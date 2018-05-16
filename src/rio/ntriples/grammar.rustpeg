@@ -1,0 +1,102 @@
+//See https://www.w3.org/TR/2014/REC-n-triples-20140225/#n-triples-grammar
+
+use std::char;
+use model::data::*;
+
+#![arguments(data_factory: &DataFactory)]
+
+//[2]
+#[pub]
+triple -> Option<Triple> =
+    _ s:subject _ p:predicate _ o:object _ "." _ comment? { Some(data_factory.triple(s, p, o)) } /
+    _ comment? { None }
+//[3]
+subject -> NamedOrBlankNode =
+    i: IRIREF { data_factory.named_node(i).into() } /
+    b: BLANK_NODE_LABEL { data_factory.blank_node(b).into() }
+//[4]
+predicate -> NamedNode = i:IRIREF {
+    data_factory.named_node(i)
+}
+//[5]
+object -> Term =
+    i: IRIREF { data_factory.named_node(i).into() } /
+    b: BLANK_NODE_LABEL { data_factory.blank_node(b).into() } /
+    l: literal { l.into() }
+//[6]
+literal -> Literal =
+    v: STRING_LITERAL_QUOTE _ "^^" _ t:IRIREF { data_factory.typed_literal(v, data_factory.named_node(t)) } /
+    v: STRING_LITERAL_QUOTE _ l:LANGTAG { data_factory.language_tagged_literal(v, l) } /
+    v: STRING_LITERAL_QUOTE { data_factory.simple_literal(v) }
+
+//[144s]
+LANGTAG -> String = "@" l: $([a-zA-Z]+ ("-" [a-zA-Z0-9]+)*) {
+    l.into()
+}
+//[7]
+EOL = [\r\n]+
+//[8]
+IRIREF -> String = "<" _ i: $(([^<>{}] / UCHAR)*) _ ">" {
+    i.into()
+}
+//[9]
+STRING_LITERAL_QUOTE -> String = "\"" l: ((NOT_BAD_LITERAL_VALUE / ECHAR / UCHAR)*) "\"" {
+    l.into_iter().collect()
+}
+NOT_BAD_LITERAL_VALUE -> char = c: $([^\u{0022}\u{005c}\u{000a}\u{000d}]) { c.chars().next().unwrap() }
+//[141s]
+BLANK_NODE_LABEL -> String = "_:" b: $((PN_CHARS_U / [0-9]) ((PN_CHARS / ".")* PN_CHARS)?) {
+    b.into()
+}
+//[10]
+UCHAR -> char = "\\u" h: $(HEX HEX HEX HEX) {
+    u32::from_str_radix(h, 16).ok().and_then(char::from_u32).unwrap()
+} / "\\U" h: $(HEX HEX HEX HEX HEX HEX HEX HEX) {
+    u32::from_str_radix(h, 16).ok().and_then(char::from_u32).unwrap()
+}
+//[153s]
+ECHAR -> char = '\\' c: $([tbnrf"'\\]) {
+    match c {
+        "t" => '\u{0009}',
+        "b" => '\u{0008}',
+        "n" => '\u{000A}',
+        "r" => '\u{000D}',
+        "f" => '\u{000C}',
+        "\"" => '\u{0022}',
+        "'" => '\u{0027}',
+        "\\" => '\u{005C}',
+        _ => panic!("unexpected escaped char") // not possible
+    }
+}
+//[157s]
+PN_CHARS_BASE -> char = c: $([A-Za-z\u{00C0}-\u{00D6}\u{00D8}-\u{00F6}\u{00F8}-\u{02FF}\u{0370}-\u{037D}\u{037F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}]) { c.chars().next().unwrap() }
+//[158s]
+PN_CHARS_U -> char = PN_CHARS_BASE / '_' { '_' } / ':' { ':' }
+//[160s]
+PN_CHARS -> char = PN_CHARS_U / c: $([\-0-9\u{00B7}\u{0300}-\u{036F}\u{203F}-\u{2040}]) { c.chars().next().unwrap() }
+//[162s]
+HEX -> char = c: $([0-9A-Fa-f]) { c.chars().next().unwrap() }
+
+//space
+_ = #quiet<[ \t]*>
+//comment
+comment = #quiet<"#" [^\r\n]*>
+
+
+/*grammar;
+
+pub NTripleLine: Option<Triple> = {
+    Comment? => None,
+    <t:NTriple> Comment? => Some(t)
+};
+pub NQuadLine: Option<Quad> = {
+    Comment? => None,
+    <t:NQuad> Comment? => Some(t)
+};
+
+NTriple: Triple = <s:Node> <p:IRI> <o:RDFTerm> "." => data_factory.triple(s, p, o);
+NQuad: Quad = {
+    <s:Node> <p:IRI> <o:RDFTerm> <g:Node> "." => data_factory.quad(s, p, o, Some(g)),
+    <s:Node> <p:IRI> <o:RDFTerm> "." => data_factory.quad(s, p, o, None)
+};
+*/

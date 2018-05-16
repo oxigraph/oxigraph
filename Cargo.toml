@@ -1,0 +1,18 @@
+[package]
+name = "rudf"
+version = "0.0.1"
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "MIT/Apache-2.0"
+readme = "../README.md"
+keywords = ["RDF"]
+repository = "https://github.com/Tpt/rudf"
+description = """
+An RDF library in Rust
+"""
+build = "build.rs"
+
+[dependencies]
+lazy_static = "^1.0"
+
+[build-dependencies]
+peg = "0.5"
