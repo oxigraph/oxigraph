@@ -11,6 +11,9 @@ An RDF library in Rust
 """
 build = "build.rs"
 
+[badges]
+travis-ci = { repository = "Tpt/rudf" }
+
 [dependencies]
 lazy_static = "^1.0"
 
