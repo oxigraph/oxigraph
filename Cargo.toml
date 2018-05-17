@@ -20,3 +20,6 @@ url = "1.7"
 
 [build-dependencies]
 peg = "0.5"
+
+[dev-dependencies]
+reqwest = "0.8"

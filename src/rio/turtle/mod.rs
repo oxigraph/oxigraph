@@ -9,8 +9,8 @@ use rio::*;
 use std::collections::HashMap;
 use std::io::BufReader;
 use std::io::Read;
-use url::Url;
 use url::ParseOptions;
+use url::Url;
 
 //TODO: make private
 pub struct ParserState {
@@ -29,7 +29,7 @@ impl ParserState {
 pub fn read_turtle<'a, R: Read + 'a>(
     source: R,
     data_factory: &'a DataFactory,
-    base_uri: impl Into<Option<Url>>
+    base_uri: impl Into<Option<Url>>,
 ) -> RioResult<impl Iterator<Item = Triple>> {
     let factory = data_factory.clone(); //TODO: try to avoid clone here
     let mut state = ParserState {

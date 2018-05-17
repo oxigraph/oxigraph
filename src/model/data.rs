@@ -372,7 +372,9 @@ impl Default for DataFactory {
 impl DataFactory {
     /// Builds a RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
     pub fn named_node(&self, iri: impl Into<Url>) -> NamedNode {
-        NamedNode { iri: Arc::new(iri.into()) }
+        NamedNode {
+            iri: Arc::new(iri.into()),
+        }
     }
 
     /// Builds a RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a known id
