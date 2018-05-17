@@ -2,6 +2,7 @@ use std::error::Error;
 use std::fmt;
 
 pub mod ntriples;
+pub mod turtle;
 
 pub type RioResult<T> = Result<T, RioError>;
 

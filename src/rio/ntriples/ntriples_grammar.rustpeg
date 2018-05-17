@@ -35,8 +35,8 @@ literal -> Literal =
 
 
 //[144s]
-LANGTAG -> String = "@" l: $([a-zA-Z]+ ("-" [a-zA-Z0-9]+)*) {
-    l.into()
+LANGTAG -> &'input str = "@" l: $([a-zA-Z]+ ("-" [a-zA-Z0-9]+)*) {
+    l
 }
 
 //[7]
@@ -55,8 +55,8 @@ STRING_LITERAL_QUOTE -> String = "\"" l: ((STRING_LITERAL_QUOTE_simple_char / EC
 STRING_LITERAL_QUOTE_simple_char -> char = c: $([^\u{0022}\u{005c}\u{000a}\u{000d}]) { c.chars().next().unwrap() }
 
 //[141s]
-BLANK_NODE_LABEL -> String = "_:" b: $((PN_CHARS_U / [0-9]) ((PN_CHARS / ".")* PN_CHARS)?) {
-    b.into()
+BLANK_NODE_LABEL -> &'input str = "_:" b: $((PN_CHARS_U / [0-9]) ((PN_CHARS / ".")* PN_CHARS)?) {
+    b
 }
 
 //[10]
@@ -92,6 +92,7 @@ PN_CHARS -> () = PN_CHARS_U / [\-0-9\u{00B7}\u{0300}-\u{036F}\u{203F}-\u{2040}]
 
 //[162s]
 HEX -> () = ([0-9A-Fa-f])
+
 
 //space
 _ = #quiet<[ \t]*>
