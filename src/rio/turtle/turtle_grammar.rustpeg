@@ -148,7 +148,7 @@ BlankNode -> BlankNode =
     ANON { data_factory.new_blank_node() }
 
 //[18]
-IRIREF -> String = "<" _ i:((_IRIREF_simple_char / UCHAR)*) _ ">" {
+IRIREF -> String = "<" i:((_IRIREF_simple_char / UCHAR)*) ">" {
     //TODO: relative URIs resolution
     i.into_iter().collect()
 }
