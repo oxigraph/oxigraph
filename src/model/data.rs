@@ -4,22 +4,27 @@ use std::fmt;
 use std::option::Option;
 use std::sync::Arc;
 use std::sync::Mutex;
+use url::Url;
 
 /// A RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct NamedNode {
-    iri: String,
+    iri: Arc<Url>,
 }
 
 impl NamedNode {
     pub fn value(&self) -> &str {
+        self.iri.as_str()
+    }
+
+    pub fn url(&self) -> &Url {
         &self.iri
     }
 }
 
 impl fmt::Display for NamedNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "<{}>", self.value())
+        write!(f, "<{}>", self.iri)
     }
 }
 
@@ -51,10 +56,10 @@ pub enum Literal {
 
 lazy_static! {
     static ref XSD_STRING: NamedNode = NamedNode {
-        iri: "http://www.w3.org/2001/XMLSchema#string".to_owned()
+        iri: Arc::new(Url::parse("http://www.w3.org/2001/XMLSchema#string").unwrap())
     };
     static ref RDF_LANG_STRING: NamedNode = NamedNode {
-        iri: "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString".to_owned()
+        iri: Arc::new(Url::parse("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString").unwrap())
     };
 }
 
@@ -366,8 +371,8 @@ impl Default for DataFactory {
 
 impl DataFactory {
     /// Builds a RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
-    pub fn named_node(&self, iri: impl Into<String>) -> NamedNode {
-        NamedNode { iri: iri.into() }
+    pub fn named_node(&self, iri: impl Into<Url>) -> NamedNode {
+        NamedNode { iri: Arc::new(iri.into()) }
     }
 
     /// Builds a RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a known id

@@ -1,8 +1,9 @@
 //See https://www.w3.org/TR/turtle/#sec-grammar
 
 use std::char;
-use std::iter;
+use url::Url;
 use model::data::*;
+use std::iter;
 use rio::turtle::ParserState;
 
 #![arguments(state: &mut ParserState, buffer: &mut Vec<Triple>, data_factory: &DataFactory)]
@@ -23,13 +24,25 @@ prefixID -> () = "@prefix" _ ns:PNAME_NS _ i:IRIREF _ "." {
 }
 
 //[5]
-base -> () = "@base" _ i:IRIREF _ "." {
-    state.base_uri = i.into();
+base -> () = "@base" _ i:IRIREF _ "." {?
+    match Url::parse(&i) {
+        Ok(url) => {
+            state.base_uri = Some(url);
+            Ok(())
+        },
+        Err(error) => Err("IRI parsing failed")
+    }
 }
 
 //[5s]
-sparqlBase -> () = "BASE"i _ i:IRIREF {
-    state.base_uri = i.into();
+sparqlBase -> () = "BASE"i _ i:IRIREF {?
+    match Url::parse(&i) {
+        Ok(url) => {
+            state.base_uri = Some(url);
+            Ok(())
+        },
+        Err(error) => Err("IRI parsing failed")
+    }
 }
 
 //[6s]
@@ -57,7 +70,7 @@ objectList -> () = object _ ("," _ object _)*
 
 //[9]
 verb -> NamedNode = predicate /
-    "a" { data_factory.named_node("http://www.w3.org/1999/02/22-rdf-syntax-ns#type") }
+    "a" { data_factory.named_node(Url::parse("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap()) }
 
 // [10]
 subject -> NamedOrBlankNode =
@@ -102,11 +115,13 @@ blankNodePropertyList_open -> () = "[" {
 
 //[15]
 collection -> NamedOrBlankNode = '(' _ o:(collection_value*) ')' {
-    let mut current_list_node = NamedOrBlankNode::from(data_factory.named_node("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"));
+    let first = data_factory.named_node(Url::parse("http://www.w3.org/1999/02/22-rdf-syntax-ns#first").unwrap());
+    let rest = data_factory.named_node(Url::parse("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest").unwrap());
+    let mut current_list_node = NamedOrBlankNode::from(data_factory.named_node(Url::parse("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil").unwrap()));
     for obj in o.into_iter().rev() {
         let new_blank_node = NamedOrBlankNode::from(data_factory.new_blank_node());
-        buffer.push(data_factory.triple(new_blank_node.clone(), data_factory.named_node("http://www.w3.org/1999/02/22-rdf-syntax-ns#first"), obj));
-        buffer.push(data_factory.triple(new_blank_node.clone(), data_factory.named_node("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"), current_list_node));
+        buffer.push(data_factory.triple(new_blank_node.clone(), first.clone(), obj));
+        buffer.push(data_factory.triple(new_blank_node.clone(), rest.clone(), current_list_node));
         current_list_node = new_blank_node;
     }
     current_list_node
@@ -115,9 +130,9 @@ collection_value -> Term = o:object_value _ { o }
 
 //[16]
 NumericLiteral -> Literal =
-    d:$(DOUBLE) { data_factory.typed_literal(d, data_factory.named_node("http://www.w3.org/2001/XMLSchema#double")) } /
-    d:$(DECIMAL) { data_factory.typed_literal(d, data_factory.named_node("http://www.w3.org/2001/XMLSchema#decimal")) } /
-    i:$(INTEGER) { data_factory.typed_literal(i, data_factory.named_node("http://www.w3.org/2001/XMLSchema#integer")) }
+    d:$(DOUBLE) { data_factory.typed_literal(d, data_factory.named_node(Url::parse("http://www.w3.org/2001/XMLSchema#double").unwrap())) } /
+    d:$(DECIMAL) { data_factory.typed_literal(d, data_factory.named_node(Url::parse("http://www.w3.org/2001/XMLSchema#decimal").unwrap())) } /
+    i:$(INTEGER) { data_factory.typed_literal(i, data_factory.named_node(Url::parse("http://www.w3.org/2001/XMLSchema#integer").unwrap())) }
 
 //[128s]
 RDFLiteral -> Literal =
@@ -127,15 +142,18 @@ RDFLiteral -> Literal =
 
 //[133s]
 BooleanLiteral -> Literal =
-    "true" { data_factory.typed_literal("true", data_factory.named_node("http://www.w3.org/2001/XMLSchema#boolean")) } /
-    "false" { data_factory.typed_literal("false", data_factory.named_node("http://www.w3.org/2001/XMLSchema#boolean")) }
+    "true" { data_factory.typed_literal("true", data_factory.named_node(Url::parse("http://www.w3.org/2001/XMLSchema#boolean").unwrap())) } /
+    "false" { data_factory.typed_literal("false", data_factory.named_node(Url::parse("http://www.w3.org/2001/XMLSchema#boolean").unwrap())) }
 
 //[17]
 String -> String = STRING_LITERAL_LONG_SINGLE_QUOTE / STRING_LITERAL_LONG_QUOTE / STRING_LITERAL_QUOTE / STRING_LITERAL_SINGLE_QUOTE
 
 //[135s]
-iri -> NamedNode = i:(IRIREF / PrefixedName) {
-    data_factory.named_node(i)
+iri -> NamedNode = i:(IRIREF / PrefixedName) {?
+    match state.url_parser().parse(&i) {
+       Ok(url) => Ok(data_factory.named_node(url)),
+       Err(error) => Err("IRI parsing failed")
+    }
 }
 
 //[136s]
@@ -149,7 +167,6 @@ BlankNode -> BlankNode =
 
 //[18]
 IRIREF -> String = "<" i:((_IRIREF_simple_char / UCHAR)*) ">" {
-    //TODO: relative URIs resolution
     i.into_iter().collect()
 }
 _IRIREF_simple_char -> char = c:$([^\u{00}-\u{20}<>"{}|^\u{60}\u{5c}]) { c.chars().next().unwrap() }

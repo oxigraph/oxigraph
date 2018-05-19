@@ -1,6 +1,8 @@
 //See https://www.w3.org/TR/2014/REC-n-triples-20140225/#n-triples-grammar
 
+use std::iter::FromIterator;
 use std::char;
+use url::Url;
 use model::data::*;
 
 #![arguments(data_factory: &DataFactory)]
@@ -43,8 +45,12 @@ LANGTAG -> &'input str = "@" l: $([a-zA-Z]+ ("-" [a-zA-Z0-9]+)*) {
 EOL = [\r\n]+
 
 //[8]
-IRIREF -> String = "<" _ i: ((_IRIREF_simple_char / UCHAR)*) _ ">" {
-    i.into_iter().collect()
+IRIREF -> Url = "<" _ i: ((_IRIREF_simple_char / UCHAR)*) _ ">" {?
+    let s = String::from_iter(i.into_iter());
+    match Url::parse(&s) {
+        Ok(url) => Ok(url),
+        Err(error) => Err("IRI parsing failed")
+    }
 }
 _IRIREF_simple_char -> char = c: $([^\u{00}-\u{20}<>"{}|^\u{60}\u{5c}]) { c.chars().next().unwrap() }
 
