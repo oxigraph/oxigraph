@@ -12,6 +12,7 @@ use rudf::rio::turtle::read_turtle;
 use std::collections::HashSet;
 use std::iter::FromIterator;
 use url::Url;
+use rudf::rio::ntriples::read_ntriples;
 
 struct RDFClient {
     client: Client,
@@ -35,6 +36,16 @@ impl RDFClient {
                 &self.data_factory,
                 Some(uri),
             )?)),
+            Err(error) => Err(RioError::new(error)),
+        }
+    }
+
+    fn load_ntriples(&self, uri: Url) -> RioResult<HashSet<Triple>> {
+        match self.client.get(uri).send() {
+            Ok(response) => read_ntriples(
+                response,
+                &self.data_factory
+            ).collect(),
             Err(error) => Err(RioError::new(error)),
         }
     }
@@ -129,5 +140,60 @@ fn turtle_w3c_testsuite() {
                     comment
                 );
             }
+        });
+}
+
+
+#[test]
+fn ntriples_w3c_testsuite() {
+    let client = RDFClient::default();
+    let data_factory = &client.data_factory;
+    let manifest = client
+        .load_turtle(Url::parse("https://www.w3.org/2013/N-TriplesTests/manifest.ttl").unwrap())
+        .unwrap();
+    let rdf_type = data_factory
+        .named_node(Url::parse("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap());
+    let mf_action = data_factory.named_node(
+        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action").unwrap(),
+    );
+    let rdfs_comment = data_factory
+        .named_node(Url::parse("http://www.w3.org/2000/01/rdf-schema#comment").unwrap());
+    let rdft_test_turtle_positive_syntax =
+        Term::from(data_factory.named_node(
+            Url::parse("http://www.w3.org/ns/rdftest#TestNTriplesPositiveSyntax").unwrap(),
+        ));
+    let rdft_test_turtle_negative_syntax =
+        Term::from(data_factory.named_node(
+            Url::parse("http://www.w3.org/ns/rdftest#TestNTriplesNegativeSyntax").unwrap(),
+        ));
+
+    subjects_for_predicate_object(&manifest, &rdf_type, &rdft_test_turtle_positive_syntax)
+        .for_each(|test| {
+            let comment = object_for_subject_predicate(&manifest, test, &rdfs_comment).unwrap();
+            if let Some(Term::NamedNode(file)) =
+            object_for_subject_predicate(&manifest, test, &mf_action)
+                {
+                    if let Err(error) = client.load_ntriples(file.url().clone()) {
+                        assert!(
+                            false,
+                            "Failure on positive syntax file {} about {} with error: {}",
+                            file, comment, error
+                        )
+                    }
+                }
+        });
+    subjects_for_predicate_object(&manifest, &rdf_type, &rdft_test_turtle_negative_syntax)
+        .for_each(|test| {
+            let comment = object_for_subject_predicate(&manifest, test, &rdfs_comment).unwrap();
+            if let Some(Term::NamedNode(file)) =
+            object_for_subject_predicate(&manifest, test, &mf_action)
+                {
+                    assert!(
+                        client.load_ntriples(file.url().clone()).is_err(),
+                        "Failure on negative syntax test file {} about {}",
+                        file,
+                        comment
+                    );
+                }
         });
 }
