@@ -2,7 +2,7 @@
 
 use std::iter::FromIterator;
 use std::char;
-use url::Url;
+use std::str::FromStr;
 use model::data::*;
 
 #![arguments(data_factory: &DataFactory)]
@@ -15,25 +15,25 @@ triple -> Option<Triple> =
 
 //[3]
 subject -> NamedOrBlankNode =
-    i: IRIREF { data_factory.named_node(i).into() } /
-    b: BLANK_NODE_LABEL { data_factory.blank_node(b).into() }
+    i: IRIREF { i.into() } /
+    b: BLANK_NODE_LABEL { b.into() }
 
 //[4]
 predicate -> NamedNode = i:IRIREF {
-    data_factory.named_node(i)
+    i
 }
 
 //[5]
 object -> Term =
-    i: IRIREF { data_factory.named_node(i).into() } /
-    b: BLANK_NODE_LABEL { data_factory.blank_node(b).into() } /
+    i: IRIREF { i.into() } /
+    b: BLANK_NODE_LABEL { b.into() } /
     l: literal { l.into() }
 
 //[6]
 literal -> Literal =
-    v: STRING_LITERAL_QUOTE _ "^^" _ t:IRIREF { data_factory.typed_literal(v, data_factory.named_node(t)) } /
+    v: STRING_LITERAL_QUOTE _ "^^" _ t:IRIREF { data_factory.typed_literal(v, t) } /
     v: STRING_LITERAL_QUOTE _ l:LANGTAG { data_factory.language_tagged_literal(v, l) } /
-    v: STRING_LITERAL_QUOTE { data_factory.simple_literal(v) }
+    v: STRING_LITERAL_QUOTE { v.into() }
 
 
 //[144s]
@@ -45,10 +45,10 @@ LANGTAG -> &'input str = "@" l:$([a-zA-Z]+ ("-" [a-zA-Z0-9]+)*) {
 EOL = [\r\n]+
 
 //[8]
-IRIREF -> Url = "<" _ i:((_IRIREF_simple_char / UCHAR)*) _ ">" {?
+IRIREF -> NamedNode = "<" _ i:((_IRIREF_simple_char / UCHAR)*) _ ">" {?
     let s = String::from_iter(i.into_iter());
-    match Url::parse(&s) {
-        Ok(url) => Ok(url),
+    match NamedNode::from_str(&s) {
+        Ok(named_node) => Ok(named_node),
         Err(error) => Err("IRI parsing failed")
     }
 }
@@ -61,8 +61,8 @@ STRING_LITERAL_QUOTE -> String = "\"" l:((STRING_LITERAL_QUOTE_simple_char / ECH
 STRING_LITERAL_QUOTE_simple_char -> char = c: $([^\u{0022}\u{005c}\u{000a}\u{000d}]) { c.chars().next().unwrap() }
 
 //[141s]
-BLANK_NODE_LABEL -> &'input str = "_:" b:$(([0-9] / PN_CHARS_U) PN_CHARS* ("."+ PN_CHARS+)*) {
-    b
+BLANK_NODE_LABEL -> BlankNode = "_:" b:$(([0-9] / PN_CHARS_U) PN_CHARS* ("."+ PN_CHARS+)*) {
+    data_factory.blank_node(b)
 }
 
 //[10]

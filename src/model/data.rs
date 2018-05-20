@@ -2,8 +2,10 @@
 ///! Inspired by [RDFjs](http://rdf.js.org/)
 use std::fmt;
 use std::option::Option;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::Mutex;
+use url::ParseError;
 use url::Url;
 
 /// A RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
@@ -25,6 +27,16 @@ impl NamedNode {
 impl fmt::Display for NamedNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "<{}>", self.iri)
+    }
+}
+
+impl FromStr for NamedNode {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(NamedNode {
+            iri: Arc::new(Url::parse(s)?),
+        })
     }
 }
 
@@ -55,12 +67,12 @@ pub enum Literal {
 }
 
 lazy_static! {
-    static ref XSD_STRING: NamedNode = NamedNode {
-        iri: Arc::new(Url::parse("http://www.w3.org/2001/XMLSchema#string").unwrap())
-    };
-    static ref RDF_LANG_STRING: NamedNode = NamedNode {
-        iri: Arc::new(Url::parse("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString").unwrap())
-    };
+    static ref XSD_BOOLEAN: NamedNode =
+        NamedNode::from_str("http://www.w3.org/2001/XMLSchema#boolean").unwrap();
+    static ref XSD_STRING: NamedNode =
+        NamedNode::from_str("http://www.w3.org/2001/XMLSchema#string").unwrap();
+    static ref RDF_LANG_STRING: NamedNode =
+        NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString").unwrap();
 }
 
 impl Literal {
@@ -109,6 +121,35 @@ impl fmt::Display for Literal {
         } else {
             write!(f, "\"{}\"^^{}", self.value(), self.datatype())
         }
+    }
+}
+
+impl<'a> From<&'a str> for Literal {
+    fn from(value: &'a str) -> Self {
+        Literal::SimpleLiteral(value.into())
+    }
+}
+
+impl From<String> for Literal {
+    fn from(value: String) -> Self {
+        Literal::SimpleLiteral(value)
+    }
+}
+
+impl From<bool> for Literal {
+    fn from(value: bool) -> Self {
+        Literal::TypedLiteral {
+            value: value.to_string(),
+            datatype: XSD_BOOLEAN.clone(),
+        }
+    }
+}
+
+impl FromStr for Literal {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(s.clone().into())
     }
 }
 
