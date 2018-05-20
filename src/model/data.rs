@@ -126,6 +126,20 @@ impl NamedOrBlankNode {
             NamedOrBlankNode::BlankNode(node) => node.value(),
         }
     }
+
+    pub fn is_named_node(&self) -> bool {
+        match self {
+            NamedOrBlankNode::NamedNode(_) => true,
+            NamedOrBlankNode::BlankNode(_) => false,
+        }
+    }
+
+    pub fn is_blank_node(&self) -> bool {
+        match self {
+            NamedOrBlankNode::NamedNode(_) => false,
+            NamedOrBlankNode::BlankNode(_) => true,
+        }
+    }
 }
 
 impl fmt::Display for NamedOrBlankNode {
@@ -164,6 +178,30 @@ impl Term {
             Term::NamedNode(node) => node.value(),
             Term::BlankNode(node) => node.value(),
             Term::Literal(literal) => literal.value(),
+        }
+    }
+
+    pub fn is_named_node(&self) -> bool {
+        match self {
+            Term::NamedNode(_) => true,
+            Term::BlankNode(_) => false,
+            Term::Literal(_) => false,
+        }
+    }
+
+    pub fn is_blank_node(&self) -> bool {
+        match self {
+            Term::NamedNode(_) => false,
+            Term::BlankNode(_) => true,
+            Term::Literal(_) => false,
+        }
+    }
+
+    pub fn is_literal(&self) -> bool {
+        match self {
+            Term::NamedNode(_) => false,
+            Term::BlankNode(_) => false,
+            Term::Literal(_) => true,
         }
     }
 }
