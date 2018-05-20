@@ -10,7 +10,7 @@ use model::data::*;
 //[2]
 #[pub]
 triple -> Option<Triple> =
-    _ s:subject _ p:predicate _ o:object _ "." _ comment? { Some(data_factory.triple(s, p, o)) } /
+    _ s:subject _ p:predicate _ o:object _ "." _ comment? { Some(Triple::new(s, p, o)) } /
     _ comment? { None }
 
 //[3]

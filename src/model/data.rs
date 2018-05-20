@@ -15,6 +15,13 @@ pub struct NamedNode {
 }
 
 impl NamedNode {
+    /// Builds a RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
+    pub fn new(iri: impl Into<Url>) -> Self {
+        Self {
+            iri: Arc::new(iri.into()),
+        }
+    }
+
     pub fn value(&self) -> &str {
         self.iri.as_str()
     }
@@ -34,9 +41,7 @@ impl FromStr for NamedNode {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(NamedNode {
-            iri: Arc::new(Url::parse(s)?),
-        })
+        Ok(NamedNode::new(Url::parse(s)?))
     }
 }
 
@@ -47,6 +52,11 @@ pub struct BlankNode {
 }
 
 impl BlankNode {
+    /// Builds a RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a known id
+    pub fn new(id: impl Into<String>) -> Self {
+        Self { id: id.into() }
+    }
+
     pub fn value(&self) -> &str {
         &self.id
     }
@@ -149,7 +159,7 @@ impl FromStr for Literal {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(s.clone().into())
+        Ok(s.into())
     }
 }
 
@@ -313,6 +323,21 @@ pub struct Triple {
     object: Term,
 }
 
+impl Triple {
+    /// Builds a RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple)
+    pub fn new(
+        subject: impl Into<NamedOrBlankNode>,
+        predicate: impl Into<NamedNode>,
+        object: impl Into<Term>,
+    ) -> Self {
+        Self {
+            subject: subject.into(),
+            predicate: predicate.into(),
+            object: object.into(),
+        }
+    }
+}
+
 impl fmt::Display for Triple {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{} {} {} .", self.subject, self.predicate, self.object)
@@ -361,6 +386,23 @@ pub struct Quad {
     predicate: NamedNode,
     object: Term,
     graph_name: Option<NamedOrBlankNode>,
+}
+
+impl Quad {
+    /// Builds a RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
+    pub fn new(
+        subject: impl Into<NamedOrBlankNode>,
+        predicate: impl Into<NamedNode>,
+        object: impl Into<Term>,
+        graph_name: impl Into<Option<NamedOrBlankNode>>,
+    ) -> Self {
+        Self {
+            subject: subject.into(),
+            predicate: predicate.into(),
+            object: object.into(),
+            graph_name: graph_name.into(),
+        }
+    }
 }
 
 impl fmt::Display for Quad {
@@ -451,19 +493,17 @@ impl Default for DataFactory {
 impl DataFactory {
     /// Builds a RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
     pub fn named_node(&self, iri: impl Into<Url>) -> NamedNode {
-        NamedNode {
-            iri: Arc::new(iri.into()),
-        }
+        NamedNode::new(iri)
     }
 
     /// Builds a RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a known id
     pub fn blank_node(&self, id: impl Into<String>) -> BlankNode {
-        BlankNode { id: id.into() }
+        BlankNode::new(id)
     }
 
     /// Builds a new RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a unique id
     pub fn new_blank_node(&self) -> BlankNode {
-        self.blank_node(self.blank_node_id_provider.next().to_string())
+        BlankNode::new(self.blank_node_id_provider.next().to_string())
     }
 
     /// Builds a RDF [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal)
@@ -493,36 +533,6 @@ impl DataFactory {
         Literal::LanguageTaggedString {
             value: value.into(),
             language: language.into(),
-        }
-    }
-
-    /// Builds a RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple)
-    pub fn triple(
-        &self,
-        subject: impl Into<NamedOrBlankNode>,
-        predicate: impl Into<NamedNode>,
-        object: impl Into<Term>,
-    ) -> Triple {
-        Triple {
-            subject: subject.into(),
-            predicate: predicate.into(),
-            object: object.into(),
-        }
-    }
-
-    /// Builds a RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
-    pub fn quad(
-        &self,
-        subject: impl Into<NamedOrBlankNode>,
-        predicate: impl Into<NamedNode>,
-        object: impl Into<Term>,
-        graph_name: impl Into<Option<NamedOrBlankNode>>,
-    ) -> Quad {
-        Quad {
-            subject: subject.into(),
-            predicate: predicate.into(),
-            object: object.into(),
-            graph_name: graph_name.into(),
         }
     }
 }

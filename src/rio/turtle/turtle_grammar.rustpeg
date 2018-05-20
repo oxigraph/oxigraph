@@ -87,7 +87,7 @@ object -> () = o:object_value {?
     match state.cur_subject.last() {
         Some(s) => match state.cur_predicate.last() {
             Some(p) => {
-                buffer.push(data_factory.triple(s.clone(), p.clone(), o));
+                buffer.push(Triple::new(s.clone(), p.clone(), o));
                 Ok(())
             }
             None => Err("Predicate not found")
@@ -121,8 +121,8 @@ collection -> NamedOrBlankNode = '(' _ o:(collection_value*) ')' {
     let mut current_list_node = NamedOrBlankNode::from(NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil").unwrap());
     for obj in o.into_iter().rev() {
         let new_blank_node = NamedOrBlankNode::from(data_factory.new_blank_node());
-        buffer.push(data_factory.triple(new_blank_node.clone(), first.clone(), obj));
-        buffer.push(data_factory.triple(new_blank_node.clone(), rest.clone(), current_list_node));
+        buffer.push(Triple::new(new_blank_node.clone(), first.clone(), obj));
+        buffer.push(Triple::new(new_blank_node.clone(), rest.clone(), current_list_node));
         current_list_node = new_blank_node;
     }
     current_list_node
