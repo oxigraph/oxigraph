@@ -52,7 +52,9 @@ sparqlPrefix -> () = "PREFIX"i _ ns:PNAME_NS _ i:IRIREF {
 }
 
 //[6]
-triples -> () = subject_push _ predicateObjectList / triples_blankNodePropertyList_push _ predicateObjectList?
+triples -> () = subject_push _ predicateObjectList / triples_blankNodePropertyList_push _ predicateObjectList? {
+    state.cur_subject.pop();
+}
 subject_push -> () = s:subject {
     state.cur_subject.push(s)
 }
@@ -61,7 +63,9 @@ triples_blankNodePropertyList_push -> () = s: blankNodePropertyList {
 }
 
 //[7]
-predicateObjectList -> () = predicate_push _ objectList _ (";" _ (predicate_push _ objectList _)?)*
+predicateObjectList -> () = predicate_push _ objectList _ (";" _ (predicate_push _ objectList _)?)* {
+    state.cur_predicate.pop();
+}
 predicate_push -> () = v:verb {
     state.cur_predicate.push(v)
 }
@@ -182,7 +186,6 @@ PNAME_LN -> String = ns:$(PNAME_NS) local:PN_LOCAL {?
 
 //[141s]
 BLANK_NODE_LABEL -> &'input str = "_:" b:$(([0-9] / PN_CHARS_U) PN_CHARS* ("."+ PN_CHARS+)*) {
-    //TODO unescape
     b
 }
 

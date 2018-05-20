@@ -9,7 +9,7 @@ use url::ParseError;
 use url::Url;
 
 /// A RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct NamedNode {
     iri: Arc<Url>,
 }
@@ -46,7 +46,7 @@ impl FromStr for NamedNode {
 }
 
 /// A RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node)
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct BlankNode {
     id: String,
 }
@@ -102,7 +102,7 @@ impl Default for BlankNode {
 }
 
 /// A RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal)
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum Literal {
     SimpleLiteral(String),
     LanguageTaggedString { value: String, language: String },
@@ -221,7 +221,7 @@ impl FromStr for Literal {
 }
 
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum NamedOrBlankNode {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
@@ -273,7 +273,7 @@ impl From<BlankNode> for NamedOrBlankNode {
 
 /// A RDF [term](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term)
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) and [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum Term {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
@@ -373,7 +373,7 @@ pub trait TripleLike {
 }
 
 /// A [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple)
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct Triple {
     subject: NamedOrBlankNode,
     predicate: NamedNode,
@@ -437,7 +437,7 @@ pub trait QuadLike: TripleLike {
 }
 
 /// A [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct Quad {
     subject: NamedOrBlankNode,
     predicate: NamedNode,
