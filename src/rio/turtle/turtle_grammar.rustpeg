@@ -3,7 +3,8 @@
 use std::char;
 use url::Url;
 use model::data::*;
-use std::str::FromStr;
+use model::vocab::rdf;
+use model::vocab::xsd;
 use std::iter;
 use rio::turtle::ParserState;
 
@@ -71,7 +72,7 @@ objectList -> () = object _ ("," _ object _)*
 
 //[9]
 verb -> NamedNode = predicate /
-    "a" { NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap() }
+    "a" { rdf::TYPE.clone() }
 
 // [10]
 subject -> NamedOrBlankNode =
@@ -116,13 +117,11 @@ blankNodePropertyList_open -> () = "[" {
 
 //[15]
 collection -> NamedOrBlankNode = '(' _ o:(collection_value*) ')' {
-    let first = NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#first").unwrap();
-    let rest = NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest").unwrap();
-    let mut current_list_node = NamedOrBlankNode::from(NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil").unwrap());
+    let mut current_list_node = NamedOrBlankNode::from(rdf::NIL.clone());
     for obj in o.into_iter().rev() {
         let new_blank_node = NamedOrBlankNode::from(data_factory.new_blank_node());
-        buffer.push(Triple::new(new_blank_node.clone(), first.clone(), obj));
-        buffer.push(Triple::new(new_blank_node.clone(), rest.clone(), current_list_node));
+        buffer.push(Triple::new(new_blank_node.clone(), rdf::FIRST.clone(), obj));
+        buffer.push(Triple::new(new_blank_node.clone(), rdf::REST.clone(), current_list_node));
         current_list_node = new_blank_node;
     }
     current_list_node
@@ -131,9 +130,9 @@ collection_value -> Term = o:object_value _ { o }
 
 //[16]
 NumericLiteral -> Literal =
-    d:$(DOUBLE) { data_factory.typed_literal(d, NamedNode::from_str("http://www.w3.org/2001/XMLSchema#double").unwrap()) } /
-    d:$(DECIMAL) { data_factory.typed_literal(d, NamedNode::from_str("http://www.w3.org/2001/XMLSchema#decimal").unwrap()) } /
-    i:$(INTEGER) { data_factory.typed_literal(i, NamedNode::from_str("http://www.w3.org/2001/XMLSchema#integer").unwrap()) }
+    d:$(DOUBLE) { data_factory.typed_literal(d, xsd::DOUBLE.clone()) } /
+    d:$(DECIMAL) { data_factory.typed_literal(d, xsd::DECIMAL.clone()) } /
+    i:$(INTEGER) { data_factory.typed_literal(i, xsd::INTEGER.clone()) }
 
 //[128s]
 RDFLiteral -> Literal =
