@@ -68,6 +68,39 @@ impl fmt::Display for BlankNode {
     }
 }
 
+/// An utility structure to generate bank node ids in a thread safe way
+#[derive(Debug)]
+struct U64IDProvider {
+    counter: Mutex<u64>,
+}
+
+impl U64IDProvider {
+    pub fn next(&self) -> u64 {
+        let mut id = self.counter.lock().unwrap();
+        *id += 1;
+        *id
+    }
+}
+
+impl Default for U64IDProvider {
+    fn default() -> Self {
+        U64IDProvider {
+            counter: Mutex::new(0),
+        }
+    }
+}
+
+lazy_static! {
+    static ref U64_ID_PROVIDER: U64IDProvider = U64IDProvider::default();
+}
+
+impl Default for BlankNode {
+    /// Builds a new RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a unique id
+    fn default() -> Self {
+        BlankNode::new(U64_ID_PROVIDER.next().to_string())
+    }
+}
+
 /// A RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal)
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Literal {
@@ -86,6 +119,30 @@ lazy_static! {
 }
 
 impl Literal {
+    /// Builds a RDF [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal)
+    pub fn new_simple_literal(value: impl Into<String>) -> Self {
+        Literal::SimpleLiteral(value.into())
+    }
+
+    /// Builds a RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) with a [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri)
+    pub fn new_typed_literal(value: impl Into<String>, datatype: impl Into<NamedNode>) -> Self {
+        Literal::TypedLiteral {
+            value: value.into(),
+            datatype: datatype.into(),
+        }
+    }
+
+    /// Builds a RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
+    pub fn new_language_tagged_literal(
+        value: impl Into<String>,
+        language: impl Into<String>,
+    ) -> Self {
+        Literal::LanguageTaggedString {
+            value: value.into(),
+            language: language.into(),
+        }
+    }
+
     /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form)
     pub fn value(&self) -> &str {
         match self {
@@ -451,88 +508,5 @@ impl QuadLike for Quad {
 
     fn graph_name_owned(self) -> Option<NamedOrBlankNode> {
         return self.graph_name;
-    }
-}
-
-/// An utility structure to generate bank node ids in a thread safe way
-#[derive(Debug, Clone)]
-struct U64IDProvider {
-    counter: Arc<Mutex<u64>>,
-}
-
-impl U64IDProvider {
-    pub fn next(&self) -> u64 {
-        let mut id = self.counter.lock().unwrap();
-        *id += 1;
-        *id
-    }
-}
-
-impl Default for U64IDProvider {
-    fn default() -> Self {
-        U64IDProvider {
-            counter: Arc::new(Mutex::new(0)),
-        }
-    }
-}
-
-/// A structure creating RDF elements
-#[derive(Debug, Clone)]
-pub struct DataFactory {
-    blank_node_id_provider: U64IDProvider,
-}
-
-impl Default for DataFactory {
-    fn default() -> Self {
-        DataFactory {
-            blank_node_id_provider: U64IDProvider::default(),
-        }
-    }
-}
-
-impl DataFactory {
-    /// Builds a RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
-    pub fn named_node(&self, iri: impl Into<Url>) -> NamedNode {
-        NamedNode::new(iri)
-    }
-
-    /// Builds a RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a known id
-    pub fn blank_node(&self, id: impl Into<String>) -> BlankNode {
-        BlankNode::new(id)
-    }
-
-    /// Builds a new RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a unique id
-    pub fn new_blank_node(&self) -> BlankNode {
-        BlankNode::new(self.blank_node_id_provider.next().to_string())
-    }
-
-    /// Builds a RDF [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal)
-    pub fn simple_literal(&self, value: impl Into<String>) -> Literal {
-        Literal::SimpleLiteral(value.into())
-    }
-
-    /// Builds a RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) with a [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri)
-    pub fn typed_literal(
-        &self,
-        value: impl Into<String>,
-        datatype: impl Into<NamedNode>,
-    ) -> Literal {
-        //TODO: find the best representation
-        Literal::TypedLiteral {
-            value: value.into(),
-            datatype: datatype.into(),
-        }
-    }
-
-    /// Builds a RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
-    pub fn language_tagged_literal(
-        &self,
-        value: impl Into<String>,
-        language: impl Into<String>,
-    ) -> Literal {
-        Literal::LanguageTaggedString {
-            value: value.into(),
-            language: language.into(),
-        }
     }
 }

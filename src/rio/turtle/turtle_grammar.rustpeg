@@ -8,7 +8,7 @@ use model::vocab::xsd;
 use std::iter;
 use rio::turtle::ParserState;
 
-#![arguments(state: &mut ParserState, buffer: &mut Vec<Triple>, data_factory: &DataFactory)]
+#![arguments(state: &mut ParserState, buffer: &mut Vec<Triple>)]
 
 //[1]
 #[pub]
@@ -112,14 +112,14 @@ blankNodePropertyList -> NamedOrBlankNode = blankNodePropertyList_open _ predica
     state.cur_subject.pop().ok_or("No subject found in the stack")
 }
 blankNodePropertyList_open -> () = "[" {
-    state.cur_subject.push(data_factory.new_blank_node().into())
+    state.cur_subject.push(BlankNode::default().into())
 }
 
 //[15]
 collection -> NamedOrBlankNode = '(' _ o:(collection_value*) ')' {
     let mut current_list_node = NamedOrBlankNode::from(rdf::NIL.clone());
     for obj in o.into_iter().rev() {
-        let new_blank_node = NamedOrBlankNode::from(data_factory.new_blank_node());
+        let new_blank_node = NamedOrBlankNode::from(BlankNode::default());
         buffer.push(Triple::new(new_blank_node.clone(), rdf::FIRST.clone(), obj));
         buffer.push(Triple::new(new_blank_node.clone(), rdf::REST.clone(), current_list_node));
         current_list_node = new_blank_node;
@@ -130,14 +130,14 @@ collection_value -> Term = o:object_value _ { o }
 
 //[16]
 NumericLiteral -> Literal =
-    d:$(DOUBLE) { data_factory.typed_literal(d, xsd::DOUBLE.clone()) } /
-    d:$(DECIMAL) { data_factory.typed_literal(d, xsd::DECIMAL.clone()) } /
-    i:$(INTEGER) { data_factory.typed_literal(i, xsd::INTEGER.clone()) }
+    d:$(DOUBLE) { Literal::new_typed_literal(d, xsd::DOUBLE.clone()) } /
+    d:$(DECIMAL) { Literal::new_typed_literal(d, xsd::DECIMAL.clone()) } /
+    i:$(INTEGER) { Literal::new_typed_literal(i, xsd::INTEGER.clone()) }
 
 //[128s]
 RDFLiteral -> Literal =
-    v:String _ "^^" _ t:iri { data_factory.typed_literal(v, t) } /
-    v:String _ l:LANGTAG { data_factory.language_tagged_literal(v, l) } /
+    v:String _ "^^" _ t:iri { Literal::new_typed_literal(v, t) } /
+    v:String _ l:LANGTAG { Literal::new_language_tagged_literal(v, l) } /
     v:String { v.into() }
 
 //[133s]
@@ -151,7 +151,7 @@ String -> String = STRING_LITERAL_LONG_SINGLE_QUOTE / STRING_LITERAL_LONG_QUOTE 
 //[135s]
 iri -> NamedNode = i:(IRIREF / PrefixedName) {?
     match state.url_parser().parse(&i) {
-       Ok(url) => Ok(data_factory.named_node(url)),
+       Ok(url) => Ok(NamedNode::new(url)),
        Err(error) => Err("IRI parsing failed")
     }
 }
@@ -162,8 +162,8 @@ PrefixedName -> String = PNAME_LN /
 
 //[137s]
 BlankNode -> BlankNode =
-    b:BLANK_NODE_LABEL { data_factory.blank_node(b) } /
-    ANON { data_factory.new_blank_node() }
+    b:BLANK_NODE_LABEL { BlankNode::new(b) } /
+    ANON { BlankNode::default() }
 
 //[18]
 IRIREF -> String = "<" i:((_IRIREF_simple_char / UCHAR)*) ">" {

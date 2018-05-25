@@ -28,10 +28,8 @@ impl ParserState {
 
 pub fn read_turtle<'a, R: Read + 'a>(
     source: R,
-    data_factory: &'a DataFactory,
     base_uri: impl Into<Option<Url>>,
 ) -> RioResult<impl Iterator<Item = Triple>> {
-    let factory = data_factory.clone(); //TODO: try to avoid clone here
     let mut state = ParserState {
         base_uri: base_uri.into(),
         namespaces: HashMap::default(),
@@ -41,8 +39,7 @@ pub fn read_turtle<'a, R: Read + 'a>(
     let mut string_buffer = String::default();
     let mut triple_buffer = Vec::default();
     match BufReader::new(source).read_to_string(&mut string_buffer) {
-        Ok(_) => match grammar::turtleDoc(&string_buffer, &mut state, &mut triple_buffer, &factory)
-        {
+        Ok(_) => match grammar::turtleDoc(&string_buffer, &mut state, &mut triple_buffer) {
             Ok(_) => Ok(triple_buffer.into_iter()),
             Err(error) => Err(RioError::new(error)),
         },

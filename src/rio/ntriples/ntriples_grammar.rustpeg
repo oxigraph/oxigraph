@@ -5,8 +5,6 @@ use std::char;
 use std::str::FromStr;
 use model::data::*;
 
-#![arguments(data_factory: &DataFactory)]
-
 //[2]
 #[pub]
 triple -> Option<Triple> =
@@ -31,8 +29,8 @@ object -> Term =
 
 //[6]
 literal -> Literal =
-    v: STRING_LITERAL_QUOTE _ "^^" _ t:IRIREF { data_factory.typed_literal(v, t) } /
-    v: STRING_LITERAL_QUOTE _ l:LANGTAG { data_factory.language_tagged_literal(v, l) } /
+    v: STRING_LITERAL_QUOTE _ "^^" _ t:IRIREF { Literal::new_typed_literal(v, t) } /
+    v: STRING_LITERAL_QUOTE _ l:LANGTAG { Literal::new_language_tagged_literal(v, l) } /
     v: STRING_LITERAL_QUOTE { v.into() }
 
 
@@ -62,7 +60,7 @@ STRING_LITERAL_QUOTE_simple_char -> char = c: $([^\u{0022}\u{005c}\u{000a}\u{000
 
 //[141s]
 BLANK_NODE_LABEL -> BlankNode = "_:" b:$(([0-9] / PN_CHARS_U) PN_CHARS* ("."+ PN_CHARS+)*) {
-    data_factory.blank_node(b)
+    BlankNode::new(b)
 }
 
 //[10]
