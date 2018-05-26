@@ -5,19 +5,19 @@ mod grammar {
 
     use model::data::*;
     use rio::*;
+    use std::collections::BTreeMap;
     use std::collections::HashMap;
     use std::io::BufReader;
     use std::io::Read;
     use url::ParseOptions;
     use url::Url;
-    use std::collections::BTreeMap;
 
     pub struct ParserState {
         base_uri: Option<Url>,
         namespaces: HashMap<String, String>,
         cur_subject: Vec<NamedOrBlankNode>,
         cur_predicate: Vec<NamedNode>,
-        bnodes_map: BTreeMap<String, BlankNode>
+        bnodes_map: BTreeMap<String, BlankNode>,
     }
 
     impl ParserState {
@@ -35,7 +35,7 @@ mod grammar {
             namespaces: HashMap::default(),
             cur_subject: Vec::default(),
             cur_predicate: Vec::default(),
-            bnodes_map: BTreeMap::default()
+            bnodes_map: BTreeMap::default(),
         };
         let mut triple_buffer = Vec::default();
 

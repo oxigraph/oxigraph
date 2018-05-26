@@ -1,13 +1,13 @@
 ///! Implements data structures for https://www.w3.org/TR/rdf11-concepts/
 ///! Inspired by [RDFjs](http://rdf.js.org/)
 use std::fmt;
+use std::ops::Deref;
 use std::option::Option;
 use std::str::FromStr;
 use std::sync::Arc;
 use url::ParseError;
 use url::Url;
 use uuid::Uuid;
-use std::ops::Deref;
 
 /// A RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
@@ -77,9 +77,7 @@ impl fmt::Display for BlankNode {
 impl Default for BlankNode {
     /// Builds a new RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a unique id
     fn default() -> Self {
-        BlankNode {
-            id: Uuid::new_v4()
-        }
+        BlankNode { id: Uuid::new_v4() }
     }
 }
 
