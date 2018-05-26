@@ -1,7 +1,6 @@
 //See https://www.w3.org/TR/turtle/#sec-grammar
 
 use std::char;
-use url::Url;
 use model::data::*;
 use model::vocab::rdf;
 use model::vocab::xsd;
@@ -27,7 +26,7 @@ prefixID -> () = "@prefix" _ ns:PNAME_NS _ i:IRIREF _ "." {
 
 //[5]
 base -> () = "@base" _ i:IRIREF _ "." {?
-    match Url::parse(&i) {
+    match state.url_parser().parse(&i) {
         Ok(url) => {
             state.base_uri = Some(url);
             Ok(())
@@ -38,7 +37,7 @@ base -> () = "@base" _ i:IRIREF _ "." {?
 
 //[5s]
 sparqlBase -> () = "BASE"i _ i:IRIREF {?
-    match Url::parse(&i) {
+    match state.url_parser().parse(&i) {
         Ok(url) => {
             state.base_uri = Some(url);
             Ok(())
@@ -177,8 +176,8 @@ PNAME_NS -> &'input str = ns:$(PN_PREFIX? ":") {
 }
 
 //[140s]
-PNAME_LN -> String = ns:$(PNAME_NS) local:$(PN_LOCAL) {?
-    state.namespaces.get(ns).map(|v| v.clone() + local).ok_or("Prefix not found")
+PNAME_LN -> String = ns:$(PNAME_NS) local:PN_LOCAL {?
+    state.namespaces.get(ns).map(|v| v.clone() + &local).ok_or("Prefix not found")
 }
 
 //[141s]
@@ -279,7 +278,16 @@ PN_CHARS -> () = [\-0-9\u{00B7}\u{0300}-\u{036F}\u{203F}-\u{2040}] / PN_CHARS_U
 PN_PREFIX -> () = PN_CHARS_BASE PN_CHARS* ("."+ PN_CHARS+)*
 
 //[168s]
-PN_LOCAL -> () = (":" / [0-9] / PN_CHARS_U / PLX) (":" / PN_CHARS / PLX)* ("."+ (":" / PN_CHARS / PLX)+)*
+PN_LOCAL -> String = f:PN_LOCAL_first c:(PN_LOCAL_next*) e:(PN_LOCAL_next_dot*) {
+    f.to_string() + &c.concat() + &e.concat()
+}
+PN_LOCAL_first -> String =
+    c:$(":" / [0-9] / PN_CHARS_U) { c.into() } /
+    s:PLX { s }
+PN_LOCAL_next -> String =
+    c:$(":" / PN_CHARS) { c.into() } /
+    s:PLX { s }
+PN_LOCAL_next_dot -> String = d:$("."+) f:PN_LOCAL_next { d.to_string() + &f}
 
 //[169s]
 PLX -> String =
