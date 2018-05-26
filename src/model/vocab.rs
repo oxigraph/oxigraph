@@ -22,6 +22,16 @@ pub mod rdf {
     }
 }
 
+pub mod rdfs {
+    use model::data::NamedNode;
+    use std::str::FromStr;
+
+    lazy_static! {
+        pub static ref COMMENT: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2000/01/rdf-schema#comment").unwrap();
+    }
+}
+
 pub mod xsd {
     ///! NamedNodes for [RDF compatible XSD datatypes](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-compatible-xsd-types)
     use model::data::NamedNode;

@@ -1,3 +1,5 @@
+#[macro_use]
+extern crate lazy_static;
 extern crate reqwest;
 extern crate rudf;
 extern crate url;
@@ -5,6 +7,7 @@ extern crate url;
 use reqwest::Client;
 use rudf::model::data::*;
 use rudf::model::vocab::rdf;
+use rudf::model::vocab::rdfs;
 use rudf::rio::RioError;
 use rudf::rio::RioResult;
 use rudf::rio::ntriples::read_ntriples;
@@ -43,18 +46,25 @@ impl RDFClient {
     }
 }
 
+mod mf {
+    use rudf::model::data::NamedNode;
+    use std::str::FromStr;
+
+    lazy_static! {
+        pub static ref ACTION: NamedNode = NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action"
+        ).unwrap();
+        pub static ref RESULT: NamedNode = NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#result"
+        ).unwrap();
+    }
+}
+
 #[test]
 fn turtle_w3c_testsuite() {
     let manifest_url = Url::parse("http://www.w3.org/2013/TurtleTests/manifest.ttl").unwrap();
     let client = RDFClient::default();
     let manifest = client.load_turtle(manifest_url.clone()).unwrap();
-    let mf_action = NamedNode::from_str(
-        "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action",
-    ).unwrap();
-    let mf_result = NamedNode::from_str(
-        "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#result",
-    ).unwrap();
-    let rdfs_comment = NamedNode::from_str("http://www.w3.org/2000/01/rdf-schema#comment").unwrap();
     let rdft_test_turtle_positive_syntax = Term::from(
         NamedNode::from_str("http://www.w3.org/ns/rdftest#TestTurtlePositiveSyntax").unwrap(),
     );
@@ -95,10 +105,10 @@ fn turtle_w3c_testsuite() {
         .subjects_for_predicate_object(&rdf::TYPE, &rdft_test_turtle_positive_syntax)
         .for_each(|test| {
             let comment = manifest
-                .object_for_subject_predicate(test, &rdfs_comment)
+                .object_for_subject_predicate(test, &rdfs::COMMENT)
                 .unwrap();
             if let Some(Term::NamedNode(file)) =
-                manifest.object_for_subject_predicate(test, &mf_action)
+                manifest.object_for_subject_predicate(test, &mf::ACTION)
             {
                 if let Err(error) = client.load_turtle(file.url().clone()) {
                     assert!(
@@ -113,10 +123,10 @@ fn turtle_w3c_testsuite() {
         .subjects_for_predicate_object(&rdf::TYPE, &rdft_test_turtle_negative_syntax)
         .for_each(|test| {
             let comment = manifest
-                .object_for_subject_predicate(test, &rdfs_comment)
+                .object_for_subject_predicate(test, &rdfs::COMMENT)
                 .unwrap();
             if let Some(Term::NamedNode(file)) =
-                manifest.object_for_subject_predicate(test, &mf_action)
+                manifest.object_for_subject_predicate(test, &mf::ACTION)
             {
                 assert!(
                     client.load_turtle(file.url().clone()).is_err(),
@@ -133,13 +143,13 @@ fn turtle_w3c_testsuite() {
                 return;
             }
             let comment = manifest
-                .object_for_subject_predicate(test, &rdfs_comment)
+                .object_for_subject_predicate(test, &rdfs::COMMENT)
                 .unwrap();
             if let Some(Term::NamedNode(input)) =
-                manifest.object_for_subject_predicate(test, &mf_action)
+                manifest.object_for_subject_predicate(test, &mf::ACTION)
             {
                 if let Some(Term::NamedNode(result)) =
-                    manifest.object_for_subject_predicate(test, &mf_result)
+                    manifest.object_for_subject_predicate(test, &mf::RESULT)
                 {
                     match client.load_turtle(input.url().clone()) {
                     Ok(action_graph) =>  match client.load_turtle(result.url().clone()) {
@@ -171,13 +181,13 @@ fn turtle_w3c_testsuite() {
         .subjects_for_predicate_object(&rdf::TYPE, &rdft_test_turtle_negative_eval)
         .for_each(|test| {
             let comment = manifest
-                .object_for_subject_predicate(test, &rdfs_comment)
+                .object_for_subject_predicate(test, &rdfs::COMMENT)
                 .unwrap();
             if let Some(Term::NamedNode(file)) =
-                manifest.object_for_subject_predicate(test, &mf_action)
+                manifest.object_for_subject_predicate(test, &mf::ACTION)
             {
                 if let Some(Term::NamedNode(result)) =
-                    manifest.object_for_subject_predicate(test, &mf_result)
+                    manifest.object_for_subject_predicate(test, &mf::RESULT)
                 {
                     let action_graph = client.load_turtle(file.url().clone());
                     let result_graph = client.load_turtle(result.url().clone());
@@ -198,10 +208,6 @@ fn ntriples_w3c_testsuite() {
     let manifest = client
         .load_turtle(Url::parse("http://www.w3.org/2013/N-TriplesTests/manifest.ttl").unwrap())
         .unwrap();
-    let mf_action = NamedNode::from_str(
-        "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action",
-    ).unwrap();
-    let rdfs_comment = NamedNode::from_str("http://www.w3.org/2000/01/rdf-schema#comment").unwrap();
     let rdft_test_ntriples_positive_syntax = Term::from(
         NamedNode::from_str("http://www.w3.org/ns/rdftest#TestNTriplesPositiveSyntax").unwrap(),
     );
@@ -213,10 +219,10 @@ fn ntriples_w3c_testsuite() {
         .subjects_for_predicate_object(&rdf::TYPE, &rdft_test_ntriples_positive_syntax)
         .for_each(|test| {
             let comment = manifest
-                .object_for_subject_predicate(test, &rdfs_comment)
+                .object_for_subject_predicate(test, &rdfs::COMMENT)
                 .unwrap();
             if let Some(Term::NamedNode(file)) =
-                manifest.object_for_subject_predicate(test, &mf_action)
+                manifest.object_for_subject_predicate(test, &mf::ACTION)
             {
                 if let Err(error) = client.load_ntriples(file.url().clone()) {
                     assert!(
@@ -231,10 +237,10 @@ fn ntriples_w3c_testsuite() {
         .subjects_for_predicate_object(&rdf::TYPE, &rdft_test_ntriples_negative_syntax)
         .for_each(|test| {
             let comment = manifest
-                .object_for_subject_predicate(test, &rdfs_comment)
+                .object_for_subject_predicate(test, &rdfs::COMMENT)
                 .unwrap();
             if let Some(Term::NamedNode(file)) =
-                manifest.object_for_subject_predicate(test, &mf_action)
+                manifest.object_for_subject_predicate(test, &mf::ACTION)
             {
                 assert!(
                     client.load_ntriples(file.url().clone()).is_err(),
