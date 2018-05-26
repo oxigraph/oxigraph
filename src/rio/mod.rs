@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::fmt;
+use std::io;
 
 pub mod ntriples;
 pub mod turtle;
@@ -19,6 +20,12 @@ impl RioError {
         RioError {
             error: error.into(),
         }
+    }
+}
+
+impl From<io::Error> for RioError {
+    fn from(error: io::Error) -> Self {
+        RioError::new(error)
     }
 }
 

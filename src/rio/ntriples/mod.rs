@@ -19,6 +19,6 @@ pub fn read_ntriples<'a, R: Read + 'a>(source: R) -> impl Iterator<Item = RioRes
                 Ok(triple) => Some(Ok(triple?)),
                 Err(error) => Some(Err(RioError::new(error))),
             },
-            Err(error) => Some(Err(RioError::new(error))),
+            Err(error) => Some(Err(error.into())),
         })
 }
