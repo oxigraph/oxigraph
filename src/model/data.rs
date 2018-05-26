@@ -4,9 +4,10 @@ use std::fmt;
 use std::option::Option;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::sync::Mutex;
 use url::ParseError;
 use url::Url;
+use uuid::Uuid;
+use std::ops::Deref;
 
 /// A RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
@@ -31,6 +32,14 @@ impl NamedNode {
     }
 }
 
+impl Deref for NamedNode {
+    type Target = Url;
+
+    fn deref(&self) -> &Url {
+        &self.iri
+    }
+}
+
 impl fmt::Display for NamedNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "<{}>", self.iri)
@@ -48,56 +57,29 @@ impl FromStr for NamedNode {
 /// A RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node)
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct BlankNode {
-    id: String,
+    id: Uuid,
 }
 
-impl BlankNode {
-    /// Builds a RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a known id
-    pub fn new(id: impl Into<String>) -> Self {
-        Self { id: id.into() }
-    }
+impl Deref for BlankNode {
+    type Target = Uuid;
 
-    pub fn value(&self) -> &str {
+    fn deref(&self) -> &Uuid {
         &self.id
     }
 }
 
 impl fmt::Display for BlankNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "_:{}", self.value())
+        write!(f, "_:{}", self.id)
     }
-}
-
-/// An utility structure to generate bank node ids in a thread safe way
-#[derive(Debug)]
-struct U64IDProvider {
-    counter: Mutex<u64>,
-}
-
-impl U64IDProvider {
-    pub fn next(&self) -> u64 {
-        let mut id = self.counter.lock().unwrap();
-        *id += 1;
-        *id
-    }
-}
-
-impl Default for U64IDProvider {
-    fn default() -> Self {
-        U64IDProvider {
-            counter: Mutex::new(0),
-        }
-    }
-}
-
-lazy_static! {
-    static ref U64_ID_PROVIDER: U64IDProvider = U64IDProvider::default();
 }
 
 impl Default for BlankNode {
     /// Builds a new RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a unique id
     fn default() -> Self {
-        BlankNode::new(U64_ID_PROVIDER.next().to_string())
+        BlankNode {
+            id: Uuid::new_v4()
+        }
     }
 }
 
@@ -228,13 +210,6 @@ pub enum NamedOrBlankNode {
 }
 
 impl NamedOrBlankNode {
-    pub fn value(&self) -> &str {
-        match self {
-            NamedOrBlankNode::NamedNode(node) => node.value(),
-            NamedOrBlankNode::BlankNode(node) => node.value(),
-        }
-    }
-
     pub fn is_named_node(&self) -> bool {
         match self {
             NamedOrBlankNode::NamedNode(_) => true,
@@ -281,14 +256,6 @@ pub enum Term {
 }
 
 impl Term {
-    pub fn value(&self) -> &str {
-        match self {
-            Term::NamedNode(node) => node.value(),
-            Term::BlankNode(node) => node.value(),
-            Term::Literal(literal) => literal.value(),
-        }
-    }
-
     pub fn is_named_node(&self) -> bool {
         match self {
             Term::NamedNode(_) => true,

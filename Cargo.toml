@@ -17,6 +17,7 @@ travis-ci = { repository = "Tpt/rudf" }
 [dependencies]
 lazy_static = "1.0"
 url = "1.7"
+uuid = { version = "0.6", features = ["v4"] }
 
 [build-dependencies]
 peg = "0.5"

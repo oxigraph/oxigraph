@@ -4,6 +4,9 @@ use std::iter::FromIterator;
 use std::char;
 use std::str::FromStr;
 use model::data::*;
+use std::collections::BTreeMap;
+
+#![arguments(bnodes_map: &mut BTreeMap<String, BlankNode>)]
 
 //[2]
 #[pub]
@@ -60,7 +63,7 @@ STRING_LITERAL_QUOTE_simple_char -> char = c: $([^\u{0022}\u{005c}\u{000a}\u{000
 
 //[141s]
 BLANK_NODE_LABEL -> BlankNode = "_:" b:$(([0-9] / PN_CHARS_U) PN_CHARS* ("."+ PN_CHARS+)*) {
-    BlankNode::new(b)
+    bnodes_map.entry(b.to_string()).or_insert_with(BlankNode::default).clone()
 }
 
 //[10]

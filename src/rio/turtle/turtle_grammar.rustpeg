@@ -1,11 +1,9 @@
 //See https://www.w3.org/TR/turtle/#sec-grammar
 
 use std::char;
-use model::data::*;
 use model::vocab::rdf;
 use model::vocab::xsd;
 use std::iter;
-use rio::turtle::ParserState;
 
 #![arguments(state: &mut ParserState, buffer: &mut Vec<Triple>)]
 
@@ -165,7 +163,7 @@ PrefixedName -> String = PNAME_LN /
 
 //[137s]
 BlankNode -> BlankNode =
-    b:BLANK_NODE_LABEL { BlankNode::new(b) } /
+    b:BLANK_NODE_LABEL { state.bnodes_map.entry(b.to_string()).or_insert_with(BlankNode::default).clone() } /
     ANON { BlankNode::default() }
 
 //[18]
