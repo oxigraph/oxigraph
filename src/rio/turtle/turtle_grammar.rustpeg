@@ -227,7 +227,7 @@ STRING_LITERAL_LONG_SINGLE_QUOTE_inner -> String = a:$(("''" / "'")?) b:(STRING_
 }
 STRING_LITERAL_LONG_SINGLE_QUOTE_simple_char -> char = c:$([^'\u{005c}]) { c.chars().next().unwrap() }
 
-//[25]abc""def''ghi"
+//[25]
 STRING_LITERAL_LONG_QUOTE -> String = "\"\"\"" l:(STRING_LITERAL_LONG_QUOTE_inner*) "\"\"\"" {
     l.into_iter().collect()
 }

@@ -1,0 +1,977 @@
+//See https://www.w3.org/TR/turtle/#sec-grammar
+
+use std::char;
+use model::vocab::rdf;
+use model::vocab::xsd;
+use std::iter;
+use std::iter::once;
+
+#![arguments(state: &mut ParserState)]
+
+
+//[1]
+#[pub]
+QueryUnit -> Query = Query
+
+//[2]
+Query -> Query = _ Prologue _ q:(SelectQuery / ConstructQuery / DescribeQuery / AskQuery) _ ValuesClause _ { //TODO: ValuesClause
+    q
+}
+
+//[4]
+Prologue -> () = (BaseDecl _ / PrefixDecl _)*
+
+//[5]
+BaseDecl -> () = "BASE"i _ i:IRIREF {?
+    match state.url_parser().parse(&i) {
+        Ok(url) => {
+            state.base_uri = Some(url);
+            Ok(())
+        },
+        Err(error) => Err("IRI parsing failed")
+    }
+}
+
+//[6]
+PrefixDecl -> () = "PREFIX"i _ ns:PNAME_NS _ i:IRIREF {
+    state.namespaces.insert(ns.into(), i.into());
+}
+
+//[7]
+SelectQuery -> Query = s:SelectClause _ d:DatasetClauses _ f:WhereClause _ SolutionModifier {  //TODO: Modifier
+    Query::SelectQuery {
+        selection: s,
+        dataset: d,
+        filter: f
+    }
+}
+
+//[8]
+SubSelect -> GraphPattern = s:SelectClause _ f:WhereClause _ SolutionModifier _ ValuesClause { //TODO: Modifiers
+    GraphPattern::SubSelectPattern {
+        selection: s,
+        filter: Box::new(f)
+    }
+}
+
+//[9]
+SelectClause -> Selection = "SELECT"i _ o:SelectClause_option _ v:SelectClause_variables {
+    Selection {
+        option: o,
+        variables: v
+    }
+}
+SelectClause_option -> SelectionOption =
+    "DISTINCT"i { SelectionOption::Distinct } /
+    "REDUCED"i { SelectionOption::Reduced } /
+    { SelectionOption::Default }
+SelectClause_variables -> Option<Vec<SelectionMember>> =
+    '*' { None } /
+    p:SelectClause_member+ { Some(p) }
+SelectClause_member -> SelectionMember =
+    v:Var _ { SelectionMember::Variable(v) } /
+    '(' _ e:Expression _ "AS"i _ v:Var _ ')' _ { SelectionMember::Expression(e, v) }
+
+//[10]
+ConstructQuery -> Query =
+    "CONSTRUCT"i _ c:ConstructTemplate _ d:DatasetClauses _ f:WhereClause _ SolutionModifier {
+        Query::ConstructQuery { construct: c, dataset: d, filter: f }
+    } /
+    "CONSTRUCT"i _ d:DatasetClauses _ "WHERE"i _ '{' _ c:ConstructQuery_optional_triple_template _ '}' _ SolutionModifier {
+        Query::ConstructQuery {
+            construct: c.clone(),
+            dataset: d,
+            filter: flatten_group_pattern(c.into_iter().map(|p| PropertyPathPattern::from(p).into()))
+        }
+    }
+
+ConstructQuery_optional_triple_template -> Vec<TriplePattern> = TriplesTemplate / { Vec::default() }
+
+//[11]
+DescribeQuery -> Query = "DESCRIBE"i _ ('*' / (VarOrIri _)+) _ d:DatasetClauses f:WhereClause? _ SolutionModifier {
+    Query::DescribeQuery {
+        dataset: d,
+        filter: f.unwrap_or_else(GraphPattern::default)
+    }
+}
+
+//[12]
+AskQuery -> Query = "ASK"i _ d:DatasetClauses f:WhereClause _ SolutionModifier {
+    Query::AskQuery {
+        dataset: d,
+        filter: f
+    }
+}
+
+//[13]
+DatasetClause -> Dataset = "FROM"i _ d:(DefaultGraphClause / NamedGraphClause) { d }
+DatasetClauses -> Dataset = d:DatasetClauses_item* {
+    d.into_iter().fold(Dataset::default(), |mut a, b| a + b)
+}
+DatasetClauses_item -> Dataset = d:DatasetClause _ { d }
+//[14]
+DefaultGraphClause -> Dataset = s:SourceSelector {
+    Dataset::new_with_default(s)
+}
+
+//[15]
+NamedGraphClause -> Dataset = "NAMED"i _ s:SourceSelector {
+    Dataset::new_with_named(s)
+}
+
+//[16]
+SourceSelector -> NamedNode = iri
+
+//[17]
+WhereClause -> GraphPattern = "WHERE"i? _ p:GroupGraphPattern { p }
+
+//[18]
+SolutionModifier -> () = GroupClause? _ HavingClause? _ OrderClause? _ LimitOffsetClauses?
+
+//[19]
+GroupClause -> () = "GROUP"i _ "BY"i _ (GroupCondition _)+
+
+//[20]
+GroupCondition -> () = BuiltInCall / FunctionCall / '(' _ Expression _ ("AS"i _ Var _)? ')' / Var
+
+//[21]
+HavingClause -> Expression = "HAVING"i _ c:HavingCondition+ {
+    if c.len() == 1 {
+        c[0].clone()
+    } else {
+        Expression::AndExpression(c)
+    }
+}
+
+//[22]
+HavingCondition -> Expression = Constraint
+
+//[23]
+OrderClause -> () = "ORDER"i "BY"i _ OrderCondition+
+
+//[24]
+OrderCondition -> () = (( "ASC"i / "DESC"i) _ BrackettedExpression) / (Constraint / Var)
+
+//[25]
+LimitOffsetClauses -> () = LimitClause _ OffsetClause? / OffsetClause _ LimitClause?
+
+//[26]
+LimitClause -> () = "LIMIT"i _ INTEGER
+
+//[27]
+OffsetClause -> () = "OFFSET"i _ INTEGER
+
+//[28]
+ValuesClause -> Option<GraphPattern> =
+    "VALUES"i _ p:DataBlock { Some(p) } /
+    { None }
+
+//[52]
+TriplesTemplate -> Vec<TriplePattern> = p:TriplesTemplate_item **<1,> ('.' _) '.'? {
+    p.into_iter().flat_map(|c| c.into_iter()).collect()
+}
+TriplesTemplate_item -> Vec<TriplePattern> = p:TriplesSameSubject _ { p }
+
+//[53]
+GroupGraphPattern -> GraphPattern =
+    '{' _ p:GroupGraphPatternSub _ '}' { p } /
+    '{' _ p:SubSelect _ '}' { p }
+
+//[54]
+GroupGraphPatternSub -> GraphPattern = a:TriplesBlock? _ b:GroupGraphPatternSub_item* {
+    let mut list = a.map(|v| vec![v]).unwrap_or_else(|| vec![]);
+    for v in b {
+        list.extend_from_slice(&v)
+    }
+    flatten_group_pattern(list.into_iter())
+}
+GroupGraphPatternSub_item -> Vec<GraphPattern> = a:GraphPatternNotTriples _ ('.' _)? b:TriplesBlock? _ {
+    let mut result = vec![a];
+    b.map(|v| result.push(v));
+    result
+}
+
+//[55]
+TriplesBlock -> GraphPattern = h:TriplesSameSubjectPath _ t:TriplesBlock_tail? {
+    match t {
+        Some(l) => flatten_group_pattern(vec![h, l].into_iter()),
+        None => flatten_group_pattern(once(h))
+    }
+}
+TriplesBlock_tail -> GraphPattern = '.' _ t:TriplesBlock? _ {
+    t.unwrap_or_else(|| GraphPattern::GroupPattern(Vec::default()))
+}
+
+//[56]
+GraphPatternNotTriples -> GraphPattern = GroupOrUnionGraphPattern / OptionalGraphPattern / MinusGraphPattern / GraphGraphPattern / ServiceGraphPattern / Filter / Bind / InlineData
+
+//[57]
+OptionalGraphPattern -> GraphPattern = "OPTIONAL"i _ p:GroupGraphPattern {
+    GraphPattern::OptionalPattern(Box::new(p))
+}
+
+//[58]
+GraphGraphPattern -> GraphPattern = "GRAPH"i _ g:VarOrIri _ p:GroupGraphPattern {
+    GraphPattern::GraphPattern(g, Box::new(p))
+}
+
+//[59]
+ServiceGraphPattern -> GraphPattern = "SERVICE"i _ "SILENT"i? _ s:VarOrIri _ p:GroupGraphPattern {
+    GraphPattern::ServicePattern(s, Box::new(p))
+}
+
+//[60]
+Bind -> GraphPattern = "BIND"i _ '(' _ e:Expression _ "AS"i _ v:Var _ ')' {
+    GraphPattern::BindPattern(e, v)
+}
+
+//[61]
+InlineData -> GraphPattern = "VALUES"i _ p:DataBlock { p }
+
+//[62]
+DataBlock -> GraphPattern = InlineDataOneVar / InlineDataFull
+
+//[63]
+InlineDataOneVar -> GraphPattern = v:Var _ '{' _ d:InlineDataOneVar_value* '}' {
+    GraphPattern::ValuesPattern(vec![v], d)
+}
+InlineDataOneVar_value -> Vec<Option<Term>> = t:DataBlockValue { vec![t] }
+
+//[64]
+InlineDataFull -> GraphPattern = '(' _ var:InlineDataFull_var* _ ')' _ '{' _ val:InlineDataFull_values* '}' {
+    GraphPattern::ValuesPattern(var, val)
+}
+InlineDataFull_var -> Variable = v:Var _ { v }
+InlineDataFull_values -> Vec<Option<Term>> = '(' _ v:InlineDataFull_value* _ ')' _ { v }
+InlineDataFull_value -> Option<Term> = v:DataBlockValue _ { v }
+
+//[65]
+DataBlockValue -> Option<Term> =
+    i:iri { Some(i.into()) } /
+    l:RDFLiteral { Some(l.into()) } /
+    l:NumericLiteral { Some(l.into()) } /
+    l:BooleanLiteral { Some(l.into()) } /
+    "UNDEF"i { None }
+
+//[66]
+MinusGraphPattern -> GraphPattern = "MINUS"i _ p: GroupGraphPattern {
+    GraphPattern::MinusPattern(Box::new(p))
+}
+
+//[67]
+GroupOrUnionGraphPattern -> GraphPattern = p:GroupOrUnionGraphPattern_item **<1,> ("UNION"i _) {
+    if p.len() == 1 {
+        p[0].clone()
+    } else {
+        GraphPattern::UnionPattern(p)
+    }
+}
+GroupOrUnionGraphPattern_item -> GraphPattern = p:GroupGraphPattern _ { p }
+
+//[68]
+Filter -> GraphPattern = "FILTER"i _ c:Constraint { GraphPattern::FilterPattern(c) }
+
+//[69]
+Constraint -> Expression = BrackettedExpression / BuiltInCall / FunctionCall
+
+//[70]
+FunctionCall -> Expression = f: iri _ a: ArgList {
+    Expression::CustomFunctionCall(f, a.into())
+}
+
+//[71]
+ArgList -> Vec<Expression> = //TODO: support DISTINCT
+    NIL { Vec::new() } /
+    '(' _ 'DISTINCT'? _ e:ArgList_item **<1,> (',' _) _ ')' { e }
+ArgList_item -> Expression = e:Expression _ { e }
+
+//[72]
+ExpressionList -> Vec<Expression> =
+    NIL { Vec::default() } /
+    '(' _ e:ExpressionList_item **<1,> (',' _) ')' { e }
+ExpressionList_item -> Expression = e:Expression _ { e }
+
+//[73]
+ConstructTemplate -> Vec<TriplePattern> = '{' _ t:ConstructTriples _ '}' { t }
+
+//[74]
+ConstructTriples -> Vec<TriplePattern> = p:ConstructTriples_item ** ('.' _) {
+    p.into_iter().flat_map(|c| c.into_iter()).collect()
+}
+ConstructTriples_item -> Vec<TriplePattern> = t:TriplesSameSubject _ { t }
+
+//[75]
+TriplesSameSubject -> Vec<TriplePattern> =
+    s:VarOrTerm _ po:PropertyListNotEmpty {
+        let mut patterns = po.patterns;
+        for (p, os) in po.focus {
+            for o in os {
+                patterns.push(TriplePattern::new(s.clone(), p.clone(), o))
+            }
+        }
+        patterns.into_iter().map(|p| p.into()).collect()
+    } /
+    s:TriplesNode _ po:PropertyList {
+        let mut patterns = s.patterns;
+        patterns.extend_from_slice(&po.patterns);
+        for (p, os) in po.focus {
+            for o in os {
+                patterns.push(TriplePattern::new(s.focus.clone(), p.clone(), o))
+            }
+        }
+        patterns.into_iter().map(|p| p.into()).collect()
+    }
+
+//[76]
+PropertyList -> FocusedTriplePattern<Vec<(NamedNodeOrVariable,Vec<TermOrVariable>)>> =
+    PropertyListNotEmpty /
+    { FocusedTriplePattern::default() }
+
+//[77]
+PropertyListNotEmpty -> FocusedTriplePattern<Vec<(NamedNodeOrVariable,Vec<TermOrVariable>)>> = l:PropertyListNotEmpty_item **<1,> (';' _) {
+    l.into_iter().fold(FocusedTriplePattern::<Vec<(NamedNodeOrVariable,Vec<TermOrVariable>)>>::default(), |mut a, b| {
+        a.focus.push(b.focus);
+        a.patterns.extend_from_slice(&b.patterns);
+        a
+    })
+}
+PropertyListNotEmpty_item -> FocusedTriplePattern<(NamedNodeOrVariable,Vec<TermOrVariable>)> = p:Verb _ o:ObjectList _ {
+    FocusedTriplePattern {
+        focus: (p, o.focus),
+        patterns: o.patterns
+    }
+}
+
+//[78]
+Verb -> NamedNodeOrVariable = 'a' { rdf::TYPE.clone().into() } / VarOrIri
+
+//[79]
+ObjectList -> FocusedTriplePattern<Vec<TermOrVariable>> = o:ObjectList_item **<1,> (',' _) {
+    o.into_iter().fold(FocusedTriplePattern::<Vec<TermOrVariable>>::default(), |mut a, b| {
+        a.focus.push(b.focus);
+        a.patterns.extend_from_slice(&b.patterns);
+        a
+    })
+}
+ObjectList_item -> FocusedTriplePattern<TermOrVariable> = o:Object _ { o }
+
+//[80]
+Object -> FocusedTriplePattern<TermOrVariable> = GraphNode
+
+//[81]
+TriplesSameSubjectPath -> GraphPattern =
+    s:VarOrTerm _ po:PropertyListPathNotEmpty {
+        let mut patterns = po.patterns;
+        for (p, os) in po.focus {
+            for o in os {
+                patterns.push(PropertyPathPattern::new(s.clone(), p.clone(), o))
+            }
+        }
+        flatten_group_pattern(patterns.into_iter().map(|p| p.into()))
+    } /
+    s:TriplesNodePath _ po:PropertyListPath {
+        let mut patterns = s.patterns;
+            patterns.extend_from_slice(&po.patterns);
+        for (p, os) in po.focus {
+            for o in os {
+                patterns.push(PropertyPathPattern::new(s.focus.clone(), p.clone(), o))
+            }
+        }
+        flatten_group_pattern(patterns.into_iter().map(|p| p.into()))
+    }
+
+//[82]
+PropertyListPath -> FocusedPropertyPathPattern<Vec<(PropertyPath,Vec<TermOrVariable>)>> =
+    PropertyListPathNotEmpty /
+    { FocusedPropertyPathPattern::default() }
+
+//[83]
+PropertyListPathNotEmpty -> FocusedPropertyPathPattern<Vec<(PropertyPath,Vec<TermOrVariable>)>> = hp:(VerbPath / VerbSimple) _ ho:ObjectListPath _ t:PropertyListPathNotEmpty_item* {
+        t.into_iter().fold(FocusedPropertyPathPattern {
+            focus: vec![(hp, ho.focus)],
+            patterns: ho.patterns
+        }, |mut a, b| {
+            a.focus.push(b.focus);
+            a.patterns.extend(b.patterns.into_iter().map(|v| v.into()));
+            a
+        })
+}
+PropertyListPathNotEmpty_item -> FocusedTriplePattern<(PropertyPath,Vec<TermOrVariable>)> = ';' _ p:(VerbPath / VerbSimple) _ o:ObjectList _ { //TODO: make values after ';' optional
+    FocusedTriplePattern {
+        focus: (p, o.focus),
+        patterns: o.patterns
+    }
+}
+
+//[84]
+VerbPath -> PropertyPath = Path
+
+//[85]
+VerbSimple -> PropertyPath = v:Var {
+    v.into()
+}
+
+//[86]
+ObjectListPath -> FocusedPropertyPathPattern<Vec<TermOrVariable>> = o:ObjectPath_item **<1,> (',' _) {
+    o.into_iter().fold(FocusedPropertyPathPattern::<Vec<TermOrVariable>>::default(), |mut a, b| {
+        a.focus.push(b.focus);
+        a.patterns.extend_from_slice(&b.patterns);
+        a
+    })
+}
+ObjectPath_item -> FocusedPropertyPathPattern<TermOrVariable> = o:ObjectPath _ { o }
+
+//[87]
+ObjectPath -> FocusedPropertyPathPattern<TermOrVariable> = GraphNodePath
+
+//[88]
+Path -> PropertyPath = PathAlternative
+
+//[89]
+PathAlternative -> PropertyPath = p:PathAlternative_item **<1,> ('|' _) {
+    if p.len() == 1 {
+        p[0].clone()
+    } else {
+        PropertyPath::SequencePath(p)
+    }
+}
+PathAlternative_item -> PropertyPath = p:PathSequence _ { p }
+
+//[90]
+PathSequence -> PropertyPath = p:PathSequence_item **<1,> ('/' _) {
+    if p.len() == 1 {
+        p[0].clone()
+    } else {
+        PropertyPath::AlternativePath(p)
+    }
+}
+PathSequence_item -> PropertyPath = p:PathEltOrInverse _ { p }
+
+//[91]
+PathElt -> PropertyPath =
+    p:PathPrimary '?' { PropertyPath::ZeroOrOnePath(Box::new(p)) } / //TODO: allow space before "?"
+    p:PathPrimary _ '*' { PropertyPath::ZeroOrMorePath(Box::new(p)) } /
+    p:PathPrimary _ '+' { PropertyPath::OneOrMorePath(Box::new(p)) } /
+    PathPrimary
+
+//[92]
+PathEltOrInverse -> PropertyPath =
+    '^' _ p:PathElt { PropertyPath::InversePath(Box::new(p)) } /
+    PathElt
+
+//[94]
+PathPrimary -> PropertyPath =
+    v:Verb { v.into() } /
+    '!' _ p:PathNegatedPropertySet {  PropertyPath::NegatedPath(Box::new(p)) } /
+    '(' _ p:Path _ ')' { p }
+
+//[95]
+PathNegatedPropertySet -> PropertyPath =
+    '(' _ p:PathNegatedPropertySet_item **<1,> ('|' _) ')' { PropertyPath::AlternativePath(p) } /
+    PathOneInPropertySet
+PathNegatedPropertySet_item -> PropertyPath = p:PathOneInPropertySet _ { p }
+
+//[96]
+PathOneInPropertySet -> PropertyPath =
+    '^' _ v:Verb { PropertyPath::InversePath(Box::new(v.into())) } /
+    v:Verb { v.into() }
+
+//[98]
+TriplesNode -> FocusedTriplePattern<TermOrVariable> = Collection / BlankNodePropertyList
+
+//[99]
+BlankNodePropertyList -> FocusedTriplePattern<TermOrVariable> = '[' _ po:PropertyListNotEmpty _ ']' {
+    let mut patterns: Vec<TriplePattern> = Vec::default();
+    let mut bnode = TermOrVariable::from(BlankNode::default());
+    for (p, os) in po.focus {
+        for o in os {
+            patterns.push(TriplePattern::new(bnode.clone(), p.clone(), o));
+        }
+    }
+    FocusedTriplePattern {
+        focus: bnode,
+        patterns
+    }
+}
+
+//[100]
+TriplesNodePath -> FocusedPropertyPathPattern<TermOrVariable> = CollectionPath / BlankNodePropertyListPath
+
+//[101]
+BlankNodePropertyListPath -> FocusedPropertyPathPattern<TermOrVariable> = '[' _ po:PropertyListPathNotEmpty _ ']' {
+    let mut patterns: Vec<PropertyPathPattern> = Vec::default();
+    let mut bnode = TermOrVariable::from(BlankNode::default());
+    for (p, os) in po.focus {
+        for o in os {
+            patterns.push(PropertyPathPattern::new(bnode.clone(), p.clone(), o));
+        }
+    }
+    FocusedPropertyPathPattern {
+        focus: bnode,
+        patterns
+    }
+}
+
+//[102]
+Collection -> FocusedTriplePattern<TermOrVariable> = '(' _ o:Collection_item+ ')' {
+    let mut patterns: Vec<TriplePattern> = Vec::default();
+    let mut current_list_node = TermOrVariable::from(rdf::NIL.clone());
+    for objWithPatterns in o.into_iter().rev() {
+        let new_blank_node = TermOrVariable::from(BlankNode::default());
+        patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::FIRST.clone(), objWithPatterns.focus.clone()));
+        patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::REST.clone(), current_list_node));
+        current_list_node = new_blank_node;
+        patterns.extend_from_slice(&objWithPatterns.patterns);
+    }
+    FocusedTriplePattern {
+        focus: current_list_node,
+        patterns
+    }
+}
+Collection_item -> FocusedTriplePattern<TermOrVariable> = o:GraphNode _ { o }
+
+//[103]
+CollectionPath -> FocusedPropertyPathPattern<TermOrVariable> = '(' _ o:CollectionPath_item+ _ ')' {
+    let mut patterns: Vec<PropertyPathPattern> = Vec::default();
+    let mut current_list_node = TermOrVariable::from(rdf::NIL.clone());
+    for objWithPatterns in o.into_iter().rev() {
+        let new_blank_node = TermOrVariable::from(BlankNode::default());
+        patterns.push(PropertyPathPattern::new(new_blank_node.clone(), rdf::FIRST.clone(), objWithPatterns.focus.clone()));
+        patterns.push(PropertyPathPattern::new(new_blank_node.clone(), rdf::REST.clone(), current_list_node));
+        current_list_node = new_blank_node;
+        patterns.extend_from_slice(&objWithPatterns.patterns);
+    }
+    FocusedPropertyPathPattern {
+        focus: current_list_node,
+        patterns
+    }
+}
+CollectionPath_item -> FocusedPropertyPathPattern<TermOrVariable> = p:GraphNodePath _ { p }
+
+//[104]
+GraphNode -> FocusedTriplePattern<TermOrVariable> =
+    t:VarOrTerm { FocusedTriplePattern::new(t) } /
+    TriplesNode
+
+//[105]
+GraphNodePath -> FocusedPropertyPathPattern<TermOrVariable> =
+    t:VarOrTerm { FocusedPropertyPathPattern::new(t.into()) } /
+    TriplesNodePath
+
+//[106]
+VarOrTerm -> TermOrVariable =
+    v:Var { v.into() } /
+    t:GraphTerm { t.into() }
+
+//[107]
+VarOrIri -> NamedNodeOrVariable =
+    v:Var { v.into() } /
+    i:iri { i.into() }
+
+//[108]
+Var -> Variable = v:(VAR1 / VAR2) { Variable::new(v) }
+
+//[109]
+GraphTerm -> Term =
+    i:iri { i.into() } /
+    l:RDFLiteral { l.into() } /
+    l:NumericLiteral { l.into() } /
+    l:BooleanLiteral { l.into() } /
+    b:BlankNode { b.into() } /
+    NIL { BlankNode::default().into() }
+
+//[110]
+Expression -> Expression = e:ConditionalOrExpression {e}
+
+//[111]
+ConditionalOrExpression -> Expression = e:ConditionalOrExpression_item **<1,> ("||" _) {
+    if e.len() == 1 {
+        e[0].clone()
+    } else {
+        Expression::OrExpression(e)
+    }
+}
+ConditionalOrExpression_item -> Expression = e:ConditionalAndExpression _ { e }
+
+//[112]
+ConditionalAndExpression -> Expression = e:ConditionalAndExpression_item **<1,> ("&&" _) {
+    if e.len() == 1 {
+        e[0].clone()
+    } else {
+        Expression::AndExpression(e)
+    }
+}
+ConditionalAndExpression_item -> Expression = e:ValueLogical _ { e }
+
+//[113]
+ValueLogical -> Expression = RelationalExpression
+
+//[114]
+RelationalExpression -> Expression =
+    a:NumericExpression _ "=" _ b:NumericExpression { Expression::EqualExpression(Box::new(a), Box::new(b)) } /
+    a:NumericExpression _ "!=" _ b:NumericExpression { Expression::NotEqualExpression(Box::new(a), Box::new(b)) } /
+    a:NumericExpression _ ">" _ b:NumericExpression { Expression::GreaterExpression(Box::new(a), Box::new(b)) } /
+    a:NumericExpression _ ">=" _ b:NumericExpression { Expression::GreaterOrEqExpression(Box::new(a), Box::new(b)) } /
+    a:NumericExpression _ "<" _ b:NumericExpression { Expression::LowerExpression(Box::new(a), Box::new(b)) } /
+    a:NumericExpression _ "<=" _ b:NumericExpression { Expression::LowerOrEqExpression(Box::new(a), Box::new(b)) } /
+    a:NumericExpression _ "IN"i _ b:ExpressionList { Expression::InExpression(Box::new(a), b) } /
+    a:NumericExpression _ "NOT"i _ "IN"i _ b:ExpressionList { Expression::NotInExpression(Box::new(a), b) } /
+    NumericExpression
+
+//[115]
+NumericExpression -> Expression = AdditiveExpression
+
+//[116]
+AdditiveExpression -> Expression =
+    a:MultiplicativeExpression _ '+' _ b:AdditiveExpression { Expression::AddExpression(Box::new(a), Box::new(b)) } /
+    a:MultiplicativeExpression _ '-' _ b:AdditiveExpression { Expression::SubExpression(Box::new(a), Box::new(b)) } /
+    MultiplicativeExpression
+
+//[117]
+MultiplicativeExpression -> Expression =
+    a:UnaryExpression _ '*' _ b:MultiplicativeExpression { Expression::MulExpression(Box::new(a), Box::new(b)) } /
+    a:UnaryExpression _ '/' _ b:MultiplicativeExpression { Expression::DivExpression(Box::new(a), Box::new(b)) } /
+    UnaryExpression
+
+//[118]
+UnaryExpression -> Expression =
+    '!' _ e:PrimaryExpression { Expression::UnaryNotExpression(Box::new(e)) } /
+    '+' _ e:PrimaryExpression { Expression::UnaryPlusExpression(Box::new(e)) } /
+    '-' _ e:PrimaryExpression { Expression::UnaryMinusExpression(Box::new(e)) } /
+    PrimaryExpression
+
+//[119]
+PrimaryExpression -> Expression =
+    BrackettedExpression /
+    BuiltInCall /
+    iriOrFunction /
+    l:RDFLiteral { Expression::ConstantExpression(l.into()) } /
+    l:NumericLiteral { Expression::ConstantExpression(l.into()) } /
+    l:BooleanLiteral { Expression::ConstantExpression(l.into()) } /
+    v:Var { Expression::ConstantExpression(v.into()) }
+
+//[120]
+BrackettedExpression -> Expression = '(' _ e:Expression _ ')' { e }
+
+//[121]
+BuiltInCall -> Expression =
+    Aggregate /
+    "STR"i _ '(' _ e:Expression _ ')' { Expression::StrFunctionCall(Box::new(e)) } /
+    "LANG"i _ '(' _ e:Expression _ ')' { Expression::LangFunctionCall(Box::new(e)) } /
+    "LANGMATCHES"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::LangMatchesFunctionCall(Box::new(a), Box::new(b)) } /
+    "DATATYPE"i _ '(' _ e:Expression _ ')' { Expression::DatatypeFunctionCall(Box::new(e)) } /
+    "BOUND"i _ '(' _ v:Var _ ')' { Expression::BoundFunctionCall(v) } /
+    ("IRI"i / "URI"i) _ '(' _ e:Expression _ ')' { Expression::IRIFunctionCall(Box::new(e)) } /
+    "BNODE"i '(' _ e:Expression _ ')' { Expression::BNodeFunctionCall(Some(Box::new(e))) } /
+    "BNODE"i NIL { Expression::BNodeFunctionCall(None) }  /
+    "RAND"i _ NIL { Expression::RandFunctionCall() } /
+    "ABS"i _ '(' _ e:Expression _ ')' { Expression::AbsFunctionCall(Box::new(e)) } /
+    "CEIL"i _ '(' _ e:Expression _ ')' { Expression::CeilFunctionCall(Box::new(e)) } /
+    "FLOOR"i _ '(' _ e:Expression _ ')' { Expression::FloorFunctionCall(Box::new(e)) } /
+    "ROUND"i _ '(' _ e:Expression _ ')' { Expression::RoundFunctionCall(Box::new(e)) } /
+    "CONCAT"i e:ExpressionList { Expression::ConcatFunctionCall(e) } /
+    SubstringExpression /
+    "STRLEN"i _ '(' _ e: Expression _ ')' { Expression::StrLenFunctionCall(Box::new(e)) } /
+    StrReplaceExpression /
+	"UCASE"i _ '(' _ e:Expression _ ')' { Expression::UCaseFunctionCall(Box::new(e)) } /
+	"LCASE"i _ '(' _ e:Expression _ ')' { Expression::LCaseFunctionCall(Box::new(e)) } /
+	'ENCODE_FOR_URI' '(' _ e: Expression _ ')' { Expression::EncodeForURIFunctionCall(Box::new(e)) } /
+	"CONTAINS"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::ContainsFunctionCall(Box::new(a), Box::new(b)) } /
+	"STRSTARTS"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::StrStartsFunctionCall(Box::new(a), Box::new(b)) } /
+	"STRENDS"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::StrEndsFunctionCall(Box::new(a), Box::new(b)) } /
+	"STRBEFORE"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::StrBeforeFunctionCall(Box::new(a), Box::new(b)) } /
+	"STRAFTER"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::StrAfterFunctionCall(Box::new(a), Box::new(b)) } /
+	"YEAR"i _ '(' _ e:Expression _ ')' { Expression::YearFunctionCall(Box::new(e)) } /
+	"MONTH"i _ '(' _ e:Expression _ ')' { Expression::MonthFunctionCall(Box::new(e)) } /
+	"DAY"i _ '(' _ e:Expression _ ')' { Expression::DayFunctionCall(Box::new(e)) } /
+	"HOURS"i _ '(' _ e:Expression _ ')' { Expression::HoursFunctionCall(Box::new(e)) } /
+	"MINUTES"i _ '(' _ e:Expression _ ')' { Expression::MinutesFunctionCall(Box::new(e)) } /
+	"SECONDS"i _ '(' _ e:Expression _ ')' { Expression::SecondsFunctionCall(Box::new(e)) } /
+    ("TIMEZONE"i / "TZ"i) _ '(' _ e:Expression _ ')' { Expression::TimezoneFunctionCall(Box::new(e)) } /
+	"NOW"i _ NIL { Expression::NowFunctionCall() } /
+	"UUID"i _ NIL { Expression::UUIDFunctionCall() }/
+	"STRUUID"i _ NIL { Expression::StrUUIDFunctionCall() } /
+	"MD5"i '(' _ e:Expression _ ')' { Expression::MD5FunctionCall(Box::new(e)) } /
+	"SHA1"i '(' _ e:Expression _ ')' { Expression::SHA1FunctionCall(Box::new(e)) } /
+	"SHA256"i '(' _ e:Expression _ ')' { Expression::SHA256FunctionCall(Box::new(e)) } /
+	"SHA384"i '(' _ e:Expression _ ')' { Expression::SHA384FunctionCall(Box::new(e)) } /
+	"SHA512"i '(' _ e:Expression _ ')' { Expression::SHA512FunctionCall(Box::new(e)) } /
+	"COALESCE"i e:ExpressionList { Expression::CoalesceFunctionCall(e) } /
+	"IF"i _ '(' _ a:Expression _ ',' _ b:Expression _ ',' _ c:Expression _ ')' { Expression::IfFunctionCall(Box::new(a), Box::new(b), Box::new(c)) } /
+	"STRLANG"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::StrLangFunctionCall(Box::new(a), Box::new(b)) }  /
+	"STRDT"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::StrDTFunctionCall(Box::new(a), Box::new(b)) } /
+	"sameTerm"i '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::SameTermFunctionCall(Box::new(a), Box::new(b)) } /
+    ("isIRI"i / "isURI"i) _ '(' _ e:Expression _ ')' { Expression::IsIRIFunctionCall(Box::new(e)) } /
+	"isBLANK"i '(' _ e:Expression _ ')' { Expression::IsBlankFunctionCall(Box::new(e)) } /
+	"isLITERAL"i '(' _ e:Expression _ ')' { Expression::IsLiteralFunctionCall(Box::new(e)) } /
+	"isNUMERIC"i '(' _ e:Expression _ ')' { Expression::IsNumericFunctionCall(Box::new(e)) } /
+	RegexExpression /
+	ExistsFunc /
+	NotExistsFunc
+
+//[122]
+RegexExpression -> Expression =
+    "REGEX"i _ '(' _ a:Expression _ ',' _ b:Expression _ ',' _ c:Expression _ ')' { Expression::RegexFunctionCall(Box::new(a), Box::new(b), Some(Box::new(c))) } /
+    "REGEX"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::RegexFunctionCall(Box::new(a), Box::new(b), None) }
+
+
+SubstringExpression -> Expression =
+    "SUBSTR"i _ '(' _ a:Expression _ ',' _ b:Expression _ ',' _ c:Expression _ ')' { Expression::SubStrFunctionCall(Box::new(a), Box::new(b), Some(Box::new(c))) } /
+    "SUBSTR"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::SubStrFunctionCall(Box::new(a), Box::new(b), None) }
+
+
+//[124]
+StrReplaceExpression -> Expression =
+    "REPLACE"i _ '(' _ a:Expression _ ',' _ b:Expression _ ',' _ c:Expression _ ',' _ d:Expression _ ')' { Expression::ReplaceFunctionCall(Box::new(a), Box::new(b), Box::new(c), Some(Box::new(d))) } /
+    "REPLACE"i _ '(' _ a:Expression _ ',' _ b:Expression _ ',' _ c:Expression _ ')' { Expression::ReplaceFunctionCall(Box::new(a), Box::new(b), Box::new(c), None) }
+
+//[125]
+ExistsFunc -> Expression = "EXISTS"i _ p:GroupGraphPattern { Expression::ExistsFunctionCall(Box::new(p)) }
+
+//[126]
+NotExistsFunc -> Expression = "NOT"i _ "EXISTS"i _ p:GroupGraphPattern { Expression::NotExistsFunctionCall(Box::new(p)) }
+
+//[127]
+Aggregate -> Expression =
+    "COUNT"i _ '(' _ "DISTINCT"i _ '*' _ ')' { Expression::CountAggregate(None, true) } /
+    "COUNT"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Expression::CountAggregate(Some(Box::new(e)), true) } /
+    "COUNT"i _ '(' _ '*' _ ')' { Expression::CountAggregate(None, false) } /
+    "COUNT"i _ '(' _ e:Expression _ ')' { Expression::CountAggregate(Some(Box::new(e)), false) } /
+    "SUM"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Expression::SumAggregate(Box::new(e), true) } /
+    "SUM"i _ '(' _ e:Expression _ ')' { Expression::SumAggregate(Box::new(e), false) } /
+    "MIN"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Expression::MinAggregate(Box::new(e), true) } /
+    "MIN"i _ '(' _ e:Expression _ ')' { Expression::MinAggregate(Box::new(e), false) } /
+    "MAX"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Expression::MaxAggregate(Box::new(e), true) } /
+    "MAX"i _ '(' _ e:Expression _ ')' { Expression::MaxAggregate(Box::new(e), false) } /
+    "AVG"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Expression::AvgAggregate(Box::new(e), true) } /
+    "AVG"i _ '(' _ e:Expression _ ')' { Expression::AvgAggregate(Box::new(e), false) } /
+    "SAMPLE"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Expression::SampleAggregate(Box::new(e), true) } /
+    "SAMPLE"i _ '(' _ e:Expression _ ')' { Expression::SampleAggregate(Box::new(e), false) } /
+    "GROUP_CONCAT"i _ '(' _ "DISTINCT"i _ e:Expression _ ';' _ 'SEPARATOR'i _ '=' _ s:String _ ')' { Expression::GroupConcatAggregate(Box::new(e), true, Some(s)) } /
+    "GROUP_CONCAT"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Expression::GroupConcatAggregate(Box::new(e), true, None) } /
+    "GROUP_CONCAT"i _ '(' _ e:Expression _ ';' _ 'SEPARATOR'i _ '=' _ s:String _ ')' { Expression::GroupConcatAggregate(Box::new(e), true, Some(s)) } /
+    "GROUP_CONCAT"i _ '(' _ e:Expression _ ')' { Expression::GroupConcatAggregate(Box::new(e), false, None) }
+
+//[128]
+iriOrFunction -> Expression =
+    FunctionCall /
+    i:iri { Expression::ConstantExpression(i.into()) }
+
+//[129]
+RDFLiteral -> Literal =
+    v:String _ "^^" _ t:iri { Literal::new_typed_literal(v, t) } /
+    v:String _ l:LANGTAG { Literal::new_language_tagged_literal(v, l) } /
+    v:String { v.into() }
+
+//[130]
+NumericLiteral -> Literal  = NumericLiteralUnsigned / NumericLiteralPositive / NumericLiteralNegative
+
+//[131]
+NumericLiteralUnsigned -> Literal =
+    d:$(DOUBLE) { Literal::new_typed_literal(d, xsd::DOUBLE.clone()) } /
+    d:$(DECIMAL) { Literal::new_typed_literal(d, xsd::DECIMAL.clone()) } /
+    i:$(INTEGER) { Literal::new_typed_literal(i, xsd::INTEGER.clone()) }
+
+//[132]
+NumericLiteralPositive -> Literal =
+    d:$(DOUBLE_POSITIVE) { Literal::new_typed_literal(d, xsd::DOUBLE.clone()) } /
+    d:$(DECIMAL_POSITIVE) { Literal::new_typed_literal(d, xsd::DECIMAL.clone()) } /
+    i:$(INTEGER_POSITIVE) { Literal::new_typed_literal(i, xsd::INTEGER.clone()) }
+
+
+//[133]
+NumericLiteralNegative -> Literal =
+    d:$(DOUBLE_NEGATIVE) { Literal::new_typed_literal(d, xsd::DOUBLE.clone()) } /
+    d:$(DECIMAL_NEGATIVE) { Literal::new_typed_literal(d, xsd::DECIMAL.clone()) } /
+    i:$(INTEGER_NEGATIVE) { Literal::new_typed_literal(i, xsd::INTEGER.clone()) }
+
+//[134]
+BooleanLiteral -> Literal =
+    "true" { true.into() } /
+    "false" { false.into() }
+
+//[135]
+String -> String = STRING_LITERAL1 / STRING_LITERAL2 / STRING_LITERAL_LONG1 / STRING_LITERAL_LONG2
+
+//[136]
+iri -> NamedNode = i:(IRIREF / PrefixedName) {?
+    match state.url_parser().parse(&i) {
+       Ok(url) => Ok(NamedNode::new(url)),
+       Err(error) => Err("IRI parsing failed")
+    }
+}
+
+//[137]
+PrefixedName -> String = PNAME_LN /
+    ns:PNAME_NS {? state.namespaces.get(ns).map(|v| v.clone()).ok_or("Prefix not found") }
+
+//[138]
+BlankNode -> BlankNode =
+    b:BLANK_NODE_LABEL { state.bnodes_map.entry(b.to_string()).or_insert_with(BlankNode::default).clone() } /
+    ANON { BlankNode::default() }
+
+//[139]
+IRIREF -> String = "<" i:$(([^\u{00}-\u{20}<>"{}|^\u{60}\u{5c}])*) ">" {
+    i.to_owned()
+}
+
+//[140]
+PNAME_NS -> &'input str = ns:$(PN_PREFIX? ":") {
+    ns
+}
+
+//[141]
+PNAME_LN -> String = ns:$(PNAME_NS) local:PN_LOCAL {?
+    state.namespaces.get(ns).map(|v| v.clone() + &local).ok_or("Prefix not found")
+}
+
+//[142]
+BLANK_NODE_LABEL -> &'input str = "_:" b:$(([0-9] / PN_CHARS_U) PN_CHARS* ("."+ PN_CHARS+)*) {
+    b
+}
+
+//[143]
+VAR1 -> &'input str = '?' v:$(VARNAME) { v }
+
+//[144]
+VAR2 -> &'input str = '$' v:$(VARNAME) { v }
+
+//[145]
+LANGTAG -> &'input str = "@" l:$([a-zA-Z]+ ("-" [a-zA-Z0-9]+)*) {
+    l
+}
+
+//[146]
+INTEGER -> () = [0-9]+
+
+//[147]
+DECIMAL -> () = [0-9]* '.' [0-9]+
+
+//[148]
+DOUBLE -> () = ([0-9]+ "." [0-9]* / "."? [0-9]+) EXPONENT
+
+//[149]
+INTEGER_POSITIVE -> () = '+' _ INTEGER
+
+//[150]
+DECIMAL_POSITIVE -> () = '+' _ DECIMAL
+
+//[151]
+DOUBLE_POSITIVE -> () = '+' _ DOUBLE
+
+//[152]
+INTEGER_NEGATIVE -> () = '-' _ INTEGER
+
+//[153]
+DECIMAL_NEGATIVE -> () = '-' _ DECIMAL
+
+//[154]
+DOUBLE_NEGATIVE -> () = '-' _ DOUBLE
+
+//[155]
+EXPONENT -> () = [eE] [+-]? [0-9]+
+
+//[156]
+STRING_LITERAL1 -> String = "'" l:((STRING_LITERAL1_simple_char / ECHAR)*) "'" {
+    l.into_iter().collect()
+}
+STRING_LITERAL1_simple_char -> char = c:$([^'\u{005c}\u{000a}\u{000d}]) { c.chars().next().unwrap() }
+
+
+//[157]
+STRING_LITERAL2 -> String = "\"" l:((STRING_LITERAL2_simple_char / ECHAR)*) "\"" {
+    l.into_iter().collect()
+}
+STRING_LITERAL2_simple_char -> char = c:$([^"\u{005c}\u{000a}\u{000d}]) { c.chars().next().unwrap() }
+
+//[158]
+STRING_LITERAL_LONG1 -> String = "'''" l:(STRING_LITERAL_LONG1_inner*) "'''" {
+    l.into_iter().collect()
+}
+STRING_LITERAL_LONG1_inner -> String = a:$(("''" / "'")?) b:(STRING_LITERAL_LONG1_simple_char / ECHAR) {
+    let mut s = a.to_string();
+    s.push(b);
+    s
+}
+STRING_LITERAL_LONG1_simple_char -> char = c:$([^'\u{005c}]) { c.chars().next().unwrap() }
+
+//[159]
+STRING_LITERAL_LONG2 -> String = "\"\"\"" l:(STRING_LITERAL_LONG2_inner*) "\"\"\"" {
+    l.into_iter().collect()
+}
+STRING_LITERAL_LONG2_inner -> String = a:$(("\"\"" / "\"")?) b:(STRING_LITERAL_LONG2_simple_char / ECHAR) {
+    let mut s = a.to_string();
+    s.push(b);
+    s
+}
+STRING_LITERAL_LONG2_simple_char -> char = c:$([^"\u{005c}]) { c.chars().next().unwrap() }
+
+//[160]
+ECHAR -> char = "\\" c:$([tbnrf"'\\]) {
+    match c {
+        "t" => '\u{0009}',
+        "b" => '\u{0008}',
+        "n" => '\u{000A}',
+        "r" => '\u{000D}',
+        "f" => '\u{000C}',
+        "\"" => '\u{0022}',
+        "'" => '\u{0027}',
+        "\\" => '\u{005C}',
+        _ => panic!("unexpected escaped char") // not possible
+    }
+}
+
+//[161]
+NIL -> () = "(" WS* ")"
+
+//[162]
+WS -> () = #quiet<[\u{20}\u{9}\u{D}\u{A}]>
+
+//[163]
+ANON -> () = '[' WS* ']'
+
+//[164]
+PN_CHARS_BASE -> () = [A-Za-z\u{00C0}-\u{00D6}\u{00D8}-\u{00F6}\u{00F8}-\u{02FF}\u{0370}-\u{037D}\u{037F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}]
+
+//[165]
+PN_CHARS_U -> () = '_' / PN_CHARS_BASE
+
+//[166]
+VARNAME	-> () = ([0-9] / PN_CHARS_U) ([0-9\u{00B7}\u{0300}-\u{036F}\u{203F}-\u{2040}] / PN_CHARS_U)*
+
+//[167]
+PN_CHARS -> () = [\-0-9\u{00B7}\u{0300}-\u{036F}\u{203F}-\u{2040}] / PN_CHARS_U
+
+//[168]
+PN_PREFIX -> () = PN_CHARS_BASE PN_CHARS* ("."+ PN_CHARS+)*
+
+//[169]
+PN_LOCAL -> String = f:PN_LOCAL_first c:(PN_LOCAL_next*) e:(PN_LOCAL_next_dot*) {
+    f.to_string() + &c.concat() + &e.concat()
+}
+PN_LOCAL_first -> String =
+    c:$(":" / [0-9] / PN_CHARS_U) { c.into() } /
+    PLX
+PN_LOCAL_next -> String =
+    c:$(":" / PN_CHARS) { c.into() } /
+    PLX
+PN_LOCAL_next_dot -> String = d:$('.'+) f:PN_LOCAL_next* { d.to_string() + &f.concat()}
+
+//[170]
+PLX -> String =
+    p:$(PERCENT) { p.into() } /
+    e:PN_LOCAL_ESC { iter::once(e).collect() }
+
+//[171]
+PERCENT -> () = "%" HEX HEX
+
+//[172]
+HEX -> () = ([0-9A-Fa-f])
+
+//[173]
+PN_LOCAL_ESC -> char = "\\" c:$([_~\.\-!$&'()*+,;=/?#@%:]) { c.chars().next().unwrap() } //TODO: added '/' to make tests pass but is it valid?
+
+//space
+_ = #quiet<([ \t\n\r] / comment)*>
+//comment
+comment = #quiet<"#" [^\r\n]*>

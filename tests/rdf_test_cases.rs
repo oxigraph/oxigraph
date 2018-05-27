@@ -1,56 +1,20 @@
+///! Integration tests based on [RDF 1.1 Test Cases](https://www.w3.org/TR/rdf11-testcases/)
+
 #[macro_use]
 extern crate lazy_static;
 extern crate reqwest;
 extern crate rudf;
 extern crate url;
 
-use reqwest::Client;
-use reqwest::Response;
+mod client;
+
+use client::RDFClient;
 use rudf::model::data::*;
 use rudf::model::vocab::rdf;
 use rudf::model::vocab::rdfs;
-use rudf::rio::ntriples::read_ntriples;
-use rudf::rio::turtle::read_turtle;
-use rudf::rio::RioError;
-use rudf::rio::RioResult;
 use rudf::store::isomorphism::GraphIsomorphism;
-use rudf::store::memory::MemoryGraph;
-use std::error::Error;
 use std::str::FromStr;
 use url::Url;
-
-struct RDFClient {
-    client: Client,
-}
-
-impl Default for RDFClient {
-    fn default() -> Self {
-        Self {
-            client: Client::new(),
-        }
-    }
-}
-
-impl RDFClient {
-    fn load_turtle(&self, url: Url) -> RioResult<MemoryGraph> {
-        Ok(read_turtle(self.get(&url)?, Some(url))?.collect())
-    }
-
-    fn load_ntriples(&self, url: Url) -> RioResult<MemoryGraph> {
-        read_ntriples(self.get(&url)?).collect()
-    }
-
-    fn get(&self, url: &Url) -> RioResult<Response> {
-        match self.client.get(url.clone()).send() {
-            Ok(response) => Ok(response),
-            Err(error) => if error.description() == "message is incomplete" {
-                self.get(url)
-            } else {
-                Err(RioError::new(error))
-            },
-        }
-    }
-}
 
 mod mf {
     use rudf::model::data::NamedNode;

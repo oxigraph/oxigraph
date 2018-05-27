@@ -8,6 +8,12 @@ impl<'a> Escaper for &'a str {
     }
 }
 
+impl Escaper for String {
+    fn escape(&self) -> String {
+        self.chars().flat_map(|c| EscapeRDF::new(c)).collect()
+    }
+}
+
 /// Customized version of EscapeDefault of the Rust standard library
 struct EscapeRDF {
     state: EscapeRdfState,
