@@ -11,8 +11,8 @@ use std::collections::BTreeMap;
 //[2]
 #[pub]
 triple -> Option<Triple> =
-    _ s:subject _ p:predicate _ o:object _ "." _ comment? { Some(Triple::new(s, p, o)) } /
-    _ comment? { None }
+    _ s:subject _ p:predicate _ o:object _ "." _ comment? EOL? { Some(Triple::new(s, p, o)) } /
+    _ comment? EOL? { None }
 
 //[3]
 subject -> NamedOrBlankNode =

@@ -11,15 +11,37 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Read;
 
+struct NTriplesIterator<R: Read> {
+    buffer: String,
+    reader: BufReader<R>,
+    bnodes_map: BTreeMap<String, BlankNode>,
+}
+
+impl<R: Read> Iterator for NTriplesIterator<R> {
+    type Item = RioResult<Triple>;
+
+    fn next(&mut self) -> Option<RioResult<Triple>> {
+        match self.reader.read_line(&mut self.buffer) {
+            Ok(line_count) => if line_count == 0 {
+                None
+            } else {
+                let result = grammar::triple(&self.buffer, &mut self.bnodes_map);
+                self.buffer.clear();
+                match result {
+                    Ok(Some(triple)) => Some(Ok(triple)),
+                    Ok(None) => self.next(),
+                    Err(error) => Some(Err(RioError::new(error))),
+                }
+            },
+            Err(error) => Some(Err(error.into())),
+        }
+    }
+}
+
 pub fn read_ntriples<'a, R: Read + 'a>(source: R) -> impl Iterator<Item = RioResult<Triple>> {
-    //TODO: use read_lines to avoid allocations
-    let lines = BufReader::new(source).lines();
-    let mut bnodes_map: BTreeMap<String, BlankNode> = BTreeMap::default();
-    lines.flat_map(move |line| match line {
-        Ok(line) => match grammar::triple(line.as_str(), &mut bnodes_map) {
-            Ok(triple) => Some(Ok(triple?)),
-            Err(error) => Some(Err(RioError::new(error))),
-        },
-        Err(error) => Some(Err(error.into())),
-    })
+    NTriplesIterator {
+        buffer: String::default(),
+        reader: BufReader::new(source),
+        bnodes_map: BTreeMap::default(),
+    }
 }
