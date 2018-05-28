@@ -5,6 +5,7 @@ extern crate rudf;
 extern crate url;
 
 use reqwest::Client;
+use reqwest::Response;
 use rudf::model::data::*;
 use rudf::model::vocab::rdf;
 use rudf::model::vocab::rdfs;
@@ -14,7 +15,7 @@ use rudf::rio::ntriples::read_ntriples;
 use rudf::rio::turtle::read_turtle;
 use rudf::store::isomorphism::GraphIsomorphism;
 use rudf::store::memory::MemoryGraph;
-use std::iter::FromIterator;
+use std::error::Error;
 use std::str::FromStr;
 use url::Url;
 
@@ -31,17 +32,22 @@ impl Default for RDFClient {
 }
 
 impl RDFClient {
-    fn load_turtle(&self, uri: Url) -> RioResult<MemoryGraph> {
-        match self.client.get(uri.clone()).send() {
-            Ok(response) => Ok(MemoryGraph::from_iter(read_turtle(response, Some(uri))?)),
-            Err(error) => Err(RioError::new(error)),
-        }
+    fn load_turtle(&self, url: Url) -> RioResult<MemoryGraph> {
+        Ok(read_turtle(self.get(&url)?, Some(url))?.collect())
     }
 
-    fn load_ntriples(&self, uri: Url) -> RioResult<MemoryGraph> {
-        match self.client.get(uri).send() {
-            Ok(response) => read_ntriples(response).collect(),
-            Err(error) => Err(RioError::new(error)),
+    fn load_ntriples(&self, url: Url) -> RioResult<MemoryGraph> {
+        read_ntriples(self.get(&url)?).collect()
+    }
+
+    fn get(&self, url: &Url) -> RioResult<Response> {
+        match self.client.get(url.clone()).send() {
+            Ok(response) => Ok(response),
+            Err(error) => if error.description() == "message is incomplete" {
+                self.get(url)
+            } else {
+                Err(RioError::new(error))
+            },
         }
     }
 }
