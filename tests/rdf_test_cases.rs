@@ -254,6 +254,9 @@ pub mod mf {
         pub static ref ENTRIES: NamedNode = NamedNode::from_str(
             "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#entries"
         ).unwrap();
+        pub static ref NAME: NamedNode = NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#name"
+        ).unwrap();
         pub static ref ACTION: NamedNode = NamedNode::from_str(
             "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action"
         ).unwrap();
@@ -280,7 +283,7 @@ impl<'a> Iterator for TestManifest<'a> {
                     _ => return Some(Err(ManifestError::NoType)),
                 };
                 let name = match self.graph
-                    .object_for_subject_predicate(&test_subject, &rdfs::COMMENT)
+                    .object_for_subject_predicate(&test_subject, &mf::NAME)
                 {
                     Some(Term::Literal(c)) => Some(c.value().to_string()),
                     _ => None,
