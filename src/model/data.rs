@@ -7,6 +7,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use url::ParseError;
 use url::Url;
+use utils::Escaper;
 use uuid::Uuid;
 
 /// A RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
@@ -163,10 +164,10 @@ impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.is_plain() {
             self.language()
-                .map(|lang| write!(f, "\"{}\"@{}", self.value(), lang))
-                .unwrap_or_else(|| write!(f, "\"{}\"", self.value()))
+                .map(|lang| write!(f, "\"{}\"@{}", self.value().escape(), lang))
+                .unwrap_or_else(|| write!(f, "\"{}\"", self.value().escape()))
         } else {
-            write!(f, "\"{}\"^^{}", self.value(), self.datatype())
+            write!(f, "\"{}\"^^{}", self.value().escape(), self.datatype())
         }
     }
 }

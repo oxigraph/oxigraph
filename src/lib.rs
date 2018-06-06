@@ -6,3 +6,4 @@ extern crate uuid;
 pub mod model;
 pub mod rio;
 pub mod store;
+mod utils;
