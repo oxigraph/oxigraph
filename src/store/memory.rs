@@ -1,4 +1,5 @@
 use model::data::*;
+use model::vocab::rdf;
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
@@ -84,6 +85,13 @@ impl MemoryGraph {
         self.subjects_for_predicate_object(predicate, object).nth(0)
     }
 
+    pub fn values_for_list<'a>(&'a self, root: NamedOrBlankNode) -> ListIterator<'a> {
+        ListIterator {
+            graph: self,
+            current_node: Some(root),
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.triples.len()
     }
@@ -144,5 +152,34 @@ impl Extend<Triple> for MemoryGraph {
 impl<'a> Extend<&'a Triple> for MemoryGraph {
     fn extend<I: IntoIterator<Item = &'a Triple>>(&mut self, iter: I) {
         self.triples.extend(iter.into_iter().cloned())
+    }
+}
+
+pub struct ListIterator<'a> {
+    graph: &'a MemoryGraph,
+    current_node: Option<NamedOrBlankNode>,
+}
+
+impl<'a> Iterator for ListIterator<'a> {
+    type Item = Term;
+
+    fn next(&mut self) -> Option<Term> {
+        match self.current_node.clone() {
+            Some(current) => {
+                let result = self.graph
+                    .object_for_subject_predicate(&current, &rdf::FIRST)?
+                    .clone();
+                self.current_node = match self.graph
+                    .object_for_subject_predicate(&current, &rdf::REST)
+                {
+                    Some(Term::NamedNode(n)) if *n == *rdf::NIL => None,
+                    Some(Term::NamedNode(n)) => Some(n.clone().into()),
+                    Some(Term::BlankNode(n)) => Some(n.clone().into()),
+                    _ => None,
+                };
+                Some(result)
+            }
+            None => None,
+        }
     }
 }
