@@ -93,6 +93,12 @@ pub enum Literal {
 lazy_static! {
     static ref XSD_BOOLEAN: NamedNode =
         NamedNode::from_str("http://www.w3.org/2001/XMLSchema#boolean").unwrap();
+    static ref XSD_DOUBLE: NamedNode =
+        NamedNode::from_str("http://www.w3.org/2001/XMLSchema#double").unwrap();
+    static ref XSD_FLOAT: NamedNode =
+        NamedNode::from_str("http://www.w3.org/2001/XMLSchema#float").unwrap();
+    static ref XSD_INTEGER: NamedNode =
+        NamedNode::from_str("http://www.w3.org/2001/XMLSchema#integer").unwrap();
     static ref XSD_STRING: NamedNode =
         NamedNode::from_str("http://www.w3.org/2001/XMLSchema#string").unwrap();
     static ref RDF_LANG_STRING: NamedNode =
@@ -189,6 +195,33 @@ impl From<bool> for Literal {
         Literal::TypedLiteral {
             value: value.to_string(),
             datatype: XSD_BOOLEAN.clone(),
+        }
+    }
+}
+
+impl From<usize> for Literal {
+    fn from(value: usize) -> Self {
+        Literal::TypedLiteral {
+            value: value.to_string(),
+            datatype: XSD_INTEGER.clone(),
+        }
+    }
+}
+
+impl From<f32> for Literal {
+    fn from(value: f32) -> Self {
+        Literal::TypedLiteral {
+            value: value.to_string(),
+            datatype: XSD_FLOAT.clone(),
+        }
+    }
+}
+
+impl From<f64> for Literal {
+    fn from(value: f64) -> Self {
+        Literal::TypedLiteral {
+            value: value.to_string(),
+            datatype: XSD_DOUBLE.clone(),
         }
     }
 }
