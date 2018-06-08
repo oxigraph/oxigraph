@@ -6,7 +6,7 @@ mod grammar {
     use model::*;
     use rio::RioError;
     use rio::RioResult;
-    use sparql::ast::*;
+    use sparql::algebra::*;
     use sparql::model::*;
     use sparql::parser::unescape_unicode_codepoints;
     use std::borrow::Cow;
@@ -90,31 +90,51 @@ mod grammar {
         }
     }
 
-    impl From<FocusedPropertyPathPattern<TermOrVariable>> for GraphPattern {
-        fn from(input: FocusedPropertyPathPattern<TermOrVariable>) -> Self {
-            if input.patterns.len() == 1 {
-                input.patterns[0].clone().into()
-            } else {
-                GraphPattern::GroupPattern(input.patterns.into_iter().map(|p| p.into()).collect())
+    #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+    enum PartialGraphPattern {
+        Optional(GraphPattern),
+        Minus(GraphPattern),
+        Bind(Expression, Variable),
+        Filter(Expression),
+        Other(GraphPattern),
+    }
+
+    fn new_join(l: GraphPattern, r: GraphPattern) -> GraphPattern {
+        //Avoid to output empty BGPs
+        if let GraphPattern::BGP(pl) = &l {
+            if pl.is_empty() {
+                return r;
             }
+        }
+        if let GraphPattern::BGP(pr) = &r {
+            if pr.is_empty() {
+                return l;
+            }
+        }
+
+        //Merge BGPs
+        match (l, r) {
+            (GraphPattern::BGP(mut pl), GraphPattern::BGP(pr)) => {
+                pl.extend_from_slice(&pr);
+                GraphPattern::BGP(pl)
+            }
+            (l, r) => GraphPattern::Join(Box::new(l), Box::new(r)),
         }
     }
 
-    fn flatten_group_pattern(v: impl Iterator<Item = GraphPattern>) -> GraphPattern {
-        let l: Vec<GraphPattern> = v.into_iter()
-            .flat_map(|p| {
-                if let GraphPattern::GroupPattern(v2) = p {
-                    v2.into_iter()
-                } else {
-                    vec![p].into_iter()
-                }
-            })
-            .collect();
-        if l.len() == 1 {
-            l[0].clone()
-        } else {
-            GraphPattern::GroupPattern(l)
-        }
+    fn not_empty_fold<T>(
+        iter: impl Iterator<Item = T>,
+        combine: impl Fn(T, T) -> T,
+    ) -> Result<T, &'static str> {
+        iter.fold(None, |a, b| match a {
+            Some(av) => Some(combine(av, b)),
+            None => Some(b),
+        }).ok_or("The iterator should not be empty")
+    }
+
+    enum Either<L, R> {
+        Left(L),
+        Right(R),
     }
 
     pub struct ParserState {

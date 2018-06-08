@@ -1,4 +1,5 @@
 use model::*;
+use std::collections::BTreeMap;
 use std::fmt;
 use uuid::Uuid;
 
@@ -111,5 +112,54 @@ impl From<NamedNodeOrVariable> for TermOrVariable {
             NamedNodeOrVariable::NamedNode(node) => TermOrVariable::Term(node.into()),
             NamedNodeOrVariable::Variable(var) => TermOrVariable::Variable(var),
         }
+    }
+}
+
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+pub struct TriplePattern {
+    pub subject: TermOrVariable,
+    pub predicate: NamedNodeOrVariable,
+    pub object: TermOrVariable,
+}
+
+impl TriplePattern {
+    pub fn new(
+        subject: impl Into<TermOrVariable>,
+        predicate: impl Into<NamedNodeOrVariable>,
+        object: impl Into<TermOrVariable>,
+    ) -> Self {
+        Self {
+            subject: subject.into(),
+            predicate: predicate.into(),
+            object: object.into(),
+        }
+    }
+}
+
+impl fmt::Display for TriplePattern {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} {} {}", self.subject, self.predicate, self.object)
+    }
+}
+
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+pub struct Binding(BTreeMap<Variable, Term>);
+
+impl Binding {
+    pub fn insert(&mut self, var: Variable, value: Term) {
+        self.0.insert(var, value);
+    }
+
+    pub fn get<'a>(&'a self, key: &'a TermOrVariable) -> Option<&'a Term> {
+        match key {
+            TermOrVariable::Term(t) => Some(t),
+            TermOrVariable::Variable(v) => self.0.get(v),
+        }
+    }
+}
+
+impl Default for Binding {
+    fn default() -> Self {
+        Binding(BTreeMap::default())
     }
 }

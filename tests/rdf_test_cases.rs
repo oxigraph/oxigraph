@@ -15,7 +15,7 @@ use rudf::rio::ntriples::read_ntriples;
 use rudf::rio::turtle::read_turtle;
 use rudf::rio::RioError;
 use rudf::rio::RioResult;
-use rudf::sparql::ast::Query;
+use rudf::sparql::algebra::Query;
 use rudf::sparql::parser::read_sparql_query;
 use rudf::store::isomorphism::GraphIsomorphism;
 use rudf::store::memory::MemoryGraph;
@@ -144,7 +144,7 @@ fn sparql_w3c_syntax_testsuite() {
                     if let Err(error) = read_sparql_query(query.to_string().as_bytes(), None) {
                         assert!(
                             false,
-                            "Failure tu deserialize \"{}\" of {} with error: {}",
+                            "Failure to deserialize \"{}\" of {} with error: {}",
                             query.to_string(),
                             test,
                             error

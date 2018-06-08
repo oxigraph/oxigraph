@@ -4,7 +4,6 @@ use std::char;
 use model::vocab::rdf;
 use model::vocab::xsd;
 use std::iter;
-use std::iter::once;
 
 #![arguments(state: &mut ParserState)]
 
@@ -48,10 +47,11 @@ SelectQuery -> Query = s:SelectClause _ d:DatasetClauses _ f:WhereClause _ Solut
 
 //[8]
 SubSelect -> GraphPattern = s:SelectClause _ f:WhereClause _ SolutionModifier _ ValuesClause { //TODO: Modifiers
-    GraphPattern::SubSelectPattern {
+    GraphPattern::default()
+    /*TODO GraphPattern::SubSelectPattern {
         selection: s,
         filter: Box::new(f)
-    }
+    }*/
 }
 
 //[9]
@@ -81,7 +81,7 @@ ConstructQuery -> Query =
         Query::ConstructQuery {
             construct: c.clone(),
             dataset: d,
-            filter: flatten_group_pattern(c.into_iter().map(|p| PropertyPathPattern::from(p).into()))
+            filter: GraphPattern::BGP(c.into_iter().map(|p| PropertyPathPattern::from(p)).collect())
         }
     }
 
@@ -135,12 +135,8 @@ GroupClause -> () = "GROUP"i _ "BY"i _ (GroupCondition _)+
 GroupCondition -> () = BuiltInCall / FunctionCall / '(' _ Expression _ ("AS"i _ Var _)? ')' / Var
 
 //[21]
-HavingClause -> Expression = "HAVING"i _ c:HavingCondition+ {
-    if c.len() == 1 {
-        c[0].clone()
-    } else {
-        Expression::AndExpression(c)
-    }
+HavingClause -> Expression = "HAVING"i _ e:HavingCondition+ {?
+    not_empty_fold(e.into_iter(), |a, b| Expression::AndExpression(Box::new(a), Box::new(b)))
 }
 
 //[22]
@@ -179,67 +175,107 @@ GroupGraphPattern -> GraphPattern =
 
 //[54]
 GroupGraphPatternSub -> GraphPattern = a:TriplesBlock? _ b:GroupGraphPatternSub_item* {
-    let mut list = a.map(|v| vec![v]).unwrap_or_else(|| vec![]);
+    let mut p = a.map(|v| vec![PartialGraphPattern::Other(GraphPattern::BGP(v))]).unwrap_or_else(|| vec![]);
     for v in b {
-        list.extend_from_slice(&v)
+        p.extend_from_slice(&v)
     }
-    flatten_group_pattern(list.into_iter())
+    let mut filter: Option<Expression> = None;
+    let mut g = GraphPattern::default();
+    for e in p {
+        match e {
+            PartialGraphPattern::Optional(p) => match p {
+                    GraphPattern::Filter(f, a2) => {
+                        g = GraphPattern::LeftJoin(Box::new(g), a2, f)
+                    }
+                    a => {
+                        g = GraphPattern::LeftJoin(Box::new(g), Box::new(a), Literal::from(true).into())
+                    }
+            }
+            PartialGraphPattern::Minus(p) => {
+                g = GraphPattern::Minus(Box::new(g), Box::new(p))
+            }
+            PartialGraphPattern::Bind(expr, var) => {
+                g = GraphPattern::Extend(Box::new(g), var, expr)
+            }
+            PartialGraphPattern::Filter(expr) => match filter {
+                Some(f) => { filter = Some(Expression::AndExpression(Box::new(f), Box::new(expr))) },
+                None => { filter = Some(expr) }
+            },
+            PartialGraphPattern::Other(e) => g = new_join(g, e),
+        }
+    }
+    match filter {
+        Some(filter) => GraphPattern::Filter(filter, Box::new(g)),
+        None => g
+    }
 }
-GroupGraphPatternSub_item -> Vec<GraphPattern> = a:GraphPatternNotTriples _ ('.' _)? b:TriplesBlock? _ {
+GroupGraphPatternSub_item -> Vec<PartialGraphPattern> = a:GraphPatternNotTriples _ ('.' _)? b:TriplesBlock? _ {
     let mut result = vec![a];
-    b.map(|v| result.push(v));
+    b.map(|v| result.push(PartialGraphPattern::Other(GraphPattern::BGP(v))));
     result
 }
 
 //[55]
-TriplesBlock -> GraphPattern = h:TriplesSameSubjectPath _ t:TriplesBlock_tail? {
-    match t {
-        Some(l) => flatten_group_pattern(vec![h, l].into_iter()),
-        None => flatten_group_pattern(once(h))
+TriplesBlock -> Vec<PropertyPathPattern> = h:TriplesSameSubjectPath _ t:TriplesBlock_tail? {
+    let mut triples = h;
+    if let Some(l) = t {
+        triples.extend_from_slice(&l)
     }
+    triples
 }
-TriplesBlock_tail -> GraphPattern = '.' _ t:TriplesBlock? _ {
-    t.unwrap_or_else(|| GraphPattern::GroupPattern(Vec::default()))
+TriplesBlock_tail -> Vec<PropertyPathPattern> = '.' _ t:TriplesBlock? _ {
+    t.unwrap_or_else(|| Vec::default())
 }
 
 //[56]
-GraphPatternNotTriples -> GraphPattern = GroupOrUnionGraphPattern / OptionalGraphPattern / MinusGraphPattern / GraphGraphPattern / ServiceGraphPattern / Filter / Bind / InlineData
+GraphPatternNotTriples -> PartialGraphPattern = GroupOrUnionGraphPattern / OptionalGraphPattern / MinusGraphPattern / GraphGraphPattern / ServiceGraphPattern / Filter / Bind / InlineData
 
 //[57]
-OptionalGraphPattern -> GraphPattern = "OPTIONAL"i _ p:GroupGraphPattern {
-    GraphPattern::OptionalPattern(Box::new(p))
+OptionalGraphPattern -> PartialGraphPattern = "OPTIONAL"i _ p:GroupGraphPattern {
+    PartialGraphPattern::Optional(p)
 }
 
 //[58]
-GraphGraphPattern -> GraphPattern = "GRAPH"i _ g:VarOrIri _ p:GroupGraphPattern {
-    GraphPattern::GraphPattern(g, Box::new(p))
+GraphGraphPattern -> PartialGraphPattern = "GRAPH"i _ g:VarOrIri _ p:GroupGraphPattern {
+    PartialGraphPattern::Other(GraphPattern::Graph(g, Box::new(p)))
 }
 
 //[59]
-ServiceGraphPattern -> GraphPattern = "SERVICE"i _ "SILENT"i? _ s:VarOrIri _ p:GroupGraphPattern {
-    GraphPattern::ServicePattern(s, Box::new(p))
+ServiceGraphPattern -> PartialGraphPattern = "SERVICE"i _ "SILENT"i? _ s:VarOrIri _ p:GroupGraphPattern {
+    PartialGraphPattern::Other(GraphPattern::default())
+    //TODO PartialGraphPattern::Other(GraphPattern::ServicePattern(s, Box::new(p)))
 }
 
 //[60]
-Bind -> GraphPattern = "BIND"i _ '(' _ e:Expression _ "AS"i _ v:Var _ ')' {
-    GraphPattern::BindPattern(e, v)
+Bind -> PartialGraphPattern = "BIND"i _ '(' _ e:Expression _ "AS"i _ v:Var _ ')' {
+    PartialGraphPattern::Bind(e, v)
 }
 
 //[61]
-InlineData -> GraphPattern = "VALUES"i _ p:DataBlock { p }
+InlineData -> PartialGraphPattern = "VALUES"i _ p:DataBlock { PartialGraphPattern::Other(p) }
 
 //[62]
 DataBlock -> GraphPattern = InlineDataOneVar / InlineDataFull
 
 //[63]
-InlineDataOneVar -> GraphPattern = v:Var _ '{' _ d:InlineDataOneVar_value* '}' {
-    GraphPattern::ValuesPattern(vec![v], d)
+InlineDataOneVar -> GraphPattern = var:Var _ '{' _ d:InlineDataOneVar_value* '}' {
+    GraphPattern::Multiset(d.into_iter().map(|val| {
+        let mut bindings = Binding::default();
+        val.map(|v| bindings.insert(var.clone(), v));
+        bindings
+    }).collect())
 }
-InlineDataOneVar_value -> Vec<Option<Term>> = t:DataBlockValue { vec![t] }
+InlineDataOneVar_value -> Option<Term> = t:DataBlockValue { t }
 
 //[64]
-InlineDataFull -> GraphPattern = '(' _ var:InlineDataFull_var* _ ')' _ '{' _ val:InlineDataFull_values* '}' {
-    GraphPattern::ValuesPattern(var, val)
+InlineDataFull -> GraphPattern = '(' _ vars:InlineDataFull_var* _ ')' _ '{' _ val:InlineDataFull_values* '}' {
+    GraphPattern::Multiset(val.into_iter().map(|vals| {
+        let mut bindings = Binding::default();
+        for (var, val) in vars.iter().zip(vals.into_iter()) {
+            val.map(|v| bindings.insert(var.clone(), v));
+        }
+        bindings
+    }).collect())
 }
 InlineDataFull_var -> Variable = v:Var _ { v }
 InlineDataFull_values -> Vec<Option<Term>> = '(' _ v:InlineDataFull_value* _ ')' _ { v }
@@ -254,22 +290,22 @@ DataBlockValue -> Option<Term> =
     "UNDEF"i { None }
 
 //[66]
-MinusGraphPattern -> GraphPattern = "MINUS"i _ p: GroupGraphPattern {
-    GraphPattern::MinusPattern(Box::new(p))
+MinusGraphPattern -> PartialGraphPattern = "MINUS"i _ p: GroupGraphPattern {
+    PartialGraphPattern::Minus(p)
 }
 
 //[67]
-GroupOrUnionGraphPattern -> GraphPattern = p:GroupOrUnionGraphPattern_item **<1,> ("UNION"i _) {
-    if p.len() == 1 {
-        p[0].clone()
-    } else {
-        GraphPattern::UnionPattern(p)
-    }
+GroupOrUnionGraphPattern -> PartialGraphPattern = p:GroupOrUnionGraphPattern_item **<1,> ("UNION"i _) {?
+    not_empty_fold(p.into_iter(), |a, b| {
+        GraphPattern::Union(Box::new(a), Box::new(b))
+    }).map(PartialGraphPattern::Other)
 }
 GroupOrUnionGraphPattern_item -> GraphPattern = p:GroupGraphPattern _ { p }
 
 //[68]
-Filter -> GraphPattern = "FILTER"i _ c:Constraint { GraphPattern::FilterPattern(c) }
+Filter -> PartialGraphPattern = "FILTER"i _ c:Constraint {
+    PartialGraphPattern::Filter(c)
+}
 
 //[69]
 Constraint -> Expression = BrackettedExpression / BuiltInCall / FunctionCall
@@ -337,7 +373,7 @@ PropertyListNotEmpty -> FocusedTriplePattern<Vec<(NamedNodeOrVariable,Vec<TermOr
 }
 PropertyListNotEmpty_item -> FocusedTriplePattern<(NamedNodeOrVariable,Vec<TermOrVariable>)> = p:Verb _ o:ObjectList _ {
     FocusedTriplePattern {
-        focus: (p, o.focus),
+        focus: (p.into(), o.focus),
         patterns: o.patterns
     }
 }
@@ -359,7 +395,7 @@ ObjectList_item -> FocusedTriplePattern<TermOrVariable> = o:Object _ { o }
 Object -> FocusedTriplePattern<TermOrVariable> = GraphNode
 
 //[81]
-TriplesSameSubjectPath -> GraphPattern =
+TriplesSameSubjectPath -> Vec<PropertyPathPattern> =
     s:VarOrTerm _ po:PropertyListPathNotEmpty {
         let mut patterns = po.patterns;
         for (p, os) in po.focus {
@@ -367,7 +403,7 @@ TriplesSameSubjectPath -> GraphPattern =
                 patterns.push(PropertyPathPattern::new(s.clone(), p.clone(), o))
             }
         }
-        flatten_group_pattern(patterns.into_iter().map(|p| p.into()))
+        patterns
     } /
     s:TriplesNodePath _ po:PropertyListPath {
         let mut patterns = s.patterns;
@@ -377,7 +413,7 @@ TriplesSameSubjectPath -> GraphPattern =
                 patterns.push(PropertyPathPattern::new(s.focus.clone(), p.clone(), o))
             }
         }
-        flatten_group_pattern(patterns.into_iter().map(|p| p.into()))
+        patterns
     }
 
 //[82]
@@ -428,22 +464,18 @@ ObjectPath -> FocusedPropertyPathPattern<TermOrVariable> = GraphNodePath
 Path -> PropertyPath = PathAlternative
 
 //[89]
-PathAlternative -> PropertyPath = p:PathAlternative_item **<1,> ('|' _) {
-    if p.len() == 1 {
-        p[0].clone()
-    } else {
-        PropertyPath::SequencePath(p)
-    }
+PathAlternative -> PropertyPath = p:PathAlternative_item **<1,> ('|' _) {?
+    not_empty_fold(p.into_iter(), |a, b| {
+        PropertyPath::AlternativePath(Box::new(a), Box::new(b))
+    })
 }
 PathAlternative_item -> PropertyPath = p:PathSequence _ { p }
 
 //[90]
-PathSequence -> PropertyPath = p:PathSequence_item **<1,> ('/' _) {
-    if p.len() == 1 {
-        p[0].clone()
-    } else {
-        PropertyPath::AlternativePath(p)
-    }
+PathSequence -> PropertyPath = p:PathSequence_item **<1,> ('/' _) {?
+    not_empty_fold(p.into_iter(), |a, b| {
+        PropertyPath::SequencePath(Box::new(a), Box::new(b))
+    })
 }
 PathSequence_item -> PropertyPath = p:PathEltOrInverse _ { p }
 
@@ -462,19 +494,43 @@ PathEltOrInverse -> PropertyPath =
 //[94]
 PathPrimary -> PropertyPath =
     v:Verb { v.into() } /
-    '!' _ p:PathNegatedPropertySet {  PropertyPath::NegatedPath(Box::new(p)) } /
+    '!' _ p:PathNegatedPropertySet { p } /
     '(' _ p:Path _ ')' { p }
 
 //[95]
 PathNegatedPropertySet -> PropertyPath =
-    '(' _ p:PathNegatedPropertySet_item **<1,> ('|' _) ')' { PropertyPath::AlternativePath(p) } /
-    PathOneInPropertySet
-PathNegatedPropertySet_item -> PropertyPath = p:PathOneInPropertySet _ { p }
+    '(' _ p:PathNegatedPropertySet_item **<1,> ('|' _) ')' {
+        let mut direct = Vec::default();
+        let mut inverse = Vec::default();
+        for e in p {
+            match e {
+                Either::Left(a) => direct.push(a),
+                Either::Right(b) => inverse.push(b)
+            }
+        }
+        if inverse.len() == 0 {
+            PropertyPath::NegatedPropertySet(direct)
+        } else if direct.len() == 0 {
+           PropertyPath::InversePath(Box::new(PropertyPath::NegatedPropertySet(inverse)))
+        } else {
+            PropertyPath::AlternativePath(
+                Box::new(PropertyPath::NegatedPropertySet(direct)),
+                Box::new(PropertyPath::InversePath(Box::new(PropertyPath::NegatedPropertySet(inverse))))
+            )
+        }
+    } /
+    p:PathOneInPropertySet {
+        match p {
+            Either::Left(a) => PropertyPath::NegatedPropertySet(vec![a]),
+            Either::Right(b) => PropertyPath::InversePath(Box::new(PropertyPath::NegatedPropertySet(vec![b]))),
+        }
+    }
+PathNegatedPropertySet_item -> Either<NamedNodeOrVariable,NamedNodeOrVariable> = p:PathOneInPropertySet _ { p }
 
 //[96]
-PathOneInPropertySet -> PropertyPath =
-    '^' _ v:Verb { PropertyPath::InversePath(Box::new(v.into())) } /
-    v:Verb { v.into() }
+PathOneInPropertySet -> Either<NamedNodeOrVariable,NamedNodeOrVariable> =
+    '^' _ v:Verb { Either::Right(v) } /
+    v:Verb { Either::Left(v) }
 
 //[98]
 TriplesNode -> FocusedTriplePattern<TermOrVariable> = Collection / BlankNodePropertyList
@@ -584,22 +640,14 @@ GraphTerm -> Term =
 Expression -> Expression = e:ConditionalOrExpression {e}
 
 //[111]
-ConditionalOrExpression -> Expression = e:ConditionalOrExpression_item **<1,> ("||" _) {
-    if e.len() == 1 {
-        e[0].clone()
-    } else {
-        Expression::OrExpression(e)
-    }
+ConditionalOrExpression -> Expression = e:ConditionalOrExpression_item **<1,> ("||" _) {?
+    not_empty_fold(e.into_iter(), |a, b| Expression::OrExpression(Box::new(a), Box::new(b)))
 }
 ConditionalOrExpression_item -> Expression = e:ConditionalAndExpression _ { e }
 
 //[112]
-ConditionalAndExpression -> Expression = e:ConditionalAndExpression_item **<1,> ("&&" _) {
-    if e.len() == 1 {
-        e[0].clone()
-    } else {
-        Expression::AndExpression(e)
-    }
+ConditionalAndExpression -> Expression = e:ConditionalAndExpression_item **<1,> ("&&" _) {?
+    not_empty_fold(e.into_iter(), |a, b| Expression::AndExpression(Box::new(a), Box::new(b)))
 }
 ConditionalAndExpression_item -> Expression = e:ValueLogical _ { e }
 
@@ -729,7 +777,7 @@ StrReplaceExpression -> Expression =
 ExistsFunc -> Expression = "EXISTS"i _ p:GroupGraphPattern { Expression::ExistsFunctionCall(Box::new(p)) }
 
 //[126]
-NotExistsFunc -> Expression = "NOT"i _ "EXISTS"i _ p:GroupGraphPattern { Expression::NotExistsFunctionCall(Box::new(p)) }
+NotExistsFunc -> Expression = "NOT"i _ "EXISTS"i _ p:GroupGraphPattern { Expression::UnaryNotExpression(Box::new(Expression::ExistsFunctionCall(Box::new(p)))) }
 
 //[127]
 Aggregate -> Expression =
