@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 ///! Implements data structures for https://www.w3.org/TR/rdf11-concepts/
 ///! Inspired by [RDFjs](http://rdf.js.org/)
 use std::fmt;
@@ -86,7 +87,9 @@ impl Default for BlankNode {
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum Literal {
     SimpleLiteral(String),
+    String(String),
     LanguageTaggedString { value: String, language: String },
+    Boolean(bool),
     TypedLiteral { value: String, datatype: NamedNode },
 }
 
@@ -113,6 +116,7 @@ impl Literal {
 
     /// Builds a RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) with a [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri)
     pub fn new_typed_literal(value: impl Into<String>, datatype: impl Into<NamedNode>) -> Self {
+        //TODO: proper casts
         Literal::TypedLiteral {
             value: value.into(),
             datatype: datatype.into(),
@@ -131,11 +135,13 @@ impl Literal {
     }
 
     /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form)
-    pub fn value(&self) -> &str {
+    pub fn value<'a>(&'a self) -> Cow<'a, String> {
         match self {
-            Literal::SimpleLiteral(value) => value,
-            Literal::LanguageTaggedString { value, .. } => value,
-            Literal::TypedLiteral { value, .. } => value,
+            Literal::SimpleLiteral(value) => Cow::Borrowed(value),
+            Literal::String(value) => Cow::Borrowed(value),
+            Literal::LanguageTaggedString { value, .. } => Cow::Borrowed(value),
+            Literal::Boolean(value) => Cow::Owned(value.to_string()),
+            Literal::TypedLiteral { value, .. } => Cow::Borrowed(value),
         }
     }
 
@@ -152,7 +158,9 @@ impl Literal {
     pub fn datatype(&self) -> &NamedNode {
         match self {
             Literal::SimpleLiteral(_) => &XSD_STRING,
+            Literal::String(_) => &XSD_STRING,
             Literal::LanguageTaggedString { .. } => &RDF_LANG_STRING,
+            Literal::Boolean(_) => &XSD_BOOLEAN,
             Literal::TypedLiteral { datatype, .. } => datatype,
         }
     }
@@ -180,22 +188,19 @@ impl fmt::Display for Literal {
 
 impl<'a> From<&'a str> for Literal {
     fn from(value: &'a str) -> Self {
-        Literal::SimpleLiteral(value.into())
+        Literal::String(value.into())
     }
 }
 
 impl From<String> for Literal {
     fn from(value: String) -> Self {
-        Literal::SimpleLiteral(value)
+        Literal::String(value)
     }
 }
 
 impl From<bool> for Literal {
     fn from(value: bool) -> Self {
-        Literal::TypedLiteral {
-            value: value.to_string(),
-            datatype: XSD_BOOLEAN.clone(),
-        }
+        Literal::Boolean(value)
     }
 }
 
@@ -223,14 +228,6 @@ impl From<f64> for Literal {
             value: value.to_string(),
             datatype: XSD_DOUBLE.clone(),
         }
-    }
-}
-
-impl FromStr for Literal {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(s.into())
     }
 }
 
