@@ -1,4 +1,4 @@
-use model::data::*;
+use model::*;
 use std::fmt;
 use uuid::Uuid;
 

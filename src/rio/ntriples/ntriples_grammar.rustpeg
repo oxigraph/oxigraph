@@ -3,7 +3,7 @@
 use std::iter::FromIterator;
 use std::char;
 use std::str::FromStr;
-use model::data::*;
+use model::*;
 use std::collections::BTreeMap;
 
 #![arguments(bnodes_map: &mut BTreeMap<String, BlankNode>)]

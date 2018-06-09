@@ -8,9 +8,9 @@ extern crate url;
 
 use reqwest::Client;
 use reqwest::Response;
-use rudf::model::data::*;
 use rudf::model::vocab::rdf;
 use rudf::model::vocab::rdfs;
+use rudf::model::*;
 use rudf::rio::ntriples::read_ntriples;
 use rudf::rio::turtle::read_turtle;
 use rudf::rio::RioError;
@@ -244,7 +244,7 @@ impl<'a> TestManifest<'a> {
 }
 
 pub mod mf {
-    use rudf::model::data::NamedNode;
+    use rudf::model::NamedNode;
     use std::str::FromStr;
 
     lazy_static! {

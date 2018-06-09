@@ -1,7 +1,7 @@
 ///! Provides ready to use NamedNode for basic RDF vocabularies
 
 pub mod rdf {
-    use model::data::NamedNode;
+    use model::named_node::NamedNode;
     use std::str::FromStr;
 
     lazy_static! {
@@ -23,7 +23,7 @@ pub mod rdf {
 }
 
 pub mod rdfs {
-    use model::data::NamedNode;
+    use model::named_node::NamedNode;
     use std::str::FromStr;
 
     lazy_static! {
@@ -34,7 +34,7 @@ pub mod rdfs {
 
 pub mod xsd {
     ///! NamedNodes for [RDF compatible XSD datatypes](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-compatible-xsd-types)
-    use model::data::NamedNode;
+    use model::named_node::NamedNode;
     use std::str::FromStr;
 
     lazy_static! {

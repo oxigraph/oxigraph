@@ -1,5 +1,5 @@
-use model::data::*;
 use model::vocab::rdf;
+use model::*;
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;

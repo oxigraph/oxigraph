@@ -1,4 +1,4 @@
-use model::data::*;
+use model::*;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeSet;
 use std::collections::HashMap;

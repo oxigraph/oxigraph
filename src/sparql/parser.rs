@@ -3,7 +3,7 @@ use std::char;
 use std::str::Chars;
 
 mod grammar {
-    use model::data::*;
+    use model::*;
     use rio::RioError;
     use rio::RioResult;
     use sparql::ast::*;

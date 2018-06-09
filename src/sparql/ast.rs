@@ -1,4 +1,4 @@
-use model::data::*;
+use model::*;
 use sparql::model::*;
 use std::fmt;
 use std::ops::Add;

@@ -3,7 +3,7 @@
 mod grammar {
     include!(concat!(env!("OUT_DIR"), "/turtle_grammar.rs"));
 
-    use model::data::*;
+    use model::*;
     use rio::*;
     use std::collections::BTreeMap;
     use std::collections::HashMap;

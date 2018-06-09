@@ -4,7 +4,7 @@ mod grammar {
     include!(concat!(env!("OUT_DIR"), "/ntriples_grammar.rs"));
 }
 
-use model::data::*;
+use model::*;
 use rio::*;
 use std::collections::BTreeMap;
 use std::io::BufRead;
