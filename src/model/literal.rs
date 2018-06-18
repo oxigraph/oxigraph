@@ -24,10 +24,18 @@ impl Literal {
 
     /// Builds a RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) with a [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri)
     pub fn new_typed_literal(value: impl Into<String>, datatype: impl Into<NamedNode>) -> Self {
-        //TODO: proper casts
-        Literal::TypedLiteral {
-            value: value.into(),
-            datatype: datatype.into(),
+        let value = value.into();
+        let datatype = datatype.into();
+        if datatype == *xsd::BOOLEAN {
+            match value.as_str() {
+                "true" | "1" => Literal::Boolean(true),
+                "false" | "0" => Literal::Boolean(false),
+                _ => Literal::TypedLiteral { value, datatype },
+            }
+        } else if datatype == *xsd::STRING {
+            Literal::String(value)
+        } else {
+            Literal::TypedLiteral { value, datatype }
         }
     }
 
