@@ -81,7 +81,7 @@ ConstructQuery -> Query =
         Query::ConstructQuery {
             construct: c.clone(),
             dataset: d,
-            filter: MultiSetPattern::BGP(c.into_iter().map(|p| PropertyPathPattern::from(p)).collect())
+            filter: MultiSetPattern::BGP(c.into_iter().map(|p| PropertyPathPattern::from(p)).collect()).into()
         }
     }
 
@@ -91,7 +91,7 @@ ConstructQuery_optional_triple_template -> Vec<TriplePattern> = TriplesTemplate 
 DescribeQuery -> Query = "DESCRIBE"i _ ('*' / (VarOrIri _)+) _ d:DatasetClauses f:WhereClause? _ SolutionModifier {
     Query::DescribeQuery {
         dataset: d,
-        filter: f.unwrap_or_else(MultiSetPattern::default)
+        filter: f.unwrap_or_else(ListPattern::default)
     }
 }
 
@@ -123,7 +123,9 @@ NamedGraphClause -> Dataset = "NAMED"i _ s:SourceSelector {
 SourceSelector -> NamedNode = iri
 
 //[17]
-WhereClause -> MultiSetPattern = "WHERE"i? _ p:GroupGraphPattern { p }
+WhereClause -> ListPattern = "WHERE"i? _ p:GroupGraphPattern {
+    p.into()
+}
 
 //[18]
 SolutionModifier -> () = GroupClause? _ HavingClause? _ OrderClause? _ LimitOffsetClauses?
@@ -255,7 +257,7 @@ InlineData -> PartialGraphPattern = "VALUES"i _ p:DataBlock { PartialGraphPatter
 
 //[62]
 DataBlock -> MultiSetPattern = l:(InlineDataOneVar / InlineDataFull) {
-    MultiSetPattern::ToMultiSet(Box::new(ListPattern::Data(l)))
+    ListPattern::Data(l).into()
 }
 
 //[63]

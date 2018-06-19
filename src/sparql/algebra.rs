@@ -785,6 +785,15 @@ impl From<PropertyPathPattern> for MultiSetPattern {
     }
 }
 
+impl From<ListPattern> for MultiSetPattern {
+    fn from(pattern: ListPattern) -> Self {
+        match pattern {
+            ListPattern::ToList(pattern) => pattern,
+            pattern => MultiSetPattern::ToMultiSet(Box::new(pattern)),
+        }
+    }
+}
+
 struct SparqlMultiSetPattern<'a>(&'a MultiSetPattern);
 
 impl<'a> fmt::Display for SparqlMultiSetPattern<'a> {
@@ -872,6 +881,21 @@ pub enum ListPattern {
     Distinct(Box<MultiSetPattern>),
     Reduced(Box<MultiSetPattern>),
     Slice(Box<MultiSetPattern>, usize, usize),
+}
+
+impl Default for ListPattern {
+    fn default() -> Self {
+        ListPattern::Data(Vec::default())
+    }
+}
+
+impl From<MultiSetPattern> for ListPattern {
+    fn from(pattern: MultiSetPattern) -> Self {
+        match pattern {
+            MultiSetPattern::ToMultiSet(pattern) => *pattern,
+            pattern => ListPattern::ToList(pattern),
+        }
+    }
 }
 
 impl fmt::Display for ListPattern {
@@ -1000,20 +1024,20 @@ pub enum Query {
     SelectQuery {
         selection: Selection,
         dataset: Dataset,
-        filter: MultiSetPattern,
+        filter: ListPattern,
     },
     ConstructQuery {
         construct: Vec<TriplePattern>,
         dataset: Dataset,
-        filter: MultiSetPattern,
+        filter: ListPattern,
     },
     DescribeQuery {
         dataset: Dataset,
-        filter: MultiSetPattern,
+        filter: ListPattern,
     },
     AskQuery {
         dataset: Dataset,
-        filter: MultiSetPattern,
+        filter: ListPattern,
     },
 }
 
@@ -1029,7 +1053,7 @@ impl fmt::Display for Query {
                 "SELECT {} {} WHERE {{ {} }}",
                 selection,
                 dataset,
-                SparqlMultiSetPattern(&filter)
+                SparqlListPattern(&filter)
             ),
             Query::ConstructQuery {
                 construct,
@@ -1044,19 +1068,19 @@ impl fmt::Display for Query {
                     .collect::<Vec<String>>()
                     .join(" . "),
                 dataset,
-                SparqlMultiSetPattern(&filter)
+                SparqlListPattern(&filter)
             ),
             Query::DescribeQuery { dataset, filter } => write!(
                 f,
                 "DESCRIBE {} WHERE {{ {} }}",
                 dataset,
-                SparqlMultiSetPattern(&filter)
+                SparqlListPattern(&filter)
             ),
             Query::AskQuery { dataset, filter } => write!(
                 f,
                 "ASK {} WHERE {{ {} }}",
                 dataset,
-                SparqlMultiSetPattern(&filter)
+                SparqlListPattern(&filter)
             ),
         }
     }
