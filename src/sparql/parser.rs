@@ -92,21 +92,21 @@ mod grammar {
 
     #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
     enum PartialGraphPattern {
-        Optional(GraphPattern),
-        Minus(GraphPattern),
+        Optional(MultiSetPattern),
+        Minus(MultiSetPattern),
         Bind(Expression, Variable),
         Filter(Expression),
-        Other(GraphPattern),
+        Other(MultiSetPattern),
     }
 
-    fn new_join(l: GraphPattern, r: GraphPattern) -> GraphPattern {
+    fn new_join(l: MultiSetPattern, r: MultiSetPattern) -> MultiSetPattern {
         //Avoid to output empty BGPs
-        if let GraphPattern::BGP(pl) = &l {
+        if let MultiSetPattern::BGP(pl) = &l {
             if pl.is_empty() {
                 return r;
             }
         }
-        if let GraphPattern::BGP(pr) = &r {
+        if let MultiSetPattern::BGP(pr) = &r {
             if pr.is_empty() {
                 return l;
             }
@@ -114,11 +114,11 @@ mod grammar {
 
         //Merge BGPs
         match (l, r) {
-            (GraphPattern::BGP(mut pl), GraphPattern::BGP(pr)) => {
+            (MultiSetPattern::BGP(mut pl), MultiSetPattern::BGP(pr)) => {
                 pl.extend_from_slice(&pr);
-                GraphPattern::BGP(pl)
+                MultiSetPattern::BGP(pl)
             }
-            (l, r) => GraphPattern::Join(Box::new(l), Box::new(r)),
+            (l, r) => MultiSetPattern::Join(Box::new(l), Box::new(r)),
         }
     }
 

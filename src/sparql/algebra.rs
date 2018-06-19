@@ -216,7 +216,7 @@ pub enum Expression {
     IsNumericFunctionCall(Box<Expression>),
     RegexFunctionCall(Box<Expression>, Box<Expression>, Option<Box<Expression>>),
     CustomFunctionCall(NamedNode, Vec<Expression>),
-    ExistsFunctionCall(Box<GraphPattern>),
+    ExistsFunctionCall(Box<MultiSetPattern>),
     CountAggregate(Option<Box<Expression>>, bool),
     SumAggregate(Box<Expression>, bool),
     MinAggregate(Box<Expression>, bool),
@@ -483,7 +483,7 @@ impl<'a> fmt::Display for SparqlExpression<'a> {
             Expression::UnaryMinusExpression(e) => write!(f, "-{}", SparqlExpression(&*e)),
             Expression::UnaryNotExpression(e) => match e.as_ref() {
                 Expression::ExistsFunctionCall(p) => {
-                    write!(f, "NOT EXISTS {{ {} }}", SparqlGraphPattern(&*p))
+                    write!(f, "NOT EXISTS {{ {} }}", SparqlMultiSetPattern(&*p))
                 }
                 e => write!(f, "!{}", e),
             },
@@ -672,7 +672,7 @@ impl<'a> fmt::Display for SparqlExpression<'a> {
                     .join(", ")
             ),
             Expression::ExistsFunctionCall(p) => {
-                write!(f, "EXISTS {{ {} }}", SparqlGraphPattern(&*p))
+                write!(f, "EXISTS {{ {} }}", SparqlMultiSetPattern(&*p))
             }
             Expression::CountAggregate(e, distinct) => if *distinct {
                 e.as_ref()
@@ -736,30 +736,22 @@ impl<'a> fmt::Display for SparqlExpression<'a> {
 }
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
-pub enum GraphPattern {
-    Multiset(Vec<Binding>),
+pub enum MultiSetPattern {
     BGP(Vec<PropertyPathPattern>),
-    Join(Box<GraphPattern>, Box<GraphPattern>),
-    LeftJoin(Box<GraphPattern>, Box<GraphPattern>, Expression),
-    Filter(Expression, Box<GraphPattern>),
-    Union(Box<GraphPattern>, Box<GraphPattern>),
-    Graph(NamedNodeOrVariable, Box<GraphPattern>),
-    Extend(Box<GraphPattern>, Variable, Expression),
-    Minus(Box<GraphPattern>, Box<GraphPattern>),
-    Group(),
-    Aggregation(),
-    AggregateJoin(),
-    OrderBy(Box<GraphPattern>),
-    Project(Box<GraphPattern>),
-    Distinct(Box<GraphPattern>),
-    Reduced(Box<GraphPattern>),
-    Slice(Box<GraphPattern>, usize, usize),
+    Join(Box<MultiSetPattern>, Box<MultiSetPattern>),
+    LeftJoin(Box<MultiSetPattern>, Box<MultiSetPattern>, Expression),
+    Filter(Expression, Box<MultiSetPattern>),
+    Union(Box<MultiSetPattern>, Box<MultiSetPattern>),
+    Graph(NamedNodeOrVariable, Box<MultiSetPattern>),
+    Extend(Box<MultiSetPattern>, Variable, Expression),
+    Minus(Box<MultiSetPattern>, Box<MultiSetPattern>),
+    ToMultiSet(Box<ListPattern>),
 }
 
-impl fmt::Display for GraphPattern {
+impl fmt::Display for MultiSetPattern {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            GraphPattern::BGP(p) => write!(
+            MultiSetPattern::BGP(p) => write!(
                 f,
                 "BGP({})",
                 p.iter()
@@ -767,36 +759,36 @@ impl fmt::Display for GraphPattern {
                     .collect::<Vec<String>>()
                     .join(" . ")
             ),
-            GraphPattern::Join(a, b) => write!(f, "Join({}, {})", a, b),
-            GraphPattern::LeftJoin(a, b, e) => write!(f, "LeftJoin({}, {}, {})", a, b, e),
-            GraphPattern::Filter(e, p) => write!(f, "Filter({}, {})", e, p),
-            GraphPattern::Union(a, b) => write!(f, "Union({}, {})", a, b),
-            GraphPattern::Graph(g, p) => write!(f, "Graph({}, {})", g, p),
-            GraphPattern::Extend(p, v, e) => write!(f, "Extend({}), {}, {})", p, v, e),
-            GraphPattern::Minus(a, b) => write!(f, "Minus({}, {})", a, b),
-            _ => Ok(()), //TODO
+            MultiSetPattern::Join(a, b) => write!(f, "Join({}, {})", a, b),
+            MultiSetPattern::LeftJoin(a, b, e) => write!(f, "LeftJoin({}, {}, {})", a, b, e),
+            MultiSetPattern::Filter(e, p) => write!(f, "Filter({}, {})", e, p),
+            MultiSetPattern::Union(a, b) => write!(f, "Union({}, {})", a, b),
+            MultiSetPattern::Graph(g, p) => write!(f, "Graph({}, {})", g, p),
+            MultiSetPattern::Extend(p, v, e) => write!(f, "Extend({}), {}, {})", p, v, e),
+            MultiSetPattern::Minus(a, b) => write!(f, "Minus({}, {})", a, b),
+            MultiSetPattern::ToMultiSet(l) => write!(f, "{}", l),
         }
     }
 }
 
-impl Default for GraphPattern {
+impl Default for MultiSetPattern {
     fn default() -> Self {
-        GraphPattern::BGP(Vec::default())
+        MultiSetPattern::BGP(Vec::default())
     }
 }
 
-impl From<PropertyPathPattern> for GraphPattern {
+impl From<PropertyPathPattern> for MultiSetPattern {
     fn from(p: PropertyPathPattern) -> Self {
-        GraphPattern::BGP(vec![p])
+        MultiSetPattern::BGP(vec![p])
     }
 }
 
-struct SparqlGraphPattern<'a>(&'a GraphPattern);
+struct SparqlMultiSetPattern<'a>(&'a MultiSetPattern);
 
-impl<'a> fmt::Display for SparqlGraphPattern<'a> {
+impl<'a> fmt::Display for SparqlMultiSetPattern<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.0 {
-            GraphPattern::BGP(p) => {
+            MultiSetPattern::BGP(p) => {
                 if p.is_empty() {
                     write!(f, "{{}}")
                 } else {
@@ -810,43 +802,82 @@ impl<'a> fmt::Display for SparqlGraphPattern<'a> {
                     )
                 }
             }
-            GraphPattern::Join(a, b) => {
-                write!(f, "{} {}", SparqlGraphPattern(&*a), SparqlGraphPattern(&*b))
-            }
-            GraphPattern::LeftJoin(a, b, e) => write!(
+            MultiSetPattern::Join(a, b) => write!(
+                f,
+                "{} {}",
+                SparqlMultiSetPattern(&*a),
+                SparqlMultiSetPattern(&*b)
+            ),
+            MultiSetPattern::LeftJoin(a, b, e) => write!(
                 f,
                 "{} OPTIONAL {{ {} FILTER({}) }}",
-                SparqlGraphPattern(&*a),
-                SparqlGraphPattern(&*b),
+                SparqlMultiSetPattern(&*a),
+                SparqlMultiSetPattern(&*b),
                 SparqlExpression(e)
             ),
-            GraphPattern::Filter(e, p) => write!(
+            MultiSetPattern::Filter(e, p) => write!(
                 f,
                 "{} FILTER({})",
-                SparqlGraphPattern(&*p),
+                SparqlMultiSetPattern(&*p),
                 SparqlExpression(e)
             ),
-            GraphPattern::Union(a, b) => write!(
+            MultiSetPattern::Union(a, b) => write!(
                 f,
                 "{{ {} }} UNION {{ {} }}",
-                SparqlGraphPattern(&*a),
-                SparqlGraphPattern(&*b)
+                SparqlMultiSetPattern(&*a),
+                SparqlMultiSetPattern(&*b)
             ),
-            GraphPattern::Graph(g, p) => write!(f, "GRAPH {} {{ {} }}", g, SparqlGraphPattern(&*p)),
-            GraphPattern::Extend(p, v, e) => write!(
+            MultiSetPattern::Graph(g, p) => {
+                write!(f, "GRAPH {} {{ {} }}", g, SparqlMultiSetPattern(&*p))
+            }
+            MultiSetPattern::Extend(p, v, e) => write!(
                 f,
                 "{} BIND({} AS {})",
-                SparqlGraphPattern(&*p),
+                SparqlMultiSetPattern(&*p),
                 SparqlExpression(e),
                 v
             ),
-            GraphPattern::Minus(a, b) => write!(
+            MultiSetPattern::Minus(a, b) => write!(
                 f,
                 "{} MINUS {{ {} }}",
-                SparqlGraphPattern(&*a),
-                SparqlGraphPattern(&*b)
+                SparqlMultiSetPattern(&*a),
+                SparqlMultiSetPattern(&*b)
             ),
-            _ => write!(f, "{{}}"), //TODO
+            MultiSetPattern::ToMultiSet(l) => write!(f, "{}", SparqlListPattern(&l)),
+        }
+    }
+}
+
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+pub enum ListPattern {
+    Data(Vec<Binding>),
+    ToList(MultiSetPattern),
+    Group(),
+    Aggregation(),
+    AggregateJoin(),
+    OrderBy(Box<MultiSetPattern>),
+    Project(Box<MultiSetPattern>),
+    Distinct(Box<MultiSetPattern>),
+    Reduced(Box<MultiSetPattern>),
+    Slice(Box<MultiSetPattern>, usize, usize),
+}
+
+impl fmt::Display for ListPattern {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ListPattern::ToList(l) => write!(f, "{}", l),
+            _ => Ok(()), //TODO
+        }
+    }
+}
+
+struct SparqlListPattern<'a>(&'a ListPattern);
+
+impl<'a> fmt::Display for SparqlListPattern<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.0 {
+            ListPattern::ToList(l) => write!(f, "{}", SparqlMultiSetPattern(&l)),
+            _ => Ok(()), //TODO
         }
     }
 }
@@ -957,20 +988,20 @@ pub enum Query {
     SelectQuery {
         selection: Selection,
         dataset: Dataset,
-        filter: GraphPattern,
+        filter: MultiSetPattern,
     },
     ConstructQuery {
         construct: Vec<TriplePattern>,
         dataset: Dataset,
-        filter: GraphPattern,
+        filter: MultiSetPattern,
     },
     DescribeQuery {
         dataset: Dataset,
-        filter: GraphPattern,
+        filter: MultiSetPattern,
     },
     AskQuery {
         dataset: Dataset,
-        filter: GraphPattern,
+        filter: MultiSetPattern,
     },
 }
 
@@ -986,7 +1017,7 @@ impl fmt::Display for Query {
                 "SELECT {} {} WHERE {{ {} }}",
                 selection,
                 dataset,
-                SparqlGraphPattern(&filter)
+                SparqlMultiSetPattern(&filter)
             ),
             Query::ConstructQuery {
                 construct,
@@ -1001,19 +1032,19 @@ impl fmt::Display for Query {
                     .collect::<Vec<String>>()
                     .join(" . "),
                 dataset,
-                SparqlGraphPattern(&filter)
+                SparqlMultiSetPattern(&filter)
             ),
             Query::DescribeQuery { dataset, filter } => write!(
                 f,
                 "DESCRIBE {} WHERE {{ {} }}",
                 dataset,
-                SparqlGraphPattern(&filter)
+                SparqlMultiSetPattern(&filter)
             ),
             Query::AskQuery { dataset, filter } => write!(
                 f,
                 "ASK {} WHERE {{ {} }}",
                 dataset,
-                SparqlGraphPattern(&filter)
+                SparqlMultiSetPattern(&filter)
             ),
         }
     }
