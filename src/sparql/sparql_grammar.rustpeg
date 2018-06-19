@@ -241,10 +241,9 @@ GraphGraphPattern -> PartialGraphPattern = "GRAPH"i _ g:VarOrIri _ p:GroupGraphP
 }
 
 //[59]
-ServiceGraphPattern -> PartialGraphPattern = "SERVICE"i _ "SILENT"i? _ s:VarOrIri _ p:GroupGraphPattern {
-    PartialGraphPattern::Other(MultiSetPattern::default())
-    //TODO PartialGraphPattern::Other(MultiSetPattern::ServicePattern(s, Box::new(p)))
-}
+ServiceGraphPattern -> PartialGraphPattern =
+    "SERVICE"i _ "SILENT"i _ s:VarOrIri _ p:GroupGraphPattern { PartialGraphPattern::Other(MultiSetPattern::Service(s, Box::new(p), true)) } /
+    "SERVICE"i _ s:VarOrIri _ p:GroupGraphPattern { PartialGraphPattern::Other(MultiSetPattern::Service(s, Box::new(p), false)) }
 
 //[60]
 Bind -> PartialGraphPattern = "BIND"i _ '(' _ e:Expression _ "AS"i _ v:Var _ ')' {

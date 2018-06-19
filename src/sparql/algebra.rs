@@ -746,6 +746,7 @@ pub enum MultiSetPattern {
     Extend(Box<MultiSetPattern>, Variable, Expression),
     Minus(Box<MultiSetPattern>, Box<MultiSetPattern>),
     ToMultiSet(Box<ListPattern>),
+    Service(NamedNodeOrVariable, Box<MultiSetPattern>, bool),
 }
 
 impl fmt::Display for MultiSetPattern {
@@ -767,6 +768,7 @@ impl fmt::Display for MultiSetPattern {
             MultiSetPattern::Extend(p, v, e) => write!(f, "Extend({}), {}, {})", p, v, e),
             MultiSetPattern::Minus(a, b) => write!(f, "Minus({}, {})", a, b),
             MultiSetPattern::ToMultiSet(l) => write!(f, "{}", l),
+            MultiSetPattern::Service(n, p, s) => write!(f, "Service({}, {}, {})", n, p, s),
         }
     }
 }
@@ -844,6 +846,16 @@ impl<'a> fmt::Display for SparqlMultiSetPattern<'a> {
                 SparqlMultiSetPattern(&*b)
             ),
             MultiSetPattern::ToMultiSet(l) => write!(f, "{}", SparqlListPattern(&l)),
+            MultiSetPattern::Service(n, p, s) => if *s {
+                write!(
+                    f,
+                    "SERVICE SILENT {} {{ {} }}",
+                    n,
+                    SparqlMultiSetPattern(&*p)
+                )
+            } else {
+                write!(f, "SERVICE {} {{ {} }}", n, SparqlMultiSetPattern(&*p))
+            },
         }
     }
 }
