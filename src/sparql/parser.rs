@@ -165,6 +165,15 @@ mod grammar {
         pub variables: Option<Vec<SelectionMember>>,
     }
 
+    impl Default for Selection {
+        fn default() -> Self {
+            Self {
+                option: SelectionOption::Default,
+                variables: None,
+            }
+        }
+    }
+
     fn build_select(
         select: Selection,
         wher: MultiSetPattern,

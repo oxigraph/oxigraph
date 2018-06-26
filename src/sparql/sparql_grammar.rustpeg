@@ -74,21 +74,18 @@ ConstructQuery -> Query =
         Query::ConstructQuery {
             construct: c,
             dataset: d,
-            algebra: build_select(Selection {
-                option: SelectionOption::Reduced,
-                variables: None
-            }, w, h, o, l, v)
+            algebra: build_select(Selection::default(), w, h, o, l, v)
         }
     } /
     "CONSTRUCT"i _ d:DatasetClauses _ "WHERE"i _ '{' _ c:ConstructQuery_optional_triple_template _ '}' _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
         Query::ConstructQuery {
             construct: c.clone(),
             dataset: d,
-            algebra: build_select(Selection {
-                option: SelectionOption::Reduced,
-                variables: None
-            }, MultiSetPattern::BGP(c.into_iter().map(|p| TripleOrPathPattern::from(p)).collect()).into(),
-            h, o, l, v)
+            algebra: build_select(
+                Selection::default(),
+                MultiSetPattern::BGP(c.into_iter().map(|p| TripleOrPathPattern::from(p)).collect()).into(),
+                h, o, l, v
+            )
         }
     }
 
@@ -99,17 +96,14 @@ DescribeQuery -> Query =
     "DESCRIBE"i _ '*' _ d:DatasetClauses w:WhereClause? _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
         Query::DescribeQuery {
             dataset: d,
-            algebra: build_select(Selection {
-                option: SelectionOption::Reduced,
-                variables: None
-            }, w.unwrap_or_else(MultiSetPattern::default), h, o, l, v)
+            algebra: build_select(Selection::default(), w.unwrap_or_else(MultiSetPattern::default), h, o, l, v)
         }
     } /
     "DESCRIBE"i _ p:DescribeQuery_item+ _ d:DatasetClauses w:WhereClause? _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
         Query::DescribeQuery {
             dataset: d,
             algebra: build_select(Selection {
-                option: SelectionOption::Reduced,
+                option: SelectionOption::Default,
                 variables: Some(p.into_iter().map(|var_or_iri| match var_or_iri {
                     NamedNodeOrVariable::NamedNode(n) => SelectionMember::Expression(n.into(), Variable::default()),
                     NamedNodeOrVariable::Variable(v) => SelectionMember::Variable(v)
@@ -123,10 +117,7 @@ DescribeQuery_item -> NamedNodeOrVariable = i:VarOrIri _ { i }
 AskQuery -> Query = "ASK"i _ d:DatasetClauses w:WhereClause _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
     Query::AskQuery {
         dataset: d,
-        algebra: build_select(Selection {
-            option: SelectionOption::Reduced,
-            variables: None
-        }, w, h, o, l, v)
+        algebra: build_select(Selection::default(), w, h, o, l, v)
     }
 }
 
