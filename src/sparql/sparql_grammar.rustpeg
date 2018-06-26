@@ -13,7 +13,7 @@ use std::iter;
 QueryUnit -> Query = Query
 
 //[2]
-Query -> Query = _ Prologue _ q:(SelectQuery / ConstructQuery / DescribeQuery / AskQuery) _ ValuesClause _ { //TODO: ValuesClause
+Query -> Query = _ Prologue _ q:(SelectQuery / ConstructQuery / DescribeQuery / AskQuery) _ { //TODO: ValuesClause
     q
 }
 
@@ -37,21 +37,16 @@ PrefixDecl -> () = "PREFIX"i _ ns:PNAME_NS _ i:IRIREF {
 }
 
 //[7]
-SelectQuery -> Query = s:SelectClause _ d:DatasetClauses _ f:WhereClause _ SolutionModifier {  //TODO: Modifier
+SelectQuery -> Query = s:SelectClause _ d:DatasetClauses _ w:WhereClause _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {  //TODO: Modifier
     Query::SelectQuery {
-        selection: s,
         dataset: d,
-        filter: f
+        algebra: build_select(s, w, h, o, v)
     }
 }
 
 //[8]
-SubSelect -> MultiSetPattern = s:SelectClause _ f:WhereClause _ SolutionModifier _ ValuesClause { //TODO: Modifiers
-    MultiSetPattern::default()
-    /*TODO MultiSetPattern::SubSelectPattern {
-        selection: s,
-        filter: Box::new(f)
-    }*/
+SubSelect -> MultiSetPattern = s:SelectClause _ w:WhereClause _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause { //TODO: Modifiers
+    build_select(s, w, h, o, v).into()
 }
 
 //[9]
@@ -74,32 +69,63 @@ SelectClause_member -> SelectionMember =
 
 //[10]
 ConstructQuery -> Query =
-    "CONSTRUCT"i _ c:ConstructTemplate _ d:DatasetClauses _ f:WhereClause _ SolutionModifier {
-        Query::ConstructQuery { construct: c, dataset: d, filter: f }
+    "CONSTRUCT"i _ c:ConstructTemplate _ d:DatasetClauses _ w:WhereClause _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ LimitOffsetClauses? _ v:ValuesClause {
+        Query::ConstructQuery {
+            construct: c,
+            dataset: d,
+            algebra: build_select(Selection {
+                option: SelectionOption::Reduced,
+                variables: None
+            }, w, h, o, v)
+        }
     } /
-    "CONSTRUCT"i _ d:DatasetClauses _ "WHERE"i _ '{' _ c:ConstructQuery_optional_triple_template _ '}' _ SolutionModifier {
+    "CONSTRUCT"i _ d:DatasetClauses _ "WHERE"i _ '{' _ c:ConstructQuery_optional_triple_template _ '}' _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ LimitOffsetClauses? _ v:ValuesClause {
         Query::ConstructQuery {
             construct: c.clone(),
             dataset: d,
-            filter: MultiSetPattern::BGP(c.into_iter().map(|p| PropertyPathPattern::from(p)).collect()).into()
+            algebra: build_select(Selection {
+                option: SelectionOption::Reduced,
+                variables: None
+            }, MultiSetPattern::BGP(c.into_iter().map(|p| PropertyPathPattern::from(p)).collect()).into(),
+            h, o, v)
         }
     }
 
 ConstructQuery_optional_triple_template -> Vec<TriplePattern> = TriplesTemplate / { Vec::default() }
 
 //[11]
-DescribeQuery -> Query = "DESCRIBE"i _ ('*' / (VarOrIri _)+) _ d:DatasetClauses f:WhereClause? _ SolutionModifier {
-    Query::DescribeQuery {
-        dataset: d,
-        filter: f.unwrap_or_else(ListPattern::default)
+DescribeQuery -> Query =
+    "DESCRIBE"i _ '*' _ d:DatasetClauses w:WhereClause? _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ LimitOffsetClauses? _ v:ValuesClause {
+        Query::DescribeQuery {
+            dataset: d,
+            algebra: build_select(Selection {
+                option: SelectionOption::Reduced,
+                variables: None
+            }, w.unwrap_or_else(MultiSetPattern::default), h, o, v)
+        }
+    } /
+    "DESCRIBE"i _ p:DescribeQuery_item+ _ d:DatasetClauses w:WhereClause? _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ LimitOffsetClauses? _ v:ValuesClause {
+        Query::DescribeQuery {
+            dataset: d,
+            algebra: build_select(Selection {
+                option: SelectionOption::Reduced,
+                variables: Some(p.into_iter().map(|var_or_iri| match var_or_iri {
+                    NamedNodeOrVariable::NamedNode(n) => SelectionMember::Expression(n.into(), Variable::default()),
+                    NamedNodeOrVariable::Variable(v) => SelectionMember::Variable(v)
+                }).collect())
+            }, w.unwrap_or_else(MultiSetPattern::default), h, o, v)
+        }
     }
-}
+DescribeQuery_item -> NamedNodeOrVariable = i:VarOrIri _ { i }
 
 //[12]
-AskQuery -> Query = "ASK"i _ d:DatasetClauses f:WhereClause _ SolutionModifier {
+AskQuery -> Query = "ASK"i _ d:DatasetClauses w:WhereClause _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ LimitOffsetClauses? _ v:ValuesClause {
     Query::AskQuery {
         dataset: d,
-        filter: f
+        algebra: build_select(Selection {
+            option: SelectionOption::Reduced,
+            variables: None
+        }, w, h, o, v)
     }
 }
 
@@ -123,12 +149,9 @@ NamedGraphClause -> Dataset = "NAMED"i _ s:SourceSelector {
 SourceSelector -> NamedNode = iri
 
 //[17]
-WhereClause -> ListPattern = "WHERE"i? _ p:GroupGraphPattern {
-    p.into()
+WhereClause -> MultiSetPattern = "WHERE"i? _ p:GroupGraphPattern {
+    p
 }
-
-//[18]
-SolutionModifier -> () = GroupClause? _ HavingClause? _ OrderClause? _ LimitOffsetClauses?
 
 //[19]
 GroupClause -> () = "GROUP"i _ "BY"i _ (GroupCondition _)+
@@ -145,10 +168,15 @@ HavingClause -> Expression = "HAVING"i _ e:HavingCondition+ {?
 HavingCondition -> Expression = Constraint
 
 //[23]
-OrderClause -> () = "ORDER"i "BY"i _ OrderCondition+
+OrderClause -> Vec<OrderComparator> = "ORDER"i "BY"i _ c:OrderClause_item+ { c }
+OrderClause_item -> OrderComparator = c:OrderCondition _ { c }
 
 //[24]
-OrderCondition -> () = (( "ASC"i / "DESC"i) _ BrackettedExpression) / (Constraint / Var)
+OrderCondition -> OrderComparator =
+    "ASC"i _ e: BrackettedExpression { OrderComparator::Asc(e) } /
+    "DESC"i _ e: BrackettedExpression { OrderComparator::Desc(e) } /
+    e: Constraint { e.into() } /
+    v: Var { Expression::from(v).into() }
 
 //[25]
 LimitOffsetClauses -> () = LimitClause _ OffsetClause? / OffsetClause _ LimitClause?

@@ -1,5 +1,6 @@
 use model::*;
 use sparql::model::*;
+use std::collections::BTreeSet;
 use std::fmt;
 use std::ops::Add;
 use utils::Escaper;
@@ -398,9 +399,21 @@ impl fmt::Display for Expression {
     }
 }
 
+impl From<NamedNode> for Expression {
+    fn from(p: NamedNode) -> Self {
+        Expression::ConstantExpression(p.into())
+    }
+}
+
 impl From<Literal> for Expression {
     fn from(p: Literal) -> Self {
         Expression::ConstantExpression(p.into())
+    }
+}
+
+impl From<Variable> for Expression {
+    fn from(v: Variable) -> Self {
+        Expression::ConstantExpression(v.into())
     }
 }
 
@@ -794,6 +807,51 @@ impl From<ListPattern> for MultiSetPattern {
     }
 }
 
+impl MultiSetPattern {
+    pub fn visible_variables<'a>(&'a self) -> BTreeSet<&'a Variable> {
+        let mut vars = BTreeSet::default();
+        self.add_visible_variables(&mut vars);
+        vars
+    }
+
+    fn add_visible_variables<'a>(&'a self, vars: &mut BTreeSet<&'a Variable>) {
+        match self {
+            MultiSetPattern::BGP(p) => {
+                for pattern in p {
+                    if let TermOrVariable::Variable(ref s) = pattern.subject {
+                        vars.insert(s);
+                    }
+                    //TODO: pred
+                    if let TermOrVariable::Variable(ref o) = pattern.object {
+                        vars.insert(o);
+                    }
+                }
+            }
+            MultiSetPattern::Join(a, b) => {
+                a.add_visible_variables(vars);
+                b.add_visible_variables(vars);
+            }
+            MultiSetPattern::LeftJoin(a, b, _) => {
+                a.add_visible_variables(vars);
+                b.add_visible_variables(vars);
+            }
+            MultiSetPattern::Filter(_, p) => p.add_visible_variables(vars),
+            MultiSetPattern::Union(a, b) => {
+                a.add_visible_variables(vars);
+                b.add_visible_variables(vars);
+            }
+            MultiSetPattern::Graph(_, p) => p.add_visible_variables(vars),
+            MultiSetPattern::Extend(p, v, _) => {
+                p.add_visible_variables(vars);
+                vars.insert(&v);
+            }
+            MultiSetPattern::Minus(a, _) => a.add_visible_variables(vars),
+            MultiSetPattern::ToMultiSet(l) => l.add_visible_variables(vars),
+            MultiSetPattern::Service(_, p, _) => p.add_visible_variables(vars),
+        }
+    }
+}
+
 struct SparqlMultiSetPattern<'a>(&'a MultiSetPattern);
 
 impl<'a> fmt::Display for SparqlMultiSetPattern<'a> {
@@ -854,7 +912,14 @@ impl<'a> fmt::Display for SparqlMultiSetPattern<'a> {
                 SparqlMultiSetPattern(&*a),
                 SparqlMultiSetPattern(&*b)
             ),
-            MultiSetPattern::ToMultiSet(l) => write!(f, "{}", SparqlListPattern(&l)),
+            MultiSetPattern::ToMultiSet(l) => write!(
+                f,
+                "{{ {} }}",
+                SparqlListPattern {
+                    algebra: &l,
+                    dataset: &EMPTY_DATASET
+                }
+            ),
             MultiSetPattern::Service(n, p, s) => if *s {
                 write!(
                     f,
@@ -873,14 +938,56 @@ impl<'a> fmt::Display for SparqlMultiSetPattern<'a> {
 pub enum ListPattern {
     Data(Vec<Binding>),
     ToList(MultiSetPattern),
-    Group(),
-    Aggregation(),
-    AggregateJoin(),
-    OrderBy(Box<MultiSetPattern>),
-    Project(Box<MultiSetPattern>),
-    Distinct(Box<MultiSetPattern>),
-    Reduced(Box<MultiSetPattern>),
-    Slice(Box<MultiSetPattern>, usize, usize),
+    OrderBy(Box<ListPattern>, Vec<OrderComparator>),
+    Project(Box<ListPattern>, Vec<Variable>),
+    Distinct(Box<ListPattern>),
+    Reduced(Box<ListPattern>),
+    Slice(Box<ListPattern>, usize, Option<usize>),
+}
+
+impl fmt::Display for ListPattern {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ListPattern::Data(bs) => write!(
+                f,
+                "{{ {} }}",
+                bs.iter()
+                    .map(|c| c.to_string())
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            ),
+            ListPattern::ToList(l) => write!(f, "{}", l),
+            ListPattern::OrderBy(l, o) => write!(
+                f,
+                "OrderBy({}, ({}))",
+                l,
+                o.iter()
+                    .map(|c| c.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
+            ListPattern::Project(l, pv) => write!(
+                f,
+                "Project({}, ({}))",
+                l,
+                pv.iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
+            ListPattern::Distinct(l) => write!(f, "Distinct({})", l),
+            ListPattern::Reduced(l) => write!(f, "Reduce({})", l),
+            ListPattern::Slice(l, start, length) => write!(
+                f,
+                "Slice({}, {}, {})",
+                l,
+                start,
+                length
+                    .map(|l| l.to_string())
+                    .unwrap_or_else(|| '?'.to_string())
+            ),
+        }
+    }
 }
 
 impl Default for ListPattern {
@@ -898,22 +1005,190 @@ impl From<MultiSetPattern> for ListPattern {
     }
 }
 
-impl fmt::Display for ListPattern {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl ListPattern {
+    pub fn visible_variables<'a>(&'a self) -> BTreeSet<&'a Variable> {
+        let mut vars = BTreeSet::default();
+        self.add_visible_variables(&mut vars);
+        vars
+    }
+
+    fn add_visible_variables<'a>(&'a self, vars: &mut BTreeSet<&'a Variable>) {
         match self {
-            ListPattern::ToList(l) => write!(f, "{}", l),
-            _ => Ok(()), //TODO
+            ListPattern::Data(b) => {
+                for binding in b {
+                    for (var, _) in binding {
+                        vars.insert(var);
+                    }
+                }
+            }
+            ListPattern::ToList(p) => p.add_visible_variables(vars),
+            ListPattern::OrderBy(l, _) => l.add_visible_variables(vars),
+            ListPattern::Project(_, pv) => vars.extend(pv.iter()),
+            ListPattern::Distinct(l) => l.add_visible_variables(vars),
+            ListPattern::Reduced(l) => l.add_visible_variables(vars),
+            ListPattern::Slice(l, _, _) => l.add_visible_variables(vars),
         }
     }
 }
 
-struct SparqlListPattern<'a>(&'a ListPattern);
+struct SparqlListPattern<'a> {
+    algebra: &'a ListPattern,
+    dataset: &'a Dataset,
+}
 
 impl<'a> fmt::Display for SparqlListPattern<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.algebra {
+            ListPattern::Data(bs) => if bs.is_empty() {
+                Ok(())
+            } else {
+                let vars: Vec<&Variable> = bs[0].iter().map(|(v, _)| v).collect();
+                write!(f, "VALUES ( ")?;
+                for var in &vars {
+                    write!(f, "{} ", var)?;
+                }
+                write!(f, ") {{ ")?;
+                for b in bs {
+                    write!(f, "( ")?;
+                    for var in &vars {
+                        b.get(var)
+                            .map(|v| write!(f, "{} ", v))
+                            .unwrap_or_else(|| write!(f, "UNDEF "))?;
+                    }
+                    write!(f, ") ")?;
+                }
+                write!(f, " }}")
+            },
+            ListPattern::ToList(l) => write!(f, "{}", SparqlMultiSetPattern(&*l)),
+            ListPattern::OrderBy(l, o) => write!(
+                f,
+                "{} ORDER BY {}",
+                SparqlListPattern {
+                    algebra: &*l,
+                    dataset: self.dataset
+                },
+                o.iter()
+                    .map(|c| SparqlOrderComparator(c).to_string())
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            ),
+            ListPattern::Project(l, pv) => write!(
+                f,
+                "SELECT {} {} WHERE {{ {} }}",
+                build_sparql_select_arguments(pv),
+                self.dataset,
+                SparqlListPattern {
+                    algebra: &*l,
+                    dataset: &EMPTY_DATASET
+                }
+            ),
+            ListPattern::Distinct(l) => match l.as_ref() {
+                ListPattern::Project(l, pv) => write!(
+                    f,
+                    "SELECT DISTINCT {} {} WHERE {{ {} }}",
+                    build_sparql_select_arguments(pv),
+                    self.dataset,
+                    SparqlListPattern {
+                        algebra: &*l,
+                        dataset: &EMPTY_DATASET
+                    }
+                ),
+                l => write!(
+                    f,
+                    "DISTINCT {}",
+                    SparqlListPattern {
+                        algebra: &l,
+                        dataset: self.dataset
+                    }
+                ),
+            },
+            ListPattern::Reduced(l) => match l.as_ref() {
+                ListPattern::Project(l, pv) => write!(
+                    f,
+                    "SELECT REDUCED {} {} WHERE {{ {} }}",
+                    build_sparql_select_arguments(pv),
+                    self.dataset,
+                    SparqlListPattern {
+                        algebra: &*l,
+                        dataset: &EMPTY_DATASET
+                    }
+                ),
+                l => write!(
+                    f,
+                    "REDUCED {}",
+                    SparqlListPattern {
+                        algebra: &l,
+                        dataset: self.dataset
+                    }
+                ),
+            },
+            ListPattern::Slice(l, start, length) => length
+                .map(|length| {
+                    write!(
+                        f,
+                        "{} LIMIT {} OFFSET {}",
+                        SparqlListPattern {
+                            algebra: &*l,
+                            dataset: self.dataset
+                        },
+                        start,
+                        length
+                    )
+                })
+                .unwrap_or_else(|| {
+                    write!(
+                        f,
+                        "{} LIMIT {}",
+                        SparqlListPattern {
+                            algebra: &*l,
+                            dataset: self.dataset
+                        },
+                        start
+                    )
+                }),
+        }
+    }
+}
+
+fn build_sparql_select_arguments(args: &Vec<Variable>) -> String {
+    if args.is_empty() {
+        "*".to_owned()
+    } else {
+        args.iter()
+            .map(|v| v.to_string())
+            .collect::<Vec<String>>()
+            .join(" ")
+    }
+}
+
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+pub enum OrderComparator {
+    Asc(Expression),
+    Desc(Expression),
+}
+
+impl fmt::Display for OrderComparator {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            OrderComparator::Asc(e) => write!(f, "ASC({})", e),
+            OrderComparator::Desc(e) => write!(f, "DESC({})", e),
+        }
+    }
+}
+
+impl From<Expression> for OrderComparator {
+    fn from(e: Expression) -> Self {
+        OrderComparator::Asc(e)
+    }
+}
+
+struct SparqlOrderComparator<'a>(&'a OrderComparator);
+
+impl<'a> fmt::Display for SparqlOrderComparator<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.0 {
-            ListPattern::ToList(l) => write!(f, "{}", SparqlMultiSetPattern(&l)),
-            _ => Ok(()), //TODO
+            OrderComparator::Asc(e) => write!(f, "ASC({})", SparqlExpression(e)),
+            OrderComparator::Desc(e) => write!(f, "DESC({})", SparqlExpression(e)),
         }
     }
 }
@@ -962,103 +1237,46 @@ impl fmt::Display for Dataset {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
-pub enum SelectionOption {
-    Distinct,
-    Reduced,
-    Default,
-}
-
-impl fmt::Display for SelectionOption {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        match self {
-            SelectionOption::Distinct => write!(f, "DISTINCT"),
-            SelectionOption::Reduced => write!(f, "REDUCED"),
-            SelectionOption::Default => Ok(()),
-        }
-    }
-}
-
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
-pub enum SelectionMember {
-    Variable(Variable),
-    Expression(Expression, Variable),
-}
-
-impl fmt::Display for SelectionMember {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        match self {
-            SelectionMember::Variable(v) => write!(f, "{}", v),
-            SelectionMember::Expression(e, v) => write!(f, "({} AS {})", e, v),
-        }
-    }
-}
-
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
-pub struct Selection {
-    pub option: SelectionOption,
-    pub variables: Option<Vec<SelectionMember>>,
-}
-
-impl fmt::Display for Selection {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        self.variables
-            .as_ref()
-            .map(|vars| {
-                write!(
-                    f,
-                    "{} {}",
-                    self.option,
-                    vars.iter()
-                        .map(|v| v.to_string())
-                        .collect::<Vec<String>>()
-                        .join(" ")
-                )
-            })
-            .unwrap_or_else(|| write!(f, "{} *", self.option))
-    }
+lazy_static! {
+    static ref EMPTY_DATASET: Dataset = Dataset::default();
 }
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum Query {
     SelectQuery {
-        selection: Selection,
         dataset: Dataset,
-        filter: ListPattern,
+        algebra: ListPattern,
     },
     ConstructQuery {
         construct: Vec<TriplePattern>,
         dataset: Dataset,
-        filter: ListPattern,
+        algebra: ListPattern,
     },
     DescribeQuery {
         dataset: Dataset,
-        filter: ListPattern,
+        algebra: ListPattern,
     },
     AskQuery {
         dataset: Dataset,
-        filter: ListPattern,
+        algebra: ListPattern,
     },
 }
 
 impl fmt::Display for Query {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Query::SelectQuery {
-                selection,
-                dataset,
-                filter,
-            } => write!(
+            Query::SelectQuery { dataset, algebra } => write!(
                 f,
-                "SELECT {} {} WHERE {{ {} }}",
-                selection,
-                dataset,
-                SparqlListPattern(&filter)
+                "{}",
+                SparqlListPattern {
+                    algebra: &algebra,
+                    dataset: &dataset
+                }
             ),
             Query::ConstructQuery {
                 construct,
                 dataset,
-                filter,
+                algebra,
             } => write!(
                 f,
                 "CONSTRUCT {{ {} }} {} WHERE {{ {} }}",
@@ -1068,19 +1286,28 @@ impl fmt::Display for Query {
                     .collect::<Vec<String>>()
                     .join(" . "),
                 dataset,
-                SparqlListPattern(&filter)
+                SparqlListPattern {
+                    algebra: &algebra,
+                    dataset: &EMPTY_DATASET
+                }
             ),
-            Query::DescribeQuery { dataset, filter } => write!(
+            Query::DescribeQuery { dataset, algebra } => write!(
                 f,
                 "DESCRIBE {} WHERE {{ {} }}",
                 dataset,
-                SparqlListPattern(&filter)
+                SparqlListPattern {
+                    algebra: &algebra,
+                    dataset: &EMPTY_DATASET
+                }
             ),
-            Query::AskQuery { dataset, filter } => write!(
+            Query::AskQuery { dataset, algebra } => write!(
                 f,
                 "ASK {} WHERE {{ {} }}",
                 dataset,
-                SparqlListPattern(&filter)
+                SparqlListPattern {
+                    algebra: &algebra,
+                    dataset: &EMPTY_DATASET
+                }
             ),
         }
     }

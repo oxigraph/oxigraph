@@ -132,6 +132,68 @@ mod grammar {
         }).ok_or("The iterator should not be empty")
     }
 
+    enum SelectionOption {
+        Distinct,
+        Reduced,
+        Default,
+    }
+
+    enum SelectionMember {
+        Variable(Variable),
+        Expression(Expression, Variable),
+    }
+
+    struct Selection {
+        pub option: SelectionOption,
+        pub variables: Option<Vec<SelectionMember>>,
+    }
+
+    fn build_select(
+        select: Selection,
+        wher: MultiSetPattern,
+        having: Option<Expression>,
+        order_by: Option<Vec<OrderComparator>>,
+        values: Option<MultiSetPattern>,
+    ) -> ListPattern {
+        let mut p = wher;
+        if let Some(ex) = having {
+            p = MultiSetPattern::Filter(ex, Box::new(p));
+        }
+        if let Some(data) = values {
+            p = MultiSetPattern::Join(Box::new(p), Box::new(data));
+        }
+        let mut pv: Vec<Variable> = Vec::default();
+        match select.variables {
+            Some(sel_items) => {
+                for sel_item in sel_items {
+                    match sel_item {
+                        SelectionMember::Variable(v) => pv.push(v),
+                        SelectionMember::Expression(e, v) => if pv.contains(&v) {
+                            //TODO: fail
+                        } else {
+                            p = MultiSetPattern::Extend(Box::new(p), v.clone(), e);
+                            pv.push(v);
+                        },
+                    }
+                }
+            }
+            None => {
+                pv.extend(p.visible_variables().into_iter().map(|v| v.clone())) //TODO: is it really useful to do a projection?
+            }
+        }
+        let mut m = ListPattern::from(p);
+        if let Some(order) = order_by {
+            m = ListPattern::OrderBy(Box::new(m), order);
+        }
+        m = ListPattern::Project(Box::new(m), pv);
+        match select.option {
+            SelectionOption::Distinct => m = ListPattern::Distinct(Box::new(m)),
+            SelectionOption::Reduced => m = ListPattern::Reduced(Box::new(m)),
+            SelectionOption::Default => (),
+        }
+        m
+    }
+
     enum Either<L, R> {
         Left(L),
         Right(R),

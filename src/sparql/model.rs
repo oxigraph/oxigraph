@@ -1,4 +1,5 @@
 use model::*;
+use std::collections::btree_map;
 use std::collections::BTreeMap;
 use std::fmt;
 use uuid::Uuid;
@@ -150,16 +151,52 @@ impl Binding {
         self.0.insert(var, value);
     }
 
-    pub fn get<'a>(&'a self, key: &'a TermOrVariable) -> Option<&'a Term> {
+    pub fn get<'a>(&'a self, key: &'a Variable) -> Option<&'a Term> {
+        self.0.get(key)
+    }
+
+    pub fn get_or_constant<'a>(&'a self, key: &'a TermOrVariable) -> Option<&'a Term> {
         match key {
             TermOrVariable::Term(t) => Some(t),
-            TermOrVariable::Variable(v) => self.0.get(v),
+            TermOrVariable::Variable(v) => self.get(v),
         }
+    }
+
+    pub fn iter<'a>(&'a self) -> btree_map::Iter<Variable, Term> {
+        self.0.iter()
     }
 }
 
 impl Default for Binding {
     fn default() -> Self {
         Binding(BTreeMap::default())
+    }
+}
+
+impl IntoIterator for Binding {
+    type Item = (Variable, Term);
+    type IntoIter = btree_map::IntoIter<Variable, Term>;
+
+    fn into_iter(self) -> btree_map::IntoIter<Variable, Term> {
+        self.0.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a Binding {
+    type Item = (&'a Variable, &'a Term);
+    type IntoIter = btree_map::Iter<'a, Variable, Term>;
+
+    fn into_iter(self) -> btree_map::Iter<'a, Variable, Term> {
+        self.0.iter()
+    }
+}
+
+impl fmt::Display for Binding {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{{")?;
+        for (var, val) in self {
+            write!(f, " {} → {} ", var, val)?;
+        }
+        write!(f, "}}")
     }
 }
