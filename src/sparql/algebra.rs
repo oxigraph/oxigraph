@@ -14,7 +14,7 @@ pub enum PropertyPath {
     ZeroOrMorePath(Box<PropertyPath>),
     OneOrMorePath(Box<PropertyPath>),
     ZeroOrOnePath(Box<PropertyPath>),
-    NegatedPropertySet(Vec<NamedNodeOrVariable>),
+    NegatedPropertySet(Vec<NamedNode>),
 }
 
 impl fmt::Display for PropertyPath {

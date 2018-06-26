@@ -563,12 +563,14 @@ PathNegatedPropertySet -> PropertyPath =
             Either::Right(b) => PropertyPath::InversePath(Box::new(PropertyPath::NegatedPropertySet(vec![b]))),
         }
     }
-PathNegatedPropertySet_item -> Either<NamedNodeOrVariable,NamedNodeOrVariable> = p:PathOneInPropertySet _ { p }
+PathNegatedPropertySet_item -> Either<NamedNode,NamedNode> = p:PathOneInPropertySet _ { p }
 
 //[96]
-PathOneInPropertySet -> Either<NamedNodeOrVariable,NamedNodeOrVariable> =
-    '^' _ v:Verb { Either::Right(v) } /
-    v:Verb { Either::Left(v) }
+PathOneInPropertySet -> Either<NamedNode,NamedNode> =
+    '^' _ 'a' { Either::Right(rdf::TYPE.clone()) } /
+    '^' _ v:iri { Either::Right(v) } /
+    'a' { Either::Left(rdf::TYPE.clone()) } /
+    v:iri { Either::Left(v) }
 
 //[98]
 TriplesNode -> FocusedTriplePattern<TermOrVariable> = Collection / BlankNodePropertyList
