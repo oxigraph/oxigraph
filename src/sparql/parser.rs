@@ -49,12 +49,29 @@ mod grammar {
         }
     }
 
-    struct FocusedPropertyPathPattern<F> {
-        focus: F,
-        patterns: Vec<PropertyPathPattern>,
+    #[derive(Clone)]
+    enum VariableOrPropertyPath {
+        Variable(Variable),
+        PropertyPath(PropertyPath),
     }
 
-    impl<F> FocusedPropertyPathPattern<F> {
+    fn to_triple_or_path_pattern(
+        s: TermOrVariable,
+        p: VariableOrPropertyPath,
+        o: TermOrVariable,
+    ) -> TripleOrPathPattern {
+        match p {
+            VariableOrPropertyPath::Variable(p) => TriplePattern::new(s, p, o).into(),
+            VariableOrPropertyPath::PropertyPath(p) => PathPattern::new(s, p, o).into(),
+        }
+    }
+
+    struct FocusedTripleOrPathPattern<F> {
+        focus: F,
+        patterns: Vec<TripleOrPathPattern>,
+    }
+
+    impl<F> FocusedTripleOrPathPattern<F> {
         fn new(focus: F) -> Self {
             Self {
                 focus,
@@ -63,7 +80,7 @@ mod grammar {
         }
     }
 
-    impl<F: Default> Default for FocusedPropertyPathPattern<F> {
+    impl<F: Default> Default for FocusedTripleOrPathPattern<F> {
         fn default() -> Self {
             Self {
                 focus: F::default(),
@@ -72,8 +89,8 @@ mod grammar {
         }
     }
 
-    impl<F> From<FocusedPropertyPathPattern<F>> for FocusedPropertyPathPattern<Vec<F>> {
-        fn from(input: FocusedPropertyPathPattern<F>) -> Self {
+    impl<F> From<FocusedTripleOrPathPattern<F>> for FocusedTripleOrPathPattern<Vec<F>> {
+        fn from(input: FocusedTripleOrPathPattern<F>) -> Self {
             Self {
                 focus: vec![input.focus],
                 patterns: input.patterns,
@@ -81,7 +98,7 @@ mod grammar {
         }
     }
 
-    impl<F, T: From<F>> From<FocusedTriplePattern<F>> for FocusedPropertyPathPattern<T> {
+    impl<F, T: From<F>> From<FocusedTriplePattern<F>> for FocusedTripleOrPathPattern<T> {
         fn from(input: FocusedTriplePattern<F>) -> Self {
             Self {
                 focus: input.focus.into(),

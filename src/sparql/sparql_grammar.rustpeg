@@ -87,7 +87,7 @@ ConstructQuery -> Query =
             algebra: build_select(Selection {
                 option: SelectionOption::Reduced,
                 variables: None
-            }, MultiSetPattern::BGP(c.into_iter().map(|p| PropertyPathPattern::from(p)).collect()).into(),
+            }, MultiSetPattern::BGP(c.into_iter().map(|p| TripleOrPathPattern::from(p)).collect()).into(),
             h, o, l, v)
         }
     }
@@ -253,14 +253,14 @@ GroupGraphPatternSub_item -> Vec<PartialGraphPattern> = a:GraphPatternNotTriples
 }
 
 //[55]
-TriplesBlock -> Vec<PropertyPathPattern> = h:TriplesSameSubjectPath _ t:TriplesBlock_tail? {
+TriplesBlock -> Vec<TripleOrPathPattern> = h:TriplesSameSubjectPath _ t:TriplesBlock_tail? {
     let mut triples = h;
     if let Some(l) = t {
         triples.extend_from_slice(&l)
     }
     triples
 }
-TriplesBlock_tail -> Vec<PropertyPathPattern> = '.' _ t:TriplesBlock? _ {
+TriplesBlock_tail -> Vec<TripleOrPathPattern> = '.' _ t:TriplesBlock? _ {
     t.unwrap_or_else(|| Vec::default())
 }
 
@@ -433,12 +433,12 @@ ObjectList_item -> FocusedTriplePattern<TermOrVariable> = o:Object _ { o }
 Object -> FocusedTriplePattern<TermOrVariable> = GraphNode
 
 //[81]
-TriplesSameSubjectPath -> Vec<PropertyPathPattern> =
+TriplesSameSubjectPath -> Vec<TripleOrPathPattern> =
     s:VarOrTerm _ po:PropertyListPathNotEmpty {
         let mut patterns = po.patterns;
         for (p, os) in po.focus {
             for o in os {
-                patterns.push(PropertyPathPattern::new(s.clone(), p.clone(), o))
+                patterns.push(to_triple_or_path_pattern(s.clone(), p.clone(), o))
             }
         }
         patterns
@@ -448,20 +448,20 @@ TriplesSameSubjectPath -> Vec<PropertyPathPattern> =
             patterns.extend_from_slice(&po.patterns);
         for (p, os) in po.focus {
             for o in os {
-                patterns.push(PropertyPathPattern::new(s.focus.clone(), p.clone(), o))
+                patterns.push(to_triple_or_path_pattern(s.focus.clone(), p.clone(), o))
             }
         }
         patterns
     }
 
 //[82]
-PropertyListPath -> FocusedPropertyPathPattern<Vec<(PropertyPath,Vec<TermOrVariable>)>> =
+PropertyListPath -> FocusedTripleOrPathPattern<Vec<(VariableOrPropertyPath,Vec<TermOrVariable>)>> =
     PropertyListPathNotEmpty /
-    { FocusedPropertyPathPattern::default() }
+    { FocusedTripleOrPathPattern::default() }
 
 //[83]
-PropertyListPathNotEmpty -> FocusedPropertyPathPattern<Vec<(PropertyPath,Vec<TermOrVariable>)>> = hp:(VerbPath / VerbSimple) _ ho:ObjectListPath _ t:PropertyListPathNotEmpty_item* {
-        t.into_iter().fold(FocusedPropertyPathPattern {
+PropertyListPathNotEmpty -> FocusedTripleOrPathPattern<Vec<(VariableOrPropertyPath,Vec<TermOrVariable>)>> = hp:(VerbPath / VerbSimple) _ ho:ObjectListPath _ t:PropertyListPathNotEmpty_item* {
+        t.into_iter().fold(FocusedTripleOrPathPattern {
             focus: vec![(hp, ho.focus)],
             patterns: ho.patterns
         }, |mut a, b| {
@@ -470,7 +470,7 @@ PropertyListPathNotEmpty -> FocusedPropertyPathPattern<Vec<(PropertyPath,Vec<Ter
             a
         })
 }
-PropertyListPathNotEmpty_item -> FocusedTriplePattern<(PropertyPath,Vec<TermOrVariable>)> = ';' _ p:(VerbPath / VerbSimple) _ o:ObjectList _ { //TODO: make values after ';' optional
+PropertyListPathNotEmpty_item -> FocusedTriplePattern<(VariableOrPropertyPath,Vec<TermOrVariable>)> = ';' _ p:(VerbPath / VerbSimple) _ o:ObjectList _ { //TODO: make values after ';' optional
     FocusedTriplePattern {
         focus: (p, o.focus),
         patterns: o.patterns
@@ -478,25 +478,27 @@ PropertyListPathNotEmpty_item -> FocusedTriplePattern<(PropertyPath,Vec<TermOrVa
 }
 
 //[84]
-VerbPath -> PropertyPath = Path
+VerbPath -> VariableOrPropertyPath = p:Path {
+    VariableOrPropertyPath::PropertyPath(p)
+}
 
 //[85]
-VerbSimple -> PropertyPath = v:Var {
-    v.into()
+VerbSimple -> VariableOrPropertyPath = v:Var {
+    VariableOrPropertyPath::Variable(v)
 }
 
 //[86]
-ObjectListPath -> FocusedPropertyPathPattern<Vec<TermOrVariable>> = o:ObjectPath_item **<1,> (',' _) {
-    o.into_iter().fold(FocusedPropertyPathPattern::<Vec<TermOrVariable>>::default(), |mut a, b| {
+ObjectListPath -> FocusedTripleOrPathPattern<Vec<TermOrVariable>> = o:ObjectPath_item **<1,> (',' _) {
+    o.into_iter().fold(FocusedTripleOrPathPattern::<Vec<TermOrVariable>>::default(), |mut a, b| {
         a.focus.push(b.focus);
         a.patterns.extend_from_slice(&b.patterns);
         a
     })
 }
-ObjectPath_item -> FocusedPropertyPathPattern<TermOrVariable> = o:ObjectPath _ { o }
+ObjectPath_item -> FocusedTripleOrPathPattern<TermOrVariable> = o:ObjectPath _ { o }
 
 //[87]
-ObjectPath -> FocusedPropertyPathPattern<TermOrVariable> = GraphNodePath
+ObjectPath -> FocusedTripleOrPathPattern<TermOrVariable> = GraphNodePath
 
 //[88]
 Path -> PropertyPath = PathAlternative
@@ -531,7 +533,8 @@ PathEltOrInverse -> PropertyPath =
 
 //[94]
 PathPrimary -> PropertyPath =
-    v:Verb { v.into() } /
+    'a' { rdf::TYPE.clone().into() } /
+    v:iri { v.into() } /
     '!' _ p:PathNegatedPropertySet { p } /
     '(' _ p:Path _ ')' { p }
 
@@ -591,18 +594,18 @@ BlankNodePropertyList -> FocusedTriplePattern<TermOrVariable> = '[' _ po:Propert
 }
 
 //[100]
-TriplesNodePath -> FocusedPropertyPathPattern<TermOrVariable> = CollectionPath / BlankNodePropertyListPath
+TriplesNodePath -> FocusedTripleOrPathPattern<TermOrVariable> = CollectionPath / BlankNodePropertyListPath
 
 //[101]
-BlankNodePropertyListPath -> FocusedPropertyPathPattern<TermOrVariable> = '[' _ po:PropertyListPathNotEmpty _ ']' {
-    let mut patterns: Vec<PropertyPathPattern> = Vec::default();
+BlankNodePropertyListPath -> FocusedTripleOrPathPattern<TermOrVariable> = '[' _ po:PropertyListPathNotEmpty _ ']' {
+    let mut patterns: Vec<TripleOrPathPattern> = Vec::default();
     let mut bnode = TermOrVariable::from(BlankNode::default());
     for (p, os) in po.focus {
         for o in os {
-            patterns.push(PropertyPathPattern::new(bnode.clone(), p.clone(), o));
+            patterns.push(to_triple_or_path_pattern(bnode.clone(), p.clone(), o));
         }
     }
-    FocusedPropertyPathPattern {
+    FocusedTripleOrPathPattern {
         focus: bnode,
         patterns
     }
@@ -627,22 +630,22 @@ Collection -> FocusedTriplePattern<TermOrVariable> = '(' _ o:Collection_item+ ')
 Collection_item -> FocusedTriplePattern<TermOrVariable> = o:GraphNode _ { o }
 
 //[103]
-CollectionPath -> FocusedPropertyPathPattern<TermOrVariable> = '(' _ o:CollectionPath_item+ _ ')' {
-    let mut patterns: Vec<PropertyPathPattern> = Vec::default();
+CollectionPath -> FocusedTripleOrPathPattern<TermOrVariable> = '(' _ o:CollectionPath_item+ _ ')' {
+    let mut patterns: Vec<TripleOrPathPattern> = Vec::default();
     let mut current_list_node = TermOrVariable::from(rdf::NIL.clone());
     for objWithPatterns in o.into_iter().rev() {
         let new_blank_node = TermOrVariable::from(BlankNode::default());
-        patterns.push(PropertyPathPattern::new(new_blank_node.clone(), rdf::FIRST.clone(), objWithPatterns.focus.clone()));
-        patterns.push(PropertyPathPattern::new(new_blank_node.clone(), rdf::REST.clone(), current_list_node));
+        patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::FIRST.clone(), objWithPatterns.focus.clone()).into());
+        patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::REST.clone(), current_list_node).into());
         current_list_node = new_blank_node;
         patterns.extend_from_slice(&objWithPatterns.patterns);
     }
-    FocusedPropertyPathPattern {
+    FocusedTripleOrPathPattern {
         focus: current_list_node,
         patterns
     }
 }
-CollectionPath_item -> FocusedPropertyPathPattern<TermOrVariable> = p:GraphNodePath _ { p }
+CollectionPath_item -> FocusedTripleOrPathPattern<TermOrVariable> = p:GraphNodePath _ { p }
 
 //[104]
 GraphNode -> FocusedTriplePattern<TermOrVariable> =
@@ -650,8 +653,8 @@ GraphNode -> FocusedTriplePattern<TermOrVariable> =
     TriplesNode
 
 //[105]
-GraphNodePath -> FocusedPropertyPathPattern<TermOrVariable> =
-    t:VarOrTerm { FocusedPropertyPathPattern::new(t.into()) } /
+GraphNodePath -> FocusedTripleOrPathPattern<TermOrVariable> =
+    t:VarOrTerm { FocusedTripleOrPathPattern::new(t.into()) } /
     TriplesNodePath
 
 //[106]

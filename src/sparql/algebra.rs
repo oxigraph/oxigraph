@@ -7,7 +7,7 @@ use utils::Escaper;
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum PropertyPath {
-    PredicatePath(NamedNodeOrVariable), //TODO: restrict to NamedNode
+    PredicatePath(NamedNode),
     InversePath(Box<PropertyPath>),
     SequencePath(Box<PropertyPath>, Box<PropertyPath>),
     AlternativePath(Box<PropertyPath>, Box<PropertyPath>),
@@ -20,7 +20,7 @@ pub enum PropertyPath {
 impl fmt::Display for PropertyPath {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            PropertyPath::PredicatePath(p) => write!(f, "{}", p),
+            PropertyPath::PredicatePath(p) => write!(f, "link({})", p),
             PropertyPath::InversePath(p) => write!(f, "inv({})", p),
             PropertyPath::AlternativePath(a, b) => write!(f, "alt({}, {})", a, b),
             PropertyPath::SequencePath(a, b) => write!(f, "seq({}, {})", a, b),
@@ -73,38 +73,26 @@ impl<'a> fmt::Display for SparqlPropertyPath<'a> {
     }
 }
 
-impl From<NamedNodeOrVariable> for PropertyPath {
-    fn from(p: NamedNodeOrVariable) -> Self {
-        PropertyPath::PredicatePath(p)
-    }
-}
-
 impl From<NamedNode> for PropertyPath {
     fn from(p: NamedNode) -> Self {
         PropertyPath::PredicatePath(p.into())
     }
 }
 
-impl From<Variable> for PropertyPath {
-    fn from(p: Variable) -> Self {
-        PropertyPath::PredicatePath(p.into())
-    }
-}
-
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
-pub struct PropertyPathPattern {
+pub struct PathPattern {
     pub subject: TermOrVariable,
     pub path: PropertyPath,
     pub object: TermOrVariable,
 }
 
-impl fmt::Display for PropertyPathPattern {
+impl fmt::Display for PathPattern {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} {} {}", self.subject, self.path, self.object)
+        write!(f, "Path({} {} {})", self.subject, self.path, self.object)
     }
 }
 
-impl PropertyPathPattern {
+impl PathPattern {
     pub fn new(
         subject: impl Into<TermOrVariable>,
         path: impl Into<PropertyPath>,
@@ -118,19 +106,9 @@ impl PropertyPathPattern {
     }
 }
 
-impl From<TriplePattern> for PropertyPathPattern {
-    fn from(p: TriplePattern) -> Self {
-        Self {
-            subject: p.subject,
-            path: p.predicate.into(),
-            object: p.object,
-        }
-    }
-}
+struct SparqlPathPattern<'a>(&'a PathPattern);
 
-struct SparqlPropertyPathPattern<'a>(&'a PropertyPathPattern);
-
-impl<'a> fmt::Display for SparqlPropertyPathPattern<'a> {
+impl<'a> fmt::Display for SparqlPathPattern<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -139,6 +117,44 @@ impl<'a> fmt::Display for SparqlPropertyPathPattern<'a> {
             SparqlPropertyPath(&self.0.path),
             self.0.object
         )
+    }
+}
+
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+pub enum TripleOrPathPattern {
+    Triple(TriplePattern),
+    Path(PathPattern),
+}
+
+impl<'a> fmt::Display for TripleOrPathPattern {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TripleOrPathPattern::Triple(tp) => write!(f, "{}", tp),
+            TripleOrPathPattern::Path(ppp) => write!(f, "{}", ppp),
+        }
+    }
+}
+
+impl From<TriplePattern> for TripleOrPathPattern {
+    fn from(tp: TriplePattern) -> Self {
+        TripleOrPathPattern::Triple(tp)
+    }
+}
+
+impl From<PathPattern> for TripleOrPathPattern {
+    fn from(ppp: PathPattern) -> Self {
+        TripleOrPathPattern::Path(ppp)
+    }
+}
+
+struct SparqlTripleOrPathPattern<'a>(&'a TripleOrPathPattern);
+
+impl<'a> fmt::Display for SparqlTripleOrPathPattern<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.0 {
+            TripleOrPathPattern::Triple(tp) => write!(f, "{}", tp),
+            TripleOrPathPattern::Path(ppp) => write!(f, "{}", SparqlPathPattern(&ppp)),
+        }
     }
 }
 
@@ -750,7 +766,7 @@ impl<'a> fmt::Display for SparqlExpression<'a> {
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum MultiSetPattern {
-    BGP(Vec<PropertyPathPattern>),
+    BGP(Vec<TripleOrPathPattern>),
     Join(Box<MultiSetPattern>, Box<MultiSetPattern>),
     LeftJoin(Box<MultiSetPattern>, Box<MultiSetPattern>, Expression),
     Filter(Expression, Box<MultiSetPattern>),
@@ -792,8 +808,8 @@ impl Default for MultiSetPattern {
     }
 }
 
-impl From<PropertyPathPattern> for MultiSetPattern {
-    fn from(p: PropertyPathPattern) -> Self {
+impl From<TripleOrPathPattern> for MultiSetPattern {
+    fn from(p: TripleOrPathPattern) -> Self {
         MultiSetPattern::BGP(vec![p])
     }
 }
@@ -818,12 +834,26 @@ impl MultiSetPattern {
         match self {
             MultiSetPattern::BGP(p) => {
                 for pattern in p {
-                    if let TermOrVariable::Variable(ref s) = pattern.subject {
-                        vars.insert(s);
-                    }
-                    //TODO: pred
-                    if let TermOrVariable::Variable(ref o) = pattern.object {
-                        vars.insert(o);
+                    match pattern {
+                        TripleOrPathPattern::Triple(tp) => {
+                            if let TermOrVariable::Variable(ref s) = tp.subject {
+                                vars.insert(s);
+                            }
+                            if let NamedNodeOrVariable::Variable(ref p) = tp.predicate {
+                                vars.insert(p);
+                            }
+                            if let TermOrVariable::Variable(ref o) = tp.object {
+                                vars.insert(o);
+                            }
+                        }
+                        TripleOrPathPattern::Path(ppp) => {
+                            if let TermOrVariable::Variable(ref s) = ppp.subject {
+                                vars.insert(s);
+                            }
+                            if let TermOrVariable::Variable(ref o) = ppp.object {
+                                vars.insert(o);
+                            }
+                        }
                     }
                 }
             }
@@ -865,7 +895,7 @@ impl<'a> fmt::Display for SparqlMultiSetPattern<'a> {
                         f,
                         "{}",
                         p.iter()
-                            .map(|v| SparqlPropertyPathPattern(v).to_string())
+                            .map(|v| SparqlTripleOrPathPattern(v).to_string())
                             .collect::<Vec<String>>()
                             .join(" . ")
                     )
@@ -1318,12 +1348,12 @@ impl fmt::Display for Query {
 #[test]
 fn test_sparql_algebra_examples() {
     assert_eq!(
-        ast::GraphPattern::PropertyPathPattern(ast::PropertyPathPattern::new(
+        ast::GraphPattern::PathPattern(ast::PathPattern::new(
             Variable::new("s"),
             Variable::new("p"),
             Variable::new("o")
         )).try_into(),
-        Ok(GraphPattern::BGP(vec![PropertyPathPattern::new(
+        Ok(GraphPattern::BGP(vec![PathPattern::new(
             Variable::new("s"),
             Variable::new("p"),
             Variable::new("o"),
@@ -1332,43 +1362,43 @@ fn test_sparql_algebra_examples() {
 
     assert_eq!(
         ast::GraphPattern::GroupPattern(vec![
-            ast::GraphPattern::PropertyPathPattern(ast::PropertyPathPattern::new(
+            ast::GraphPattern::PathPattern(ast::PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p1"),
                 Variable::new("v1"),
             )),
-            ast::GraphPattern::PropertyPathPattern(ast::PropertyPathPattern::new(
+            ast::GraphPattern::PathPattern(ast::PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p2"),
                 Variable::new("v2"),
             )),
         ]).try_into(),
         Ok(GraphPattern::BGP(vec![
-            PropertyPathPattern::new(Variable::new("s"), Variable::new("p1"), Variable::new("v1")),
-            PropertyPathPattern::new(Variable::new("s"), Variable::new("p2"), Variable::new("v2")),
+            PathPattern::new(Variable::new("s"), Variable::new("p1"), Variable::new("v1")),
+            PathPattern::new(Variable::new("s"), Variable::new("p2"), Variable::new("v2")),
         ]))
     );
 
     assert_eq!(
         ast::GraphPattern::UnionPattern(vec![
-            ast::GraphPattern::PropertyPathPattern(ast::PropertyPathPattern::new(
+            ast::GraphPattern::PathPattern(ast::PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p1"),
                 Variable::new("v1"),
             )),
-            ast::GraphPattern::PropertyPathPattern(ast::PropertyPathPattern::new(
+            ast::GraphPattern::PathPattern(ast::PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p2"),
                 Variable::new("v2"),
             )),
         ]).try_into(),
         Ok(GraphPattern::Union(
-            Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+            Box::new(GraphPattern::BGP(vec![PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p1"),
                 Variable::new("v1"),
             )])),
-            Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+            Box::new(GraphPattern::BGP(vec![PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p2"),
                 Variable::new("v2"),
@@ -1378,17 +1408,17 @@ fn test_sparql_algebra_examples() {
 
     assert_eq!(
         ast::GraphPattern::UnionPattern(vec![
-            ast::GraphPattern::PropertyPathPattern(ast::PropertyPathPattern::new(
+            ast::GraphPattern::PathPattern(ast::PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p1"),
                 Variable::new("v1"),
             )),
-            ast::GraphPattern::PropertyPathPattern(ast::PropertyPathPattern::new(
+            ast::GraphPattern::PathPattern(ast::PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p2"),
                 Variable::new("v2"),
             )),
-            ast::GraphPattern::PropertyPathPattern(ast::PropertyPathPattern::new(
+            ast::GraphPattern::PathPattern(ast::PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p3"),
                 Variable::new("v3"),
@@ -1396,18 +1426,18 @@ fn test_sparql_algebra_examples() {
         ]).try_into(),
         Ok(GraphPattern::Union(
             Box::new(GraphPattern::Union(
-                Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+                Box::new(GraphPattern::BGP(vec![PathPattern::new(
                     Variable::new("s"),
                     Variable::new("p1"),
                     Variable::new("v1"),
                 )])),
-                Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+                Box::new(GraphPattern::BGP(vec![PathPattern::new(
                     Variable::new("s"),
                     Variable::new("p2"),
                     Variable::new("v2"),
                 )])),
             )),
-            Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+            Box::new(GraphPattern::BGP(vec![PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p3"),
                 Variable::new("v3"),
@@ -1417,13 +1447,13 @@ fn test_sparql_algebra_examples() {
 
     assert_eq!(
         ast::GraphPattern::GroupPattern(vec![
-            ast::GraphPattern::PropertyPathPattern(ast::PropertyPathPattern::new(
+            ast::GraphPattern::PathPattern(ast::PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p1"),
                 Variable::new("v1"),
             )),
-            ast::GraphPattern::OptionalPattern(Box::new(ast::GraphPattern::PropertyPathPattern(
-                ast::PropertyPathPattern::new(
+            ast::GraphPattern::OptionalPattern(Box::new(ast::GraphPattern::PathPattern(
+                ast::PathPattern::new(
                     Variable::new("s"),
                     Variable::new("p2"),
                     Variable::new("v2"),
@@ -1431,12 +1461,12 @@ fn test_sparql_algebra_examples() {
             ))),
         ]).try_into(),
         Ok(GraphPattern::LeftJoin(
-            Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+            Box::new(GraphPattern::BGP(vec![PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p1"),
                 Variable::new("v1"),
             )])),
-            Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+            Box::new(GraphPattern::BGP(vec![PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p2"),
                 Variable::new("v2"),
@@ -1447,20 +1477,20 @@ fn test_sparql_algebra_examples() {
 
     assert_eq!(
         ast::GraphPattern::GroupPattern(vec![
-            ast::GraphPattern::PropertyPathPattern(ast::PropertyPathPattern::new(
+            ast::GraphPattern::PathPattern(ast::PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p1"),
                 Variable::new("v1"),
             )),
-            ast::GraphPattern::OptionalPattern(Box::new(ast::GraphPattern::PropertyPathPattern(
-                ast::PropertyPathPattern::new(
+            ast::GraphPattern::OptionalPattern(Box::new(ast::GraphPattern::PathPattern(
+                ast::PathPattern::new(
                     Variable::new("s"),
                     Variable::new("p2"),
                     Variable::new("v2"),
                 ),
             ))),
-            ast::GraphPattern::OptionalPattern(Box::new(ast::GraphPattern::PropertyPathPattern(
-                ast::PropertyPathPattern::new(
+            ast::GraphPattern::OptionalPattern(Box::new(ast::GraphPattern::PathPattern(
+                ast::PathPattern::new(
                     Variable::new("s"),
                     Variable::new("p3"),
                     Variable::new("v3"),
@@ -1469,19 +1499,19 @@ fn test_sparql_algebra_examples() {
         ]).try_into(),
         Ok(GraphPattern::LeftJoin(
             Box::new(GraphPattern::LeftJoin(
-                Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+                Box::new(GraphPattern::BGP(vec![PathPattern::new(
                     Variable::new("s"),
                     Variable::new("p1"),
                     Variable::new("v1"),
                 )])),
-                Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+                Box::new(GraphPattern::BGP(vec![PathPattern::new(
                     Variable::new("s"),
                     Variable::new("p2"),
                     Variable::new("v2"),
                 )])),
                 ast::Expression::ConstantExpression(Literal::from(true).into()),
             )),
-            Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+            Box::new(GraphPattern::BGP(vec![PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p3"),
                 Variable::new("v3"),
@@ -1492,13 +1522,13 @@ fn test_sparql_algebra_examples() {
 
     assert_eq!(
         ast::GraphPattern::GroupPattern(vec![
-            ast::GraphPattern::PropertyPathPattern(ast::PropertyPathPattern::new(
+            ast::GraphPattern::PathPattern(ast::PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p1"),
                 Variable::new("v1"),
             )),
             ast::GraphPattern::OptionalPattern(Box::new(ast::GraphPattern::GroupPattern(vec![
-                ast::GraphPattern::PropertyPathPattern(ast::PropertyPathPattern::new(
+                ast::GraphPattern::PathPattern(ast::PathPattern::new(
                     Variable::new("s"),
                     Variable::new("p2"),
                     Variable::new("v2"),
@@ -1512,12 +1542,12 @@ fn test_sparql_algebra_examples() {
             ]))),
         ]).try_into(),
         Ok(GraphPattern::LeftJoin(
-            Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+            Box::new(GraphPattern::BGP(vec![PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p1"),
                 Variable::new("v1"),
             )])),
-            Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+            Box::new(GraphPattern::BGP(vec![PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p2"),
                 Variable::new("v2"),
@@ -1534,19 +1564,19 @@ fn test_sparql_algebra_examples() {
     assert_eq!(
         ast::GraphPattern::GroupPattern(vec![
             ast::GraphPattern::UnionPattern(vec![
-                ast::GraphPattern::PropertyPathPattern(ast::PropertyPathPattern::new(
+                ast::GraphPattern::PathPattern(ast::PathPattern::new(
                     Variable::new("s"),
                     Variable::new("p1"),
                     Variable::new("v1"),
                 )),
-                ast::GraphPattern::PropertyPathPattern(ast::PropertyPathPattern::new(
+                ast::GraphPattern::PathPattern(ast::PathPattern::new(
                     Variable::new("s"),
                     Variable::new("p2"),
                     Variable::new("v2"),
                 )),
             ]),
-            ast::GraphPattern::OptionalPattern(Box::new(ast::GraphPattern::PropertyPathPattern(
-                ast::PropertyPathPattern::new(
+            ast::GraphPattern::OptionalPattern(Box::new(ast::GraphPattern::PathPattern(
+                ast::PathPattern::new(
                     Variable::new("s"),
                     Variable::new("p3"),
                     Variable::new("v3"),
@@ -1555,18 +1585,18 @@ fn test_sparql_algebra_examples() {
         ]).try_into(),
         Ok(GraphPattern::LeftJoin(
             Box::new(GraphPattern::Union(
-                Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+                Box::new(GraphPattern::BGP(vec![PathPattern::new(
                     Variable::new("s"),
                     Variable::new("p1"),
                     Variable::new("v1"),
                 )])),
-                Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+                Box::new(GraphPattern::BGP(vec![PathPattern::new(
                     Variable::new("s"),
                     Variable::new("p2"),
                     Variable::new("v2"),
                 )])),
             )),
-            Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+            Box::new(GraphPattern::BGP(vec![PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p3"),
                 Variable::new("v3"),
@@ -1577,7 +1607,7 @@ fn test_sparql_algebra_examples() {
 
     assert_eq!(
         ast::GraphPattern::GroupPattern(vec![
-            ast::GraphPattern::PropertyPathPattern(ast::PropertyPathPattern::new(
+            ast::GraphPattern::PathPattern(ast::PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p1"),
                 Variable::new("v1"),
@@ -1588,8 +1618,8 @@ fn test_sparql_algebra_examples() {
                 )),
                 Box::new(ast::Expression::ConstantExpression(Literal::from(3).into())),
             )),
-            ast::GraphPattern::OptionalPattern(Box::new(ast::GraphPattern::PropertyPathPattern(
-                ast::PropertyPathPattern::new(
+            ast::GraphPattern::OptionalPattern(Box::new(ast::GraphPattern::PathPattern(
+                ast::PathPattern::new(
                     Variable::new("s"),
                     Variable::new("p2"),
                     Variable::new("v2"),
@@ -1604,12 +1634,12 @@ fn test_sparql_algebra_examples() {
                 Box::new(ast::Expression::ConstantExpression(Literal::from(3).into())),
             ),
             Box::new(GraphPattern::LeftJoin(
-                Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+                Box::new(GraphPattern::BGP(vec![PathPattern::new(
                     Variable::new("s"),
                     Variable::new("p1"),
                     Variable::new("v1"),
                 )])),
-                Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+                Box::new(GraphPattern::BGP(vec![PathPattern::new(
                     Variable::new("s"),
                     Variable::new("p2"),
                     Variable::new("v2"),
@@ -1621,7 +1651,7 @@ fn test_sparql_algebra_examples() {
 
     assert_eq!(
         ast::GraphPattern::GroupPattern(vec![
-            ast::GraphPattern::PropertyPathPattern(ast::PropertyPathPattern::new(
+            ast::GraphPattern::PathPattern(ast::PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p"),
                 Variable::new("v"),
@@ -1635,7 +1665,7 @@ fn test_sparql_algebra_examples() {
                 ),
                 Variable::new("v2"),
             ),
-            ast::GraphPattern::PropertyPathPattern(ast::PropertyPathPattern::new(
+            ast::GraphPattern::PathPattern(ast::PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p1"),
                 Variable::new("v2"),
@@ -1643,7 +1673,7 @@ fn test_sparql_algebra_examples() {
         ]).try_into(),
         Ok(GraphPattern::Join(
             Box::new(GraphPattern::Extend(
-                Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+                Box::new(GraphPattern::BGP(vec![PathPattern::new(
                     Variable::new("s"),
                     Variable::new("p"),
                     Variable::new("v"),
@@ -1656,7 +1686,7 @@ fn test_sparql_algebra_examples() {
                     )),
                 ),
             )),
-            Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+            Box::new(GraphPattern::BGP(vec![PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p1"),
                 Variable::new("v2"),
@@ -1668,13 +1698,13 @@ fn test_sparql_algebra_examples() {
 
     assert_eq!(
         ast::GraphPattern::GroupPattern(vec![
-            ast::GraphPattern::PropertyPathPattern(ast::PropertyPathPattern::new(
+            ast::GraphPattern::PathPattern(ast::PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p"),
                 Variable::new("v"),
             )),
-            ast::GraphPattern::MinusPattern(Box::new(ast::GraphPattern::PropertyPathPattern(
-                ast::PropertyPathPattern::new(
+            ast::GraphPattern::MinusPattern(Box::new(ast::GraphPattern::PathPattern(
+                ast::PathPattern::new(
                     Variable::new("s"),
                     Variable::new("p1"),
                     Variable::new("v2"),
@@ -1682,12 +1712,12 @@ fn test_sparql_algebra_examples() {
             ))),
         ]).try_into(),
         Ok(GraphPattern::Minus(
-            Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+            Box::new(GraphPattern::BGP(vec![PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p"),
                 Variable::new("v"),
             )])),
-            Box::new(GraphPattern::BGP(vec![PropertyPathPattern::new(
+            Box::new(GraphPattern::BGP(vec![PathPattern::new(
                 Variable::new("s"),
                 Variable::new("p1"),
                 Variable::new("v2"),
