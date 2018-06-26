@@ -4,6 +4,7 @@ use std::char;
 use model::vocab::rdf;
 use model::vocab::xsd;
 use std::iter;
+use std::str::FromStr;
 
 #![arguments(state: &mut ParserState)]
 
@@ -40,13 +41,13 @@ PrefixDecl -> () = "PREFIX"i _ ns:PNAME_NS _ i:IRIREF {
 SelectQuery -> Query = s:SelectClause _ d:DatasetClauses _ w:WhereClause _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {  //TODO: Modifier
     Query::SelectQuery {
         dataset: d,
-        algebra: build_select(s, w, h, o, v)
+        algebra: build_select(s, w, h, o, l, v)
     }
 }
 
 //[8]
 SubSelect -> MultiSetPattern = s:SelectClause _ w:WhereClause _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause { //TODO: Modifiers
-    build_select(s, w, h, o, v).into()
+    build_select(s, w, h, o, l, v).into()
 }
 
 //[9]
@@ -69,17 +70,17 @@ SelectClause_member -> SelectionMember =
 
 //[10]
 ConstructQuery -> Query =
-    "CONSTRUCT"i _ c:ConstructTemplate _ d:DatasetClauses _ w:WhereClause _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ LimitOffsetClauses? _ v:ValuesClause {
+    "CONSTRUCT"i _ c:ConstructTemplate _ d:DatasetClauses _ w:WhereClause _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
         Query::ConstructQuery {
             construct: c,
             dataset: d,
             algebra: build_select(Selection {
                 option: SelectionOption::Reduced,
                 variables: None
-            }, w, h, o, v)
+            }, w, h, o, l, v)
         }
     } /
-    "CONSTRUCT"i _ d:DatasetClauses _ "WHERE"i _ '{' _ c:ConstructQuery_optional_triple_template _ '}' _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ LimitOffsetClauses? _ v:ValuesClause {
+    "CONSTRUCT"i _ d:DatasetClauses _ "WHERE"i _ '{' _ c:ConstructQuery_optional_triple_template _ '}' _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
         Query::ConstructQuery {
             construct: c.clone(),
             dataset: d,
@@ -87,7 +88,7 @@ ConstructQuery -> Query =
                 option: SelectionOption::Reduced,
                 variables: None
             }, MultiSetPattern::BGP(c.into_iter().map(|p| PropertyPathPattern::from(p)).collect()).into(),
-            h, o, v)
+            h, o, l, v)
         }
     }
 
@@ -95,16 +96,16 @@ ConstructQuery_optional_triple_template -> Vec<TriplePattern> = TriplesTemplate 
 
 //[11]
 DescribeQuery -> Query =
-    "DESCRIBE"i _ '*' _ d:DatasetClauses w:WhereClause? _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ LimitOffsetClauses? _ v:ValuesClause {
+    "DESCRIBE"i _ '*' _ d:DatasetClauses w:WhereClause? _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
         Query::DescribeQuery {
             dataset: d,
             algebra: build_select(Selection {
                 option: SelectionOption::Reduced,
                 variables: None
-            }, w.unwrap_or_else(MultiSetPattern::default), h, o, v)
+            }, w.unwrap_or_else(MultiSetPattern::default), h, o, l, v)
         }
     } /
-    "DESCRIBE"i _ p:DescribeQuery_item+ _ d:DatasetClauses w:WhereClause? _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ LimitOffsetClauses? _ v:ValuesClause {
+    "DESCRIBE"i _ p:DescribeQuery_item+ _ d:DatasetClauses w:WhereClause? _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
         Query::DescribeQuery {
             dataset: d,
             algebra: build_select(Selection {
@@ -113,19 +114,19 @@ DescribeQuery -> Query =
                     NamedNodeOrVariable::NamedNode(n) => SelectionMember::Expression(n.into(), Variable::default()),
                     NamedNodeOrVariable::Variable(v) => SelectionMember::Variable(v)
                 }).collect())
-            }, w.unwrap_or_else(MultiSetPattern::default), h, o, v)
+            }, w.unwrap_or_else(MultiSetPattern::default), h, o, l, v)
         }
     }
 DescribeQuery_item -> NamedNodeOrVariable = i:VarOrIri _ { i }
 
 //[12]
-AskQuery -> Query = "ASK"i _ d:DatasetClauses w:WhereClause _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ LimitOffsetClauses? _ v:ValuesClause {
+AskQuery -> Query = "ASK"i _ d:DatasetClauses w:WhereClause _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
     Query::AskQuery {
         dataset: d,
         algebra: build_select(Selection {
             option: SelectionOption::Reduced,
             variables: None
-        }, w, h, o, v)
+        }, w, h, o, l, v)
     }
 }
 
@@ -179,13 +180,19 @@ OrderCondition -> OrderComparator =
     v: Var { Expression::from(v).into() }
 
 //[25]
-LimitOffsetClauses -> () = LimitClause _ OffsetClause? / OffsetClause _ LimitClause?
+LimitOffsetClauses -> (usize, Option<usize>) =
+    l:LimitClause _ o:OffsetClause? { (o.unwrap_or(0), Some(l)) } /
+    o:OffsetClause _ l:LimitClause? { (o, l) }
 
 //[26]
-LimitClause -> () = "LIMIT"i _ INTEGER
+LimitClause -> usize = "LIMIT"i _ l:$(INTEGER) {?
+    usize::from_str(l).map_err(|_| "The query limit should be a non negative integer")
+}
 
 //[27]
-OffsetClause -> () = "OFFSET"i _ INTEGER
+OffsetClause -> usize = "OFFSET"i _ o:$(INTEGER) {?
+    usize::from_str(o).map_err(|_| "The query offset should be a non negative integer")
+}
 
 //[28]
 ValuesClause -> Option<MultiSetPattern> =

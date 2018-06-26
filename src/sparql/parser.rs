@@ -153,6 +153,7 @@ mod grammar {
         wher: MultiSetPattern,
         having: Option<Expression>,
         order_by: Option<Vec<OrderComparator>>,
+        offset_limit: Option<(usize, Option<usize>)>,
         values: Option<MultiSetPattern>,
     ) -> ListPattern {
         let mut p = wher;
@@ -190,6 +191,9 @@ mod grammar {
             SelectionOption::Distinct => m = ListPattern::Distinct(Box::new(m)),
             SelectionOption::Reduced => m = ListPattern::Reduced(Box::new(m)),
             SelectionOption::Default => (),
+        }
+        if let Some((offset, limit)) = offset_limit {
+            m = ListPattern::Slice(Box::new(m), offset, limit)
         }
         m
     }
