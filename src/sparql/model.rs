@@ -24,7 +24,7 @@ impl fmt::Display for Variable {
 impl Default for Variable {
     fn default() -> Self {
         Self {
-            name: Uuid::new_v4().to_string(),
+            name: Uuid::new_v4().simple().to_string(),
         }
     }
 }

@@ -177,18 +177,43 @@ mod grammar {
     fn build_select(
         select: Selection,
         wher: MultiSetPattern,
+        group: Option<(Vec<Expression>, Vec<(Expression, Variable)>)>,
         having: Option<Expression>,
         order_by: Option<Vec<OrderComparator>>,
         offset_limit: Option<(usize, Option<usize>)>,
         values: Option<MultiSetPattern>,
+        state: &mut ParserState,
     ) -> ListPattern {
         let mut p = wher;
+
+        //GROUP BY
+        if let Some((clauses, binds)) = group {
+            for (e, v) in binds {
+                p = MultiSetPattern::Extend(Box::new(p), v, e);
+            }
+            let g = GroupPattern(clauses, Box::new(p));
+            p = MultiSetPattern::AggregateJoin(g, state.aggregations.clone());
+            state.aggregations = BTreeMap::default();
+        }
+        if !state.aggregations.is_empty() {
+            let g = GroupPattern(vec![Literal::from(1).into()], Box::new(p));
+            p = MultiSetPattern::AggregateJoin(g, state.aggregations.clone());
+            state.aggregations = BTreeMap::default();
+        }
+
+        //TODO: not aggregated vars
+
+        //HAVING
         if let Some(ex) = having {
             p = MultiSetPattern::Filter(ex, Box::new(p));
         }
+
+        //VALUES
         if let Some(data) = values {
             p = MultiSetPattern::Join(Box::new(p), Box::new(data));
         }
+
+        //SELECT
         let mut pv: Vec<Variable> = Vec::default();
         match select.variables {
             Some(sel_items) => {
@@ -209,15 +234,21 @@ mod grammar {
             }
         }
         let mut m = ListPattern::from(p);
+
+        //ORDER BY
         if let Some(order) = order_by {
             m = ListPattern::OrderBy(Box::new(m), order);
         }
+
+        //PROJECT
         m = ListPattern::Project(Box::new(m), pv);
         match select.option {
             SelectionOption::Distinct => m = ListPattern::Distinct(Box::new(m)),
             SelectionOption::Reduced => m = ListPattern::Reduced(Box::new(m)),
             SelectionOption::Default => (),
         }
+
+        //OFFSET LIMIT
         if let Some((offset, limit)) = offset_limit {
             m = ListPattern::Slice(Box::new(m), offset, limit)
         }
@@ -233,11 +264,23 @@ mod grammar {
         base_uri: Option<Url>,
         namespaces: HashMap<String, String>,
         bnodes_map: BTreeMap<String, BlankNode>,
+        aggregations: BTreeMap<Aggregation, Variable>,
     }
 
     impl ParserState {
         fn url_parser<'a>(&'a self) -> ParseOptions<'a> {
             Url::options().base_url(self.base_uri.as_ref())
+        }
+
+        fn new_aggregation(&mut self, agg: Aggregation) -> Variable {
+            self.aggregations
+                .get(&agg)
+                .map(|v| v.clone())
+                .unwrap_or_else(|| {
+                    let new_var = Variable::default();
+                    self.aggregations.insert(agg, new_var.clone());
+                    new_var
+                })
         }
     }
 
@@ -251,6 +294,7 @@ mod grammar {
             base_uri: base_uri.into(),
             namespaces: HashMap::default(),
             bnodes_map: BTreeMap::default(),
+            aggregations: BTreeMap::default(),
         };
 
         let mut string_buffer = String::default();

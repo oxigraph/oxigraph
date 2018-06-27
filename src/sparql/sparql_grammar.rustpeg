@@ -38,16 +38,16 @@ PrefixDecl -> () = "PREFIX"i _ ns:PNAME_NS _ i:IRIREF {
 }
 
 //[7]
-SelectQuery -> Query = s:SelectClause _ d:DatasetClauses _ w:WhereClause _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {  //TODO: Modifier
+SelectQuery -> Query = s:SelectClause _ d:DatasetClauses _ w:WhereClause _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {  //TODO: Modifier
     Query::SelectQuery {
         dataset: d,
-        algebra: build_select(s, w, h, o, l, v)
+        algebra: build_select(s, w, g, h, o, l, v, state)
     }
 }
 
 //[8]
-SubSelect -> MultiSetPattern = s:SelectClause _ w:WhereClause _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause { //TODO: Modifiers
-    build_select(s, w, h, o, l, v).into()
+SubSelect -> MultiSetPattern = s:SelectClause _ w:WhereClause _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause { //TODO: Modifiers
+    build_select(s, w, g, h, o, l, v, state).into()
 }
 
 //[9]
@@ -70,21 +70,21 @@ SelectClause_member -> SelectionMember =
 
 //[10]
 ConstructQuery -> Query =
-    "CONSTRUCT"i _ c:ConstructTemplate _ d:DatasetClauses _ w:WhereClause _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
+    "CONSTRUCT"i _ c:ConstructTemplate _ d:DatasetClauses _ w:WhereClause _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
         Query::ConstructQuery {
             construct: c,
             dataset: d,
-            algebra: build_select(Selection::default(), w, h, o, l, v)
+            algebra: build_select(Selection::default(), w, g, h, o, l, v, state)
         }
     } /
-    "CONSTRUCT"i _ d:DatasetClauses _ "WHERE"i _ '{' _ c:ConstructQuery_optional_triple_template _ '}' _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
+    "CONSTRUCT"i _ d:DatasetClauses _ "WHERE"i _ '{' _ c:ConstructQuery_optional_triple_template _ '}' _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
         Query::ConstructQuery {
             construct: c.clone(),
             dataset: d,
             algebra: build_select(
                 Selection::default(),
                 MultiSetPattern::BGP(c.into_iter().map(|p| TripleOrPathPattern::from(p)).collect()).into(),
-                h, o, l, v
+                g, h, o, l, v, state
             )
         }
     }
@@ -93,13 +93,13 @@ ConstructQuery_optional_triple_template -> Vec<TriplePattern> = TriplesTemplate 
 
 //[11]
 DescribeQuery -> Query =
-    "DESCRIBE"i _ '*' _ d:DatasetClauses w:WhereClause? _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
+    "DESCRIBE"i _ '*' _ d:DatasetClauses w:WhereClause? _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
         Query::DescribeQuery {
             dataset: d,
-            algebra: build_select(Selection::default(), w.unwrap_or_else(MultiSetPattern::default), h, o, l, v)
+            algebra: build_select(Selection::default(), w.unwrap_or_else(MultiSetPattern::default), g, h, o, l, v, state)
         }
     } /
-    "DESCRIBE"i _ p:DescribeQuery_item+ _ d:DatasetClauses w:WhereClause? _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
+    "DESCRIBE"i _ p:DescribeQuery_item+ _ d:DatasetClauses w:WhereClause? _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
         Query::DescribeQuery {
             dataset: d,
             algebra: build_select(Selection {
@@ -108,16 +108,16 @@ DescribeQuery -> Query =
                     NamedNodeOrVariable::NamedNode(n) => SelectionMember::Expression(n.into(), Variable::default()),
                     NamedNodeOrVariable::Variable(v) => SelectionMember::Variable(v)
                 }).collect())
-            }, w.unwrap_or_else(MultiSetPattern::default), h, o, l, v)
+            }, w.unwrap_or_else(MultiSetPattern::default), g, h, o, l, v, state)
         }
     }
 DescribeQuery_item -> NamedNodeOrVariable = i:VarOrIri _ { i }
 
 //[12]
-AskQuery -> Query = "ASK"i _ d:DatasetClauses w:WhereClause _ GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
+AskQuery -> Query = "ASK"i _ d:DatasetClauses w:WhereClause _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
     Query::AskQuery {
         dataset: d,
-        algebra: build_select(Selection::default(), w, h, o, l, v)
+        algebra: build_select(Selection::default(), w, g, h, o, l, v, state)
     }
 }
 
@@ -146,10 +146,28 @@ WhereClause -> MultiSetPattern = "WHERE"i? _ p:GroupGraphPattern {
 }
 
 //[19]
-GroupClause -> () = "GROUP"i _ "BY"i _ (GroupCondition _)+
+GroupClause -> (Vec<Expression>, Vec<(Expression,Variable)>) = "GROUP"i _ "BY"i _ c:GroupCondition_item+ {
+    let mut projections: Vec<(Expression,Variable)> = Vec::default();
+    let clauses = c.into_iter().map(|(e, vo)| {
+        match vo {
+            Some(v) => {
+                projections.push((e, v.clone()));
+                v.into()
+            },
+            None => e
+        }
+    }).collect();
+    (clauses, projections)
+}
+GroupCondition_item -> (Expression, Option<Variable>) = c:GroupCondition _ { c }
 
 //[20]
-GroupCondition -> () = BuiltInCall / FunctionCall / '(' _ Expression _ ("AS"i _ Var _)? ')' / Var
+GroupCondition -> (Expression, Option<Variable>) =
+    e:BuiltInCall { (e, None) } /
+    e:FunctionCall { (e, None) } /
+    '(' _ e:Expression _ v:GroupCondition_as? ')' { (e, v) } /
+    e:Var { (e.into(), None) }
+GroupCondition_as -> Variable = "AS"i _ v:Var _ { v }
 
 //[21]
 HavingClause -> Expression = "HAVING"i _ e:HavingCondition+ {?
@@ -737,7 +755,7 @@ BrackettedExpression -> Expression = '(' _ e:Expression _ ')' { e }
 
 //[121]
 BuiltInCall -> Expression =
-    Aggregate /
+    a:Aggregate { state.new_aggregation(a).into() } /
     "STR"i _ '(' _ e:Expression _ ')' { Expression::StrFunctionCall(Box::new(e)) } /
     "LANG"i _ '(' _ e:Expression _ ')' { Expression::LangFunctionCall(Box::new(e)) } /
     "LANGMATCHES"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::LangMatchesFunctionCall(Box::new(a), Box::new(b)) } /
@@ -814,25 +832,25 @@ ExistsFunc -> Expression = "EXISTS"i _ p:GroupGraphPattern { Expression::ExistsF
 NotExistsFunc -> Expression = "NOT"i _ "EXISTS"i _ p:GroupGraphPattern { Expression::UnaryNotExpression(Box::new(Expression::ExistsFunctionCall(Box::new(p)))) }
 
 //[127]
-Aggregate -> Expression =
-    "COUNT"i _ '(' _ "DISTINCT"i _ '*' _ ')' { Expression::CountAggregate(None, true) } /
-    "COUNT"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Expression::CountAggregate(Some(Box::new(e)), true) } /
-    "COUNT"i _ '(' _ '*' _ ')' { Expression::CountAggregate(None, false) } /
-    "COUNT"i _ '(' _ e:Expression _ ')' { Expression::CountAggregate(Some(Box::new(e)), false) } /
-    "SUM"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Expression::SumAggregate(Box::new(e), true) } /
-    "SUM"i _ '(' _ e:Expression _ ')' { Expression::SumAggregate(Box::new(e), false) } /
-    "MIN"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Expression::MinAggregate(Box::new(e), true) } /
-    "MIN"i _ '(' _ e:Expression _ ')' { Expression::MinAggregate(Box::new(e), false) } /
-    "MAX"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Expression::MaxAggregate(Box::new(e), true) } /
-    "MAX"i _ '(' _ e:Expression _ ')' { Expression::MaxAggregate(Box::new(e), false) } /
-    "AVG"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Expression::AvgAggregate(Box::new(e), true) } /
-    "AVG"i _ '(' _ e:Expression _ ')' { Expression::AvgAggregate(Box::new(e), false) } /
-    "SAMPLE"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Expression::SampleAggregate(Box::new(e), true) } /
-    "SAMPLE"i _ '(' _ e:Expression _ ')' { Expression::SampleAggregate(Box::new(e), false) } /
-    "GROUP_CONCAT"i _ '(' _ "DISTINCT"i _ e:Expression _ ';' _ 'SEPARATOR'i _ '=' _ s:String _ ')' { Expression::GroupConcatAggregate(Box::new(e), true, Some(s)) } /
-    "GROUP_CONCAT"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Expression::GroupConcatAggregate(Box::new(e), true, None) } /
-    "GROUP_CONCAT"i _ '(' _ e:Expression _ ';' _ 'SEPARATOR'i _ '=' _ s:String _ ')' { Expression::GroupConcatAggregate(Box::new(e), true, Some(s)) } /
-    "GROUP_CONCAT"i _ '(' _ e:Expression _ ')' { Expression::GroupConcatAggregate(Box::new(e), false, None) }
+Aggregate -> Aggregation =
+    "COUNT"i _ '(' _ "DISTINCT"i _ '*' _ ')' { Aggregation::Count(None, true) } /
+    "COUNT"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Aggregation::Count(Some(Box::new(e)), true) } /
+    "COUNT"i _ '(' _ '*' _ ')' { Aggregation::Count(None, false) } /
+    "COUNT"i _ '(' _ e:Expression _ ')' { Aggregation::Count(Some(Box::new(e)), false) } /
+    "SUM"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Aggregation::Sum(Box::new(e), true) } /
+    "SUM"i _ '(' _ e:Expression _ ')' { Aggregation::Sum(Box::new(e), false) } /
+    "MIN"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Aggregation::Min(Box::new(e), true) } /
+    "MIN"i _ '(' _ e:Expression _ ')' { Aggregation::Min(Box::new(e), false) } /
+    "MAX"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Aggregation::Max(Box::new(e), true) } /
+    "MAX"i _ '(' _ e:Expression _ ')' { Aggregation::Max(Box::new(e), false) } /
+    "AVG"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Aggregation::Avg(Box::new(e), true) } /
+    "AVG"i _ '(' _ e:Expression _ ')' { Aggregation::Avg(Box::new(e), false) } /
+    "SAMPLE"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Aggregation::Sample(Box::new(e), true) } /
+    "SAMPLE"i _ '(' _ e:Expression _ ')' { Aggregation::Sample(Box::new(e), false) } /
+    "GROUP_CONCAT"i _ '(' _ "DISTINCT"i _ e:Expression _ ';' _ 'SEPARATOR'i _ '=' _ s:String _ ')' { Aggregation::GroupConcat(Box::new(e), true, Some(s)) } /
+    "GROUP_CONCAT"i _ '(' _ "DISTINCT"i _ e:Expression _ ')' { Aggregation::GroupConcat(Box::new(e), true, None) } /
+    "GROUP_CONCAT"i _ '(' _ e:Expression _ ';' _ 'SEPARATOR'i _ '=' _ s:String _ ')' { Aggregation::GroupConcat(Box::new(e), true, Some(s)) } /
+    "GROUP_CONCAT"i _ '(' _ e:Expression _ ')' { Aggregation::GroupConcat(Box::new(e), false, None) }
 
 //[128]
 iriOrFunction -> Expression =
