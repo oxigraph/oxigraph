@@ -28,3 +28,9 @@ impl Default for BlankNode {
         BlankNode { id: Uuid::new_v4() }
     }
 }
+
+impl From<Uuid> for BlankNode {
+    fn from(id: Uuid) -> Self {
+        Self { id }
+    }
+}

@@ -8,3 +8,7 @@ matrix:
     - rust: nightly
   fast_finish: true
 cache: cargo
+addons:
+  apt:
+    packages:
+      - clang

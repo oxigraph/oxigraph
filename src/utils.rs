@@ -1,3 +1,6 @@
+use std::mem::size_of;
+use std::mem::transmute;
+
 pub trait Escaper {
     fn escape(&self) -> String;
 }
@@ -76,4 +79,9 @@ impl ExactSizeIterator for EscapeRDF {
             EscapeRdfState::Backslash(_) => 2,
         }
     }
+}
+
+pub fn to_bytes(int: usize) -> [u8; size_of::<usize>()] {
+    //TODO: remove when next rust version stabilize this method
+    unsafe { transmute(int) }
 }
