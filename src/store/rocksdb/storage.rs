@@ -2,20 +2,14 @@ use errors::*;
 use rocksdb::ColumnFamily;
 use rocksdb::DBRawIterator;
 use rocksdb::DBVector;
-use rocksdb::IteratorMode;
 use rocksdb::Options;
 use rocksdb::WriteBatch;
 use rocksdb::DB;
-use std::ops::Deref;
 use std::path::Path;
-use std::slice;
 use std::str;
-use store::numeric_encoder::BytesStore;
-use store::numeric_encoder::EncodedQuad;
-use store::numeric_encoder::EncodedTerm;
-use store::numeric_encoder::Encoder;
-use store::numeric_encoder::STRING_KEY_SIZE;
-use store::numeric_encoder::TERM_ENCODING_SIZE;
+use std::sync::Mutex;
+use store::numeric_encoder::*;
+use utils::from_bytes;
 use utils::to_bytes;
 
 const ID2STR_CF: &'static str = "id2str";
@@ -32,6 +26,7 @@ const COLUMN_FAMILIES: [&'static str; 5] = [ID2STR_CF, STR2ID_CF, SPOG_CF, POSG_
 
 pub struct RocksDbStore {
     db: DB,
+    counter_mutex: Mutex<()>,
     id2str_cf: ColumnFamily,
     str2id_cf: ColumnFamily,
     spog_cf: ColumnFamily,
@@ -41,7 +36,9 @@ pub struct RocksDbStore {
 
 impl RocksDbStore {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
-        let options = Options::default();
+        let mut options = Options::default();
+        options.create_if_missing(true);
+        options.create_missing_column_families(true);
 
         let db = DB::open_cf(&options, path, &COLUMN_FAMILIES)?;
         let id2str_cf = get_cf(&db, STR2ID_CF)?;
@@ -52,6 +49,7 @@ impl RocksDbStore {
 
         Ok(Self {
             db,
+            counter_mutex: Mutex::new(()),
             id2str_cf,
             str2id_cf,
             spog_cf,
@@ -174,6 +172,25 @@ pub fn get_cf(db: &DB, name: &str) -> Result<ColumnFamily> {
 
 pub struct RocksDbBytesStore<'a>(&'a RocksDbStore);
 
+impl<'a> RocksDbBytesStore<'a> {
+    fn new_id(&self) -> Result<[u8; STRING_KEY_SIZE]> {
+        let _ = self.0.counter_mutex.lock();
+        let id = self.0
+            .db
+            .get(b"bsc")?
+            .map(|v| {
+                let mut id = [0 as u8; STRING_KEY_SIZE];
+                id.copy_from_slice(&v);
+                id
+            })
+            .unwrap_or_else(|| [0 as u8; STRING_KEY_SIZE]);
+        self.0
+            .db
+            .put(b"bsc", &to_bytes(from_bytes(id.clone()) + 1))?;
+        Ok(id)
+    }
+}
+
 impl<'a> BytesStore for RocksDbBytesStore<'a> {
     type BytesOutput = DBVector;
 
@@ -181,9 +198,8 @@ impl<'a> BytesStore for RocksDbBytesStore<'a> {
         match self.0.db.get_cf(self.0.str2id_cf, value)? {
             Some(id) => id_buffer.copy_from_slice(&id),
             None => {
+                let id = self.new_id()?;
                 let mut batch = WriteBatch::default();
-                // TODO: id allocation
-                let id = [0 as u8; STRING_KEY_SIZE];
                 batch.put_cf(self.0.id2str_cf, &id, value)?;
                 batch.put_cf(self.0.str2id_cf, value, &id)?;
                 self.0.db.write(batch)?;
@@ -260,7 +276,7 @@ fn encode_term_triple(
     let mut bytes = [0 as u8; 3 * TERM_ENCODING_SIZE];
     bytes[0..TERM_ENCODING_SIZE].copy_from_slice(t1.as_ref());
     bytes[TERM_ENCODING_SIZE..2 * TERM_ENCODING_SIZE].copy_from_slice(t2.as_ref());
-    bytes[2 * TERM_ENCODING_SIZE..3 * TERM_ENCODING_SIZE].copy_from_slice(t2.as_ref());
+    bytes[2 * TERM_ENCODING_SIZE..3 * TERM_ENCODING_SIZE].copy_from_slice(t3.as_ref());
     bytes
 }
 

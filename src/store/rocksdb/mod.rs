@@ -2,18 +2,10 @@ mod storage;
 
 use errors::*;
 use model::*;
-use std::ops::Deref;
 use std::path::Path;
-use std::slice;
-use std::str;
-use store::numeric_encoder::BytesStore;
 use store::numeric_encoder::EncodedQuad;
-use store::numeric_encoder::EncodedTerm;
 use store::numeric_encoder::Encoder;
-use store::numeric_encoder::STRING_KEY_SIZE;
-use store::numeric_encoder::TERM_ENCODING_SIZE;
 use store::rocksdb::storage::*;
-use utils::to_bytes;
 
 pub struct RocksDbDataset {
     store: RocksDbStore,
@@ -41,7 +33,7 @@ impl RocksDbDataset {
         RocksDbUnionGraph { store: &self.store }
     }
 
-    fn iter(&self) -> Result<QuadsIterator<SPOGIndexIterator>> {
+    pub fn iter(&self) -> Result<QuadsIterator<SPOGIndexIterator>> {
         Ok(QuadsIterator {
             iter: self.store.quads()?,
             encoder: self.store.encoder(),
@@ -59,16 +51,16 @@ impl RocksDbDataset {
         })
     }
 
-    fn contains(&self, quad: &Quad) -> Result<bool> {
+    pub fn contains(&self, quad: &Quad) -> Result<bool> {
         self.store
             .contains(&self.store.encoder().encode_quad(quad)?)
     }
 
-    fn insert(&self, quad: &Quad) -> Result<()> {
+    pub fn insert(&self, quad: &Quad) -> Result<()> {
         self.store.insert(&self.store.encoder().encode_quad(quad)?)
     }
 
-    fn remove(&self, quad: &Quad) -> Result<()> {
+    pub fn remove(&self, quad: &Quad) -> Result<()> {
         self.store.remove(&self.store.encoder().encode_quad(quad)?)
     }
 }
@@ -86,7 +78,7 @@ struct RocksDbUnionGraph<'a> {
     store: &'a RocksDbStore,
 }
 
-struct QuadsIterator<'a, I: Iterator<Item = Result<EncodedQuad>>> {
+pub struct QuadsIterator<'a, I: Iterator<Item = Result<EncodedQuad>>> {
     iter: I,
     encoder: Encoder<RocksDbBytesStore<'a>>,
 }

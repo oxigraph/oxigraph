@@ -157,7 +157,7 @@ impl<S: BytesStore> Encoder<S> {
     pub fn encode_blank_node(&self, blank_node: &BlankNode) -> Result<EncodedTerm> {
         let mut bytes = [0 as u8; TERM_ENCODING_SIZE];
         bytes[0] = TYPE_BLANK_NODE_ID;
-        bytes[TYPE_KEY_SIZE..TERM_ENCODING_SIZE].copy_from_slice(blank_node.as_bytes());
+        bytes[TYPE_KEY_SIZE..].copy_from_slice(blank_node.as_bytes());
         Ok(EncodedTerm(bytes))
     }
 
@@ -332,10 +332,7 @@ mod test {
     use std::cell::RefCell;
     use std::collections::BTreeMap;
     use std::str::FromStr;
-    use store::numeric_encoder::BytesStore;
-    use store::numeric_encoder::Encoder;
-    use store::numeric_encoder::STRING_KEY_SIZE;
-    use store::numeric_encoder::TERM_ENCODING_SIZE;
+    use store::numeric_encoder::*;
     use utils::to_bytes;
 
     #[derive(Default)]

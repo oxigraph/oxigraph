@@ -85,3 +85,8 @@ pub fn to_bytes(int: usize) -> [u8; size_of::<usize>()] {
     //TODO: remove when next rust version stabilize this method
     unsafe { transmute(int) }
 }
+
+pub fn from_bytes(bytes: [u8; size_of::<usize>()]) -> usize {
+    //TODO: remove when next rust version stabilize this method
+    unsafe { transmute(bytes) }
+}
