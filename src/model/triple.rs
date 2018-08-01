@@ -161,6 +161,15 @@ impl Triple {
             object: object.into(),
         }
     }
+
+    pub fn in_graph(self, graph_name: Option<NamedOrBlankNode>) -> Quad {
+        Quad {
+            subject: self.subject,
+            predicate: self.predicate,
+            object: self.object,
+            graph_name,
+        }
+    }
 }
 
 impl fmt::Display for Triple {
