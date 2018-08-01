@@ -1,9 +1,9 @@
+use errors::*;
 use std::fmt;
 use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::Arc;
 use url::Url;
-use errors::*;
 
 /// A RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]

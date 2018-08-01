@@ -1,16 +1,15 @@
 /// Implements https://www.w3.org/TR/turtle/
 
 mod grammar {
-    include!(concat!(env!("OUT_DIR"), "/turtle_grammar.rs"));
-
     use model::*;
-    use rio::*;
     use std::collections::BTreeMap;
     use std::collections::HashMap;
     use std::io::BufReader;
     use std::io::Read;
     use url::ParseOptions;
     use url::Url;
+
+    include!(concat!(env!("OUT_DIR"), "/turtle_grammar.rs"));
 
     pub struct ParserState {
         base_uri: Option<Url>,
@@ -29,7 +28,7 @@ mod grammar {
     pub fn read_turtle<'a, R: Read + 'a>(
         source: R,
         base_uri: impl Into<Option<Url>>,
-    ) -> RioResult<impl Iterator<Item = Triple>> {
+    ) -> super::super::super::errors::Result<impl Iterator<Item = Triple>> {
         let mut state = ParserState {
             base_uri: base_uri.into(),
             namespaces: HashMap::default(),
@@ -44,9 +43,10 @@ mod grammar {
 
         match turtleDoc(&string_buffer, &mut state, &mut triple_buffer) {
             Ok(_) => Ok(triple_buffer.into_iter()),
-            Err(error) => Err(RioError::new(error)),
+            Err(error) => Err(error.into()),
         }
     }
 }
 
+pub(crate) type ParseError = self::grammar::ParseError;
 pub use self::grammar::read_turtle;

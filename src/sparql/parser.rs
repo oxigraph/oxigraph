@@ -4,8 +4,6 @@ use std::str::Chars;
 
 mod grammar {
     use model::*;
-    use rio::RioError;
-    use rio::RioResult;
     use sparql::algebra::*;
     use sparql::model::*;
     use sparql::parser::unescape_unicode_codepoints;
@@ -289,7 +287,7 @@ mod grammar {
     pub fn read_sparql_query<'a, R: Read + 'a>(
         source: R,
         base_uri: impl Into<Option<Url>>,
-    ) -> RioResult<Query> {
+    ) -> super::super::super::errors::Result<Query> {
         let mut state = ParserState {
             base_uri: base_uri.into(),
             namespaces: HashMap::default(),
@@ -305,12 +303,13 @@ mod grammar {
             &mut state,
         ) {
             Ok(query) => Ok(query),
-            Err(error) => Err(RioError::new(error)),
+            Err(error) => Err(error.into()),
         }
     }
 }
 
-pub use sparql::parser::grammar::read_sparql_query;
+pub(crate) type ParseError = self::grammar::ParseError;
+pub use self::grammar::read_sparql_query;
 
 fn needs_unescape_unicode_codepoints(input: &str) -> bool {
     let bytes = input.as_bytes();

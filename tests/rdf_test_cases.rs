@@ -8,13 +8,12 @@ extern crate url;
 
 use reqwest::Client;
 use reqwest::Response;
+use rudf::errors::*;
 use rudf::model::vocab::rdf;
 use rudf::model::vocab::rdfs;
 use rudf::model::*;
 use rudf::rio::ntriples::read_ntriples;
 use rudf::rio::turtle::read_turtle;
-use rudf::rio::RioError;
-use rudf::rio::RioResult;
 use rudf::sparql::algebra::Query;
 use rudf::sparql::parser::read_sparql_query;
 use rudf::store::isomorphism::GraphIsomorphism;
@@ -178,25 +177,25 @@ impl Default for RDFClient {
 }
 
 impl RDFClient {
-    pub fn load_turtle(&self, url: Url) -> RioResult<MemoryGraph> {
+    pub fn load_turtle(&self, url: Url) -> Result<MemoryGraph> {
         Ok(read_turtle(self.get(&url)?, Some(url))?.collect())
     }
 
-    pub fn load_ntriples(&self, url: Url) -> RioResult<MemoryGraph> {
+    pub fn load_ntriples(&self, url: Url) -> Result<MemoryGraph> {
         read_ntriples(self.get(&url)?).collect()
     }
 
-    pub fn load_sparql_query(&self, url: Url) -> RioResult<Query> {
+    pub fn load_sparql_query(&self, url: Url) -> Result<Query> {
         read_sparql_query(self.get(&url)?, Some(url))
     }
 
-    fn get(&self, url: &Url) -> RioResult<Response> {
+    fn get(&self, url: &Url) -> Result<Response> {
         match self.client.get(url.clone()).send() {
             Ok(response) => Ok(response),
             Err(error) => if error.description() == "message is incomplete" {
                 self.get(url)
             } else {
-                Err(RioError::new(error))
+                Err("HTTP request error".into()) //TODO: improve
             },
         }
     }
@@ -267,9 +266,9 @@ pub mod mf {
 }
 
 impl<'a> Iterator for TestManifest<'a> {
-    type Item = Result<Test, ManifestError>;
+    type Item = Result<Test>;
 
-    fn next(&mut self) -> Option<Result<Test, ManifestError>> {
+    fn next(&mut self) -> Option<Result<Test>> {
         match self.tests_to_do.pop() {
             Some(Term::NamedNode(test_node)) => {
                 let test_subject = NamedOrBlankNode::from(test_node.clone());
@@ -278,9 +277,9 @@ impl<'a> Iterator for TestManifest<'a> {
                 {
                     Some(Term::NamedNode(c)) => match c.value().split("#").last() {
                         Some(k) => k.to_string(),
-                        None => return Some(Err(ManifestError::NoType)),
+                        None => return Some(Err("no type".into())),
                     },
-                    _ => return Some(Err(ManifestError::NoType)),
+                    _ => return Some(Err("no type".into())),
                 };
                 let name = match self.graph
                     .object_for_subject_predicate(&test_subject, &mf::NAME)
@@ -298,14 +297,14 @@ impl<'a> Iterator for TestManifest<'a> {
                     .object_for_subject_predicate(&test_subject, &*mf::ACTION)
                 {
                     Some(Term::NamedNode(n)) => n.url().clone(),
-                    Some(_) => return Some(Err(ManifestError::InvalidAction)),
-                    None => return Some(Err(ManifestError::ActionNotFound)),
+                    Some(_) => return Some(Err("invalid action".into())),
+                    None => return Some(Err("action not found".into())),
                 };
                 let result = match self.graph
                     .object_for_subject_predicate(&test_subject, &*mf::RESULT)
                 {
                     Some(Term::NamedNode(n)) => Some(n.url().clone()),
-                    Some(_) => return Some(Err(ManifestError::InvalidResult)),
+                    Some(_) => return Some(Err("invalid result".into())),
                     None => None,
                 };
                 Some(Ok(Test {
@@ -317,7 +316,7 @@ impl<'a> Iterator for TestManifest<'a> {
                     result,
                 }))
             }
-            Some(_) => Some(Err(ManifestError::InvalidTestsList)),
+            Some(_) => Some(Err("invalid test list".into())),
             None => {
                 match self.manifests_to_do.pop() {
                     Some(url) => {
@@ -341,7 +340,7 @@ impl<'a> Iterator for TestManifest<'a> {
                                         }),
                                 );
                             }
-                            Some(_) => return Some(Err(ManifestError::InvalidTestsList)),
+                            Some(_) => return Some(Err("invalid tests list".into())),
                             None => (),
                         }
 
@@ -353,7 +352,7 @@ impl<'a> Iterator for TestManifest<'a> {
                                 self.tests_to_do
                                     .extend(self.graph.values_for_list(list.clone().into()));
                             }
-                            Some(_) => return Some(Err(ManifestError::InvalidTestsList)),
+                            Some(_) => return Some(Err("invalid tests list".into())),
                             None => (),
                         }
                     }
@@ -362,47 +361,5 @@ impl<'a> Iterator for TestManifest<'a> {
                 self.next()
             }
         }
-    }
-}
-
-#[derive(Debug)]
-pub enum ManifestError {
-    NoType,
-    ActionNotFound,
-    InvalidAction,
-    InvalidResult,
-    InvalidTestsList,
-    RioError(RioError),
-}
-
-impl Error for ManifestError {
-    fn description(&self) -> &str {
-        match self {
-            ManifestError::NoType => "no type found on the test case",
-            ManifestError::ActionNotFound => "action not found",
-            ManifestError::InvalidAction => "invalid action",
-            ManifestError::InvalidResult => "invalid result",
-            ManifestError::InvalidTestsList => "invalid tests list",
-            ManifestError::RioError(e) => e.description(),
-        }
-    }
-
-    fn cause(&self) -> Option<&Error> {
-        match self {
-            ManifestError::RioError(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
-impl fmt::Display for ManifestError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.description())
-    }
-}
-
-impl From<RioError> for ManifestError {
-    fn from(e: RioError) -> Self {
-        ManifestError::RioError(e)
     }
 }
