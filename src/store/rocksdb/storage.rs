@@ -5,6 +5,7 @@ use rocksdb::DBVector;
 use rocksdb::Options;
 use rocksdb::WriteBatch;
 use rocksdb::DB;
+use std::mem::size_of;
 use std::path::Path;
 use std::str;
 use std::sync::Mutex;
@@ -26,7 +27,7 @@ const COLUMN_FAMILIES: [&'static str; 5] = [ID2STR_CF, STR2ID_CF, SPOG_CF, POSG_
 
 pub struct RocksDbStore {
     db: DB,
-    counter_mutex: Mutex<()>,
+    str_id_counter: Mutex<RocksDBCounter>,
     id2str_cf: ColumnFamily,
     str2id_cf: ColumnFamily,
     spog_cf: ColumnFamily,
@@ -49,7 +50,7 @@ impl RocksDbStore {
 
         Ok(Self {
             db,
-            counter_mutex: Mutex::new(()),
+            str_id_counter: Mutex::new(RocksDBCounter::new("bsc")),
             id2str_cf,
             str2id_cf,
             spog_cf,
@@ -172,25 +173,6 @@ pub fn get_cf(db: &DB, name: &str) -> Result<ColumnFamily> {
 
 pub struct RocksDbBytesStore<'a>(&'a RocksDbStore);
 
-impl<'a> RocksDbBytesStore<'a> {
-    fn new_id(&self) -> Result<[u8; STRING_KEY_SIZE]> {
-        let _ = self.0.counter_mutex.lock();
-        let id = self.0
-            .db
-            .get(b"bsc")?
-            .map(|v| {
-                let mut id = [0 as u8; STRING_KEY_SIZE];
-                id.copy_from_slice(&v);
-                id
-            })
-            .unwrap_or_else(|| [0 as u8; STRING_KEY_SIZE]);
-        self.0
-            .db
-            .put(b"bsc", &to_bytes(from_bytes(id.clone()) + 1))?;
-        Ok(id)
-    }
-}
-
 impl<'a> BytesStore for RocksDbBytesStore<'a> {
     type BytesOutput = DBVector;
 
@@ -198,7 +180,11 @@ impl<'a> BytesStore for RocksDbBytesStore<'a> {
         match self.0.db.get_cf(self.0.str2id_cf, value)? {
             Some(id) => id_buffer.copy_from_slice(&id),
             None => {
-                let id = self.new_id()?;
+                let id = to_bytes(self.0
+                    .str_id_counter
+                    .lock()
+                    .unwrap()
+                    .get_and_increment(&self.0.db)?);
                 let mut batch = WriteBatch::default();
                 batch.put_cf(self.0.id2str_cf, &id, value)?;
                 batch.put_cf(self.0.str2id_cf, value, &id)?;
@@ -211,6 +197,28 @@ impl<'a> BytesStore for RocksDbBytesStore<'a> {
 
     fn get(&self, id: &[u8]) -> Result<Option<DBVector>> {
         Ok(self.0.db.get_cf(self.0.id2str_cf, id)?)
+    }
+}
+
+struct RocksDBCounter {
+    name: &'static str,
+}
+
+impl RocksDBCounter {
+    fn new(name: &'static str) -> Self {
+        Self { name }
+    }
+
+    fn get_and_increment(&self, db: &DB) -> Result<usize> {
+        let value = db.get(self.name.as_bytes())?
+            .map(|b| {
+                let mut buf = [0 as u8; size_of::<usize>()];
+                buf.copy_from_slice(&b);
+                from_bytes(buf)
+            })
+            .unwrap_or(0);
+        db.put(self.name.as_bytes(), &to_bytes(value + 1))?;
+        Ok(value)
     }
 }
 
