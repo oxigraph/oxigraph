@@ -2,8 +2,8 @@ use std::fmt;
 use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::Arc;
-use url::ParseError;
 use url::Url;
+use errors::*;
 
 /// A RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
@@ -49,9 +49,9 @@ impl From<Url> for NamedNode {
 }
 
 impl FromStr for NamedNode {
-    type Err = ParseError;
+    type Err = Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self> {
         Ok(NamedNode::new(Url::parse(s)?))
     }
 }
