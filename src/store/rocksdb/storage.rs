@@ -180,11 +180,13 @@ impl<'a> BytesStore for RocksDbBytesStore<'a> {
         match self.0.db.get_cf(self.0.str2id_cf, value)? {
             Some(id) => id_buffer.copy_from_slice(&id),
             None => {
-                let id = to_bytes(self.0
-                    .str_id_counter
-                    .lock()
-                    .unwrap()
-                    .get_and_increment(&self.0.db)?);
+                let id = to_bytes(
+                    self.0
+                        .str_id_counter
+                        .lock()
+                        .unwrap()
+                        .get_and_increment(&self.0.db)?,
+                );
                 let mut batch = WriteBatch::default();
                 batch.put_cf(self.0.id2str_cf, &id, value)?;
                 batch.put_cf(self.0.str2id_cf, value, &id)?;
@@ -210,7 +212,8 @@ impl RocksDBCounter {
     }
 
     fn get_and_increment(&self, db: &DB) -> Result<usize> {
-        let value = db.get(self.name.as_bytes())?
+        let value = db
+            .get(self.name.as_bytes())?
             .map(|b| {
                 let mut buf = [0 as u8; size_of::<usize>()];
                 buf.copy_from_slice(&b);

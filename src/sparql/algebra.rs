@@ -280,7 +280,8 @@ impl fmt::Display for Expression {
             Expression::DatatypeFunctionCall(e) => write!(f, "DATATYPE({})", e),
             Expression::BoundFunctionCall(v) => write!(f, "BOUND({})", v),
             Expression::IRIFunctionCall(e) => write!(f, "IRI({})", e),
-            Expression::BNodeFunctionCall(v) => v.as_ref()
+            Expression::BNodeFunctionCall(v) => v
+                .as_ref()
                 .map(|id| write!(f, "BOUND({})", id))
                 .unwrap_or_else(|| write!(f, "BOUND()")),
             Expression::RandFunctionCall() => write!(f, "RAND()"),
@@ -296,11 +297,13 @@ impl fmt::Display for Expression {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
-            Expression::SubStrFunctionCall(a, b, c) => c.as_ref()
+            Expression::SubStrFunctionCall(a, b, c) => c
+                .as_ref()
                 .map(|cv| write!(f, "SUBSTR({}, {}, {})", a, b, cv))
                 .unwrap_or_else(|| write!(f, "SUBSTR({}, {})", a, b)),
             Expression::StrLenFunctionCall(e) => write!(f, "STRLEN({})", e),
-            Expression::ReplaceFunctionCall(a, b, c, d) => d.as_ref()
+            Expression::ReplaceFunctionCall(a, b, c, d) => d
+                .as_ref()
                 .map(|dv| write!(f, "REPLACE({}, {}, {}, {})", a, b, c, dv))
                 .unwrap_or_else(|| write!(f, "REPLACE({}, {}, {})", a, b, c)),
             Expression::UCaseFunctionCall(e) => write!(f, "UCASE({})", e),
@@ -342,7 +345,8 @@ impl fmt::Display for Expression {
             Expression::IsBlankFunctionCall(e) => write!(f, "isBLANK({})", e),
             Expression::IsLiteralFunctionCall(e) => write!(f, "isLITERAL({})", e),
             Expression::IsNumericFunctionCall(e) => write!(f, "isNUMERIC({})", e),
-            Expression::RegexFunctionCall(a, b, c) => c.as_ref()
+            Expression::RegexFunctionCall(a, b, c) => c
+                .as_ref()
                 .map(|cv| write!(f, "REGEX({}, {}, {})", a, b, cv))
                 .unwrap_or_else(|| write!(f, "REGEX({}, {})", a, b)),
             Expression::CustomFunctionCall(iri, args) => write!(
@@ -471,7 +475,8 @@ impl<'a> fmt::Display for SparqlExpression<'a> {
             Expression::DatatypeFunctionCall(e) => write!(f, "DATATYPE({})", SparqlExpression(&*e)),
             Expression::BoundFunctionCall(v) => write!(f, "BOUND({})", v),
             Expression::IRIFunctionCall(e) => write!(f, "IRI({})", SparqlExpression(&*e)),
-            Expression::BNodeFunctionCall(v) => v.as_ref()
+            Expression::BNodeFunctionCall(v) => v
+                .as_ref()
                 .map(|id| write!(f, "BOUND({})", SparqlExpression(&*id)))
                 .unwrap_or_else(|| write!(f, "BOUND()")),
             Expression::RandFunctionCall() => write!(f, "RAND()"),
@@ -487,7 +492,8 @@ impl<'a> fmt::Display for SparqlExpression<'a> {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
-            Expression::SubStrFunctionCall(a, b, c) => c.as_ref()
+            Expression::SubStrFunctionCall(a, b, c) => c
+                .as_ref()
                 .map(|cv| {
                     write!(
                         f,
@@ -506,7 +512,8 @@ impl<'a> fmt::Display for SparqlExpression<'a> {
                     )
                 }),
             Expression::StrLenFunctionCall(e) => write!(f, "STRLEN({})", SparqlExpression(&*e)),
-            Expression::ReplaceFunctionCall(a, b, c, d) => d.as_ref()
+            Expression::ReplaceFunctionCall(a, b, c, d) => d
+                .as_ref()
                 .map(|dv| {
                     write!(
                         f,
@@ -617,7 +624,8 @@ impl<'a> fmt::Display for SparqlExpression<'a> {
             Expression::IsNumericFunctionCall(e) => {
                 write!(f, "isNUMERIC({})", SparqlExpression(&*e))
             }
-            Expression::RegexFunctionCall(a, b, c) => c.as_ref()
+            Expression::RegexFunctionCall(a, b, c) => c
+                .as_ref()
                 .map(|cv| {
                     write!(
                         f,

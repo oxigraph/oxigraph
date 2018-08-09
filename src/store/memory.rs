@@ -166,10 +166,12 @@ impl<'a> Iterator for ListIterator<'a> {
     fn next(&mut self) -> Option<Term> {
         match self.current_node.clone() {
             Some(current) => {
-                let result = self.graph
+                let result = self
+                    .graph
                     .object_for_subject_predicate(&current, &rdf::FIRST)?
                     .clone();
-                self.current_node = match self.graph
+                self.current_node = match self
+                    .graph
                     .object_for_subject_predicate(&current, &rdf::REST)
                 {
                     Some(Term::NamedNode(n)) if *n == *rdf::NIL => None,

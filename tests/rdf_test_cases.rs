@@ -88,7 +88,8 @@ fn turtle_w3c_testsuite() {
             }
         } else if test.kind == "TestTurtleNegativeEval" {
             let action_graph = client.load_turtle(test.action.clone());
-            let result_graph = test.result
+            let result_graph = test
+                .result
                 .clone()
                 .map(|r| client.load_turtle(r))
                 .unwrap_or_else(|| Ok(MemoryGraph::default()));
@@ -272,7 +273,8 @@ impl<'a> Iterator for TestManifest<'a> {
         match self.tests_to_do.pop() {
             Some(Term::NamedNode(test_node)) => {
                 let test_subject = NamedOrBlankNode::from(test_node.clone());
-                let kind = match self.graph
+                let kind = match self
+                    .graph
                     .object_for_subject_predicate(&test_subject, &rdf::TYPE)
                 {
                     Some(Term::NamedNode(c)) => match c.value().split("#").last() {
@@ -281,26 +283,30 @@ impl<'a> Iterator for TestManifest<'a> {
                     },
                     _ => return Some(Err("no type".into())),
                 };
-                let name = match self.graph
+                let name = match self
+                    .graph
                     .object_for_subject_predicate(&test_subject, &mf::NAME)
                 {
                     Some(Term::Literal(c)) => Some(c.value().to_string()),
                     _ => None,
                 };
-                let comment = match self.graph
+                let comment = match self
+                    .graph
                     .object_for_subject_predicate(&test_subject, &rdfs::COMMENT)
                 {
                     Some(Term::Literal(c)) => Some(c.value().to_string()),
                     _ => None,
                 };
-                let action = match self.graph
+                let action = match self
+                    .graph
                     .object_for_subject_predicate(&test_subject, &*mf::ACTION)
                 {
                     Some(Term::NamedNode(n)) => n.url().clone(),
                     Some(_) => return Some(Err("invalid action".into())),
                     None => return Some(Err("action not found".into())),
                 };
-                let result = match self.graph
+                let result = match self
+                    .graph
                     .object_for_subject_predicate(&test_subject, &*mf::RESULT)
                 {
                     Some(Term::NamedNode(n)) => Some(n.url().clone()),
@@ -327,7 +333,8 @@ impl<'a> Iterator for TestManifest<'a> {
                         }
 
                         // New manifests
-                        match self.graph
+                        match self
+                            .graph
                             .object_for_subject_predicate(&manifest, &*mf::INCLUDE)
                         {
                             Some(Term::BlankNode(list)) => {
@@ -345,7 +352,8 @@ impl<'a> Iterator for TestManifest<'a> {
                         }
 
                         // New tests
-                        match self.graph
+                        match self
+                            .graph
                             .object_for_subject_predicate(&manifest, &*mf::ENTRIES)
                         {
                             Some(Term::BlankNode(list)) => {

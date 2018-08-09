@@ -40,12 +40,13 @@ impl RocksDbDataset {
         })
     }
 
-    fn quads_for_subject(
+    pub fn quads_for_subject(
         &self,
         subject: &NamedOrBlankNode,
     ) -> Result<QuadsIterator<FilteringEncodedQuadsIterator<SPOGIndexIterator>>> {
         Ok(QuadsIterator {
-            iter: self.store
+            iter: self
+                .store
                 .quads_for_subject(self.store.encoder().encode_named_or_blank_node(subject)?)?,
             encoder: self.store.encoder(),
         })
