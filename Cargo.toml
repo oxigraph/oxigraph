@@ -16,7 +16,7 @@ travis-ci = { repository = "Tpt/rudf" }
 
 [dependencies]
 error-chain = "0.12"
-lazy_static = "1.0"
+lazy_static = "1"
 rocksdb = "0.10"
 url = "1"
 uuid = { version = "0.6", features = ["v4"] }
