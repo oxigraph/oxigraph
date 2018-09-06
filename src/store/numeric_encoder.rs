@@ -1,45 +1,110 @@
 use errors::*;
 use model::*;
+use std::mem::size_of;
 use std::ops::Deref;
 use std::str;
 use std::str::FromStr;
 use url::Url;
+use utils::from_bytes_slice;
+use utils::to_bytes;
 use uuid::Uuid;
-
-pub const STRING_KEY_SIZE: usize = 8;
 
 pub trait BytesStore {
     type BytesOutput: Deref<Target = [u8]>;
 
-    fn put(&self, value: &[u8], id_buffer: &mut [u8]) -> Result<()>;
-    fn get(&self, id: &[u8]) -> Result<Option<Self::BytesOutput>>;
+    fn put(&self, value: &[u8]) -> Result<usize>;
+    fn get(&self, id: usize) -> Result<Option<Self::BytesOutput>>;
 }
 
-const TYPE_KEY_SIZE: usize = 1;
 const TYPE_NAMED_NODE_ID: u8 = 1;
 const TYPE_BLANK_NODE_ID: u8 = 2;
 const TYPE_LANG_STRING_LITERAL_ID: u8 = 3;
 const TYPE_TYPED_LITERAL_ID: u8 = 4;
-pub const TERM_ENCODING_SIZE: usize = TYPE_KEY_SIZE + 2 * STRING_KEY_SIZE;
-const EMPTY_TERM: [u8; TERM_ENCODING_SIZE] = [0 as u8; TERM_ENCODING_SIZE];
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
-pub struct EncodedTerm([u8; TERM_ENCODING_SIZE]);
+pub enum EncodedTerm {
+    NamedNode { iri_id: usize },
+    BlankNode(Uuid),
+    LangStringLiteral { value_id: usize, language_id: usize },
+    TypedLiteral { value_id: usize, datatype_id: usize },
+}
 
 impl EncodedTerm {
     pub fn new_from_buffer(buffer: &[u8]) -> Result<Self> {
-        if buffer.len() != TERM_ENCODING_SIZE {
-            return Err("the term buffer has not the correct length".into());
+        if buffer.is_empty() {
+            return Err("the term buffer is empty.".into());
         }
-        let mut buf = [0 as u8; TERM_ENCODING_SIZE];
-        buf.copy_from_slice(buffer);
-        return Ok(EncodedTerm(buf));
+        if buffer.len() < Self::type_length(buffer[0])? {
+            return Err(format!(
+                "the term buffer with id {} do not have at least {} bytes.",
+                buffer[0],
+                buffer.len()
+            ).into());
+        }
+        match buffer[0] {
+            TYPE_NAMED_NODE_ID => Ok(EncodedTerm::NamedNode {
+                iri_id: from_bytes_slice(&buffer[1..1 + size_of::<usize>()]),
+            }),
+            TYPE_BLANK_NODE_ID => Ok(EncodedTerm::BlankNode(Uuid::from_bytes(&buffer[1..17])?)),
+            TYPE_LANG_STRING_LITERAL_ID => Ok(EncodedTerm::LangStringLiteral {
+                language_id: from_bytes_slice(&buffer[1..1 + size_of::<usize>()]),
+                value_id: from_bytes_slice(
+                    &buffer[1 + size_of::<usize>()..1 + 2 * size_of::<usize>()],
+                ),
+            }),
+            TYPE_TYPED_LITERAL_ID => Ok(EncodedTerm::TypedLiteral {
+                datatype_id: from_bytes_slice(&buffer[1..1 + size_of::<usize>()]),
+                value_id: from_bytes_slice(
+                    &buffer[1 + size_of::<usize>()..1 + 2 * size_of::<usize>()],
+                ),
+            }),
+            _ => Err("the term buffer has an invalid type id".into()),
+        }
     }
-}
 
-impl AsRef<[u8]> for EncodedTerm {
-    fn as_ref(&self) -> &[u8] {
-        &self.0[..]
+    pub fn encoding_size(&self) -> usize {
+        Self::type_length(self.type_id()).unwrap() //It is not possible to fail here
+    }
+
+    fn type_id(&self) -> u8 {
+        match self {
+            EncodedTerm::NamedNode { .. } => TYPE_NAMED_NODE_ID,
+            EncodedTerm::BlankNode(_) => TYPE_BLANK_NODE_ID,
+            EncodedTerm::LangStringLiteral { .. } => TYPE_LANG_STRING_LITERAL_ID,
+            EncodedTerm::TypedLiteral { .. } => TYPE_TYPED_LITERAL_ID,
+        }
+    }
+
+    fn type_length(type_id: u8) -> Result<usize> {
+        match type_id {
+            TYPE_NAMED_NODE_ID => Ok(1 + size_of::<usize>()),
+            TYPE_BLANK_NODE_ID => Ok(17), //TODO: guess
+            TYPE_LANG_STRING_LITERAL_ID => Ok(1 + 2 * size_of::<usize>()),
+            TYPE_TYPED_LITERAL_ID => Ok(1 + 2 * size_of::<usize>()),
+            _ => Err(format!("{} is not a known type id", type_id).into()),
+        }
+    }
+
+    pub fn add_to_vec(&self, vec: &mut Vec<u8>) {
+        vec.push(self.type_id());
+        match self {
+            EncodedTerm::NamedNode { iri_id } => vec.extend_from_slice(&to_bytes(*iri_id)),
+            EncodedTerm::BlankNode(id) => vec.extend_from_slice(id.as_bytes()),
+            EncodedTerm::LangStringLiteral {
+                value_id,
+                language_id,
+            } => {
+                vec.extend_from_slice(&to_bytes(*language_id));
+                vec.extend_from_slice(&to_bytes(*value_id));
+            }
+            EncodedTerm::TypedLiteral {
+                value_id,
+                datatype_id,
+            } => {
+                vec.extend_from_slice(&to_bytes(*datatype_id));
+                vec.extend_from_slice(&to_bytes(*value_id));
+            }
+        }
     }
 }
 
@@ -48,93 +113,112 @@ pub struct EncodedQuad {
     pub subject: EncodedTerm,
     pub predicate: EncodedTerm,
     pub object: EncodedTerm,
-    pub graph_name: EncodedTerm,
+    pub graph_name: Option<EncodedTerm>,
 }
 
 impl EncodedQuad {
     pub fn new_from_spog_buffer(buffer: &[u8]) -> Result<Self> {
-        if buffer.len() != 4 * TERM_ENCODING_SIZE {
-            return Err("the spog buffer has not the correct length".into());
-        }
+        let mut start = 0 as usize;
+        let subject = EncodedTerm::new_from_buffer(&buffer[start..])?;
+        start += subject.encoding_size();
+        let predicate = EncodedTerm::new_from_buffer(&buffer[start..])?;
+        start += predicate.encoding_size();
+        let object = EncodedTerm::new_from_buffer(&buffer[start..])?;
+        start += object.encoding_size();
+        let graph_name = if start < buffer.len() {
+            Some(EncodedTerm::new_from_buffer(&buffer[start..])?)
+        } else {
+            None
+        };
         Ok(Self {
-            subject: EncodedTerm::new_from_buffer(&buffer[0..TERM_ENCODING_SIZE])?,
-            predicate: EncodedTerm::new_from_buffer(
-                &buffer[TERM_ENCODING_SIZE..2 * TERM_ENCODING_SIZE],
-            )?,
-            object: EncodedTerm::new_from_buffer(
-                &buffer[2 * TERM_ENCODING_SIZE..3 * TERM_ENCODING_SIZE],
-            )?,
-            graph_name: EncodedTerm::new_from_buffer(
-                &buffer[3 * TERM_ENCODING_SIZE..4 * TERM_ENCODING_SIZE],
-            )?,
+            subject,
+            predicate,
+            object,
+            graph_name,
         })
     }
 
     pub fn new_from_posg_buffer(buffer: &[u8]) -> Result<Self> {
-        if buffer.len() != 4 * TERM_ENCODING_SIZE {
-            return Err("the posg buffer has not the correct length".into());
-        }
+        let mut start = 0 as usize;
+        let predicate = EncodedTerm::new_from_buffer(&buffer[start..])?;
+        start += predicate.encoding_size();
+        let object = EncodedTerm::new_from_buffer(&buffer[start..])?;
+        start += object.encoding_size();
+        let subject = EncodedTerm::new_from_buffer(&buffer[start..])?;
+        start += subject.encoding_size();
+        let graph_name = if start < buffer.len() {
+            Some(EncodedTerm::new_from_buffer(&buffer[start..])?)
+        } else {
+            None
+        };
         Ok(Self {
-            subject: EncodedTerm::new_from_buffer(
-                &buffer[2 * TERM_ENCODING_SIZE..3 * TERM_ENCODING_SIZE],
-            )?,
-            predicate: EncodedTerm::new_from_buffer(&buffer[0..TERM_ENCODING_SIZE])?,
-            object: EncodedTerm::new_from_buffer(
-                &buffer[TERM_ENCODING_SIZE..2 * TERM_ENCODING_SIZE],
-            )?,
-            graph_name: EncodedTerm::new_from_buffer(
-                &buffer[3 * TERM_ENCODING_SIZE..4 * TERM_ENCODING_SIZE],
-            )?,
+            subject,
+            predicate,
+            object,
+            graph_name,
         })
     }
 
     pub fn new_from_ospg_buffer(buffer: &[u8]) -> Result<Self> {
-        if buffer.len() != 4 * TERM_ENCODING_SIZE {
-            return Err("the ospg buffer has not the correct length".into());
-        }
+        let mut start = 0 as usize;
+        let object = EncodedTerm::new_from_buffer(&buffer[start..])?;
+        start += object.encoding_size();
+        let subject = EncodedTerm::new_from_buffer(&buffer[start..])?;
+        start += subject.encoding_size();
+        let predicate = EncodedTerm::new_from_buffer(&buffer[start..])?;
+        start += predicate.encoding_size();
+        let graph_name = if start < buffer.len() {
+            Some(EncodedTerm::new_from_buffer(&buffer[start..])?)
+        } else {
+            None
+        };
         Ok(Self {
-            subject: EncodedTerm::new_from_buffer(
-                &buffer[TERM_ENCODING_SIZE..2 * TERM_ENCODING_SIZE],
-            )?,
-            predicate: EncodedTerm::new_from_buffer(
-                &buffer[2 * TERM_ENCODING_SIZE..3 * TERM_ENCODING_SIZE],
-            )?,
-            object: EncodedTerm::new_from_buffer(&buffer[0..TERM_ENCODING_SIZE])?,
-            graph_name: EncodedTerm::new_from_buffer(
-                &buffer[3 * TERM_ENCODING_SIZE..4 * TERM_ENCODING_SIZE],
-            )?,
+            subject,
+            predicate,
+            object,
+            graph_name,
         })
     }
 
-    pub fn spog(&self) -> [u8; 4 * TERM_ENCODING_SIZE] {
-        let mut spog = [0 as u8; 4 * TERM_ENCODING_SIZE];
-        spog[0..TERM_ENCODING_SIZE].copy_from_slice(self.subject.as_ref());
-        spog[TERM_ENCODING_SIZE..2 * TERM_ENCODING_SIZE].copy_from_slice(self.predicate.as_ref());
-        spog[2 * TERM_ENCODING_SIZE..3 * TERM_ENCODING_SIZE].copy_from_slice(self.object.as_ref());
-        spog[3 * TERM_ENCODING_SIZE..4 * TERM_ENCODING_SIZE]
-            .copy_from_slice(self.graph_name.as_ref());
+    pub fn spog(&self) -> Vec<u8> {
+        let mut spog = Vec::with_capacity(self.encoding_size());
+        self.subject.add_to_vec(&mut spog);
+        self.predicate.add_to_vec(&mut spog);
+        self.object.add_to_vec(&mut spog);
+        if let Some(ref graph_name) = self.graph_name {
+            graph_name.add_to_vec(&mut spog);
+        }
         spog
     }
 
-    pub fn posg(&self) -> [u8; 4 * TERM_ENCODING_SIZE] {
-        let mut posg = [0 as u8; 4 * TERM_ENCODING_SIZE];
-        posg[0..TERM_ENCODING_SIZE].copy_from_slice(self.predicate.as_ref());
-        posg[TERM_ENCODING_SIZE..2 * TERM_ENCODING_SIZE].copy_from_slice(self.object.as_ref());
-        posg[2 * TERM_ENCODING_SIZE..3 * TERM_ENCODING_SIZE].copy_from_slice(self.subject.as_ref());
-        posg[3 * TERM_ENCODING_SIZE..4 * TERM_ENCODING_SIZE]
-            .copy_from_slice(self.graph_name.as_ref());
+    pub fn posg(&self) -> Vec<u8> {
+        let mut posg = Vec::with_capacity(self.encoding_size());
+        self.predicate.add_to_vec(&mut posg);
+        self.object.add_to_vec(&mut posg);
+        self.subject.add_to_vec(&mut posg);
+        if let Some(ref graph_name) = self.graph_name {
+            graph_name.add_to_vec(&mut posg);
+        }
         posg
     }
 
-    pub fn ospg(&self) -> [u8; 4 * TERM_ENCODING_SIZE] {
-        let mut ospg = [0 as u8; 4 * TERM_ENCODING_SIZE];
-        ospg[0..TERM_ENCODING_SIZE].copy_from_slice(self.object.as_ref());
-        ospg[TERM_ENCODING_SIZE..2 * TERM_ENCODING_SIZE].copy_from_slice(self.subject.as_ref());
-        ospg[2 * TERM_ENCODING_SIZE..3 * TERM_ENCODING_SIZE]
-            .copy_from_slice(self.predicate.as_ref());
-        ospg[3 * TERM_ENCODING_SIZE..4 * TERM_ENCODING_SIZE]
-            .copy_from_slice(self.graph_name.as_ref());
+    pub fn ospg(&self) -> Vec<u8> {
+        let mut ospg = Vec::with_capacity(self.encoding_size());
+        self.object.add_to_vec(&mut ospg);
+        self.subject.add_to_vec(&mut ospg);
+        self.predicate.add_to_vec(&mut ospg);
+        if let Some(ref graph_name) = self.graph_name {
+            graph_name.add_to_vec(&mut ospg);
+        }
         ospg
+    }
+
+    fn encoding_size(&self) -> usize {
+        self.subject.encoding_size() + self.predicate.encoding_size() + self.object.encoding_size()
+            + match self.graph_name {
+                Some(ref graph_name) => graph_name.encoding_size(),
+                None => 0,
+            }
     }
 }
 
@@ -148,46 +232,33 @@ impl<S: BytesStore> Encoder<S> {
     }
 
     pub fn encode_named_node(&self, named_node: &NamedNode) -> Result<EncodedTerm> {
-        let mut bytes = [0 as u8; TERM_ENCODING_SIZE];
-        bytes[0] = TYPE_NAMED_NODE_ID;
-        self.encode_str_value_to_lower_bytes(named_node.as_str(), &mut bytes)?;
-        Ok(EncodedTerm(bytes))
+        Ok(EncodedTerm::NamedNode {
+            iri_id: self.encode_str_value(named_node.as_str())?,
+        })
     }
 
     pub fn encode_blank_node(&self, blank_node: &BlankNode) -> Result<EncodedTerm> {
-        let mut bytes = [0 as u8; TERM_ENCODING_SIZE];
-        bytes[0] = TYPE_BLANK_NODE_ID;
-        bytes[TYPE_KEY_SIZE..].copy_from_slice(blank_node.as_bytes());
-        Ok(EncodedTerm(bytes))
+        Ok(EncodedTerm::BlankNode(blank_node.deref().clone()))
     }
 
     pub fn encode_literal(&self, literal: &Literal) -> Result<EncodedTerm> {
-        let mut bytes = [0 as u8; TERM_ENCODING_SIZE];
         if let Some(language) = literal.language() {
-            bytes[0] = TYPE_LANG_STRING_LITERAL_ID;
-            self.encode_str_value_to_upper_bytes(language, &mut bytes)?;
+            Ok(EncodedTerm::LangStringLiteral {
+                value_id: self.encode_str_value(&literal.value())?,
+                language_id: self.encode_str_value(language)?,
+            })
         } else {
-            bytes[0] = TYPE_TYPED_LITERAL_ID;
-            self.encode_str_value_to_upper_bytes(literal.datatype().as_str(), &mut bytes)?;
+            Ok(EncodedTerm::TypedLiteral {
+                value_id: self.encode_str_value(&literal.value())?,
+                datatype_id: self.encode_str_value(literal.datatype().as_ref())?,
+            })
         }
-        self.encode_str_value_to_lower_bytes(literal.value().as_str(), &mut bytes)?;
-        Ok(EncodedTerm(bytes))
     }
 
     pub fn encode_named_or_blank_node(&self, term: &NamedOrBlankNode) -> Result<EncodedTerm> {
         match term {
             NamedOrBlankNode::NamedNode(named_node) => self.encode_named_node(named_node),
             NamedOrBlankNode::BlankNode(blank_node) => self.encode_blank_node(blank_node),
-        }
-    }
-
-    pub fn encode_optional_named_or_blank_node(
-        &self,
-        term: &Option<NamedOrBlankNode>,
-    ) -> Result<EncodedTerm> {
-        match term {
-            Some(node) => self.encode_named_or_blank_node(node),
-            None => Ok(EncodedTerm(EMPTY_TERM)),
         }
     }
 
@@ -204,117 +275,82 @@ impl<S: BytesStore> Encoder<S> {
             subject: self.encode_named_or_blank_node(quad.subject())?,
             predicate: self.encode_named_node(quad.predicate())?,
             object: self.encode_term(quad.object())?,
-            graph_name: self.encode_optional_named_or_blank_node(quad.graph_name())?,
+            graph_name: match quad.graph_name() {
+                Some(graph_name) => Some(self.encode_named_or_blank_node(&graph_name)?),
+                None => None,
+            },
         })
     }
 
-    pub fn decode_term(&self, encoded: impl AsRef<[u8]>) -> Result<Term> {
-        let encoding = encoded.as_ref();
-        match encoding[0] {
-            TYPE_NAMED_NODE_ID => {
-                let iri = self.decode_url_value_from_lower_bytes(encoding)?;
-                Ok(NamedNode::from(iri).into())
+    pub fn decode_term(&self, encoded: &EncodedTerm) -> Result<Term> {
+        match encoded {
+            EncodedTerm::NamedNode { iri_id } => {
+                Ok(NamedNode::from(self.decode_url_value(*iri_id)?).into())
             }
-            TYPE_BLANK_NODE_ID => Ok(BlankNode::from(Uuid::from_bytes(&encoding[1..])?).into()),
-            TYPE_LANG_STRING_LITERAL_ID => {
-                let value = self.decode_str_value_from_lower_bytes(encoding)?;
-                let language = self.decode_str_value_from_upper_bytes(encoding)?;
-                Ok(Literal::new_language_tagged_literal(value, language).into())
-            }
-            TYPE_TYPED_LITERAL_ID => {
-                let value = self.decode_str_value_from_lower_bytes(encoding)?;
-                let datatype = NamedNode::from(self.decode_url_value_from_upper_bytes(encoding)?);
-                Ok(Literal::new_typed_literal(value, datatype).into())
-            }
-            _ => Err("invalid term type encoding".into()),
+            EncodedTerm::BlankNode(id) => Ok(BlankNode::from(*id).into()),
+            EncodedTerm::LangStringLiteral {
+                value_id,
+                language_id,
+            } => Ok(Literal::new_language_tagged_literal(
+                self.decode_str_value(*value_id)?,
+                self.decode_str_value(*language_id)?,
+            ).into()),
+            EncodedTerm::TypedLiteral {
+                value_id,
+                datatype_id,
+            } => Ok(Literal::new_typed_literal(
+                self.decode_str_value(*value_id)?,
+                NamedNode::from(self.decode_url_value(*datatype_id)?),
+            ).into()),
         }
     }
 
-    pub fn decode_named_or_blank_node(
-        &self,
-        encoded: impl AsRef<[u8]>,
-    ) -> Result<NamedOrBlankNode> {
-        let encoding = encoded.as_ref();
-        match self.decode_term(encoding)? {
+    pub fn decode_named_or_blank_node(&self, encoded: &EncodedTerm) -> Result<NamedOrBlankNode> {
+        match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node.into()),
             Term::BlankNode(blank_node) => Ok(blank_node.into()),
             Term::Literal(_) => Err("A literal has ben found instead of a named node".into()),
         }
     }
 
-    pub fn decode_optional_named_or_blank_node(
-        &self,
-        encoded: impl AsRef<[u8]>,
-    ) -> Result<Option<NamedOrBlankNode>> {
-        let encoding = encoded.as_ref();
-        if encoding == EMPTY_TERM {
-            Ok(None)
-        } else {
-            Ok(Some(self.decode_named_or_blank_node(encoding)?))
-        }
-    }
-
-    pub fn decode_named_node(&self, encoded: impl AsRef<[u8]>) -> Result<NamedNode> {
-        let encoding = encoded.as_ref();
-        match self.decode_term(encoding)? {
+    pub fn decode_named_node(&self, encoded: &EncodedTerm) -> Result<NamedNode> {
+        match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node),
             Term::BlankNode(_) => Err("A blank node has been found instead of a named node".into()),
             Term::Literal(_) => Err("A literal has ben found instead of a named node".into()),
         }
     }
 
-    pub fn decode_quad(&self, encoded: EncodedQuad) -> Result<Quad> {
+    pub fn decode_quad(&self, encoded: &EncodedQuad) -> Result<Quad> {
         Ok(Quad::new(
-            self.decode_named_or_blank_node(encoded.subject)?,
-            self.decode_named_node(encoded.predicate)?,
-            self.decode_term(encoded.object)?,
-            self.decode_optional_named_or_blank_node(encoded.graph_name)?,
+            self.decode_named_or_blank_node(&encoded.subject)?,
+            self.decode_named_node(&encoded.predicate)?,
+            self.decode_term(&encoded.object)?,
+            match encoded.graph_name {
+                Some(ref graph_name) => Some(self.decode_named_or_blank_node(&graph_name)?),
+                None => None,
+            },
         ))
     }
 
-    fn encode_str_value_to_upper_bytes(&self, text: &str, bytes: &mut [u8]) -> Result<()> {
-        self.string_store.put(
-            text.as_bytes(),
-            &mut bytes[TYPE_KEY_SIZE..TYPE_KEY_SIZE + STRING_KEY_SIZE],
-        )
-    }
-    fn encode_str_value_to_lower_bytes(&self, text: &str, bytes: &mut [u8]) -> Result<()> {
-        self.string_store.put(
-            text.as_bytes(),
-            &mut bytes[TYPE_KEY_SIZE + STRING_KEY_SIZE..TYPE_KEY_SIZE + 2 * STRING_KEY_SIZE],
-        )
+    fn encode_str_value(&self, text: &str) -> Result<usize> {
+        self.string_store.put(text.as_bytes())
     }
 
-    fn decode_str_value_from_upper_bytes(&self, encoding: &[u8]) -> Result<String> {
-        let bytes = self.decode_value_from_upper_bytes(encoding)?;
-        Ok(str::from_utf8(&bytes)?.to_string())
-    }
-
-    fn decode_url_value_from_upper_bytes(&self, encoding: &[u8]) -> Result<Url> {
-        let bytes = self.decode_value_from_upper_bytes(encoding)?;
+    fn decode_url_value(&self, id: usize) -> Result<Url> {
+        let bytes = self.decode_value(id)?;
         Ok(Url::from_str(str::from_utf8(&bytes)?)?)
     }
 
-    fn decode_value_from_upper_bytes(&self, encoding: &[u8]) -> Result<S::BytesOutput> {
+    fn decode_str_value(&self, id: usize) -> Result<String> {
+        let bytes = self.decode_value(id)?;
+        Ok(str::from_utf8(&bytes)?.to_owned())
+    }
+
+    fn decode_value(&self, id: usize) -> Result<S::BytesOutput> {
         self.string_store
-            .get(&encoding[TYPE_KEY_SIZE..TYPE_KEY_SIZE + STRING_KEY_SIZE])?
-            .ok_or(Error::from("value not found in the dictionary"))
-    }
-
-    fn decode_str_value_from_lower_bytes(&self, encoding: &[u8]) -> Result<String> {
-        let bytes = self.decode_value_from_lower_bytes(encoding)?;
-        Ok(str::from_utf8(&bytes)?.to_string())
-    }
-
-    fn decode_url_value_from_lower_bytes(&self, encoding: &[u8]) -> Result<Url> {
-        let bytes = self.decode_value_from_lower_bytes(encoding)?;
-        Ok(Url::from_str(str::from_utf8(&bytes)?)?)
-    }
-
-    fn decode_value_from_lower_bytes(&self, encoding: &[u8]) -> Result<S::BytesOutput> {
-        self.string_store
-            .get(&encoding[TYPE_KEY_SIZE + STRING_KEY_SIZE..TYPE_KEY_SIZE + 2 * STRING_KEY_SIZE])?
-            .ok_or(Error::from("value not found in the dictionary"))
+            .get(id)?
+            .ok_or("value not found in the dictionary".into())
     }
 }
 
@@ -327,37 +363,34 @@ impl<S: BytesStore + Default> Default for Encoder<S> {
 }
 
 mod test {
-    use errors::*;
     use model::*;
     use std::cell::RefCell;
     use std::collections::BTreeMap;
-    use std::str::FromStr;
     use store::numeric_encoder::*;
     use utils::to_bytes;
 
     #[derive(Default)]
     struct MemoryBytesStore {
-        id2str: RefCell<BTreeMap<[u8; STRING_KEY_SIZE], Vec<u8>>>,
-        str2id: RefCell<BTreeMap<Vec<u8>, [u8; STRING_KEY_SIZE]>>,
+        id2str: RefCell<BTreeMap<usize, Vec<u8>>>,
+        str2id: RefCell<BTreeMap<Vec<u8>, usize>>,
     }
 
     impl BytesStore for MemoryBytesStore {
         type BytesOutput = Vec<u8>;
 
-        fn put(&self, value: &[u8], id_buffer: &mut [u8]) -> Result<()> {
+        fn put(&self, value: &[u8]) -> Result<usize> {
             let mut str2id = self.str2id.borrow_mut();
             let mut id2str = self.id2str.borrow_mut();
             let id = str2id.entry(value.to_vec()).or_insert_with(|| {
-                let id = to_bytes(id2str.len());
+                let id = id2str.len();
                 id2str.insert(id, value.to_vec());
                 id
             });
-            id_buffer.copy_from_slice(id);
-            Ok(())
+            Ok(*id)
         }
 
-        fn get(&self, id: &[u8]) -> Result<Option<Vec<u8>>> {
-            Ok(self.id2str.borrow().get(id).map(|s| s.to_owned()))
+        fn get(&self, id: usize) -> Result<Option<Vec<u8>>> {
+            Ok(self.id2str.borrow().get(&id).map(|s| s.to_owned()))
         }
     }
 
@@ -376,7 +409,7 @@ mod test {
         ];
         for term in terms {
             let encoded = encoder.encode_term(&term).unwrap();
-            assert_eq!(term, encoder.decode_term(encoded).unwrap())
+            assert_eq!(term, encoder.decode_term(&encoded).unwrap())
         }
     }
 

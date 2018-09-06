@@ -90,3 +90,9 @@ pub fn from_bytes(bytes: [u8; size_of::<usize>()]) -> usize {
     //TODO: remove when next rust version stabilize this method
     unsafe { transmute(bytes) }
 }
+
+pub fn from_bytes_slice(bytes: &[u8]) -> usize {
+    let mut buf = [0 as u8; size_of::<usize>()];
+    buf.copy_from_slice(bytes);
+    from_bytes(buf)
+}

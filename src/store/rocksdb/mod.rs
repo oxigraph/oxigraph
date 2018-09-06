@@ -90,6 +90,6 @@ impl<'a, I: Iterator<Item = Result<EncodedQuad>>> Iterator for QuadsIterator<'a,
     fn next(&mut self) -> Option<Result<Quad>> {
         self.iter
             .next()
-            .map(|k| k.and_then(|quad| self.encoder.decode_quad(quad)))
+            .map(|k| k.and_then(|quad| self.encoder.decode_quad(&quad)))
     }
 }

@@ -11,6 +11,7 @@ use std::str;
 use std::sync::Mutex;
 use store::numeric_encoder::*;
 use utils::from_bytes;
+use utils::from_bytes_slice;
 use utils::to_bytes;
 
 const ID2STR_CF: &'static str = "id2str";
@@ -74,7 +75,7 @@ impl RocksDbStore {
         subject: EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<SPOGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.spog_cf)?;
-        iter.seek(subject.as_ref());
+        iter.seek(&encode_term(&subject));
         Ok(FilteringEncodedQuadsIterator {
             iter: SPOGIndexIterator { iter },
             filter: EncodedQuadPattern::new(Some(subject), None, None, None),
@@ -113,7 +114,7 @@ impl RocksDbStore {
         predicate: EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<POSGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.posg_cf)?;
-        iter.seek(predicate.as_ref());
+        iter.seek(&encode_term(&predicate));
         Ok(FilteringEncodedQuadsIterator {
             iter: POSGIndexIterator { iter },
             filter: EncodedQuadPattern::new(None, Some(predicate), None, None),
@@ -138,7 +139,7 @@ impl RocksDbStore {
         object: EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<OSPGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.ospg_cf)?;
-        iter.seek(object.as_ref());
+        iter.seek(&encode_term(&object));
         Ok(FilteringEncodedQuadsIterator {
             iter: OSPGIndexIterator { iter },
             filter: EncodedQuadPattern::new(None, None, Some(object), None),
@@ -168,7 +169,7 @@ impl RocksDbStore {
 
 pub fn get_cf(db: &DB, name: &str) -> Result<ColumnFamily> {
     db.cf_handle(name)
-        .ok_or_else(|| Error::from("column family not found"))
+        .ok_or_else(|| "column family not found".into())
 }
 
 pub struct RocksDbBytesStore<'a>(&'a RocksDbStore);
@@ -176,29 +177,28 @@ pub struct RocksDbBytesStore<'a>(&'a RocksDbStore);
 impl<'a> BytesStore for RocksDbBytesStore<'a> {
     type BytesOutput = DBVector;
 
-    fn put(&self, value: &[u8], id_buffer: &mut [u8]) -> Result<()> {
-        match self.0.db.get_cf(self.0.str2id_cf, value)? {
-            Some(id) => id_buffer.copy_from_slice(&id),
+    fn put(&self, value: &[u8]) -> Result<usize> {
+        Ok(match self.0.db.get_cf(self.0.str2id_cf, value)? {
+            Some(id) => from_bytes_slice(&id),
             None => {
-                let id = to_bytes(
-                    self.0
-                        .str_id_counter
-                        .lock()
-                        .unwrap()
-                        .get_and_increment(&self.0.db)?,
-                );
+                let id = self
+                    .0
+                    .str_id_counter
+                    .lock()
+                    .unwrap()
+                    .get_and_increment(&self.0.db)?;
+                let id_bytes = to_bytes(id);
                 let mut batch = WriteBatch::default();
-                batch.put_cf(self.0.id2str_cf, &id, value)?;
-                batch.put_cf(self.0.str2id_cf, value, &id)?;
+                batch.put_cf(self.0.id2str_cf, &id_bytes, value)?;
+                batch.put_cf(self.0.str2id_cf, value, &id_bytes)?;
                 self.0.db.write(batch)?;
-                id_buffer.copy_from_slice(&id)
+                id
             }
-        }
-        Ok(())
+        })
     }
 
-    fn get(&self, id: &[u8]) -> Result<Option<DBVector>> {
-        Ok(self.0.db.get_cf(self.0.id2str_cf, id)?)
+    fn get(&self, id: usize) -> Result<Option<DBVector>> {
+        Ok(self.0.db.get_cf(self.0.id2str_cf, &to_bytes(id))?)
     }
 }
 
@@ -229,7 +229,7 @@ struct EncodedQuadPattern {
     subject: Option<EncodedTerm>,
     predicate: Option<EncodedTerm>,
     object: Option<EncodedTerm>,
-    graph_name: Option<EncodedTerm>,
+    graph_name: Option<Option<EncodedTerm>>,
 }
 
 impl EncodedQuadPattern {
@@ -237,7 +237,7 @@ impl EncodedQuadPattern {
         subject: Option<EncodedTerm>,
         predicate: Option<EncodedTerm>,
         object: Option<EncodedTerm>,
-        graph_name: Option<EncodedTerm>,
+        graph_name: Option<Option<EncodedTerm>>,
     ) -> Self {
         Self {
             subject,
@@ -272,23 +272,25 @@ impl EncodedQuadPattern {
     }
 }
 
-fn encode_term_pair(t1: &EncodedTerm, t2: &EncodedTerm) -> [u8; 2 * TERM_ENCODING_SIZE] {
-    let mut bytes = [0 as u8; 2 * TERM_ENCODING_SIZE];
-    bytes[0..TERM_ENCODING_SIZE].copy_from_slice(t1.as_ref());
-    bytes[TERM_ENCODING_SIZE..2 * TERM_ENCODING_SIZE].copy_from_slice(t2.as_ref());
-    bytes
+fn encode_term(t: &EncodedTerm) -> Vec<u8> {
+    let mut vec = Vec::with_capacity(t.encoding_size());
+    t.add_to_vec(&mut vec);
+    vec
 }
 
-fn encode_term_triple(
-    t1: &EncodedTerm,
-    t2: &EncodedTerm,
-    t3: &EncodedTerm,
-) -> [u8; 3 * TERM_ENCODING_SIZE] {
-    let mut bytes = [0 as u8; 3 * TERM_ENCODING_SIZE];
-    bytes[0..TERM_ENCODING_SIZE].copy_from_slice(t1.as_ref());
-    bytes[TERM_ENCODING_SIZE..2 * TERM_ENCODING_SIZE].copy_from_slice(t2.as_ref());
-    bytes[2 * TERM_ENCODING_SIZE..3 * TERM_ENCODING_SIZE].copy_from_slice(t3.as_ref());
-    bytes
+fn encode_term_pair(t1: &EncodedTerm, t2: &EncodedTerm) -> Vec<u8> {
+    let mut vec = Vec::with_capacity(t1.encoding_size() + t2.encoding_size());
+    t1.add_to_vec(&mut vec);
+    t2.add_to_vec(&mut vec);
+    vec
+}
+
+fn encode_term_triple(t1: &EncodedTerm, t2: &EncodedTerm, t3: &EncodedTerm) -> Vec<u8> {
+    let mut vec = Vec::with_capacity(t1.encoding_size() + t2.encoding_size() + t3.encoding_size());
+    t1.add_to_vec(&mut vec);
+    t2.add_to_vec(&mut vec);
+    t3.add_to_vec(&mut vec);
+    vec
 }
 
 pub struct SPOGIndexIterator {
@@ -347,7 +349,7 @@ impl<I: Iterator<Item = Result<EncodedQuad>>> Iterator for FilteringEncodedQuads
     fn next(&mut self) -> Option<Result<EncodedQuad>> {
         self.iter.next().filter(|quad| match quad {
             Ok(quad) => self.filter.filter(quad),
-            Err(e) => true,
+            Err(_) => true,
         })
     }
 }
