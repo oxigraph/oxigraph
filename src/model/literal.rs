@@ -51,7 +51,7 @@ impl Literal {
     }
 
     /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form)
-    pub fn value<'a>(&'a self) -> Cow<'a, String> {
+    pub fn value(&self) -> Cow<String> {
         match self {
             Literal::SimpleLiteral(value) => Cow::Borrowed(value),
             Literal::String(value) => Cow::Borrowed(value),
