@@ -75,7 +75,7 @@ impl RocksDbStore {
         subject: EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<SPOGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.spog_cf)?;
-        iter.seek(&encode_term(&subject));
+        iter.seek(&encode_term(&subject)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: SPOGIndexIterator { iter },
             filter: EncodedQuadPattern::new(Some(subject), None, None, None),
@@ -88,7 +88,7 @@ impl RocksDbStore {
         predicate: EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<SPOGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.spog_cf)?;
-        iter.seek(&encode_term_pair(&subject, &predicate));
+        iter.seek(&encode_term_pair(&subject, &predicate)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: SPOGIndexIterator { iter },
             filter: EncodedQuadPattern::new(Some(subject), Some(predicate), None, None),
@@ -102,7 +102,7 @@ impl RocksDbStore {
         object: EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<SPOGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.spog_cf)?;
-        iter.seek(&encode_term_triple(&subject, &predicate, &object));
+        iter.seek(&encode_term_triple(&subject, &predicate, &object)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: SPOGIndexIterator { iter },
             filter: EncodedQuadPattern::new(Some(subject), Some(predicate), Some(object), None),
@@ -114,7 +114,7 @@ impl RocksDbStore {
         predicate: EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<POSGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.posg_cf)?;
-        iter.seek(&encode_term(&predicate));
+        iter.seek(&encode_term(&predicate)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: POSGIndexIterator { iter },
             filter: EncodedQuadPattern::new(None, Some(predicate), None, None),
@@ -127,7 +127,7 @@ impl RocksDbStore {
         object: EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<POSGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.spog_cf)?;
-        iter.seek(&encode_term_pair(&predicate, &object));
+        iter.seek(&encode_term_pair(&predicate, &object)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: POSGIndexIterator { iter },
             filter: EncodedQuadPattern::new(None, Some(predicate), Some(object), None),
@@ -139,7 +139,7 @@ impl RocksDbStore {
         object: EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<OSPGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.ospg_cf)?;
-        iter.seek(&encode_term(&object));
+        iter.seek(&encode_term(&object)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: OSPGIndexIterator { iter },
             filter: EncodedQuadPattern::new(None, None, Some(object), None),
@@ -147,22 +147,22 @@ impl RocksDbStore {
     }
 
     pub fn contains(&self, quad: &EncodedQuad) -> Result<bool> {
-        Ok(self.db.get_cf(self.spog_cf, &quad.spog())?.is_some())
+        Ok(self.db.get_cf(self.spog_cf, &quad.spog()?)?.is_some())
     }
 
     pub fn insert(&self, quad: &EncodedQuad) -> Result<()> {
         let mut batch = WriteBatch::default();
-        batch.put_cf(self.spog_cf, &quad.spog(), &EMPTY_BUF)?;
-        batch.put_cf(self.posg_cf, &quad.posg(), &EMPTY_BUF)?;
-        batch.put_cf(self.ospg_cf, &quad.ospg(), &EMPTY_BUF)?;
+        batch.put_cf(self.spog_cf, &quad.spog()?, &EMPTY_BUF)?;
+        batch.put_cf(self.posg_cf, &quad.posg()?, &EMPTY_BUF)?;
+        batch.put_cf(self.ospg_cf, &quad.ospg()?, &EMPTY_BUF)?;
         Ok(self.db.write(batch)?) //TODO: check what's going on if the key already exists
     }
 
     pub fn remove(&self, quad: &EncodedQuad) -> Result<()> {
         let mut batch = WriteBatch::default();
-        batch.delete_cf(self.spog_cf, &quad.spog())?;
-        batch.delete_cf(self.posg_cf, &quad.posg())?;
-        batch.delete_cf(self.ospg_cf, &quad.ospg())?;
+        batch.delete_cf(self.spog_cf, &quad.spog()?)?;
+        batch.delete_cf(self.posg_cf, &quad.posg()?)?;
+        batch.delete_cf(self.ospg_cf, &quad.ospg()?)?;
         Ok(self.db.write(batch)?)
     }
 }
@@ -177,7 +177,7 @@ pub struct RocksDbBytesStore<'a>(&'a RocksDbStore);
 impl<'a> BytesStore for RocksDbBytesStore<'a> {
     type BytesOutput = DBVector;
 
-    fn put(&self, value: &[u8]) -> Result<usize> {
+    fn put(&self, value: &[u8]) -> Result<u64> {
         Ok(match self.0.db.get_cf(self.0.str2id_cf, value)? {
             Some(id) => from_bytes_slice(&id),
             None => {
@@ -186,7 +186,7 @@ impl<'a> BytesStore for RocksDbBytesStore<'a> {
                     .str_id_counter
                     .lock()
                     .unwrap()
-                    .get_and_increment(&self.0.db)?;
+                    .get_and_increment(&self.0.db)? as u64;
                 let id_bytes = to_bytes(id);
                 let mut batch = WriteBatch::default();
                 batch.put_cf(self.0.id2str_cf, &id_bytes, value)?;
@@ -197,7 +197,7 @@ impl<'a> BytesStore for RocksDbBytesStore<'a> {
         })
     }
 
-    fn get(&self, id: usize) -> Result<Option<DBVector>> {
+    fn get(&self, id: u64) -> Result<Option<DBVector>> {
         Ok(self.0.db.get_cf(self.0.id2str_cf, &to_bytes(id))?)
     }
 }
@@ -211,7 +211,7 @@ impl RocksDBCounter {
         Self { name }
     }
 
-    fn get_and_increment(&self, db: &DB) -> Result<usize> {
+    fn get_and_increment(&self, db: &DB) -> Result<u64> {
         let value = db
             .get(self.name.as_bytes())?
             .map(|b| {
@@ -272,25 +272,25 @@ impl EncodedQuadPattern {
     }
 }
 
-fn encode_term(t: &EncodedTerm) -> Vec<u8> {
+fn encode_term(t: &EncodedTerm) -> Result<Vec<u8>> {
     let mut vec = Vec::with_capacity(t.encoding_size());
-    t.add_to_vec(&mut vec);
-    vec
+    t.write(&mut vec)?;
+    Ok(vec)
 }
 
-fn encode_term_pair(t1: &EncodedTerm, t2: &EncodedTerm) -> Vec<u8> {
+fn encode_term_pair(t1: &EncodedTerm, t2: &EncodedTerm) -> Result<Vec<u8>> {
     let mut vec = Vec::with_capacity(t1.encoding_size() + t2.encoding_size());
-    t1.add_to_vec(&mut vec);
-    t2.add_to_vec(&mut vec);
-    vec
+    t1.write(&mut vec)?;
+    t2.write(&mut vec)?;
+    Ok(vec)
 }
 
-fn encode_term_triple(t1: &EncodedTerm, t2: &EncodedTerm, t3: &EncodedTerm) -> Vec<u8> {
+fn encode_term_triple(t1: &EncodedTerm, t2: &EncodedTerm, t3: &EncodedTerm) -> Result<Vec<u8>> {
     let mut vec = Vec::with_capacity(t1.encoding_size() + t2.encoding_size() + t3.encoding_size());
-    t1.add_to_vec(&mut vec);
-    t2.add_to_vec(&mut vec);
-    t3.add_to_vec(&mut vec);
-    vec
+    t1.write(&mut vec)?;
+    t2.write(&mut vec)?;
+    t3.write(&mut vec)?;
+    Ok(vec)
 }
 
 pub struct SPOGIndexIterator {
