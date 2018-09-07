@@ -11,6 +11,7 @@ use std::path::Path;
 use std::str;
 use std::sync::Mutex;
 use store::numeric_encoder::*;
+use store::store::EncodedQuadsStore;
 use utils::from_bytes;
 use utils::from_bytes_slice;
 use utils::to_bytes;
@@ -60,101 +61,260 @@ impl RocksDbStore {
             ospg_cf,
         })
     }
+}
 
-    pub fn encoder(&self) -> Encoder<RocksDbBytesStore> {
-        Encoder::new(RocksDbBytesStore(&self))
+impl BytesStore for RocksDbStore {
+    type BytesOutput = DBVector;
+
+    fn insert_bytes(&self, value: &[u8]) -> Result<u64> {
+        Ok(match self.db.get_cf(self.str2id_cf, value)? {
+            Some(id) => from_bytes_slice(&id),
+            None => {
+                let id = self
+                    .str_id_counter
+                    .lock()
+                    .unwrap()
+                    .get_and_increment(&self.db)? as u64;
+                let id_bytes = to_bytes(id);
+                let mut batch = WriteBatch::default();
+                batch.put_cf(self.id2str_cf, &id_bytes, value)?;
+                batch.put_cf(self.str2id_cf, value, &id_bytes)?;
+                self.db.write(batch)?;
+                id
+            }
+        })
     }
 
-    pub fn quads(&self) -> Result<SPOGIndexIterator> {
+    fn get_bytes(&self, id: u64) -> Result<Option<DBVector>> {
+        Ok(self.db.get_cf(self.id2str_cf, &to_bytes(id))?)
+    }
+}
+
+impl EncodedQuadsStore for RocksDbStore {
+    type QuadsIterator = SPOGIndexIterator;
+    type QuadsForSubjectIterator = FilteringEncodedQuadsIterator<SPOGIndexIterator>;
+    type QuadsForSubjectPredicateIterator = FilteringEncodedQuadsIterator<SPOGIndexIterator>;
+    type QuadsForSubjectPredicateObjectIterator = FilteringEncodedQuadsIterator<SPOGIndexIterator>;
+    type QuadsForSubjectObjectIterator = FilteringEncodedQuadsIterator<OSPGIndexIterator>;
+    type QuadsForPredicateIterator = FilteringEncodedQuadsIterator<POSGIndexIterator>;
+    type QuadsForPredicateObjectIterator = FilteringEncodedQuadsIterator<POSGIndexIterator>;
+    type QuadsForObjectIterator = FilteringEncodedQuadsIterator<OSPGIndexIterator>;
+    type QuadsForGraphIterator = InGraphQuadsIterator<SPOGIndexIterator>;
+    type QuadsForSubjectGraphIterator =
+        InGraphQuadsIterator<FilteringEncodedQuadsIterator<SPOGIndexIterator>>;
+    type QuadsForSubjectPredicateGraphIterator =
+        InGraphQuadsIterator<FilteringEncodedQuadsIterator<SPOGIndexIterator>>;
+    type QuadsForSubjectObjectGraphIterator =
+        InGraphQuadsIterator<FilteringEncodedQuadsIterator<OSPGIndexIterator>>;
+    type QuadsForPredicateGraphIterator =
+        InGraphQuadsIterator<FilteringEncodedQuadsIterator<POSGIndexIterator>>;
+    type QuadsForPredicateObjectGraphIterator =
+        InGraphQuadsIterator<FilteringEncodedQuadsIterator<POSGIndexIterator>>;
+    type QuadsForObjectGraphIterator =
+        InGraphQuadsIterator<FilteringEncodedQuadsIterator<OSPGIndexIterator>>;
+
+    fn quads(&self) -> Result<SPOGIndexIterator> {
         let mut iter = self.db.raw_iterator_cf(self.spog_cf)?;
         iter.seek_to_first();
         Ok(SPOGIndexIterator { iter })
     }
 
-    pub fn quads_for_subject(
+    fn quads_for_subject(
         &self,
-        subject: EncodedTerm,
+        subject: &EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<SPOGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.spog_cf)?;
-        iter.seek(&encode_term(&subject)?);
+        iter.seek(&encode_term(subject)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: SPOGIndexIterator { iter },
-            filter: EncodedQuadPattern::new(Some(subject), None, None, None),
+            filter: EncodedQuadPattern::new(Some(subject.clone()), None, None, None),
         })
     }
 
-    pub fn quads_for_subject_predicate(
+    fn quads_for_subject_predicate(
         &self,
-        subject: EncodedTerm,
-        predicate: EncodedTerm,
+        subject: &EncodedTerm,
+        predicate: &EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<SPOGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.spog_cf)?;
-        iter.seek(&encode_term_pair(&subject, &predicate)?);
+        iter.seek(&encode_term_pair(subject, predicate)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: SPOGIndexIterator { iter },
-            filter: EncodedQuadPattern::new(Some(subject), Some(predicate), None, None),
+            filter: EncodedQuadPattern::new(
+                Some(subject.clone()),
+                Some(predicate.clone()),
+                None,
+                None,
+            ),
         })
     }
 
-    pub fn quads_for_subject_predicate_object(
+    fn quads_for_subject_predicate_object(
         &self,
-        subject: EncodedTerm,
-        predicate: EncodedTerm,
-        object: EncodedTerm,
+        subject: &EncodedTerm,
+        predicate: &EncodedTerm,
+        object: &EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<SPOGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.spog_cf)?;
-        iter.seek(&encode_term_triple(&subject, &predicate, &object)?);
+        iter.seek(&encode_term_triple(subject, predicate, object)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: SPOGIndexIterator { iter },
-            filter: EncodedQuadPattern::new(Some(subject), Some(predicate), Some(object), None),
+            filter: EncodedQuadPattern::new(
+                Some(subject.clone()),
+                Some(predicate.clone()),
+                Some(object.clone()),
+                None,
+            ),
         })
     }
 
-    pub fn quads_for_predicate(
+    fn quads_for_subject_object(
         &self,
-        predicate: EncodedTerm,
+        subject: &EncodedTerm,
+        object: &EncodedTerm,
+    ) -> Result<FilteringEncodedQuadsIterator<OSPGIndexIterator>> {
+        let mut iter = self.db.raw_iterator_cf(self.spog_cf)?;
+        iter.seek(&encode_term_pair(object, subject)?);
+        Ok(FilteringEncodedQuadsIterator {
+            iter: OSPGIndexIterator { iter },
+            filter: EncodedQuadPattern::new(
+                Some(subject.clone()),
+                None,
+                Some(object.clone()),
+                None,
+            ),
+        })
+    }
+
+    fn quads_for_predicate(
+        &self,
+        predicate: &EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<POSGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.posg_cf)?;
-        iter.seek(&encode_term(&predicate)?);
+        iter.seek(&encode_term(predicate)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: POSGIndexIterator { iter },
-            filter: EncodedQuadPattern::new(None, Some(predicate), None, None),
+            filter: EncodedQuadPattern::new(None, Some(predicate.clone()), None, None),
         })
     }
 
-    pub fn quads_for_predicate_object(
+    fn quads_for_predicate_object(
         &self,
-        predicate: EncodedTerm,
-        object: EncodedTerm,
+        predicate: &EncodedTerm,
+        object: &EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<POSGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.spog_cf)?;
-        iter.seek(&encode_term_pair(&predicate, &object)?);
+        iter.seek(&encode_term_pair(predicate, object)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: POSGIndexIterator { iter },
-            filter: EncodedQuadPattern::new(None, Some(predicate), Some(object), None),
+            filter: EncodedQuadPattern::new(
+                None,
+                Some(predicate.clone()),
+                Some(object.clone()),
+                None,
+            ),
         })
     }
 
-    pub fn quads_for_object(
+    fn quads_for_object(
         &self,
-        object: EncodedTerm,
+        object: &EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<OSPGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.ospg_cf)?;
         iter.seek(&encode_term(&object)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: OSPGIndexIterator { iter },
-            filter: EncodedQuadPattern::new(None, None, Some(object), None),
+            filter: EncodedQuadPattern::new(None, None, Some(object.clone()), None),
         })
     }
 
-    pub fn contains(&self, quad: &EncodedQuad) -> Result<bool> {
+    fn quads_for_graph(
+        &self,
+        graph_name: &Option<EncodedTerm>,
+    ) -> Result<InGraphQuadsIterator<SPOGIndexIterator>> {
+        Ok(InGraphQuadsIterator {
+            iter: self.quads()?,
+            graph_name: graph_name.clone(),
+        })
+    }
+
+    fn quads_for_subject_graph(
+        &self,
+        subject: &EncodedTerm,
+        graph_name: &Option<EncodedTerm>,
+    ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<SPOGIndexIterator>>> {
+        Ok(InGraphQuadsIterator {
+            iter: self.quads_for_subject(subject)?,
+            graph_name: graph_name.clone(),
+        })
+    }
+
+    fn quads_for_subject_predicate_graph(
+        &self,
+        subject: &EncodedTerm,
+        predicate: &EncodedTerm,
+        graph_name: &Option<EncodedTerm>,
+    ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<SPOGIndexIterator>>> {
+        Ok(InGraphQuadsIterator {
+            iter: self.quads_for_subject_predicate(subject, predicate)?,
+            graph_name: graph_name.clone(),
+        })
+    }
+
+    fn quads_for_subject_object_graph(
+        &self,
+        subject: &EncodedTerm,
+        object: &EncodedTerm,
+        graph_name: &Option<EncodedTerm>,
+    ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<OSPGIndexIterator>>> {
+        Ok(InGraphQuadsIterator {
+            iter: self.quads_for_subject_object(subject, object)?,
+            graph_name: graph_name.clone(),
+        })
+    }
+
+    fn quads_for_predicate_graph(
+        &self,
+        predicate: &EncodedTerm,
+        graph_name: &Option<EncodedTerm>,
+    ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<POSGIndexIterator>>> {
+        Ok(InGraphQuadsIterator {
+            iter: self.quads_for_predicate(predicate)?,
+            graph_name: graph_name.clone(),
+        })
+    }
+
+    fn quads_for_predicate_object_graph(
+        &self,
+        predicate: &EncodedTerm,
+        object: &EncodedTerm,
+        graph_name: &Option<EncodedTerm>,
+    ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<POSGIndexIterator>>> {
+        Ok(InGraphQuadsIterator {
+            iter: self.quads_for_predicate_object(predicate, object)?,
+            graph_name: graph_name.clone(),
+        })
+    }
+
+    fn quads_for_object_graph(
+        &self,
+        object: &EncodedTerm,
+        graph_name: &Option<EncodedTerm>,
+    ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<OSPGIndexIterator>>> {
+        Ok(InGraphQuadsIterator {
+            iter: self.quads_for_object(object)?,
+            graph_name: graph_name.clone(),
+        })
+    }
+
+    fn contains(&self, quad: &EncodedQuad) -> Result<bool> {
         Ok(self
             .db
             .get_cf(self.spog_cf, &encode_spog_quad(quad)?)?
             .is_some())
     }
 
-    pub fn insert(&self, quad: &EncodedQuad) -> Result<()> {
+    fn insert(&self, quad: &EncodedQuad) -> Result<()> {
         let mut batch = WriteBatch::default();
         batch.put_cf(self.spog_cf, &encode_spog_quad(quad)?, &EMPTY_BUF)?;
         batch.put_cf(self.posg_cf, &encode_posg_quad(quad)?, &EMPTY_BUF)?;
@@ -162,7 +322,7 @@ impl RocksDbStore {
         Ok(self.db.write(batch)?) //TODO: check what's going on if the key already exists
     }
 
-    pub fn remove(&self, quad: &EncodedQuad) -> Result<()> {
+    fn remove(&self, quad: &EncodedQuad) -> Result<()> {
         let mut batch = WriteBatch::default();
         batch.delete_cf(self.spog_cf, &encode_spog_quad(quad)?)?;
         batch.delete_cf(self.posg_cf, &encode_posg_quad(quad)?)?;
@@ -174,36 +334,6 @@ impl RocksDbStore {
 pub fn get_cf(db: &DB, name: &str) -> Result<ColumnFamily> {
     db.cf_handle(name)
         .ok_or_else(|| "column family not found".into())
-}
-
-pub struct RocksDbBytesStore<'a>(&'a RocksDbStore);
-
-impl<'a> BytesStore for RocksDbBytesStore<'a> {
-    type BytesOutput = DBVector;
-
-    fn put(&self, value: &[u8]) -> Result<u64> {
-        Ok(match self.0.db.get_cf(self.0.str2id_cf, value)? {
-            Some(id) => from_bytes_slice(&id),
-            None => {
-                let id = self
-                    .0
-                    .str_id_counter
-                    .lock()
-                    .unwrap()
-                    .get_and_increment(&self.0.db)? as u64;
-                let id_bytes = to_bytes(id);
-                let mut batch = WriteBatch::default();
-                batch.put_cf(self.0.id2str_cf, &id_bytes, value)?;
-                batch.put_cf(self.0.str2id_cf, value, &id_bytes)?;
-                self.0.db.write(batch)?;
-                id
-            }
-        })
-    }
-
-    fn get(&self, id: u64) -> Result<Option<DBVector>> {
-        Ok(self.0.db.get_cf(self.0.id2str_cf, &to_bytes(id))?)
-    }
 }
 
 struct RocksDBCounter {
@@ -371,6 +501,23 @@ impl<I: Iterator<Item = Result<EncodedQuad>>> Iterator for FilteringEncodedQuads
     fn next(&mut self) -> Option<Result<EncodedQuad>> {
         self.iter.next().filter(|quad| match quad {
             Ok(quad) => self.filter.filter(quad),
+            Err(_) => true,
+        })
+    }
+}
+
+pub struct InGraphQuadsIterator<I: Iterator<Item = Result<EncodedQuad>>> {
+    iter: I,
+    graph_name: Option<EncodedTerm>,
+}
+
+impl<I: Iterator<Item = Result<EncodedQuad>>> Iterator for InGraphQuadsIterator<I> {
+    type Item = Result<EncodedQuad>;
+
+    fn next(&mut self) -> Option<Result<EncodedQuad>> {
+        let graph_name = &self.graph_name;
+        self.iter.find(|quad| match quad {
+            Ok(quad) => graph_name == &quad.graph_name,
             Err(_) => true,
         })
     }

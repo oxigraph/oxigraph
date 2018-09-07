@@ -12,8 +12,8 @@ use uuid::Uuid;
 pub trait BytesStore {
     type BytesOutput: Deref<Target = [u8]>;
 
-    fn put(&self, value: &[u8]) -> Result<u64>;
-    fn get(&self, id: u64) -> Result<Option<Self::BytesOutput>>;
+    fn insert_bytes(&self, value: &[u8]) -> Result<u64>;
+    fn get_bytes(&self, id: u64) -> Result<Option<Self::BytesOutput>>;
 }
 
 const TYPE_NOTHING_ID: u8 = 0;
@@ -258,6 +258,19 @@ impl<S: BytesStore> Encoder<S> {
         })
     }
 
+    pub fn encode_triple_in_graph(
+        &self,
+        triple: &Triple,
+        graph_name: Option<EncodedTerm>,
+    ) -> Result<EncodedQuad> {
+        Ok(EncodedQuad {
+            subject: self.encode_named_or_blank_node(triple.subject())?,
+            predicate: self.encode_named_node(triple.predicate())?,
+            object: self.encode_term(triple.object())?,
+            graph_name,
+        })
+    }
+
     pub fn decode_term(&self, encoded: &EncodedTerm) -> Result<Term> {
         match encoded {
             EncodedTerm::NamedNode { iri_id } => {
@@ -297,6 +310,14 @@ impl<S: BytesStore> Encoder<S> {
         }
     }
 
+    pub fn decode_triple(&self, encoded: &EncodedQuad) -> Result<Triple> {
+        Ok(Triple::new(
+            self.decode_named_or_blank_node(&encoded.subject)?,
+            self.decode_named_node(&encoded.predicate)?,
+            self.decode_term(&encoded.object)?,
+        ))
+    }
+
     pub fn decode_quad(&self, encoded: &EncodedQuad) -> Result<Quad> {
         Ok(Quad::new(
             self.decode_named_or_blank_node(&encoded.subject)?,
@@ -310,7 +331,7 @@ impl<S: BytesStore> Encoder<S> {
     }
 
     fn encode_str_value(&self, text: &str) -> Result<u64> {
-        self.string_store.put(text.as_bytes())
+        self.string_store.insert_bytes(text.as_bytes())
     }
 
     fn decode_url_value(&self, id: u64) -> Result<Url> {
@@ -325,7 +346,7 @@ impl<S: BytesStore> Encoder<S> {
 
     fn decode_value(&self, id: u64) -> Result<S::BytesOutput> {
         self.string_store
-            .get(id)?
+            .get_bytes(id)?
             .ok_or("value not found in the dictionary".into())
     }
 }
@@ -352,7 +373,7 @@ mod test {
     impl BytesStore for MemoryBytesStore {
         type BytesOutput = Vec<u8>;
 
-        fn put(&self, value: &[u8]) -> Result<u64> {
+        fn insert_bytes(&self, value: &[u8]) -> Result<u64> {
             let mut str2id = self.str2id.borrow_mut();
             let mut id2str = self.id2str.borrow_mut();
             let id = str2id.entry(value.to_vec()).or_insert_with(|| {
@@ -363,7 +384,7 @@ mod test {
             Ok(*id)
         }
 
-        fn get(&self, id: u64) -> Result<Option<Vec<u8>>> {
+        fn get_bytes(&self, id: u64) -> Result<Option<Vec<u8>>> {
             Ok(self.id2str.borrow().get(&id).map(|s| s.to_owned()))
         }
     }
