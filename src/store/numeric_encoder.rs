@@ -1,10 +1,8 @@
 use byteorder::{NetworkEndian, ReadBytesExt, WriteBytesExt};
 use errors::*;
 use model::*;
-use std::io::Cursor;
 use std::io::Read;
 use std::io::Write;
-use std::mem::size_of;
 use std::ops::Deref;
 use std::str;
 use std::str::FromStr;
@@ -18,6 +16,7 @@ pub trait BytesStore {
     fn get(&self, id: u64) -> Result<Option<Self::BytesOutput>>;
 }
 
+const TYPE_NOTHING_ID: u8 = 0;
 const TYPE_NAMED_NODE_ID: u8 = 1;
 const TYPE_BLANK_NODE_ID: u8 = 2;
 const TYPE_LANG_STRING_LITERAL_ID: u8 = 3;
@@ -32,33 +31,6 @@ pub enum EncodedTerm {
 }
 
 impl EncodedTerm {
-    pub fn read(reader: &mut impl Read) -> Result<Self> {
-        let type_id = reader.read_u8()?;
-        match type_id {
-            TYPE_NAMED_NODE_ID => Ok(EncodedTerm::NamedNode {
-                iri_id: reader.read_u64::<NetworkEndian>()?,
-            }),
-            TYPE_BLANK_NODE_ID => {
-                let mut uuid_buffer = [0 as u8; 16];
-                reader.read_exact(&mut uuid_buffer)?;
-                Ok(EncodedTerm::BlankNode(Uuid::from_bytes(&uuid_buffer)?))
-            }
-            TYPE_LANG_STRING_LITERAL_ID => Ok(EncodedTerm::LangStringLiteral {
-                language_id: reader.read_u64::<NetworkEndian>()?,
-                value_id: reader.read_u64::<NetworkEndian>()?,
-            }),
-            TYPE_TYPED_LITERAL_ID => Ok(EncodedTerm::TypedLiteral {
-                datatype_id: reader.read_u64::<NetworkEndian>()?,
-                value_id: reader.read_u64::<NetworkEndian>()?,
-            }),
-            _ => Err("the term buffer has an invalid type id".into()),
-        }
-    }
-
-    pub fn encoding_size(&self) -> usize {
-        Self::type_length(self.type_id()).unwrap() //It is not possible to fail here
-    }
-
     fn type_id(&self) -> u8 {
         match self {
             EncodedTerm::NamedNode { .. } => TYPE_NAMED_NODE_ID,
@@ -66,40 +38,6 @@ impl EncodedTerm {
             EncodedTerm::LangStringLiteral { .. } => TYPE_LANG_STRING_LITERAL_ID,
             EncodedTerm::TypedLiteral { .. } => TYPE_TYPED_LITERAL_ID,
         }
-    }
-
-    fn type_length(type_id: u8) -> Result<usize> {
-        //TODO: useful
-        match type_id {
-            TYPE_NAMED_NODE_ID => Ok(1 + size_of::<u64>()),
-            TYPE_BLANK_NODE_ID => Ok(17), //TODO: guess
-            TYPE_LANG_STRING_LITERAL_ID => Ok(1 + 2 * size_of::<u64>()),
-            TYPE_TYPED_LITERAL_ID => Ok(1 + 2 * size_of::<u64>()),
-            _ => Err(format!("{} is not a known type id", type_id).into()),
-        }
-    }
-
-    pub fn write(&self, writer: &mut impl Write) -> Result<()> {
-        writer.write_u8(self.type_id())?;
-        match self {
-            EncodedTerm::NamedNode { iri_id } => writer.write_u64::<NetworkEndian>(*iri_id)?,
-            EncodedTerm::BlankNode(id) => writer.write_all(id.as_bytes())?,
-            EncodedTerm::LangStringLiteral {
-                value_id,
-                language_id,
-            } => {
-                writer.write_u64::<NetworkEndian>(*language_id)?;
-                writer.write_u64::<NetworkEndian>(*value_id)?;
-            }
-            EncodedTerm::TypedLiteral {
-                value_id,
-                datatype_id,
-            } => {
-                writer.write_u64::<NetworkEndian>(*datatype_id)?;
-                writer.write_u64::<NetworkEndian>(*value_id)?;
-            }
-        }
-        Ok(())
     }
 }
 
@@ -111,18 +49,35 @@ pub struct EncodedQuad {
     pub graph_name: Option<EncodedTerm>,
 }
 
-impl EncodedQuad {
-    pub fn new_from_spog_buffer(buffer: &[u8]) -> Result<Self> {
-        let mut cursor = Cursor::new(buffer);
-        let subject = EncodedTerm::read(&mut cursor)?;
-        let predicate = EncodedTerm::read(&mut cursor)?;
-        let object = EncodedTerm::read(&mut cursor)?;
-        let graph_name = if cursor.position() < buffer.len() as u64 {
-            Some(EncodedTerm::read(&mut cursor)?)
+pub trait TermReader {
+    fn read_term(&mut self) -> Result<EncodedTerm>;
+    fn read_optional_term(&mut self) -> Result<Option<EncodedTerm>>;
+    fn read_spog_quad(&mut self) -> Result<EncodedQuad>;
+    fn read_posg_quad(&mut self) -> Result<EncodedQuad>;
+    fn read_ospg_quad(&mut self) -> Result<EncodedQuad>;
+}
+
+impl<R: Read> TermReader for R {
+    fn read_term(&mut self) -> Result<EncodedTerm> {
+        let type_id = self.read_u8()?;
+        read_term_after_type(self, type_id)
+    }
+
+    fn read_optional_term(&mut self) -> Result<Option<EncodedTerm>> {
+        let type_id = self.read_u8()?;
+        if type_id == 0 {
+            Ok(None)
         } else {
-            None
-        };
-        Ok(Self {
+            Ok(Some(read_term_after_type(self, type_id)?))
+        }
+    }
+
+    fn read_spog_quad(&mut self) -> Result<EncodedQuad> {
+        let subject = self.read_term()?;
+        let predicate = self.read_term()?;
+        let object = self.read_term()?;
+        let graph_name = self.read_optional_term()?;
+        Ok(EncodedQuad {
             subject,
             predicate,
             object,
@@ -130,17 +85,12 @@ impl EncodedQuad {
         })
     }
 
-    pub fn new_from_posg_buffer(buffer: &[u8]) -> Result<Self> {
-        let mut cursor = Cursor::new(buffer);
-        let predicate = EncodedTerm::read(&mut cursor)?;
-        let object = EncodedTerm::read(&mut cursor)?;
-        let subject = EncodedTerm::read(&mut cursor)?;
-        let graph_name = if cursor.position() < buffer.len() as u64 {
-            Some(EncodedTerm::read(&mut cursor)?)
-        } else {
-            None
-        };
-        Ok(Self {
+    fn read_posg_quad(&mut self) -> Result<EncodedQuad> {
+        let predicate = self.read_term()?;
+        let object = self.read_term()?;
+        let subject = self.read_term()?;
+        let graph_name = self.read_optional_term()?;
+        Ok(EncodedQuad {
             subject,
             predicate,
             object,
@@ -148,63 +98,103 @@ impl EncodedQuad {
         })
     }
 
-    pub fn new_from_ospg_buffer(buffer: &[u8]) -> Result<Self> {
-        let mut cursor = Cursor::new(buffer);
-        let object = EncodedTerm::read(&mut cursor)?;
-        let subject = EncodedTerm::read(&mut cursor)?;
-        let predicate = EncodedTerm::read(&mut cursor)?;
-        let graph_name = if cursor.position() < buffer.len() as u64 {
-            Some(EncodedTerm::read(&mut cursor)?)
-        } else {
-            None
-        };
-        Ok(Self {
+    fn read_ospg_quad(&mut self) -> Result<EncodedQuad> {
+        let object = self.read_term()?;
+        let subject = self.read_term()?;
+        let predicate = self.read_term()?;
+        let graph_name = self.read_optional_term()?;
+        Ok(EncodedQuad {
             subject,
             predicate,
             object,
             graph_name,
         })
     }
+}
 
-    pub fn spog(&self) -> Result<Vec<u8>> {
-        let mut spog = Vec::with_capacity(self.encoding_size());
-        self.subject.write(&mut spog)?;
-        self.predicate.write(&mut spog)?;
-        self.object.write(&mut spog)?;
-        if let Some(ref graph_name) = self.graph_name {
-            graph_name.write(&mut spog)?;
+fn read_term_after_type(reader: &mut impl Read, type_id: u8) -> Result<EncodedTerm> {
+    match type_id {
+        TYPE_NAMED_NODE_ID => Ok(EncodedTerm::NamedNode {
+            iri_id: reader.read_u64::<NetworkEndian>()?,
+        }),
+        TYPE_BLANK_NODE_ID => {
+            let mut uuid_buffer = [0 as u8; 16];
+            reader.read_exact(&mut uuid_buffer)?;
+            Ok(EncodedTerm::BlankNode(Uuid::from_bytes(&uuid_buffer)?))
         }
-        Ok(spog)
+        TYPE_LANG_STRING_LITERAL_ID => Ok(EncodedTerm::LangStringLiteral {
+            language_id: reader.read_u64::<NetworkEndian>()?,
+            value_id: reader.read_u64::<NetworkEndian>()?,
+        }),
+        TYPE_TYPED_LITERAL_ID => Ok(EncodedTerm::TypedLiteral {
+            datatype_id: reader.read_u64::<NetworkEndian>()?,
+            value_id: reader.read_u64::<NetworkEndian>()?,
+        }),
+        _ => Err("the term buffer has an invalid type id".into()),
     }
+}
 
-    pub fn posg(&self) -> Result<Vec<u8>> {
-        let mut posg = Vec::with_capacity(self.encoding_size());
-        self.predicate.write(&mut posg)?;
-        self.object.write(&mut posg)?;
-        self.subject.write(&mut posg)?;
-        if let Some(ref graph_name) = self.graph_name {
-            graph_name.write(&mut posg)?;
-        }
-        Ok(posg)
-    }
+pub trait TermWriter {
+    fn write_term(&mut self, term: &EncodedTerm) -> Result<()>;
+    fn write_optional_term(&mut self, term: &Option<EncodedTerm>) -> Result<()>;
+    fn write_spog_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
+    fn write_posg_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
+    fn write_ospg_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
+}
 
-    pub fn ospg(&self) -> Result<Vec<u8>> {
-        let mut ospg = Vec::with_capacity(self.encoding_size());
-        self.object.write(&mut ospg)?;
-        self.subject.write(&mut ospg)?;
-        self.predicate.write(&mut ospg)?;
-        if let Some(ref graph_name) = self.graph_name {
-            graph_name.write(&mut ospg)?;
-        }
-        Ok(ospg)
-    }
-
-    fn encoding_size(&self) -> usize {
-        self.subject.encoding_size() + self.predicate.encoding_size() + self.object.encoding_size()
-            + match self.graph_name {
-                Some(ref graph_name) => graph_name.encoding_size(),
-                None => 0,
+impl<R: Write> TermWriter for R {
+    fn write_term(&mut self, term: &EncodedTerm) -> Result<()> {
+        self.write_u8(term.type_id())?;
+        match term {
+            EncodedTerm::NamedNode { iri_id } => self.write_u64::<NetworkEndian>(*iri_id)?,
+            EncodedTerm::BlankNode(id) => self.write_all(id.as_bytes())?,
+            EncodedTerm::LangStringLiteral {
+                value_id,
+                language_id,
+            } => {
+                self.write_u64::<NetworkEndian>(*language_id)?;
+                self.write_u64::<NetworkEndian>(*value_id)?;
             }
+            EncodedTerm::TypedLiteral {
+                value_id,
+                datatype_id,
+            } => {
+                self.write_u64::<NetworkEndian>(*datatype_id)?;
+                self.write_u64::<NetworkEndian>(*value_id)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn write_optional_term(&mut self, term: &Option<EncodedTerm>) -> Result<()> {
+        match term {
+            Some(term) => self.write_term(term),
+            None => Ok(self.write_u8(TYPE_NOTHING_ID)?),
+        }
+    }
+
+    fn write_spog_quad(&mut self, quad: &EncodedQuad) -> Result<()> {
+        self.write_term(&quad.subject)?;
+        self.write_term(&quad.predicate)?;
+        self.write_term(&quad.object)?;
+        self.write_optional_term(&quad.graph_name)?;
+        Ok(())
+    }
+
+    fn write_posg_quad(&mut self, quad: &EncodedQuad) -> Result<()> {
+        self.write_term(&quad.predicate)?;
+        self.write_term(&quad.object)?;
+        self.write_term(&quad.subject)?;
+        self.write_optional_term(&quad.graph_name)?;
+        Ok(())
+    }
+
+    fn write_ospg_quad(&mut self, quad: &EncodedQuad) -> Result<()> {
+        self.write_term(&quad.object)?;
+        self.write_term(&quad.subject)?;
+        self.write_term(&quad.predicate)?;
+        self.write_optional_term(&quad.graph_name)?;
+        Ok(())
     }
 }
 

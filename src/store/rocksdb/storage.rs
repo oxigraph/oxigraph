@@ -5,6 +5,7 @@ use rocksdb::DBVector;
 use rocksdb::Options;
 use rocksdb::WriteBatch;
 use rocksdb::DB;
+use std::io::Cursor;
 use std::mem::size_of;
 use std::path::Path;
 use std::str;
@@ -147,22 +148,25 @@ impl RocksDbStore {
     }
 
     pub fn contains(&self, quad: &EncodedQuad) -> Result<bool> {
-        Ok(self.db.get_cf(self.spog_cf, &quad.spog()?)?.is_some())
+        Ok(self
+            .db
+            .get_cf(self.spog_cf, &encode_spog_quad(quad)?)?
+            .is_some())
     }
 
     pub fn insert(&self, quad: &EncodedQuad) -> Result<()> {
         let mut batch = WriteBatch::default();
-        batch.put_cf(self.spog_cf, &quad.spog()?, &EMPTY_BUF)?;
-        batch.put_cf(self.posg_cf, &quad.posg()?, &EMPTY_BUF)?;
-        batch.put_cf(self.ospg_cf, &quad.ospg()?, &EMPTY_BUF)?;
+        batch.put_cf(self.spog_cf, &encode_spog_quad(quad)?, &EMPTY_BUF)?;
+        batch.put_cf(self.posg_cf, &encode_posg_quad(quad)?, &EMPTY_BUF)?;
+        batch.put_cf(self.ospg_cf, &encode_ospg_quad(quad)?, &EMPTY_BUF)?;
         Ok(self.db.write(batch)?) //TODO: check what's going on if the key already exists
     }
 
     pub fn remove(&self, quad: &EncodedQuad) -> Result<()> {
         let mut batch = WriteBatch::default();
-        batch.delete_cf(self.spog_cf, &quad.spog()?)?;
-        batch.delete_cf(self.posg_cf, &quad.posg()?)?;
-        batch.delete_cf(self.ospg_cf, &quad.ospg()?)?;
+        batch.delete_cf(self.spog_cf, &encode_spog_quad(quad)?)?;
+        batch.delete_cf(self.posg_cf, &encode_posg_quad(quad)?)?;
+        batch.delete_cf(self.ospg_cf, &encode_ospg_quad(quad)?)?;
         Ok(self.db.write(batch)?)
     }
 }
@@ -273,23 +277,41 @@ impl EncodedQuadPattern {
 }
 
 fn encode_term(t: &EncodedTerm) -> Result<Vec<u8>> {
-    let mut vec = Vec::with_capacity(t.encoding_size());
-    t.write(&mut vec)?;
+    let mut vec = Vec::default();
+    vec.write_term(&t)?;
     Ok(vec)
 }
 
 fn encode_term_pair(t1: &EncodedTerm, t2: &EncodedTerm) -> Result<Vec<u8>> {
-    let mut vec = Vec::with_capacity(t1.encoding_size() + t2.encoding_size());
-    t1.write(&mut vec)?;
-    t2.write(&mut vec)?;
+    let mut vec = Vec::default();
+    vec.write_term(&t1)?;
+    vec.write_term(&t2)?;
     Ok(vec)
 }
 
 fn encode_term_triple(t1: &EncodedTerm, t2: &EncodedTerm, t3: &EncodedTerm) -> Result<Vec<u8>> {
-    let mut vec = Vec::with_capacity(t1.encoding_size() + t2.encoding_size() + t3.encoding_size());
-    t1.write(&mut vec)?;
-    t2.write(&mut vec)?;
-    t3.write(&mut vec)?;
+    let mut vec = Vec::default();
+    vec.write_term(&t1)?;
+    vec.write_term(&t2)?;
+    vec.write_term(&t3)?;
+    Ok(vec)
+}
+
+fn encode_spog_quad(quad: &EncodedQuad) -> Result<Vec<u8>> {
+    let mut vec = Vec::default();
+    vec.write_spog_quad(quad)?;
+    Ok(vec)
+}
+
+fn encode_posg_quad(quad: &EncodedQuad) -> Result<Vec<u8>> {
+    let mut vec = Vec::default();
+    vec.write_posg_quad(quad)?;
+    Ok(vec)
+}
+
+fn encode_ospg_quad(quad: &EncodedQuad) -> Result<Vec<u8>> {
+    let mut vec = Vec::default();
+    vec.write_ospg_quad(quad)?;
     Ok(vec)
 }
 
@@ -304,7 +326,7 @@ impl Iterator for SPOGIndexIterator {
         self.iter.next();
         self.iter
             .key()
-            .map(|buffer| EncodedQuad::new_from_spog_buffer(&buffer))
+            .map(|buffer| Cursor::new(buffer).read_spog_quad())
     }
 }
 
@@ -319,7 +341,7 @@ impl Iterator for POSGIndexIterator {
         self.iter.next();
         self.iter
             .key()
-            .map(|buffer| EncodedQuad::new_from_posg_buffer(&buffer))
+            .map(|buffer| Cursor::new(buffer).read_posg_quad())
     }
 }
 
@@ -334,7 +356,7 @@ impl Iterator for OSPGIndexIterator {
         self.iter.next();
         self.iter
             .key()
-            .map(|buffer| EncodedQuad::new_from_ospg_buffer(&buffer))
+            .map(|buffer| Cursor::new(buffer).read_ospg_quad())
     }
 }
 
