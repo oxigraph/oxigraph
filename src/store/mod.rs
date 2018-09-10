@@ -57,6 +57,10 @@ pub trait Graph {
     fn insert(&self, triple: &Triple) -> Result<()>;
 
     fn remove(&self, triple: &Triple) -> Result<()>;
+
+    fn len(&self) -> Result<usize>;
+
+    fn is_empty(&self) -> Result<bool>;
 }
 
 pub trait NamedGraph: Graph {
@@ -128,4 +132,8 @@ pub trait Dataset {
     fn insert(&self, quad: &Quad) -> Result<()>;
 
     fn remove(&self, quad: &Quad) -> Result<()>;
+
+    fn len(&self) -> Result<usize>;
+
+    fn is_empty(&self) -> Result<bool>;
 }

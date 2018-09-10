@@ -266,6 +266,14 @@ impl<S: EncodedQuadsStore> Dataset for StoreDataset<S> {
     fn remove(&self, quad: &Quad) -> Result<()> {
         self.store.remove(&self.store.encoder().encode_quad(quad)?)
     }
+
+    fn len(&self) -> Result<usize> {
+        Ok(self.store.quads()?.count())
+    }
+
+    fn is_empty(&self) -> Result<bool> {
+        Ok(self.store.quads()?.any(|_| true))
+    }
 }
 
 pub struct StoreNamedGraph<S: EncodedQuadsStore> {
@@ -403,6 +411,17 @@ impl<S: EncodedQuadsStore> Graph for StoreNamedGraph<S> {
                 .encode_triple_in_graph(triple, self.encoded_name.clone())?,
         )
     }
+
+    fn len(&self) -> Result<usize> {
+        Ok(self.store.quads_for_graph(&self.encoded_name)?.count())
+    }
+
+    fn is_empty(&self) -> Result<bool> {
+        Ok(self
+            .store
+            .quads_for_graph(&self.encoded_name)?
+            .any(|_| true))
+    }
 }
 
 impl<S: EncodedQuadsStore> NamedGraph for StoreNamedGraph<S> {
@@ -530,6 +549,14 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
         self.store
             .remove(&self.store.encoder().encode_triple_in_graph(triple, None)?)
     }
+
+    fn len(&self) -> Result<usize> {
+        Ok(self.store.quads_for_graph(&None)?.count())
+    }
+
+    fn is_empty(&self) -> Result<bool> {
+        Ok(self.store.quads_for_graph(&None)?.any(|_| true))
+    }
 }
 
 pub struct StoreUnionGraph<S: EncodedQuadsStore> {
@@ -649,6 +676,14 @@ impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
 
     fn remove(&self, triple: &Triple) -> Result<()> {
         unimplemented!()
+    }
+
+    fn len(&self) -> Result<usize> {
+        Ok(self.store.quads()?.count())
+    }
+
+    fn is_empty(&self) -> Result<bool> {
+        Ok(self.store.quads()?.any(|_| true))
     }
 }
 
