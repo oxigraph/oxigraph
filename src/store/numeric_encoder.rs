@@ -16,14 +16,17 @@ pub trait BytesStore {
     fn get_bytes(&self, id: u64) -> Result<Option<Self::BytesOutput>>;
 }
 
-const TYPE_NOTHING_ID: u8 = 0;
+const TYPE_DEFAULT_GRAPH_ID: u8 = 0;
 const TYPE_NAMED_NODE_ID: u8 = 1;
 const TYPE_BLANK_NODE_ID: u8 = 2;
 const TYPE_LANG_STRING_LITERAL_ID: u8 = 3;
 const TYPE_TYPED_LITERAL_ID: u8 = 4;
 
+pub static ENCODED_DEFAULT_GRAPH: EncodedTerm = EncodedTerm::DefaultGraph {};
+
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum EncodedTerm {
+    DefaultGraph {},
     NamedNode { iri_id: u64 },
     BlankNode(Uuid),
     LangStringLiteral { value_id: u64, language_id: u64 },
@@ -33,6 +36,7 @@ pub enum EncodedTerm {
 impl EncodedTerm {
     fn type_id(&self) -> u8 {
         match self {
+            EncodedTerm::DefaultGraph { .. } => TYPE_DEFAULT_GRAPH_ID,
             EncodedTerm::NamedNode { .. } => TYPE_NAMED_NODE_ID,
             EncodedTerm::BlankNode(_) => TYPE_BLANK_NODE_ID,
             EncodedTerm::LangStringLiteral { .. } => TYPE_LANG_STRING_LITERAL_ID,
@@ -46,12 +50,11 @@ pub struct EncodedQuad {
     pub subject: EncodedTerm,
     pub predicate: EncodedTerm,
     pub object: EncodedTerm,
-    pub graph_name: Option<EncodedTerm>,
+    pub graph_name: EncodedTerm,
 }
 
 pub trait TermReader {
     fn read_term(&mut self) -> Result<EncodedTerm>;
-    fn read_optional_term(&mut self) -> Result<Option<EncodedTerm>>;
     fn read_spog_quad(&mut self) -> Result<EncodedQuad>;
     fn read_posg_quad(&mut self) -> Result<EncodedQuad>;
     fn read_ospg_quad(&mut self) -> Result<EncodedQuad>;
@@ -59,16 +62,25 @@ pub trait TermReader {
 
 impl<R: Read> TermReader for R {
     fn read_term(&mut self) -> Result<EncodedTerm> {
-        let type_id = self.read_u8()?;
-        read_term_after_type(self, type_id)
-    }
-
-    fn read_optional_term(&mut self) -> Result<Option<EncodedTerm>> {
-        let type_id = self.read_u8()?;
-        if type_id == 0 {
-            Ok(None)
-        } else {
-            Ok(Some(read_term_after_type(self, type_id)?))
+        match self.read_u8()? {
+            TYPE_DEFAULT_GRAPH_ID => Ok(EncodedTerm::DefaultGraph {}),
+            TYPE_NAMED_NODE_ID => Ok(EncodedTerm::NamedNode {
+                iri_id: self.read_u64::<NetworkEndian>()?,
+            }),
+            TYPE_BLANK_NODE_ID => {
+                let mut uuid_buffer = [0 as u8; 16];
+                self.read_exact(&mut uuid_buffer)?;
+                Ok(EncodedTerm::BlankNode(Uuid::from_bytes(&uuid_buffer)?))
+            }
+            TYPE_LANG_STRING_LITERAL_ID => Ok(EncodedTerm::LangStringLiteral {
+                language_id: self.read_u64::<NetworkEndian>()?,
+                value_id: self.read_u64::<NetworkEndian>()?,
+            }),
+            TYPE_TYPED_LITERAL_ID => Ok(EncodedTerm::TypedLiteral {
+                datatype_id: self.read_u64::<NetworkEndian>()?,
+                value_id: self.read_u64::<NetworkEndian>()?,
+            }),
+            _ => Err("the term buffer has an invalid type id".into()),
         }
     }
 
@@ -76,7 +88,7 @@ impl<R: Read> TermReader for R {
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
         let object = self.read_term()?;
-        let graph_name = self.read_optional_term()?;
+        let graph_name = self.read_term()?;
         Ok(EncodedQuad {
             subject,
             predicate,
@@ -89,7 +101,7 @@ impl<R: Read> TermReader for R {
         let predicate = self.read_term()?;
         let object = self.read_term()?;
         let subject = self.read_term()?;
-        let graph_name = self.read_optional_term()?;
+        let graph_name = self.read_term()?;
         Ok(EncodedQuad {
             subject,
             predicate,
@@ -102,7 +114,7 @@ impl<R: Read> TermReader for R {
         let object = self.read_term()?;
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
-        let graph_name = self.read_optional_term()?;
+        let graph_name = self.read_term()?;
         Ok(EncodedQuad {
             subject,
             predicate,
@@ -112,31 +124,8 @@ impl<R: Read> TermReader for R {
     }
 }
 
-fn read_term_after_type(reader: &mut impl Read, type_id: u8) -> Result<EncodedTerm> {
-    match type_id {
-        TYPE_NAMED_NODE_ID => Ok(EncodedTerm::NamedNode {
-            iri_id: reader.read_u64::<NetworkEndian>()?,
-        }),
-        TYPE_BLANK_NODE_ID => {
-            let mut uuid_buffer = [0 as u8; 16];
-            reader.read_exact(&mut uuid_buffer)?;
-            Ok(EncodedTerm::BlankNode(Uuid::from_bytes(&uuid_buffer)?))
-        }
-        TYPE_LANG_STRING_LITERAL_ID => Ok(EncodedTerm::LangStringLiteral {
-            language_id: reader.read_u64::<NetworkEndian>()?,
-            value_id: reader.read_u64::<NetworkEndian>()?,
-        }),
-        TYPE_TYPED_LITERAL_ID => Ok(EncodedTerm::TypedLiteral {
-            datatype_id: reader.read_u64::<NetworkEndian>()?,
-            value_id: reader.read_u64::<NetworkEndian>()?,
-        }),
-        _ => Err("the term buffer has an invalid type id".into()),
-    }
-}
-
 pub trait TermWriter {
     fn write_term(&mut self, term: &EncodedTerm) -> Result<()>;
-    fn write_optional_term(&mut self, term: &Option<EncodedTerm>) -> Result<()>;
     fn write_spog_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
     fn write_posg_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
     fn write_ospg_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
@@ -146,6 +135,7 @@ impl<R: Write> TermWriter for R {
     fn write_term(&mut self, term: &EncodedTerm) -> Result<()> {
         self.write_u8(term.type_id())?;
         match term {
+            EncodedTerm::DefaultGraph {} => {}
             EncodedTerm::NamedNode { iri_id } => self.write_u64::<NetworkEndian>(*iri_id)?,
             EncodedTerm::BlankNode(id) => self.write_all(id.as_bytes())?,
             EncodedTerm::LangStringLiteral {
@@ -166,18 +156,11 @@ impl<R: Write> TermWriter for R {
         Ok(())
     }
 
-    fn write_optional_term(&mut self, term: &Option<EncodedTerm>) -> Result<()> {
-        match term {
-            Some(term) => self.write_term(term),
-            None => Ok(self.write_u8(TYPE_NOTHING_ID)?),
-        }
-    }
-
     fn write_spog_quad(&mut self, quad: &EncodedQuad) -> Result<()> {
         self.write_term(&quad.subject)?;
         self.write_term(&quad.predicate)?;
         self.write_term(&quad.object)?;
-        self.write_optional_term(&quad.graph_name)?;
+        self.write_term(&quad.graph_name)?;
         Ok(())
     }
 
@@ -185,7 +168,7 @@ impl<R: Write> TermWriter for R {
         self.write_term(&quad.predicate)?;
         self.write_term(&quad.object)?;
         self.write_term(&quad.subject)?;
-        self.write_optional_term(&quad.graph_name)?;
+        self.write_term(&quad.graph_name)?;
         Ok(())
     }
 
@@ -193,7 +176,7 @@ impl<R: Write> TermWriter for R {
         self.write_term(&quad.object)?;
         self.write_term(&quad.subject)?;
         self.write_term(&quad.predicate)?;
-        self.write_optional_term(&quad.graph_name)?;
+        self.write_term(&quad.graph_name)?;
         Ok(())
     }
 }
@@ -252,8 +235,8 @@ impl<S: BytesStore> Encoder<S> {
             predicate: self.encode_named_node(quad.predicate())?,
             object: self.encode_term(quad.object())?,
             graph_name: match quad.graph_name() {
-                Some(graph_name) => Some(self.encode_named_or_blank_node(&graph_name)?),
-                None => None,
+                Some(graph_name) => self.encode_named_or_blank_node(&graph_name)?,
+                None => ENCODED_DEFAULT_GRAPH.clone(),
             },
         })
     }
@@ -261,18 +244,19 @@ impl<S: BytesStore> Encoder<S> {
     pub fn encode_triple_in_graph(
         &self,
         triple: &Triple,
-        graph_name: Option<EncodedTerm>,
+        graph_name: &EncodedTerm,
     ) -> Result<EncodedQuad> {
         Ok(EncodedQuad {
             subject: self.encode_named_or_blank_node(triple.subject())?,
             predicate: self.encode_named_node(triple.predicate())?,
             object: self.encode_term(triple.object())?,
-            graph_name,
+            graph_name: graph_name.clone(),
         })
     }
 
     pub fn decode_term(&self, encoded: &EncodedTerm) -> Result<Term> {
         match encoded {
+            EncodedTerm::DefaultGraph {} => Err("The default graph tag is not a valid term".into()),
             EncodedTerm::NamedNode { iri_id } => {
                 Ok(NamedNode::from(self.decode_url_value(*iri_id)?).into())
             }
@@ -324,8 +308,8 @@ impl<S: BytesStore> Encoder<S> {
             self.decode_named_node(&encoded.predicate)?,
             self.decode_term(&encoded.object)?,
             match encoded.graph_name {
-                Some(ref graph_name) => Some(self.decode_named_or_blank_node(&graph_name)?),
-                None => None,
+                EncodedTerm::DefaultGraph {} => None,
+                ref graph_name => Some(self.decode_named_or_blank_node(graph_name)?),
             },
         ))
     }

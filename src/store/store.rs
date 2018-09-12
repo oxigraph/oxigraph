@@ -1,10 +1,7 @@
 use errors::*;
 use model::*;
 use std::sync::Arc;
-use store::numeric_encoder::BytesStore;
-use store::numeric_encoder::EncodedQuad;
-use store::numeric_encoder::EncodedTerm;
-use store::numeric_encoder::Encoder;
+use store::numeric_encoder::*;
 use store::Dataset;
 use store::Graph;
 use store::NamedGraph;
@@ -60,42 +57,39 @@ pub trait EncodedQuadsStore: BytesStore + Sized {
         object: &EncodedTerm,
     ) -> Result<Self::QuadsForPredicateObjectIterator>;
     fn quads_for_object(&self, object: &EncodedTerm) -> Result<Self::QuadsForObjectIterator>;
-    fn quads_for_graph(
-        &self,
-        graph_name: &Option<EncodedTerm>,
-    ) -> Result<Self::QuadsForGraphIterator>;
+    fn quads_for_graph(&self, graph_name: &EncodedTerm) -> Result<Self::QuadsForGraphIterator>;
     fn quads_for_subject_graph(
         &self,
         subject: &EncodedTerm,
-        graph_name: &Option<EncodedTerm>,
+        graph_name: &EncodedTerm,
     ) -> Result<Self::QuadsForSubjectGraphIterator>;
     fn quads_for_subject_predicate_graph(
         &self,
         subject: &EncodedTerm,
         predicate: &EncodedTerm,
-        graph_name: &Option<EncodedTerm>,
+        graph_name: &EncodedTerm,
     ) -> Result<Self::QuadsForSubjectPredicateGraphIterator>;
     fn quads_for_subject_object_graph(
         &self,
         subject: &EncodedTerm,
         object: &EncodedTerm,
-        graph_name: &Option<EncodedTerm>,
+        graph_name: &EncodedTerm,
     ) -> Result<Self::QuadsForSubjectObjectGraphIterator>;
     fn quads_for_predicate_graph(
         &self,
         predicate: &EncodedTerm,
-        graph_name: &Option<EncodedTerm>,
+        graph_name: &EncodedTerm,
     ) -> Result<Self::QuadsForPredicateGraphIterator>;
     fn quads_for_predicate_object_graph(
         &self,
         predicate: &EncodedTerm,
         object: &EncodedTerm,
-        graph_name: &Option<EncodedTerm>,
+        graph_name: &EncodedTerm,
     ) -> Result<Self::QuadsForPredicateObjectGraphIterator>;
     fn quads_for_object_graph(
         &self,
         object: &EncodedTerm,
-        graph_name: &Option<EncodedTerm>,
+        graph_name: &EncodedTerm,
     ) -> Result<Self::QuadsForObjectGraphIterator>;
     fn contains(&self, quad: &EncodedQuad) -> Result<bool>;
     fn insert(&self, quad: &EncodedQuad) -> Result<()>;
@@ -132,7 +126,7 @@ impl<S: EncodedQuadsStore> Dataset for StoreDataset<S> {
         Ok(StoreNamedGraph {
             store: self.store.clone(),
             name: name.clone(),
-            encoded_name: Some(self.store.encoder().encode_named_or_blank_node(name)?),
+            encoded_name: self.store.encoder().encode_named_or_blank_node(name)?,
         })
     }
 
@@ -279,7 +273,7 @@ impl<S: EncodedQuadsStore> Dataset for StoreDataset<S> {
 pub struct StoreNamedGraph<S: EncodedQuadsStore> {
     store: Arc<S>,
     name: NamedOrBlankNode,
-    encoded_name: Option<EncodedTerm>,
+    encoded_name: EncodedTerm,
 }
 
 impl<S: EncodedQuadsStore> Graph for StoreNamedGraph<S> {
@@ -390,7 +384,7 @@ impl<S: EncodedQuadsStore> Graph for StoreNamedGraph<S> {
             &self
                 .store
                 .encoder()
-                .encode_triple_in_graph(triple, self.encoded_name.clone())?,
+                .encode_triple_in_graph(triple, &self.encoded_name)?,
         )
     }
 
@@ -399,7 +393,7 @@ impl<S: EncodedQuadsStore> Graph for StoreNamedGraph<S> {
             &self
                 .store
                 .encoder()
-                .encode_triple_in_graph(triple, self.encoded_name.clone())?,
+                .encode_triple_in_graph(triple, &self.encoded_name)?,
         )
     }
 
@@ -408,7 +402,7 @@ impl<S: EncodedQuadsStore> Graph for StoreNamedGraph<S> {
             &self
                 .store
                 .encoder()
-                .encode_triple_in_graph(triple, self.encoded_name.clone())?,
+                .encode_triple_in_graph(triple, &self.encoded_name)?,
         )
     }
 
@@ -448,7 +442,7 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
 
     fn triples(&self) -> Result<TriplesIterator<S::QuadsForGraphIterator, S>> {
         Ok(TriplesIterator {
-            iter: self.store.quads_for_graph(&None)?,
+            iter: self.store.quads_for_graph(&ENCODED_DEFAULT_GRAPH)?,
             store: self.store.clone(),
         })
     }
@@ -459,9 +453,10 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
     ) -> Result<TriplesIterator<S::QuadsForSubjectGraphIterator, S>> {
         let encoder = self.store.encoder();
         Ok(TriplesIterator {
-            iter: self
-                .store
-                .quads_for_subject_graph(&encoder.encode_named_or_blank_node(subject)?, &None)?,
+            iter: self.store.quads_for_subject_graph(
+                &encoder.encode_named_or_blank_node(subject)?,
+                &ENCODED_DEFAULT_GRAPH,
+            )?,
             store: self.store.clone(),
         })
     }
@@ -475,7 +470,7 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
             iter: self.store.quads_for_subject_predicate_graph(
                 &encoder.encode_named_or_blank_node(subject)?,
                 &encoder.encode_named_node(predicate)?,
-                &None,
+                &ENCODED_DEFAULT_GRAPH,
             )?,
             store: self.store.clone(),
         })
@@ -490,7 +485,7 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
             iter: self.store.quads_for_subject_object_graph(
                 &encoder.encode_named_or_blank_node(subject)?,
                 &encoder.encode_term(object)?,
-                &None,
+                &ENCODED_DEFAULT_GRAPH,
             )?,
             store: self.store.clone(),
         })
@@ -501,9 +496,10 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
     ) -> Result<TriplesIterator<S::QuadsForPredicateGraphIterator, S>> {
         let encoder = self.store.encoder();
         Ok(TriplesIterator {
-            iter: self
-                .store
-                .quads_for_predicate_graph(&encoder.encode_named_node(predicate)?, &None)?,
+            iter: self.store.quads_for_predicate_graph(
+                &encoder.encode_named_node(predicate)?,
+                &ENCODED_DEFAULT_GRAPH,
+            )?,
             store: self.store.clone(),
         })
     }
@@ -517,7 +513,7 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
             iter: self.store.quads_for_predicate_object_graph(
                 &encoder.encode_named_node(predicate)?,
                 &encoder.encode_term(object)?,
-                &None,
+                &ENCODED_DEFAULT_GRAPH,
             )?,
             store: self.store.clone(),
         })
@@ -530,32 +526,47 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
         Ok(TriplesIterator {
             iter: self
                 .store
-                .quads_for_object_graph(&encoder.encode_term(object)?, &None)?,
+                .quads_for_object_graph(&encoder.encode_term(object)?, &ENCODED_DEFAULT_GRAPH)?,
             store: self.store.clone(),
         })
     }
 
     fn contains(&self, triple: &Triple) -> Result<bool> {
-        self.store
-            .contains(&self.store.encoder().encode_triple_in_graph(triple, None)?)
+        self.store.contains(
+            &self
+                .store
+                .encoder()
+                .encode_triple_in_graph(triple, &ENCODED_DEFAULT_GRAPH)?,
+        )
     }
 
     fn insert(&self, triple: &Triple) -> Result<()> {
-        self.store
-            .insert(&self.store.encoder().encode_triple_in_graph(triple, None)?)
+        self.store.insert(
+            &self
+                .store
+                .encoder()
+                .encode_triple_in_graph(triple, &ENCODED_DEFAULT_GRAPH)?,
+        )
     }
 
     fn remove(&self, triple: &Triple) -> Result<()> {
-        self.store
-            .remove(&self.store.encoder().encode_triple_in_graph(triple, None)?)
+        self.store.remove(
+            &self
+                .store
+                .encoder()
+                .encode_triple_in_graph(triple, &ENCODED_DEFAULT_GRAPH)?,
+        )
     }
 
     fn len(&self) -> Result<usize> {
-        Ok(self.store.quads_for_graph(&None)?.count())
+        Ok(self.store.quads_for_graph(&ENCODED_DEFAULT_GRAPH)?.count())
     }
 
     fn is_empty(&self) -> Result<bool> {
-        Ok(self.store.quads_for_graph(&None)?.any(|_| true))
+        Ok(self
+            .store
+            .quads_for_graph(&ENCODED_DEFAULT_GRAPH)?
+            .any(|_| true))
     }
 }
 

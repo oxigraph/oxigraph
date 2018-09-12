@@ -230,7 +230,7 @@ impl EncodedQuadsStore for RocksDbStore {
 
     fn quads_for_graph(
         &self,
-        graph_name: &Option<EncodedTerm>,
+        graph_name: &EncodedTerm,
     ) -> Result<InGraphQuadsIterator<SPOGIndexIterator>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads()?,
@@ -241,7 +241,7 @@ impl EncodedQuadsStore for RocksDbStore {
     fn quads_for_subject_graph(
         &self,
         subject: &EncodedTerm,
-        graph_name: &Option<EncodedTerm>,
+        graph_name: &EncodedTerm,
     ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<SPOGIndexIterator>>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads_for_subject(subject)?,
@@ -253,7 +253,7 @@ impl EncodedQuadsStore for RocksDbStore {
         &self,
         subject: &EncodedTerm,
         predicate: &EncodedTerm,
-        graph_name: &Option<EncodedTerm>,
+        graph_name: &EncodedTerm,
     ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<SPOGIndexIterator>>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads_for_subject_predicate(subject, predicate)?,
@@ -265,7 +265,7 @@ impl EncodedQuadsStore for RocksDbStore {
         &self,
         subject: &EncodedTerm,
         object: &EncodedTerm,
-        graph_name: &Option<EncodedTerm>,
+        graph_name: &EncodedTerm,
     ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<OSPGIndexIterator>>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads_for_subject_object(subject, object)?,
@@ -276,7 +276,7 @@ impl EncodedQuadsStore for RocksDbStore {
     fn quads_for_predicate_graph(
         &self,
         predicate: &EncodedTerm,
-        graph_name: &Option<EncodedTerm>,
+        graph_name: &EncodedTerm,
     ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<POSGIndexIterator>>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads_for_predicate(predicate)?,
@@ -288,7 +288,7 @@ impl EncodedQuadsStore for RocksDbStore {
         &self,
         predicate: &EncodedTerm,
         object: &EncodedTerm,
-        graph_name: &Option<EncodedTerm>,
+        graph_name: &EncodedTerm,
     ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<POSGIndexIterator>>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads_for_predicate_object(predicate, object)?,
@@ -299,7 +299,7 @@ impl EncodedQuadsStore for RocksDbStore {
     fn quads_for_object_graph(
         &self,
         object: &EncodedTerm,
-        graph_name: &Option<EncodedTerm>,
+        graph_name: &EncodedTerm,
     ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<OSPGIndexIterator>>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads_for_object(object)?,
@@ -363,7 +363,7 @@ struct EncodedQuadPattern {
     subject: Option<EncodedTerm>,
     predicate: Option<EncodedTerm>,
     object: Option<EncodedTerm>,
-    graph_name: Option<Option<EncodedTerm>>,
+    graph_name: Option<EncodedTerm>,
 }
 
 impl EncodedQuadPattern {
@@ -371,7 +371,7 @@ impl EncodedQuadPattern {
         subject: Option<EncodedTerm>,
         predicate: Option<EncodedTerm>,
         object: Option<EncodedTerm>,
-        graph_name: Option<Option<EncodedTerm>>,
+        graph_name: Option<EncodedTerm>,
     ) -> Self {
         Self {
             subject,
@@ -508,7 +508,7 @@ impl<I: Iterator<Item = Result<EncodedQuad>>> Iterator for FilteringEncodedQuads
 
 pub struct InGraphQuadsIterator<I: Iterator<Item = Result<EncodedQuad>>> {
     iter: I,
-    graph_name: Option<EncodedTerm>,
+    graph_name: EncodedTerm,
 }
 
 impl<I: Iterator<Item = Result<EncodedQuad>>> Iterator for InGraphQuadsIterator<I> {
