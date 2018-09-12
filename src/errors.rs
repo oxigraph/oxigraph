@@ -1,3 +1,5 @@
+use std::fmt;
+use std::sync::PoisonError;
 error_chain! {
     foreign_links {
         Url(::url::ParseError);
@@ -8,5 +10,18 @@ error_chain! {
         NTriples(::rio::ntriples::ParseError);
         Turtle(::rio::turtle::ParseError);
         SparqlParser(::sparql::parser::ParseError);
+    }
+}
+
+impl<T> From<PoisonError<T>> for Error {
+    fn from(_: PoisonError<T>) -> Self {
+        //TODO: improve conversion
+        "Unexpected lock error".into()
+    }
+}
+
+impl From<Error> for fmt::Error {
+    fn from(_: Error) -> Self {
+        fmt::Error
     }
 }

@@ -79,11 +79,7 @@ impl BytesStore for RocksDbStore {
         Ok(match self.db.get_cf(self.str2id_cf, value)? {
             Some(id) => from_bytes_slice(&id),
             None => {
-                let id = self
-                    .str_id_counter
-                    .lock()
-                    .unwrap()
-                    .get_and_increment(&self.db)? as u64;
+                let id = self.str_id_counter.lock()?.get_and_increment(&self.db)? as u64;
                 let id_bytes = to_bytes(id);
                 let mut batch = WriteBatch::default();
                 batch.put_cf(self.id2str_cf, &id_bytes, value)?;

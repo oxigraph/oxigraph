@@ -1,187 +1,457 @@
-use model::vocab::rdf;
-use model::*;
-use std::collections::HashSet;
-use std::fmt;
-use std::iter::FromIterator;
+use errors::*;
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
+use std::sync::RwLock;
+use store::numeric_encoder::*;
+use store::store::*;
 
-#[derive(Debug, Clone, Default)]
-pub struct MemoryGraph {
-    triples: HashSet<Triple>,
+pub type MemoryDataset = StoreDataset<MemoryStore>;
+pub type MemoryGraph = StoreDefaultGraph<MemoryStore>;
+
+#[derive(Default)]
+pub struct MemoryStore {
+    id2str: RwLock<BTreeMap<u64, Vec<u8>>>,
+    str2id: RwLock<BTreeMap<Vec<u8>, u64>>,
+    graph_indexes: RwLock<BTreeMap<EncodedTerm, MemoryGraphIndexes>>,
 }
 
-impl MemoryGraph {
-    pub fn iter(&self) -> impl Iterator<Item = &Triple> {
-        self.triples.iter()
+#[derive(Default)]
+struct MemoryGraphIndexes {
+    spo: BTreeMap<EncodedTerm, BTreeMap<EncodedTerm, BTreeSet<EncodedTerm>>>,
+    pos: BTreeMap<EncodedTerm, BTreeMap<EncodedTerm, BTreeSet<EncodedTerm>>>,
+    osp: BTreeMap<EncodedTerm, BTreeMap<EncodedTerm, BTreeSet<EncodedTerm>>>,
+}
+
+impl BytesStore for MemoryStore {
+    type BytesOutput = Vec<u8>;
+
+    fn insert_bytes(&self, value: &[u8]) -> Result<u64> {
+        let mut id2str = self.id2str.write()?;
+        let mut str2id = self.str2id.write()?;
+        let id = str2id.entry(value.to_vec()).or_insert_with(|| {
+            let id = id2str.len() as u64;
+            id2str.insert(id, value.to_vec());
+            id
+        });
+        Ok(*id)
     }
 
-    pub fn triples_for_subject<'a>(
-        &'a self,
-        subject: &'a NamedOrBlankNode,
-    ) -> impl Iterator<Item = &'a Triple> {
-        self.iter().filter(move |t| t.subject() == subject)
+    fn get_bytes(&self, id: u64) -> Result<Option<Vec<u8>>> {
+        Ok(self.id2str.read()?.get(&id).map(|s| s.to_owned()))
     }
+}
 
-    pub fn triples_for_predicate<'a>(
-        &'a self,
-        predicate: &'a NamedNode,
-    ) -> impl Iterator<Item = &'a Triple> {
-        self.iter().filter(move |t| t.predicate() == predicate)
-    }
+impl EncodedQuadsStore for MemoryStore {
+    type QuadsIterator = <Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter;
+    type QuadsForSubjectIterator = <Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter;
+    type QuadsForSubjectPredicateIterator = <Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter;
+    type QuadsForSubjectPredicateObjectIterator =
+        <Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter;
+    type QuadsForSubjectObjectIterator = <Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter;
+    type QuadsForPredicateIterator = <Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter;
+    type QuadsForPredicateObjectIterator = <Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter;
+    type QuadsForObjectIterator = <Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter;
+    type QuadsForGraphIterator = <Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter;
+    type QuadsForSubjectGraphIterator = <Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter;
+    type QuadsForSubjectPredicateGraphIterator =
+        <Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter;
+    type QuadsForSubjectObjectGraphIterator = <Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter;
+    type QuadsForPredicateGraphIterator = <Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter;
+    type QuadsForPredicateObjectGraphIterator =
+        <Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter;
+    type QuadsForObjectGraphIterator = <Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter;
 
-    pub fn triples_for_object<'a>(&'a self, object: &'a Term) -> impl Iterator<Item = &'a Triple> {
-        self.iter().filter(move |t| t.object() == object)
-    }
-
-    pub fn triples_for_subject_predicate<'a>(
-        &'a self,
-        subject: &'a NamedOrBlankNode,
-        predicate: &'a NamedNode,
-    ) -> impl Iterator<Item = &'a Triple> {
-        self.iter()
-            .filter(move |t| t.subject() == subject && t.predicate() == predicate)
-    }
-
-    pub fn objects_for_subject_predicate<'a>(
-        &'a self,
-        subject: &'a NamedOrBlankNode,
-        predicate: &'a NamedNode,
-    ) -> impl Iterator<Item = &'a Term> {
-        self.triples_for_subject_predicate(subject, predicate)
-            .map(|t| t.object())
-    }
-
-    pub fn object_for_subject_predicate<'a>(
-        &'a self,
-        subject: &'a NamedOrBlankNode,
-        predicate: &'a NamedNode,
-    ) -> Option<&'a Term> {
-        self.objects_for_subject_predicate(subject, predicate)
-            .nth(0)
-    }
-
-    pub fn triples_for_predicate_object<'a>(
-        &'a self,
-        predicate: &'a NamedNode,
-        object: &'a Term,
-    ) -> impl Iterator<Item = &'a Triple> {
-        self.iter()
-            .filter(move |t| t.predicate() == predicate && t.object() == object)
-    }
-
-    pub fn subjects_for_predicate_object<'a>(
-        &'a self,
-        predicate: &'a NamedNode,
-        object: &'a Term,
-    ) -> impl Iterator<Item = &'a NamedOrBlankNode> {
-        self.triples_for_predicate_object(predicate, object)
-            .map(|t| t.subject())
-    }
-
-    pub fn subject_for_predicate_object<'a>(
-        &'a self,
-        predicate: &'a NamedNode,
-        object: &'a Term,
-    ) -> Option<&'a NamedOrBlankNode> {
-        self.subjects_for_predicate_object(predicate, object).nth(0)
-    }
-
-    pub fn values_for_list<'a>(&'a self, root: NamedOrBlankNode) -> ListIterator<'a> {
-        ListIterator {
-            graph: self,
-            current_node: Some(root),
+    fn quads(&self) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
+        let mut result = Vec::default();
+        for (graph_name, graph) in self.graph_indexes.read()?.iter() {
+            for (s, pos) in graph.spo.iter() {
+                for (p, os) in pos.iter() {
+                    for o in os.iter() {
+                        result.push(Ok(encoded_quad(s, p, o, graph_name)))
+                    }
+                }
+            }
         }
+        Ok(result.into_iter())
     }
 
-    pub fn len(&self) -> usize {
-        self.triples.len()
+    fn quads_for_subject(
+        &self,
+        subject: &EncodedTerm,
+    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
+        let mut result = Vec::default();
+        for (graph_name, graph) in self.graph_indexes.read()?.iter() {
+            if let Some(pos) = graph.spo.get(subject) {
+                for (p, os) in pos.iter() {
+                    for o in os.iter() {
+                        result.push(Ok(encoded_quad(subject, p, o, graph_name)))
+                    }
+                }
+            }
+        }
+        Ok(result.into_iter())
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.triples.is_empty()
+    fn quads_for_subject_predicate(
+        &self,
+        subject: &EncodedTerm,
+        predicate: &EncodedTerm,
+    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
+        let mut result = Vec::default();
+        for (graph_name, graph) in self.graph_indexes.read()?.iter() {
+            if let Some(pos) = graph.spo.get(subject) {
+                if let Some(os) = pos.get(predicate) {
+                    for o in os.iter() {
+                        result.push(Ok(encoded_quad(subject, predicate, o, graph_name)))
+                    }
+                }
+            }
+        }
+        Ok(result.into_iter())
     }
 
-    pub fn contains(&self, value: &Triple) -> bool {
-        self.triples.contains(value)
+    fn quads_for_subject_predicate_object(
+        &self,
+        subject: &EncodedTerm,
+        predicate: &EncodedTerm,
+        object: &EncodedTerm,
+    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
+        let mut result = Vec::default();
+        for (graph_name, graph) in self.graph_indexes.read()?.iter() {
+            if let Some(pos) = graph.spo.get(subject) {
+                if let Some(os) = pos.get(predicate) {
+                    if os.contains(object) {
+                        result.push(Ok(encoded_quad(subject, predicate, object, graph_name)))
+                    }
+                }
+            }
+        }
+        Ok(result.into_iter())
     }
 
-    pub fn insert(&mut self, value: Triple) -> bool {
-        self.triples.insert(value)
+    fn quads_for_subject_object(
+        &self,
+        subject: &EncodedTerm,
+        object: &EncodedTerm,
+    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
+        let mut result = Vec::default();
+        for (graph_name, graph) in self.graph_indexes.read()?.iter() {
+            if let Some(sps) = graph.osp.get(object) {
+                if let Some(ps) = sps.get(subject) {
+                    for p in ps.iter() {
+                        result.push(Ok(encoded_quad(subject, p, object, graph_name)))
+                    }
+                }
+            }
+        }
+        Ok(result.into_iter())
     }
-}
 
-impl fmt::Display for MemoryGraph {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        for triple in &self.triples {
-            write!(fmt, "{}\n", triple)?;
+    fn quads_for_predicate(
+        &self,
+        predicate: &EncodedTerm,
+    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
+        let mut result = Vec::default();
+        for (graph_name, graph) in self.graph_indexes.read()?.iter() {
+            if let Some(oss) = graph.pos.get(predicate) {
+                for (o, ss) in oss.iter() {
+                    for s in ss.iter() {
+                        result.push(Ok(encoded_quad(s, predicate, o, graph_name)))
+                    }
+                }
+            }
+        }
+        Ok(result.into_iter())
+    }
+
+    fn quads_for_predicate_object(
+        &self,
+        predicate: &EncodedTerm,
+        object: &EncodedTerm,
+    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
+        let mut result = Vec::default();
+        for (graph_name, graph) in self.graph_indexes.read()?.iter() {
+            if let Some(oss) = graph.pos.get(predicate) {
+                if let Some(ss) = oss.get(object) {
+                    for s in ss.iter() {
+                        result.push(Ok(encoded_quad(s, predicate, object, graph_name)))
+                    }
+                }
+            }
+        }
+        Ok(result.into_iter())
+    }
+
+    fn quads_for_object(
+        &self,
+        object: &EncodedTerm,
+    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
+        let mut result = Vec::default();
+        for (graph_name, graph) in self.graph_indexes.read()?.iter() {
+            if let Some(sps) = graph.osp.get(object) {
+                for (s, ps) in sps.iter() {
+                    for p in ps.iter() {
+                        result.push(Ok(encoded_quad(s, p, object, graph_name)))
+                    }
+                }
+            }
+        }
+        Ok(result.into_iter())
+    }
+
+    fn quads_for_graph(
+        &self,
+        graph_name: &EncodedTerm,
+    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
+        let mut result = Vec::default();
+        if let Some(graph) = self.graph_indexes.read()?.get(graph_name) {
+            for (s, pos) in graph.spo.iter() {
+                for (p, os) in pos.iter() {
+                    for o in os.iter() {
+                        result.push(Ok(encoded_quad(s, p, o, graph_name)))
+                    }
+                }
+            }
+        }
+        Ok(result.into_iter())
+    }
+
+    fn quads_for_subject_graph(
+        &self,
+        subject: &EncodedTerm,
+        graph_name: &EncodedTerm,
+    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
+        let mut result = Vec::default();
+        if let Some(graph) = self.graph_indexes.read()?.get(graph_name) {
+            if let Some(pos) = graph.spo.get(subject) {
+                for (p, os) in pos.iter() {
+                    for o in os.iter() {
+                        result.push(Ok(encoded_quad(subject, p, o, graph_name)))
+                    }
+                }
+            }
+        }
+        Ok(result.into_iter())
+    }
+
+    fn quads_for_subject_predicate_graph(
+        &self,
+        subject: &EncodedTerm,
+        predicate: &EncodedTerm,
+        graph_name: &EncodedTerm,
+    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
+        let mut result = Vec::default();
+        if let Some(graph) = self.graph_indexes.read()?.get(graph_name) {
+            if let Some(pos) = graph.spo.get(subject) {
+                if let Some(os) = pos.get(predicate) {
+                    for o in os.iter() {
+                        result.push(Ok(encoded_quad(subject, predicate, o, graph_name)))
+                    }
+                }
+            }
+        }
+        Ok(result.into_iter())
+    }
+
+    fn quads_for_subject_object_graph(
+        &self,
+        subject: &EncodedTerm,
+        object: &EncodedTerm,
+        graph_name: &EncodedTerm,
+    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
+        let mut result = Vec::default();
+        if let Some(graph) = self.graph_indexes.read()?.get(graph_name) {
+            if let Some(sps) = graph.osp.get(object) {
+                if let Some(ps) = sps.get(subject) {
+                    for p in ps.iter() {
+                        result.push(Ok(encoded_quad(subject, p, object, graph_name)))
+                    }
+                }
+            }
+        }
+        Ok(result.into_iter())
+    }
+
+    fn quads_for_predicate_graph(
+        &self,
+        predicate: &EncodedTerm,
+        graph_name: &EncodedTerm,
+    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
+        let mut result = Vec::default();
+        if let Some(graph) = self.graph_indexes.read()?.get(graph_name) {
+            if let Some(oss) = graph.pos.get(predicate) {
+                for (o, ss) in oss.iter() {
+                    for s in ss.iter() {
+                        result.push(Ok(encoded_quad(s, predicate, o, graph_name)))
+                    }
+                }
+            }
+        }
+        Ok(result.into_iter())
+    }
+
+    fn quads_for_predicate_object_graph(
+        &self,
+        predicate: &EncodedTerm,
+        object: &EncodedTerm,
+        graph_name: &EncodedTerm,
+    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
+        let mut result = Vec::default();
+        if let Some(graph) = self.graph_indexes.read()?.get(graph_name) {
+            if let Some(oss) = graph.pos.get(predicate) {
+                if let Some(ss) = oss.get(object) {
+                    for s in ss.iter() {
+                        result.push(Ok(encoded_quad(s, predicate, object, graph_name)))
+                    }
+                }
+            }
+        }
+        Ok(result.into_iter())
+    }
+
+    fn quads_for_object_graph(
+        &self,
+        object: &EncodedTerm,
+        graph_name: &EncodedTerm,
+    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
+        let mut result = Vec::default();
+        if let Some(graph) = self.graph_indexes.read()?.get(graph_name) {
+            if let Some(sps) = graph.osp.get(object) {
+                for (s, ps) in sps.iter() {
+                    for p in ps.iter() {
+                        result.push(Ok(encoded_quad(s, p, object, graph_name)))
+                    }
+                }
+            }
+        }
+        Ok(result.into_iter())
+    }
+
+    fn contains(&self, quad: &EncodedQuad) -> Result<bool> {
+        Ok(self
+            .graph_indexes
+            .read()?
+            .get(&quad.graph_name)
+            .map(|graph| {
+                graph
+                    .spo
+                    .get(&quad.subject)
+                    .map(|po| {
+                        po.get(&quad.predicate)
+                            .map(|o| o.contains(&quad.object))
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false)
+            })
+            .unwrap_or(false))
+    }
+
+    fn insert(&self, quad: &EncodedQuad) -> Result<()> {
+        let mut graph_indexes = self.graph_indexes.write()?;
+        let graph = graph_indexes
+            .entry(quad.graph_name.clone())
+            .or_insert_with(MemoryGraphIndexes::default);
+        graph
+            .spo
+            .entry(quad.subject.clone())
+            .or_default()
+            .entry(quad.predicate.clone())
+            .or_default()
+            .insert(quad.object.clone());
+        graph
+            .pos
+            .entry(quad.predicate.clone())
+            .or_default()
+            .entry(quad.object.clone())
+            .or_default()
+            .insert(quad.subject.clone());
+        graph
+            .osp
+            .entry(quad.object.clone())
+            .or_default()
+            .entry(quad.subject.clone())
+            .or_default()
+            .insert(quad.predicate.clone());
+        Ok(())
+    }
+
+    fn remove(&self, quad: &EncodedQuad) -> Result<()> {
+        let mut graph_indexes = self.graph_indexes.write()?;
+        let mut empty_graph = false;
+        if let Some(graph) = graph_indexes.get_mut(&quad.graph_name) {
+            {
+                let mut empty_pos = false;
+                if let Some(mut pos) = graph.spo.get_mut(&quad.subject) {
+                    let mut empty_os = false;
+                    if let Some(mut os) = pos.get_mut(&quad.predicate) {
+                        os.remove(&quad.object);
+                        empty_os = os.is_empty();
+                    }
+                    if empty_os {
+                        pos.remove(&quad.predicate);
+                    }
+                    empty_pos = pos.is_empty();
+                }
+                if empty_pos {
+                    graph.spo.remove(&quad.subject);
+                }
+            }
+
+            {
+                let mut empty_oss = false;
+                if let Some(mut oss) = graph.pos.get_mut(&quad.predicate) {
+                    let mut empty_ss = false;
+                    if let Some(mut ss) = oss.get_mut(&quad.object) {
+                        ss.remove(&quad.subject);
+                        empty_ss = ss.is_empty();
+                    }
+                    if empty_ss {
+                        oss.remove(&quad.object);
+                    }
+                    empty_oss = oss.is_empty();
+                }
+                if empty_oss {
+                    graph.pos.remove(&quad.predicate);
+                }
+            }
+
+            {
+                let mut empty_sps = false;
+                if let Some(mut sps) = graph.osp.get_mut(&quad.object) {
+                    let mut empty_ps = false;
+                    if let Some(mut ps) = sps.get_mut(&quad.subject) {
+                        ps.remove(&quad.predicate);
+                        empty_ps = ps.is_empty();
+                    }
+                    if empty_ps {
+                        sps.remove(&quad.subject);
+                    }
+                    empty_sps = sps.is_empty();
+                }
+                if empty_sps {
+                    graph.osp.remove(&quad.object);
+                }
+            }
+
+            empty_graph = graph.spo.is_empty();
+        }
+        if empty_graph {
+            graph_indexes.remove(&quad.graph_name);
         }
         Ok(())
     }
 }
 
-impl IntoIterator for MemoryGraph {
-    type Item = Triple;
-    type IntoIter = <HashSet<Triple> as IntoIterator>::IntoIter;
-
-    fn into_iter(self) -> <Self as IntoIterator>::IntoIter {
-        self.triples.into_iter()
-    }
-}
-
-impl<'a> IntoIterator for &'a MemoryGraph {
-    type Item = &'a Triple;
-    type IntoIter = <&'a HashSet<Triple> as IntoIterator>::IntoIter;
-
-    fn into_iter(self) -> <Self as IntoIterator>::IntoIter {
-        self.triples.iter()
-    }
-}
-
-impl FromIterator<Triple> for MemoryGraph {
-    fn from_iter<I: IntoIterator<Item = Triple>>(iter: I) -> Self {
-        let triples = HashSet::from_iter(iter);
-        Self { triples }
-    }
-}
-
-impl Extend<Triple> for MemoryGraph {
-    fn extend<I: IntoIterator<Item = Triple>>(&mut self, iter: I) {
-        self.triples.extend(iter)
-    }
-}
-
-impl<'a> Extend<&'a Triple> for MemoryGraph {
-    fn extend<I: IntoIterator<Item = &'a Triple>>(&mut self, iter: I) {
-        self.triples.extend(iter.into_iter().cloned())
-    }
-}
-
-pub struct ListIterator<'a> {
-    graph: &'a MemoryGraph,
-    current_node: Option<NamedOrBlankNode>,
-}
-
-impl<'a> Iterator for ListIterator<'a> {
-    type Item = Term;
-
-    fn next(&mut self) -> Option<Term> {
-        match self.current_node.clone() {
-            Some(current) => {
-                let result = self
-                    .graph
-                    .object_for_subject_predicate(&current, &rdf::FIRST)?
-                    .clone();
-                self.current_node = match self
-                    .graph
-                    .object_for_subject_predicate(&current, &rdf::REST)
-                {
-                    Some(Term::NamedNode(n)) if *n == *rdf::NIL => None,
-                    Some(Term::NamedNode(n)) => Some(n.clone().into()),
-                    Some(Term::BlankNode(n)) => Some(n.clone().into()),
-                    _ => None,
-                };
-                Some(result)
-            }
-            None => None,
-        }
-    }
+fn encoded_quad(
+    subject: &EncodedTerm,
+    predicate: &EncodedTerm,
+    object: &EncodedTerm,
+    graph_name: &EncodedTerm,
+) -> EncodedQuad {
+    EncodedQuad::new(
+        subject.clone(),
+        predicate.clone(),
+        object.clone(),
+        graph_name.clone(),
+    )
 }

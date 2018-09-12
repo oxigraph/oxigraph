@@ -17,7 +17,8 @@ use rudf::rio::turtle::read_turtle;
 use rudf::sparql::algebra::Query;
 use rudf::sparql::parser::read_sparql_query;
 use rudf::store::isomorphism::GraphIsomorphism;
-use rudf::store::memory::MemoryGraph;
+use rudf::store::Graph;
+use rudf::store::MemoryGraph;
 use std::error::Error;
 use std::fmt;
 use url::Url;
@@ -70,7 +71,7 @@ fn turtle_w3c_testsuite() {
             match client.load_turtle(test.action.clone()) {
                 Ok(action_graph) => match client.load_turtle(test.result.clone().unwrap()) {
                     Ok(result_graph) => assert!(
-                        action_graph.is_isomorphic(&result_graph),
+                        action_graph.is_isomorphic(&result_graph).unwrap(),
                         "Failure on {}. Expected file:\n{}\nParsed file:\n{}\n",
                         test,
                         action_graph,
@@ -95,7 +96,10 @@ fn turtle_w3c_testsuite() {
                 .unwrap_or_else(|| Ok(MemoryGraph::default()));
             assert!(
                 action_graph.is_err()
-                    || !action_graph.unwrap().is_isomorphic(&result_graph.unwrap()),
+                    || !action_graph
+                        .unwrap()
+                        .is_isomorphic(&result_graph.unwrap())
+                        .unwrap(),
                 "Failure on {}",
                 test
             );
@@ -276,6 +280,7 @@ impl<'a> Iterator for TestManifest<'a> {
                 let kind = match self
                     .graph
                     .object_for_subject_predicate(&test_subject, &rdf::TYPE)
+                    .unwrap()
                 {
                     Some(Term::NamedNode(c)) => match c.value().split("#").last() {
                         Some(k) => k.to_string(),
@@ -286,6 +291,7 @@ impl<'a> Iterator for TestManifest<'a> {
                 let name = match self
                     .graph
                     .object_for_subject_predicate(&test_subject, &mf::NAME)
+                    .unwrap()
                 {
                     Some(Term::Literal(c)) => Some(c.value().to_string()),
                     _ => None,
@@ -293,6 +299,7 @@ impl<'a> Iterator for TestManifest<'a> {
                 let comment = match self
                     .graph
                     .object_for_subject_predicate(&test_subject, &rdfs::COMMENT)
+                    .unwrap()
                 {
                     Some(Term::Literal(c)) => Some(c.value().to_string()),
                     _ => None,
@@ -300,6 +307,7 @@ impl<'a> Iterator for TestManifest<'a> {
                 let action = match self
                     .graph
                     .object_for_subject_predicate(&test_subject, &*mf::ACTION)
+                    .unwrap()
                 {
                     Some(Term::NamedNode(n)) => n.url().clone(),
                     Some(_) => return Some(Err("invalid action".into())),
@@ -308,6 +316,7 @@ impl<'a> Iterator for TestManifest<'a> {
                 let result = match self
                     .graph
                     .object_for_subject_predicate(&test_subject, &*mf::RESULT)
+                    .unwrap()
                 {
                     Some(Term::NamedNode(n)) => Some(n.url().clone()),
                     Some(_) => return Some(Err("invalid result".into())),
@@ -328,7 +337,10 @@ impl<'a> Iterator for TestManifest<'a> {
                     Some(url) => {
                         let manifest = NamedOrBlankNode::from(NamedNode::new(url.clone()));
                         match self.client.load_turtle(url) {
-                            Ok(g) => self.graph.extend(g.into_iter()),
+                            Ok(g) => g
+                                .iter()
+                                .unwrap()
+                                .for_each(|g| self.graph.insert(&g.unwrap()).unwrap()),
                             Err(e) => return Some(Err(e.into())),
                         }
 
@@ -336,11 +348,11 @@ impl<'a> Iterator for TestManifest<'a> {
                         match self
                             .graph
                             .object_for_subject_predicate(&manifest, &*mf::INCLUDE)
+                            .unwrap()
                         {
                             Some(Term::BlankNode(list)) => {
                                 self.manifests_to_do.extend(
-                                    self.graph
-                                        .values_for_list(list.clone().into())
+                                    RdfListIterator::iter(&self.graph, list.clone().into())
                                         .flat_map(|m| match m {
                                             Term::NamedNode(nm) => Some(nm.url().clone()),
                                             _ => None,
@@ -355,12 +367,19 @@ impl<'a> Iterator for TestManifest<'a> {
                         match self
                             .graph
                             .object_for_subject_predicate(&manifest, &*mf::ENTRIES)
+                            .unwrap()
                         {
                             Some(Term::BlankNode(list)) => {
-                                self.tests_to_do
-                                    .extend(self.graph.values_for_list(list.clone().into()));
+                                self.tests_to_do.extend(RdfListIterator::iter(
+                                    &self.graph,
+                                    list.clone().into(),
+                                ));
                             }
-                            Some(_) => return Some(Err("invalid tests list".into())),
+                            Some(term) => {
+                                return Some(Err(
+                                    format!("Invalid tests list. Got term {}", term).into()
+                                ))
+                            }
                             None => (),
                         }
                     }
@@ -368,6 +387,48 @@ impl<'a> Iterator for TestManifest<'a> {
                 }
                 self.next()
             }
+        }
+    }
+}
+
+pub struct RdfListIterator<'a, G: 'a + Graph> {
+    graph: &'a G,
+    current_node: Option<NamedOrBlankNode>,
+}
+
+impl<'a, G: 'a + Graph> RdfListIterator<'a, G> {
+    fn iter(graph: &'a G, root: NamedOrBlankNode) -> RdfListIterator<'a, G> {
+        RdfListIterator {
+            graph,
+            current_node: Some(root),
+        }
+    }
+}
+
+impl<'a, G: 'a + Graph> Iterator for RdfListIterator<'a, G> {
+    type Item = Term;
+
+    fn next(&mut self) -> Option<Term> {
+        match self.current_node.clone() {
+            Some(current) => {
+                let result = self
+                    .graph
+                    .object_for_subject_predicate(&current, &rdf::FIRST)
+                    .unwrap()?
+                    .clone();
+                self.current_node = match self
+                    .graph
+                    .object_for_subject_predicate(&current, &rdf::REST)
+                    .unwrap()
+                {
+                    Some(Term::NamedNode(ref n)) if *n == *rdf::NIL => None,
+                    Some(Term::NamedNode(n)) => Some(n.clone().into()),
+                    Some(Term::BlankNode(n)) => Some(n.clone().into()),
+                    _ => None,
+                };
+                Some(result)
+            }
+            None => None,
         }
     }
 }

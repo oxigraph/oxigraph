@@ -1,3 +1,4 @@
+use errors::*;
 use model::*;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeSet;
@@ -5,55 +6,55 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::hash::Hash;
 use std::hash::Hasher;
-use store::memory::MemoryGraph;
+use store::Graph;
 
 #[derive(Eq, PartialEq, Hash, Ord, PartialOrd)]
-struct SubjectPredicate<'a> {
-    subject: &'a NamedOrBlankNode,
-    predicate: &'a NamedNode,
+struct SubjectPredicate {
+    subject: NamedOrBlankNode,
+    predicate: NamedNode,
 }
 
-impl<'a> SubjectPredicate<'a> {
-    fn new(subject: &'a NamedOrBlankNode, predicate: &'a NamedNode) -> Self {
+impl SubjectPredicate {
+    fn new(subject: NamedOrBlankNode, predicate: NamedNode) -> Self {
         Self { subject, predicate }
     }
 }
 
 #[derive(Eq, PartialEq, Hash, Ord, PartialOrd)]
-struct PredicateObject<'a> {
-    predicate: &'a NamedNode,
-    object: &'a Term,
+struct PredicateObject {
+    predicate: NamedNode,
+    object: Term,
 }
 
-impl<'a> PredicateObject<'a> {
-    fn new(predicate: &'a NamedNode, object: &'a Term) -> Self {
+impl PredicateObject {
+    fn new(predicate: NamedNode, object: Term) -> Self {
         Self { predicate, object }
     }
 }
 
-fn subject_predicates_for_object<'a>(
-    graph: &'a MemoryGraph,
-    object: &'a Term,
-) -> impl Iterator<Item = SubjectPredicate<'a>> {
-    graph
-        .triples_for_object(object)
-        .map(|t| SubjectPredicate::new(t.subject(), t.predicate()))
+fn subject_predicates_for_object(
+    graph: &impl Graph,
+    object: &Term,
+) -> Result<impl Iterator<Item = Result<SubjectPredicate>>> {
+    Ok(graph
+        .triples_for_object(object)?
+        .map(|t| t.map(|t| SubjectPredicate::new(t.subject().clone(), t.predicate_owned()))))
 }
 
-fn predicate_objects_for_subject<'a>(
-    graph: &'a MemoryGraph,
-    subject: &'a NamedOrBlankNode,
-) -> impl Iterator<Item = PredicateObject<'a>> {
-    graph
-        .triples_for_subject(subject)
-        .map(|t| PredicateObject::new(t.predicate(), t.object()))
+fn predicate_objects_for_subject(
+    graph: &impl Graph,
+    subject: &NamedOrBlankNode,
+) -> Result<impl Iterator<Item = Result<PredicateObject>>> {
+    Ok(graph
+        .triples_for_subject(subject)?
+        .map(|t| t.map(|t| PredicateObject::new(t.predicate().clone(), t.object_owned()))))
 }
 
-fn hash_blank_nodes<'a>(
-    bnodes: HashSet<&'a BlankNode>,
-    graph: &'a MemoryGraph,
-) -> HashMap<u64, Vec<&'a BlankNode>> {
-    let mut bnodes_by_hash: HashMap<u64, Vec<&BlankNode>> = HashMap::default();
+fn hash_blank_nodes(
+    bnodes: HashSet<BlankNode>,
+    graph: &impl Graph,
+) -> Result<HashMap<u64, Vec<BlankNode>>> {
+    let mut bnodes_by_hash: HashMap<u64, Vec<BlankNode>> = HashMap::default();
 
     // NB: we need to sort the triples to have the same hash
     for bnode in bnodes.into_iter() {
@@ -62,7 +63,8 @@ fn hash_blank_nodes<'a>(
         {
             let subject = NamedOrBlankNode::from(bnode.clone());
             let mut po_set: BTreeSet<PredicateObject> = BTreeSet::default();
-            for po in predicate_objects_for_subject(&graph, &subject) {
+            for po in predicate_objects_for_subject(graph, &subject)? {
+                let po = po?;
                 if !po.object.is_blank_node() {
                     po_set.insert(po);
                 }
@@ -75,7 +77,8 @@ fn hash_blank_nodes<'a>(
         {
             let object = Term::from(bnode.clone());
             let mut sp_set: BTreeSet<SubjectPredicate> = BTreeSet::default();
-            for sp in subject_predicates_for_object(&graph, &object) {
+            for sp in subject_predicates_for_object(graph, &object)? {
+                let sp = sp?;
                 if !sp.subject.is_blank_node() {
                     sp_set.insert(sp);
                 }
@@ -91,64 +94,66 @@ fn hash_blank_nodes<'a>(
             .push(bnode);
     }
 
-    bnodes_by_hash
+    Ok(bnodes_by_hash)
 }
 
 pub trait GraphIsomorphism {
     /// Checks if two graphs are [isomorphic](https://www.w3.org/TR/rdf11-concepts/#dfn-graph-isomorphism)
-    fn is_isomorphic(&self, other: &Self) -> bool;
+    fn is_isomorphic(&self, other: &Self) -> Result<bool>;
 }
 
-impl GraphIsomorphism for MemoryGraph {
+impl<G: Graph> GraphIsomorphism for G {
     //TODO: proper isomorphism building
-    fn is_isomorphic(&self, other: &Self) -> bool {
-        if self.len() != other.len() {
-            return false;
+    fn is_isomorphic(&self, other: &Self) -> Result<bool> {
+        if self.len()? != other.len()? {
+            return Ok(false);
         }
 
-        let mut self_bnodes: HashSet<&BlankNode> = HashSet::default();
-        let mut other_bnodes: HashSet<&BlankNode> = HashSet::default();
+        let mut self_bnodes: HashSet<BlankNode> = HashSet::default();
+        let mut other_bnodes: HashSet<BlankNode> = HashSet::default();
 
-        for t in self {
+        for t in self.iter()? {
+            let t = t?;
             if let NamedOrBlankNode::BlankNode(subject) = t.subject() {
-                self_bnodes.insert(subject);
+                self_bnodes.insert(subject.clone());
                 if let Term::BlankNode(object) = t.object() {
-                    self_bnodes.insert(object);
+                    self_bnodes.insert(object.clone());
                 }
             } else if let Term::BlankNode(object) = t.object() {
-                self_bnodes.insert(object);
-            } else if !other.contains(t) {
-                return false;
+                self_bnodes.insert(object.clone());
+            } else if !other.contains(&t)? {
+                return Ok(false);
             }
         }
-        for t in other {
+        for t in other.iter()? {
+            let t = t?;
             if let NamedOrBlankNode::BlankNode(subject) = t.subject() {
-                other_bnodes.insert(subject);
+                other_bnodes.insert(subject.clone());
                 if let Term::BlankNode(object) = t.object() {
-                    other_bnodes.insert(object);
+                    other_bnodes.insert(object.clone());
                 }
             } else if let Term::BlankNode(object) = t.object() {
-                other_bnodes.insert(object);
-            } else if !self.contains(t) {
-                return false;
+                other_bnodes.insert(object.clone());
+            } else if !self.contains(&t)? {
+                return Ok(false);
             }
         }
 
-        let self_bnodes_by_hash = hash_blank_nodes(self_bnodes, &self);
-        let other_bnodes_by_hash = hash_blank_nodes(other_bnodes, &other);
+        let self_bnodes_by_hash = hash_blank_nodes(self_bnodes, self)?;
+        let other_bnodes_by_hash = hash_blank_nodes(other_bnodes, other)?;
 
         if self_bnodes_by_hash.len() != other_bnodes_by_hash.len() {
-            return false;
+            return Ok(false);
         }
 
         for hash in self_bnodes_by_hash.keys() {
             if self_bnodes_by_hash.get(hash).map(|l| l.len())
                 != other_bnodes_by_hash.get(hash).map(|l| l.len())
             {
-                return false;
+                return Ok(false);
             }
         }
 
-        true
+        Ok(true)
     }
 }

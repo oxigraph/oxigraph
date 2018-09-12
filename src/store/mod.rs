@@ -1,19 +1,23 @@
 pub mod isomorphism;
-pub mod memory;
+mod memory;
 mod numeric_encoder;
-pub mod rocksdb;
+mod rocksdb;
 mod store;
 
 use errors::*;
 use model::*;
 
+pub use store::memory::MemoryDataset;
+pub use store::memory::MemoryGraph;
+pub use store::rocksdb::RocksDbDataset;
+
 pub trait Graph {
     type TriplesIterator: Iterator<Item = Result<Triple>>;
     type TriplesForSubjectIterator: Iterator<Item = Result<Triple>>;
-    type TriplesForSubjectPredicateIterator: Iterator<Item = Result<Triple>>;
-    type TriplesForSubjectObjectIterator: Iterator<Item = Result<Triple>>;
+    type ObjectsForSubjectPredicateIterator: Iterator<Item = Result<Term>>;
+    type PredicatesForSubjectObjectIterator: Iterator<Item = Result<NamedNode>>;
     type TriplesForPredicateIterator: Iterator<Item = Result<Triple>>;
-    type TriplesForPredicateObjectIterator: Iterator<Item = Result<Triple>>;
+    type SubjectsForPredicateObjectIterator: Iterator<Item = Result<NamedOrBlankNode>>;
     type TriplesForObjectIterator: Iterator<Item = Result<Triple>>;
 
     fn iter(&self) -> Result<Self::TriplesIterator> {
@@ -27,28 +31,43 @@ pub trait Graph {
         subject: &NamedOrBlankNode,
     ) -> Result<Self::TriplesForSubjectIterator>;
 
-    fn triples_for_subject_predicate(
+    fn objects_for_subject_predicate(
         &self,
         subject: &NamedOrBlankNode,
         predicate: &NamedNode,
-    ) -> Result<Self::TriplesForSubjectPredicateIterator>;
+    ) -> Result<Self::ObjectsForSubjectPredicateIterator>;
 
-    fn triples_for_subject_object(
+    fn object_for_subject_predicate(
+        &self,
+        subject: &NamedOrBlankNode,
+        predicate: &NamedNode,
+    ) -> Result<Option<Term>> {
+        //TODO use transpose when stable
+        match self
+            .objects_for_subject_predicate(subject, predicate)?
+            .nth(0)
+        {
+            Some(object) => Ok(Some(object?)),
+            None => Ok(None),
+        }
+    }
+
+    fn predicates_for_subject_object(
         &self,
         subject: &NamedOrBlankNode,
         object: &Term,
-    ) -> Result<Self::TriplesForSubjectObjectIterator>;
+    ) -> Result<Self::PredicatesForSubjectObjectIterator>;
 
     fn triples_for_predicate(
         &self,
         predicate: &NamedNode,
     ) -> Result<Self::TriplesForPredicateIterator>;
 
-    fn triples_for_predicate_object(
+    fn subjects_for_predicate_object(
         &self,
         predicate: &NamedNode,
         object: &Term,
-    ) -> Result<Self::TriplesForPredicateObjectIterator>;
+    ) -> Result<Self::SubjectsForPredicateObjectIterator>;
 
     fn triples_for_object(&self, object: &Term) -> Result<Self::TriplesForObjectIterator>;
 

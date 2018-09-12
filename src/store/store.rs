@@ -1,5 +1,8 @@
 use errors::*;
 use model::*;
+use std::fmt;
+use std::iter::FromIterator;
+use std::iter::Iterator;
 use std::sync::Arc;
 use store::numeric_encoder::*;
 use store::Dataset;
@@ -270,6 +273,41 @@ impl<S: EncodedQuadsStore> Dataset for StoreDataset<S> {
     }
 }
 
+impl<S: EncodedQuadsStore> fmt::Display for StoreDataset<S> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        for quad in self.iter()? {
+            write!(fmt, "{}\n", quad?)?;
+        }
+        Ok(())
+    }
+}
+
+impl<S: EncodedQuadsStore + Default> Default for StoreDataset<S> {
+    fn default() -> Self {
+        Self::new_from_store(S::default())
+    }
+}
+
+impl<S: EncodedQuadsStore + Default> FromIterator<Quad> for StoreDataset<S> {
+    fn from_iter<I: IntoIterator<Item = Quad>>(iter: I) -> Self {
+        let dataset = StoreDataset::default();
+        for quad in iter {
+            dataset.insert(&quad).unwrap();
+        }
+        dataset
+    }
+}
+
+impl<'a, S: EncodedQuadsStore + Default> FromIterator<&'a Quad> for StoreDataset<S> {
+    fn from_iter<I: IntoIterator<Item = &'a Quad>>(iter: I) -> Self {
+        let dataset = StoreDataset::default();
+        for quad in iter {
+            dataset.insert(quad).unwrap();
+        }
+        dataset
+    }
+}
+
 pub struct StoreNamedGraph<S: EncodedQuadsStore> {
     store: Arc<S>,
     name: NamedOrBlankNode,
@@ -279,13 +317,13 @@ pub struct StoreNamedGraph<S: EncodedQuadsStore> {
 impl<S: EncodedQuadsStore> Graph for StoreNamedGraph<S> {
     type TriplesIterator = TriplesIterator<S::QuadsForGraphIterator, S>;
     type TriplesForSubjectIterator = TriplesIterator<S::QuadsForSubjectGraphIterator, S>;
-    type TriplesForSubjectPredicateIterator =
-        TriplesIterator<S::QuadsForSubjectPredicateGraphIterator, S>;
-    type TriplesForSubjectObjectIterator =
-        TriplesIterator<S::QuadsForSubjectObjectGraphIterator, S>;
+    type ObjectsForSubjectPredicateIterator =
+        ObjectsIterator<S::QuadsForSubjectPredicateGraphIterator, S>;
+    type PredicatesForSubjectObjectIterator =
+        PredicatesIterator<S::QuadsForSubjectObjectGraphIterator, S>;
     type TriplesForPredicateIterator = TriplesIterator<S::QuadsForPredicateGraphIterator, S>;
-    type TriplesForPredicateObjectIterator =
-        TriplesIterator<S::QuadsForPredicateObjectGraphIterator, S>;
+    type SubjectsForPredicateObjectIterator =
+        SubjectsIterator<S::QuadsForPredicateObjectGraphIterator, S>;
     type TriplesForObjectIterator = TriplesIterator<S::QuadsForObjectGraphIterator, S>;
 
     fn triples(&self) -> Result<TriplesIterator<S::QuadsForGraphIterator, S>> {
@@ -308,13 +346,13 @@ impl<S: EncodedQuadsStore> Graph for StoreNamedGraph<S> {
             store: self.store.clone(),
         })
     }
-    fn triples_for_subject_predicate(
+    fn objects_for_subject_predicate(
         &self,
         subject: &NamedOrBlankNode,
         predicate: &NamedNode,
-    ) -> Result<TriplesIterator<S::QuadsForSubjectPredicateGraphIterator, S>> {
+    ) -> Result<ObjectsIterator<S::QuadsForSubjectPredicateGraphIterator, S>> {
         let encoder = self.store.encoder();
-        Ok(TriplesIterator {
+        Ok(ObjectsIterator {
             iter: self.store.quads_for_subject_predicate_graph(
                 &encoder.encode_named_or_blank_node(subject)?,
                 &encoder.encode_named_node(predicate)?,
@@ -323,13 +361,13 @@ impl<S: EncodedQuadsStore> Graph for StoreNamedGraph<S> {
             store: self.store.clone(),
         })
     }
-    fn triples_for_subject_object(
+    fn predicates_for_subject_object(
         &self,
         subject: &NamedOrBlankNode,
         object: &Term,
-    ) -> Result<TriplesIterator<S::QuadsForSubjectObjectGraphIterator, S>> {
+    ) -> Result<PredicatesIterator<S::QuadsForSubjectObjectGraphIterator, S>> {
         let encoder = self.store.encoder();
-        Ok(TriplesIterator {
+        Ok(PredicatesIterator {
             iter: self.store.quads_for_subject_object_graph(
                 &encoder.encode_named_or_blank_node(subject)?,
                 &encoder.encode_term(object)?,
@@ -351,13 +389,13 @@ impl<S: EncodedQuadsStore> Graph for StoreNamedGraph<S> {
             store: self.store.clone(),
         })
     }
-    fn triples_for_predicate_object(
+    fn subjects_for_predicate_object(
         &self,
         predicate: &NamedNode,
         object: &Term,
-    ) -> Result<TriplesIterator<S::QuadsForPredicateObjectGraphIterator, S>> {
+    ) -> Result<SubjectsIterator<S::QuadsForPredicateObjectGraphIterator, S>> {
         let encoder = self.store.encoder();
-        Ok(TriplesIterator {
+        Ok(SubjectsIterator {
             iter: self.store.quads_for_predicate_object_graph(
                 &encoder.encode_named_node(predicate)?,
                 &encoder.encode_term(object)?,
@@ -424,6 +462,15 @@ impl<S: EncodedQuadsStore> NamedGraph for StoreNamedGraph<S> {
     }
 }
 
+impl<S: EncodedQuadsStore> fmt::Display for StoreNamedGraph<S> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        for triple in self.iter()? {
+            write!(fmt, "{}\n", triple?)?;
+        }
+        Ok(())
+    }
+}
+
 pub struct StoreDefaultGraph<S: EncodedQuadsStore> {
     store: Arc<S>,
 }
@@ -431,13 +478,13 @@ pub struct StoreDefaultGraph<S: EncodedQuadsStore> {
 impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
     type TriplesIterator = TriplesIterator<S::QuadsForGraphIterator, S>;
     type TriplesForSubjectIterator = TriplesIterator<S::QuadsForSubjectGraphIterator, S>;
-    type TriplesForSubjectPredicateIterator =
-        TriplesIterator<S::QuadsForSubjectPredicateGraphIterator, S>;
-    type TriplesForSubjectObjectIterator =
-        TriplesIterator<S::QuadsForSubjectObjectGraphIterator, S>;
+    type ObjectsForSubjectPredicateIterator =
+        ObjectsIterator<S::QuadsForSubjectPredicateGraphIterator, S>;
+    type PredicatesForSubjectObjectIterator =
+        PredicatesIterator<S::QuadsForSubjectObjectGraphIterator, S>;
     type TriplesForPredicateIterator = TriplesIterator<S::QuadsForPredicateGraphIterator, S>;
-    type TriplesForPredicateObjectIterator =
-        TriplesIterator<S::QuadsForPredicateObjectGraphIterator, S>;
+    type SubjectsForPredicateObjectIterator =
+        SubjectsIterator<S::QuadsForPredicateObjectGraphIterator, S>;
     type TriplesForObjectIterator = TriplesIterator<S::QuadsForObjectGraphIterator, S>;
 
     fn triples(&self) -> Result<TriplesIterator<S::QuadsForGraphIterator, S>> {
@@ -460,13 +507,13 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
             store: self.store.clone(),
         })
     }
-    fn triples_for_subject_predicate(
+    fn objects_for_subject_predicate(
         &self,
         subject: &NamedOrBlankNode,
         predicate: &NamedNode,
-    ) -> Result<TriplesIterator<S::QuadsForSubjectPredicateGraphIterator, S>> {
+    ) -> Result<ObjectsIterator<S::QuadsForSubjectPredicateGraphIterator, S>> {
         let encoder = self.store.encoder();
-        Ok(TriplesIterator {
+        Ok(ObjectsIterator {
             iter: self.store.quads_for_subject_predicate_graph(
                 &encoder.encode_named_or_blank_node(subject)?,
                 &encoder.encode_named_node(predicate)?,
@@ -475,13 +522,13 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
             store: self.store.clone(),
         })
     }
-    fn triples_for_subject_object(
+    fn predicates_for_subject_object(
         &self,
         subject: &NamedOrBlankNode,
         object: &Term,
-    ) -> Result<TriplesIterator<S::QuadsForSubjectObjectGraphIterator, S>> {
+    ) -> Result<PredicatesIterator<S::QuadsForSubjectObjectGraphIterator, S>> {
         let encoder = self.store.encoder();
-        Ok(TriplesIterator {
+        Ok(PredicatesIterator {
             iter: self.store.quads_for_subject_object_graph(
                 &encoder.encode_named_or_blank_node(subject)?,
                 &encoder.encode_term(object)?,
@@ -503,13 +550,13 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
             store: self.store.clone(),
         })
     }
-    fn triples_for_predicate_object(
+    fn subjects_for_predicate_object(
         &self,
         predicate: &NamedNode,
         object: &Term,
-    ) -> Result<TriplesIterator<S::QuadsForPredicateObjectGraphIterator, S>> {
+    ) -> Result<SubjectsIterator<S::QuadsForPredicateObjectGraphIterator, S>> {
         let encoder = self.store.encoder();
-        Ok(TriplesIterator {
+        Ok(SubjectsIterator {
             iter: self.store.quads_for_predicate_object_graph(
                 &encoder.encode_named_node(predicate)?,
                 &encoder.encode_term(object)?,
@@ -570,6 +617,41 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
     }
 }
 
+impl<S: EncodedQuadsStore> fmt::Display for StoreDefaultGraph<S> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        for triple in self.iter()? {
+            write!(fmt, "{}\n", triple?)?;
+        }
+        Ok(())
+    }
+}
+
+impl<S: EncodedQuadsStore + Default> Default for StoreDefaultGraph<S> {
+    fn default() -> Self {
+        StoreDataset::default().default_graph()
+    }
+}
+
+impl<S: EncodedQuadsStore + Default> FromIterator<Triple> for StoreDefaultGraph<S> {
+    fn from_iter<I: IntoIterator<Item = Triple>>(iter: I) -> Self {
+        let graph = StoreDefaultGraph::default();
+        for triple in iter {
+            graph.insert(&triple).unwrap();
+        }
+        graph
+    }
+}
+
+impl<'a, S: EncodedQuadsStore + Default> FromIterator<&'a Triple> for StoreDefaultGraph<S> {
+    fn from_iter<I: IntoIterator<Item = &'a Triple>>(iter: I) -> Self {
+        let graph = StoreDefaultGraph::default();
+        for triple in iter {
+            graph.insert(triple).unwrap();
+        }
+        graph
+    }
+}
+
 pub struct StoreUnionGraph<S: EncodedQuadsStore> {
     store: Arc<S>,
 }
@@ -577,11 +659,13 @@ pub struct StoreUnionGraph<S: EncodedQuadsStore> {
 impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
     type TriplesIterator = TriplesIterator<S::QuadsIterator, S>;
     type TriplesForSubjectIterator = TriplesIterator<S::QuadsForSubjectIterator, S>;
-    type TriplesForSubjectPredicateIterator =
-        TriplesIterator<S::QuadsForSubjectPredicateIterator, S>;
-    type TriplesForSubjectObjectIterator = TriplesIterator<S::QuadsForSubjectObjectIterator, S>;
+    type ObjectsForSubjectPredicateIterator =
+        ObjectsIterator<S::QuadsForSubjectPredicateIterator, S>;
+    type PredicatesForSubjectObjectIterator =
+        PredicatesIterator<S::QuadsForSubjectObjectIterator, S>;
     type TriplesForPredicateIterator = TriplesIterator<S::QuadsForPredicateIterator, S>;
-    type TriplesForPredicateObjectIterator = TriplesIterator<S::QuadsForPredicateObjectIterator, S>;
+    type SubjectsForPredicateObjectIterator =
+        SubjectsIterator<S::QuadsForPredicateObjectIterator, S>;
     type TriplesForObjectIterator = TriplesIterator<S::QuadsForObjectIterator, S>;
 
     fn triples(&self) -> Result<TriplesIterator<S::QuadsIterator, S>> {
@@ -603,13 +687,13 @@ impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
             store: self.store.clone(),
         })
     }
-    fn triples_for_subject_predicate(
+    fn objects_for_subject_predicate(
         &self,
         subject: &NamedOrBlankNode,
         predicate: &NamedNode,
-    ) -> Result<TriplesIterator<S::QuadsForSubjectPredicateIterator, S>> {
+    ) -> Result<ObjectsIterator<S::QuadsForSubjectPredicateIterator, S>> {
         let encoder = self.store.encoder();
-        Ok(TriplesIterator {
+        Ok(ObjectsIterator {
             iter: self.store.quads_for_subject_predicate(
                 &encoder.encode_named_or_blank_node(subject)?,
                 &encoder.encode_named_node(predicate)?,
@@ -617,13 +701,13 @@ impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
             store: self.store.clone(),
         })
     }
-    fn triples_for_subject_object(
+    fn predicates_for_subject_object(
         &self,
         subject: &NamedOrBlankNode,
         object: &Term,
-    ) -> Result<TriplesIterator<S::QuadsForSubjectObjectIterator, S>> {
+    ) -> Result<PredicatesIterator<S::QuadsForSubjectObjectIterator, S>> {
         let encoder = self.store.encoder();
-        Ok(TriplesIterator {
+        Ok(PredicatesIterator {
             iter: self.store.quads_for_subject_object(
                 &encoder.encode_named_or_blank_node(subject)?,
                 &encoder.encode_term(object)?,
@@ -643,13 +727,13 @@ impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
             store: self.store.clone(),
         })
     }
-    fn triples_for_predicate_object(
+    fn subjects_for_predicate_object(
         &self,
         predicate: &NamedNode,
         object: &Term,
-    ) -> Result<TriplesIterator<S::QuadsForPredicateObjectIterator, S>> {
+    ) -> Result<SubjectsIterator<S::QuadsForPredicateObjectIterator, S>> {
         let encoder = self.store.encoder();
-        Ok(TriplesIterator {
+        Ok(SubjectsIterator {
             iter: self.store.quads_for_predicate_object(
                 &encoder.encode_named_node(predicate)?,
                 &encoder.encode_term(object)?,
@@ -682,11 +766,11 @@ impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
     }
 
     fn insert(&self, triple: &Triple) -> Result<()> {
-        unimplemented!()
+        Err("Union graph is not writable".into())
     }
 
     fn remove(&self, triple: &Triple) -> Result<()> {
-        unimplemented!()
+        Err("Union graph is not writable".into())
     }
 
     fn len(&self) -> Result<usize> {
@@ -695,6 +779,15 @@ impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
 
     fn is_empty(&self) -> Result<bool> {
         Ok(self.store.quads()?.any(|_| true))
+    }
+}
+
+impl<S: EncodedQuadsStore> fmt::Display for StoreUnionGraph<S> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        for triple in self.iter()? {
+            write!(fmt, "{}\n", triple?)?;
+        }
+        Ok(())
     }
 }
 
@@ -743,5 +836,60 @@ impl<I: Iterator<Item = Result<EncodedQuad>>, S: EncodedQuadsStore> Iterator
         self.iter
             .next()
             .map(|k| k.and_then(|quad| self.store.encoder().decode_triple(&quad)))
+    }
+}
+
+pub struct SubjectsIterator<I: Iterator<Item = Result<EncodedQuad>>, S: EncodedQuadsStore> {
+    iter: I,
+    store: Arc<S>,
+}
+
+impl<I: Iterator<Item = Result<EncodedQuad>>, S: EncodedQuadsStore> Iterator
+    for SubjectsIterator<I, S>
+{
+    type Item = Result<NamedOrBlankNode>;
+
+    fn next(&mut self) -> Option<Result<NamedOrBlankNode>> {
+        self.iter.next().map(|k| {
+            k.and_then(|quad| {
+                self.store
+                    .encoder()
+                    .decode_named_or_blank_node(&quad.subject)
+            })
+        })
+    }
+}
+
+pub struct PredicatesIterator<I: Iterator<Item = Result<EncodedQuad>>, S: EncodedQuadsStore> {
+    iter: I,
+    store: Arc<S>,
+}
+
+impl<I: Iterator<Item = Result<EncodedQuad>>, S: EncodedQuadsStore> Iterator
+    for PredicatesIterator<I, S>
+{
+    type Item = Result<NamedNode>;
+
+    fn next(&mut self) -> Option<Result<NamedNode>> {
+        self.iter
+            .next()
+            .map(|k| k.and_then(|quad| self.store.encoder().decode_named_node(&quad.predicate)))
+    }
+}
+
+pub struct ObjectsIterator<I: Iterator<Item = Result<EncodedQuad>>, S: EncodedQuadsStore> {
+    iter: I,
+    store: Arc<S>,
+}
+
+impl<I: Iterator<Item = Result<EncodedQuad>>, S: EncodedQuadsStore> Iterator
+    for ObjectsIterator<I, S>
+{
+    type Item = Result<Term>;
+
+    fn next(&mut self) -> Option<Result<Term>> {
+        self.iter
+            .next()
+            .map(|k| k.and_then(|quad| self.store.encoder().decode_term(&quad.object)))
     }
 }

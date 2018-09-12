@@ -53,6 +53,22 @@ pub struct EncodedQuad {
     pub graph_name: EncodedTerm,
 }
 
+impl EncodedQuad {
+    pub fn new(
+        subject: EncodedTerm,
+        predicate: EncodedTerm,
+        object: EncodedTerm,
+        graph_name: EncodedTerm,
+    ) -> Self {
+        Self {
+            subject,
+            predicate,
+            object,
+            graph_name,
+        }
+    }
+}
+
 pub trait TermReader {
     fn read_term(&mut self) -> Result<EncodedTerm>;
     fn read_spog_quad(&mut self) -> Result<EncodedQuad>;
