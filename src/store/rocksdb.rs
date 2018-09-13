@@ -1,3 +1,5 @@
+use byteorder::ByteOrder;
+use byteorder::NetworkEndian;
 use errors::*;
 use rocksdb::ColumnFamily;
 use rocksdb::DBRawIterator;
@@ -6,16 +8,12 @@ use rocksdb::Options;
 use rocksdb::WriteBatch;
 use rocksdb::DB;
 use std::io::Cursor;
-use std::mem::size_of;
 use std::path::Path;
 use std::str;
 use std::sync::Mutex;
 use store::numeric_encoder::*;
 use store::store::EncodedQuadsStore;
 use store::store::StoreDataset;
-use utils::from_bytes;
-use utils::from_bytes_slice;
-use utils::to_bytes;
 
 pub type RocksDbDataset = StoreDataset<RocksDbStore>;
 
@@ -77,7 +75,7 @@ impl BytesStore for RocksDbStore {
 
     fn insert_bytes(&self, value: &[u8]) -> Result<u64> {
         Ok(match self.db.get_cf(self.str2id_cf, value)? {
-            Some(id) => from_bytes_slice(&id),
+            Some(id) => NetworkEndian::read_u64(&id),
             None => {
                 let id = self.str_id_counter.lock()?.get_and_increment(&self.db)? as u64;
                 let id_bytes = to_bytes(id);
@@ -353,11 +351,7 @@ impl RocksDBCounter {
     fn get_and_increment(&self, db: &DB) -> Result<u64> {
         let value = db
             .get(self.name.as_bytes())?
-            .map(|b| {
-                let mut buf = [0 as u8; size_of::<usize>()];
-                buf.copy_from_slice(&b);
-                from_bytes(buf)
-            })
+            .map(|b| NetworkEndian::read_u64(&b))
             .unwrap_or(0);
         db.put(self.name.as_bytes(), &to_bytes(value + 1))?;
         Ok(value)
@@ -526,4 +520,10 @@ impl<I: Iterator<Item = Result<EncodedQuad>>> Iterator for InGraphQuadsIterator<
             Err(_) => true,
         })
     }
+}
+
+fn to_bytes(int: u64) -> [u8; 8] {
+    let mut buf = [0 as u8; 8];
+    NetworkEndian::write_u64(&mut buf, int);
+    buf
 }

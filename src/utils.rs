@@ -1,6 +1,3 @@
-use std::mem::size_of;
-use std::mem::transmute;
-
 pub trait Escaper {
     fn escape(&self) -> String;
 }
@@ -79,20 +76,4 @@ impl ExactSizeIterator for EscapeRDF {
             EscapeRdfState::Backslash(_) => 2,
         }
     }
-}
-
-pub fn to_bytes(int: u64) -> [u8; size_of::<u64>()] {
-    //TODO: remove when next rust version stabilize this method
-    unsafe { transmute(int) }
-}
-
-pub fn from_bytes(bytes: [u8; size_of::<u64>()]) -> u64 {
-    //TODO: remove when next rust version stabilize this method
-    unsafe { transmute(bytes) }
-}
-
-pub fn from_bytes_slice(bytes: &[u8]) -> u64 {
-    let mut buf = [0 as u8; size_of::<u64>()];
-    buf.copy_from_slice(bytes);
-    from_bytes(buf)
 }
