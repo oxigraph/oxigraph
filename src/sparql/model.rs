@@ -1,5 +1,4 @@
 use model::*;
-use std::collections::btree_map;
 use std::collections::BTreeMap;
 use std::fmt;
 use uuid::Uuid;
@@ -162,7 +161,7 @@ impl Binding {
         }
     }
 
-    pub fn iter<'a>(&'a self) -> btree_map::Iter<Variable, Term> {
+    pub fn iter(&self) -> <&BTreeMap<Variable, Term> as IntoIterator>::IntoIter {
         self.0.iter()
     }
 }
@@ -175,18 +174,18 @@ impl Default for Binding {
 
 impl IntoIterator for Binding {
     type Item = (Variable, Term);
-    type IntoIter = btree_map::IntoIter<Variable, Term>;
+    type IntoIter = <BTreeMap<Variable, Term> as IntoIterator>::IntoIter;
 
-    fn into_iter(self) -> btree_map::IntoIter<Variable, Term> {
+    fn into_iter(self) -> <BTreeMap<Variable, Term> as IntoIterator>::IntoIter {
         self.0.into_iter()
     }
 }
 
 impl<'a> IntoIterator for &'a Binding {
     type Item = (&'a Variable, &'a Term);
-    type IntoIter = btree_map::Iter<'a, Variable, Term>;
+    type IntoIter = <&'a BTreeMap<Variable, Term> as IntoIterator>::IntoIter;
 
-    fn into_iter(self) -> btree_map::Iter<'a, Variable, Term> {
+    fn into_iter(self) -> <&'a BTreeMap<Variable, Term> as IntoIterator>::IntoIter {
         self.0.iter()
     }
 }

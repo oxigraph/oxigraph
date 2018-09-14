@@ -1,6 +1,8 @@
 ///Implements https://www.w3.org/TR/n-triples/
 
 mod grammar {
+    #![allow(unknown_lints)]
+    #![allow(clippy)]
     include!(concat!(env!("OUT_DIR"), "/ntriples_grammar.rs"));
 }
 

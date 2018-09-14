@@ -1,6 +1,9 @@
 /// Implements https://www.w3.org/TR/turtle/
 
 mod grammar {
+    #![allow(unknown_lints)]
+    #![allow(clippy)]
+
     use model::*;
     use std::collections::BTreeMap;
     use std::collections::HashMap;

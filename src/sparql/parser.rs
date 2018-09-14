@@ -3,6 +3,9 @@ use std::char;
 use std::str::Chars;
 
 mod grammar {
+    #![allow(unknown_lints)]
+    #![allow(clippy)]
+
     use model::*;
     use sparql::algebra::*;
     use sparql::model::*;

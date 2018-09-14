@@ -764,11 +764,11 @@ impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
             )?.any(|_| true))
     }
 
-    fn insert(&self, triple: &Triple) -> Result<()> {
+    fn insert(&self, _triple: &Triple) -> Result<()> {
         Err("Union graph is not writable".into())
     }
 
-    fn remove(&self, triple: &Triple) -> Result<()> {
+    fn remove(&self, _triple: &Triple) -> Result<()> {
         Err("Union graph is not writable".into())
     }
 
