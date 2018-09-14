@@ -130,7 +130,7 @@ impl EncodedQuadsStore for RocksDbStore {
         iter.seek(&encode_term(subject)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: SPOGIndexIterator { iter },
-            filter: EncodedQuadPattern::new(Some(subject.clone()), None, None, None),
+            filter: EncodedQuadPattern::new(Some(*subject), None, None, None),
         })
     }
 
@@ -143,12 +143,7 @@ impl EncodedQuadsStore for RocksDbStore {
         iter.seek(&encode_term_pair(subject, predicate)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: SPOGIndexIterator { iter },
-            filter: EncodedQuadPattern::new(
-                Some(subject.clone()),
-                Some(predicate.clone()),
-                None,
-                None,
-            ),
+            filter: EncodedQuadPattern::new(Some(*subject), Some(*predicate), None, None),
         })
     }
 
@@ -162,12 +157,7 @@ impl EncodedQuadsStore for RocksDbStore {
         iter.seek(&encode_term_triple(subject, predicate, object)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: SPOGIndexIterator { iter },
-            filter: EncodedQuadPattern::new(
-                Some(subject.clone()),
-                Some(predicate.clone()),
-                Some(object.clone()),
-                None,
-            ),
+            filter: EncodedQuadPattern::new(Some(*subject), Some(*predicate), Some(*object), None),
         })
     }
 
@@ -180,12 +170,7 @@ impl EncodedQuadsStore for RocksDbStore {
         iter.seek(&encode_term_pair(object, subject)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: OSPGIndexIterator { iter },
-            filter: EncodedQuadPattern::new(
-                Some(subject.clone()),
-                None,
-                Some(object.clone()),
-                None,
-            ),
+            filter: EncodedQuadPattern::new(Some(*subject), None, Some(*object), None),
         })
     }
 
@@ -197,7 +182,7 @@ impl EncodedQuadsStore for RocksDbStore {
         iter.seek(&encode_term(predicate)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: POSGIndexIterator { iter },
-            filter: EncodedQuadPattern::new(None, Some(predicate.clone()), None, None),
+            filter: EncodedQuadPattern::new(None, Some(*predicate), None, None),
         })
     }
 
@@ -210,12 +195,7 @@ impl EncodedQuadsStore for RocksDbStore {
         iter.seek(&encode_term_pair(predicate, object)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: POSGIndexIterator { iter },
-            filter: EncodedQuadPattern::new(
-                None,
-                Some(predicate.clone()),
-                Some(object.clone()),
-                None,
-            ),
+            filter: EncodedQuadPattern::new(None, Some(*predicate), Some(*object), None),
         })
     }
 
@@ -227,7 +207,7 @@ impl EncodedQuadsStore for RocksDbStore {
         iter.seek(&encode_term(&object)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: OSPGIndexIterator { iter },
-            filter: EncodedQuadPattern::new(None, None, Some(object.clone()), None),
+            filter: EncodedQuadPattern::new(None, None, Some(*object), None),
         })
     }
 
@@ -237,7 +217,7 @@ impl EncodedQuadsStore for RocksDbStore {
     ) -> Result<InGraphQuadsIterator<SPOGIndexIterator>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads()?,
-            graph_name: graph_name.clone(),
+            graph_name: *graph_name,
         })
     }
 
@@ -248,7 +228,7 @@ impl EncodedQuadsStore for RocksDbStore {
     ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<SPOGIndexIterator>>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads_for_subject(subject)?,
-            graph_name: graph_name.clone(),
+            graph_name: *graph_name,
         })
     }
 
@@ -260,7 +240,7 @@ impl EncodedQuadsStore for RocksDbStore {
     ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<SPOGIndexIterator>>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads_for_subject_predicate(subject, predicate)?,
-            graph_name: graph_name.clone(),
+            graph_name: *graph_name,
         })
     }
 
@@ -272,7 +252,7 @@ impl EncodedQuadsStore for RocksDbStore {
     ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<OSPGIndexIterator>>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads_for_subject_object(subject, object)?,
-            graph_name: graph_name.clone(),
+            graph_name: *graph_name,
         })
     }
 
@@ -283,7 +263,7 @@ impl EncodedQuadsStore for RocksDbStore {
     ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<POSGIndexIterator>>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads_for_predicate(predicate)?,
-            graph_name: graph_name.clone(),
+            graph_name: *graph_name,
         })
     }
 
@@ -295,7 +275,7 @@ impl EncodedQuadsStore for RocksDbStore {
     ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<POSGIndexIterator>>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads_for_predicate_object(predicate, object)?,
-            graph_name: graph_name.clone(),
+            graph_name: *graph_name,
         })
     }
 
@@ -306,7 +286,7 @@ impl EncodedQuadsStore for RocksDbStore {
     ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<OSPGIndexIterator>>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads_for_object(object)?,
-            graph_name: graph_name.clone(),
+            graph_name: *graph_name,
         })
     }
 

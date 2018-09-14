@@ -24,7 +24,7 @@ const TYPE_TYPED_LITERAL_ID: u8 = 4;
 
 pub static ENCODED_DEFAULT_GRAPH: EncodedTerm = EncodedTerm::DefaultGraph {};
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
 pub enum EncodedTerm {
     DefaultGraph {},
     NamedNode { iri_id: u64 },
@@ -252,7 +252,7 @@ impl<S: BytesStore> Encoder<S> {
             object: self.encode_term(quad.object())?,
             graph_name: match quad.graph_name() {
                 Some(graph_name) => self.encode_named_or_blank_node(&graph_name)?,
-                None => ENCODED_DEFAULT_GRAPH.clone(),
+                None => ENCODED_DEFAULT_GRAPH,
             },
         })
     }
@@ -266,7 +266,7 @@ impl<S: BytesStore> Encoder<S> {
             subject: self.encode_named_or_blank_node(triple.subject())?,
             predicate: self.encode_named_node(triple.predicate())?,
             object: self.encode_term(triple.object())?,
-            graph_name: graph_name.clone(),
+            graph_name: *graph_name,
         })
     }
 

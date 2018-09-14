@@ -347,29 +347,29 @@ impl EncodedQuadsStore for MemoryStore {
     fn insert(&self, quad: &EncodedQuad) -> Result<()> {
         let mut graph_indexes = self.graph_indexes.write()?;
         let graph = graph_indexes
-            .entry(quad.graph_name.clone())
+            .entry(quad.graph_name)
             .or_insert_with(MemoryGraphIndexes::default);
         graph
             .spo
-            .entry(quad.subject.clone())
+            .entry(quad.subject)
             .or_default()
-            .entry(quad.predicate.clone())
+            .entry(quad.predicate)
             .or_default()
-            .insert(quad.object.clone());
+            .insert(quad.object);
         graph
             .pos
-            .entry(quad.predicate.clone())
+            .entry(quad.predicate)
             .or_default()
-            .entry(quad.object.clone())
+            .entry(quad.object)
             .or_default()
-            .insert(quad.subject.clone());
+            .insert(quad.subject);
         graph
             .osp
-            .entry(quad.object.clone())
+            .entry(quad.object)
             .or_default()
-            .entry(quad.subject.clone())
+            .entry(quad.subject)
             .or_default()
-            .insert(quad.predicate.clone());
+            .insert(quad.predicate);
         Ok(())
     }
 
@@ -446,10 +446,5 @@ fn encoded_quad(
     object: &EncodedTerm,
     graph_name: &EncodedTerm,
 ) -> EncodedQuad {
-    EncodedQuad::new(
-        subject.clone(),
-        predicate.clone(),
-        object.clone(),
-        graph_name.clone(),
-    )
+    EncodedQuad::new(*subject, *predicate, *object, *graph_name)
 }
