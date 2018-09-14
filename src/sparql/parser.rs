@@ -298,13 +298,10 @@ mod grammar {
         let mut string_buffer = String::default();
         BufReader::new(source).read_to_string(&mut string_buffer)?;
 
-        match QueryUnit(
+        Ok(QueryUnit(
             &unescape_unicode_codepoints(Cow::from(string_buffer)),
             &mut state,
-        ) {
-            Ok(query) => Ok(query),
-            Err(error) => Err(error.into()),
-        }
+        )?)
     }
 }
 

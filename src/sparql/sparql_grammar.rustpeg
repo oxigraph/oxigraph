@@ -1074,7 +1074,7 @@ PERCENT -> () = "%" HEX HEX
 HEX -> () = ([0-9A-Fa-f])
 
 //[173]
-PN_LOCAL_ESC -> char = "\\" c:$([_~\.\-!$&'()*+,;=/?#@%:]) { c.chars().next().unwrap() } //TODO: added '/' to make tests pass but is it valid?
+PN_LOCAL_ESC -> char = "\\" c:$([_~\.\-!$&'()*+,;=/?#@%]) { c.chars().next().unwrap() } //TODO: added '/' to make tests pass but is it valid?
 
 //space
 _ = #quiet<([ \t\n\r] / comment)*>

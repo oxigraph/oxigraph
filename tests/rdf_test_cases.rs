@@ -157,11 +157,9 @@ fn sparql_w3c_syntax_testsuite() {
             }
         } else if test.kind == "NegativeSyntaxTest11" {
             //TODO
-            /*assert!(
-                client.load_sparql_query(test.action.clone()).is_err(),
-                "Failure on {}",
-                test
-            );*/
+            if let Ok(result) = client.load_sparql_query(test.action.clone()) {
+                eprintln!("Failure on {}. The output tree is: {}", test, result);
+            }
         } else {
             assert!(false, "Not supported test: {}", test);
         }

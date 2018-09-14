@@ -44,10 +44,8 @@ mod grammar {
         let mut string_buffer = String::default();
         BufReader::new(source).read_to_string(&mut string_buffer)?;
 
-        match turtleDoc(&string_buffer, &mut state, &mut triple_buffer) {
-            Ok(_) => Ok(triple_buffer.into_iter()),
-            Err(error) => Err(error.into()),
-        }
+        turtleDoc(&string_buffer, &mut state, &mut triple_buffer)?;
+        Ok(triple_buffer.into_iter())
     }
 }
 
