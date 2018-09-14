@@ -213,7 +213,7 @@ impl<S: BytesStore> Encoder<S> {
     }
 
     pub fn encode_blank_node(&self, blank_node: &BlankNode) -> Result<EncodedTerm> {
-        Ok(EncodedTerm::BlankNode(blank_node.deref().clone()))
+        Ok(EncodedTerm::BlankNode(*blank_node.deref()))
     }
 
     pub fn encode_literal(&self, literal: &Literal) -> Result<EncodedTerm> {
@@ -347,7 +347,7 @@ impl<S: BytesStore> Encoder<S> {
     fn decode_value(&self, id: u64) -> Result<S::BytesOutput> {
         self.string_store
             .get_bytes(id)?
-            .ok_or("value not found in the dictionary".into())
+            .ok_or_else(|| "value not found in the dictionary".into())
     }
 }
 

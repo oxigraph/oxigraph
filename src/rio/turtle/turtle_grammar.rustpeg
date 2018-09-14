@@ -46,7 +46,7 @@ sparqlBase -> () = "BASE"i _ i:IRIREF {?
 
 //[6s]
 sparqlPrefix -> () = "PREFIX"i _ ns:PNAME_NS _ i:IRIREF {
-    state.namespaces.insert(ns.into(), i.into());
+    state.namespaces.insert(ns.into(), i);
 }
 
 //[6]

@@ -64,7 +64,7 @@ impl EncodedQuadsStore for MemoryStore {
     fn quads(&self) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
         for (graph_name, graph) in self.graph_indexes.read()?.iter() {
-            for (s, pos) in graph.spo.iter() {
+            for (s, pos) in &graph.spo {
                 for (p, os) in pos.iter() {
                     for o in os.iter() {
                         result.push(Ok(encoded_quad(s, p, o, graph_name)))
@@ -205,7 +205,7 @@ impl EncodedQuadsStore for MemoryStore {
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
         if let Some(graph) = self.graph_indexes.read()?.get(graph_name) {
-            for (s, pos) in graph.spo.iter() {
+            for (s, pos) in &graph.spo {
                 for (p, os) in pos.iter() {
                     for o in os.iter() {
                         result.push(Ok(encoded_quad(s, p, o, graph_name)))
@@ -340,10 +340,8 @@ impl EncodedQuadsStore for MemoryStore {
                         po.get(&quad.predicate)
                             .map(|o| o.contains(&quad.object))
                             .unwrap_or(false)
-                    })
-                    .unwrap_or(false)
-            })
-            .unwrap_or(false))
+                    }).unwrap_or(false)
+            }).unwrap_or(false))
     }
 
     fn insert(&self, quad: &EncodedQuad) -> Result<()> {

@@ -23,17 +23,17 @@ impl RocksDbDataset {
     }
 }
 
-const ID2STR_CF: &'static str = "id2str";
-const STR2ID_CF: &'static str = "id2str";
-const SPOG_CF: &'static str = "spog";
-const POSG_CF: &'static str = "posg";
-const OSPG_CF: &'static str = "ospg";
+const ID2STR_CF: &str = "id2str";
+const STR2ID_CF: &str = "id2str";
+const SPOG_CF: &str = "spog";
+const POSG_CF: &str = "posg";
+const OSPG_CF: &str = "ospg";
 
 const EMPTY_BUF: [u8; 0] = [0 as u8; 0];
 
 //TODO: indexes for the default graph and indexes for the named graphs (no more Optional and space saving)
 
-const COLUMN_FAMILIES: [&'static str; 5] = [ID2STR_CF, STR2ID_CF, SPOG_CF, POSG_CF, OSPG_CF];
+const COLUMN_FAMILIES: [&str; 5] = [ID2STR_CF, STR2ID_CF, SPOG_CF, POSG_CF, OSPG_CF];
 
 pub struct RocksDbStore {
     db: DB,
@@ -322,7 +322,8 @@ impl EncodedQuadsStore for RocksDbStore {
         batch.put_cf(self.spog_cf, &encode_spog_quad(quad)?, &EMPTY_BUF)?;
         batch.put_cf(self.posg_cf, &encode_posg_quad(quad)?, &EMPTY_BUF)?;
         batch.put_cf(self.ospg_cf, &encode_ospg_quad(quad)?, &EMPTY_BUF)?;
-        Ok(self.db.write(batch)?) //TODO: check what's going on if the key already exists
+        self.db.write(batch)?; //TODO: check what's going on if the key already exists
+        Ok(())
     }
 
     fn remove(&self, quad: &EncodedQuad) -> Result<()> {
@@ -330,7 +331,8 @@ impl EncodedQuadsStore for RocksDbStore {
         batch.delete_cf(self.spog_cf, &encode_spog_quad(quad)?)?;
         batch.delete_cf(self.posg_cf, &encode_posg_quad(quad)?)?;
         batch.delete_cf(self.ospg_cf, &encode_ospg_quad(quad)?)?;
-        Ok(self.db.write(batch)?)
+        self.db.write(batch)?;
+        Ok(())
     }
 }
 

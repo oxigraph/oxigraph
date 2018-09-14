@@ -95,11 +95,10 @@ fn turtle_w3c_testsuite() {
                 .map(|r| client.load_turtle(r))
                 .unwrap_or_else(|| Ok(MemoryGraph::default()));
             assert!(
-                action_graph.is_err()
-                    || !action_graph
-                        .unwrap()
-                        .is_isomorphic(&result_graph.unwrap())
-                        .unwrap(),
+                action_graph.is_err() || !action_graph
+                    .unwrap()
+                    .is_isomorphic(&result_graph.unwrap())
+                    .unwrap(),
                 "Failure on {}",
                 test
             );
@@ -252,21 +251,21 @@ pub mod mf {
     use std::str::FromStr;
 
     lazy_static! {
-        pub static ref INCLUDE: NamedNode = NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#include"
-        ).unwrap();
-        pub static ref ENTRIES: NamedNode = NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#entries"
-        ).unwrap();
-        pub static ref NAME: NamedNode = NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#name"
-        ).unwrap();
-        pub static ref ACTION: NamedNode = NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action"
-        ).unwrap();
-        pub static ref RESULT: NamedNode = NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#result"
-        ).unwrap();
+        pub static ref INCLUDE: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#include")
+                .unwrap();
+        pub static ref ENTRIES: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#entries")
+                .unwrap();
+        pub static ref NAME: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#name")
+                .unwrap();
+        pub static ref ACTION: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action")
+                .unwrap();
+        pub static ref RESULT: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#result")
+                .unwrap();
     }
 }
 

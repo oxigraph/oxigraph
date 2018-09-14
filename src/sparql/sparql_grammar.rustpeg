@@ -257,7 +257,9 @@ GroupGraphPatternSub -> MultiSetPattern = a:TriplesBlock? _ b:GroupGraphPatternS
 }
 GroupGraphPatternSub_item -> Vec<PartialGraphPattern> = a:GraphPatternNotTriples _ ('.' _)? b:TriplesBlock? _ {
     let mut result = vec![a];
-    b.map(|v| result.push(PartialGraphPattern::Other(MultiSetPattern::BGP(v))));
+    if let Some(v) = b {
+        result.push(PartialGraphPattern::Other(MultiSetPattern::BGP(v)));
+    }
     result
 }
 
@@ -270,7 +272,7 @@ TriplesBlock -> Vec<TripleOrPathPattern> = h:TriplesSameSubjectPath _ t:TriplesB
     triples
 }
 TriplesBlock_tail -> Vec<TripleOrPathPattern> = '.' _ t:TriplesBlock? _ {
-    t.unwrap_or_else(|| Vec::default())
+    t.unwrap_or_else(Vec::default)
 }
 
 //[56]
@@ -308,7 +310,9 @@ DataBlock -> MultiSetPattern = l:(InlineDataOneVar / InlineDataFull) {
 InlineDataOneVar -> Vec<Binding> = var:Var _ '{' _ d:InlineDataOneVar_value* '}' {
     d.into_iter().map(|val| {
         let mut bindings = Binding::default();
-        val.map(|v| bindings.insert(var.clone(), v));
+        if let Some(v) = val {
+            bindings.insert(var.clone(), v);
+        }
         bindings
     }).collect()
 }
@@ -319,7 +323,9 @@ InlineDataFull -> Vec<Binding> = '(' _ vars:InlineDataFull_var* _ ')' _ '{' _ va
     val.into_iter().map(|vals| {
         let mut bindings = Binding::default();
         for (var, val) in vars.iter().zip(vals.into_iter()) {
-            val.map(|v| bindings.insert(var.clone(), v));
+            if let Some(v) = val {
+                bindings.insert(var.clone(), v);
+            }
         }
         bindings
     }).collect()
@@ -359,7 +365,7 @@ Constraint -> Expression = BrackettedExpression / BuiltInCall / FunctionCall
 
 //[70]
 FunctionCall -> Expression = f: iri _ a: ArgList {
-    Expression::CustomFunctionCall(f, a.into())
+    Expression::CustomFunctionCall(f, a)
 }
 
 //[71]
@@ -392,7 +398,7 @@ TriplesSameSubject -> Vec<TriplePattern> =
                 patterns.push(TriplePattern::new(s.clone(), p.clone(), o))
             }
         }
-        patterns.into_iter().map(|p| p.into()).collect()
+        patterns
     } /
     s:TriplesNode _ po:PropertyList {
         let mut patterns = s.patterns;
@@ -402,7 +408,7 @@ TriplesSameSubject -> Vec<TriplePattern> =
                 patterns.push(TriplePattern::new(s.focus.clone(), p.clone(), o))
             }
         }
-        patterns.into_iter().map(|p| p.into()).collect()
+        patterns
     }
 
 //[76]
@@ -420,7 +426,7 @@ PropertyListNotEmpty -> FocusedTriplePattern<Vec<(NamedNodeOrVariable,Vec<TermOr
 }
 PropertyListNotEmpty_item -> FocusedTriplePattern<(NamedNodeOrVariable,Vec<TermOrVariable>)> = p:Verb _ o:ObjectList _ {
     FocusedTriplePattern {
-        focus: (p.into(), o.focus),
+        focus: (p, o.focus),
         patterns: o.patterns
     }
 }
@@ -558,9 +564,9 @@ PathNegatedPropertySet -> PropertyPath =
                 Either::Right(b) => inverse.push(b)
             }
         }
-        if inverse.len() == 0 {
+        if inverse.is_empty() {
             PropertyPath::NegatedPropertySet(direct)
-        } else if direct.len() == 0 {
+        } else if direct.is_empty() {
            PropertyPath::InversePath(Box::new(PropertyPath::NegatedPropertySet(inverse)))
         } else {
             PropertyPath::AlternativePath(
@@ -903,7 +909,7 @@ iri -> NamedNode = i:(IRIREF / PrefixedName) {?
 
 //[137]
 PrefixedName -> String = PNAME_LN /
-    ns:PNAME_NS {? state.namespaces.get(ns).map(|v| v.clone()).ok_or("Prefix not found") }
+    ns:PNAME_NS {? state.namespaces.get(ns).cloned().ok_or("Prefix not found") }
 
 //[138]
 BlankNode -> BlankNode =

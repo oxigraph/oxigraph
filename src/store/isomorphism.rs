@@ -57,7 +57,7 @@ fn hash_blank_nodes(
     let mut bnodes_by_hash: HashMap<u64, Vec<BlankNode>> = HashMap::default();
 
     // NB: we need to sort the triples to have the same hash
-    for bnode in bnodes.into_iter() {
+    for bnode in bnodes {
         let mut hasher = DefaultHasher::new();
 
         {

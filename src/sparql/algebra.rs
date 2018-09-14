@@ -76,7 +76,7 @@ impl<'a> fmt::Display for SparqlPropertyPath<'a> {
 
 impl From<NamedNode> for PropertyPath {
     fn from(p: NamedNode) -> Self {
-        PropertyPath::PredicatePath(p.into())
+        PropertyPath::PredicatePath(p)
     }
 }
 
@@ -502,8 +502,7 @@ impl<'a> fmt::Display for SparqlExpression<'a> {
                         SparqlExpression(&*b),
                         SparqlExpression(cv)
                     )
-                })
-                .unwrap_or_else(|| {
+                }).unwrap_or_else(|| {
                     write!(
                         f,
                         "SUBSTR({}, {})",
@@ -523,8 +522,7 @@ impl<'a> fmt::Display for SparqlExpression<'a> {
                         SparqlExpression(&*c),
                         dv
                     )
-                })
-                .unwrap_or_else(|| {
+                }).unwrap_or_else(|| {
                     write!(
                         f,
                         "REPLACE({}, {}, {})",
@@ -634,8 +632,7 @@ impl<'a> fmt::Display for SparqlExpression<'a> {
                         SparqlExpression(&*b),
                         cv
                     )
-                })
-                .unwrap_or_else(|| {
+                }).unwrap_or_else(|| {
                     write!(
                         f,
                         "REGEX({}, {})",
@@ -729,7 +726,7 @@ impl From<ListPattern> for MultiSetPattern {
 }
 
 impl MultiSetPattern {
-    pub fn visible_variables<'a>(&'a self) -> BTreeSet<&'a Variable> {
+    pub fn visible_variables(&self) -> BTreeSet<&Variable> {
         let mut vars = BTreeSet::default();
         self.add_visible_variables(&mut vars);
         vars
@@ -1102,8 +1099,7 @@ impl<'a> fmt::Display for SparqlListPattern<'a> {
                         start,
                         length
                     )
-                })
-                .unwrap_or_else(|| {
+                }).unwrap_or_else(|| {
                     write!(
                         f,
                         "{} LIMIT {}",
@@ -1118,7 +1114,7 @@ impl<'a> fmt::Display for SparqlListPattern<'a> {
     }
 }
 
-fn build_sparql_select_arguments(args: &Vec<Variable>) -> String {
+fn build_sparql_select_arguments(args: &[Variable]) -> String {
     if args.is_empty() {
         "*".to_owned()
     } else {
@@ -1263,8 +1259,7 @@ impl<'a> fmt::Display for SparqlAggregation<'a> {
                             SparqlExpression(e),
                             s.escape()
                         )
-                    })
-                    .unwrap_or_else(|| write!(f, "GROUP_CONCAT({})", SparqlExpression(e)))
+                    }).unwrap_or_else(|| write!(f, "GROUP_CONCAT({})", SparqlExpression(e)))
             },
         }
     }

@@ -4,13 +4,13 @@ pub trait Escaper {
 
 impl<'a> Escaper for &'a str {
     fn escape(&self) -> String {
-        self.chars().flat_map(|c| EscapeRDF::new(c)).collect()
+        self.chars().flat_map(EscapeRDF::new).collect()
     }
 }
 
 impl Escaper for String {
     fn escape(&self) -> String {
-        self.chars().flat_map(|c| EscapeRDF::new(c)).collect()
+        self.chars().flat_map(EscapeRDF::new).collect()
     }
 }
 

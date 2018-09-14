@@ -20,7 +20,7 @@ mod grammar {
     }
 
     impl ParserState {
-        fn url_parser<'a>(&'a self) -> ParseOptions<'a> {
+        fn url_parser(&self) -> ParseOptions {
             Url::options().base_url(self.base_uri.as_ref())
         }
     }

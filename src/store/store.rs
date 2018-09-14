@@ -276,7 +276,7 @@ impl<S: EncodedQuadsStore> Dataset for StoreDataset<S> {
 impl<S: EncodedQuadsStore> fmt::Display for StoreDataset<S> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         for quad in self.iter()? {
-            write!(fmt, "{}\n", quad?)?;
+            writeln!(fmt, "{}", quad?)?;
         }
         Ok(())
     }
@@ -465,7 +465,7 @@ impl<S: EncodedQuadsStore> NamedGraph for StoreNamedGraph<S> {
 impl<S: EncodedQuadsStore> fmt::Display for StoreNamedGraph<S> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         for triple in self.iter()? {
-            write!(fmt, "{}\n", triple?)?;
+            writeln!(fmt, "{}", triple?)?;
         }
         Ok(())
     }
@@ -620,7 +620,7 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
 impl<S: EncodedQuadsStore> fmt::Display for StoreDefaultGraph<S> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         for triple in self.iter()? {
-            write!(fmt, "{}\n", triple?)?;
+            writeln!(fmt, "{}", triple?)?;
         }
         Ok(())
     }
@@ -761,8 +761,7 @@ impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
                 &encoder.encode_named_or_blank_node(triple.subject())?,
                 &encoder.encode_named_node(triple.predicate())?,
                 &encoder.encode_term(triple.object())?,
-            )?
-            .any(|_| true))
+            )?.any(|_| true))
     }
 
     fn insert(&self, triple: &Triple) -> Result<()> {
@@ -785,7 +784,7 @@ impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
 impl<S: EncodedQuadsStore> fmt::Display for StoreUnionGraph<S> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         for triple in self.iter()? {
-            write!(fmt, "{}\n", triple?)?;
+            writeln!(fmt, "{}", triple?)?;
         }
         Ok(())
     }

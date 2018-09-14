@@ -228,7 +228,7 @@ mod grammar {
                 }
             }
             None => {
-                pv.extend(p.visible_variables().into_iter().map(|v| v.clone())) //TODO: is it really useful to do a projection?
+                pv.extend(p.visible_variables().into_iter().cloned()) //TODO: is it really useful to do a projection?
             }
         }
         let mut m = ListPattern::from(p);
@@ -266,19 +266,16 @@ mod grammar {
     }
 
     impl ParserState {
-        fn url_parser<'a>(&'a self) -> ParseOptions<'a> {
+        fn url_parser(&self) -> ParseOptions {
             Url::options().base_url(self.base_uri.as_ref())
         }
 
         fn new_aggregation(&mut self, agg: Aggregation) -> Variable {
-            self.aggregations
-                .get(&agg)
-                .map(|v| v.clone())
-                .unwrap_or_else(|| {
-                    let new_var = Variable::default();
-                    self.aggregations.insert(agg, new_var.clone());
-                    new_var
-                })
+            self.aggregations.get(&agg).cloned().unwrap_or_else(|| {
+                let new_var = Variable::default();
+                self.aggregations.insert(agg, new_var.clone());
+                new_var
+            })
         }
     }
 
@@ -314,11 +311,11 @@ pub use self::grammar::read_sparql_query;
 fn needs_unescape_unicode_codepoints(input: &str) -> bool {
     let bytes = input.as_bytes();
     for i in 1..bytes.len() {
-        if (bytes[i] == ('u' as u8) || bytes[i] == ('U' as u8)) && bytes[i - 1] == ('/' as u8) {
+        if (bytes[i] == b'u' || bytes[i] == b'U') && bytes[i - 1] == b'/' {
             return true;
         }
     }
-    return false;
+    false
 }
 
 struct UnescapeUnicodeCharIterator<'a> {
@@ -393,7 +390,7 @@ impl<'a> Iterator for UnescapeUnicodeCharIterator<'a> {
     }
 }
 
-fn unescape_unicode_codepoints<'a>(input: Cow<'a, str>) -> Cow<'a, str> {
+fn unescape_unicode_codepoints(input: Cow<str>) -> Cow<str> {
     if needs_unescape_unicode_codepoints(&input) {
         UnescapeUnicodeCharIterator::new(&input).collect()
     } else {

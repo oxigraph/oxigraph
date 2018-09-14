@@ -180,27 +180,27 @@ impl fmt::Display for Triple {
 
 impl TripleLike for Triple {
     fn subject(&self) -> &NamedOrBlankNode {
-        return &self.subject;
+        &self.subject
     }
 
     fn subject_owned(self) -> NamedOrBlankNode {
-        return self.subject;
+        self.subject
     }
 
     fn predicate(&self) -> &NamedNode {
-        return &self.predicate;
+        &self.predicate
     }
 
     fn predicate_owned(self) -> NamedNode {
-        return self.predicate;
+        self.predicate
     }
 
     fn object(&self) -> &Term {
-        return &self.object;
+        &self.object
     }
 
     fn object_owned(self) -> Term {
-        return self.object;
+        self.object
     }
 }
 
@@ -254,36 +254,36 @@ impl fmt::Display for Quad {
 
 impl TripleLike for Quad {
     fn subject(&self) -> &NamedOrBlankNode {
-        return &self.subject;
+        &self.subject
     }
 
     fn subject_owned(self) -> NamedOrBlankNode {
-        return self.subject;
+        self.subject
     }
 
     fn predicate(&self) -> &NamedNode {
-        return &self.predicate;
+        &self.predicate
     }
 
     fn predicate_owned(self) -> NamedNode {
-        return self.predicate;
+        self.predicate
     }
 
     fn object(&self) -> &Term {
-        return &self.object;
+        &self.object
     }
 
     fn object_owned(self) -> Term {
-        return self.object;
+        self.object
     }
 }
 
 impl QuadLike for Quad {
     fn graph_name(&self) -> &Option<NamedOrBlankNode> {
-        return &self.graph_name;
+        &self.graph_name
     }
 
     fn graph_name_owned(self) -> Option<NamedOrBlankNode> {
-        return self.graph_name;
+        self.graph_name
     }
 }
