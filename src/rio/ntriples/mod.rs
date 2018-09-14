@@ -25,18 +25,17 @@ impl<R: Read> Iterator for NTriplesIterator<R> {
     type Item = Result<Triple>;
 
     fn next(&mut self) -> Option<Result<Triple>> {
-        match self.reader.read_line(&mut self.buffer) {
-            Ok(line_count) => if line_count == 0 {
-                None
-            } else {
-                let result = grammar::triple(&self.buffer, &mut self.bnodes_map);
-                self.buffer.clear();
-                match result {
-                    Ok(Some(triple)) => Some(Ok(triple)),
-                    Ok(None) => self.next(),
-                    Err(error) => Some(Err(error.into())),
-                }
-            },
+        if let Err(error) = self.reader.read_line(&mut self.buffer) {
+            return Some(Err(error.into()));
+        }
+        if self.buffer.is_empty() {
+            return None; //End of file
+        }
+        let result = grammar::triple(&self.buffer, &mut self.bnodes_map);
+        self.buffer.clear();
+        match result {
+            Ok(Some(triple)) => Some(Ok(triple)),
+            Ok(None) => self.next(),
             Err(error) => Some(Err(error.into())),
         }
     }
