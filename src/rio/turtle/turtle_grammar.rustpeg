@@ -8,8 +8,7 @@ use std::iter;
 #![arguments(state: &mut ParserState, buffer: &mut Vec<Triple>)]
 
 //[1]
-#[pub]
-turtleDoc -> () = _ (statement _)*
+pub turtleDoc -> () = _ (statement _)*
 
 //[2]
 statement -> () = directive / triples "."

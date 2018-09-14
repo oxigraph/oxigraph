@@ -10,8 +10,7 @@ use std::str::FromStr;
 
 
 //[1]
-#[pub]
-QueryUnit -> Query = Query
+pub QueryUnit -> Query = Query
 
 //[2]
 Query -> Query = _ Prologue _ q:(SelectQuery / ConstructQuery / DescribeQuery / AskQuery) _ { //TODO: ValuesClause
