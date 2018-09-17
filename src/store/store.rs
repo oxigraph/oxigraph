@@ -5,9 +5,6 @@ use std::iter::FromIterator;
 use std::iter::Iterator;
 use std::sync::Arc;
 use store::numeric_encoder::*;
-use store::Dataset;
-use store::Graph;
-use store::NamedGraph;
 
 /// Defines the Store traits that is used to have efficient binary storage
 

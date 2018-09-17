@@ -121,19 +121,19 @@ AskQuery -> Query = "ASK"i _ d:DatasetClauses w:WhereClause _ g:GroupClause? _ h
 }
 
 //[13]
-DatasetClause -> Dataset = "FROM"i _ d:(DefaultGraphClause / NamedGraphClause) { d }
-DatasetClauses -> Dataset = d:DatasetClauses_item* {
-    d.into_iter().fold(Dataset::default(), |mut a, b| a + b)
+DatasetClause -> DatasetSpec = "FROM"i _ d:(DefaultGraphClause / NamedGraphClause) { d }
+DatasetClauses -> DatasetSpec = d:DatasetClauses_item* {
+    d.into_iter().fold(DatasetSpec::default(), |mut a, b| a + b)
 }
-DatasetClauses_item -> Dataset = d:DatasetClause _ { d }
+DatasetClauses_item -> DatasetSpec = d:DatasetClause _ { d }
 //[14]
-DefaultGraphClause -> Dataset = s:SourceSelector {
-    Dataset::new_with_default(s)
+DefaultGraphClause -> DatasetSpec = s:SourceSelector {
+    DatasetSpec::new_with_default(s)
 }
 
 //[15]
-NamedGraphClause -> Dataset = "NAMED"i _ s:SourceSelector {
-    Dataset::new_with_named(s)
+NamedGraphClause -> DatasetSpec = "NAMED"i _ s:SourceSelector {
+    DatasetSpec::new_with_named(s)
 }
 
 //[16]

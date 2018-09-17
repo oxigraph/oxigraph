@@ -204,7 +204,7 @@ impl TripleLike for Triple {
     }
 }
 
-/// The interface of [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) that are in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
+/// The interface of containers that looks like [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) that are in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
 pub trait QuadLike: TripleLike {
     /// The name of the RDF [graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph) in which the triple is or None if it is in the [default graph](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph)
     fn graph_name(&self) -> &Option<NamedOrBlankNode>;

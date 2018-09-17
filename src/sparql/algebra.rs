@@ -998,7 +998,7 @@ impl ListPattern {
 
 struct SparqlListPattern<'a> {
     algebra: &'a ListPattern,
-    dataset: &'a Dataset,
+    dataset: &'a DatasetSpec,
 }
 
 impl<'a> fmt::Display for SparqlListPattern<'a> {
@@ -1298,12 +1298,12 @@ impl<'a> fmt::Display for SparqlOrderComparator<'a> {
 }
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash, Default)]
-pub struct Dataset {
+pub struct DatasetSpec {
     pub default: Vec<NamedNode>,
     pub named: Vec<NamedNode>,
 }
 
-impl Dataset {
+impl DatasetSpec {
     pub fn new_with_default(graph: NamedNode) -> Self {
         Self {
             default: vec![graph],
@@ -1319,17 +1319,17 @@ impl Dataset {
     }
 }
 
-impl Add for Dataset {
+impl Add for DatasetSpec {
     type Output = Self;
 
-    fn add(mut self, rhs: Dataset) -> Self {
+    fn add(mut self, rhs: DatasetSpec) -> Self {
         self.default.extend_from_slice(&rhs.default);
         self.named.extend_from_slice(&rhs.named);
         self
     }
 }
 
-impl fmt::Display for Dataset {
+impl fmt::Display for DatasetSpec {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for g in &self.default {
             write!(f, "FROM {} ", g)?;
@@ -1342,26 +1342,26 @@ impl fmt::Display for Dataset {
 }
 
 lazy_static! {
-    static ref EMPTY_DATASET: Dataset = Dataset::default();
+    static ref EMPTY_DATASET: DatasetSpec = DatasetSpec::default();
 }
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum Query {
     SelectQuery {
-        dataset: Dataset,
+        dataset: DatasetSpec,
         algebra: ListPattern,
     },
     ConstructQuery {
         construct: Vec<TriplePattern>,
-        dataset: Dataset,
+        dataset: DatasetSpec,
         algebra: ListPattern,
     },
     DescribeQuery {
-        dataset: Dataset,
+        dataset: DatasetSpec,
         algebra: ListPattern,
     },
     AskQuery {
-        dataset: Dataset,
+        dataset: DatasetSpec,
         algebra: ListPattern,
     },
 }

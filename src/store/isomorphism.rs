@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::hash::Hash;
 use std::hash::Hasher;
-use store::Graph;
 
 #[derive(Eq, PartialEq, Hash, Ord, PartialOrd)]
 struct SubjectPredicate {
