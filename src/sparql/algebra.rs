@@ -5,6 +5,163 @@ use std::collections::BTreeSet;
 use std::fmt;
 use std::ops::Add;
 use utils::Escaper;
+use uuid::Uuid;
+
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+pub enum Variable {
+    Variable { name: String },
+    BlankNode { id: Uuid },
+    Internal { id: Uuid },
+}
+
+impl Variable {
+    pub fn new(name: impl Into<String>) -> Self {
+        Variable::Variable { name: name.into() }
+    }
+
+    pub fn has_name(&self) -> bool {
+        match self {
+            Variable::Variable { .. } => true,
+            _ => false,
+        }
+    }
+}
+
+impl fmt::Display for Variable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Variable::Variable { name } => write!(f, "?{}", name),
+            Variable::BlankNode { id } => write!(f, "_:{}", id.simple()),
+            Variable::Internal { id } => write!(f, "?{}", id.simple()),
+        }
+    }
+}
+
+impl Default for Variable {
+    fn default() -> Self {
+        Variable::Internal { id: Uuid::new_v4() }
+    }
+}
+
+impl From<BlankNode> for Variable {
+    fn from(blank_node: BlankNode) -> Self {
+        Variable::BlankNode { id: *blank_node }
+    }
+}
+
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+pub enum NamedNodeOrVariable {
+    NamedNode(NamedNode),
+    Variable(Variable),
+}
+
+impl fmt::Display for NamedNodeOrVariable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            NamedNodeOrVariable::NamedNode(node) => write!(f, "{}", node),
+            NamedNodeOrVariable::Variable(var) => write!(f, "{}", var),
+        }
+    }
+}
+
+impl From<NamedNode> for NamedNodeOrVariable {
+    fn from(node: NamedNode) -> Self {
+        NamedNodeOrVariable::NamedNode(node)
+    }
+}
+
+impl From<Variable> for NamedNodeOrVariable {
+    fn from(var: Variable) -> Self {
+        NamedNodeOrVariable::Variable(var)
+    }
+}
+
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+pub enum TermOrVariable {
+    NamedNode(NamedNode),
+    Literal(Literal),
+    Variable(Variable),
+}
+
+impl fmt::Display for TermOrVariable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TermOrVariable::NamedNode(node) => write!(f, "{}", node),
+            TermOrVariable::Literal(node) => write!(f, "{}", node),
+            TermOrVariable::Variable(var) => write!(f, "{}", var),
+        }
+    }
+}
+
+impl From<NamedNode> for TermOrVariable {
+    fn from(node: NamedNode) -> Self {
+        TermOrVariable::NamedNode(node)
+    }
+}
+
+impl From<BlankNode> for TermOrVariable {
+    fn from(node: BlankNode) -> Self {
+        TermOrVariable::Variable(node.into())
+    }
+}
+
+impl From<Literal> for TermOrVariable {
+    fn from(literal: Literal) -> Self {
+        TermOrVariable::Literal(literal)
+    }
+}
+
+impl From<Variable> for TermOrVariable {
+    fn from(var: Variable) -> Self {
+        TermOrVariable::Variable(var)
+    }
+}
+
+impl From<Term> for TermOrVariable {
+    fn from(term: Term) -> Self {
+        match term {
+            Term::NamedNode(node) => TermOrVariable::NamedNode(node),
+            Term::BlankNode(node) => TermOrVariable::Variable(node.into()),
+            Term::Literal(literal) => TermOrVariable::Literal(literal),
+        }
+    }
+}
+
+impl From<NamedNodeOrVariable> for TermOrVariable {
+    fn from(element: NamedNodeOrVariable) -> Self {
+        match element {
+            NamedNodeOrVariable::NamedNode(node) => TermOrVariable::NamedNode(node),
+            NamedNodeOrVariable::Variable(var) => TermOrVariable::Variable(var),
+        }
+    }
+}
+
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+pub struct TriplePattern {
+    pub subject: TermOrVariable,
+    pub predicate: NamedNodeOrVariable,
+    pub object: TermOrVariable,
+}
+
+impl TriplePattern {
+    pub fn new(
+        subject: impl Into<TermOrVariable>,
+        predicate: impl Into<NamedNodeOrVariable>,
+        object: impl Into<TermOrVariable>,
+    ) -> Self {
+        Self {
+            subject: subject.into(),
+            predicate: predicate.into(),
+            object: object.into(),
+        }
+    }
+}
+
+impl fmt::Display for TriplePattern {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} {} {}", self.subject, self.predicate, self.object)
+    }
+}
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum PropertyPath {
@@ -739,21 +896,21 @@ impl MultiSetPattern {
                     match pattern {
                         TripleOrPathPattern::Triple(tp) => {
                             if let TermOrVariable::Variable(ref s) = tp.subject {
-                                vars.insert(s);
+                                adds_if_has_name(vars, s);
                             }
                             if let NamedNodeOrVariable::Variable(ref p) = tp.predicate {
-                                vars.insert(p);
+                                adds_if_has_name(vars, p);
                             }
                             if let TermOrVariable::Variable(ref o) = tp.object {
-                                vars.insert(o);
+                                adds_if_has_name(vars, o);
                             }
                         }
                         TripleOrPathPattern::Path(ppp) => {
                             if let TermOrVariable::Variable(ref s) = ppp.subject {
-                                vars.insert(s);
+                                adds_if_has_name(vars, s);
                             }
                             if let TermOrVariable::Variable(ref o) = ppp.object {
-                                vars.insert(o);
+                                adds_if_has_name(vars, o);
                             }
                         }
                     }
@@ -775,13 +932,19 @@ impl MultiSetPattern {
             MultiSetPattern::Graph(_, p) => p.add_visible_variables(vars),
             MultiSetPattern::Extend(p, v, _) => {
                 p.add_visible_variables(vars);
-                vars.insert(&v);
+                adds_if_has_name(vars, &v);
             }
             MultiSetPattern::Minus(a, _) => a.add_visible_variables(vars),
             MultiSetPattern::ToMultiSet(l) => l.add_visible_variables(vars),
             MultiSetPattern::Service(_, p, _) => p.add_visible_variables(vars),
             MultiSetPattern::AggregateJoin(_, a) => vars.extend(a.iter().map(|(_, v)| v)),
         }
+    }
+}
+
+fn adds_if_has_name<'a>(vars: &mut BTreeSet<&'a Variable>, var: &'a Variable) {
+    if var.has_name() {
+        vars.insert(var);
     }
 }
 
