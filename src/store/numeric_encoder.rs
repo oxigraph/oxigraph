@@ -406,7 +406,7 @@ mod test {
         ];
         for term in terms {
             let encoded = encoder.encode_term(&term).unwrap();
-            assert_eq!(term, encoder.decode_term(&encoded).unwrap())
+            assert_eq!(term, encoder.decode_term(encoded).unwrap())
         }
     }
 

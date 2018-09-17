@@ -17,7 +17,6 @@ use rudf::rio::turtle::read_turtle;
 use rudf::sparql::algebra::Query;
 use rudf::sparql::parser::read_sparql_query;
 use rudf::store::isomorphism::GraphIsomorphism;
-use rudf::store::Graph;
 use rudf::store::MemoryGraph;
 use std::error::Error;
 use std::fmt;
