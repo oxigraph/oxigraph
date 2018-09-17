@@ -124,169 +124,169 @@ impl EncodedQuadsStore for RocksDbStore {
 
     fn quads_for_subject(
         &self,
-        subject: &EncodedTerm,
+        subject: EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<SPOGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.spog_cf)?;
         iter.seek(&encode_term(subject)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: SPOGIndexIterator { iter },
-            filter: EncodedQuadPattern::new(Some(*subject), None, None, None),
+            filter: EncodedQuadPattern::new(Some(subject), None, None, None),
         })
     }
 
     fn quads_for_subject_predicate(
         &self,
-        subject: &EncodedTerm,
-        predicate: &EncodedTerm,
+        subject: EncodedTerm,
+        predicate: EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<SPOGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.spog_cf)?;
         iter.seek(&encode_term_pair(subject, predicate)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: SPOGIndexIterator { iter },
-            filter: EncodedQuadPattern::new(Some(*subject), Some(*predicate), None, None),
+            filter: EncodedQuadPattern::new(Some(subject), Some(predicate), None, None),
         })
     }
 
     fn quads_for_subject_predicate_object(
         &self,
-        subject: &EncodedTerm,
-        predicate: &EncodedTerm,
-        object: &EncodedTerm,
+        subject: EncodedTerm,
+        predicate: EncodedTerm,
+        object: EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<SPOGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.spog_cf)?;
         iter.seek(&encode_term_triple(subject, predicate, object)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: SPOGIndexIterator { iter },
-            filter: EncodedQuadPattern::new(Some(*subject), Some(*predicate), Some(*object), None),
+            filter: EncodedQuadPattern::new(Some(subject), Some(predicate), Some(object), None),
         })
     }
 
     fn quads_for_subject_object(
         &self,
-        subject: &EncodedTerm,
-        object: &EncodedTerm,
+        subject: EncodedTerm,
+        object: EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<OSPGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.spog_cf)?;
         iter.seek(&encode_term_pair(object, subject)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: OSPGIndexIterator { iter },
-            filter: EncodedQuadPattern::new(Some(*subject), None, Some(*object), None),
+            filter: EncodedQuadPattern::new(Some(subject), None, Some(object), None),
         })
     }
 
     fn quads_for_predicate(
         &self,
-        predicate: &EncodedTerm,
+        predicate: EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<POSGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.posg_cf)?;
         iter.seek(&encode_term(predicate)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: POSGIndexIterator { iter },
-            filter: EncodedQuadPattern::new(None, Some(*predicate), None, None),
+            filter: EncodedQuadPattern::new(None, Some(predicate), None, None),
         })
     }
 
     fn quads_for_predicate_object(
         &self,
-        predicate: &EncodedTerm,
-        object: &EncodedTerm,
+        predicate: EncodedTerm,
+        object: EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<POSGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.spog_cf)?;
         iter.seek(&encode_term_pair(predicate, object)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: POSGIndexIterator { iter },
-            filter: EncodedQuadPattern::new(None, Some(*predicate), Some(*object), None),
+            filter: EncodedQuadPattern::new(None, Some(predicate), Some(object), None),
         })
     }
 
     fn quads_for_object(
         &self,
-        object: &EncodedTerm,
+        object: EncodedTerm,
     ) -> Result<FilteringEncodedQuadsIterator<OSPGIndexIterator>> {
         let mut iter = self.db.raw_iterator_cf(self.ospg_cf)?;
-        iter.seek(&encode_term(&object)?);
+        iter.seek(&encode_term(object)?);
         Ok(FilteringEncodedQuadsIterator {
             iter: OSPGIndexIterator { iter },
-            filter: EncodedQuadPattern::new(None, None, Some(*object), None),
+            filter: EncodedQuadPattern::new(None, None, Some(object), None),
         })
     }
 
     fn quads_for_graph(
         &self,
-        graph_name: &EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<InGraphQuadsIterator<SPOGIndexIterator>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads()?,
-            graph_name: *graph_name,
+            graph_name,
         })
     }
 
     fn quads_for_subject_graph(
         &self,
-        subject: &EncodedTerm,
-        graph_name: &EncodedTerm,
+        subject: EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<SPOGIndexIterator>>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads_for_subject(subject)?,
-            graph_name: *graph_name,
+            graph_name,
         })
     }
 
     fn quads_for_subject_predicate_graph(
         &self,
-        subject: &EncodedTerm,
-        predicate: &EncodedTerm,
-        graph_name: &EncodedTerm,
+        subject: EncodedTerm,
+        predicate: EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<SPOGIndexIterator>>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads_for_subject_predicate(subject, predicate)?,
-            graph_name: *graph_name,
+            graph_name,
         })
     }
 
     fn quads_for_subject_object_graph(
         &self,
-        subject: &EncodedTerm,
-        object: &EncodedTerm,
-        graph_name: &EncodedTerm,
+        subject: EncodedTerm,
+        object: EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<OSPGIndexIterator>>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads_for_subject_object(subject, object)?,
-            graph_name: *graph_name,
+            graph_name,
         })
     }
 
     fn quads_for_predicate_graph(
         &self,
-        predicate: &EncodedTerm,
-        graph_name: &EncodedTerm,
+        predicate: EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<POSGIndexIterator>>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads_for_predicate(predicate)?,
-            graph_name: *graph_name,
+            graph_name,
         })
     }
 
     fn quads_for_predicate_object_graph(
         &self,
-        predicate: &EncodedTerm,
-        object: &EncodedTerm,
-        graph_name: &EncodedTerm,
+        predicate: EncodedTerm,
+        object: EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<POSGIndexIterator>>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads_for_predicate_object(predicate, object)?,
-            graph_name: *graph_name,
+            graph_name,
         })
     }
 
     fn quads_for_object_graph(
         &self,
-        object: &EncodedTerm,
-        graph_name: &EncodedTerm,
+        object: EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<OSPGIndexIterator>>> {
         Ok(InGraphQuadsIterator {
             iter: self.quads_for_object(object)?,
-            graph_name: *graph_name,
+            graph_name,
         })
     }
 
@@ -387,24 +387,24 @@ impl EncodedQuadPattern {
     }
 }
 
-fn encode_term(t: &EncodedTerm) -> Result<Vec<u8>> {
+fn encode_term(t: EncodedTerm) -> Result<Vec<u8>> {
     let mut vec = Vec::default();
-    vec.write_term(&t)?;
+    vec.write_term(t)?;
     Ok(vec)
 }
 
-fn encode_term_pair(t1: &EncodedTerm, t2: &EncodedTerm) -> Result<Vec<u8>> {
+fn encode_term_pair(t1: EncodedTerm, t2: EncodedTerm) -> Result<Vec<u8>> {
     let mut vec = Vec::default();
-    vec.write_term(&t1)?;
-    vec.write_term(&t2)?;
+    vec.write_term(t1)?;
+    vec.write_term(t2)?;
     Ok(vec)
 }
 
-fn encode_term_triple(t1: &EncodedTerm, t2: &EncodedTerm, t3: &EncodedTerm) -> Result<Vec<u8>> {
+fn encode_term_triple(t1: EncodedTerm, t2: EncodedTerm, t3: EncodedTerm) -> Result<Vec<u8>> {
     let mut vec = Vec::default();
-    vec.write_term(&t1)?;
-    vec.write_term(&t2)?;
-    vec.write_term(&t3)?;
+    vec.write_term(t1)?;
+    vec.write_term(t2)?;
+    vec.write_term(t3)?;
     Ok(vec)
 }
 

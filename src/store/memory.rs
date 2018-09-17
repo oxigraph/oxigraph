@@ -67,7 +67,7 @@ impl EncodedQuadsStore for MemoryStore {
             for (s, pos) in &graph.spo {
                 for (p, os) in pos.iter() {
                     for o in os.iter() {
-                        result.push(Ok(encoded_quad(s, p, o, graph_name)))
+                        result.push(Ok(EncodedQuad::new(*s, *p, *o, *graph_name)))
                     }
                 }
             }
@@ -77,14 +77,14 @@ impl EncodedQuadsStore for MemoryStore {
 
     fn quads_for_subject(
         &self,
-        subject: &EncodedTerm,
+        subject: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
         for (graph_name, graph) in self.graph_indexes.read()?.iter() {
-            if let Some(pos) = graph.spo.get(subject) {
+            if let Some(pos) = graph.spo.get(&subject) {
                 for (p, os) in pos.iter() {
                     for o in os.iter() {
-                        result.push(Ok(encoded_quad(subject, p, o, graph_name)))
+                        result.push(Ok(EncodedQuad::new(subject, *p, *o, *graph_name)))
                     }
                 }
             }
@@ -94,15 +94,15 @@ impl EncodedQuadsStore for MemoryStore {
 
     fn quads_for_subject_predicate(
         &self,
-        subject: &EncodedTerm,
-        predicate: &EncodedTerm,
+        subject: EncodedTerm,
+        predicate: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
         for (graph_name, graph) in self.graph_indexes.read()?.iter() {
-            if let Some(pos) = graph.spo.get(subject) {
-                if let Some(os) = pos.get(predicate) {
+            if let Some(pos) = graph.spo.get(&subject) {
+                if let Some(os) = pos.get(&predicate) {
                     for o in os.iter() {
-                        result.push(Ok(encoded_quad(subject, predicate, o, graph_name)))
+                        result.push(Ok(EncodedQuad::new(subject, predicate, *o, *graph_name)))
                     }
                 }
             }
@@ -112,16 +112,21 @@ impl EncodedQuadsStore for MemoryStore {
 
     fn quads_for_subject_predicate_object(
         &self,
-        subject: &EncodedTerm,
-        predicate: &EncodedTerm,
-        object: &EncodedTerm,
+        subject: EncodedTerm,
+        predicate: EncodedTerm,
+        object: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
         for (graph_name, graph) in self.graph_indexes.read()?.iter() {
-            if let Some(pos) = graph.spo.get(subject) {
-                if let Some(os) = pos.get(predicate) {
-                    if os.contains(object) {
-                        result.push(Ok(encoded_quad(subject, predicate, object, graph_name)))
+            if let Some(pos) = graph.spo.get(&subject) {
+                if let Some(os) = pos.get(&predicate) {
+                    if os.contains(&object) {
+                        result.push(Ok(EncodedQuad::new(
+                            subject,
+                            predicate,
+                            object,
+                            *graph_name,
+                        )))
                     }
                 }
             }
@@ -131,15 +136,15 @@ impl EncodedQuadsStore for MemoryStore {
 
     fn quads_for_subject_object(
         &self,
-        subject: &EncodedTerm,
-        object: &EncodedTerm,
+        subject: EncodedTerm,
+        object: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
         for (graph_name, graph) in self.graph_indexes.read()?.iter() {
-            if let Some(sps) = graph.osp.get(object) {
-                if let Some(ps) = sps.get(subject) {
+            if let Some(sps) = graph.osp.get(&object) {
+                if let Some(ps) = sps.get(&subject) {
                     for p in ps.iter() {
-                        result.push(Ok(encoded_quad(subject, p, object, graph_name)))
+                        result.push(Ok(EncodedQuad::new(subject, *p, object, *graph_name)))
                     }
                 }
             }
@@ -149,14 +154,14 @@ impl EncodedQuadsStore for MemoryStore {
 
     fn quads_for_predicate(
         &self,
-        predicate: &EncodedTerm,
+        predicate: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
         for (graph_name, graph) in self.graph_indexes.read()?.iter() {
-            if let Some(oss) = graph.pos.get(predicate) {
+            if let Some(oss) = graph.pos.get(&predicate) {
                 for (o, ss) in oss.iter() {
                     for s in ss.iter() {
-                        result.push(Ok(encoded_quad(s, predicate, o, graph_name)))
+                        result.push(Ok(EncodedQuad::new(*s, predicate, *o, *graph_name)))
                     }
                 }
             }
@@ -166,15 +171,15 @@ impl EncodedQuadsStore for MemoryStore {
 
     fn quads_for_predicate_object(
         &self,
-        predicate: &EncodedTerm,
-        object: &EncodedTerm,
+        predicate: EncodedTerm,
+        object: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
         for (graph_name, graph) in self.graph_indexes.read()?.iter() {
-            if let Some(oss) = graph.pos.get(predicate) {
-                if let Some(ss) = oss.get(object) {
+            if let Some(oss) = graph.pos.get(&predicate) {
+                if let Some(ss) = oss.get(&object) {
                     for s in ss.iter() {
-                        result.push(Ok(encoded_quad(s, predicate, object, graph_name)))
+                        result.push(Ok(EncodedQuad::new(*s, predicate, object, *graph_name)))
                     }
                 }
             }
@@ -184,14 +189,14 @@ impl EncodedQuadsStore for MemoryStore {
 
     fn quads_for_object(
         &self,
-        object: &EncodedTerm,
+        object: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
         for (graph_name, graph) in self.graph_indexes.read()?.iter() {
-            if let Some(sps) = graph.osp.get(object) {
+            if let Some(sps) = graph.osp.get(&object) {
                 for (s, ps) in sps.iter() {
                     for p in ps.iter() {
-                        result.push(Ok(encoded_quad(s, p, object, graph_name)))
+                        result.push(Ok(EncodedQuad::new(*s, *p, object, *graph_name)))
                     }
                 }
             }
@@ -201,14 +206,14 @@ impl EncodedQuadsStore for MemoryStore {
 
     fn quads_for_graph(
         &self,
-        graph_name: &EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes.read()?.get(graph_name) {
+        if let Some(graph) = self.graph_indexes.read()?.get(&graph_name) {
             for (s, pos) in &graph.spo {
                 for (p, os) in pos.iter() {
                     for o in os.iter() {
-                        result.push(Ok(encoded_quad(s, p, o, graph_name)))
+                        result.push(Ok(EncodedQuad::new(*s, *p, *o, graph_name)))
                     }
                 }
             }
@@ -218,15 +223,15 @@ impl EncodedQuadsStore for MemoryStore {
 
     fn quads_for_subject_graph(
         &self,
-        subject: &EncodedTerm,
-        graph_name: &EncodedTerm,
+        subject: EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes.read()?.get(graph_name) {
-            if let Some(pos) = graph.spo.get(subject) {
+        if let Some(graph) = self.graph_indexes.read()?.get(&graph_name) {
+            if let Some(pos) = graph.spo.get(&subject) {
                 for (p, os) in pos.iter() {
                     for o in os.iter() {
-                        result.push(Ok(encoded_quad(subject, p, o, graph_name)))
+                        result.push(Ok(EncodedQuad::new(subject, *p, *o, graph_name)))
                     }
                 }
             }
@@ -236,16 +241,16 @@ impl EncodedQuadsStore for MemoryStore {
 
     fn quads_for_subject_predicate_graph(
         &self,
-        subject: &EncodedTerm,
-        predicate: &EncodedTerm,
-        graph_name: &EncodedTerm,
+        subject: EncodedTerm,
+        predicate: EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes.read()?.get(graph_name) {
-            if let Some(pos) = graph.spo.get(subject) {
-                if let Some(os) = pos.get(predicate) {
+        if let Some(graph) = self.graph_indexes.read()?.get(&graph_name) {
+            if let Some(pos) = graph.spo.get(&subject) {
+                if let Some(os) = pos.get(&predicate) {
                     for o in os.iter() {
-                        result.push(Ok(encoded_quad(subject, predicate, o, graph_name)))
+                        result.push(Ok(EncodedQuad::new(subject, predicate, *o, graph_name)))
                     }
                 }
             }
@@ -255,16 +260,16 @@ impl EncodedQuadsStore for MemoryStore {
 
     fn quads_for_subject_object_graph(
         &self,
-        subject: &EncodedTerm,
-        object: &EncodedTerm,
-        graph_name: &EncodedTerm,
+        subject: EncodedTerm,
+        object: EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes.read()?.get(graph_name) {
-            if let Some(sps) = graph.osp.get(object) {
-                if let Some(ps) = sps.get(subject) {
+        if let Some(graph) = self.graph_indexes.read()?.get(&graph_name) {
+            if let Some(sps) = graph.osp.get(&object) {
+                if let Some(ps) = sps.get(&subject) {
                     for p in ps.iter() {
-                        result.push(Ok(encoded_quad(subject, p, object, graph_name)))
+                        result.push(Ok(EncodedQuad::new(subject, *p, object, graph_name)))
                     }
                 }
             }
@@ -274,15 +279,15 @@ impl EncodedQuadsStore for MemoryStore {
 
     fn quads_for_predicate_graph(
         &self,
-        predicate: &EncodedTerm,
-        graph_name: &EncodedTerm,
+        predicate: EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes.read()?.get(graph_name) {
-            if let Some(oss) = graph.pos.get(predicate) {
+        if let Some(graph) = self.graph_indexes.read()?.get(&graph_name) {
+            if let Some(oss) = graph.pos.get(&predicate) {
                 for (o, ss) in oss.iter() {
                     for s in ss.iter() {
-                        result.push(Ok(encoded_quad(s, predicate, o, graph_name)))
+                        result.push(Ok(EncodedQuad::new(*s, predicate, *o, graph_name)))
                     }
                 }
             }
@@ -292,16 +297,16 @@ impl EncodedQuadsStore for MemoryStore {
 
     fn quads_for_predicate_object_graph(
         &self,
-        predicate: &EncodedTerm,
-        object: &EncodedTerm,
-        graph_name: &EncodedTerm,
+        predicate: EncodedTerm,
+        object: EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes.read()?.get(graph_name) {
-            if let Some(oss) = graph.pos.get(predicate) {
-                if let Some(ss) = oss.get(object) {
+        if let Some(graph) = self.graph_indexes.read()?.get(&graph_name) {
+            if let Some(oss) = graph.pos.get(&predicate) {
+                if let Some(ss) = oss.get(&object) {
                     for s in ss.iter() {
-                        result.push(Ok(encoded_quad(s, predicate, object, graph_name)))
+                        result.push(Ok(EncodedQuad::new(*s, predicate, object, graph_name)))
                     }
                 }
             }
@@ -311,15 +316,15 @@ impl EncodedQuadsStore for MemoryStore {
 
     fn quads_for_object_graph(
         &self,
-        object: &EncodedTerm,
-        graph_name: &EncodedTerm,
+        object: EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes.read()?.get(graph_name) {
-            if let Some(sps) = graph.osp.get(object) {
+        if let Some(graph) = self.graph_indexes.read()?.get(&graph_name) {
+            if let Some(sps) = graph.osp.get(&object) {
                 for (s, ps) in sps.iter() {
                     for p in ps.iter() {
-                        result.push(Ok(encoded_quad(s, p, object, graph_name)))
+                        result.push(Ok(EncodedQuad::new(*s, *p, object, graph_name)))
                     }
                 }
             }
@@ -438,13 +443,4 @@ impl EncodedQuadsStore for MemoryStore {
         }
         Ok(())
     }
-}
-
-fn encoded_quad(
-    subject: &EncodedTerm,
-    predicate: &EncodedTerm,
-    object: &EncodedTerm,
-    graph_name: &EncodedTerm,
-) -> EncodedQuad {
-    EncodedQuad::new(*subject, *predicate, *object, *graph_name)
 }

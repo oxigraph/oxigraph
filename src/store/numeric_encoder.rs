@@ -141,58 +141,58 @@ impl<R: Read> TermReader for R {
 }
 
 pub trait TermWriter {
-    fn write_term(&mut self, term: &EncodedTerm) -> Result<()>;
+    fn write_term(&mut self, term: EncodedTerm) -> Result<()>;
     fn write_spog_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
     fn write_posg_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
     fn write_ospg_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
 }
 
 impl<R: Write> TermWriter for R {
-    fn write_term(&mut self, term: &EncodedTerm) -> Result<()> {
+    fn write_term(&mut self, term: EncodedTerm) -> Result<()> {
         self.write_u8(term.type_id())?;
         match term {
             EncodedTerm::DefaultGraph {} => {}
-            EncodedTerm::NamedNode { iri_id } => self.write_u64::<NetworkEndian>(*iri_id)?,
+            EncodedTerm::NamedNode { iri_id } => self.write_u64::<NetworkEndian>(iri_id)?,
             EncodedTerm::BlankNode(id) => self.write_all(id.as_bytes())?,
             EncodedTerm::LangStringLiteral {
                 value_id,
                 language_id,
             } => {
-                self.write_u64::<NetworkEndian>(*language_id)?;
-                self.write_u64::<NetworkEndian>(*value_id)?;
+                self.write_u64::<NetworkEndian>(language_id)?;
+                self.write_u64::<NetworkEndian>(value_id)?;
             }
             EncodedTerm::TypedLiteral {
                 value_id,
                 datatype_id,
             } => {
-                self.write_u64::<NetworkEndian>(*datatype_id)?;
-                self.write_u64::<NetworkEndian>(*value_id)?;
+                self.write_u64::<NetworkEndian>(datatype_id)?;
+                self.write_u64::<NetworkEndian>(value_id)?;
             }
         }
         Ok(())
     }
 
     fn write_spog_quad(&mut self, quad: &EncodedQuad) -> Result<()> {
-        self.write_term(&quad.subject)?;
-        self.write_term(&quad.predicate)?;
-        self.write_term(&quad.object)?;
-        self.write_term(&quad.graph_name)?;
+        self.write_term(quad.subject)?;
+        self.write_term(quad.predicate)?;
+        self.write_term(quad.object)?;
+        self.write_term(quad.graph_name)?;
         Ok(())
     }
 
     fn write_posg_quad(&mut self, quad: &EncodedQuad) -> Result<()> {
-        self.write_term(&quad.predicate)?;
-        self.write_term(&quad.object)?;
-        self.write_term(&quad.subject)?;
-        self.write_term(&quad.graph_name)?;
+        self.write_term(quad.predicate)?;
+        self.write_term(quad.object)?;
+        self.write_term(quad.subject)?;
+        self.write_term(quad.graph_name)?;
         Ok(())
     }
 
     fn write_ospg_quad(&mut self, quad: &EncodedQuad) -> Result<()> {
-        self.write_term(&quad.object)?;
-        self.write_term(&quad.subject)?;
-        self.write_term(&quad.predicate)?;
-        self.write_term(&quad.graph_name)?;
+        self.write_term(quad.object)?;
+        self.write_term(quad.subject)?;
+        self.write_term(quad.predicate)?;
+        self.write_term(quad.graph_name)?;
         Ok(())
     }
 }
@@ -260,41 +260,41 @@ impl<S: BytesStore> Encoder<S> {
     pub fn encode_triple_in_graph(
         &self,
         triple: &Triple,
-        graph_name: &EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<EncodedQuad> {
         Ok(EncodedQuad {
             subject: self.encode_named_or_blank_node(triple.subject())?,
             predicate: self.encode_named_node(triple.predicate())?,
             object: self.encode_term(triple.object())?,
-            graph_name: *graph_name,
+            graph_name,
         })
     }
 
-    pub fn decode_term(&self, encoded: &EncodedTerm) -> Result<Term> {
+    pub fn decode_term(&self, encoded: EncodedTerm) -> Result<Term> {
         match encoded {
             EncodedTerm::DefaultGraph {} => Err("The default graph tag is not a valid term".into()),
             EncodedTerm::NamedNode { iri_id } => {
-                Ok(NamedNode::from(self.decode_url_value(*iri_id)?).into())
+                Ok(NamedNode::from(self.decode_url_value(iri_id)?).into())
             }
-            EncodedTerm::BlankNode(id) => Ok(BlankNode::from(*id).into()),
+            EncodedTerm::BlankNode(id) => Ok(BlankNode::from(id).into()),
             EncodedTerm::LangStringLiteral {
                 value_id,
                 language_id,
             } => Ok(Literal::new_language_tagged_literal(
-                self.decode_str_value(*value_id)?,
-                self.decode_str_value(*language_id)?,
+                self.decode_str_value(value_id)?,
+                self.decode_str_value(language_id)?,
             ).into()),
             EncodedTerm::TypedLiteral {
                 value_id,
                 datatype_id,
             } => Ok(Literal::new_typed_literal(
-                self.decode_str_value(*value_id)?,
-                NamedNode::from(self.decode_url_value(*datatype_id)?),
+                self.decode_str_value(value_id)?,
+                NamedNode::from(self.decode_url_value(datatype_id)?),
             ).into()),
         }
     }
 
-    pub fn decode_named_or_blank_node(&self, encoded: &EncodedTerm) -> Result<NamedOrBlankNode> {
+    pub fn decode_named_or_blank_node(&self, encoded: EncodedTerm) -> Result<NamedOrBlankNode> {
         match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node.into()),
             Term::BlankNode(blank_node) => Ok(blank_node.into()),
@@ -302,7 +302,7 @@ impl<S: BytesStore> Encoder<S> {
         }
     }
 
-    pub fn decode_named_node(&self, encoded: &EncodedTerm) -> Result<NamedNode> {
+    pub fn decode_named_node(&self, encoded: EncodedTerm) -> Result<NamedNode> {
         match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node),
             Term::BlankNode(_) => Err("A blank node has been found instead of a named node".into()),
@@ -312,20 +312,20 @@ impl<S: BytesStore> Encoder<S> {
 
     pub fn decode_triple(&self, encoded: &EncodedQuad) -> Result<Triple> {
         Ok(Triple::new(
-            self.decode_named_or_blank_node(&encoded.subject)?,
-            self.decode_named_node(&encoded.predicate)?,
-            self.decode_term(&encoded.object)?,
+            self.decode_named_or_blank_node(encoded.subject)?,
+            self.decode_named_node(encoded.predicate)?,
+            self.decode_term(encoded.object)?,
         ))
     }
 
     pub fn decode_quad(&self, encoded: &EncodedQuad) -> Result<Quad> {
         Ok(Quad::new(
-            self.decode_named_or_blank_node(&encoded.subject)?,
-            self.decode_named_node(&encoded.predicate)?,
-            self.decode_term(&encoded.object)?,
+            self.decode_named_or_blank_node(encoded.subject)?,
+            self.decode_named_node(encoded.predicate)?,
+            self.decode_term(encoded.object)?,
             match encoded.graph_name {
                 EncodedTerm::DefaultGraph {} => None,
-                ref graph_name => Some(self.decode_named_or_blank_node(graph_name)?),
+                graph_name => Some(self.decode_named_or_blank_node(graph_name)?),
             },
         ))
     }

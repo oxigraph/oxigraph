@@ -33,66 +33,66 @@ pub trait EncodedQuadsStore: BytesStore + Sized {
     }
 
     fn quads(&self) -> Result<Self::QuadsIterator>;
-    fn quads_for_subject(&self, subject: &EncodedTerm) -> Result<Self::QuadsForSubjectIterator>;
+    fn quads_for_subject(&self, subject: EncodedTerm) -> Result<Self::QuadsForSubjectIterator>;
     fn quads_for_subject_predicate(
         &self,
-        subject: &EncodedTerm,
-        predicate: &EncodedTerm,
+        subject: EncodedTerm,
+        predicate: EncodedTerm,
     ) -> Result<Self::QuadsForSubjectPredicateIterator>;
     fn quads_for_subject_predicate_object(
         &self,
-        subject: &EncodedTerm,
-        predicate: &EncodedTerm,
-        object: &EncodedTerm,
+        subject: EncodedTerm,
+        predicate: EncodedTerm,
+        object: EncodedTerm,
     ) -> Result<Self::QuadsForSubjectPredicateObjectIterator>;
     fn quads_for_subject_object(
         &self,
-        subject: &EncodedTerm,
-        object: &EncodedTerm,
+        subject: EncodedTerm,
+        object: EncodedTerm,
     ) -> Result<Self::QuadsForSubjectObjectIterator>;
     fn quads_for_predicate(
         &self,
-        predicate: &EncodedTerm,
+        predicate: EncodedTerm,
     ) -> Result<Self::QuadsForPredicateIterator>;
     fn quads_for_predicate_object(
         &self,
-        predicate: &EncodedTerm,
-        object: &EncodedTerm,
+        predicate: EncodedTerm,
+        object: EncodedTerm,
     ) -> Result<Self::QuadsForPredicateObjectIterator>;
-    fn quads_for_object(&self, object: &EncodedTerm) -> Result<Self::QuadsForObjectIterator>;
-    fn quads_for_graph(&self, graph_name: &EncodedTerm) -> Result<Self::QuadsForGraphIterator>;
+    fn quads_for_object(&self, object: EncodedTerm) -> Result<Self::QuadsForObjectIterator>;
+    fn quads_for_graph(&self, graph_name: EncodedTerm) -> Result<Self::QuadsForGraphIterator>;
     fn quads_for_subject_graph(
         &self,
-        subject: &EncodedTerm,
-        graph_name: &EncodedTerm,
+        subject: EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<Self::QuadsForSubjectGraphIterator>;
     fn quads_for_subject_predicate_graph(
         &self,
-        subject: &EncodedTerm,
-        predicate: &EncodedTerm,
-        graph_name: &EncodedTerm,
+        subject: EncodedTerm,
+        predicate: EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<Self::QuadsForSubjectPredicateGraphIterator>;
     fn quads_for_subject_object_graph(
         &self,
-        subject: &EncodedTerm,
-        object: &EncodedTerm,
-        graph_name: &EncodedTerm,
+        subject: EncodedTerm,
+        object: EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<Self::QuadsForSubjectObjectGraphIterator>;
     fn quads_for_predicate_graph(
         &self,
-        predicate: &EncodedTerm,
-        graph_name: &EncodedTerm,
+        predicate: EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<Self::QuadsForPredicateGraphIterator>;
     fn quads_for_predicate_object_graph(
         &self,
-        predicate: &EncodedTerm,
-        object: &EncodedTerm,
-        graph_name: &EncodedTerm,
+        predicate: EncodedTerm,
+        object: EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<Self::QuadsForPredicateObjectGraphIterator>;
     fn quads_for_object_graph(
         &self,
-        object: &EncodedTerm,
-        graph_name: &EncodedTerm,
+        object: EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Result<Self::QuadsForObjectGraphIterator>;
     fn contains(&self, quad: &EncodedQuad) -> Result<bool>;
     fn insert(&self, quad: &EncodedQuad) -> Result<()>;
@@ -160,7 +160,7 @@ impl<S: EncodedQuadsStore> Dataset for StoreDataset<S> {
         Ok(QuadsIterator {
             iter: self
                 .store
-                .quads_for_subject(&encoder.encode_named_or_blank_node(subject)?)?,
+                .quads_for_subject(encoder.encode_named_or_blank_node(subject)?)?,
             store: self.store.clone(),
         })
     }
@@ -173,8 +173,8 @@ impl<S: EncodedQuadsStore> Dataset for StoreDataset<S> {
         let encoder = self.store.encoder();
         Ok(QuadsIterator {
             iter: self.store.quads_for_subject_predicate(
-                &encoder.encode_named_or_blank_node(subject)?,
-                &encoder.encode_named_node(predicate)?,
+                encoder.encode_named_or_blank_node(subject)?,
+                encoder.encode_named_node(predicate)?,
             )?,
             store: self.store.clone(),
         })
@@ -189,9 +189,9 @@ impl<S: EncodedQuadsStore> Dataset for StoreDataset<S> {
         let encoder = self.store.encoder();
         Ok(QuadsIterator {
             iter: self.store.quads_for_subject_predicate_object(
-                &encoder.encode_named_or_blank_node(subject)?,
-                &encoder.encode_named_node(predicate)?,
-                &encoder.encode_term(object)?,
+                encoder.encode_named_or_blank_node(subject)?,
+                encoder.encode_named_node(predicate)?,
+                encoder.encode_term(object)?,
             )?,
             store: self.store.clone(),
         })
@@ -205,8 +205,8 @@ impl<S: EncodedQuadsStore> Dataset for StoreDataset<S> {
         let encoder = self.store.encoder();
         Ok(QuadsIterator {
             iter: self.store.quads_for_subject_object(
-                &encoder.encode_named_or_blank_node(subject)?,
-                &encoder.encode_term(object)?,
+                encoder.encode_named_or_blank_node(subject)?,
+                encoder.encode_term(object)?,
             )?,
             store: self.store.clone(),
         })
@@ -220,7 +220,7 @@ impl<S: EncodedQuadsStore> Dataset for StoreDataset<S> {
         Ok(QuadsIterator {
             iter: self
                 .store
-                .quads_for_predicate(&encoder.encode_named_node(predicate)?)?,
+                .quads_for_predicate(encoder.encode_named_node(predicate)?)?,
             store: self.store.clone(),
         })
     }
@@ -233,8 +233,8 @@ impl<S: EncodedQuadsStore> Dataset for StoreDataset<S> {
         let encoder = self.store.encoder();
         Ok(QuadsIterator {
             iter: self.store.quads_for_predicate_object(
-                &encoder.encode_named_node(predicate)?,
-                &encoder.encode_term(object)?,
+                encoder.encode_named_node(predicate)?,
+                encoder.encode_term(object)?,
             )?,
             store: self.store.clone(),
         })
@@ -246,7 +246,7 @@ impl<S: EncodedQuadsStore> Dataset for StoreDataset<S> {
     ) -> Result<QuadsIterator<S::QuadsForObjectIterator, S>> {
         let encoder = self.store.encoder();
         Ok(QuadsIterator {
-            iter: self.store.quads_for_object(&encoder.encode_term(object)?)?,
+            iter: self.store.quads_for_object(encoder.encode_term(object)?)?,
             store: self.store.clone(),
         })
     }
@@ -328,7 +328,7 @@ impl<S: EncodedQuadsStore> Graph for StoreNamedGraph<S> {
 
     fn triples(&self) -> Result<TriplesIterator<S::QuadsForGraphIterator, S>> {
         Ok(TriplesIterator {
-            iter: self.store.quads_for_graph(&self.encoded_name)?,
+            iter: self.store.quads_for_graph(self.encoded_name)?,
             store: self.store.clone(),
         })
     }
@@ -340,8 +340,8 @@ impl<S: EncodedQuadsStore> Graph for StoreNamedGraph<S> {
         let encoder = self.store.encoder();
         Ok(TriplesIterator {
             iter: self.store.quads_for_subject_graph(
-                &encoder.encode_named_or_blank_node(subject)?,
-                &self.encoded_name,
+                encoder.encode_named_or_blank_node(subject)?,
+                self.encoded_name,
             )?,
             store: self.store.clone(),
         })
@@ -354,9 +354,9 @@ impl<S: EncodedQuadsStore> Graph for StoreNamedGraph<S> {
         let encoder = self.store.encoder();
         Ok(ObjectsIterator {
             iter: self.store.quads_for_subject_predicate_graph(
-                &encoder.encode_named_or_blank_node(subject)?,
-                &encoder.encode_named_node(predicate)?,
-                &self.encoded_name,
+                encoder.encode_named_or_blank_node(subject)?,
+                encoder.encode_named_node(predicate)?,
+                self.encoded_name,
             )?,
             store: self.store.clone(),
         })
@@ -369,9 +369,9 @@ impl<S: EncodedQuadsStore> Graph for StoreNamedGraph<S> {
         let encoder = self.store.encoder();
         Ok(PredicatesIterator {
             iter: self.store.quads_for_subject_object_graph(
-                &encoder.encode_named_or_blank_node(subject)?,
-                &encoder.encode_term(object)?,
-                &self.encoded_name,
+                encoder.encode_named_or_blank_node(subject)?,
+                encoder.encode_term(object)?,
+                self.encoded_name,
             )?,
             store: self.store.clone(),
         })
@@ -383,8 +383,8 @@ impl<S: EncodedQuadsStore> Graph for StoreNamedGraph<S> {
         let encoder = self.store.encoder();
         Ok(TriplesIterator {
             iter: self.store.quads_for_predicate_graph(
-                &encoder.encode_named_node(predicate)?,
-                &self.encoded_name,
+                encoder.encode_named_node(predicate)?,
+                self.encoded_name,
             )?,
             store: self.store.clone(),
         })
@@ -397,9 +397,9 @@ impl<S: EncodedQuadsStore> Graph for StoreNamedGraph<S> {
         let encoder = self.store.encoder();
         Ok(SubjectsIterator {
             iter: self.store.quads_for_predicate_object_graph(
-                &encoder.encode_named_node(predicate)?,
-                &encoder.encode_term(object)?,
-                &self.encoded_name,
+                encoder.encode_named_node(predicate)?,
+                encoder.encode_term(object)?,
+                self.encoded_name,
             )?,
             store: self.store.clone(),
         })
@@ -412,7 +412,7 @@ impl<S: EncodedQuadsStore> Graph for StoreNamedGraph<S> {
         Ok(TriplesIterator {
             iter: self
                 .store
-                .quads_for_object_graph(&encoder.encode_term(object)?, &self.encoded_name)?,
+                .quads_for_object_graph(encoder.encode_term(object)?, self.encoded_name)?,
             store: self.store.clone(),
         })
     }
@@ -422,7 +422,7 @@ impl<S: EncodedQuadsStore> Graph for StoreNamedGraph<S> {
             &self
                 .store
                 .encoder()
-                .encode_triple_in_graph(triple, &self.encoded_name)?,
+                .encode_triple_in_graph(triple, self.encoded_name)?,
         )
     }
 
@@ -431,7 +431,7 @@ impl<S: EncodedQuadsStore> Graph for StoreNamedGraph<S> {
             &self
                 .store
                 .encoder()
-                .encode_triple_in_graph(triple, &self.encoded_name)?,
+                .encode_triple_in_graph(triple, self.encoded_name)?,
         )
     }
 
@@ -440,19 +440,16 @@ impl<S: EncodedQuadsStore> Graph for StoreNamedGraph<S> {
             &self
                 .store
                 .encoder()
-                .encode_triple_in_graph(triple, &self.encoded_name)?,
+                .encode_triple_in_graph(triple, self.encoded_name)?,
         )
     }
 
     fn len(&self) -> Result<usize> {
-        Ok(self.store.quads_for_graph(&self.encoded_name)?.count())
+        Ok(self.store.quads_for_graph(self.encoded_name)?.count())
     }
 
     fn is_empty(&self) -> Result<bool> {
-        Ok(self
-            .store
-            .quads_for_graph(&self.encoded_name)?
-            .any(|_| true))
+        Ok(self.store.quads_for_graph(self.encoded_name)?.any(|_| true))
     }
 }
 
@@ -489,7 +486,7 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
 
     fn triples(&self) -> Result<TriplesIterator<S::QuadsForGraphIterator, S>> {
         Ok(TriplesIterator {
-            iter: self.store.quads_for_graph(&ENCODED_DEFAULT_GRAPH)?,
+            iter: self.store.quads_for_graph(ENCODED_DEFAULT_GRAPH)?,
             store: self.store.clone(),
         })
     }
@@ -501,8 +498,8 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
         let encoder = self.store.encoder();
         Ok(TriplesIterator {
             iter: self.store.quads_for_subject_graph(
-                &encoder.encode_named_or_blank_node(subject)?,
-                &ENCODED_DEFAULT_GRAPH,
+                encoder.encode_named_or_blank_node(subject)?,
+                ENCODED_DEFAULT_GRAPH,
             )?,
             store: self.store.clone(),
         })
@@ -515,9 +512,9 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
         let encoder = self.store.encoder();
         Ok(ObjectsIterator {
             iter: self.store.quads_for_subject_predicate_graph(
-                &encoder.encode_named_or_blank_node(subject)?,
-                &encoder.encode_named_node(predicate)?,
-                &ENCODED_DEFAULT_GRAPH,
+                encoder.encode_named_or_blank_node(subject)?,
+                encoder.encode_named_node(predicate)?,
+                ENCODED_DEFAULT_GRAPH,
             )?,
             store: self.store.clone(),
         })
@@ -530,9 +527,9 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
         let encoder = self.store.encoder();
         Ok(PredicatesIterator {
             iter: self.store.quads_for_subject_object_graph(
-                &encoder.encode_named_or_blank_node(subject)?,
-                &encoder.encode_term(object)?,
-                &ENCODED_DEFAULT_GRAPH,
+                encoder.encode_named_or_blank_node(subject)?,
+                encoder.encode_term(object)?,
+                ENCODED_DEFAULT_GRAPH,
             )?,
             store: self.store.clone(),
         })
@@ -544,8 +541,8 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
         let encoder = self.store.encoder();
         Ok(TriplesIterator {
             iter: self.store.quads_for_predicate_graph(
-                &encoder.encode_named_node(predicate)?,
-                &ENCODED_DEFAULT_GRAPH,
+                encoder.encode_named_node(predicate)?,
+                ENCODED_DEFAULT_GRAPH,
             )?,
             store: self.store.clone(),
         })
@@ -558,9 +555,9 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
         let encoder = self.store.encoder();
         Ok(SubjectsIterator {
             iter: self.store.quads_for_predicate_object_graph(
-                &encoder.encode_named_node(predicate)?,
-                &encoder.encode_term(object)?,
-                &ENCODED_DEFAULT_GRAPH,
+                encoder.encode_named_node(predicate)?,
+                encoder.encode_term(object)?,
+                ENCODED_DEFAULT_GRAPH,
             )?,
             store: self.store.clone(),
         })
@@ -573,7 +570,7 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
         Ok(TriplesIterator {
             iter: self
                 .store
-                .quads_for_object_graph(&encoder.encode_term(object)?, &ENCODED_DEFAULT_GRAPH)?,
+                .quads_for_object_graph(encoder.encode_term(object)?, ENCODED_DEFAULT_GRAPH)?,
             store: self.store.clone(),
         })
     }
@@ -583,7 +580,7 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
             &self
                 .store
                 .encoder()
-                .encode_triple_in_graph(triple, &ENCODED_DEFAULT_GRAPH)?,
+                .encode_triple_in_graph(triple, ENCODED_DEFAULT_GRAPH)?,
         )
     }
 
@@ -592,7 +589,7 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
             &self
                 .store
                 .encoder()
-                .encode_triple_in_graph(triple, &ENCODED_DEFAULT_GRAPH)?,
+                .encode_triple_in_graph(triple, ENCODED_DEFAULT_GRAPH)?,
         )
     }
 
@@ -601,18 +598,18 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
             &self
                 .store
                 .encoder()
-                .encode_triple_in_graph(triple, &ENCODED_DEFAULT_GRAPH)?,
+                .encode_triple_in_graph(triple, ENCODED_DEFAULT_GRAPH)?,
         )
     }
 
     fn len(&self) -> Result<usize> {
-        Ok(self.store.quads_for_graph(&ENCODED_DEFAULT_GRAPH)?.count())
+        Ok(self.store.quads_for_graph(ENCODED_DEFAULT_GRAPH)?.count())
     }
 
     fn is_empty(&self) -> Result<bool> {
         Ok(self
             .store
-            .quads_for_graph(&ENCODED_DEFAULT_GRAPH)?
+            .quads_for_graph(ENCODED_DEFAULT_GRAPH)?
             .any(|_| true))
     }
 }
@@ -683,7 +680,7 @@ impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
         Ok(TriplesIterator {
             iter: self
                 .store
-                .quads_for_subject(&encoder.encode_named_or_blank_node(subject)?)?,
+                .quads_for_subject(encoder.encode_named_or_blank_node(subject)?)?,
             store: self.store.clone(),
         })
     }
@@ -695,8 +692,8 @@ impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
         let encoder = self.store.encoder();
         Ok(ObjectsIterator {
             iter: self.store.quads_for_subject_predicate(
-                &encoder.encode_named_or_blank_node(subject)?,
-                &encoder.encode_named_node(predicate)?,
+                encoder.encode_named_or_blank_node(subject)?,
+                encoder.encode_named_node(predicate)?,
             )?,
             store: self.store.clone(),
         })
@@ -709,8 +706,8 @@ impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
         let encoder = self.store.encoder();
         Ok(PredicatesIterator {
             iter: self.store.quads_for_subject_object(
-                &encoder.encode_named_or_blank_node(subject)?,
-                &encoder.encode_term(object)?,
+                encoder.encode_named_or_blank_node(subject)?,
+                encoder.encode_term(object)?,
             )?,
             store: self.store.clone(),
         })
@@ -723,7 +720,7 @@ impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
         Ok(TriplesIterator {
             iter: self
                 .store
-                .quads_for_predicate(&encoder.encode_named_node(predicate)?)?,
+                .quads_for_predicate(encoder.encode_named_node(predicate)?)?,
             store: self.store.clone(),
         })
     }
@@ -735,8 +732,8 @@ impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
         let encoder = self.store.encoder();
         Ok(SubjectsIterator {
             iter: self.store.quads_for_predicate_object(
-                &encoder.encode_named_node(predicate)?,
-                &encoder.encode_term(object)?,
+                encoder.encode_named_node(predicate)?,
+                encoder.encode_term(object)?,
             )?,
             store: self.store.clone(),
         })
@@ -748,7 +745,7 @@ impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
     ) -> Result<TriplesIterator<S::QuadsForObjectIterator, S>> {
         let encoder = self.store.encoder();
         Ok(TriplesIterator {
-            iter: self.store.quads_for_object(&encoder.encode_term(object)?)?,
+            iter: self.store.quads_for_object(encoder.encode_term(object)?)?,
             store: self.store.clone(),
         })
     }
@@ -758,9 +755,9 @@ impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
         Ok(self
             .store
             .quads_for_subject_predicate_object(
-                &encoder.encode_named_or_blank_node(triple.subject())?,
-                &encoder.encode_named_node(triple.predicate())?,
-                &encoder.encode_term(triple.object())?,
+                encoder.encode_named_or_blank_node(triple.subject())?,
+                encoder.encode_named_node(triple.predicate())?,
+                encoder.encode_term(triple.object())?,
             )?.any(|_| true))
     }
 
@@ -853,7 +850,7 @@ impl<I: Iterator<Item = Result<EncodedQuad>>, S: EncodedQuadsStore> Iterator
             k.and_then(|quad| {
                 self.store
                     .encoder()
-                    .decode_named_or_blank_node(&quad.subject)
+                    .decode_named_or_blank_node(quad.subject)
             })
         })
     }
@@ -872,7 +869,7 @@ impl<I: Iterator<Item = Result<EncodedQuad>>, S: EncodedQuadsStore> Iterator
     fn next(&mut self) -> Option<Result<NamedNode>> {
         self.iter
             .next()
-            .map(|k| k.and_then(|quad| self.store.encoder().decode_named_node(&quad.predicate)))
+            .map(|k| k.and_then(|quad| self.store.encoder().decode_named_node(quad.predicate)))
     }
 }
 
@@ -889,6 +886,6 @@ impl<I: Iterator<Item = Result<EncodedQuad>>, S: EncodedQuadsStore> Iterator
     fn next(&mut self) -> Option<Result<Term>> {
         self.iter
             .next()
-            .map(|k| k.and_then(|quad| self.store.encoder().decode_term(&quad.object)))
+            .map(|k| k.and_then(|quad| self.store.encoder().decode_term(quad.object)))
     }
 }
