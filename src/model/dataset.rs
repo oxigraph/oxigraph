@@ -1,5 +1,7 @@
 use errors::*;
 use model::*;
+use sparql::algebra::QueryResult;
+use std::io::Read;
 
 /// Trait for [RDF graphs](https://www.w3.org/TR/rdf11-concepts/#dfn-graph)
 pub trait Graph {
@@ -148,4 +150,6 @@ pub trait Dataset {
     fn len(&self) -> Result<usize>;
 
     fn is_empty(&self) -> Result<bool>;
+
+    fn query(&self, query: impl Read) -> Result<QueryResult>;
 }

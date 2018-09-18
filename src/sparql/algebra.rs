@@ -1,9 +1,10 @@
+use errors::*;
 use model::*;
-use sparql::model::*;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fmt;
 use std::ops::Add;
+use store::MemoryGraph;
 use utils::Escaper;
 use uuid::Uuid;
 
@@ -23,6 +24,13 @@ impl Variable {
         match self {
             Variable::Variable { .. } => true,
             _ => false,
+        }
+    }
+
+    pub fn name(&self) -> Result<&str> {
+        match self {
+            Variable::Variable { name } => Ok(name),
+            _ => Err(format!("The variable {} has no name", self).into()),
         }
     }
 }
@@ -78,16 +86,14 @@ impl From<Variable> for NamedNodeOrVariable {
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum TermOrVariable {
-    NamedNode(NamedNode),
-    Literal(Literal),
+    Term(Term),
     Variable(Variable),
 }
 
 impl fmt::Display for TermOrVariable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            TermOrVariable::NamedNode(node) => write!(f, "{}", node),
-            TermOrVariable::Literal(node) => write!(f, "{}", node),
+            TermOrVariable::Term(term) => write!(f, "{}", term),
             TermOrVariable::Variable(var) => write!(f, "{}", var),
         }
     }
@@ -95,7 +101,7 @@ impl fmt::Display for TermOrVariable {
 
 impl From<NamedNode> for TermOrVariable {
     fn from(node: NamedNode) -> Self {
-        TermOrVariable::NamedNode(node)
+        TermOrVariable::Term(node.into())
     }
 }
 
@@ -107,7 +113,7 @@ impl From<BlankNode> for TermOrVariable {
 
 impl From<Literal> for TermOrVariable {
     fn from(literal: Literal) -> Self {
-        TermOrVariable::Literal(literal)
+        TermOrVariable::Term(literal.into())
     }
 }
 
@@ -120,9 +126,9 @@ impl From<Variable> for TermOrVariable {
 impl From<Term> for TermOrVariable {
     fn from(term: Term) -> Self {
         match term {
-            Term::NamedNode(node) => TermOrVariable::NamedNode(node),
+            Term::NamedNode(node) => TermOrVariable::Term(node.into()),
             Term::BlankNode(node) => TermOrVariable::Variable(node.into()),
-            Term::Literal(literal) => TermOrVariable::Literal(literal),
+            Term::Literal(literal) => TermOrVariable::Term(literal.into()),
         }
     }
 }
@@ -130,9 +136,84 @@ impl From<Term> for TermOrVariable {
 impl From<NamedNodeOrVariable> for TermOrVariable {
     fn from(element: NamedNodeOrVariable) -> Self {
         match element {
-            NamedNodeOrVariable::NamedNode(node) => TermOrVariable::NamedNode(node),
+            NamedNodeOrVariable::NamedNode(node) => TermOrVariable::Term(node.into()),
             NamedNodeOrVariable::Variable(var) => TermOrVariable::Variable(var),
         }
+    }
+}
+
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+pub struct StaticBindings {
+    variables: Vec<Variable>,
+    values: Vec<Vec<Option<Term>>>,
+}
+
+impl StaticBindings {
+    pub fn new(variables: Vec<Variable>, values: Vec<Vec<Option<Term>>>) -> Self {
+        Self { variables, values }
+    }
+
+    pub fn variables(&self) -> &[Variable] {
+        &*self.variables
+    }
+
+    pub fn variables_iter(&self) -> impl Iterator<Item = &Variable> {
+        self.variables.iter()
+    }
+
+    pub fn values_iter(&self) -> impl Iterator<Item = &Vec<Option<Term>>> {
+        self.values.iter()
+    }
+
+    pub fn into_iterator(self) -> BindingsIterator {
+        BindingsIterator {
+            variables: self.variables,
+            iter: Box::new(self.values.into_iter().map(Ok)),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+}
+
+impl Default for StaticBindings {
+    fn default() -> Self {
+        StaticBindings {
+            variables: Vec::default(),
+            values: Vec::default(),
+        }
+    }
+}
+
+pub struct BindingsIterator {
+    variables: Vec<Variable>,
+    iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>>>>,
+}
+
+impl BindingsIterator {
+    pub fn new(
+        variables: Vec<Variable>,
+        iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>>>>,
+    ) -> Self {
+        Self { variables, iter }
+    }
+
+    pub fn variables(&self) -> &[Variable] {
+        &*self.variables
+    }
+
+    pub fn into_values_iter(self) -> Box<dyn Iterator<Item = Result<Vec<Option<Term>>>>> {
+        self.iter
+    }
+
+    pub fn destruct(
+        self,
+    ) -> (
+        Vec<Variable>,
+        Box<dyn Iterator<Item = Result<Vec<Option<Term>>>>>,
+    ) {
+        (self.variables, self.iter)
     }
 }
 
@@ -1061,7 +1142,7 @@ impl fmt::Display for GroupPattern {
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum ListPattern {
-    Data(Vec<Binding>),
+    Data(StaticBindings),
     ToList(MultiSetPattern),
     OrderBy(Box<ListPattern>, Vec<OrderComparator>),
     Project(Box<ListPattern>, Vec<Variable>),
@@ -1073,14 +1154,20 @@ pub enum ListPattern {
 impl fmt::Display for ListPattern {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ListPattern::Data(bs) => write!(
-                f,
-                "{{ {} }}",
-                bs.iter()
-                    .map(|c| c.to_string())
-                    .collect::<Vec<String>>()
-                    .join(" ")
-            ),
+            ListPattern::Data(bs) => {
+                let variables = bs.variables();
+                write!(f, "{{ ")?;
+                for values in bs.values_iter() {
+                    write!(f, "{{")?;
+                    for i in 0..values.len() {
+                        if let Some(ref val) = values[i] {
+                            write!(f, " {} → {} ", variables[i], val)?;
+                        }
+                    }
+                    write!(f, "}}")?;
+                }
+                write!(f, "}}")
+            }
             ListPattern::ToList(l) => write!(f, "{}", l),
             ListPattern::OrderBy(l, o) => write!(
                 f,
@@ -1117,7 +1204,7 @@ impl fmt::Display for ListPattern {
 
 impl Default for ListPattern {
     fn default() -> Self {
-        ListPattern::Data(Vec::default())
+        ListPattern::Data(StaticBindings::default())
     }
 }
 
@@ -1136,13 +1223,7 @@ impl ListPattern {
 
     fn add_visible_variables<'a>(&'a self, vars: &mut BTreeSet<&'a Variable>) {
         match self {
-            ListPattern::Data(b) => {
-                for binding in b {
-                    for (var, _) in binding {
-                        vars.insert(var);
-                    }
-                }
-            }
+            ListPattern::Data(b) => vars.extend(b.variables_iter()),
             ListPattern::ToList(p) => p.add_visible_variables(vars),
             ListPattern::OrderBy(l, _) => l.add_visible_variables(vars),
             ListPattern::Project(_, pv) => vars.extend(pv.iter()),
@@ -1164,18 +1245,18 @@ impl<'a> fmt::Display for SparqlListPattern<'a> {
             ListPattern::Data(bs) => if bs.is_empty() {
                 Ok(())
             } else {
-                let vars: Vec<&Variable> = bs[0].iter().map(|(v, _)| v).collect();
                 write!(f, "VALUES ( ")?;
-                for var in &vars {
+                for var in bs.variables() {
                     write!(f, "{} ", var)?;
                 }
                 write!(f, ") {{ ")?;
-                for b in bs {
+                for values in bs.values_iter() {
                     write!(f, "( ")?;
-                    for var in &vars {
-                        b.get(var)
-                            .map(|v| write!(f, "{} ", v))
-                            .unwrap_or_else(|| write!(f, "UNDEF "))?;
+                    for val in values {
+                        match val {
+                            Some(val) => write!(f, "{} ", val),
+                            None => write!(f, "UNDEF "),
+                        }?;
                     }
                     write!(f, ") ")?;
                 }
@@ -1572,4 +1653,10 @@ impl fmt::Display for Query {
             ),
         }
     }
+}
+
+pub enum QueryResult {
+    Bindings(BindingsIterator),
+    Boolean(bool),
+    Graph(MemoryGraph),
 }

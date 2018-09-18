@@ -48,6 +48,12 @@ impl From<Url> for NamedNode {
     }
 }
 
+impl From<NamedNode> for Url {
+    fn from(named_node: NamedNode) -> Self {
+        Arc::try_unwrap(named_node.iri).unwrap_or_else(|iri| (*iri).clone())
+    }
+}
+
 impl FromStr for NamedNode {
     type Err = Error;
 

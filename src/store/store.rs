@@ -1,16 +1,20 @@
 use errors::*;
 use model::*;
+use sparql::algebra::QueryResult;
+use sparql::parser::read_sparql_query;
 use std::fmt;
+use std::io::Read;
 use std::iter::empty;
 use std::iter::once;
 use std::iter::FromIterator;
 use std::iter::Iterator;
 use std::sync::Arc;
 use store::numeric_encoder::*;
+use store::sparql::SparqlEvaluator;
 
 /// Defines the Store traits that is used to have efficient binary storage
 
-pub trait EncodedQuadsStore: BytesStore + Sized {
+pub trait EncodedQuadsStore: BytesStore + Sized + 'static {
     type QuadsIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
     type QuadsForSubjectIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
     type QuadsForSubjectPredicateIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
@@ -344,6 +348,11 @@ impl<S: EncodedQuadsStore> Dataset for StoreDataset<S> {
 
     fn is_empty(&self) -> Result<bool> {
         Ok(self.store.quads()?.any(|_| true))
+    }
+
+    fn query(&self, query: impl Read) -> Result<QueryResult> {
+        let query = read_sparql_query(query, None)?;
+        SparqlEvaluator::new(self.store.clone()).evaluate(&query)
     }
 }
 

@@ -15,7 +15,6 @@ mod grammar {
     use rio::utils::unescape_characters;
     use rio::utils::unescape_unicode_codepoints;
     use sparql::algebra::*;
-    use sparql::model::*;
     use std::borrow::Cow;
     use std::collections::BTreeMap;
     use std::collections::HashMap;

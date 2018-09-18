@@ -312,28 +312,14 @@ DataBlock -> MultiSetPattern = l:(InlineDataOneVar / InlineDataFull) {
 }
 
 //[63]
-InlineDataOneVar -> Vec<Binding> = var:Var _ '{' _ d:InlineDataOneVar_value* '}' {
-    d.into_iter().map(|val| {
-        let mut bindings = Binding::default();
-        if let Some(v) = val {
-            bindings.insert(var.clone(), v);
-        }
-        bindings
-    }).collect()
+InlineDataOneVar -> StaticBindings = var:Var _ '{' _ d:InlineDataOneVar_value* '}' {
+    StaticBindings::new(vec![var], d)
 }
-InlineDataOneVar_value -> Option<Term> = t:DataBlockValue { t }
+InlineDataOneVar_value -> Vec<Option<Term>> = t:DataBlockValue { vec![t] }
 
 //[64]
-InlineDataFull -> Vec<Binding> = '(' _ vars:InlineDataFull_var* _ ')' _ '{' _ val:InlineDataFull_values* '}' {
-    val.into_iter().map(|vals| {
-        let mut bindings = Binding::default();
-        for (var, val) in vars.iter().zip(vals.into_iter()) {
-            if let Some(v) = val {
-                bindings.insert(var.clone(), v);
-            }
-        }
-        bindings
-    }).collect()
+InlineDataFull -> StaticBindings = '(' _ vars:InlineDataFull_var* _ ')' _ '{' _ val:InlineDataFull_values* '}' {
+    StaticBindings::new(vars, val)
 }
 InlineDataFull_var -> Variable = v:Var _ { v }
 InlineDataFull_values -> Vec<Option<Term>> = '(' _ v:InlineDataFull_value* _ ')' _ { v }
@@ -700,7 +686,7 @@ GraphTerm -> Term =
     l:NumericLiteral { l.into() } /
     l:BooleanLiteral { l.into() } /
     b:BlankNode { b.into() } /
-    NIL { BlankNode::default().into() }
+    NIL { rdf::NIL.clone().into() }
 
 //[110]
 Expression -> Expression = e:ConditionalOrExpression {e}
@@ -962,28 +948,28 @@ LANGTAG -> &'input str = "@" l:$([a-zA-Z]+ ("-" [a-zA-Z0-9]+)*) {
 INTEGER -> () = [0-9]+
 
 //[147]
-DECIMAL -> () = [0-9]* '.' [0-9]+
+DECIMAL -> () = ([0-9]+ "." [0-9]* / [0-9]* "." [0-9]+)
 
 //[148]
-DOUBLE -> () = ([0-9]+ "."? [0-9]* / "." [0-9]+) EXPONENT
+DOUBLE -> () = ([0-9]+ "." [0-9]* / "." [0-9]+ / [0-9]+) EXPONENT
 
 //[149]
-INTEGER_POSITIVE -> () = '+' _ INTEGER
+INTEGER_POSITIVE -> () = "+" _ INTEGER
 
 //[150]
-DECIMAL_POSITIVE -> () = '+' _ DECIMAL
+DECIMAL_POSITIVE -> () = "+" _ DECIMAL
 
 //[151]
-DOUBLE_POSITIVE -> () = '+' _ DOUBLE
+DOUBLE_POSITIVE -> () = "+" _ DOUBLE
 
 //[152]
-INTEGER_NEGATIVE -> () = '-' _ INTEGER
+INTEGER_NEGATIVE -> () = "-" _ INTEGER
 
 //[153]
-DECIMAL_NEGATIVE -> () = '-' _ DECIMAL
+DECIMAL_NEGATIVE -> () = "-" _ DECIMAL
 
 //[154]
-DOUBLE_NEGATIVE -> () = '-' _ DOUBLE
+DOUBLE_NEGATIVE -> () = "-" _ DOUBLE
 
 //[155]
 EXPONENT -> () = [eE] [+-]? [0-9]+
