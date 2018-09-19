@@ -31,8 +31,8 @@ impl fmt::Display for Variable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Variable::Variable { name } => write!(f, "?{}", name),
-            Variable::BlankNode { id } => write!(f, "_:{}", id.simple()),
-            Variable::Internal { id } => write!(f, "?{}", id.simple()),
+            Variable::BlankNode { id } => write!(f, "_:{}", id.to_simple()),
+            Variable::Internal { id } => write!(f, "?{}", id.to_simple()),
         }
     }
 }

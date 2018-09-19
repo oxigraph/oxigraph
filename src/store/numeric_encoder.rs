@@ -86,7 +86,7 @@ impl<R: Read> TermReader for R {
             TYPE_BLANK_NODE_ID => {
                 let mut uuid_buffer = [0 as u8; 16];
                 self.read_exact(&mut uuid_buffer)?;
-                Ok(EncodedTerm::BlankNode(Uuid::from_bytes(&uuid_buffer)?))
+                Ok(EncodedTerm::BlankNode(Uuid::from_bytes(uuid_buffer)))
             }
             TYPE_LANG_STRING_LITERAL_ID => Ok(EncodedTerm::LangStringLiteral {
                 language_id: self.read_u64::<NetworkEndian>()?,

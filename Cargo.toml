@@ -19,7 +19,7 @@ error-chain = "0.12"
 lazy_static = "1"
 rocksdb = "0.10"
 url = "1"
-uuid = { version = "0.6", features = ["v4"] }
+uuid = { version = "0.7", features = ["v4"] }
 bzip2 = "0.3"
 byteorder = "1"
 
@@ -27,4 +27,4 @@ byteorder = "1"
 peg = "0.5"
 
 [dev-dependencies]
-reqwest = "0.8"
+reqwest = "0.9"

@@ -18,7 +18,7 @@ impl Deref for BlankNode {
 
 impl fmt::Display for BlankNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "_:{}", self.id)
+        write!(f, "_:{}", self.id.to_simple())
     }
 }
 
