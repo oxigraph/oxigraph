@@ -14,12 +14,14 @@ use rudf::model::vocab::rdfs;
 use rudf::model::*;
 use rudf::rio::ntriples::read_ntriples;
 use rudf::rio::turtle::read_turtle;
+use rudf::rio::xml::read_rdf_xml;
 use rudf::sparql::algebra::Query;
 use rudf::sparql::parser::read_sparql_query;
 use rudf::store::isomorphism::GraphIsomorphism;
 use rudf::store::MemoryGraph;
 use std::error::Error;
 use std::fmt;
+use std::io::BufReader;
 use url::Url;
 
 #[test]
@@ -131,6 +133,56 @@ fn ntriples_w3c_testsuite() {
 }
 
 #[test]
+fn rdf_xml_w3c_testsuite() -> Result<()> {
+    let manifest_url = Url::parse("http://www.w3.org/2013/RDFXMLTests/manifest.ttl")?;
+    let client = RDFClient::default();
+    //TODO: make blacklist pass
+    let test_blacklist = vec![
+        NamedNode::new(manifest_url.join("#xml-canon-test001")?),
+        NamedNode::new(manifest_url.join("#rdfms-seq-representation-test001")?),
+        NamedNode::new(manifest_url.join("#rdf-containers-syntax-vs-schema-test004")?),
+    ];
+
+    for test_result in TestManifest::new(&client, manifest_url) {
+        let test = test_result?;
+        if test_blacklist.contains(&test.id) {
+            continue;
+        }
+
+        if test.kind == "TestXMLNegativeSyntax" {
+            /*TODO assert!(
+                client.load_rdf_xml(test.action.clone()).is_err(),
+                "Failure on {}",
+                test
+            );*/
+        } else if test.kind == "TestXMLEval" {
+            match client.load_rdf_xml(test.action.clone()) {
+                Ok(action_graph) => match client.load_ntriples(test.result.clone().unwrap()) {
+                    Ok(result_graph) => assert!(
+                        action_graph.is_isomorphic(&result_graph)?,
+                        "Failure on {}. Expected file:\n{}\nParsed file:\n{}\n",
+                        test,
+                        result_graph,
+                        action_graph
+                    ),
+                    Err(error) => assert!(
+                        false,
+                        "Failure to parse the RDF XML result file {} of {} with error: {}",
+                        test.result.clone().unwrap(),
+                        test,
+                        error
+                    ),
+                },
+                Err(error) => assert!(false, "Failure to parse {} with error: {}", test, error),
+            }
+        } else {
+            assert!(false, "Not supported test: {}", test);
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn sparql_w3c_syntax_testsuite() {
     let manifest_url = Url::parse(
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest.ttl",
@@ -184,6 +236,10 @@ impl RDFClient {
 
     pub fn load_ntriples(&self, url: Url) -> Result<MemoryGraph> {
         read_ntriples(self.get(&url)?).collect()
+    }
+
+    pub fn load_rdf_xml(&self, url: Url) -> Result<MemoryGraph> {
+        read_rdf_xml(BufReader::new(self.get(&url)?), Some(url)).collect()
     }
 
     pub fn load_sparql_query(&self, url: Url) -> Result<Query> {

@@ -13,8 +13,16 @@ pub mod rdf {
             NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString").unwrap();
         pub static ref NIL: NamedNode =
             NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil").unwrap();
+        pub static ref OBJECT: NamedNode =
+            NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#object").unwrap();
+        pub static ref PREDICATE: NamedNode =
+            NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#predicate").unwrap();
         pub static ref REST: NamedNode =
             NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest").unwrap();
+        pub static ref STATEMENT: NamedNode =
+            NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement").unwrap();
+        pub static ref SUBJECT: NamedNode =
+            NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#subject").unwrap();
         pub static ref TYPE: NamedNode =
             NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
         pub static ref XML_LITERAL: NamedNode =

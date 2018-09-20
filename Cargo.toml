@@ -22,6 +22,7 @@ url = "1"
 uuid = { version = "0.7", features = ["v4"] }
 bzip2 = "0.3"
 byteorder = "1"
+quick-xml = "0.12"
 
 [build-dependencies]
 peg = "0.5"
