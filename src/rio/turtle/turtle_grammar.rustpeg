@@ -4,6 +4,7 @@ use std::char;
 use model::vocab::rdf;
 use model::vocab::xsd;
 use std::iter;
+use rio::utils::unescape_unicode_codepoints;
 
 #![arguments(state: &mut ParserState, buffer: &mut Vec<Triple>)]
 
@@ -22,25 +23,13 @@ prefixID -> () = "@prefix" _ ns:PNAME_NS _ i:IRIREF _ "." {
 }
 
 //[5]
-base -> () = "@base" _ i:IRIREF _ "." {?
-    match state.url_parser().parse(&i) {
-        Ok(url) => {
-            state.base_uri = Some(url);
-            Ok(())
-        },
-        Err(error) => Err("IRI parsing failed")
-    }
+base -> () = "@base" _ url:IRIREF _ "." {
+    state.base_uri = Some(url);
 }
 
 //[5s]
-sparqlBase -> () = "BASE"i _ i:IRIREF {?
-    match state.url_parser().parse(&i) {
-        Ok(url) => {
-            state.base_uri = Some(url);
-            Ok(())
-        },
-        Err(error) => Err("IRI parsing failed")
-    }
+sparqlBase -> () = "BASE"i _ url:IRIREF {
+    state.base_uri = Some(url);
 }
 
 //[6s]
@@ -149,15 +138,12 @@ BooleanLiteral -> Literal =
 String -> String = STRING_LITERAL_LONG_SINGLE_QUOTE / STRING_LITERAL_LONG_QUOTE / STRING_LITERAL_QUOTE / STRING_LITERAL_SINGLE_QUOTE
 
 //[135s]
-iri -> NamedNode = i:(IRIREF / PrefixedName) {?
-    match state.url_parser().parse(&i) {
-       Ok(url) => Ok(NamedNode::new(url)),
-       Err(error) => Err("IRI parsing failed")
-    }
+iri -> NamedNode = i:(IRIREF / PrefixedName) {
+    i.into()
 }
 
 //[136s]
-PrefixedName -> String = PNAME_LN /
+PrefixedName -> Url = PNAME_LN /
     ns:PNAME_NS {? state.namespaces.get(ns).map(|v| v.clone()).ok_or("Prefix not found") }
 
 //[137s]
@@ -166,10 +152,12 @@ BlankNode -> BlankNode =
     ANON { BlankNode::default() }
 
 //[18]
-IRIREF -> String = "<" i:((_IRIREF_simple_char / UCHAR)*) ">" {
-    i.into_iter().collect()
+IRIREF -> Url = "<" i:$(([^\u{00}-\u{20}<>"{}|^\u{60}\u{5c}] / UCHAR)*) ">" {?
+    match state.url_parser().parse(&unescape_unicode_codepoints(i)) {
+       Ok(url) => Ok(url),
+       Err(error) => Err("IRI parsing failed")
+    }
 }
-_IRIREF_simple_char -> char = c:$([^\u{00}-\u{20}<>"{}|^\u{60}\u{5c}]) { c.chars().next().unwrap() }
 
 //[139s]
 PNAME_NS -> &'input str = ns:$(PN_PREFIX? ":") {
@@ -177,8 +165,14 @@ PNAME_NS -> &'input str = ns:$(PN_PREFIX? ":") {
 }
 
 //[140s]
-PNAME_LN -> String = ns:$(PNAME_NS) local:PN_LOCAL {?
-    state.namespaces.get(ns).map(|v| v.clone() + &local).ok_or("Prefix not found")
+PNAME_LN -> Url = ns:$(PNAME_NS) local:PN_LOCAL {?
+    match state.namespaces.get(ns) {
+        Some(ns) => match ns.join(&local) {
+            Ok(url) => Ok(url),
+            Err(error) => Err("IRI parsing failed")
+        },
+        None => Err("Prefix not found")
+    }
 }
 
 //[141s]
@@ -204,60 +198,32 @@ DOUBLE -> () = [+-]? ([0-9]+ "." [0-9]* / "."? [0-9]+) EXPONENT
 EXPONENT -> () = [eE] [+-]? [0-9]+
 
 //[22]
-STRING_LITERAL_QUOTE -> String = "\"" l:((STRING_LITERAL_QUOTE_simple_char / ECHAR / UCHAR)*) "\"" {
-    l.into_iter().collect()
+STRING_LITERAL_QUOTE -> String = "\"" l: $(([^"\u{005c}\u{000a}\u{000d}] / ECHAR / UCHAR)*) "\"" {
+    unescape_unicode_codepoints(&unescape_echars(l)).into_owned()
 }
-STRING_LITERAL_QUOTE_simple_char -> char = c:$([^"\u{005c}\u{000a}\u{000d}]) { c.chars().next().unwrap() }
 
 //[23]
-STRING_LITERAL_SINGLE_QUOTE -> String = "'" l:((STRING_LITERAL_SINGLE_QUOTE_simple_char / ECHAR / UCHAR)*) "'" {
-    l.into_iter().collect()
+STRING_LITERAL_SINGLE_QUOTE -> String = "'" l:$(([^'\u{005c}\u{000a}\u{000d}] / ECHAR / UCHAR)*) "'" {
+    unescape_unicode_codepoints(&unescape_echars(l)).into_owned()
 }
-STRING_LITERAL_SINGLE_QUOTE_simple_char -> char = c:$([^'\u{005c}\u{000a}\u{000d}]) { c.chars().next().unwrap() }
 
 //[24]
-STRING_LITERAL_LONG_SINGLE_QUOTE -> String = "'''" l:(STRING_LITERAL_LONG_SINGLE_QUOTE_inner*) "'''" {
-    l.into_iter().collect()
+STRING_LITERAL_LONG_SINGLE_QUOTE -> String = "'''" l:$(STRING_LITERAL_LONG_SINGLE_QUOTE_inner*) "'''" {
+    unescape_unicode_codepoints(&unescape_echars(l)).into_owned()
 }
-STRING_LITERAL_LONG_SINGLE_QUOTE_inner -> String = a:$(("''" / "'")?) b:(STRING_LITERAL_LONG_SINGLE_QUOTE_simple_char / ECHAR / UCHAR) {
-    let mut s = a.to_string();
-    s.push(b);
-    s
-}
-STRING_LITERAL_LONG_SINGLE_QUOTE_simple_char -> char = c:$([^'\u{005c}]) { c.chars().next().unwrap() }
+STRING_LITERAL_LONG_SINGLE_QUOTE_inner -> () = ("''" / "'")? ([^'\u{005c}] / ECHAR / UCHAR)
 
 //[25]
-STRING_LITERAL_LONG_QUOTE -> String = "\"\"\"" l:(STRING_LITERAL_LONG_QUOTE_inner*) "\"\"\"" {
-    l.into_iter().collect()
+STRING_LITERAL_LONG_QUOTE -> String = "\"\"\"" l:$(STRING_LITERAL_LONG_QUOTE_inner*) "\"\"\"" {
+    unescape_unicode_codepoints(&unescape_echars(l)).into_owned()
 }
-STRING_LITERAL_LONG_QUOTE_inner -> String = a:$(("\"\"" / "\"")?) b:(STRING_LITERAL_LONG_QUOTE_simple_char / ECHAR / UCHAR) {
-    let mut s = a.to_string();
-    s.push(b);
-    s
-}
-STRING_LITERAL_LONG_QUOTE_simple_char -> char = c:$([^"\u{005c}]) { c.chars().next().unwrap() }
+STRING_LITERAL_LONG_QUOTE_inner -> () = ("\"\"" / "\"")? ([^"\u{005c}] / ECHAR / UCHAR)
 
 //[26]
-UCHAR -> char = "\\u" h:$(HEX HEX HEX HEX) {
-    u32::from_str_radix(h, 16).ok().and_then(char::from_u32).unwrap()
-} / "\\U" h:$(HEX HEX HEX HEX HEX HEX HEX HEX) {
-    u32::from_str_radix(h, 16).ok().and_then(char::from_u32).unwrap()
-}
+UCHAR -> () = "\\u" HEX HEX HEX HEX / "\\U" HEX HEX HEX HEX HEX HEX HEX HEX
 
 //[159s]
-ECHAR -> char = "\\" c:$([tbnrf"'\\]) {
-    match c {
-        "t" => '\u{0009}',
-        "b" => '\u{0008}',
-        "n" => '\u{000A}',
-        "r" => '\u{000D}',
-        "f" => '\u{000C}',
-        "\"" => '\u{0022}',
-        "'" => '\u{0027}',
-        "\\" => '\u{005C}',
-        _ => panic!("unexpected escaped char") // not possible
-    }
-}
+ECHAR -> () = "\\" [tbnrf"'\\]
 
 //[161s]
 WS -> () = #quiet<[\u{20}\u{9}\u{D}\u{A}]>

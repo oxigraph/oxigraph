@@ -73,8 +73,8 @@ fn turtle_w3c_testsuite() {
                         action_graph.is_isomorphic(&result_graph).unwrap(),
                         "Failure on {}. Expected file:\n{}\nParsed file:\n{}\n",
                         test,
-                        action_graph,
-                        result_graph
+                        result_graph,
+                        action_graph
                     ),
                     Err(error) => assert!(
                         false,

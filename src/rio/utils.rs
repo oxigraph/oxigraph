@@ -14,7 +14,7 @@ pub fn unescape_unicode_codepoints(input: &str) -> Cow<str> {
 fn needs_unescape_unicode_codepoints(input: &str) -> bool {
     let bytes = input.as_bytes();
     for i in 1..bytes.len() {
-        if (bytes[i] == b'u' || bytes[i] == b'U') && bytes[i - 1] == b'/' {
+        if (bytes[i] == b'u' || bytes[i] == b'U') && bytes[i - 1] == b'\\' {
             return true;
         }
     }
@@ -108,7 +108,7 @@ pub fn unescape_characters<'a>(
 fn needs_unescape_characters(input: &str, characters: &[u8]) -> bool {
     let bytes = input.as_bytes();
     for i in 1..bytes.len() {
-        if bytes[i - 1] == b'/' && characters.contains(&bytes[i]) {
+        if bytes[i - 1] == b'\\' && characters.contains(&bytes[i]) {
             return true;
         }
     }

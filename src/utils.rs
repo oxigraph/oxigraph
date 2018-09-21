@@ -78,6 +78,19 @@ impl ExactSizeIterator for EscapeRDF {
     }
 }
 
+#[test]
+fn test_escaper() {
+    assert_eq!("foo", "foo".escape());
+    assert_eq!(
+        "John said: \\\"Hello World!\\\"",
+        "John said: \"Hello World!\"".escape()
+    );
+    assert_eq!(
+        "John said: \\\"Hello World!\\\\\\\"",
+        "John said: \"Hello World!\\\"".escape()
+    );
+}
+
 pub struct StaticSliceMap<K: 'static + Copy + Eq, V: 'static + Copy> {
     keys: &'static [K],
     values: &'static [V],
