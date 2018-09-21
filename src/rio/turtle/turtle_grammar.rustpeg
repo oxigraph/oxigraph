@@ -167,7 +167,7 @@ PNAME_NS -> &'input str = ns:$(PN_PREFIX? ":") {
 //[140s]
 PNAME_LN -> Url = ns:$(PNAME_NS) local:PN_LOCAL {?
     match state.namespaces.get(ns) {
-        Some(ns) => match ns.join(&local) {
+        Some(ns) => match Url::parse(&(ns.to_string() + &local)) {
             Ok(url) => Ok(url),
             Err(error) => Err("IRI parsing failed")
         },
