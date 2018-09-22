@@ -1,6 +1,8 @@
 use errors::*;
 use model::*;
 use std::fmt;
+use std::iter::empty;
+use std::iter::once;
 use std::iter::FromIterator;
 use std::iter::Iterator;
 use std::sync::Arc;
@@ -9,21 +11,21 @@ use store::numeric_encoder::*;
 /// Defines the Store traits that is used to have efficient binary storage
 
 pub trait EncodedQuadsStore: BytesStore + Sized {
-    type QuadsIterator: Iterator<Item = Result<EncodedQuad>>;
-    type QuadsForSubjectIterator: Iterator<Item = Result<EncodedQuad>>;
-    type QuadsForSubjectPredicateIterator: Iterator<Item = Result<EncodedQuad>>;
-    type QuadsForSubjectPredicateObjectIterator: Iterator<Item = Result<EncodedQuad>>;
-    type QuadsForSubjectObjectIterator: Iterator<Item = Result<EncodedQuad>>;
-    type QuadsForPredicateIterator: Iterator<Item = Result<EncodedQuad>>;
-    type QuadsForPredicateObjectIterator: Iterator<Item = Result<EncodedQuad>>;
-    type QuadsForObjectIterator: Iterator<Item = Result<EncodedQuad>>;
-    type QuadsForGraphIterator: Iterator<Item = Result<EncodedQuad>>;
-    type QuadsForSubjectGraphIterator: Iterator<Item = Result<EncodedQuad>>;
-    type QuadsForSubjectPredicateGraphIterator: Iterator<Item = Result<EncodedQuad>>;
-    type QuadsForSubjectObjectGraphIterator: Iterator<Item = Result<EncodedQuad>>;
-    type QuadsForPredicateGraphIterator: Iterator<Item = Result<EncodedQuad>>;
-    type QuadsForPredicateObjectGraphIterator: Iterator<Item = Result<EncodedQuad>>;
-    type QuadsForObjectGraphIterator: Iterator<Item = Result<EncodedQuad>>;
+    type QuadsIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
+    type QuadsForSubjectIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
+    type QuadsForSubjectPredicateIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
+    type QuadsForSubjectPredicateObjectIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
+    type QuadsForSubjectObjectIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
+    type QuadsForPredicateIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
+    type QuadsForPredicateObjectIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
+    type QuadsForObjectIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
+    type QuadsForGraphIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
+    type QuadsForSubjectGraphIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
+    type QuadsForSubjectPredicateGraphIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
+    type QuadsForSubjectObjectGraphIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
+    type QuadsForPredicateGraphIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
+    type QuadsForPredicateObjectGraphIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
+    type QuadsForObjectGraphIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
 
     fn encoder(&self) -> Encoder<DelegatingBytesStore<Self>> {
         Encoder::new(DelegatingBytesStore(&self))
@@ -94,6 +96,81 @@ pub trait EncodedQuadsStore: BytesStore + Sized {
     fn contains(&self, quad: &EncodedQuad) -> Result<bool>;
     fn insert(&self, quad: &EncodedQuad) -> Result<()>;
     fn remove(&self, quad: &EncodedQuad) -> Result<()>;
+    fn quads_for_pattern(
+        &self,
+        subject: Option<EncodedTerm>,
+        predicate: Option<EncodedTerm>,
+        object: Option<EncodedTerm>,
+        graph_name: Option<EncodedTerm>,
+    ) -> Result<Box<dyn Iterator<Item = Result<EncodedQuad>>>> {
+        Ok(match subject {
+            Some(subject) => match predicate {
+                Some(predicate) => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => {
+                            let quad = EncodedQuad::new(subject, predicate, object, graph_name);
+                            if self.contains(&quad)? {
+                                Box::new(once(Ok(quad)))
+                            } else {
+                                Box::new(empty())
+                            }
+                        }
+                        None => Box::new(
+                            self.quads_for_subject_predicate_object(subject, predicate, object)?,
+                        ),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => Box::new(
+                            self.quads_for_subject_predicate_graph(subject, predicate, graph_name)?,
+                        ),
+                        None => Box::new(self.quads_for_subject_predicate(subject, predicate)?),
+                    },
+                },
+                None => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => Box::new(
+                            self.quads_for_subject_object_graph(subject, object, graph_name)?,
+                        ),
+                        None => Box::new(self.quads_for_subject_object(subject, object)?),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => {
+                            Box::new(self.quads_for_subject_graph(subject, graph_name)?)
+                        }
+                        None => Box::new(self.quads_for_subject(subject)?),
+                    },
+                },
+            },
+            None => match predicate {
+                Some(predicate) => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => Box::new(
+                            self.quads_for_predicate_object_graph(predicate, object, graph_name)?,
+                        ),
+                        None => Box::new(self.quads_for_predicate_object(predicate, object)?),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => {
+                            Box::new(self.quads_for_predicate_graph(predicate, graph_name)?)
+                        }
+                        None => Box::new(self.quads_for_predicate(predicate)?),
+                    },
+                },
+                None => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => {
+                            Box::new(self.quads_for_object_graph(object, graph_name)?)
+                        }
+                        None => Box::new(self.quads_for_object(object)?),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => Box::new(self.quads_for_graph(graph_name)?),
+                        None => Box::new(self.quads()?),
+                    },
+                },
+            },
+        })
+    }
 }
 
 pub struct StoreDataset<S: EncodedQuadsStore> {
