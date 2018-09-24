@@ -2,7 +2,13 @@
 
 mod grammar {
     #![allow(unknown_lints)]
-    #![allow(clippy)]
+    #![allow(
+        suspicious_else_formatting,
+        len_zero,
+        single_match,
+        unit_arg,
+        naive_bytecount
+    )]
 
     use model::*;
     use rio::utils::unescape_characters;

@@ -1,6 +1,14 @@
 mod grammar {
     #![allow(unknown_lints)]
-    #![allow(clippy)]
+    #![allow(
+        suspicious_else_formatting,
+        len_zero,
+        single_match,
+        unit_arg,
+        naive_bytecount,
+        cyclomatic_complexity,
+        many_single_char_names
+    )]
 
     use model::*;
     use rio::utils::unescape_unicode_codepoints;
