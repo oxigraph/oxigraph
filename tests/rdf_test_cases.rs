@@ -54,7 +54,7 @@ fn turtle_w3c_testsuite() {
     for test_result in TestManifest::new(&client, manifest_url) {
         let test = test_result.unwrap();
         if test_blacklist.contains(&test.id) {
-            return;
+            continue;
         }
         if test.kind == "TestTurtlePositiveSyntax" {
             if let Err(error) = client.load_turtle(test.action.clone()) {
