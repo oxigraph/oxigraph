@@ -7,7 +7,8 @@ mod grammar {
         unit_arg,
         naive_bytecount,
         cyclomatic_complexity,
-        many_single_char_names
+        many_single_char_names,
+        type_complexity
     )]
 
     use model::*;

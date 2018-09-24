@@ -19,7 +19,7 @@ directive -> () = prefixID / base / sparqlPrefix / sparqlBase
 
 //[4]
 prefixID -> () = "@prefix" _ ns:PNAME_NS _ i:IRIREF _ "." {
-    state.namespaces.insert(ns.into(), i.into());
+    state.namespaces.insert(ns.into(), i);
 }
 
 //[5]
@@ -144,7 +144,7 @@ iri -> NamedNode = i:(IRIREF / PrefixedName) {
 
 //[136s]
 PrefixedName -> Url = PNAME_LN /
-    ns:PNAME_NS {? state.namespaces.get(ns).map(|v| v.clone()).ok_or("Prefix not found") }
+    ns:PNAME_NS {? state.namespaces.get(ns).cloned().ok_or("Prefix not found") }
 
 //[137s]
 BlankNode -> BlankNode =

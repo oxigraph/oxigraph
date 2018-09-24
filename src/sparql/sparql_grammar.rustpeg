@@ -33,7 +33,7 @@ BaseDecl -> () = "BASE"i _ i:IRIREF {?
 
 //[6]
 PrefixDecl -> () = "PREFIX"i _ ns:PNAME_NS _ i:IRIREF {
-    state.namespaces.insert(ns.into(), i.into());
+    state.namespaces.insert(ns.into(), i);
 }
 
 //[7]
@@ -82,7 +82,7 @@ ConstructQuery -> Query =
             dataset: d,
             algebra: build_select(
                 Selection::default(),
-                MultiSetPattern::BGP(c.into_iter().map(|p| TripleOrPathPattern::from(p)).collect()).into(),
+                MultiSetPattern::BGP(c.into_iter().map(TripleOrPathPattern::from).collect()),
                 g, h, o, l, v, state
             )
         }
@@ -668,7 +668,7 @@ GraphNode -> FocusedTriplePattern<TermOrVariable> =
 
 //[105]
 GraphNodePath -> FocusedTripleOrPathPattern<TermOrVariable> =
-    t:VarOrTerm { FocusedTripleOrPathPattern::new(t.into()) } /
+    t:VarOrTerm { FocusedTripleOrPathPattern::new(t) } /
     TriplesNodePath
 
 //[106]
