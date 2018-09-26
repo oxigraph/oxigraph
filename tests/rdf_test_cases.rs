@@ -193,10 +193,11 @@ impl RDFClient {
     fn get(&self, url: &Url) -> Result<Response> {
         match self.client.get(url.clone()).send() {
             Ok(response) => Ok(response),
-            Err(error) => if error.description() == "message is incomplete" {
+            Err(error) => if error.description() == "parsed HTTP message from remote is incomplete"
+            {
                 self.get(url)
             } else {
-                Err("HTTP request error".into()) //TODO: improve
+                Err(format!("HTTP request error: {}", error.description()).into())
             },
         }
     }
