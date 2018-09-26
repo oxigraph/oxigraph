@@ -10,7 +10,7 @@ pub type MemoryGraph = StoreDefaultGraph<MemoryStore>;
 
 #[derive(Default)]
 pub struct MemoryStore {
-    id2str: RwLock<BTreeMap<u64, Vec<u8>>>,
+    id2str: RwLock<Vec<Vec<u8>>>,
     str2id: RwLock<BTreeMap<Vec<u8>, u64>>,
     graph_indexes: RwLock<BTreeMap<EncodedTerm, MemoryGraphIndexes>>,
 }
@@ -30,14 +30,20 @@ impl BytesStore for MemoryStore {
         let mut str2id = self.str2id.write()?;
         let id = str2id.entry(value.to_vec()).or_insert_with(|| {
             let id = id2str.len() as u64;
-            id2str.insert(id, value.to_vec());
+            id2str.push(value.to_vec());
             id
         });
         Ok(*id)
     }
 
     fn get_bytes(&self, id: u64) -> Result<Option<Vec<u8>>> {
-        Ok(self.id2str.read()?.get(&id).map(|s| s.to_owned()))
+        //TODO: use try_from when stable
+        let id2str = self.id2str.read()?;
+        Ok(if id2str.len() as u64 <= id {
+            None
+        } else {
+            Some(id2str[id as usize].to_owned())
+        })
     }
 }
 
