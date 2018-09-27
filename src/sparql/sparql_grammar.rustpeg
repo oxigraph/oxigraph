@@ -177,7 +177,7 @@ HavingClause -> Expression = "HAVING"i _ e:HavingCondition+ {?
 HavingCondition -> Expression = Constraint
 
 //[23]
-OrderClause -> Vec<OrderComparator> = "ORDER"i "BY"i _ c:OrderClause_item+ { c }
+OrderClause -> Vec<OrderComparator> = "ORDER"i _ "BY"i _ c:OrderClause_item+ { c }
 OrderClause_item -> OrderComparator = c:OrderCondition _ { c }
 
 //[24]
@@ -208,10 +208,16 @@ ValuesClause -> Option<MultiSetPattern> =
     { None }
 
 //[52]
-TriplesTemplate -> Vec<TriplePattern> = p:TriplesTemplate_item **<1,> ('.' _) '.'? {
-    p.into_iter().flat_map(|c| c.into_iter()).collect()
+TriplesTemplate -> Vec<TriplePattern> =  h:TriplesSameSubject _ t:TriplesTemplate_tail? {
+    let mut triples = h;
+    if let Some(l) = t {
+        triples.extend_from_slice(&l)
+    }
+    triples
 }
-TriplesTemplate_item -> Vec<TriplePattern> = p:TriplesSameSubject _ { p }
+TriplesTemplate_tail -> Vec<TriplePattern> = '.' _ t:TriplesTemplate? _ {
+    t.unwrap_or_else(Vec::default)
+}
 
 //[53]
 GroupGraphPattern -> MultiSetPattern =
@@ -369,14 +375,14 @@ FunctionCall -> Expression = f: iri _ a: ArgList {
 
 //[71]
 ArgList -> Vec<Expression> = //TODO: support DISTINCT
-    NIL { Vec::new() } /
-    '(' _ 'DISTINCT'? _ e:ArgList_item **<1,> (',' _) _ ')' { e }
+    '(' _ 'DISTINCT'? _ e:ArgList_item **<1,> (',' _) _ ')' { e } /
+    NIL { Vec::new() }
 ArgList_item -> Expression = e:Expression _ { e }
 
 //[72]
 ExpressionList -> Vec<Expression> =
-    NIL { Vec::default() } /
-    '(' _ e:ExpressionList_item **<1,> (',' _) ')' { e }
+    '(' _ e:ExpressionList_item **<1,> (',' _) ')' { e } /
+    NIL { Vec::default() }
 ExpressionList_item -> Expression = e:Expression _ { e }
 
 //[73]
@@ -475,7 +481,7 @@ PropertyListPath -> FocusedTripleOrPathPattern<Vec<(VariableOrPropertyPath,Vec<T
 
 //[83]
 PropertyListPathNotEmpty -> FocusedTripleOrPathPattern<Vec<(VariableOrPropertyPath,Vec<TermOrVariable>)>> = hp:(VerbPath / VerbSimple) _ ho:ObjectListPath _ t:PropertyListPathNotEmpty_item* {
-        t.into_iter().fold(FocusedTripleOrPathPattern {
+        t.into_iter().flat_map(|e| e.into_iter()).fold(FocusedTripleOrPathPattern {
             focus: vec![(hp, ho.focus)],
             patterns: ho.patterns
         }, |mut a, b| {
@@ -484,7 +490,10 @@ PropertyListPathNotEmpty -> FocusedTripleOrPathPattern<Vec<(VariableOrPropertyPa
             a
         })
 }
-PropertyListPathNotEmpty_item -> FocusedTriplePattern<(VariableOrPropertyPath,Vec<TermOrVariable>)> = ';' _ p:(VerbPath / VerbSimple) _ o:ObjectList _ { //TODO: make values after ';' optional
+PropertyListPathNotEmpty_item -> Option<FocusedTriplePattern<(VariableOrPropertyPath,Vec<TermOrVariable>)>> = ';' _ c:PropertyListPathNotEmpty_item_content? {
+    c
+}
+PropertyListPathNotEmpty_item_content -> FocusedTriplePattern<(VariableOrPropertyPath,Vec<TermOrVariable>)> = p:(VerbPath / VerbSimple) _ o:ObjectList _ {
     FocusedTriplePattern {
         focus: (p, o.focus),
         patterns: o.patterns
@@ -858,9 +867,12 @@ Aggregate -> Aggregation =
     "GROUP_CONCAT"i _ '(' _ e:Expression _ ')' { Aggregation::GroupConcat(Box::new(e), false, None) }
 
 //[128]
-iriOrFunction -> Expression =
-    FunctionCall /
-    i:iri { Expression::ConstantExpression(i.into()) }
+iriOrFunction -> Expression = i: iri _ a: ArgList? {
+    match a {
+        Some(a) => Expression::CustomFunctionCall(i, a),
+        None => Expression::ConstantExpression(i.into())
+    }
+}
 
 //[129]
 RDFLiteral -> Literal =
@@ -896,7 +908,7 @@ BooleanLiteral -> Literal =
     "false" { false.into() }
 
 //[135]
-String -> String = STRING_LITERAL1 / STRING_LITERAL2 / STRING_LITERAL_LONG1 / STRING_LITERAL_LONG2
+String -> String = STRING_LITERAL_LONG1 / STRING_LITERAL_LONG2 / STRING_LITERAL1 / STRING_LITERAL2
 
 //[136]
 iri -> NamedNode = i:(IRIREF / PrefixedName) {?
@@ -953,7 +965,7 @@ INTEGER -> () = [0-9]+
 DECIMAL -> () = [0-9]* '.' [0-9]+
 
 //[148]
-DOUBLE -> () = ([0-9]+ "." [0-9]* / "."? [0-9]+) EXPONENT
+DOUBLE -> () = ([0-9]+ "."? [0-9]* / "." [0-9]+) EXPONENT
 
 //[149]
 INTEGER_POSITIVE -> () = '+' _ INTEGER

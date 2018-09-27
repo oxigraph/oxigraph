@@ -875,10 +875,7 @@ impl From<TripleOrPathPattern> for MultiSetPattern {
 
 impl From<ListPattern> for MultiSetPattern {
     fn from(pattern: ListPattern) -> Self {
-        match pattern {
-            ListPattern::ToList(pattern) => pattern,
-            pattern => MultiSetPattern::ToMultiSet(Box::new(pattern)),
-        }
+        MultiSetPattern::ToMultiSet(Box::new(pattern))
     }
 }
 
@@ -955,7 +952,7 @@ impl<'a> fmt::Display for SparqlMultiSetPattern<'a> {
         match self.0 {
             MultiSetPattern::BGP(p) => {
                 if p.is_empty() {
-                    write!(f, "{{}}")
+                    Ok(())
                 } else {
                     write!(
                         f,
@@ -1126,10 +1123,7 @@ impl Default for ListPattern {
 
 impl From<MultiSetPattern> for ListPattern {
     fn from(pattern: MultiSetPattern) -> Self {
-        match pattern {
-            MultiSetPattern::ToMultiSet(pattern) => *pattern,
-            pattern => ListPattern::ToList(pattern),
-        }
+        ListPattern::ToList(pattern)
     }
 }
 
@@ -1187,7 +1181,7 @@ impl<'a> fmt::Display for SparqlListPattern<'a> {
                 }
                 write!(f, " }}")
             },
-            ListPattern::ToList(l) => write!(f, "{}", SparqlMultiSetPattern(&*l)),
+            ListPattern::ToList(l) => write!(f, "{{ {} }}", SparqlMultiSetPattern(&*l)),
             ListPattern::OrderBy(l, o) => write!(
                 f,
                 "{} ORDER BY {}",
@@ -1202,7 +1196,7 @@ impl<'a> fmt::Display for SparqlListPattern<'a> {
             ),
             ListPattern::Project(l, pv) => write!(
                 f,
-                "SELECT {} {} WHERE {{ {} }}",
+                "SELECT {} {} WHERE {}",
                 build_sparql_select_arguments(pv),
                 self.dataset,
                 SparqlListPattern {
@@ -1213,7 +1207,7 @@ impl<'a> fmt::Display for SparqlListPattern<'a> {
             ListPattern::Distinct(l) => match l.as_ref() {
                 ListPattern::Project(l, pv) => write!(
                     f,
-                    "SELECT DISTINCT {} {} WHERE {{ {} }}",
+                    "SELECT DISTINCT {} {} WHERE {}",
                     build_sparql_select_arguments(pv),
                     self.dataset,
                     SparqlListPattern {
@@ -1233,7 +1227,7 @@ impl<'a> fmt::Display for SparqlListPattern<'a> {
             ListPattern::Reduced(l) => match l.as_ref() {
                 ListPattern::Project(l, pv) => write!(
                     f,
-                    "SELECT REDUCED {} {} WHERE {{ {} }}",
+                    "SELECT REDUCED {} {} WHERE {}",
                     build_sparql_select_arguments(pv),
                     self.dataset,
                     SparqlListPattern {
@@ -1560,7 +1554,7 @@ impl fmt::Display for Query {
             ),
             Query::DescribeQuery { dataset, algebra } => write!(
                 f,
-                "DESCRIBE {} WHERE {{ {} }}",
+                "DESCRIBE * {} WHERE {{ {} }}",
                 dataset,
                 SparqlListPattern {
                     algebra: &algebra,

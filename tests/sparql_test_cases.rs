@@ -1,4 +1,4 @@
-///! Integration tests based on [RDF 1.1 Test Cases](https://www.w3.org/TR/rdf11-testcases/)
+///! Integration tests based on [SPARQL 1.1 Test Cases](https://www.w3.org/2009/sparql/docs/tests/README.html)
 
 #[macro_use]
 extern crate lazy_static;
@@ -15,169 +15,64 @@ use rudf::model::*;
 use rudf::rio::ntriples::read_ntriples;
 use rudf::rio::turtle::read_turtle;
 use rudf::rio::xml::read_rdf_xml;
-use rudf::store::isomorphism::GraphIsomorphism;
+use rudf::sparql::algebra::Query;
+use rudf::sparql::parser::read_sparql_query;
 use rudf::store::MemoryGraph;
 use std::error::Error;
 use std::fmt;
 use std::io::BufReader;
+use std::str::FromStr;
 use url::Url;
 
 #[test]
-fn turtle_w3c_testsuite() {
-    let manifest_url = Url::parse("http://www.w3.org/2013/TurtleTests/manifest.ttl").unwrap();
-    let client = RDFClient::default();
-    //TODO: make blacklist pass
+fn sparql_w3c_syntax_testsuite() {
+    let manifest_10_url =
+        Url::parse("https://www.w3.org/2001/sw/DataAccess/tests/data-r2/manifest-syntax.ttl")
+            .unwrap();
+    let manifest_11_url = Url::parse(
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest.ttl",
+    ).unwrap();
     let test_blacklist = vec![
-        //UTF-8 broken surrogates in BNode ids
-        NamedNode::new(
-            manifest_url
-                .join("#prefix_with_PN_CHARS_BASE_character_boundaries")
-                .unwrap(),
-        ),
-        NamedNode::new(
-            manifest_url
-                .join("#labeled_blank_node_with_PN_CHARS_BASE_character_boundaries")
-                .unwrap(),
-        ),
-        NamedNode::new(
-            manifest_url
-                .join("#localName_with_assigned_nfc_PN_CHARS_BASE_character_boundaries")
-                .unwrap(),
-        ),
-        NamedNode::new(
-            manifest_url
-                .join("#localName_with_nfc_PN_CHARS_BASE_character_boundaries")
-                .unwrap(),
-        ),
+        NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql2/manifest#syntax-form-construct02").unwrap(),
+        //TODO: Deserialization of the serialization failing:
+        NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql2/manifest#syntax-form-construct04").unwrap(),
+        NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql2/manifest#syntax-function-04").unwrap(),
+        NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql1/manifest#syntax-lit-08").unwrap(),
+        NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql1/manifest#syntax-qname-04").unwrap(),
     ];
+    let client = RDFClient::default();
 
-    for test_result in TestManifest::new(&client, manifest_url) {
+    for test_result in TestManifest::new(&client, manifest_10_url)
+        .chain(TestManifest::new(&client, manifest_11_url))
+    {
         let test = test_result.unwrap();
         if test_blacklist.contains(&test.id) {
             continue;
         }
-        if test.kind == "TestTurtlePositiveSyntax" {
-            if let Err(error) = client.load_turtle(test.action.clone()) {
-                assert!(false, "Failure on {} with error: {}", test, error)
+        if test.kind == "PositiveSyntaxTest" || test.kind == "PositiveSyntaxTest11" {
+            match client.load_sparql_query(test.action.clone()) {
+                Err(error) => assert!(false, "Failure on {} with error: {}", test, error),
+                Ok(query) => {
+                    if let Err(error) = read_sparql_query(query.to_string().as_bytes(), None) {
+                        assert!(
+                            false,
+                            "Failure to deserialize \"{}\" of {} with error: {}",
+                            query.to_string(),
+                            test,
+                            error
+                        )
+                    }
+                }
             }
-        } else if test.kind == "TestTurtleNegativeSyntax" {
-            assert!(
-                client.load_turtle(test.action.clone()).is_err(),
-                "Failure on {}",
-                test
-            );
-        } else if test.kind == "TestTurtleEval" {
-            match client.load_turtle(test.action.clone()) {
-                Ok(action_graph) => match client.load_turtle(test.result.clone().unwrap()) {
-                    Ok(result_graph) => assert!(
-                        action_graph.is_isomorphic(&result_graph).unwrap(),
-                        "Failure on {}. Expected file:\n{}\nParsed file:\n{}\n",
-                        test,
-                        result_graph,
-                        action_graph
-                    ),
-                    Err(error) => assert!(
-                        false,
-                        "Failure to parse the Turtle result file {} of {} with error: {}",
-                        test.result.clone().unwrap(),
-                        test,
-                        error
-                    ),
-                },
-                Err(error) => assert!(false, "Failure to parse {} with error: {}", test, error),
-            }
-        } else if test.kind == "TestTurtleNegativeEval" {
-            let action_graph = client.load_turtle(test.action.clone());
-            let result_graph = test
-                .result
-                .clone()
-                .map(|r| client.load_turtle(r))
-                .unwrap_or_else(|| Ok(MemoryGraph::default()));
-            assert!(
-                action_graph.is_err() || !action_graph
-                    .unwrap()
-                    .is_isomorphic(&result_graph.unwrap())
-                    .unwrap(),
-                "Failure on {}",
-                test
-            );
-        } else {
-            assert!(false, "Not supported test: {}", test);
-        }
-    }
-}
-
-#[test]
-fn ntriples_w3c_testsuite() {
-    let client = RDFClient::default();
-    let manifest_url = Url::parse("http://www.w3.org/2013/N-TriplesTests/manifest.ttl").unwrap();
-
-    for test_result in TestManifest::new(&client, manifest_url) {
-        let test = test_result.unwrap();
-        if test.kind == "TestNTriplesPositiveSyntax" {
-            if let Err(error) = client.load_ntriples(test.action.clone()) {
-                assert!(false, "Failure on {} with error: {}", test, error)
-            }
-        } else if test.kind == "TestNTriplesNegativeSyntax" {
-            assert!(
-                client.load_ntriples(test.action.clone()).is_err(),
-                "Failure on {}",
-                test
-            );
-        } else {
-            assert!(false, "Not supported test: {}", test);
-        }
-    }
-}
-
-#[test]
-fn rdf_xml_w3c_testsuite() -> Result<()> {
-    let manifest_url = Url::parse("http://www.w3.org/2013/RDFXMLTests/manifest.ttl")?;
-    let client = RDFClient::default();
-    //TODO: make blacklist pass
-    let test_blacklist = vec![
-        NamedNode::new(manifest_url.join("#xml-canon-test001")?),
-        NamedNode::new(manifest_url.join("#rdfms-seq-representation-test001")?),
-        NamedNode::new(manifest_url.join("#rdf-containers-syntax-vs-schema-test004")?),
-    ];
-
-    for test_result in TestManifest::new(&client, manifest_url) {
-        let test = test_result?;
-        if test_blacklist.contains(&test.id) {
-            continue;
-        }
-
-        if test.kind == "TestXMLNegativeSyntax" {
-            /*TODO assert!(
-                client.load_rdf_xml(test.action.clone()).is_err(),
-                "Failure on {}",
-                test
-            );*/
-        } else if test.kind == "TestXMLEval" {
-            match client.load_rdf_xml(test.action.clone()) {
-                Ok(action_graph) => match client.load_ntriples(test.result.clone().unwrap()) {
-                    Ok(result_graph) => assert!(
-                        action_graph.is_isomorphic(&result_graph)?,
-                        "Failure on {}. Expected file:\n{}\nParsed file:\n{}\n",
-                        test,
-                        result_graph,
-                        action_graph
-                    ),
-                    Err(error) => assert!(
-                        false,
-                        "Failure to parse the RDF XML result file {} of {} with error: {}",
-                        test.result.clone().unwrap(),
-                        test,
-                        error
-                    ),
-                },
-                Err(error) => assert!(false, "Failure to parse {} with error: {}", test, error),
+        } else if test.kind == "NegativeSyntaxTest" || test.kind == "NegativeSyntaxTest11" {
+            //TODO
+            if let Ok(result) = client.load_sparql_query(test.action.clone()) {
+                eprintln!("Failure on {}. The output tree is: {}", test, result);
             }
         } else {
             assert!(false, "Not supported test: {}", test);
         }
     }
-    Ok(())
 }
 
 pub struct RDFClient {
@@ -203,6 +98,10 @@ impl RDFClient {
 
     pub fn load_rdf_xml(&self, url: Url) -> Result<MemoryGraph> {
         read_rdf_xml(BufReader::new(self.get(&url)?), Some(url)).collect()
+    }
+
+    pub fn load_sparql_query(&self, url: Url) -> Result<Query> {
+        read_sparql_query(self.get(&url)?, Some(url))
     }
 
     fn get(&self, url: &Url) -> Result<Response> {
