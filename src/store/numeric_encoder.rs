@@ -410,4 +410,11 @@ mod test {
         }
     }
 
+    #[test]
+    fn test_encoded_term_size() {
+        use std::mem::size_of;
+
+        assert_eq!(size_of::<EncodedTerm>(), 24);
+    }
+
 }
