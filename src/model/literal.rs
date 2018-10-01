@@ -81,6 +81,7 @@ impl Literal {
         }
     }
 
+    /// Checks if it could be considered as an RDF 1.0 [plain literal](https://www.w3.org/TR/rdf-concepts/#dfn-plain-literal)
     pub fn is_plain(&self) -> bool {
         match self {
             Literal::SimpleLiteral(_) => true,
