@@ -136,62 +136,37 @@ impl<R: BufRead> Iterator for RdfXmlIterator<R> {
             }
 
             //Read more XML
-            let (namespace, event) = match self
+            match self
                 .reader
                 .read_namespaced_event(&mut buffer, &mut self.namespace_buffer)
             {
-                Ok((Some(namespace), event)) => {
-                    (Some(self.reader.decode(namespace).to_string()), event)
-                }
-                Ok((None, event)) => (None, event),
-                Err(error) => return Some(Err(error.into())),
-            };
-
-            match event {
-                Event::Start(event) => {
-                    let uri = match namespace {
-                        Some(namespace) => {
-                            Url::parse(&(namespace + &self.reader.decode(&event.local_name())))
+                Ok((_, event)) => match event {
+                    Event::Start(event) => {
+                        if let Err(error) = self.parse_start_event(&event) {
+                            return Some(Err(error));
                         }
-                        None => Url::parse(&self.reader.decode(&event.name())),
-                    };
-                    let uri = match uri {
-                        Ok(uri) => uri,
-                        Err(error) => return Some(Err(error.into())),
-                    };
-                    if let Err(error) = self.parse_start_event(&event, uri) {
-                        return Some(Err(error));
                     }
-                }
-                Event::Text(event) => {
-                    if let Err(error) = self.parse_text_event(&event) {
-                        return Some(Err(error));
+                    Event::Text(event) => {
+                        if let Err(error) = self.parse_text_event(&event) {
+                            return Some(Err(error));
+                        }
                     }
-                }
-                Event::End(event) => {
-                    if let Err(error) = self.parse_end_event(&event) {
-                        return Some(Err(error));
+                    Event::End(event) => {
+                        if let Err(error) = self.parse_end_event(&event) {
+                            return Some(Err(error));
+                        }
                     }
-                }
-                Event::Eof => return None,
-                _ => (),
+                    Event::Eof => return None,
+                    _ => (),
+                },
+                Err(error) => return Some(Err(error.into())),
             }
         }
     }
 }
 
-/*
-fn read_next_event<'a, R: BufRead>(reader: &'a mut Reader<R>, namespace_buffer: &mut Vec<u8>) -> Result<(Option<String>, Event<'a>)> {
-    let mut buffer = Vec::default();
-    Ok(match reader.read_namespaced_event(&mut buffer, namespace_buffer)? {
-        (Some(namespace), event) => (Some(reader.decode(namespace).to_string()), event),
-        (None, event) => (None, event)
-    })
-}
-*/
-
 impl<R: BufRead> RdfXmlIterator<R> {
-    fn parse_start_event(&mut self, event: &BytesStart, uri: Url) -> Result<()> {
+    fn parse_start_event(&mut self, event: &BytesStart) -> Result<()> {
         #[derive(PartialEq, Eq)]
         enum RdfXmlParseType {
             Default,
@@ -207,6 +182,8 @@ impl<R: BufRead> RdfXmlIterator<R> {
             NodeElt,
             PropertyElt { subject: NamedOrBlankNode },
         }
+
+        let uri = self.resolve_tag_name(event.name())?;
 
         //We read attributes
         let mut language = String::default();
@@ -234,7 +211,7 @@ impl<R: BufRead> RdfXmlIterator<R> {
                     base_uri = Some(self.resolve_uri(&attribute.unescaped_value()?, &None)?)
                 }
                 key if !key.starts_with(b"xml") => {
-                    let attribute_url = self.resolve_q_name(key)?;
+                    let attribute_url = self.resolve_attribute_name(key)?;
                     if attribute_url == *RDF_ID {
                         let mut id = Vec::with_capacity(attribute.value.len() + 1);
                         id.push(b'#');
@@ -417,8 +394,19 @@ impl<R: BufRead> RdfXmlIterator<R> {
         Ok(())
     }
 
-    fn resolve_q_name(&self, qname: &[u8]) -> Result<Url> {
-        let (namespace, local_name) = self.reader.resolve_namespace(qname, &self.namespace_buffer);
+    fn resolve_tag_name(&self, qname: &[u8]) -> Result<Url> {
+        let (namespace, local_name) = self.reader.event_namespace(qname, &self.namespace_buffer);
+        self.resolve_ns_name(namespace, local_name)
+    }
+
+    fn resolve_attribute_name(&self, qname: &[u8]) -> Result<Url> {
+        let (namespace, local_name) = self
+            .reader
+            .attribute_namespace(qname, &self.namespace_buffer);
+        self.resolve_ns_name(namespace, local_name)
+    }
+
+    fn resolve_ns_name(&self, namespace: Option<&[u8]>, local_name: &[u8]) -> Result<Url> {
         Ok(Url::parse(
             &(match namespace {
                 Some(namespace) => self.reader.decode(namespace) + self.reader.decode(local_name),
