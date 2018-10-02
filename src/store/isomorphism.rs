@@ -1,4 +1,3 @@
-use errors::*;
 use model::*;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeSet;
@@ -6,6 +5,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::hash::Hash;
 use std::hash::Hasher;
+use Result;
 
 #[derive(Eq, PartialEq, Hash, Ord, PartialOrd)]
 struct SubjectPredicate {

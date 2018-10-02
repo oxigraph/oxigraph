@@ -32,12 +32,12 @@ mod grammar {
     include!(concat!(env!("OUT_DIR"), "/ntriples_grammar.rs"));
 }
 
-use errors::*;
 use model::*;
 use std::collections::BTreeMap;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Read;
+use Result;
 
 pub(crate) type ParseError = self::grammar::ParseError;
 

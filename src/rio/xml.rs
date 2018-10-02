@@ -1,4 +1,3 @@
-use errors::*;
 use model::vocab::rdf;
 use model::Triple;
 use model::*;
@@ -11,6 +10,7 @@ use std::collections::BTreeMap;
 use std::io::BufRead;
 use std::str::FromStr;
 use url::Url;
+use Result;
 
 pub fn read_rdf_xml(
     source: impl BufRead,
@@ -237,7 +237,7 @@ impl<R: BufRead> RdfXmlIterator<R> {
                             b"Resource" => RdfXmlParseType::Resource,
                             _ => RdfXmlParseType::Other,
                         };
-                    } else if attribute_url == **rdf::TYPE {
+                    } else if attribute_url == *rdf::TYPE.as_url() {
                         type_attr = Some(attribute.unescaped_value()?.to_vec());
                     } else {
                         property_attrs.push((

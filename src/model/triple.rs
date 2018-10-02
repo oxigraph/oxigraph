@@ -119,27 +119,6 @@ impl From<NamedOrBlankNode> for Term {
     }
 }
 
-/// The interface of containers that looks like [RDF triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple)
-pub trait TripleLike {
-    /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
-    fn subject(&self) -> &NamedOrBlankNode;
-
-    /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
-    fn subject_owned(self) -> NamedOrBlankNode;
-
-    /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
-    fn predicate(&self) -> &NamedNode;
-    /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
-
-    fn predicate_owned(self) -> NamedNode;
-
-    /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple
-    fn object(&self) -> &Term;
-
-    /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple
-    fn object_owned(self) -> Term;
-}
-
 /// A [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple)
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct Triple {
@@ -162,6 +141,37 @@ impl Triple {
         }
     }
 
+    /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
+    pub fn subject(&self) -> &NamedOrBlankNode {
+        &self.subject
+    }
+
+    /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
+    pub fn subject_owned(self) -> NamedOrBlankNode {
+        self.subject
+    }
+
+    /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
+    pub fn predicate(&self) -> &NamedNode {
+        &self.predicate
+    }
+
+    /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
+    pub fn predicate_owned(self) -> NamedNode {
+        self.predicate
+    }
+
+    /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple
+    pub fn object(&self) -> &Term {
+        &self.object
+    }
+
+    /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple
+    pub fn object_owned(self) -> Term {
+        self.object
+    }
+
+    /// Encodes that this triple is in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
     pub fn in_graph(self, graph_name: Option<NamedOrBlankNode>) -> Quad {
         Quad {
             subject: self.subject,
@@ -176,41 +186,6 @@ impl fmt::Display for Triple {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{} {} {} .", self.subject, self.predicate, self.object)
     }
-}
-
-impl TripleLike for Triple {
-    fn subject(&self) -> &NamedOrBlankNode {
-        &self.subject
-    }
-
-    fn subject_owned(self) -> NamedOrBlankNode {
-        self.subject
-    }
-
-    fn predicate(&self) -> &NamedNode {
-        &self.predicate
-    }
-
-    fn predicate_owned(self) -> NamedNode {
-        self.predicate
-    }
-
-    fn object(&self) -> &Term {
-        &self.object
-    }
-
-    fn object_owned(self) -> Term {
-        self.object
-    }
-}
-
-/// The interface of containers that looks like [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) that are in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
-pub trait QuadLike: TripleLike {
-    /// The name of the RDF [graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph) in which the triple is or None if it is in the [default graph](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph)
-    fn graph_name(&self) -> &Option<NamedOrBlankNode>;
-
-    /// The name of the RDF [graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph) in which the triple is or None if it is in the [default graph](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph)
-    fn graph_name_owned(self) -> Option<NamedOrBlankNode>;
 }
 
 /// A [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
@@ -237,6 +212,46 @@ impl Quad {
             graph_name: graph_name.into(),
         }
     }
+
+    /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
+    pub fn subject(&self) -> &NamedOrBlankNode {
+        &self.subject
+    }
+
+    /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
+    pub fn subject_owned(self) -> NamedOrBlankNode {
+        self.subject
+    }
+
+    /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
+    pub fn predicate(&self) -> &NamedNode {
+        &self.predicate
+    }
+
+    /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
+    pub fn predicate_owned(self) -> NamedNode {
+        self.predicate
+    }
+
+    /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple
+    pub fn object(&self) -> &Term {
+        &self.object
+    }
+
+    /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple
+    pub fn object_owned(self) -> Term {
+        self.object
+    }
+
+    /// The name of the RDF [graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph) in which the triple is or None if it is in the [default graph](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph)
+    pub fn graph_name(&self) -> &Option<NamedOrBlankNode> {
+        &self.graph_name
+    }
+
+    /// The name of the RDF [graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph) in which the triple is or None if it is in the [default graph](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph)
+    pub fn graph_name_owned(self) -> Option<NamedOrBlankNode> {
+        self.graph_name
+    }
 }
 
 impl fmt::Display for Quad {
@@ -249,41 +264,5 @@ impl fmt::Display for Quad {
             ),
             None => write!(f, "{} {} {} .", self.subject, self.predicate, self.object),
         }
-    }
-}
-
-impl TripleLike for Quad {
-    fn subject(&self) -> &NamedOrBlankNode {
-        &self.subject
-    }
-
-    fn subject_owned(self) -> NamedOrBlankNode {
-        self.subject
-    }
-
-    fn predicate(&self) -> &NamedNode {
-        &self.predicate
-    }
-
-    fn predicate_owned(self) -> NamedNode {
-        self.predicate
-    }
-
-    fn object(&self) -> &Term {
-        &self.object
-    }
-
-    fn object_owned(self) -> Term {
-        self.object
-    }
-}
-
-impl QuadLike for Quad {
-    fn graph_name(&self) -> &Option<NamedOrBlankNode> {
-        &self.graph_name
-    }
-
-    fn graph_name_owned(self) -> Option<NamedOrBlankNode> {
-        self.graph_name
     }
 }

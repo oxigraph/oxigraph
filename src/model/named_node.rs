@@ -1,11 +1,26 @@
-use errors::*;
 use std::fmt;
-use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::Arc;
 use url::Url;
+use Error;
+use Result;
 
 /// A RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
+///
+/// The common way to build it is to use the `FromStr::from_str` trait method.
+/// This method takes care of usual IRI normalization and validation.
+///
+/// The default string formatter is returning a N-Triples, Turtle and SPARQL compatible representation:
+/// ```
+/// use rudf::model::NamedNode;
+/// use std::str::FromStr;
+///
+/// assert_eq!(
+///     "<http://example.com/foo>",
+///     NamedNode::from_str("http://example.com/foo").unwrap().to_string()
+/// )
+/// ```
+///
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct NamedNode {
     iri: Arc<Url>,
@@ -25,19 +40,11 @@ impl NamedNode {
         }
     }
 
-    pub fn value(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         self.iri.as_str()
     }
 
-    pub fn url(&self) -> &Url {
-        &self.iri
-    }
-}
-
-impl Deref for NamedNode {
-    type Target = Url;
-
-    fn deref(&self) -> &Url {
+    pub fn as_url(&self) -> &Url {
         &self.iri
     }
 }

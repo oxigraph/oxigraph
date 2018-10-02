@@ -1,4 +1,3 @@
-use errors::*;
 use model::*;
 use sparql::algebra::QueryResult;
 use sparql::parser::read_sparql_query;
@@ -11,6 +10,7 @@ use std::iter::Iterator;
 use std::sync::Arc;
 use store::numeric_encoder::*;
 use store::sparql::SparqlEvaluator;
+use Result;
 
 /// Defines the Store traits that is used to have efficient binary storage
 

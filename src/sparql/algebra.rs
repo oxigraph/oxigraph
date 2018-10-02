@@ -1,4 +1,3 @@
-use errors::*;
 use model::*;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -7,6 +6,7 @@ use std::ops::Add;
 use store::MemoryGraph;
 use utils::Escaper;
 use uuid::Uuid;
+use Result;
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum Variable {
@@ -53,7 +53,9 @@ impl Default for Variable {
 
 impl From<BlankNode> for Variable {
     fn from(blank_node: BlankNode) -> Self {
-        Variable::BlankNode { id: *blank_node }
+        Variable::BlankNode {
+            id: *blank_node.as_uuid(),
+        }
     }
 }
 

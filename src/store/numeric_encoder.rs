@@ -1,5 +1,4 @@
 use byteorder::{NetworkEndian, ReadBytesExt, WriteBytesExt};
-use errors::*;
 use model::*;
 use std::io::Read;
 use std::io::Write;
@@ -8,6 +7,7 @@ use std::str;
 use std::str::FromStr;
 use url::Url;
 use uuid::Uuid;
+use Result;
 
 pub trait BytesStore {
     type BytesOutput: Deref<Target = [u8]>;
@@ -213,7 +213,7 @@ impl<S: BytesStore> Encoder<S> {
     }
 
     pub fn encode_blank_node(&self, blank_node: &BlankNode) -> Result<EncodedTerm> {
-        Ok(EncodedTerm::BlankNode(*blank_node.deref()))
+        Ok(EncodedTerm::BlankNode(*blank_node.as_uuid()))
     }
 
     pub fn encode_literal(&self, literal: &Literal) -> Result<EncodedTerm> {
@@ -225,7 +225,7 @@ impl<S: BytesStore> Encoder<S> {
         } else {
             Ok(EncodedTerm::TypedLiteral {
                 value_id: self.encode_str_value(&literal.value())?,
-                datatype_id: self.encode_str_value(literal.datatype().as_ref())?,
+                datatype_id: self.encode_str_value(literal.datatype().as_str())?,
             })
         }
     }

@@ -1,7 +1,7 @@
-use errors::*;
 use model::*;
 use sparql::algebra::QueryResult;
 use std::io::Read;
+use Result;
 
 /// Trait for [RDF graphs](https://www.w3.org/TR/rdf11-concepts/#dfn-graph)
 pub trait Graph {

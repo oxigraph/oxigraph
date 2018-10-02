@@ -1,10 +1,10 @@
-use errors::*;
 use sparql::algebra::*;
 use std::iter::once;
 use std::iter::Iterator;
 use std::sync::Arc;
 use store::numeric_encoder::EncodedTerm;
 use store::store::EncodedQuadsStore;
+use Result;
 
 type EncodedBinding = Vec<Option<EncodedTerm>>;
 

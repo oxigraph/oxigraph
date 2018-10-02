@@ -8,9 +8,12 @@ extern crate rocksdb;
 extern crate url;
 extern crate uuid;
 
-pub mod errors;
+mod errors;
 pub mod model;
 pub mod rio;
 pub mod sparql;
 pub mod store;
 mod utils;
+
+pub use errors::Error;
+pub use errors::Result;

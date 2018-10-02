@@ -1,9 +1,9 @@
-use errors::*;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::sync::RwLock;
 use store::numeric_encoder::*;
 use store::store::*;
+use Result;
 
 pub type MemoryDataset = StoreDataset<MemoryStore>;
 pub type MemoryGraph = StoreDefaultGraph<MemoryStore>;

@@ -7,7 +7,6 @@ extern crate url;
 
 use reqwest::Client;
 use reqwest::Response;
-use rudf::errors::*;
 use rudf::model::vocab::rdf;
 use rudf::model::vocab::rdfs;
 use rudf::model::*;
@@ -20,6 +19,7 @@ use rudf::sparql::xml_results::read_xml_results;
 use rudf::store::isomorphism::GraphIsomorphism;
 use rudf::store::MemoryDataset;
 use rudf::store::MemoryGraph;
+use rudf::Result;
 use std::error::Error;
 use std::fmt;
 use std::io::BufReader;
@@ -366,7 +366,7 @@ impl<'a> Iterator for TestManifest<'a> {
                     .object_for_subject_predicate(&test_subject, &rdf::TYPE)
                     .unwrap()
                 {
-                    Some(Term::NamedNode(c)) => match c.value().split("#").last() {
+                    Some(Term::NamedNode(c)) => match c.as_str().split("#").last() {
                         Some(k) => k.to_string(),
                         None => return Some(Err("no type".into())),
                     },
@@ -464,7 +464,7 @@ impl<'a> Iterator for TestManifest<'a> {
                                 self.manifests_to_do.extend(
                                     RdfListIterator::iter(&self.graph, list.clone().into())
                                         .flat_map(|m| match m {
-                                            Term::NamedNode(nm) => Some(nm.url().clone()),
+                                            Term::NamedNode(nm) => Some(nm.as_url().clone()),
                                             _ => None,
                                         }),
                                 );

@@ -1,5 +1,6 @@
-///! Implements data structures for https://www.w3.org/TR/rdf11-concepts/
-///! Inspired by [RDFjs](http://rdf.js.org/)
+//! Implements data structures for [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/)
+//! Inspired by [RDFjs](http://rdf.js.org/) and [Apache Commons RDF](http://commons.apache.org/proper/commons-rdf/)
+
 mod blank_node;
 mod dataset;
 mod literal;
@@ -15,7 +16,5 @@ pub use model::literal::Literal;
 pub use model::named_node::NamedNode;
 pub use model::triple::NamedOrBlankNode;
 pub use model::triple::Quad;
-pub use model::triple::QuadLike;
 pub use model::triple::Term;
 pub use model::triple::Triple;
-pub use model::triple::TripleLike;

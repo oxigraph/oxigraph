@@ -1,4 +1,3 @@
-use errors::*;
 use model::*;
 use quick_xml::events::Event;
 use quick_xml::Reader;
@@ -9,6 +8,7 @@ use std::collections::BTreeMap;
 use std::io::BufRead;
 use std::iter::empty;
 use std::str::FromStr;
+use Result;
 
 pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResult> {
     enum State {

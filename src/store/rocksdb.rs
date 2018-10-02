@@ -1,6 +1,5 @@
 use byteorder::ByteOrder;
 use byteorder::NetworkEndian;
-use errors::*;
 use rocksdb::ColumnFamily;
 use rocksdb::DBRawIterator;
 use rocksdb::DBVector;
@@ -14,6 +13,7 @@ use std::sync::Mutex;
 use store::numeric_encoder::*;
 use store::store::EncodedQuadsStore;
 use store::store::StoreDataset;
+use Result;
 
 pub type RocksDbDataset = StoreDataset<RocksDbStore>;
 

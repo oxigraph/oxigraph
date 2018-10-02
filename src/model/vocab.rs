@@ -1,6 +1,7 @@
-///! Provides ready to use NamedNode for basic RDF vocabularies
+//! Provides ready to use `NamedNode`s for basic RDF vocabularies
 
 pub mod rdf {
+    //! [RDF 1.1](https://www.w3.org/TR/rdf11-concepts/) vocabulary
     use model::named_node::NamedNode;
     use std::str::FromStr;
 
@@ -31,6 +32,8 @@ pub mod rdf {
 }
 
 pub mod rdfs {
+    //! [RDFS](https://www.w3.org/TR/rdf-schema/) vocabulary
+
     use model::named_node::NamedNode;
     use std::str::FromStr;
 
@@ -41,7 +44,7 @@ pub mod rdfs {
 }
 
 pub mod xsd {
-    ///! NamedNodes for [RDF compatible XSD datatypes](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-compatible-xsd-types)
+    //! `NamedNode`s for [RDF compatible XSD datatypes](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-compatible-xsd-types)
     use model::named_node::NamedNode;
     use std::str::FromStr;
 
