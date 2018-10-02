@@ -165,6 +165,10 @@ impl<S: EncodedQuadsStore> SparqlEvaluator<S> {
         let object =
             self.binding_value_lookup_from_term_or_variable(&pattern.object, &mut variables)?;
 
+        let filter_sp = subject.is_var() && subject == predicate;
+        let filter_so = subject.is_var() && subject == object;
+        let filter_po = predicate.is_var() && predicate == object;
+
         let store = self.store.clone();
         let variables_len = variables.len();
         Ok(EncodedBindingsIterator {
@@ -178,15 +182,35 @@ impl<S: EncodedQuadsStore> SparqlEvaluator<S> {
                             object.get(&binding),
                             None, //TODO
                         ) {
-                            Ok(iter) => Box::new(iter.map(move |quad| {
-                                let quad = quad?;
-                                let mut binding = binding.clone();
-                                binding.resize(variables_len, None);
-                                subject.put(quad.subject, &mut binding);
-                                predicate.put(quad.predicate, &mut binding);
-                                object.put(quad.object, &mut binding);
-                                Ok(binding)
-                            })),
+                            Ok(mut iter) => {
+                                if filter_sp {
+                                    iter = Box::new(iter.filter(|quad| match quad {
+                                        Err(_) => true,
+                                        Ok(quad) => quad.subject == quad.predicate,
+                                    }))
+                                }
+                                if filter_so {
+                                    iter = Box::new(iter.filter(|quad| match quad {
+                                        Err(_) => true,
+                                        Ok(quad) => quad.subject == quad.object,
+                                    }))
+                                }
+                                if filter_po {
+                                    iter = Box::new(iter.filter(|quad| match quad {
+                                        Err(_) => true,
+                                        Ok(quad) => quad.predicate == quad.object,
+                                    }))
+                                }
+                                Box::new(iter.map(move |quad| {
+                                    let quad = quad?;
+                                    let mut binding = binding.clone();
+                                    binding.resize(variables_len, None);
+                                    subject.put(quad.subject, &mut binding);
+                                    predicate.put(quad.predicate, &mut binding);
+                                    object.put(quad.object, &mut binding);
+                                    Ok(binding)
+                                }))
+                            }
                             Err(error) => Box::new(once(Err(error))),
                         }
                     }
@@ -288,7 +312,7 @@ impl<S: EncodedQuadsStore> SparqlEvaluator<S> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 enum BindingValueLookup {
     Constant(EncodedTerm),
     Variable(usize),
@@ -310,6 +334,13 @@ impl BindingValueLookup {
         match self {
             BindingValueLookup::Constant(_) => (),
             BindingValueLookup::Variable(v) => binding[*v] = Some(value),
+        }
+    }
+
+    fn is_var(&self) -> bool {
+        match self {
+            BindingValueLookup::Constant(_) => false,
+            BindingValueLookup::Variable(_) => true,
         }
     }
 }

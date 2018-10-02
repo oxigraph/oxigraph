@@ -78,14 +78,19 @@ fn sparql_w3c_syntax_testsuite() {
 
 #[test]
 fn sparql_w3c_query_evaluation_testsuite() {
-    let manifest_10_url =
+    let manifest_10_urls = vec![
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/basic/manifest.ttl")
-            .unwrap();
-
+            .unwrap(),
+        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/triple-match/manifest.ttl")
+            .unwrap(),
+    ];
     let test_blacklist = vec![];
     let client = RDFClient::default();
 
-    for test_result in TestManifest::new(&client, manifest_10_url) {
+    for test_result in manifest_10_urls
+        .into_iter()
+        .flat_map(|manifest| TestManifest::new(&client, manifest))
+    {
         let test = test_result.unwrap();
         if test_blacklist.contains(&test.id) {
             continue;
