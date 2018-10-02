@@ -49,7 +49,8 @@ triples_blankNodePropertyList_push -> () = s: blankNodePropertyList {
 }
 
 //[7]
-predicateObjectList -> () = predicate_push _ objectList _ (";" _ (predicate_push _ objectList _)?)* {
+predicateObjectList -> () = predicateObject (";" _ predicateObject?)*
+predicateObject -> () = predicate_push _ objectList _ {
     state.cur_predicate.pop();
 }
 predicate_push -> () = v:verb {
