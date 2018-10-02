@@ -63,14 +63,38 @@ mod grammar {
         PropertyPath(PropertyPath),
     }
 
-    fn to_triple_or_path_pattern(
+    impl From<Variable> for VariableOrPropertyPath {
+        fn from(var: Variable) -> Self {
+            VariableOrPropertyPath::Variable(var)
+        }
+    }
+
+    impl From<PropertyPath> for VariableOrPropertyPath {
+        fn from(path: PropertyPath) -> Self {
+            VariableOrPropertyPath::PropertyPath(path)
+        }
+    }
+
+    fn add_to_triple_or_path_patterns(
         s: TermOrVariable,
-        p: VariableOrPropertyPath,
+        p: impl Into<VariableOrPropertyPath>,
         o: TermOrVariable,
-    ) -> TripleOrPathPattern {
-        match p {
-            VariableOrPropertyPath::Variable(p) => TriplePattern::new(s, p, o).into(),
-            VariableOrPropertyPath::PropertyPath(p) => PathPattern::new(s, p, o).into(),
+        patterns: &mut Vec<TripleOrPathPattern>,
+    ) {
+        match p.into() {
+            VariableOrPropertyPath::Variable(p) => {
+                patterns.push(TriplePattern::new(s, p, o).into())
+            }
+            VariableOrPropertyPath::PropertyPath(p) => match p {
+                PropertyPath::PredicatePath(p) => patterns.push(TriplePattern::new(s, p, o).into()),
+                PropertyPath::InversePath(p) => add_to_triple_or_path_patterns(o, *p, s, patterns),
+                PropertyPath::SequencePath(a, b) => {
+                    let middle = Variable::default();
+                    add_to_triple_or_path_patterns(s, *a, middle.clone().into(), patterns);
+                    add_to_triple_or_path_patterns(middle.into(), *b, o, patterns);
+                }
+                p => patterns.push(PathPattern::new(s, p, o).into()),
+            },
         }
     }
 

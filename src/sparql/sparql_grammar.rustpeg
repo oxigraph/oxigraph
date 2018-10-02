@@ -458,7 +458,7 @@ TriplesSameSubjectPath -> Vec<TripleOrPathPattern> =
         let mut patterns = po.patterns;
         for (p, os) in po.focus {
             for o in os {
-                patterns.push(to_triple_or_path_pattern(s.clone(), p.clone(), o))
+                add_to_triple_or_path_patterns(s.clone(), p.clone(), o, &mut patterns);
             }
         }
         patterns
@@ -468,7 +468,7 @@ TriplesSameSubjectPath -> Vec<TripleOrPathPattern> =
             patterns.extend_from_slice(&po.patterns);
         for (p, os) in po.focus {
             for o in os {
-                patterns.push(to_triple_or_path_pattern(s.focus.clone(), p.clone(), o))
+                add_to_triple_or_path_patterns(s.focus.clone(), p.clone(), o, &mut patterns);
             }
         }
         patterns
@@ -502,12 +502,12 @@ PropertyListPathNotEmpty_item_content -> FocusedTriplePattern<(VariableOrPropert
 
 //[84]
 VerbPath -> VariableOrPropertyPath = p:Path {
-    VariableOrPropertyPath::PropertyPath(p)
+    p.into()
 }
 
 //[85]
 VerbSimple -> VariableOrPropertyPath = v:Var {
-    VariableOrPropertyPath::Variable(v)
+    v.into()
 }
 
 //[86]
@@ -625,7 +625,7 @@ BlankNodePropertyListPath -> FocusedTripleOrPathPattern<TermOrVariable> = '[' _ 
     let mut bnode = TermOrVariable::from(BlankNode::default());
     for (p, os) in po.focus {
         for o in os {
-            patterns.push(to_triple_or_path_pattern(bnode.clone(), p.clone(), o));
+            add_to_triple_or_path_patterns(bnode.clone(), p.clone(), o, &mut patterns);
         }
     }
     FocusedTripleOrPathPattern {
