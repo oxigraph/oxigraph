@@ -124,7 +124,7 @@ impl EncodedBindingsIterator {
                 iter: Box::new(oks.clone().into_iter().map(Ok)),
             },
             EncodedBindingsIterator {
-                variables: variables,
+                variables,
                 iter: Box::new(errors.into_iter().map(Err).chain(oks.into_iter().map(Ok))),
             },
         )
@@ -149,6 +149,7 @@ fn slice_key<T: Eq>(slice: &[T], element: &T) -> Option<usize> {
     None
 }
 
+#[derive(Clone)]
 pub struct SparqlEvaluator<S: EncodedQuadsStore> {
     store: Arc<S>,
 }
@@ -218,7 +219,26 @@ impl<S: EncodedQuadsStore> SparqlEvaluator<S> {
                 self.eval_multi_set_pattern(b, self.eval_multi_set_pattern(a, from)?)
             }
             MultiSetPattern::LeftJoin(a, b, e) => unimplemented!(),
-            MultiSetPattern::Filter(e, p) => unimplemented!(),
+            MultiSetPattern::Filter(e, p) => {
+                let EncodedBindingsIterator { variables, iter } =
+                    self.eval_multi_set_pattern(p, from)?;
+                let expression = e.clone();
+                let evaluator = Self {
+                    store: self.store.clone(),
+                };
+                Ok(EncodedBindingsIterator {
+                    variables: variables.clone(),
+                    iter: Box::new(iter.filter(move |val| match val {
+                        Ok(binding) => {
+                            match evaluator.eval_expression(&expression, binding, &variables) {
+                                Ok(Some(term)) => true,
+                                _ => false,
+                            }
+                        }
+                        Err(_) => true,
+                    })),
+                })
+            }
             MultiSetPattern::Union(a, b) => {
                 let (from1, from2) = from.duplicate();
                 Ok(self
@@ -312,6 +332,56 @@ impl<S: EncodedQuadsStore> SparqlEvaluator<S> {
         from: EncodedBindingsIterator,
     ) -> Result<EncodedBindingsIterator> {
         unimplemented!()
+    }
+
+    fn eval_expression(
+        &self,
+        expr: &Expression,
+        binding: &[Option<EncodedTerm>],
+        variables: &[Variable],
+    ) -> Result<Option<EncodedTerm>> {
+        match expr {
+            Expression::ConstantExpression(TermOrVariable::Term(t)) => {
+                Ok(Some(self.store.encoder().encode_term(t)?))
+            }
+            Expression::ConstantExpression(TermOrVariable::Variable(v)) => {
+                Ok(slice_key(variables, v).and_then(|key| binding[key]))
+            }
+            Expression::OrExpression(a, b) => Ok(match self
+                .to_bool(self.eval_expression(a, binding, variables)?)?
+            {
+                Some(true) => Some(true.into()),
+                Some(false) => self.eval_expression(b, binding, variables)?,
+                None => match self.to_bool(self.eval_expression(b, binding, variables)?)? {
+                    Some(true) => Some(true.into()),
+                    _ => None,
+                },
+            }),
+            Expression::AndExpression(a, b) => Ok(match self
+                .to_bool(self.eval_expression(a, binding, variables)?)?
+            {
+                Some(true) => self.eval_expression(b, binding, variables)?,
+                Some(false) => Some(false.into()),
+                None => match self.to_bool(self.eval_expression(b, binding, variables)?)? {
+                    Some(false) => Some(false.into()),
+                    _ => None,
+                },
+            }),
+            Expression::UnaryNotExpression(e) => Ok(self
+                .to_bool(self.eval_expression(e, binding, variables)?)?
+                .map(|v| (!v).into())),
+            e => Err(format!("Evaluation of expression {} is not implemented yet", e).into()),
+        }
+    }
+
+    fn to_bool(&self, term: Option<EncodedTerm>) -> Result<Option<bool>> {
+        Ok(match term {
+            Some(EncodedTerm::BooleanLiteral(value)) => Some(value),
+            Some(EncodedTerm::NamedNode { .. }) => None,
+            Some(EncodedTerm::BlankNode(_)) => None,
+            Some(term) => self.store.encoder().decode_term(term)?.to_bool(),
+            None => None,
+        })
     }
 
     fn binding_value_lookup_from_term_or_variable(

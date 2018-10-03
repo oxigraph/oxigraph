@@ -80,6 +80,14 @@ impl Term {
             Term::Literal(_) => true,
         }
     }
+
+    /// Returns the [effective boolean value](https://www.w3.org/TR/sparql11-query/#ebv) of the term if it exists
+    pub fn to_bool(&self) -> Option<bool> {
+        match self {
+            Term::Literal(literal) => literal.to_bool(),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for Term {

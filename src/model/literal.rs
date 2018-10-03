@@ -119,6 +119,34 @@ impl Literal {
             _ => false,
         }
     }
+
+    /// Checks if the literal has the datatype [xsd:string](http://www.w3.org/2001/XMLSchema#string) and is valid
+    pub fn is_string(&self) -> bool {
+        match self.0 {
+            LiteralContent::String(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Checks if the literal has the datatype [xsd:boolean](http://www.w3.org/2001/XMLSchema#string) and is valid
+    pub fn is_boolean(&self) -> bool {
+        match self.0 {
+            LiteralContent::Boolean(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns the [effective boolean value](https://www.w3.org/TR/sparql11-query/#ebv) of the literal if it exists
+    pub fn to_bool(&self) -> Option<bool> {
+        //TODO: numeric literals
+        match self.0 {
+            LiteralContent::SimpleLiteral(ref value) => Some(!value.is_empty()),
+            LiteralContent::String(ref value) => Some(!value.is_empty()),
+            LiteralContent::LanguageTaggedString { .. } => None,
+            LiteralContent::Boolean(value) => Some(value),
+            LiteralContent::TypedLiteral { .. } => None,
+        }
+    }
 }
 
 impl fmt::Display for Literal {

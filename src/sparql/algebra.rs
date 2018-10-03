@@ -522,8 +522,8 @@ impl fmt::Display for Expression {
             Expression::IRIFunctionCall(e) => write!(f, "IRI({})", e),
             Expression::BNodeFunctionCall(v) => v
                 .as_ref()
-                .map(|id| write!(f, "BOUND({})", id))
-                .unwrap_or_else(|| write!(f, "BOUND()")),
+                .map(|id| write!(f, "BNODE({})", id))
+                .unwrap_or_else(|| write!(f, "BNODE()")),
             Expression::RandFunctionCall() => write!(f, "RAND()"),
             Expression::AbsFunctionCall(e) => write!(f, "ABS({})", e),
             Expression::CeilFunctionCall(e) => write!(f, "CEIL({})", e),

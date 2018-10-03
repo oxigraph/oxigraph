@@ -7,6 +7,7 @@ use std::str;
 use std::str::FromStr;
 use url::Url;
 use uuid::Uuid;
+use Error;
 use Result;
 
 pub trait BytesStore {
@@ -22,6 +23,9 @@ const TYPE_BLANK_NODE_ID: u8 = 2;
 const TYPE_SIMPLE_LITERAL_ID: u8 = 3;
 const TYPE_LANG_STRING_LITERAL_ID: u8 = 4;
 const TYPE_TYPED_LITERAL_ID: u8 = 5;
+const TYPE_STRING_LITERAL: u8 = 6;
+const TYPE_BOOLEAN_LITERAL_TRUE: u8 = 6;
+const TYPE_BOOLEAN_LITERAL_FALSE: u8 = 7;
 
 pub static ENCODED_DEFAULT_GRAPH: EncodedTerm = EncodedTerm::DefaultGraph {};
 
@@ -33,6 +37,8 @@ pub enum EncodedTerm {
     SimpleLiteral { value_id: u64 },
     LangStringLiteral { value_id: u64, language_id: u64 },
     TypedLiteral { value_id: u64, datatype_id: u64 },
+    StringLiteral { value_id: u64 },
+    BooleanLiteral(bool),
 }
 
 impl EncodedTerm {
@@ -44,7 +50,16 @@ impl EncodedTerm {
             EncodedTerm::SimpleLiteral { .. } => TYPE_SIMPLE_LITERAL_ID,
             EncodedTerm::LangStringLiteral { .. } => TYPE_LANG_STRING_LITERAL_ID,
             EncodedTerm::TypedLiteral { .. } => TYPE_TYPED_LITERAL_ID,
+            EncodedTerm::StringLiteral { .. } => TYPE_STRING_LITERAL,
+            EncodedTerm::BooleanLiteral(true) => TYPE_BOOLEAN_LITERAL_TRUE,
+            EncodedTerm::BooleanLiteral(false) => TYPE_BOOLEAN_LITERAL_FALSE,
         }
+    }
+}
+
+impl From<bool> for EncodedTerm {
+    fn from(val: bool) -> Self {
+        EncodedTerm::BooleanLiteral(val)
     }
 }
 
@@ -102,6 +117,11 @@ impl<R: Read> TermReader for R {
                 datatype_id: self.read_u64::<NetworkEndian>()?,
                 value_id: self.read_u64::<NetworkEndian>()?,
             }),
+            TYPE_STRING_LITERAL => Ok(EncodedTerm::SimpleLiteral {
+                value_id: self.read_u64::<NetworkEndian>()?,
+            }),
+            TYPE_BOOLEAN_LITERAL_TRUE => Ok(EncodedTerm::BooleanLiteral(true)),
+            TYPE_BOOLEAN_LITERAL_FALSE => Ok(EncodedTerm::BooleanLiteral(false)),
             _ => Err("the term buffer has an invalid type id".into()),
         }
     }
@@ -177,6 +197,11 @@ impl<R: Write> TermWriter for R {
                 self.write_u64::<NetworkEndian>(datatype_id)?;
                 self.write_u64::<NetworkEndian>(value_id)?;
             }
+
+            EncodedTerm::StringLiteral { value_id } => {
+                self.write_u64::<NetworkEndian>(value_id)?;
+            }
+            EncodedTerm::BooleanLiteral(_) => {}
         }
         Ok(())
     }
@@ -237,6 +262,16 @@ impl<S: BytesStore> Encoder<S> {
                     value_id: self.encode_str_value(&literal.value())?,
                 }
             }
+        } else if literal.is_string() {
+            EncodedTerm::StringLiteral {
+                value_id: self.encode_str_value(&literal.value())?,
+            }
+        } else if literal.is_boolean() {
+            EncodedTerm::BooleanLiteral(
+                literal
+                    .to_bool()
+                    .ok_or_else(|| Error::from("boolean literal without boolean value"))?,
+            )
         } else {
             EncodedTerm::TypedLiteral {
                 value_id: self.encode_str_value(&literal.value())?,
@@ -309,6 +344,10 @@ impl<S: BytesStore> Encoder<S> {
                 self.decode_str_value(value_id)?,
                 NamedNode::from(self.decode_url_value(datatype_id)?),
             ).into()),
+            EncodedTerm::StringLiteral { value_id } => {
+                Ok(Literal::from(self.decode_str_value(value_id)?).into())
+            }
+            EncodedTerm::BooleanLiteral(value) => Ok(Literal::from(value).into()),
         }
     }
 
