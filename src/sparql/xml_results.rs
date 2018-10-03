@@ -279,20 +279,7 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
                         }
                         State::Literal => {
                             let value = self.reader.decode(&data).to_string();
-                            term = Some(
-                                match datatype {
-                                    Some(ref datatype) => {
-                                        Literal::new_typed_literal(value, datatype.clone())
-                                    }
-                                    None => match lang {
-                                        Some(ref lang) => Literal::new_language_tagged_literal(
-                                            value,
-                                            lang.clone(),
-                                        ),
-                                        None => Literal::new_simple_literal(value),
-                                    },
-                                }.into(),
-                            )
+                            term = Some(build_literal(value, &lang, &datatype).into());
                         }
                         _ => {
                             return Some(Err(format!(
@@ -322,12 +309,33 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
                         term = None;
                         state = State::Result;
                     }
-                    State::Uri | State::BNode | State::Literal => state = State::Binding,
+                    State::Uri | State::BNode => state = State::Binding,
+                    State::Literal => {
+                        if term.is_none() {
+                            //We default to the empty literal
+                            term = Some(build_literal("", &lang, &datatype).into())
+                        }
+                        state = State::Binding;
+                    }
                     _ => (),
                 },
                 Event::Eof => return None,
                 _ => (),
             }
         }
+    }
+}
+
+fn build_literal(
+    value: impl Into<String>,
+    lang: &Option<String>,
+    datatype: &Option<NamedNode>,
+) -> Literal {
+    match datatype {
+        Some(datatype) => Literal::new_typed_literal(value, datatype.clone()),
+        None => match lang {
+            Some(lang) => Literal::new_language_tagged_literal(value, lang.clone()),
+            None => Literal::new_simple_literal(value),
+        },
     }
 }

@@ -1,4 +1,5 @@
 use sparql::algebra::*;
+use std::collections::BTreeSet;
 use std::iter::once;
 use std::iter::Iterator;
 use std::sync::Arc;
@@ -48,6 +49,85 @@ impl EncodedBindingsIterator {
                 Ok(new_binding)
             })),
         }
+    }
+
+    fn unique(self) -> Self {
+        let EncodedBindingsIterator { variables, iter } = self;
+        let mut oks = BTreeSet::default();
+        let mut errors = Vec::default();
+        for element in iter {
+            match element {
+                Ok(ok) => {
+                    oks.insert(ok);
+                }
+                Err(error) => errors.push(error),
+            }
+        }
+        EncodedBindingsIterator {
+            variables,
+            iter: Box::new(errors.into_iter().map(Err).chain(oks.into_iter().map(Ok))),
+        }
+    }
+
+    fn chain(self, other: Self) -> Self {
+        let EncodedBindingsIterator {
+            variables: variables1,
+            iter: iter1,
+        } = self;
+        let EncodedBindingsIterator {
+            variables: variables2,
+            iter: iter2,
+        } = other;
+
+        let mut variables = variables1;
+        let mut map_2_to_1 = Vec::with_capacity(variables2.len());
+        for var in variables2 {
+            map_2_to_1.push(match slice_key(&variables, &var) {
+                Some(key) => key,
+                None => {
+                    variables.push(var);
+                    variables.len() - 1
+                }
+            })
+        }
+        let variables_len = variables.len();
+        EncodedBindingsIterator {
+            variables,
+            iter: Box::new(iter1.chain(iter2.map(move |binding| {
+                let binding = binding?;
+                let mut new_binding = binding.clone();
+                new_binding.resize(variables_len, None);
+                for (old_key, new_key) in map_2_to_1.iter().enumerate() {
+                    new_binding[*new_key] = binding[old_key];
+                }
+                Ok(new_binding)
+            }))),
+        }
+    }
+
+    fn duplicate(self) -> (Self, Self) {
+        let EncodedBindingsIterator { variables, iter } = self;
+        //TODO: optimize
+        let mut oks = Vec::default();
+        let mut errors = Vec::default();
+        for element in iter {
+            match element {
+                Ok(ok) => {
+                    oks.push(ok);
+                }
+                Err(error) => errors.push(error),
+            }
+        }
+        (
+            EncodedBindingsIterator {
+                variables: variables.clone(),
+                iter: Box::new(oks.clone().into_iter().map(Ok)),
+            },
+            EncodedBindingsIterator {
+                variables: variables,
+                iter: Box::new(errors.into_iter().map(Err).chain(oks.into_iter().map(Ok))),
+            },
+        )
     }
 }
 
@@ -101,7 +181,7 @@ impl<S: EncodedQuadsStore> SparqlEvaluator<S> {
             ListPattern::Project(l, new_variables) => Ok(self
                 .eval_list_pattern(l, from)?
                 .project(new_variables.to_vec())),
-            ListPattern::Distinct(l) => self.eval_list_pattern(l, from), //TODO
+            ListPattern::Distinct(l) => Ok(self.eval_list_pattern(l, from)?.unique()),
             ListPattern::Reduced(l) => self.eval_list_pattern(l, from),
             ListPattern::Slice(l, start, length) => {
                 let mut iter = self.eval_list_pattern(l, from)?;
@@ -139,7 +219,12 @@ impl<S: EncodedQuadsStore> SparqlEvaluator<S> {
             }
             MultiSetPattern::LeftJoin(a, b, e) => unimplemented!(),
             MultiSetPattern::Filter(e, p) => unimplemented!(),
-            MultiSetPattern::Union(a, b) => unimplemented!(),
+            MultiSetPattern::Union(a, b) => {
+                let (from1, from2) = from.duplicate();
+                Ok(self
+                    .eval_multi_set_pattern(a, from1)?
+                    .chain(self.eval_multi_set_pattern(b, from2)?))
+            }
             MultiSetPattern::Graph(g, p) => unimplemented!(),
             MultiSetPattern::Extend(p, v, e) => unimplemented!(),
             MultiSetPattern::Minus(a, b) => unimplemented!(),

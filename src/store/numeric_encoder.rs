@@ -19,8 +19,9 @@ pub trait BytesStore {
 const TYPE_DEFAULT_GRAPH_ID: u8 = 0;
 const TYPE_NAMED_NODE_ID: u8 = 1;
 const TYPE_BLANK_NODE_ID: u8 = 2;
-const TYPE_LANG_STRING_LITERAL_ID: u8 = 3;
-const TYPE_TYPED_LITERAL_ID: u8 = 4;
+const TYPE_SIMPLE_LITERAL_ID: u8 = 3;
+const TYPE_LANG_STRING_LITERAL_ID: u8 = 4;
+const TYPE_TYPED_LITERAL_ID: u8 = 5;
 
 pub static ENCODED_DEFAULT_GRAPH: EncodedTerm = EncodedTerm::DefaultGraph {};
 
@@ -29,6 +30,7 @@ pub enum EncodedTerm {
     DefaultGraph {},
     NamedNode { iri_id: u64 },
     BlankNode(Uuid),
+    SimpleLiteral { value_id: u64 },
     LangStringLiteral { value_id: u64, language_id: u64 },
     TypedLiteral { value_id: u64, datatype_id: u64 },
 }
@@ -39,6 +41,7 @@ impl EncodedTerm {
             EncodedTerm::DefaultGraph { .. } => TYPE_DEFAULT_GRAPH_ID,
             EncodedTerm::NamedNode { .. } => TYPE_NAMED_NODE_ID,
             EncodedTerm::BlankNode(_) => TYPE_BLANK_NODE_ID,
+            EncodedTerm::SimpleLiteral { .. } => TYPE_SIMPLE_LITERAL_ID,
             EncodedTerm::LangStringLiteral { .. } => TYPE_LANG_STRING_LITERAL_ID,
             EncodedTerm::TypedLiteral { .. } => TYPE_TYPED_LITERAL_ID,
         }
@@ -88,6 +91,9 @@ impl<R: Read> TermReader for R {
                 self.read_exact(&mut uuid_buffer)?;
                 Ok(EncodedTerm::BlankNode(Uuid::from_bytes(uuid_buffer)))
             }
+            TYPE_SIMPLE_LITERAL_ID => Ok(EncodedTerm::SimpleLiteral {
+                value_id: self.read_u64::<NetworkEndian>()?,
+            }),
             TYPE_LANG_STRING_LITERAL_ID => Ok(EncodedTerm::LangStringLiteral {
                 language_id: self.read_u64::<NetworkEndian>()?,
                 value_id: self.read_u64::<NetworkEndian>()?,
@@ -154,6 +160,9 @@ impl<R: Write> TermWriter for R {
             EncodedTerm::DefaultGraph {} => {}
             EncodedTerm::NamedNode { iri_id } => self.write_u64::<NetworkEndian>(iri_id)?,
             EncodedTerm::BlankNode(id) => self.write_all(id.as_bytes())?,
+            EncodedTerm::SimpleLiteral { value_id } => {
+                self.write_u64::<NetworkEndian>(value_id)?;
+            }
             EncodedTerm::LangStringLiteral {
                 value_id,
                 language_id,
@@ -217,17 +226,23 @@ impl<S: BytesStore> Encoder<S> {
     }
 
     pub fn encode_literal(&self, literal: &Literal) -> Result<EncodedTerm> {
-        if let Some(language) = literal.language() {
-            Ok(EncodedTerm::LangStringLiteral {
-                value_id: self.encode_str_value(&literal.value())?,
-                language_id: self.encode_str_value(language)?,
-            })
+        Ok(if literal.is_plain() {
+            if let Some(language) = literal.language() {
+                EncodedTerm::LangStringLiteral {
+                    value_id: self.encode_str_value(&literal.value())?,
+                    language_id: self.encode_str_value(language)?,
+                }
+            } else {
+                EncodedTerm::SimpleLiteral {
+                    value_id: self.encode_str_value(&literal.value())?,
+                }
+            }
         } else {
-            Ok(EncodedTerm::TypedLiteral {
+            EncodedTerm::TypedLiteral {
                 value_id: self.encode_str_value(&literal.value())?,
                 datatype_id: self.encode_str_value(literal.datatype().as_str())?,
-            })
-        }
+            }
+        })
     }
 
     pub fn encode_named_or_blank_node(&self, term: &NamedOrBlankNode) -> Result<EncodedTerm> {
@@ -277,6 +292,9 @@ impl<S: BytesStore> Encoder<S> {
                 Ok(NamedNode::from(self.decode_url_value(iri_id)?).into())
             }
             EncodedTerm::BlankNode(id) => Ok(BlankNode::from(id).into()),
+            EncodedTerm::SimpleLiteral { value_id } => {
+                Ok(Literal::new_simple_literal(self.decode_str_value(value_id)?).into())
+            }
             EncodedTerm::LangStringLiteral {
                 value_id,
                 language_id,

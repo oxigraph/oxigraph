@@ -83,8 +83,18 @@ fn sparql_w3c_query_evaluation_testsuite() {
             .unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/triple-match/manifest.ttl")
             .unwrap(),
+        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest.ttl")
+            .unwrap(),
     ];
-    let test_blacklist = vec![];
+    let test_blacklist = vec![
+        //With LeftJoin
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-4",
+        ).unwrap(),
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#no-distinct-4",
+        ).unwrap(),
+    ];
     let client = RDFClient::default();
 
     for test_result in manifest_10_urls
@@ -232,7 +242,7 @@ fn to_graph(result: QueryResult) -> Result<MemoryGraph> {
                 graph.insert(&Triple::new(
                     result_set.clone(),
                     rs::RESULT_VARIABLE.clone(),
-                    Literal::from(variable.name()?),
+                    Literal::new_simple_literal(variable.name()?),
                 ))?;
             }
             for binding_values in iter {
@@ -259,7 +269,7 @@ fn to_graph(result: QueryResult) -> Result<MemoryGraph> {
                         graph.insert(&Triple::new(
                             binding.clone(),
                             rs::VARIABLE.clone(),
-                            Literal::from(variables[i].name()?),
+                            Literal::new_simple_literal(variables[i].name()?),
                         ))?;
                     }
                 }

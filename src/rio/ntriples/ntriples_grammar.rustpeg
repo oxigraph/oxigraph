@@ -33,7 +33,7 @@ object -> Term =
 literal -> Literal =
     v: STRING_LITERAL_QUOTE _ "^^" _ t:IRIREF { Literal::new_typed_literal(v, t) } /
     v: STRING_LITERAL_QUOTE _ l:LANGTAG { Literal::new_language_tagged_literal(v, l) } /
-    v: STRING_LITERAL_QUOTE { v.into() }
+    v: STRING_LITERAL_QUOTE { Literal::new_simple_literal(v) }
 
 
 //[144s]

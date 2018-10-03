@@ -128,7 +128,7 @@ NumericLiteral -> Literal =
 RDFLiteral -> Literal =
     v:String _ "^^" _ t:iri { Literal::new_typed_literal(v, t) } /
     v:String _ l:LANGTAG { Literal::new_language_tagged_literal(v, l) } /
-    v:String { v.into() }
+    v:String { Literal::new_simple_literal(v) }
 
 //[133s]
 BooleanLiteral -> Literal =
