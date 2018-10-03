@@ -12,6 +12,7 @@ use std::str::FromStr;
 use url::Url;
 use Result;
 
+/// Reads a RDF/XML file from a Rust `Read` and returns an iterator on the read `Triple`s
 pub fn read_rdf_xml(
     source: impl BufRead,
     base_uri: impl Into<Option<Url>>,

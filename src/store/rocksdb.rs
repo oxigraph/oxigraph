@@ -15,6 +15,13 @@ use store::store::EncodedQuadsStore;
 use store::store::StoreDataset;
 use Result;
 
+/// `rudf::model::Dataset` trait implementation based on the [RocksDB](https://rocksdb.org/) key-value store
+///
+/// Usage example:
+/// ```
+/// use rudf::store::RocksDbDataset;
+/// let dataset = RocksDbDataset::open("example.db").unwrap();
+/// ```
 pub type RocksDbDataset = StoreDataset<RocksDbStore>;
 
 impl RocksDbDataset {

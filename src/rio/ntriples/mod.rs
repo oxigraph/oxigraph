@@ -67,6 +67,7 @@ impl<R: Read> Iterator for NTriplesIterator<R> {
     }
 }
 
+/// Reads a N-Triples file from a Rust `Read` and returns an iterator on the read `Triple`s
 pub fn read_ntriples<'a, R: Read + 'a>(source: R) -> impl Iterator<Item = Result<Triple>> {
     NTriplesIterator {
         buffer: String::default(),

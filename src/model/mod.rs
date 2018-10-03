@@ -1,4 +1,5 @@
-//! Implements data structures for [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/)
+//! Implements data structures for [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/).
+//!
 //! Inspired by [RDFjs](http://rdf.js.org/) and [Apache Commons RDF](http://commons.apache.org/proper/commons-rdf/)
 
 mod blank_node;

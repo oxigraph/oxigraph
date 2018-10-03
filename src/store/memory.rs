@@ -5,7 +5,41 @@ use store::numeric_encoder::*;
 use store::store::*;
 use Result;
 
+/// Memory based implementation of the `rudf::model::Dataset` trait.
+/// They are cheap to build using the `MemoryDataset::default()` method.
+///
+/// Usage example:
+/// ```
+/// use rudf::model::*;
+/// use rudf::store::MemoryDataset;
+/// use std::str::FromStr;
+///
+/// let dataset = MemoryDataset::default();
+/// let default_graph = dataset.default_graph();
+/// let ex = NamedNode::from_str("http://example.com").unwrap();
+/// let triple = Triple::new(ex.clone(), ex.clone(), ex.clone());
+/// default_graph.insert(&triple);
+/// let results: Vec<Quad> = dataset.quads_for_subject(&ex.into()).unwrap().map(|t| t.unwrap()).collect();
+/// assert_eq!(vec![triple.in_graph(None)], results);
+/// ```
 pub type MemoryDataset = StoreDataset<MemoryStore>;
+
+/// Memory based implementation of the `rudf::model::Graph` trait.
+/// They are cheap to build using the `MemoryGraph::default()` method.
+///
+/// Usage example:
+/// ```
+/// use rudf::model::*;
+/// use rudf::store::MemoryGraph;
+/// use std::str::FromStr;
+///
+/// let graph = MemoryGraph::default();
+/// let ex = NamedNode::from_str("http://example.com").unwrap();
+/// let triple = Triple::new(ex.clone(), ex.clone(), ex.clone());
+/// graph.insert(&triple);
+/// let results: Vec<Triple> = graph.triples_for_subject(&ex.into()).unwrap().map(|t| t.unwrap()).collect();
+/// assert_eq!(vec![triple], results);
+/// ```
 pub type MemoryGraph = StoreDefaultGraph<MemoryStore>;
 
 #[derive(Default)]
