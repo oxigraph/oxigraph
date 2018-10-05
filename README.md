@@ -5,6 +5,7 @@ This library is a work in progress of a [RDF](https://www.w3.org/RDF/) stack imp
 Its goal is to provide a compliant, safe and fast implementation of W3C specifications in Rust.
 
 [![Build Status](https://travis-ci.org/Tpt/rudf.svg?branch=master)](https://travis-ci.org/Tpt/rudf)
+[![dependency status](https://deps.rs/repo/github/Tpt/rudf/status.svg)](https://deps.rs/repo/github/Tpt/rudf)
 
 
 # License
