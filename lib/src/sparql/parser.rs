@@ -140,21 +140,21 @@ mod grammar {
 
     #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
     enum PartialGraphPattern {
-        Optional(MultiSetPattern),
-        Minus(MultiSetPattern),
+        Optional(GraphPattern),
+        Minus(GraphPattern),
         Bind(Expression, Variable),
         Filter(Expression),
-        Other(MultiSetPattern),
+        Other(GraphPattern),
     }
 
-    fn new_join(l: MultiSetPattern, r: MultiSetPattern) -> MultiSetPattern {
+    fn new_join(l: GraphPattern, r: GraphPattern) -> GraphPattern {
         //Avoid to output empty BGPs
-        if let MultiSetPattern::BGP(pl) = &l {
+        if let GraphPattern::BGP(pl) = &l {
             if pl.is_empty() {
                 return r;
             }
         }
-        if let MultiSetPattern::BGP(pr) = &r {
+        if let GraphPattern::BGP(pr) = &r {
             if pr.is_empty() {
                 return l;
             }
@@ -162,11 +162,11 @@ mod grammar {
 
         //Merge BGPs
         match (l, r) {
-            (MultiSetPattern::BGP(mut pl), MultiSetPattern::BGP(pr)) => {
+            (GraphPattern::BGP(mut pl), GraphPattern::BGP(pr)) => {
                 pl.extend_from_slice(&pr);
-                MultiSetPattern::BGP(pl)
+                GraphPattern::BGP(pl)
             }
-            (l, r) => MultiSetPattern::Join(Box::new(l), Box::new(r)),
+            (l, r) => GraphPattern::Join(Box::new(l), Box::new(r)),
         }
     }
 
@@ -207,28 +207,28 @@ mod grammar {
 
     fn build_select(
         select: Selection,
-        wher: MultiSetPattern,
+        wher: GraphPattern,
         group: Option<(Vec<Expression>, Vec<(Expression, Variable)>)>,
         having: Option<Expression>,
         order_by: Option<Vec<OrderComparator>>,
         offset_limit: Option<(usize, Option<usize>)>,
-        values: Option<MultiSetPattern>,
+        values: Option<GraphPattern>,
         state: &mut ParserState,
-    ) -> ListPattern {
+    ) -> GraphPattern {
         let mut p = wher;
 
         //GROUP BY
         if let Some((clauses, binds)) = group {
             for (e, v) in binds {
-                p = MultiSetPattern::Extend(Box::new(p), v, e);
+                p = GraphPattern::Extend(Box::new(p), v, e);
             }
             let g = GroupPattern(clauses, Box::new(p));
-            p = MultiSetPattern::AggregateJoin(g, state.aggregations.clone());
+            p = GraphPattern::AggregateJoin(g, state.aggregations.clone());
             state.aggregations = BTreeMap::default();
         }
         if !state.aggregations.is_empty() {
             let g = GroupPattern(vec![Literal::from(1).into()], Box::new(p));
-            p = MultiSetPattern::AggregateJoin(g, state.aggregations.clone());
+            p = GraphPattern::AggregateJoin(g, state.aggregations.clone());
             state.aggregations = BTreeMap::default();
         }
 
@@ -236,12 +236,12 @@ mod grammar {
 
         //HAVING
         if let Some(ex) = having {
-            p = MultiSetPattern::Filter(ex, Box::new(p));
+            p = GraphPattern::Filter(ex, Box::new(p));
         }
 
         //VALUES
         if let Some(data) = values {
-            p = MultiSetPattern::Join(Box::new(p), Box::new(data));
+            p = new_join(p, data);
         }
 
         //SELECT
@@ -254,7 +254,7 @@ mod grammar {
                         SelectionMember::Expression(e, v) => if pv.contains(&v) {
                             //TODO: fail
                         } else {
-                            p = MultiSetPattern::Extend(Box::new(p), v.clone(), e);
+                            p = GraphPattern::Extend(Box::new(p), v.clone(), e);
                             pv.push(v);
                         },
                     }
@@ -264,24 +264,24 @@ mod grammar {
                 pv.extend(p.visible_variables().into_iter().cloned()) //TODO: is it really useful to do a projection?
             }
         }
-        let mut m = ListPattern::from(p);
+        let mut m = GraphPattern::from(p);
 
         //ORDER BY
         if let Some(order) = order_by {
-            m = ListPattern::OrderBy(Box::new(m), order);
+            m = GraphPattern::OrderBy(Box::new(m), order);
         }
 
         //PROJECT
-        m = ListPattern::Project(Box::new(m), pv);
+        m = GraphPattern::Project(Box::new(m), pv);
         match select.option {
-            SelectionOption::Distinct => m = ListPattern::Distinct(Box::new(m)),
-            SelectionOption::Reduced => m = ListPattern::Reduced(Box::new(m)),
+            SelectionOption::Distinct => m = GraphPattern::Distinct(Box::new(m)),
+            SelectionOption::Reduced => m = GraphPattern::Reduced(Box::new(m)),
             SelectionOption::Default => (),
         }
 
         //OFFSET LIMIT
         if let Some((offset, limit)) = offset_limit {
-            m = ListPattern::Slice(Box::new(m), offset, limit)
+            m = GraphPattern::Slice(Box::new(m), offset, limit)
         }
         m
     }

@@ -163,47 +163,20 @@ impl<S: EncodedQuadsStore> SparqlEvaluator<S> {
         match query {
             Query::SelectQuery { algebra, dataset } => {
                 Ok(QueryResult::Bindings(self.decode_bindings(
-                    self.eval_list_pattern(algebra, EncodedBindingsIterator::default())?,
+                    self.eval_graph_pattern(algebra, EncodedBindingsIterator::default())?,
                 )))
             }
             _ => unimplemented!(),
         }
     }
 
-    fn eval_list_pattern(
+    fn eval_graph_pattern(
         &self,
-        pattern: &ListPattern,
+        pattern: &GraphPattern,
         from: EncodedBindingsIterator,
     ) -> Result<EncodedBindingsIterator> {
         match pattern {
-            ListPattern::Data(bs) => Ok(self.encode_bindings(bs)),
-            ListPattern::ToList(l) => self.eval_multi_set_pattern(l, from),
-            ListPattern::OrderBy(l, o) => self.eval_list_pattern(l, from), //TODO
-            ListPattern::Project(l, new_variables) => Ok(self
-                .eval_list_pattern(l, from)?
-                .project(new_variables.to_vec())),
-            ListPattern::Distinct(l) => Ok(self.eval_list_pattern(l, from)?.unique()),
-            ListPattern::Reduced(l) => self.eval_list_pattern(l, from),
-            ListPattern::Slice(l, start, length) => {
-                let mut iter = self.eval_list_pattern(l, from)?;
-                if *start > 0 {
-                    iter = iter.skip(*start);
-                }
-                if let Some(length) = length {
-                    iter = iter.take(*length);
-                }
-                Ok(iter)
-            }
-        }
-    }
-
-    fn eval_multi_set_pattern(
-        &self,
-        pattern: &MultiSetPattern,
-        from: EncodedBindingsIterator,
-    ) -> Result<EncodedBindingsIterator> {
-        match pattern {
-            MultiSetPattern::BGP(p) => {
+            GraphPattern::BGP(p) => {
                 let mut iter = from;
                 for pattern in p {
                     iter = match pattern {
@@ -215,13 +188,13 @@ impl<S: EncodedQuadsStore> SparqlEvaluator<S> {
                 }
                 Ok(iter)
             }
-            MultiSetPattern::Join(a, b) => {
-                self.eval_multi_set_pattern(b, self.eval_multi_set_pattern(a, from)?)
+            GraphPattern::Join(a, b) => {
+                self.eval_graph_pattern(b, self.eval_graph_pattern(a, from)?)
             }
-            MultiSetPattern::LeftJoin(a, b, e) => unimplemented!(),
-            MultiSetPattern::Filter(e, p) => {
+            GraphPattern::LeftJoin(a, b, e) => unimplemented!(),
+            GraphPattern::Filter(e, p) => {
                 let EncodedBindingsIterator { variables, iter } =
-                    self.eval_multi_set_pattern(p, from)?;
+                    self.eval_graph_pattern(p, from)?;
                 let expression = e.clone();
                 let evaluator = Self {
                     store: self.store.clone(),
@@ -239,18 +212,34 @@ impl<S: EncodedQuadsStore> SparqlEvaluator<S> {
                     })),
                 })
             }
-            MultiSetPattern::Union(a, b) => {
+            GraphPattern::Union(a, b) => {
                 let (from1, from2) = from.duplicate();
                 Ok(self
-                    .eval_multi_set_pattern(a, from1)?
-                    .chain(self.eval_multi_set_pattern(b, from2)?))
+                    .eval_graph_pattern(a, from1)?
+                    .chain(self.eval_graph_pattern(b, from2)?))
             }
-            MultiSetPattern::Graph(g, p) => unimplemented!(),
-            MultiSetPattern::Extend(p, v, e) => unimplemented!(),
-            MultiSetPattern::Minus(a, b) => unimplemented!(),
-            MultiSetPattern::ToMultiSet(l) => self.eval_list_pattern(l, from),
-            MultiSetPattern::Service(n, p, s) => unimplemented!(),
-            MultiSetPattern::AggregateJoin(g, a) => unimplemented!(),
+            GraphPattern::Graph(g, p) => unimplemented!(),
+            GraphPattern::Extend(p, v, e) => unimplemented!(),
+            GraphPattern::Minus(a, b) => unimplemented!(),
+            GraphPattern::Service(n, p, s) => unimplemented!(),
+            GraphPattern::AggregateJoin(g, a) => unimplemented!(),
+            GraphPattern::Data(bs) => Ok(self.encode_bindings(bs)),
+            GraphPattern::OrderBy(l, o) => self.eval_graph_pattern(l, from), //TODO
+            GraphPattern::Project(l, new_variables) => Ok(self
+                .eval_graph_pattern(l, from)?
+                .project(new_variables.to_vec())),
+            GraphPattern::Distinct(l) => Ok(self.eval_graph_pattern(l, from)?.unique()),
+            GraphPattern::Reduced(l) => self.eval_graph_pattern(l, from),
+            GraphPattern::Slice(l, start, length) => {
+                let mut iter = self.eval_graph_pattern(l, from)?;
+                if *start > 0 {
+                    iter = iter.skip(*start);
+                }
+                if let Some(length) = length {
+                    iter = iter.take(*length);
+                }
+                Ok(iter)
+            }
         }
     }
 

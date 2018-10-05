@@ -45,7 +45,7 @@ SelectQuery -> Query = s:SelectClause _ d:DatasetClauses _ w:WhereClause _ g:Gro
 }
 
 //[8]
-SubSelect -> MultiSetPattern = s:SelectClause _ w:WhereClause _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause { //TODO: Modifiers
+SubSelect -> GraphPattern = s:SelectClause _ w:WhereClause _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause { //TODO: Modifiers
     build_select(s, w, g, h, o, l, v, state).into()
 }
 
@@ -82,7 +82,7 @@ ConstructQuery -> Query =
             dataset: d,
             algebra: build_select(
                 Selection::default(),
-                MultiSetPattern::BGP(c.into_iter().map(TripleOrPathPattern::from).collect()),
+                GraphPattern::BGP(c.into_iter().map(TripleOrPathPattern::from).collect()),
                 g, h, o, l, v, state
             )
         }
@@ -95,7 +95,7 @@ DescribeQuery -> Query =
     "DESCRIBE"i _ '*' _ d:DatasetClauses w:WhereClause? _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
         Query::DescribeQuery {
             dataset: d,
-            algebra: build_select(Selection::default(), w.unwrap_or_else(MultiSetPattern::default), g, h, o, l, v, state)
+            algebra: build_select(Selection::default(), w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state)
         }
     } /
     "DESCRIBE"i _ p:DescribeQuery_item+ _ d:DatasetClauses w:WhereClause? _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
@@ -107,7 +107,7 @@ DescribeQuery -> Query =
                     NamedNodeOrVariable::NamedNode(n) => SelectionMember::Expression(n.into(), Variable::default()),
                     NamedNodeOrVariable::Variable(v) => SelectionMember::Variable(v)
                 }).collect())
-            }, w.unwrap_or_else(MultiSetPattern::default), g, h, o, l, v, state)
+            }, w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state)
         }
     }
 DescribeQuery_item -> NamedNodeOrVariable = i:VarOrIri _ { i }
@@ -140,7 +140,7 @@ NamedGraphClause -> DatasetSpec = "NAMED"i _ s:SourceSelector {
 SourceSelector -> NamedNode = iri
 
 //[17]
-WhereClause -> MultiSetPattern = "WHERE"i? _ p:GroupGraphPattern {
+WhereClause -> GraphPattern = "WHERE"i? _ p:GroupGraphPattern {
     p
 }
 
@@ -203,7 +203,7 @@ OffsetClause -> usize = "OFFSET"i _ o:$(INTEGER) {?
 }
 
 //[28]
-ValuesClause -> Option<MultiSetPattern> =
+ValuesClause -> Option<GraphPattern> =
     "VALUES"i _ p:DataBlock { Some(p) } /
     { None }
 
@@ -220,33 +220,33 @@ TriplesTemplate_tail -> Vec<TriplePattern> = '.' _ t:TriplesTemplate? _ {
 }
 
 //[53]
-GroupGraphPattern -> MultiSetPattern =
+GroupGraphPattern -> GraphPattern =
     '{' _ p:GroupGraphPatternSub _ '}' { p } /
     '{' _ p:SubSelect _ '}' { p }
 
 //[54]
-GroupGraphPatternSub -> MultiSetPattern = a:TriplesBlock? _ b:GroupGraphPatternSub_item* {
-    let mut p = a.map(|v| vec![PartialGraphPattern::Other(MultiSetPattern::BGP(v))]).unwrap_or_else(|| vec![]);
+GroupGraphPatternSub -> GraphPattern = a:TriplesBlock? _ b:GroupGraphPatternSub_item* {
+    let mut p = a.map(|v| vec![PartialGraphPattern::Other(GraphPattern::BGP(v))]).unwrap_or_else(|| vec![]);
     for v in b {
         p.extend_from_slice(&v)
     }
     let mut filter: Option<Expression> = None;
-    let mut g = MultiSetPattern::default();
+    let mut g = GraphPattern::default();
     for e in p {
         match e {
             PartialGraphPattern::Optional(p) => match p {
-                    MultiSetPattern::Filter(f, a2) => {
-                        g = MultiSetPattern::LeftJoin(Box::new(g), a2, f)
+                    GraphPattern::Filter(f, a2) => {
+                        g = GraphPattern::LeftJoin(Box::new(g), a2, f)
                     }
                     a => {
-                        g = MultiSetPattern::LeftJoin(Box::new(g), Box::new(a), Literal::from(true).into())
+                        g = GraphPattern::LeftJoin(Box::new(g), Box::new(a), Literal::from(true).into())
                     }
             }
             PartialGraphPattern::Minus(p) => {
-                g = MultiSetPattern::Minus(Box::new(g), Box::new(p))
+                g = GraphPattern::Minus(Box::new(g), Box::new(p))
             }
             PartialGraphPattern::Bind(expr, var) => {
-                g = MultiSetPattern::Extend(Box::new(g), var, expr)
+                g = GraphPattern::Extend(Box::new(g), var, expr)
             }
             PartialGraphPattern::Filter(expr) => match filter {
                 Some(f) => { filter = Some(Expression::AndExpression(Box::new(f), Box::new(expr))) },
@@ -256,14 +256,14 @@ GroupGraphPatternSub -> MultiSetPattern = a:TriplesBlock? _ b:GroupGraphPatternS
         }
     }
     match filter {
-        Some(filter) => MultiSetPattern::Filter(filter, Box::new(g)),
+        Some(filter) => GraphPattern::Filter(filter, Box::new(g)),
         None => g
     }
 }
 GroupGraphPatternSub_item -> Vec<PartialGraphPattern> = a:GraphPatternNotTriples _ ('.' _)? b:TriplesBlock? _ {
     let mut result = vec![a];
     if let Some(v) = b {
-        result.push(PartialGraphPattern::Other(MultiSetPattern::BGP(v)));
+        result.push(PartialGraphPattern::Other(GraphPattern::BGP(v)));
     }
     result
 }
@@ -290,13 +290,13 @@ OptionalGraphPattern -> PartialGraphPattern = "OPTIONAL"i _ p:GroupGraphPattern 
 
 //[58]
 GraphGraphPattern -> PartialGraphPattern = "GRAPH"i _ g:VarOrIri _ p:GroupGraphPattern {
-    PartialGraphPattern::Other(MultiSetPattern::Graph(g, Box::new(p)))
+    PartialGraphPattern::Other(GraphPattern::Graph(g, Box::new(p)))
 }
 
 //[59]
 ServiceGraphPattern -> PartialGraphPattern =
-    "SERVICE"i _ "SILENT"i _ s:VarOrIri _ p:GroupGraphPattern { PartialGraphPattern::Other(MultiSetPattern::Service(s, Box::new(p), true)) } /
-    "SERVICE"i _ s:VarOrIri _ p:GroupGraphPattern { PartialGraphPattern::Other(MultiSetPattern::Service(s, Box::new(p), false)) }
+    "SERVICE"i _ "SILENT"i _ s:VarOrIri _ p:GroupGraphPattern { PartialGraphPattern::Other(GraphPattern::Service(s, Box::new(p), true)) } /
+    "SERVICE"i _ s:VarOrIri _ p:GroupGraphPattern { PartialGraphPattern::Other(GraphPattern::Service(s, Box::new(p), false)) }
 
 //[60]
 Bind -> PartialGraphPattern = "BIND"i _ '(' _ e:Expression _ "AS"i _ v:Var _ ')' {
@@ -307,8 +307,8 @@ Bind -> PartialGraphPattern = "BIND"i _ '(' _ e:Expression _ "AS"i _ v:Var _ ')'
 InlineData -> PartialGraphPattern = "VALUES"i _ p:DataBlock { PartialGraphPattern::Other(p) }
 
 //[62]
-DataBlock -> MultiSetPattern = l:(InlineDataOneVar / InlineDataFull) {
-    ListPattern::Data(l).into()
+DataBlock -> GraphPattern = l:(InlineDataOneVar / InlineDataFull) {
+    GraphPattern::Data(l).into()
 }
 
 //[63]
@@ -341,10 +341,10 @@ MinusGraphPattern -> PartialGraphPattern = "MINUS"i _ p: GroupGraphPattern {
 //[67]
 GroupOrUnionGraphPattern -> PartialGraphPattern = p:GroupOrUnionGraphPattern_item **<1,> ("UNION"i _) {?
     not_empty_fold(p.into_iter(), |a, b| {
-        MultiSetPattern::Union(Box::new(a), Box::new(b))
+        GraphPattern::Union(Box::new(a), Box::new(b))
     }).map(PartialGraphPattern::Other)
 }
-GroupOrUnionGraphPattern_item -> MultiSetPattern = p:GroupGraphPattern _ { p }
+GroupOrUnionGraphPattern_item -> GraphPattern = p:GroupGraphPattern _ { p }
 
 //[68]
 Filter -> PartialGraphPattern = "FILTER"i _ c:Constraint {
