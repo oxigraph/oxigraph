@@ -1,15 +1,11 @@
 use model::*;
-use sparql::algebra::QueryResult;
-use sparql::parser::read_sparql_query;
 use std::fmt;
-use std::io::Read;
 use std::iter::empty;
 use std::iter::once;
 use std::iter::FromIterator;
 use std::iter::Iterator;
 use std::sync::Arc;
 use store::numeric_encoder::*;
-use store::sparql::SparqlEvaluator;
 use Result;
 
 /// Defines the Store traits that is used to have efficient binary storage
@@ -187,6 +183,10 @@ impl<S: EncodedQuadsStore> StoreDataset<S> {
             store: Arc::new(store),
         }
     }
+
+    pub(crate) fn encoded(&self) -> Arc<S> {
+        self.store.clone()
+    }
 }
 
 impl<S: EncodedQuadsStore> Dataset for StoreDataset<S> {
@@ -348,11 +348,6 @@ impl<S: EncodedQuadsStore> Dataset for StoreDataset<S> {
 
     fn is_empty(&self) -> Result<bool> {
         Ok(self.store.quads()?.any(|_| true))
-    }
-
-    fn query(&self, query: impl Read) -> Result<QueryResult> {
-        let query = read_sparql_query(query, None)?;
-        SparqlEvaluator::new(self.store.clone()).evaluate(&query)
     }
 }
 

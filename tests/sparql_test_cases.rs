@@ -16,6 +16,7 @@ use rudf::sparql::algebra::Query;
 use rudf::sparql::algebra::QueryResult;
 use rudf::sparql::parser::read_sparql_query;
 use rudf::sparql::xml_results::read_xml_results;
+use rudf::sparql::SparqlDataset;
 use rudf::store::isomorphism::GraphIsomorphism;
 use rudf::store::MemoryDataset;
 use rudf::store::MemoryGraph;
