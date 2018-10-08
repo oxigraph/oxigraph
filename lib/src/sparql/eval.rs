@@ -1,5 +1,6 @@
 use sparql::algebra::*;
-use std::collections::BTreeSet;
+use sparql::plan::*;
+use std::collections::HashSet;
 use std::iter::once;
 use std::iter::Iterator;
 use std::sync::Arc;
@@ -7,154 +8,21 @@ use store::numeric_encoder::EncodedTerm;
 use store::store::EncodedQuadsStore;
 use Result;
 
-type EncodedBinding = Vec<Option<EncodedTerm>>;
+type EncodedTuplesIterator = Box<dyn Iterator<Item = Result<EncodedTuple>>>;
 
-struct EncodedBindingsIterator {
-    variables: Vec<Variable>,
-    iter: Box<dyn Iterator<Item = Result<EncodedBinding>>>,
-}
-
-impl EncodedBindingsIterator {
-    fn take(self, n: usize) -> Self {
-        EncodedBindingsIterator {
-            variables: self.variables,
-            iter: Box::new(self.iter.take(n)),
-        }
-    }
-
-    fn skip(self, n: usize) -> Self {
-        EncodedBindingsIterator {
-            variables: self.variables,
-            iter: Box::new(self.iter.skip(n)),
-        }
-    }
-
-    fn project(self, on_variables: Vec<Variable>) -> Self {
-        let EncodedBindingsIterator { variables, iter } = self;
-        let projection: Vec<(usize, usize)> = on_variables
-            .iter()
-            .enumerate()
-            .flat_map(|(new_pos, v)| slice_key(&variables, v).map(|old_pos| (old_pos, new_pos)))
-            .collect();
-        let new_len = on_variables.len();
-        EncodedBindingsIterator {
-            variables: on_variables,
-            iter: Box::new(iter.map(move |binding| {
-                let binding = binding?;
-                let mut new_binding = Vec::with_capacity(new_len);
-                new_binding.resize(new_len, None);
-                for (old_pos, new_pos) in &projection {
-                    new_binding[*new_pos] = binding[*old_pos];
-                }
-                Ok(new_binding)
-            })),
-        }
-    }
-
-    fn unique(self) -> Self {
-        let EncodedBindingsIterator { variables, iter } = self;
-        let mut oks = BTreeSet::default();
-        let mut errors = Vec::default();
-        for element in iter {
-            match element {
-                Ok(ok) => {
-                    oks.insert(ok);
-                }
-                Err(error) => errors.push(error),
-            }
-        }
-        EncodedBindingsIterator {
-            variables,
-            iter: Box::new(errors.into_iter().map(Err).chain(oks.into_iter().map(Ok))),
-        }
-    }
-
-    fn chain(self, other: Self) -> Self {
-        let EncodedBindingsIterator {
-            variables: variables1,
-            iter: iter1,
-        } = self;
-        let EncodedBindingsIterator {
-            variables: variables2,
-            iter: iter2,
-        } = other;
-
-        let mut variables = variables1;
-        let mut map_2_to_1 = Vec::with_capacity(variables2.len());
-        for var in variables2 {
-            map_2_to_1.push(match slice_key(&variables, &var) {
-                Some(key) => key,
-                None => {
-                    variables.push(var);
-                    variables.len() - 1
-                }
-            })
-        }
-        let variables_len = variables.len();
-        EncodedBindingsIterator {
-            variables,
-            iter: Box::new(iter1.chain(iter2.map(move |binding| {
-                let binding = binding?;
-                let mut new_binding = binding.clone();
-                new_binding.resize(variables_len, None);
-                for (old_key, new_key) in map_2_to_1.iter().enumerate() {
-                    new_binding[*new_key] = binding[old_key];
-                }
-                Ok(new_binding)
-            }))),
-        }
-    }
-
-    fn duplicate(self) -> (Self, Self) {
-        let EncodedBindingsIterator { variables, iter } = self;
-        //TODO: optimize
-        let mut oks = Vec::default();
-        let mut errors = Vec::default();
-        for element in iter {
-            match element {
-                Ok(ok) => {
-                    oks.push(ok);
-                }
-                Err(error) => errors.push(error),
-            }
-        }
-        (
-            EncodedBindingsIterator {
-                variables: variables.clone(),
-                iter: Box::new(oks.clone().into_iter().map(Ok)),
-            },
-            EncodedBindingsIterator {
-                variables,
-                iter: Box::new(errors.into_iter().map(Err).chain(oks.into_iter().map(Ok))),
-            },
-        )
-    }
-}
-
-impl Default for EncodedBindingsIterator {
-    fn default() -> Self {
-        EncodedBindingsIterator {
-            variables: Vec::default(),
-            iter: Box::new(once(Ok(Vec::default()))),
-        }
-    }
-}
-
-fn slice_key<T: Eq>(slice: &[T], element: &T) -> Option<usize> {
-    for (i, item) in slice.iter().enumerate() {
-        if item == element {
-            return Some(i);
-        }
-    }
-    None
-}
-
-#[derive(Clone)]
-pub struct SparqlEvaluator<S: EncodedQuadsStore> {
+pub struct SimpleEvaluator<S: EncodedQuadsStore> {
     store: Arc<S>,
 }
 
-impl<S: EncodedQuadsStore> SparqlEvaluator<S> {
+impl<S: EncodedQuadsStore> Clone for SimpleEvaluator<S> {
+    fn clone(&self) -> Self {
+        Self {
+            store: self.store.clone(),
+        }
+    }
+}
+
+impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
     pub fn new(store: Arc<S>) -> Self {
         Self { store }
     }
@@ -162,329 +30,233 @@ impl<S: EncodedQuadsStore> SparqlEvaluator<S> {
     pub fn evaluate(&self, query: &Query) -> Result<QueryResult> {
         match query {
             Query::SelectQuery { algebra, dataset } => {
-                Ok(QueryResult::Bindings(self.decode_bindings(
-                    self.eval_graph_pattern(algebra, EncodedBindingsIterator::default())?,
-                )))
+                let (plan, variables) = PlanBuilder::build(&*self.store, algebra)?;
+                let iter = self.eval_plan(plan, vec![None; variables.len()]);
+                Ok(QueryResult::Bindings(self.decode_bindings(iter, variables)))
             }
             _ => unimplemented!(),
         }
     }
 
-    fn eval_graph_pattern(
-        &self,
-        pattern: &GraphPattern,
-        from: EncodedBindingsIterator,
-    ) -> Result<EncodedBindingsIterator> {
-        match pattern {
-            GraphPattern::BGP(p) => {
-                let mut iter = from;
-                for pattern in p {
-                    iter = match pattern {
-                        TripleOrPathPattern::Triple(pattern) => {
-                            self.eval_triple_pattern(pattern, iter)
-                        }
-                        TripleOrPathPattern::Path(pattern) => self.eval_path_pattern(pattern, iter),
-                    }?;
-                }
-                Ok(iter)
-            }
-            GraphPattern::Join(a, b) => {
-                self.eval_graph_pattern(b, self.eval_graph_pattern(a, from)?)
-            }
-            GraphPattern::LeftJoin(a, b, e) => unimplemented!(),
-            GraphPattern::Filter(e, p) => {
-                let EncodedBindingsIterator { variables, iter } =
-                    self.eval_graph_pattern(p, from)?;
-                let expression = e.clone();
-                let evaluator = Self {
-                    store: self.store.clone(),
-                };
-                Ok(EncodedBindingsIterator {
-                    variables: variables.clone(),
-                    iter: Box::new(iter.filter(move |val| match val {
-                        Ok(binding) => {
-                            match evaluator.eval_expression(&expression, binding, &variables) {
-                                Ok(Some(term)) => true,
-                                _ => false,
-                            }
-                        }
-                        Err(_) => true,
-                    })),
-                })
-            }
-            GraphPattern::Union(a, b) => {
-                let (from1, from2) = from.duplicate();
-                Ok(self
-                    .eval_graph_pattern(a, from1)?
-                    .chain(self.eval_graph_pattern(b, from2)?))
-            }
-            GraphPattern::Graph(g, p) => unimplemented!(),
-            GraphPattern::Extend(p, v, e) => unimplemented!(),
-            GraphPattern::Minus(a, b) => unimplemented!(),
-            GraphPattern::Service(n, p, s) => unimplemented!(),
-            GraphPattern::AggregateJoin(g, a) => unimplemented!(),
-            GraphPattern::Data(bs) => Ok(self.encode_bindings(bs)),
-            GraphPattern::OrderBy(l, o) => self.eval_graph_pattern(l, from), //TODO
-            GraphPattern::Project(l, new_variables) => Ok(self
-                .eval_graph_pattern(l, from)?
-                .project(new_variables.to_vec())),
-            GraphPattern::Distinct(l) => Ok(self.eval_graph_pattern(l, from)?.unique()),
-            GraphPattern::Reduced(l) => self.eval_graph_pattern(l, from),
-            GraphPattern::Slice(l, start, length) => {
-                let mut iter = self.eval_graph_pattern(l, from)?;
-                if *start > 0 {
-                    iter = iter.skip(*start);
-                }
-                if let Some(length) = length {
-                    iter = iter.take(*length);
-                }
-                Ok(iter)
-            }
-        }
-    }
-
-    fn eval_triple_pattern(
-        &self,
-        pattern: &TriplePattern,
-        from: EncodedBindingsIterator,
-    ) -> Result<EncodedBindingsIterator> {
-        let EncodedBindingsIterator {
-            mut variables,
-            iter: from_iter,
-        } = from;
-        let subject =
-            self.binding_value_lookup_from_term_or_variable(&pattern.subject, &mut variables)?;
-        let predicate = self
-            .binding_value_lookup_from_named_node_or_variable(&pattern.predicate, &mut variables)?;
-        let object =
-            self.binding_value_lookup_from_term_or_variable(&pattern.object, &mut variables)?;
-
-        let filter_sp = subject.is_var() && subject == predicate;
-        let filter_so = subject.is_var() && subject == object;
-        let filter_po = predicate.is_var() && predicate == object;
-
-        let store = self.store.clone();
-        let variables_len = variables.len();
-        Ok(EncodedBindingsIterator {
-            variables,
-            iter: Box::new(from_iter.flat_map(move |binding| {
-                let result: Box<dyn Iterator<Item = Result<EncodedBinding>>> = match binding {
-                    Ok(mut binding) => {
-                        match store.quads_for_pattern(
-                            subject.get(&binding),
-                            predicate.get(&binding),
-                            object.get(&binding),
-                            None, //TODO
-                        ) {
-                            Ok(mut iter) => {
-                                if filter_sp {
-                                    iter = Box::new(iter.filter(|quad| match quad {
-                                        Err(_) => true,
-                                        Ok(quad) => quad.subject == quad.predicate,
-                                    }))
-                                }
-                                if filter_so {
-                                    iter = Box::new(iter.filter(|quad| match quad {
-                                        Err(_) => true,
-                                        Ok(quad) => quad.subject == quad.object,
-                                    }))
-                                }
-                                if filter_po {
-                                    iter = Box::new(iter.filter(|quad| match quad {
-                                        Err(_) => true,
-                                        Ok(quad) => quad.predicate == quad.object,
-                                    }))
-                                }
-                                Box::new(iter.map(move |quad| {
-                                    let quad = quad?;
-                                    let mut binding = binding.clone();
-                                    binding.resize(variables_len, None);
-                                    subject.put(quad.subject, &mut binding);
-                                    predicate.put(quad.predicate, &mut binding);
-                                    object.put(quad.object, &mut binding);
-                                    Ok(binding)
-                                }))
+    fn eval_plan(&self, node: PlanNode, from: EncodedTuple) -> EncodedTuplesIterator {
+        match node {
+            PlanNode::Init => Box::new(once(Ok(from))),
+            PlanNode::StaticBindings { tuples } => Box::new(tuples.into_iter().map(Ok)),
+            PlanNode::TriplePatternJoin {
+                child,
+                subject,
+                predicate,
+                object,
+            } => {
+                let eval = self.clone();
+                Box::new(
+                    self.eval_plan(*child, from)
+                        .flat_map(move |tuple| match tuple {
+                            Ok(tuple) => {
+                                let iter: EncodedTuplesIterator = match eval
+                                    .store
+                                    .quads_for_pattern(
+                                        get_pattern_value(&subject, &tuple),
+                                        get_pattern_value(&predicate, &tuple),
+                                        get_pattern_value(&object, &tuple),
+                                        None, //TODO
+                                    ) {
+                                    Ok(mut iter) => {
+                                        if subject.is_var() && subject == predicate {
+                                            iter = Box::new(iter.filter(|quad| match quad {
+                                                Err(_) => true,
+                                                Ok(quad) => quad.subject == quad.predicate,
+                                            }))
+                                        }
+                                        if subject.is_var() && subject == object {
+                                            iter = Box::new(iter.filter(|quad| match quad {
+                                                Err(_) => true,
+                                                Ok(quad) => quad.subject == quad.object,
+                                            }))
+                                        }
+                                        if predicate.is_var() && predicate == object {
+                                            iter = Box::new(iter.filter(|quad| match quad {
+                                                Err(_) => true,
+                                                Ok(quad) => quad.predicate == quad.object,
+                                            }))
+                                        }
+                                        Box::new(iter.map(move |quad| {
+                                            let quad = quad?;
+                                            let mut new_tuple = tuple.clone();
+                                            put_pattern_value(
+                                                &subject,
+                                                quad.subject,
+                                                &mut new_tuple,
+                                            );
+                                            put_pattern_value(
+                                                &predicate,
+                                                quad.predicate,
+                                                &mut new_tuple,
+                                            );
+                                            put_pattern_value(&object, quad.object, &mut new_tuple);
+                                            Ok(new_tuple)
+                                        }))
+                                    }
+                                    Err(error) => Box::new(once(Err(error))),
+                                };
+                                iter
                             }
                             Err(error) => Box::new(once(Err(error))),
-                        }
+                        }),
+                )
+            }
+            PlanNode::Filter { child, expression } => {
+                let eval = self.clone();
+                Box::new(self.eval_plan(*child, from).filter(move |tuple| {
+                    match tuple {
+                        Ok(tuple) => eval
+                            .eval_expression(&expression, tuple)
+                            .and_then(|term| eval.to_bool(term))
+                            .unwrap_or(false),
+                        Err(_) => true,
                     }
-                    Err(error) => Box::new(once(Err(error))),
-                };
-                result
-            })),
-        })
-    }
-
-    fn eval_path_pattern(
-        &self,
-        pattern: &PathPattern,
-        from: EncodedBindingsIterator,
-    ) -> Result<EncodedBindingsIterator> {
-        unimplemented!()
+                }))
+            }
+            PlanNode::Union { entry, children } => {
+                //TODO: avoid clones
+                let eval = self.clone();
+                Box::new(self.eval_plan(*entry, from).flat_map(move |tuple| {
+                    let eval = eval.clone();
+                    let iter: EncodedTuplesIterator = match tuple {
+                        Ok(tuple) => Box::new(
+                            children
+                                .clone()
+                                .into_iter()
+                                .flat_map(move |child| eval.eval_plan(child, tuple.clone())),
+                        ),
+                        Err(error) => Box::new(once(Err(error))),
+                    };
+                    iter
+                }))
+            }
+            PlanNode::HashDeduplicate { child } => {
+                let iter = self.eval_plan(*child, from);
+                let mut values = HashSet::with_capacity(iter.size_hint().0);
+                let mut errors = Vec::default();
+                for result in iter {
+                    match result {
+                        Ok(result) => {
+                            values.insert(result);
+                        }
+                        Err(error) => errors.push(Err(error)),
+                    }
+                }
+                Box::new(errors.into_iter().chain(values.into_iter().map(Ok)))
+            }
+            PlanNode::Skip { child, count } => Box::new(self.eval_plan(*child, from).skip(count)),
+            PlanNode::Limit { child, count } => Box::new(self.eval_plan(*child, from).take(count)),
+            PlanNode::Project { child, mapping } => {
+                Box::new(self.eval_plan(*child, from).map(move |tuple| {
+                    let tuple = tuple?;
+                    let mut new_tuple = Vec::with_capacity(mapping.len());
+                    for key in &mapping {
+                        new_tuple.push(tuple[*key]);
+                    }
+                    Ok(new_tuple)
+                }))
+            }
+        }
     }
 
     fn eval_expression(
         &self,
-        expr: &Expression,
-        binding: &[Option<EncodedTerm>],
-        variables: &[Variable],
-    ) -> Result<Option<EncodedTerm>> {
-        match expr {
-            Expression::ConstantExpression(TermOrVariable::Term(t)) => {
-                Ok(Some(self.store.encoder().encode_term(t)?))
-            }
-            Expression::ConstantExpression(TermOrVariable::Variable(v)) => {
-                Ok(slice_key(variables, v).and_then(|key| binding[key]))
-            }
-            Expression::OrExpression(a, b) => Ok(match self
-                .to_bool(self.eval_expression(a, binding, variables)?)?
-            {
+        expression: &PlanExpression,
+        tuple: &[Option<EncodedTerm>],
+    ) -> Option<EncodedTerm> {
+        match expression {
+            PlanExpression::Constant(t) => Some(*t),
+            PlanExpression::Variable(v) => if *v < tuple.len() {
+                tuple[*v]
+            } else {
+                None
+            },
+            PlanExpression::Or(a, b) => match self.to_bool(self.eval_expression(a, tuple)?) {
                 Some(true) => Some(true.into()),
-                Some(false) => self.eval_expression(b, binding, variables)?,
-                None => match self.to_bool(self.eval_expression(b, binding, variables)?)? {
+                Some(false) => self.eval_expression(b, tuple),
+                None => match self.to_bool(self.eval_expression(b, tuple)?) {
                     Some(true) => Some(true.into()),
                     _ => None,
                 },
-            }),
-            Expression::AndExpression(a, b) => Ok(match self
-                .to_bool(self.eval_expression(a, binding, variables)?)?
-            {
-                Some(true) => self.eval_expression(b, binding, variables)?,
+            },
+            PlanExpression::And(a, b) => match self.to_bool(self.eval_expression(a, tuple)?) {
+                Some(true) => self.eval_expression(b, tuple),
                 Some(false) => Some(false.into()),
-                None => match self.to_bool(self.eval_expression(b, binding, variables)?)? {
+                None => match self.to_bool(self.eval_expression(b, tuple)?) {
                     Some(false) => Some(false.into()),
                     _ => None,
                 },
-            }),
-            Expression::UnaryNotExpression(e) => Ok(self
-                .to_bool(self.eval_expression(e, binding, variables)?)?
-                .map(|v| (!v).into())),
-            e => Err(format!("Evaluation of expression {} is not implemented yet", e).into()),
+            },
+            PlanExpression::UnaryNot(e) => self
+                .to_bool(self.eval_expression(e, tuple)?)
+                .map(|v| (!v).into()),
+            e => unimplemented!(),
         }
     }
 
-    fn to_bool(&self, term: Option<EncodedTerm>) -> Result<Option<bool>> {
-        Ok(match term {
-            Some(EncodedTerm::BooleanLiteral(value)) => Some(value),
-            Some(EncodedTerm::NamedNode { .. }) => None,
-            Some(EncodedTerm::BlankNode(_)) => None,
-            Some(term) => self.store.encoder().decode_term(term)?.to_bool(),
-            None => None,
-        })
-    }
-
-    fn binding_value_lookup_from_term_or_variable(
-        &self,
-        term_or_variable: &TermOrVariable,
-        variables: &mut Vec<Variable>,
-    ) -> Result<BindingValueLookup> {
-        Ok(match term_or_variable {
-            TermOrVariable::Term(term) => {
-                BindingValueLookup::Constant(self.store.encoder().encode_term(term)?)
-            }
-            TermOrVariable::Variable(variable) => {
-                BindingValueLookup::Variable(match slice_key(variables, variable) {
-                    Some(key) => key,
-                    None => {
-                        variables.push(variable.clone());
-                        variables.len() - 1
-                    }
-                })
-            }
-        })
-    }
-
-    fn binding_value_lookup_from_named_node_or_variable(
-        &self,
-        named_node_or_variable: &NamedNodeOrVariable,
-        variables: &mut Vec<Variable>,
-    ) -> Result<BindingValueLookup> {
-        Ok(match named_node_or_variable {
-            NamedNodeOrVariable::NamedNode(named_node) => {
-                BindingValueLookup::Constant(self.store.encoder().encode_named_node(named_node)?)
-            }
-            NamedNodeOrVariable::Variable(variable) => {
-                BindingValueLookup::Variable(match slice_key(variables, variable) {
-                    Some(key) => key,
-                    None => {
-                        variables.push(variable.clone());
-                        variables.len() - 1
-                    }
-                })
-            }
-        })
-    }
-
-    fn encode_bindings(&self, bindings: &StaticBindings) -> EncodedBindingsIterator {
-        let encoder = self.store.encoder();
-        let encoded_values: Vec<Result<EncodedBinding>> = bindings
-            .values_iter()
-            .map(move |values| {
-                let mut result = Vec::with_capacity(values.len());
-                for value in values {
-                    result.push(match value {
-                        Some(term) => Some(encoder.encode_term(term)?),
-                        None => None,
-                    });
-                }
-                Ok(result)
-            }).collect();
-        EncodedBindingsIterator {
-            variables: bindings.variables().to_vec(),
-            iter: Box::new(encoded_values.into_iter()),
+    fn to_bool(&self, term: EncodedTerm) -> Option<bool> {
+        match term {
+            EncodedTerm::BooleanLiteral(value) => Some(value),
+            EncodedTerm::NamedNode { .. } => None,
+            EncodedTerm::BlankNode(_) => None,
+            term => self.store.encoder().decode_term(term).ok()?.to_bool(),
         }
     }
 
-    fn decode_bindings(&self, iter: EncodedBindingsIterator) -> BindingsIterator {
+    fn decode_bindings(
+        &self,
+        iter: EncodedTuplesIterator,
+        variables: Vec<Variable>,
+    ) -> BindingsIterator {
         let store = self.store.clone();
-        let EncodedBindingsIterator { variables, iter } = iter;
         BindingsIterator::new(
             variables,
             Box::new(iter.map(move |values| {
-                let values = values?;
                 let encoder = store.encoder();
-                let mut result = Vec::with_capacity(values.len());
-                for value in values {
-                    result.push(match value {
-                        Some(term) => Some(encoder.decode_term(term)?),
-                        None => None,
-                    });
-                }
-                Ok(result)
+                values?
+                    .into_iter()
+                    .map(|value| {
+                        Ok(match value {
+                            Some(term) => Some(encoder.decode_term(term)?),
+                            None => None,
+                        })
+                    }).collect()
             })),
         )
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Copy)]
-enum BindingValueLookup {
-    Constant(EncodedTerm),
-    Variable(usize),
+fn get_pattern_value(
+    selector: &PatternValue,
+    tuple: &[Option<EncodedTerm>],
+) -> Option<EncodedTerm> {
+    match selector {
+        PatternValue::Constant(term) => Some(*term),
+        PatternValue::Variable(v) => if *v < tuple.len() {
+            tuple[*v]
+        } else {
+            None
+        },
+    }
 }
 
-impl BindingValueLookup {
-    fn get(&self, binding: &[Option<EncodedTerm>]) -> Option<EncodedTerm> {
-        match self {
-            BindingValueLookup::Constant(term) => Some(*term),
-            BindingValueLookup::Variable(v) => if *v < binding.len() {
-                binding[*v]
+fn put_pattern_value(selector: &PatternValue, value: EncodedTerm, tuple: &mut EncodedTuple) {
+    match selector {
+        PatternValue::Constant(_) => (),
+        PatternValue::Variable(v) => {
+            let v = *v;
+            if tuple.len() > v {
+                tuple[v] = Some(value)
             } else {
-                None
-            },
-        }
-    }
-
-    fn put(&self, value: EncodedTerm, binding: &mut EncodedBinding) {
-        match self {
-            BindingValueLookup::Constant(_) => (),
-            BindingValueLookup::Variable(v) => binding[*v] = Some(value),
-        }
-    }
-
-    fn is_var(&self) -> bool {
-        match self {
-            BindingValueLookup::Constant(_) => false,
-            BindingValueLookup::Variable(_) => true,
+                if tuple.len() < v {
+                    tuple.resize(v, None);
+                }
+                tuple.push(Some(value))
+            }
         }
     }
 }

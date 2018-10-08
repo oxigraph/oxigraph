@@ -3,7 +3,7 @@
 
 use model::Dataset;
 use sparql::algebra::QueryResult;
-use sparql::eval::SparqlEvaluator;
+use sparql::eval::SimpleEvaluator;
 use sparql::parser::read_sparql_query;
 use std::io::Read;
 use store::store::EncodedQuadsStore;
@@ -13,6 +13,7 @@ use Result;
 pub mod algebra;
 mod eval;
 pub mod parser;
+mod plan;
 pub mod xml_results;
 
 pub trait SparqlDataset: Dataset {
@@ -22,6 +23,6 @@ pub trait SparqlDataset: Dataset {
 impl<S: EncodedQuadsStore> SparqlDataset for StoreDataset<S> {
     fn query(&self, query: impl Read) -> Result<QueryResult> {
         let query = read_sparql_query(query, None)?;
-        SparqlEvaluator::new(self.encoded()).evaluate(&query)
+        SimpleEvaluator::new(self.encoded()).evaluate(&query)
     }
 }
