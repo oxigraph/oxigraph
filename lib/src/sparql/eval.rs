@@ -212,25 +212,9 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             PlanExpression::UnaryNot(e) => self
                 .to_bool(self.eval_expression(e, tuple)?)
                 .map(|v| (!v).into()),
-            PlanExpression::Str(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::NamedNode { iri_id } => {
-                    Some(EncodedTerm::SimpleLiteral { value_id: iri_id })
-                }
-                EncodedTerm::SimpleLiteral { value_id } => {
-                    Some(EncodedTerm::SimpleLiteral { value_id })
-                }
-                EncodedTerm::LangStringLiteral { value_id, .. } => {
-                    Some(EncodedTerm::SimpleLiteral { value_id })
-                }
-                EncodedTerm::TypedLiteral { value_id, .. } => {
-                    Some(EncodedTerm::SimpleLiteral { value_id })
-                }
-                EncodedTerm::StringLiteral { value_id } => {
-                    Some(EncodedTerm::SimpleLiteral { value_id })
-                }
-                //TODO EncodedTerm::BooleanLiteral(v),
-                _ => None,
-            },
+            PlanExpression::Str(e) => Some(EncodedTerm::SimpleLiteral {
+                value_id: self.to_string_id(self.eval_expression(e, tuple)?)?,
+            }),
             PlanExpression::Lang(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::LangStringLiteral { language_id, .. } => {
                     Some(EncodedTerm::SimpleLiteral {
@@ -272,6 +256,12 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             PlanExpression::IsLiteral(e) => {
                 Some(self.eval_expression(e, tuple)?.is_literal().into())
             }
+            PlanExpression::BooleanCast(e) => {
+                Some(self.to_bool(self.eval_expression(e, tuple)?)?.into())
+            }
+            PlanExpression::StringCast(e) => Some(EncodedTerm::StringLiteral {
+                value_id: self.to_string_id(self.eval_expression(e, tuple)?)?,
+            }),
             e => unimplemented!(),
         }
     }
@@ -281,6 +271,21 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             EncodedTerm::BooleanLiteral(value) => Some(value),
             EncodedTerm::SimpleLiteral { .. } => Some(term != ENCODED_EMPTY_SIMPLE_LITERAL),
             EncodedTerm::StringLiteral { .. } => Some(term != ENCODED_EMPTY_STRING_LITERAL),
+            _ => None,
+        }
+    }
+
+    fn to_string_id(&self, term: EncodedTerm) -> Option<u64> {
+        match term {
+            EncodedTerm::NamedNode { iri_id } => Some(iri_id),
+            EncodedTerm::SimpleLiteral { value_id } => Some(value_id),
+            EncodedTerm::LangStringLiteral { value_id, .. } => Some(value_id),
+            EncodedTerm::TypedLiteral { value_id, .. } => Some(value_id),
+            EncodedTerm::StringLiteral { value_id } => Some(value_id),
+            EncodedTerm::BooleanLiteral(value) => self
+                .store
+                .insert_bytes(if value { b"true" } else { b"false" })
+                .ok(),
             _ => None,
         }
     }
