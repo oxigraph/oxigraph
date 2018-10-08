@@ -1,3 +1,4 @@
+use model::vocab::xsd;
 use sparql::algebra::*;
 use store::numeric_encoder::EncodedTerm;
 use store::store::EncodedQuadsStore;
@@ -136,6 +137,13 @@ pub enum PlanExpression {
         Box<PlanExpression>,
         Option<Box<PlanExpression>>,
     ),
+    BooleanCast(Box<PlanExpression>),
+    DoubleCast(Box<PlanExpression>),
+    FloatCast(Box<PlanExpression>),
+    DecimalCast(Box<PlanExpression>),
+    IntegerCast(Box<PlanExpression>),
+    DateTimeCast(Box<PlanExpression>),
+    StringCast(Box<PlanExpression>),
 }
 
 pub struct PlanBuilder<'a, S: EncodedQuadsStore> {
@@ -370,8 +378,61 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                     None => None,
                 },
             ),
+            Expression::CustomFunctionCall(name, parameters) => if *name == *xsd::BOOLEAN {
+                self.build_cast(
+                    parameters,
+                    PlanExpression::BooleanCast,
+                    variables,
+                    "boolean",
+                )?
+            } else if *name == *xsd::DOUBLE {
+                self.build_cast(parameters, PlanExpression::DoubleCast, variables, "double")?
+            } else if *name == *xsd::FLOAT {
+                self.build_cast(parameters, PlanExpression::FloatCast, variables, "float")?
+            } else if *name == *xsd::DECIMAL {
+                self.build_cast(
+                    parameters,
+                    PlanExpression::DecimalCast,
+                    variables,
+                    "decimal",
+                )?
+            } else if *name == *xsd::INTEGER {
+                self.build_cast(
+                    parameters,
+                    PlanExpression::IntegerCast,
+                    variables,
+                    "integer",
+                )?
+            } else if *name == *xsd::DATE_TIME {
+                self.build_cast(
+                    parameters,
+                    PlanExpression::DateTimeCast,
+                    variables,
+                    "dateTime",
+                )?
+            } else if *name == *xsd::STRING {
+                self.build_cast(parameters, PlanExpression::StringCast, variables, "string")?
+            } else {
+                Err(format!("Not supported custom function {}", expression))?
+            },
             _ => unimplemented!(),
         })
+    }
+
+    fn build_cast(
+        &self,
+        parameters: &Vec<Expression>,
+        constructor: impl Fn(Box<PlanExpression>) -> PlanExpression,
+        variables: &mut Vec<Variable>,
+        name: &'static str,
+    ) -> Result<PlanExpression> {
+        if parameters.len() == 1 {
+            Ok(constructor(Box::new(
+                self.build_for_expression(&parameters[0], variables)?,
+            )))
+        } else {
+            Err(format!("The xsd:{} casting takes only one parameter", name).into())
+        }
     }
 
     fn pattern_value_from_term_or_variable(
