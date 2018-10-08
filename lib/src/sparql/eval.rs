@@ -191,6 +191,24 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                     _ => None,
                 },
             },
+            PlanExpression::Equal(a, b) => {
+                Some((self.eval_expression(a, tuple)? == self.eval_expression(b, tuple)?).into())
+            }
+            PlanExpression::NotEqual(a, b) => {
+                Some((self.eval_expression(a, tuple)? != self.eval_expression(b, tuple)?).into())
+            }
+            PlanExpression::Greater(a, b) => {
+                Some((self.eval_expression(a, tuple)? > self.eval_expression(b, tuple)?).into())
+            }
+            PlanExpression::GreaterOrEq(a, b) => {
+                Some((self.eval_expression(a, tuple)? >= self.eval_expression(b, tuple)?).into())
+            }
+            PlanExpression::Lower(a, b) => {
+                Some((self.eval_expression(a, tuple)? < self.eval_expression(b, tuple)?).into())
+            }
+            PlanExpression::LowerOrEq(a, b) => {
+                Some((self.eval_expression(a, tuple)? <= self.eval_expression(b, tuple)?).into())
+            }
             PlanExpression::UnaryNot(e) => self
                 .to_bool(self.eval_expression(e, tuple)?)
                 .map(|v| (!v).into()),
