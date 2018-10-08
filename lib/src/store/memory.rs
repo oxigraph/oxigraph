@@ -42,11 +42,22 @@ pub type MemoryDataset = StoreDataset<MemoryStore>;
 /// ```
 pub type MemoryGraph = StoreDefaultGraph<MemoryStore>;
 
-#[derive(Default)]
 pub struct MemoryStore {
     id2str: RwLock<Vec<Vec<u8>>>,
     str2id: RwLock<BTreeMap<Vec<u8>, u64>>,
     graph_indexes: RwLock<BTreeMap<EncodedTerm, MemoryGraphIndexes>>,
+}
+
+impl Default for MemoryStore {
+    fn default() -> Self {
+        let new = Self {
+            id2str: RwLock::default(),
+            str2id: RwLock::default(),
+            graph_indexes: RwLock::default(),
+        };
+        new.set_first_strings().unwrap();
+        new
+    }
 }
 
 #[derive(Default)]

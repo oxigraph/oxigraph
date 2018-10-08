@@ -1,4 +1,6 @@
 use byteorder::{NetworkEndian, ReadBytesExt, WriteBytesExt};
+use model::vocab::rdf;
+use model::vocab::xsd;
 use model::*;
 use std::io::Read;
 use std::io::Write;
@@ -10,11 +12,39 @@ use uuid::Uuid;
 use Error;
 use Result;
 
+const EMPTY_STRING_ID: u64 = 0;
+const RDF_LANG_STRING_ID: u64 = 1;
+const XSD_STRING_ID: u64 = 2;
+const XSD_BOOLEAN_ID: u64 = 3;
+const XSD_FLOAT_ID: u64 = 4;
+const XSD_DOUBLE_ID: u64 = 5;
+const XSD_INTEGER_ID: u64 = 6;
+const XSD_DECIMAL_ID: u64 = 7;
+const XSD_DATE_TIME_ID: u64 = 8;
+
 pub trait BytesStore {
     type BytesOutput: Deref<Target = [u8]>;
 
     fn insert_bytes(&self, value: &[u8]) -> Result<u64>;
     fn get_bytes(&self, id: u64) -> Result<Option<Self::BytesOutput>>;
+
+    /// Should be called when the bytes store is created
+    fn set_first_strings(&self) -> Result<()> {
+        if EMPTY_STRING_ID == self.insert_bytes(b"")?
+            && RDF_LANG_STRING_ID == self.insert_bytes(rdf::LANG_STRING.as_str().as_bytes())?
+            && XSD_STRING_ID == self.insert_bytes(xsd::STRING.as_str().as_bytes())?
+            && XSD_BOOLEAN_ID == self.insert_bytes(xsd::BOOLEAN.as_str().as_bytes())?
+            && XSD_FLOAT_ID == self.insert_bytes(xsd::FLOAT.as_str().as_bytes())?
+            && XSD_DOUBLE_ID == self.insert_bytes(xsd::DOUBLE.as_str().as_bytes())?
+            && XSD_INTEGER_ID == self.insert_bytes(xsd::INTEGER.as_str().as_bytes())?
+            && XSD_DECIMAL_ID == self.insert_bytes(xsd::DECIMAL.as_str().as_bytes())?
+            && XSD_DATE_TIME_ID == self.insert_bytes(xsd::DATE_TIME.as_str().as_bytes())?
+        {
+            Ok(())
+        } else {
+            Err("Failed to properly setup the basic string ids in the dictionnary".into())
+        }
+    }
 }
 
 const TYPE_DEFAULT_GRAPH_ID: u8 = 0;
@@ -28,6 +58,36 @@ const TYPE_BOOLEAN_LITERAL_TRUE: u8 = 7;
 const TYPE_BOOLEAN_LITERAL_FALSE: u8 = 8;
 
 pub static ENCODED_DEFAULT_GRAPH: EncodedTerm = EncodedTerm::DefaultGraph {};
+pub static ENCODED_EMPTY_SIMPLE_LITERAL: EncodedTerm = EncodedTerm::SimpleLiteral {
+    value_id: EMPTY_STRING_ID,
+};
+pub static ENCODED_EMPTY_STRING_LITERAL: EncodedTerm = EncodedTerm::StringLiteral {
+    value_id: EMPTY_STRING_ID,
+};
+pub static ENCODED_RDF_LANG_STRING_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+    iri_id: RDF_LANG_STRING_ID,
+};
+pub static ENCODED_XSD_STRING_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+    iri_id: XSD_STRING_ID,
+};
+pub static ENCODED_XSD_BOOLEAN_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+    iri_id: XSD_BOOLEAN_ID,
+};
+pub static ENCODED_XSD_FLOAT_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+    iri_id: XSD_FLOAT_ID,
+};
+pub static ENCODED_XSD_DOUBLE_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+    iri_id: XSD_DOUBLE_ID,
+};
+pub static ENCODED_XSD_INTEGER_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+    iri_id: XSD_INTEGER_ID,
+};
+pub static ENCODED_XSD_DECIMAL_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+    iri_id: XSD_DECIMAL_ID,
+};
+pub static ENCODED_XSD_DATE_TIME_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+    iri_id: XSD_DATE_TIME_ID,
+};
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
 pub enum EncodedTerm {

@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::iter::once;
 use std::iter::Iterator;
 use std::sync::Arc;
-use store::numeric_encoder::EncodedTerm;
+use store::numeric_encoder::*;
 use store::store::EncodedQuadsStore;
 use Result;
 
@@ -240,13 +240,13 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 _ => None,
             },
             PlanExpression::Datatype(e) => match self.eval_expression(e, tuple)? {
-                //TODO EncodedTerm::SimpleLiteral { .. }
-                //TODO EncodedTerm::LangStringLiteral { .. }
+                EncodedTerm::SimpleLiteral { .. } => Some(ENCODED_XSD_STRING_NAMED_NODE),
+                EncodedTerm::LangStringLiteral { .. } => Some(ENCODED_RDF_LANG_STRING_NAMED_NODE),
                 EncodedTerm::TypedLiteral { datatype_id, .. } => Some(EncodedTerm::NamedNode {
                     iri_id: datatype_id,
                 }),
-                //TODO EncodedTerm::StringLiteral { .. }
-                //TODO EncodedTerm::BooleanLiteral(..)
+                EncodedTerm::StringLiteral { .. } => Some(ENCODED_XSD_STRING_NAMED_NODE),
+                EncodedTerm::BooleanLiteral(..) => Some(ENCODED_XSD_BOOLEAN_NAMED_NODE),
                 _ => None,
             },
             PlanExpression::Bound(v) => Some((*v >= tuple.len() && tuple[*v].is_some()).into()),
@@ -279,9 +279,9 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
     fn to_bool(&self, term: EncodedTerm) -> Option<bool> {
         match term {
             EncodedTerm::BooleanLiteral(value) => Some(value),
-            EncodedTerm::NamedNode { .. } => None,
-            EncodedTerm::BlankNode(_) => None,
-            term => self.store.encoder().decode_term(term).ok()?.to_bool(),
+            EncodedTerm::SimpleLiteral { .. } => Some(term != ENCODED_EMPTY_SIMPLE_LITERAL),
+            EncodedTerm::StringLiteral { .. } => Some(term != ENCODED_EMPTY_STRING_LITERAL),
+            _ => None,
         }
     }
 

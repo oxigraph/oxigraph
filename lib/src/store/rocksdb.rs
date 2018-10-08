@@ -65,7 +65,7 @@ impl RocksDbStore {
         let posg_cf = get_cf(&db, POSG_CF)?;
         let ospg_cf = get_cf(&db, OSPG_CF)?;
 
-        Ok(Self {
+        let new = Self {
             db,
             str_id_counter: Mutex::new(RocksDBCounter::new("bsc")),
             id2str_cf,
@@ -73,7 +73,9 @@ impl RocksDbStore {
             spog_cf,
             posg_cf,
             ospg_cf,
-        })
+        };
+        new.set_first_strings()?;
+        Ok(new)
     }
 }
 
