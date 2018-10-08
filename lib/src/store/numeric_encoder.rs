@@ -55,6 +55,31 @@ impl EncodedTerm {
             EncodedTerm::BooleanLiteral(false) => TYPE_BOOLEAN_LITERAL_FALSE,
         }
     }
+
+    pub fn is_named_node(&self) -> bool {
+        match self {
+            EncodedTerm::NamedNode { .. } => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_blank_node(&self) -> bool {
+        match self {
+            EncodedTerm::BlankNode(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_literal(&self) -> bool {
+        match self {
+            EncodedTerm::SimpleLiteral { .. } => true,
+            EncodedTerm::LangStringLiteral { .. } => true,
+            EncodedTerm::TypedLiteral { .. } => true,
+            EncodedTerm::StringLiteral { .. } => true,
+            EncodedTerm::BooleanLiteral(_) => true,
+            _ => false,
+        }
+    }
 }
 
 impl From<bool> for EncodedTerm {

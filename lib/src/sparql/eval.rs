@@ -194,6 +194,66 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             PlanExpression::UnaryNot(e) => self
                 .to_bool(self.eval_expression(e, tuple)?)
                 .map(|v| (!v).into()),
+            PlanExpression::Str(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::NamedNode { iri_id } => {
+                    Some(EncodedTerm::SimpleLiteral { value_id: iri_id })
+                }
+                EncodedTerm::SimpleLiteral { value_id } => {
+                    Some(EncodedTerm::SimpleLiteral { value_id })
+                }
+                EncodedTerm::LangStringLiteral { value_id, .. } => {
+                    Some(EncodedTerm::SimpleLiteral { value_id })
+                }
+                EncodedTerm::TypedLiteral { value_id, .. } => {
+                    Some(EncodedTerm::SimpleLiteral { value_id })
+                }
+                EncodedTerm::StringLiteral { value_id } => {
+                    Some(EncodedTerm::SimpleLiteral { value_id })
+                }
+                //TODO EncodedTerm::BooleanLiteral(v),
+                _ => None,
+            },
+            PlanExpression::Lang(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::LangStringLiteral { language_id, .. } => {
+                    Some(EncodedTerm::SimpleLiteral {
+                        value_id: language_id,
+                    })
+                }
+                _ => None,
+            },
+            PlanExpression::Datatype(e) => match self.eval_expression(e, tuple)? {
+                //TODO EncodedTerm::SimpleLiteral { .. }
+                //TODO EncodedTerm::LangStringLiteral { .. }
+                EncodedTerm::TypedLiteral { datatype_id, .. } => Some(EncodedTerm::NamedNode {
+                    iri_id: datatype_id,
+                }),
+                //TODO EncodedTerm::StringLiteral { .. }
+                //TODO EncodedTerm::BooleanLiteral(..)
+                _ => None,
+            },
+            PlanExpression::Bound(v) => Some((*v >= tuple.len() && tuple[*v].is_some()).into()),
+            PlanExpression::IRI(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::NamedNode { iri_id } => Some(EncodedTerm::NamedNode { iri_id }),
+                EncodedTerm::SimpleLiteral { value_id } => {
+                    Some(EncodedTerm::NamedNode { iri_id: value_id })
+                }
+                EncodedTerm::StringLiteral { value_id } => {
+                    Some(EncodedTerm::NamedNode { iri_id: value_id })
+                }
+                _ => None,
+            },
+            PlanExpression::SameTerm(a, b) => {
+                Some((self.eval_expression(a, tuple)? == self.eval_expression(b, tuple)?).into())
+            }
+            PlanExpression::IsIRI(e) => {
+                Some(self.eval_expression(e, tuple)?.is_named_node().into())
+            }
+            PlanExpression::IsBlank(e) => {
+                Some(self.eval_expression(e, tuple)?.is_blank_node().into())
+            }
+            PlanExpression::IsLiteral(e) => {
+                Some(self.eval_expression(e, tuple)?.is_literal().into())
+            }
             e => unimplemented!(),
         }
     }
