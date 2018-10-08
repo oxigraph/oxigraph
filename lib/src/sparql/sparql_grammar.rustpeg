@@ -46,7 +46,7 @@ SelectQuery -> Query = s:SelectClause _ d:DatasetClauses _ w:WhereClause _ g:Gro
 
 //[8]
 SubSelect -> GraphPattern = s:SelectClause _ w:WhereClause _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause { //TODO: Modifiers
-    build_select(s, w, g, h, o, l, v, state).into()
+    build_select(s, w, g, h, o, l, v, state)
 }
 
 //[9]
@@ -308,7 +308,7 @@ InlineData -> PartialGraphPattern = "VALUES"i _ p:DataBlock { PartialGraphPatter
 
 //[62]
 DataBlock -> GraphPattern = l:(InlineDataOneVar / InlineDataFull) {
-    GraphPattern::Data(l).into()
+    GraphPattern::Data(l)
 }
 
 //[63]

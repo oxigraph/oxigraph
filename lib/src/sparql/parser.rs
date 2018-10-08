@@ -264,7 +264,7 @@ mod grammar {
                 pv.extend(p.visible_variables().into_iter().cloned()) //TODO: is it really useful to do a projection?
             }
         }
-        let mut m = GraphPattern::from(p);
+        let mut m = p;
 
         //ORDER BY
         if let Some(order) = order_by {
