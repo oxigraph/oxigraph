@@ -481,7 +481,7 @@ impl<'a> Iterator for TestManifest<'a> {
                             Some(Term::BlankNode(list)) => {
                                 self.manifests_to_do.extend(
                                     RdfListIterator::iter(&self.graph, list.clone().into())
-                                        .flat_map(|m| match m {
+                                        .filter_map(|m| match m {
                                             Term::NamedNode(nm) => Some(nm.as_url().clone()),
                                             _ => None,
                                         }),

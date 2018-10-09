@@ -26,6 +26,11 @@ pub enum PlanNode {
         entry: Box<PlanNode>,
         children: Vec<PlanNode>,
     },
+    Extend {
+        child: Box<PlanNode>,
+        position: usize,
+        expression: PlanExpression,
+    },
     HashDeduplicate {
         child: Box<PlanNode>,
     },
@@ -222,7 +227,11 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                 }
             }
             GraphPattern::Graph(g, p) => unimplemented!(),
-            GraphPattern::Extend(p, v, e) => unimplemented!(),
+            GraphPattern::Extend(p, v, e) => PlanNode::Extend {
+                child: Box::new(self.build_for_graph_pattern(p, input, variables)?),
+                position: variable_key(variables, &v),
+                expression: self.build_for_expression(e, variables)?,
+            },
             GraphPattern::Minus(a, b) => unimplemented!(),
             GraphPattern::Service(n, p, s) => unimplemented!(),
             GraphPattern::AggregateJoin(g, a) => unimplemented!(),

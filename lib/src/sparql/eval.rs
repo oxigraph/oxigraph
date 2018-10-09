@@ -135,6 +135,27 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                     iter
                 }))
             }
+            PlanNode::Extend {
+                child,
+                position,
+                expression,
+            } => {
+                let eval = self.clone();
+                Box::new(
+                    self.eval_plan(*child, from)
+                        .filter_map(move |tuple| match tuple {
+                            Ok(mut tuple) => {
+                                put_value(
+                                    position,
+                                    eval.eval_expression(&expression, &tuple)?,
+                                    &mut tuple,
+                                );
+                                Some(Ok(tuple))
+                            }
+                            Err(error) => Some(Err(error)),
+                        }),
+                )
+            }
             PlanNode::HashDeduplicate { child } => {
                 let iter = self.eval_plan(*child, from);
                 let mut values = HashSet::with_capacity(iter.size_hint().0);
@@ -335,16 +356,17 @@ fn get_pattern_value(
 fn put_pattern_value(selector: &PatternValue, value: EncodedTerm, tuple: &mut EncodedTuple) {
     match selector {
         PatternValue::Constant(_) => (),
-        PatternValue::Variable(v) => {
-            let v = *v;
-            if tuple.len() > v {
-                tuple[v] = Some(value)
-            } else {
-                if tuple.len() < v {
-                    tuple.resize(v, None);
-                }
-                tuple.push(Some(value))
-            }
+        PatternValue::Variable(v) => put_value(*v, value, tuple),
+    }
+}
+
+fn put_value(position: usize, value: EncodedTerm, tuple: &mut EncodedTuple) {
+    if tuple.len() > position {
+        tuple[position] = Some(value)
+    } else {
+        if tuple.len() < position {
+            tuple.resize(position, None);
         }
+        tuple.push(Some(value))
     }
 }
