@@ -43,11 +43,12 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
         match node {
             PlanNode::Init => Box::new(once(Ok(from))),
             PlanNode::StaticBindings { tuples } => Box::new(tuples.into_iter().map(Ok)),
-            PlanNode::TriplePatternJoin {
+            PlanNode::QuadPatternJoin {
                 child,
                 subject,
                 predicate,
                 object,
+                graph_name,
             } => {
                 let eval = self.clone();
                 Box::new(
@@ -60,7 +61,9 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                                         get_pattern_value(&subject, &tuple),
                                         get_pattern_value(&predicate, &tuple),
                                         get_pattern_value(&object, &tuple),
-                                        None, //TODO
+                                        graph_name.and_then(|graph_name| {
+                                            get_pattern_value(&graph_name, &tuple)
+                                        }),
                                     ) {
                                     Ok(mut iter) => {
                                         if subject.is_var() && subject == predicate {
@@ -95,6 +98,13 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                                                 &mut new_tuple,
                                             );
                                             put_pattern_value(&object, quad.object, &mut new_tuple);
+                                            if let Some(graph_name) = graph_name {
+                                                put_pattern_value(
+                                                    &graph_name,
+                                                    quad.graph_name,
+                                                    &mut new_tuple,
+                                                );
+                                            }
                                             Ok(new_tuple)
                                         }))
                                     }

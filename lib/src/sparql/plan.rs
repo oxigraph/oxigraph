@@ -12,11 +12,12 @@ pub enum PlanNode {
     StaticBindings {
         tuples: Vec<EncodedTuple>,
     },
-    TriplePatternJoin {
+    QuadPatternJoin {
         child: Box<PlanNode>,
         subject: PatternValue,
         predicate: PatternValue,
         object: PatternValue,
+        graph_name: Option<PatternValue>,
     },
     Filter {
         child: Box<PlanNode>,
@@ -162,6 +163,7 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
             pattern,
             PlanNode::Init,
             &mut variables,
+            None,
         )?;
         Ok((plan, variables))
     }
@@ -171,13 +173,14 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
         pattern: &GraphPattern,
         input: PlanNode,
         variables: &mut Vec<Variable>,
+        graph_name: Option<PatternValue>,
     ) -> Result<PlanNode> {
         Ok(match pattern {
             GraphPattern::BGP(p) => {
                 let mut plan = input;
                 for pattern in p {
                     plan = match pattern {
-                        TripleOrPathPattern::Triple(pattern) => PlanNode::TriplePatternJoin {
+                        TripleOrPathPattern::Triple(pattern) => PlanNode::QuadPatternJoin {
                             child: Box::new(plan),
                             subject: self
                                 .pattern_value_from_term_or_variable(&pattern.subject, variables)?,
@@ -187,6 +190,7 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                             )?,
                             object: self
                                 .pattern_value_from_term_or_variable(&pattern.object, variables)?,
+                            graph_name,
                         },
                         TripleOrPathPattern::Path(pattern) => unimplemented!(),
                     }
@@ -195,12 +199,13 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
             }
             GraphPattern::Join(a, b) => self.build_for_graph_pattern(
                 b,
-                self.build_for_graph_pattern(a, input, variables)?,
+                self.build_for_graph_pattern(a, input, variables, graph_name)?,
                 variables,
+                graph_name,
             )?,
             GraphPattern::LeftJoin(a, b, e) => unimplemented!(),
             GraphPattern::Filter(e, p) => PlanNode::Filter {
-                child: Box::new(self.build_for_graph_pattern(p, input, variables)?),
+                child: Box::new(self.build_for_graph_pattern(p, input, variables, graph_name)?),
                 expression: self.build_for_expression(e, variables)?,
             },
             GraphPattern::Union(a, b) => {
@@ -218,6 +223,7 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                             a,
                             PlanNode::Init,
                             variables,
+                            graph_name,
                         )?),
                     }
                 }
@@ -226,9 +232,12 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                     children,
                 }
             }
-            GraphPattern::Graph(g, p) => unimplemented!(),
+            GraphPattern::Graph(g, p) => {
+                let graph_name = self.pattern_value_from_named_node_or_variable(g, variables)?;
+                self.build_for_graph_pattern(p, input, variables, Some(graph_name))?
+            }
             GraphPattern::Extend(p, v, e) => PlanNode::Extend {
-                child: Box::new(self.build_for_graph_pattern(p, input, variables)?),
+                child: Box::new(self.build_for_graph_pattern(p, input, variables, graph_name)?),
                 position: variable_key(variables, &v),
                 expression: self.build_for_expression(e, variables)?,
             },
@@ -238,12 +247,15 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
             GraphPattern::Data(bs) => PlanNode::StaticBindings {
                 tuples: self.encode_bindings(bs, variables)?,
             },
-            GraphPattern::OrderBy(l, o) => self.build_for_graph_pattern(l, input, variables)?, //TODO
+            GraphPattern::OrderBy(l, o) => {
+                self.build_for_graph_pattern(l, input, variables, graph_name)?
+            } //TODO
             GraphPattern::Project(l, new_variables) => PlanNode::Project {
                 child: Box::new(self.build_for_graph_pattern(
                     l,
                     input,
                     &mut new_variables.clone(),
+                    graph_name,
                 )?),
                 mapping: new_variables
                     .iter()
@@ -251,11 +263,13 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                     .collect(),
             },
             GraphPattern::Distinct(l) => PlanNode::HashDeduplicate {
-                child: Box::new(self.build_for_graph_pattern(l, input, variables)?),
+                child: Box::new(self.build_for_graph_pattern(l, input, variables, graph_name)?),
             },
-            GraphPattern::Reduced(l) => self.build_for_graph_pattern(l, input, variables)?,
+            GraphPattern::Reduced(l) => {
+                self.build_for_graph_pattern(l, input, variables, graph_name)?
+            }
             GraphPattern::Slice(l, start, length) => {
-                let mut plan = self.build_for_graph_pattern(l, input, variables)?;
+                let mut plan = self.build_for_graph_pattern(l, input, variables, graph_name)?;
                 if *start > 0 {
                     plan = PlanNode::Skip {
                         child: Box::new(plan),
