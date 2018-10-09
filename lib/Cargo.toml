@@ -25,6 +25,7 @@ byteorder = {version="1", features = ["i128"] }
 quick-xml = "0.13"
 ordered-float = "1"
 num-traits = "0.2"
+rust_decimal = "0.10"
 
 [build-dependencies]
 peg = "0.5"

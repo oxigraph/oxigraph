@@ -3,6 +3,7 @@ use model::vocab::rdf;
 use model::vocab::xsd;
 use model::*;
 use ordered_float::OrderedFloat;
+use rust_decimal::Decimal;
 use std::io::Read;
 use std::io::Write;
 use std::ops::Deref;
@@ -60,6 +61,7 @@ const TYPE_BOOLEAN_LITERAL_FALSE: u8 = 8;
 const TYPE_FLOAT_LITERAL: u8 = 9;
 const TYPE_DOUBLE_LITERAL: u8 = 10;
 const TYPE_INTEGER_LITERAL: u8 = 11;
+const TYPE_DECIMAL_LITERAL: u8 = 12;
 
 pub static ENCODED_DEFAULT_GRAPH: EncodedTerm = EncodedTerm::DefaultGraph {};
 pub static ENCODED_EMPTY_SIMPLE_LITERAL: EncodedTerm = EncodedTerm::SimpleLiteral {
@@ -106,6 +108,7 @@ pub enum EncodedTerm {
     FloatLiteral(OrderedFloat<f32>),
     DoubleLiteral(OrderedFloat<f64>),
     IntegerLiteral(i128),
+    DecimalLiteral(Decimal),
 }
 
 impl EncodedTerm {
@@ -133,6 +136,7 @@ impl EncodedTerm {
             EncodedTerm::FloatLiteral(_) => true,
             EncodedTerm::DoubleLiteral(_) => true,
             EncodedTerm::IntegerLiteral(_) => true,
+            EncodedTerm::DecimalLiteral(_) => true,
             _ => false,
         }
     }
@@ -150,6 +154,7 @@ impl EncodedTerm {
             EncodedTerm::FloatLiteral(..) => Some(ENCODED_XSD_FLOAT_NAMED_NODE),
             EncodedTerm::DoubleLiteral(..) => Some(ENCODED_XSD_DOUBLE_NAMED_NODE),
             EncodedTerm::IntegerLiteral(..) => Some(ENCODED_XSD_INTEGER_NAMED_NODE),
+            EncodedTerm::DecimalLiteral(..) => Some(ENCODED_XSD_DECIMAL_NAMED_NODE),
             _ => None,
         }
     }
@@ -168,6 +173,7 @@ impl EncodedTerm {
             EncodedTerm::FloatLiteral(_) => TYPE_FLOAT_LITERAL,
             EncodedTerm::DoubleLiteral(_) => TYPE_DOUBLE_LITERAL,
             EncodedTerm::IntegerLiteral(_) => TYPE_INTEGER_LITERAL,
+            EncodedTerm::DecimalLiteral(_) => TYPE_DECIMAL_LITERAL,
         }
     }
 }
@@ -193,6 +199,12 @@ impl From<f32> for EncodedTerm {
 impl From<f64> for EncodedTerm {
     fn from(value: f64) -> Self {
         EncodedTerm::DoubleLiteral(value.into())
+    }
+}
+
+impl From<Decimal> for EncodedTerm {
+    fn from(value: Decimal) -> Self {
+        EncodedTerm::DecimalLiteral(value)
     }
 }
 
@@ -264,6 +276,11 @@ impl<R: Read> TermReader for R {
             TYPE_INTEGER_LITERAL => Ok(EncodedTerm::IntegerLiteral(
                 self.read_i128::<NetworkEndian>()?,
             )),
+            TYPE_DECIMAL_LITERAL => {
+                let mut buffer = [0 as u8; 16];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::DecimalLiteral(Decimal::deserialize(buffer)))
+            }
             _ => Err("the term buffer has an invalid type id".into()),
         }
     }
@@ -347,6 +364,7 @@ impl<R: Write> TermWriter for R {
             EncodedTerm::FloatLiteral(value) => self.write_f32::<NetworkEndian>(*value)?,
             EncodedTerm::DoubleLiteral(value) => self.write_f64::<NetworkEndian>(*value)?,
             EncodedTerm::IntegerLiteral(value) => self.write_i128::<NetworkEndian>(value)?,
+            EncodedTerm::DecimalLiteral(value) => self.write_all(&value.serialize())?,
         }
         Ok(())
     }
@@ -431,6 +449,11 @@ impl<S: BytesStore> Encoder<S> {
                 .to_integer()
                 .ok_or_else(|| Error::from("integer literal without integer value"))?
                 .into()
+        } else if literal.is_decimal() {
+            literal
+                .to_decimal()
+                .ok_or_else(|| Error::from("decimal literal without decimal value"))?
+                .into()
         } else {
             EncodedTerm::TypedLiteral {
                 value_id: self.encode_str_value(&literal.value())?,
@@ -510,6 +533,7 @@ impl<S: BytesStore> Encoder<S> {
             EncodedTerm::FloatLiteral(value) => Ok(Literal::from(*value).into()),
             EncodedTerm::DoubleLiteral(value) => Ok(Literal::from(*value).into()),
             EncodedTerm::IntegerLiteral(value) => Ok(Literal::from(value).into()),
+            EncodedTerm::DecimalLiteral(value) => Ok(Literal::from(value).into()),
         }
     }
 

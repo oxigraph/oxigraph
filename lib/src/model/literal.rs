@@ -2,7 +2,11 @@ use model::named_node::NamedNode;
 use model::vocab::rdf;
 use model::vocab::xsd;
 use num_traits::identities::Zero;
+use num_traits::FromPrimitive;
+use num_traits::One;
+use num_traits::ToPrimitive;
 use ordered_float::OrderedFloat;
+use rust_decimal::Decimal;
 use std::borrow::Cow;
 use std::fmt;
 use std::option::Option;
@@ -42,6 +46,7 @@ enum LiteralContent {
     Float(OrderedFloat<f32>),
     Double(OrderedFloat<f64>),
     Integer(i128),
+    Decimal(Decimal),
     TypedLiteral { value: String, datatype: NamedNode },
 }
 
@@ -78,6 +83,11 @@ impl Literal {
                 Ok(value) => LiteralContent::Integer(value),
                 Err(_) => LiteralContent::TypedLiteral { value, datatype },
             }
+        } else if datatype == *xsd::DECIMAL {
+            match value.parse() {
+                Ok(value) => LiteralContent::Decimal(value),
+                Err(_) => LiteralContent::TypedLiteral { value, datatype },
+            }
         } else {
             LiteralContent::TypedLiteral { value, datatype }
         })
@@ -105,6 +115,7 @@ impl Literal {
             LiteralContent::Float(value) => Cow::Owned(value.to_string()),
             LiteralContent::Double(value) => Cow::Owned(value.to_string()),
             LiteralContent::Integer(value) => Cow::Owned(value.to_string()),
+            LiteralContent::Decimal(value) => Cow::Owned(value.to_string()),
             LiteralContent::TypedLiteral { ref value, .. } => Cow::Borrowed(value),
         }
     }
@@ -130,6 +141,7 @@ impl Literal {
             LiteralContent::Float(_) => &xsd::FLOAT,
             LiteralContent::Double(_) => &xsd::DOUBLE,
             LiteralContent::Integer(_) => &xsd::INTEGER,
+            LiteralContent::Decimal(_) => &xsd::DECIMAL,
             LiteralContent::TypedLiteral { ref datatype, .. } => datatype,
         }
     }
@@ -186,6 +198,15 @@ impl Literal {
         }
     }
 
+    /// Checks if the literal has the datatype [xsd:decimal](http://www.w3.org/2001/XMLSchema#decimal) or one of its sub datatype and is valid
+    pub fn is_decimal(&self) -> bool {
+        match self.0 {
+            LiteralContent::Integer(_) => true,
+            LiteralContent::Decimal(_) => true,
+            _ => false,
+        }
+    }
+
     /// Returns the [effective boolean value](https://www.w3.org/TR/sparql11-query/#ebv) of the literal if it exists
     pub fn to_bool(&self) -> Option<bool> {
         match self.0 {
@@ -197,6 +218,7 @@ impl Literal {
             LiteralContent::Float(value) => Some(!value.is_zero()),
             LiteralContent::Double(value) => Some(!value.is_zero()),
             LiteralContent::Integer(value) => Some(!value.is_zero()),
+            LiteralContent::Decimal(value) => Some(!value.is_zero()),
             LiteralContent::TypedLiteral { .. } => None,
         }
     }
@@ -204,10 +226,11 @@ impl Literal {
     /// Returns the value of this literal as an f32 if it exists following the rules of [XPath xsd:float casting](https://www.w3.org/TR/xpath-functions/#casting-to-float)
     pub fn to_float(&self) -> Option<f32> {
         match self.0 {
-            LiteralContent::Float(value) => Some(*value),
+            LiteralContent::Float(value) => value.to_f32(),
+            LiteralContent::Double(value) => value.to_f32(),
+            LiteralContent::Integer(value) => value.to_f32(),
+            LiteralContent::Decimal(value) => value.to_f32(),
             LiteralContent::Boolean(value) => Some(if value { 1. } else { 0. }),
-            LiteralContent::Double(value) => Some(*value as f32),
-            LiteralContent::Integer(value) => Some(value as f32),
             LiteralContent::SimpleLiteral(ref value) | LiteralContent::String(ref value) => {
                 value.parse().ok()
             }
@@ -218,9 +241,10 @@ impl Literal {
     /// Returns the value of this literal as an f64 if it exists following the rules of [XPath xsd:double casting](https://www.w3.org/TR/xpath-functions/#casting-to-double)
     pub fn to_double(&self) -> Option<f64> {
         match self.0 {
-            LiteralContent::Double(value) => Some(*value),
-            LiteralContent::Float(value) => Some(*value as f64),
-            LiteralContent::Integer(value) => Some(value as f64),
+            LiteralContent::Float(value) => value.to_f64(),
+            LiteralContent::Double(value) => value.to_f64(),
+            LiteralContent::Integer(value) => value.to_f64(),
+            LiteralContent::Decimal(value) => value.to_f64(),
             LiteralContent::Boolean(value) => Some(if value { 1. } else { 0. }),
             LiteralContent::SimpleLiteral(ref value) | LiteralContent::String(ref value) => {
                 value.parse().ok()
@@ -232,10 +256,30 @@ impl Literal {
     /// Returns the value of this literal as an i128 if it exists following the rules of [XPath xsd:integer casting](https://www.w3.org/TR/xpath-functions/#casting-to-integer)
     pub fn to_integer(&self) -> Option<i128> {
         match self.0 {
-            LiteralContent::Integer(value) => Some(value),
-            LiteralContent::Float(value) => Some(*value as i128),
-            LiteralContent::Double(value) => Some(*value as i128),
+            LiteralContent::Float(value) => value.to_i128(),
+            LiteralContent::Double(value) => value.to_i128(),
+            LiteralContent::Integer(value) => value.to_i128(),
+            LiteralContent::Decimal(value) => value.to_i128(),
             LiteralContent::Boolean(value) => Some(if value { 1 } else { 0 }),
+            LiteralContent::SimpleLiteral(ref value) | LiteralContent::String(ref value) => {
+                value.parse().ok()
+            }
+            _ => None,
+        }
+    }
+
+    /// Returns the value of this literal as Decimal if it exists following the rules of [XPath xsd:decimal casting](https://www.w3.org/TR/xpath-functions/#casting-to-decimal)
+    pub(crate) fn to_decimal(&self) -> Option<Decimal> {
+        match self.0 {
+            LiteralContent::Float(value) => Decimal::from_f32(*value),
+            LiteralContent::Double(value) => Decimal::from_f64(*value),
+            LiteralContent::Integer(value) => Decimal::from_i128(value),
+            LiteralContent::Decimal(value) => Some(value),
+            LiteralContent::Boolean(value) => Some(if value {
+                Decimal::one()
+            } else {
+                Decimal::zero()
+            }),
             LiteralContent::SimpleLiteral(ref value) | LiteralContent::String(ref value) => {
                 value.parse().ok()
             }
@@ -325,5 +369,11 @@ impl From<f32> for Literal {
 impl From<f64> for Literal {
     fn from(value: f64) -> Self {
         Literal(LiteralContent::Double(value.into()))
+    }
+}
+
+impl From<Decimal> for Literal {
+    fn from(value: Decimal) -> Self {
+        Literal(LiteralContent::Decimal(value))
     }
 }

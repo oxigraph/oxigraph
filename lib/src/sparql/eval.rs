@@ -1,4 +1,7 @@
 use num_traits::identities::Zero;
+use num_traits::FromPrimitive;
+use num_traits::ToPrimitive;
+use rust_decimal::Decimal;
 use sparql::algebra::*;
 use sparql::plan::*;
 use std::collections::HashSet;
@@ -245,32 +248,38 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 NumericBinaryOperands::Float(v1, v2) => (v1 + v2).into(),
                 NumericBinaryOperands::Double(v1, v2) => (v1 + v2).into(),
                 NumericBinaryOperands::Integer(v1, v2) => (v1 + v2).into(),
+                NumericBinaryOperands::Decimal(v1, v2) => (v1 + v2).into(),
             }),
             PlanExpression::Sub(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
                 NumericBinaryOperands::Float(v1, v2) => (v1 - v2).into(),
                 NumericBinaryOperands::Double(v1, v2) => (v1 - v2).into(),
                 NumericBinaryOperands::Integer(v1, v2) => (v1 - v2).into(),
+                NumericBinaryOperands::Decimal(v1, v2) => (v1 - v2).into(),
             }),
             PlanExpression::Mul(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
                 NumericBinaryOperands::Float(v1, v2) => (v1 * v2).into(),
                 NumericBinaryOperands::Double(v1, v2) => (v1 * v2).into(),
                 NumericBinaryOperands::Integer(v1, v2) => (v1 * v2).into(),
+                NumericBinaryOperands::Decimal(v1, v2) => (v1 * v2).into(),
             }),
             PlanExpression::Div(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
                 NumericBinaryOperands::Float(v1, v2) => (v1 / v2).into(),
                 NumericBinaryOperands::Double(v1, v2) => (v1 / v2).into(),
                 NumericBinaryOperands::Integer(v1, v2) => (v1 / v2).into(),
+                NumericBinaryOperands::Decimal(v1, v2) => (v1 / v2).into(),
             }),
             PlanExpression::UnaryPlus(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::FloatLiteral(value) => Some((*value).into()),
                 EncodedTerm::DoubleLiteral(value) => Some((*value).into()),
                 EncodedTerm::IntegerLiteral(value) => Some((value).into()),
+                EncodedTerm::DecimalLiteral(value) => Some((value).into()),
                 _ => None,
             },
             PlanExpression::UnaryMinus(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::FloatLiteral(value) => Some((-*value).into()),
                 EncodedTerm::DoubleLiteral(value) => Some((-*value).into()),
                 EncodedTerm::IntegerLiteral(value) => Some((-value).into()),
+                EncodedTerm::DecimalLiteral(value) => Some((-value).into()),
                 _ => None,
             },
             PlanExpression::UnaryNot(e) => self
@@ -329,6 +338,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             EncodedTerm::FloatLiteral(value) => Some(!value.is_zero()),
             EncodedTerm::DoubleLiteral(value) => Some(!value.is_zero()),
             EncodedTerm::IntegerLiteral(value) => Some(!value.is_zero()),
+            EncodedTerm::DecimalLiteral(value) => Some(!value.is_zero()),
             _ => None,
         }
     }
@@ -354,6 +364,9 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             EncodedTerm::IntegerLiteral(value) => {
                 self.store.insert_bytes(value.to_string().as_bytes()).ok()
             }
+            EncodedTerm::DecimalLiteral(value) => {
+                self.store.insert_bytes(value.to_string().as_bytes()).ok()
+            }
             _ => None,
         }
     }
@@ -369,19 +382,52 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             self.eval_expression(&e2, tuple)?,
         ) {
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(NumericBinaryOperands::Float(*v1, *v2))
+                Some(NumericBinaryOperands::Float(*v1, v2.to_f32()?))
             }
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(*v1 as f64, *v2))
+                Some(NumericBinaryOperands::Double(v1.to_f64()?, *v2))
+            }
+            (EncodedTerm::FloatLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
+                Some(NumericBinaryOperands::Float(*v1, v2.to_f32()?))
+            }
+            (EncodedTerm::FloatLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
+                Some(NumericBinaryOperands::Float(*v1, v2.to_f32()?))
             }
             (EncodedTerm::DoubleLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(*v1, *v2 as f64))
+                Some(NumericBinaryOperands::Double(*v1, v2.to_f64()?))
             }
             (EncodedTerm::DoubleLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
                 Some(NumericBinaryOperands::Double(*v1, *v2))
             }
+            (EncodedTerm::DoubleLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
+                Some(NumericBinaryOperands::Double(*v1, v2.to_f64()?))
+            }
+            (EncodedTerm::DoubleLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
+                Some(NumericBinaryOperands::Double(*v1, v2.to_f64()?))
+            }
+            (EncodedTerm::IntegerLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
+                Some(NumericBinaryOperands::Float(v1.to_f32()?, *v2))
+            }
+            (EncodedTerm::IntegerLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
+                Some(NumericBinaryOperands::Double(v1.to_f64()?, *v2))
+            }
             (EncodedTerm::IntegerLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
                 Some(NumericBinaryOperands::Integer(v1, v2))
+            }
+            (EncodedTerm::IntegerLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
+                Some(NumericBinaryOperands::Decimal(Decimal::from_i128(v1)?, v2))
+            }
+            (EncodedTerm::DecimalLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
+                Some(NumericBinaryOperands::Float(v1.to_f32()?, *v2))
+            }
+            (EncodedTerm::DecimalLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
+                Some(NumericBinaryOperands::Double(v1.to_f64()?, *v2))
+            }
+            (EncodedTerm::DecimalLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
+                Some(NumericBinaryOperands::Decimal(v1, Decimal::from_i128(v2)?))
+            }
+            (EncodedTerm::DecimalLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
+                Some(NumericBinaryOperands::Decimal(v1, v2))
             }
             _ => None,
         }
@@ -414,6 +460,7 @@ enum NumericBinaryOperands {
     Float(f32, f32),
     Double(f64, f64),
     Integer(i128, i128),
+    Decimal(Decimal, Decimal),
 }
 
 fn get_pattern_value(

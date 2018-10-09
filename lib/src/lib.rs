@@ -7,6 +7,7 @@ extern crate num_traits;
 extern crate ordered_float;
 extern crate quick_xml;
 extern crate rocksdb;
+extern crate rust_decimal;
 extern crate url;
 extern crate uuid;
 
