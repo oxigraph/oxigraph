@@ -241,6 +241,38 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             PlanExpression::LowerOrEq(a, b) => {
                 Some((self.eval_expression(a, tuple)? <= self.eval_expression(b, tuple)?).into())
             }
+            PlanExpression::Add(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
+                NumericBinaryOperands::Float(v1, v2) => (v1 + v2).into(),
+                NumericBinaryOperands::Double(v1, v2) => (v1 + v2).into(),
+                NumericBinaryOperands::Integer(v1, v2) => (v1 + v2).into(),
+            }),
+            PlanExpression::Sub(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
+                NumericBinaryOperands::Float(v1, v2) => (v1 - v2).into(),
+                NumericBinaryOperands::Double(v1, v2) => (v1 - v2).into(),
+                NumericBinaryOperands::Integer(v1, v2) => (v1 - v2).into(),
+            }),
+            PlanExpression::Mul(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
+                NumericBinaryOperands::Float(v1, v2) => (v1 * v2).into(),
+                NumericBinaryOperands::Double(v1, v2) => (v1 * v2).into(),
+                NumericBinaryOperands::Integer(v1, v2) => (v1 * v2).into(),
+            }),
+            PlanExpression::Div(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
+                NumericBinaryOperands::Float(v1, v2) => (v1 / v2).into(),
+                NumericBinaryOperands::Double(v1, v2) => (v1 / v2).into(),
+                NumericBinaryOperands::Integer(v1, v2) => (v1 / v2).into(),
+            }),
+            PlanExpression::UnaryPlus(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::FloatLiteral(value) => Some((*value).into()),
+                EncodedTerm::DoubleLiteral(value) => Some((*value).into()),
+                EncodedTerm::IntegerLiteral(value) => Some((value).into()),
+                _ => None,
+            },
+            PlanExpression::UnaryMinus(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::FloatLiteral(value) => Some((-*value).into()),
+                EncodedTerm::DoubleLiteral(value) => Some((-*value).into()),
+                EncodedTerm::IntegerLiteral(value) => Some((-value).into()),
+                _ => None,
+            },
             PlanExpression::UnaryNot(e) => self
                 .to_bool(self.eval_expression(e, tuple)?)
                 .map(|v| (!v).into()),
@@ -326,6 +358,35 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
         }
     }
 
+    fn parse_numeric_operands(
+        &self,
+        e1: &PlanExpression,
+        e2: &PlanExpression,
+        tuple: &[Option<EncodedTerm>],
+    ) -> Option<NumericBinaryOperands> {
+        match (
+            self.eval_expression(&e1, tuple)?,
+            self.eval_expression(&e2, tuple)?,
+        ) {
+            (EncodedTerm::FloatLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
+                Some(NumericBinaryOperands::Float(*v1, *v2))
+            }
+            (EncodedTerm::FloatLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
+                Some(NumericBinaryOperands::Double(*v1 as f64, *v2))
+            }
+            (EncodedTerm::DoubleLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
+                Some(NumericBinaryOperands::Double(*v1, *v2 as f64))
+            }
+            (EncodedTerm::DoubleLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
+                Some(NumericBinaryOperands::Double(*v1, *v2))
+            }
+            (EncodedTerm::IntegerLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
+                Some(NumericBinaryOperands::Integer(v1, v2))
+            }
+            _ => None,
+        }
+    }
+
     fn decode_bindings(
         &self,
         iter: EncodedTuplesIterator,
@@ -347,6 +408,12 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             })),
         )
     }
+}
+
+enum NumericBinaryOperands {
+    Float(f32, f32),
+    Double(f64, f64),
+    Integer(i128, i128),
 }
 
 fn get_pattern_value(
