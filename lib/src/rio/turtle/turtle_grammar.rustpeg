@@ -4,6 +4,7 @@ use std::char;
 use model::vocab::rdf;
 use model::vocab::xsd;
 use std::iter;
+use std::str::FromStr;
 use rio::utils::unescape_unicode_codepoints;
 
 #![arguments(state: &mut ParserState, buffer: &mut Vec<Triple>)]
@@ -120,7 +121,10 @@ collection_value -> Term = o:object_value _ { o }
 
 //[16]
 NumericLiteral -> Literal =
-    d:$(DOUBLE) { Literal::new_typed_literal(d, xsd::DOUBLE.clone()) } /
+    d:$(DOUBLE) {? match f64::from_str(d) {
+        Ok(value) => Ok(value.into()),
+        Err(_) => Err("Invalid xsd:double")
+    } } /
     d:$(DECIMAL) { Literal::new_typed_literal(d, xsd::DECIMAL.clone()) } /
     i:$(INTEGER) { Literal::new_typed_literal(i, xsd::INTEGER.clone()) }
 

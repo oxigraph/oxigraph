@@ -2,6 +2,7 @@ use byteorder::{NetworkEndian, ReadBytesExt, WriteBytesExt};
 use model::vocab::rdf;
 use model::vocab::xsd;
 use model::*;
+use ordered_float::OrderedFloat;
 use std::io::Read;
 use std::io::Write;
 use std::ops::Deref;
@@ -56,6 +57,9 @@ const TYPE_TYPED_LITERAL_ID: u8 = 5;
 const TYPE_STRING_LITERAL: u8 = 6;
 const TYPE_BOOLEAN_LITERAL_TRUE: u8 = 7;
 const TYPE_BOOLEAN_LITERAL_FALSE: u8 = 8;
+const TYPE_FLOAT_LITERAL: u8 = 9;
+const TYPE_DOUBLE_LITERAL: u8 = 10;
+const TYPE_INTEGER_LITERAL: u8 = 11;
 
 pub static ENCODED_DEFAULT_GRAPH: EncodedTerm = EncodedTerm::DefaultGraph {};
 pub static ENCODED_EMPTY_SIMPLE_LITERAL: EncodedTerm = EncodedTerm::SimpleLiteral {
@@ -99,23 +103,12 @@ pub enum EncodedTerm {
     TypedLiteral { value_id: u64, datatype_id: u64 },
     StringLiteral { value_id: u64 },
     BooleanLiteral(bool),
+    FloatLiteral(OrderedFloat<f32>),
+    DoubleLiteral(OrderedFloat<f64>),
+    IntegerLiteral(i128),
 }
 
 impl EncodedTerm {
-    fn type_id(&self) -> u8 {
-        match self {
-            EncodedTerm::DefaultGraph { .. } => TYPE_DEFAULT_GRAPH_ID,
-            EncodedTerm::NamedNode { .. } => TYPE_NAMED_NODE_ID,
-            EncodedTerm::BlankNode(_) => TYPE_BLANK_NODE_ID,
-            EncodedTerm::SimpleLiteral { .. } => TYPE_SIMPLE_LITERAL_ID,
-            EncodedTerm::LangStringLiteral { .. } => TYPE_LANG_STRING_LITERAL_ID,
-            EncodedTerm::TypedLiteral { .. } => TYPE_TYPED_LITERAL_ID,
-            EncodedTerm::StringLiteral { .. } => TYPE_STRING_LITERAL,
-            EncodedTerm::BooleanLiteral(true) => TYPE_BOOLEAN_LITERAL_TRUE,
-            EncodedTerm::BooleanLiteral(false) => TYPE_BOOLEAN_LITERAL_FALSE,
-        }
-    }
-
     pub fn is_named_node(&self) -> bool {
         match self {
             EncodedTerm::NamedNode { .. } => true,
@@ -137,14 +130,69 @@ impl EncodedTerm {
             EncodedTerm::TypedLiteral { .. } => true,
             EncodedTerm::StringLiteral { .. } => true,
             EncodedTerm::BooleanLiteral(_) => true,
+            EncodedTerm::FloatLiteral(_) => true,
+            EncodedTerm::DoubleLiteral(_) => true,
+            EncodedTerm::IntegerLiteral(_) => true,
             _ => false,
+        }
+    }
+
+    pub fn datatype(&self) -> Option<EncodedTerm> {
+        match self {
+            EncodedTerm::SimpleLiteral { .. } | EncodedTerm::StringLiteral { .. } => {
+                Some(ENCODED_XSD_STRING_NAMED_NODE)
+            }
+            EncodedTerm::LangStringLiteral { .. } => Some(ENCODED_RDF_LANG_STRING_NAMED_NODE),
+            EncodedTerm::TypedLiteral { datatype_id, .. } => Some(EncodedTerm::NamedNode {
+                iri_id: *datatype_id,
+            }),
+            EncodedTerm::BooleanLiteral(..) => Some(ENCODED_XSD_BOOLEAN_NAMED_NODE),
+            EncodedTerm::FloatLiteral(..) => Some(ENCODED_XSD_FLOAT_NAMED_NODE),
+            EncodedTerm::DoubleLiteral(..) => Some(ENCODED_XSD_DOUBLE_NAMED_NODE),
+            EncodedTerm::IntegerLiteral(..) => Some(ENCODED_XSD_INTEGER_NAMED_NODE),
+            _ => None,
+        }
+    }
+
+    fn type_id(&self) -> u8 {
+        match self {
+            EncodedTerm::DefaultGraph { .. } => TYPE_DEFAULT_GRAPH_ID,
+            EncodedTerm::NamedNode { .. } => TYPE_NAMED_NODE_ID,
+            EncodedTerm::BlankNode(_) => TYPE_BLANK_NODE_ID,
+            EncodedTerm::SimpleLiteral { .. } => TYPE_SIMPLE_LITERAL_ID,
+            EncodedTerm::LangStringLiteral { .. } => TYPE_LANG_STRING_LITERAL_ID,
+            EncodedTerm::TypedLiteral { .. } => TYPE_TYPED_LITERAL_ID,
+            EncodedTerm::StringLiteral { .. } => TYPE_STRING_LITERAL,
+            EncodedTerm::BooleanLiteral(true) => TYPE_BOOLEAN_LITERAL_TRUE,
+            EncodedTerm::BooleanLiteral(false) => TYPE_BOOLEAN_LITERAL_FALSE,
+            EncodedTerm::FloatLiteral(_) => TYPE_FLOAT_LITERAL,
+            EncodedTerm::DoubleLiteral(_) => TYPE_DOUBLE_LITERAL,
+            EncodedTerm::IntegerLiteral(_) => TYPE_INTEGER_LITERAL,
         }
     }
 }
 
 impl From<bool> for EncodedTerm {
-    fn from(val: bool) -> Self {
-        EncodedTerm::BooleanLiteral(val)
+    fn from(value: bool) -> Self {
+        EncodedTerm::BooleanLiteral(value)
+    }
+}
+
+impl From<i128> for EncodedTerm {
+    fn from(value: i128) -> Self {
+        EncodedTerm::IntegerLiteral(value)
+    }
+}
+
+impl From<f32> for EncodedTerm {
+    fn from(value: f32) -> Self {
+        EncodedTerm::FloatLiteral(value.into())
+    }
+}
+
+impl From<f64> for EncodedTerm {
+    fn from(value: f64) -> Self {
+        EncodedTerm::DoubleLiteral(value.into())
     }
 }
 
@@ -207,6 +255,15 @@ impl<R: Read> TermReader for R {
             }),
             TYPE_BOOLEAN_LITERAL_TRUE => Ok(EncodedTerm::BooleanLiteral(true)),
             TYPE_BOOLEAN_LITERAL_FALSE => Ok(EncodedTerm::BooleanLiteral(false)),
+            TYPE_FLOAT_LITERAL => Ok(EncodedTerm::FloatLiteral(OrderedFloat(
+                self.read_f32::<NetworkEndian>()?,
+            ))),
+            TYPE_DOUBLE_LITERAL => Ok(EncodedTerm::DoubleLiteral(OrderedFloat(
+                self.read_f64::<NetworkEndian>()?,
+            ))),
+            TYPE_INTEGER_LITERAL => Ok(EncodedTerm::IntegerLiteral(
+                self.read_i128::<NetworkEndian>()?,
+            )),
             _ => Err("the term buffer has an invalid type id".into()),
         }
     }
@@ -287,6 +344,9 @@ impl<R: Write> TermWriter for R {
                 self.write_u64::<NetworkEndian>(value_id)?;
             }
             EncodedTerm::BooleanLiteral(_) => {}
+            EncodedTerm::FloatLiteral(value) => self.write_f32::<NetworkEndian>(*value)?,
+            EncodedTerm::DoubleLiteral(value) => self.write_f64::<NetworkEndian>(*value)?,
+            EncodedTerm::IntegerLiteral(value) => self.write_i128::<NetworkEndian>(value)?,
         }
         Ok(())
     }
@@ -352,11 +412,25 @@ impl<S: BytesStore> Encoder<S> {
                 value_id: self.encode_str_value(&literal.value())?,
             }
         } else if literal.is_boolean() {
-            EncodedTerm::BooleanLiteral(
-                literal
-                    .to_bool()
-                    .ok_or_else(|| Error::from("boolean literal without boolean value"))?,
-            )
+            literal
+                .to_bool()
+                .ok_or_else(|| Error::from("boolean literal without boolean value"))?
+                .into()
+        } else if literal.is_float() {
+            literal
+                .to_float()
+                .ok_or_else(|| Error::from("float literal without float value"))?
+                .into()
+        } else if literal.is_double() {
+            literal
+                .to_double()
+                .ok_or_else(|| Error::from("double literal without double value"))?
+                .into()
+        } else if literal.is_integer() {
+            literal
+                .to_integer()
+                .ok_or_else(|| Error::from("integer literal without integer value"))?
+                .into()
         } else {
             EncodedTerm::TypedLiteral {
                 value_id: self.encode_str_value(&literal.value())?,
@@ -433,6 +507,9 @@ impl<S: BytesStore> Encoder<S> {
                 Ok(Literal::from(self.decode_str_value(value_id)?).into())
             }
             EncodedTerm::BooleanLiteral(value) => Ok(Literal::from(value).into()),
+            EncodedTerm::FloatLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::DoubleLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::IntegerLiteral(value) => Ok(Literal::from(value).into()),
         }
     }
 
@@ -541,8 +618,10 @@ mod test {
             NamedNode::from_str("http://bar.com").unwrap().into(),
             NamedNode::from_str("http://foo.com").unwrap().into(),
             BlankNode::default().into(),
+            Literal::new_simple_literal("foo").into(),
             Literal::from(true).into(),
             Literal::from(1.2).into(),
+            Literal::from(1).into(),
             Literal::from("foo").into(),
             Literal::new_language_tagged_literal("foo", "fr").into(),
         ];

@@ -1,3 +1,4 @@
+use num_traits::identities::Zero;
 use sparql::algebra::*;
 use sparql::plan::*;
 use std::collections::HashSet;
@@ -223,16 +224,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 }
                 _ => None,
             },
-            PlanExpression::Datatype(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::SimpleLiteral { .. } => Some(ENCODED_XSD_STRING_NAMED_NODE),
-                EncodedTerm::LangStringLiteral { .. } => Some(ENCODED_RDF_LANG_STRING_NAMED_NODE),
-                EncodedTerm::TypedLiteral { datatype_id, .. } => Some(EncodedTerm::NamedNode {
-                    iri_id: datatype_id,
-                }),
-                EncodedTerm::StringLiteral { .. } => Some(ENCODED_XSD_STRING_NAMED_NODE),
-                EncodedTerm::BooleanLiteral(..) => Some(ENCODED_XSD_BOOLEAN_NAMED_NODE),
-                _ => None,
-            },
+            PlanExpression::Datatype(e) => self.eval_expression(e, tuple)?.datatype(),
             PlanExpression::Bound(v) => Some((*v >= tuple.len() && tuple[*v].is_some()).into()),
             PlanExpression::IRI(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::NamedNode { iri_id } => Some(EncodedTerm::NamedNode { iri_id }),
@@ -271,6 +263,9 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             EncodedTerm::BooleanLiteral(value) => Some(value),
             EncodedTerm::SimpleLiteral { .. } => Some(term != ENCODED_EMPTY_SIMPLE_LITERAL),
             EncodedTerm::StringLiteral { .. } => Some(term != ENCODED_EMPTY_STRING_LITERAL),
+            EncodedTerm::FloatLiteral(value) => Some(!value.is_zero()),
+            EncodedTerm::DoubleLiteral(value) => Some(!value.is_zero()),
+            EncodedTerm::IntegerLiteral(value) => Some(!value.is_zero()),
             _ => None,
         }
     }
@@ -278,14 +273,24 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
     fn to_string_id(&self, term: EncodedTerm) -> Option<u64> {
         match term {
             EncodedTerm::NamedNode { iri_id } => Some(iri_id),
-            EncodedTerm::SimpleLiteral { value_id } => Some(value_id),
+            EncodedTerm::SimpleLiteral { value_id } | EncodedTerm::StringLiteral { value_id } => {
+                Some(value_id)
+            }
             EncodedTerm::LangStringLiteral { value_id, .. } => Some(value_id),
             EncodedTerm::TypedLiteral { value_id, .. } => Some(value_id),
-            EncodedTerm::StringLiteral { value_id } => Some(value_id),
             EncodedTerm::BooleanLiteral(value) => self
                 .store
                 .insert_bytes(if value { b"true" } else { b"false" })
                 .ok(),
+            EncodedTerm::FloatLiteral(value) => {
+                self.store.insert_bytes(value.to_string().as_bytes()).ok()
+            }
+            EncodedTerm::DoubleLiteral(value) => {
+                self.store.insert_bytes(value.to_string().as_bytes()).ok()
+            }
+            EncodedTerm::IntegerLiteral(value) => {
+                self.store.insert_bytes(value.to_string().as_bytes()).ok()
+            }
             _ => None,
         }
     }

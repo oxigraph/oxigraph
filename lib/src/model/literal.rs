@@ -1,6 +1,8 @@
 use model::named_node::NamedNode;
 use model::vocab::rdf;
 use model::vocab::xsd;
+use num_traits::identities::Zero;
+use ordered_float::OrderedFloat;
 use std::borrow::Cow;
 use std::fmt;
 use std::option::Option;
@@ -31,12 +33,15 @@ use utils::Escaper;
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct Literal(LiteralContent);
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(PartialEq, Eq, Ord, PartialOrd, Debug, Clone, Hash)]
 enum LiteralContent {
     SimpleLiteral(String),
     String(String),
     LanguageTaggedString { value: String, language: String },
     Boolean(bool),
+    Float(OrderedFloat<f32>),
+    Double(OrderedFloat<f64>),
+    Integer(i128),
     TypedLiteral { value: String, datatype: NamedNode },
 }
 
@@ -50,17 +55,32 @@ impl Literal {
     pub fn new_typed_literal(value: impl Into<String>, datatype: impl Into<NamedNode>) -> Self {
         let value = value.into();
         let datatype = datatype.into();
-        if datatype == *xsd::BOOLEAN {
+        Literal(if datatype == *xsd::BOOLEAN {
             match value.as_str() {
-                "true" | "1" => Literal(LiteralContent::Boolean(true)),
-                "false" | "0" => Literal(LiteralContent::Boolean(false)),
-                _ => Literal(LiteralContent::TypedLiteral { value, datatype }),
+                "true" | "1" => LiteralContent::Boolean(true),
+                "false" | "0" => LiteralContent::Boolean(false),
+                _ => LiteralContent::TypedLiteral { value, datatype },
             }
         } else if datatype == *xsd::STRING {
-            Literal(LiteralContent::String(value))
+            LiteralContent::String(value)
+        } else if datatype == *xsd::FLOAT {
+            match value.parse() {
+                Ok(value) => LiteralContent::Float(OrderedFloat(value)),
+                Err(_) => LiteralContent::TypedLiteral { value, datatype },
+            }
+        } else if datatype == *xsd::DOUBLE {
+            match value.parse() {
+                Ok(value) => LiteralContent::Double(OrderedFloat(value)),
+                Err(_) => LiteralContent::TypedLiteral { value, datatype },
+            }
+        } else if datatype == *xsd::INTEGER {
+            match value.parse() {
+                Ok(value) => LiteralContent::Integer(value),
+                Err(_) => LiteralContent::TypedLiteral { value, datatype },
+            }
         } else {
-            Literal(LiteralContent::TypedLiteral { value, datatype })
-        }
+            LiteralContent::TypedLiteral { value, datatype }
+        })
     }
 
     /// Builds a RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
@@ -77,10 +97,14 @@ impl Literal {
     /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form)
     pub fn value(&self) -> Cow<String> {
         match self.0 {
-            LiteralContent::SimpleLiteral(ref value) => Cow::Borrowed(value),
-            LiteralContent::String(ref value) => Cow::Borrowed(value),
+            LiteralContent::SimpleLiteral(ref value) | LiteralContent::String(ref value) => {
+                Cow::Borrowed(value)
+            }
             LiteralContent::LanguageTaggedString { ref value, .. } => Cow::Borrowed(value),
             LiteralContent::Boolean(value) => Cow::Owned(value.to_string()),
+            LiteralContent::Float(value) => Cow::Owned(value.to_string()),
+            LiteralContent::Double(value) => Cow::Owned(value.to_string()),
+            LiteralContent::Integer(value) => Cow::Owned(value.to_string()),
             LiteralContent::TypedLiteral { ref value, .. } => Cow::Borrowed(value),
         }
     }
@@ -100,10 +124,12 @@ impl Literal {
     /// The datatype of [simple literals](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal) is [xsd:string](http://www.w3.org/2001/XMLSchema#string).
     pub fn datatype(&self) -> &NamedNode {
         match self.0 {
-            LiteralContent::SimpleLiteral(_) => &xsd::STRING,
-            LiteralContent::String(_) => &xsd::STRING,
+            LiteralContent::SimpleLiteral(_) | LiteralContent::String(_) => &xsd::STRING,
             LiteralContent::LanguageTaggedString { .. } => &rdf::LANG_STRING,
             LiteralContent::Boolean(_) => &xsd::BOOLEAN,
+            LiteralContent::Float(_) => &xsd::FLOAT,
+            LiteralContent::Double(_) => &xsd::DOUBLE,
+            LiteralContent::Integer(_) => &xsd::INTEGER,
             LiteralContent::TypedLiteral { ref datatype, .. } => datatype,
         }
     }
@@ -128,7 +154,7 @@ impl Literal {
         }
     }
 
-    /// Checks if the literal has the datatype [xsd:boolean](http://www.w3.org/2001/XMLSchema#string) and is valid
+    /// Checks if the literal has the datatype [xsd:boolean](http://www.w3.org/2001/XMLSchema#boolean) and is valid
     pub fn is_boolean(&self) -> bool {
         match self.0 {
             LiteralContent::Boolean(_) => true,
@@ -136,15 +162,84 @@ impl Literal {
         }
     }
 
+    /// Checks if the literal has the datatype [xsd:float](http://www.w3.org/2001/XMLSchema#float) and is valid
+    pub fn is_float(&self) -> bool {
+        match self.0 {
+            LiteralContent::Float(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Checks if the literal has the datatype [xsd:double](http://www.w3.org/2001/XMLSchema#double) and is valid
+    pub fn is_double(&self) -> bool {
+        match self.0 {
+            LiteralContent::Double(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Checks if the literal has the datatype [xsd:integer](http://www.w3.org/2001/XMLSchema#integer) and is valid
+    pub fn is_integer(&self) -> bool {
+        match self.0 {
+            LiteralContent::Integer(_) => true,
+            _ => false,
+        }
+    }
+
     /// Returns the [effective boolean value](https://www.w3.org/TR/sparql11-query/#ebv) of the literal if it exists
     pub fn to_bool(&self) -> Option<bool> {
-        //TODO: numeric literals
         match self.0 {
-            LiteralContent::SimpleLiteral(ref value) => Some(!value.is_empty()),
-            LiteralContent::String(ref value) => Some(!value.is_empty()),
+            LiteralContent::SimpleLiteral(ref value) | LiteralContent::String(ref value) => {
+                Some(!value.is_empty())
+            }
             LiteralContent::LanguageTaggedString { .. } => None,
             LiteralContent::Boolean(value) => Some(value),
+            LiteralContent::Float(value) => Some(!value.is_zero()),
+            LiteralContent::Double(value) => Some(!value.is_zero()),
+            LiteralContent::Integer(value) => Some(!value.is_zero()),
             LiteralContent::TypedLiteral { .. } => None,
+        }
+    }
+
+    /// Returns the value of this literal as an f32 if it exists following the rules of [XPath xsd:float casting](https://www.w3.org/TR/xpath-functions/#casting-to-float)
+    pub fn to_float(&self) -> Option<f32> {
+        match self.0 {
+            LiteralContent::Float(value) => Some(*value),
+            LiteralContent::Boolean(value) => Some(if value { 1. } else { 0. }),
+            LiteralContent::Double(value) => Some(*value as f32),
+            LiteralContent::Integer(value) => Some(value as f32),
+            LiteralContent::SimpleLiteral(ref value) | LiteralContent::String(ref value) => {
+                value.parse().ok()
+            }
+            _ => None,
+        }
+    }
+
+    /// Returns the value of this literal as an f64 if it exists following the rules of [XPath xsd:double casting](https://www.w3.org/TR/xpath-functions/#casting-to-double)
+    pub fn to_double(&self) -> Option<f64> {
+        match self.0 {
+            LiteralContent::Double(value) => Some(*value),
+            LiteralContent::Float(value) => Some(*value as f64),
+            LiteralContent::Integer(value) => Some(value as f64),
+            LiteralContent::Boolean(value) => Some(if value { 1. } else { 0. }),
+            LiteralContent::SimpleLiteral(ref value) | LiteralContent::String(ref value) => {
+                value.parse().ok()
+            }
+            _ => None,
+        }
+    }
+
+    /// Returns the value of this literal as an i128 if it exists following the rules of [XPath xsd:integer casting](https://www.w3.org/TR/xpath-functions/#casting-to-integer)
+    pub fn to_integer(&self) -> Option<i128> {
+        match self.0 {
+            LiteralContent::Integer(value) => Some(value),
+            LiteralContent::Float(value) => Some(*value as i128),
+            LiteralContent::Double(value) => Some(*value as i128),
+            LiteralContent::Boolean(value) => Some(if value { 1 } else { 0 }),
+            LiteralContent::SimpleLiteral(ref value) | LiteralContent::String(ref value) => {
+                value.parse().ok()
+            }
+            _ => None,
         }
     }
 }
@@ -179,29 +274,56 @@ impl From<bool> for Literal {
     }
 }
 
-impl From<usize> for Literal {
-    fn from(value: usize) -> Self {
-        Literal(LiteralContent::TypedLiteral {
-            value: value.to_string(),
-            datatype: xsd::INTEGER.clone(),
-        })
+impl From<i128> for Literal {
+    fn from(value: i128) -> Self {
+        Literal(LiteralContent::Integer(value))
+    }
+}
+
+impl From<i64> for Literal {
+    fn from(value: i64) -> Self {
+        Literal(LiteralContent::Integer(value as i128))
+    }
+}
+
+impl From<i32> for Literal {
+    fn from(value: i32) -> Self {
+        Literal(LiteralContent::Integer(value as i128))
+    }
+}
+
+impl From<i16> for Literal {
+    fn from(value: i16) -> Self {
+        Literal(LiteralContent::Integer(value as i128))
+    }
+}
+
+impl From<u64> for Literal {
+    fn from(value: u64) -> Self {
+        Literal(LiteralContent::Integer(value as i128))
+    }
+}
+
+impl From<u32> for Literal {
+    fn from(value: u32) -> Self {
+        Literal(LiteralContent::Integer(value as i128))
+    }
+}
+
+impl From<u16> for Literal {
+    fn from(value: u16) -> Self {
+        Literal(LiteralContent::Integer(value as i128))
     }
 }
 
 impl From<f32> for Literal {
     fn from(value: f32) -> Self {
-        Literal(LiteralContent::TypedLiteral {
-            value: value.to_string(),
-            datatype: xsd::FLOAT.clone(),
-        })
+        Literal(LiteralContent::Float(value.into()))
     }
 }
 
 impl From<f64> for Literal {
     fn from(value: f64) -> Self {
-        Literal(LiteralContent::TypedLiteral {
-            value: value.to_string(),
-            datatype: xsd::DOUBLE.clone(),
-        })
+        Literal(LiteralContent::Double(value.into()))
     }
 }

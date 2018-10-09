@@ -21,8 +21,10 @@ rocksdb = "0.10"
 url = "1"
 uuid = { version = "0.7", features = ["v4"] }
 bzip2 = "0.3"
-byteorder = "1"
+byteorder = {version="1", features = ["i128"] }
 quick-xml = "0.13"
+ordered-float = "1"
+num-traits = "0.2"
 
 [build-dependencies]
 peg = "0.5"

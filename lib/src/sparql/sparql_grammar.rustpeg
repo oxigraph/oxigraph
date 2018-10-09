@@ -871,20 +871,29 @@ NumericLiteral -> Literal  = NumericLiteralUnsigned / NumericLiteralPositive / N
 
 //[131]
 NumericLiteralUnsigned -> Literal =
-    d:$(DOUBLE) { Literal::new_typed_literal(d, xsd::DOUBLE.clone()) } /
+    d:$(DOUBLE) {? match f64::from_str(d) {
+        Ok(value) => Ok(value.into()),
+        Err(_) => Err("Invalid xsd:double")
+    } } /
     d:$(DECIMAL) { Literal::new_typed_literal(d, xsd::DECIMAL.clone()) } /
     i:$(INTEGER) { Literal::new_typed_literal(i, xsd::INTEGER.clone()) }
 
 //[132]
 NumericLiteralPositive -> Literal =
-    d:$(DOUBLE_POSITIVE) { Literal::new_typed_literal(d, xsd::DOUBLE.clone()) } /
+    d:$(DOUBLE_POSITIVE) {? match f64::from_str(d) {
+        Ok(value) => Ok(value.into()),
+        Err(_) => Err("Invalid xsd:double")
+    } } /
     d:$(DECIMAL_POSITIVE) { Literal::new_typed_literal(d, xsd::DECIMAL.clone()) } /
     i:$(INTEGER_POSITIVE) { Literal::new_typed_literal(i, xsd::INTEGER.clone()) }
 
 
 //[133]
 NumericLiteralNegative -> Literal =
-    d:$(DOUBLE_NEGATIVE) { Literal::new_typed_literal(d, xsd::DOUBLE.clone()) } /
+    d:$(DOUBLE_NEGATIVE) {? match f64::from_str(d) {
+        Ok(value) => Ok(value.into()),
+        Err(_) => Err("Invalid xsd:double")
+    } } /
     d:$(DECIMAL_NEGATIVE) { Literal::new_typed_literal(d, xsd::DECIMAL.clone()) } /
     i:$(INTEGER_NEGATIVE) { Literal::new_typed_literal(i, xsd::INTEGER.clone()) }
 

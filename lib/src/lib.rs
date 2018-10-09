@@ -3,6 +3,8 @@ extern crate byteorder;
 extern crate error_chain;
 #[macro_use]
 extern crate lazy_static;
+extern crate num_traits;
+extern crate ordered_float;
 extern crate quick_xml;
 extern crate rocksdb;
 extern crate url;

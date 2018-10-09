@@ -88,6 +88,13 @@ fn sparql_w3c_query_evaluation_testsuite() {
             .unwrap(),
     ];
     let test_blacklist = vec![
+        //Multiple writing of the same xsd:integer. Our system does strong normalization.
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-1",
+        ).unwrap(),
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-9",
+        ).unwrap(),
         //With LeftJoin
         NamedNode::from_str(
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-4",
