@@ -86,6 +86,7 @@ fn sparql_w3c_query_evaluation_testsuite() {
             .unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest.ttl")
             .unwrap(),
+        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/cast/manifest.ttl").unwrap(),
     ];
     let test_blacklist = vec![
         //Multiple writing of the same xsd:integer. Our system does strong normalization.

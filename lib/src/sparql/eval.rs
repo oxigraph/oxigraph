@@ -1,12 +1,17 @@
+use chrono::DateTime;
+use chrono::NaiveDateTime;
 use num_traits::identities::Zero;
 use num_traits::FromPrimitive;
+use num_traits::One;
 use num_traits::ToPrimitive;
+use ordered_float::OrderedFloat;
 use rust_decimal::Decimal;
 use sparql::algebra::*;
 use sparql::plan::*;
 use std::collections::HashSet;
 use std::iter::once;
 use std::iter::Iterator;
+use std::str;
 use std::sync::Arc;
 use store::encoded::EncodedQuadsStore;
 use store::numeric_encoder::*;
@@ -318,9 +323,108 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             PlanExpression::IsLiteral(e) => {
                 Some(self.eval_expression(e, tuple)?.is_literal().into())
             }
-            PlanExpression::BooleanCast(e) => {
-                Some(self.to_bool(self.eval_expression(e, tuple)?)?.into())
-            }
+            PlanExpression::BooleanCast(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::BooleanLiteral(value) => Some(value.into()),
+                EncodedTerm::SimpleLiteral { value_id }
+                | EncodedTerm::StringLiteral { value_id } => {
+                    match &*self.store.get_bytes(value_id).ok()?? {
+                        b"true" | b"1" => Some(true.into()),
+                        b"false" | b"0" => Some(false.into()),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            },
+            PlanExpression::DoubleCast(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::FloatLiteral(value) => Some(value.to_f64()?.into()),
+                EncodedTerm::DoubleLiteral(value) => Some(value.to_f64()?.into()),
+                EncodedTerm::IntegerLiteral(value) => Some(value.to_f64()?.into()),
+                EncodedTerm::DecimalLiteral(value) => Some(value.to_f64()?.into()),
+                EncodedTerm::BooleanLiteral(value) => {
+                    Some(if value { 1. as f64 } else { 0. }.into())
+                }
+                EncodedTerm::SimpleLiteral { value_id }
+                | EncodedTerm::StringLiteral { value_id } => {
+                    Some(EncodedTerm::DoubleLiteral(OrderedFloat(
+                        str::from_utf8(&self.store.get_bytes(value_id).ok()??)
+                            .ok()?
+                            .parse()
+                            .ok()?,
+                    )))
+                }
+                _ => None,
+            },
+            PlanExpression::FloatCast(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::FloatLiteral(value) => Some(value.to_f32()?.into()),
+                EncodedTerm::DoubleLiteral(value) => Some(value.to_f32()?.into()),
+                EncodedTerm::IntegerLiteral(value) => Some(value.to_f32()?.into()),
+                EncodedTerm::DecimalLiteral(value) => Some(value.to_f32()?.into()),
+                EncodedTerm::BooleanLiteral(value) => {
+                    Some(if value { 1. as f32 } else { 0. }.into())
+                }
+                EncodedTerm::SimpleLiteral { value_id }
+                | EncodedTerm::StringLiteral { value_id } => {
+                    Some(EncodedTerm::FloatLiteral(OrderedFloat(
+                        str::from_utf8(&self.store.get_bytes(value_id).ok()??)
+                            .ok()?
+                            .parse()
+                            .ok()?,
+                    )))
+                }
+                _ => None,
+            },
+            PlanExpression::IntegerCast(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::FloatLiteral(value) => Some(value.to_i128()?.into()),
+                EncodedTerm::DoubleLiteral(value) => Some(value.to_i128()?.into()),
+                EncodedTerm::IntegerLiteral(value) => Some(value.to_i128()?.into()),
+                EncodedTerm::DecimalLiteral(value) => Some(value.to_i128()?.into()),
+                EncodedTerm::BooleanLiteral(value) => Some(if value { 1 } else { 0 }.into()),
+                EncodedTerm::SimpleLiteral { value_id }
+                | EncodedTerm::StringLiteral { value_id } => Some(EncodedTerm::IntegerLiteral(
+                    str::from_utf8(&self.store.get_bytes(value_id).ok()??)
+                        .ok()?
+                        .parse()
+                        .ok()?,
+                )),
+                _ => None,
+            },
+            PlanExpression::DecimalCast(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::FloatLiteral(value) => Some(Decimal::from_f32(*value)?.into()),
+                EncodedTerm::DoubleLiteral(value) => Some(Decimal::from_f64(*value)?.into()),
+                EncodedTerm::IntegerLiteral(value) => Some(Decimal::from_i128(value)?.into()),
+                EncodedTerm::DecimalLiteral(value) => Some(value.into()),
+                EncodedTerm::BooleanLiteral(value) => Some(
+                    if value {
+                        Decimal::one()
+                    } else {
+                        Decimal::zero()
+                    }.into(),
+                ),
+                EncodedTerm::SimpleLiteral { value_id }
+                | EncodedTerm::StringLiteral { value_id } => Some(EncodedTerm::DecimalLiteral(
+                    str::from_utf8(&self.store.get_bytes(value_id).ok()??)
+                        .ok()?
+                        .parse()
+                        .ok()?,
+                )),
+                _ => None,
+            },
+            PlanExpression::DateTimeCast(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::DateTime(value) => Some(value.into()),
+                EncodedTerm::NaiveDateTime(value) => Some(value.into()),
+                EncodedTerm::SimpleLiteral { value_id }
+                | EncodedTerm::StringLiteral { value_id } => {
+                    let bytes = self.store.get_bytes(value_id).ok()??;
+                    let value = str::from_utf8(&bytes).ok()?;
+                    Some(match DateTime::parse_from_rfc3339(&value) {
+                        Ok(value) => value.into(),
+                        Err(_) => NaiveDateTime::parse_from_str(&value, "%Y-%m-%dT%H:%M:%S")
+                            .ok()?
+                            .into(),
+                    })
+                }
+                _ => None,
+            },
             PlanExpression::StringCast(e) => Some(EncodedTerm::StringLiteral {
                 value_id: self.to_string_id(self.eval_expression(e, tuple)?)?,
             }),
