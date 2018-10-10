@@ -65,6 +65,6 @@ impl FromStr for NamedNode {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        Ok(NamedNode::new(Url::parse(s)?))
+        Ok(Self::new(Url::parse(s)?))
     }
 }

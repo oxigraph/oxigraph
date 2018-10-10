@@ -6,8 +6,8 @@ use sparql::algebra::QueryResult;
 use sparql::eval::SimpleEvaluator;
 use sparql::parser::read_sparql_query;
 use std::io::Read;
-use store::store::EncodedQuadsStore;
-use store::store::StoreDataset;
+use store::encoded::EncodedQuadsStore;
+use store::encoded::StoreDataset;
 use Result;
 
 pub mod algebra;

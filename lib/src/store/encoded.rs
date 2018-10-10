@@ -368,7 +368,7 @@ impl<S: EncodedQuadsStore + Default> Default for StoreDataset<S> {
 
 impl<S: EncodedQuadsStore + Default> FromIterator<Quad> for StoreDataset<S> {
     fn from_iter<I: IntoIterator<Item = Quad>>(iter: I) -> Self {
-        let dataset = StoreDataset::default();
+        let dataset = Self::default();
         for quad in iter {
             dataset.insert(&quad).unwrap();
         }
@@ -378,7 +378,7 @@ impl<S: EncodedQuadsStore + Default> FromIterator<Quad> for StoreDataset<S> {
 
 impl<'a, S: EncodedQuadsStore + Default> FromIterator<&'a Quad> for StoreDataset<S> {
     fn from_iter<I: IntoIterator<Item = &'a Quad>>(iter: I) -> Self {
-        let dataset = StoreDataset::default();
+        let dataset = Self::default();
         for quad in iter {
             dataset.insert(quad).unwrap();
         }
@@ -709,7 +709,7 @@ impl<S: EncodedQuadsStore + Default> Default for StoreDefaultGraph<S> {
 
 impl<S: EncodedQuadsStore + Default> FromIterator<Triple> for StoreDefaultGraph<S> {
     fn from_iter<I: IntoIterator<Item = Triple>>(iter: I) -> Self {
-        let graph = StoreDefaultGraph::default();
+        let graph = Self::default();
         for triple in iter {
             graph.insert(&triple).unwrap();
         }
@@ -719,7 +719,7 @@ impl<S: EncodedQuadsStore + Default> FromIterator<Triple> for StoreDefaultGraph<
 
 impl<'a, S: EncodedQuadsStore + Default> FromIterator<&'a Triple> for StoreDefaultGraph<S> {
     fn from_iter<I: IntoIterator<Item = &'a Triple>>(iter: I) -> Self {
-        let graph = StoreDefaultGraph::default();
+        let graph = Self::default();
         for triple in iter {
             graph.insert(triple).unwrap();
         }

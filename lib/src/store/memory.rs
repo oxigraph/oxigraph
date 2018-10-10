@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::sync::RwLock;
+use store::encoded::*;
 use store::numeric_encoder::*;
-use store::store::*;
 use Result;
 
 /// Memory based implementation of the `rudf::model::Dataset` trait.
@@ -388,16 +388,12 @@ impl EncodedQuadsStore for MemoryStore {
             .graph_indexes
             .read()?
             .get(&quad.graph_name)
-            .map(|graph| {
-                graph
-                    .spo
-                    .get(&quad.subject)
-                    .map(|po| {
-                        po.get(&quad.predicate)
-                            .map(|o| o.contains(&quad.object))
-                            .unwrap_or(false)
-                    }).unwrap_or(false)
-            }).unwrap_or(false))
+            .map_or(false, |graph| {
+                graph.spo.get(&quad.subject).map_or(false, |po| {
+                    po.get(&quad.predicate)
+                        .map_or(false, |o| o.contains(&quad.object))
+                })
+            }))
     }
 
     fn insert(&self, quad: &EncodedQuad) -> Result<()> {

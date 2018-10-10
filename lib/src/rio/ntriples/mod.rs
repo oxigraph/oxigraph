@@ -1,13 +1,15 @@
 ///Implements https://www.w3.org/TR/n-triples/
 
 mod grammar {
-    #![allow(unknown_lints)]
-    #![allow(
-        suspicious_else_formatting,
-        len_zero,
-        single_match,
-        unit_arg,
-        naive_bytecount
+    #![cfg_attr(
+        feature = "cargo-clippy",
+        allow(
+            suspicious_else_formatting,
+            len_zero,
+            single_match,
+            unit_arg,
+            naive_bytecount
+        )
     )]
 
     use rio::utils::unescape_characters;

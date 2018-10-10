@@ -26,8 +26,8 @@ enum EscapeRdfState {
 }
 
 impl EscapeRDF {
-    fn new(c: char) -> EscapeRDF {
-        EscapeRDF {
+    fn new(c: char) -> Self {
+        Self {
             state: match c {
                 '\t' => EscapeRdfState::Backslash('t'),
                 '\u{08}' => EscapeRdfState::Backslash('b'),

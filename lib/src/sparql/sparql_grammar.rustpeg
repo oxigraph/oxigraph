@@ -38,7 +38,7 @@ PrefixDecl -> () = "PREFIX"i _ ns:PNAME_NS _ i:IRIREF {
 
 //[7]
 SelectQuery -> Query = s:SelectClause _ d:DatasetClauses _ w:WhereClause _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {  //TODO: Modifier
-    Query::SelectQuery {
+    Query::Select {
         dataset: d,
         algebra: build_select(s, w, g, h, o, l, v, state)
     }
@@ -70,14 +70,14 @@ SelectClause_member -> SelectionMember =
 //[10]
 ConstructQuery -> Query =
     "CONSTRUCT"i _ c:ConstructTemplate _ d:DatasetClauses _ w:WhereClause _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
-        Query::ConstructQuery {
+        Query::Construct {
             construct: c,
             dataset: d,
             algebra: build_select(Selection::default(), w, g, h, o, l, v, state)
         }
     } /
     "CONSTRUCT"i _ d:DatasetClauses _ "WHERE"i _ '{' _ c:ConstructQuery_optional_triple_template _ '}' _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
-        Query::ConstructQuery {
+        Query::Construct {
             construct: c.clone(),
             dataset: d,
             algebra: build_select(
@@ -93,13 +93,13 @@ ConstructQuery_optional_triple_template -> Vec<TriplePattern> = TriplesTemplate 
 //[11]
 DescribeQuery -> Query =
     "DESCRIBE"i _ '*' _ d:DatasetClauses w:WhereClause? _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
-        Query::DescribeQuery {
+        Query::Describe {
             dataset: d,
             algebra: build_select(Selection::default(), w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state)
         }
     } /
     "DESCRIBE"i _ p:DescribeQuery_item+ _ d:DatasetClauses w:WhereClause? _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
-        Query::DescribeQuery {
+        Query::Describe {
             dataset: d,
             algebra: build_select(Selection {
                 option: SelectionOption::Default,
@@ -114,7 +114,7 @@ DescribeQuery_item -> NamedNodeOrVariable = i:VarOrIri _ { i }
 
 //[12]
 AskQuery -> Query = "ASK"i _ d:DatasetClauses w:WhereClause _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
-    Query::AskQuery {
+    Query::Ask {
         dataset: d,
         algebra: build_select(Selection::default(), w, g, h, o, l, v, state)
     }
@@ -170,7 +170,7 @@ GroupCondition_as -> Variable = "AS"i _ v:Var _ { v }
 
 //[21]
 HavingClause -> Expression = "HAVING"i _ e:HavingCondition+ {?
-    not_empty_fold(e.into_iter(), |a, b| Expression::AndExpression(Box::new(a), Box::new(b)))
+    not_empty_fold(e.into_iter(), |a, b| Expression::And(Box::new(a), Box::new(b)))
 }
 
 //[22]
@@ -226,7 +226,7 @@ GroupGraphPattern -> GraphPattern =
 
 //[54]
 GroupGraphPatternSub -> GraphPattern = a:TriplesBlock? _ b:GroupGraphPatternSub_item* {
-    let mut p = a.map(|v| vec![PartialGraphPattern::Other(GraphPattern::BGP(v))]).unwrap_or_else(|| vec![]);
+    let mut p = a.map_or_else(Vec::default, |v| vec![PartialGraphPattern::Other(GraphPattern::BGP(v))]);
     for v in b {
         p.extend_from_slice(&v)
     }
@@ -249,7 +249,7 @@ GroupGraphPatternSub -> GraphPattern = a:TriplesBlock? _ b:GroupGraphPatternSub_
                 g = GraphPattern::Extend(Box::new(g), var, expr)
             }
             PartialGraphPattern::Filter(expr) => match filter {
-                Some(f) => { filter = Some(Expression::AndExpression(Box::new(f), Box::new(expr))) },
+                Some(f) => { filter = Some(Expression::And(Box::new(f), Box::new(expr))) },
                 None => { filter = Some(expr) }
             },
             PartialGraphPattern::Other(e) => g = new_join(g, e),
@@ -693,13 +693,13 @@ Expression -> Expression = e:ConditionalOrExpression {e}
 
 //[111]
 ConditionalOrExpression -> Expression = e:ConditionalOrExpression_item **<1,> ("||" _) {?
-    not_empty_fold(e.into_iter(), |a, b| Expression::OrExpression(Box::new(a), Box::new(b)))
+    not_empty_fold(e.into_iter(), |a, b| Expression::Or(Box::new(a), Box::new(b)))
 }
 ConditionalOrExpression_item -> Expression = e:ConditionalAndExpression _ { e }
 
 //[112]
 ConditionalAndExpression -> Expression = e:ConditionalAndExpression_item **<1,> ("&&" _) {?
-    not_empty_fold(e.into_iter(), |a, b| Expression::AndExpression(Box::new(a), Box::new(b)))
+    not_empty_fold(e.into_iter(), |a, b| Expression::And(Box::new(a), Box::new(b)))
 }
 ConditionalAndExpression_item -> Expression = e:ValueLogical _ { e }
 
@@ -708,14 +708,14 @@ ValueLogical -> Expression = RelationalExpression
 
 //[114]
 RelationalExpression -> Expression =
-    a:NumericExpression _ "=" _ b:NumericExpression { Expression::EqualExpression(Box::new(a), Box::new(b)) } /
-    a:NumericExpression _ "!=" _ b:NumericExpression { Expression::NotEqualExpression(Box::new(a), Box::new(b)) } /
-    a:NumericExpression _ ">" _ b:NumericExpression { Expression::GreaterExpression(Box::new(a), Box::new(b)) } /
-    a:NumericExpression _ ">=" _ b:NumericExpression { Expression::GreaterOrEqExpression(Box::new(a), Box::new(b)) } /
-    a:NumericExpression _ "<" _ b:NumericExpression { Expression::LowerExpression(Box::new(a), Box::new(b)) } /
-    a:NumericExpression _ "<=" _ b:NumericExpression { Expression::LowerOrEqExpression(Box::new(a), Box::new(b)) } /
-    a:NumericExpression _ "IN"i _ b:ExpressionList { Expression::InExpression(Box::new(a), b) } /
-    a:NumericExpression _ "NOT"i _ "IN"i _ b:ExpressionList { Expression::NotInExpression(Box::new(a), b) } /
+    a:NumericExpression _ "=" _ b:NumericExpression { Expression::Equal(Box::new(a), Box::new(b)) } /
+    a:NumericExpression _ "!=" _ b:NumericExpression { Expression::NotEqual(Box::new(a), Box::new(b)) } /
+    a:NumericExpression _ ">" _ b:NumericExpression { Expression::Greater(Box::new(a), Box::new(b)) } /
+    a:NumericExpression _ ">=" _ b:NumericExpression { Expression::GreaterOrEq(Box::new(a), Box::new(b)) } /
+    a:NumericExpression _ "<" _ b:NumericExpression { Expression::Lower(Box::new(a), Box::new(b)) } /
+    a:NumericExpression _ "<=" _ b:NumericExpression { Expression::LowerOrEq(Box::new(a), Box::new(b)) } /
+    a:NumericExpression _ "IN"i _ b:ExpressionList { Expression::In(Box::new(a), b) } /
+    a:NumericExpression _ "NOT"i _ "IN"i _ b:ExpressionList { Expression::NotIn(Box::new(a), b) } /
     NumericExpression
 
 //[115]
@@ -723,21 +723,21 @@ NumericExpression -> Expression = AdditiveExpression
 
 //[116]
 AdditiveExpression -> Expression =
-    a:MultiplicativeExpression _ '+' _ b:AdditiveExpression { Expression::AddExpression(Box::new(a), Box::new(b)) } /
-    a:MultiplicativeExpression _ '-' _ b:AdditiveExpression { Expression::SubExpression(Box::new(a), Box::new(b)) } /
+    a:MultiplicativeExpression _ '+' _ b:AdditiveExpression { Expression::Add(Box::new(a), Box::new(b)) } /
+    a:MultiplicativeExpression _ '-' _ b:AdditiveExpression { Expression::Sub(Box::new(a), Box::new(b)) } /
     MultiplicativeExpression
 
 //[117]
 MultiplicativeExpression -> Expression =
-    a:UnaryExpression _ '*' _ b:MultiplicativeExpression { Expression::MulExpression(Box::new(a), Box::new(b)) } /
-    a:UnaryExpression _ '/' _ b:MultiplicativeExpression { Expression::DivExpression(Box::new(a), Box::new(b)) } /
+    a:UnaryExpression _ '*' _ b:MultiplicativeExpression { Expression::Mul(Box::new(a), Box::new(b)) } /
+    a:UnaryExpression _ '/' _ b:MultiplicativeExpression { Expression::Div(Box::new(a), Box::new(b)) } /
     UnaryExpression
 
 //[118]
 UnaryExpression -> Expression =
-    '!' _ e:PrimaryExpression { Expression::UnaryNotExpression(Box::new(e)) } /
-    '+' _ e:PrimaryExpression { Expression::UnaryPlusExpression(Box::new(e)) } /
-    '-' _ e:PrimaryExpression { Expression::UnaryMinusExpression(Box::new(e)) } /
+    '!' _ e:PrimaryExpression { Expression::UnaryNot(Box::new(e)) } /
+    '+' _ e:PrimaryExpression { Expression::UnaryPlus(Box::new(e)) } /
+    '-' _ e:PrimaryExpression { Expression::UnaryMinus(Box::new(e)) } /
     PrimaryExpression
 
 //[119]
@@ -745,10 +745,10 @@ PrimaryExpression -> Expression =
     BrackettedExpression /
     BuiltInCall /
     iriOrFunction /
-    l:RDFLiteral { Expression::ConstantExpression(l.into()) } /
-    l:NumericLiteral { Expression::ConstantExpression(l.into()) } /
-    l:BooleanLiteral { Expression::ConstantExpression(l.into()) } /
-    v:Var { Expression::ConstantExpression(v.into()) }
+    l:RDFLiteral { Expression::Constant(l.into()) } /
+    l:NumericLiteral { Expression::Constant(l.into()) } /
+    l:BooleanLiteral { Expression::Constant(l.into()) } /
+    v:Var { Expression::Constant(v.into()) }
 
 //[120]
 BrackettedExpression -> Expression = '(' _ e:Expression _ ')' { e }
@@ -829,7 +829,7 @@ StrReplaceExpression -> Expression =
 ExistsFunc -> Expression = "EXISTS"i _ p:GroupGraphPattern { Expression::ExistsFunctionCall(Box::new(p)) }
 
 //[126]
-NotExistsFunc -> Expression = "NOT"i _ "EXISTS"i _ p:GroupGraphPattern { Expression::UnaryNotExpression(Box::new(Expression::ExistsFunctionCall(Box::new(p)))) }
+NotExistsFunc -> Expression = "NOT"i _ "EXISTS"i _ p:GroupGraphPattern { Expression::UnaryNot(Box::new(Expression::ExistsFunctionCall(Box::new(p)))) }
 
 //[127]
 Aggregate -> Aggregation =
@@ -856,7 +856,7 @@ Aggregate -> Aggregation =
 iriOrFunction -> Expression = i: iri _ a: ArgList? {
     match a {
         Some(a) => Expression::CustomFunctionCall(i, a),
-        None => Expression::ConstantExpression(i.into())
+        None => Expression::Constant(i.into())
     }
 }
 

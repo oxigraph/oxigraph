@@ -10,9 +10,9 @@ use std::io::Cursor;
 use std::path::Path;
 use std::str;
 use std::sync::Mutex;
+use store::encoded::EncodedQuadsStore;
+use store::encoded::StoreDataset;
 use store::numeric_encoder::*;
-use store::store::EncodedQuadsStore;
-use store::store::StoreDataset;
 use Result;
 
 /// `rudf::model::Dataset` trait implementation based on the [RocksDB](https://rocksdb.org/) key-value store
@@ -83,17 +83,16 @@ impl BytesStore for RocksDbStore {
     type BytesOutput = DBVector;
 
     fn insert_bytes(&self, value: &[u8]) -> Result<u64> {
-        Ok(match self.db.get_cf(self.str2id_cf, value)? {
-            Some(id) => NetworkEndian::read_u64(&id),
-            None => {
-                let id = self.str_id_counter.lock()?.get_and_increment(&self.db)? as u64;
-                let id_bytes = to_bytes(id);
-                let mut batch = WriteBatch::default();
-                batch.put_cf(self.id2str_cf, &id_bytes, value)?;
-                batch.put_cf(self.str2id_cf, value, &id_bytes)?;
-                self.db.write(batch)?;
-                id
-            }
+        Ok(if let Some(id) = self.db.get_cf(self.str2id_cf, value)? {
+            NetworkEndian::read_u64(&id)
+        } else {
+            let id = self.str_id_counter.lock()?.get_and_increment(&self.db)? as u64;
+            let id_bytes = to_bytes(id);
+            let mut batch = WriteBatch::default();
+            batch.put_cf(self.id2str_cf, &id_bytes, value)?;
+            batch.put_cf(self.str2id_cf, value, &id_bytes)?;
+            self.db.write(batch)?;
+            id
         })
     }
 
@@ -342,8 +341,7 @@ impl RocksDBCounter {
     fn get_and_increment(&self, db: &DB) -> Result<u64> {
         let value = db
             .get(self.name.as_bytes())?
-            .map(|b| NetworkEndian::read_u64(&b))
-            .unwrap_or(0);
+            .map_or(0, |b| NetworkEndian::read_u64(&b));
         db.put(self.name.as_bytes(), &to_bytes(value + 1))?;
         Ok(value)
     }

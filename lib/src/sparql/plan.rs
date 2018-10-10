@@ -1,7 +1,7 @@
 use model::vocab::xsd;
 use sparql::algebra::*;
+use store::encoded::EncodedQuadsStore;
 use store::numeric_encoder::EncodedTerm;
-use store::store::EncodedQuadsStore;
 use Result;
 
 pub type EncodedTuple = Vec<Option<EncodedTerm>>;
@@ -293,67 +293,67 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
         variables: &mut Vec<Variable>,
     ) -> Result<PlanExpression> {
         Ok(match expression {
-            Expression::ConstantExpression(t) => match t {
+            Expression::Constant(t) => match t {
                 TermOrVariable::Term(t) => {
                     PlanExpression::Constant(self.store.encoder().encode_term(t)?)
                 }
                 TermOrVariable::Variable(v) => PlanExpression::Variable(variable_key(variables, v)),
             },
-            Expression::OrExpression(a, b) => PlanExpression::Or(
+            Expression::Or(a, b) => PlanExpression::Or(
                 Box::new(self.build_for_expression(a, variables)?),
                 Box::new(self.build_for_expression(b, variables)?),
             ),
-            Expression::AndExpression(a, b) => PlanExpression::And(
+            Expression::And(a, b) => PlanExpression::And(
                 Box::new(self.build_for_expression(a, variables)?),
                 Box::new(self.build_for_expression(b, variables)?),
             ),
-            Expression::EqualExpression(a, b) => PlanExpression::Equal(
+            Expression::Equal(a, b) => PlanExpression::Equal(
                 Box::new(self.build_for_expression(a, variables)?),
                 Box::new(self.build_for_expression(b, variables)?),
             ),
-            Expression::NotEqualExpression(a, b) => PlanExpression::NotEqual(
+            Expression::NotEqual(a, b) => PlanExpression::NotEqual(
                 Box::new(self.build_for_expression(a, variables)?),
                 Box::new(self.build_for_expression(b, variables)?),
             ),
-            Expression::GreaterExpression(a, b) => PlanExpression::Greater(
+            Expression::Greater(a, b) => PlanExpression::Greater(
                 Box::new(self.build_for_expression(a, variables)?),
                 Box::new(self.build_for_expression(b, variables)?),
             ),
-            Expression::GreaterOrEqExpression(a, b) => PlanExpression::GreaterOrEq(
+            Expression::GreaterOrEq(a, b) => PlanExpression::GreaterOrEq(
                 Box::new(self.build_for_expression(a, variables)?),
                 Box::new(self.build_for_expression(b, variables)?),
             ),
-            Expression::LowerExpression(a, b) => PlanExpression::Lower(
+            Expression::Lower(a, b) => PlanExpression::Lower(
                 Box::new(self.build_for_expression(a, variables)?),
                 Box::new(self.build_for_expression(b, variables)?),
             ),
-            Expression::LowerOrEqExpression(a, b) => PlanExpression::LowerOrEq(
+            Expression::LowerOrEq(a, b) => PlanExpression::LowerOrEq(
                 Box::new(self.build_for_expression(a, variables)?),
                 Box::new(self.build_for_expression(b, variables)?),
             ),
-            Expression::AddExpression(a, b) => PlanExpression::Add(
+            Expression::Add(a, b) => PlanExpression::Add(
                 Box::new(self.build_for_expression(a, variables)?),
                 Box::new(self.build_for_expression(b, variables)?),
             ),
-            Expression::SubExpression(a, b) => PlanExpression::Sub(
+            Expression::Sub(a, b) => PlanExpression::Sub(
                 Box::new(self.build_for_expression(a, variables)?),
                 Box::new(self.build_for_expression(b, variables)?),
             ),
-            Expression::MulExpression(a, b) => PlanExpression::Mul(
+            Expression::Mul(a, b) => PlanExpression::Mul(
                 Box::new(self.build_for_expression(a, variables)?),
                 Box::new(self.build_for_expression(b, variables)?),
             ),
-            Expression::DivExpression(a, b) => PlanExpression::Div(
+            Expression::Div(a, b) => PlanExpression::Div(
                 Box::new(self.build_for_expression(a, variables)?),
                 Box::new(self.build_for_expression(b, variables)?),
             ),
-            Expression::UnaryPlusExpression(e) => {
+            Expression::UnaryPlus(e) => {
                 PlanExpression::UnaryPlus(Box::new(self.build_for_expression(e, variables)?))
             }
-            Expression::UnaryMinusExpression(e) => {
+            Expression::UnaryMinus(e) => {
                 PlanExpression::UnaryMinus(Box::new(self.build_for_expression(e, variables)?))
             }
-            Expression::UnaryNotExpression(e) => {
+            Expression::UnaryNot(e) => {
                 PlanExpression::UnaryNot(Box::new(self.build_for_expression(e, variables)?))
             }
             Expression::StrFunctionCall(e) => {
@@ -393,11 +393,11 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
             Expression::IsNumericFunctionCall(e) => {
                 PlanExpression::IsNumeric(Box::new(self.build_for_expression(e, variables)?))
             }
-            Expression::RegexFunctionCall(a, b, c) => PlanExpression::Regex(
-                Box::new(self.build_for_expression(a, variables)?),
-                Box::new(self.build_for_expression(b, variables)?),
-                match c {
-                    Some(c) => Some(Box::new(self.build_for_expression(c, variables)?)),
+            Expression::RegexFunctionCall(text, pattern, flags) => PlanExpression::Regex(
+                Box::new(self.build_for_expression(text, variables)?),
+                Box::new(self.build_for_expression(pattern, variables)?),
+                match flags {
+                    Some(flags) => Some(Box::new(self.build_for_expression(flags, variables)?)),
                     None => None,
                 },
             ),
@@ -444,7 +444,7 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
 
     fn build_cast(
         &self,
-        parameters: &Vec<Expression>,
+        parameters: &[Expression],
         constructor: impl Fn(Box<PlanExpression>) -> PlanExpression,
         variables: &mut Vec<Variable>,
         name: &'static str,

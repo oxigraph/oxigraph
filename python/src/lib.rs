@@ -1,3 +1,8 @@
+#![cfg_attr(
+    feature = "cargo-clippy",
+    allow(zero_ptr, transmute_ptr_to_ptr)
+)]
+
 #[macro_use]
 extern crate cpython;
 extern crate rudf;
@@ -24,11 +29,11 @@ py_module_initializer!(rudf, initrudf, PyInit_rudf, |py, m| {
     Ok(())
 });
 
-fn new_value_error(py: Python, error: impl Error) -> PyErr {
+fn new_value_error(py: Python, error: &impl Error) -> PyErr {
     PyErr::new::<ValueError, _>(py, error.description())
 }
 
-fn eq_compare<T: Eq + Ord>(a: T, b: T, op: CompareOp) -> bool {
+fn eq_compare<T: Eq + Ord>(a: &T, b: &T, op: &CompareOp) -> bool {
     match op {
         CompareOp::Lt => a < b,
         CompareOp::Le => a <= b,
@@ -49,7 +54,7 @@ py_class!(class NamedNode |py| {
     data inner: model::NamedNode;
 
     def __new__(_cls, value: &str) -> PyResult<NamedNode> {
-        NamedNode::create_instance(py, model::NamedNode::from_str(value).map_err(|error| new_value_error(py, error))?)
+        NamedNode::create_instance(py, model::NamedNode::from_str(value).map_err(|error| new_value_error(py, &error))?)
     }
 
     def value(&self) -> PyResult<String> {
@@ -61,7 +66,7 @@ py_class!(class NamedNode |py| {
     }
 
     def __richcmp__(&self, other: &NamedNode, op: CompareOp) -> PyResult<bool> {
-        Ok(eq_compare(self.inner(py), other.inner(py), op))
+        Ok(eq_compare(&self.inner(py), &other.inner(py), &op))
     }
 
     def __hash__(&self) -> PyResult<u64> {
@@ -81,7 +86,7 @@ py_class!(class BlankNode |py| {
     }
 
     def __richcmp__(&self, other: &BlankNode, op: CompareOp) -> PyResult<bool> {
-        Ok(eq_compare(self.inner(py), other.inner(py), op))
+        Ok(eq_compare(&self.inner(py), &other.inner(py), &op))
     }
 
     def __hash__(&self) -> PyResult<u64> {
@@ -119,7 +124,7 @@ py_class!(class Literal |py| {
     }
 
     def __richcmp__(&self, other: &Literal, op: CompareOp) -> PyResult<bool> {
-        Ok(eq_compare(self.inner(py), other.inner(py), op))
+        Ok(eq_compare(&self.inner(py), &other.inner(py), &op))
     }
 
     def __hash__(&self) -> PyResult<u64> {

@@ -1,14 +1,16 @@
 mod grammar {
-    #![allow(unknown_lints)]
-    #![allow(
-        suspicious_else_formatting,
-        len_zero,
-        single_match,
-        unit_arg,
-        naive_bytecount,
-        cyclomatic_complexity,
-        many_single_char_names,
-        type_complexity
+    #![cfg_attr(
+        feature = "cargo-clippy",
+        allow(
+            suspicious_else_formatting,
+            len_zero,
+            single_match,
+            unit_arg,
+            naive_bytecount,
+            cyclomatic_complexity,
+            many_single_char_names,
+            type_complexity
+        )
     )]
 
     use model::*;

@@ -1,3 +1,36 @@
+#![cfg_attr(
+    feature = "cargo-clippy",
+    warn(
+        cast_possible_truncation,
+        cast_possible_wrap,
+        cast_precision_loss,
+        cast_sign_loss,
+        default_trait_access,
+        empty_enum,
+        enum_glob_use,
+        expl_impl_clone_on_copy,
+        explicit_into_iter_loop,
+        filter_map,
+        if_not_else,
+        inline_always,
+        invalid_upcast_comparisons,
+        items_after_statements,
+        linkedlist,
+        //TODO match_same_arms,
+        maybe_infinite_iter,
+        mut_mut,
+        needless_continue,
+        option_map_unwrap_or,
+        //TODO option_map_unwrap_or_else,
+        pub_enum_variant_names,
+        replace_consts,
+        result_map_unwrap_or_else,
+        //TODO single_match_else,
+        string_add_assign,
+        unicode_not_nfc
+    )
+)]
+
 extern crate byteorder;
 #[macro_use]
 extern crate error_chain;

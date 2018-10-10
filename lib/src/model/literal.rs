@@ -107,16 +107,15 @@ impl Literal {
     /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form)
     pub fn value(&self) -> Cow<String> {
         match self.0 {
-            LiteralContent::SimpleLiteral(ref value) | LiteralContent::String(ref value) => {
-                Cow::Borrowed(value)
-            }
-            LiteralContent::LanguageTaggedString { ref value, .. } => Cow::Borrowed(value),
+            LiteralContent::SimpleLiteral(ref value)
+            | LiteralContent::String(ref value)
+            | LiteralContent::LanguageTaggedString { ref value, .. }
+            | LiteralContent::TypedLiteral { ref value, .. } => Cow::Borrowed(value),
             LiteralContent::Boolean(value) => Cow::Owned(value.to_string()),
             LiteralContent::Float(value) => Cow::Owned(value.to_string()),
             LiteralContent::Double(value) => Cow::Owned(value.to_string()),
             LiteralContent::Integer(value) => Cow::Owned(value.to_string()),
             LiteralContent::Decimal(value) => Cow::Owned(value.to_string()),
-            LiteralContent::TypedLiteral { ref value, .. } => Cow::Borrowed(value),
         }
     }
 
@@ -152,8 +151,7 @@ impl Literal {
     /// or have been created by `Literal::new_simple_literal`.
     pub fn is_plain(&self) -> bool {
         match self.0 {
-            LiteralContent::SimpleLiteral(_) => true,
-            LiteralContent::LanguageTaggedString { .. } => true,
+            LiteralContent::SimpleLiteral(_) | LiteralContent::LanguageTaggedString { .. } => true,
             _ => false,
         }
     }
@@ -201,8 +199,7 @@ impl Literal {
     /// Checks if the literal has the datatype [xsd:decimal](http://www.w3.org/2001/XMLSchema#decimal) or one of its sub datatype and is valid
     pub fn is_decimal(&self) -> bool {
         match self.0 {
-            LiteralContent::Integer(_) => true,
-            LiteralContent::Decimal(_) => true,
+            LiteralContent::Integer(_) | LiteralContent::Decimal(_) => true,
             _ => false,
         }
     }
@@ -213,13 +210,12 @@ impl Literal {
             LiteralContent::SimpleLiteral(ref value) | LiteralContent::String(ref value) => {
                 Some(!value.is_empty())
             }
-            LiteralContent::LanguageTaggedString { .. } => None,
             LiteralContent::Boolean(value) => Some(value),
             LiteralContent::Float(value) => Some(!value.is_zero()),
             LiteralContent::Double(value) => Some(!value.is_zero()),
             LiteralContent::Integer(value) => Some(!value.is_zero()),
             LiteralContent::Decimal(value) => Some(!value.is_zero()),
-            LiteralContent::TypedLiteral { .. } => None,
+            _ => None,
         }
     }
 
@@ -326,37 +322,37 @@ impl From<i128> for Literal {
 
 impl From<i64> for Literal {
     fn from(value: i64) -> Self {
-        Literal(LiteralContent::Integer(value as i128))
+        Literal(LiteralContent::Integer(value.into()))
     }
 }
 
 impl From<i32> for Literal {
     fn from(value: i32) -> Self {
-        Literal(LiteralContent::Integer(value as i128))
+        Literal(LiteralContent::Integer(value.into()))
     }
 }
 
 impl From<i16> for Literal {
     fn from(value: i16) -> Self {
-        Literal(LiteralContent::Integer(value as i128))
+        Literal(LiteralContent::Integer(value.into()))
     }
 }
 
 impl From<u64> for Literal {
     fn from(value: u64) -> Self {
-        Literal(LiteralContent::Integer(value as i128))
+        Literal(LiteralContent::Integer(value.into()))
     }
 }
 
 impl From<u32> for Literal {
     fn from(value: u32) -> Self {
-        Literal(LiteralContent::Integer(value as i128))
+        Literal(LiteralContent::Integer(value.into()))
     }
 }
 
 impl From<u16> for Literal {
     fn from(value: u16) -> Self {
-        Literal(LiteralContent::Integer(value as i128))
+        Literal(LiteralContent::Integer(value.into()))
     }
 }
 

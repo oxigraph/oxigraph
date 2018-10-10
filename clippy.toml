@@ -1,0 +1,3 @@
+cyclomatic-complexity-threshold = 50
+too-many-arguments-threshold = 10
+type-complexity-threshold = 500

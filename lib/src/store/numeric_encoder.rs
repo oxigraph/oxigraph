@@ -128,20 +128,20 @@ impl EncodedTerm {
 
     pub fn is_literal(&self) -> bool {
         match self {
-            EncodedTerm::SimpleLiteral { .. } => true,
-            EncodedTerm::LangStringLiteral { .. } => true,
-            EncodedTerm::TypedLiteral { .. } => true,
-            EncodedTerm::StringLiteral { .. } => true,
-            EncodedTerm::BooleanLiteral(_) => true,
-            EncodedTerm::FloatLiteral(_) => true,
-            EncodedTerm::DoubleLiteral(_) => true,
-            EncodedTerm::IntegerLiteral(_) => true,
-            EncodedTerm::DecimalLiteral(_) => true,
+            EncodedTerm::SimpleLiteral { .. }
+            | EncodedTerm::LangStringLiteral { .. }
+            | EncodedTerm::TypedLiteral { .. }
+            | EncodedTerm::StringLiteral { .. }
+            | EncodedTerm::BooleanLiteral(_)
+            | EncodedTerm::FloatLiteral(_)
+            | EncodedTerm::DoubleLiteral(_)
+            | EncodedTerm::IntegerLiteral(_)
+            | EncodedTerm::DecimalLiteral(_) => true,
             _ => false,
         }
     }
 
-    pub fn datatype(&self) -> Option<EncodedTerm> {
+    pub fn datatype(&self) -> Option<Self> {
         match self {
             EncodedTerm::SimpleLiteral { .. } | EncodedTerm::StringLiteral { .. } => {
                 Some(ENCODED_XSD_STRING_NAMED_NODE)
@@ -262,7 +262,7 @@ impl<R: Read> TermReader for R {
                 datatype_id: self.read_u64::<NetworkEndian>()?,
                 value_id: self.read_u64::<NetworkEndian>()?,
             }),
-            TYPE_STRING_LITERAL => Ok(EncodedTerm::SimpleLiteral {
+            TYPE_STRING_LITERAL => Ok(EncodedTerm::StringLiteral {
                 value_id: self.read_u64::<NetworkEndian>()?,
             }),
             TYPE_BOOLEAN_LITERAL_TRUE => Ok(EncodedTerm::BooleanLiteral(true)),
@@ -339,7 +339,7 @@ impl<R: Write> TermWriter for R {
             EncodedTerm::DefaultGraph {} => {}
             EncodedTerm::NamedNode { iri_id } => self.write_u64::<NetworkEndian>(iri_id)?,
             EncodedTerm::BlankNode(id) => self.write_all(id.as_bytes())?,
-            EncodedTerm::SimpleLiteral { value_id } => {
+            EncodedTerm::SimpleLiteral { value_id } | EncodedTerm::StringLiteral { value_id } => {
                 self.write_u64::<NetworkEndian>(value_id)?;
             }
             EncodedTerm::LangStringLiteral {
@@ -354,10 +354,6 @@ impl<R: Write> TermWriter for R {
                 datatype_id,
             } => {
                 self.write_u64::<NetworkEndian>(datatype_id)?;
-                self.write_u64::<NetworkEndian>(value_id)?;
-            }
-
-            EncodedTerm::StringLiteral { value_id } => {
                 self.write_u64::<NetworkEndian>(value_id)?;
             }
             EncodedTerm::BooleanLiteral(_) => {}

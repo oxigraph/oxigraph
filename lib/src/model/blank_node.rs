@@ -32,7 +32,7 @@ impl fmt::Display for BlankNode {
 impl Default for BlankNode {
     /// Builds a new RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a unique id
     fn default() -> Self {
-        BlankNode { id: Uuid::new_v4() }
+        Self { id: Uuid::new_v4() }
     }
 }
 

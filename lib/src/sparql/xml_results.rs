@@ -90,8 +90,7 @@ pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResult> {
                 State::Head => {
                     if event.name() == b"variable" {
                         let name = event.attributes()
-                            .filter(|attr| attr.is_ok())
-                            .map(|attr| attr.unwrap())
+                            .filter_map(|attr| attr.ok())
                             .find(|attr| attr.key == b"name")
                             .ok_or("No name attribute found for the <variable> tag");
                         variables.push(name?.unescape_and_decode_value(&reader)?);
@@ -128,11 +127,10 @@ pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResult> {
                     _ => Err(format!("Unexpected textual value found: {}", reader.decode(&value)).into())
                 };
             },
-            Event::End(_) => match state {
-                State::Head => state = State::AfterHead,
-                _ => {
+            Event::End(_) => if let State::Head = state {
+                state = State::AfterHead;
+            } else {
                     return Err("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag".into());
-                }
             },
             Event::Eof => return Err("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag".into()),
             _ => (),
@@ -199,8 +197,7 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
                     State::Result => if event.name() == b"binding" {
                         match event
                             .attributes()
-                            .filter(|attr| attr.is_ok())
-                            .map(|attr| attr.unwrap())
+                            .filter_map(|attr| attr.ok())
                             .find(|attr| attr.key == b"name")
                         {
                             Some(attr) => match attr.unescaped_value() {

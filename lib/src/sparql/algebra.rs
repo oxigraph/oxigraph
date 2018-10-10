@@ -181,7 +181,7 @@ impl StaticBindings {
 
 impl Default for StaticBindings {
     fn default() -> Self {
-        StaticBindings {
+        Self {
             variables: Vec::default(),
             values: Vec::default(),
         }
@@ -401,24 +401,24 @@ impl<'a> fmt::Display for SparqlTripleOrPathPattern<'a> {
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum Expression {
-    ConstantExpression(TermOrVariable),
-    OrExpression(Box<Expression>, Box<Expression>),
-    AndExpression(Box<Expression>, Box<Expression>),
-    EqualExpression(Box<Expression>, Box<Expression>),
-    NotEqualExpression(Box<Expression>, Box<Expression>),
-    GreaterExpression(Box<Expression>, Box<Expression>),
-    GreaterOrEqExpression(Box<Expression>, Box<Expression>),
-    LowerExpression(Box<Expression>, Box<Expression>),
-    LowerOrEqExpression(Box<Expression>, Box<Expression>),
-    InExpression(Box<Expression>, Vec<Expression>),
-    NotInExpression(Box<Expression>, Vec<Expression>),
-    AddExpression(Box<Expression>, Box<Expression>),
-    SubExpression(Box<Expression>, Box<Expression>),
-    MulExpression(Box<Expression>, Box<Expression>),
-    DivExpression(Box<Expression>, Box<Expression>),
-    UnaryPlusExpression(Box<Expression>),
-    UnaryMinusExpression(Box<Expression>),
-    UnaryNotExpression(Box<Expression>),
+    Constant(TermOrVariable),
+    Or(Box<Expression>, Box<Expression>),
+    And(Box<Expression>, Box<Expression>),
+    Equal(Box<Expression>, Box<Expression>),
+    NotEqual(Box<Expression>, Box<Expression>),
+    Greater(Box<Expression>, Box<Expression>),
+    GreaterOrEq(Box<Expression>, Box<Expression>),
+    Lower(Box<Expression>, Box<Expression>),
+    LowerOrEq(Box<Expression>, Box<Expression>),
+    In(Box<Expression>, Vec<Expression>),
+    NotIn(Box<Expression>, Vec<Expression>),
+    Add(Box<Expression>, Box<Expression>),
+    Sub(Box<Expression>, Box<Expression>),
+    Mul(Box<Expression>, Box<Expression>),
+    Div(Box<Expression>, Box<Expression>),
+    UnaryPlus(Box<Expression>),
+    UnaryMinus(Box<Expression>),
+    UnaryNot(Box<Expression>),
     StrFunctionCall(Box<Expression>),
     LangFunctionCall(Box<Expression>),
     LangMatchesFunctionCall(Box<Expression>, Box<Expression>),
@@ -480,16 +480,16 @@ pub enum Expression {
 impl fmt::Display for Expression {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Expression::ConstantExpression(t) => write!(f, "{}", t),
-            Expression::OrExpression(a, b) => write!(f, "({} || {})", a, b),
-            Expression::AndExpression(a, b) => write!(f, "({} && {})", a, b),
-            Expression::EqualExpression(a, b) => write!(f, "({} = {})", a, b),
-            Expression::NotEqualExpression(a, b) => write!(f, "({} != {})", a, b),
-            Expression::GreaterExpression(a, b) => write!(f, "({} > {})", a, b),
-            Expression::GreaterOrEqExpression(a, b) => write!(f, "({} >= {})", a, b),
-            Expression::LowerExpression(a, b) => write!(f, "({} < {})", a, b),
-            Expression::LowerOrEqExpression(a, b) => write!(f, "({} <= {})", a, b),
-            Expression::InExpression(a, b) => write!(
+            Expression::Constant(t) => write!(f, "{}", t),
+            Expression::Or(a, b) => write!(f, "({} || {})", a, b),
+            Expression::And(a, b) => write!(f, "({} && {})", a, b),
+            Expression::Equal(a, b) => write!(f, "({} = {})", a, b),
+            Expression::NotEqual(a, b) => write!(f, "({} != {})", a, b),
+            Expression::Greater(a, b) => write!(f, "({} > {})", a, b),
+            Expression::GreaterOrEq(a, b) => write!(f, "({} >= {})", a, b),
+            Expression::Lower(a, b) => write!(f, "({} < {})", a, b),
+            Expression::LowerOrEq(a, b) => write!(f, "({} <= {})", a, b),
+            Expression::In(a, b) => write!(
                 f,
                 "({} IN ({}))",
                 a,
@@ -498,7 +498,7 @@ impl fmt::Display for Expression {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
-            Expression::NotInExpression(a, b) => write!(
+            Expression::NotIn(a, b) => write!(
                 f,
                 "({} NOT IN ({}))",
                 a,
@@ -507,13 +507,13 @@ impl fmt::Display for Expression {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
-            Expression::AddExpression(a, b) => write!(f, "{} + {}", a, b),
-            Expression::SubExpression(a, b) => write!(f, "{} - {}", a, b),
-            Expression::MulExpression(a, b) => write!(f, "{} * {}", a, b),
-            Expression::DivExpression(a, b) => write!(f, "{} / {}", a, b),
-            Expression::UnaryPlusExpression(e) => write!(f, "+{}", e),
-            Expression::UnaryMinusExpression(e) => write!(f, "-{}", e),
-            Expression::UnaryNotExpression(e) => write!(f, "!{}", e),
+            Expression::Add(a, b) => write!(f, "{} + {}", a, b),
+            Expression::Sub(a, b) => write!(f, "{} - {}", a, b),
+            Expression::Mul(a, b) => write!(f, "{} * {}", a, b),
+            Expression::Div(a, b) => write!(f, "{} / {}", a, b),
+            Expression::UnaryPlus(e) => write!(f, "+{}", e),
+            Expression::UnaryMinus(e) => write!(f, "-{}", e),
+            Expression::UnaryNot(e) => write!(f, "!{}", e),
             Expression::StrFunctionCall(e) => write!(f, "STR({})", e),
             Expression::LangFunctionCall(e) => write!(f, "LANG({})", e),
             Expression::LangMatchesFunctionCall(a, b) => write!(f, "LANGMATCHES({}, {})", a, b),
@@ -542,10 +542,14 @@ impl fmt::Display for Expression {
                 .map(|cv| write!(f, "SUBSTR({}, {}, {})", a, b, cv))
                 .unwrap_or_else(|| write!(f, "SUBSTR({}, {})", a, b)),
             Expression::StrLenFunctionCall(e) => write!(f, "STRLEN({})", e),
-            Expression::ReplaceFunctionCall(a, b, c, d) => d
-                .as_ref()
-                .map(|dv| write!(f, "REPLACE({}, {}, {}, {})", a, b, c, dv))
-                .unwrap_or_else(|| write!(f, "REPLACE({}, {}, {})", a, b, c)),
+            Expression::ReplaceFunctionCall(arg, pattern, replacement, flags) => match flags {
+                Some(flags) => write!(
+                    f,
+                    "REPLACE({}, {}, {}, {})",
+                    arg, pattern, replacement, flags
+                ),
+                None => write!(f, "REPLACE({}, {}, {})", arg, pattern, replacement),
+            },
             Expression::UCaseFunctionCall(e) => write!(f, "UCASE({})", e),
             Expression::LCaseFunctionCall(e) => write!(f, "LCASE({})", e),
             Expression::EncodeForURIFunctionCall(e) => write!(f, "ENCODE_FOR_URI({})", e),
@@ -585,10 +589,10 @@ impl fmt::Display for Expression {
             Expression::IsBlankFunctionCall(e) => write!(f, "isBLANK({})", e),
             Expression::IsLiteralFunctionCall(e) => write!(f, "isLITERAL({})", e),
             Expression::IsNumericFunctionCall(e) => write!(f, "isNUMERIC({})", e),
-            Expression::RegexFunctionCall(a, b, c) => c
-                .as_ref()
-                .map(|cv| write!(f, "REGEX({}, {}, {})", a, b, cv))
-                .unwrap_or_else(|| write!(f, "REGEX({}, {})", a, b)),
+            Expression::RegexFunctionCall(text, pattern, flags) => match flags {
+                Some(flags) => write!(f, "REGEX({}, {}, {})", text, pattern, flags),
+                None => write!(f, "REGEX({}, {})", text, pattern),
+            },
             Expression::CustomFunctionCall(iri, args) => write!(
                 f,
                 "{}({})",
@@ -605,19 +609,19 @@ impl fmt::Display for Expression {
 
 impl From<NamedNode> for Expression {
     fn from(p: NamedNode) -> Self {
-        Expression::ConstantExpression(p.into())
+        Expression::Constant(p.into())
     }
 }
 
 impl From<Literal> for Expression {
     fn from(p: Literal) -> Self {
-        Expression::ConstantExpression(p.into())
+        Expression::Constant(p.into())
     }
 }
 
 impl From<Variable> for Expression {
     fn from(v: Variable) -> Self {
-        Expression::ConstantExpression(v.into())
+        Expression::Constant(v.into())
     }
 }
 
@@ -626,47 +630,47 @@ struct SparqlExpression<'a>(&'a Expression);
 impl<'a> fmt::Display for SparqlExpression<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.0 {
-            Expression::ConstantExpression(t) => write!(f, "{}", t),
-            Expression::OrExpression(a, b) => write!(
+            Expression::Constant(t) => write!(f, "{}", t),
+            Expression::Or(a, b) => write!(
                 f,
                 "({} || {})",
                 SparqlExpression(&*a),
                 SparqlExpression(&*b)
             ),
-            Expression::AndExpression(a, b) => write!(
+            Expression::And(a, b) => write!(
                 f,
                 "({} && {})",
                 SparqlExpression(&*a),
                 SparqlExpression(&*b)
             ),
-            Expression::EqualExpression(a, b) => {
+            Expression::Equal(a, b) => {
                 write!(f, "({} = {})", SparqlExpression(&*a), SparqlExpression(&*b))
             }
-            Expression::NotEqualExpression(a, b) => write!(
+            Expression::NotEqual(a, b) => write!(
                 f,
                 "({} != {})",
                 SparqlExpression(&*a),
                 SparqlExpression(&*b)
             ),
-            Expression::GreaterExpression(a, b) => {
+            Expression::Greater(a, b) => {
                 write!(f, "({} > {})", SparqlExpression(&*a), SparqlExpression(&*b))
             }
-            Expression::GreaterOrEqExpression(a, b) => write!(
+            Expression::GreaterOrEq(a, b) => write!(
                 f,
                 "({} >= {})",
                 SparqlExpression(&*a),
                 SparqlExpression(&*b)
             ),
-            Expression::LowerExpression(a, b) => {
+            Expression::Lower(a, b) => {
                 write!(f, "({} < {})", SparqlExpression(&*a), SparqlExpression(&*b))
             }
-            Expression::LowerOrEqExpression(a, b) => write!(
+            Expression::LowerOrEq(a, b) => write!(
                 f,
                 "({} <= {})",
                 SparqlExpression(&*a),
                 SparqlExpression(&*b)
             ),
-            Expression::InExpression(a, b) => write!(
+            Expression::In(a, b) => write!(
                 f,
                 "({} IN ({}))",
                 a,
@@ -675,7 +679,7 @@ impl<'a> fmt::Display for SparqlExpression<'a> {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
-            Expression::NotInExpression(a, b) => write!(
+            Expression::NotIn(a, b) => write!(
                 f,
                 "({} NOT IN ({}))",
                 a,
@@ -684,21 +688,21 @@ impl<'a> fmt::Display for SparqlExpression<'a> {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
-            Expression::AddExpression(a, b) => {
+            Expression::Add(a, b) => {
                 write!(f, "{} + {}", SparqlExpression(&*a), SparqlExpression(&*b))
             }
-            Expression::SubExpression(a, b) => {
+            Expression::Sub(a, b) => {
                 write!(f, "{} - {}", SparqlExpression(&*a), SparqlExpression(&*b))
             }
-            Expression::MulExpression(a, b) => {
+            Expression::Mul(a, b) => {
                 write!(f, "{} * {}", SparqlExpression(&*a), SparqlExpression(&*b))
             }
-            Expression::DivExpression(a, b) => {
+            Expression::Div(a, b) => {
                 write!(f, "{} / {}", SparqlExpression(&*a), SparqlExpression(&*b))
             }
-            Expression::UnaryPlusExpression(e) => write!(f, "+{}", SparqlExpression(&*e)),
-            Expression::UnaryMinusExpression(e) => write!(f, "-{}", SparqlExpression(&*e)),
-            Expression::UnaryNotExpression(e) => match e.as_ref() {
+            Expression::UnaryPlus(e) => write!(f, "+{}", SparqlExpression(&*e)),
+            Expression::UnaryMinus(e) => write!(f, "-{}", SparqlExpression(&*e)),
+            Expression::UnaryNot(e) => match e.as_ref() {
                 Expression::ExistsFunctionCall(p) => {
                     write!(f, "NOT EXISTS {{ {} }}", SparqlGraphPattern(&*p))
                 }
@@ -751,26 +755,23 @@ impl<'a> fmt::Display for SparqlExpression<'a> {
                     )
                 }),
             Expression::StrLenFunctionCall(e) => write!(f, "STRLEN({})", SparqlExpression(&*e)),
-            Expression::ReplaceFunctionCall(a, b, c, d) => d
-                .as_ref()
-                .map(|dv| {
-                    write!(
-                        f,
-                        "REPLACE({}, {}, {}, {})",
-                        SparqlExpression(&*a),
-                        SparqlExpression(&*b),
-                        SparqlExpression(&*c),
-                        dv
-                    )
-                }).unwrap_or_else(|| {
-                    write!(
-                        f,
-                        "REPLACE({}, {}, {})",
-                        SparqlExpression(&*a),
-                        SparqlExpression(&*b),
-                        SparqlExpression(&*c)
-                    )
-                }),
+            Expression::ReplaceFunctionCall(arg, pattern, replacement, flags) => match flags {
+                Some(flags) => write!(
+                    f,
+                    "REPLACE({}, {}, {}, {})",
+                    SparqlExpression(&*arg),
+                    SparqlExpression(&*pattern),
+                    SparqlExpression(&*replacement),
+                    flags
+                ),
+                None => write!(
+                    f,
+                    "REPLACE({}, {}, {})",
+                    SparqlExpression(&*arg),
+                    SparqlExpression(&*pattern),
+                    SparqlExpression(&*replacement)
+                ),
+            },
             Expression::UCaseFunctionCall(e) => write!(f, "UCASE({})", SparqlExpression(&*e)),
             Expression::LCaseFunctionCall(e) => write!(f, "LCASE({})", SparqlExpression(&*e)),
             Expression::EncodeForURIFunctionCall(e) => {
@@ -862,24 +863,21 @@ impl<'a> fmt::Display for SparqlExpression<'a> {
             Expression::IsNumericFunctionCall(e) => {
                 write!(f, "isNUMERIC({})", SparqlExpression(&*e))
             }
-            Expression::RegexFunctionCall(a, b, c) => c
-                .as_ref()
-                .map(|cv| {
-                    write!(
-                        f,
-                        "REGEX({}, {}, {})",
-                        SparqlExpression(&*a),
-                        SparqlExpression(&*b),
-                        cv
-                    )
-                }).unwrap_or_else(|| {
-                    write!(
-                        f,
-                        "REGEX({}, {})",
-                        SparqlExpression(&*a),
-                        SparqlExpression(&*b)
-                    )
-                }),
+            Expression::RegexFunctionCall(text, pattern, flags) => match flags {
+                Some(flags) => write!(
+                    f,
+                    "REGEX({}, {}, {})",
+                    SparqlExpression(&*text),
+                    SparqlExpression(&*pattern),
+                    flags
+                ),
+                None => write!(
+                    f,
+                    "REGEX({}, {})",
+                    SparqlExpression(&*text),
+                    SparqlExpression(&*pattern)
+                ),
+            },
             Expression::CustomFunctionCall(iri, args) => write!(
                 f,
                 "{}({})",
@@ -1361,13 +1359,15 @@ impl<'a> fmt::Display for SparqlAggregation<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.0 {
             Aggregation::Count(e, distinct) => if *distinct {
-                e.as_ref()
-                    .map(|ex| write!(f, "COUNT(DISTINCT {})", SparqlExpression(ex)))
-                    .unwrap_or_else(|| write!(f, "COUNT(DISTINCT *)"))
+                if let Some(e) = e {
+                    write!(f, "COUNT(DISTINCT {})", SparqlExpression(e))
+                } else {
+                    write!(f, "COUNT(DISTINCT *)")
+                }
+            } else if let Some(e) = e {
+                write!(f, "COUNT({})", SparqlExpression(e))
             } else {
-                e.as_ref()
-                    .map(|ex| write!(f, "COUNT({})", SparqlExpression(ex)))
-                    .unwrap_or_else(|| write!(f, "COUNT(*)"))
+                write!(f, "COUNT(*)")
             },
             Aggregation::Sum(e, distinct) => if *distinct {
                 write!(f, "SUM(DISTINCT {})", SparqlExpression(e))
@@ -1395,26 +1395,25 @@ impl<'a> fmt::Display for SparqlAggregation<'a> {
                 write!(f, "SAMPLE({})", SparqlExpression(e))
             },
             Aggregation::GroupConcat(e, distinct, sep) => if *distinct {
-                sep.as_ref()
-                    .map(|s| {
-                        write!(
-                            f,
-                            "GROUP_CONCAT(DISTINCT {}; SEPARATOR = \"{}\")",
-                            SparqlExpression(e),
-                            s.escape()
-                        )
-                    })
-                    .unwrap_or_else(|| write!(f, "GROUP_CONCAT(DISTINCT {})", SparqlExpression(e)))
+                if let Some(sep) = sep {
+                    write!(
+                        f,
+                        "GROUP_CONCAT(DISTINCT {}; SEPARATOR = \"{}\")",
+                        SparqlExpression(e),
+                        sep.escape()
+                    )
+                } else {
+                    write!(f, "GROUP_CONCAT(DISTINCT {})", SparqlExpression(e))
+                }
+            } else if let Some(sep) = sep {
+                write!(
+                    f,
+                    "GROUP_CONCAT({}; SEPARATOR = \"{}\")",
+                    SparqlExpression(e),
+                    sep.escape()
+                )
             } else {
-                sep.as_ref()
-                    .map(|s| {
-                        write!(
-                            f,
-                            "GROUP_CONCAT({}; SEPARATOR = \"{}\")",
-                            SparqlExpression(e),
-                            s.escape()
-                        )
-                    }).unwrap_or_else(|| write!(f, "GROUP_CONCAT({})", SparqlExpression(e)))
+                write!(f, "GROUP_CONCAT({})", SparqlExpression(e))
             },
         }
     }
@@ -1477,7 +1476,7 @@ impl DatasetSpec {
 impl Add for DatasetSpec {
     type Output = Self;
 
-    fn add(mut self, rhs: DatasetSpec) -> Self {
+    fn add(mut self, rhs: Self) -> Self {
         self.default.extend_from_slice(&rhs.default);
         self.named.extend_from_slice(&rhs.named);
         self
@@ -1502,20 +1501,20 @@ lazy_static! {
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum Query {
-    SelectQuery {
+    Select {
         dataset: DatasetSpec,
         algebra: GraphPattern,
     },
-    ConstructQuery {
+    Construct {
         construct: Vec<TriplePattern>,
         dataset: DatasetSpec,
         algebra: GraphPattern,
     },
-    DescribeQuery {
+    Describe {
         dataset: DatasetSpec,
         algebra: GraphPattern,
     },
-    AskQuery {
+    Ask {
         dataset: DatasetSpec,
         algebra: GraphPattern,
     },
@@ -1524,7 +1523,7 @@ pub enum Query {
 impl fmt::Display for Query {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Query::SelectQuery { dataset, algebra } => write!(
+            Query::Select { dataset, algebra } => write!(
                 f,
                 "{}",
                 SparqlGraphRootPattern {
@@ -1532,7 +1531,7 @@ impl fmt::Display for Query {
                     dataset: &dataset
                 }
             ),
-            Query::ConstructQuery {
+            Query::Construct {
                 construct,
                 dataset,
                 algebra,
@@ -1550,7 +1549,7 @@ impl fmt::Display for Query {
                     dataset: &EMPTY_DATASET
                 }
             ),
-            Query::DescribeQuery { dataset, algebra } => write!(
+            Query::Describe { dataset, algebra } => write!(
                 f,
                 "DESCRIBE * {} WHERE {{ {} }}",
                 dataset,
@@ -1559,7 +1558,7 @@ impl fmt::Display for Query {
                     dataset: &EMPTY_DATASET
                 }
             ),
-            Query::AskQuery { dataset, algebra } => write!(
+            Query::Ask { dataset, algebra } => write!(
                 f,
                 "ASK {} WHERE {{ {} }}",
                 dataset,

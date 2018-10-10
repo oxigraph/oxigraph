@@ -8,8 +8,8 @@ use std::collections::HashSet;
 use std::iter::once;
 use std::iter::Iterator;
 use std::sync::Arc;
+use store::encoded::EncodedQuadsStore;
 use store::numeric_encoder::*;
-use store::store::EncodedQuadsStore;
 use Result;
 
 type EncodedTuplesIterator = Box<dyn Iterator<Item = Result<EncodedTuple>>>;
@@ -33,7 +33,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
 
     pub fn evaluate(&self, query: &Query) -> Result<QueryResult> {
         match query {
-            Query::SelectQuery { algebra, dataset } => {
+            Query::Select { algebra, dataset } => {
                 let (plan, variables) = PlanBuilder::build(&*self.store, algebra)?;
                 let iter = self.eval_plan(plan, vec![None; variables.len()]);
                 Ok(QueryResult::Bindings(self.decode_bindings(iter, variables)))
@@ -300,10 +300,8 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             PlanExpression::Bound(v) => Some((*v >= tuple.len() && tuple[*v].is_some()).into()),
             PlanExpression::IRI(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::NamedNode { iri_id } => Some(EncodedTerm::NamedNode { iri_id }),
-                EncodedTerm::SimpleLiteral { value_id } => {
-                    Some(EncodedTerm::NamedNode { iri_id: value_id })
-                }
-                EncodedTerm::StringLiteral { value_id } => {
+                EncodedTerm::SimpleLiteral { value_id }
+                | EncodedTerm::StringLiteral { value_id } => {
                     Some(EncodedTerm::NamedNode { iri_id: value_id })
                 }
                 _ => None,
@@ -346,11 +344,10 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
     fn to_string_id(&self, term: EncodedTerm) -> Option<u64> {
         match term {
             EncodedTerm::NamedNode { iri_id } => Some(iri_id),
-            EncodedTerm::SimpleLiteral { value_id } | EncodedTerm::StringLiteral { value_id } => {
-                Some(value_id)
-            }
-            EncodedTerm::LangStringLiteral { value_id, .. } => Some(value_id),
-            EncodedTerm::TypedLiteral { value_id, .. } => Some(value_id),
+            EncodedTerm::SimpleLiteral { value_id }
+            | EncodedTerm::StringLiteral { value_id }
+            | EncodedTerm::LangStringLiteral { value_id, .. }
+            | EncodedTerm::TypedLiteral { value_id, .. } => Some(value_id),
             EncodedTerm::BooleanLiteral(value) => self
                 .store
                 .insert_bytes(if value { b"true" } else { b"false" })
