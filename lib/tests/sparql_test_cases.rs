@@ -88,6 +88,11 @@ fn sparql_w3c_query_evaluation_testsuite() {
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/cast/manifest.ttl").unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest.ttl")
             .unwrap(),
+        Url::parse(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest.ttl",
+        ).unwrap(),
+        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional/manifest.ttl")
+            .unwrap(),
     ];
     let test_blacklist = vec![
         //Multiple writing of the same xsd:integer. Our system does strong normalization.
@@ -97,12 +102,9 @@ fn sparql_w3c_query_evaluation_testsuite() {
         NamedNode::from_str(
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-9",
         ).unwrap(),
-        //With LeftJoin
+        //Test on curly brace scoping with OPTIONAL filter
         NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-4",
-        ).unwrap(),
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#no-distinct-4",
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest#dawg-optional-filter-005-not-simplified",
         ).unwrap(),
     ];
     let client = RDFClient::default();
@@ -130,6 +132,17 @@ fn sparql_w3c_query_evaluation_testsuite() {
                 }
                 None => MemoryDataset::default(),
             };
+            for graph_data in &test.graph_data {
+                let named_graph = data
+                    .named_graph(&NamedNode::from(graph_data.clone()).into())
+                    .unwrap();
+                client
+                    .load_graph(graph_data.clone())
+                    .unwrap()
+                    .iter()
+                    .unwrap()
+                    .for_each(|triple| named_graph.insert(&triple.unwrap()).unwrap());
+            }
             match data.query(client.get(&test.query).unwrap()) {
                 Err(error) => assert!(
                     false,
@@ -142,14 +155,14 @@ fn sparql_w3c_query_evaluation_testsuite() {
                         .load_sparql_query_result_graph(test.result.clone().unwrap())
                         .unwrap();
                     assert!(
-                        actual_graph.is_isomorphic(&expected_graph).unwrap(),
-                        "Failure on {}. Expected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
-                        test,
-                        expected_graph,
-                        actual_graph,
-                        client.load_sparql_query(test.query.clone()).unwrap(),
-                        data
-                    )
+                            actual_graph.is_isomorphic(&expected_graph).unwrap(),
+                            "Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
+                            test,
+                            expected_graph,
+                            actual_graph,
+                            client.load_sparql_query(test.query.clone()).unwrap(),
+                            data
+                        )
                 }
             }
         } else {
@@ -296,6 +309,7 @@ pub struct Test {
     pub comment: Option<String>,
     pub query: Url,
     pub data: Option<Url>,
+    pub graph_data: Vec<Url>,
     pub result: Option<Url>,
 }
 
@@ -311,6 +325,9 @@ impl fmt::Display for Test {
         write!(f, " on query {}", self.query)?;
         for data in &self.data {
             write!(f, " with data {}", data)?;
+        }
+        for data in &self.graph_data {
+            write!(f, " and graph data {}", data)?;
         }
         for result in &self.result {
             write!(f, " and expected result {}", result)?;
@@ -371,6 +388,9 @@ pub mod qt {
         pub static ref DATA: NamedNode =
             NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/test-query#data")
                 .unwrap();
+        pub static ref GRAPH_DATA: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/test-query#graphData")
+                .unwrap();
     }
 }
 
@@ -408,12 +428,12 @@ impl<'a> Iterator for TestManifest<'a> {
                     Some(Term::Literal(c)) => Some(c.value().to_string()),
                     _ => None,
                 };
-                let (query, data) = match self
+                let (query, data, graph_data) = match self
                     .graph
                     .object_for_subject_predicate(&test_subject, &*mf::ACTION)
                     .unwrap()
                 {
-                    Some(Term::NamedNode(n)) => (n.into(), None),
+                    Some(Term::NamedNode(n)) => (n.into(), None, vec![]),
                     Some(Term::BlankNode(n)) => {
                         let n = n.into();
                         let query = match self
@@ -433,7 +453,15 @@ impl<'a> Iterator for TestManifest<'a> {
                             Some(Term::NamedNode(q)) => Some(q.into()),
                             _ => None,
                         };
-                        (query, data)
+                        let graph_data = self
+                            .graph
+                            .objects_for_subject_predicate(&n, &qt::GRAPH_DATA)
+                            .unwrap()
+                            .filter_map(|g| match g {
+                                Ok(Term::NamedNode(q)) => Some(q.into()),
+                                _ => None,
+                            }).collect();
+                        (query, data, graph_data)
                     }
                     Some(_) => return Some(Err("invalid action".into())),
                     None => {
@@ -458,6 +486,7 @@ impl<'a> Iterator for TestManifest<'a> {
                     comment,
                     query,
                     data,
+                    graph_data,
                     result,
                 }))
             }

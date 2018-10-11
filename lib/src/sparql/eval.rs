@@ -124,6 +124,12 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                         }),
                 )
             }
+            PlanNode::LeftJoin { left, right } => Box::new(LeftJoinIterator {
+                eval: self.clone(),
+                right_plan: *right,
+                left_iter: self.eval_plan(*left, from),
+                current_right_iter: None,
+            }),
             PlanNode::Filter { child, expression } => {
                 let eval = self.clone();
                 Box::new(self.eval_plan(*child, from).filter(move |tuple| {
@@ -136,23 +142,12 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                     }
                 }))
             }
-            PlanNode::Union { entry, children } => {
-                //TODO: avoid clones
-                let eval = self.clone();
-                Box::new(self.eval_plan(*entry, from).flat_map(move |tuple| {
-                    let eval = eval.clone();
-                    let iter: EncodedTuplesIterator = match tuple {
-                        Ok(tuple) => Box::new(
-                            children
-                                .clone()
-                                .into_iter()
-                                .flat_map(move |child| eval.eval_plan(child, tuple.clone())),
-                        ),
-                        Err(error) => Box::new(once(Err(error))),
-                    };
-                    iter
-                }))
-            }
+            PlanNode::Union { entry, children } => Box::new(UnionIterator {
+                eval: self.clone(),
+                children_plan: children,
+                input_iter: self.eval_plan(*entry, from),
+                current_iters: Vec::default(),
+            }),
             PlanNode::Extend {
                 child,
                 position,
@@ -302,7 +297,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 _ => None,
             },
             PlanExpression::Datatype(e) => self.eval_expression(e, tuple)?.datatype(),
-            PlanExpression::Bound(v) => Some((*v >= tuple.len() && tuple[*v].is_some()).into()),
+            PlanExpression::Bound(v) => Some((*v < tuple.len() && tuple[*v].is_some()).into()),
             PlanExpression::IRI(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::NamedNode { iri_id } => Some(EncodedTerm::NamedNode { iri_id }),
                 EncodedTerm::SimpleLiteral { value_id }
@@ -586,12 +581,76 @@ fn put_pattern_value(selector: &PatternValue, value: EncodedTerm, tuple: &mut En
 }
 
 fn put_value(position: usize, value: EncodedTerm, tuple: &mut EncodedTuple) {
-    if tuple.len() > position {
+    if position < tuple.len() {
         tuple[position] = Some(value)
     } else {
-        if tuple.len() < position {
+        if position > tuple.len() {
             tuple.resize(position, None);
         }
         tuple.push(Some(value))
+    }
+}
+
+struct LeftJoinIterator<S: EncodedQuadsStore> {
+    eval: SimpleEvaluator<S>,
+    right_plan: PlanNode,
+    left_iter: EncodedTuplesIterator,
+    current_right_iter: Option<EncodedTuplesIterator>,
+}
+
+impl<S: EncodedQuadsStore> Iterator for LeftJoinIterator<S> {
+    type Item = Result<EncodedTuple>;
+
+    fn next(&mut self) -> Option<Result<EncodedTuple>> {
+        if let Some(ref mut right_iter) = self.current_right_iter {
+            if let Some(tuple) = right_iter.next() {
+                return Some(tuple);
+            }
+        }
+        match self.left_iter.next()? {
+            Ok(left_tuple) => {
+                let mut right_iter = self
+                    .eval
+                    .eval_plan(self.right_plan.clone(), left_tuple.clone());
+                match right_iter.next() {
+                    Some(right_tuple) => {
+                        self.current_right_iter = Some(right_iter);
+                        Some(right_tuple)
+                    }
+                    None => Some(Ok(left_tuple)),
+                }
+            }
+            Err(error) => Some(Err(error)),
+        }
+    }
+}
+
+struct UnionIterator<S: EncodedQuadsStore> {
+    eval: SimpleEvaluator<S>,
+    children_plan: Vec<PlanNode>,
+    input_iter: EncodedTuplesIterator,
+    current_iters: Vec<EncodedTuplesIterator>,
+}
+
+impl<S: EncodedQuadsStore> Iterator for UnionIterator<S> {
+    type Item = Result<EncodedTuple>;
+
+    fn next(&mut self) -> Option<Result<EncodedTuple>> {
+        while let Some(mut iter) = self.current_iters.pop() {
+            if let Some(tuple) = iter.next() {
+                self.current_iters.push(iter);
+                return Some(tuple);
+            }
+        }
+        match self.input_iter.next()? {
+            Ok(input_tuple) => {
+                for plan in &self.children_plan {
+                    self.current_iters
+                        .push(self.eval.eval_plan(plan.clone(), input_tuple.clone()));
+                }
+            }
+            Err(error) => return Some(Err(error)),
+        }
+        self.next()
     }
 }

@@ -1,4 +1,5 @@
 use model::vocab::xsd;
+use model::Literal;
 use sparql::algebra::*;
 use store::encoded::EncodedQuadsStore;
 use store::numeric_encoder::EncodedTerm;
@@ -26,6 +27,10 @@ pub enum PlanNode {
     Union {
         entry: Box<PlanNode>,
         children: Vec<PlanNode>,
+    },
+    LeftJoin {
+        left: Box<PlanNode>,
+        right: Box<PlanNode>,
     },
     Extend {
         child: Box<PlanNode>,
@@ -203,7 +208,25 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                 variables,
                 graph_name,
             )?,
-            GraphPattern::LeftJoin(a, b, e) => unimplemented!(),
+            GraphPattern::LeftJoin(a, b, e) => {
+                let right = Box::new(self.build_for_graph_pattern(
+                    b,
+                    PlanNode::Init,
+                    variables,
+                    graph_name,
+                )?);
+                PlanNode::LeftJoin {
+                    left: Box::new(self.build_for_graph_pattern(a, input, variables, graph_name)?),
+                    right: if *e == Expression::from(Literal::from(true)) {
+                        right
+                    } else {
+                        Box::new(PlanNode::Filter {
+                            child: right,
+                            expression: self.build_for_expression(e, variables)?,
+                        })
+                    },
+                }
+            }
             GraphPattern::Filter(e, p) => PlanNode::Filter {
                 child: Box::new(self.build_for_graph_pattern(p, input, variables, graph_name)?),
                 expression: self.build_for_expression(e, variables)?,
@@ -220,7 +243,7 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                             stack.push(b);
                         }
                         Some(p) => children.push(self.build_for_graph_pattern(
-                            a,
+                            p,
                             PlanNode::Init,
                             variables,
                             graph_name,
