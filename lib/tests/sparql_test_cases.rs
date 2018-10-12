@@ -87,6 +87,12 @@ fn sparql_w3c_query_evaluation_testsuite() {
         Url::parse(
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/bnode-coreference/manifest.ttl",
         ).unwrap(),
+        Url::parse(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/boolean-effective-value/manifest.ttl",
+        ).unwrap(),
+        Url::parse(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/bound/manifest.ttl",
+        ).unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/cast/manifest.ttl").unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest.ttl")
             .unwrap(),
