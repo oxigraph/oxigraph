@@ -1083,9 +1083,12 @@ impl<'a> fmt::Display for SparqlGraphPattern<'a> {
                 }
                 Ok(())
             }
-            GraphPattern::Join(a, b) => {
-                write!(f, "{} {}", SparqlGraphPattern(&*a), SparqlGraphPattern(&*b))
-            }
+            GraphPattern::Join(a, b) => write!(
+                f,
+                "{{ {} }} {{ {} }}",
+                SparqlGraphPattern(&*a),
+                SparqlGraphPattern(&*b)
+            ),
             GraphPattern::LeftJoin(a, b, e) => write!(
                 f,
                 "{} OPTIONAL {{ {} FILTER({}) }}",

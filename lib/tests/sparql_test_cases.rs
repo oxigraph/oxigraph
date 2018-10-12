@@ -80,6 +80,8 @@ fn sparql_w3c_syntax_testsuite() {
 #[test]
 fn sparql_w3c_query_evaluation_testsuite() {
     let manifest_10_urls = vec![
+        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/algebra/manifest.ttl")
+            .unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/basic/manifest.ttl")
             .unwrap(),
         Url::parse(
@@ -88,19 +90,33 @@ fn sparql_w3c_query_evaluation_testsuite() {
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/cast/manifest.ttl").unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest.ttl")
             .unwrap(),
+        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest.ttl").unwrap(),
         Url::parse(
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest.ttl",
         ).unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional/manifest.ttl")
             .unwrap(),
+        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/triple-match/manifest.ttl")
+            .unwrap(),
     ];
     let test_blacklist = vec![
+        // Bad nested optionals
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/algebra/manifest#nested-opt-1",
+        ).unwrap(),
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/algebra/manifest#nested-opt-2",
+        ).unwrap(),
         //Multiple writing of the same xsd:integer. Our system does strong normalization.
         NamedNode::from_str(
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-1",
         ).unwrap(),
         NamedNode::from_str(
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-9",
+        ).unwrap(),
+        //URI normalization: we are normalizing more strongly
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest#normalization-3",
         ).unwrap(),
         //Test on curly brace scoping with OPTIONAL filter
         NamedNode::from_str(

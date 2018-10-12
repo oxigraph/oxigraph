@@ -92,6 +92,23 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                                                 Ok(quad) => quad.predicate == quad.object,
                                             }))
                                         }
+                                        if let Some(graph_name) = graph_name {
+                                            if graph_name.is_var() {
+                                                iter = Box::new(iter.filter(|quad| match quad {
+                                                    Err(_) => true,
+                                                    Ok(quad) => {
+                                                        quad.graph_name != ENCODED_DEFAULT_GRAPH
+                                                    }
+                                                }))
+                                            }
+                                        } else {
+                                            iter = Box::new(iter.filter(|quad| match quad {
+                                                Err(_) => true,
+                                                Ok(quad) => {
+                                                    quad.graph_name == ENCODED_DEFAULT_GRAPH
+                                                }
+                                            }))
+                                        }
                                         Box::new(iter.map(move |quad| {
                                             let quad = quad?;
                                             let mut new_tuple = tuple.clone();
@@ -123,6 +140,25 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                             Err(error) => Box::new(once(Err(error))),
                         }),
                 )
+            }
+            PlanNode::Join { left, right } => {
+                //TODO: very dumb implementation
+                let left_iter = self.eval_plan(*left, from.clone());
+                let mut left_values = Vec::with_capacity(left_iter.size_hint().0);
+                let mut errors = Vec::default();
+                for result in left_iter {
+                    match result {
+                        Ok(result) => {
+                            left_values.push(result);
+                        }
+                        Err(error) => errors.push(Err(error)),
+                    }
+                }
+                Box::new(JoinIterator {
+                    left: left_values,
+                    right_iter: self.eval_plan(*right, from),
+                    buffered_results: errors,
+                })
             }
             PlanNode::LeftJoin { left, right } => Box::new(LeftJoinIterator {
                 eval: self.clone(),
@@ -205,11 +241,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
     ) -> Option<EncodedTerm> {
         match expression {
             PlanExpression::Constant(t) => Some(*t),
-            PlanExpression::Variable(v) => if *v < tuple.len() {
-                tuple[*v]
-            } else {
-                None
-            },
+            PlanExpression::Variable(v) => get_tuple_value(*v, tuple),
             PlanExpression::Or(a, b) => match self.to_bool(self.eval_expression(a, tuple)?) {
                 Some(true) => Some(true.into()),
                 Some(false) => self.eval_expression(b, tuple),
@@ -297,7 +329,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 _ => None,
             },
             PlanExpression::Datatype(e) => self.eval_expression(e, tuple)?.datatype(),
-            PlanExpression::Bound(v) => Some((*v < tuple.len() && tuple[*v].is_some()).into()),
+            PlanExpression::Bound(v) => Some(has_tuple_value(*v, tuple).into()),
             PlanExpression::IRI(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::NamedNode { iri_id } => Some(EncodedTerm::NamedNode { iri_id }),
                 EncodedTerm::SimpleLiteral { value_id }
@@ -559,17 +591,29 @@ enum NumericBinaryOperands {
     Decimal(Decimal, Decimal),
 }
 
+fn get_tuple_value(variable: usize, tuple: &[Option<EncodedTerm>]) -> Option<EncodedTerm> {
+    if variable < tuple.len() {
+        tuple[variable]
+    } else {
+        None
+    }
+}
+
+fn has_tuple_value(variable: usize, tuple: &[Option<EncodedTerm>]) -> bool {
+    if variable < tuple.len() {
+        tuple[variable].is_some()
+    } else {
+        false
+    }
+}
+
 fn get_pattern_value(
     selector: &PatternValue,
     tuple: &[Option<EncodedTerm>],
 ) -> Option<EncodedTerm> {
     match selector {
         PatternValue::Constant(term) => Some(*term),
-        PatternValue::Variable(v) => if *v < tuple.len() {
-            tuple[*v]
-        } else {
-            None
-        },
+        PatternValue::Variable(v) => get_tuple_value(*v, tuple),
     }
 }
 
@@ -588,6 +632,62 @@ fn put_value(position: usize, value: EncodedTerm, tuple: &mut EncodedTuple) {
             tuple.resize(position, None);
         }
         tuple.push(Some(value))
+    }
+}
+
+fn combine_tuples(a: &[Option<EncodedTerm>], b: &[Option<EncodedTerm>]) -> Option<EncodedTuple> {
+    if a.len() < b.len() {
+        let mut result = b.to_owned();
+        for (key, a_value) in a.into_iter().enumerate() {
+            if let Some(a_value) = a_value {
+                match b[key] {
+                    Some(ref b_value) => if a_value != b_value {
+                        return None;
+                    },
+                    None => result[key] = Some(*a_value),
+                }
+            }
+        }
+        Some(result)
+    } else {
+        let mut result = a.to_owned();
+        for (key, b_value) in b.into_iter().enumerate() {
+            if let Some(b_value) = b_value {
+                match a[key] {
+                    Some(ref a_value) => if a_value != b_value {
+                        return None;
+                    },
+                    None => result[key] = Some(*b_value),
+                }
+            }
+        }
+        Some(result)
+    }
+}
+
+struct JoinIterator {
+    left: Vec<EncodedTuple>,
+    right_iter: EncodedTuplesIterator,
+    buffered_results: Vec<Result<EncodedTuple>>,
+}
+
+impl Iterator for JoinIterator {
+    type Item = Result<EncodedTuple>;
+
+    fn next(&mut self) -> Option<Result<EncodedTuple>> {
+        if let Some(result) = self.buffered_results.pop() {
+            return Some(result);
+        }
+        let right_tuple = match self.right_iter.next()? {
+            Ok(right_tuple) => right_tuple,
+            Err(error) => return Some(Err(error)),
+        };
+        for left_tuple in &self.left {
+            if let Some(result_tuple) = combine_tuples(left_tuple, &right_tuple) {
+                self.buffered_results.push(Ok(result_tuple))
+            }
+        }
+        self.next()
     }
 }
 

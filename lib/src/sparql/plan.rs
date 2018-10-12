@@ -20,6 +20,10 @@ pub enum PlanNode {
         object: PatternValue,
         graph_name: Option<PatternValue>,
     },
+    Join {
+        left: Box<PlanNode>,
+        right: Box<PlanNode>,
+    },
     Filter {
         child: Box<PlanNode>,
         expression: PlanExpression,
@@ -202,12 +206,15 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                 }
                 plan
             }
-            GraphPattern::Join(a, b) => self.build_for_graph_pattern(
-                b,
-                self.build_for_graph_pattern(a, input, variables, graph_name)?,
-                variables,
-                graph_name,
-            )?,
+            GraphPattern::Join(a, b) => PlanNode::Join {
+                left: Box::new(self.build_for_graph_pattern(
+                    a,
+                    input.clone(),
+                    variables,
+                    graph_name,
+                )?),
+                right: Box::new(self.build_for_graph_pattern(b, input, variables, graph_name)?),
+            },
             GraphPattern::LeftJoin(a, b, e) => {
                 let right = Box::new(self.build_for_graph_pattern(
                     b,
