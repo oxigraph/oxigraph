@@ -160,12 +160,30 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                     buffered_results: errors,
                 })
             }
-            PlanNode::LeftJoin { left, right } => Box::new(LeftJoinIterator {
-                eval: self.clone(),
-                right_plan: *right,
-                left_iter: self.eval_plan(*left, from),
-                current_right_iter: None,
-            }),
+            PlanNode::LeftJoin {
+                left,
+                right,
+                possible_problem_vars,
+            } => {
+                let problem_vars = bind_variables_in_set(&from, &possible_problem_vars);
+                let mut filtered_from = from.clone();
+                unbind_variables(&mut filtered_from, &problem_vars);
+                let iter = LeftJoinIterator {
+                    eval: self.clone(),
+                    right_plan: *right,
+                    left_iter: self.eval_plan(*left, filtered_from),
+                    current_right_iter: None,
+                };
+                if problem_vars.is_empty() {
+                    Box::new(iter)
+                } else {
+                    Box::new(BadLeftJoinIterator {
+                        input: from,
+                        iter,
+                        problem_vars,
+                    })
+                }
+            }
             PlanNode::Filter { child, expression } => {
                 let eval = self.clone();
                 Box::new(self.eval_plan(*child, from).filter(move |tuple| {
@@ -635,6 +653,21 @@ fn put_value(position: usize, value: EncodedTerm, tuple: &mut EncodedTuple) {
     }
 }
 
+fn bind_variables_in_set(binding: &[Option<EncodedTerm>], set: &[usize]) -> Vec<usize> {
+    set.into_iter()
+        .cloned()
+        .filter(|key| *key < binding.len() && binding[*key].is_some())
+        .collect()
+}
+
+fn unbind_variables(binding: &mut [Option<EncodedTerm>], variables: &[usize]) {
+    for var in variables {
+        if *var < binding.len() {
+            binding[*var] = None
+        }
+    }
+}
+
 fn combine_tuples(a: &[Option<EncodedTerm>], b: &[Option<EncodedTerm>]) -> Option<EncodedTuple> {
     if a.len() < b.len() {
         let mut result = b.to_owned();
@@ -721,6 +754,42 @@ impl<S: EncodedQuadsStore> Iterator for LeftJoinIterator<S> {
                 }
             }
             Err(error) => Some(Err(error)),
+        }
+    }
+}
+
+struct BadLeftJoinIterator<S: EncodedQuadsStore> {
+    input: EncodedTuple,
+    iter: LeftJoinIterator<S>,
+    problem_vars: Vec<usize>,
+}
+
+impl<S: EncodedQuadsStore> Iterator for BadLeftJoinIterator<S> {
+    type Item = Result<EncodedTuple>;
+
+    fn next(&mut self) -> Option<Result<EncodedTuple>> {
+        loop {
+            match self.iter.next()? {
+                Ok(mut tuple) => {
+                    let mut conflict = false;
+                    for problem_var in &self.problem_vars {
+                        if let Some(input_value) = self.input[*problem_var] {
+                            if let Some(result_value) = get_tuple_value(*problem_var, &tuple) {
+                                if input_value != result_value {
+                                    conflict = true;
+                                    continue; //Binding conflict
+                                }
+                            } else {
+                                put_value(*problem_var, input_value, &mut tuple);
+                            }
+                        }
+                    }
+                    if !conflict {
+                        return Some(Ok(tuple));
+                    }
+                }
+                Err(error) => return Some(Err(error)),
+            }
         }
     }
 }

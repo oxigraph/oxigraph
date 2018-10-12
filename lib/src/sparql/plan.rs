@@ -1,6 +1,7 @@
 use model::vocab::xsd;
 use model::Literal;
 use sparql::algebra::*;
+use std::collections::BTreeSet;
 use store::encoded::EncodedQuadsStore;
 use store::numeric_encoder::EncodedTerm;
 use Result;
@@ -35,6 +36,7 @@ pub enum PlanNode {
     LeftJoin {
         left: Box<PlanNode>,
         right: Box<PlanNode>,
+        possible_problem_vars: Vec<usize>, //Variables that should not be part of the entry of the left join
     },
     Extend {
         child: Box<PlanNode>,
@@ -56,6 +58,82 @@ pub enum PlanNode {
         child: Box<PlanNode>,
         mapping: Vec<usize>, // for each key in children the key of the returned vector (children is sliced at the vector length)
     },
+}
+
+impl PlanNode {
+    fn variables(&self) -> BTreeSet<usize> {
+        let mut set = BTreeSet::default();
+        self.add_variables(&mut set);
+        set
+    }
+
+    fn add_variables(&self, set: &mut BTreeSet<usize>) {
+        match self {
+            PlanNode::Init => (),
+            PlanNode::StaticBindings { tuples } => {
+                for tuple in tuples {
+                    for (key, value) in tuple.into_iter().enumerate() {
+                        if value.is_some() {
+                            set.insert(key);
+                        }
+                    }
+                }
+            }
+            PlanNode::QuadPatternJoin {
+                child,
+                subject,
+                predicate,
+                object,
+                graph_name,
+            } => {
+                if let PatternValue::Variable(var) = subject {
+                    set.insert(*var);
+                }
+                if let PatternValue::Variable(var) = predicate {
+                    set.insert(*var);
+                }
+                if let PatternValue::Variable(var) = object {
+                    set.insert(*var);
+                }
+                if let Some(PatternValue::Variable(var)) = graph_name {
+                    set.insert(*var);
+                }
+                child.add_variables(set);
+            }
+            PlanNode::Filter { child, expression } => {
+                child.add_variables(set);
+                expression.add_variables(set);
+            } //TODO: condition vars
+            PlanNode::Union { entry, children } => {
+                entry.add_variables(set);
+                for child in children {
+                    child.add_variables(set);
+                }
+            }
+            PlanNode::Join { left, right } => {
+                left.add_variables(set);
+                right.add_variables(set);
+            }
+            PlanNode::LeftJoin { left, right, .. } => {
+                left.add_variables(set);
+                right.add_variables(set);
+            }
+            PlanNode::Extend {
+                child, position, ..
+            } => {
+                set.insert(*position);
+                child.add_variables(set);
+            }
+            PlanNode::HashDeduplicate { child } => child.add_variables(set),
+            PlanNode::Skip { child, .. } => child.add_variables(set),
+            PlanNode::Limit { child, .. } => child.add_variables(set),
+            PlanNode::Project { child, mapping } => {
+                for i in 0..mapping.len() {
+                    set.insert(i);
+                }
+            }
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
@@ -161,6 +239,61 @@ pub enum PlanExpression {
     StringCast(Box<PlanExpression>),
 }
 
+impl PlanExpression {
+    fn add_variables(&self, set: &mut BTreeSet<usize>) {
+        match self {
+            PlanExpression::Constant(_) | PlanExpression::BNode(None) => (),
+            PlanExpression::Variable(v) | PlanExpression::Bound(v) => {
+                set.insert(*v);
+            }
+            PlanExpression::Or(a, b)
+            | PlanExpression::And(a, b)
+            | PlanExpression::Equal(a, b)
+            | PlanExpression::NotEqual(a, b)
+            | PlanExpression::Greater(a, b)
+            | PlanExpression::GreaterOrEq(a, b)
+            | PlanExpression::Lower(a, b)
+            | PlanExpression::LowerOrEq(a, b)
+            | PlanExpression::Add(a, b)
+            | PlanExpression::Sub(a, b)
+            | PlanExpression::Mul(a, b)
+            | PlanExpression::Div(a, b)
+            | PlanExpression::SameTerm(a, b)
+            | PlanExpression::LangMatches(a, b)
+            | PlanExpression::Regex(a, b, None) => {
+                a.add_variables(set);
+                b.add_variables(set);
+            }
+            PlanExpression::UnaryPlus(e)
+            | PlanExpression::UnaryMinus(e)
+            | PlanExpression::UnaryNot(e)
+            | PlanExpression::Str(e)
+            | PlanExpression::Lang(e)
+            | PlanExpression::Datatype(e)
+            | PlanExpression::IRI(e)
+            | PlanExpression::BNode(Some(e))
+            | PlanExpression::IsIRI(e)
+            | PlanExpression::IsBlank(e)
+            | PlanExpression::IsLiteral(e)
+            | PlanExpression::IsNumeric(e)
+            | PlanExpression::BooleanCast(e)
+            | PlanExpression::DoubleCast(e)
+            | PlanExpression::FloatCast(e)
+            | PlanExpression::IntegerCast(e)
+            | PlanExpression::DecimalCast(e)
+            | PlanExpression::DateTimeCast(e)
+            | PlanExpression::StringCast(e) => {
+                e.add_variables(set);
+            }
+            PlanExpression::Regex(a, b, Some(c)) => {
+                a.add_variables(set);
+                b.add_variables(set);
+                c.add_variables(set);
+            }
+        }
+    }
+}
+
 pub struct PlanBuilder<'a, S: EncodedQuadsStore> {
     store: &'a S,
 }
@@ -216,22 +349,28 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                 right: Box::new(self.build_for_graph_pattern(b, input, variables, graph_name)?),
             },
             GraphPattern::LeftJoin(a, b, e) => {
-                let right = Box::new(self.build_for_graph_pattern(
-                    b,
-                    PlanNode::Init,
-                    variables,
-                    graph_name,
-                )?);
+                let left = self.build_for_graph_pattern(a, input, variables, graph_name)?;
+                let right =
+                    self.build_for_graph_pattern(b, PlanNode::Init, variables, graph_name)?;
+                //We add the extra filter if needed
+                let right = if *e == Expression::from(Literal::from(true)) {
+                    right
+                } else {
+                    PlanNode::Filter {
+                        child: Box::new(right),
+                        expression: self.build_for_expression(e, variables)?,
+                    }
+                };
+                let possible_problem_vars = right
+                    .variables()
+                    .difference(&left.variables())
+                    .cloned()
+                    .collect();
+
                 PlanNode::LeftJoin {
-                    left: Box::new(self.build_for_graph_pattern(a, input, variables, graph_name)?),
-                    right: if *e == Expression::from(Literal::from(true)) {
-                        right
-                    } else {
-                        Box::new(PlanNode::Filter {
-                            child: right,
-                            expression: self.build_for_expression(e, variables)?,
-                        })
-                    },
+                    left: Box::new(left),
+                    right: Box::new(right),
+                    possible_problem_vars,
                 }
             }
             GraphPattern::Filter(e, p) => PlanNode::Filter {

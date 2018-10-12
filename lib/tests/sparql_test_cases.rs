@@ -100,13 +100,6 @@ fn sparql_w3c_query_evaluation_testsuite() {
             .unwrap(),
     ];
     let test_blacklist = vec![
-        // Bad nested optionals
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/algebra/manifest#nested-opt-1",
-        ).unwrap(),
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/algebra/manifest#nested-opt-2",
-        ).unwrap(),
         //Multiple writing of the same xsd:integer. Our system does strong normalization.
         NamedNode::from_str(
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-1",
