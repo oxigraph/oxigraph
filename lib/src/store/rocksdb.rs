@@ -1,5 +1,5 @@
 use byteorder::ByteOrder;
-use byteorder::NetworkEndian;
+use byteorder::LittleEndian;
 use rocksdb::ColumnFamily;
 use rocksdb::DBRawIterator;
 use rocksdb::DBVector;
@@ -84,7 +84,7 @@ impl BytesStore for RocksDbStore {
 
     fn insert_bytes(&self, value: &[u8]) -> Result<u64> {
         Ok(if let Some(id) = self.db.get_cf(self.str2id_cf, value)? {
-            NetworkEndian::read_u64(&id)
+            LittleEndian::read_u64(&id)
         } else {
             let id = self.str_id_counter.lock()?.get_and_increment(&self.db)? as u64;
             let id_bytes = to_bytes(id);
@@ -341,7 +341,7 @@ impl RocksDBCounter {
     fn get_and_increment(&self, db: &DB) -> Result<u64> {
         let value = db
             .get(self.name.as_bytes())?
-            .map_or(0, |b| NetworkEndian::read_u64(&b));
+            .map_or(0, |b| LittleEndian::read_u64(&b));
         db.put(self.name.as_bytes(), &to_bytes(value + 1))?;
         Ok(value)
     }
@@ -513,6 +513,6 @@ impl<I: Iterator<Item = Result<EncodedQuad>>> Iterator for InGraphQuadsIterator<
 
 fn to_bytes(int: u64) -> [u8; 8] {
     let mut buf = [0 as u8; 8];
-    NetworkEndian::write_u64(&mut buf, int);
+    LittleEndian::write_u64(&mut buf, int);
     buf
 }

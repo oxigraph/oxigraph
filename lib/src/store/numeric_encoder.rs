@@ -1,4 +1,4 @@
-use byteorder::{NetworkEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use chrono::DateTime;
 use chrono::FixedOffset;
 use chrono::NaiveDateTime;
@@ -270,7 +270,7 @@ impl<R: Read> TermReader for R {
         match self.read_u8()? {
             TYPE_DEFAULT_GRAPH_ID => Ok(EncodedTerm::DefaultGraph {}),
             TYPE_NAMED_NODE_ID => Ok(EncodedTerm::NamedNode {
-                iri_id: self.read_u64::<NetworkEndian>()?,
+                iri_id: self.read_u64::<LittleEndian>()?,
             }),
             TYPE_BLANK_NODE_ID => {
                 let mut uuid_buffer = [0 as u8; 16];
@@ -278,29 +278,29 @@ impl<R: Read> TermReader for R {
                 Ok(EncodedTerm::BlankNode(Uuid::from_bytes(uuid_buffer)))
             }
             TYPE_SIMPLE_LITERAL_ID => Ok(EncodedTerm::SimpleLiteral {
-                value_id: self.read_u64::<NetworkEndian>()?,
+                value_id: self.read_u64::<LittleEndian>()?,
             }),
             TYPE_LANG_STRING_LITERAL_ID => Ok(EncodedTerm::LangStringLiteral {
-                language_id: self.read_u64::<NetworkEndian>()?,
-                value_id: self.read_u64::<NetworkEndian>()?,
+                language_id: self.read_u64::<LittleEndian>()?,
+                value_id: self.read_u64::<LittleEndian>()?,
             }),
             TYPE_TYPED_LITERAL_ID => Ok(EncodedTerm::TypedLiteral {
-                datatype_id: self.read_u64::<NetworkEndian>()?,
-                value_id: self.read_u64::<NetworkEndian>()?,
+                datatype_id: self.read_u64::<LittleEndian>()?,
+                value_id: self.read_u64::<LittleEndian>()?,
             }),
             TYPE_STRING_LITERAL => Ok(EncodedTerm::StringLiteral {
-                value_id: self.read_u64::<NetworkEndian>()?,
+                value_id: self.read_u64::<LittleEndian>()?,
             }),
             TYPE_BOOLEAN_LITERAL_TRUE => Ok(EncodedTerm::BooleanLiteral(true)),
             TYPE_BOOLEAN_LITERAL_FALSE => Ok(EncodedTerm::BooleanLiteral(false)),
             TYPE_FLOAT_LITERAL => Ok(EncodedTerm::FloatLiteral(OrderedFloat(
-                self.read_f32::<NetworkEndian>()?,
+                self.read_f32::<LittleEndian>()?,
             ))),
             TYPE_DOUBLE_LITERAL => Ok(EncodedTerm::DoubleLiteral(OrderedFloat(
-                self.read_f64::<NetworkEndian>()?,
+                self.read_f64::<LittleEndian>()?,
             ))),
             TYPE_INTEGER_LITERAL => Ok(EncodedTerm::IntegerLiteral(
-                self.read_i128::<NetworkEndian>()?,
+                self.read_i128::<LittleEndian>()?,
             )),
             TYPE_DECIMAL_LITERAL => {
                 let mut buffer = [0 as u8; 16];
@@ -309,16 +309,16 @@ impl<R: Read> TermReader for R {
             }
             TYPE_DATE_TIME_LITERAL => Ok(EncodedTerm::DateTime(DateTime::from_utc(
                 NaiveDateTime::from_timestamp_opt(
-                    self.read_i64::<NetworkEndian>()?,
-                    self.read_u32::<NetworkEndian>()?,
+                    self.read_i64::<LittleEndian>()?,
+                    self.read_u32::<LittleEndian>()?,
                 ).ok_or("Invalid date time serialization")?,
-                FixedOffset::east_opt(self.read_i32::<NetworkEndian>()?)
+                FixedOffset::east_opt(self.read_i32::<LittleEndian>()?)
                     .ok_or("Invalid timezone offset")?,
             ))),
             TYPE_NAIVE_DATE_TIME_LITERAL => Ok(EncodedTerm::NaiveDateTime(
                 NaiveDateTime::from_timestamp_opt(
-                    self.read_i64::<NetworkEndian>()?,
-                    self.read_u32::<NetworkEndian>()?,
+                    self.read_i64::<LittleEndian>()?,
+                    self.read_u32::<LittleEndian>()?,
                 ).ok_or("Invalid date time serialization")?,
             )),
             _ => Err("the term buffer has an invalid type id".into()),
@@ -377,38 +377,38 @@ impl<R: Write> TermWriter for R {
         self.write_u8(term.type_id())?;
         match term {
             EncodedTerm::DefaultGraph {} => {}
-            EncodedTerm::NamedNode { iri_id } => self.write_u64::<NetworkEndian>(iri_id)?,
+            EncodedTerm::NamedNode { iri_id } => self.write_u64::<LittleEndian>(iri_id)?,
             EncodedTerm::BlankNode(id) => self.write_all(id.as_bytes())?,
             EncodedTerm::SimpleLiteral { value_id } | EncodedTerm::StringLiteral { value_id } => {
-                self.write_u64::<NetworkEndian>(value_id)?;
+                self.write_u64::<LittleEndian>(value_id)?;
             }
             EncodedTerm::LangStringLiteral {
                 value_id,
                 language_id,
             } => {
-                self.write_u64::<NetworkEndian>(language_id)?;
-                self.write_u64::<NetworkEndian>(value_id)?;
+                self.write_u64::<LittleEndian>(language_id)?;
+                self.write_u64::<LittleEndian>(value_id)?;
             }
             EncodedTerm::TypedLiteral {
                 value_id,
                 datatype_id,
             } => {
-                self.write_u64::<NetworkEndian>(datatype_id)?;
-                self.write_u64::<NetworkEndian>(value_id)?;
+                self.write_u64::<LittleEndian>(datatype_id)?;
+                self.write_u64::<LittleEndian>(value_id)?;
             }
             EncodedTerm::BooleanLiteral(_) => {}
-            EncodedTerm::FloatLiteral(value) => self.write_f32::<NetworkEndian>(*value)?,
-            EncodedTerm::DoubleLiteral(value) => self.write_f64::<NetworkEndian>(*value)?,
-            EncodedTerm::IntegerLiteral(value) => self.write_i128::<NetworkEndian>(value)?,
+            EncodedTerm::FloatLiteral(value) => self.write_f32::<LittleEndian>(*value)?,
+            EncodedTerm::DoubleLiteral(value) => self.write_f64::<LittleEndian>(*value)?,
+            EncodedTerm::IntegerLiteral(value) => self.write_i128::<LittleEndian>(value)?,
             EncodedTerm::DecimalLiteral(value) => self.write_all(&value.serialize())?,
             EncodedTerm::DateTime(value) => {
-                self.write_i64::<NetworkEndian>(value.timestamp())?;
-                self.write_u32::<NetworkEndian>(value.timestamp_subsec_nanos())?;
-                self.write_i32::<NetworkEndian>(value.timezone().local_minus_utc())?;
+                self.write_i64::<LittleEndian>(value.timestamp())?;
+                self.write_u32::<LittleEndian>(value.timestamp_subsec_nanos())?;
+                self.write_i32::<LittleEndian>(value.timezone().local_minus_utc())?;
             }
             EncodedTerm::NaiveDateTime(value) => {
-                self.write_i64::<NetworkEndian>(value.timestamp())?;
-                self.write_u32::<NetworkEndian>(value.timestamp_subsec_nanos())?;
+                self.write_i64::<LittleEndian>(value.timestamp())?;
+                self.write_u32::<LittleEndian>(value.timestamp_subsec_nanos())?;
             }
         }
         Ok(())
