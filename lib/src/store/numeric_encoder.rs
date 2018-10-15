@@ -234,6 +234,12 @@ impl From<NaiveDateTime> for EncodedTerm {
     }
 }
 
+impl From<BlankNode> for EncodedTerm {
+    fn from(node: BlankNode) -> Self {
+        EncodedTerm::BlankNode(*node.as_uuid())
+    }
+}
+
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct EncodedQuad {
     pub subject: EncodedTerm,

@@ -37,6 +37,7 @@ extern crate error_chain;
 #[macro_use]
 extern crate lazy_static;
 extern crate chrono;
+extern crate language_tags;
 extern crate num_traits;
 extern crate ordered_float;
 extern crate quick_xml;

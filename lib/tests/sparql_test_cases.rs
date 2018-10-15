@@ -96,6 +96,12 @@ fn sparql_w3c_query_evaluation_testsuite() {
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/cast/manifest.ttl").unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest.ttl")
             .unwrap(),
+        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest.ttl")
+            .unwrap(),
+        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest.ttl")
+            .unwrap(),
+        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-ops/manifest.ttl")
+            .unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest.ttl").unwrap(),
         Url::parse(
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest.ttl",
@@ -113,6 +119,31 @@ fn sparql_w3c_query_evaluation_testsuite() {
         NamedNode::from_str(
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-9",
         ).unwrap(),
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-str-1",
+        ).unwrap(),
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-str-2",
+        ).unwrap(),
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest#eq-graph-1",
+        ).unwrap(),
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest#eq-graph-2",
+        ).unwrap(),
+        //Multiple writing of the same xsd:double. Our system does strong normalization.
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm",
+        ).unwrap(),
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm-simple",
+        ).unwrap(),
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm-eq",
+        ).unwrap(),
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm-not-eq",
+        ).unwrap(),
         //URI normalization: we are normalizing more strongly
         NamedNode::from_str(
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest#normalization-3",
@@ -120,6 +151,27 @@ fn sparql_w3c_query_evaluation_testsuite() {
         //Test on curly brace scoping with OPTIONAL filter
         NamedNode::from_str(
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest#dawg-optional-filter-005-not-simplified",
+        ).unwrap(),
+        //Case insensitive language tag comparison
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#lang-case-insensitive-eq",
+        ).unwrap(),
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#lang-case-insensitive-ne",
+        ).unwrap(),
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-lang-3",
+        ).unwrap(),
+        //Difference in language matching
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-langMatches-basic",
+        ).unwrap(),
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-langMatches-basic",
+        ).unwrap(),
+        //DATATYPE("foo"@en) returns rdf:langString in SPARQL 1.1
+        NamedNode::from_str(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-datatype-2",
         ).unwrap(),
     ];
     let client = RDFClient::default();
@@ -170,14 +222,14 @@ fn sparql_w3c_query_evaluation_testsuite() {
                         .load_sparql_query_result_graph(test.result.clone().unwrap())
                         .unwrap();
                     assert!(
-                            actual_graph.is_isomorphic(&expected_graph).unwrap(),
-                            "Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
-                            test,
-                            expected_graph,
-                            actual_graph,
-                            client.load_sparql_query(test.query.clone()).unwrap(),
-                            data
-                        )
+                        actual_graph.is_isomorphic(&expected_graph).unwrap(),
+                        "Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
+                        test,
+                        expected_graph,
+                        actual_graph,
+                        client.load_sparql_query(test.query.clone()).unwrap(),
+                        data
+                    )
                 }
             }
         } else {

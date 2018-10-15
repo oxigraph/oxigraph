@@ -1,5 +1,7 @@
 use chrono::DateTime;
 use chrono::NaiveDateTime;
+use language_tags::LanguageTag;
+use model::BlankNode;
 use num_traits::identities::Zero;
 use num_traits::FromPrimitive;
 use num_traits::One;
@@ -8,10 +10,12 @@ use ordered_float::OrderedFloat;
 use rust_decimal::Decimal;
 use sparql::algebra::*;
 use sparql::plan::*;
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::iter::once;
 use std::iter::Iterator;
 use std::str;
+use std::str::FromStr;
 use std::sync::Arc;
 use store::encoded::EncodedQuadsStore;
 use store::numeric_encoder::*;
@@ -277,23 +281,47 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 },
             },
             PlanExpression::Equal(a, b) => {
-                Some((self.eval_expression(a, tuple)? == self.eval_expression(b, tuple)?).into())
+                let a = self.eval_expression(a, tuple)?;
+                let b = self.eval_expression(b, tuple)?;
+                Some((a == b || self.partial_cmp_terms(a, b) == Some(Ordering::Equal)).into())
             }
             PlanExpression::NotEqual(a, b) => {
-                Some((self.eval_expression(a, tuple)? != self.eval_expression(b, tuple)?).into())
+                let a = self.eval_expression(a, tuple)?;
+                let b = self.eval_expression(b, tuple)?;
+                Some((a != b && self.partial_cmp_terms(a, b) != Some(Ordering::Equal)).into())
             }
-            PlanExpression::Greater(a, b) => {
-                Some((self.eval_expression(a, tuple)? > self.eval_expression(b, tuple)?).into())
-            }
-            PlanExpression::GreaterOrEq(a, b) => {
-                Some((self.eval_expression(a, tuple)? >= self.eval_expression(b, tuple)?).into())
-            }
-            PlanExpression::Lower(a, b) => {
-                Some((self.eval_expression(a, tuple)? < self.eval_expression(b, tuple)?).into())
-            }
-            PlanExpression::LowerOrEq(a, b) => {
-                Some((self.eval_expression(a, tuple)? <= self.eval_expression(b, tuple)?).into())
-            }
+            PlanExpression::Greater(a, b) => Some(
+                (self.partial_cmp_terms(
+                    self.eval_expression(a, tuple)?,
+                    self.eval_expression(b, tuple)?,
+                )? == Ordering::Greater)
+                    .into(),
+            ),
+            PlanExpression::GreaterOrEq(a, b) => Some(
+                match self.partial_cmp_terms(
+                    self.eval_expression(a, tuple)?,
+                    self.eval_expression(b, tuple)?,
+                )? {
+                    Ordering::Greater | Ordering::Equal => true,
+                    _ => false,
+                }.into(),
+            ),
+            PlanExpression::Lower(a, b) => Some(
+                (self.partial_cmp_terms(
+                    self.eval_expression(a, tuple)?,
+                    self.eval_expression(b, tuple)?,
+                )? == Ordering::Less)
+                    .into(),
+            ),
+            PlanExpression::LowerOrEq(a, b) => Some(
+                match self.partial_cmp_terms(
+                    self.eval_expression(a, tuple)?,
+                    self.eval_expression(b, tuple)?,
+                )? {
+                    Ordering::Less | Ordering::Equal => true,
+                    _ => false,
+                }.into(),
+            ),
             PlanExpression::Add(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
                 NumericBinaryOperands::Float(v1, v2) => (v1 + v2).into(),
                 NumericBinaryOperands::Double(v1, v2) => (v1 + v2).into(),
@@ -344,6 +372,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                         value_id: language_id,
                     })
                 }
+                e if e.is_literal() => Some(ENCODED_EMPTY_SIMPLE_LITERAL),
                 _ => None,
             },
             PlanExpression::Datatype(e) => self.eval_expression(e, tuple)?.datatype(),
@@ -355,6 +384,10 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                     Some(EncodedTerm::NamedNode { iri_id: value_id })
                 }
                 _ => None,
+            },
+            PlanExpression::BNode(id) => match id {
+                Some(id) => unimplemented!(),
+                None => Some(BlankNode::default().into()),
             },
             PlanExpression::SameTerm(a, b) => {
                 Some((self.eval_expression(a, tuple)? == self.eval_expression(b, tuple)?).into())
@@ -368,6 +401,31 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             PlanExpression::IsLiteral(e) => {
                 Some(self.eval_expression(e, tuple)?.is_literal().into())
             }
+            PlanExpression::IsNumeric(e) => Some(
+                match self.eval_expression(e, tuple)? {
+                    EncodedTerm::FloatLiteral(_)
+                    | EncodedTerm::DoubleLiteral(_)
+                    | EncodedTerm::IntegerLiteral(_)
+                    | EncodedTerm::DecimalLiteral(_) => true,
+                    _ => false,
+                }.into(),
+            ),
+            PlanExpression::LangMatches(language_tag, language_range) => {
+                let language_tag =
+                    self.to_simple_string(self.eval_expression(language_tag, tuple)?)?;
+                let language_range =
+                    self.to_simple_string(self.eval_expression(language_range, tuple)?)?;
+                Some(
+                    if language_range == "*" {
+                        !language_tag.is_empty()
+                    } else {
+                        LanguageTag::from_str(&language_range)
+                            .ok()?
+                            .matches(&LanguageTag::from_str(&language_tag).ok()?)
+                    }.into(),
+                )
+            }
+            PlanExpression::Regex(text, pattern, flags) => unimplemented!(),
             PlanExpression::BooleanCast(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::BooleanLiteral(value) => Some(value.into()),
                 EncodedTerm::SimpleLiteral { value_id }
@@ -473,7 +531,6 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             PlanExpression::StringCast(e) => Some(EncodedTerm::StringLiteral {
                 value_id: self.to_string_id(self.eval_expression(e, tuple)?)?,
             }),
-            e => unimplemented!(),
         }
     }
 
@@ -514,6 +571,18 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 self.store.insert_bytes(value.to_string().as_bytes()).ok()
             }
             _ => None,
+        }
+    }
+
+    fn to_simple_string(&self, term: EncodedTerm) -> Option<String> {
+        if let EncodedTerm::SimpleLiteral { value_id } = term {
+            Some(
+                str::from_utf8(&self.store.get_bytes(value_id).ok()??)
+                    .ok()?
+                    .to_owned(),
+            )
+        } else {
+            None
         }
     }
 
@@ -599,6 +668,46 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                     }).collect()
             })),
         )
+    }
+
+    fn partial_cmp_terms(&self, a: EncodedTerm, b: EncodedTerm) -> Option<Ordering> {
+        match a {
+            EncodedTerm::SimpleLiteral { value_id: a }
+            | EncodedTerm::StringLiteral { value_id: a } => match b {
+                EncodedTerm::SimpleLiteral { value_id: b }
+                | EncodedTerm::StringLiteral { value_id: b } => a.partial_cmp(&b),
+                _ => None,
+            },
+            EncodedTerm::FloatLiteral(a) => match b {
+                EncodedTerm::FloatLiteral(b) => (*a).partial_cmp(&*b),
+                EncodedTerm::DoubleLiteral(b) => a.to_f64()?.partial_cmp(&*b),
+                EncodedTerm::IntegerLiteral(b) => (*a).partial_cmp(&b.to_f32()?),
+                EncodedTerm::DecimalLiteral(b) => (*a).partial_cmp(&b.to_f32()?),
+                _ => None,
+            },
+            EncodedTerm::DoubleLiteral(a) => match b {
+                EncodedTerm::FloatLiteral(b) => (*a).partial_cmp(&b.to_f64()?),
+                EncodedTerm::DoubleLiteral(b) => (*a).partial_cmp(&*b),
+                EncodedTerm::IntegerLiteral(b) => (*a).partial_cmp(&b.to_f64()?),
+                EncodedTerm::DecimalLiteral(b) => (*a).partial_cmp(&b.to_f64()?),
+                _ => None,
+            },
+            EncodedTerm::IntegerLiteral(a) => match b {
+                EncodedTerm::FloatLiteral(b) => a.to_f32()?.partial_cmp(&*b),
+                EncodedTerm::DoubleLiteral(b) => a.to_f64()?.partial_cmp(&*b),
+                EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&b),
+                EncodedTerm::DecimalLiteral(b) => Decimal::from_i128(a)?.partial_cmp(&b),
+                _ => None,
+            },
+            EncodedTerm::DecimalLiteral(a) => match b {
+                EncodedTerm::FloatLiteral(b) => a.to_f32()?.partial_cmp(&*b),
+                EncodedTerm::DoubleLiteral(b) => a.to_f64()?.partial_cmp(&*b),
+                EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&Decimal::from_i128(b)?),
+                EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&b),
+                _ => None,
+            },
+            _ => None,
+        }
     }
 }
 
