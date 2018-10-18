@@ -42,19 +42,19 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
 
     pub fn evaluate_select_plan<'a>(
         &'a self,
-        plan: &PlanNode,
+        plan: &'a PlanNode,
         variables: &[Variable],
     ) -> Result<QueryResult<'a>> {
-        let iter = self.eval_plan(plan.clone(), vec![None; variables.len()]);
+        let iter = self.eval_plan(plan, vec![None; variables.len()]);
         Ok(QueryResult::Bindings(
             self.decode_bindings(iter, variables.to_vec()),
         ))
     }
 
-    fn eval_plan<'a>(&self, node: PlanNode, from: EncodedTuple) -> EncodedTuplesIterator<'a> {
+    fn eval_plan<'a>(&self, node: &'a PlanNode, from: EncodedTuple) -> EncodedTuplesIterator<'a> {
         match node {
             PlanNode::Init => Box::new(once(Ok(from))),
-            PlanNode::StaticBindings { tuples } => Box::new(tuples.into_iter().map(Ok)),
+            PlanNode::StaticBindings { tuples } => Box::new(tuples.iter().cloned().map(Ok)),
             PlanNode::QuadPatternJoin {
                 child,
                 subject,
@@ -64,7 +64,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             } => {
                 let eval = self.clone();
                 Box::new(
-                    self.eval_plan(*child, from)
+                    self.eval_plan(&*child, from)
                         .flat_map(move |tuple| match tuple {
                             Ok(tuple) => {
                                 let iter: EncodedTuplesIterator = match eval
@@ -147,7 +147,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             }
             PlanNode::Join { left, right } => {
                 //TODO: very dumb implementation
-                let left_iter = self.eval_plan(*left, from.clone());
+                let left_iter = self.eval_plan(&*left, from.clone());
                 let mut left_values = Vec::with_capacity(left_iter.size_hint().0);
                 let mut errors = Vec::default();
                 for result in left_iter {
@@ -160,7 +160,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 }
                 Box::new(JoinIterator {
                     left: left_values,
-                    right_iter: self.eval_plan(*right, from),
+                    right_iter: self.eval_plan(&*right, from),
                     buffered_results: errors,
                 })
             }
@@ -174,8 +174,8 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 unbind_variables(&mut filtered_from, &problem_vars);
                 let iter = LeftJoinIterator {
                     eval: self.clone(),
-                    right_plan: *right,
-                    left_iter: self.eval_plan(*left, filtered_from),
+                    right_plan: &*right,
+                    left_iter: self.eval_plan(&*left, filtered_from),
                     current_right_iter: None,
                 };
                 if problem_vars.is_empty() {
@@ -190,7 +190,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             }
             PlanNode::Filter { child, expression } => {
                 let eval = self.clone();
-                Box::new(self.eval_plan(*child, from).filter(move |tuple| {
+                Box::new(self.eval_plan(&*child, from).filter(move |tuple| {
                     match tuple {
                         Ok(tuple) => eval
                             .eval_expression(&expression, tuple)
@@ -202,8 +202,8 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             }
             PlanNode::Union { entry, children } => Box::new(UnionIterator {
                 eval: self.clone(),
-                children_plan: children,
-                input_iter: self.eval_plan(*entry, from),
+                children_plan: &children,
+                input_iter: self.eval_plan(&*entry, from),
                 current_iters: Vec::default(),
             }),
             PlanNode::Extend {
@@ -213,11 +213,11 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             } => {
                 let eval = self.clone();
                 Box::new(
-                    self.eval_plan(*child, from)
+                    self.eval_plan(&*child, from)
                         .filter_map(move |tuple| match tuple {
                             Ok(mut tuple) => {
                                 put_value(
-                                    position,
+                                    *position,
                                     eval.eval_expression(&expression, &tuple)?,
                                     &mut tuple,
                                 );
@@ -228,7 +228,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 )
             }
             PlanNode::HashDeduplicate { child } => {
-                let iter = self.eval_plan(*child, from);
+                let iter = self.eval_plan(&*child, from);
                 let mut values = HashSet::with_capacity(iter.size_hint().0);
                 let mut errors = Vec::default();
                 for result in iter {
@@ -241,13 +241,15 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 }
                 Box::new(errors.into_iter().chain(values.into_iter().map(Ok)))
             }
-            PlanNode::Skip { child, count } => Box::new(self.eval_plan(*child, from).skip(count)),
-            PlanNode::Limit { child, count } => Box::new(self.eval_plan(*child, from).take(count)),
+            PlanNode::Skip { child, count } => Box::new(self.eval_plan(&*child, from).skip(*count)),
+            PlanNode::Limit { child, count } => {
+                Box::new(self.eval_plan(&*child, from).take(*count))
+            }
             PlanNode::Project { child, mapping } => {
-                Box::new(self.eval_plan(*child, from).map(move |tuple| {
+                Box::new(self.eval_plan(&*child, from).map(move |tuple| {
                     let tuple = tuple?;
                     let mut new_tuple = Vec::with_capacity(mapping.len());
-                    for key in &mapping {
+                    for key in mapping {
                         new_tuple.push(tuple[*key]);
                     }
                     Ok(new_tuple)
@@ -835,7 +837,7 @@ impl<'a> Iterator for JoinIterator<'a> {
 
 struct LeftJoinIterator<'a, S: EncodedQuadsStore> {
     eval: SimpleEvaluator<S>,
-    right_plan: PlanNode,
+    right_plan: &'a PlanNode,
     left_iter: EncodedTuplesIterator<'a>,
     current_right_iter: Option<EncodedTuplesIterator<'a>>,
 }
@@ -851,9 +853,7 @@ impl<'a, S: EncodedQuadsStore> Iterator for LeftJoinIterator<'a, S> {
         }
         match self.left_iter.next()? {
             Ok(left_tuple) => {
-                let mut right_iter = self
-                    .eval
-                    .eval_plan(self.right_plan.clone(), left_tuple.clone());
+                let mut right_iter = self.eval.eval_plan(self.right_plan, left_tuple.clone());
                 match right_iter.next() {
                     Some(right_tuple) => {
                         self.current_right_iter = Some(right_iter);
@@ -905,7 +905,7 @@ impl<'a, S: EncodedQuadsStore> Iterator for BadLeftJoinIterator<'a, S> {
 
 struct UnionIterator<'a, S: EncodedQuadsStore> {
     eval: SimpleEvaluator<S>,
-    children_plan: Vec<PlanNode>,
+    children_plan: &'a Vec<PlanNode>,
     input_iter: EncodedTuplesIterator<'a>,
     current_iters: Vec<EncodedTuplesIterator<'a>>,
 }
@@ -922,9 +922,9 @@ impl<'a, S: EncodedQuadsStore> Iterator for UnionIterator<'a, S> {
         }
         match self.input_iter.next()? {
             Ok(input_tuple) => {
-                for plan in &self.children_plan {
+                for plan in self.children_plan {
                     self.current_iters
-                        .push(self.eval.eval_plan(plan.clone(), input_tuple.clone()));
+                        .push(self.eval.eval_plan(plan, input_tuple.clone()));
                 }
             }
             Err(error) => return Some(Err(error)),
