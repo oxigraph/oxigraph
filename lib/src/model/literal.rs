@@ -83,7 +83,20 @@ impl Literal {
                 Ok(value) => LiteralContent::Double(OrderedFloat(value)),
                 Err(_) => LiteralContent::TypedLiteral { value, datatype },
             }
-        } else if datatype == *xsd::INTEGER {
+        } else if datatype == *xsd::INTEGER
+            || datatype == *xsd::BYTE
+            || datatype == *xsd::SHORT
+            || datatype == *xsd::INT
+            || datatype == *xsd::LONG
+            || datatype == *xsd::UNSIGNED_BYTE
+            || datatype == *xsd::UNSIGNED_SHORT
+            || datatype == *xsd::UNSIGNED_INT
+            || datatype == *xsd::UNSIGNED_LONG
+            || datatype == *xsd::POSITIVE_INTEGER
+            || datatype == *xsd::NEGATIVE_INTEGER
+            || datatype == *xsd::NON_POSITIVE_INTEGER
+            || datatype == *xsd::NON_NEGATIVE_INTEGER
+        {
             match value.parse() {
                 Ok(value) => LiteralContent::Integer(value),
                 Err(_) => LiteralContent::TypedLiteral { value, datatype },
@@ -93,18 +106,13 @@ impl Literal {
                 Ok(value) => LiteralContent::Decimal(value),
                 Err(_) => LiteralContent::TypedLiteral { value, datatype },
             }
-        } else if datatype == *xsd::DATE_TIME {
+        } else if datatype == *xsd::DATE_TIME || datatype == *xsd::DATE_TIME_STAMP {
             match DateTime::parse_from_rfc3339(&value) {
                 Ok(value) => LiteralContent::DateTime(value),
                 Err(_) => match NaiveDateTime::parse_from_str(&value, "%Y-%m-%dT%H:%M:%S") {
                     Ok(value) => LiteralContent::NaiveDateTime(value),
                     Err(_) => LiteralContent::TypedLiteral { value, datatype },
                 },
-            }
-        } else if datatype == *xsd::DATE_TIME_STAMP {
-            match DateTime::parse_from_rfc3339(&value) {
-                Ok(value) => LiteralContent::DateTime(value),
-                Err(_) => LiteralContent::TypedLiteral { value, datatype },
             }
         } else {
             LiteralContent::TypedLiteral { value, datatype }

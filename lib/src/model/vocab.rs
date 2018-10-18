@@ -52,6 +52,9 @@ pub mod xsd {
         /// true, false
         pub static ref BOOLEAN: NamedNode =
             NamedNode::from_str("http://www.w3.org/2001/XMLSchema#boolean").unwrap();
+        /// 128…+127 (8 bit)
+        pub static ref BYTE: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2001/XMLSchema#byte").unwrap();
         /// Dates (yyyy-mm-dd) with or without timezone
         pub static ref DATE: NamedNode =
             NamedNode::from_str("http://www.w3.org/2001/XMLSchema#date").unwrap();
@@ -91,15 +94,48 @@ pub mod xsd {
         /// Gregorian calendar year and month
         pub static ref G_YEAR_MONTH: NamedNode =
             NamedNode::from_str("http://www.w3.org/2001/XMLSchema#gYearMonth").unwrap();
+        /// -2147483648…+2147483647 (32 bit)
+        pub static ref INT: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2001/XMLSchema#int").unwrap();
         /// Arbitrary-size integer numbers
         pub static ref INTEGER: NamedNode =
             NamedNode::from_str("http://www.w3.org/2001/XMLSchema#integer").unwrap();
+        /// -9223372036854775808…+9223372036854775807 (64 bit)
+        pub static ref LONG: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2001/XMLSchema#long").unwrap();
+        /// Integer numbers <0
+        pub static ref NEGATIVE_INTEGER: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2001/XMLSchema#negativeInteger").unwrap();
+        /// Integer numbers ≥0
+        pub static ref NON_NEGATIVE_INTEGER: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2001/XMLSchema#nonNegativeInteger").unwrap();
+        /// Integer numbers ≤0
+        pub static ref NON_POSITIVE_INTEGER: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2001/XMLSchema#nonPositiveInteger").unwrap();
+        /// Integer numbers >0
+        pub static ref POSITIVE_INTEGER: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2001/XMLSchema#positiveInteger").unwrap();
         /// Times (hh:mm:ss.sss…) with or without timezone
         pub static ref TIME: NamedNode =
             NamedNode::from_str("http://www.w3.org/2001/XMLSchema#time").unwrap();
+        /// -32768…+32767 (16 bit)
+        pub static ref SHORT: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2001/XMLSchema#short").unwrap();
         /// Character strings (but not all Unicode character strings)
         pub static ref STRING: NamedNode =
             NamedNode::from_str("http://www.w3.org/2001/XMLSchema#string").unwrap();
+        /// 0…255 (8 bit)
+        pub static ref UNSIGNED_BYTE: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2001/XMLSchema#unsignedByte").unwrap();
+        /// 0…4294967295 (32 bit)
+        pub static ref UNSIGNED_INT: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2001/XMLSchema#unsignedInt").unwrap();
+        /// 0…18446744073709551615 (64 bit)
+        pub static ref UNSIGNED_LONG: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2001/XMLSchema#unsignedLong").unwrap();
+        /// 0…65535 (16 bit)
+        pub static ref UNSIGNED_SHORT: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2001/XMLSchema#unsignedShort").unwrap();
         /// Duration of time (months and years only)
         pub static ref YEAR_MONTH_DURATION: NamedNode =
             NamedNode::from_str("http://www.w3.org/2001/XMLSchema#yearMonthDuration").unwrap();
