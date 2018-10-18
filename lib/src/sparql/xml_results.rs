@@ -10,7 +10,7 @@ use std::iter::empty;
 use std::str::FromStr;
 use Result;
 
-pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResult> {
+pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResult<'static>> {
     enum State {
         Start,
         Sparql,

@@ -211,30 +211,34 @@ fn sparql_w3c_query_evaluation_testsuite() {
                     .unwrap()
                     .for_each(|triple| named_graph.insert(&triple.unwrap()).unwrap());
             }
-            match data
-                .prepare_query(client.get(&test.query).unwrap())
-                .and_then(|p| p.exec())
-            {
+            match data.prepare_query(client.get(&test.query).unwrap()) {
                 Err(error) => assert!(
                     false,
                     "Failure to parse query of {} with error: {}",
                     test, error
                 ),
-                Ok(result) => {
-                    let actual_graph = to_graph(result).unwrap();
-                    let expected_graph = client
-                        .load_sparql_query_result_graph(test.result.clone().unwrap())
-                        .unwrap();
-                    assert!(
-                        actual_graph.is_isomorphic(&expected_graph).unwrap(),
-                        "Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
-                        test,
-                        expected_graph,
-                        actual_graph,
-                        client.load_sparql_query(test.query.clone()).unwrap(),
-                        data
-                    )
-                }
+                Ok(query) => match query.exec() {
+                    Err(error) => assert!(
+                        false,
+                        "Failure to execute query of {} with error: {}",
+                        test, error
+                    ),
+                    Ok(result) => {
+                        let actual_graph = to_graph(result).unwrap();
+                        let expected_graph = client
+                            .load_sparql_query_result_graph(test.result.clone().unwrap())
+                            .unwrap();
+                        assert!(
+                            actual_graph.is_isomorphic(&expected_graph).unwrap(),
+                            "Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
+                            test,
+                            expected_graph,
+                            actual_graph,
+                            client.load_sparql_query(test.query.clone()).unwrap(),
+                            data
+                        )
+                    }
+                },
             }
         } else {
             assert!(false, "Not supported test: {}", test);

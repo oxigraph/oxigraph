@@ -21,7 +21,7 @@ use store::encoded::EncodedQuadsStore;
 use store::numeric_encoder::*;
 use Result;
 
-type EncodedTuplesIterator = Box<dyn Iterator<Item = Result<EncodedTuple>>>;
+type EncodedTuplesIterator<'a> = Box<dyn Iterator<Item = Result<EncodedTuple>> + 'a>;
 
 pub struct SimpleEvaluator<S: EncodedQuadsStore> {
     store: Arc<S>,
@@ -40,18 +40,18 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
         Self { store }
     }
 
-    pub fn evaluate(&self, query: &Query) -> Result<QueryResult> {
-        match query {
-            Query::Select { algebra, dataset } => {
-                let (plan, variables) = PlanBuilder::build(&*self.store, algebra)?;
-                let iter = self.eval_plan(plan, vec![None; variables.len()]);
-                Ok(QueryResult::Bindings(self.decode_bindings(iter, variables)))
-            }
-            _ => unimplemented!(),
-        }
+    pub fn evaluate_select_plan<'a>(
+        &'a self,
+        plan: &PlanNode,
+        variables: &[Variable],
+    ) -> Result<QueryResult<'a>> {
+        let iter = self.eval_plan(plan.clone(), vec![None; variables.len()]);
+        Ok(QueryResult::Bindings(
+            self.decode_bindings(iter, variables.to_vec()),
+        ))
     }
 
-    fn eval_plan(&self, node: PlanNode, from: EncodedTuple) -> EncodedTuplesIterator {
+    fn eval_plan<'a>(&self, node: PlanNode, from: EncodedTuple) -> EncodedTuplesIterator<'a> {
         match node {
             PlanNode::Init => Box::new(once(Ok(from))),
             PlanNode::StaticBindings { tuples } => Box::new(tuples.into_iter().map(Ok)),
@@ -648,11 +648,11 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
         }
     }
 
-    fn decode_bindings(
+    fn decode_bindings<'a>(
         &self,
-        iter: EncodedTuplesIterator,
+        iter: EncodedTuplesIterator<'a>,
         variables: Vec<Variable>,
-    ) -> BindingsIterator {
+    ) -> BindingsIterator<'a> {
         let store = self.store.clone();
         BindingsIterator::new(
             variables,
@@ -807,13 +807,13 @@ fn combine_tuples(a: &[Option<EncodedTerm>], b: &[Option<EncodedTerm>]) -> Optio
     }
 }
 
-struct JoinIterator {
+struct JoinIterator<'a> {
     left: Vec<EncodedTuple>,
-    right_iter: EncodedTuplesIterator,
+    right_iter: EncodedTuplesIterator<'a>,
     buffered_results: Vec<Result<EncodedTuple>>,
 }
 
-impl Iterator for JoinIterator {
+impl<'a> Iterator for JoinIterator<'a> {
     type Item = Result<EncodedTuple>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple>> {
@@ -833,14 +833,14 @@ impl Iterator for JoinIterator {
     }
 }
 
-struct LeftJoinIterator<S: EncodedQuadsStore> {
+struct LeftJoinIterator<'a, S: EncodedQuadsStore> {
     eval: SimpleEvaluator<S>,
     right_plan: PlanNode,
-    left_iter: EncodedTuplesIterator,
-    current_right_iter: Option<EncodedTuplesIterator>,
+    left_iter: EncodedTuplesIterator<'a>,
+    current_right_iter: Option<EncodedTuplesIterator<'a>>,
 }
 
-impl<S: EncodedQuadsStore> Iterator for LeftJoinIterator<S> {
+impl<'a, S: EncodedQuadsStore> Iterator for LeftJoinIterator<'a, S> {
     type Item = Result<EncodedTuple>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple>> {
@@ -867,13 +867,13 @@ impl<S: EncodedQuadsStore> Iterator for LeftJoinIterator<S> {
     }
 }
 
-struct BadLeftJoinIterator<S: EncodedQuadsStore> {
+struct BadLeftJoinIterator<'a, S: EncodedQuadsStore> {
     input: EncodedTuple,
-    iter: LeftJoinIterator<S>,
+    iter: LeftJoinIterator<'a, S>,
     problem_vars: Vec<usize>,
 }
 
-impl<S: EncodedQuadsStore> Iterator for BadLeftJoinIterator<S> {
+impl<'a, S: EncodedQuadsStore> Iterator for BadLeftJoinIterator<'a, S> {
     type Item = Result<EncodedTuple>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple>> {
@@ -903,14 +903,14 @@ impl<S: EncodedQuadsStore> Iterator for BadLeftJoinIterator<S> {
     }
 }
 
-struct UnionIterator<S: EncodedQuadsStore> {
+struct UnionIterator<'a, S: EncodedQuadsStore> {
     eval: SimpleEvaluator<S>,
     children_plan: Vec<PlanNode>,
-    input_iter: EncodedTuplesIterator,
-    current_iters: Vec<EncodedTuplesIterator>,
+    input_iter: EncodedTuplesIterator<'a>,
+    current_iters: Vec<EncodedTuplesIterator<'a>>,
 }
 
-impl<S: EncodedQuadsStore> Iterator for UnionIterator<S> {
+impl<'a, S: EncodedQuadsStore> Iterator for UnionIterator<'a, S> {
     type Item = Result<EncodedTuple>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple>> {

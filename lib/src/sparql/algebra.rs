@@ -167,7 +167,7 @@ impl StaticBindings {
         self.values.iter()
     }
 
-    pub fn into_iterator(self) -> BindingsIterator {
+    pub fn into_iterator(self) -> BindingsIterator<'static> {
         BindingsIterator {
             variables: self.variables,
             iter: Box::new(self.values.into_iter().map(Ok)),
@@ -188,15 +188,15 @@ impl Default for StaticBindings {
     }
 }
 
-pub struct BindingsIterator {
+pub struct BindingsIterator<'a> {
     variables: Vec<Variable>,
-    iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>>>>,
+    iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>>> + 'a>,
 }
 
-impl BindingsIterator {
+impl<'a> BindingsIterator<'a> {
     pub fn new(
         variables: Vec<Variable>,
-        iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>>>>,
+        iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>>> + 'a>,
     ) -> Self {
         Self { variables, iter }
     }
@@ -205,7 +205,7 @@ impl BindingsIterator {
         &*self.variables
     }
 
-    pub fn into_values_iter(self) -> Box<dyn Iterator<Item = Result<Vec<Option<Term>>>>> {
+    pub fn into_values_iter(self) -> Box<dyn Iterator<Item = Result<Vec<Option<Term>>>> + 'a> {
         self.iter
     }
 
@@ -213,7 +213,7 @@ impl BindingsIterator {
         self,
     ) -> (
         Vec<Variable>,
-        Box<dyn Iterator<Item = Result<Vec<Option<Term>>>>>,
+        Box<dyn Iterator<Item = Result<Vec<Option<Term>>>> + 'a>,
     ) {
         (self.variables, self.iter)
     }
@@ -1574,8 +1574,8 @@ impl fmt::Display for Query {
     }
 }
 
-pub enum QueryResult {
-    Bindings(BindingsIterator),
+pub enum QueryResult<'a> {
+    Bindings(BindingsIterator<'a>),
     Boolean(bool),
     Graph(MemoryGraph),
 }

@@ -4,10 +4,12 @@
 use model::Dataset;
 use sparql::algebra::Query;
 use sparql::algebra::QueryResult;
+use sparql::algebra::Variable;
 use sparql::eval::SimpleEvaluator;
 use sparql::parser::read_sparql_query;
+use sparql::plan::PlanBuilder;
+use sparql::plan::PlanNode;
 use std::io::Read;
-use std::sync::Arc;
 use store::encoded::EncodedQuadsStore;
 use store::encoded::StoreDataset;
 use Result;
@@ -31,20 +33,37 @@ impl<S: EncodedQuadsStore> SparqlDataset for StoreDataset<S> {
     type PreparedQuery = SimplePreparedQuery<S>;
 
     fn prepare_query(&self, query: impl Read) -> Result<SimplePreparedQuery<S>> {
-        Ok(SimplePreparedQuery {
-            query: read_sparql_query(query, None)?,
-            store: self.encoded(),
+        Ok(match read_sparql_query(query, None)? {
+            Query::Select { algebra, dataset } => {
+                let store = self.encoded();
+                let (plan, variables) = PlanBuilder::build(&*store, &algebra)?;
+                SimplePreparedQuery::Select {
+                    plan,
+                    variables,
+                    evaluator: SimpleEvaluator::new(store),
+                }
+            }
+            _ => unimplemented!(),
         })
     }
 }
 
-pub struct SimplePreparedQuery<S: EncodedQuadsStore> {
-    query: Query,
-    store: Arc<S>,
+pub enum SimplePreparedQuery<S: EncodedQuadsStore> {
+    Select {
+        plan: PlanNode,
+        variables: Vec<Variable>,
+        evaluator: SimpleEvaluator<S>,
+    },
 }
 
 impl<S: EncodedQuadsStore> PreparedQuery for SimplePreparedQuery<S> {
     fn exec(&self) -> Result<QueryResult> {
-        SimpleEvaluator::new(self.store.clone()).evaluate(&self.query)
+        match self {
+            SimplePreparedQuery::Select {
+                plan,
+                variables,
+                evaluator,
+            } => evaluator.evaluate_select_plan(&plan, &variables),
+        }
     }
 }
