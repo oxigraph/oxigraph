@@ -16,6 +16,7 @@ use rudf::sparql::algebra::Query;
 use rudf::sparql::algebra::QueryResult;
 use rudf::sparql::parser::read_sparql_query;
 use rudf::sparql::xml_results::read_xml_results;
+use rudf::sparql::PreparedQuery;
 use rudf::sparql::SparqlDataset;
 use rudf::store::isomorphism::GraphIsomorphism;
 use rudf::store::MemoryDataset;
@@ -210,7 +211,10 @@ fn sparql_w3c_query_evaluation_testsuite() {
                     .unwrap()
                     .for_each(|triple| named_graph.insert(&triple.unwrap()).unwrap());
             }
-            match data.query(client.get(&test.query).unwrap()) {
+            match data
+                .prepare_query(client.get(&test.query).unwrap())
+                .and_then(|p| p.exec())
+            {
                 Err(error) => assert!(
                     false,
                     "Failure to parse query of {} with error: {}",
