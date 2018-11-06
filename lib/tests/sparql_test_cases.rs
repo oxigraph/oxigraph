@@ -111,10 +111,12 @@ fn sparql_w3c_query_evaluation_testsuite() {
         ).unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional/manifest.ttl")
             .unwrap(),
+        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/sort/manifest.ttl").unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/triple-match/manifest.ttl")
             .unwrap(),
-        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/type-promotion/manifest.ttl")
-            .unwrap(),
+        Url::parse(
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/type-promotion/manifest.ttl",
+        ).unwrap(),
     ];
     let test_blacklist = vec![
         //Multiple writing of the same xsd:integer. Our system does strong normalization.
@@ -228,10 +230,15 @@ fn sparql_w3c_query_evaluation_testsuite() {
                         test, error
                     ),
                     Ok(result) => {
-                        let actual_graph = to_graph(result).unwrap();
                         let expected_graph = client
                             .load_sparql_query_result_graph(test.result.clone().unwrap())
                             .unwrap();
+                        let with_order = expected_graph
+                            .triples_for_predicate(&rs::INDEX)
+                            .unwrap()
+                            .next()
+                            .is_some();
+                        let actual_graph = to_graph(result, with_order).unwrap();
                         assert!(
                             actual_graph.is_isomorphic(&expected_graph).unwrap(),
                             "Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
@@ -279,7 +286,7 @@ impl RDFClient {
 
     fn load_sparql_query_result_graph(&self, url: Url) -> Result<MemoryGraph> {
         if url.as_str().ends_with(".srx") {
-            to_graph(read_xml_results(BufReader::new(self.get(&url)?))?)
+            to_graph(read_xml_results(BufReader::new(self.get(&url)?))?, false)
         } else {
             self.load_graph(url)
         }
@@ -330,7 +337,7 @@ mod rs {
     }
 }
 
-fn to_graph(result: QueryResult) -> Result<MemoryGraph> {
+fn to_graph(result: QueryResult, with_order: bool) -> Result<MemoryGraph> {
     match result {
         QueryResult::Graph(graph) => Ok(graph),
         QueryResult::Boolean(value) => {
@@ -364,7 +371,7 @@ fn to_graph(result: QueryResult) -> Result<MemoryGraph> {
                     Literal::new_simple_literal(variable.name()?),
                 ))?;
             }
-            for binding_values in iter {
+            for (i, binding_values) in iter.enumerate() {
                 let binding_values = binding_values?;
                 let solution = BlankNode::default();
                 graph.insert(&Triple::new(
@@ -391,6 +398,13 @@ fn to_graph(result: QueryResult) -> Result<MemoryGraph> {
                             Literal::new_simple_literal(variables[i].name()?),
                         ))?;
                     }
+                }
+                if with_order {
+                    graph.insert(&Triple::new(
+                        solution.clone(),
+                        rs::INDEX.clone(),
+                        Literal::from((i + 1) as i128),
+                    ))?;
                 }
             }
             Ok(graph)

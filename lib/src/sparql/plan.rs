@@ -43,6 +43,10 @@ pub enum PlanNode {
         position: usize,
         expression: PlanExpression,
     },
+    Sort {
+        child: Box<PlanNode>,
+        by: Vec<Comparator>,
+    },
     HashDeduplicate {
         child: Box<PlanNode>,
     },
@@ -124,6 +128,7 @@ impl PlanNode {
                 set.insert(*position);
                 child.add_variables(set);
             }
+            PlanNode::Sort { child, .. } => child.add_variables(set),
             PlanNode::HashDeduplicate { child } => child.add_variables(set),
             PlanNode::Skip { child, .. } => child.add_variables(set),
             PlanNode::Limit { child, .. } => child.add_variables(set),
@@ -294,6 +299,12 @@ impl PlanExpression {
     }
 }
 
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub enum Comparator {
+    Asc(PlanExpression),
+    Desc(PlanExpression),
+}
+
 pub struct PlanBuilder<'a, S: EncodedQuadsStore> {
     store: &'a S,
 }
@@ -417,8 +428,21 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                 tuples: self.encode_bindings(bs, variables)?,
             },
             GraphPattern::OrderBy(l, o) => {
-                self.build_for_graph_pattern(l, input, variables, graph_name)?
-            } //TODO
+                let by: Result<Vec<_>> = o
+                    .into_iter()
+                    .map(|comp| match comp {
+                        OrderComparator::Asc(e) => {
+                            Ok(Comparator::Asc(self.build_for_expression(e, variables)?))
+                        }
+                        OrderComparator::Desc(e) => {
+                            Ok(Comparator::Desc(self.build_for_expression(e, variables)?))
+                        }
+                    }).collect();
+                PlanNode::Sort {
+                    child: Box::new(self.build_for_graph_pattern(l, input, variables, graph_name)?),
+                    by: by?,
+                }
+            }
             GraphPattern::Project(l, new_variables) => PlanNode::Project {
                 child: Box::new(self.build_for_graph_pattern(
                     l,

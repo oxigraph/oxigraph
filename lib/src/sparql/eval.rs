@@ -235,6 +235,41 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                         }),
                 )
             }
+            PlanNode::Sort { child, by } => {
+                let iter = self.eval_plan(&*child, from);
+                let mut values = Vec::with_capacity(iter.size_hint().0);
+                let mut errors = Vec::default();
+                for result in iter {
+                    match result {
+                        Ok(result) => {
+                            values.push(result);
+                        }
+                        Err(error) => errors.push(Err(error)),
+                    }
+                }
+                values.sort_unstable_by(|a, b| {
+                    for comp in by {
+                        match comp {
+                            Comparator::Asc(expression) => {
+                                match self.cmp_according_to_expression(a, b, &expression) {
+                                    Ordering::Greater => return Ordering::Greater,
+                                    Ordering::Less => return Ordering::Less,
+                                    Ordering::Equal => (),
+                                }
+                            }
+                            Comparator::Desc(expression) => {
+                                match self.cmp_according_to_expression(a, b, &expression) {
+                                    Ordering::Greater => return Ordering::Less,
+                                    Ordering::Less => return Ordering::Greater,
+                                    Ordering::Equal => (),
+                                }
+                            }
+                        }
+                    }
+                    Ordering::Equal
+                });
+                Box::new(errors.into_iter().chain(values.into_iter().map(Ok)))
+            }
             PlanNode::HashDeduplicate { child } => {
                 let iter = self.eval_plan(&*child, from);
                 let mut values = HashSet::with_capacity(iter.size_hint().0);
@@ -293,22 +328,22 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             PlanExpression::Equal(a, b) => {
                 let a = self.eval_expression(a, tuple)?;
                 let b = self.eval_expression(b, tuple)?;
-                Some((a == b || self.partial_cmp_terms(a, b) == Some(Ordering::Equal)).into())
+                Some((a == b || self.partial_cmp_literals(a, b) == Some(Ordering::Equal)).into())
             }
             PlanExpression::NotEqual(a, b) => {
                 let a = self.eval_expression(a, tuple)?;
                 let b = self.eval_expression(b, tuple)?;
-                Some((a != b && self.partial_cmp_terms(a, b) != Some(Ordering::Equal)).into())
+                Some((a != b && self.partial_cmp_literals(a, b) != Some(Ordering::Equal)).into())
             }
             PlanExpression::Greater(a, b) => Some(
-                (self.partial_cmp_terms(
+                (self.partial_cmp_literals(
                     self.eval_expression(a, tuple)?,
                     self.eval_expression(b, tuple)?,
                 )? == Ordering::Greater)
                     .into(),
             ),
             PlanExpression::GreaterOrEq(a, b) => Some(
-                match self.partial_cmp_terms(
+                match self.partial_cmp_literals(
                     self.eval_expression(a, tuple)?,
                     self.eval_expression(b, tuple)?,
                 )? {
@@ -317,14 +352,14 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 }.into(),
             ),
             PlanExpression::Lower(a, b) => Some(
-                (self.partial_cmp_terms(
+                (self.partial_cmp_literals(
                     self.eval_expression(a, tuple)?,
                     self.eval_expression(b, tuple)?,
                 )? == Ordering::Less)
                     .into(),
             ),
             PlanExpression::LowerOrEq(a, b) => Some(
-                match self.partial_cmp_terms(
+                match self.partial_cmp_literals(
                     self.eval_expression(a, tuple)?,
                     self.eval_expression(b, tuple)?,
                 )? {
@@ -680,12 +715,46 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
         )
     }
 
-    fn partial_cmp_terms(&self, a: EncodedTerm, b: EncodedTerm) -> Option<Ordering> {
+    fn cmp_according_to_expression(
+        &self,
+        tuple_a: &[Option<EncodedTerm>],
+        tuple_b: &[Option<EncodedTerm>],
+        expression: &PlanExpression,
+    ) -> Ordering {
+        match (
+            self.eval_expression(expression, tuple_a),
+            self.eval_expression(expression, tuple_b),
+        ) {
+            (Some(a), Some(b)) => match a {
+                EncodedTerm::BlankNode(a) => if let EncodedTerm::BlankNode(b) = b {
+                    a.cmp(&b)
+                } else {
+                    Ordering::Less
+                },
+                EncodedTerm::NamedNode { iri_id: a } => match b {
+                    EncodedTerm::NamedNode { iri_id: b } => {
+                        self.compare_str_ids(a, b).unwrap_or(Ordering::Equal)
+                    }
+                    EncodedTerm::BlankNode(_) => Ordering::Greater,
+                    _ => Ordering::Less,
+                },
+                a => match b {
+                    EncodedTerm::NamedNode { .. } | EncodedTerm::BlankNode(_) => Ordering::Greater,
+                    b => self.partial_cmp_literals(a, b).unwrap_or(Ordering::Equal),
+                },
+            },
+            (Some(_), None) => Ordering::Greater,
+            (None, Some(_)) => Ordering::Less,
+            (None, None) => Ordering::Equal,
+        }
+    }
+
+    fn partial_cmp_literals(&self, a: EncodedTerm, b: EncodedTerm) -> Option<Ordering> {
         match a {
             EncodedTerm::SimpleLiteral { value_id: a }
             | EncodedTerm::StringLiteral { value_id: a } => match b {
                 EncodedTerm::SimpleLiteral { value_id: b }
-                | EncodedTerm::StringLiteral { value_id: b } => a.partial_cmp(&b),
+                | EncodedTerm::StringLiteral { value_id: b } => self.compare_str_ids(a, b),
                 _ => None,
             },
             EncodedTerm::FloatLiteral(a) => match b {
@@ -717,6 +786,14 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 _ => None,
             },
             _ => None,
+        }
+    }
+
+    fn compare_str_ids(&self, a: u64, b: u64) -> Option<Ordering> {
+        if let (Ok(Some(a)), Ok(Some(b))) = (self.store.get_bytes(a), self.store.get_bytes(b)) {
+            Some(a.cmp(&b))
+        } else {
+            None
         }
     }
 }
