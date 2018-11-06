@@ -51,6 +51,14 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
         ))
     }
 
+    pub fn evaluate_ask_plan<'a>(&'a self, plan: &'a PlanNode) -> Result<QueryResult<'a>> {
+        match self.eval_plan(plan, vec![]).next() {
+            Some(Ok(_)) => Ok(QueryResult::Boolean(true)),
+            Some(Err(error)) => Err(error),
+            None => Ok(QueryResult::Boolean(false)),
+        }
+    }
+
     fn eval_plan<'a>(&self, node: &'a PlanNode, from: EncodedTuple) -> EncodedTuplesIterator<'a> {
         match node {
             PlanNode::Init => Box::new(once(Ok(from))),

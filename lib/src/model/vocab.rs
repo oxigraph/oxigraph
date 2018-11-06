@@ -26,6 +26,8 @@ pub mod rdf {
             NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#subject").unwrap();
         pub static ref TYPE: NamedNode =
             NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
+        pub static ref VALUE: NamedNode =
+            NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#value").unwrap();
         pub static ref XML_LITERAL: NamedNode =
             NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral").unwrap();
     }

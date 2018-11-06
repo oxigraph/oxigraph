@@ -83,6 +83,8 @@ fn sparql_w3c_query_evaluation_testsuite() {
     let manifest_10_urls = vec![
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/algebra/manifest.ttl")
             .unwrap(),
+        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/ask/manifest.ttl")
+            .unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/basic/manifest.ttl")
             .unwrap(),
         Url::parse(
@@ -110,6 +112,8 @@ fn sparql_w3c_query_evaluation_testsuite() {
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional/manifest.ttl")
             .unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/triple-match/manifest.ttl")
+            .unwrap(),
+        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/type-promotion/manifest.ttl")
             .unwrap(),
     ];
     let test_blacklist = vec![
@@ -320,13 +324,30 @@ mod rs {
         pub static ref INDEX: NamedNode =
             NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/result-set#index")
                 .unwrap();
+        pub static ref BOOLEAN: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/result-set#boolean")
+                .unwrap();
     }
 }
 
 fn to_graph(result: QueryResult) -> Result<MemoryGraph> {
     match result {
         QueryResult::Graph(graph) => Ok(graph),
-        QueryResult::Boolean(_) => unimplemented!(),
+        QueryResult::Boolean(value) => {
+            let graph = MemoryGraph::default();
+            let result_set = BlankNode::default();
+            graph.insert(&Triple::new(
+                result_set.clone(),
+                rdf::TYPE.clone(),
+                rs::RESULT_SET.clone(),
+            ))?;
+            graph.insert(&Triple::new(
+                result_set.clone(),
+                rs::BOOLEAN.clone(),
+                Literal::from(value),
+            ))?;
+            Ok(graph)
+        }
         QueryResult::Bindings(bindings) => {
             let graph = MemoryGraph::default();
             let result_set = BlankNode::default();
