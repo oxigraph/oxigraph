@@ -64,7 +64,7 @@ struct RdfXmlIterator<R: BufRead> {
     li_counter: Vec<usize>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum NodeOrText {
     Node(NamedOrBlankNode),
     Text(String),
@@ -385,12 +385,6 @@ impl<R: BufRead> RdfXmlIterator<R> {
     }
 
     fn parse_text_event(&mut self, event: &BytesText) -> Result<()> {
-        if self.object.is_some() {
-            return Err(format!(
-                "There is already an object set at byte {}",
-                self.reader.buffer_position()
-            ).into());
-        }
         self.object = Some(NodeOrText::Text(event.unescape_and_decode(&self.reader)?));
         Ok(())
     }
