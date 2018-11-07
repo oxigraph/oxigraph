@@ -92,8 +92,8 @@ pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResult<'s
                         let name = event.attributes()
                             .filter_map(|attr| attr.ok())
                             .find(|attr| attr.key == b"name")
-                            .ok_or(format_err!("No name attribute found for the <variable> tag"));
-                        variables.push(name?.unescape_and_decode_value(&reader)?);
+                            .ok_or_else(|| format_err!("No name attribute found for the <variable> tag"))?;
+                        variables.push(name.unescape_and_decode_value(&reader)?);
                     } else if event.name() == b"link" {
                         // no op
                     } else {
