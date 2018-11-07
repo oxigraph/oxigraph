@@ -41,8 +41,6 @@ use std::io::BufReader;
 use std::io::Read;
 use Result;
 
-pub(crate) type ParseError = self::grammar::ParseError;
-
 struct NTriplesIterator<R: Read> {
     buffer: String,
     reader: BufReader<R>,

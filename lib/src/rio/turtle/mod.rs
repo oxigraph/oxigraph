@@ -45,7 +45,7 @@ mod grammar {
     pub fn read_turtle<'a, R: Read + 'a>(
         source: R,
         base_uri: impl Into<Option<Url>>,
-    ) -> super::super::super::errors::Result<impl Iterator<Item = Triple>> {
+    ) -> super::super::super::Result<impl Iterator<Item = Triple>> {
         let mut state = ParserState {
             base_uri: base_uri.into(),
             namespaces: HashMap::default(),
@@ -78,5 +78,4 @@ mod grammar {
     }
 }
 
-pub(crate) type ParseError = self::grammar::ParseError;
 pub use self::grammar::read_turtle;

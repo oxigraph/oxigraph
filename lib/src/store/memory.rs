@@ -1,6 +1,10 @@
+use failure::Backtrace;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::sync::PoisonError;
 use std::sync::RwLock;
+use std::sync::RwLockReadGuard;
+use std::sync::RwLockWriteGuard;
 use store::encoded::*;
 use store::numeric_encoder::*;
 use Result;
@@ -71,8 +75,8 @@ impl BytesStore for MemoryStore {
     type BytesOutput = Vec<u8>;
 
     fn insert_bytes(&self, value: &[u8]) -> Result<u64> {
-        let mut id2str = self.id2str.write()?;
-        let mut str2id = self.str2id.write()?;
+        let mut id2str = self.id2str.write().map_err(MemoryStorePoisonError::from)?;
+        let mut str2id = self.str2id.write().map_err(MemoryStorePoisonError::from)?;
         let id = str2id.entry(value.to_vec()).or_insert_with(|| {
             let id = id2str.len() as u64;
             id2str.push(value.to_vec());
@@ -83,7 +87,7 @@ impl BytesStore for MemoryStore {
 
     fn get_bytes(&self, id: u64) -> Result<Option<Vec<u8>>> {
         //TODO: use try_from when stable
-        let id2str = self.id2str.read()?;
+        let id2str = self.id2str.read().map_err(MemoryStorePoisonError::from)?;
         Ok(if id2str.len() as u64 <= id {
             None
         } else {
@@ -114,7 +118,7 @@ impl EncodedQuadsStore for MemoryStore {
 
     fn quads(&self) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        for (graph_name, graph) in self.graph_indexes.read()?.iter() {
+        for (graph_name, graph) in self.graph_indexes()?.iter() {
             for (s, pos) in &graph.spo {
                 for (p, os) in pos.iter() {
                     for o in os.iter() {
@@ -131,7 +135,7 @@ impl EncodedQuadsStore for MemoryStore {
         subject: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        for (graph_name, graph) in self.graph_indexes.read()?.iter() {
+        for (graph_name, graph) in self.graph_indexes()?.iter() {
             if let Some(pos) = graph.spo.get(&subject) {
                 for (p, os) in pos.iter() {
                     for o in os.iter() {
@@ -149,7 +153,7 @@ impl EncodedQuadsStore for MemoryStore {
         predicate: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        for (graph_name, graph) in self.graph_indexes.read()?.iter() {
+        for (graph_name, graph) in self.graph_indexes()?.iter() {
             if let Some(pos) = graph.spo.get(&subject) {
                 if let Some(os) = pos.get(&predicate) {
                     for o in os.iter() {
@@ -168,7 +172,7 @@ impl EncodedQuadsStore for MemoryStore {
         object: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        for (graph_name, graph) in self.graph_indexes.read()?.iter() {
+        for (graph_name, graph) in self.graph_indexes()?.iter() {
             if let Some(pos) = graph.spo.get(&subject) {
                 if let Some(os) = pos.get(&predicate) {
                     if os.contains(&object) {
@@ -191,7 +195,7 @@ impl EncodedQuadsStore for MemoryStore {
         object: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        for (graph_name, graph) in self.graph_indexes.read()?.iter() {
+        for (graph_name, graph) in self.graph_indexes()?.iter() {
             if let Some(sps) = graph.osp.get(&object) {
                 if let Some(ps) = sps.get(&subject) {
                     for p in ps.iter() {
@@ -208,7 +212,7 @@ impl EncodedQuadsStore for MemoryStore {
         predicate: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        for (graph_name, graph) in self.graph_indexes.read()?.iter() {
+        for (graph_name, graph) in self.graph_indexes()?.iter() {
             if let Some(oss) = graph.pos.get(&predicate) {
                 for (o, ss) in oss.iter() {
                     for s in ss.iter() {
@@ -226,7 +230,7 @@ impl EncodedQuadsStore for MemoryStore {
         object: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        for (graph_name, graph) in self.graph_indexes.read()?.iter() {
+        for (graph_name, graph) in self.graph_indexes()?.iter() {
             if let Some(oss) = graph.pos.get(&predicate) {
                 if let Some(ss) = oss.get(&object) {
                     for s in ss.iter() {
@@ -243,7 +247,7 @@ impl EncodedQuadsStore for MemoryStore {
         object: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        for (graph_name, graph) in self.graph_indexes.read()?.iter() {
+        for (graph_name, graph) in self.graph_indexes()?.iter() {
             if let Some(sps) = graph.osp.get(&object) {
                 for (s, ps) in sps.iter() {
                     for p in ps.iter() {
@@ -260,7 +264,7 @@ impl EncodedQuadsStore for MemoryStore {
         graph_name: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes.read()?.get(&graph_name) {
+        if let Some(graph) = self.graph_indexes()?.get(&graph_name) {
             for (s, pos) in &graph.spo {
                 for (p, os) in pos.iter() {
                     for o in os.iter() {
@@ -278,7 +282,7 @@ impl EncodedQuadsStore for MemoryStore {
         graph_name: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes.read()?.get(&graph_name) {
+        if let Some(graph) = self.graph_indexes()?.get(&graph_name) {
             if let Some(pos) = graph.spo.get(&subject) {
                 for (p, os) in pos.iter() {
                     for o in os.iter() {
@@ -297,7 +301,7 @@ impl EncodedQuadsStore for MemoryStore {
         graph_name: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes.read()?.get(&graph_name) {
+        if let Some(graph) = self.graph_indexes()?.get(&graph_name) {
             if let Some(pos) = graph.spo.get(&subject) {
                 if let Some(os) = pos.get(&predicate) {
                     for o in os.iter() {
@@ -316,7 +320,7 @@ impl EncodedQuadsStore for MemoryStore {
         graph_name: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes.read()?.get(&graph_name) {
+        if let Some(graph) = self.graph_indexes()?.get(&graph_name) {
             if let Some(sps) = graph.osp.get(&object) {
                 if let Some(ps) = sps.get(&subject) {
                     for p in ps.iter() {
@@ -334,7 +338,7 @@ impl EncodedQuadsStore for MemoryStore {
         graph_name: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes.read()?.get(&graph_name) {
+        if let Some(graph) = self.graph_indexes()?.get(&graph_name) {
             if let Some(oss) = graph.pos.get(&predicate) {
                 for (o, ss) in oss.iter() {
                     for s in ss.iter() {
@@ -353,7 +357,7 @@ impl EncodedQuadsStore for MemoryStore {
         graph_name: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes.read()?.get(&graph_name) {
+        if let Some(graph) = self.graph_indexes()?.get(&graph_name) {
             if let Some(oss) = graph.pos.get(&predicate) {
                 if let Some(ss) = oss.get(&object) {
                     for s in ss.iter() {
@@ -371,7 +375,7 @@ impl EncodedQuadsStore for MemoryStore {
         graph_name: EncodedTerm,
     ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
         let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes.read()?.get(&graph_name) {
+        if let Some(graph) = self.graph_indexes()?.get(&graph_name) {
             if let Some(sps) = graph.osp.get(&object) {
                 for (s, ps) in sps.iter() {
                     for p in ps.iter() {
@@ -385,8 +389,7 @@ impl EncodedQuadsStore for MemoryStore {
 
     fn contains(&self, quad: &EncodedQuad) -> Result<bool> {
         Ok(self
-            .graph_indexes
-            .read()?
+            .graph_indexes()?
             .get(&quad.graph_name)
             .map_or(false, |graph| {
                 graph.spo.get(&quad.subject).map_or(false, |po| {
@@ -397,7 +400,7 @@ impl EncodedQuadsStore for MemoryStore {
     }
 
     fn insert(&self, quad: &EncodedQuad) -> Result<()> {
-        let mut graph_indexes = self.graph_indexes.write()?;
+        let mut graph_indexes = self.graph_indexes_mut()?;
         let graph = graph_indexes
             .entry(quad.graph_name)
             .or_insert_with(MemoryGraphIndexes::default);
@@ -426,7 +429,7 @@ impl EncodedQuadsStore for MemoryStore {
     }
 
     fn remove(&self, quad: &EncodedQuad) -> Result<()> {
-        let mut graph_indexes = self.graph_indexes.write()?;
+        let mut graph_indexes = self.graph_indexes_mut()?;
         let mut empty_graph = false;
         if let Some(graph) = graph_indexes.get_mut(&quad.graph_name) {
             {
@@ -489,5 +492,37 @@ impl EncodedQuadsStore for MemoryStore {
             graph_indexes.remove(&quad.graph_name);
         }
         Ok(())
+    }
+}
+
+impl MemoryStore {
+    fn graph_indexes(&self) -> Result<RwLockReadGuard<BTreeMap<EncodedTerm, MemoryGraphIndexes>>> {
+        Ok(self
+            .graph_indexes
+            .read()
+            .map_err(MemoryStorePoisonError::from)?)
+    }
+
+    fn graph_indexes_mut(
+        &self,
+    ) -> Result<RwLockWriteGuard<BTreeMap<EncodedTerm, MemoryGraphIndexes>>> {
+        Ok(self
+            .graph_indexes
+            .write()
+            .map_err(MemoryStorePoisonError::from)?)
+    }
+}
+
+#[derive(Debug, Fail)]
+#[fail(display = "MemoryStore Mutex was poisoned")]
+pub struct MemoryStorePoisonError {
+    backtrace: Backtrace,
+}
+
+impl<T> From<PoisonError<T>> for MemoryStorePoisonError {
+    fn from(_: PoisonError<T>) -> Self {
+        Self {
+            backtrace: Backtrace::new(),
+        }
     }
 }

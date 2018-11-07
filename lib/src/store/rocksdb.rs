@@ -1,5 +1,6 @@
 use byteorder::ByteOrder;
 use byteorder::LittleEndian;
+use failure::Backtrace;
 use rocksdb::ColumnFamily;
 use rocksdb::DBRawIterator;
 use rocksdb::DBVector;
@@ -10,6 +11,7 @@ use std::io::Cursor;
 use std::path::Path;
 use std::str;
 use std::sync::Mutex;
+use std::sync::PoisonError;
 use store::encoded::EncodedQuadsStore;
 use store::encoded::StoreDataset;
 use store::numeric_encoder::*;
@@ -86,7 +88,11 @@ impl BytesStore for RocksDbStore {
         Ok(if let Some(id) = self.db.get_cf(self.str2id_cf, value)? {
             LittleEndian::read_u64(&id)
         } else {
-            let id = self.str_id_counter.lock()?.get_and_increment(&self.db)? as u64;
+            let id = self
+                .str_id_counter
+                .lock()
+                .map_err(RocksDBCounterMutexPoisonError::from)?
+                .get_and_increment(&self.db)? as u64;
             let id_bytes = to_bytes(id);
             let mut batch = WriteBatch::default();
             batch.put_cf(self.id2str_cf, &id_bytes, value)?;
@@ -326,7 +332,7 @@ impl EncodedQuadsStore for RocksDbStore {
 
 pub fn get_cf(db: &DB, name: &str) -> Result<ColumnFamily> {
     db.cf_handle(name)
-        .ok_or_else(|| "column family not found".into())
+        .ok_or_else(|| format_err!("column family not found"))
 }
 
 struct RocksDBCounter {
@@ -515,4 +521,18 @@ fn to_bytes(int: u64) -> [u8; 8] {
     let mut buf = [0 as u8; 8];
     LittleEndian::write_u64(&mut buf, int);
     buf
+}
+
+#[derive(Debug, Fail)]
+#[fail(display = "RocksDBStore Mutex was poisoned")]
+pub struct RocksDBCounterMutexPoisonError {
+    backtrace: Backtrace,
+}
+
+impl<T> From<PoisonError<T>> for RocksDBCounterMutexPoisonError {
+    fn from(_: PoisonError<T>) -> Self {
+        Self {
+            backtrace: Backtrace::new(),
+        }
+    }
 }

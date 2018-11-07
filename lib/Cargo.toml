@@ -15,7 +15,6 @@ build = "build.rs"
 travis-ci = { repository = "Tpt/rudf" }
 
 [dependencies]
-error-chain = "0.12"
 lazy_static = "1"
 rocksdb = "0.10"
 url = "1"
@@ -28,6 +27,7 @@ num-traits = "0.2"
 rust_decimal = "0.10"
 chrono = "0.4"
 language-tags = "0.2"
+failure = "0.1"
 
 [build-dependencies]
 peg = "0.5"

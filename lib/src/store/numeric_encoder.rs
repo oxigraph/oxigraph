@@ -14,7 +14,6 @@ use std::str;
 use std::str::FromStr;
 use url::Url;
 use uuid::Uuid;
-use Error;
 use Result;
 
 const EMPTY_STRING_ID: u64 = 0;
@@ -47,7 +46,9 @@ pub trait BytesStore {
         {
             Ok(())
         } else {
-            Err("Failed to properly setup the basic string ids in the dictionnary".into())
+            Err(format_err!(
+                "Failed to properly setup the basic string ids in the dictionnary"
+            ))
         }
     }
 }
@@ -317,17 +318,17 @@ impl<R: Read> TermReader for R {
                 NaiveDateTime::from_timestamp_opt(
                     self.read_i64::<LittleEndian>()?,
                     self.read_u32::<LittleEndian>()?,
-                ).ok_or("Invalid date time serialization")?,
+                ).ok_or_else(|| format_err!("Invalid date time serialization"))?,
                 FixedOffset::east_opt(self.read_i32::<LittleEndian>()?)
-                    .ok_or("Invalid timezone offset")?,
+                    .ok_or_else(|| format_err!("Invalid timezone offset"))?,
             ))),
             TYPE_NAIVE_DATE_TIME_LITERAL => Ok(EncodedTerm::NaiveDateTime(
                 NaiveDateTime::from_timestamp_opt(
                     self.read_i64::<LittleEndian>()?,
                     self.read_u32::<LittleEndian>()?,
-                ).ok_or("Invalid date time serialization")?,
+                ).ok_or_else(|| format_err!("Invalid date time serialization"))?,
             )),
-            _ => Err("the term buffer has an invalid type id".into()),
+            _ => Err(format_err!("the term buffer has an invalid type id")),
         }
     }
 
@@ -483,37 +484,37 @@ impl<S: BytesStore> Encoder<S> {
         } else if literal.is_boolean() {
             literal
                 .to_bool()
-                .ok_or_else(|| Error::from("boolean literal without boolean value"))?
+                .ok_or_else(|| format_err!("boolean literal without boolean value"))?
                 .into()
         } else if literal.is_float() {
             literal
                 .to_float()
-                .ok_or_else(|| Error::from("float literal without float value"))?
+                .ok_or_else(|| format_err!("float literal without float value"))?
                 .into()
         } else if literal.is_double() {
             literal
                 .to_double()
-                .ok_or_else(|| Error::from("double literal without double value"))?
+                .ok_or_else(|| format_err!("double literal without double value"))?
                 .into()
         } else if literal.is_integer() {
             literal
                 .to_integer()
-                .ok_or_else(|| Error::from("integer literal without integer value"))?
+                .ok_or_else(|| format_err!("integer literal without integer value"))?
                 .into()
         } else if literal.is_decimal() {
             literal
                 .to_decimal()
-                .ok_or_else(|| Error::from("decimal literal without decimal value"))?
+                .ok_or_else(|| format_err!("decimal literal without decimal value"))?
                 .into()
         } else if literal.is_date_time_stamp() {
             literal
                 .to_date_time_stamp()
-                .ok_or_else(|| Error::from("dateTimeStamp literal without dateTimeStamp value"))?
+                .ok_or_else(|| format_err!("dateTimeStamp literal without dateTimeStamp value"))?
                 .into()
         } else if literal.is_decimal() {
             literal
                 .to_date_time()
-                .ok_or_else(|| Error::from("dateTime literal without dateTime value"))?
+                .ok_or_else(|| format_err!("dateTime literal without dateTime value"))?
                 .into()
         } else {
             EncodedTerm::TypedLiteral {
@@ -565,7 +566,9 @@ impl<S: BytesStore> Encoder<S> {
 
     pub fn decode_term(&self, encoded: EncodedTerm) -> Result<Term> {
         match encoded {
-            EncodedTerm::DefaultGraph {} => Err("The default graph tag is not a valid term".into()),
+            EncodedTerm::DefaultGraph {} => {
+                Err(format_err!("The default graph tag is not a valid term"))
+            }
             EncodedTerm::NamedNode { iri_id } => {
                 Ok(NamedNode::from(self.decode_url_value(iri_id)?).into())
             }
@@ -604,15 +607,21 @@ impl<S: BytesStore> Encoder<S> {
         match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node.into()),
             Term::BlankNode(blank_node) => Ok(blank_node.into()),
-            Term::Literal(_) => Err("A literal has ben found instead of a named node".into()),
+            Term::Literal(_) => Err(format_err!(
+                "A literal has ben found instead of a named node"
+            )),
         }
     }
 
     pub fn decode_named_node(&self, encoded: EncodedTerm) -> Result<NamedNode> {
         match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node),
-            Term::BlankNode(_) => Err("A blank node has been found instead of a named node".into()),
-            Term::Literal(_) => Err("A literal has ben found instead of a named node".into()),
+            Term::BlankNode(_) => Err(format_err!(
+                "A blank node has been found instead of a named node"
+            )),
+            Term::Literal(_) => Err(format_err!(
+                "A literal has ben found instead of a named node"
+            )),
         }
     }
 
@@ -653,7 +662,7 @@ impl<S: BytesStore> Encoder<S> {
     fn decode_value(&self, id: u64) -> Result<S::BytesOutput> {
         self.string_store
             .get_bytes(id)?
-            .ok_or_else(|| "value not found in the dictionary".into())
+            .ok_or_else(|| format_err!("value not found in the dictionary"))
     }
 }
 

@@ -33,8 +33,6 @@
 
 extern crate byteorder;
 #[macro_use]
-extern crate error_chain;
-#[macro_use]
 extern crate lazy_static;
 extern crate chrono;
 extern crate language_tags;
@@ -45,13 +43,14 @@ extern crate rocksdb;
 extern crate rust_decimal;
 extern crate url;
 extern crate uuid;
+#[macro_use]
+extern crate failure;
 
-mod errors;
 pub mod model;
 pub mod rio;
 pub mod sparql;
 pub mod store;
 mod utils;
 
-pub use errors::Error;
-pub use errors::Result;
+pub use failure::Error;
+pub type Result<T> = ::std::result::Result<T, failure::Error>;

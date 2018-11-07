@@ -283,7 +283,11 @@ impl<R: BufRead> RdfXmlIterator<R> {
             Some(RdfXmlState::ParseTypeCollectionPropertyElt { .. }) => {
                 RdfXmlNextProduction::NodeElt {}
             }
-            None => return Err("No state in the stack: the XML is not balanced".into()),
+            None => {
+                return Err(format_err!(
+                    "No state in the stack: the XML is not balanced"
+                ))
+            }
         };
 
         let new_state = match next_production {
@@ -356,7 +360,9 @@ impl<R: BufRead> RdfXmlIterator<R> {
                     }
                 }
                 RdfXmlParseType::Literal => {
-                    return Err("rdf:parseType=\"Literal\" is not supported yet".into());
+                    return Err(format_err!(
+                        "rdf:parseType=\"Literal\" is not supported yet"
+                    ));
                 }
                 RdfXmlParseType::Resource => self.build_parse_type_resource_property_elt(
                     NamedNode::from(uri),
@@ -366,10 +372,12 @@ impl<R: BufRead> RdfXmlIterator<R> {
                     id_attr,
                 ),
                 RdfXmlParseType::Collection => {
-                    return Err("rdf:parseType=\"Collection\" is not supported yet".into());
+                    return Err(format_err!(
+                        "rdf:parseType=\"Collection\" is not supported yet"
+                    ));
                 }
                 RdfXmlParseType::Other => {
-                    return Err("Arbitrary rdf:parseType are not supported yet".into());
+                    return Err(format_err!("Arbitrary rdf:parseType are not supported yet"));
                 }
             },
         };

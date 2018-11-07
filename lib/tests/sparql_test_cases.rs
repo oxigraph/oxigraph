@@ -4,6 +4,8 @@ extern crate lazy_static;
 extern crate reqwest;
 extern crate rudf;
 extern crate url;
+#[macro_use]
+extern crate failure;
 
 use reqwest::Client;
 use reqwest::Response;
@@ -276,7 +278,7 @@ impl RDFClient {
         } else if url.as_str().ends_with(".rdf") {
             read_rdf_xml(BufReader::new(self.get(&url)?), Some(url)).collect()
         } else {
-            Err(format!("Serialization type not found for {}", url).into())
+            Err(format_err!("Serialization type not found for {}", url))
         }
     }
 
@@ -299,7 +301,7 @@ impl RDFClient {
             {
                 self.get(url)
             } else {
-                Err(format!("HTTP request error: {}", error.description()).into())
+                Err(format_err!("HTTP request error: {}", error.description()))
             },
         }
     }
@@ -518,9 +520,9 @@ impl<'a> Iterator for TestManifest<'a> {
                 {
                     Some(Term::NamedNode(c)) => match c.as_str().split("#").last() {
                         Some(k) => k.to_string(),
-                        None => return Some(Err("no type".into())),
+                        None => return Some(Err(format_err!("no type"))),
                     },
-                    _ => return Some(Err("no type".into())),
+                    _ => return Some(Err(format_err!("no type"))),
                 };
                 let name = match self
                     .graph
@@ -552,8 +554,8 @@ impl<'a> Iterator for TestManifest<'a> {
                             .unwrap()
                         {
                             Some(Term::NamedNode(q)) => q.into(),
-                            Some(_) => return Some(Err("invalid query".into())),
-                            None => return Some(Err("query not found".into())),
+                            Some(_) => return Some(Err(format_err!("invalid query"))),
+                            None => return Some(Err(format_err!("query not found"))),
                         };
                         let data = match self
                             .graph
@@ -573,11 +575,12 @@ impl<'a> Iterator for TestManifest<'a> {
                             }).collect();
                         (query, data, graph_data)
                     }
-                    Some(_) => return Some(Err("invalid action".into())),
+                    Some(_) => return Some(Err(format_err!("invalid action"))),
                     None => {
-                        return Some(Err(
-                            format!("action not found for test {}", test_subject).into()
-                        ))
+                        return Some(Err(format_err!(
+                            "action not found for test {}",
+                            test_subject
+                        )))
                     }
                 };
                 let result = match self
@@ -586,7 +589,7 @@ impl<'a> Iterator for TestManifest<'a> {
                     .unwrap()
                 {
                     Some(Term::NamedNode(n)) => Some(n.into()),
-                    Some(_) => return Some(Err("invalid result".into())),
+                    Some(_) => return Some(Err(format_err!("invalid result"))),
                     None => None,
                 };
                 Some(Ok(Test {
@@ -600,7 +603,7 @@ impl<'a> Iterator for TestManifest<'a> {
                     result,
                 }))
             }
-            Some(_) => Some(Err("invalid test list".into())),
+            Some(_) => Some(Err(format_err!("invalid test list"))),
             None => {
                 match self.manifests_to_do.pop() {
                     Some(url) => {
@@ -628,7 +631,7 @@ impl<'a> Iterator for TestManifest<'a> {
                                         }),
                                 );
                             }
-                            Some(_) => return Some(Err("invalid tests list".into())),
+                            Some(_) => return Some(Err(format_err!("invalid tests list"))),
                             None => (),
                         }
 
@@ -645,9 +648,10 @@ impl<'a> Iterator for TestManifest<'a> {
                                 ));
                             }
                             Some(term) => {
-                                return Some(Err(
-                                    format!("Invalid tests list. Got term {}", term).into()
-                                ));
+                                return Some(Err(format_err!(
+                                    "Invalid tests list. Got term {}",
+                                    term
+                                )));
                             }
                             None => (),
                         }

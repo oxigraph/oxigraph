@@ -353,8 +353,8 @@ impl<S: EncodedQuadsStore> Dataset for StoreDataset<S> {
 
 impl<S: EncodedQuadsStore> fmt::Display for StoreDataset<S> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        for quad in self.iter()? {
-            writeln!(fmt, "{}", quad?)?;
+        for quad in self.iter().map_err(|_| fmt::Error)? {
+            writeln!(fmt, "{}", quad.map_err(|_| fmt::Error)?)?;
         }
         Ok(())
     }
@@ -539,8 +539,8 @@ impl<S: EncodedQuadsStore> NamedGraph for StoreNamedGraph<S> {
 
 impl<S: EncodedQuadsStore> fmt::Display for StoreNamedGraph<S> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        for triple in self.iter()? {
-            writeln!(fmt, "{}", triple?)?;
+        for triple in self.iter().map_err(|_| fmt::Error)? {
+            writeln!(fmt, "{}", triple.map_err(|_| fmt::Error)?)?;
         }
         Ok(())
     }
@@ -694,8 +694,8 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
 
 impl<S: EncodedQuadsStore> fmt::Display for StoreDefaultGraph<S> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        for triple in self.iter()? {
-            writeln!(fmt, "{}", triple?)?;
+        for triple in self.iter().map_err(|_| fmt::Error)? {
+            writeln!(fmt, "{}", triple.map_err(|_| fmt::Error)?)?;
         }
         Ok(())
     }
@@ -840,11 +840,11 @@ impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
     }
 
     fn insert(&self, _triple: &Triple) -> Result<()> {
-        Err("Union graph is not writable".into())
+        Err(format_err!("Union graph is not writable"))
     }
 
     fn remove(&self, _triple: &Triple) -> Result<()> {
-        Err("Union graph is not writable".into())
+        Err(format_err!("Union graph is not writable"))
     }
 
     fn len(&self) -> Result<usize> {
@@ -858,8 +858,8 @@ impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
 
 impl<S: EncodedQuadsStore> fmt::Display for StoreUnionGraph<S> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        for triple in self.iter()? {
-            writeln!(fmt, "{}", triple?)?;
+        for triple in self.iter().map_err(|_| fmt::Error)? {
+            writeln!(fmt, "{}", triple.map_err(|_| fmt::Error)?)?;
         }
         Ok(())
     }

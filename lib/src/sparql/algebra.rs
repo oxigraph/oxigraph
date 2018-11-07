@@ -30,7 +30,7 @@ impl Variable {
     pub fn name(&self) -> Result<&str> {
         match self {
             Variable::Variable { name } => Ok(name),
-            _ => Err(format!("The variable {} has no name", self).into()),
+            _ => Err(format_err!("The variable {} has no name", self)),
         }
     }
 }

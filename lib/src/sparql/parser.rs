@@ -334,7 +334,7 @@ mod grammar {
     pub fn read_sparql_query<'a, R: Read + 'a>(
         source: R,
         base_uri: impl Into<Option<Url>>,
-    ) -> super::super::super::errors::Result<Query> {
+    ) -> super::super::super::Result<Query> {
         let mut state = ParserState {
             base_uri: base_uri.into(),
             namespaces: HashMap::default(),
@@ -352,5 +352,4 @@ mod grammar {
     }
 }
 
-pub(crate) type ParseError = self::grammar::ParseError;
 pub use self::grammar::read_sparql_query;

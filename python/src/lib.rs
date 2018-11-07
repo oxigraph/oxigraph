@@ -15,8 +15,8 @@ use cpython::Python;
 use cpython::PythonObject;
 use cpython::ToPyObject;
 use rudf::model;
+use rudf::Error;
 use std::collections::hash_map::DefaultHasher;
-use std::error::Error;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::str::FromStr;
@@ -29,8 +29,8 @@ py_module_initializer!(rudf, initrudf, PyInit_rudf, |py, m| {
     Ok(())
 });
 
-fn new_value_error(py: Python, error: &impl Error) -> PyErr {
-    PyErr::new::<ValueError, _>(py, error.description())
+fn new_value_error(py: Python, error: &Error) -> PyErr {
+    PyErr::new::<ValueError, _>(py, error.to_string())
 }
 
 fn eq_compare<T: Eq + Ord>(a: &T, b: &T, op: &CompareOp) -> bool {

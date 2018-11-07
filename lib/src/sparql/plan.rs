@@ -629,7 +629,7 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
             } else if *name == *xsd::STRING {
                 self.build_cast(parameters, PlanExpression::StringCast, variables, "string")?
             } else {
-                Err(format!("Not supported custom function {}", expression))?
+                Err(format_err!("Not supported custom function {}", expression))?
             },
             _ => unimplemented!(),
         })
@@ -647,7 +647,10 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                 self.build_for_expression(&parameters[0], variables)?,
             )))
         } else {
-            Err(format!("The xsd:{} casting takes only one parameter", name).into())
+            Err(format_err!(
+                "The xsd:{} casting takes only one parameter",
+                name
+            ))
         }
     }
 
