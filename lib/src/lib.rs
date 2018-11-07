@@ -39,6 +39,7 @@ extern crate language_tags;
 extern crate num_traits;
 extern crate ordered_float;
 extern crate quick_xml;
+#[cfg(feature = "rocksdb")]
 extern crate rocksdb;
 extern crate rust_decimal;
 extern crate url;
