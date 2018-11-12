@@ -1,14 +1,108 @@
+//! Implementation of [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/)
+
 use model::*;
+use quick_xml::events::BytesEnd;
+use quick_xml::events::BytesStart;
+use quick_xml::events::BytesText;
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use quick_xml::Writer;
 use sparql::algebra::BindingsIterator;
 use sparql::algebra::QueryResult;
 use sparql::algebra::Variable;
 use std::collections::BTreeMap;
 use std::io::BufRead;
+use std::io::Write;
 use std::iter::empty;
 use std::str::FromStr;
 use Result;
+
+pub fn write_xml_results<W: Write>(results: QueryResult, sink: W) -> Result<W> {
+    let mut writer = Writer::new(sink);
+    match results {
+        QueryResult::Boolean(value) => {
+            let mut sparql_open = BytesStart::borrowed_name(b"sparql");
+            sparql_open.push_attribute(("xmlns", "http://www.w3.org/2005/sparql-results#"));
+            writer.write_event(Event::Start(sparql_open))?;
+            writer.write_event(Event::Start(BytesStart::borrowed_name(b"head")))?;
+            writer.write_event(Event::End(BytesEnd::borrowed(b"head")))?;
+            writer.write_event(Event::Start(BytesStart::borrowed_name(b"boolean")))?;
+            writer.write_event(Event::Text(BytesText::from_plain_str(if value {
+                "true"
+            } else {
+                "false"
+            })))?;
+            writer.write_event(Event::End(BytesEnd::borrowed(b"boolean")))?;
+            writer.write_event(Event::End(BytesEnd::borrowed(b"sparql")))?;
+        }
+        QueryResult::Bindings(bindings) => {
+            let (variables, results) = bindings.destruct();
+            let mut sparql_open = BytesStart::borrowed_name(b"sparql");
+            sparql_open.push_attribute(("xmlns", "http://www.w3.org/2005/sparql-results#"));
+            writer.write_event(Event::Start(sparql_open))?;
+            writer.write_event(Event::Start(BytesStart::borrowed_name(b"head")))?;
+            for variable in &variables {
+                let mut variable_tag = BytesStart::borrowed_name(b"variable");
+                variable_tag.push_attribute(("name", variable.name()?));
+                writer.write_event(Event::Empty(variable_tag))?;
+            }
+            writer.write_event(Event::End(BytesEnd::borrowed(b"head")))?;
+            writer.write_event(Event::Start(BytesStart::borrowed_name(b"results")))?;
+            for result in results {
+                let result = result?;
+                writer.write_event(Event::Start(BytesStart::borrowed_name(b"result")))?;
+                for (k, value) in result.into_iter().enumerate() {
+                    if let Some(term) = value {
+                        writer.write_event(Event::Start(BytesStart::borrowed_name(b"binding")))?;
+                        match term {
+                            Term::NamedNode(uri) => {
+                                writer
+                                    .write_event(Event::Start(BytesStart::borrowed_name(b"uri")))?;
+                                writer.write_event(Event::Text(BytesText::from_plain_str(
+                                    uri.as_str(),
+                                )))?;
+                                writer.write_event(Event::End(BytesEnd::borrowed(b"uri")))?;
+                            }
+                            Term::BlankNode(bnode) => {
+                                writer.write_event(Event::Start(BytesStart::borrowed_name(
+                                    b"bnode",
+                                )))?;
+                                writer.write_event(Event::Text(BytesText::from_plain_str(
+                                    &bnode.as_uuid().to_simple().to_string(),
+                                )))?;
+                                writer.write_event(Event::End(BytesEnd::borrowed(b"bnode")))?;
+                            }
+                            Term::Literal(literal) => {
+                                let mut literal_tag = BytesStart::borrowed_name(b"literal");
+                                if let Some(language) = literal.language() {
+                                    literal_tag.push_attribute(("xml:lang", language));
+                                } else if !literal.is_plain() {
+                                    literal_tag
+                                        .push_attribute(("datatype", literal.datatype().as_str()));
+                                }
+                                writer.write_event(Event::Start(literal_tag))?;
+                                writer.write_event(Event::Text(BytesText::from_plain_str(
+                                    &literal.value(),
+                                )))?;
+                                writer.write_event(Event::End(BytesEnd::borrowed(b"literal")))?;
+                            }
+                        }
+                        writer.write_event(Event::End(BytesEnd::borrowed(b"binding")))?;
+                    }
+                }
+                writer.write_event(Event::End(BytesEnd::borrowed(b"result")))?;
+            }
+            writer.write_event(Event::End(BytesEnd::borrowed(b"results")))?;
+            writer.write_event(Event::End(BytesEnd::borrowed(b"sparql")))?;
+        }
+        QueryResult::Graph(_) => {
+            return Err(format_err!(
+                "Graphs could not be formatted to SPARQL query results XML format"
+            ))
+        }
+    }
+    Ok(writer.into_inner())
+}
 
 pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResult<'static>> {
     enum State {
@@ -130,7 +224,7 @@ pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResult<'s
             Event::End(_) => if let State::Head = state {
                 state = State::AfterHead;
             } else {
-                    return Err(format_err!("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag"));
+                return Err(format_err!("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag"));
             },
             Event::Eof => return Err(format_err!("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag")),
             _ => (),
