@@ -1,0 +1,23 @@
+[package]
+name = "rudf_server"
+version = "0.1.0"
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "MIT/Apache-2.0"
+readme = "../README.md"
+repository = "https://github.com/Tpt/rudf"
+description = """
+Rudf based SPARQL server
+"""
+
+[dependencies]
+rudf = {path = "../lib"}
+gotham = "0.3"
+gotham_derive = "0.3"
+hyper = "0.12"
+futures = "0.1"
+serde = "1"
+serde_derive = "1"
+mime = "0.3"
+failure = "0.1"
+url = "1"
+clap = "2"
