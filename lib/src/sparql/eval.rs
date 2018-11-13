@@ -74,6 +74,14 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
         })))
     }
 
+    pub fn evaluate_describe_plan<'a>(&'a self, plan: &'a PlanNode) -> Result<QueryResult<'a>> {
+        Ok(QueryResult::Graph(Box::new(DescribeIterator {
+            store: self.store.clone(),
+            iter: self.eval_plan(plan, vec![]),
+            quads_iters: Vec::default(),
+        })))
+    }
+
     fn eval_plan<'a>(&self, node: &'a PlanNode, from: EncodedTuple) -> EncodedTuplesIterator<'a> {
         match node {
             PlanNode::Init => Box::new(once(Ok(from))),
@@ -1102,4 +1110,43 @@ fn decode_triple<S: BytesStore>(
         encoder.decode_named_node(predicate)?,
         encoder.decode_term(object)?,
     ))
+}
+
+struct DescribeIterator<'a, S: EncodedQuadsStore> {
+    store: Arc<S>,
+    iter: EncodedTuplesIterator<'a>,
+    quads_iters: Vec<S::QuadsForSubjectIterator>,
+}
+
+impl<'a, S: EncodedQuadsStore> Iterator for DescribeIterator<'a, S> {
+    type Item = Result<Triple>;
+
+    fn next(&mut self) -> Option<Result<Triple>> {
+        while let Some(mut quads_iter) = self.quads_iters.pop() {
+            if let Some(quad) = quads_iter.next() {
+                self.quads_iters.push(quads_iter);
+                return Some(quad.and_then(|quad| self.store.encoder().decode_triple(&quad)));
+            }
+        }
+        let tuple = match self.iter.next()? {
+            Ok(tuple) => tuple,
+            Err(error) => return Some(Err(error)),
+        };
+        let mut error_to_return = None;
+        for subject in tuple {
+            if let Some(subject) = subject {
+                match self.store.quads_for_subject(subject) {
+                    Ok(quads_iter) => self.quads_iters.push(quads_iter),
+                    Err(error) => {
+                        error_to_return = Some(error);
+                    }
+                }
+            }
+        }
+        if let Some(error) = error_to_return {
+            Some(Err(error))
+        } else {
+            self.next()
+        }
+    }
 }

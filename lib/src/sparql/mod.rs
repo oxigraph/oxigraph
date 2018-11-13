@@ -65,7 +65,14 @@ impl<S: EncodedQuadsStore> SparqlDataset for StoreDataset<S> {
                     evaluator: SimpleEvaluator::new(store),
                 }
             }
-            _ => unimplemented!(),
+            Query::Describe { algebra, dataset } => {
+                let store = self.encoded();
+                let (plan, _) = PlanBuilder::build(&*store, &algebra)?;
+                SimplePreparedQuery::Describe {
+                    plan,
+                    evaluator: SimpleEvaluator::new(store),
+                }
+            }
         })
     }
 }
@@ -85,6 +92,10 @@ pub enum SimplePreparedQuery<S: EncodedQuadsStore> {
         construct: Vec<TripleTemplate>,
         evaluator: SimpleEvaluator<S>,
     },
+    Describe {
+        plan: PlanNode,
+        evaluator: SimpleEvaluator<S>,
+    },
 }
 
 impl<S: EncodedQuadsStore> PreparedQuery for SimplePreparedQuery<S> {
@@ -101,6 +112,9 @@ impl<S: EncodedQuadsStore> PreparedQuery for SimplePreparedQuery<S> {
                 construct,
                 evaluator,
             } => evaluator.evaluate_construct_plan(&plan, &construct),
+            SimplePreparedQuery::Describe { plan, evaluator } => {
+                evaluator.evaluate_describe_plan(&plan)
+            }
         }
     }
 }
