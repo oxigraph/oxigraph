@@ -37,10 +37,12 @@ use hyper::StatusCode;
 use rudf::model::Dataset;
 use rudf::model::Graph;
 use rudf::rio::ntriples::read_ntriples;
+use rudf::sparql::algebra::QueryResult;
 use rudf::sparql::xml_results::write_xml_results;
 use rudf::sparql::PreparedQuery;
 use rudf::sparql::SparqlDataset;
 use rudf::store::MemoryDataset;
+use rudf::store::MemoryGraph;
 use std::fs::File;
 use std::sync::Arc;
 use url::form_urlencoded;
@@ -180,6 +182,15 @@ fn evaluate_sparql_query(state: &mut State, query: &[u8]) -> Response<Body> {
     let dataset = SparqlStore::take_from(state);
     match dataset.as_ref().prepare_query(query) {
         Ok(query) => match query.exec() {
+            Ok(QueryResult::Graph(triples)) => {
+                let triples: Result<MemoryGraph, failure::Error> = triples.collect();
+                create_response(
+                    &state,
+                    StatusCode::OK,
+                    "application/n-triples".parse().unwrap(),
+                    triples.unwrap().to_string(),
+                )
+            }
             Ok(result) => create_response(
                 &state,
                 StatusCode::OK,
