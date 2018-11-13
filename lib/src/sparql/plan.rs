@@ -305,6 +305,20 @@ pub enum Comparator {
     Desc(PlanExpression),
 }
 
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+pub struct TripleTemplate {
+    pub subject: TripleTemplateValue,
+    pub predicate: TripleTemplateValue,
+    pub object: TripleTemplateValue,
+}
+
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+pub enum TripleTemplateValue {
+    Constant(EncodedTerm),
+    BlankNode(usize),
+    Variable(usize),
+}
+
 pub struct PlanBuilder<'a, S: EncodedQuadsStore> {
     store: &'a S,
 }
@@ -319,6 +333,14 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
             None,
         )?;
         Ok((plan, variables))
+    }
+
+    pub fn build_graph_template(
+        store: &S,
+        template: &[TriplePattern],
+        mut variables: Vec<Variable>,
+    ) -> Result<Vec<TripleTemplate>> {
+        PlanBuilder { store }.build_for_graph_template(template, &mut variables)
     }
 
     fn build_for_graph_pattern(
@@ -703,6 +725,71 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                 }
                 Ok(result)
             }).collect()
+    }
+
+    fn build_for_graph_template(
+        &self,
+        template: &[TriplePattern],
+        variables: &mut Vec<Variable>,
+    ) -> Result<Vec<TripleTemplate>> {
+        let mut bnodes = Vec::default();
+        template
+            .into_iter()
+            .map(|triple| {
+                Ok(TripleTemplate {
+                    subject: self.template_value_from_term_or_variable(
+                        &triple.subject,
+                        variables,
+                        &mut bnodes,
+                    )?,
+                    predicate: self.template_value_from_named_node_or_variable(
+                        &triple.predicate,
+                        variables,
+                        &mut bnodes,
+                    )?,
+                    object: self.template_value_from_term_or_variable(
+                        &triple.object,
+                        variables,
+                        &mut bnodes,
+                    )?,
+                })
+            }).collect()
+    }
+
+    fn template_value_from_term_or_variable(
+        &self,
+        term_or_variable: &TermOrVariable,
+        variables: &mut Vec<Variable>,
+        bnodes: &mut Vec<Variable>,
+    ) -> Result<TripleTemplateValue> {
+        Ok(match term_or_variable {
+            TermOrVariable::Term(term) => {
+                TripleTemplateValue::Constant(self.store.encoder().encode_term(term)?)
+            }
+            TermOrVariable::Variable(variable) => if variable.has_name() {
+                TripleTemplateValue::Variable(variable_key(variables, variable))
+            } else {
+                TripleTemplateValue::BlankNode(variable_key(bnodes, variable))
+            },
+        })
+    }
+
+    fn template_value_from_named_node_or_variable(
+        &self,
+        named_node_or_variable: &NamedNodeOrVariable,
+        variables: &mut Vec<Variable>,
+        bnodes: &mut Vec<Variable>,
+    ) -> Result<TripleTemplateValue> {
+        Ok(match named_node_or_variable {
+            NamedNodeOrVariable::NamedNode(term) => {
+                TripleTemplateValue::Constant(self.store.encoder().encode_named_node(term)?)
+            }
+            NamedNodeOrVariable::Variable(variable) => if variable.has_name() {
+                TripleTemplateValue::Variable(variable_key(variables, variable))
+            } else {
+                TripleTemplateValue::BlankNode(variable_key(bnodes, variable))
+            },
+        })
     }
 }
 

@@ -9,6 +9,7 @@ use sparql::eval::SimpleEvaluator;
 use sparql::parser::read_sparql_query;
 use sparql::plan::PlanBuilder;
 use sparql::plan::PlanNode;
+use sparql::plan::TripleTemplate;
 use std::io::Read;
 use store::encoded::EncodedQuadsStore;
 use store::encoded::StoreDataset;
@@ -51,6 +52,19 @@ impl<S: EncodedQuadsStore> SparqlDataset for StoreDataset<S> {
                     evaluator: SimpleEvaluator::new(store),
                 }
             }
+            Query::Construct {
+                construct,
+                algebra,
+                dataset,
+            } => {
+                let store = self.encoded();
+                let (plan, variables) = PlanBuilder::build(&*store, &algebra)?;
+                SimplePreparedQuery::Construct {
+                    plan,
+                    construct: PlanBuilder::build_graph_template(&*store, &construct, variables)?,
+                    evaluator: SimpleEvaluator::new(store),
+                }
+            }
             _ => unimplemented!(),
         })
     }
@@ -66,6 +80,11 @@ pub enum SimplePreparedQuery<S: EncodedQuadsStore> {
         plan: PlanNode,
         evaluator: SimpleEvaluator<S>,
     },
+    Construct {
+        plan: PlanNode,
+        construct: Vec<TripleTemplate>,
+        evaluator: SimpleEvaluator<S>,
+    },
 }
 
 impl<S: EncodedQuadsStore> PreparedQuery for SimplePreparedQuery<S> {
@@ -77,6 +96,11 @@ impl<S: EncodedQuadsStore> PreparedQuery for SimplePreparedQuery<S> {
                 evaluator,
             } => evaluator.evaluate_select_plan(&plan, &variables),
             SimplePreparedQuery::Ask { plan, evaluator } => evaluator.evaluate_ask_plan(&plan),
+            SimplePreparedQuery::Construct {
+                plan,
+                construct,
+                evaluator,
+            } => evaluator.evaluate_construct_plan(&plan, &construct),
         }
     }
 }

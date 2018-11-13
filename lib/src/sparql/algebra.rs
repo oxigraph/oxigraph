@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fmt;
 use std::ops::Add;
-use store::MemoryGraph;
 use utils::Escaper;
 use uuid::Uuid;
 use Result;
@@ -1577,5 +1576,5 @@ impl fmt::Display for Query {
 pub enum QueryResult<'a> {
     Bindings(BindingsIterator<'a>),
     Boolean(bool),
-    Graph(MemoryGraph),
+    Graph(Box<dyn Iterator<Item = Result<Triple>> + 'a>),
 }

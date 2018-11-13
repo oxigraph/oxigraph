@@ -99,6 +99,8 @@ fn sparql_w3c_query_evaluation_testsuite() {
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/bound/manifest.ttl",
         ).unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/cast/manifest.ttl").unwrap(),
+        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/construct/manifest.ttl")
+            .unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest.ttl")
             .unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest.ttl")
@@ -341,7 +343,7 @@ mod rs {
 
 fn to_graph(result: QueryResult, with_order: bool) -> Result<MemoryGraph> {
     match result {
-        QueryResult::Graph(graph) => Ok(graph),
+        QueryResult::Graph(graph) => graph.collect(),
         QueryResult::Boolean(value) => {
             let graph = MemoryGraph::default();
             let result_set = BlankNode::default();

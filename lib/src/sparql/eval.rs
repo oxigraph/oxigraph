@@ -2,6 +2,7 @@ use chrono::DateTime;
 use chrono::NaiveDateTime;
 use language_tags::LanguageTag;
 use model::BlankNode;
+use model::Triple;
 use num_traits::identities::Zero;
 use num_traits::FromPrimitive;
 use num_traits::One;
@@ -57,6 +58,20 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             Some(Err(error)) => Err(error),
             None => Ok(QueryResult::Boolean(false)),
         }
+    }
+
+    pub fn evaluate_construct_plan<'a>(
+        &'a self,
+        plan: &'a PlanNode,
+        construct: &'a [TripleTemplate],
+    ) -> Result<QueryResult<'a>> {
+        Ok(QueryResult::Graph(Box::new(ConstructIterator {
+            store: self.store.clone(),
+            iter: self.eval_plan(plan, vec![]),
+            template: construct,
+            buffered_results: Vec::default(),
+            bnodes: Vec::default(),
+        })))
     }
 
     fn eval_plan<'a>(&self, node: &'a PlanNode, from: EncodedTuple) -> EncodedTuplesIterator<'a> {
@@ -1016,4 +1031,75 @@ impl<'a, S: EncodedQuadsStore> Iterator for UnionIterator<'a, S> {
         }
         self.next()
     }
+}
+
+struct ConstructIterator<'a, S: EncodedQuadsStore> {
+    store: Arc<S>,
+    iter: EncodedTuplesIterator<'a>,
+    template: &'a [TripleTemplate],
+    buffered_results: Vec<Result<Triple>>,
+    bnodes: Vec<BlankNode>,
+}
+
+impl<'a, S: EncodedQuadsStore> Iterator for ConstructIterator<'a, S> {
+    type Item = Result<Triple>;
+
+    fn next(&mut self) -> Option<Result<Triple>> {
+        if let Some(result) = self.buffered_results.pop() {
+            return Some(result);
+        }
+        {
+            let tuple = match self.iter.next()? {
+                Ok(tuple) => tuple,
+                Err(error) => return Some(Err(error)),
+            };
+            let encoder = self.store.encoder();
+            for template in self.template {
+                if let (Some(subject), Some(predicate), Some(object)) = (
+                    get_triple_template_value(&template.subject, &tuple, &mut self.bnodes),
+                    get_triple_template_value(&template.predicate, &tuple, &mut self.bnodes),
+                    get_triple_template_value(&template.object, &tuple, &mut self.bnodes),
+                ) {
+                    self.buffered_results
+                        .push(decode_triple(&encoder, subject, predicate, object));
+                } else {
+                    self.buffered_results.clear(); //No match, we do not output any triple for this row
+                    break;
+                }
+            }
+            self.bnodes.clear(); //We do not reuse old bnodes
+        }
+        self.next()
+    }
+}
+
+fn get_triple_template_value(
+    selector: &TripleTemplateValue,
+    tuple: &[Option<EncodedTerm>],
+    bnodes: &mut Vec<BlankNode>,
+) -> Option<EncodedTerm> {
+    match selector {
+        TripleTemplateValue::Constant(term) => Some(*term),
+        TripleTemplateValue::Variable(v) => get_tuple_value(*v, tuple),
+        TripleTemplateValue::BlankNode(id) => {
+            //TODO use resize_with
+            while *id >= tuple.len() {
+                bnodes.push(BlankNode::default())
+            }
+            tuple[*id]
+        }
+    }
+}
+
+fn decode_triple<S: BytesStore>(
+    encoder: &Encoder<S>,
+    subject: EncodedTerm,
+    predicate: EncodedTerm,
+    object: EncodedTerm,
+) -> Result<Triple> {
+    Ok(Triple::new(
+        encoder.decode_named_or_blank_node(subject)?,
+        encoder.decode_named_node(predicate)?,
+        encoder.decode_term(object)?,
+    ))
 }
