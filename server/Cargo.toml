@@ -10,7 +10,7 @@ Rudf based SPARQL server
 """
 
 [dependencies]
-rudf = {path = "../lib"}
+rudf = {path = "../lib", features=["rocksdb"]}
 gotham = "0.3"
 gotham_derive = "0.3"
 hyper = "0.12"

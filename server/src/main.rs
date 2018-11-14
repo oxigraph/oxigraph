@@ -15,6 +15,7 @@ extern crate clap;
 
 use clap::App;
 use clap::Arg;
+use clap::ArgMatches;
 use futures::future;
 use futures::Future;
 use futures::Stream;
@@ -34,7 +35,6 @@ use hyper::Body;
 use hyper::HeaderMap;
 use hyper::Response;
 use hyper::StatusCode;
-use rudf::model::Dataset;
 use rudf::model::Graph;
 use rudf::rio::ntriples::read_ntriples;
 use rudf::sparql::algebra::QueryResult;
@@ -43,7 +43,9 @@ use rudf::sparql::PreparedQuery;
 use rudf::sparql::SparqlDataset;
 use rudf::store::MemoryDataset;
 use rudf::store::MemoryGraph;
+use rudf::store::RocksDbDataset;
 use std::fs::File;
+use std::panic::RefUnwindSafe;
 use std::sync::Arc;
 use url::form_urlencoded;
 
@@ -60,9 +62,26 @@ pub fn main() -> Result<(), failure::Error> {
                 .long("ntriples")
                 .help("Load a N-Triples file in the server at startup")
                 .takes_value(true),
+        ).arg(
+            Arg::with_name("file")
+                .long("file")
+                .short("f")
+                .help("File in which persist the dataset")
+                .takes_value(true),
         ).get_matches();
 
-    let dataset = MemoryDataset::default();
+    let file = matches.value_of("file").map(|v| v.to_string());
+    if let Some(file) = file {
+        main_with_dataset(Arc::new(RocksDbDataset::open(file)?), matches)
+    } else {
+        main_with_dataset(Arc::new(MemoryDataset::default()), matches)
+    }
+}
+
+fn main_with_dataset<D: SparqlDataset + Send + Sync + RefUnwindSafe + 'static>(
+    dataset: Arc<D>,
+    matches: ArgMatches,
+) -> Result<(), failure::Error> {
     if let Some(nt_file) = matches.value_of("ntriples") {
         println!("Loading NTriples file {}", nt_file);
         let default_graph = dataset.default_graph();
@@ -77,8 +96,8 @@ pub fn main() -> Result<(), failure::Error> {
     Ok(())
 }
 
-fn router(dataset: MemoryDataset) -> Router {
-    let store = SparqlStore::new(dataset);
+fn router<D: SparqlDataset + Send + Sync + RefUnwindSafe + 'static>(dataset: Arc<D>) -> Router {
+    let store = SparqlStore(dataset);
     let middleware = StateMiddleware::new(store);
     let pipeline = single_middleware(middleware);
     let (chain, pipelines) = single_pipeline(pipeline);
@@ -90,7 +109,7 @@ fn router(dataset: MemoryDataset) -> Router {
                 .to(|mut state: State| -> (State, Response<Body>) {
                     let parsed_request = QueryRequest::take_from(&mut state);
                     let response =
-                        evaluate_sparql_query(&mut state, &parsed_request.query.as_bytes());
+                        evaluate_sparql_query::<D>(&mut state, &parsed_request.query.as_bytes());
                     (state, response)
                 });
             assoc.post().to(|mut state: State| -> Box<HandlerFuture> {
@@ -105,13 +124,16 @@ fn router(dataset: MemoryDataset) -> Router {
                                 {
                                     Some(content_type) => {
                                         if content_type == "application/sparql-query" {
-                                            evaluate_sparql_query(&mut state, &body.into_bytes())
+                                            evaluate_sparql_query::<D>(
+                                                &mut state,
+                                                &body.into_bytes(),
+                                            )
                                         } else if content_type
                                             == "application/x-www-form-urlencoded"
                                         {
                                             match parse_urlencoded_query_request(&body.into_bytes())
                                             {
-                                                Ok(parsed_request) => evaluate_sparql_query(
+                                                Ok(parsed_request) => evaluate_sparql_query::<D>(
                                                     &mut state,
                                                     &parsed_request.query.as_bytes(),
                                                 ),
@@ -150,17 +172,17 @@ fn router(dataset: MemoryDataset) -> Router {
     })
 }
 
-#[derive(Clone, StateData)]
-struct SparqlStore(Arc<MemoryDataset>);
+#[derive(StateData)]
+struct SparqlStore<D: SparqlDataset + Send + Sync + RefUnwindSafe + 'static>(Arc<D>);
 
-impl SparqlStore {
-    fn new(dataset: MemoryDataset) -> Self {
-        SparqlStore(Arc::new(dataset))
+impl<D: SparqlDataset + Send + Sync + RefUnwindSafe + 'static> Clone for SparqlStore<D> {
+    fn clone(&self) -> Self {
+        SparqlStore(self.0.clone())
     }
 }
 
-impl AsRef<MemoryDataset> for SparqlStore {
-    fn as_ref(&self) -> &MemoryDataset {
+impl<D: SparqlDataset + Send + Sync + RefUnwindSafe + 'static> AsRef<D> for SparqlStore<D> {
+    fn as_ref(&self) -> &D {
         &*self.0
     }
 }
@@ -178,8 +200,11 @@ fn parse_urlencoded_query_request(query: &[u8]) -> Result<QueryRequest, failure:
         }).ok_or_else(|| format_err!("'query' parameter not found"))
 }
 
-fn evaluate_sparql_query(state: &mut State, query: &[u8]) -> Response<Body> {
-    let dataset = SparqlStore::take_from(state);
+fn evaluate_sparql_query<D: SparqlDataset + Send + Sync + RefUnwindSafe + 'static>(
+    state: &mut State,
+    query: &[u8],
+) -> Response<Body> {
+    let dataset: SparqlStore<D> = SparqlStore::take_from(state);
     match dataset.as_ref().prepare_query(query) {
         Ok(query) => match query.exec() {
             Ok(QueryResult::Graph(triples)) => {
@@ -216,7 +241,7 @@ mod tests {
 
     #[test]
     fn get_query() {
-        let test_server = TestServer::new(router(MemoryDataset::default())).unwrap();
+        let test_server = TestServer::new(router(Arc::new(MemoryDataset::default()))).unwrap();
         let response = test_server
             .client()
             .get("http://localhost/query?query=SELECT+*+WHERE+{+?s+?p+?o+}")
@@ -227,7 +252,7 @@ mod tests {
 
     #[test]
     fn post_query() {
-        let test_server = TestServer::new(router(MemoryDataset::default())).unwrap();
+        let test_server = TestServer::new(router(Arc::new(MemoryDataset::default()))).unwrap();
         let response = test_server
             .client()
             .post(
