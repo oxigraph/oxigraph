@@ -449,9 +449,12 @@ impl Iterator for SPOGIndexIterator {
 
     fn next(&mut self) -> Option<Result<EncodedQuad>> {
         self.iter.next();
-        self.iter
-            .key()
-            .map(|buffer| Cursor::new(buffer).read_spog_quad())
+        unsafe {
+            //This is safe because we are not keeping the buffer
+            self.iter
+                .key_inner()
+                .map(|buffer| Cursor::new(buffer).read_spog_quad())
+        }
     }
 }
 
@@ -464,9 +467,12 @@ impl Iterator for POSGIndexIterator {
 
     fn next(&mut self) -> Option<Result<EncodedQuad>> {
         self.iter.next();
-        self.iter
-            .key()
-            .map(|buffer| Cursor::new(buffer).read_posg_quad())
+        unsafe {
+            //This is safe because we are not keeping the buffer
+            self.iter
+                .key_inner()
+                .map(|buffer| Cursor::new(buffer).read_posg_quad())
+        }
     }
 }
 
@@ -479,9 +485,12 @@ impl Iterator for OSPGIndexIterator {
 
     fn next(&mut self) -> Option<Result<EncodedQuad>> {
         self.iter.next();
-        self.iter
-            .key()
-            .map(|buffer| Cursor::new(buffer).read_ospg_quad())
+        unsafe {
+            //This is safe because we are not keeping the buffer
+            self.iter
+                .key_inner()
+                .map(|buffer| Cursor::new(buffer).read_ospg_quad())
+        }
     }
 }
 
