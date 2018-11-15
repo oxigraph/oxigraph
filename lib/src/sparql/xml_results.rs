@@ -1,6 +1,7 @@
 //! Implementation of [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/)
 
 use model::*;
+use quick_xml::events::BytesDecl;
 use quick_xml::events::BytesEnd;
 use quick_xml::events::BytesStart;
 use quick_xml::events::BytesText;
@@ -21,6 +22,7 @@ pub fn write_xml_results<W: Write>(results: QueryResult, sink: W) -> Result<W> {
     let mut writer = Writer::new(sink);
     match results {
         QueryResult::Boolean(value) => {
+            writer.write_event(Event::Decl(BytesDecl::new(b"1.0", None, None)))?;
             let mut sparql_open = BytesStart::borrowed_name(b"sparql");
             sparql_open.push_attribute(("xmlns", "http://www.w3.org/2005/sparql-results#"));
             writer.write_event(Event::Start(sparql_open))?;
@@ -37,6 +39,7 @@ pub fn write_xml_results<W: Write>(results: QueryResult, sink: W) -> Result<W> {
         }
         QueryResult::Bindings(bindings) => {
             let (variables, results) = bindings.destruct();
+            writer.write_event(Event::Decl(BytesDecl::new(b"1.0", None, None)))?;
             let mut sparql_open = BytesStart::borrowed_name(b"sparql");
             sparql_open.push_attribute(("xmlns", "http://www.w3.org/2005/sparql-results#"));
             writer.write_event(Event::Start(sparql_open))?;
@@ -51,9 +54,11 @@ pub fn write_xml_results<W: Write>(results: QueryResult, sink: W) -> Result<W> {
             for result in results {
                 let result = result?;
                 writer.write_event(Event::Start(BytesStart::borrowed_name(b"result")))?;
-                for (k, value) in result.into_iter().enumerate() {
+                for (i, value) in result.into_iter().enumerate() {
                     if let Some(term) = value {
-                        writer.write_event(Event::Start(BytesStart::borrowed_name(b"binding")))?;
+                        let mut binding_tag = BytesStart::borrowed_name(b"binding");
+                        binding_tag.push_attribute(("name", variables[i].name()?));
+                        writer.write_event(Event::Start(binding_tag))?;
                         match term {
                             Term::NamedNode(uri) => {
                                 writer
