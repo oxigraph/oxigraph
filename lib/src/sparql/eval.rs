@@ -295,17 +295,8 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             }
             PlanNode::HashDeduplicate { child } => {
                 let iter = self.eval_plan(&*child, from);
-                let mut values = HashSet::with_capacity(iter.size_hint().0);
-                let mut errors = Vec::default();
-                for result in iter {
-                    match result {
-                        Ok(result) => {
-                            values.insert(result);
-                        }
-                        Err(error) => errors.push(Err(error)),
-                    }
-                }
-                Box::new(errors.into_iter().chain(values.into_iter().map(Ok)))
+                let already_seen = HashSet::with_capacity(iter.size_hint().0);
+                Box::new(HashDeduplicateIterator { iter, already_seen })
             }
             PlanNode::Skip { child, count } => Box::new(self.eval_plan(&*child, from).skip(*count)),
             PlanNode::Limit { child, count } => {
@@ -1045,6 +1036,26 @@ impl<'a, S: EncodedQuadsStore> Iterator for UnionIterator<'a, S> {
             Err(error) => return Some(Err(error)),
         }
         self.next()
+    }
+}
+
+struct HashDeduplicateIterator<'a> {
+    iter: EncodedTuplesIterator<'a>,
+    already_seen: HashSet<EncodedTuple>,
+}
+
+impl<'a> Iterator for HashDeduplicateIterator<'a> {
+    type Item = Result<EncodedTuple>;
+
+    fn next(&mut self) -> Option<Result<EncodedTuple>> {
+        match self.iter.next()? {
+            Ok(tuple) => if self.already_seen.insert(tuple.clone()) {
+                Some(Ok(tuple))
+            } else {
+                self.next()
+            },
+            Err(error) => Some(Err(error)),
+        }
     }
 }
 
