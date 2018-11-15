@@ -13,12 +13,14 @@ use rust_decimal::Decimal;
 use sparql::algebra::*;
 use sparql::plan::*;
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::iter::once;
 use std::iter::Iterator;
 use std::str;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::sync::Mutex;
 use store::encoded::EncodedQuadsStore;
 use store::numeric_encoder::*;
 use Result;
@@ -29,19 +31,24 @@ type EncodedTuplesIterator<'a> = Box<dyn Iterator<Item = Result<EncodedTuple>> +
 
 pub struct SimpleEvaluator<S: EncodedQuadsStore> {
     store: Arc<S>,
+    bnodes_map: Arc<Mutex<BTreeMap<u64, BlankNode>>>,
 }
 
 impl<S: EncodedQuadsStore> Clone for SimpleEvaluator<S> {
     fn clone(&self) -> Self {
         Self {
             store: self.store.clone(),
+            bnodes_map: self.bnodes_map.clone(),
         }
     }
 }
 
 impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
     pub fn new(store: Arc<S>) -> Self {
-        Self { store }
+        Self {
+            store,
+            bnodes_map: Arc::new(Mutex::new(BTreeMap::default())),
+        }
     }
 
     pub fn evaluate_select_plan<'a>(
@@ -448,7 +455,19 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 _ => None,
             },
             PlanExpression::BNode(id) => match id {
-                Some(id) => unimplemented!(),
+                Some(id) => match self.eval_expression(id, tuple)? {
+                    EncodedTerm::SimpleLiteral { value_id }
+                    | EncodedTerm::StringLiteral { value_id } => Some(
+                        self.bnodes_map
+                            .lock()
+                            .ok()?
+                            .entry(value_id)
+                            .or_insert_with(BlankNode::default)
+                            .clone()
+                            .into(),
+                    ),
+                    _ => None,
+                },
                 None => Some(BlankNode::default().into()),
             },
             PlanExpression::SameTerm(a, b) => {
@@ -515,7 +534,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 }
                 let regex = regex_builder.build().ok()?;
                 let text = self.to_string(self.eval_expression(text, tuple)?)?;
-                Some(regex_builder.build().ok()?.is_match(&text).into())
+                Some(regex.is_match(&text).into())
             }
             PlanExpression::BooleanCast(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::BooleanLiteral(value) => Some(value.into()),
