@@ -8,6 +8,7 @@ use num_traits::FromPrimitive;
 use num_traits::One;
 use num_traits::ToPrimitive;
 use ordered_float::OrderedFloat;
+use regex::RegexBuilder;
 use rust_decimal::Decimal;
 use sparql::algebra::*;
 use sparql::plan::*;
@@ -21,6 +22,8 @@ use std::sync::Arc;
 use store::encoded::EncodedQuadsStore;
 use store::numeric_encoder::*;
 use Result;
+
+const REGEX_SIZE_LIMIT: usize = 1_000_000;
 
 type EncodedTuplesIterator<'a> = Box<dyn Iterator<Item = Result<EncodedTuple>> + 'a>;
 
@@ -484,7 +487,36 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                     }.into(),
                 )
             }
-            PlanExpression::Regex(text, pattern, flags) => unimplemented!(),
+            PlanExpression::Regex(text, pattern, flags) => {
+                // TODO Avoid to compile the regex each time
+                let pattern = self.to_simple_string(self.eval_expression(pattern, tuple)?)?;
+                let mut regex_builder = RegexBuilder::new(&pattern);
+                regex_builder.size_limit(REGEX_SIZE_LIMIT);
+                if let Some(flags) = flags {
+                    let flags = self.to_simple_string(self.eval_expression(flags, tuple)?)?;
+                    for flag in flags.chars() {
+                        match flag {
+                            's' => {
+                                regex_builder.dot_matches_new_line(true);
+                            }
+                            'm' => {
+                                regex_builder.multi_line(true);
+                            }
+                            'i' => {
+                                regex_builder.case_insensitive(true);
+                            }
+                            'x' => {
+                                regex_builder.ignore_whitespace(true);
+                            }
+                            'q' => (), //TODO: implement
+                            _ => (),
+                        }
+                    }
+                }
+                let regex = regex_builder.build().ok()?;
+                let text = self.to_string(self.eval_expression(text, tuple)?)?;
+                Some(regex_builder.build().ok()?.is_match(&text).into())
+            }
             PlanExpression::BooleanCast(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::BooleanLiteral(value) => Some(value.into()),
                 EncodedTerm::SimpleLiteral { value_id }
@@ -649,6 +681,19 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             )
         } else {
             None
+        }
+    }
+
+    fn to_string(&self, term: EncodedTerm) -> Option<String> {
+        match term {
+            EncodedTerm::SimpleLiteral { value_id }
+            | EncodedTerm::StringLiteral { value_id }
+            | EncodedTerm::LangStringLiteral { value_id, .. } => Some(
+                str::from_utf8(&self.store.get_bytes(value_id).ok()??)
+                    .ok()?
+                    .to_owned(),
+            ),
+            _ => None,
         }
     }
 

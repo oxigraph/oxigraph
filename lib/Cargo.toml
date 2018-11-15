@@ -28,6 +28,7 @@ rust_decimal = "0.10"
 chrono = "0.4"
 language-tags = "0.2"
 failure = "0.1"
+regex = "1"
 
 [build-dependencies]
 peg = "0.5"
