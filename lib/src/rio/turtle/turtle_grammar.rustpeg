@@ -3,7 +3,6 @@
 use std::char;
 use model::vocab::rdf;
 use model::vocab::xsd;
-use std::iter;
 use std::str::FromStr;
 use rio::utils::unescape_unicode_codepoints;
 
@@ -170,9 +169,9 @@ PNAME_NS -> &'input str = ns:$(PN_PREFIX? ":") {
 }
 
 //[140s]
-PNAME_LN -> Url = ns:$(PNAME_NS) local:PN_LOCAL {?
+PNAME_LN -> Url = ns:$(PNAME_NS) local:$(PN_LOCAL) {?
     match state.namespaces.get(ns) {
-        Some(ns) => match Url::parse(&(ns.to_string() + &local)) {
+        Some(ns) => match Url::parse(&(ns.to_string() + &unescape_pn_local(local))) {
             Ok(url) => Ok(url),
             Err(error) => Err("IRI parsing failed")
         },
@@ -249,21 +248,10 @@ PN_CHARS -> () = [\-0-9\u{00B7}\u{0300}-\u{036F}\u{203F}-\u{2040}] / PN_CHARS_U
 PN_PREFIX -> () = PN_CHARS_BASE PN_CHARS* ("."+ PN_CHARS+)*
 
 //[168s]
-PN_LOCAL -> String = f:PN_LOCAL_first c:(PN_LOCAL_next*) e:(PN_LOCAL_next_dot*) {
-    f.to_string() + &c.concat() + &e.concat()
-}
-PN_LOCAL_first -> String =
-    c:$(":" / [0-9] / PN_CHARS_U) { c.into() } /
-    s:PLX { s }
-PN_LOCAL_next -> String =
-    c:$(":" / PN_CHARS) { c.into() } /
-    s:PLX { s }
-PN_LOCAL_next_dot -> String = d:$("."+) f:PN_LOCAL_next { d.to_string() + &f}
+PN_LOCAL -> () = (PN_CHARS_U / ':' / [0-9] / PLX) (PN_CHARS / ':' / PLX)* ('.'+ (PN_CHARS / ':' / PLX)+)?
 
 //[169s]
-PLX -> String =
-    p:$(PERCENT) { p.into() } /
-    e:PN_LOCAL_ESC { iter::once(e).collect() }
+PLX -> () = PERCENT / PN_LOCAL_ESC
 
 //[170s]
 PERCENT -> () = "%" HEX HEX
@@ -272,7 +260,7 @@ PERCENT -> () = "%" HEX HEX
 HEX -> () = ([0-9A-Fa-f])
 
 //[172s]
-PN_LOCAL_ESC -> char = "\\" c:$([_~\.\-!$&'()*+,;=/?#@%]) { c.chars().next().unwrap() }
+PN_LOCAL_ESC -> () = "\\" [_~\.\-!$&'()*+,;=/?#@%]
 
 
 //space

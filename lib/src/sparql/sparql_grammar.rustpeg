@@ -3,7 +3,6 @@
 use std::char;
 use model::vocab::rdf;
 use model::vocab::xsd;
-use std::iter;
 use std::str::FromStr;
 
 #![arguments(state: &mut ParserState)]
@@ -933,8 +932,8 @@ PNAME_NS -> &'input str = ns:$(PN_PREFIX? ":") {
 }
 
 //[141]
-PNAME_LN -> String = ns:$(PNAME_NS) local:PN_LOCAL {?
-    state.namespaces.get(ns).map(|v| v.clone() + &local).ok_or("Prefix not found")
+PNAME_LN -> String = ns:$(PNAME_NS) local:$(PN_LOCAL) {?
+    state.namespaces.get(ns).map(|v| v.clone() + &unescape_pn_local(local)).ok_or("Prefix not found")
 }
 
 //[142]
@@ -1038,21 +1037,10 @@ PN_CHARS -> () = [\-0-9\u{00B7}\u{0300}-\u{036F}\u{203F}-\u{2040}] / PN_CHARS_U
 PN_PREFIX -> () = PN_CHARS_BASE PN_CHARS* ("."+ PN_CHARS+)*
 
 //[169]
-PN_LOCAL -> String = f:PN_LOCAL_first c:(PN_LOCAL_next*) e:(PN_LOCAL_next_dot*) {
-    f.to_string() + &c.concat() + &e.concat()
-}
-PN_LOCAL_first -> String =
-    c:$(":" / [0-9] / PN_CHARS_U) { c.into() } /
-    PLX
-PN_LOCAL_next -> String =
-    c:$(":" / PN_CHARS) { c.into() } /
-    PLX
-PN_LOCAL_next_dot -> String = d:$('.'+) f:PN_LOCAL_next* { d.to_string() + &f.concat()}
+PN_LOCAL -> () = (PN_CHARS_U / ':' / [0-9] / PLX) (PN_CHARS / ':' / PLX)* ('.'+ (PN_CHARS / ':' / PLX)+)?
 
 //[170]
-PLX -> String =
-    p:$(PERCENT) { p.into() } /
-    e:PN_LOCAL_ESC { iter::once(e).collect() }
+PLX -> () = PERCENT / PN_LOCAL_ESC
 
 //[171]
 PERCENT -> () = "%" HEX HEX
@@ -1061,7 +1049,7 @@ PERCENT -> () = "%" HEX HEX
 HEX -> () = ([0-9A-Fa-f])
 
 //[173]
-PN_LOCAL_ESC -> char = "\\" c:$([_~\.\-!$&'()*+,;=/?#@%]) { c.chars().next().unwrap() } //TODO: added '/' to make tests pass but is it valid?
+PN_LOCAL_ESC -> () = "\\" [_~\.\-!$&'()*+,;=/?#@%] //TODO: added '/' to make tests pass but is it valid?
 
 //space
 _ = #quiet<([ \t\n\r] / comment)*>

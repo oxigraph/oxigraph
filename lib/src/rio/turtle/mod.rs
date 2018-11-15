@@ -73,8 +73,29 @@ mod grammar {
         );
     }
 
-    pub fn unescape_echars(input: &str) -> Cow<str> {
+    fn unescape_echars(input: &str) -> Cow<str> {
         unescape_characters(input, &UNESCAPE_CHARACTERS, &UNESCAPE_REPLACEMENT)
+    }
+
+    const UNESCAPE_PN_CHARACTERS: [u8; 20] = [
+        b'_', b'~', b'.', b'-', b'!', b'$', b'&', b'\'', b'(', b')', b'*', b'+', b',', b';', b'=',
+        b'/', b'?', b'#', b'@', b'%',
+    ];
+    lazy_static! {
+        static ref UNESCAPE_PN_REPLACEMENT: StaticSliceMap<char, char> = StaticSliceMap::new(
+            &[
+                '_', '~', '.', '-', '!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '=', '/',
+                '?', '#', '@', '%'
+            ],
+            &[
+                '_', '~', '.', '-', '!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '=', '/',
+                '?', '#', '@', '%'
+            ]
+        );
+    }
+
+    pub fn unescape_pn_local(input: &str) -> Cow<str> {
+        unescape_characters(input, &UNESCAPE_PN_CHARACTERS, &UNESCAPE_PN_REPLACEMENT)
     }
 }
 
