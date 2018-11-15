@@ -371,7 +371,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                     self.eval_expression(b, tuple)?,
                 )? {
                     Ordering::Greater | Ordering::Equal => true,
-                    _ => false,
+                    Ordering::Less => false,
                 }.into(),
             ),
             PlanExpression::Lower(a, b) => Some(
@@ -387,7 +387,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                     self.eval_expression(b, tuple)?,
                 )? {
                     Ordering::Less | Ordering::Equal => true,
-                    _ => false,
+                    Ordering::Greater => false,
                 }.into(),
             ),
             PlanExpression::Add(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
@@ -617,7 +617,9 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
 
     fn to_string_id(&self, term: EncodedTerm) -> Option<u64> {
         match term {
+            EncodedTerm::DefaultGraph {} => None,
             EncodedTerm::NamedNode { iri_id } => Some(iri_id),
+            EncodedTerm::BlankNode(_) => None,
             EncodedTerm::SimpleLiteral { value_id }
             | EncodedTerm::StringLiteral { value_id }
             | EncodedTerm::LangStringLiteral { value_id, .. }
@@ -638,7 +640,12 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             EncodedTerm::DecimalLiteral(value) => {
                 self.store.insert_bytes(value.to_string().as_bytes()).ok()
             }
-            _ => None,
+            EncodedTerm::DateTime(value) => {
+                self.store.insert_bytes(value.to_string().as_bytes()).ok()
+            }
+            EncodedTerm::NaiveDateTime(value) => {
+                self.store.insert_bytes(value.to_string().as_bytes()).ok()
+            }
         }
     }
 
