@@ -1,3 +1,5 @@
+//! [SPARQL 1.1 Query Algebra](https://www.w3.org/TR/sparql11-query/#sparqlQuery) AST
+
 use model::*;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;

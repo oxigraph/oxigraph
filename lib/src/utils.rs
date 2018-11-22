@@ -2,13 +2,7 @@ pub trait Escaper {
     fn escape(&self) -> String;
 }
 
-impl<'a> Escaper for &'a str {
-    fn escape(&self) -> String {
-        self.chars().flat_map(EscapeRDF::new).collect()
-    }
-}
-
-impl Escaper for String {
+impl Escaper for str {
     fn escape(&self) -> String {
         self.chars().flat_map(EscapeRDF::new).collect()
     }

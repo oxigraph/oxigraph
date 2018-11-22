@@ -1,4 +1,4 @@
-/// Implements https://www.w3.org/TR/turtle/
+//! Implementation of [Turtle](https://www.w3.org/TR/turtle/) RDF syntax
 
 mod grammar {
     #![cfg_attr(
@@ -39,9 +39,10 @@ mod grammar {
         }
     }
 
-    /// Reads a Turtle file from a Rust `Read` and returns an iterator on the read `Triple`s
+    /// Reads a [Turtle](https://www.w3.org/TR/turtle/) file from a Rust `Read` and returns an iterator on the read `Triple`s
     ///
-    /// Warning: this implementation has not been optimized yet and stores all the found triples in memory
+    /// Warning: this implementation has not been optimized yet and stores all the found triples in memory.
+    /// This implementation also requires that blank node ids are valid UTF-8
     pub fn read_turtle<'a, R: Read + 'a>(
         source: R,
         base_uri: impl Into<Option<Url>>,

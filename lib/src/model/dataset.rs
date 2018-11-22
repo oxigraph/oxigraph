@@ -122,7 +122,8 @@ pub trait NamedGraph: Graph {
 /// assert_eq!(vec![triple.in_graph(None)], results);
 /// ```
 ///
-/// The implementation backed by RocksDB could be built using `RocksDbDataset::open` and works just like its in-memory equivalent:
+/// The implementation backed by RocksDB if disabled by default and requires the `"rocksdb"` feature to be activated.
+/// A `RocksDbDataset` could be built using `RocksDbDataset::open` and works just like its in-memory equivalent:
 /// ```ignore
 /// use rudf::store::RocksDbDataset;
 /// let dataset = RocksDbDataset::open("foo.db");

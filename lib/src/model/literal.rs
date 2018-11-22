@@ -131,7 +131,7 @@ impl Literal {
     }
 
     /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form)
-    pub fn value(&self) -> Cow<String> {
+    pub fn value(&self) -> Cow<str> {
         match self.0 {
             LiteralContent::SimpleLiteral(ref value)
             | LiteralContent::String(ref value)

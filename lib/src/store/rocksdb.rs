@@ -20,6 +20,8 @@ use Result;
 
 /// `rudf::model::Dataset` trait implementation based on the [RocksDB](https://rocksdb.org/) key-value store
 ///
+/// To use it, the `"rocksdb"` feature need to be activated.
+///
 /// Usage example:
 /// ```
 /// use rudf::store::RocksDbDataset;

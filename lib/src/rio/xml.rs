@@ -1,3 +1,5 @@
+//! Implementation of [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) syntax
+
 use model::vocab::rdf;
 use model::Triple;
 use model::*;
@@ -12,7 +14,9 @@ use std::str::FromStr;
 use url::Url;
 use Result;
 
-/// Reads a RDF/XML file from a Rust `Read` and returns an iterator on the read `Triple`s
+/// Reads a [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) file from a Rust `Read` and returns an iterator on the read `Triple`s
+///
+/// Warning: The `rdf:parseType="Literal"` and `rdf:parseType="Collection"` options are not supported yet
 pub fn read_rdf_xml(
     source: impl BufRead,
     base_uri: impl Into<Option<Url>>,

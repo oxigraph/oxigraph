@@ -1,3 +1,13 @@
+//! This crate is a work in progress of implementation of an RDF and SPARQL software stack in Rust.
+//!
+//! Its goal is to provide a compliant, safe and fast implementation of W3C specifications.
+//!
+//! It currently provides:
+//! * Basic RDF data structures in the `model` package
+//! * Parsers for XML, Turtle and N-Triples syntaxes in the `rio` package
+//! * A memory based and a disk based stores in the `store` package
+//! * A work in progress SPARQL implementation in the `sparql` package
+
 #![cfg_attr(
     feature = "cargo-clippy",
     warn(
