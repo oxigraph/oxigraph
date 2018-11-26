@@ -245,6 +245,8 @@ pub enum PlanExpression {
     FloatCast(Box<PlanExpression>),
     DecimalCast(Box<PlanExpression>),
     IntegerCast(Box<PlanExpression>),
+    DateCast(Box<PlanExpression>),
+    TimeCast(Box<PlanExpression>),
     DateTimeCast(Box<PlanExpression>),
     StringCast(Box<PlanExpression>),
 }
@@ -295,6 +297,8 @@ impl PlanExpression {
             | PlanExpression::FloatCast(e)
             | PlanExpression::IntegerCast(e)
             | PlanExpression::DecimalCast(e)
+            | PlanExpression::DateCast(e)
+            | PlanExpression::TimeCast(e)
             | PlanExpression::DateTimeCast(e)
             | PlanExpression::StringCast(e) => {
                 e.add_variables(set);
@@ -690,7 +694,11 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                         variables,
                         "integer",
                     )?
-                } else if *name == *xsd::DATE_TIME {
+                } else if *name == *xsd::DATE {
+                self.build_cast(parameters, PlanExpression::DateCast, variables, "date")?
+            } else if *name == *xsd::TIME {
+                self.build_cast(parameters, PlanExpression::TimeCast, variables, "time")?
+            } else if *name == *xsd::DATE_TIME {
                     self.build_cast(
                         parameters,
                         PlanExpression::DateTimeCast,

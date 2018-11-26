@@ -5,8 +5,7 @@ use crate::sparql::plan::*;
 use crate::store::encoded::EncodedQuadsStore;
 use crate::store::numeric_encoder::*;
 use crate::Result;
-use chrono::DateTime;
-use chrono::NaiveDateTime;
+use chrono::prelude::*;
 use language_tags::LanguageTag;
 use num_traits::identities::Zero;
 use num_traits::FromPrimitive;
@@ -658,6 +657,28 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 )),
                 _ => None,
             },
+            PlanExpression::DateCast(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::NaiveDate(value) => Some(value.into()),
+                EncodedTerm::DateTime(value) => Some(value.date().naive_utc().into()), //TODO: use date with timezone
+                EncodedTerm::NaiveDateTime(value) => Some(value.date().into()),
+                EncodedTerm::SimpleLiteral { value_id }
+                | EncodedTerm::StringLiteral { value_id } => {
+                    let value = self.store.get_str(value_id).ok()?;
+                    Some(NaiveDate::parse_from_str(&value, "%Y-%m-%d").ok()?.into())
+                }
+                _ => None,
+            },
+            PlanExpression::TimeCast(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::NaiveTime(value) => Some(value.into()),
+                EncodedTerm::DateTime(value) => Some(value.time().into()),
+                EncodedTerm::NaiveDateTime(value) => Some(value.time().into()),
+                EncodedTerm::SimpleLiteral { value_id }
+                | EncodedTerm::StringLiteral { value_id } => {
+                    let value = self.store.get_str(value_id).ok()?;
+                    Some(NaiveTime::parse_from_str(&value, "%H:%M:%S").ok()?.into())
+                }
+                _ => None,
+            },
             PlanExpression::DateTimeCast(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::DateTime(value) => Some(value.into()),
                 EncodedTerm::NaiveDateTime(value) => Some(value.into()),
@@ -709,6 +730,8 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             EncodedTerm::DoubleLiteral(value) => self.store.insert_str(&value.to_string()).ok(),
             EncodedTerm::IntegerLiteral(value) => self.store.insert_str(&value.to_string()).ok(),
             EncodedTerm::DecimalLiteral(value) => self.store.insert_str(&value.to_string()).ok(),
+            EncodedTerm::NaiveDate(value) => self.store.insert_str(&value.to_string()).ok(),
+            EncodedTerm::NaiveTime(value) => self.store.insert_str(&value.to_string()).ok(),
             EncodedTerm::DateTime(value) => self.store.insert_str(&value.to_string()).ok(),
             EncodedTerm::NaiveDateTime(value) => self.store.insert_str(&value.to_string()).ok(),
         }
@@ -903,6 +926,26 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&Decimal::from_i128(b)?),
                 EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&b),
                 _ => None,
+            },
+            EncodedTerm::NaiveDate(a) => if let EncodedTerm::NaiveDate(ref b) = b {
+                a.partial_cmp(b)
+            } else {
+                None
+            },
+            EncodedTerm::NaiveTime(a) => if let EncodedTerm::NaiveTime(ref b) = b {
+                a.partial_cmp(b)
+            } else {
+                None
+            },
+            EncodedTerm::DateTime(a) => if let EncodedTerm::DateTime(ref b) = b {
+                a.partial_cmp(b)
+            } else {
+                None
+            },
+            EncodedTerm::NaiveDateTime(a) => if let EncodedTerm::NaiveDateTime(ref b) = b {
+                a.partial_cmp(b)
+            } else {
+                None
             },
             _ => None,
         }
