@@ -1,6 +1,5 @@
 use byteorder::ByteOrder;
 use byteorder::LittleEndian;
-use failure::Backtrace;
 use rocksdb::ColumnFamily;
 use rocksdb::DBRawIterator;
 use rocksdb::Options;
@@ -12,11 +11,11 @@ use std::path::Path;
 use std::str;
 use std::str::FromStr;
 use std::sync::Mutex;
-use std::sync::PoisonError;
 use store::encoded::EncodedQuadsStore;
 use store::encoded::StoreDataset;
 use store::numeric_encoder::*;
 use url::Url;
+use utils::MutexPoisonError;
 use Result;
 
 /// `rudf::model::Dataset` trait implementation based on the [RocksDB](https://rocksdb.org/) key-value store
@@ -94,7 +93,7 @@ impl StringStore for RocksDbStore {
             let id = self
                 .str_id_counter
                 .lock()
-                .map_err(RocksDBCounterMutexPoisonError::from)?
+                .map_err(MutexPoisonError::from)?
                 .get_and_increment(&self.db)? as u64;
             let id_bytes = to_bytes(id);
             let mut batch = WriteBatch::default();
@@ -547,20 +546,6 @@ fn to_bytes(int: u64) -> [u8; 8] {
     let mut buf = [0 as u8; 8];
     LittleEndian::write_u64(&mut buf, int);
     buf
-}
-
-#[derive(Debug, Fail)]
-#[fail(display = "RocksDBStore Mutex was poisoned")]
-pub struct RocksDBCounterMutexPoisonError {
-    backtrace: Backtrace,
-}
-
-impl<T> From<PoisonError<T>> for RocksDBCounterMutexPoisonError {
-    fn from(_: PoisonError<T>) -> Self {
-        Self {
-            backtrace: Backtrace::new(),
-        }
-    }
 }
 
 // TODO: very bad but I believe it is fine

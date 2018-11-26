@@ -7,10 +7,14 @@ use model::vocab::xsd;
 use model::*;
 use ordered_float::OrderedFloat;
 use rust_decimal::Decimal;
+use std::collections::BTreeMap;
 use std::io::Read;
 use std::io::Write;
 use std::str;
+use std::str::FromStr;
+use std::sync::RwLock;
 use url::Url;
+use utils::MutexPoisonError;
 use uuid::Uuid;
 use Result;
 
@@ -46,6 +50,53 @@ pub trait StringStore {
             Err(format_err!(
                 "Failed to properly setup the basic string ids in the dictionnary"
             ))
+        }
+    }
+}
+
+pub struct MemoryStringStore {
+    id2str: RwLock<Vec<String>>,
+    str2id: RwLock<BTreeMap<String, u64>>,
+}
+
+impl Default for MemoryStringStore {
+    fn default() -> Self {
+        let new = Self {
+            id2str: RwLock::default(),
+            str2id: RwLock::default(),
+        };
+        new.set_first_strings().unwrap();
+        new
+    }
+}
+
+impl StringStore for MemoryStringStore {
+    fn insert_str(&self, value: &str) -> Result<u64> {
+        let mut id2str = self.id2str.write().map_err(MutexPoisonError::from)?;
+        let mut str2id = self.str2id.write().map_err(MutexPoisonError::from)?;
+        let id = str2id.entry(value.to_string()).or_insert_with(|| {
+            let id = id2str.len() as u64;
+            id2str.push(value.to_string());
+            id
+        });
+        Ok(*id)
+    }
+
+    fn get_str(&self, id: u64) -> Result<String> {
+        let id2str = self.id2str.read().map_err(MutexPoisonError::from)?;
+        if id2str.len() as u64 <= id {
+            Err(format_err!("value not found in the dictionary"))
+        } else {
+            Ok(id2str[id as usize].to_owned())
+        }
+    }
+
+    fn get_url(&self, id: u64) -> Result<Url> {
+        let id2str = self.id2str.read().map_err(MutexPoisonError::from)?;
+        if id2str.len() as u64 <= id {
+            Err(format_err!("value not found in the dictionary"))
+        } else {
+            Ok(Url::from_str(&id2str[id as usize])?)
         }
     }
 }
@@ -652,48 +703,6 @@ impl<S: StringStore + Default> Default for Encoder<S> {
 }
 
 mod test {
-    use std::cell::RefCell;
-    use std::collections::BTreeMap;
-    use std::str::FromStr;
-    use store::numeric_encoder::*;
-
-    #[derive(Default)]
-    struct MemoryStringStore {
-        id2str: RefCell<Vec<String>>,
-        str2id: RefCell<BTreeMap<String, u64>>,
-    }
-
-    impl StringStore for MemoryStringStore {
-        fn insert_str(&self, value: &str) -> Result<u64> {
-            let mut str2id = self.str2id.borrow_mut();
-            let mut id2str = self.id2str.borrow_mut();
-            let id = str2id.entry(value.to_string()).or_insert_with(|| {
-                let id = id2str.len() as u64;
-                id2str.push(value.to_string());
-                id
-            });
-            Ok(*id)
-        }
-
-        fn get_str(&self, id: u64) -> Result<String> {
-            let id2str = self.id2str.borrow();
-            if id2str.len() as u64 <= id {
-                Err(format_err!("value not found in the dictionary"))
-            } else {
-                Ok(id2str[id as usize].to_owned())
-            }
-        }
-
-        fn get_url(&self, id: u64) -> Result<Url> {
-            let id2str = self.id2str.borrow();
-            if id2str.len() as u64 <= id {
-                Err(format_err!("value not found in the dictionary"))
-            } else {
-                Ok(Url::from_str(&id2str[id as usize])?)
-            }
-        }
-    }
-
     #[test]
     fn test_encoding() {
         use model::*;

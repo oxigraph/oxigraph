@@ -1,3 +1,6 @@
+use failure::Backtrace;
+use std::sync::PoisonError;
+
 pub trait Escaper {
     fn escape(&self) -> String;
 }
@@ -107,5 +110,19 @@ impl<K: 'static + Copy + Eq, V: 'static + Copy> StaticSliceMap<K, V> {
             }
         }
         None
+    }
+}
+
+#[derive(Debug, Fail)]
+#[fail(display = "Mutex Mutex was poisoned")]
+pub struct MutexPoisonError {
+    backtrace: Backtrace,
+}
+
+impl<T> From<PoisonError<T>> for MutexPoisonError {
+    fn from(_: PoisonError<T>) -> Self {
+        Self {
+            backtrace: Backtrace::new(),
+        }
     }
 }

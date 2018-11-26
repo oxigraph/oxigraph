@@ -1,14 +1,12 @@
-use failure::Backtrace;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
-use std::str::FromStr;
-use std::sync::PoisonError;
 use std::sync::RwLock;
 use std::sync::RwLockReadGuard;
 use std::sync::RwLockWriteGuard;
 use store::encoded::*;
 use store::numeric_encoder::*;
 use url::Url;
+use utils::MutexPoisonError;
 use Result;
 
 /// Memory based implementation of the `rudf::model::Dataset` trait.
@@ -49,20 +47,16 @@ pub type MemoryDataset = StoreDataset<MemoryStore>;
 pub type MemoryGraph = StoreDefaultGraph<MemoryStore>;
 
 pub struct MemoryStore {
-    id2str: RwLock<Vec<String>>,
-    str2id: RwLock<BTreeMap<String, u64>>,
+    string_store: MemoryStringStore,
     graph_indexes: RwLock<BTreeMap<EncodedTerm, MemoryGraphIndexes>>,
 }
 
 impl Default for MemoryStore {
     fn default() -> Self {
-        let new = Self {
-            id2str: RwLock::default(),
-            str2id: RwLock::default(),
+        Self {
+            string_store: MemoryStringStore::default(),
             graph_indexes: RwLock::default(),
-        };
-        new.set_first_strings().unwrap();
-        new
+        }
     }
 }
 
@@ -75,32 +69,15 @@ struct MemoryGraphIndexes {
 
 impl StringStore for MemoryStore {
     fn insert_str(&self, value: &str) -> Result<u64> {
-        let mut id2str = self.id2str.write().map_err(MemoryStorePoisonError::from)?;
-        let mut str2id = self.str2id.write().map_err(MemoryStorePoisonError::from)?;
-        let id = str2id.entry(value.to_string()).or_insert_with(|| {
-            let id = id2str.len() as u64;
-            id2str.push(value.to_string());
-            id
-        });
-        Ok(*id)
+        self.string_store.insert_str(value)
     }
 
     fn get_str(&self, id: u64) -> Result<String> {
-        let id2str = self.id2str.read().map_err(MemoryStorePoisonError::from)?;
-        if id2str.len() as u64 <= id {
-            Err(format_err!("value not found in the dictionary"))
-        } else {
-            Ok(id2str[id as usize].to_owned())
-        }
+        self.string_store.get_str(id)
     }
 
     fn get_url(&self, id: u64) -> Result<Url> {
-        let id2str = self.id2str.read().map_err(MemoryStorePoisonError::from)?;
-        if id2str.len() as u64 <= id {
-            Err(format_err!("value not found in the dictionary"))
-        } else {
-            Ok(Url::from_str(&id2str[id as usize])?)
-        }
+        self.string_store.get_url(id)
     }
 }
 
@@ -505,32 +482,12 @@ impl EncodedQuadsStore for MemoryStore {
 
 impl MemoryStore {
     fn graph_indexes(&self) -> Result<RwLockReadGuard<BTreeMap<EncodedTerm, MemoryGraphIndexes>>> {
-        Ok(self
-            .graph_indexes
-            .read()
-            .map_err(MemoryStorePoisonError::from)?)
+        Ok(self.graph_indexes.read().map_err(MutexPoisonError::from)?)
     }
 
     fn graph_indexes_mut(
         &self,
     ) -> Result<RwLockWriteGuard<BTreeMap<EncodedTerm, MemoryGraphIndexes>>> {
-        Ok(self
-            .graph_indexes
-            .write()
-            .map_err(MemoryStorePoisonError::from)?)
-    }
-}
-
-#[derive(Debug, Fail)]
-#[fail(display = "MemoryStore Mutex was poisoned")]
-pub struct MemoryStorePoisonError {
-    backtrace: Backtrace,
-}
-
-impl<T> From<PoisonError<T>> for MemoryStorePoisonError {
-    fn from(_: PoisonError<T>) -> Self {
-        Self {
-            backtrace: Backtrace::new(),
-        }
+        Ok(self.graph_indexes.write().map_err(MutexPoisonError::from)?)
     }
 }
