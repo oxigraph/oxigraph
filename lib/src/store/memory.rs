@@ -1,12 +1,14 @@
 use failure::Backtrace;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::str::FromStr;
 use std::sync::PoisonError;
 use std::sync::RwLock;
 use std::sync::RwLockReadGuard;
 use std::sync::RwLockWriteGuard;
 use store::encoded::*;
 use store::numeric_encoder::*;
+use url::Url;
 use Result;
 
 /// Memory based implementation of the `rudf::model::Dataset` trait.
@@ -47,8 +49,8 @@ pub type MemoryDataset = StoreDataset<MemoryStore>;
 pub type MemoryGraph = StoreDefaultGraph<MemoryStore>;
 
 pub struct MemoryStore {
-    id2str: RwLock<Vec<Vec<u8>>>,
-    str2id: RwLock<BTreeMap<Vec<u8>, u64>>,
+    id2str: RwLock<Vec<String>>,
+    str2id: RwLock<BTreeMap<String, u64>>,
     graph_indexes: RwLock<BTreeMap<EncodedTerm, MemoryGraphIndexes>>,
 }
 
@@ -71,28 +73,34 @@ struct MemoryGraphIndexes {
     osp: BTreeMap<EncodedTerm, BTreeMap<EncodedTerm, BTreeSet<EncodedTerm>>>,
 }
 
-impl BytesStore for MemoryStore {
-    type BytesOutput = Vec<u8>;
-
-    fn insert_bytes(&self, value: &[u8]) -> Result<u64> {
+impl StringStore for MemoryStore {
+    fn insert_str(&self, value: &str) -> Result<u64> {
         let mut id2str = self.id2str.write().map_err(MemoryStorePoisonError::from)?;
         let mut str2id = self.str2id.write().map_err(MemoryStorePoisonError::from)?;
-        let id = str2id.entry(value.to_vec()).or_insert_with(|| {
+        let id = str2id.entry(value.to_string()).or_insert_with(|| {
             let id = id2str.len() as u64;
-            id2str.push(value.to_vec());
+            id2str.push(value.to_string());
             id
         });
         Ok(*id)
     }
 
-    fn get_bytes(&self, id: u64) -> Result<Option<Vec<u8>>> {
-        //TODO: use try_from when stable
+    fn get_str(&self, id: u64) -> Result<String> {
         let id2str = self.id2str.read().map_err(MemoryStorePoisonError::from)?;
-        Ok(if id2str.len() as u64 <= id {
-            None
+        if id2str.len() as u64 <= id {
+            Err(format_err!("value not found in the dictionary"))
         } else {
-            Some(id2str[id as usize].to_owned())
-        })
+            Ok(id2str[id as usize].to_owned())
+        }
+    }
+
+    fn get_url(&self, id: u64) -> Result<Url> {
+        let id2str = self.id2str.read().map_err(MemoryStorePoisonError::from)?;
+        if id2str.len() as u64 <= id {
+            Err(format_err!("value not found in the dictionary"))
+        } else {
+            Ok(Url::from_str(&id2str[id as usize])?)
+        }
     }
 }
 

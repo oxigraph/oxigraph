@@ -9,9 +9,7 @@ use ordered_float::OrderedFloat;
 use rust_decimal::Decimal;
 use std::io::Read;
 use std::io::Write;
-use std::ops::Deref;
 use std::str;
-use std::str::FromStr;
 use url::Url;
 use uuid::Uuid;
 use Result;
@@ -26,23 +24,22 @@ const XSD_INTEGER_ID: u64 = 6;
 const XSD_DECIMAL_ID: u64 = 7;
 const XSD_DATE_TIME_ID: u64 = 8;
 
-pub trait BytesStore {
-    type BytesOutput: Deref<Target = [u8]>;
-
-    fn insert_bytes(&self, value: &[u8]) -> Result<u64>;
-    fn get_bytes(&self, id: u64) -> Result<Option<Self::BytesOutput>>;
+pub trait StringStore {
+    fn insert_str(&self, value: &str) -> Result<u64>;
+    fn get_str(&self, id: u64) -> Result<String>;
+    fn get_url(&self, id: u64) -> Result<Url>;
 
     /// Should be called when the bytes store is created
     fn set_first_strings(&self) -> Result<()> {
-        if EMPTY_STRING_ID == self.insert_bytes(b"")?
-            && RDF_LANG_STRING_ID == self.insert_bytes(rdf::LANG_STRING.as_str().as_bytes())?
-            && XSD_STRING_ID == self.insert_bytes(xsd::STRING.as_str().as_bytes())?
-            && XSD_BOOLEAN_ID == self.insert_bytes(xsd::BOOLEAN.as_str().as_bytes())?
-            && XSD_FLOAT_ID == self.insert_bytes(xsd::FLOAT.as_str().as_bytes())?
-            && XSD_DOUBLE_ID == self.insert_bytes(xsd::DOUBLE.as_str().as_bytes())?
-            && XSD_INTEGER_ID == self.insert_bytes(xsd::INTEGER.as_str().as_bytes())?
-            && XSD_DECIMAL_ID == self.insert_bytes(xsd::DECIMAL.as_str().as_bytes())?
-            && XSD_DATE_TIME_ID == self.insert_bytes(xsd::DATE_TIME.as_str().as_bytes())?
+        if EMPTY_STRING_ID == self.insert_str("")?
+            && RDF_LANG_STRING_ID == self.insert_str(rdf::LANG_STRING.as_str())?
+            && XSD_STRING_ID == self.insert_str(xsd::STRING.as_str())?
+            && XSD_BOOLEAN_ID == self.insert_str(xsd::BOOLEAN.as_str())?
+            && XSD_FLOAT_ID == self.insert_str(xsd::FLOAT.as_str())?
+            && XSD_DOUBLE_ID == self.insert_str(xsd::DOUBLE.as_str())?
+            && XSD_INTEGER_ID == self.insert_str(xsd::INTEGER.as_str())?
+            && XSD_DECIMAL_ID == self.insert_str(xsd::DECIMAL.as_str())?
+            && XSD_DATE_TIME_ID == self.insert_str(xsd::DATE_TIME.as_str())?
         {
             Ok(())
         } else {
@@ -446,18 +443,18 @@ impl<R: Write> TermWriter for R {
     }
 }
 
-pub struct Encoder<S: BytesStore> {
+pub struct Encoder<S: StringStore> {
     string_store: S,
 }
 
-impl<S: BytesStore> Encoder<S> {
+impl<S: StringStore> Encoder<S> {
     pub fn new(string_store: S) -> Self {
         Self { string_store }
     }
 
     pub fn encode_named_node(&self, named_node: &NamedNode) -> Result<EncodedTerm> {
         Ok(EncodedTerm::NamedNode {
-            iri_id: self.encode_str_value(named_node.as_str())?,
+            iri_id: self.string_store.insert_str(named_node.as_str())?,
         })
     }
 
@@ -469,17 +466,17 @@ impl<S: BytesStore> Encoder<S> {
         Ok(if literal.is_plain() {
             if let Some(language) = literal.language() {
                 EncodedTerm::LangStringLiteral {
-                    value_id: self.encode_str_value(&literal.value())?,
-                    language_id: self.encode_str_value(language)?,
+                    value_id: self.string_store.insert_str(&literal.value())?,
+                    language_id: self.string_store.insert_str(language)?,
                 }
             } else {
                 EncodedTerm::SimpleLiteral {
-                    value_id: self.encode_str_value(&literal.value())?,
+                    value_id: self.string_store.insert_str(&literal.value())?,
                 }
             }
         } else if literal.is_string() {
             EncodedTerm::StringLiteral {
-                value_id: self.encode_str_value(&literal.value())?,
+                value_id: self.string_store.insert_str(&literal.value())?,
             }
         } else if literal.is_boolean() {
             literal
@@ -518,8 +515,8 @@ impl<S: BytesStore> Encoder<S> {
                 .into()
         } else {
             EncodedTerm::TypedLiteral {
-                value_id: self.encode_str_value(&literal.value())?,
-                datatype_id: self.encode_str_value(literal.datatype().as_str())?,
+                value_id: self.string_store.insert_str(&literal.value())?,
+                datatype_id: self.string_store.insert_str(literal.datatype().as_str())?,
             }
         })
     }
@@ -570,28 +567,28 @@ impl<S: BytesStore> Encoder<S> {
                 Err(format_err!("The default graph tag is not a valid term"))
             }
             EncodedTerm::NamedNode { iri_id } => {
-                Ok(NamedNode::from(self.decode_url_value(iri_id)?).into())
+                Ok(NamedNode::from(self.string_store.get_url(iri_id)?).into())
             }
             EncodedTerm::BlankNode(id) => Ok(BlankNode::from(id).into()),
             EncodedTerm::SimpleLiteral { value_id } => {
-                Ok(Literal::new_simple_literal(self.decode_str_value(value_id)?).into())
+                Ok(Literal::new_simple_literal(self.string_store.get_str(value_id)?).into())
             }
             EncodedTerm::LangStringLiteral {
                 value_id,
                 language_id,
             } => Ok(Literal::new_language_tagged_literal(
-                self.decode_str_value(value_id)?,
-                self.decode_str_value(language_id)?,
+                self.string_store.get_str(value_id)?,
+                self.string_store.get_str(language_id)?,
             ).into()),
             EncodedTerm::TypedLiteral {
                 value_id,
                 datatype_id,
             } => Ok(Literal::new_typed_literal(
-                self.decode_str_value(value_id)?,
-                NamedNode::from(self.decode_url_value(datatype_id)?),
+                self.string_store.get_str(value_id)?,
+                NamedNode::from(self.string_store.get_url(datatype_id)?),
             ).into()),
             EncodedTerm::StringLiteral { value_id } => {
-                Ok(Literal::from(self.decode_str_value(value_id)?).into())
+                Ok(Literal::from(self.string_store.get_str(value_id)?).into())
             }
             EncodedTerm::BooleanLiteral(value) => Ok(Literal::from(value).into()),
             EncodedTerm::FloatLiteral(value) => Ok(Literal::from(*value).into()),
@@ -644,29 +641,9 @@ impl<S: BytesStore> Encoder<S> {
             },
         ))
     }
-
-    fn encode_str_value(&self, text: &str) -> Result<u64> {
-        self.string_store.insert_bytes(text.as_bytes())
-    }
-
-    fn decode_url_value(&self, id: u64) -> Result<Url> {
-        let bytes = self.decode_value(id)?;
-        Ok(Url::from_str(str::from_utf8(&bytes)?)?)
-    }
-
-    fn decode_str_value(&self, id: u64) -> Result<String> {
-        let bytes = self.decode_value(id)?;
-        Ok(str::from_utf8(&bytes)?.to_owned())
-    }
-
-    fn decode_value(&self, id: u64) -> Result<S::BytesOutput> {
-        self.string_store
-            .get_bytes(id)?
-            .ok_or_else(|| format_err!("value not found in the dictionary"))
-    }
 }
 
-impl<S: BytesStore + Default> Default for Encoder<S> {
+impl<S: StringStore + Default> Default for Encoder<S> {
     fn default() -> Self {
         Self {
             string_store: S::default(),
@@ -677,30 +654,43 @@ impl<S: BytesStore + Default> Default for Encoder<S> {
 mod test {
     use std::cell::RefCell;
     use std::collections::BTreeMap;
+    use std::str::FromStr;
     use store::numeric_encoder::*;
 
     #[derive(Default)]
-    struct MemoryBytesStore {
-        id2str: RefCell<BTreeMap<u64, Vec<u8>>>,
-        str2id: RefCell<BTreeMap<Vec<u8>, u64>>,
+    struct MemoryStringStore {
+        id2str: RefCell<Vec<String>>,
+        str2id: RefCell<BTreeMap<String, u64>>,
     }
 
-    impl BytesStore for MemoryBytesStore {
-        type BytesOutput = Vec<u8>;
-
-        fn insert_bytes(&self, value: &[u8]) -> Result<u64> {
+    impl StringStore for MemoryStringStore {
+        fn insert_str(&self, value: &str) -> Result<u64> {
             let mut str2id = self.str2id.borrow_mut();
             let mut id2str = self.id2str.borrow_mut();
-            let id = str2id.entry(value.to_vec()).or_insert_with(|| {
+            let id = str2id.entry(value.to_string()).or_insert_with(|| {
                 let id = id2str.len() as u64;
-                id2str.insert(id, value.to_vec());
+                id2str.push(value.to_string());
                 id
             });
             Ok(*id)
         }
 
-        fn get_bytes(&self, id: u64) -> Result<Option<Vec<u8>>> {
-            Ok(self.id2str.borrow().get(&id).map(|s| s.to_owned()))
+        fn get_str(&self, id: u64) -> Result<String> {
+            let id2str = self.id2str.borrow();
+            if id2str.len() as u64 <= id {
+                Err(format_err!("value not found in the dictionary"))
+            } else {
+                Ok(id2str[id as usize].to_owned())
+            }
+        }
+
+        fn get_url(&self, id: u64) -> Result<Url> {
+            let id2str = self.id2str.borrow();
+            if id2str.len() as u64 <= id {
+                Err(format_err!("value not found in the dictionary"))
+            } else {
+                Ok(Url::from_str(&id2str[id as usize])?)
+            }
         }
     }
 
@@ -708,7 +698,7 @@ mod test {
     fn test_encoding() {
         use model::*;
 
-        let encoder: Encoder<MemoryBytesStore> = Encoder::default();
+        let encoder: Encoder<MemoryStringStore> = Encoder::default();
         let terms: Vec<Term> = vec![
             NamedNode::from_str("http://foo.com").unwrap().into(),
             NamedNode::from_str("http://bar.com").unwrap().into(),

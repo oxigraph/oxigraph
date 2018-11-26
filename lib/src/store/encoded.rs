@@ -6,11 +6,12 @@ use std::iter::FromIterator;
 use std::iter::Iterator;
 use std::sync::Arc;
 use store::numeric_encoder::*;
+use url::Url;
 use Result;
 
 /// Defines the Store traits that is used to have efficient binary storage
 
-pub trait EncodedQuadsStore: BytesStore + Sized + 'static {
+pub trait EncodedQuadsStore: StringStore + Sized + 'static {
     type QuadsIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
     type QuadsForSubjectIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
     type QuadsForSubjectPredicateIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
@@ -27,8 +28,8 @@ pub trait EncodedQuadsStore: BytesStore + Sized + 'static {
     type QuadsForPredicateObjectGraphIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
     type QuadsForObjectGraphIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
 
-    fn encoder(&self) -> Encoder<DelegatingBytesStore<Self>> {
-        Encoder::new(DelegatingBytesStore(&self))
+    fn encoder(&self) -> Encoder<DelegatingStringStore<Self>> {
+        Encoder::new(DelegatingStringStore(&self))
     }
 
     fn quads(&self) -> Result<Self::QuadsIterator>;
@@ -865,17 +866,19 @@ impl<S: EncodedQuadsStore> fmt::Display for StoreUnionGraph<S> {
     }
 }
 
-pub struct DelegatingBytesStore<'a, S: 'a + BytesStore + Sized>(&'a S);
+pub struct DelegatingStringStore<'a, S: 'a + StringStore + Sized>(&'a S);
 
-impl<'a, S: BytesStore> BytesStore for DelegatingBytesStore<'a, S> {
-    type BytesOutput = S::BytesOutput;
-
-    fn insert_bytes(&self, value: &[u8]) -> Result<u64> {
-        self.0.insert_bytes(value)
+impl<'a, S: StringStore> StringStore for DelegatingStringStore<'a, S> {
+    fn insert_str(&self, value: &str) -> Result<u64> {
+        self.0.insert_str(value)
     }
 
-    fn get_bytes(&self, id: u64) -> Result<Option<S::BytesOutput>> {
-        self.0.get_bytes(id)
+    fn get_str(&self, id: u64) -> Result<String> {
+        self.0.get_str(id)
+    }
+
+    fn get_url(&self, id: u64) -> Result<Url> {
+        self.0.get_url(id)
     }
 }
 

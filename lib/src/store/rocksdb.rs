@@ -3,7 +3,6 @@ use byteorder::LittleEndian;
 use failure::Backtrace;
 use rocksdb::ColumnFamily;
 use rocksdb::DBRawIterator;
-use rocksdb::DBVector;
 use rocksdb::Options;
 use rocksdb::WriteBatch;
 use rocksdb::DB;
@@ -11,11 +10,13 @@ use std::io::Cursor;
 use std::ops::Deref;
 use std::path::Path;
 use std::str;
+use std::str::FromStr;
 use std::sync::Mutex;
 use std::sync::PoisonError;
 use store::encoded::EncodedQuadsStore;
 use store::encoded::StoreDataset;
 use store::numeric_encoder::*;
+use url::Url;
 use Result;
 
 /// `rudf::model::Dataset` trait implementation based on the [RocksDB](https://rocksdb.org/) key-value store
@@ -84,10 +85,9 @@ impl RocksDbStore {
     }
 }
 
-impl BytesStore for RocksDbStore {
-    type BytesOutput = DBVector;
-
-    fn insert_bytes(&self, value: &[u8]) -> Result<u64> {
+impl StringStore for RocksDbStore {
+    fn insert_str(&self, value: &str) -> Result<u64> {
+        let value = value.as_bytes();
         Ok(if let Some(id) = self.db.get_cf(*self.str2id_cf, value)? {
             LittleEndian::read_u64(&id)
         } else {
@@ -105,8 +105,22 @@ impl BytesStore for RocksDbStore {
         })
     }
 
-    fn get_bytes(&self, id: u64) -> Result<Option<DBVector>> {
-        Ok(self.db.get_cf(*self.id2str_cf, &to_bytes(id))?)
+    fn get_str(&self, id: u64) -> Result<String> {
+        let value = self.db.get_cf(*self.id2str_cf, &to_bytes(id))?;
+        if let Some(value) = value {
+            Ok(str::from_utf8(&value)?.to_owned())
+        } else {
+            Err(format_err!("value not found in the dictionary"))
+        }
+    }
+
+    fn get_url(&self, id: u64) -> Result<Url> {
+        let value = self.db.get_cf(*self.id2str_cf, &to_bytes(id))?;
+        if let Some(value) = value {
+            Ok(Url::from_str(str::from_utf8(&value)?)?)
+        } else {
+            Err(format_err!("value not found in the dictionary"))
+        }
     }
 }
 

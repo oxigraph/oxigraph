@@ -17,7 +17,6 @@ use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::iter::once;
 use std::iter::Iterator;
-use std::str;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -540,9 +539,9 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 EncodedTerm::BooleanLiteral(value) => Some(value.into()),
                 EncodedTerm::SimpleLiteral { value_id }
                 | EncodedTerm::StringLiteral { value_id } => {
-                    match &*self.store.get_bytes(value_id).ok()?? {
-                        b"true" | b"1" => Some(true.into()),
-                        b"false" | b"0" => Some(false.into()),
+                    match &*self.store.get_str(value_id).ok()? {
+                        "true" | "1" => Some(true.into()),
+                        "false" | "0" => Some(false.into()),
                         _ => None,
                     }
                 }
@@ -557,14 +556,9 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                     Some(if value { 1. as f64 } else { 0. }.into())
                 }
                 EncodedTerm::SimpleLiteral { value_id }
-                | EncodedTerm::StringLiteral { value_id } => {
-                    Some(EncodedTerm::DoubleLiteral(OrderedFloat(
-                        str::from_utf8(&self.store.get_bytes(value_id).ok()??)
-                            .ok()?
-                            .parse()
-                            .ok()?,
-                    )))
-                }
+                | EncodedTerm::StringLiteral { value_id } => Some(EncodedTerm::DoubleLiteral(
+                    OrderedFloat(self.store.get_str(value_id).ok()?.parse().ok()?),
+                )),
                 _ => None,
             },
             PlanExpression::FloatCast(e) => match self.eval_expression(e, tuple)? {
@@ -576,14 +570,9 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                     Some(if value { 1. as f32 } else { 0. }.into())
                 }
                 EncodedTerm::SimpleLiteral { value_id }
-                | EncodedTerm::StringLiteral { value_id } => {
-                    Some(EncodedTerm::FloatLiteral(OrderedFloat(
-                        str::from_utf8(&self.store.get_bytes(value_id).ok()??)
-                            .ok()?
-                            .parse()
-                            .ok()?,
-                    )))
-                }
+                | EncodedTerm::StringLiteral { value_id } => Some(EncodedTerm::FloatLiteral(
+                    OrderedFloat(self.store.get_str(value_id).ok()?.parse().ok()?),
+                )),
                 _ => None,
             },
             PlanExpression::IntegerCast(e) => match self.eval_expression(e, tuple)? {
@@ -594,10 +583,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 EncodedTerm::BooleanLiteral(value) => Some(if value { 1 } else { 0 }.into()),
                 EncodedTerm::SimpleLiteral { value_id }
                 | EncodedTerm::StringLiteral { value_id } => Some(EncodedTerm::IntegerLiteral(
-                    str::from_utf8(&self.store.get_bytes(value_id).ok()??)
-                        .ok()?
-                        .parse()
-                        .ok()?,
+                    self.store.get_str(value_id).ok()?.parse().ok()?,
                 )),
                 _ => None,
             },
@@ -615,10 +601,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 ),
                 EncodedTerm::SimpleLiteral { value_id }
                 | EncodedTerm::StringLiteral { value_id } => Some(EncodedTerm::DecimalLiteral(
-                    str::from_utf8(&self.store.get_bytes(value_id).ok()??)
-                        .ok()?
-                        .parse()
-                        .ok()?,
+                    self.store.get_str(value_id).ok()?.parse().ok()?,
                 )),
                 _ => None,
             },
@@ -627,8 +610,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 EncodedTerm::NaiveDateTime(value) => Some(value.into()),
                 EncodedTerm::SimpleLiteral { value_id }
                 | EncodedTerm::StringLiteral { value_id } => {
-                    let bytes = self.store.get_bytes(value_id).ok()??;
-                    let value = str::from_utf8(&bytes).ok()?;
+                    let value = self.store.get_str(value_id).ok()?;
                     Some(match DateTime::parse_from_rfc3339(&value) {
                         Ok(value) => value.into(),
                         Err(_) => NaiveDateTime::parse_from_str(&value, "%Y-%m-%dT%H:%M:%S")
@@ -668,36 +650,20 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             | EncodedTerm::TypedLiteral { value_id, .. } => Some(value_id),
             EncodedTerm::BooleanLiteral(value) => self
                 .store
-                .insert_bytes(if value { b"true" } else { b"false" })
+                .insert_str(if value { "true" } else { "false" })
                 .ok(),
-            EncodedTerm::FloatLiteral(value) => {
-                self.store.insert_bytes(value.to_string().as_bytes()).ok()
-            }
-            EncodedTerm::DoubleLiteral(value) => {
-                self.store.insert_bytes(value.to_string().as_bytes()).ok()
-            }
-            EncodedTerm::IntegerLiteral(value) => {
-                self.store.insert_bytes(value.to_string().as_bytes()).ok()
-            }
-            EncodedTerm::DecimalLiteral(value) => {
-                self.store.insert_bytes(value.to_string().as_bytes()).ok()
-            }
-            EncodedTerm::DateTime(value) => {
-                self.store.insert_bytes(value.to_string().as_bytes()).ok()
-            }
-            EncodedTerm::NaiveDateTime(value) => {
-                self.store.insert_bytes(value.to_string().as_bytes()).ok()
-            }
+            EncodedTerm::FloatLiteral(value) => self.store.insert_str(&value.to_string()).ok(),
+            EncodedTerm::DoubleLiteral(value) => self.store.insert_str(&value.to_string()).ok(),
+            EncodedTerm::IntegerLiteral(value) => self.store.insert_str(&value.to_string()).ok(),
+            EncodedTerm::DecimalLiteral(value) => self.store.insert_str(&value.to_string()).ok(),
+            EncodedTerm::DateTime(value) => self.store.insert_str(&value.to_string()).ok(),
+            EncodedTerm::NaiveDateTime(value) => self.store.insert_str(&value.to_string()).ok(),
         }
     }
 
     fn to_simple_string(&self, term: EncodedTerm) -> Option<String> {
         if let EncodedTerm::SimpleLiteral { value_id } = term {
-            Some(
-                str::from_utf8(&self.store.get_bytes(value_id).ok()??)
-                    .ok()?
-                    .to_owned(),
-            )
+            self.store.get_str(value_id).ok()
         } else {
             None
         }
@@ -707,11 +673,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
         match term {
             EncodedTerm::SimpleLiteral { value_id }
             | EncodedTerm::StringLiteral { value_id }
-            | EncodedTerm::LangStringLiteral { value_id, .. } => Some(
-                str::from_utf8(&self.store.get_bytes(value_id).ok()??)
-                    .ok()?
-                    .to_owned(),
-            ),
+            | EncodedTerm::LangStringLiteral { value_id, .. } => self.store.get_str(value_id).ok(),
             _ => None,
         }
     }
@@ -875,7 +837,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
     }
 
     fn compare_str_ids(&self, a: u64, b: u64) -> Option<Ordering> {
-        if let (Ok(Some(a)), Ok(Some(b))) = (self.store.get_bytes(a), self.store.get_bytes(b)) {
+        if let (Ok(a), Ok(b)) = (self.store.get_str(a), self.store.get_str(b)) {
             Some(a.cmp(&b))
         } else {
             None
@@ -1181,7 +1143,7 @@ fn get_triple_template_value(
     }
 }
 
-fn decode_triple<S: BytesStore>(
+fn decode_triple<S: StringStore>(
     encoder: &Encoder<S>,
     subject: EncodedTerm,
     predicate: EncodedTerm,
