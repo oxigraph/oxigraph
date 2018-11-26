@@ -168,8 +168,7 @@ pub enum PlanExpression {
     GreaterOrEq(Box<PlanExpression>, Box<PlanExpression>),
     Lower(Box<PlanExpression>, Box<PlanExpression>),
     LowerOrEq(Box<PlanExpression>, Box<PlanExpression>),
-    //In(Box<PlanExpression>, Vec<PlanExpression>),
-    //NotIn(Box<PlanExpression>, Vec<PlanExpression>),
+    In(Box<PlanExpression>, Vec<PlanExpression>),
     Add(Box<PlanExpression>, Box<PlanExpression>),
     Sub(Box<PlanExpression>, Box<PlanExpression>),
     Mul(Box<PlanExpression>, Box<PlanExpression>),
@@ -213,18 +212,22 @@ pub enum PlanExpression {
     Minutes(Box<PlanExpression>),
     Seconds(Box<PlanExpression>),
     Timezone(Box<PlanExpression>),
-    Now(),
+    Now(),*/
     UUID(),
     StrUUID(),
-    MD5(Box<PlanExpression>),
+    /*MD5(Box<PlanExpression>),
     SHA1(Box<PlanExpression>),
     SHA256(Box<PlanExpression>),
     SHA384(Box<PlanExpression>),
-    SHA512(Box<PlanExpression>),
+    SHA512(Box<PlanExpression>),*/
     Coalesce(Vec<PlanExpression>),
-    If(Box<PlanExpression>, Box<PlanExpression>, Box<PlanExpression>),
+    If(
+        Box<PlanExpression>,
+        Box<PlanExpression>,
+        Box<PlanExpression>,
+    ),
     StrLang(Box<PlanExpression>, Box<PlanExpression>),
-    StrDT(Box<PlanExpression>, Box<PlanExpression>),*/
+    //StrDT(Box<PlanExpression>, Box<PlanExpression>),
     SameTerm(Box<PlanExpression>, Box<PlanExpression>),
     IsIRI(Box<PlanExpression>),
     IsBlank(Box<PlanExpression>),
@@ -247,7 +250,10 @@ pub enum PlanExpression {
 impl PlanExpression {
     fn add_variables(&self, set: &mut BTreeSet<usize>) {
         match self {
-            PlanExpression::Constant(_) | PlanExpression::BNode(None) => (),
+            PlanExpression::Constant(_)
+            | PlanExpression::BNode(None)
+            | PlanExpression::UUID()
+            | PlanExpression::StrUUID() => (),
             PlanExpression::Variable(v) | PlanExpression::Bound(v) => {
                 set.insert(*v);
             }
@@ -265,6 +271,7 @@ impl PlanExpression {
             | PlanExpression::Div(a, b)
             | PlanExpression::SameTerm(a, b)
             | PlanExpression::LangMatches(a, b)
+            | PlanExpression::StrLang(a, b)
             | PlanExpression::Regex(a, b, None) => {
                 a.add_variables(set);
                 b.add_variables(set);
@@ -290,10 +297,26 @@ impl PlanExpression {
             | PlanExpression::StringCast(e) => {
                 e.add_variables(set);
             }
+            PlanExpression::Coalesce(l) => {
+                for e in l {
+                    e.add_variables(set);
+                }
+            }
+            PlanExpression::If(a, b, c) => {
+                a.add_variables(set);
+                b.add_variables(set);
+                c.add_variables(set);
+            }
             PlanExpression::Regex(a, b, Some(c)) => {
                 a.add_variables(set);
                 b.add_variables(set);
                 c.add_variables(set);
+            }
+            PlanExpression::In(e, l) => {
+                e.add_variables(set);
+                for e in l {
+                    e.add_variables(set);
+                }
             }
         }
     }
@@ -546,6 +569,14 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                 Box::new(self.build_for_expression(a, variables)?),
                 Box::new(self.build_for_expression(b, variables)?),
             ),
+            Expression::In(e, l) => PlanExpression::In(
+                Box::new(self.build_for_expression(e, variables)?),
+                self.expression_list(l, variables)?,
+            ),
+            Expression::NotIn(e, l) => PlanExpression::UnaryNot(Box::new(PlanExpression::In(
+                Box::new(self.build_for_expression(e, variables)?),
+                self.expression_list(l, variables)?,
+            ))),
             Expression::Add(a, b) => PlanExpression::Add(
                 Box::new(self.build_for_expression(a, variables)?),
                 Box::new(self.build_for_expression(b, variables)?),
@@ -592,6 +623,20 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                 Some(e) => Some(Box::new(self.build_for_expression(e, variables)?)),
                 None => None,
             }),
+            Expression::UUIDFunctionCall() => PlanExpression::UUID(),
+            Expression::StrUUIDFunctionCall() => PlanExpression::StrUUID(),
+            Expression::CoalesceFunctionCall(l) => {
+                PlanExpression::Coalesce(self.expression_list(l, variables)?)
+            }
+            Expression::IfFunctionCall(a, b, c) => PlanExpression::If(
+                Box::new(self.build_for_expression(a, variables)?),
+                Box::new(self.build_for_expression(b, variables)?),
+                Box::new(self.build_for_expression(c, variables)?),
+            ),
+            Expression::StrLangFunctionCall(a, b) => PlanExpression::StrLang(
+                Box::new(self.build_for_expression(a, variables)?),
+                Box::new(self.build_for_expression(b, variables)?),
+            ),
             Expression::SameTermFunctionCall(a, b) => PlanExpression::SameTerm(
                 Box::new(self.build_for_expression(a, variables)?),
                 Box::new(self.build_for_expression(b, variables)?),
@@ -674,6 +719,16 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                 name
             ))
         }
+    }
+
+    fn expression_list(
+        &self,
+        l: &[Expression],
+        variables: &mut Vec<Variable>,
+    ) -> Result<Vec<PlanExpression>> {
+        l.iter()
+            .map(|e| self.build_for_expression(e, variables))
+            .collect()
     }
 
     fn pattern_value_from_term_or_variable(

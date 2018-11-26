@@ -22,6 +22,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use store::encoded::EncodedQuadsStore;
 use store::numeric_encoder::*;
+use uuid::Uuid;
 use Result;
 
 const REGEX_SIZE_LIMIT: usize = 1_000_000;
@@ -351,12 +352,12 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             PlanExpression::Equal(a, b) => {
                 let a = self.eval_expression(a, tuple)?;
                 let b = self.eval_expression(b, tuple)?;
-                Some((a == b || self.partial_cmp_literals(a, b) == Some(Ordering::Equal)).into())
+                Some(self.equals(a, b).into())
             }
             PlanExpression::NotEqual(a, b) => {
                 let a = self.eval_expression(a, tuple)?;
                 let b = self.eval_expression(b, tuple)?;
-                Some((a != b && self.partial_cmp_literals(a, b) != Some(Ordering::Equal)).into())
+                Some(self.not_equals(a, b).into())
             }
             PlanExpression::Greater(a, b) => Some(
                 (self.partial_cmp_literals(
@@ -390,6 +391,24 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                     Ordering::Greater => false,
                 }.into(),
             ),
+            PlanExpression::In(e, l) => {
+                let needed = self.eval_expression(e, tuple)?;
+                let mut error = false;
+                for possible in l {
+                    if let Some(possible) = self.eval_expression(possible, tuple) {
+                        if self.equals(needed, possible) {
+                            return Some(true.into());
+                        }
+                    } else {
+                        error = true;
+                    }
+                }
+                if error {
+                    None
+                } else {
+                    Some(false.into())
+                }
+            }
             PlanExpression::Add(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
                 NumericBinaryOperands::Float(v1, v2) => (v1 + v2).into(),
                 NumericBinaryOperands::Double(v1, v2) => (v1 + v2).into(),
@@ -469,6 +488,39 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 },
                 None => Some(BlankNode::default().into()),
             },
+            PlanExpression::UUID() => Some(EncodedTerm::NamedNode {
+                iri_id: self
+                    .store
+                    .insert_str(&Uuid::new_v4().to_urn().to_string())
+                    .ok()?,
+            }),
+            PlanExpression::StrUUID() => Some(EncodedTerm::SimpleLiteral {
+                value_id: self
+                    .store
+                    .insert_str(&Uuid::new_v4().to_simple().to_string())
+                    .ok()?,
+            }),
+            PlanExpression::Coalesce(l) => {
+                for e in l {
+                    if let Some(result) = self.eval_expression(e, tuple) {
+                        return Some(result);
+                    }
+                }
+                None
+            }
+            PlanExpression::If(a, b, c) => if self.to_bool(self.eval_expression(a, tuple)?)? {
+                self.eval_expression(b, tuple)
+            } else {
+                self.eval_expression(c, tuple)
+            },
+            PlanExpression::StrLang(lexical_form, lang_tag) => {
+                Some(EncodedTerm::LangStringLiteral {
+                    value_id: self
+                        .to_simple_string_id(self.eval_expression(lexical_form, tuple)?)?,
+                    language_id: self
+                        .to_simple_string_id(self.eval_expression(lang_tag, tuple)?)?,
+                })
+            }
             PlanExpression::SameTerm(a, b) => {
                 Some((self.eval_expression(a, tuple)? == self.eval_expression(b, tuple)?).into())
             }
@@ -669,6 +721,14 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
         }
     }
 
+    fn to_simple_string_id(&self, term: EncodedTerm) -> Option<u64> {
+        if let EncodedTerm::SimpleLiteral { value_id } = term {
+            Some(value_id)
+        } else {
+            None
+        }
+    }
+
     fn to_string(&self, term: EncodedTerm) -> Option<String> {
         match term {
             EncodedTerm::SimpleLiteral { value_id }
@@ -760,6 +820,14 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                     }).collect()
             })),
         )
+    }
+
+    fn equals(&self, a: EncodedTerm, b: EncodedTerm) -> bool {
+        (a == b || self.partial_cmp_literals(a, b) == Some(Ordering::Equal))
+    }
+
+    fn not_equals(&self, a: EncodedTerm, b: EncodedTerm) -> bool {
+        (a != b && self.partial_cmp_literals(a, b) != Some(Ordering::Equal))
     }
 
     fn cmp_according_to_expression(
