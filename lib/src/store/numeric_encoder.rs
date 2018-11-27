@@ -703,10 +703,11 @@ impl<S: StringStore + Default> Default for Encoder<S> {
 }
 
 mod test {
+    use model::*;
+    use store::numeric_encoder::*;
+
     #[test]
     fn test_encoding() {
-        use model::*;
-
         let encoder: Encoder<MemoryStringStore> = Encoder::default();
         let terms: Vec<Term> = vec![
             NamedNode::from_str("http://foo.com").unwrap().into(),
