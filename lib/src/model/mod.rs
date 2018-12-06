@@ -4,6 +4,7 @@
 
 mod blank_node;
 mod dataset;
+mod language_tag;
 mod literal;
 mod named_node;
 mod triple;
