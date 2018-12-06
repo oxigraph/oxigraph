@@ -82,7 +82,7 @@ fn sparql_w3c_syntax_testsuite() {
 
 #[test]
 fn sparql_w3c_query_evaluation_testsuite() {
-    //TODO: dataset graph open-world
+    //TODO: dataset open-world
     let manifest_10_urls = vec![
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/algebra/manifest.ttl")
             .unwrap(),
@@ -109,6 +109,8 @@ fn sparql_w3c_query_evaluation_testsuite() {
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest.ttl")
             .unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-ops/manifest.ttl")
+            .unwrap(),
+        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/graph/manifest.ttl")
             .unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest.ttl").unwrap(),
         Url::parse(

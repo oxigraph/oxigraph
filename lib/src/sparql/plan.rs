@@ -4,6 +4,7 @@ use sparql::algebra::*;
 use std::collections::BTreeSet;
 use store::encoded::EncodedQuadsStore;
 use store::numeric_encoder::EncodedTerm;
+use store::numeric_encoder::ENCODED_DEFAULT_GRAPH;
 use Result;
 
 pub type EncodedTuple = Vec<Option<EncodedTerm>>;
@@ -19,7 +20,7 @@ pub enum PlanNode {
         subject: PatternValue,
         predicate: PatternValue,
         object: PatternValue,
-        graph_name: Option<PatternValue>,
+        graph_name: PatternValue,
     },
     Join {
         left: Box<PlanNode>,
@@ -99,7 +100,7 @@ impl PlanNode {
                 if let PatternValue::Variable(var) = object {
                     set.insert(*var);
                 }
-                if let Some(PatternValue::Variable(var)) = graph_name {
+                if let PatternValue::Variable(var) = graph_name {
                     set.insert(*var);
                 }
                 child.add_variables(set);
@@ -353,7 +354,7 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
             pattern,
             PlanNode::Init,
             &mut variables,
-            None,
+            PatternValue::Constant(ENCODED_DEFAULT_GRAPH),
         )?;
         Ok((plan, variables))
     }
@@ -371,7 +372,7 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
         pattern: &GraphPattern,
         input: PlanNode,
         variables: &mut Vec<Variable>,
-        graph_name: Option<PatternValue>,
+        graph_name: PatternValue,
     ) -> Result<PlanNode> {
         Ok(match pattern {
             GraphPattern::BGP(p) => {
@@ -459,7 +460,7 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
             }
             GraphPattern::Graph(g, p) => {
                 let graph_name = self.pattern_value_from_named_node_or_variable(g, variables)?;
-                self.build_for_graph_pattern(p, input, variables, Some(graph_name))?
+                self.build_for_graph_pattern(p, input, variables, graph_name)?
             }
             GraphPattern::Extend(p, v, e) => PlanNode::Extend {
                 child: Box::new(self.build_for_graph_pattern(p, input, variables, graph_name)?),

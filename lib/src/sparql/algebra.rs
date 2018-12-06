@@ -1049,7 +1049,12 @@ impl GraphPattern {
                 a.add_visible_variables(vars);
                 b.add_visible_variables(vars);
             }
-            GraphPattern::Graph(_, p) => p.add_visible_variables(vars),
+            GraphPattern::Graph(g, p) => {
+                if let NamedNodeOrVariable::Variable(ref g) = g {
+                    adds_if_has_name(vars, g);
+                }
+                p.add_visible_variables(vars);
+            }
             GraphPattern::Extend(p, v, _) => {
                 p.add_visible_variables(vars);
                 adds_if_has_name(vars, &v);

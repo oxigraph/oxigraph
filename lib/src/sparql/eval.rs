@@ -114,9 +114,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                                         get_pattern_value(&subject, &tuple),
                                         get_pattern_value(&predicate, &tuple),
                                         get_pattern_value(&object, &tuple),
-                                        graph_name.and_then(|graph_name| {
-                                            get_pattern_value(&graph_name, &tuple)
-                                        }),
+                                        get_pattern_value(&graph_name, &tuple),
                                     ) {
                                     Ok(mut iter) => {
                                         if subject.is_var() && subject == predicate {
@@ -137,22 +135,31 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                                                 Ok(quad) => quad.predicate == quad.object,
                                             }))
                                         }
-                                        if let Some(graph_name) = graph_name {
-                                            if graph_name.is_var() {
-                                                iter = Box::new(iter.filter(|quad| match quad {
-                                                    Err(_) => true,
-                                                    Ok(quad) => {
-                                                        quad.graph_name != ENCODED_DEFAULT_GRAPH
-                                                    }
-                                                }))
-                                            }
-                                        } else {
+                                        if graph_name.is_var() {
                                             iter = Box::new(iter.filter(|quad| match quad {
                                                 Err(_) => true,
                                                 Ok(quad) => {
-                                                    quad.graph_name == ENCODED_DEFAULT_GRAPH
+                                                    quad.graph_name != ENCODED_DEFAULT_GRAPH
                                                 }
-                                            }))
+                                            }));
+                                            if graph_name == subject {
+                                                iter = Box::new(iter.filter(|quad| match quad {
+                                                    Err(_) => true,
+                                                    Ok(quad) => quad.graph_name == quad.subject,
+                                                }))
+                                            }
+                                            if graph_name == predicate {
+                                                iter = Box::new(iter.filter(|quad| match quad {
+                                                    Err(_) => true,
+                                                    Ok(quad) => quad.graph_name == quad.predicate,
+                                                }))
+                                            }
+                                            if graph_name == object {
+                                                iter = Box::new(iter.filter(|quad| match quad {
+                                                    Err(_) => true,
+                                                    Ok(quad) => quad.graph_name == quad.object,
+                                                }))
+                                            }
                                         }
                                         Box::new(iter.map(move |quad| {
                                             let quad = quad?;
@@ -168,13 +175,11 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                                                 &mut new_tuple,
                                             );
                                             put_pattern_value(&object, quad.object, &mut new_tuple);
-                                            if let Some(graph_name) = graph_name {
-                                                put_pattern_value(
-                                                    &graph_name,
-                                                    quad.graph_name,
-                                                    &mut new_tuple,
-                                                );
-                                            }
+                                            put_pattern_value(
+                                                &graph_name,
+                                                quad.graph_name,
+                                                &mut new_tuple,
+                                            );
                                             Ok(new_tuple)
                                         }))
                                     }
