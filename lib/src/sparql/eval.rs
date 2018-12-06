@@ -108,83 +108,63 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                     self.eval_plan(&*child, from)
                         .flat_map(move |tuple| match tuple {
                             Ok(tuple) => {
-                                let iter: EncodedTuplesIterator = match eval
-                                    .store
-                                    .quads_for_pattern(
-                                        get_pattern_value(&subject, &tuple),
-                                        get_pattern_value(&predicate, &tuple),
-                                        get_pattern_value(&object, &tuple),
-                                        get_pattern_value(&graph_name, &tuple),
-                                    ) {
-                                    Ok(mut iter) => {
-                                        if subject.is_var() && subject == predicate {
-                                            iter = Box::new(iter.filter(|quad| match quad {
-                                                Err(_) => true,
-                                                Ok(quad) => quad.subject == quad.predicate,
-                                            }))
-                                        }
-                                        if subject.is_var() && subject == object {
-                                            iter = Box::new(iter.filter(|quad| match quad {
-                                                Err(_) => true,
-                                                Ok(quad) => quad.subject == quad.object,
-                                            }))
-                                        }
-                                        if predicate.is_var() && predicate == object {
-                                            iter = Box::new(iter.filter(|quad| match quad {
-                                                Err(_) => true,
-                                                Ok(quad) => quad.predicate == quad.object,
-                                            }))
-                                        }
-                                        if graph_name.is_var() {
-                                            iter = Box::new(iter.filter(|quad| match quad {
-                                                Err(_) => true,
-                                                Ok(quad) => {
-                                                    quad.graph_name != ENCODED_DEFAULT_GRAPH
-                                                }
-                                            }));
-                                            if graph_name == subject {
-                                                iter = Box::new(iter.filter(|quad| match quad {
-                                                    Err(_) => true,
-                                                    Ok(quad) => quad.graph_name == quad.subject,
-                                                }))
-                                            }
-                                            if graph_name == predicate {
-                                                iter = Box::new(iter.filter(|quad| match quad {
-                                                    Err(_) => true,
-                                                    Ok(quad) => quad.graph_name == quad.predicate,
-                                                }))
-                                            }
-                                            if graph_name == object {
-                                                iter = Box::new(iter.filter(|quad| match quad {
-                                                    Err(_) => true,
-                                                    Ok(quad) => quad.graph_name == quad.object,
-                                                }))
-                                            }
-                                        }
-                                        Box::new(iter.map(move |quad| {
-                                            let quad = quad?;
-                                            let mut new_tuple = tuple.clone();
-                                            put_pattern_value(
-                                                &subject,
-                                                quad.subject,
-                                                &mut new_tuple,
-                                            );
-                                            put_pattern_value(
-                                                &predicate,
-                                                quad.predicate,
-                                                &mut new_tuple,
-                                            );
-                                            put_pattern_value(&object, quad.object, &mut new_tuple);
-                                            put_pattern_value(
-                                                &graph_name,
-                                                quad.graph_name,
-                                                &mut new_tuple,
-                                            );
-                                            Ok(new_tuple)
+                                let mut iter = eval.store.quads_for_pattern(
+                                    get_pattern_value(&subject, &tuple),
+                                    get_pattern_value(&predicate, &tuple),
+                                    get_pattern_value(&object, &tuple),
+                                    get_pattern_value(&graph_name, &tuple),
+                                );
+                                if subject.is_var() && subject == predicate {
+                                    iter = Box::new(iter.filter(|quad| match quad {
+                                        Err(_) => true,
+                                        Ok(quad) => quad.subject == quad.predicate,
+                                    }))
+                                }
+                                if subject.is_var() && subject == object {
+                                    iter = Box::new(iter.filter(|quad| match quad {
+                                        Err(_) => true,
+                                        Ok(quad) => quad.subject == quad.object,
+                                    }))
+                                }
+                                if predicate.is_var() && predicate == object {
+                                    iter = Box::new(iter.filter(|quad| match quad {
+                                        Err(_) => true,
+                                        Ok(quad) => quad.predicate == quad.object,
+                                    }))
+                                }
+                                if graph_name.is_var() {
+                                    iter = Box::new(iter.filter(|quad| match quad {
+                                        Err(_) => true,
+                                        Ok(quad) => quad.graph_name != ENCODED_DEFAULT_GRAPH,
+                                    }));
+                                    if graph_name == subject {
+                                        iter = Box::new(iter.filter(|quad| match quad {
+                                            Err(_) => true,
+                                            Ok(quad) => quad.graph_name == quad.subject,
                                         }))
                                     }
-                                    Err(error) => Box::new(once(Err(error))),
-                                };
+                                    if graph_name == predicate {
+                                        iter = Box::new(iter.filter(|quad| match quad {
+                                            Err(_) => true,
+                                            Ok(quad) => quad.graph_name == quad.predicate,
+                                        }))
+                                    }
+                                    if graph_name == object {
+                                        iter = Box::new(iter.filter(|quad| match quad {
+                                            Err(_) => true,
+                                            Ok(quad) => quad.graph_name == quad.object,
+                                        }))
+                                    }
+                                }
+                                let iter: EncodedTuplesIterator = Box::new(iter.map(move |quad| {
+                                    let quad = quad?;
+                                    let mut new_tuple = tuple.clone();
+                                    put_pattern_value(&subject, quad.subject, &mut new_tuple);
+                                    put_pattern_value(&predicate, quad.predicate, &mut new_tuple);
+                                    put_pattern_value(&object, quad.object, &mut new_tuple);
+                                    put_pattern_value(&graph_name, quad.graph_name, &mut new_tuple);
+                                    Ok(new_tuple)
+                                }));
                                 iter
                             }
                             Err(error) => Box::new(once(Err(error))),

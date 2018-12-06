@@ -54,6 +54,20 @@ pub trait StringStore {
     }
 }
 
+impl<'a, S: StringStore> StringStore for &'a S {
+    fn insert_str(&self, value: &str) -> Result<u64> {
+        (*self).insert_str(value)
+    }
+
+    fn get_str(&self, id: u64) -> Result<String> {
+        (*self).get_str(id)
+    }
+
+    fn get_url(&self, id: u64) -> Result<Url> {
+        (*self).get_url(id)
+    }
+}
+
 pub struct MemoryStringStore {
     id2str: RwLock<Vec<String>>,
     str2id: RwLock<BTreeMap<String, u64>>,

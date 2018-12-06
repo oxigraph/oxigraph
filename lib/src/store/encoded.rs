@@ -6,7 +6,6 @@ use std::iter::FromIterator;
 use std::iter::Iterator;
 use std::sync::Arc;
 use store::numeric_encoder::*;
-use url::Url;
 use Result;
 
 /// Defines the Store traits that is used to have efficient binary storage
@@ -28,8 +27,8 @@ pub trait EncodedQuadsStore: StringStore + Sized + 'static {
     type QuadsForPredicateObjectGraphIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
     type QuadsForObjectGraphIterator: Iterator<Item = Result<EncodedQuad>> + 'static;
 
-    fn encoder(&self) -> Encoder<DelegatingStringStore<Self>> {
-        Encoder::new(DelegatingStringStore(&self))
+    fn encoder(&self) -> Encoder<&Self> {
+        Encoder::new(&self)
     }
 
     fn quads(&self) -> Result<Self::QuadsIterator>;
@@ -103,74 +102,83 @@ pub trait EncodedQuadsStore: StringStore + Sized + 'static {
         predicate: Option<EncodedTerm>,
         object: Option<EncodedTerm>,
         graph_name: Option<EncodedTerm>,
-    ) -> Result<Box<dyn Iterator<Item = Result<EncodedQuad>>>> {
-        Ok(match subject {
+    ) -> Box<dyn Iterator<Item = Result<EncodedQuad>>> {
+        match subject {
             Some(subject) => match predicate {
                 Some(predicate) => match object {
                     Some(object) => match graph_name {
                         Some(graph_name) => {
                             let quad = EncodedQuad::new(subject, predicate, object, graph_name);
-                            if self.contains(&quad)? {
-                                Box::new(once(Ok(quad)))
-                            } else {
-                                Box::new(empty())
+                            match self.contains(&quad) {
+                                Ok(true) => Box::new(once(Ok(quad))),
+                                Ok(false) => Box::new(empty()),
+                                Err(error) => Box::new(once(Err(error))),
                             }
                         }
-                        None => Box::new(
-                            self.quads_for_subject_predicate_object(subject, predicate, object)?,
+                        None => wrap_error(
+                            self.quads_for_subject_predicate_object(subject, predicate, object),
                         ),
                     },
                     None => match graph_name {
-                        Some(graph_name) => Box::new(
-                            self.quads_for_subject_predicate_graph(subject, predicate, graph_name)?,
+                        Some(graph_name) => wrap_error(
+                            self.quads_for_subject_predicate_graph(subject, predicate, graph_name),
                         ),
-                        None => Box::new(self.quads_for_subject_predicate(subject, predicate)?),
+                        None => wrap_error(self.quads_for_subject_predicate(subject, predicate)),
                     },
                 },
                 None => match object {
                     Some(object) => match graph_name {
-                        Some(graph_name) => Box::new(
-                            self.quads_for_subject_object_graph(subject, object, graph_name)?,
+                        Some(graph_name) => wrap_error(
+                            self.quads_for_subject_object_graph(subject, object, graph_name),
                         ),
-                        None => Box::new(self.quads_for_subject_object(subject, object)?),
+                        None => wrap_error(self.quads_for_subject_object(subject, object)),
                     },
                     None => match graph_name {
                         Some(graph_name) => {
-                            Box::new(self.quads_for_subject_graph(subject, graph_name)?)
+                            wrap_error(self.quads_for_subject_graph(subject, graph_name))
                         }
-                        None => Box::new(self.quads_for_subject(subject)?),
+                        None => wrap_error(self.quads_for_subject(subject)),
                     },
                 },
             },
             None => match predicate {
                 Some(predicate) => match object {
                     Some(object) => match graph_name {
-                        Some(graph_name) => Box::new(
-                            self.quads_for_predicate_object_graph(predicate, object, graph_name)?,
+                        Some(graph_name) => wrap_error(
+                            self.quads_for_predicate_object_graph(predicate, object, graph_name),
                         ),
-                        None => Box::new(self.quads_for_predicate_object(predicate, object)?),
+                        None => wrap_error(self.quads_for_predicate_object(predicate, object)),
                     },
                     None => match graph_name {
                         Some(graph_name) => {
-                            Box::new(self.quads_for_predicate_graph(predicate, graph_name)?)
+                            wrap_error(self.quads_for_predicate_graph(predicate, graph_name))
                         }
-                        None => Box::new(self.quads_for_predicate(predicate)?),
+                        None => wrap_error(self.quads_for_predicate(predicate)),
                     },
                 },
                 None => match object {
                     Some(object) => match graph_name {
                         Some(graph_name) => {
-                            Box::new(self.quads_for_object_graph(object, graph_name)?)
+                            wrap_error(self.quads_for_object_graph(object, graph_name))
                         }
-                        None => Box::new(self.quads_for_object(object)?),
+                        None => wrap_error(self.quads_for_object(object)),
                     },
                     None => match graph_name {
-                        Some(graph_name) => Box::new(self.quads_for_graph(graph_name)?),
-                        None => Box::new(self.quads()?),
+                        Some(graph_name) => wrap_error(self.quads_for_graph(graph_name)),
+                        None => wrap_error(self.quads()),
                     },
                 },
             },
-        })
+        }
+    }
+}
+
+fn wrap_error<E: 'static, I: Iterator<Item = Result<E>> + 'static>(
+    iter: Result<I>,
+) -> Box<dyn Iterator<Item = Result<E>>> {
+    match iter {
+        Ok(iter) => Box::new(iter),
+        Err(error) => Box::new(once(Err(error))),
     }
 }
 
@@ -863,22 +871,6 @@ impl<S: EncodedQuadsStore> fmt::Display for StoreUnionGraph<S> {
             writeln!(fmt, "{}", triple.map_err(|_| fmt::Error)?)?;
         }
         Ok(())
-    }
-}
-
-pub struct DelegatingStringStore<'a, S: 'a + StringStore + Sized>(&'a S);
-
-impl<'a, S: StringStore> StringStore for DelegatingStringStore<'a, S> {
-    fn insert_str(&self, value: &str) -> Result<u64> {
-        self.0.insert_str(value)
-    }
-
-    fn get_str(&self, id: u64) -> Result<String> {
-        self.0.get_str(id)
-    }
-
-    fn get_url(&self, id: u64) -> Result<Url> {
-        self.0.get_url(id)
     }
 }
 
