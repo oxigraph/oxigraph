@@ -702,36 +702,30 @@ impl<S: StringStore + Default> Default for Encoder<S> {
     }
 }
 
-mod test {
-    use model::*;
-    use store::numeric_encoder::*;
-
-    #[test]
-    fn test_encoding() {
-        let encoder: Encoder<MemoryStringStore> = Encoder::default();
-        let terms: Vec<Term> = vec![
-            NamedNode::from_str("http://foo.com").unwrap().into(),
-            NamedNode::from_str("http://bar.com").unwrap().into(),
-            NamedNode::from_str("http://foo.com").unwrap().into(),
-            BlankNode::default().into(),
-            Literal::new_simple_literal("foo").into(),
-            Literal::from(true).into(),
-            Literal::from(1.2).into(),
-            Literal::from(1).into(),
-            Literal::from("foo").into(),
-            Literal::new_language_tagged_literal("foo", "fr").into(),
-        ];
-        for term in terms {
-            let encoded = encoder.encode_term(&term).unwrap();
-            assert_eq!(term, encoder.decode_term(encoded).unwrap())
-        }
+#[test]
+fn test_encoding() {
+    let encoder: Encoder<MemoryStringStore> = Encoder::default();
+    let terms: Vec<Term> = vec![
+        NamedNode::from_str("http://foo.com").unwrap().into(),
+        NamedNode::from_str("http://bar.com").unwrap().into(),
+        NamedNode::from_str("http://foo.com").unwrap().into(),
+        BlankNode::default().into(),
+        Literal::new_simple_literal("foo").into(),
+        Literal::from(true).into(),
+        Literal::from(1.2).into(),
+        Literal::from(1).into(),
+        Literal::from("foo").into(),
+        Literal::new_language_tagged_literal("foo", "fr").into(),
+    ];
+    for term in terms {
+        let encoded = encoder.encode_term(&term).unwrap();
+        assert_eq!(term, encoder.decode_term(encoded).unwrap())
     }
+}
 
-    #[test]
-    fn test_encoded_term_size() {
-        use std::mem::size_of;
+#[test]
+fn test_encoded_term_size() {
+    use std::mem::size_of;
 
-        assert_eq!(size_of::<EncodedTerm>(), 24);
-    }
-
+    assert_eq!(size_of::<EncodedTerm>(), 24);
 }
