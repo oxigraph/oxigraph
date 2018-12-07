@@ -8,6 +8,7 @@ repository = "https://github.com/Tpt/rudf"
 description = """
 Rudf based SPARQL server
 """
+edition = "2018"
 
 [dependencies]
 rudf = {path = "../lib", features=["rocksdb"]}

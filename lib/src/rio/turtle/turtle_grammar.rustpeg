@@ -1,10 +1,10 @@
 //See https://www.w3.org/TR/turtle/#sec-grammar
 
 use std::char;
-use model::vocab::rdf;
-use model::vocab::xsd;
+use crate::model::vocab::rdf;
+use crate::model::vocab::xsd;
 use std::str::FromStr;
-use rio::utils::unescape_unicode_codepoints;
+use crate::rio::utils::unescape_unicode_codepoints;
 
 #![arguments(state: &mut ParserState, buffer: &mut Vec<Triple>)]
 

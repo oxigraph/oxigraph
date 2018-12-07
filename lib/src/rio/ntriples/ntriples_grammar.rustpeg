@@ -2,9 +2,9 @@
 
 use std::char;
 use std::str::FromStr;
-use model::*;
+use crate::model::*;
 use std::collections::BTreeMap;
-use rio::utils::unescape_unicode_codepoints;
+use crate::rio::utils::unescape_unicode_codepoints;
 
 #![arguments(bnodes_map: &mut BTreeMap<String, BlankNode>)]
 

@@ -419,9 +419,9 @@ impl EncodedQuadsStore for MemoryStore {
         if let Some(graph) = graph_indexes.get_mut(&quad.graph_name) {
             {
                 let mut empty_pos = false;
-                if let Some(mut pos) = graph.spo.get_mut(&quad.subject) {
+                if let Some(pos) = graph.spo.get_mut(&quad.subject) {
                     let mut empty_os = false;
-                    if let Some(mut os) = pos.get_mut(&quad.predicate) {
+                    if let Some(os) = pos.get_mut(&quad.predicate) {
                         os.remove(&quad.object);
                         empty_os = os.is_empty();
                     }
@@ -437,9 +437,9 @@ impl EncodedQuadsStore for MemoryStore {
 
             {
                 let mut empty_oss = false;
-                if let Some(mut oss) = graph.pos.get_mut(&quad.predicate) {
+                if let Some(oss) = graph.pos.get_mut(&quad.predicate) {
                     let mut empty_ss = false;
-                    if let Some(mut ss) = oss.get_mut(&quad.object) {
+                    if let Some(ss) = oss.get_mut(&quad.object) {
                         ss.remove(&quad.subject);
                         empty_ss = ss.is_empty();
                     }
@@ -455,9 +455,9 @@ impl EncodedQuadsStore for MemoryStore {
 
             {
                 let mut empty_sps = false;
-                if let Some(mut sps) = graph.osp.get_mut(&quad.object) {
+                if let Some(sps) = graph.osp.get_mut(&quad.object) {
                     let mut empty_ps = false;
-                    if let Some(mut ps) = sps.get_mut(&quad.subject) {
+                    if let Some(ps) = sps.get_mut(&quad.subject) {
                         ps.remove(&quad.predicate);
                         empty_ps = ps.is_empty();
                     }

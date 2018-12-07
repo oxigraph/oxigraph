@@ -9,6 +9,7 @@ repository = "https://github.com/Tpt/rudf"
 description = """
 Python bindings of the Rudf library
 """
+edition = "2018"
 
 [lib]
 name = "rudf"
