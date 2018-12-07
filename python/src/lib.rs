@@ -1,7 +1,4 @@
-#![cfg_attr(
-    feature = "cargo-clippy",
-    allow(zero_ptr, transmute_ptr_to_ptr)
-)]
+#![cfg_attr(feature = "cargo-clippy", allow(zero_ptr, transmute_ptr_to_ptr))]
 
 #[macro_use]
 extern crate cpython;

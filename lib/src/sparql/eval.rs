@@ -358,7 +358,8 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 )? {
                     Ordering::Greater | Ordering::Equal => true,
                     Ordering::Less => false,
-                }.into(),
+                }
+                .into(),
             ),
             PlanExpression::Lower(a, b) => Some(
                 (self.partial_cmp_literals(
@@ -374,7 +375,8 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 )? {
                     Ordering::Less | Ordering::Equal => true,
                     Ordering::Greater => false,
-                }.into(),
+                }
+                .into(),
             ),
             PlanExpression::In(e, l) => {
                 let needed = self.eval_expression(e, tuple)?;
@@ -493,11 +495,13 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 }
                 None
             }
-            PlanExpression::If(a, b, c) => if self.to_bool(self.eval_expression(a, tuple)?)? {
-                self.eval_expression(b, tuple)
-            } else {
-                self.eval_expression(c, tuple)
-            },
+            PlanExpression::If(a, b, c) => {
+                if self.to_bool(self.eval_expression(a, tuple)?)? {
+                    self.eval_expression(b, tuple)
+                } else {
+                    self.eval_expression(c, tuple)
+                }
+            }
             PlanExpression::StrLang(lexical_form, lang_tag) => {
                 Some(EncodedTerm::LangStringLiteral {
                     value_id: self
@@ -525,7 +529,8 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                     | EncodedTerm::IntegerLiteral(_)
                     | EncodedTerm::DecimalLiteral(_) => true,
                     _ => false,
-                }.into(),
+                }
+                .into(),
             ),
             PlanExpression::LangMatches(language_tag, language_range) => {
                 let language_tag =
@@ -539,7 +544,8 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                         LanguageTag::from_str(&language_range)
                             .ok()?
                             .matches(&LanguageTag::from_str(&language_tag).ok()?)
-                    }.into(),
+                    }
+                    .into(),
                 )
             }
             PlanExpression::Regex(text, pattern, flags) => {
@@ -634,7 +640,8 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                         Decimal::one()
                     } else {
                         Decimal::zero()
-                    }.into(),
+                    }
+                    .into(),
                 ),
                 EncodedTerm::SimpleLiteral { value_id }
                 | EncodedTerm::StringLiteral { value_id } => Some(EncodedTerm::DecimalLiteral(
@@ -802,7 +809,8 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                             Some(term) => Some(encoder.decode_term(term)?),
                             None => None,
                         })
-                    }).collect()
+                    })
+                    .collect()
             })),
         )
     }
@@ -826,11 +834,13 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             self.eval_expression(expression, tuple_b),
         ) {
             (Some(a), Some(b)) => match a {
-                EncodedTerm::BlankNode(a) => if let EncodedTerm::BlankNode(b) = b {
-                    a.cmp(&b)
-                } else {
-                    Ordering::Less
-                },
+                EncodedTerm::BlankNode(a) => {
+                    if let EncodedTerm::BlankNode(b) = b {
+                        a.cmp(&b)
+                    } else {
+                        Ordering::Less
+                    }
+                }
                 EncodedTerm::NamedNode { iri_id: a } => match b {
                     EncodedTerm::NamedNode { iri_id: b } => {
                         self.compare_str_ids(a, b).unwrap_or(Ordering::Equal)
@@ -970,9 +980,11 @@ fn combine_tuples(a: &[Option<EncodedTerm>], b: &[Option<EncodedTerm>]) -> Optio
         for (key, a_value) in a.into_iter().enumerate() {
             if let Some(a_value) = a_value {
                 match b[key] {
-                    Some(ref b_value) => if a_value != b_value {
-                        return None;
-                    },
+                    Some(ref b_value) => {
+                        if a_value != b_value {
+                            return None;
+                        }
+                    }
                     None => result[key] = Some(*a_value),
                 }
             }
@@ -983,9 +995,11 @@ fn combine_tuples(a: &[Option<EncodedTerm>], b: &[Option<EncodedTerm>]) -> Optio
         for (key, b_value) in b.into_iter().enumerate() {
             if let Some(b_value) = b_value {
                 match a[key] {
-                    Some(ref a_value) => if a_value != b_value {
-                        return None;
-                    },
+                    Some(ref a_value) => {
+                        if a_value != b_value {
+                            return None;
+                        }
+                    }
                     None => result[key] = Some(*b_value),
                 }
             }
@@ -1128,11 +1142,13 @@ impl<'a> Iterator for HashDeduplicateIterator<'a> {
 
     fn next(&mut self) -> Option<Result<EncodedTuple>> {
         match self.iter.next()? {
-            Ok(tuple) => if self.already_seen.insert(tuple.clone()) {
-                Some(Ok(tuple))
-            } else {
-                self.next()
-            },
+            Ok(tuple) => {
+                if self.already_seen.insert(tuple.clone()) {
+                    Some(Ok(tuple))
+                } else {
+                    self.next()
+                }
+            }
             Err(error) => Some(Err(error)),
         }
     }

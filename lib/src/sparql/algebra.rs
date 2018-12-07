@@ -747,7 +747,8 @@ impl<'a> fmt::Display for SparqlExpression<'a> {
                         SparqlExpression(&*b),
                         SparqlExpression(cv)
                     )
-                }).unwrap_or_else(|| {
+                })
+                .unwrap_or_else(|| {
                     write!(
                         f,
                         "SUBSTR({}, {})",
@@ -1130,31 +1131,35 @@ impl<'a> fmt::Display for SparqlGraphPattern<'a> {
                 SparqlGraphPattern(&*a),
                 SparqlGraphPattern(&*b)
             ),
-            GraphPattern::Service(n, p, s) => if *s {
-                write!(f, "SERVICE SILENT {} {{ {} }}", n, SparqlGraphPattern(&*p))
-            } else {
-                write!(f, "SERVICE {} {{ {} }}", n, SparqlGraphPattern(&*p))
-            },
-            GraphPattern::Data(bs) => if bs.is_empty() {
-                Ok(())
-            } else {
-                write!(f, "VALUES ( ")?;
-                for var in bs.variables() {
-                    write!(f, "{} ", var)?;
+            GraphPattern::Service(n, p, s) => {
+                if *s {
+                    write!(f, "SERVICE SILENT {} {{ {} }}", n, SparqlGraphPattern(&*p))
+                } else {
+                    write!(f, "SERVICE {} {{ {} }}", n, SparqlGraphPattern(&*p))
                 }
-                write!(f, ") {{ ")?;
-                for values in bs.values_iter() {
-                    write!(f, "( ")?;
-                    for val in values {
-                        match val {
-                            Some(val) => write!(f, "{} ", val),
-                            None => write!(f, "UNDEF "),
-                        }?;
+            }
+            GraphPattern::Data(bs) => {
+                if bs.is_empty() {
+                    Ok(())
+                } else {
+                    write!(f, "VALUES ( ")?;
+                    for var in bs.variables() {
+                        write!(f, "{} ", var)?;
                     }
-                    write!(f, ") ")?;
+                    write!(f, ") {{ ")?;
+                    for values in bs.values_iter() {
+                        write!(f, "( ")?;
+                        for val in values {
+                            match val {
+                                Some(val) => write!(f, "{} ", val),
+                                None => write!(f, "UNDEF "),
+                            }?;
+                        }
+                        write!(f, ") ")?;
+                    }
+                    write!(f, " }}")
                 }
-                write!(f, " }}")
-            },
+            }
             GraphPattern::AggregateJoin(GroupPattern(group, p), agg) => write!(
                 f,
                 "{{ SELECT {} WHERE {{ {} }} GROUP BY {} }}",
@@ -1301,63 +1306,81 @@ pub enum Aggregation {
 impl fmt::Display for Aggregation {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Aggregation::Count(e, distinct) => if *distinct {
-                e.as_ref()
-                    .map(|ex| write!(f, "COUNT(DISTINCT {})", ex))
-                    .unwrap_or_else(|| write!(f, "COUNT(DISTINCT *)"))
-            } else {
-                e.as_ref()
-                    .map(|ex| write!(f, "COUNT({})", ex))
-                    .unwrap_or_else(|| write!(f, "COUNT(*)"))
-            },
-            Aggregation::Sum(e, distinct) => if *distinct {
-                write!(f, "Aggregation(Distinct({}), Sum, {{}})", e)
-            } else {
-                write!(f, "Aggregation({}, Sum, {{}})", e)
-            },
-            Aggregation::Min(e, distinct) => if *distinct {
-                write!(f, "Aggregation(Distinct({}), Min, {{}})", e)
-            } else {
-                write!(f, "Aggregation({}, Min, {{}})", e)
-            },
-            Aggregation::Max(e, distinct) => if *distinct {
-                write!(f, "Aggregation(Distinct({}), Max, {{}})", e)
-            } else {
-                write!(f, "Aggregation({}, Max, {{}})", e)
-            },
-            Aggregation::Avg(e, distinct) => if *distinct {
-                write!(f, "Aggregation(Distinct({}), Avg, {{}})", e)
-            } else {
-                write!(f, "Aggregation({}, Avg, {{}})", e)
-            },
-            Aggregation::Sample(e, distinct) => if *distinct {
-                write!(f, "Aggregation(Distinct({}), Sum, {{}})", e)
-            } else {
-                write!(f, "Aggregation({}, Sample, {{}})", e)
-            },
-            Aggregation::GroupConcat(e, distinct, sep) => if *distinct {
-                sep.as_ref()
-                    .map(|s| {
-                        write!(
+            Aggregation::Count(e, distinct) => {
+                if *distinct {
+                    e.as_ref()
+                        .map(|ex| write!(f, "COUNT(DISTINCT {})", ex))
+                        .unwrap_or_else(|| write!(f, "COUNT(DISTINCT *)"))
+                } else {
+                    e.as_ref()
+                        .map(|ex| write!(f, "COUNT({})", ex))
+                        .unwrap_or_else(|| write!(f, "COUNT(*)"))
+                }
+            }
+            Aggregation::Sum(e, distinct) => {
+                if *distinct {
+                    write!(f, "Aggregation(Distinct({}), Sum, {{}})", e)
+                } else {
+                    write!(f, "Aggregation({}, Sum, {{}})", e)
+                }
+            }
+            Aggregation::Min(e, distinct) => {
+                if *distinct {
+                    write!(f, "Aggregation(Distinct({}), Min, {{}})", e)
+                } else {
+                    write!(f, "Aggregation({}, Min, {{}})", e)
+                }
+            }
+            Aggregation::Max(e, distinct) => {
+                if *distinct {
+                    write!(f, "Aggregation(Distinct({}), Max, {{}})", e)
+                } else {
+                    write!(f, "Aggregation({}, Max, {{}})", e)
+                }
+            }
+            Aggregation::Avg(e, distinct) => {
+                if *distinct {
+                    write!(f, "Aggregation(Distinct({}), Avg, {{}})", e)
+                } else {
+                    write!(f, "Aggregation({}, Avg, {{}})", e)
+                }
+            }
+            Aggregation::Sample(e, distinct) => {
+                if *distinct {
+                    write!(f, "Aggregation(Distinct({}), Sum, {{}})", e)
+                } else {
+                    write!(f, "Aggregation({}, Sample, {{}})", e)
+                }
+            }
+            Aggregation::GroupConcat(e, distinct, sep) => {
+                if *distinct {
+                    sep.as_ref()
+                        .map(|s| {
+                            write!(
                             f,
                             "Aggregation(Distinct({}), GroupConcat, {{\"separator\" → \"{}\"}})",
                             e,
                             s.escape()
                         )
-                    })
-                    .unwrap_or_else(|| write!(f, "Aggregation(Distinct({}), GroupConcat, {{}})", e))
-            } else {
-                sep.as_ref()
-                    .map(|s| {
-                        write!(
-                            f,
-                            "Aggregation({}, GroupConcat, {{\"separator\" → \"{}\"}})",
-                            e,
-                            s.escape()
-                        )
-                    })
-                    .unwrap_or_else(|| write!(f, "Aggregation(Distinct({}), GroupConcat, {{}})", e))
-            },
+                        })
+                        .unwrap_or_else(|| {
+                            write!(f, "Aggregation(Distinct({}), GroupConcat, {{}})", e)
+                        })
+                } else {
+                    sep.as_ref()
+                        .map(|s| {
+                            write!(
+                                f,
+                                "Aggregation({}, GroupConcat, {{\"separator\" → \"{}\"}})",
+                                e,
+                                s.escape()
+                            )
+                        })
+                        .unwrap_or_else(|| {
+                            write!(f, "Aggregation(Distinct({}), GroupConcat, {{}})", e)
+                        })
+                }
+            }
         }
     }
 }
@@ -1367,63 +1390,77 @@ struct SparqlAggregation<'a>(&'a Aggregation);
 impl<'a> fmt::Display for SparqlAggregation<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.0 {
-            Aggregation::Count(e, distinct) => if *distinct {
-                if let Some(e) = e {
-                    write!(f, "COUNT(DISTINCT {})", SparqlExpression(e))
+            Aggregation::Count(e, distinct) => {
+                if *distinct {
+                    if let Some(e) = e {
+                        write!(f, "COUNT(DISTINCT {})", SparqlExpression(e))
+                    } else {
+                        write!(f, "COUNT(DISTINCT *)")
+                    }
+                } else if let Some(e) = e {
+                    write!(f, "COUNT({})", SparqlExpression(e))
                 } else {
-                    write!(f, "COUNT(DISTINCT *)")
+                    write!(f, "COUNT(*)")
                 }
-            } else if let Some(e) = e {
-                write!(f, "COUNT({})", SparqlExpression(e))
-            } else {
-                write!(f, "COUNT(*)")
-            },
-            Aggregation::Sum(e, distinct) => if *distinct {
-                write!(f, "SUM(DISTINCT {})", SparqlExpression(e))
-            } else {
-                write!(f, "SUM({})", SparqlExpression(e))
-            },
-            Aggregation::Min(e, distinct) => if *distinct {
-                write!(f, "MIN(DISTINCT {})", SparqlExpression(e))
-            } else {
-                write!(f, "MIN({})", SparqlExpression(e))
-            },
-            Aggregation::Max(e, distinct) => if *distinct {
-                write!(f, "MAX(DISTINCT {})", SparqlExpression(e))
-            } else {
-                write!(f, "MAX({})", SparqlExpression(e))
-            },
-            Aggregation::Avg(e, distinct) => if *distinct {
-                write!(f, "AVG(DISTINCT {})", SparqlExpression(e))
-            } else {
-                write!(f, "AVG({})", SparqlExpression(e))
-            },
-            Aggregation::Sample(e, distinct) => if *distinct {
-                write!(f, "SAMPLE(DISTINCT {})", SparqlExpression(e))
-            } else {
-                write!(f, "SAMPLE({})", SparqlExpression(e))
-            },
-            Aggregation::GroupConcat(e, distinct, sep) => if *distinct {
-                if let Some(sep) = sep {
+            }
+            Aggregation::Sum(e, distinct) => {
+                if *distinct {
+                    write!(f, "SUM(DISTINCT {})", SparqlExpression(e))
+                } else {
+                    write!(f, "SUM({})", SparqlExpression(e))
+                }
+            }
+            Aggregation::Min(e, distinct) => {
+                if *distinct {
+                    write!(f, "MIN(DISTINCT {})", SparqlExpression(e))
+                } else {
+                    write!(f, "MIN({})", SparqlExpression(e))
+                }
+            }
+            Aggregation::Max(e, distinct) => {
+                if *distinct {
+                    write!(f, "MAX(DISTINCT {})", SparqlExpression(e))
+                } else {
+                    write!(f, "MAX({})", SparqlExpression(e))
+                }
+            }
+            Aggregation::Avg(e, distinct) => {
+                if *distinct {
+                    write!(f, "AVG(DISTINCT {})", SparqlExpression(e))
+                } else {
+                    write!(f, "AVG({})", SparqlExpression(e))
+                }
+            }
+            Aggregation::Sample(e, distinct) => {
+                if *distinct {
+                    write!(f, "SAMPLE(DISTINCT {})", SparqlExpression(e))
+                } else {
+                    write!(f, "SAMPLE({})", SparqlExpression(e))
+                }
+            }
+            Aggregation::GroupConcat(e, distinct, sep) => {
+                if *distinct {
+                    if let Some(sep) = sep {
+                        write!(
+                            f,
+                            "GROUP_CONCAT(DISTINCT {}; SEPARATOR = \"{}\")",
+                            SparqlExpression(e),
+                            sep.escape()
+                        )
+                    } else {
+                        write!(f, "GROUP_CONCAT(DISTINCT {})", SparqlExpression(e))
+                    }
+                } else if let Some(sep) = sep {
                     write!(
                         f,
-                        "GROUP_CONCAT(DISTINCT {}; SEPARATOR = \"{}\")",
+                        "GROUP_CONCAT({}; SEPARATOR = \"{}\")",
                         SparqlExpression(e),
                         sep.escape()
                     )
                 } else {
-                    write!(f, "GROUP_CONCAT(DISTINCT {})", SparqlExpression(e))
+                    write!(f, "GROUP_CONCAT({})", SparqlExpression(e))
                 }
-            } else if let Some(sep) = sep {
-                write!(
-                    f,
-                    "GROUP_CONCAT({}; SEPARATOR = \"{}\")",
-                    SparqlExpression(e),
-                    sep.escape()
-                )
-            } else {
-                write!(f, "GROUP_CONCAT({})", SparqlExpression(e))
-            },
+            }
         }
     }
 }

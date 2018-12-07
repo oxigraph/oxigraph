@@ -79,18 +79,21 @@ pub fn main() -> Result<(), failure::Error> {
                 .long("bind")
                 .help("Specify a server socket to bind using the format $(HOST):$(PORT)")
                 .takes_value(true),
-        ).arg(
+        )
+        .arg(
             Arg::with_name("ntriples")
                 .long("ntriples")
                 .help("Load a N-Triples file in the server at startup")
                 .takes_value(true),
-        ).arg(
+        )
+        .arg(
             Arg::with_name("file")
                 .long("file")
                 .short("f")
                 .help("File in which persist the dataset")
                 .takes_value(true),
-        ).get_matches();
+        )
+        .get_matches();
 
     let file = matches.value_of("file").map(|v| v.to_string());
     if let Some(file) = file {
@@ -233,7 +236,8 @@ fn parse_urlencoded_query_request(query: &[u8]) -> Result<QueryRequest, failure:
         .find(|(key, _)| key == "query")
         .map(|(_, value)| QueryRequest {
             query: value.to_string(),
-        }).ok_or_else(|| format_err!("'query' parameter not found"))
+        })
+        .ok_or_else(|| format_err!("'query' parameter not found"))
 }
 
 fn evaluate_sparql_query<D: SparqlDataset + Send + Sync + RefUnwindSafe + 'static>(
@@ -309,7 +313,8 @@ mod tests {
                 "http://localhost/query",
                 "SELECT * WHERE { ?s ?p ?o }",
                 Mime::from_str("application/sparql-query").unwrap(),
-            ).perform()
+            )
+            .perform()
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
     }

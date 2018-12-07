@@ -96,10 +96,11 @@ fn turtle_w3c_testsuite() {
                 .map(|r| client.load_turtle(r))
                 .unwrap_or_else(|| Ok(MemoryGraph::default()));
             assert!(
-                action_graph.is_err() || !action_graph
-                    .unwrap()
-                    .is_isomorphic(&result_graph.unwrap())
-                    .unwrap(),
+                action_graph.is_err()
+                    || !action_graph
+                        .unwrap()
+                        .is_isomorphic(&result_graph.unwrap())
+                        .unwrap(),
                 "Failure on {}",
                 test
             );
@@ -210,12 +211,13 @@ impl RDFClient {
     fn get(&self, url: &Url) -> Result<Response> {
         match self.client.get(url.clone()).send() {
             Ok(response) => Ok(response),
-            Err(error) => if error.description() == "parsed HTTP message from remote is incomplete"
-            {
-                self.get(url)
-            } else {
-                Err(format_err!("HTTP request error: {}", error.description()))
-            },
+            Err(error) => {
+                if error.description() == "parsed HTTP message from remote is incomplete" {
+                    self.get(url)
+                } else {
+                    Err(format_err!("HTTP request error: {}", error.description()))
+                }
+            }
         }
     }
 }

@@ -285,37 +285,41 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
             }
             match event {
                 Event::Start(event) => match state {
-                    State::Start => if event.name() == b"result" {
-                        state = State::Result;
-                    } else {
-                        return Some(Err(format_err!(
-                            "Expecting <result>, found {}",
-                            self.reader.decode(event.name())
-                        )));
-                    },
-                    State::Result => if event.name() == b"binding" {
-                        match event
-                            .attributes()
-                            .filter_map(|attr| attr.ok())
-                            .find(|attr| attr.key == b"name")
-                        {
-                            Some(attr) => match attr.unescaped_value() {
-                                Ok(var) => current_var = Some(var.to_vec()),
-                                Err(error) => return Some(Err(error.into())),
-                            },
-                            None => {
-                                return Some(Err(format_err!(
-                                    "No name attribute found for the <binding> tag"
-                                )))
-                            }
+                    State::Start => {
+                        if event.name() == b"result" {
+                            state = State::Result;
+                        } else {
+                            return Some(Err(format_err!(
+                                "Expecting <result>, found {}",
+                                self.reader.decode(event.name())
+                            )));
                         }
-                        state = State::Binding;
-                    } else {
-                        return Some(Err(format_err!(
-                            "Expecting <binding>, found {}",
-                            self.reader.decode(event.name())
-                        )));
-                    },
+                    }
+                    State::Result => {
+                        if event.name() == b"binding" {
+                            match event
+                                .attributes()
+                                .filter_map(|attr| attr.ok())
+                                .find(|attr| attr.key == b"name")
+                            {
+                                Some(attr) => match attr.unescaped_value() {
+                                    Ok(var) => current_var = Some(var.to_vec()),
+                                    Err(error) => return Some(Err(error.into())),
+                                },
+                                None => {
+                                    return Some(Err(format_err!(
+                                        "No name attribute found for the <binding> tag"
+                                    )))
+                                }
+                            }
+                            state = State::Binding;
+                        } else {
+                            return Some(Err(format_err!(
+                                "Expecting <binding>, found {}",
+                                self.reader.decode(event.name())
+                            )));
+                        }
+                    }
                     State::Binding => {
                         if term.is_some() {
                             return Some(Err(format_err!(

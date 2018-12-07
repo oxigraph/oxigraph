@@ -845,7 +845,8 @@ impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
                 encoder.encode_named_or_blank_node(triple.subject())?,
                 encoder.encode_named_node(triple.predicate())?,
                 encoder.encode_term(triple.object())?,
-            )?.any(|_| true))
+            )?
+            .any(|_| true))
     }
 
     fn insert(&self, _triple: &Triple) -> Result<()> {

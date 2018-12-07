@@ -37,7 +37,8 @@ fn sparql_w3c_syntax_testsuite() {
             .unwrap();
     let manifest_11_url = Url::parse(
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest.ttl",
-    ).unwrap();
+    )
+    .unwrap();
     let test_blacklist = vec![
         NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql2/manifest#syntax-form-construct02").unwrap(),
         //TODO: Deserialization of the serialization failing:
@@ -308,12 +309,13 @@ impl RDFClient {
     fn get(&self, url: &Url) -> Result<Response> {
         match self.client.get(url.clone()).send() {
             Ok(response) => Ok(response),
-            Err(error) => if error.description() == "parsed HTTP message from remote is incomplete"
-            {
-                self.get(url)
-            } else {
-                Err(format_err!("HTTP request error: {}", error.description()))
-            },
+            Err(error) => {
+                if error.description() == "parsed HTTP message from remote is incomplete" {
+                    self.get(url)
+                } else {
+                    Err(format_err!("HTTP request error: {}", error.description()))
+                }
+            }
         }
     }
 }
@@ -328,7 +330,8 @@ mod rs {
                 .unwrap();
         pub static ref RESULT_VARIABLE: NamedNode = NamedNode::from_str(
             "http://www.w3.org/2001/sw/DataAccess/tests/result-set#resultVariable"
-        ).unwrap();
+        )
+        .unwrap();
         pub static ref SOLUTION: NamedNode =
             NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/result-set#solution")
                 .unwrap();
@@ -583,7 +586,8 @@ impl<'a> Iterator for TestManifest<'a> {
                             .filter_map(|g| match g {
                                 Ok(Term::NamedNode(q)) => Some(q.into()),
                                 _ => None,
-                            }).collect();
+                            })
+                            .collect();
                         (query, data, graph_data)
                     }
                     Some(_) => return Some(Err(format_err!("invalid action"))),

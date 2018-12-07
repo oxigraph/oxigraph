@@ -179,7 +179,8 @@ mod grammar {
         iter.fold(None, |a, b| match a {
             Some(av) => Some(combine(av, b)),
             None => Some(b),
-        }).ok_or("The iterator should not be empty")
+        })
+        .ok_or("The iterator should not be empty")
     }
 
     enum SelectionOption {
@@ -253,12 +254,14 @@ mod grammar {
                 for sel_item in sel_items {
                     match sel_item {
                         SelectionMember::Variable(v) => pv.push(v),
-                        SelectionMember::Expression(e, v) => if pv.contains(&v) {
-                            //TODO: fail
-                        } else {
-                            p = GraphPattern::Extend(Box::new(p), v.clone(), e);
-                            pv.push(v);
-                        },
+                        SelectionMember::Expression(e, v) => {
+                            if pv.contains(&v) {
+                                //TODO: fail
+                            } else {
+                                p = GraphPattern::Extend(Box::new(p), v.clone(), e);
+                                pv.push(v);
+                            }
+                        }
                     }
                 }
             }

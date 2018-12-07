@@ -483,7 +483,8 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                         OrderComparator::Desc(e) => {
                             Ok(Comparator::Desc(self.build_for_expression(e, variables)?))
                         }
-                    }).collect();
+                    })
+                    .collect();
                 PlanNode::Sort {
                     child: Box::new(self.build_for_graph_pattern(l, input, variables, graph_name)?),
                     by: by?,
@@ -662,43 +663,45 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                     None => None,
                 },
             ),
-            Expression::CustomFunctionCall(name, parameters) => if *name == *xsd::BOOLEAN {
-                self.build_cast(
-                    parameters,
-                    PlanExpression::BooleanCast,
-                    variables,
-                    "boolean",
-                )?
-            } else if *name == *xsd::DOUBLE {
-                self.build_cast(parameters, PlanExpression::DoubleCast, variables, "double")?
-            } else if *name == *xsd::FLOAT {
-                self.build_cast(parameters, PlanExpression::FloatCast, variables, "float")?
-            } else if *name == *xsd::DECIMAL {
-                self.build_cast(
-                    parameters,
-                    PlanExpression::DecimalCast,
-                    variables,
-                    "decimal",
-                )?
-            } else if *name == *xsd::INTEGER {
-                self.build_cast(
-                    parameters,
-                    PlanExpression::IntegerCast,
-                    variables,
-                    "integer",
-                )?
-            } else if *name == *xsd::DATE_TIME {
-                self.build_cast(
-                    parameters,
-                    PlanExpression::DateTimeCast,
-                    variables,
-                    "dateTime",
-                )?
-            } else if *name == *xsd::STRING {
-                self.build_cast(parameters, PlanExpression::StringCast, variables, "string")?
-            } else {
-                Err(format_err!("Not supported custom function {}", expression))?
-            },
+            Expression::CustomFunctionCall(name, parameters) => {
+                if *name == *xsd::BOOLEAN {
+                    self.build_cast(
+                        parameters,
+                        PlanExpression::BooleanCast,
+                        variables,
+                        "boolean",
+                    )?
+                } else if *name == *xsd::DOUBLE {
+                    self.build_cast(parameters, PlanExpression::DoubleCast, variables, "double")?
+                } else if *name == *xsd::FLOAT {
+                    self.build_cast(parameters, PlanExpression::FloatCast, variables, "float")?
+                } else if *name == *xsd::DECIMAL {
+                    self.build_cast(
+                        parameters,
+                        PlanExpression::DecimalCast,
+                        variables,
+                        "decimal",
+                    )?
+                } else if *name == *xsd::INTEGER {
+                    self.build_cast(
+                        parameters,
+                        PlanExpression::IntegerCast,
+                        variables,
+                        "integer",
+                    )?
+                } else if *name == *xsd::DATE_TIME {
+                    self.build_cast(
+                        parameters,
+                        PlanExpression::DateTimeCast,
+                        variables,
+                        "dateTime",
+                    )?
+                } else if *name == *xsd::STRING {
+                    self.build_cast(parameters, PlanExpression::StringCast, variables, "string")?
+                } else {
+                    Err(format_err!("Not supported custom function {}", expression))?
+                }
+            }
             _ => unimplemented!(),
         })
     }
@@ -780,7 +783,8 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                     }
                 }
                 Ok(result)
-            }).collect()
+            })
+            .collect()
     }
 
     fn build_for_graph_template(
@@ -809,7 +813,8 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                         &mut bnodes,
                     )?,
                 })
-            }).collect()
+            })
+            .collect()
     }
 
     fn template_value_from_term_or_variable(
@@ -822,11 +827,13 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
             TermOrVariable::Term(term) => {
                 TripleTemplateValue::Constant(self.store.encoder().encode_term(term)?)
             }
-            TermOrVariable::Variable(variable) => if variable.has_name() {
-                TripleTemplateValue::Variable(variable_key(variables, variable))
-            } else {
-                TripleTemplateValue::BlankNode(variable_key(bnodes, variable))
-            },
+            TermOrVariable::Variable(variable) => {
+                if variable.has_name() {
+                    TripleTemplateValue::Variable(variable_key(variables, variable))
+                } else {
+                    TripleTemplateValue::BlankNode(variable_key(bnodes, variable))
+                }
+            }
         })
     }
 
@@ -840,11 +847,13 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
             NamedNodeOrVariable::NamedNode(term) => {
                 TripleTemplateValue::Constant(self.store.encoder().encode_named_node(term)?)
             }
-            NamedNodeOrVariable::Variable(variable) => if variable.has_name() {
-                TripleTemplateValue::Variable(variable_key(variables, variable))
-            } else {
-                TripleTemplateValue::BlankNode(variable_key(bnodes, variable))
-            },
+            NamedNodeOrVariable::Variable(variable) => {
+                if variable.has_name() {
+                    TripleTemplateValue::Variable(variable_key(variables, variable))
+                } else {
+                    TripleTemplateValue::BlankNode(variable_key(bnodes, variable))
+                }
+            }
         })
     }
 }

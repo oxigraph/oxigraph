@@ -380,7 +380,8 @@ impl<R: Read> TermReader for R {
                 NaiveDateTime::from_timestamp_opt(
                     self.read_i64::<LittleEndian>()?,
                     self.read_u32::<LittleEndian>()?,
-                ).ok_or_else(|| format_err!("Invalid date time serialization"))?,
+                )
+                .ok_or_else(|| format_err!("Invalid date time serialization"))?,
                 FixedOffset::east_opt(self.read_i32::<LittleEndian>()?)
                     .ok_or_else(|| format_err!("Invalid timezone offset"))?,
             ))),
@@ -388,7 +389,8 @@ impl<R: Read> TermReader for R {
                 NaiveDateTime::from_timestamp_opt(
                     self.read_i64::<LittleEndian>()?,
                     self.read_u32::<LittleEndian>()?,
-                ).ok_or_else(|| format_err!("Invalid date time serialization"))?,
+                )
+                .ok_or_else(|| format_err!("Invalid date time serialization"))?,
             )),
             _ => Err(format_err!("the term buffer has an invalid type id")),
         }
@@ -644,14 +646,16 @@ impl<S: StringStore> Encoder<S> {
             } => Ok(Literal::new_language_tagged_literal(
                 self.string_store.get_str(value_id)?,
                 self.string_store.get_str(language_id)?,
-            ).into()),
+            )
+            .into()),
             EncodedTerm::TypedLiteral {
                 value_id,
                 datatype_id,
             } => Ok(Literal::new_typed_literal(
                 self.string_store.get_str(value_id)?,
                 NamedNode::from(self.string_store.get_url(datatype_id)?),
-            ).into()),
+            )
+            .into()),
             EncodedTerm::StringLiteral { value_id } => {
                 Ok(Literal::from(self.string_store.get_str(value_id)?).into())
             }
