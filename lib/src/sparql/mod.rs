@@ -23,19 +23,19 @@
 //! }
 //! ```
 
-use model::Dataset;
-use sparql::algebra::Query;
-use sparql::algebra::QueryResult;
-use sparql::algebra::Variable;
-use sparql::eval::SimpleEvaluator;
-use sparql::parser::read_sparql_query;
-use sparql::plan::PlanBuilder;
-use sparql::plan::PlanNode;
-use sparql::plan::TripleTemplate;
+use crate::model::Dataset;
+use crate::sparql::algebra::Query;
+use crate::sparql::algebra::QueryResult;
+use crate::sparql::algebra::Variable;
+use crate::sparql::eval::SimpleEvaluator;
+use crate::sparql::parser::read_sparql_query;
+use crate::sparql::plan::PlanBuilder;
+use crate::sparql::plan::PlanNode;
+use crate::sparql::plan::TripleTemplate;
+use crate::store::encoded::EncodedQuadsStore;
+use crate::store::encoded::StoreDataset;
+use crate::Result;
 use std::io::Read;
-use store::encoded::EncodedQuadsStore;
-use store::encoded::StoreDataset;
-use Result;
 
 pub mod algebra;
 mod eval;
@@ -66,7 +66,10 @@ impl<S: EncodedQuadsStore> SparqlDataset for StoreDataset<S> {
 
     fn prepare_query(&self, query: impl Read) -> Result<SimplePreparedQuery<S>> {
         Ok(SimplePreparedQuery(match read_sparql_query(query, None)? {
-            Query::Select { algebra, dataset } => {
+            Query::Select {
+                algebra,
+                dataset: _,
+            } => {
                 let store = self.encoded();
                 let (plan, variables) = PlanBuilder::build(&*store, &algebra)?;
                 SimplePreparedQueryOptions::Select {
@@ -75,7 +78,10 @@ impl<S: EncodedQuadsStore> SparqlDataset for StoreDataset<S> {
                     evaluator: SimpleEvaluator::new(store),
                 }
             }
-            Query::Ask { algebra, dataset } => {
+            Query::Ask {
+                algebra,
+                dataset: _,
+            } => {
                 let store = self.encoded();
                 let (plan, _) = PlanBuilder::build(&*store, &algebra)?;
                 SimplePreparedQueryOptions::Ask {
@@ -86,7 +92,7 @@ impl<S: EncodedQuadsStore> SparqlDataset for StoreDataset<S> {
             Query::Construct {
                 construct,
                 algebra,
-                dataset,
+                dataset: _,
             } => {
                 let store = self.encoded();
                 let (plan, variables) = PlanBuilder::build(&*store, &algebra)?;
@@ -96,7 +102,10 @@ impl<S: EncodedQuadsStore> SparqlDataset for StoreDataset<S> {
                     evaluator: SimpleEvaluator::new(store),
                 }
             }
-            Query::Describe { algebra, dataset } => {
+            Query::Describe {
+                algebra,
+                dataset: _,
+            } => {
                 let store = self.encoded();
                 let (plan, _) = PlanBuilder::build(&*store, &algebra)?;
                 SimplePreparedQueryOptions::Describe {

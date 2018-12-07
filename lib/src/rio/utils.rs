@@ -1,7 +1,7 @@
+use crate::utils::StaticSliceMap;
 use std::borrow::Cow;
 use std::char;
 use std::str::Chars;
-use utils::StaticSliceMap;
 
 pub fn unescape_unicode_codepoints(input: &str) -> Cow<str> {
     if needs_unescape_unicode_codepoints(input) {

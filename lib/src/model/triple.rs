@@ -1,6 +1,6 @@
-use model::blank_node::BlankNode;
-use model::literal::Literal;
-use model::named_node::NamedNode;
+use crate::model::blank_node::BlankNode;
+use crate::model::literal::Literal;
+use crate::model::named_node::NamedNode;
 use std::fmt;
 
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).

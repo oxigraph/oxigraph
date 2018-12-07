@@ -1,9 +1,10 @@
+use crate::model::named_node::NamedNode;
+use crate::model::vocab::rdf;
+use crate::model::vocab::xsd;
+use crate::utils::Escaper;
 use chrono::DateTime;
 use chrono::FixedOffset;
 use chrono::NaiveDateTime;
-use model::named_node::NamedNode;
-use model::vocab::rdf;
-use model::vocab::xsd;
 use num_traits::identities::Zero;
 use num_traits::FromPrimitive;
 use num_traits::One;
@@ -13,7 +14,6 @@ use rust_decimal::Decimal;
 use std::borrow::Cow;
 use std::fmt;
 use std::option::Option;
-use utils::Escaper;
 
 /// A RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal)
 ///

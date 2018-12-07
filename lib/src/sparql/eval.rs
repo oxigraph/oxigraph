@@ -1,8 +1,13 @@
+use crate::model::BlankNode;
+use crate::model::Triple;
+use crate::sparql::algebra::*;
+use crate::sparql::plan::*;
+use crate::store::encoded::EncodedQuadsStore;
+use crate::store::numeric_encoder::*;
+use crate::Result;
 use chrono::DateTime;
 use chrono::NaiveDateTime;
 use language_tags::LanguageTag;
-use model::BlankNode;
-use model::Triple;
 use num_traits::identities::Zero;
 use num_traits::FromPrimitive;
 use num_traits::One;
@@ -10,8 +15,6 @@ use num_traits::ToPrimitive;
 use ordered_float::OrderedFloat;
 use regex::RegexBuilder;
 use rust_decimal::Decimal;
-use sparql::algebra::*;
-use sparql::plan::*;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::HashSet;
@@ -20,10 +23,7 @@ use std::iter::Iterator;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::Mutex;
-use store::encoded::EncodedQuadsStore;
-use store::numeric_encoder::*;
 use uuid::Uuid;
-use Result;
 
 const REGEX_SIZE_LIMIT: usize = 1_000_000;
 

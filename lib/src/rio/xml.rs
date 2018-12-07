@@ -1,8 +1,9 @@
 //! Implementation of [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) syntax
 
-use model::vocab::rdf;
-use model::Triple;
-use model::*;
+use crate::model::vocab::rdf;
+use crate::model::Triple;
+use crate::model::*;
+use crate::Result;
 use quick_xml::events::BytesEnd;
 use quick_xml::events::BytesStart;
 use quick_xml::events::BytesText;
@@ -12,7 +13,6 @@ use std::collections::BTreeMap;
 use std::io::BufRead;
 use std::str::FromStr;
 use url::Url;
-use Result;
 
 /// Reads a [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) file from a Rust `Read` and returns an iterator on the read `Triple`s
 ///

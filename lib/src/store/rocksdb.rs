@@ -1,3 +1,8 @@
+use crate::store::encoded::EncodedQuadsStore;
+use crate::store::encoded::StoreDataset;
+use crate::store::numeric_encoder::*;
+use crate::utils::MutexPoisonError;
+use crate::Result;
 use byteorder::ByteOrder;
 use byteorder::LittleEndian;
 use rocksdb::ColumnFamily;
@@ -11,12 +16,7 @@ use std::path::Path;
 use std::str;
 use std::str::FromStr;
 use std::sync::Mutex;
-use store::encoded::EncodedQuadsStore;
-use store::encoded::StoreDataset;
-use store::numeric_encoder::*;
 use url::Url;
-use utils::MutexPoisonError;
-use Result;
 
 /// `rudf::model::Dataset` trait implementation based on the [RocksDB](https://rocksdb.org/) key-value store
 ///

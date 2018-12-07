@@ -12,8 +12,9 @@ mod grammar {
         )
     )]
 
-    use model::*;
-    use rio::utils::unescape_characters;
+    use crate::model::*;
+    use crate::rio::utils::unescape_characters;
+    use crate::utils::StaticSliceMap;
     use std::borrow::Cow;
     use std::collections::BTreeMap;
     use std::collections::HashMap;
@@ -21,7 +22,6 @@ mod grammar {
     use std::io::Read;
     use url::ParseOptions;
     use url::Url;
-    use utils::StaticSliceMap;
 
     include!(concat!(env!("OUT_DIR"), "/turtle_grammar.rs"));
 

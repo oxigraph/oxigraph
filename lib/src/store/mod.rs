@@ -7,7 +7,7 @@ pub(crate) mod numeric_encoder;
 #[cfg(feature = "rocksdb")]
 mod rocksdb;
 
-pub use store::memory::MemoryDataset;
-pub use store::memory::MemoryGraph;
+pub use crate::store::memory::MemoryDataset;
+pub use crate::store::memory::MemoryGraph;
 #[cfg(feature = "rocksdb")]
-pub use store::rocksdb::RocksDbDataset;
+pub use crate::store::rocksdb::RocksDbDataset;

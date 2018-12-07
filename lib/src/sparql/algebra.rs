@@ -1,13 +1,13 @@
 //! [SPARQL 1.1 Query Algebra](https://www.w3.org/TR/sparql11-query/#sparqlQuery) AST
 
-use model::*;
+use crate::model::*;
+use crate::utils::Escaper;
+use crate::Result;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fmt;
 use std::ops::Add;
-use utils::Escaper;
 use uuid::Uuid;
-use Result;
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum Variable {

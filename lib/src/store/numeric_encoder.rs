@@ -1,10 +1,12 @@
+use crate::model::vocab::rdf;
+use crate::model::vocab::xsd;
+use crate::model::*;
+use crate::utils::MutexPoisonError;
+use crate::Result;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use chrono::DateTime;
 use chrono::FixedOffset;
 use chrono::NaiveDateTime;
-use model::vocab::rdf;
-use model::vocab::xsd;
-use model::*;
 use ordered_float::OrderedFloat;
 use rust_decimal::Decimal;
 use std::collections::BTreeMap;
@@ -14,9 +16,7 @@ use std::str;
 use std::str::FromStr;
 use std::sync::RwLock;
 use url::Url;
-use utils::MutexPoisonError;
 use uuid::Uuid;
-use Result;
 
 const EMPTY_STRING_ID: u64 = 0;
 const RDF_LANG_STRING_ID: u64 = 1;

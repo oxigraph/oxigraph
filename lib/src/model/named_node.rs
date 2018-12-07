@@ -1,9 +1,9 @@
+use crate::Error;
+use crate::Result;
 use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
 use url::Url;
-use Error;
-use Result;
 
 /// A RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
 ///

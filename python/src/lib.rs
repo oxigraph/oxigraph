@@ -19,10 +19,10 @@ use std::hash::Hasher;
 use std::str::FromStr;
 
 py_module_initializer!(rudf, initrudf, PyInit_rudf, |py, m| {
-    try!(m.add(py, "__doc__", "Rudf Python bindings"));
-    try!(m.add_class::<NamedNode>(py));
-    try!(m.add_class::<BlankNode>(py));
-    try!(m.add_class::<Literal>(py));
+    r#try!(m.add(py, "__doc__", "Rudf Python bindings"));
+    r#try!(m.add_class::<NamedNode>(py));
+    r#try!(m.add_class::<BlankNode>(py));
+    r#try!(m.add_class::<Literal>(py));
     Ok(())
 });
 

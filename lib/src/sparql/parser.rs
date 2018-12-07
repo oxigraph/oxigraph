@@ -13,10 +13,11 @@ mod grammar {
         )
     )]
 
-    use model::*;
-    use rio::utils::unescape_characters;
-    use rio::utils::unescape_unicode_codepoints;
-    use sparql::algebra::*;
+    use crate::model::*;
+    use crate::rio::utils::unescape_characters;
+    use crate::rio::utils::unescape_unicode_codepoints;
+    use crate::sparql::algebra::*;
+    use crate::utils::StaticSliceMap;
     use std::borrow::Cow;
     use std::collections::BTreeMap;
     use std::collections::HashMap;
@@ -24,7 +25,6 @@ mod grammar {
     use std::io::Read;
     use url::ParseOptions;
     use url::Url;
-    use utils::StaticSliceMap;
 
     struct FocusedTriplePattern<F> {
         focus: F,

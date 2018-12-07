@@ -1,13 +1,13 @@
+use crate::store::encoded::*;
+use crate::store::numeric_encoder::*;
+use crate::utils::MutexPoisonError;
+use crate::Result;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::sync::RwLock;
 use std::sync::RwLockReadGuard;
 use std::sync::RwLockWriteGuard;
-use store::encoded::*;
-use store::numeric_encoder::*;
 use url::Url;
-use utils::MutexPoisonError;
-use Result;
 
 /// Memory based implementation of the `rudf::model::Dataset` trait.
 /// They are cheap to build using the `MemoryDataset::default()` method.

@@ -1,12 +1,12 @@
-use model::*;
+use crate::model::*;
+use crate::store::numeric_encoder::*;
+use crate::Result;
 use std::fmt;
 use std::iter::empty;
 use std::iter::once;
 use std::iter::FromIterator;
 use std::iter::Iterator;
 use std::sync::Arc;
-use store::numeric_encoder::*;
-use Result;
 
 /// Defines the Store traits that is used to have efficient binary storage
 

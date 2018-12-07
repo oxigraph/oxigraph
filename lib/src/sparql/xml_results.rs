@@ -1,6 +1,10 @@
 //! Implementation of [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/)
 
-use model::*;
+use crate::model::*;
+use crate::sparql::algebra::BindingsIterator;
+use crate::sparql::algebra::QueryResult;
+use crate::sparql::algebra::Variable;
+use crate::Result;
 use quick_xml::events::BytesDecl;
 use quick_xml::events::BytesEnd;
 use quick_xml::events::BytesStart;
@@ -8,15 +12,11 @@ use quick_xml::events::BytesText;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use quick_xml::Writer;
-use sparql::algebra::BindingsIterator;
-use sparql::algebra::QueryResult;
-use sparql::algebra::Variable;
 use std::collections::BTreeMap;
 use std::io::BufRead;
 use std::io::Write;
 use std::iter::empty;
 use std::str::FromStr;
-use Result;
 
 pub fn write_xml_results<W: Write>(results: QueryResult, sink: W) -> Result<W> {
     let mut writer = Writer::new(sink);

@@ -12,9 +12,9 @@ mod grammar {
         )
     )]
 
-    use rio::utils::unescape_characters;
+    use crate::rio::utils::unescape_characters;
+    use crate::utils::StaticSliceMap;
     use std::borrow::Cow;
-    use utils::StaticSliceMap;
 
     const UNESCAPE_CHARACTERS: [u8; 8] = [b't', b'b', b'n', b'r', b'f', b'"', b'\'', b'\\'];
     lazy_static! {
@@ -34,12 +34,12 @@ mod grammar {
     include!(concat!(env!("OUT_DIR"), "/ntriples_grammar.rs"));
 }
 
-use model::*;
+use crate::model::*;
+use crate::Result;
 use std::collections::BTreeMap;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Read;
-use Result;
 
 struct NTriplesIterator<R: Read> {
     buffer: String,

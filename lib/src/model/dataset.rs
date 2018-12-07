@@ -1,5 +1,5 @@
-use model::*;
-use Result;
+use crate::model::*;
+use crate::Result;
 
 /// Trait for [RDF graphs](https://www.w3.org/TR/rdf11-concepts/#dfn-graph)
 ///

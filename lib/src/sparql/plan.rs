@@ -1,11 +1,11 @@
-use model::vocab::xsd;
-use model::Literal;
-use sparql::algebra::*;
+use crate::model::vocab::xsd;
+use crate::model::Literal;
+use crate::sparql::algebra::*;
+use crate::store::encoded::EncodedQuadsStore;
+use crate::store::numeric_encoder::EncodedTerm;
+use crate::store::numeric_encoder::ENCODED_DEFAULT_GRAPH;
+use crate::Result;
 use std::collections::BTreeSet;
-use store::encoded::EncodedQuadsStore;
-use store::numeric_encoder::EncodedTerm;
-use store::numeric_encoder::ENCODED_DEFAULT_GRAPH;
-use Result;
 
 pub type EncodedTuple = Vec<Option<EncodedTerm>>;
 
@@ -133,7 +133,7 @@ impl PlanNode {
             PlanNode::HashDeduplicate { child } => child.add_variables(set),
             PlanNode::Skip { child, .. } => child.add_variables(set),
             PlanNode::Limit { child, .. } => child.add_variables(set),
-            PlanNode::Project { child, mapping } => {
+            PlanNode::Project { child: _, mapping } => {
                 for i in 0..mapping.len() {
                     set.insert(i);
                 }
@@ -391,7 +391,7 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                                 .pattern_value_from_term_or_variable(&pattern.object, variables)?,
                             graph_name,
                         },
-                        TripleOrPathPattern::Path(pattern) => unimplemented!(),
+                        TripleOrPathPattern::Path(_pattern) => unimplemented!(),
                     }
                 }
                 plan
@@ -467,9 +467,9 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                 position: variable_key(variables, &v),
                 expression: self.build_for_expression(e, variables)?,
             },
-            GraphPattern::Minus(a, b) => unimplemented!(),
-            GraphPattern::Service(n, p, s) => unimplemented!(),
-            GraphPattern::AggregateJoin(g, a) => unimplemented!(),
+            GraphPattern::Minus(_a, _b) => unimplemented!(),
+            GraphPattern::Service(_n, _p, _s) => unimplemented!(),
+            GraphPattern::AggregateJoin(_g, _a) => unimplemented!(),
             GraphPattern::Data(bs) => PlanNode::StaticBindings {
                 tuples: self.encode_bindings(bs, variables)?,
             },
