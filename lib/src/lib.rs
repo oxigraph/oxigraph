@@ -8,37 +8,33 @@
 //! * A memory based and a disk based stores in the `store` package
 //! * A work in progress SPARQL implementation in the `sparql` package
 
-#![cfg_attr(
-    feature = "cargo-clippy",
-    warn(
-        cast_possible_truncation,
-        cast_possible_wrap,
-        cast_precision_loss,
-        cast_sign_loss,
-        default_trait_access,
-        empty_enum,
-        enum_glob_use,
-        expl_impl_clone_on_copy,
-        explicit_into_iter_loop,
-        filter_map,
-        if_not_else,
-        inline_always,
-        invalid_upcast_comparisons,
-        items_after_statements,
-        linkedlist,
-        //TODO match_same_arms,
-        maybe_infinite_iter,
-        mut_mut,
-        needless_continue,
-        option_map_unwrap_or,
-        //TODO option_map_unwrap_or_else,
-        pub_enum_variant_names,
-        replace_consts,
-        result_map_unwrap_or_else,
-        //TODO single_match_else,
-        string_add_assign,
-        unicode_not_nfc
-    )
+#![warn(
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::default_trait_access,
+    clippy::empty_enum,
+    clippy::enum_glob_use,
+    clippy::expl_impl_clone_on_copy,
+    clippy::explicit_into_iter_loop,
+    clippy::filter_map,
+    clippy::if_not_else,
+    clippy::inline_always,
+    clippy::invalid_upcast_comparisons,
+    clippy::items_after_statements,
+    clippy::linkedlist,
+    //TODO match_same_arms,
+    clippy::maybe_infinite_iter,
+    clippy::mut_mut,
+    clippy::needless_continue,
+    clippy::option_map_unwrap_or,
+    //TODO option_map_unwrap_or_else,
+    clippy::pub_enum_variant_names,
+    clippy::replace_consts,
+    clippy::result_map_unwrap_or_else,
+    //TODO single_match_else,
+    clippy::string_add_assign,
+    clippy::unicode_not_nfc
 )]
 
 extern crate byteorder;

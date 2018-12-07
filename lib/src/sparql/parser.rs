@@ -1,16 +1,13 @@
 mod grammar {
-    #![cfg_attr(
-        feature = "cargo-clippy",
-        allow(
-            suspicious_else_formatting,
-            len_zero,
-            single_match,
-            unit_arg,
-            naive_bytecount,
-            cyclomatic_complexity,
-            many_single_char_names,
-            type_complexity
-        )
+    #![allow(
+        clippy::suspicious_else_formatting,
+        clippy::len_zero,
+        clippy::single_match,
+        clippy::unit_arg,
+        clippy::naive_bytecount,
+        clippy::cyclomatic_complexity,
+        clippy::many_single_char_names,
+        clippy::type_complexity
     )]
 
     use crate::model::*;

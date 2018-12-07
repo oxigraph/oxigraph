@@ -1,15 +1,12 @@
 //! Implementation of [Turtle](https://www.w3.org/TR/turtle/) RDF syntax
 
 mod grammar {
-    #![cfg_attr(
-        feature = "cargo-clippy",
-        allow(
-            suspicious_else_formatting,
-            len_zero,
-            single_match,
-            unit_arg,
-            naive_bytecount
-        )
+    #![allow(
+        clippy::suspicious_else_formatting,
+        clippy::len_zero,
+        clippy::single_match,
+        clippy::unit_arg,
+        clippy::naive_bytecount
     )]
 
     use crate::model::*;

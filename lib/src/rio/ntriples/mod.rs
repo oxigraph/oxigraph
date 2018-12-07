@@ -1,15 +1,12 @@
 //! Implementation of [N-Triples](https://www.w3.org/TR/n-triples/) RDF syntax
 
 mod grammar {
-    #![cfg_attr(
-        feature = "cargo-clippy",
-        allow(
-            suspicious_else_formatting,
-            len_zero,
-            single_match,
-            unit_arg,
-            naive_bytecount
-        )
+    #![allow(
+        clippy::suspicious_else_formatting,
+        clippy::len_zero,
+        clippy::single_match,
+        clippy::unit_arg,
+        clippy::naive_bytecount
     )]
 
     use crate::rio::utils::unescape_characters;
