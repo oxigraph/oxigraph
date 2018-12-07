@@ -27,7 +27,7 @@ impl NamedOrBlankNode {
 }
 
 impl fmt::Display for NamedOrBlankNode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             NamedOrBlankNode::NamedNode(node) => node.fmt(f),
             NamedOrBlankNode::BlankNode(node) => node.fmt(f),
@@ -91,7 +91,7 @@ impl Term {
 }
 
 impl fmt::Display for Term {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Term::NamedNode(node) => node.fmt(f),
             Term::BlankNode(node) => node.fmt(f),
@@ -191,7 +191,7 @@ impl Triple {
 }
 
 impl fmt::Display for Triple {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {} {} .", self.subject, self.predicate, self.object)
     }
 }
@@ -263,7 +263,7 @@ impl Quad {
 }
 
 impl fmt::Display for Quad {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.graph_name {
             Some(ref graph_name) => write!(
                 f,

@@ -37,22 +37,12 @@
     clippy::unicode_not_nfc
 )]
 
-extern crate byteorder;
-extern crate chrono;
 #[macro_use]
 extern crate failure;
-extern crate language_tags;
 #[macro_use]
 extern crate lazy_static;
-extern crate num_traits;
-extern crate ordered_float;
-extern crate quick_xml;
-extern crate regex;
 #[cfg(feature = "rocksdb")]
 extern crate rocksdb;
-extern crate rust_decimal;
-extern crate url;
-extern crate uuid;
 
 pub mod model;
 pub mod rio;

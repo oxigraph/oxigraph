@@ -131,7 +131,7 @@ impl Literal {
     }
 
     /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form)
-    pub fn value(&self) -> Cow<str> {
+    pub fn value(&self) -> Cow<'_, str> {
         match self.0 {
             LiteralContent::SimpleLiteral(ref value)
             | LiteralContent::String(ref value)
@@ -348,7 +348,7 @@ impl Literal {
 }
 
 impl fmt::Display for Literal {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.is_plain() {
             self.language()
                 .map(|lang| write!(f, "\"{}\"@{}", self.value().escape(), lang))

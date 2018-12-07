@@ -18,7 +18,7 @@ use std::io::Write;
 use std::iter::empty;
 use std::str::FromStr;
 
-pub fn write_xml_results<W: Write>(results: QueryResult, sink: W) -> Result<W> {
+pub fn write_xml_results<W: Write>(results: QueryResult<'_>, sink: W) -> Result<W> {
     let mut writer = Writer::new(sink);
     match results {
         QueryResult::Boolean(value) => {

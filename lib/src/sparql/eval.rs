@@ -156,15 +156,24 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                                         }))
                                     }
                                 }
-                                let iter: EncodedTuplesIterator = Box::new(iter.map(move |quad| {
-                                    let quad = quad?;
-                                    let mut new_tuple = tuple.clone();
-                                    put_pattern_value(&subject, quad.subject, &mut new_tuple);
-                                    put_pattern_value(&predicate, quad.predicate, &mut new_tuple);
-                                    put_pattern_value(&object, quad.object, &mut new_tuple);
-                                    put_pattern_value(&graph_name, quad.graph_name, &mut new_tuple);
-                                    Ok(new_tuple)
-                                }));
+                                let iter: EncodedTuplesIterator<'_> =
+                                    Box::new(iter.map(move |quad| {
+                                        let quad = quad?;
+                                        let mut new_tuple = tuple.clone();
+                                        put_pattern_value(&subject, quad.subject, &mut new_tuple);
+                                        put_pattern_value(
+                                            &predicate,
+                                            quad.predicate,
+                                            &mut new_tuple,
+                                        );
+                                        put_pattern_value(&object, quad.object, &mut new_tuple);
+                                        put_pattern_value(
+                                            &graph_name,
+                                            quad.graph_name,
+                                            &mut new_tuple,
+                                        );
+                                        Ok(new_tuple)
+                                    }));
                                 iter
                             }
                             Err(error) => Box::new(once(Err(error))),

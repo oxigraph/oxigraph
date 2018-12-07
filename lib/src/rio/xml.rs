@@ -171,7 +171,7 @@ impl<R: BufRead> Iterator for RdfXmlIterator<R> {
 }
 
 impl<R: BufRead> RdfXmlIterator<R> {
-    fn parse_start_event(&mut self, event: &BytesStart) -> Result<()> {
+    fn parse_start_event(&mut self, event: &BytesStart<'_>) -> Result<()> {
         #[derive(PartialEq, Eq)]
         enum RdfXmlParseType {
             Default,
@@ -389,14 +389,14 @@ impl<R: BufRead> RdfXmlIterator<R> {
         Ok(())
     }
 
-    fn parse_end_event(&mut self, _event: &BytesEnd) -> Result<()> {
+    fn parse_end_event(&mut self, _event: &BytesEnd<'_>) -> Result<()> {
         if let Some(current_state) = self.state.pop() {
             self.end_state(current_state)?;
         }
         Ok(())
     }
 
-    fn parse_text_event(&mut self, event: &BytesText) -> Result<()> {
+    fn parse_text_event(&mut self, event: &BytesText<'_>) -> Result<()> {
         self.object = Some(NodeOrText::Text(event.unescape_and_decode(&self.reader)?));
         Ok(())
     }

@@ -31,7 +31,7 @@ mod grammar {
     }
 
     impl ParserState {
-        fn url_parser(&self) -> ParseOptions {
+        fn url_parser(&self) -> ParseOptions<'_> {
             Url::options().base_url(self.base_uri.as_ref())
         }
     }
@@ -71,7 +71,7 @@ mod grammar {
         );
     }
 
-    fn unescape_echars(input: &str) -> Cow<str> {
+    fn unescape_echars(input: &str) -> Cow<'_, str> {
         unescape_characters(input, &UNESCAPE_CHARACTERS, &UNESCAPE_REPLACEMENT)
     }
 
@@ -92,7 +92,7 @@ mod grammar {
         );
     }
 
-    pub fn unescape_pn_local(input: &str) -> Cow<str> {
+    pub fn unescape_pn_local(input: &str) -> Cow<'_, str> {
         unescape_characters(input, &UNESCAPE_PN_CHARACTERS, &UNESCAPE_PN_REPLACEMENT)
     }
 }

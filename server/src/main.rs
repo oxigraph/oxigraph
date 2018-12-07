@@ -1,21 +1,16 @@
-extern crate clap;
 #[macro_use]
 extern crate failure;
-extern crate futures;
-extern crate gotham;
+use gotham;
 #[macro_use]
 extern crate gotham_derive;
-extern crate hyper;
+use hyper;
 #[macro_use]
 extern crate lazy_static;
-extern crate mime;
-extern crate rudf;
-extern crate serde;
+use mime;
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
 extern crate tera;
-extern crate url;
 
 use clap::App;
 use clap::Arg;
@@ -105,7 +100,7 @@ pub fn main() -> Result<(), failure::Error> {
 
 fn main_with_dataset<D: SparqlDataset + Send + Sync + RefUnwindSafe + 'static>(
     dataset: Arc<D>,
-    matches: &ArgMatches,
+    matches: &ArgMatches<'_>,
 ) -> Result<(), failure::Error> {
     if let Some(nt_file) = matches.value_of("ntriples") {
         println!("Loading NTriples file {}", nt_file);

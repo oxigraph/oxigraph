@@ -361,7 +361,7 @@ impl<S: EncodedQuadsStore> Dataset for StoreDataset<S> {
 }
 
 impl<S: EncodedQuadsStore> fmt::Display for StoreDataset<S> {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         for quad in self.iter().map_err(|_| fmt::Error)? {
             writeln!(fmt, "{}", quad.map_err(|_| fmt::Error)?)?;
         }
@@ -547,7 +547,7 @@ impl<S: EncodedQuadsStore> NamedGraph for StoreNamedGraph<S> {
 }
 
 impl<S: EncodedQuadsStore> fmt::Display for StoreNamedGraph<S> {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         for triple in self.iter().map_err(|_| fmt::Error)? {
             writeln!(fmt, "{}", triple.map_err(|_| fmt::Error)?)?;
         }
@@ -702,7 +702,7 @@ impl<S: EncodedQuadsStore> Graph for StoreDefaultGraph<S> {
 }
 
 impl<S: EncodedQuadsStore> fmt::Display for StoreDefaultGraph<S> {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         for triple in self.iter().map_err(|_| fmt::Error)? {
             writeln!(fmt, "{}", triple.map_err(|_| fmt::Error)?)?;
         }
@@ -867,7 +867,7 @@ impl<S: EncodedQuadsStore> Graph for StoreUnionGraph<S> {
 }
 
 impl<S: EncodedQuadsStore> fmt::Display for StoreUnionGraph<S> {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         for triple in self.iter().map_err(|_| fmt::Error)? {
             writeln!(fmt, "{}", triple.map_err(|_| fmt::Error)?)?;
         }

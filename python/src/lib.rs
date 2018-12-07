@@ -2,7 +2,6 @@
 
 #[macro_use]
 extern crate cpython;
-extern crate rudf;
 
 use cpython::exc::ValueError;
 use cpython::CompareOp;
@@ -26,7 +25,7 @@ py_module_initializer!(rudf, initrudf, PyInit_rudf, |py, m| {
     Ok(())
 });
 
-fn new_value_error(py: Python, error: &Error) -> PyErr {
+fn new_value_error(py: Python<'_>, error: &Error) -> PyErr {
     PyErr::new::<ValueError, _>(py, error.to_string())
 }
 

@@ -1,4 +1,4 @@
-extern crate peg;
+use peg;
 
 fn main() {
     peg::cargo_build("src/rio/ntriples/ntriples_grammar.rustpeg");

@@ -58,7 +58,7 @@ pub trait SparqlDataset: Dataset {
 /// A prepared [SPARQL 1.1](https://www.w3.org/TR/sparql11-query/) query
 pub trait PreparedQuery {
     /// Evaluates the query and returns its results
-    fn exec(&self) -> Result<QueryResult>;
+    fn exec(&self) -> Result<QueryResult<'_>>;
 }
 
 impl<S: EncodedQuadsStore> SparqlDataset for StoreDataset<S> {
@@ -142,7 +142,7 @@ enum SimplePreparedQueryOptions<S: EncodedQuadsStore> {
 }
 
 impl<S: EncodedQuadsStore> PreparedQuery for SimplePreparedQuery<S> {
-    fn exec(&self) -> Result<QueryResult> {
+    fn exec(&self) -> Result<QueryResult<'_>> {
         match &self.0 {
             SimplePreparedQueryOptions::Select {
                 plan,

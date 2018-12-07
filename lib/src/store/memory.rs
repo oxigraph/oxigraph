@@ -481,13 +481,15 @@ impl EncodedQuadsStore for MemoryStore {
 }
 
 impl MemoryStore {
-    fn graph_indexes(&self) -> Result<RwLockReadGuard<BTreeMap<EncodedTerm, MemoryGraphIndexes>>> {
+    fn graph_indexes(
+        &self,
+    ) -> Result<RwLockReadGuard<'_, BTreeMap<EncodedTerm, MemoryGraphIndexes>>> {
         Ok(self.graph_indexes.read().map_err(MutexPoisonError::from)?)
     }
 
     fn graph_indexes_mut(
         &self,
-    ) -> Result<RwLockWriteGuard<BTreeMap<EncodedTerm, MemoryGraphIndexes>>> {
+    ) -> Result<RwLockWriteGuard<'_, BTreeMap<EncodedTerm, MemoryGraphIndexes>>> {
         Ok(self.graph_indexes.write().map_err(MutexPoisonError::from)?)
     }
 }

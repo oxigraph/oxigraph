@@ -1,9 +1,6 @@
 ///! Integration tests based on [SPARQL 1.1 Test Cases](https://www.w3.org/2009/sparql/docs/tests/README.html)
 #[macro_use]
 extern crate lazy_static;
-extern crate reqwest;
-extern crate rudf;
-extern crate url;
 #[macro_use]
 extern crate failure;
 
@@ -353,7 +350,7 @@ mod rs {
     }
 }
 
-fn to_graph(result: QueryResult, with_order: bool) -> Result<MemoryGraph> {
+fn to_graph(result: QueryResult<'_>, with_order: bool) -> Result<MemoryGraph> {
     match result {
         QueryResult::Graph(graph) => graph.collect(),
         QueryResult::Boolean(value) => {
@@ -440,7 +437,7 @@ pub struct Test {
 }
 
 impl fmt::Display for Test {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.kind)?;
         for name in &self.name {
             write!(f, " named \"{}\"", name)?;
@@ -679,7 +676,7 @@ impl<'a> Iterator for TestManifest<'a> {
     }
 }
 
-pub struct RdfListIterator<'a, G: 'a + Graph> {
+pub struct RdfListIterator<'a, G: Graph> {
     graph: &'a G,
     current_node: Option<NamedOrBlankNode>,
 }

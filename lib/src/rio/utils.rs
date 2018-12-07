@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use std::char;
 use std::str::Chars;
 
-pub fn unescape_unicode_codepoints(input: &str) -> Cow<str> {
+pub fn unescape_unicode_codepoints(input: &str) -> Cow<'_, str> {
     if needs_unescape_unicode_codepoints(input) {
         UnescapeUnicodeCharIterator::new(input).collect()
     } else {

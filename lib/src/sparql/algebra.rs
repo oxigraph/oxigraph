@@ -37,7 +37,7 @@ impl Variable {
 }
 
 impl fmt::Display for Variable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Variable::Variable { name } => write!(f, "?{}", name),
             Variable::BlankNode { id } => write!(f, "_:{}", id.to_simple()),
@@ -67,7 +67,7 @@ pub enum NamedNodeOrVariable {
 }
 
 impl fmt::Display for NamedNodeOrVariable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             NamedNodeOrVariable::NamedNode(node) => write!(f, "{}", node),
             NamedNodeOrVariable::Variable(var) => write!(f, "{}", var),
@@ -94,7 +94,7 @@ pub enum TermOrVariable {
 }
 
 impl fmt::Display for TermOrVariable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TermOrVariable::Term(term) => write!(f, "{}", term),
             TermOrVariable::Variable(var) => write!(f, "{}", var),
@@ -242,7 +242,7 @@ impl TriplePattern {
 }
 
 impl fmt::Display for TriplePattern {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {} {}", self.subject, self.predicate, self.object)
     }
 }
@@ -260,7 +260,7 @@ pub enum PropertyPath {
 }
 
 impl fmt::Display for PropertyPath {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PropertyPath::PredicatePath(p) => write!(f, "link({})", p),
             PropertyPath::InversePath(p) => write!(f, "inv({})", p),
@@ -284,7 +284,7 @@ impl fmt::Display for PropertyPath {
 struct SparqlPropertyPath<'a>(&'a PropertyPath);
 
 impl<'a> fmt::Display for SparqlPropertyPath<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
             PropertyPath::PredicatePath(p) => write!(f, "{}", p),
             PropertyPath::InversePath(p) => write!(f, "^{}", SparqlPropertyPath(&*p)),
@@ -329,7 +329,7 @@ pub struct PathPattern {
 }
 
 impl fmt::Display for PathPattern {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Path({} {} {})", self.subject, self.path, self.object)
     }
 }
@@ -351,7 +351,7 @@ impl PathPattern {
 struct SparqlPathPattern<'a>(&'a PathPattern);
 
 impl<'a> fmt::Display for SparqlPathPattern<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{} {} {}",
@@ -369,7 +369,7 @@ pub enum TripleOrPathPattern {
 }
 
 impl<'a> fmt::Display for TripleOrPathPattern {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TripleOrPathPattern::Triple(tp) => write!(f, "{}", tp),
             TripleOrPathPattern::Path(ppp) => write!(f, "{}", ppp),
@@ -392,7 +392,7 @@ impl From<PathPattern> for TripleOrPathPattern {
 struct SparqlTripleOrPathPattern<'a>(&'a TripleOrPathPattern);
 
 impl<'a> fmt::Display for SparqlTripleOrPathPattern<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
             TripleOrPathPattern::Triple(tp) => write!(f, "{}", tp),
             TripleOrPathPattern::Path(ppp) => write!(f, "{}", SparqlPathPattern(&ppp)),
@@ -479,7 +479,7 @@ pub enum Expression {
 }
 
 impl fmt::Display for Expression {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Expression::Constant(t) => write!(f, "{}", t),
             Expression::Or(a, b) => write!(f, "({} || {})", a, b),
@@ -629,7 +629,7 @@ impl From<Variable> for Expression {
 struct SparqlExpression<'a>(&'a Expression);
 
 impl<'a> fmt::Display for SparqlExpression<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
             Expression::Constant(t) => write!(f, "{}", t),
             Expression::Or(a, b) => write!(
@@ -917,7 +917,7 @@ pub enum GraphPattern {
 }
 
 impl fmt::Display for GraphPattern {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             GraphPattern::BGP(p) => write!(
                 f,
@@ -1082,7 +1082,7 @@ fn adds_if_has_name<'a>(vars: &mut BTreeSet<&'a Variable>, var: &'a Variable) {
 struct SparqlGraphPattern<'a>(&'a GraphPattern);
 
 impl<'a> fmt::Display for SparqlGraphPattern<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
             GraphPattern::BGP(p) => {
                 for pattern in p {
@@ -1192,7 +1192,7 @@ struct SparqlGraphRootPattern<'a> {
 }
 
 impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut distinct = false;
         let mut reduced = false;
         let mut order = None;
@@ -1267,7 +1267,7 @@ impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
 pub struct GroupPattern(pub Vec<Expression>, pub Box<GraphPattern>);
 
 impl fmt::Display for GroupPattern {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "Group(({}), {})",
@@ -1304,7 +1304,7 @@ pub enum Aggregation {
 }
 
 impl fmt::Display for Aggregation {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Aggregation::Count(e, distinct) => {
                 if *distinct {
@@ -1388,7 +1388,7 @@ impl fmt::Display for Aggregation {
 struct SparqlAggregation<'a>(&'a Aggregation);
 
 impl<'a> fmt::Display for SparqlAggregation<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
             Aggregation::Count(e, distinct) => {
                 if *distinct {
@@ -1472,7 +1472,7 @@ pub enum OrderComparator {
 }
 
 impl fmt::Display for OrderComparator {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             OrderComparator::Asc(e) => write!(f, "ASC({})", e),
             OrderComparator::Desc(e) => write!(f, "DESC({})", e),
@@ -1489,7 +1489,7 @@ impl From<Expression> for OrderComparator {
 struct SparqlOrderComparator<'a>(&'a OrderComparator);
 
 impl<'a> fmt::Display for SparqlOrderComparator<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
             OrderComparator::Asc(e) => write!(f, "ASC({})", SparqlExpression(e)),
             OrderComparator::Desc(e) => write!(f, "DESC({})", SparqlExpression(e)),
@@ -1530,7 +1530,7 @@ impl Add for DatasetSpec {
 }
 
 impl fmt::Display for DatasetSpec {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for g in &self.default {
             write!(f, "FROM {} ", g)?;
         }
@@ -1567,7 +1567,7 @@ pub enum Query {
 }
 
 impl fmt::Display for Query {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Query::Select { dataset, algebra } => write!(
                 f,

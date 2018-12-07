@@ -24,7 +24,7 @@ mod grammar {
         );
     }
 
-    pub fn unescape_echars(input: &str) -> Cow<str> {
+    pub fn unescape_echars(input: &str) -> Cow<'_, str> {
         unescape_characters(input, &UNESCAPE_CHARACTERS, &UNESCAPE_REPLACEMENT)
     }
 
