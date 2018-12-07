@@ -1,15 +1,7 @@
 #![allow(clippy::zero_ptr, clippy::transmute_ptr_to_ptr)]
 
-#[macro_use]
-extern crate cpython;
-
 use cpython::exc::ValueError;
-use cpython::CompareOp;
-use cpython::PyErr;
-use cpython::PyResult;
-use cpython::Python;
-use cpython::PythonObject;
-use cpython::ToPyObject;
+use cpython::*;
 use rudf::model;
 use rudf::Error;
 use std::collections::hash_map::DefaultHasher;

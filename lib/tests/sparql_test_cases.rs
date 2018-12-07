@@ -1,9 +1,5 @@
 ///! Integration tests based on [SPARQL 1.1 Test Cases](https://www.w3.org/2009/sparql/docs/tests/README.html)
-#[macro_use]
-extern crate lazy_static;
-#[macro_use]
-extern crate failure;
-
+use failure::format_err;
 use reqwest::Client;
 use reqwest::Response;
 use rudf::model::vocab::rdf;
@@ -318,6 +314,7 @@ impl RDFClient {
 }
 
 mod rs {
+    use lazy_static::lazy_static;
     use rudf::model::NamedNode;
     use std::str::FromStr;
 
@@ -478,6 +475,7 @@ impl<'a> TestManifest<'a> {
 }
 
 pub mod mf {
+    use lazy_static::lazy_static;
     use rudf::model::NamedNode;
     use std::str::FromStr;
 
@@ -501,6 +499,7 @@ pub mod mf {
 }
 
 pub mod qt {
+    use lazy_static::lazy_static;
     use rudf::model::NamedNode;
     use std::str::FromStr;
 

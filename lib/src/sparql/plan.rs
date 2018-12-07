@@ -5,6 +5,7 @@ use crate::store::encoded::EncodedQuadsStore;
 use crate::store::numeric_encoder::EncodedTerm;
 use crate::store::numeric_encoder::ENCODED_DEFAULT_GRAPH;
 use crate::Result;
+use failure::format_err;
 use std::collections::BTreeSet;
 
 pub type EncodedTuple = Vec<Option<EncodedTerm>>;

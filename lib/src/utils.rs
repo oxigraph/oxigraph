@@ -1,4 +1,5 @@
 use failure::Backtrace;
+use failure::Fail;
 use std::sync::PoisonError;
 
 pub trait Escaper {

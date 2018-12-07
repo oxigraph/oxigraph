@@ -5,6 +5,7 @@ use crate::utils::MutexPoisonError;
 use crate::Result;
 use byteorder::ByteOrder;
 use byteorder::LittleEndian;
+use failure::format_err;
 use rocksdb::ColumnFamily;
 use rocksdb::DBRawIterator;
 use rocksdb::Options;

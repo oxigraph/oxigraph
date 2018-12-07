@@ -7,6 +7,7 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use chrono::DateTime;
 use chrono::FixedOffset;
 use chrono::NaiveDateTime;
+use failure::format_err;
 use ordered_float::OrderedFloat;
 use rust_decimal::Decimal;
 use std::collections::BTreeMap;

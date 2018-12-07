@@ -1,10 +1,5 @@
 ///! Integration tests based on [RDF 1.1 Test Cases](https://www.w3.org/TR/rdf11-testcases/)
-
-#[macro_use]
-extern crate lazy_static;
-#[macro_use]
-extern crate failure;
-
+use failure::format_err;
 use reqwest::Client;
 use reqwest::Response;
 use rudf::model::vocab::rdf;
@@ -261,6 +256,7 @@ impl<'a> TestManifest<'a> {
 }
 
 pub mod mf {
+    use lazy_static::lazy_static;
     use rudf::model::NamedNode;
     use std::str::FromStr;
 

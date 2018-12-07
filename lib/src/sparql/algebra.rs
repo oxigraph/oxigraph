@@ -3,6 +3,8 @@
 use crate::model::*;
 use crate::utils::Escaper;
 use crate::Result;
+use failure::format_err;
+use lazy_static::lazy_static;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fmt;

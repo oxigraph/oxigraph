@@ -37,13 +37,6 @@
     clippy::unicode_not_nfc
 )]
 
-#[macro_use]
-extern crate failure;
-#[macro_use]
-extern crate lazy_static;
-#[cfg(feature = "rocksdb")]
-extern crate rocksdb;
-
 pub mod model;
 pub mod rio;
 pub mod sparql;

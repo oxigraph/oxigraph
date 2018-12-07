@@ -4,6 +4,8 @@ use crate::model::vocab::rdf;
 use crate::model::Triple;
 use crate::model::*;
 use crate::Result;
+use failure::format_err;
+use lazy_static::lazy_static;
 use quick_xml::events::BytesEnd;
 use quick_xml::events::BytesStart;
 use quick_xml::events::BytesText;

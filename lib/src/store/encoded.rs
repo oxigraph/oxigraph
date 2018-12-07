@@ -1,6 +1,7 @@
 use crate::model::*;
 use crate::store::numeric_encoder::*;
 use crate::Result;
+use failure::format_err;
 use std::fmt;
 use std::iter::empty;
 use std::iter::once;

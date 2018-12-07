@@ -15,6 +15,7 @@ mod grammar {
     use crate::rio::utils::unescape_unicode_codepoints;
     use crate::sparql::algebra::*;
     use crate::utils::StaticSliceMap;
+    use lazy_static::lazy_static;
     use std::borrow::Cow;
     use std::collections::BTreeMap;
     use std::collections::HashMap;

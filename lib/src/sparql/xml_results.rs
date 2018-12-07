@@ -5,6 +5,7 @@ use crate::sparql::algebra::BindingsIterator;
 use crate::sparql::algebra::QueryResult;
 use crate::sparql::algebra::Variable;
 use crate::Result;
+use failure::format_err;
 use quick_xml::events::BytesDecl;
 use quick_xml::events::BytesEnd;
 use quick_xml::events::BytesStart;

@@ -12,6 +12,7 @@ mod grammar {
     use crate::model::*;
     use crate::rio::utils::unescape_characters;
     use crate::utils::StaticSliceMap;
+    use lazy_static::lazy_static;
     use std::borrow::Cow;
     use std::collections::BTreeMap;
     use std::collections::HashMap;

@@ -11,6 +11,7 @@ mod grammar {
 
     use crate::rio::utils::unescape_characters;
     use crate::utils::StaticSliceMap;
+    use lazy_static::lazy_static;
     use std::borrow::Cow;
 
     const UNESCAPE_CHARACTERS: [u8; 8] = [b't', b'b', b'n', b'r', b'f', b'"', b'\'', b'\\'];

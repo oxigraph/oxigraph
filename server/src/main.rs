@@ -1,20 +1,7 @@
-#[macro_use]
-extern crate failure;
-use gotham;
-#[macro_use]
-extern crate gotham_derive;
-use hyper;
-#[macro_use]
-extern crate lazy_static;
-use mime;
-#[macro_use]
-extern crate serde_derive;
-#[macro_use]
-extern crate tera;
-
 use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
+use failure::format_err;
 use futures::future;
 use futures::Future;
 use futures::Stream;
@@ -27,13 +14,18 @@ use gotham::router::builder::build_router;
 use gotham::router::builder::DefineSingleRoute;
 use gotham::router::builder::DrawRoutes;
 use gotham::router::Router;
+use gotham::start;
 use gotham::state::FromState;
 use gotham::state::State;
+use gotham_derive::*;
+use hyper;
 use hyper::header::CONTENT_TYPE;
 use hyper::Body;
 use hyper::HeaderMap;
 use hyper::Response;
 use hyper::StatusCode;
+use lazy_static::lazy_static;
+use mime;
 use mime::Mime;
 use rudf::model::Graph;
 use rudf::rio::ntriples::read_ntriples;
@@ -44,10 +36,12 @@ use rudf::sparql::SparqlDataset;
 use rudf::store::MemoryDataset;
 use rudf::store::MemoryGraph;
 use rudf::store::RocksDbDataset;
+use serde_derive::Deserialize;
 use std::fs::File;
 use std::panic::RefUnwindSafe;
 use std::str::FromStr;
 use std::sync::Arc;
+use tera::compile_templates;
 use tera::Context;
 use tera::Tera;
 use url::form_urlencoded;
@@ -112,7 +106,7 @@ fn main_with_dataset<D: SparqlDataset + Send + Sync + RefUnwindSafe + 'static>(
 
     let addr = matches.value_of("bind").unwrap_or("127.0.0.1:7878");
     println!("Listening for requests at http://{}", addr);
-    gotham::start(addr.to_string(), router(dataset, addr.to_string()));
+    start(addr.to_string(), router(dataset, addr.to_string()));
     Ok(())
 }
 

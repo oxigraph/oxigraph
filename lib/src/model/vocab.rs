@@ -3,6 +3,7 @@
 pub mod rdf {
     //! [RDF 1.1](https://www.w3.org/TR/rdf11-concepts/) vocabulary
     use crate::model::named_node::NamedNode;
+    use lazy_static::lazy_static;
     use std::str::FromStr;
 
     lazy_static! {
@@ -37,6 +38,7 @@ pub mod rdfs {
     //! [RDFS](https://www.w3.org/TR/rdf-schema/) vocabulary
 
     use crate::model::named_node::NamedNode;
+    use lazy_static::lazy_static;
     use std::str::FromStr;
 
     lazy_static! {
@@ -48,6 +50,7 @@ pub mod rdfs {
 pub mod xsd {
     //! `NamedNode`s for [RDF compatible XSD datatypes](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-compatible-xsd-types)
     use crate::model::named_node::NamedNode;
+    use lazy_static::lazy_static;
     use std::str::FromStr;
 
     lazy_static! {
