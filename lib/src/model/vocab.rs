@@ -7,28 +7,54 @@ pub mod rdf {
     use std::str::FromStr;
 
     lazy_static! {
+        /// The class of containers of alternatives.
+        pub static ref ALT: NamedNode =
+            NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#Alt").unwrap();
+        /// The class of unordered containers.
+        pub static ref BAG: NamedNode =
+            NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#Bag").unwrap();
+        /// The first item in the subject RDF list.
         pub static ref FIRST: NamedNode =
             NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#first").unwrap();
+        /// The class of HTML literal values.
         pub static ref HTML: NamedNode =
             NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#HTML").unwrap();
+        /// The class of language-tagged string literal values.
         pub static ref LANG_STRING: NamedNode =
             NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString").unwrap();
+        /// The class of RDF Lists.
+        pub static ref LIST: NamedNode =
+            NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#List").unwrap();
         pub static ref NIL: NamedNode =
             NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil").unwrap();
+        /// The object of the subject RDF statement.
         pub static ref OBJECT: NamedNode =
             NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#object").unwrap();
+        /// The predicate of the subject RDF statement.
         pub static ref PREDICATE: NamedNode =
             NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#predicate").unwrap();
+        /// The class of RDF properties.
+        pub static ref PROPERTY: NamedNode =
+            NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#Property").unwrap();
+        /// The rest of the subject RDF list after the first item.
         pub static ref REST: NamedNode =
             NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest").unwrap();
+        /// The class of ordered containers.
+        pub static ref SEQ: NamedNode =
+            NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#Seq").unwrap();
+        /// The class of RDF statements.
         pub static ref STATEMENT: NamedNode =
             NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement").unwrap();
+        /// The subject of the subject RDF statement.
         pub static ref SUBJECT: NamedNode =
             NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#subject").unwrap();
+        /// The subject is an instance of a class.
         pub static ref TYPE: NamedNode =
             NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
+        /// Idiomatic property used for structured values.
         pub static ref VALUE: NamedNode =
             NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#value").unwrap();
+        /// The class of XML literal values.
         pub static ref XML_LITERAL: NamedNode =
             NamedNode::from_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral").unwrap();
     }
@@ -36,14 +62,56 @@ pub mod rdf {
 
 pub mod rdfs {
     //! [RDFS](https://www.w3.org/TR/rdf-schema/) vocabulary
-
     use crate::model::named_node::NamedNode;
     use lazy_static::lazy_static;
     use std::str::FromStr;
 
     lazy_static! {
+        /// The class of classes.
+        pub static ref CLASS: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2000/01/rdf-schema#Class").unwrap();
+        /// A description of the subject resource.
         pub static ref COMMENT: NamedNode =
             NamedNode::from_str("http://www.w3.org/2000/01/rdf-schema#comment").unwrap();
+        /// The class of RDF containers.
+        pub static ref CONTAINER: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2000/01/rdf-schema#Container").unwrap();
+        /// The class of container membership properties, rdf:_1, rdf:_2, ..., all of which are sub-properties of 'member'.
+        pub static ref CONTAINER_MEMBERSHIP_PROPERTY: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2000/01/rdf-schema#ContainerMembershipProperty").unwrap();
+        /// The class of RDF datatypes.
+        pub static ref DATATYPE: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2000/01/rdf-schema#Datatype").unwrap();
+        /// A domain of the subject property.
+        pub static ref DOMAIN: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2000/01/rdf-schema#domain").unwrap();
+        /// The definition of the subject resource.
+        pub static ref IS_DEFINED_BY: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2000/01/rdf-schema#isDefinedBy").unwrap();
+        /// A human-readable name for the subject.
+        pub static ref LABEL: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2000/01/rdf-schema#label").unwrap();
+        /// The class of literal values, e.g. textual strings and integers.
+        pub static ref LITERAL: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2000/01/rdf-schema#Literal").unwrap();
+        /// A member of the subject resource.
+        pub static ref MEMBER: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2000/01/rdf-schema#member").unwrap();
+        /// A range of the subject property.
+        pub static ref RANGE: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2000/01/rdf-schema#range").unwrap();
+        /// The class resource, everything.
+        pub static ref RESOURCE: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2000/01/rdf-schema#Resource").unwrap();
+        /// Further information about the subject resource.
+        pub static ref SEE_ALSO: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2000/01/rdf-schema#seeAlso").unwrap();
+        /// The subject is a subclass of a class.
+        pub static ref SUB_CLASS_OF: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2000/01/rdf-schema#subClassOf").unwrap();
+        /// The subject is a subproperty of a property.
+        pub static ref SUB_PROPERTY_OF: NamedNode =
+            NamedNode::from_str("http://www.w3.org/2000/01/rdf-schema#subPropertyOf").unwrap();
     }
 }
 
