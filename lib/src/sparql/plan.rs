@@ -206,14 +206,15 @@ pub enum PlanExpression {
     StrStarts(Box<PlanExpression>, Box<PlanExpression>),
     StrEnds(Box<PlanExpression>, Box<PlanExpression>),
     StrBefore(Box<PlanExpression>, Box<PlanExpression>),
-    StrAfter(Box<PlanExpression>, Box<PlanExpression>),
+    StrAfter(Box<PlanExpression>, Box<PlanExpression>),*/
     Year(Box<PlanExpression>),
     Month(Box<PlanExpression>),
     Day(Box<PlanExpression>),
     Hours(Box<PlanExpression>),
     Minutes(Box<PlanExpression>),
     Seconds(Box<PlanExpression>),
-    Timezone(Box<PlanExpression>),
+    /*Timezone(Box<PlanExpression>),
+    Tz(Box<PlanExpression>),
     Now(),*/
     UUID(),
     StrUUID(),
@@ -288,6 +289,12 @@ impl PlanExpression {
             | PlanExpression::Datatype(e)
             | PlanExpression::IRI(e)
             | PlanExpression::BNode(Some(e))
+            | PlanExpression::Year(e)
+            | PlanExpression::Month(e)
+            | PlanExpression::Day(e)
+            | PlanExpression::Hours(e)
+            | PlanExpression::Minutes(e)
+            | PlanExpression::Seconds(e)
             | PlanExpression::IsIRI(e)
             | PlanExpression::IsBlank(e)
             | PlanExpression::IsLiteral(e)
@@ -630,6 +637,24 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                 Some(e) => Some(Box::new(self.build_for_expression(e, variables)?)),
                 None => None,
             }),
+            Expression::YearFunctionCall(e) => {
+                PlanExpression::Year(Box::new(self.build_for_expression(e, variables)?))
+            }
+            Expression::MonthFunctionCall(e) => {
+                PlanExpression::Month(Box::new(self.build_for_expression(e, variables)?))
+            }
+            Expression::DayFunctionCall(e) => {
+                PlanExpression::Day(Box::new(self.build_for_expression(e, variables)?))
+            }
+            Expression::HoursFunctionCall(e) => {
+                PlanExpression::Hours(Box::new(self.build_for_expression(e, variables)?))
+            }
+            Expression::MinutesFunctionCall(e) => {
+                PlanExpression::Minutes(Box::new(self.build_for_expression(e, variables)?))
+            }
+            Expression::SecondsFunctionCall(e) => {
+                PlanExpression::Seconds(Box::new(self.build_for_expression(e, variables)?))
+            }
             Expression::UUIDFunctionCall() => PlanExpression::UUID(),
             Expression::StrUUIDFunctionCall() => PlanExpression::StrUUID(),
             Expression::CoalesceFunctionCall(l) => {

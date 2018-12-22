@@ -483,6 +483,42 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 },
                 None => Some(BlankNode::default().into()),
             },
+            PlanExpression::Year(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::NaiveDate(date) => Some(date.year().into()),
+                EncodedTerm::DateTime(date_time) => Some(date_time.year().into()),
+                EncodedTerm::NaiveDateTime(date_time) => Some(date_time.year().into()),
+                _ => None
+            },
+            PlanExpression::Month(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::NaiveDate(date) => Some(date.month().into()),
+                EncodedTerm::DateTime(date_time) => Some(date_time.month().into()),
+                EncodedTerm::NaiveDateTime(date_time) => Some(date_time.month().into()),
+                _ => None
+            },
+            PlanExpression::Day(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::NaiveDate(date) => Some(date.day().into()),
+                EncodedTerm::DateTime(date_time) => Some(date_time.day().into()),
+                EncodedTerm::NaiveDateTime(date_time) => Some(date_time.day().into()),
+                _ => None
+            },
+            PlanExpression::Hours(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::NaiveTime(time) => Some(time.hour().into()),
+                EncodedTerm::DateTime(date_time) => Some(date_time.hour().into()),
+                EncodedTerm::NaiveDateTime(date_time) => Some(date_time.hour().into()),
+                _ => None
+            },
+            PlanExpression::Minutes(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::NaiveTime(time) => Some(time.minute().into()),
+                EncodedTerm::DateTime(date_time) => Some(date_time.minute().into()),
+                EncodedTerm::NaiveDateTime(date_time) => Some(date_time.minute().into()),
+                _ => None
+            },
+            PlanExpression::Seconds(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::NaiveTime(time) => Some(time.second().into()),
+                EncodedTerm::DateTime(date_time) => Some(date_time.second().into()),
+                EncodedTerm::NaiveDateTime(date_time) => Some(date_time.second().into()),
+                _ => None
+            },
             PlanExpression::UUID() => Some(EncodedTerm::NamedNode {
                 iri_id: self
                     .store
