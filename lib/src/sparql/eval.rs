@@ -407,25 +407,25 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
             PlanExpression::Add(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
                 NumericBinaryOperands::Float(v1, v2) => (v1 + v2).into(),
                 NumericBinaryOperands::Double(v1, v2) => (v1 + v2).into(),
-                NumericBinaryOperands::Integer(v1, v2) => (v1 + v2).into(),
+                NumericBinaryOperands::Integer(v1, v2) => v1.checked_add(v2)?.into(),
                 NumericBinaryOperands::Decimal(v1, v2) => (v1 + v2).into(),
             }),
             PlanExpression::Sub(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
                 NumericBinaryOperands::Float(v1, v2) => (v1 - v2).into(),
                 NumericBinaryOperands::Double(v1, v2) => (v1 - v2).into(),
-                NumericBinaryOperands::Integer(v1, v2) => (v1 - v2).into(),
+                NumericBinaryOperands::Integer(v1, v2) => v1.checked_sub(v2)?.into(),
                 NumericBinaryOperands::Decimal(v1, v2) => (v1 - v2).into(),
             }),
             PlanExpression::Mul(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
                 NumericBinaryOperands::Float(v1, v2) => (v1 * v2).into(),
                 NumericBinaryOperands::Double(v1, v2) => (v1 * v2).into(),
-                NumericBinaryOperands::Integer(v1, v2) => (v1 * v2).into(),
+                NumericBinaryOperands::Integer(v1, v2) => v1.checked_mul(v2)?.into(),
                 NumericBinaryOperands::Decimal(v1, v2) => (v1 * v2).into(),
             }),
             PlanExpression::Div(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
                 NumericBinaryOperands::Float(v1, v2) => (v1 / v2).into(),
                 NumericBinaryOperands::Double(v1, v2) => (v1 / v2).into(),
-                NumericBinaryOperands::Integer(v1, v2) => (v1 / v2).into(),
+                NumericBinaryOperands::Integer(v1, v2) => v1.checked_div(v2)?.into(),
                 NumericBinaryOperands::Decimal(v1, v2) => (v1 / v2).into(),
             }),
             PlanExpression::UnaryPlus(e) => match self.eval_expression(e, tuple)? {
