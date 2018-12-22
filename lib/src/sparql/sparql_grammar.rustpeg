@@ -786,7 +786,8 @@ BuiltInCall -> Expression =
 	"HOURS"i _ '(' _ e:Expression _ ')' { Expression::HoursFunctionCall(Box::new(e)) } /
 	"MINUTES"i _ '(' _ e:Expression _ ')' { Expression::MinutesFunctionCall(Box::new(e)) } /
 	"SECONDS"i _ '(' _ e:Expression _ ')' { Expression::SecondsFunctionCall(Box::new(e)) } /
-    ("TIMEZONE"i / "TZ"i) _ '(' _ e:Expression _ ')' { Expression::TimezoneFunctionCall(Box::new(e)) } /
+    "TIMEZONE"i _ '(' _ e:Expression _ ')' { Expression::TimezoneFunctionCall(Box::new(e)) } /
+    "TZ"i _ '(' _ e:Expression _ ')' { Expression::TzFunctionCall(Box::new(e)) } /
 	"NOW"i _ NIL { Expression::NowFunctionCall() } /
 	"UUID"i _ NIL { Expression::UUIDFunctionCall() }/
 	"STRUUID"i _ NIL { Expression::StrUUIDFunctionCall() } /
