@@ -7,6 +7,8 @@ use byteorder::ByteOrder;
 use byteorder::LittleEndian;
 use failure::format_err;
 use rocksdb::ColumnFamily;
+use rocksdb::DBCompactionStyle;
+use rocksdb::DBCompressionType;
 use rocksdb::DBRawIterator;
 use rocksdb::Options;
 use rocksdb::WriteBatch;
@@ -63,6 +65,8 @@ impl RocksDbStore {
         let mut options = Options::default();
         options.create_if_missing(true);
         options.create_missing_column_families(true);
+        options.set_compaction_style(DBCompactionStyle::Universal);
+        options.set_compression_type(DBCompressionType::Lz4hc);
 
         let db = DB::open_cf(&options, path, &COLUMN_FAMILIES)?;
         let id2str_cf = SendColumnFamily(get_cf(&db, STR2ID_CF)?);
@@ -552,7 +556,6 @@ fn to_bytes(int: u64) -> [u8; 8] {
 // TODO: very bad but I believe it is fine
 #[derive(Clone, Copy)]
 struct SendColumnFamily(ColumnFamily);
-unsafe impl Send for SendColumnFamily {}
 unsafe impl Sync for SendColumnFamily {}
 
 impl Deref for SendColumnFamily {
