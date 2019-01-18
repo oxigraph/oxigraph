@@ -1056,7 +1056,7 @@ fn put_value(position: usize, value: EncodedTerm, tuple: &mut EncodedTuple) {
 }
 
 fn bind_variables_in_set(binding: &[Option<EncodedTerm>], set: &[usize]) -> Vec<usize> {
-    set.into_iter()
+    set.iter()
         .cloned()
         .filter(|key| *key < binding.len() && binding[*key].is_some())
         .collect()
@@ -1073,7 +1073,7 @@ fn unbind_variables(binding: &mut [Option<EncodedTerm>], variables: &[usize]) {
 fn combine_tuples(a: &[Option<EncodedTerm>], b: &[Option<EncodedTerm>]) -> Option<EncodedTuple> {
     if a.len() < b.len() {
         let mut result = b.to_owned();
-        for (key, a_value) in a.into_iter().enumerate() {
+        for (key, a_value) in a.iter().enumerate() {
             if let Some(a_value) = a_value {
                 match b[key] {
                     Some(ref b_value) => {
@@ -1088,7 +1088,7 @@ fn combine_tuples(a: &[Option<EncodedTerm>], b: &[Option<EncodedTerm>]) -> Optio
         Some(result)
     } else {
         let mut result = a.to_owned();
-        for (key, b_value) in b.into_iter().enumerate() {
+        for (key, b_value) in b.iter().enumerate() {
             if let Some(b_value) = b_value {
                 match a[key] {
                     Some(ref a_value) => {

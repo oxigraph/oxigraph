@@ -78,7 +78,7 @@ impl PlanNode {
             PlanNode::Init => (),
             PlanNode::StaticBindings { tuples } => {
                 for tuple in tuples {
-                    for (key, value) in tuple.into_iter().enumerate() {
+                    for (key, value) in tuple.iter().enumerate() {
                         if value.is_some() {
                             set.insert(key);
                         }
@@ -487,7 +487,7 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
             },
             GraphPattern::OrderBy(l, o) => {
                 let by: Result<Vec<_>> = o
-                    .into_iter()
+                    .iter()
                     .map(|comp| match comp {
                         OrderComparator::Asc(e) => {
                             Ok(Comparator::Asc(self.build_for_expression(e, variables)?))
@@ -828,7 +828,7 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
     ) -> Result<Vec<TripleTemplate>> {
         let mut bnodes = Vec::default();
         template
-            .into_iter()
+            .iter()
             .map(|triple| {
                 Ok(TripleTemplate {
                     subject: self.template_value_from_term_or_variable(

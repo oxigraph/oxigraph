@@ -300,13 +300,13 @@ impl From<f64> for EncodedTerm {
 
 impl From<i32> for EncodedTerm {
     fn from(value: i32) -> Self {
-        EncodedTerm::IntegerLiteral(value as i128)
+        EncodedTerm::IntegerLiteral(value.into())
     }
 }
 
 impl From<u32> for EncodedTerm {
     fn from(value: u32) -> Self {
-        EncodedTerm::IntegerLiteral(value as i128)
+        EncodedTerm::IntegerLiteral(value.into())
     }
 }
 
