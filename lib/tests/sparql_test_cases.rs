@@ -591,7 +591,7 @@ impl<'a> Iterator for TestManifest<'a> {
                         return Some(Err(format_err!(
                             "action not found for test {}",
                             test_subject
-                        )))
+                        )));
                     }
                 };
                 let result = match self

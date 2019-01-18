@@ -388,7 +388,7 @@ impl<'a> Iterator for TestManifest<'a> {
                                 return Some(Err(format_err!(
                                     "Invalid tests list. Got term {}",
                                     term
-                                )))
+                                )));
                             }
                             None => (),
                         }

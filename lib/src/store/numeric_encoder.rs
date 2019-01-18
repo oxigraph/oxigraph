@@ -427,7 +427,8 @@ impl<R: Read> TermReader for R {
                 NaiveTime::from_num_seconds_from_midnight_opt(
                     self.read_u32::<LittleEndian>()?,
                     self.read_u32::<LittleEndian>()?,
-                ).ok_or_else(|| format_err!("Invalid time serialization"))?,
+                )
+                .ok_or_else(|| format_err!("Invalid time serialization"))?,
             )),
             TYPE_DATE_TIME_LITERAL => Ok(EncodedTerm::DateTime(DateTime::from_utc(
                 NaiveDateTime::from_timestamp_opt(

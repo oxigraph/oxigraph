@@ -104,7 +104,7 @@ pub fn write_xml_results<W: Write>(results: QueryResult<'_>, sink: W) -> Result<
         QueryResult::Graph(_) => {
             return Err(format_err!(
                 "Graphs could not be formatted to SPARQL query results XML format"
-            ))
+            ));
         }
     }
     Ok(writer.into_inner())
@@ -310,7 +310,7 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
                                 None => {
                                     return Some(Err(format_err!(
                                         "No name attribute found for the <binding> tag"
-                                    )))
+                                    )));
                                 }
                             }
                             state = State::Binding;
@@ -386,7 +386,7 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
                             return Some(Err(format_err!(
                                 "Unexpected textual value found: {}",
                                 self.reader.decode(&data)
-                            )))
+                            )));
                         }
                     },
                     Err(error) => return Some(Err(error.into())),
@@ -403,7 +403,7 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
                                 return Some(Err(format_err!(
                                     "No variable found for variable {}",
                                     self.reader.decode(&var)
-                                )))
+                                )));
                             }
                             _ => return Some(Err(format_err!("No name found for <binding> tag"))),
                         }

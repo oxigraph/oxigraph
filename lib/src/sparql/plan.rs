@@ -720,10 +720,10 @@ impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
                         "integer",
                     )?
                 } else if *name == *xsd::DATE {
-                self.build_cast(parameters, PlanExpression::DateCast, variables, "date")?
-            } else if *name == *xsd::TIME {
-                self.build_cast(parameters, PlanExpression::TimeCast, variables, "time")?
-            } else if *name == *xsd::DATE_TIME {
+                    self.build_cast(parameters, PlanExpression::DateCast, variables, "date")?
+                } else if *name == *xsd::TIME {
+                    self.build_cast(parameters, PlanExpression::TimeCast, variables, "time")?
+                } else if *name == *xsd::DATE_TIME {
                     self.build_cast(
                         parameters,
                         PlanExpression::DateTimeCast,

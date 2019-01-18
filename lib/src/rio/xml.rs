@@ -292,7 +292,7 @@ impl<R: BufRead> RdfXmlIterator<R> {
             None => {
                 return Err(format_err!(
                     "No state in the stack: the XML is not balanced"
-                ))
+                ));
             }
         };
 

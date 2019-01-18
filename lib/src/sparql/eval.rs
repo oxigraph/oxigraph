@@ -487,37 +487,37 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 EncodedTerm::NaiveDate(date) => Some(date.year().into()),
                 EncodedTerm::DateTime(date_time) => Some(date_time.year().into()),
                 EncodedTerm::NaiveDateTime(date_time) => Some(date_time.year().into()),
-                _ => None
+                _ => None,
             },
             PlanExpression::Month(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::NaiveDate(date) => Some(date.month().into()),
                 EncodedTerm::DateTime(date_time) => Some(date_time.month().into()),
                 EncodedTerm::NaiveDateTime(date_time) => Some(date_time.month().into()),
-                _ => None
+                _ => None,
             },
             PlanExpression::Day(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::NaiveDate(date) => Some(date.day().into()),
                 EncodedTerm::DateTime(date_time) => Some(date_time.day().into()),
                 EncodedTerm::NaiveDateTime(date_time) => Some(date_time.day().into()),
-                _ => None
+                _ => None,
             },
             PlanExpression::Hours(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::NaiveTime(time) => Some(time.hour().into()),
                 EncodedTerm::DateTime(date_time) => Some(date_time.hour().into()),
                 EncodedTerm::NaiveDateTime(date_time) => Some(date_time.hour().into()),
-                _ => None
+                _ => None,
             },
             PlanExpression::Minutes(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::NaiveTime(time) => Some(time.minute().into()),
                 EncodedTerm::DateTime(date_time) => Some(date_time.minute().into()),
                 EncodedTerm::NaiveDateTime(date_time) => Some(date_time.minute().into()),
-                _ => None
+                _ => None,
             },
             PlanExpression::Seconds(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::NaiveTime(time) => Some(time.second().into()),
                 EncodedTerm::DateTime(date_time) => Some(date_time.second().into()),
                 EncodedTerm::NaiveDateTime(date_time) => Some(date_time.second().into()),
-                _ => None
+                _ => None,
             },
             PlanExpression::UUID() => Some(EncodedTerm::NamedNode {
                 iri_id: self
@@ -963,26 +963,34 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&b),
                 _ => None,
             },
-            EncodedTerm::NaiveDate(a) => if let EncodedTerm::NaiveDate(ref b) = b {
-                a.partial_cmp(b)
-            } else {
-                None
-            },
-            EncodedTerm::NaiveTime(a) => if let EncodedTerm::NaiveTime(ref b) = b {
-                a.partial_cmp(b)
-            } else {
-                None
-            },
-            EncodedTerm::DateTime(a) => if let EncodedTerm::DateTime(ref b) = b {
-                a.partial_cmp(b)
-            } else {
-                None
-            },
-            EncodedTerm::NaiveDateTime(a) => if let EncodedTerm::NaiveDateTime(ref b) = b {
-                a.partial_cmp(b)
-            } else {
-                None
-            },
+            EncodedTerm::NaiveDate(a) => {
+                if let EncodedTerm::NaiveDate(ref b) = b {
+                    a.partial_cmp(b)
+                } else {
+                    None
+                }
+            }
+            EncodedTerm::NaiveTime(a) => {
+                if let EncodedTerm::NaiveTime(ref b) = b {
+                    a.partial_cmp(b)
+                } else {
+                    None
+                }
+            }
+            EncodedTerm::DateTime(a) => {
+                if let EncodedTerm::DateTime(ref b) = b {
+                    a.partial_cmp(b)
+                } else {
+                    None
+                }
+            }
+            EncodedTerm::NaiveDateTime(a) => {
+                if let EncodedTerm::NaiveDateTime(ref b) = b {
+                    a.partial_cmp(b)
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
