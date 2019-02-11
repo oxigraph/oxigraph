@@ -11,6 +11,7 @@ use rust_decimal::Decimal;
 use std::collections::BTreeMap;
 use std::io::Read;
 use std::io::Write;
+use std::ops::Deref;
 use std::str;
 use std::str::FromStr;
 use std::sync::RwLock;
@@ -30,8 +31,10 @@ const XSD_DATE_ID: u64 = 9;
 const XSD_TIME_ID: u64 = 10;
 
 pub trait StringStore {
+    type StringType: Deref<Target = str> + ToString + Into<String>;
+
     fn insert_str(&self, value: &str) -> Result<u64>;
-    fn get_str(&self, id: u64) -> Result<String>;
+    fn get_str(&self, id: u64) -> Result<Self::StringType>;
     fn get_url(&self, id: u64) -> Result<Url>;
 
     /// Should be called when the bytes store is created
@@ -58,11 +61,13 @@ pub trait StringStore {
 }
 
 impl<'a, S: StringStore> StringStore for &'a S {
+    type StringType = S::StringType;
+
     fn insert_str(&self, value: &str) -> Result<u64> {
         (*self).insert_str(value)
     }
 
-    fn get_str(&self, id: u64) -> Result<String> {
+    fn get_str(&self, id: u64) -> Result<S::StringType> {
         (*self).get_str(id)
     }
 
@@ -88,6 +93,8 @@ impl Default for MemoryStringStore {
 }
 
 impl StringStore for MemoryStringStore {
+    type StringType = String;
+
     fn insert_str(&self, value: &str) -> Result<u64> {
         let mut id2str = self.id2str.write().map_err(MutexPoisonError::from)?;
         let mut str2id = self.str2id.write().map_err(MutexPoisonError::from)?;
@@ -728,7 +735,7 @@ impl<S: StringStore> Encoder<S> {
             )
             .into()),
             EncodedTerm::StringLiteral { value_id } => {
-                Ok(Literal::from(self.string_store.get_str(value_id)?).into())
+                Ok(Literal::from(self.string_store.get_str(value_id)?.into()).into())
             }
             EncodedTerm::BooleanLiteral(value) => Ok(Literal::from(value).into()),
             EncodedTerm::FloatLiteral(value) => Ok(Literal::from(*value).into()),

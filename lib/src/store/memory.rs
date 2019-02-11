@@ -68,6 +68,8 @@ struct MemoryGraphIndexes {
 }
 
 impl StringStore for MemoryStore {
+    type StringType = String;
+
     fn insert_str(&self, value: &str) -> Result<u64> {
         self.string_store.insert_str(value)
     }

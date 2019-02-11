@@ -10,6 +10,7 @@ use rocksdb::ColumnFamily;
 use rocksdb::DBCompactionStyle;
 use rocksdb::DBCompressionType;
 use rocksdb::DBRawIterator;
+use rocksdb::DBVector;
 use rocksdb::Options;
 use rocksdb::WriteBatch;
 use rocksdb::DB;
@@ -90,6 +91,8 @@ impl RocksDbStore {
 }
 
 impl StringStore for RocksDbStore {
+    type StringType = RocksString;
+
     fn insert_str(&self, value: &str) -> Result<u64> {
         let value = value.as_bytes();
         Ok(if let Some(id) = self.db.get_cf(*self.str2id_cf, value)? {
@@ -109,22 +112,17 @@ impl StringStore for RocksDbStore {
         })
     }
 
-    fn get_str(&self, id: u64) -> Result<String> {
+    fn get_str(&self, id: u64) -> Result<RocksString> {
         let value = self.db.get_cf(*self.id2str_cf, &to_bytes(id))?;
         if let Some(value) = value {
-            Ok(str::from_utf8(&value)?.to_owned())
+            Ok(RocksString { vec: value })
         } else {
             Err(format_err!("value not found in the dictionary"))
         }
     }
 
     fn get_url(&self, id: u64) -> Result<Url> {
-        let value = self.db.get_cf(*self.id2str_cf, &to_bytes(id))?;
-        if let Some(value) = value {
-            Ok(Url::from_str(str::from_utf8(&value)?)?)
-        } else {
-            Err(format_err!("value not found in the dictionary"))
-        }
+        Ok(Url::from_str(&self.get_str(id)?)?)
     }
 }
 
@@ -551,6 +549,30 @@ fn to_bytes(int: u64) -> [u8; 8] {
     let mut buf = [0 as u8; 8];
     LittleEndian::write_u64(&mut buf, int);
     buf
+}
+
+pub struct RocksString {
+    vec: DBVector,
+}
+
+impl Deref for RocksString {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        unsafe { str::from_utf8_unchecked(&self.vec) }
+    }
+}
+
+impl ToString for RocksString {
+    fn to_string(&self) -> String {
+        self.deref().to_owned()
+    }
+}
+
+impl From<RocksString> for String {
+    fn from(val: RocksString) -> String {
+        val.deref().to_owned()
+    }
 }
 
 // TODO: very bad but I believe it is fine

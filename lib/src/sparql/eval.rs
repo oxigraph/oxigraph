@@ -775,7 +775,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
 
     fn to_simple_string(&self, term: EncodedTerm) -> Option<String> {
         if let EncodedTerm::SimpleLiteral { value_id } = term {
-            self.store.get_str(value_id).ok()
+            Some(self.store.get_str(value_id).ok()?.into())
         } else {
             None
         }
@@ -793,7 +793,9 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
         match term {
             EncodedTerm::SimpleLiteral { value_id }
             | EncodedTerm::StringLiteral { value_id }
-            | EncodedTerm::LangStringLiteral { value_id, .. } => self.store.get_str(value_id).ok(),
+            | EncodedTerm::LangStringLiteral { value_id, .. } => {
+                Some(self.store.get_str(value_id).ok()?.into())
+            }
             _ => None,
         }
     }
