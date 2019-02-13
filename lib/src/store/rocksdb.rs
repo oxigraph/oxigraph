@@ -8,7 +8,6 @@ use byteorder::LittleEndian;
 use failure::format_err;
 use rocksdb::ColumnFamily;
 use rocksdb::DBCompactionStyle;
-use rocksdb::DBCompressionType;
 use rocksdb::DBRawIterator;
 use rocksdb::DBVector;
 use rocksdb::Options;
@@ -67,7 +66,6 @@ impl RocksDbStore {
         options.create_if_missing(true);
         options.create_missing_column_families(true);
         options.set_compaction_style(DBCompactionStyle::Universal);
-        options.set_compression_type(DBCompressionType::Lz4hc);
 
         let db = DB::open_cf(&options, path, &COLUMN_FAMILIES)?;
         let id2str_cf = SendColumnFamily(get_cf(&db, STR2ID_CF)?);
