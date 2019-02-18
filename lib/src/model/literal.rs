@@ -40,7 +40,6 @@ pub struct Literal(LiteralContent);
 
 #[derive(PartialEq, Eq, Ord, PartialOrd, Debug, Clone, Hash)]
 enum LiteralContent {
-    SimpleLiteral(String),
     String(String),
     LanguageTaggedString { value: String, language: String },
     Boolean(bool),
@@ -58,7 +57,7 @@ enum LiteralContent {
 impl Literal {
     /// Builds a RDF [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal)
     pub fn new_simple_literal(value: impl Into<String>) -> Self {
-        Literal(LiteralContent::SimpleLiteral(value.into()))
+        Literal(LiteralContent::String(value.into()))
     }
 
     /// Builds a RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) with a [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri)
@@ -143,8 +142,7 @@ impl Literal {
     /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form)
     pub fn value(&self) -> Cow<'_, str> {
         match self.0 {
-            LiteralContent::SimpleLiteral(ref value)
-            | LiteralContent::String(ref value)
+            LiteralContent::String(ref value)
             | LiteralContent::LanguageTaggedString { ref value, .. }
             | LiteralContent::TypedLiteral { ref value, .. } => Cow::Borrowed(value),
             LiteralContent::Boolean(value) => Cow::Owned(value.to_string()),
@@ -174,7 +172,7 @@ impl Literal {
     /// The datatype of [simple literals](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal) is [xsd:string](http://www.w3.org/2001/XMLSchema#string).
     pub fn datatype(&self) -> &NamedNode {
         match self.0 {
-            LiteralContent::SimpleLiteral(_) | LiteralContent::String(_) => &xsd::STRING,
+            LiteralContent::String(_) => &xsd::STRING,
             LiteralContent::LanguageTaggedString { .. } => &rdf::LANG_STRING,
             LiteralContent::Boolean(_) => &xsd::BOOLEAN,
             LiteralContent::Float(_) => &xsd::FLOAT,
@@ -191,10 +189,10 @@ impl Literal {
     /// Checks if it could be considered as an RDF 1.0 [plain literal](https://www.w3.org/TR/rdf-concepts/#dfn-plain-literal).
     ///
     /// It returns true if the literal is a [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
-    /// or have been created by `Literal::new_simple_literal`.
+    /// or has the datatype [xsd:string](http://www.w3.org/2001/XMLSchema#string).
     pub fn is_plain(&self) -> bool {
         match self.0 {
-            LiteralContent::SimpleLiteral(_) | LiteralContent::LanguageTaggedString { .. } => true,
+            LiteralContent::String(_) | LiteralContent::LanguageTaggedString { .. } => true,
             _ => false,
         }
     }
@@ -282,9 +280,7 @@ impl Literal {
     /// Returns the [effective boolean value](https://www.w3.org/TR/sparql11-query/#ebv) of the literal if it exists
     pub fn to_bool(&self) -> Option<bool> {
         match self.0 {
-            LiteralContent::SimpleLiteral(ref value) | LiteralContent::String(ref value) => {
-                Some(!value.is_empty())
-            }
+            LiteralContent::String(ref value) => Some(!value.is_empty()),
             LiteralContent::Boolean(value) => Some(value),
             LiteralContent::Float(value) => Some(!value.is_zero()),
             LiteralContent::Double(value) => Some(!value.is_zero()),
@@ -302,9 +298,7 @@ impl Literal {
             LiteralContent::Integer(value) => value.to_f32(),
             LiteralContent::Decimal(value) => value.to_f32(),
             LiteralContent::Boolean(value) => Some(if value { 1. } else { 0. }),
-            LiteralContent::SimpleLiteral(ref value) | LiteralContent::String(ref value) => {
-                value.parse().ok()
-            }
+            LiteralContent::String(ref value) => value.parse().ok(),
             _ => None,
         }
     }
@@ -317,9 +311,7 @@ impl Literal {
             LiteralContent::Integer(value) => value.to_f64(),
             LiteralContent::Decimal(value) => value.to_f64(),
             LiteralContent::Boolean(value) => Some(if value { 1. } else { 0. }),
-            LiteralContent::SimpleLiteral(ref value) | LiteralContent::String(ref value) => {
-                value.parse().ok()
-            }
+            LiteralContent::String(ref value) => value.parse().ok(),
             _ => None,
         }
     }
@@ -332,9 +324,7 @@ impl Literal {
             LiteralContent::Integer(value) => value.to_i128(),
             LiteralContent::Decimal(value) => value.to_i128(),
             LiteralContent::Boolean(value) => Some(if value { 1 } else { 0 }),
-            LiteralContent::SimpleLiteral(ref value) | LiteralContent::String(ref value) => {
-                value.parse().ok()
-            }
+            LiteralContent::String(ref value) => value.parse().ok(),
             _ => None,
         }
     }
@@ -351,9 +341,7 @@ impl Literal {
             } else {
                 Decimal::zero()
             }),
-            LiteralContent::SimpleLiteral(ref value) | LiteralContent::String(ref value) => {
-                value.parse().ok()
-            }
+            LiteralContent::String(ref value) => value.parse().ok(),
             _ => None,
         }
     }

@@ -128,7 +128,6 @@ impl StringStore for MemoryStringStore {
 const TYPE_DEFAULT_GRAPH_ID: u8 = 0;
 const TYPE_NAMED_NODE_ID: u8 = 1;
 const TYPE_BLANK_NODE_ID: u8 = 2;
-const TYPE_SIMPLE_LITERAL_ID: u8 = 3;
 const TYPE_LANG_STRING_LITERAL_ID: u8 = 4;
 const TYPE_TYPED_LITERAL_ID: u8 = 5;
 const TYPE_STRING_LITERAL: u8 = 6;
@@ -144,9 +143,6 @@ const TYPE_NAIVE_DATE_LITERAL: u8 = 15;
 const TYPE_NAIVE_TIME_LITERAL: u8 = 16;
 
 pub static ENCODED_DEFAULT_GRAPH: EncodedTerm = EncodedTerm::DefaultGraph {};
-pub static ENCODED_EMPTY_SIMPLE_LITERAL: EncodedTerm = EncodedTerm::SimpleLiteral {
-    value_id: EMPTY_STRING_ID,
-};
 pub static ENCODED_EMPTY_STRING_LITERAL: EncodedTerm = EncodedTerm::StringLiteral {
     value_id: EMPTY_STRING_ID,
 };
@@ -186,10 +182,9 @@ pub enum EncodedTerm {
     DefaultGraph {},
     NamedNode { iri_id: u64 },
     BlankNode(Uuid),
-    SimpleLiteral { value_id: u64 },
+    StringLiteral { value_id: u64 },
     LangStringLiteral { value_id: u64, language_id: u64 },
     TypedLiteral { value_id: u64, datatype_id: u64 },
-    StringLiteral { value_id: u64 },
     BooleanLiteral(bool),
     FloatLiteral(OrderedFloat<f32>),
     DoubleLiteral(OrderedFloat<f64>),
@@ -218,10 +213,9 @@ impl EncodedTerm {
 
     pub fn is_literal(&self) -> bool {
         match self {
-            EncodedTerm::SimpleLiteral { .. }
+            EncodedTerm::StringLiteral { .. }
             | EncodedTerm::LangStringLiteral { .. }
             | EncodedTerm::TypedLiteral { .. }
-            | EncodedTerm::StringLiteral { .. }
             | EncodedTerm::BooleanLiteral(_)
             | EncodedTerm::FloatLiteral(_)
             | EncodedTerm::DoubleLiteral(_)
@@ -237,9 +231,7 @@ impl EncodedTerm {
 
     pub fn datatype(&self) -> Option<Self> {
         match self {
-            EncodedTerm::SimpleLiteral { .. } | EncodedTerm::StringLiteral { .. } => {
-                Some(ENCODED_XSD_STRING_NAMED_NODE)
-            }
+            EncodedTerm::StringLiteral { .. } => Some(ENCODED_XSD_STRING_NAMED_NODE),
             EncodedTerm::LangStringLiteral { .. } => Some(ENCODED_RDF_LANG_STRING_NAMED_NODE),
             EncodedTerm::TypedLiteral { datatype_id, .. } => Some(EncodedTerm::NamedNode {
                 iri_id: *datatype_id,
@@ -263,10 +255,9 @@ impl EncodedTerm {
             EncodedTerm::DefaultGraph { .. } => TYPE_DEFAULT_GRAPH_ID,
             EncodedTerm::NamedNode { .. } => TYPE_NAMED_NODE_ID,
             EncodedTerm::BlankNode(_) => TYPE_BLANK_NODE_ID,
-            EncodedTerm::SimpleLiteral { .. } => TYPE_SIMPLE_LITERAL_ID,
+            EncodedTerm::StringLiteral { .. } => TYPE_STRING_LITERAL,
             EncodedTerm::LangStringLiteral { .. } => TYPE_LANG_STRING_LITERAL_ID,
             EncodedTerm::TypedLiteral { .. } => TYPE_TYPED_LITERAL_ID,
-            EncodedTerm::StringLiteral { .. } => TYPE_STRING_LITERAL,
             EncodedTerm::BooleanLiteral(true) => TYPE_BOOLEAN_LITERAL_TRUE,
             EncodedTerm::BooleanLiteral(false) => TYPE_BOOLEAN_LITERAL_FALSE,
             EncodedTerm::FloatLiteral(_) => TYPE_FLOAT_LITERAL,
@@ -396,9 +387,6 @@ impl<R: Read> TermReader for R {
                 self.read_exact(&mut uuid_buffer)?;
                 Ok(EncodedTerm::BlankNode(Uuid::from_bytes(uuid_buffer)))
             }
-            TYPE_SIMPLE_LITERAL_ID => Ok(EncodedTerm::SimpleLiteral {
-                value_id: self.read_u64::<LittleEndian>()?,
-            }),
             TYPE_LANG_STRING_LITERAL_ID => Ok(EncodedTerm::LangStringLiteral {
                 language_id: self.read_u64::<LittleEndian>()?,
                 value_id: self.read_u64::<LittleEndian>()?,
@@ -511,7 +499,7 @@ impl<R: Write> TermWriter for R {
             EncodedTerm::DefaultGraph {} => {}
             EncodedTerm::NamedNode { iri_id } => self.write_u64::<LittleEndian>(iri_id)?,
             EncodedTerm::BlankNode(id) => self.write_all(id.as_bytes())?,
-            EncodedTerm::SimpleLiteral { value_id } | EncodedTerm::StringLiteral { value_id } => {
+            EncodedTerm::StringLiteral { value_id } => {
                 self.write_u64::<LittleEndian>(value_id)?;
             }
             EncodedTerm::LangStringLiteral {
@@ -605,7 +593,7 @@ impl<S: StringStore> Encoder<S> {
                     language_id: self.string_store.insert_str(language)?,
                 }
             } else {
-                EncodedTerm::SimpleLiteral {
+                EncodedTerm::StringLiteral {
                     value_id: self.string_store.insert_str(&literal.value())?,
                 }
             }
@@ -715,7 +703,7 @@ impl<S: StringStore> Encoder<S> {
                 Ok(NamedNode::from(self.string_store.get_url(iri_id)?).into())
             }
             EncodedTerm::BlankNode(id) => Ok(BlankNode::from(id).into()),
-            EncodedTerm::SimpleLiteral { value_id } => {
+            EncodedTerm::StringLiteral { value_id } => {
                 Ok(Literal::new_simple_literal(self.string_store.get_str(value_id)?).into())
             }
             EncodedTerm::LangStringLiteral {
@@ -734,9 +722,6 @@ impl<S: StringStore> Encoder<S> {
                 NamedNode::from(self.string_store.get_url(datatype_id)?),
             )
             .into()),
-            EncodedTerm::StringLiteral { value_id } => {
-                Ok(Literal::from(self.string_store.get_str(value_id)?.into()).into())
-            }
             EncodedTerm::BooleanLiteral(value) => Ok(Literal::from(value).into()),
             EncodedTerm::FloatLiteral(value) => Ok(Literal::from(*value).into()),
             EncodedTerm::DoubleLiteral(value) => Ok(Literal::from(*value).into()),

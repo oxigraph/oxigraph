@@ -158,6 +158,8 @@ fn sparql_w3c_query_evaluation_testsuite() {
         NamedNode::from_str(
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm-not-eq",
         ).unwrap(),
+        //Simple literal vs xsd:string. We apply RDF 1.1
+        NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-2").unwrap(),
         //URI normalization: we are normalizing more strongly
         NamedNode::from_str(
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest#normalization-3",
