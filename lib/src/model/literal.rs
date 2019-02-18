@@ -405,6 +405,12 @@ impl From<String> for Literal {
     }
 }
 
+impl<'a> From<Cow<'a, str>> for Literal {
+    fn from(value: Cow<'a, str>) -> Self {
+        Literal(LiteralContent::String(value.into()))
+    }
+}
+
 impl From<bool> for Literal {
     fn from(value: bool) -> Self {
         Literal(LiteralContent::Boolean(value))
