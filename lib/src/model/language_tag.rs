@@ -377,16 +377,23 @@ impl LanguageTag {
         }
 
         // There are no duplicate singleton (extension) subtags.
-        let mut seen_extensions = AlphanumericLowerCharSet::new();
-        if self.extension_subtags().any(|(extension, _)| {
-            if seen_extensions.contains(extension) {
-                true
-            } else {
-                seen_extensions.insert(extension);
-                false
+        if let Some(extension) = self.extension() {
+            let mut seen_extensions = AlphanumericLowerCharSet::new();
+            if extension.split('-').any(|subtag| {
+                if subtag.len() == 1 {
+                    let extension = subtag.chars().next().unwrap();
+                    if seen_extensions.contains(extension) {
+                        true
+                    } else {
+                        seen_extensions.insert(extension);
+                        false
+                    }
+                } else {
+                    false
+                }
+            }) {
+                return Err(ValidationError::DuplicateExtension);
             }
-        }) {
-            return Err(ValidationError::DuplicateExtension);
         }
 
         // There is no more than one extended language subtag.
@@ -677,124 +684,6 @@ impl fmt::Display for ValidationError {
     }
 }
 
-#[test]
-fn test_wellformed_tags() {
-    // Source: http://www.langtag.net/test-suites/well-formed-tags.txt
-    let tags = vec![
-        "fr",
-        "fr-Latn",
-        "fr-fra", // Extended tag
-        "fr-Latn-FR",
-        "fr-Latn-419",
-        "fr-FR",
-        "ax-TZ",     // Not in the registry, but well-formed
-        "fr-shadok", // Variant
-        "fr-y-myext-myext2",
-        "fra-Latn", // ISO 639 can be 3-letters
-        "fra",
-        "fra-FX",
-        "i-klingon", // grandfathered with singleton
-        "I-kLINgon", // tags are case-insensitive...
-        "no-bok",    // grandfathered without singleton
-        "fr-Lat",    // Extended",
-        "mn-Cyrl-MN",
-        "mN-cYrL-Mn",
-        "fr-Latn-CA",
-        "en-US",
-        "fr-Latn-CA",
-        "i-enochian", // Grand fathered
-        "x-fr-CH",
-        "sr-Latn-CS",
-        "es-419",
-        "sl-nedis",
-        "de-CH-1996",
-        "de-Latg-1996",
-        "sl-IT-nedis",
-        "en-a-bbb-x-a-ccc",
-        "de-a-value",
-        "en-Latn-GB-boont-r-extended-sequence-x-private",
-        "en-x-US",
-        "az-Arab-x-AZE-derbend",
-        "es-Latn-CO-x-private",
-        "en-US-boont",
-        "ab-x-abc-x-abc",     // anything goes after x
-        "ab-x-abc-a-a",       // ditto",
-        "i-default",          // grandfathered",
-        "i-klingon",          // grandfathered",
-        "abcd-Latn",          // Language of 4 chars reserved for future use
-        "AaBbCcDd-x-y-any-x", // Language of 5-8 chars, registered
-        "en",
-        "de-AT",
-        "es-419",
-        "de-CH-1901",
-        "sr-Cyrl",
-        "sr-Cyrl-CS",
-        "sl-Latn-IT-rozaj",
-        "en-US-x-twain",
-        "zh-cmn",
-        "zh-cmn-Hant",
-        "zh-cmn-Hant-HK",
-        "zh-gan",
-        "zh-yue-Hant-HK",
-        "xr-lxs-qut", // extlangS
-        "xr-lqt-qu",  // extlang + region
-        "xr-p-lze",   // Extension
-    ];
-    for tag in tags {
-        let result = LanguageTag::from_str(tag);
-        assert!(
-            result.is_ok(),
-            "{} should be considered well-formed but returned error {}",
-            tag,
-            result.err().unwrap()
-        );
-    }
-}
-
-#[test]
-fn test_broken_tags() {
-    // http://www.langtag.net/test-suites/broken-tags.txt
-    let tags = vec![
-        "f",
-        "f-Latn",
-        "fr-Latn-F",
-        "a-value",
-        // "en-a-bbb-a-ccc", // 'a' appears twice, commented out because well-formed
-        "tlh-a-b-foo",
-        "i-notexist", // grandfathered but not registered: always invalid
-        "abcdefghi-012345678",
-        "ab-abc-abc-abc-abc",
-        "ab-abcd-abc",
-        "ab-ab-abc",
-        "ab-123-abc",
-        "a-Hant-ZH",
-        "a1-Hant-ZH",
-        "ab-abcde-abc",
-        "ab-1abc-abc",
-        "ab-ab-abcd",
-        "ab-123-abcd",
-        "ab-abcde-abcd",
-        "ab-1abc-abcd",
-        "ab-a-b",
-        "ab-a-x",
-        "ab--ab",
-        "ab-abc-",
-        "-ab-abc",
-        // "ab-c-abc-r-toto-c-abc  # 'c' appears twice ", commented out because well-formed
-        "abcd-efg",
-        "aabbccddE",
-    ];
-    for tag in tags {
-        let result = LanguageTag::from_str(tag);
-        assert!(
-            result.is_err(),
-            "{} should be considered not well-formed but returned result {:?}",
-            tag,
-            result.ok().unwrap()
-        );
-    }
-}
-
 // Tests from RFC 5646 2.1.1
 #[test]
 fn test_formatting() {
@@ -1030,4 +919,222 @@ fn test_is_valid() {
     assert!(LanguageTag::from_str("en-a-bbb-x-a-ccc")
         .unwrap()
         .is_valid());
+}
+
+// http://www.langtag.net/test-suites/well-formed-tags.txt
+#[test]
+fn test_wellformed_tags() {
+    let tags = vec![
+        "fr",
+        "fr-Latn",
+        "fr-fra", // Extended tag
+        "fr-Latn-FR",
+        "fr-Latn-419",
+        "fr-FR",
+        "ax-TZ",     // Not in the registry, but well-formed
+        "fr-shadok", // Variant
+        "fr-y-myext-myext2",
+        "fra-Latn", // ISO 639 can be 3-letters
+        "fra",
+        "fra-FX",
+        "i-klingon", // grandfathered with singleton
+        "I-kLINgon", // tags are case-insensitive...
+        "no-bok",    // grandfathered without singleton
+        "fr-Lat",    // Extended",
+        "mn-Cyrl-MN",
+        "mN-cYrL-Mn",
+        "fr-Latn-CA",
+        "en-US",
+        "fr-Latn-CA",
+        "i-enochian", // Grand fathered
+        "x-fr-CH",
+        "sr-Latn-CS",
+        "es-419",
+        "sl-nedis",
+        "de-CH-1996",
+        "de-Latg-1996",
+        "sl-IT-nedis",
+        "en-a-bbb-x-a-ccc",
+        "de-a-value",
+        "en-Latn-GB-boont-r-extended-sequence-x-private",
+        "en-x-US",
+        "az-Arab-x-AZE-derbend",
+        "es-Latn-CO-x-private",
+        "en-US-boont",
+        "ab-x-abc-x-abc",     // anything goes after x
+        "ab-x-abc-a-a",       // ditto",
+        "i-default",          // grandfathered",
+        "i-klingon",          // grandfathered",
+        "abcd-Latn",          // Language of 4 chars reserved for future use
+        "AaBbCcDd-x-y-any-x", // Language of 5-8 chars, registered
+        "en",
+        "de-AT",
+        "es-419",
+        "de-CH-1901",
+        "sr-Cyrl",
+        "sr-Cyrl-CS",
+        "sl-Latn-IT-rozaj",
+        "en-US-x-twain",
+        "zh-cmn",
+        "zh-cmn-Hant",
+        "zh-cmn-Hant-HK",
+        "zh-gan",
+        "zh-yue-Hant-HK",
+        "xr-lxs-qut", // extlangS
+        "xr-lqt-qu",  // extlang + region
+        "xr-p-lze",   // Extension
+    ];
+    for tag in tags {
+        let result = LanguageTag::from_str(tag);
+        assert!(
+            result.is_ok(),
+            "{} should be considered well-formed but returned error {}",
+            tag,
+            result.err().unwrap()
+        );
+    }
+}
+
+// http://www.langtag.net/test-suites/broken-tags.txt
+#[test]
+fn test_broken_tags() {
+    let tags = vec![
+        "f",
+        "f-Latn",
+        "fr-Latn-F",
+        "a-value",
+        // "en-a-bbb-a-ccc", # 'a' appears twice, commented out because well-formed
+        "tlh-a-b-foo",
+        "i-notexist", // grandfathered but not registered: always invalid
+        "abcdefghi-012345678",
+        "ab-abc-abc-abc-abc",
+        "ab-abcd-abc",
+        "ab-ab-abc",
+        "ab-123-abc",
+        "a-Hant-ZH",
+        "a1-Hant-ZH",
+        "ab-abcde-abc",
+        "ab-1abc-abc",
+        "ab-ab-abcd",
+        "ab-123-abcd",
+        "ab-abcde-abcd",
+        "ab-1abc-abcd",
+        "ab-a-b",
+        "ab-a-x",
+        "ab--ab",
+        "ab-abc-",
+        "-ab-abc",
+        // "ab-c-abc-r-toto-c-abc  # 'c' appears twice ", commented out because well-formed
+        "abcd-efg",
+        "aabbccddE",
+    ];
+    for tag in tags {
+        let result = LanguageTag::from_str(tag);
+        assert!(
+            result.is_err(),
+            "{} should be considered not well-formed but returned result {:?}",
+            tag,
+            result.ok().unwrap()
+        );
+    }
+}
+
+// http://www.langtag.net/test-suites/valid-tags.txt
+#[test]
+fn test_valid_tags() {
+    let tags = vec![
+        "fr",
+        "fr-Latn",
+        "fr-fra", // Extended tag
+        "fr-Latn-FR",
+        "fr-Latn-419",
+        "fr-FR",
+        "fr-y-myext-myext2",
+        "apa-Latn", // ISO 639 can be 3-letters
+        "apa",
+        "apa-CA",
+        "i-klingon", // grandfathered with singleton
+        "no-bok",    // grandfathered without singleton
+        "fr-Lat",    // Extended
+        "mn-Cyrl-MN",
+        "mN-cYrL-Mn",
+        "fr-Latn-CA",
+        "en-US",
+        "fr-Latn-CA",
+        "i-enochian", // Grand fathered
+        "x-fr-CH",
+        "sr-Latn-CS",
+        "es-419",
+        "sl-nedis",
+        "de-CH-1996",
+        "de-Latg-1996",
+        "sl-IT-nedis",
+        "en-a-bbb-x-a-ccc",
+        "de-a-value",
+        "en-x-US",
+        "az-Arab-x-AZE-derbend",
+        "es-Latn-CO-x-private",
+        "ab-x-abc-x-abc", // anything goes after x
+        "ab-x-abc-a-a",   // ditto
+        "i-default",      // grandfathered
+        "i-klingon",      // grandfathered
+        "en",
+        "de-AT",
+        "es-419",
+        "de-CH-1901",
+        "sr-Cyrl",
+        "sr-Cyrl-CS",
+        "sl-Latn-IT-rozaj",
+        "en-US-x-twain",
+        "zh-cmn",
+        "zh-cmn-Hant",
+        "zh-cmn-Hant-HK",
+        "zh-gan",
+        "zh-yue-Hant-HK",
+        "en-Latn-GB-boont-r-extended-sequence-x-private",
+        "en-US-boont",
+    ];
+    for tag in tags {
+        let result = LanguageTag::from_str(tag);
+        assert!(
+            result.is_ok(),
+            "{} should be considered well-formed but returned error {}",
+            tag,
+            result.err().unwrap()
+        );
+        let validation = result.unwrap().validate();
+        assert!(
+            validation.is_ok(),
+            "{} should be considered valid but returned error {}",
+            tag,
+            validation.err().unwrap()
+        );
+    }
+}
+
+// http://www.langtag.net/test-suites/invalid-tags.txt
+#[test]
+fn test_invalid_tags() {
+    let tags = vec![
+        //TODO "ax-TZ",    // Not in the registry, but well-formed
+        //TODO "fra-Latn", // ISO 639 can be 3-letters
+        //TODO "fra",
+        //TODO "fra-FX",
+        //TODO "abcd-Latn",          // Language of 4 chars reserved for future use
+        //TODO "AaBbCcDd-x-y-any-x", // Language of 5-8 chars, registered
+        //TODO "zh-Latm-CN",         // Typo
+        //TODO "de-DE-1902",         // Wrong variant
+        //TODO "fr-shadok",          // Variant
+    ];
+    for tag in tags {
+        let result = LanguageTag::from_str(tag);
+        assert!(
+            result.is_ok(),
+            "{} should be considered well-formed but returned error {}",
+            tag,
+            result.err().unwrap()
+        );
+        let validation = result.unwrap().validate();
+        assert!(validation.is_err(), "{} should be considered invalid", tag);
+    }
 }
