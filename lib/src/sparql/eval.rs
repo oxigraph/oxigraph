@@ -6,7 +6,6 @@ use crate::store::encoded::EncodedQuadsStore;
 use crate::store::numeric_encoder::*;
 use crate::Result;
 use chrono::prelude::*;
-use language_tags::LanguageTag;
 use num_traits::identities::Zero;
 use num_traits::FromPrimitive;
 use num_traits::One;
@@ -19,7 +18,6 @@ use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::iter::once;
 use std::iter::Iterator;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::Mutex;
 use uuid::Uuid;
@@ -583,9 +581,15 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                     if language_range == "*" {
                         !language_tag.is_empty()
                     } else {
-                        LanguageTag::from_str(&language_range)
-                            .ok()?
-                            .matches(&LanguageTag::from_str(&language_tag).ok()?)
+                        !ZipLongest::new(language_range.split('-'), language_tag.split('-')).any(
+                            |parts| match parts {
+                                (Some(range_subtag), Some(language_subtag)) => {
+                                    !range_subtag.eq_ignore_ascii_case(language_subtag)
+                                }
+                                (Some(_), None) => true,
+                                (None, _) => false,
+                            },
+                        )
                     }
                     .into(),
                 )
@@ -1346,6 +1350,30 @@ impl<'a, S: EncodedQuadsStore> Iterator for DescribeIterator<'a, S> {
             Some(Err(error))
         } else {
             self.next()
+        }
+    }
+}
+
+struct ZipLongest<T1, T2, I1: Iterator<Item = T1>, I2: Iterator<Item = T2>> {
+    a: I1,
+    b: I2,
+}
+
+impl<T1, T2, I1: Iterator<Item = T1>, I2: Iterator<Item = T2>> ZipLongest<T1, T2, I1, I2> {
+    fn new(a: I1, b: I2) -> Self {
+        Self { a, b }
+    }
+}
+
+impl<T1, T2, I1: Iterator<Item = T1>, I2: Iterator<Item = T2>> Iterator
+    for ZipLongest<T1, T2, I1, I2>
+{
+    type Item = (Option<T1>, Option<T2>);
+
+    fn next(&mut self) -> Option<(Option<T1>, Option<T2>)> {
+        match (self.a.next(), self.b.next()) {
+            (None, None) => None,
+            r => Some(r),
         }
     }
 }

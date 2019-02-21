@@ -178,13 +178,6 @@ fn sparql_w3c_query_evaluation_testsuite() {
         NamedNode::from_str(
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-lang-3",
         ).unwrap(),
-        //Difference in language matching
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-langMatches-basic",
-        ).unwrap(),
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-langMatches-basic",
-        ).unwrap(),
         //DATATYPE("foo"@en) returns rdf:langString in SPARQL 1.1
         NamedNode::from_str(
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-datatype-2",
