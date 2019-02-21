@@ -14,6 +14,7 @@ pub use crate::model::blank_node::BlankNode;
 pub use crate::model::dataset::Dataset;
 pub use crate::model::dataset::Graph;
 pub use crate::model::dataset::NamedGraph;
+pub use crate::model::language_tag::LanguageTag;
 pub use crate::model::literal::Literal;
 pub use crate::model::named_node::NamedNode;
 pub use crate::model::triple::NamedOrBlankNode;

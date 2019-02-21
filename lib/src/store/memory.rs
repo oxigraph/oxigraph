@@ -1,3 +1,4 @@
+use crate::model::LanguageTag;
 use crate::store::encoded::*;
 use crate::store::numeric_encoder::*;
 use crate::utils::MutexPoisonError;
@@ -80,6 +81,10 @@ impl StringStore for MemoryStore {
 
     fn get_url(&self, id: u64) -> Result<Url> {
         self.string_store.get_url(id)
+    }
+
+    fn get_language_tag(&self, id: u64) -> Result<LanguageTag> {
+        self.string_store.get_language_tag(id)
     }
 }
 

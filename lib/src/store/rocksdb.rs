@@ -1,3 +1,4 @@
+use crate::model::LanguageTag;
 use crate::store::encoded::EncodedQuadsStore;
 use crate::store::encoded::StoreDataset;
 use crate::store::numeric_encoder::*;
@@ -17,7 +18,6 @@ use std::io::Cursor;
 use std::ops::Deref;
 use std::path::Path;
 use std::str;
-use std::str::FromStr;
 use std::sync::Mutex;
 use url::Url;
 
@@ -120,7 +120,11 @@ impl StringStore for RocksDbStore {
     }
 
     fn get_url(&self, id: u64) -> Result<Url> {
-        Ok(Url::from_str(&self.get_str(id)?)?)
+        Ok(Url::parse(&self.get_str(id)?)?)
+    }
+
+    fn get_language_tag(&self, id: u64) -> Result<LanguageTag> {
+        Ok(LanguageTag::parse(&self.get_str(id)?)?)
     }
 }
 

@@ -168,16 +168,6 @@ fn sparql_w3c_query_evaluation_testsuite() {
         NamedNode::from_str(
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest#dawg-optional-filter-005-not-simplified",
         ).unwrap(),
-        //Case insensitive language tag comparison
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#lang-case-insensitive-eq",
-        ).unwrap(),
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#lang-case-insensitive-ne",
-        ).unwrap(),
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-lang-3",
-        ).unwrap(),
         //DATATYPE("foo"@en) returns rdf:langString in SPARQL 1.1
         NamedNode::from_str(
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-datatype-2",

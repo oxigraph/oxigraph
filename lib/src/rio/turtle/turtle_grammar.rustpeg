@@ -185,8 +185,11 @@ BLANK_NODE_LABEL -> &'input str = "_:" b:$(([0-9] / PN_CHARS_U) PN_CHARS* ("."+ 
 }
 
 //[144s]
-LANGTAG -> &'input str = "@" l:$([a-zA-Z]+ ("-" [a-zA-Z0-9]+)*) {
-    l
+LANGTAG -> LanguageTag = "@" l:$([a-zA-Z]+ ("-" [a-zA-Z0-9]+)*) {?
+    match LanguageTag::parse(&l) {
+        Ok(langtag) => Ok(langtag),
+        Err(error) => Err("language tag parsing failed")
+    }
 }
 
 //[19]

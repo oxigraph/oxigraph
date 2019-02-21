@@ -1,7 +1,6 @@
 //! Implementation of [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) syntax
 
 use crate::model::vocab::rdf;
-use crate::model::Triple;
 use crate::model::*;
 use crate::Result;
 use failure::format_err;
@@ -82,18 +81,18 @@ enum RdfXmlState {
     },
     RDF {
         base_uri: Option<Url>,
-        language: String,
+        language: Option<LanguageTag>,
     },
     NodeElt {
         base_uri: Option<Url>,
-        language: String,
+        language: Option<LanguageTag>,
         subject: NamedOrBlankNode,
     },
     PropertyElt {
         //Resource, Literal or Empty property element
         uri: Url,
         base_uri: Option<Url>,
-        language: String,
+        language: Option<LanguageTag>,
         subject: NamedOrBlankNode,
         object: Option<NamedOrBlankNode>,
         id_attr: Option<NamedNode>,
@@ -102,7 +101,7 @@ enum RdfXmlState {
     ParseTypeCollectionPropertyElt {
         uri: NamedNode,
         base_uri: Option<Url>,
-        language: String,
+        language: Option<LanguageTag>,
         subject: NamedOrBlankNode,
         id_attr: Option<NamedNode>,
     },
@@ -120,13 +119,13 @@ impl RdfXmlState {
         }
     }
 
-    fn language(&self) -> &str {
+    fn language(&self) -> Option<&LanguageTag> {
         match self {
-            RdfXmlState::Doc { .. } => "",
-            RdfXmlState::RDF { language, .. } => language,
-            RdfXmlState::NodeElt { language, .. } => language,
-            RdfXmlState::PropertyElt { language, .. } => language,
-            RdfXmlState::ParseTypeCollectionPropertyElt { language, .. } => language,
+            RdfXmlState::Doc { .. } => None,
+            RdfXmlState::RDF { language, .. } => language.as_ref(),
+            RdfXmlState::NodeElt { language, .. } => language.as_ref(),
+            RdfXmlState::PropertyElt { language, .. } => language.as_ref(),
+            RdfXmlState::ParseTypeCollectionPropertyElt { language, .. } => language.as_ref(),
         }
     }
 }
@@ -193,10 +192,10 @@ impl<R: BufRead> RdfXmlIterator<R> {
         let uri = self.resolve_tag_name(event.name())?;
 
         //We read attributes
-        let mut language = String::default();
+        let mut language = None;
         let mut base_uri = None;
         if let Some(current_state) = self.state.last() {
-            language = current_state.language().to_string();
+            language = current_state.language().cloned();
             base_uri = current_state.base_uri().clone();
         }
         let mut id_attr = None;
@@ -212,7 +211,9 @@ impl<R: BufRead> RdfXmlIterator<R> {
             let attribute = attribute?;
             match attribute.key {
                 b"xml:lang" => {
-                    language = attribute.unescape_and_decode_value(&self.reader)?;
+                    language = Some(LanguageTag::parse(
+                        &attribute.unescape_and_decode_value(&self.reader)?,
+                    )?);
                 }
                 b"xml:base" => {
                     base_uri = Some(self.resolve_uri(&attribute.unescaped_value()?, &None)?)
@@ -434,7 +435,7 @@ impl<R: BufRead> RdfXmlIterator<R> {
         &mut self,
         uri: NamedNode,
         base_uri: Option<Url>,
-        language: String,
+        language: Option<LanguageTag>,
         id_attr: Option<NamedNode>,
         node_id_attr: Option<BlankNode>,
         about_attr: Option<NamedNode>,
@@ -474,7 +475,7 @@ impl<R: BufRead> RdfXmlIterator<R> {
         &mut self,
         uri: NamedNode,
         base_uri: Option<Url>,
-        language: String,
+        language: Option<LanguageTag>,
         subject: NamedOrBlankNode,
         id_attr: Option<NamedNode>,
     ) -> RdfXmlState {
@@ -544,13 +545,18 @@ impl<R: BufRead> RdfXmlIterator<R> {
         Ok(())
     }
 
-    fn new_literal(&self, text: String, language: String, datatype: Option<NamedNode>) -> Literal {
+    fn new_literal(
+        &self,
+        text: String,
+        language: Option<LanguageTag>,
+        datatype: Option<NamedNode>,
+    ) -> Literal {
         if let Some(datatype) = datatype {
             Literal::new_typed_literal(text, datatype)
-        } else if language.is_empty() {
-            Literal::new_simple_literal(text)
-        } else {
+        } else if let Some(language) = language {
             Literal::new_language_tagged_literal(text, language)
+        } else {
+            Literal::new_simple_literal(text)
         }
     }
 
@@ -581,16 +587,16 @@ impl<R: BufRead> RdfXmlIterator<R> {
         &mut self,
         subject: &NamedOrBlankNode,
         literal_attributes: Vec<(NamedNode, String)>,
-        language: &str,
+        language: &Option<LanguageTag>,
     ) {
         for (literal_predicate, literal_value) in literal_attributes {
             self.triples_cache.push(Triple::new(
                 subject.clone(),
                 literal_predicate,
-                if language.is_empty() {
-                    Literal::new_simple_literal(literal_value)
+                if let Some(language) = language {
+                    Literal::new_language_tagged_literal(literal_value, language.clone())
                 } else {
-                    Literal::new_language_tagged_literal(literal_value, language)
+                    Literal::new_simple_literal(literal_value)
                 },
             ));
         }

@@ -87,7 +87,10 @@ py_class!(class Literal |py| {
 
     def __new__(_cls, value: String, language: Option<String> = None, datatype: Option<NamedNode> = None) -> PyResult<Literal> {
         Literal::create_instance(py, match language {
-            Some(language) => model::Literal::new_language_tagged_literal(value, language),
+            Some(language) => {
+                let language = model::LanguageTag::parse(&language).map_err(|error| new_value_error(py, &error.into()))?;
+                model::Literal::new_language_tagged_literal(value, language)
+            },
             None => match datatype {
                 Some(datatype) => model::Literal::new_typed_literal(value, datatype.inner(py).clone()),
                 None => model::Literal::new_simple_literal(value)
@@ -100,7 +103,7 @@ py_class!(class Literal |py| {
     }
 
     def language(&self) -> PyResult<Option<String>> {
-        Ok(self.inner(py).language().map(|l| l.to_string()))
+        Ok(self.inner(py).language().map(|l| l.as_str().to_string()))
     }
 
     def datatype(&self) -> PyResult<NamedNode> {

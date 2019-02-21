@@ -37,8 +37,11 @@ literal -> Literal =
 
 
 //[144s]
-LANGTAG -> &'input str = "@" l:$([a-zA-Z]+ ("-" [a-zA-Z0-9]+)*) {
-    l
+LANGTAG -> LanguageTag = "@" l:$([a-zA-Z]+ ("-" [a-zA-Z0-9]+)*) {?
+    match LanguageTag::parse(&l) {
+        Ok(langtag) => Ok(langtag),
+        Err(error) => Err("language tag parsing failed")
+    }
 }
 
 //[7]

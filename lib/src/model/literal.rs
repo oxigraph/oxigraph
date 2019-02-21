@@ -1,3 +1,4 @@
+use crate::model::language_tag::LanguageTag;
 use crate::model::named_node::NamedNode;
 use crate::model::vocab::rdf;
 use crate::model::vocab::xsd;
@@ -18,6 +19,7 @@ use std::option::Option;
 /// The default string formatter is returning a N-Triples, Turtle and SPARQL compatible representation:
 /// ```
 /// use rudf::model::Literal;
+/// use rudf::model::LanguageTag;
 /// use rudf::model::vocab::xsd;
 ///
 /// assert_eq!(
@@ -32,7 +34,7 @@ use std::option::Option;
 ///
 /// assert_eq!(
 ///     "\"foo\"@en",
-///     Literal::new_language_tagged_literal("foo", "en").to_string()
+///     Literal::new_language_tagged_literal("foo", LanguageTag::parse("en").unwrap()).to_string()
 /// );
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
@@ -41,7 +43,10 @@ pub struct Literal(LiteralContent);
 #[derive(PartialEq, Eq, Ord, PartialOrd, Debug, Clone, Hash)]
 enum LiteralContent {
     String(String),
-    LanguageTaggedString { value: String, language: String },
+    LanguageTaggedString {
+        value: String,
+        language: LanguageTag,
+    },
     Boolean(bool),
     Float(OrderedFloat<f32>),
     Double(OrderedFloat<f64>),
@@ -51,7 +56,10 @@ enum LiteralContent {
     NaiveTime(NaiveTime),
     DateTime(DateTime<FixedOffset>),
     NaiveDateTime(NaiveDateTime),
-    TypedLiteral { value: String, datatype: NamedNode },
+    TypedLiteral {
+        value: String,
+        datatype: NamedNode,
+    },
 }
 
 impl Literal {
@@ -131,7 +139,7 @@ impl Literal {
     /// Builds a RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
     pub fn new_language_tagged_literal(
         value: impl Into<String>,
-        language: impl Into<String>,
+        language: impl Into<LanguageTag>,
     ) -> Self {
         Literal(LiteralContent::LanguageTaggedString {
             value: value.into(),
@@ -159,7 +167,7 @@ impl Literal {
 
     /// The literal [language tag](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tag) if it is a [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string).
     /// Language tags are defined by the [BCP47](https://tools.ietf.org/html/bcp47).
-    pub fn language(&self) -> Option<&str> {
+    pub fn language(&self) -> Option<&LanguageTag> {
         match self.0 {
             LiteralContent::LanguageTaggedString { ref language, .. } => Some(language),
             _ => None,

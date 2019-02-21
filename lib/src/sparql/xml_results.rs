@@ -81,7 +81,7 @@ pub fn write_xml_results<W: Write>(results: QueryResult<'_>, sink: W) -> Result<
                             Term::Literal(literal) => {
                                 let mut literal_tag = BytesStart::borrowed_name(b"literal");
                                 if let Some(language) = literal.language() {
-                                    literal_tag.push_attribute(("xml:lang", language));
+                                    literal_tag.push_attribute(("xml:lang", language.as_str()));
                                 } else if !literal.is_plain() {
                                     literal_tag
                                         .push_attribute(("datatype", literal.datatype().as_str()));
@@ -336,7 +336,10 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
                                 if let Ok(attr) = attr {
                                     if attr.key == b"xml:lang" {
                                         match attr.unescape_and_decode_value(&self.reader) {
-                                            Ok(val) => lang = Some(val),
+                                            Ok(val) => match LanguageTag::parse(&val) {
+                                                Ok(val) => lang = Some(val),
+                                                Err(error) => return Some(Err(error.into())),
+                                            },
                                             Err(error) => return Some(Err(error.into())),
                                         }
                                     } else if attr.key == b"datatype" {
@@ -429,7 +432,7 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
 
 fn build_literal(
     value: impl Into<String>,
-    lang: &Option<String>,
+    lang: &Option<LanguageTag>,
     datatype: &Option<NamedNode>,
 ) -> Literal {
     match datatype {

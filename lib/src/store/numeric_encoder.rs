@@ -13,7 +13,6 @@ use std::io::Read;
 use std::io::Write;
 use std::ops::Deref;
 use std::str;
-use std::str::FromStr;
 use std::sync::RwLock;
 use url::Url;
 use uuid::Uuid;
@@ -36,6 +35,7 @@ pub trait StringStore {
     fn insert_str(&self, value: &str) -> Result<u64>;
     fn get_str(&self, id: u64) -> Result<Self::StringType>;
     fn get_url(&self, id: u64) -> Result<Url>;
+    fn get_language_tag(&self, id: u64) -> Result<LanguageTag>;
 
     /// Should be called when the bytes store is created
     fn set_first_strings(&self) -> Result<()> {
@@ -73,6 +73,10 @@ impl<'a, S: StringStore> StringStore for &'a S {
 
     fn get_url(&self, id: u64) -> Result<Url> {
         (*self).get_url(id)
+    }
+
+    fn get_language_tag(&self, id: u64) -> Result<LanguageTag> {
+        (*self).get_language_tag(id)
     }
 }
 
@@ -120,7 +124,16 @@ impl StringStore for MemoryStringStore {
         if id2str.len() as u64 <= id {
             Err(format_err!("value not found in the dictionary"))
         } else {
-            Ok(Url::from_str(&id2str[id as usize])?)
+            Ok(Url::parse(&id2str[id as usize])?)
+        }
+    }
+
+    fn get_language_tag(&self, id: u64) -> Result<LanguageTag> {
+        let id2str = self.id2str.read().map_err(MutexPoisonError::from)?;
+        if id2str.len() as u64 <= id {
+            Err(format_err!("value not found in the dictionary"))
+        } else {
+            Ok(LanguageTag::parse(&id2str[id as usize])?)
         }
     }
 }
@@ -586,16 +599,10 @@ impl<S: StringStore> Encoder<S> {
     }
 
     pub fn encode_literal(&self, literal: &Literal) -> Result<EncodedTerm> {
-        Ok(if literal.is_plain() {
-            if let Some(language) = literal.language() {
-                EncodedTerm::LangStringLiteral {
-                    value_id: self.string_store.insert_str(&literal.value())?,
-                    language_id: self.string_store.insert_str(language)?,
-                }
-            } else {
-                EncodedTerm::StringLiteral {
-                    value_id: self.string_store.insert_str(&literal.value())?,
-                }
+        Ok(if let Some(language) = literal.language() {
+            EncodedTerm::LangStringLiteral {
+                value_id: self.string_store.insert_str(&literal.value())?,
+                language_id: self.string_store.insert_str(language.as_str())?,
             }
         } else if literal.is_string() {
             EncodedTerm::StringLiteral {
@@ -711,7 +718,7 @@ impl<S: StringStore> Encoder<S> {
                 language_id,
             } => Ok(Literal::new_language_tagged_literal(
                 self.string_store.get_str(value_id)?,
-                self.string_store.get_str(language_id)?,
+                self.string_store.get_language_tag(language_id)?,
             )
             .into()),
             EncodedTerm::TypedLiteral {
@@ -787,6 +794,8 @@ impl<S: StringStore + Default> Default for Encoder<S> {
 
 #[test]
 fn test_encoding() {
+    use std::str::FromStr;
+
     let encoder: Encoder<MemoryStringStore> = Encoder::default();
     let terms: Vec<Term> = vec![
         NamedNode::from_str("http://foo.com").unwrap().into(),
@@ -798,7 +807,7 @@ fn test_encoding() {
         Literal::from(1.2).into(),
         Literal::from(1).into(),
         Literal::from("foo").into(),
-        Literal::new_language_tagged_literal("foo", "fr").into(),
+        Literal::new_language_tagged_literal("foo", LanguageTag::parse("fr").unwrap()).into(),
     ];
     for term in terms {
         let encoded = encoder.encode_term(&term).unwrap();
