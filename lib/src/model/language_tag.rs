@@ -1003,7 +1003,6 @@ fn test_broken_tags() {
         "f-Latn",
         "fr-Latn-F",
         "a-value",
-        // "en-a-bbb-a-ccc", # 'a' appears twice, commented out because well-formed
         "tlh-a-b-foo",
         "i-notexist", // grandfathered but not registered: always invalid
         "abcdefghi-012345678",
@@ -1024,7 +1023,6 @@ fn test_broken_tags() {
         "ab--ab",
         "ab-abc-",
         "-ab-abc",
-        // "ab-c-abc-r-toto-c-abc  # 'c' appears twice ", commented out because well-formed
         "abcd-efg",
         "aabbccddE",
     ];
@@ -1116,15 +1114,17 @@ fn test_valid_tags() {
 #[test]
 fn test_invalid_tags() {
     let tags = vec![
-        //TODO "ax-TZ",    // Not in the registry, but well-formed
-        //TODO "fra-Latn", // ISO 639 can be 3-letters
-        //TODO "fra",
-        //TODO "fra-FX",
-        //TODO "abcd-Latn",          // Language of 4 chars reserved for future use
-        //TODO "AaBbCcDd-x-y-any-x", // Language of 5-8 chars, registered
-        //TODO "zh-Latm-CN",         // Typo
-        //TODO "de-DE-1902",         // Wrong variant
-        //TODO "fr-shadok",          // Variant
+        "en-a-bbb-a-ccc", // 'a' appears twice, moved from broken_tags
+        "ab-c-abc-r-toto-c-abc", // 'c' appears twice ", moved from broken_tags
+                          //TODO "ax-TZ",    // Not in the registry, but well-formed
+                          //TODO "fra-Latn", // ISO 639 can be 3-letters
+                          //TODO "fra",
+                          //TODO "fra-FX",
+                          //TODO "abcd-Latn",          // Language of 4 chars reserved for future use
+                          //TODO "AaBbCcDd-x-y-any-x", // Language of 5-8 chars, registered
+                          //TODO "zh-Latm-CN",         // Typo
+                          //TODO "de-DE-1902",         // Wrong variant
+                          //TODO "fr-shadok",          // Variant
     ];
     for tag in tags {
         let result = LanguageTag::from_str(tag);
