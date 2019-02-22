@@ -578,7 +578,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 let language_range =
                     self.to_simple_string(self.eval_expression(language_range, tuple)?)?;
                 Some(
-                    if language_range == "*" {
+                    if &*language_range == "*" {
                         !language_tag.is_empty()
                     } else {
                         !ZipLongest::new(language_range.split('-'), language_tag.split('-')).any(
@@ -765,9 +765,9 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
         }
     }
 
-    fn to_simple_string(&self, term: EncodedTerm) -> Option<String> {
+    fn to_simple_string(&self, term: EncodedTerm) -> Option<S::StringType> {
         if let EncodedTerm::StringLiteral { value_id } = term {
-            Some(self.store.get_str(value_id).ok()?.into())
+            Some(self.store.get_str(value_id).ok()?)
         } else {
             None
         }
@@ -781,11 +781,11 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
         }
     }
 
-    fn to_string(&self, term: EncodedTerm) -> Option<String> {
+    fn to_string(&self, term: EncodedTerm) -> Option<S::StringType> {
         match term {
             EncodedTerm::StringLiteral { value_id }
             | EncodedTerm::LangStringLiteral { value_id, .. } => {
-                Some(self.store.get_str(value_id).ok()?.into())
+                Some(self.store.get_str(value_id).ok()?)
             }
             _ => None,
         }
