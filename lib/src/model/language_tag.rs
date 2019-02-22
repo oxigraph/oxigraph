@@ -163,6 +163,17 @@ impl LanguageTag {
     ///
     /// If the language tag is not "well-formed" a [`ParseError`] variant will be returned.
     pub fn parse(input: &str) -> Result<Self, ParseError> {
+        #[derive(PartialEq, Eq)]
+        enum State {
+            Start,
+            AfterLanguage,
+            AfterExtLang,
+            AfterScript,
+            AfterRegion,
+            InExtension { expected: bool },
+            InPrivateUse { expected: bool },
+        }
+
         //grandfathered tags
         if let Some(tag) = GRANDFATHERED.iter().find(|x| x.eq_ignore_ascii_case(input)) {
             return Ok(Self {
@@ -195,16 +206,6 @@ impl LanguageTag {
             });
         }
 
-        #[derive(PartialEq, Eq)]
-        enum State {
-            Start,
-            AfterLanguage,
-            AfterExtLang,
-            AfterScript,
-            AfterRegion,
-            InExtension { expected: bool },
-            InPrivateUse { expected: bool },
-        }
         let mut serialization = String::with_capacity(input.len());
 
         let mut state = State::Start;
@@ -430,7 +431,7 @@ impl FromStr for LanguageTag {
     }
 }
 
-const GRANDFATHERED: [&'static str; 26] = [
+const GRANDFATHERED: [&str; 26] = [
     "en-GB-oed",
     "i-ami",
     "i-bnn",
