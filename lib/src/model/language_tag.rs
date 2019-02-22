@@ -134,7 +134,9 @@ impl LanguageTag {
     /// Return the [private use subtags](https://tools.ietf.org/html/rfc5646#section-2.2.7).
     #[inline]
     pub fn private_use(&self) -> Option<&str> {
-        if self.extension_end == self.serialization.len() {
+        if self.serialization.starts_with("x-") {
+            Some(&self.serialization)
+        } else if self.extension_end == self.serialization.len() {
             None
         } else {
             Some(&self.serialization[self.extension_end + 1..])
@@ -902,6 +904,10 @@ fn test_privateuse() {
     assert_eq!(
         ("el", Some("x-koine"), vec!["koine"]),
         parts(&LanguageTag::from_str("el-x-koine").unwrap())
+    );
+    assert_eq!(
+        ("x-fr-ch", Some("x-fr-ch"), vec!["fr", "ch"]),
+        parts(&LanguageTag::from_str("x-fr-ch").unwrap())
     );
 }
 
