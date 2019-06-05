@@ -1,0 +1,3 @@
+[submodule "lib/tests/rdf-tests"]
+	path = lib/tests/rdf-tests
+	url = https://github.com/w3c/rdf-tests.git

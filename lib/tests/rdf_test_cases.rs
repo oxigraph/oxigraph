@@ -1,7 +1,5 @@
 ///! Integration tests based on [RDF 1.1 Test Cases](https://www.w3.org/TR/rdf11-testcases/)
 use failure::format_err;
-use reqwest::Client;
-use reqwest::Response;
 use rudf::model::vocab::rdf;
 use rudf::model::vocab::rdfs;
 use rudf::model::*;
@@ -11,15 +9,15 @@ use rudf::rio::xml::read_rdf_xml;
 use rudf::store::isomorphism::GraphIsomorphism;
 use rudf::store::MemoryGraph;
 use rudf::Result;
-use std::error::Error;
 use std::fmt;
-use std::io::BufReader;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 use url::Url;
 
 #[test]
 fn turtle_w3c_testsuite() {
     let manifest_url = Url::parse("http://www.w3.org/2013/TurtleTests/manifest.ttl").unwrap();
-    let client = RDFClient::default();
     //TODO: make blacklist pass
     let test_blacklist = vec![
         //UTF-8 broken surrogates in BNode ids
@@ -43,26 +41,31 @@ fn turtle_w3c_testsuite() {
                 .join("#localName_with_nfc_PN_CHARS_BASE_character_boundaries")
                 .unwrap(),
         ),
+        NamedNode::new(manifest_url.join("#IRI-resolution-01").unwrap()),
+        NamedNode::new(manifest_url.join("#IRI-resolution-02").unwrap()),
+        NamedNode::new(manifest_url.join("#IRI-resolution-07").unwrap()),
+        NamedNode::new(manifest_url.join("#turtle-subm-01").unwrap()),
+        NamedNode::new(manifest_url.join("#turtle-subm-27").unwrap()),
     ];
 
-    for test_result in TestManifest::new(&client, manifest_url) {
+    for test_result in TestManifest::new(manifest_url) {
         let test = test_result.unwrap();
         if test_blacklist.contains(&test.id) {
             continue;
         }
         if test.kind == "TestTurtlePositiveSyntax" {
-            if let Err(error) = client.load_turtle(test.action.clone()) {
+            if let Err(error) = load_turtle(test.action.clone()) {
                 assert!(false, "Failure on {} with error: {}", test, error)
             }
         } else if test.kind == "TestTurtleNegativeSyntax" {
             assert!(
-                client.load_turtle(test.action.clone()).is_err(),
+                load_turtle(test.action.clone()).is_err(),
                 "Failure on {}",
                 test
             );
         } else if test.kind == "TestTurtleEval" {
-            match client.load_turtle(test.action.clone()) {
-                Ok(action_graph) => match client.load_turtle(test.result.clone().unwrap()) {
+            match load_turtle(test.action.clone()) {
+                Ok(action_graph) => match load_turtle(test.result.clone().unwrap()) {
                     Ok(result_graph) => assert!(
                         action_graph.is_isomorphic(&result_graph).unwrap(),
                         "Failure on {}. Expected file:\n{}\nParsed file:\n{}\n",
@@ -81,11 +84,11 @@ fn turtle_w3c_testsuite() {
                 Err(error) => assert!(false, "Failure to parse {} with error: {}", test, error),
             }
         } else if test.kind == "TestTurtleNegativeEval" {
-            let action_graph = client.load_turtle(test.action.clone());
+            let action_graph = load_turtle(test.action.clone());
             let result_graph = test
                 .result
                 .clone()
-                .map(|r| client.load_turtle(r))
+                .map(|r| load_turtle(r))
                 .unwrap_or_else(|| Ok(MemoryGraph::default()));
             assert!(
                 action_graph.is_err()
@@ -104,18 +107,17 @@ fn turtle_w3c_testsuite() {
 
 #[test]
 fn ntriples_w3c_testsuite() {
-    let client = RDFClient::default();
     let manifest_url = Url::parse("http://www.w3.org/2013/N-TriplesTests/manifest.ttl").unwrap();
 
-    for test_result in TestManifest::new(&client, manifest_url) {
+    for test_result in TestManifest::new(manifest_url) {
         let test = test_result.unwrap();
         if test.kind == "TestNTriplesPositiveSyntax" {
-            if let Err(error) = client.load_ntriples(test.action.clone()) {
+            if let Err(error) = load_ntriples(test.action.clone()) {
                 assert!(false, "Failure on {} with error: {}", test, error)
             }
         } else if test.kind == "TestNTriplesNegativeSyntax" {
             assert!(
-                client.load_ntriples(test.action.clone()).is_err(),
+                load_ntriples(test.action.clone()).is_err(),
                 "Failure on {}",
                 test
             );
@@ -128,7 +130,6 @@ fn ntriples_w3c_testsuite() {
 #[test]
 fn rdf_xml_w3c_testsuite() -> Result<()> {
     let manifest_url = Url::parse("http://www.w3.org/2013/RDFXMLTests/manifest.ttl")?;
-    let client = RDFClient::default();
     //TODO: make blacklist pass
     let test_blacklist = vec![
         NamedNode::new(manifest_url.join("#xml-canon-test001")?),
@@ -136,7 +137,7 @@ fn rdf_xml_w3c_testsuite() -> Result<()> {
         NamedNode::new(manifest_url.join("#rdf-containers-syntax-vs-schema-test004")?),
     ];
 
-    for test_result in TestManifest::new(&client, manifest_url) {
+    for test_result in TestManifest::new(manifest_url) {
         let test = test_result?;
         if test_blacklist.contains(&test.id) {
             continue;
@@ -144,13 +145,13 @@ fn rdf_xml_w3c_testsuite() -> Result<()> {
 
         if test.kind == "TestXMLNegativeSyntax" {
             /*TODO assert!(
-                client.load_rdf_xml(test.action.clone()).is_err(),
+                load_rdf_xml(test.action.clone()).is_err(),
                 "Failure on {}",
                 test
             );*/
         } else if test.kind == "TestXMLEval" {
-            match client.load_rdf_xml(test.action.clone()) {
-                Ok(action_graph) => match client.load_ntriples(test.result.clone().unwrap()) {
+            match load_rdf_xml(test.action.clone()) {
+                Ok(action_graph) => match load_ntriples(test.result.clone().unwrap()) {
                     Ok(result_graph) => assert!(
                         action_graph.is_isomorphic(&result_graph)?,
                         "Failure on {}. Expected file:\n{}\nParsed file:\n{}\n",
@@ -175,43 +176,42 @@ fn rdf_xml_w3c_testsuite() -> Result<()> {
     Ok(())
 }
 
-pub struct RDFClient {
-    client: Client,
+fn load_turtle(url: Url) -> Result<MemoryGraph> {
+    Ok(read_turtle(read_file(&url)?, Some(url))?.collect())
 }
 
-impl Default for RDFClient {
-    fn default() -> Self {
-        Self {
-            client: Client::new(),
-        }
+fn load_ntriples(url: Url) -> Result<MemoryGraph> {
+    read_ntriples(read_file(&url)?).collect()
+}
+
+fn load_rdf_xml(url: Url) -> Result<MemoryGraph> {
+    read_rdf_xml(read_file(&url)?, Some(url)).collect()
+}
+
+fn to_relative_path(url: &Url) -> Result<String> {
+    let url = url.as_str();
+    if url.starts_with("http://www.w3.org/2013/N-TriplesTests") {
+        Ok(url.replace(
+            "http://www.w3.org/2013/N-TriplesTests",
+            "rdf-tests/ntriples/",
+        ))
+    } else if url.starts_with("http://www.w3.org/2013/TurtleTests/") {
+        Ok(url.replace("http://www.w3.org/2013/TurtleTests/", "rdf-tests/turtle/"))
+    } else if url.starts_with("http://www.w3.org/2013/RDFXMLTests/") {
+        Ok(url.replace("http://www.w3.org/2013/RDFXMLTests/", "rdf-tests/rdf-xml/"))
+    } else {
+        Err(format_err!("Not supported url for file: {}", url))
     }
 }
 
-impl RDFClient {
-    pub fn load_turtle(&self, url: Url) -> Result<MemoryGraph> {
-        Ok(read_turtle(self.get(&url)?, Some(url))?.collect())
-    }
+fn read_file(url: &Url) -> Result<impl BufRead> {
+    let mut base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    base_path.push("tests");
+    base_path.push(to_relative_path(url)?);
 
-    pub fn load_ntriples(&self, url: Url) -> Result<MemoryGraph> {
-        read_ntriples(self.get(&url)?).collect()
-    }
-
-    pub fn load_rdf_xml(&self, url: Url) -> Result<MemoryGraph> {
-        read_rdf_xml(BufReader::new(self.get(&url)?), Some(url)).collect()
-    }
-
-    fn get(&self, url: &Url) -> Result<Response> {
-        match self.client.get(url.clone()).send() {
-            Ok(response) => Ok(response),
-            Err(error) => {
-                if error.description() == "parsed HTTP message from remote is incomplete" {
-                    self.get(url)
-                } else {
-                    Err(format_err!("HTTP request error: {}", error.description()))
-                }
-            }
-        }
-    }
+    Ok(BufReader::new(File::open(&base_path).map_err(|e| {
+        format_err!("Opening file {} failed with {}", base_path.display(), e)
+    })?))
 }
 
 pub struct Test {
@@ -237,17 +237,15 @@ impl fmt::Display for Test {
     }
 }
 
-pub struct TestManifest<'a> {
-    client: &'a RDFClient,
+pub struct TestManifest {
     graph: MemoryGraph,
     tests_to_do: Vec<Term>,
     manifests_to_do: Vec<Url>,
 }
 
-impl<'a> TestManifest<'a> {
-    pub fn new(client: &'a RDFClient, url: Url) -> TestManifest<'a> {
+impl TestManifest {
+    pub fn new(url: Url) -> TestManifest {
         Self {
-            client,
             graph: MemoryGraph::default(),
             tests_to_do: Vec::default(),
             manifests_to_do: vec![url],
@@ -279,7 +277,7 @@ pub mod mf {
     }
 }
 
-impl<'a> Iterator for TestManifest<'a> {
+impl Iterator for TestManifest {
     type Item = Result<Test>;
 
     fn next(&mut self) -> Option<Result<Test>> {
@@ -345,7 +343,7 @@ impl<'a> Iterator for TestManifest<'a> {
                 match self.manifests_to_do.pop() {
                     Some(url) => {
                         let manifest = NamedOrBlankNode::from(NamedNode::new(url.clone()));
-                        match self.client.load_turtle(url) {
+                        match load_turtle(url) {
                             Ok(g) => g
                                 .iter()
                                 .unwrap()
