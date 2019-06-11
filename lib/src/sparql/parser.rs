@@ -5,7 +5,7 @@ mod grammar {
         clippy::single_match,
         clippy::unit_arg,
         clippy::naive_bytecount,
-        clippy::cyclomatic_complexity,
+        clippy::cognitive_complexity,
         clippy::many_single_char_names,
         clippy::type_complexity
     )]

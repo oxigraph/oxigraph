@@ -22,10 +22,10 @@ url = "1"
 uuid = { version = "0.7", features = ["v4"] }
 bzip2 = "0.3"
 byteorder = {version="1", features = ["i128"] }
-quick-xml = "0.13"
+quick-xml = "0.14"
 ordered-float = "1"
 num-traits = "0.2"
-rust_decimal = "0.11"
+rust_decimal = "1"
 chrono = "0.4"
 failure = "0.1"
 regex = "1"
