@@ -1,7 +1,5 @@
 ///! Integration tests based on [SPARQL 1.1 Test Cases](https://www.w3.org/2009/sparql/docs/tests/README.html)
 use failure::format_err;
-use reqwest::Client;
-use reqwest::Response;
 use rudf::model::vocab::rdf;
 use rudf::model::vocab::rdfs;
 use rudf::model::*;
@@ -17,16 +15,17 @@ use rudf::store::isomorphism::GraphIsomorphism;
 use rudf::store::MemoryDataset;
 use rudf::store::MemoryGraph;
 use rudf::Result;
-use std::error::Error;
 use std::fmt;
-use std::io::BufReader;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 use std::str::FromStr;
 use url::Url;
 
 #[test]
 fn sparql_w3c_syntax_testsuite() {
     let manifest_10_url =
-        Url::parse("https://www.w3.org/2001/sw/DataAccess/tests/data-r2/manifest-syntax.ttl")
+        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/manifest-syntax.ttl")
             .unwrap();
     let manifest_11_url = Url::parse(
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest.ttl",
@@ -39,17 +38,15 @@ fn sparql_w3c_syntax_testsuite() {
         NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql2/manifest#syntax-function-04").unwrap(),
         NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql1/manifest#syntax-qname-04").unwrap(),
     ];
-    let client = RDFClient::default();
 
-    for test_result in TestManifest::new(&client, manifest_10_url)
-        .chain(TestManifest::new(&client, manifest_11_url))
+    for test_result in TestManifest::new(manifest_10_url).chain(TestManifest::new(manifest_11_url))
     {
         let test = test_result.unwrap();
         if test_blacklist.contains(&test.id) {
             continue;
         }
         if test.kind == "PositiveSyntaxTest" || test.kind == "PositiveSyntaxTest11" {
-            match client.load_sparql_query(test.query.clone()) {
+            match load_sparql_query(test.query.clone()) {
                 Err(error) => assert!(false, "Failure on {} with error: {}", test, error),
                 Ok(query) => {
                     if let Err(error) = read_sparql_query(query.to_string().as_bytes(), None) {
@@ -65,7 +62,7 @@ fn sparql_w3c_syntax_testsuite() {
             }
         } else if test.kind == "NegativeSyntaxTest" || test.kind == "NegativeSyntaxTest11" {
             //TODO
-            if let Ok(result) = client.load_sparql_query(test.query.clone()) {
+            if let Ok(result) = load_sparql_query(test.query.clone()) {
                 eprintln!("Failure on {}. The output tree is: {}", test, result);
             }
         } else {
@@ -107,9 +104,6 @@ fn sparql_w3c_query_evaluation_testsuite() {
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/graph/manifest.ttl")
             .unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest.ttl").unwrap(),
-        Url::parse(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest.ttl",
-        ).unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional/manifest.ttl")
             .unwrap(),
         Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest.ttl")
@@ -171,13 +165,12 @@ fn sparql_w3c_query_evaluation_testsuite() {
         //DATATYPE("foo"@en) returns rdf:langString in SPARQL 1.1
         NamedNode::from_str(
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-datatype-2",
-        ).unwrap(),
+        ).unwrap()
     ];
-    let client = RDFClient::default();
 
     for test_result in manifest_10_urls
         .into_iter()
-        .flat_map(|manifest| TestManifest::new(&client, manifest))
+        .flat_map(|manifest| TestManifest::new(manifest))
     {
         let test = test_result.unwrap();
         if test_blacklist.contains(&test.id) {
@@ -188,8 +181,7 @@ fn sparql_w3c_query_evaluation_testsuite() {
                 Some(data) => {
                     let dataset = MemoryDataset::default();
                     let dataset_default = dataset.default_graph();
-                    client
-                        .load_graph(data.clone())
+                    load_graph(data.clone())
                         .unwrap()
                         .iter()
                         .unwrap()
@@ -202,14 +194,13 @@ fn sparql_w3c_query_evaluation_testsuite() {
                 let named_graph = data
                     .named_graph(&NamedNode::from(graph_data.clone()).into())
                     .unwrap();
-                client
-                    .load_graph(graph_data.clone())
+                load_graph(graph_data.clone())
                     .unwrap()
                     .iter()
                     .unwrap()
                     .for_each(|triple| named_graph.insert(&triple.unwrap()).unwrap());
             }
-            match data.prepare_query(client.get(&test.query).unwrap()) {
+            match data.prepare_query(read_file(&test.query).unwrap()) {
                 Err(error) => assert!(
                     false,
                     "Failure to parse query of {} with error: {}",
@@ -222,9 +213,8 @@ fn sparql_w3c_query_evaluation_testsuite() {
                         test, error
                     ),
                     Ok(result) => {
-                        let expected_graph = client
-                            .load_sparql_query_result_graph(test.result.clone().unwrap())
-                            .unwrap();
+                        let expected_graph =
+                            load_sparql_query_result_graph(test.result.clone().unwrap()).unwrap();
                         let with_order = expected_graph
                             .triples_for_predicate(&rs::INDEX)
                             .unwrap()
@@ -237,7 +227,7 @@ fn sparql_w3c_query_evaluation_testsuite() {
                             test,
                             expected_graph,
                             actual_graph,
-                            client.load_sparql_query(test.query.clone()).unwrap(),
+                            load_sparql_query(test.query.clone()).unwrap(),
                             data
                         )
                     }
@@ -249,53 +239,53 @@ fn sparql_w3c_query_evaluation_testsuite() {
     }
 }
 
-pub struct RDFClient {
-    client: Client,
-}
-
-impl Default for RDFClient {
-    fn default() -> Self {
-        Self {
-            client: Client::new(),
-        }
+fn load_graph(url: Url) -> Result<MemoryGraph> {
+    if url.as_str().ends_with(".ttl") {
+        Ok(read_turtle(read_file(&url)?, Some(url))?.collect())
+    } else if url.as_str().ends_with(".rdf") {
+        read_rdf_xml(read_file(&url)?, Some(url)).collect()
+    } else {
+        Err(format_err!("Serialization type not found for {}", url))
     }
 }
 
-impl RDFClient {
-    fn load_graph(&self, url: Url) -> Result<MemoryGraph> {
-        if url.as_str().ends_with(".ttl") {
-            Ok(read_turtle(self.get(&url)?, Some(url))?.collect())
-        } else if url.as_str().ends_with(".rdf") {
-            read_rdf_xml(BufReader::new(self.get(&url)?), Some(url)).collect()
-        } else {
-            Err(format_err!("Serialization type not found for {}", url))
-        }
-    }
+fn load_sparql_query(url: Url) -> Result<Query> {
+    read_sparql_query(read_file(&url)?, Some(url))
+}
 
-    fn load_sparql_query(&self, url: Url) -> Result<Query> {
-        read_sparql_query(self.get(&url)?, Some(url))
+fn load_sparql_query_result_graph(url: Url) -> Result<MemoryGraph> {
+    if url.as_str().ends_with(".srx") {
+        to_graph(read_xml_results(read_file(&url)?)?, false)
+    } else {
+        load_graph(url)
     }
+}
 
-    fn load_sparql_query_result_graph(&self, url: Url) -> Result<MemoryGraph> {
-        if url.as_str().ends_with(".srx") {
-            to_graph(read_xml_results(BufReader::new(self.get(&url)?))?, false)
-        } else {
-            self.load_graph(url)
-        }
+fn to_relative_path(url: &Url) -> Result<String> {
+    let url = url.as_str();
+    if url.starts_with("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/") {
+        Ok(url.replace(
+            "http://www.w3.org/2001/sw/DataAccess/tests/",
+            "rdf-tests/sparql11/",
+        ))
+    } else if url.starts_with("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/") {
+        Ok(url.replace(
+            "http://www.w3.org/2009/sparql/docs/tests/",
+            "rdf-tests/sparql11/",
+        ))
+    } else {
+        Err(format_err!("Not supported url for file: {}", url))
     }
+}
 
-    fn get(&self, url: &Url) -> Result<Response> {
-        match self.client.get(url.clone()).send() {
-            Ok(response) => Ok(response),
-            Err(error) => {
-                if error.description() == "parsed HTTP message from remote is incomplete" {
-                    self.get(url)
-                } else {
-                    Err(format_err!("HTTP request error: {}", error.description()))
-                }
-            }
-        }
-    }
+fn read_file(url: &Url) -> Result<impl BufRead> {
+    let mut base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    base_path.push("tests");
+    base_path.push(to_relative_path(url)?);
+
+    Ok(BufReader::new(File::open(&base_path).map_err(|e| {
+        format_err!("Opening file {} failed with {}", base_path.display(), e)
+    })?))
 }
 
 mod rs {
@@ -441,17 +431,15 @@ impl fmt::Display for Test {
     }
 }
 
-pub struct TestManifest<'a> {
-    client: &'a RDFClient,
+pub struct TestManifest {
     graph: MemoryGraph,
     tests_to_do: Vec<Term>,
     manifests_to_do: Vec<Url>,
 }
 
-impl<'a> TestManifest<'a> {
-    pub fn new(client: &'a RDFClient, url: Url) -> TestManifest<'a> {
+impl TestManifest {
+    pub fn new(url: Url) -> TestManifest {
         Self {
-            client,
             graph: MemoryGraph::default(),
             tests_to_do: Vec::default(),
             manifests_to_do: vec![url],
@@ -501,7 +489,7 @@ pub mod qt {
     }
 }
 
-impl<'a> Iterator for TestManifest<'a> {
+impl Iterator for TestManifest {
     type Item = Result<Test>;
 
     fn next(&mut self) -> Option<Result<Test>> {
@@ -515,9 +503,9 @@ impl<'a> Iterator for TestManifest<'a> {
                 {
                     Some(Term::NamedNode(c)) => match c.as_str().split("#").last() {
                         Some(k) => k.to_string(),
-                        None => return Some(Err(format_err!("no type"))),
+                        None => return self.next(), //We ignore the test
                     },
-                    _ => return Some(Err(format_err!("no type"))),
+                    _ => return self.next(), //We ignore the test
                 };
                 let name = match self
                     .graph
@@ -604,7 +592,7 @@ impl<'a> Iterator for TestManifest<'a> {
                 match self.manifests_to_do.pop() {
                     Some(url) => {
                         let manifest = NamedOrBlankNode::from(NamedNode::new(url.clone()));
-                        match self.client.load_graph(url) {
+                        match load_graph(url) {
                             Ok(g) => g
                                 .iter()
                                 .unwrap()

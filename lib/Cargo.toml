@@ -32,6 +32,3 @@ regex = "1"
 
 [build-dependencies]
 peg = "0.5"
-
-[dev-dependencies]
-reqwest = "0.9"
