@@ -38,6 +38,7 @@ use rudf::store::MemoryGraph;
 use rudf::store::RocksDbDataset;
 use serde_derive::Deserialize;
 use std::fs::File;
+use std::io::BufReader;
 use std::panic::RefUnwindSafe;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -99,7 +100,7 @@ fn main_with_dataset<D: SparqlDataset + Send + Sync + RefUnwindSafe + 'static>(
     if let Some(nt_file) = matches.value_of("ntriples") {
         println!("Loading NTriples file {}", nt_file);
         let default_graph = dataset.default_graph();
-        for quad in read_ntriples(File::open(nt_file)?) {
+        for quad in read_ntriples(BufReader::new(File::open(nt_file)?))? {
             default_graph.insert(&quad?)?
         }
     }

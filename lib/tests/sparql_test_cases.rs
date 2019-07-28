@@ -241,7 +241,7 @@ fn sparql_w3c_query_evaluation_testsuite() {
 
 fn load_graph(url: Url) -> Result<MemoryGraph> {
     if url.as_str().ends_with(".ttl") {
-        Ok(read_turtle(read_file(&url)?, Some(url))?.collect())
+        read_turtle(read_file(&url)?, Some(url))?.collect()
     } else if url.as_str().ends_with(".rdf") {
         read_rdf_xml(read_file(&url)?, Some(url)).collect()
     } else {

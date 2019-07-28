@@ -17,42 +17,9 @@ use url::Url;
 
 #[test]
 fn turtle_w3c_testsuite() {
-    let manifest_url = Url::parse("http://www.w3.org/2013/TurtleTests/manifest.ttl").unwrap();
-    //TODO: make blacklist pass
-    let test_blacklist = vec![
-        //UTF-8 broken surrogates in BNode ids
-        NamedNode::new(
-            manifest_url
-                .join("#prefix_with_PN_CHARS_BASE_character_boundaries")
-                .unwrap(),
-        ),
-        NamedNode::new(
-            manifest_url
-                .join("#labeled_blank_node_with_PN_CHARS_BASE_character_boundaries")
-                .unwrap(),
-        ),
-        NamedNode::new(
-            manifest_url
-                .join("#localName_with_assigned_nfc_PN_CHARS_BASE_character_boundaries")
-                .unwrap(),
-        ),
-        NamedNode::new(
-            manifest_url
-                .join("#localName_with_nfc_PN_CHARS_BASE_character_boundaries")
-                .unwrap(),
-        ),
-        NamedNode::new(manifest_url.join("#IRI-resolution-01").unwrap()),
-        NamedNode::new(manifest_url.join("#IRI-resolution-02").unwrap()),
-        NamedNode::new(manifest_url.join("#IRI-resolution-07").unwrap()),
-        NamedNode::new(manifest_url.join("#turtle-subm-01").unwrap()),
-        NamedNode::new(manifest_url.join("#turtle-subm-27").unwrap()),
-    ];
-
+    let manifest_url = Url::parse("http://w3c.github.io/rdf-tests/turtle/manifest.ttl").unwrap();
     for test_result in TestManifest::new(manifest_url) {
         let test = test_result.unwrap();
-        if test_blacklist.contains(&test.id) {
-            continue;
-        }
         if test.kind == "TestTurtlePositiveSyntax" {
             if let Err(error) = load_turtle(test.action.clone()) {
                 assert!(false, "Failure on {} with error: {}", test, error)
@@ -107,7 +74,7 @@ fn turtle_w3c_testsuite() {
 
 #[test]
 fn ntriples_w3c_testsuite() {
-    let manifest_url = Url::parse("http://www.w3.org/2013/N-TriplesTests/manifest.ttl").unwrap();
+    let manifest_url = Url::parse("http://w3c.github.io/rdf-tests/ntriples/manifest.ttl").unwrap();
 
     for test_result in TestManifest::new(manifest_url) {
         let test = test_result.unwrap();
@@ -116,11 +83,9 @@ fn ntriples_w3c_testsuite() {
                 assert!(false, "Failure on {} with error: {}", test, error)
             }
         } else if test.kind == "TestNTriplesNegativeSyntax" {
-            assert!(
-                load_ntriples(test.action.clone()).is_err(),
-                "Failure on {}",
-                test
-            );
+            if let Ok(graph) = load_ntriples(test.action.clone()) {
+                assert!(false, "Failure on {}, found:\n{}", test, graph);
+            }
         } else {
             assert!(false, "Not supported test: {}", test);
         }
@@ -177,11 +142,11 @@ fn rdf_xml_w3c_testsuite() -> Result<()> {
 }
 
 fn load_turtle(url: Url) -> Result<MemoryGraph> {
-    Ok(read_turtle(read_file(&url)?, Some(url))?.collect())
+    read_turtle(read_file(&url)?, Some(url))?.collect()
 }
 
 fn load_ntriples(url: Url) -> Result<MemoryGraph> {
-    read_ntriples(read_file(&url)?).collect()
+    read_ntriples(read_file(&url)?)?.collect()
 }
 
 fn load_rdf_xml(url: Url) -> Result<MemoryGraph> {
@@ -190,13 +155,8 @@ fn load_rdf_xml(url: Url) -> Result<MemoryGraph> {
 
 fn to_relative_path(url: &Url) -> Result<String> {
     let url = url.as_str();
-    if url.starts_with("http://www.w3.org/2013/N-TriplesTests") {
-        Ok(url.replace(
-            "http://www.w3.org/2013/N-TriplesTests",
-            "rdf-tests/ntriples/",
-        ))
-    } else if url.starts_with("http://www.w3.org/2013/TurtleTests/") {
-        Ok(url.replace("http://www.w3.org/2013/TurtleTests/", "rdf-tests/turtle/"))
+    if url.starts_with("http://w3c.github.io/rdf-tests/") {
+        Ok(url.replace("http://w3c.github.io/", ""))
     } else if url.starts_with("http://www.w3.org/2013/RDFXMLTests/") {
         Ok(url.replace("http://www.w3.org/2013/RDFXMLTests/", "rdf-tests/rdf-xml/"))
     } else {
