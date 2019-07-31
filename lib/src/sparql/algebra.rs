@@ -422,63 +422,9 @@ pub enum Expression {
     UnaryPlus(Box<Expression>),
     UnaryMinus(Box<Expression>),
     UnaryNot(Box<Expression>),
-    StrFunctionCall(Box<Expression>),
-    LangFunctionCall(Box<Expression>),
-    LangMatchesFunctionCall(Box<Expression>, Box<Expression>),
-    DatatypeFunctionCall(Box<Expression>),
-    BoundFunctionCall(Variable),
-    IRIFunctionCall(Box<Expression>),
-    BNodeFunctionCall(Option<Box<Expression>>),
-    RandFunctionCall(),
-    AbsFunctionCall(Box<Expression>),
-    CeilFunctionCall(Box<Expression>),
-    FloorFunctionCall(Box<Expression>),
-    RoundFunctionCall(Box<Expression>),
-    ConcatFunctionCall(Vec<Expression>),
-    SubStrFunctionCall(Box<Expression>, Box<Expression>, Option<Box<Expression>>),
-    StrLenFunctionCall(Box<Expression>),
-    ReplaceFunctionCall(
-        Box<Expression>,
-        Box<Expression>,
-        Box<Expression>,
-        Option<Box<Expression>>,
-    ),
-    UCaseFunctionCall(Box<Expression>),
-    LCaseFunctionCall(Box<Expression>),
-    EncodeForURIFunctionCall(Box<Expression>),
-    ContainsFunctionCall(Box<Expression>, Box<Expression>),
-    StrStartsFunctionCall(Box<Expression>, Box<Expression>),
-    StrEndsFunctionCall(Box<Expression>, Box<Expression>),
-    StrBeforeFunctionCall(Box<Expression>, Box<Expression>),
-    StrAfterFunctionCall(Box<Expression>, Box<Expression>),
-    YearFunctionCall(Box<Expression>),
-    MonthFunctionCall(Box<Expression>),
-    DayFunctionCall(Box<Expression>),
-    HoursFunctionCall(Box<Expression>),
-    MinutesFunctionCall(Box<Expression>),
-    SecondsFunctionCall(Box<Expression>),
-    TimezoneFunctionCall(Box<Expression>),
-    TzFunctionCall(Box<Expression>),
-    NowFunctionCall(),
-    UUIDFunctionCall(),
-    StrUUIDFunctionCall(),
-    MD5FunctionCall(Box<Expression>),
-    SHA1FunctionCall(Box<Expression>),
-    SHA256FunctionCall(Box<Expression>),
-    SHA384FunctionCall(Box<Expression>),
-    SHA512FunctionCall(Box<Expression>),
-    CoalesceFunctionCall(Vec<Expression>),
-    IfFunctionCall(Box<Expression>, Box<Expression>, Box<Expression>),
-    StrLangFunctionCall(Box<Expression>, Box<Expression>),
-    StrDTFunctionCall(Box<Expression>, Box<Expression>),
-    SameTermFunctionCall(Box<Expression>, Box<Expression>),
-    IsIRIFunctionCall(Box<Expression>),
-    IsBlankFunctionCall(Box<Expression>),
-    IsLiteralFunctionCall(Box<Expression>),
-    IsNumericFunctionCall(Box<Expression>),
-    RegexFunctionCall(Box<Expression>, Box<Expression>, Option<Box<Expression>>),
-    CustomFunctionCall(NamedNode, Vec<Expression>),
-    ExistsFunctionCall(Box<GraphPattern>),
+    FunctionCall(Function, Vec<Expression>),
+    Exists(Box<GraphPattern>),
+    Bound(Variable),
 }
 
 impl fmt::Display for Expression {
@@ -518,96 +464,20 @@ impl fmt::Display for Expression {
             Expression::UnaryPlus(e) => write!(f, "+{}", e),
             Expression::UnaryMinus(e) => write!(f, "-{}", e),
             Expression::UnaryNot(e) => write!(f, "!{}", e),
-            Expression::StrFunctionCall(e) => write!(f, "STR({})", e),
-            Expression::LangFunctionCall(e) => write!(f, "LANG({})", e),
-            Expression::LangMatchesFunctionCall(a, b) => write!(f, "LANGMATCHES({}, {})", a, b),
-            Expression::DatatypeFunctionCall(e) => write!(f, "DATATYPE({})", e),
-            Expression::BoundFunctionCall(v) => write!(f, "BOUND({})", v),
-            Expression::IRIFunctionCall(e) => write!(f, "IRI({})", e),
-            Expression::BNodeFunctionCall(v) => v
-                .as_ref()
-                .map(|id| write!(f, "BNODE({})", id))
-                .unwrap_or_else(|| write!(f, "BNODE()")),
-            Expression::RandFunctionCall() => write!(f, "RAND()"),
-            Expression::AbsFunctionCall(e) => write!(f, "ABS({})", e),
-            Expression::CeilFunctionCall(e) => write!(f, "CEIL({})", e),
-            Expression::FloorFunctionCall(e) => write!(f, "FLOOR({})", e),
-            Expression::RoundFunctionCall(e) => write!(f, "ROUND({})", e),
-            Expression::ConcatFunctionCall(e) => write!(
-                f,
-                "CONCAT({})",
-                e.iter()
-                    .map(|v| v.to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
-            Expression::SubStrFunctionCall(a, b, c) => c
-                .as_ref()
-                .map(|cv| write!(f, "SUBSTR({}, {}, {})", a, b, cv))
-                .unwrap_or_else(|| write!(f, "SUBSTR({}, {})", a, b)),
-            Expression::StrLenFunctionCall(e) => write!(f, "STRLEN({})", e),
-            Expression::ReplaceFunctionCall(arg, pattern, replacement, flags) => match flags {
-                Some(flags) => write!(
-                    f,
-                    "REPLACE({}, {}, {}, {})",
-                    arg, pattern, replacement, flags
-                ),
-                None => write!(f, "REPLACE({}, {}, {})", arg, pattern, replacement),
-            },
-            Expression::UCaseFunctionCall(e) => write!(f, "UCASE({})", e),
-            Expression::LCaseFunctionCall(e) => write!(f, "LCASE({})", e),
-            Expression::EncodeForURIFunctionCall(e) => write!(f, "ENCODE_FOR_URI({})", e),
-            Expression::ContainsFunctionCall(a, b) => write!(f, "CONTAINS({}, {})", a, b),
-            Expression::StrStartsFunctionCall(a, b) => write!(f, "STRSTATS({}, {})", a, b),
-            Expression::StrEndsFunctionCall(a, b) => write!(f, "STRENDS({}, {})", a, b),
-            Expression::StrBeforeFunctionCall(a, b) => write!(f, "STRBEFORE({}, {})", a, b),
-            Expression::StrAfterFunctionCall(a, b) => write!(f, "STRAFTER({}, {})", a, b),
-            Expression::YearFunctionCall(e) => write!(f, "YEAR({})", e),
-            Expression::MonthFunctionCall(e) => write!(f, "MONTH({})", e),
-            Expression::DayFunctionCall(e) => write!(f, "DAY({})", e),
-            Expression::HoursFunctionCall(e) => write!(f, "HOURS({})", e),
-            Expression::MinutesFunctionCall(e) => write!(f, "MINUTES({})", e),
-            Expression::SecondsFunctionCall(e) => write!(f, "SECONDS({})", e),
-            Expression::TimezoneFunctionCall(e) => write!(f, "TIMEZONE({})", e),
-            Expression::TzFunctionCall(e) => write!(f, "TZ({})", e),
-            Expression::NowFunctionCall() => write!(f, "NOW()"),
-            Expression::UUIDFunctionCall() => write!(f, "UUID()"),
-            Expression::StrUUIDFunctionCall() => write!(f, "STRUUID()"),
-            Expression::MD5FunctionCall(e) => write!(f, "MD5({})", e),
-            Expression::SHA1FunctionCall(e) => write!(f, "SHA1({})", e),
-            Expression::SHA256FunctionCall(e) => write!(f, "SHA256({})", e),
-            Expression::SHA384FunctionCall(e) => write!(f, "SHA384({})", e),
-            Expression::SHA512FunctionCall(e) => write!(f, "SHA512({})", e),
-            Expression::CoalesceFunctionCall(e) => write!(
-                f,
-                "COALESCE({})",
-                e.iter()
-                    .map(|v| v.to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
-            Expression::IfFunctionCall(a, b, c) => write!(f, "IF({}, {}, {})", a, b, c),
-            Expression::StrLangFunctionCall(a, b) => write!(f, "STRLANG({}, {})", a, b),
-            Expression::StrDTFunctionCall(a, b) => write!(f, "STRDT({}, {})", a, b),
-            Expression::SameTermFunctionCall(a, b) => write!(f, "sameTerm({}, {})", a, b),
-            Expression::IsIRIFunctionCall(e) => write!(f, "isIRI({})", e),
-            Expression::IsBlankFunctionCall(e) => write!(f, "isBLANK({})", e),
-            Expression::IsLiteralFunctionCall(e) => write!(f, "isLITERAL({})", e),
-            Expression::IsNumericFunctionCall(e) => write!(f, "isNUMERIC({})", e),
-            Expression::RegexFunctionCall(text, pattern, flags) => match flags {
-                Some(flags) => write!(f, "REGEX({}, {}, {})", text, pattern, flags),
-                None => write!(f, "REGEX({}, {})", text, pattern),
-            },
-            Expression::CustomFunctionCall(iri, args) => write!(
-                f,
-                "{}({})",
-                iri,
-                args.iter()
-                    .map(|v| v.to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
-            Expression::ExistsFunctionCall(p) => write!(f, "EXISTS {{ {} }}", p),
+            Expression::FunctionCall(function, parameters) => {
+                write!(f, "{}(", function)?;
+                let mut cont = false;
+                for p in parameters {
+                    if cont {
+                        write!(f, ", ")?;
+                    }
+                    p.fmt(f)?;
+                    cont = true;
+                }
+                write!(f, ")")
+            }
+            Expression::Exists(p) => write!(f, "EXISTS {{ {} }}", p),
+            Expression::Bound(v) => write!(f, "BOUND({})", v),
         }
     }
 }
@@ -708,195 +578,134 @@ impl<'a> fmt::Display for SparqlExpression<'a> {
             Expression::UnaryPlus(e) => write!(f, "+{}", SparqlExpression(&*e)),
             Expression::UnaryMinus(e) => write!(f, "-{}", SparqlExpression(&*e)),
             Expression::UnaryNot(e) => match e.as_ref() {
-                Expression::ExistsFunctionCall(p) => {
-                    write!(f, "NOT EXISTS {{ {} }}", SparqlGraphPattern(&*p))
-                }
+                Expression::Exists(p) => write!(f, "NOT EXISTS {{ {} }}", SparqlGraphPattern(&*p)),
                 e => write!(f, "!{}", e),
             },
-            Expression::StrFunctionCall(e) => write!(f, "STR({})", SparqlExpression(&*e)),
-            Expression::LangFunctionCall(e) => write!(f, "LANG({})", SparqlExpression(&*e)),
-            Expression::LangMatchesFunctionCall(a, b) => write!(
-                f,
-                "LANGMATCHES({}, {})",
-                SparqlExpression(&*a),
-                SparqlExpression(&*b)
-            ),
-            Expression::DatatypeFunctionCall(e) => write!(f, "DATATYPE({})", SparqlExpression(&*e)),
-            Expression::BoundFunctionCall(v) => write!(f, "BOUND({})", v),
-            Expression::IRIFunctionCall(e) => write!(f, "IRI({})", SparqlExpression(&*e)),
-            Expression::BNodeFunctionCall(v) => v
-                .as_ref()
-                .map(|id| write!(f, "BOUND({})", SparqlExpression(&*id)))
-                .unwrap_or_else(|| write!(f, "BOUND()")),
-            Expression::RandFunctionCall() => write!(f, "RAND()"),
-            Expression::AbsFunctionCall(e) => write!(f, "ABS({})", SparqlExpression(&*e)),
-            Expression::CeilFunctionCall(e) => write!(f, "CEIL({})", SparqlExpression(&*e)),
-            Expression::FloorFunctionCall(e) => write!(f, "FLOOR({})", SparqlExpression(&*e)),
-            Expression::RoundFunctionCall(e) => write!(f, "ROUND({})", SparqlExpression(&*e)),
-            Expression::ConcatFunctionCall(e) => write!(
-                f,
-                "CONCAT({})",
-                e.iter()
-                    .map(|v| SparqlExpression(v).to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
-            Expression::SubStrFunctionCall(a, b, c) => c
-                .as_ref()
-                .map(|cv| {
-                    write!(
-                        f,
-                        "SUBSTR({}, {}, {})",
-                        SparqlExpression(&*a),
-                        SparqlExpression(&*b),
-                        SparqlExpression(cv)
-                    )
-                })
-                .unwrap_or_else(|| {
-                    write!(
-                        f,
-                        "SUBSTR({}, {})",
-                        SparqlExpression(&*a),
-                        SparqlExpression(&*b)
-                    )
-                }),
-            Expression::StrLenFunctionCall(e) => write!(f, "STRLEN({})", SparqlExpression(&*e)),
-            Expression::ReplaceFunctionCall(arg, pattern, replacement, flags) => match flags {
-                Some(flags) => write!(
-                    f,
-                    "REPLACE({}, {}, {}, {})",
-                    SparqlExpression(&*arg),
-                    SparqlExpression(&*pattern),
-                    SparqlExpression(&*replacement),
-                    flags
-                ),
-                None => write!(
-                    f,
-                    "REPLACE({}, {}, {})",
-                    SparqlExpression(&*arg),
-                    SparqlExpression(&*pattern),
-                    SparqlExpression(&*replacement)
-                ),
-            },
-            Expression::UCaseFunctionCall(e) => write!(f, "UCASE({})", SparqlExpression(&*e)),
-            Expression::LCaseFunctionCall(e) => write!(f, "LCASE({})", SparqlExpression(&*e)),
-            Expression::EncodeForURIFunctionCall(e) => {
-                write!(f, "ENCODE_FOR_URI({})", SparqlExpression(&*e))
+            Expression::FunctionCall(function, parameters) => {
+                write!(f, "{}(", function)?;
+                let mut cont = false;
+                for p in parameters {
+                    if cont {
+                        write!(f, ", ")?;
+                    }
+                    SparqlExpression(&*p).fmt(f)?;
+                    cont = true;
+                }
+                write!(f, ")")
             }
-            Expression::ContainsFunctionCall(a, b) => write!(
-                f,
-                "CONTAINS({}, {})",
-                SparqlExpression(&*a),
-                SparqlExpression(&*b)
-            ),
-            Expression::StrStartsFunctionCall(a, b) => write!(
-                f,
-                "STRSTATS({}, {})",
-                SparqlExpression(&*a),
-                SparqlExpression(&*b)
-            ),
-            Expression::StrEndsFunctionCall(a, b) => write!(
-                f,
-                "STRENDS({}, {})",
-                SparqlExpression(&*a),
-                SparqlExpression(&*b)
-            ),
-            Expression::StrBeforeFunctionCall(a, b) => write!(
-                f,
-                "STRBEFORE({}, {})",
-                SparqlExpression(&*a),
-                SparqlExpression(&*b)
-            ),
-            Expression::StrAfterFunctionCall(a, b) => write!(
-                f,
-                "STRAFTER({}, {})",
-                SparqlExpression(&*a),
-                SparqlExpression(&*b)
-            ),
-            Expression::YearFunctionCall(e) => write!(f, "YEAR({})", SparqlExpression(&*e)),
-            Expression::MonthFunctionCall(e) => write!(f, "MONTH({})", SparqlExpression(&*e)),
-            Expression::DayFunctionCall(e) => write!(f, "DAY({})", SparqlExpression(&*e)),
-            Expression::HoursFunctionCall(e) => write!(f, "HOURS({})", SparqlExpression(&*e)),
-            Expression::MinutesFunctionCall(e) => write!(f, "MINUTES({})", SparqlExpression(&*e)),
-            Expression::SecondsFunctionCall(e) => write!(f, "SECONDS({})", SparqlExpression(&*e)),
-            Expression::TimezoneFunctionCall(e) => write!(f, "TIMEZONE({})", SparqlExpression(&*e)),
-            Expression::TzFunctionCall(e) => write!(f, "TZ({})", SparqlExpression(&*e)),
-            Expression::NowFunctionCall() => write!(f, "NOW()"),
-            Expression::UUIDFunctionCall() => write!(f, "UUID()"),
-            Expression::StrUUIDFunctionCall() => write!(f, "STRUUID()"),
-            Expression::MD5FunctionCall(e) => write!(f, "MD5({})", SparqlExpression(&*e)),
-            Expression::SHA1FunctionCall(e) => write!(f, "SHA1({})", SparqlExpression(&*e)),
-            Expression::SHA256FunctionCall(e) => write!(f, "SHA256({})", SparqlExpression(&*e)),
-            Expression::SHA384FunctionCall(e) => write!(f, "SHA384({})", SparqlExpression(&*e)),
-            Expression::SHA512FunctionCall(e) => write!(f, "SHA512({})", SparqlExpression(&*e)),
-            Expression::CoalesceFunctionCall(e) => write!(
-                f,
-                "COALESCE({})",
-                e.iter()
-                    .map(|v| SparqlExpression(&*v).to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
-            Expression::IfFunctionCall(a, b, c) => write!(
-                f,
-                "IF({}, {}, {})",
-                SparqlExpression(&*a),
-                SparqlExpression(&*b),
-                SparqlExpression(&*c)
-            ),
-            Expression::StrLangFunctionCall(a, b) => write!(
-                f,
-                "STRLANG({}, {})",
-                SparqlExpression(&*a),
-                SparqlExpression(&*b)
-            ),
-            Expression::StrDTFunctionCall(a, b) => write!(
-                f,
-                "STRDT({}, {})",
-                SparqlExpression(&*a),
-                SparqlExpression(&*b)
-            ),
-            Expression::SameTermFunctionCall(a, b) => write!(
-                f,
-                "sameTerm({}, {})",
-                SparqlExpression(&*a),
-                SparqlExpression(&*b)
-            ),
-            Expression::IsIRIFunctionCall(e) => write!(f, "isIRI({})", SparqlExpression(&*e)),
-            Expression::IsBlankFunctionCall(e) => write!(f, "isBLANK({})", SparqlExpression(&*e)),
-            Expression::IsLiteralFunctionCall(e) => {
-                write!(f, "isLITERAL({})", SparqlExpression(&*e))
-            }
-            Expression::IsNumericFunctionCall(e) => {
-                write!(f, "isNUMERIC({})", SparqlExpression(&*e))
-            }
-            Expression::RegexFunctionCall(text, pattern, flags) => match flags {
-                Some(flags) => write!(
-                    f,
-                    "REGEX({}, {}, {})",
-                    SparqlExpression(&*text),
-                    SparqlExpression(&*pattern),
-                    flags
-                ),
-                None => write!(
-                    f,
-                    "REGEX({}, {})",
-                    SparqlExpression(&*text),
-                    SparqlExpression(&*pattern)
-                ),
-            },
-            Expression::CustomFunctionCall(iri, args) => write!(
-                f,
-                "{}({})",
-                iri,
-                args.iter()
-                    .map(|v| SparqlExpression(v).to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
-            Expression::ExistsFunctionCall(p) => {
-                write!(f, "EXISTS {{ {} }}", SparqlGraphPattern(&*p))
-            }
+            Expression::Bound(v) => write!(f, "BOUND({})", v),
+            Expression::Exists(p) => write!(f, "EXISTS {{ {} }}", SparqlGraphPattern(&*p)),
+        }
+    }
+}
+
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+pub enum Function {
+    Str,
+    Lang,
+    LangMatches,
+    Datatype,
+    IRI,
+    BNode,
+    Rand,
+    Abs,
+    Ceil,
+    Floor,
+    Round,
+    Concat,
+    SubStr,
+    StrLen,
+    Replace,
+    UCase,
+    LCase,
+    EncodeForURI,
+    Contains,
+    StrStarts,
+    StrEnds,
+    StrBefore,
+    StrAfter,
+    Year,
+    Month,
+    Day,
+    Hours,
+    Minutes,
+    Seconds,
+    Timezone,
+    Tz,
+    Now,
+    UUID,
+    StrUUID,
+    MD5,
+    SHA1,
+    SHA256,
+    SHA384,
+    SHA512,
+    Coalesce,
+    If,
+    StrLang,
+    StrDT,
+    SameTerm,
+    IsIRI,
+    IsBlank,
+    IsLiteral,
+    IsNumeric,
+    Regex,
+    Custom(NamedNode),
+}
+
+impl fmt::Display for Function {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Function::Str => write!(f, "STR"),
+            Function::Lang => write!(f, "LANG"),
+            Function::LangMatches => write!(f, "LANGMATCHES"),
+            Function::Datatype => write!(f, "DATATYPE"),
+            Function::IRI => write!(f, "IRI"),
+            Function::BNode => write!(f, "BNODE"),
+            Function::Rand => write!(f, "RAND"),
+            Function::Abs => write!(f, "ABS"),
+            Function::Ceil => write!(f, "CEIL"),
+            Function::Floor => write!(f, "FLOOR"),
+            Function::Round => write!(f, "ROUND"),
+            Function::Concat => write!(f, "CONCAT"),
+            Function::SubStr => write!(f, "SUBSTR"),
+            Function::StrLen => write!(f, "STRLEN"),
+            Function::Replace => write!(f, "REPLACE"),
+            Function::UCase => write!(f, "UCASE"),
+            Function::LCase => write!(f, "LCASE"),
+            Function::EncodeForURI => write!(f, "ENCODE_FOR_URI"),
+            Function::Contains => write!(f, "CONTAINS"),
+            Function::StrStarts => write!(f, "STRSTATS"),
+            Function::StrEnds => write!(f, "STRENDS"),
+            Function::StrBefore => write!(f, "STRBEFORE"),
+            Function::StrAfter => write!(f, "STRAFTER"),
+            Function::Year => write!(f, "YEAR"),
+            Function::Month => write!(f, "MONTH"),
+            Function::Day => write!(f, "DAY"),
+            Function::Hours => write!(f, "HOURS"),
+            Function::Minutes => write!(f, "MINUTES"),
+            Function::Seconds => write!(f, "SECONDS"),
+            Function::Timezone => write!(f, "TIMEZONE"),
+            Function::Tz => write!(f, "TZ"),
+            Function::Now => write!(f, "NOW"),
+            Function::UUID => write!(f, "UUID"),
+            Function::StrUUID => write!(f, "STRUUID"),
+            Function::MD5 => write!(f, "MD5"),
+            Function::SHA1 => write!(f, "SHA1"),
+            Function::SHA256 => write!(f, "SHA256"),
+            Function::SHA384 => write!(f, "SHA384"),
+            Function::SHA512 => write!(f, "SHA512"),
+            Function::Coalesce => write!(f, "COALESCE"),
+            Function::If => write!(f, "IF"),
+            Function::StrLang => write!(f, "STRLANG"),
+            Function::StrDT => write!(f, "STRDT"),
+            Function::SameTerm => write!(f, "sameTerm"),
+            Function::IsIRI => write!(f, "isIRI"),
+            Function::IsBlank => write!(f, "isBLANK"),
+            Function::IsLiteral => write!(f, "isLITERAL"),
+            Function::IsNumeric => write!(f, "isNUMERIC"),
+            Function::Regex => write!(f, "REGEX"),
+            Function::Custom(iri) => iri.fmt(f),
         }
     }
 }

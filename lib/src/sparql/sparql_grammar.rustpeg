@@ -354,7 +354,7 @@ Constraint -> Expression = BrackettedExpression / BuiltInCall / FunctionCall
 
 //[70]
 FunctionCall -> Expression = f: iri _ a: ArgList {
-    Expression::CustomFunctionCall(f, a)
+    Expression::FunctionCall(Function::Custom(f), a)
 }
 
 //[71]
@@ -754,81 +754,81 @@ BrackettedExpression -> Expression = '(' _ e:Expression _ ')' { e }
 //[121]
 BuiltInCall -> Expression =
     a:Aggregate { state.new_aggregation(a).into() } /
-    "STR"i _ '(' _ e:Expression _ ')' { Expression::StrFunctionCall(Box::new(e)) } /
-    "LANG"i _ '(' _ e:Expression _ ')' { Expression::LangFunctionCall(Box::new(e)) } /
-    "LANGMATCHES"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::LangMatchesFunctionCall(Box::new(a), Box::new(b)) } /
-    "DATATYPE"i _ '(' _ e:Expression _ ')' { Expression::DatatypeFunctionCall(Box::new(e)) } /
-    "BOUND"i _ '(' _ v:Var _ ')' { Expression::BoundFunctionCall(v) } /
-    ("IRI"i / "URI"i) _ '(' _ e:Expression _ ')' { Expression::IRIFunctionCall(Box::new(e)) } /
-    "BNODE"i '(' _ e:Expression _ ')' { Expression::BNodeFunctionCall(Some(Box::new(e))) } /
-    "BNODE"i NIL { Expression::BNodeFunctionCall(None) }  /
-    "RAND"i _ NIL { Expression::RandFunctionCall() } /
-    "ABS"i _ '(' _ e:Expression _ ')' { Expression::AbsFunctionCall(Box::new(e)) } /
-    "CEIL"i _ '(' _ e:Expression _ ')' { Expression::CeilFunctionCall(Box::new(e)) } /
-    "FLOOR"i _ '(' _ e:Expression _ ')' { Expression::FloorFunctionCall(Box::new(e)) } /
-    "ROUND"i _ '(' _ e:Expression _ ')' { Expression::RoundFunctionCall(Box::new(e)) } /
-    "CONCAT"i e:ExpressionList { Expression::ConcatFunctionCall(e) } /
+    "STR"i _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::Str, vec![e]) } /
+    "LANG"i _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::Lang, vec![e]) } /
+    "LANGMATCHES"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::FunctionCall(Function::LangMatches, vec![a, b]) } /
+    "DATATYPE"i _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::Datatype, vec![e]) } /
+    "BOUND"i _ '(' _ v:Var _ ')' { Expression::Bound(v) } /
+    ("IRI"i / "URI"i) _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::IRI, vec![e]) } /
+    "BNODE"i '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::BNode, vec![e]) } /
+    "BNODE"i NIL { Expression::FunctionCall(Function::BNode, vec![]) }  /
+    "RAND"i _ NIL { Expression::FunctionCall(Function::Rand, vec![]) } /
+    "ABS"i _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::Abs, vec![e]) } /
+    "CEIL"i _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::Ceil, vec![e]) } /
+    "FLOOR"i _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::Floor, vec![e]) } /
+    "ROUND"i _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::Round, vec![e]) } /
+    "CONCAT"i e:ExpressionList { Expression::FunctionCall(Function::Concat, e) } /
     SubstringExpression /
-    "STRLEN"i _ '(' _ e: Expression _ ')' { Expression::StrLenFunctionCall(Box::new(e)) } /
+    "STRLEN"i _ '(' _ e: Expression _ ')' { Expression::FunctionCall(Function::StrLen, vec![e]) } /
     StrReplaceExpression /
-	"UCASE"i _ '(' _ e:Expression _ ')' { Expression::UCaseFunctionCall(Box::new(e)) } /
-	"LCASE"i _ '(' _ e:Expression _ ')' { Expression::LCaseFunctionCall(Box::new(e)) } /
-	'ENCODE_FOR_URI' '(' _ e: Expression _ ')' { Expression::EncodeForURIFunctionCall(Box::new(e)) } /
-	"CONTAINS"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::ContainsFunctionCall(Box::new(a), Box::new(b)) } /
-	"STRSTARTS"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::StrStartsFunctionCall(Box::new(a), Box::new(b)) } /
-	"STRENDS"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::StrEndsFunctionCall(Box::new(a), Box::new(b)) } /
-	"STRBEFORE"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::StrBeforeFunctionCall(Box::new(a), Box::new(b)) } /
-	"STRAFTER"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::StrAfterFunctionCall(Box::new(a), Box::new(b)) } /
-	"YEAR"i _ '(' _ e:Expression _ ')' { Expression::YearFunctionCall(Box::new(e)) } /
-	"MONTH"i _ '(' _ e:Expression _ ')' { Expression::MonthFunctionCall(Box::new(e)) } /
-	"DAY"i _ '(' _ e:Expression _ ')' { Expression::DayFunctionCall(Box::new(e)) } /
-	"HOURS"i _ '(' _ e:Expression _ ')' { Expression::HoursFunctionCall(Box::new(e)) } /
-	"MINUTES"i _ '(' _ e:Expression _ ')' { Expression::MinutesFunctionCall(Box::new(e)) } /
-	"SECONDS"i _ '(' _ e:Expression _ ')' { Expression::SecondsFunctionCall(Box::new(e)) } /
-    "TIMEZONE"i _ '(' _ e:Expression _ ')' { Expression::TimezoneFunctionCall(Box::new(e)) } /
-    "TZ"i _ '(' _ e:Expression _ ')' { Expression::TzFunctionCall(Box::new(e)) } /
-	"NOW"i _ NIL { Expression::NowFunctionCall() } /
-	"UUID"i _ NIL { Expression::UUIDFunctionCall() }/
-	"STRUUID"i _ NIL { Expression::StrUUIDFunctionCall() } /
-	"MD5"i '(' _ e:Expression _ ')' { Expression::MD5FunctionCall(Box::new(e)) } /
-	"SHA1"i '(' _ e:Expression _ ')' { Expression::SHA1FunctionCall(Box::new(e)) } /
-	"SHA256"i '(' _ e:Expression _ ')' { Expression::SHA256FunctionCall(Box::new(e)) } /
-	"SHA384"i '(' _ e:Expression _ ')' { Expression::SHA384FunctionCall(Box::new(e)) } /
-	"SHA512"i '(' _ e:Expression _ ')' { Expression::SHA512FunctionCall(Box::new(e)) } /
-	"COALESCE"i e:ExpressionList { Expression::CoalesceFunctionCall(e) } /
-	"IF"i _ '(' _ a:Expression _ ',' _ b:Expression _ ',' _ c:Expression _ ')' { Expression::IfFunctionCall(Box::new(a), Box::new(b), Box::new(c)) } /
-	"STRLANG"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::StrLangFunctionCall(Box::new(a), Box::new(b)) }  /
-	"STRDT"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::StrDTFunctionCall(Box::new(a), Box::new(b)) } /
-	"sameTerm"i '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::SameTermFunctionCall(Box::new(a), Box::new(b)) } /
-    ("isIRI"i / "isURI"i) _ '(' _ e:Expression _ ')' { Expression::IsIRIFunctionCall(Box::new(e)) } /
-	"isBLANK"i '(' _ e:Expression _ ')' { Expression::IsBlankFunctionCall(Box::new(e)) } /
-	"isLITERAL"i '(' _ e:Expression _ ')' { Expression::IsLiteralFunctionCall(Box::new(e)) } /
-	"isNUMERIC"i '(' _ e:Expression _ ')' { Expression::IsNumericFunctionCall(Box::new(e)) } /
+	"UCASE"i _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::UCase, vec![e]) } /
+	"LCASE"i _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::LCase, vec![e]) } /
+	'ENCODE_FOR_URI' '(' _ e: Expression _ ')' { Expression::FunctionCall(Function::EncodeForURI, vec![e]) } /
+	"CONTAINS"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::FunctionCall(Function::Contains, vec![a, b]) } /
+	"STRSTARTS"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::FunctionCall(Function::StrStarts, vec![a, b]) } /
+	"STRENDS"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::FunctionCall(Function::StrEnds, vec![a, b]) } /
+	"STRBEFORE"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::FunctionCall(Function::StrBefore, vec![a, b]) } /
+	"STRAFTER"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::FunctionCall(Function::StrAfter, vec![a, b]) } /
+	"YEAR"i _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::Year, vec![e]) } /
+	"MONTH"i _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::Month, vec![e]) } /
+	"DAY"i _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::Day, vec![e]) } /
+	"HOURS"i _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::Hours, vec![e]) } /
+	"MINUTES"i _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::Minutes, vec![e]) } /
+	"SECONDS"i _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::Seconds, vec![e]) } /
+    "TIMEZONE"i _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::Timezone, vec![e]) } /
+    "TZ"i _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::Tz, vec![e]) } /
+	"NOW"i _ NIL { Expression::FunctionCall(Function::Now, vec![]) } /
+	"UUID"i _ NIL { Expression::FunctionCall(Function::UUID, vec![]) }/
+	"STRUUID"i _ NIL { Expression::FunctionCall(Function::StrUUID, vec![]) } /
+	"MD5"i '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::MD5, vec![e]) } /
+	"SHA1"i '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::SHA1, vec![e]) } /
+	"SHA256"i '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::SHA256, vec![e]) } /
+	"SHA384"i '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::SHA384, vec![e]) } /
+	"SHA512"i '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::SHA512, vec![e]) } /
+	"COALESCE"i e:ExpressionList { Expression::FunctionCall(Function::Coalesce, e) } /
+	"IF"i _ '(' _ a:Expression _ ',' _ b:Expression _ ',' _ c:Expression _ ')' { Expression::FunctionCall(Function::If, vec![a, b, c]) } /
+	"STRLANG"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::FunctionCall(Function::StrLang, vec![a, b]) }  /
+	"STRDT"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::FunctionCall(Function::StrDT, vec![a, b]) } /
+	"sameTerm"i '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::FunctionCall(Function::SameTerm, vec![a, b]) } /
+    ("isIRI"i / "isURI"i) _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::IsIRI, vec![e]) } /
+	"isBLANK"i '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::IsBlank, vec![e]) } /
+	"isLITERAL"i '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::IsLiteral, vec![e]) } /
+	"isNUMERIC"i '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::IsNumeric, vec![e]) } /
 	RegexExpression /
 	ExistsFunc /
 	NotExistsFunc
 
 //[122]
 RegexExpression -> Expression =
-    "REGEX"i _ '(' _ a:Expression _ ',' _ b:Expression _ ',' _ c:Expression _ ')' { Expression::RegexFunctionCall(Box::new(a), Box::new(b), Some(Box::new(c))) } /
-    "REGEX"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::RegexFunctionCall(Box::new(a), Box::new(b), None) }
+    "REGEX"i _ '(' _ a:Expression _ ',' _ b:Expression _ ',' _ c:Expression _ ')' { Expression::FunctionCall(Function::Regex, vec![a, b, c]) } /
+    "REGEX"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::FunctionCall(Function::Regex, vec![a, b]) }
 
 
 SubstringExpression -> Expression =
-    "SUBSTR"i _ '(' _ a:Expression _ ',' _ b:Expression _ ',' _ c:Expression _ ')' { Expression::SubStrFunctionCall(Box::new(a), Box::new(b), Some(Box::new(c))) } /
-    "SUBSTR"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::SubStrFunctionCall(Box::new(a), Box::new(b), None) }
+    "SUBSTR"i _ '(' _ a:Expression _ ',' _ b:Expression _ ',' _ c:Expression _ ')' { Expression::FunctionCall(Function::SubStr, vec![a, b, c]) } /
+    "SUBSTR"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::FunctionCall(Function::SubStr, vec![a, b]) }
 
 
 //[124]
 StrReplaceExpression -> Expression =
-    "REPLACE"i _ '(' _ a:Expression _ ',' _ b:Expression _ ',' _ c:Expression _ ',' _ d:Expression _ ')' { Expression::ReplaceFunctionCall(Box::new(a), Box::new(b), Box::new(c), Some(Box::new(d))) } /
-    "REPLACE"i _ '(' _ a:Expression _ ',' _ b:Expression _ ',' _ c:Expression _ ')' { Expression::ReplaceFunctionCall(Box::new(a), Box::new(b), Box::new(c), None) }
+    "REPLACE"i _ '(' _ a:Expression _ ',' _ b:Expression _ ',' _ c:Expression _ ',' _ d:Expression _ ')' { Expression::FunctionCall(Function::Replace, vec![a, b, c, d]) } /
+    "REPLACE"i _ '(' _ a:Expression _ ',' _ b:Expression _ ',' _ c:Expression _ ')' { Expression::FunctionCall(Function::Replace, vec![a, b, c]) }
 
 //[125]
-ExistsFunc -> Expression = "EXISTS"i _ p:GroupGraphPattern { Expression::ExistsFunctionCall(Box::new(p)) }
+ExistsFunc -> Expression = "EXISTS"i _ p:GroupGraphPattern { Expression::Exists(Box::new(p)) }
 
 //[126]
-NotExistsFunc -> Expression = "NOT"i _ "EXISTS"i _ p:GroupGraphPattern { Expression::UnaryNot(Box::new(Expression::ExistsFunctionCall(Box::new(p)))) }
+NotExistsFunc -> Expression = "NOT"i _ "EXISTS"i _ p:GroupGraphPattern { Expression::UnaryNot(Box::new(Expression::Exists(Box::new(p)))) }
 
 //[127]
 Aggregate -> Aggregation =
@@ -854,7 +854,7 @@ Aggregate -> Aggregation =
 //[128]
 iriOrFunction -> Expression = i: iri _ a: ArgList? {
     match a {
-        Some(a) => Expression::CustomFunctionCall(i, a),
+        Some(a) => Expression::FunctionCall(Function::Custom(i), a),
         None => Expression::Constant(i.into())
     }
 }
