@@ -243,7 +243,7 @@ fn load_graph(url: Url) -> Result<MemoryGraph> {
     if url.as_str().ends_with(".ttl") {
         read_turtle(read_file(&url)?, Some(url))?.collect()
     } else if url.as_str().ends_with(".rdf") {
-        read_rdf_xml(read_file(&url)?, Some(url)).collect()
+        read_rdf_xml(read_file(&url)?, Some(url))?.collect()
     } else {
         Err(format_err!("Serialization type not found for {}", url))
     }

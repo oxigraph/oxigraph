@@ -95,25 +95,16 @@ fn ntriples_w3c_testsuite() {
 #[test]
 fn rdf_xml_w3c_testsuite() -> Result<()> {
     let manifest_url = Url::parse("http://www.w3.org/2013/RDFXMLTests/manifest.ttl")?;
-    //TODO: make blacklist pass
-    let test_blacklist = vec![
-        NamedNode::new(manifest_url.join("#xml-canon-test001")?),
-        NamedNode::new(manifest_url.join("#rdfms-seq-representation-test001")?),
-        NamedNode::new(manifest_url.join("#rdf-containers-syntax-vs-schema-test004")?),
-    ];
 
     for test_result in TestManifest::new(manifest_url) {
         let test = test_result?;
-        if test_blacklist.contains(&test.id) {
-            continue;
-        }
 
         if test.kind == "TestXMLNegativeSyntax" {
-            /*TODO assert!(
+            assert!(
                 load_rdf_xml(test.action.clone()).is_err(),
                 "Failure on {}",
                 test
-            );*/
+            );
         } else if test.kind == "TestXMLEval" {
             match load_rdf_xml(test.action.clone()) {
                 Ok(action_graph) => match load_ntriples(test.result.clone().unwrap()) {
@@ -150,7 +141,7 @@ fn load_ntriples(url: Url) -> Result<MemoryGraph> {
 }
 
 fn load_rdf_xml(url: Url) -> Result<MemoryGraph> {
-    read_rdf_xml(read_file(&url)?, Some(url)).collect()
+    read_rdf_xml(read_file(&url)?, Some(url))?.collect()
 }
 
 fn to_relative_path(url: &Url) -> Result<String> {
