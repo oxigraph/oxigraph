@@ -1,7 +1,6 @@
 use crate::model::LanguageTag;
 use crate::store::encoded::*;
 use crate::store::numeric_encoder::*;
-use crate::utils::MutexPoisonError;
 use crate::Result;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;

@@ -1,6 +1,5 @@
 //See https://www.w3.org/TR/turtle/#sec-grammar
 
-use std::char;
 use crate::model::vocab::rdf;
 use crate::model::vocab::xsd;
 use std::str::FromStr;

@@ -1,11 +1,12 @@
 use crate::model::vocab::rdf;
 use crate::model::vocab::xsd;
 use crate::model::*;
-use crate::utils::MutexPoisonError;
 use crate::Result;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use chrono::prelude::*;
 use failure::format_err;
+use failure::Backtrace;
+use failure::Fail;
 use ordered_float::OrderedFloat;
 use rust_decimal::Decimal;
 use std::collections::BTreeMap;
@@ -13,6 +14,7 @@ use std::io::Read;
 use std::io::Write;
 use std::ops::Deref;
 use std::str;
+use std::sync::PoisonError;
 use std::sync::RwLock;
 use url::Url;
 use uuid::Uuid;
@@ -788,6 +790,20 @@ impl<S: StringStore + Default> Default for Encoder<S> {
     fn default() -> Self {
         Self {
             string_store: S::default(),
+        }
+    }
+}
+
+#[derive(Debug, Fail)]
+#[fail(display = "Mutex Mutex was poisoned")]
+pub struct MutexPoisonError {
+    backtrace: Backtrace,
+}
+
+impl<T> From<PoisonError<T>> for MutexPoisonError {
+    fn from(_: PoisonError<T>) -> Self {
+        Self {
+            backtrace: Backtrace::new(),
         }
     }
 }

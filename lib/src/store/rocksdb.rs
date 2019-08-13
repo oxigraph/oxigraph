@@ -2,7 +2,6 @@ use crate::model::LanguageTag;
 use crate::store::encoded::EncodedQuadsStore;
 use crate::store::encoded::StoreDataset;
 use crate::store::numeric_encoder::*;
-use crate::utils::MutexPoisonError;
 use crate::Result;
 use byteorder::ByteOrder;
 use byteorder::LittleEndian;

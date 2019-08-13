@@ -2,13 +2,13 @@ use crate::model::language_tag::LanguageTag;
 use crate::model::named_node::NamedNode;
 use crate::model::vocab::rdf;
 use crate::model::vocab::xsd;
-use crate::utils::Escaper;
 use chrono::prelude::*;
 use num_traits::identities::Zero;
 use num_traits::FromPrimitive;
 use num_traits::One;
 use num_traits::ToPrimitive;
 use ordered_float::OrderedFloat;
+use rio_api::model as rio;
 use rust_decimal::Decimal;
 use std::borrow::Cow;
 use std::fmt;
@@ -393,10 +393,27 @@ impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.is_plain() {
             self.language()
-                .map(|lang| write!(f, "\"{}\"@{}", self.value().escape(), lang))
-                .unwrap_or_else(|| write!(f, "\"{}\"", self.value().escape()))
+                .map(|lang| {
+                    rio::Literal::LanguageTaggedString {
+                        value: &self.value(),
+                        language: lang.as_str(),
+                    }
+                    .fmt(f)
+                })
+                .unwrap_or_else(|| {
+                    rio::Literal::Simple {
+                        value: &self.value(),
+                    }
+                    .fmt(f)
+                })
         } else {
-            write!(f, "\"{}\"^^{}", self.value().escape(), self.datatype())
+            rio::Literal::Typed {
+                value: &self.value(),
+                datatype: rio::NamedNode {
+                    iri: self.datatype().as_str(),
+                },
+            }
+            .fmt(f)
         }
     }
 }

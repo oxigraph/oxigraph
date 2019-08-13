@@ -1,10 +1,10 @@
 //! [SPARQL 1.1 Query Algebra](https://www.w3.org/TR/sparql11-query/#sparqlQuery) AST
 
 use crate::model::*;
-use crate::utils::Escaper;
 use crate::Result;
 use failure::format_err;
 use lazy_static::lazy_static;
+use rio_api::model as rio;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fmt;
@@ -1362,11 +1362,11 @@ impl fmt::Display for Aggregation {
                     sep.as_ref()
                         .map(|s| {
                             write!(
-                            f,
-                            "Aggregation(Distinct({}), GroupConcat, {{\"separator\" → \"{}\"}})",
-                            e,
-                            s.escape()
-                        )
+                                f,
+                                "Aggregation(Distinct({}), GroupConcat, {{\"separator\" → {}}})",
+                                e,
+                                fmt_str(s)
+                            )
                         })
                         .unwrap_or_else(|| {
                             write!(f, "Aggregation(Distinct({}), GroupConcat, {{}})", e)
@@ -1376,9 +1376,9 @@ impl fmt::Display for Aggregation {
                         .map(|s| {
                             write!(
                                 f,
-                                "Aggregation({}, GroupConcat, {{\"separator\" → \"{}\"}})",
+                                "Aggregation({}, GroupConcat, {{\"separator\" → {}}})",
                                 e,
-                                s.escape()
+                                fmt_str(s)
                             )
                         })
                         .unwrap_or_else(|| {
@@ -1448,9 +1448,9 @@ impl<'a> fmt::Display for SparqlAggregation<'a> {
                     if let Some(sep) = sep {
                         write!(
                             f,
-                            "GROUP_CONCAT(DISTINCT {}; SEPARATOR = \"{}\")",
+                            "GROUP_CONCAT(DISTINCT {}; SEPARATOR = {})",
                             SparqlExpression(e),
-                            sep.escape()
+                            fmt_str(sep)
                         )
                     } else {
                         write!(f, "GROUP_CONCAT(DISTINCT {})", SparqlExpression(e))
@@ -1458,15 +1458,21 @@ impl<'a> fmt::Display for SparqlAggregation<'a> {
                 } else if let Some(sep) = sep {
                     write!(
                         f,
-                        "GROUP_CONCAT({}; SEPARATOR = \"{}\")",
+                        "GROUP_CONCAT({}; SEPARATOR = {})",
                         SparqlExpression(e),
-                        sep.escape()
+                        fmt_str(sep)
                     )
                 } else {
                     write!(f, "GROUP_CONCAT({})", SparqlExpression(e))
                 }
             }
         }
+    }
+}
+
+fn fmt_str(value: &str) -> rio::Literal {
+    rio::Literal::Simple {
+        value: value.into(),
     }
 }
 

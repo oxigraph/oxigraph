@@ -41,7 +41,6 @@ pub mod model;
 pub mod rio;
 pub mod sparql;
 pub mod store;
-mod utils;
 
 pub use failure::Error;
 pub type Result<T> = ::std::result::Result<T, failure::Error>;

@@ -1,5 +1,6 @@
 use crate::Error;
 use crate::Result;
+use rio_api::model as rio;
 use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -28,7 +29,10 @@ pub struct NamedNode {
 
 impl fmt::Display for NamedNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<{}>", self.iri)
+        rio::NamedNode {
+            iri: self.iri.as_str(),
+        }
+        .fmt(f)
     }
 }
 
