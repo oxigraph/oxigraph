@@ -28,7 +28,7 @@ use lazy_static::lazy_static;
 use mime;
 use mime::Mime;
 use rudf::model::Graph;
-use rudf::rio::ntriples::read_ntriples;
+use rudf::rio::read_ntriples;
 use rudf::sparql::algebra::QueryResult;
 use rudf::sparql::xml_results::write_xml_results;
 use rudf::sparql::PreparedQuery;
