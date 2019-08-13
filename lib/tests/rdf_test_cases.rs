@@ -6,8 +6,6 @@ use rudf::model::*;
 use rudf::rio::ntriples::read_ntriples;
 use rudf::rio::turtle::read_turtle;
 use rudf::rio::xml::read_rdf_xml;
-use rudf::store::isomorphism::GraphIsomorphism;
-use rudf::store::MemoryGraph;
 use rudf::Result;
 use std::fmt;
 use std::fs::File;
@@ -34,7 +32,7 @@ fn turtle_w3c_testsuite() {
             match load_turtle(test.action.clone()) {
                 Ok(action_graph) => match load_turtle(test.result.clone().unwrap()) {
                     Ok(result_graph) => assert!(
-                        action_graph.is_isomorphic(&result_graph).unwrap(),
+                        action_graph.is_isomorphic(&result_graph),
                         "Failure on {}. Expected file:\n{}\nParsed file:\n{}\n",
                         test,
                         result_graph,
@@ -56,13 +54,10 @@ fn turtle_w3c_testsuite() {
                 .result
                 .clone()
                 .map(|r| load_turtle(r))
-                .unwrap_or_else(|| Ok(MemoryGraph::default()));
+                .unwrap_or_else(|| Ok(SimpleGraph::default()));
             assert!(
                 action_graph.is_err()
-                    || !action_graph
-                        .unwrap()
-                        .is_isomorphic(&result_graph.unwrap())
-                        .unwrap(),
+                    || !action_graph.unwrap().is_isomorphic(&result_graph.unwrap()),
                 "Failure on {}",
                 test
             );
@@ -109,7 +104,7 @@ fn rdf_xml_w3c_testsuite() -> Result<()> {
             match load_rdf_xml(test.action.clone()) {
                 Ok(action_graph) => match load_ntriples(test.result.clone().unwrap()) {
                     Ok(result_graph) => assert!(
-                        action_graph.is_isomorphic(&result_graph)?,
+                        action_graph.is_isomorphic(&result_graph),
                         "Failure on {}. Expected file:\n{}\nParsed file:\n{}\n",
                         test,
                         result_graph,
@@ -132,15 +127,15 @@ fn rdf_xml_w3c_testsuite() -> Result<()> {
     Ok(())
 }
 
-fn load_turtle(url: Url) -> Result<MemoryGraph> {
+fn load_turtle(url: Url) -> Result<SimpleGraph> {
     read_turtle(read_file(&url)?, Some(url))?.collect()
 }
 
-fn load_ntriples(url: Url) -> Result<MemoryGraph> {
+fn load_ntriples(url: Url) -> Result<SimpleGraph> {
     read_ntriples(read_file(&url)?)?.collect()
 }
 
-fn load_rdf_xml(url: Url) -> Result<MemoryGraph> {
+fn load_rdf_xml(url: Url) -> Result<SimpleGraph> {
     read_rdf_xml(read_file(&url)?, Some(url))?.collect()
 }
 
@@ -189,7 +184,7 @@ impl fmt::Display for Test {
 }
 
 pub struct TestManifest {
-    graph: MemoryGraph,
+    graph: SimpleGraph,
     tests_to_do: Vec<Term>,
     manifests_to_do: Vec<Url>,
 }
@@ -197,7 +192,7 @@ pub struct TestManifest {
 impl TestManifest {
     pub fn new(url: Url) -> TestManifest {
         Self {
-            graph: MemoryGraph::default(),
+            graph: SimpleGraph::default(),
             tests_to_do: Vec::default(),
             manifests_to_do: vec![url],
         }
@@ -238,7 +233,6 @@ impl Iterator for TestManifest {
                 let kind = match self
                     .graph
                     .object_for_subject_predicate(&test_subject, &rdf::TYPE)
-                    .unwrap()
                 {
                     Some(Term::NamedNode(c)) => match c.as_str().split("#").last() {
                         Some(k) => k.to_string(),
@@ -249,7 +243,6 @@ impl Iterator for TestManifest {
                 let name = match self
                     .graph
                     .object_for_subject_predicate(&test_subject, &mf::NAME)
-                    .unwrap()
                 {
                     Some(Term::Literal(c)) => Some(c.value().to_string()),
                     _ => None,
@@ -257,7 +250,6 @@ impl Iterator for TestManifest {
                 let comment = match self
                     .graph
                     .object_for_subject_predicate(&test_subject, &rdfs::COMMENT)
-                    .unwrap()
                 {
                     Some(Term::Literal(c)) => Some(c.value().to_string()),
                     _ => None,
@@ -265,7 +257,6 @@ impl Iterator for TestManifest {
                 let action = match self
                     .graph
                     .object_for_subject_predicate(&test_subject, &*mf::ACTION)
-                    .unwrap()
                 {
                     Some(Term::NamedNode(n)) => n.as_url().clone(),
                     Some(_) => return Some(Err(format_err!("invalid action"))),
@@ -274,7 +265,6 @@ impl Iterator for TestManifest {
                 let result = match self
                     .graph
                     .object_for_subject_predicate(&test_subject, &*mf::RESULT)
-                    .unwrap()
                 {
                     Some(Term::NamedNode(n)) => Some(n.as_url().clone()),
                     Some(_) => return Some(Err(format_err!("invalid result"))),
@@ -295,10 +285,7 @@ impl Iterator for TestManifest {
                     Some(url) => {
                         let manifest = NamedOrBlankNode::from(NamedNode::new(url.clone()));
                         match load_turtle(url) {
-                            Ok(g) => g
-                                .iter()
-                                .unwrap()
-                                .for_each(|g| self.graph.insert(&g.unwrap()).unwrap()),
+                            Ok(g) => self.graph.extend(g.into_iter()),
                             Err(e) => return Some(Err(e.into())),
                         }
 
@@ -306,7 +293,6 @@ impl Iterator for TestManifest {
                         match self
                             .graph
                             .object_for_subject_predicate(&manifest, &*mf::INCLUDE)
-                            .unwrap()
                         {
                             Some(Term::BlankNode(list)) => {
                                 self.manifests_to_do.extend(
@@ -325,7 +311,6 @@ impl Iterator for TestManifest {
                         match self
                             .graph
                             .object_for_subject_predicate(&manifest, &*mf::ENTRIES)
-                            .unwrap()
                         {
                             Some(Term::BlankNode(list)) => {
                                 self.tests_to_do.extend(RdfListIterator::iter(
@@ -350,13 +335,13 @@ impl Iterator for TestManifest {
     }
 }
 
-pub struct RdfListIterator<'a, G: Graph> {
-    graph: &'a G,
+pub struct RdfListIterator<'a> {
+    graph: &'a SimpleGraph,
     current_node: Option<NamedOrBlankNode>,
 }
 
-impl<'a, G: 'a + Graph> RdfListIterator<'a, G> {
-    fn iter(graph: &'a G, root: NamedOrBlankNode) -> RdfListIterator<'a, G> {
+impl<'a> RdfListIterator<'a> {
+    fn iter(graph: &'a SimpleGraph, root: NamedOrBlankNode) -> RdfListIterator<'a> {
         RdfListIterator {
             graph,
             current_node: Some(root),
@@ -364,7 +349,7 @@ impl<'a, G: 'a + Graph> RdfListIterator<'a, G> {
     }
 }
 
-impl<'a, G: 'a + Graph> Iterator for RdfListIterator<'a, G> {
+impl<'a> Iterator for RdfListIterator<'a> {
     type Item = Term;
 
     fn next(&mut self) -> Option<Term> {
@@ -372,20 +357,17 @@ impl<'a, G: 'a + Graph> Iterator for RdfListIterator<'a, G> {
             Some(current) => {
                 let result = self
                     .graph
-                    .object_for_subject_predicate(&current, &rdf::FIRST)
-                    .unwrap()?
-                    .clone();
+                    .object_for_subject_predicate(&current, &rdf::FIRST);
                 self.current_node = match self
                     .graph
                     .object_for_subject_predicate(&current, &rdf::REST)
-                    .unwrap()
                 {
                     Some(Term::NamedNode(ref n)) if *n == *rdf::NIL => None,
                     Some(Term::NamedNode(n)) => Some(n.clone().into()),
                     Some(Term::BlankNode(n)) => Some(n.clone().into()),
                     _ => None,
                 };
-                Some(result)
+                result.cloned()
             }
             None => None,
         }

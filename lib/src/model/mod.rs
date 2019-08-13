@@ -4,6 +4,8 @@
 
 mod blank_node;
 mod dataset;
+mod graph;
+mod isomorphism;
 mod language_tag;
 mod literal;
 mod named_node;
@@ -14,6 +16,7 @@ pub use crate::model::blank_node::BlankNode;
 pub use crate::model::dataset::Dataset;
 pub use crate::model::dataset::Graph;
 pub use crate::model::dataset::NamedGraph;
+pub use crate::model::graph::SimpleGraph;
 pub use crate::model::language_tag::LanguageTag;
 pub use crate::model::literal::Literal;
 pub use crate::model::named_node::NamedNode;

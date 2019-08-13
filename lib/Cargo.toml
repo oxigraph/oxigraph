@@ -32,6 +32,7 @@ regex = "1"
 rio_api = "0.2"
 rio_turtle = "0.2"
 rio_xml = "0.2"
+permutohedron = "0.2"
 
 [build-dependencies]
 peg = "0.5"

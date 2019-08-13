@@ -11,9 +11,7 @@ use rudf::sparql::parser::read_sparql_query;
 use rudf::sparql::xml_results::read_xml_results;
 use rudf::sparql::PreparedQuery;
 use rudf::sparql::SparqlDataset;
-use rudf::store::isomorphism::GraphIsomorphism;
 use rudf::store::MemoryDataset;
-use rudf::store::MemoryGraph;
 use rudf::Result;
 use std::fmt;
 use std::fs::File;
@@ -184,8 +182,7 @@ fn sparql_w3c_query_evaluation_testsuite() {
                     load_graph(data.clone())
                         .unwrap()
                         .iter()
-                        .unwrap()
-                        .for_each(|triple| dataset_default.insert(&triple.unwrap()).unwrap());
+                        .for_each(|triple| dataset_default.insert(triple).unwrap());
                     dataset
                 }
                 None => MemoryDataset::default(),
@@ -197,8 +194,7 @@ fn sparql_w3c_query_evaluation_testsuite() {
                 load_graph(graph_data.clone())
                     .unwrap()
                     .iter()
-                    .unwrap()
-                    .for_each(|triple| named_graph.insert(&triple.unwrap()).unwrap());
+                    .for_each(|triple| named_graph.insert(triple).unwrap());
             }
             match data.prepare_query(read_file(&test.query).unwrap()) {
                 Err(error) => assert!(
@@ -217,12 +213,11 @@ fn sparql_w3c_query_evaluation_testsuite() {
                             load_sparql_query_result_graph(test.result.clone().unwrap()).unwrap();
                         let with_order = expected_graph
                             .triples_for_predicate(&rs::INDEX)
-                            .unwrap()
                             .next()
                             .is_some();
                         let actual_graph = to_graph(result, with_order).unwrap();
                         assert!(
-                            actual_graph.is_isomorphic(&expected_graph).unwrap(),
+                            actual_graph.is_isomorphic(&expected_graph),
                             "Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
                             test,
                             expected_graph,
@@ -239,7 +234,7 @@ fn sparql_w3c_query_evaluation_testsuite() {
     }
 }
 
-fn load_graph(url: Url) -> Result<MemoryGraph> {
+fn load_graph(url: Url) -> Result<SimpleGraph> {
     if url.as_str().ends_with(".ttl") {
         read_turtle(read_file(&url)?, Some(url))?.collect()
     } else if url.as_str().ends_with(".rdf") {
@@ -253,7 +248,7 @@ fn load_sparql_query(url: Url) -> Result<Query> {
     read_sparql_query(read_file(&url)?, Some(url))
 }
 
-fn load_sparql_query_result_graph(url: Url) -> Result<MemoryGraph> {
+fn load_sparql_query_result_graph(url: Url) -> Result<SimpleGraph> {
     if url.as_str().ends_with(".srx") {
         to_graph(read_xml_results(read_file(&url)?)?, false)
     } else {
@@ -322,74 +317,74 @@ mod rs {
     }
 }
 
-fn to_graph(result: QueryResult<'_>, with_order: bool) -> Result<MemoryGraph> {
+fn to_graph(result: QueryResult<'_>, with_order: bool) -> Result<SimpleGraph> {
     match result {
         QueryResult::Graph(graph) => graph.collect(),
         QueryResult::Boolean(value) => {
-            let graph = MemoryGraph::default();
+            let mut graph = SimpleGraph::default();
             let result_set = BlankNode::default();
-            graph.insert(&Triple::new(
+            graph.insert(Triple::new(
                 result_set.clone(),
                 rdf::TYPE.clone(),
                 rs::RESULT_SET.clone(),
-            ))?;
-            graph.insert(&Triple::new(
+            ));
+            graph.insert(Triple::new(
                 result_set.clone(),
                 rs::BOOLEAN.clone(),
                 Literal::from(value),
-            ))?;
+            ));
             Ok(graph)
         }
         QueryResult::Bindings(bindings) => {
-            let graph = MemoryGraph::default();
+            let mut graph = SimpleGraph::default();
             let result_set = BlankNode::default();
-            graph.insert(&Triple::new(
+            graph.insert(Triple::new(
                 result_set.clone(),
                 rdf::TYPE.clone(),
                 rs::RESULT_SET.clone(),
-            ))?;
+            ));
             let (variables, iter) = bindings.destruct();
             for variable in &variables {
-                graph.insert(&Triple::new(
+                graph.insert(Triple::new(
                     result_set.clone(),
                     rs::RESULT_VARIABLE.clone(),
                     Literal::new_simple_literal(variable.name()?),
-                ))?;
+                ));
             }
             for (i, binding_values) in iter.enumerate() {
                 let binding_values = binding_values?;
                 let solution = BlankNode::default();
-                graph.insert(&Triple::new(
+                graph.insert(Triple::new(
                     result_set.clone(),
                     rs::SOLUTION.clone(),
                     solution.clone(),
-                ))?;
+                ));
                 for i in 0..variables.len() {
                     if let Some(ref value) = binding_values[i] {
                         let binding = BlankNode::default();
-                        graph.insert(&Triple::new(
+                        graph.insert(Triple::new(
                             solution.clone(),
                             rs::BINDING.clone(),
                             binding.clone(),
-                        ))?;
-                        graph.insert(&Triple::new(
+                        ));
+                        graph.insert(Triple::new(
                             binding.clone(),
                             rs::VALUE.clone(),
                             value.clone(),
-                        ))?;
-                        graph.insert(&Triple::new(
+                        ));
+                        graph.insert(Triple::new(
                             binding.clone(),
                             rs::VARIABLE.clone(),
                             Literal::new_simple_literal(variables[i].name()?),
-                        ))?;
+                        ));
                     }
                 }
                 if with_order {
-                    graph.insert(&Triple::new(
+                    graph.insert(Triple::new(
                         solution.clone(),
                         rs::INDEX.clone(),
                         Literal::from((i + 1) as i128),
-                    ))?;
+                    ));
                 }
             }
             Ok(graph)
@@ -432,7 +427,7 @@ impl fmt::Display for Test {
 }
 
 pub struct TestManifest {
-    graph: MemoryGraph,
+    graph: SimpleGraph,
     tests_to_do: Vec<Term>,
     manifests_to_do: Vec<Url>,
 }
@@ -440,7 +435,7 @@ pub struct TestManifest {
 impl TestManifest {
     pub fn new(url: Url) -> TestManifest {
         Self {
-            graph: MemoryGraph::default(),
+            graph: SimpleGraph::default(),
             tests_to_do: Vec::default(),
             manifests_to_do: vec![url],
         }
@@ -499,7 +494,6 @@ impl Iterator for TestManifest {
                 let kind = match self
                     .graph
                     .object_for_subject_predicate(&test_subject, &rdf::TYPE)
-                    .unwrap()
                 {
                     Some(Term::NamedNode(c)) => match c.as_str().split("#").last() {
                         Some(k) => k.to_string(),
@@ -510,7 +504,6 @@ impl Iterator for TestManifest {
                 let name = match self
                     .graph
                     .object_for_subject_predicate(&test_subject, &mf::NAME)
-                    .unwrap()
                 {
                     Some(Term::Literal(c)) => Some(c.value().to_string()),
                     _ => None,
@@ -518,7 +511,6 @@ impl Iterator for TestManifest {
                 let comment = match self
                     .graph
                     .object_for_subject_predicate(&test_subject, &rdfs::COMMENT)
-                    .unwrap()
                 {
                     Some(Term::Literal(c)) => Some(c.value().to_string()),
                     _ => None,
@@ -526,34 +518,24 @@ impl Iterator for TestManifest {
                 let (query, data, graph_data) = match self
                     .graph
                     .object_for_subject_predicate(&test_subject, &*mf::ACTION)
-                    .unwrap()
                 {
-                    Some(Term::NamedNode(n)) => (n.into(), None, vec![]),
+                    Some(Term::NamedNode(n)) => (n.clone().into(), None, vec![]),
                     Some(Term::BlankNode(n)) => {
-                        let n = n.into();
-                        let query = match self
-                            .graph
-                            .object_for_subject_predicate(&n, &qt::QUERY)
-                            .unwrap()
-                        {
-                            Some(Term::NamedNode(q)) => q.into(),
+                        let n = n.clone().into();
+                        let query = match self.graph.object_for_subject_predicate(&n, &qt::QUERY) {
+                            Some(Term::NamedNode(q)) => q.clone().into(),
                             Some(_) => return Some(Err(format_err!("invalid query"))),
                             None => return Some(Err(format_err!("query not found"))),
                         };
-                        let data = match self
-                            .graph
-                            .object_for_subject_predicate(&n, &qt::DATA)
-                            .unwrap()
-                        {
-                            Some(Term::NamedNode(q)) => Some(q.into()),
+                        let data = match self.graph.object_for_subject_predicate(&n, &qt::DATA) {
+                            Some(Term::NamedNode(q)) => Some(q.clone().into()),
                             _ => None,
                         };
                         let graph_data = self
                             .graph
                             .objects_for_subject_predicate(&n, &qt::GRAPH_DATA)
-                            .unwrap()
                             .filter_map(|g| match g {
-                                Ok(Term::NamedNode(q)) => Some(q.into()),
+                                Term::NamedNode(q) => Some(q.clone().into()),
                                 _ => None,
                             })
                             .collect();
@@ -570,9 +552,8 @@ impl Iterator for TestManifest {
                 let result = match self
                     .graph
                     .object_for_subject_predicate(&test_subject, &*mf::RESULT)
-                    .unwrap()
                 {
-                    Some(Term::NamedNode(n)) => Some(n.into()),
+                    Some(Term::NamedNode(n)) => Some(n.clone().into()),
                     Some(_) => return Some(Err(format_err!("invalid result"))),
                     None => None,
                 };
@@ -593,10 +574,7 @@ impl Iterator for TestManifest {
                     Some(url) => {
                         let manifest = NamedOrBlankNode::from(NamedNode::new(url.clone()));
                         match load_graph(url) {
-                            Ok(g) => g
-                                .iter()
-                                .unwrap()
-                                .for_each(|g| self.graph.insert(&g.unwrap()).unwrap()),
+                            Ok(g) => self.graph.extend(g.into_iter()),
                             Err(e) => return Some(Err(e.into())),
                         }
 
@@ -604,7 +582,6 @@ impl Iterator for TestManifest {
                         match self
                             .graph
                             .object_for_subject_predicate(&manifest, &*mf::INCLUDE)
-                            .unwrap()
                         {
                             Some(Term::BlankNode(list)) => {
                                 self.manifests_to_do.extend(
@@ -623,7 +600,6 @@ impl Iterator for TestManifest {
                         match self
                             .graph
                             .object_for_subject_predicate(&manifest, &*mf::ENTRIES)
-                            .unwrap()
                         {
                             Some(Term::BlankNode(list)) => {
                                 self.tests_to_do.extend(RdfListIterator::iter(
@@ -648,13 +624,13 @@ impl Iterator for TestManifest {
     }
 }
 
-pub struct RdfListIterator<'a, G: Graph> {
-    graph: &'a G,
+pub struct RdfListIterator<'a> {
+    graph: &'a SimpleGraph,
     current_node: Option<NamedOrBlankNode>,
 }
 
-impl<'a, G: 'a + Graph> RdfListIterator<'a, G> {
-    fn iter(graph: &'a G, root: NamedOrBlankNode) -> RdfListIterator<'a, G> {
+impl<'a> RdfListIterator<'a> {
+    fn iter(graph: &'a SimpleGraph, root: NamedOrBlankNode) -> RdfListIterator<'a> {
         RdfListIterator {
             graph,
             current_node: Some(root),
@@ -662,7 +638,7 @@ impl<'a, G: 'a + Graph> RdfListIterator<'a, G> {
     }
 }
 
-impl<'a, G: 'a + Graph> Iterator for RdfListIterator<'a, G> {
+impl<'a> Iterator for RdfListIterator<'a> {
     type Item = Term;
 
     fn next(&mut self) -> Option<Term> {
@@ -670,20 +646,17 @@ impl<'a, G: 'a + Graph> Iterator for RdfListIterator<'a, G> {
             Some(current) => {
                 let result = self
                     .graph
-                    .object_for_subject_predicate(&current, &rdf::FIRST)
-                    .unwrap()?
-                    .clone();
+                    .object_for_subject_predicate(&current, &rdf::FIRST);
                 self.current_node = match self
                     .graph
                     .object_for_subject_predicate(&current, &rdf::REST)
-                    .unwrap()
                 {
                     Some(Term::NamedNode(ref n)) if *n == *rdf::NIL => None,
                     Some(Term::NamedNode(n)) => Some(n.clone().into()),
                     Some(Term::BlankNode(n)) => Some(n.clone().into()),
                     _ => None,
                 };
-                Some(result)
+                result.cloned()
             }
             None => None,
         }
