@@ -11,26 +11,25 @@ use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use url::Url;
 
 #[test]
 fn turtle_w3c_testsuite() {
-    let manifest_url = Url::parse("http://w3c.github.io/rdf-tests/turtle/manifest.ttl").unwrap();
+    let manifest_url = "http://w3c.github.io/rdf-tests/turtle/manifest.ttl";
     for test_result in TestManifest::new(manifest_url) {
         let test = test_result.unwrap();
         if test.kind == "TestTurtlePositiveSyntax" {
-            if let Err(error) = load_turtle(test.action.clone()) {
+            if let Err(error) = load_turtle(test.action.as_str()) {
                 assert!(false, "Failure on {} with error: {}", test, error)
             }
         } else if test.kind == "TestTurtleNegativeSyntax" {
             assert!(
-                load_turtle(test.action.clone()).is_err(),
+                load_turtle(test.action.as_str()).is_err(),
                 "Failure on {}",
                 test
             );
         } else if test.kind == "TestTurtleEval" {
-            match load_turtle(test.action.clone()) {
-                Ok(action_graph) => match load_turtle(test.result.clone().unwrap()) {
+            match load_turtle(test.action.as_str()) {
+                Ok(action_graph) => match load_turtle(test.result.as_ref().unwrap()) {
                     Ok(result_graph) => assert!(
                         action_graph.is_isomorphic(&result_graph),
                         "Failure on {}. Expected file:\n{}\nParsed file:\n{}\n",
@@ -41,7 +40,7 @@ fn turtle_w3c_testsuite() {
                     Err(error) => assert!(
                         false,
                         "Failure to parse the Turtle result file {} of {} with error: {}",
-                        test.result.clone().unwrap(),
+                        test.result.as_ref().unwrap(),
                         test,
                         error
                     ),
@@ -49,11 +48,11 @@ fn turtle_w3c_testsuite() {
                 Err(error) => assert!(false, "Failure to parse {} with error: {}", test, error),
             }
         } else if test.kind == "TestTurtleNegativeEval" {
-            let action_graph = load_turtle(test.action.clone());
+            let action_graph = load_turtle(test.action.as_str());
             let result_graph = test
                 .result
                 .clone()
-                .map(|r| load_turtle(r))
+                .map(|r| load_turtle(r.as_str()))
                 .unwrap_or_else(|| Ok(SimpleGraph::default()));
             assert!(
                 action_graph.is_err()
@@ -69,16 +68,16 @@ fn turtle_w3c_testsuite() {
 
 #[test]
 fn ntriples_w3c_testsuite() {
-    let manifest_url = Url::parse("http://w3c.github.io/rdf-tests/ntriples/manifest.ttl").unwrap();
+    let manifest_url = "http://w3c.github.io/rdf-tests/ntriples/manifest.ttl";
 
     for test_result in TestManifest::new(manifest_url) {
         let test = test_result.unwrap();
         if test.kind == "TestNTriplesPositiveSyntax" {
-            if let Err(error) = load_ntriples(test.action.clone()) {
+            if let Err(error) = load_ntriples(test.action.as_str()) {
                 assert!(false, "Failure on {} with error: {}", test, error)
             }
         } else if test.kind == "TestNTriplesNegativeSyntax" {
-            if let Ok(graph) = load_ntriples(test.action.clone()) {
+            if let Ok(graph) = load_ntriples(test.action.as_str()) {
                 assert!(false, "Failure on {}, found:\n{}", test, graph);
             }
         } else {
@@ -89,20 +88,20 @@ fn ntriples_w3c_testsuite() {
 
 #[test]
 fn rdf_xml_w3c_testsuite() -> Result<()> {
-    let manifest_url = Url::parse("http://www.w3.org/2013/RDFXMLTests/manifest.ttl")?;
+    let manifest_url = "http://www.w3.org/2013/RDFXMLTests/manifest.ttl";
 
     for test_result in TestManifest::new(manifest_url) {
         let test = test_result?;
 
         if test.kind == "TestXMLNegativeSyntax" {
             assert!(
-                load_rdf_xml(test.action.clone()).is_err(),
+                load_rdf_xml(test.action.as_str()).is_err(),
                 "Failure on {}",
                 test
             );
         } else if test.kind == "TestXMLEval" {
-            match load_rdf_xml(test.action.clone()) {
-                Ok(action_graph) => match load_ntriples(test.result.clone().unwrap()) {
+            match load_rdf_xml(test.action.as_str()) {
+                Ok(action_graph) => match load_ntriples(test.result.as_ref().unwrap()) {
                     Ok(result_graph) => assert!(
                         action_graph.is_isomorphic(&result_graph),
                         "Failure on {}. Expected file:\n{}\nParsed file:\n{}\n",
@@ -127,20 +126,19 @@ fn rdf_xml_w3c_testsuite() -> Result<()> {
     Ok(())
 }
 
-fn load_turtle(url: Url) -> Result<SimpleGraph> {
-    read_turtle(read_file(&url)?, Some(url))?.collect()
+fn load_turtle(url: &str) -> Result<SimpleGraph> {
+    read_turtle(read_file(url)?, Some(url))?.collect()
 }
 
-fn load_ntriples(url: Url) -> Result<SimpleGraph> {
-    read_ntriples(read_file(&url)?)?.collect()
+fn load_ntriples(url: &str) -> Result<SimpleGraph> {
+    read_ntriples(read_file(url)?)?.collect()
 }
 
-fn load_rdf_xml(url: Url) -> Result<SimpleGraph> {
-    read_rdf_xml(read_file(&url)?, Some(url))?.collect()
+fn load_rdf_xml(url: &str) -> Result<SimpleGraph> {
+    read_rdf_xml(read_file(url)?, Some(url))?.collect()
 }
 
-fn to_relative_path(url: &Url) -> Result<String> {
-    let url = url.as_str();
+fn to_relative_path(url: &str) -> Result<String> {
     if url.starts_with("http://w3c.github.io/rdf-tests/") {
         Ok(url.replace("http://w3c.github.io/", ""))
     } else if url.starts_with("http://www.w3.org/2013/RDFXMLTests/") {
@@ -150,7 +148,7 @@ fn to_relative_path(url: &Url) -> Result<String> {
     }
 }
 
-fn read_file(url: &Url) -> Result<impl BufRead> {
+fn read_file(url: &str) -> Result<impl BufRead> {
     let mut base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     base_path.push("tests");
     base_path.push(to_relative_path(url)?);
@@ -165,8 +163,8 @@ pub struct Test {
     pub kind: String,
     pub name: Option<String>,
     pub comment: Option<String>,
-    pub action: Url,
-    pub result: Option<Url>,
+    pub action: String,
+    pub result: Option<String>,
 }
 
 impl fmt::Display for Test {
@@ -186,15 +184,15 @@ impl fmt::Display for Test {
 pub struct TestManifest {
     graph: SimpleGraph,
     tests_to_do: Vec<Term>,
-    manifests_to_do: Vec<Url>,
+    manifests_to_do: Vec<String>,
 }
 
 impl TestManifest {
-    pub fn new(url: Url) -> TestManifest {
+    pub fn new(url: impl Into<String>) -> TestManifest {
         Self {
             graph: SimpleGraph::default(),
             tests_to_do: Vec::default(),
-            manifests_to_do: vec![url],
+            manifests_to_do: vec![url.into()],
         }
     }
 }
@@ -258,7 +256,7 @@ impl Iterator for TestManifest {
                     .graph
                     .object_for_subject_predicate(&test_subject, &*mf::ACTION)
                 {
-                    Some(Term::NamedNode(n)) => n.as_url().clone(),
+                    Some(Term::NamedNode(n)) => n.as_str().to_string(),
                     Some(_) => return Some(Err(format_err!("invalid action"))),
                     None => return Some(Err(format_err!("action not found"))),
                 };
@@ -266,7 +264,7 @@ impl Iterator for TestManifest {
                     .graph
                     .object_for_subject_predicate(&test_subject, &*mf::RESULT)
                 {
-                    Some(Term::NamedNode(n)) => Some(n.as_url().clone()),
+                    Some(Term::NamedNode(n)) => Some(n.as_str().to_string()),
                     Some(_) => return Some(Err(format_err!("invalid result"))),
                     None => None,
                 };
@@ -283,8 +281,9 @@ impl Iterator for TestManifest {
             None => {
                 match self.manifests_to_do.pop() {
                     Some(url) => {
-                        let manifest = NamedOrBlankNode::from(NamedNode::new(url.clone()));
-                        match load_turtle(url) {
+                        let manifest =
+                            NamedOrBlankNode::from(NamedNode::new(url.as_str().to_string()));
+                        match load_turtle(&url) {
                             Ok(g) => self.graph.extend(g.into_iter()),
                             Err(e) => return Some(Err(e.into())),
                         }
@@ -298,7 +297,7 @@ impl Iterator for TestManifest {
                                 self.manifests_to_do.extend(
                                     RdfListIterator::iter(&self.graph, list.clone().into())
                                         .filter_map(|m| match m {
-                                            Term::NamedNode(nm) => Some(nm.as_url().clone()),
+                                            Term::NamedNode(nm) => Some(nm.as_str().to_string()),
                                             _ => None,
                                         }),
                                 );

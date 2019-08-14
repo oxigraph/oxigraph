@@ -531,10 +531,14 @@ mod grammar {
 
     pub fn read_sparql_query<'a, R: Read + 'a>(
         source: R,
-        base_uri: impl Into<Option<Url>>,
+        base_uri: Option<&'a str>,
     ) -> super::super::super::Result<Query> {
         let mut state = ParserState {
-            base_uri: base_uri.into(),
+            base_uri: if let Some(base_uri) = base_uri {
+                Some(Url::parse(base_uri)?)
+            } else {
+                None
+            },
             namespaces: HashMap::default(),
             bnodes_map: BTreeMap::default(),
             aggregations: BTreeMap::default(),

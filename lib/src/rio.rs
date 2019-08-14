@@ -9,7 +9,6 @@ use rio_xml::RdfXmlParser;
 use std::collections::BTreeMap;
 use std::io::BufRead;
 use std::str::FromStr;
-use url::Url;
 
 /// Reads a [N-Triples](https://www.w3.org/TR/n-triples/) file from a Rust `BufRead` and returns an iterator of the read `Triple`s
 pub fn read_ntriples<R: BufRead>(reader: R) -> Result<impl Iterator<Item = Result<Triple>>> {
@@ -18,27 +17,23 @@ pub fn read_ntriples<R: BufRead>(reader: R) -> Result<impl Iterator<Item = Resul
 }
 
 /// Reads a [Turtle](https://www.w3.org/TR/turtle/) file from a Rust `BufRead` and returns an iterator of the read `Triple`s
-pub fn read_turtle<R: BufRead>(
+pub fn read_turtle<'a, R: BufRead + 'a>(
     reader: R,
-    base_url: Option<Url>,
-) -> Result<impl Iterator<Item = Result<Triple>>> {
+    base_url: Option<&'a str>,
+) -> Result<impl Iterator<Item = Result<Triple>> + 'a> {
     let mut bnode_map = BTreeMap::default();
-    Ok(
-        TurtleParser::new(reader, base_url.as_ref().map_or("", |url| url.as_str()))?
-            .into_iter(move |t| convert_triple(t, &mut bnode_map)),
-    )
+    Ok(TurtleParser::new(reader, base_url.unwrap_or(""))?
+        .into_iter(move |t| convert_triple(t, &mut bnode_map)))
 }
 
 /// Reads a [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) file from a Rust `BufRead` and returns an iterator of the read `Triple`s
-pub fn read_rdf_xml<R: BufRead>(
+pub fn read_rdf_xml<'a, R: BufRead + 'a>(
     reader: R,
-    base_url: Option<Url>,
-) -> Result<impl Iterator<Item = Result<Triple>>> {
+    base_url: Option<&'a str>,
+) -> Result<impl Iterator<Item = Result<Triple>> + 'a> {
     let mut bnode_map = BTreeMap::default();
-    Ok(
-        RdfXmlParser::new(reader, base_url.as_ref().map_or("", |url| url.as_str()))?
-            .into_iter(move |t| convert_triple(t, &mut bnode_map)),
-    )
+    Ok(RdfXmlParser::new(reader, base_url.unwrap_or(""))?
+        .into_iter(move |t| convert_triple(t, &mut bnode_map)))
 }
 
 fn convert_triple(

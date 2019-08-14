@@ -16,7 +16,6 @@ use std::ops::Deref;
 use std::str;
 use std::sync::PoisonError;
 use std::sync::RwLock;
-use url::Url;
 use uuid::Uuid;
 
 const EMPTY_STRING_ID: u64 = 0;
@@ -36,7 +35,6 @@ pub trait StringStore {
 
     fn insert_str(&self, value: &str) -> Result<u64>;
     fn get_str(&self, id: u64) -> Result<Self::StringType>;
-    fn get_url(&self, id: u64) -> Result<Url>;
     fn get_language_tag(&self, id: u64) -> Result<LanguageTag>;
 
     /// Should be called when the bytes store is created
@@ -71,10 +69,6 @@ impl<'a, S: StringStore> StringStore for &'a S {
 
     fn get_str(&self, id: u64) -> Result<S::StringType> {
         (*self).get_str(id)
-    }
-
-    fn get_url(&self, id: u64) -> Result<Url> {
-        (*self).get_url(id)
     }
 
     fn get_language_tag(&self, id: u64) -> Result<LanguageTag> {
@@ -118,15 +112,6 @@ impl StringStore for MemoryStringStore {
             Err(format_err!("value not found in the dictionary"))
         } else {
             Ok(id2str[id as usize].to_owned())
-        }
-    }
-
-    fn get_url(&self, id: u64) -> Result<Url> {
-        let id2str = self.id2str.read().map_err(MutexPoisonError::from)?;
-        if id2str.len() as u64 <= id {
-            Err(format_err!("value not found in the dictionary"))
-        } else {
-            Ok(Url::parse(&id2str[id as usize])?)
         }
     }
 
@@ -709,7 +694,7 @@ impl<S: StringStore> Encoder<S> {
                 Err(format_err!("The default graph tag is not a valid term"))
             }
             EncodedTerm::NamedNode { iri_id } => {
-                Ok(NamedNode::from(self.string_store.get_url(iri_id)?).into())
+                Ok(NamedNode::new(self.string_store.get_str(iri_id)?).into())
             }
             EncodedTerm::BlankNode(id) => Ok(BlankNode::from(id).into()),
             EncodedTerm::StringLiteral { value_id } => {
@@ -728,7 +713,7 @@ impl<S: StringStore> Encoder<S> {
                 datatype_id,
             } => Ok(Literal::new_typed_literal(
                 self.string_store.get_str(value_id)?,
-                NamedNode::from(self.string_store.get_url(datatype_id)?),
+                NamedNode::new(self.string_store.get_str(datatype_id)?),
             )
             .into()),
             EncodedTerm::BooleanLiteral(value) => Ok(Literal::from(value).into()),

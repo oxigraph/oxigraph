@@ -18,17 +18,12 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::str::FromStr;
-use url::Url;
 
 #[test]
 fn sparql_w3c_syntax_testsuite() {
-    let manifest_10_url =
-        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/manifest-syntax.ttl")
-            .unwrap();
-    let manifest_11_url = Url::parse(
-        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest.ttl",
-    )
-    .unwrap();
+    let manifest_10_url = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/manifest-syntax.ttl";
+    let manifest_11_url =
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest.ttl";
     let test_blacklist = vec![
         NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql2/manifest#syntax-form-construct02").unwrap(),
         //TODO: Deserialization of the serialization failing:
@@ -44,7 +39,7 @@ fn sparql_w3c_syntax_testsuite() {
             continue;
         }
         if test.kind == "PositiveSyntaxTest" || test.kind == "PositiveSyntaxTest11" {
-            match load_sparql_query(test.query.clone()) {
+            match load_sparql_query(&test.query) {
                 Err(error) => assert!(false, "Failure on {} with error: {}", test, error),
                 Ok(query) => {
                     if let Err(error) = read_sparql_query(query.to_string().as_bytes(), None) {
@@ -60,7 +55,7 @@ fn sparql_w3c_syntax_testsuite() {
             }
         } else if test.kind == "NegativeSyntaxTest" || test.kind == "NegativeSyntaxTest11" {
             //TODO
-            if let Ok(result) = load_sparql_query(test.query.clone()) {
+            if let Ok(result) = load_sparql_query(&test.query) {
                 eprintln!("Failure on {}. The output tree is: {}", test, result);
             }
         } else {
@@ -73,49 +68,27 @@ fn sparql_w3c_syntax_testsuite() {
 fn sparql_w3c_query_evaluation_testsuite() {
     //TODO: dataset open-world
     let manifest_10_urls = vec![
-        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/algebra/manifest.ttl")
-            .unwrap(),
-        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/ask/manifest.ttl")
-            .unwrap(),
-        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/basic/manifest.ttl")
-            .unwrap(),
-        Url::parse(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/bnode-coreference/manifest.ttl",
-        ).unwrap(),
-        Url::parse(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/boolean-effective-value/manifest.ttl",
-        ).unwrap(),
-        Url::parse(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/bound/manifest.ttl",
-        ).unwrap(),
-        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/cast/manifest.ttl").unwrap(),
-        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/construct/manifest.ttl")
-            .unwrap(),
-        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest.ttl")
-            .unwrap(),
-        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest.ttl")
-            .unwrap(),
-        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest.ttl")
-            .unwrap(),
-        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-ops/manifest.ttl")
-            .unwrap(),
-        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/graph/manifest.ttl")
-            .unwrap(),
-        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest.ttl").unwrap(),
-        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional/manifest.ttl")
-            .unwrap(),
-        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest.ttl")
-            .unwrap(),
-        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/regex/manifest.ttl")
-            .unwrap(),
-        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/solution-seq/manifest.ttl")
-            .unwrap(),
-        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/sort/manifest.ttl").unwrap(),
-        Url::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/triple-match/manifest.ttl")
-            .unwrap(),
-        Url::parse(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/type-promotion/manifest.ttl",
-        ).unwrap(),
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/algebra/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/ask/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/basic/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/bnode-coreference/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/boolean-effective-value/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/bound/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/cast/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/construct/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-ops/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/graph/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/regex/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/solution-seq/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/sort/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/triple-match/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/type-promotion/manifest.ttl",
     ];
     let test_blacklist = vec![
         //Multiple writing of the same xsd:integer. Our system does strong normalization.
@@ -179,7 +152,7 @@ fn sparql_w3c_query_evaluation_testsuite() {
                 Some(data) => {
                     let dataset = MemoryDataset::default();
                     let dataset_default = dataset.default_graph();
-                    load_graph(data.clone())
+                    load_graph(&data)
                         .unwrap()
                         .iter()
                         .for_each(|triple| dataset_default.insert(triple).unwrap());
@@ -189,9 +162,9 @@ fn sparql_w3c_query_evaluation_testsuite() {
             };
             for graph_data in &test.graph_data {
                 let named_graph = data
-                    .named_graph(&NamedNode::from(graph_data.clone()).into())
+                    .named_graph(&NamedNode::new(graph_data.clone()).into())
                     .unwrap();
-                load_graph(graph_data.clone())
+                load_graph(&graph_data)
                     .unwrap()
                     .iter()
                     .for_each(|triple| named_graph.insert(triple).unwrap());
@@ -210,21 +183,21 @@ fn sparql_w3c_query_evaluation_testsuite() {
                     ),
                     Ok(result) => {
                         let expected_graph =
-                            load_sparql_query_result_graph(test.result.clone().unwrap()).unwrap();
+                            load_sparql_query_result_graph(test.result.as_ref().unwrap()).unwrap();
                         let with_order = expected_graph
                             .triples_for_predicate(&rs::INDEX)
                             .next()
                             .is_some();
                         let actual_graph = to_graph(result, with_order).unwrap();
                         assert!(
-                            actual_graph.is_isomorphic(&expected_graph),
-                            "Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
-                            test,
-                            expected_graph,
-                            actual_graph,
-                            load_sparql_query(test.query.clone()).unwrap(),
-                            data
-                        )
+                                actual_graph.is_isomorphic(&expected_graph),
+                                "Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
+                                test,
+                                expected_graph,
+                                actual_graph,
+                                load_sparql_query(&test.query).unwrap(),
+                                data
+                            )
                     }
                 },
             }
@@ -234,30 +207,29 @@ fn sparql_w3c_query_evaluation_testsuite() {
     }
 }
 
-fn load_graph(url: Url) -> Result<SimpleGraph> {
-    if url.as_str().ends_with(".ttl") {
-        read_turtle(read_file(&url)?, Some(url))?.collect()
-    } else if url.as_str().ends_with(".rdf") {
-        read_rdf_xml(read_file(&url)?, Some(url))?.collect()
+fn load_graph(url: &str) -> Result<SimpleGraph> {
+    if url.ends_with(".ttl") {
+        read_turtle(read_file(url)?, Some(url))?.collect()
+    } else if url.ends_with(".rdf") {
+        read_rdf_xml(read_file(url)?, Some(url))?.collect()
     } else {
         Err(format_err!("Serialization type not found for {}", url))
     }
 }
 
-fn load_sparql_query(url: Url) -> Result<Query> {
-    read_sparql_query(read_file(&url)?, Some(url))
+fn load_sparql_query(url: &str) -> Result<Query> {
+    read_sparql_query(read_file(url)?, Some(url))
 }
 
-fn load_sparql_query_result_graph(url: Url) -> Result<SimpleGraph> {
-    if url.as_str().ends_with(".srx") {
-        to_graph(read_xml_results(read_file(&url)?)?, false)
+fn load_sparql_query_result_graph(url: &str) -> Result<SimpleGraph> {
+    if url.ends_with(".srx") {
+        to_graph(read_xml_results(read_file(url)?)?, false)
     } else {
         load_graph(url)
     }
 }
 
-fn to_relative_path(url: &Url) -> Result<String> {
-    let url = url.as_str();
+fn to_relative_path(url: &str) -> Result<String> {
     if url.starts_with("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/") {
         Ok(url.replace(
             "http://www.w3.org/2001/sw/DataAccess/tests/",
@@ -273,7 +245,7 @@ fn to_relative_path(url: &Url) -> Result<String> {
     }
 }
 
-fn read_file(url: &Url) -> Result<impl BufRead> {
+fn read_file(url: &str) -> Result<impl BufRead> {
     let mut base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     base_path.push("tests");
     base_path.push(to_relative_path(url)?);
@@ -397,10 +369,10 @@ pub struct Test {
     pub kind: String,
     pub name: Option<String>,
     pub comment: Option<String>,
-    pub query: Url,
-    pub data: Option<Url>,
-    pub graph_data: Vec<Url>,
-    pub result: Option<Url>,
+    pub query: String,
+    pub data: Option<String>,
+    pub graph_data: Vec<String>,
+    pub result: Option<String>,
 }
 
 impl fmt::Display for Test {
@@ -429,15 +401,15 @@ impl fmt::Display for Test {
 pub struct TestManifest {
     graph: SimpleGraph,
     tests_to_do: Vec<Term>,
-    manifests_to_do: Vec<Url>,
+    manifests_to_do: Vec<String>,
 }
 
 impl TestManifest {
-    pub fn new(url: Url) -> TestManifest {
+    pub fn new(url: impl Into<String>) -> TestManifest {
         Self {
             graph: SimpleGraph::default(),
             tests_to_do: Vec::default(),
-            manifests_to_do: vec![url],
+            manifests_to_do: vec![url.into()],
         }
     }
 }
@@ -519,23 +491,23 @@ impl Iterator for TestManifest {
                     .graph
                     .object_for_subject_predicate(&test_subject, &*mf::ACTION)
                 {
-                    Some(Term::NamedNode(n)) => (n.clone().into(), None, vec![]),
+                    Some(Term::NamedNode(n)) => (n.as_str().to_string(), None, vec![]),
                     Some(Term::BlankNode(n)) => {
                         let n = n.clone().into();
                         let query = match self.graph.object_for_subject_predicate(&n, &qt::QUERY) {
-                            Some(Term::NamedNode(q)) => q.clone().into(),
+                            Some(Term::NamedNode(q)) => q.as_str().to_string(),
                             Some(_) => return Some(Err(format_err!("invalid query"))),
                             None => return Some(Err(format_err!("query not found"))),
                         };
                         let data = match self.graph.object_for_subject_predicate(&n, &qt::DATA) {
-                            Some(Term::NamedNode(q)) => Some(q.clone().into()),
+                            Some(Term::NamedNode(q)) => Some(q.as_str().to_string()),
                             _ => None,
                         };
                         let graph_data = self
                             .graph
                             .objects_for_subject_predicate(&n, &qt::GRAPH_DATA)
                             .filter_map(|g| match g {
-                                Term::NamedNode(q) => Some(q.clone().into()),
+                                Term::NamedNode(q) => Some(q.as_str().to_string()),
                                 _ => None,
                             })
                             .collect();
@@ -553,7 +525,7 @@ impl Iterator for TestManifest {
                     .graph
                     .object_for_subject_predicate(&test_subject, &*mf::RESULT)
                 {
-                    Some(Term::NamedNode(n)) => Some(n.clone().into()),
+                    Some(Term::NamedNode(n)) => Some(n.as_str().to_string()),
                     Some(_) => return Some(Err(format_err!("invalid result"))),
                     None => None,
                 };
@@ -573,7 +545,7 @@ impl Iterator for TestManifest {
                 match self.manifests_to_do.pop() {
                     Some(url) => {
                         let manifest = NamedOrBlankNode::from(NamedNode::new(url.clone()));
-                        match load_graph(url) {
+                        match load_graph(&url) {
                             Ok(g) => self.graph.extend(g.into_iter()),
                             Err(e) => return Some(Err(e.into())),
                         }
@@ -587,7 +559,7 @@ impl Iterator for TestManifest {
                                 self.manifests_to_do.extend(
                                     RdfListIterator::iter(&self.graph, list.clone().into())
                                         .filter_map(|m| match m {
-                                            Term::NamedNode(nm) => Some(nm.as_url().clone()),
+                                            Term::NamedNode(nm) => Some(nm.as_str().to_string()),
                                             _ => None,
                                         }),
                                 );

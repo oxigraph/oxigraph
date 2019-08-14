@@ -7,7 +7,6 @@ use std::collections::BTreeSet;
 use std::sync::RwLock;
 use std::sync::RwLockReadGuard;
 use std::sync::RwLockWriteGuard;
-use url::Url;
 
 /// Memory based implementation of the `rudf::model::Dataset` trait.
 /// They are cheap to build using the `MemoryDataset::default()` method.
@@ -76,10 +75,6 @@ impl StringStore for MemoryStore {
 
     fn get_str(&self, id: u64) -> Result<String> {
         self.string_store.get_str(id)
-    }
-
-    fn get_url(&self, id: u64) -> Result<Url> {
-        self.string_store.get_url(id)
     }
 
     fn get_language_tag(&self, id: u64) -> Result<LanguageTag> {

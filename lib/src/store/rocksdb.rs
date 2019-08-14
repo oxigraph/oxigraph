@@ -18,7 +18,6 @@ use std::ops::Deref;
 use std::path::Path;
 use std::str;
 use std::sync::Mutex;
-use url::Url;
 
 /// `rudf::model::Dataset` trait implementation based on the [RocksDB](https://rocksdb.org/) key-value store
 ///
@@ -116,10 +115,6 @@ impl StringStore for RocksDbStore {
         } else {
             Err(format_err!("value not found in the dictionary"))
         }
-    }
-
-    fn get_url(&self, id: u64) -> Result<Url> {
-        Ok(Url::parse(&self.get_str(id)?)?)
     }
 
     fn get_language_tag(&self, id: u64) -> Result<LanguageTag> {
