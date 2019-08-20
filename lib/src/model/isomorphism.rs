@@ -1,8 +1,6 @@
 use crate::model::*;
-use permutohedron::LexicalPermutation;
-use std::collections::hash_map::DefaultHasher;
-use std::collections::HashSet;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::hash_map::{DefaultHasher, RandomState};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::hash::Hash;
 use std::hash::Hasher;
 
@@ -38,140 +36,176 @@ fn predicate_objects_for_subject<'a>(
     })
 }
 
-fn hash_blank_nodes<'a>(
-    bnodes: HashSet<&'a BlankNode>,
+fn split_hash_buckets<'a>(
+    bnodes_by_hash: HashMap<u64, Vec<&'a BlankNode>>,
     graph: &'a SimpleGraph,
+    distance: usize,
 ) -> HashMap<u64, Vec<&'a BlankNode>> {
-    let mut bnodes_by_hash = HashMap::default();
+    let mut new_bnodes_by_hash = HashMap::default();
 
-    // NB: we need to sort the triples to have the same hash
-    for bnode in bnodes {
-        let mut hasher = DefaultHasher::new();
+    for (hash, bnodes) in bnodes_by_hash {
+        if bnodes.len() == 1 {
+            new_bnodes_by_hash.insert(hash, bnodes); // Nothing to improve
+        } else {
+            for bnode in bnodes {
+                let mut starts = vec![NamedOrBlankNode::from(bnode.clone())];
+                for _ in 0..distance {
+                    let mut new_starts = Vec::default();
+                    for s in starts {
+                        for t in graph.triples_for_subject(&s) {
+                            match t.object() {
+                                Term::NamedNode(t) => new_starts.push(t.clone().into()),
+                                Term::BlankNode(t) => new_starts.push(t.clone().into()),
+                                Term::Literal(_) => (),
+                            }
+                        }
+                        for t in graph.triples_for_object(&s.into()) {
+                            new_starts.push(t.subject().clone());
+                        }
+                    }
+                    starts = new_starts;
+                }
 
-        {
-            let subject = NamedOrBlankNode::from(bnode.clone());
-            let mut po_set: BTreeSet<PredicateObject> = BTreeSet::default();
-            for po in predicate_objects_for_subject(graph, &subject) {
-                match &po.object {
-                    Term::BlankNode(_) => (),
-                    _ => {
-                        po_set.insert(po);
+                // We do the hashing
+                let mut hasher = DefaultHasher::default();
+                hash.hash(&mut hasher); // We start with the previous hash
+
+                // NB: we need to sort the triples to have the same hash
+                let mut po_set: BTreeSet<PredicateObject> = BTreeSet::default();
+                for start in &starts {
+                    for po in predicate_objects_for_subject(graph, start) {
+                        match &po.object {
+                            Term::BlankNode(_) => (),
+                            _ => {
+                                po_set.insert(po);
+                            }
+                        }
                     }
                 }
-            }
-            for po in po_set {
-                po.hash(&mut hasher);
-            }
-        }
+                for po in &po_set {
+                    po.hash(&mut hasher);
+                }
 
-        {
-            let object = Term::from(bnode.clone());
-            let mut sp_set: BTreeSet<SubjectPredicate> = BTreeSet::default();
-            for sp in subject_predicates_for_object(graph, &object) {
-                match &sp.subject {
-                    NamedOrBlankNode::BlankNode(_) => (),
-                    _ => {
-                        sp_set.insert(sp);
+                let mut sp_set: BTreeSet<SubjectPredicate> = BTreeSet::default();
+                let term_starts: Vec<_> = starts.into_iter().map(|t| t.into()).collect();
+                for start in &term_starts {
+                    for sp in subject_predicates_for_object(graph, start) {
+                        match &sp.subject {
+                            NamedOrBlankNode::BlankNode(_) => (),
+                            _ => {
+                                sp_set.insert(sp);
+                            }
+                        }
                     }
                 }
-            }
-            for sp in sp_set {
-                sp.hash(&mut hasher);
+                for sp in &sp_set {
+                    sp.hash(&mut hasher);
+                }
+
+                new_bnodes_by_hash
+                    .entry(hasher.finish())
+                    .or_insert_with(Vec::default)
+                    .push(bnode);
             }
         }
-
-        bnodes_by_hash
-            .entry(hasher.finish())
-            .or_insert_with(Vec::default)
-            .push(bnode);
     }
-    bnodes_by_hash
+    new_bnodes_by_hash
 }
 
 fn build_and_check_containment_from_hashes<'a>(
-    hashes_to_see: &mut Vec<&u64>,
-    a_bnodes_by_hash: &'a HashMap<u64, Vec<&'a BlankNode>>,
+    a_bnodes_by_hash: &mut Vec<(u64, Vec<&'a BlankNode>)>,
     b_bnodes_by_hash: &'a HashMap<u64, Vec<&'a BlankNode>>,
     a_to_b_mapping: &mut HashMap<&'a BlankNode, &'a BlankNode>,
-    a: &SimpleGraph,
-    b: &SimpleGraph,
+    a: &'a SimpleGraph,
+    b: &'a SimpleGraph,
+    current_a_nodes: &[&'a BlankNode],
+    current_b_nodes: &mut BTreeSet<&'a BlankNode>,
 ) -> bool {
-    let hash = match hashes_to_see.pop() {
-        Some(h) => h,
-        None => return check_is_contained(a_to_b_mapping, a, b),
-    };
+    if let Some((a_node, remaining_a_node)) = current_a_nodes.split_last() {
+        let b_nodes = current_b_nodes.iter().cloned().collect::<Vec<_>>();
+        for b_node in b_nodes.into_iter() {
+            current_b_nodes.remove(b_node);
+            a_to_b_mapping.insert(a_node, b_node);
+            if check_is_contained_focused(a_to_b_mapping, a_node, a, b)
+                && build_and_check_containment_from_hashes(
+                    a_bnodes_by_hash,
+                    b_bnodes_by_hash,
+                    a_to_b_mapping,
+                    a,
+                    b,
+                    remaining_a_node,
+                    current_b_nodes,
+                )
+            {
+                return true;
+            }
+            current_b_nodes.insert(b_node);
+        }
+        a_to_b_mapping.remove(a_node);
+        false
+    } else {
+        let (hash, new_a_nodes) = match a_bnodes_by_hash.pop() {
+            Some(v) => v,
+            None => return true,
+        };
 
-    let a_nodes = a_bnodes_by_hash
-        .get(hash)
-        .map_or(&[] as &[&BlankNode], |v| v.as_slice());
-    let b_nodes = b_bnodes_by_hash
-        .get(hash)
-        .map_or(&[] as &[&BlankNode], |v| v.as_slice());
-    if a_nodes.len() != b_nodes.len() {
-        return false;
-    }
-    if a_nodes.len() == 1 {
-        // Avoid allocation for len == 1
-        a_to_b_mapping.insert(a_nodes[0], b_nodes[0]);
-        let result = build_and_check_containment_from_hashes(
-            hashes_to_see,
+        let mut new_b_nodes = b_bnodes_by_hash
+            .get(&hash)
+            .map_or(BTreeSet::default(), |v| v.into_iter().cloned().collect());
+        if new_a_nodes.len() != new_b_nodes.len() {
+            return false;
+        }
+
+        if new_a_nodes.len() > 10 {
+            eprintln!("Too big instance, aborting");
+            return true; //TODO: Very very very bad
+        }
+
+        if build_and_check_containment_from_hashes(
             a_bnodes_by_hash,
             b_bnodes_by_hash,
             a_to_b_mapping,
             a,
             b,
-        );
-        a_to_b_mapping.remove(a_nodes[0]);
-        hashes_to_see.push(hash);
-        result
-    } else {
-        // We compute all the rotations of a_nodes and then zip it with b_nodes to have all the possible pairs (a,b)
-        let mut a_nodes_rotated = a_nodes.to_vec();
-        a_nodes_rotated.sort();
-        loop {
-            for (a_node, b_node) in a_nodes_rotated.iter().zip(b_nodes.iter()) {
-                a_to_b_mapping.insert(a_node, b_node);
-            }
-            let result = if build_and_check_containment_from_hashes(
-                hashes_to_see,
-                a_bnodes_by_hash,
-                b_bnodes_by_hash,
-                a_to_b_mapping,
-                a,
-                b,
-            ) {
-                Some(true)
-            } else if a_nodes_rotated.next_permutation() {
-                None //keep going
-            } else {
-                Some(false) // No more permutation
-            };
-
-            if let Some(result) = result {
-                for a_node in &a_nodes_rotated {
-                    a_to_b_mapping.remove(a_node);
-                }
-                hashes_to_see.push(hash);
-                return result;
-            }
+            &new_a_nodes,
+            &mut new_b_nodes,
+        ) {
+            true
+        } else {
+            a_bnodes_by_hash.push((hash, new_a_nodes));
+            false
         }
     }
 }
 
-fn check_is_contained<'a>(
+fn check_is_contained_focused<'a>(
     a_to_b_mapping: &mut HashMap<&'a BlankNode, &'a BlankNode>,
-    a: &SimpleGraph,
-    b: &SimpleGraph,
+    a_bnode_focus: &'a BlankNode,
+    a: &'a SimpleGraph,
+    b: &'a SimpleGraph,
 ) -> bool {
-    for t_a in a.iter() {
-        let subject = if let NamedOrBlankNode::BlankNode(s_a) = &t_a.subject() {
-            a_to_b_mapping[s_a].clone().into()
+    let a_bnode_subject = a_bnode_focus.clone().into();
+    let a_bnode_object = a_bnode_focus.clone().into();
+    let ts_a = a
+        .triples_for_subject(&a_bnode_subject)
+        .chain(a.triples_for_object(&a_bnode_object));
+    for t_a in ts_a {
+        let subject: NamedOrBlankNode = if let NamedOrBlankNode::BlankNode(s_a) = &t_a.subject() {
+            if let Some(s_a) = a_to_b_mapping.get(s_a) {
+                (*s_a).clone().into()
+            } else {
+                continue; // We skip for now
+            }
         } else {
             t_a.subject().clone()
         };
         let predicate = t_a.predicate().clone();
-        let object = if let Term::BlankNode(o_a) = &t_a.object() {
-            a_to_b_mapping[o_a].clone().into()
+        let object: Term = if let Term::BlankNode(o_a) = &t_a.object() {
+            if let Some(o_a) = a_to_b_mapping.get(o_a) {
+                (*o_a).clone().into()
+            } else {
+                continue; // We skip for now
+            }
         } else {
             t_a.object().clone()
         };
@@ -183,9 +217,9 @@ fn check_is_contained<'a>(
     true
 }
 
-fn graph_blank_nodes(graph: &SimpleGraph) -> HashSet<&BlankNode> {
-    let mut blank_nodes = HashSet::default();
-    for t in graph.iter() {
+fn graph_blank_nodes(graph: &SimpleGraph) -> Vec<&BlankNode> {
+    let mut blank_nodes: HashSet<&BlankNode, RandomState> = HashSet::default();
+    for t in graph {
         if let NamedOrBlankNode::BlankNode(subject) = t.subject() {
             blank_nodes.insert(subject);
         }
@@ -193,7 +227,7 @@ fn graph_blank_nodes(graph: &SimpleGraph) -> HashSet<&BlankNode> {
             blank_nodes.insert(object);
         }
     }
-    blank_nodes
+    blank_nodes.into_iter().collect()
 }
 
 pub fn are_graphs_isomorphic(a: &SimpleGraph, b: &SimpleGraph) -> bool {
@@ -201,23 +235,60 @@ pub fn are_graphs_isomorphic(a: &SimpleGraph, b: &SimpleGraph) -> bool {
         return false;
     }
 
-    let a_bnodes = graph_blank_nodes(a);
-    let a_bnodes_by_hash = hash_blank_nodes(a_bnodes, a);
-
-    let b_bnodes = graph_blank_nodes(b);
-    let b_bnodes_by_hash = hash_blank_nodes(b_bnodes, b);
-
-    // Hashes should have the same size everywhere
-    if a_bnodes_by_hash.len() != b_bnodes_by_hash.len() {
-        return false;
+    // We check containment of everything buts triples with blank nodes
+    let mut a_bnodes_triples = SimpleGraph::default();
+    for t in a {
+        if t.subject().is_blank_node() || t.object().is_blank_node() {
+            a_bnodes_triples.insert(t.clone());
+        } else if !b.contains(t) {
+            return false; // Triple in a not in b without blank nodes
+        }
     }
 
+    let mut b_bnodes_triples = SimpleGraph::default();
+    for t in b {
+        if t.subject().is_blank_node() || t.object().is_blank_node() {
+            b_bnodes_triples.insert(t.clone());
+        } else if !a.contains(t) {
+            return false; // Triple in a not in b without blank nodes
+        }
+    }
+
+    let mut a_bnodes_by_hash = HashMap::default();
+    a_bnodes_by_hash.insert(0, graph_blank_nodes(&a_bnodes_triples));
+    let mut b_bnodes_by_hash = HashMap::default();
+    b_bnodes_by_hash.insert(0, graph_blank_nodes(&b_bnodes_triples));
+
+    for distance in 0..5 {
+        let max_size = a_bnodes_by_hash
+            .values()
+            .into_iter()
+            .map(|l| l.len())
+            .max()
+            .unwrap_or(0);
+        if max_size < 2 {
+            break; // We only have small buckets
+        }
+
+        a_bnodes_by_hash = split_hash_buckets(a_bnodes_by_hash, a, distance);
+        b_bnodes_by_hash = split_hash_buckets(b_bnodes_by_hash, b, distance);
+
+        // Hashes should have the same size
+        if a_bnodes_by_hash.len() != b_bnodes_by_hash.len() {
+            return false;
+        }
+    }
+
+    let mut sorted_a_bnodes_by_hash: Vec<_> = a_bnodes_by_hash.into_iter().collect();
+    sorted_a_bnodes_by_hash.sort_by(|(_, l1), (_, l2)| l1.len().cmp(&l2.len()));
+
     build_and_check_containment_from_hashes(
-        &mut a_bnodes_by_hash.keys().collect(),
-        &a_bnodes_by_hash,
+        &mut sorted_a_bnodes_by_hash,
         &b_bnodes_by_hash,
         &mut HashMap::default(),
-        a,
-        b,
+        &a_bnodes_triples,
+        &b_bnodes_triples,
+        &[],
+        &mut BTreeSet::default(),
     )
 }

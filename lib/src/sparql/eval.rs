@@ -2,8 +2,8 @@ use crate::model::BlankNode;
 use crate::model::Triple;
 use crate::sparql::algebra::*;
 use crate::sparql::plan::*;
-use crate::store::encoded::EncodedQuadsStore;
 use crate::store::numeric_encoder::*;
+use crate::store::StoreConnection;
 use crate::Result;
 use chrono::prelude::*;
 use num_traits::identities::Zero;
@@ -26,40 +26,38 @@ const REGEX_SIZE_LIMIT: usize = 1_000_000;
 
 type EncodedTuplesIterator<'a> = Box<dyn Iterator<Item = Result<EncodedTuple>> + 'a>;
 
-pub struct SimpleEvaluator<S: EncodedQuadsStore> {
-    store: Arc<S>,
+#[derive(Clone)]
+pub struct SimpleEvaluator<S: StoreConnection> {
+    store: S,
     bnodes_map: Arc<Mutex<BTreeMap<u64, BlankNode>>>,
 }
 
-impl<S: EncodedQuadsStore> Clone for SimpleEvaluator<S> {
-    fn clone(&self) -> Self {
-        Self {
-            store: self.store.clone(),
-            bnodes_map: self.bnodes_map.clone(),
-        }
-    }
-}
-
-impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
-    pub fn new(store: Arc<S>) -> Self {
+impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
+    pub fn new(store: S) -> Self {
         Self {
             store,
             bnodes_map: Arc::new(Mutex::new(BTreeMap::default())),
         }
     }
 
-    pub fn evaluate_select_plan<'a>(
-        &'a self,
-        plan: &'a PlanNode,
+    pub fn evaluate_select_plan<'b>(
+        &'b self,
+        plan: &'b PlanNode,
         variables: &[Variable],
-    ) -> Result<QueryResult<'a>> {
+    ) -> Result<QueryResult<'b>>
+    where
+        'a: 'b,
+    {
         let iter = self.eval_plan(plan, vec![None; variables.len()]);
         Ok(QueryResult::Bindings(
             self.decode_bindings(iter, variables.to_vec()),
         ))
     }
 
-    pub fn evaluate_ask_plan<'a>(&'a self, plan: &'a PlanNode) -> Result<QueryResult<'a>> {
+    pub fn evaluate_ask_plan<'b>(&'b self, plan: &'b PlanNode) -> Result<QueryResult<'b>>
+    where
+        'a: 'b,
+    {
         match self.eval_plan(plan, vec![]).next() {
             Some(Ok(_)) => Ok(QueryResult::Boolean(true)),
             Some(Err(error)) => Err(error),
@@ -67,11 +65,14 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
         }
     }
 
-    pub fn evaluate_construct_plan<'a>(
-        &'a self,
-        plan: &'a PlanNode,
-        construct: &'a [TripleTemplate],
-    ) -> Result<QueryResult<'a>> {
+    pub fn evaluate_construct_plan<'b>(
+        &'b self,
+        plan: &'b PlanNode,
+        construct: &'b [TripleTemplate],
+    ) -> Result<QueryResult<'b>>
+    where
+        'a: 'b,
+    {
         Ok(QueryResult::Graph(Box::new(ConstructIterator {
             store: self.store.clone(),
             iter: self.eval_plan(plan, vec![]),
@@ -81,15 +82,21 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
         })))
     }
 
-    pub fn evaluate_describe_plan<'a>(&'a self, plan: &'a PlanNode) -> Result<QueryResult<'a>> {
+    pub fn evaluate_describe_plan<'b>(&'b self, plan: &'b PlanNode) -> Result<QueryResult<'b>>
+    where
+        'a: 'b,
+    {
         Ok(QueryResult::Graph(Box::new(DescribeIterator {
             store: self.store.clone(),
             iter: self.eval_plan(plan, vec![]),
-            quads_iters: Vec::default(),
+            quads: Vec::default(),
         })))
     }
 
-    fn eval_plan<'a>(&self, node: &'a PlanNode, from: EncodedTuple) -> EncodedTuplesIterator<'a> {
+    fn eval_plan<'b>(&'b self, node: &'b PlanNode, from: EncodedTuple) -> EncodedTuplesIterator<'b>
+    where
+        'a: 'b,
+    {
         match node {
             PlanNode::Init => Box::new(once(Ok(from))),
             PlanNode::StaticBindings { tuples } => Box::new(tuples.iter().cloned().map(Ok)),
@@ -99,84 +106,72 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 predicate,
                 object,
                 graph_name,
-            } => {
-                let eval = self.clone();
-                Box::new(
-                    self.eval_plan(&*child, from)
-                        .flat_map(move |tuple| match tuple {
-                            Ok(tuple) => {
-                                let mut iter = eval.store.quads_for_pattern(
-                                    get_pattern_value(&subject, &tuple),
-                                    get_pattern_value(&predicate, &tuple),
-                                    get_pattern_value(&object, &tuple),
-                                    get_pattern_value(&graph_name, &tuple),
-                                );
-                                if subject.is_var() && subject == predicate {
-                                    iter = Box::new(iter.filter(|quad| match quad {
-                                        Err(_) => true,
-                                        Ok(quad) => quad.subject == quad.predicate,
-                                    }))
-                                }
-                                if subject.is_var() && subject == object {
-                                    iter = Box::new(iter.filter(|quad| match quad {
-                                        Err(_) => true,
-                                        Ok(quad) => quad.subject == quad.object,
-                                    }))
-                                }
-                                if predicate.is_var() && predicate == object {
-                                    iter = Box::new(iter.filter(|quad| match quad {
-                                        Err(_) => true,
-                                        Ok(quad) => quad.predicate == quad.object,
-                                    }))
-                                }
-                                if graph_name.is_var() {
-                                    iter = Box::new(iter.filter(|quad| match quad {
-                                        Err(_) => true,
-                                        Ok(quad) => quad.graph_name != ENCODED_DEFAULT_GRAPH,
-                                    }));
-                                    if graph_name == subject {
-                                        iter = Box::new(iter.filter(|quad| match quad {
-                                            Err(_) => true,
-                                            Ok(quad) => quad.graph_name == quad.subject,
-                                        }))
-                                    }
-                                    if graph_name == predicate {
-                                        iter = Box::new(iter.filter(|quad| match quad {
-                                            Err(_) => true,
-                                            Ok(quad) => quad.graph_name == quad.predicate,
-                                        }))
-                                    }
-                                    if graph_name == object {
-                                        iter = Box::new(iter.filter(|quad| match quad {
-                                            Err(_) => true,
-                                            Ok(quad) => quad.graph_name == quad.object,
-                                        }))
-                                    }
-                                }
-                                let iter: EncodedTuplesIterator<'_> =
-                                    Box::new(iter.map(move |quad| {
-                                        let quad = quad?;
-                                        let mut new_tuple = tuple.clone();
-                                        put_pattern_value(&subject, quad.subject, &mut new_tuple);
-                                        put_pattern_value(
-                                            &predicate,
-                                            quad.predicate,
-                                            &mut new_tuple,
-                                        );
-                                        put_pattern_value(&object, quad.object, &mut new_tuple);
-                                        put_pattern_value(
-                                            &graph_name,
-                                            quad.graph_name,
-                                            &mut new_tuple,
-                                        );
-                                        Ok(new_tuple)
-                                    }));
-                                iter
+            } => Box::new(
+                self.eval_plan(&*child, from)
+                    .flat_map(move |tuple| match tuple {
+                        Ok(tuple) => {
+                            let mut iter = self.store.quads_for_pattern(
+                                get_pattern_value(&subject, &tuple),
+                                get_pattern_value(&predicate, &tuple),
+                                get_pattern_value(&object, &tuple),
+                                get_pattern_value(&graph_name, &tuple),
+                            );
+                            if subject.is_var() && subject == predicate {
+                                iter = Box::new(iter.filter(|quad| match quad {
+                                    Err(_) => true,
+                                    Ok(quad) => quad.subject == quad.predicate,
+                                }))
                             }
-                            Err(error) => Box::new(once(Err(error))),
-                        }),
-                )
-            }
+                            if subject.is_var() && subject == object {
+                                iter = Box::new(iter.filter(|quad| match quad {
+                                    Err(_) => true,
+                                    Ok(quad) => quad.subject == quad.object,
+                                }))
+                            }
+                            if predicate.is_var() && predicate == object {
+                                iter = Box::new(iter.filter(|quad| match quad {
+                                    Err(_) => true,
+                                    Ok(quad) => quad.predicate == quad.object,
+                                }))
+                            }
+                            if graph_name.is_var() {
+                                iter = Box::new(iter.filter(|quad| match quad {
+                                    Err(_) => true,
+                                    Ok(quad) => quad.graph_name != ENCODED_DEFAULT_GRAPH,
+                                }));
+                                if graph_name == subject {
+                                    iter = Box::new(iter.filter(|quad| match quad {
+                                        Err(_) => true,
+                                        Ok(quad) => quad.graph_name == quad.subject,
+                                    }))
+                                }
+                                if graph_name == predicate {
+                                    iter = Box::new(iter.filter(|quad| match quad {
+                                        Err(_) => true,
+                                        Ok(quad) => quad.graph_name == quad.predicate,
+                                    }))
+                                }
+                                if graph_name == object {
+                                    iter = Box::new(iter.filter(|quad| match quad {
+                                        Err(_) => true,
+                                        Ok(quad) => quad.graph_name == quad.object,
+                                    }))
+                                }
+                            }
+                            let iter: EncodedTuplesIterator<'_> = Box::new(iter.map(move |quad| {
+                                let quad = quad?;
+                                let mut new_tuple = tuple.clone();
+                                put_pattern_value(&subject, quad.subject, &mut new_tuple);
+                                put_pattern_value(&predicate, quad.predicate, &mut new_tuple);
+                                put_pattern_value(&object, quad.object, &mut new_tuple);
+                                put_pattern_value(&graph_name, quad.graph_name, &mut new_tuple);
+                                Ok(new_tuple)
+                            }));
+                            iter
+                        }
+                        Err(error) => Box::new(once(Err(error))),
+                    }),
+            ),
             PlanNode::Join { left, right } => {
                 //TODO: very dumb implementation
                 let left_iter = self.eval_plan(&*left, from.clone());
@@ -208,7 +203,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                     eval: self.clone(),
                     right_plan: &*right,
                     left_iter: self.eval_plan(&*left, filtered_from),
-                    current_right_iter: None,
+                    current_right: Vec::default(),
                 };
                 if problem_vars.is_empty() {
                     Box::new(iter)
@@ -236,7 +231,7 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
                 eval: self.clone(),
                 children_plan: &children,
                 input_iter: self.eval_plan(&*entry, from),
-                current_iters: Vec::default(),
+                current: Vec::default(),
             }),
             PlanNode::Extend {
                 child,
@@ -853,11 +848,14 @@ impl<S: EncodedQuadsStore> SimpleEvaluator<S> {
         }
     }
 
-    fn decode_bindings<'a>(
-        &self,
-        iter: EncodedTuplesIterator<'a>,
+    fn decode_bindings<'b>(
+        &'b self,
+        iter: EncodedTuplesIterator<'b>,
         variables: Vec<Variable>,
-    ) -> BindingsIterator<'a> {
+    ) -> BindingsIterator<'b>
+    where
+        'a: 'b,
+    {
         let store = self.store.clone();
         BindingsIterator::new(
             variables,
@@ -1124,31 +1122,31 @@ impl<'a> Iterator for JoinIterator<'a> {
     }
 }
 
-struct LeftJoinIterator<'a, S: EncodedQuadsStore> {
+struct LeftJoinIterator<'a, S: StoreConnection + 'a> {
     eval: SimpleEvaluator<S>,
     right_plan: &'a PlanNode,
     left_iter: EncodedTuplesIterator<'a>,
-    current_right_iter: Option<EncodedTuplesIterator<'a>>,
+    current_right: Vec<Result<EncodedTuple>>, //TODO: keep using an iterator?
 }
 
-impl<'a, S: EncodedQuadsStore> Iterator for LeftJoinIterator<'a, S> {
+impl<'a, S: StoreConnection> Iterator for LeftJoinIterator<'a, S> {
     type Item = Result<EncodedTuple>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple>> {
-        if let Some(ref mut right_iter) = self.current_right_iter {
-            if let Some(tuple) = right_iter.next() {
-                return Some(tuple);
-            }
+        if let Some(tuple) = self.current_right.pop() {
+            return Some(tuple);
         }
         match self.left_iter.next()? {
             Ok(left_tuple) => {
-                let mut right_iter = self.eval.eval_plan(self.right_plan, left_tuple.clone());
-                match right_iter.next() {
-                    Some(right_tuple) => {
-                        self.current_right_iter = Some(right_iter);
-                        Some(right_tuple)
-                    }
-                    None => Some(Ok(left_tuple)),
+                let mut current_right: Vec<_> = self
+                    .eval
+                    .eval_plan(self.right_plan, left_tuple.clone())
+                    .collect();
+                if let Some(right_tuple) = current_right.pop() {
+                    self.current_right = current_right;
+                    Some(right_tuple)
+                } else {
+                    Some(Ok(left_tuple))
                 }
             }
             Err(error) => Some(Err(error)),
@@ -1156,13 +1154,13 @@ impl<'a, S: EncodedQuadsStore> Iterator for LeftJoinIterator<'a, S> {
     }
 }
 
-struct BadLeftJoinIterator<'a, S: EncodedQuadsStore> {
+struct BadLeftJoinIterator<'a, S: StoreConnection> {
     input: EncodedTuple,
     iter: LeftJoinIterator<'a, S>,
     problem_vars: Vec<usize>,
 }
 
-impl<'a, S: EncodedQuadsStore> Iterator for BadLeftJoinIterator<'a, S> {
+impl<'a, S: StoreConnection> Iterator for BadLeftJoinIterator<'a, S> {
     type Item = Result<EncodedTuple>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple>> {
@@ -1192,28 +1190,25 @@ impl<'a, S: EncodedQuadsStore> Iterator for BadLeftJoinIterator<'a, S> {
     }
 }
 
-struct UnionIterator<'a, S: EncodedQuadsStore> {
+struct UnionIterator<'a, S: StoreConnection + 'a> {
     eval: SimpleEvaluator<S>,
     children_plan: &'a Vec<PlanNode>,
     input_iter: EncodedTuplesIterator<'a>,
-    current_iters: Vec<EncodedTuplesIterator<'a>>,
+    current: Vec<Result<EncodedTuple>>, //TODO: avoid
 }
 
-impl<'a, S: EncodedQuadsStore> Iterator for UnionIterator<'a, S> {
+impl<'a, S: StoreConnection> Iterator for UnionIterator<'a, S> {
     type Item = Result<EncodedTuple>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple>> {
-        while let Some(mut iter) = self.current_iters.pop() {
-            if let Some(tuple) = iter.next() {
-                self.current_iters.push(iter);
-                return Some(tuple);
-            }
+        while let Some(tuple) = self.current.pop() {
+            return Some(tuple);
         }
         match self.input_iter.next()? {
             Ok(input_tuple) => {
                 for plan in self.children_plan {
-                    self.current_iters
-                        .push(self.eval.eval_plan(plan, input_tuple.clone()));
+                    self.current
+                        .extend(self.eval.eval_plan(plan, input_tuple.clone()));
                 }
             }
             Err(error) => return Some(Err(error)),
@@ -1244,15 +1239,15 @@ impl<'a> Iterator for HashDeduplicateIterator<'a> {
     }
 }
 
-struct ConstructIterator<'a, S: EncodedQuadsStore> {
-    store: Arc<S>,
+struct ConstructIterator<'a, S: StoreConnection> {
+    store: S,
     iter: EncodedTuplesIterator<'a>,
     template: &'a [TripleTemplate],
     buffered_results: Vec<Result<Triple>>,
     bnodes: Vec<BlankNode>,
 }
 
-impl<'a, S: EncodedQuadsStore> Iterator for ConstructIterator<'a, S> {
+impl<'a, S: StoreConnection> Iterator for ConstructIterator<'a, S> {
     type Item = Result<Triple>;
 
     fn next(&mut self) -> Option<Result<Triple>> {
@@ -1315,42 +1310,39 @@ fn decode_triple<S: StringStore>(
     ))
 }
 
-struct DescribeIterator<'a, S: EncodedQuadsStore> {
-    store: Arc<S>,
+struct DescribeIterator<'a, S: StoreConnection + 'a> {
+    store: S,
     iter: EncodedTuplesIterator<'a>,
-    quads_iters: Vec<S::QuadsForSubjectIterator>,
+    quads: Vec<Result<EncodedQuad>>,
 }
 
-impl<'a, S: EncodedQuadsStore> Iterator for DescribeIterator<'a, S> {
+impl<'a, S: StoreConnection> Iterator for DescribeIterator<'a, S> {
     type Item = Result<Triple>;
 
     fn next(&mut self) -> Option<Result<Triple>> {
-        while let Some(mut quads_iter) = self.quads_iters.pop() {
-            if let Some(quad) = quads_iter.next() {
-                self.quads_iters.push(quads_iter);
-                return Some(quad.and_then(|quad| self.store.encoder().decode_triple(&quad)));
-            }
+        while let Some(quad) = self.quads.pop() {
+            return Some(match quad {
+                Ok(quad) => self
+                    .store
+                    .encoder()
+                    .decode_quad(&quad)
+                    .map(|q| q.into_triple()),
+                Err(error) => Err(error),
+            });
         }
         let tuple = match self.iter.next()? {
             Ok(tuple) => tuple,
             Err(error) => return Some(Err(error)),
         };
-        let mut error_to_return = None;
         for subject in tuple {
             if let Some(subject) = subject {
-                match self.store.quads_for_subject(subject) {
-                    Ok(quads_iter) => self.quads_iters.push(quads_iter),
-                    Err(error) => {
-                        error_to_return = Some(error);
-                    }
-                }
+                self.quads = self
+                    .store
+                    .quads_for_pattern(Some(subject), None, None, None)
+                    .collect();
             }
         }
-        if let Some(error) = error_to_return {
-            Some(Err(error))
-        } else {
-            self.next()
-        }
+        self.next()
     }
 }
 

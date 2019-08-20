@@ -260,6 +260,11 @@ impl Quad {
     pub fn graph_name_owned(self) -> Option<NamedOrBlankNode> {
         self.graph_name
     }
+
+    /// Returns the underlying [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple)
+    pub fn into_triple(self) -> Triple {
+        Triple::new(self.subject, self.predicate, self.object)
+    }
 }
 
 impl fmt::Display for Quad {

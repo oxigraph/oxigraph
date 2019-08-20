@@ -27,16 +27,15 @@ use hyper::StatusCode;
 use lazy_static::lazy_static;
 use mime;
 use mime::Mime;
-use rudf::model::Graph;
 use rudf::rio::read_ntriples;
 use rudf::sparql::algebra::QueryResult;
 use rudf::sparql::xml_results::write_xml_results;
 use rudf::sparql::PreparedQuery;
-use rudf::sparql::SparqlDataset;
-use rudf::store::MemoryDataset;
-use rudf::store::MemoryGraph;
-use rudf::store::RocksDbDataset;
+use rudf::Repository;
+use rudf::RepositoryConnection;
+use rudf::{MemoryRepository, RocksDbRepository};
 use serde_derive::Deserialize;
+use std::fmt::Write;
 use std::fs::File;
 use std::io::BufReader;
 use std::panic::RefUnwindSafe;
@@ -87,21 +86,27 @@ pub fn main() -> Result<(), failure::Error> {
 
     let file = matches.value_of("file").map(|v| v.to_string());
     if let Some(file) = file {
-        main_with_dataset(Arc::new(RocksDbDataset::open(file)?), &matches)
+        main_with_dataset(Arc::new(RocksDbRepository::open(file)?), &matches)
     } else {
-        main_with_dataset(Arc::new(MemoryDataset::default()), &matches)
+        main_with_dataset(Arc::new(MemoryRepository::default()), &matches)
     }
 }
 
-fn main_with_dataset<D: SparqlDataset + Send + Sync + RefUnwindSafe + 'static>(
+fn main_with_dataset<D: Send + Sync + RefUnwindSafe + 'static>(
     dataset: Arc<D>,
     matches: &ArgMatches<'_>,
-) -> Result<(), failure::Error> {
+) -> Result<(), failure::Error>
+where
+    for<'a> &'a D: Repository,
+{
     if let Some(nt_file) = matches.value_of("ntriples") {
         println!("Loading NTriples file {}", nt_file);
-        let default_graph = dataset.default_graph();
-        for quad in read_ntriples(BufReader::new(File::open(nt_file)?))? {
-            default_graph.insert(&quad?)?
+        let connection = dataset.connection()?;
+        if let Some(nt_file) = matches.value_of("ntriples") {
+            println!("Loading NTriples file {}", nt_file);
+            for triple in read_ntriples(BufReader::new(File::open(nt_file)?))? {
+                connection.insert(&triple?.in_graph(None))?
+            }
         }
     }
 
@@ -111,10 +116,10 @@ fn main_with_dataset<D: SparqlDataset + Send + Sync + RefUnwindSafe + 'static>(
     Ok(())
 }
 
-fn router<D: SparqlDataset + Send + Sync + RefUnwindSafe + 'static>(
-    dataset: Arc<D>,
-    base: String,
-) -> Router {
+fn router<D: Send + Sync + RefUnwindSafe + 'static>(dataset: Arc<D>, base: String) -> Router
+where
+    for<'a> &'a D: Repository,
+{
     let middleware = StateMiddleware::new(GothamState { dataset, base });
     let pipeline = single_middleware(middleware);
     let (chain, pipelines) = single_pipeline(pipeline);
@@ -149,48 +154,48 @@ fn router<D: SparqlDataset + Send + Sync + RefUnwindSafe + 'static>(
                         .concat2()
                         .then(|body| match body {
                             Ok(body) => {
-                                let content_type: Option<Result<Mime,failure::Error>> = HeaderMap::borrow_from(&state)
+                                let content_type: Option<Result<Mime, failure::Error>> = HeaderMap::borrow_from(&state)
                                     .get(CONTENT_TYPE)
                                     .map(|content_type| Ok(Mime::from_str(content_type.to_str()?)?));
                                 let response = match content_type {
-                                        Some(Ok(content_type)) => match (content_type.type_(), content_type.subtype()) {
-                                            (mime::APPLICATION, subtype) if subtype == APPLICATION_SPARQL_QUERY_UTF_8.subtype() => {
-                                                evaluate_sparql_query::<D>(
-                                                    &mut state,
-                                                    &body.into_bytes(),
-                                                )
-                                            },
-                                            (mime::APPLICATION, mime::WWW_FORM_URLENCODED) => {
-                                                match parse_urlencoded_query_request(&body.into_bytes())
-                                                    {
-                                                        Ok(parsed_request) => evaluate_sparql_query::<D>(
-                                                            &mut state,
-                                                            &parsed_request.query.as_bytes(),
-                                                        ),
-                                                        Err(error) => error_to_response(
-                                                            &state,
-                                                            &error,
-                                                            StatusCode::BAD_REQUEST,
-                                                        ),
-                                                    }
-                                            },
-                                            _ => error_to_response(
-                                                    &state,
-                                                    &format_err!("Unsupported Content-Type: {:?}", content_type),
-                                                    StatusCode::BAD_REQUEST,
-                                                )
+                                    Some(Ok(content_type)) => match (content_type.type_(), content_type.subtype()) {
+                                        (mime::APPLICATION, subtype) if subtype == APPLICATION_SPARQL_QUERY_UTF_8.subtype() => {
+                                            evaluate_sparql_query::<D>(
+                                                &mut state,
+                                                &body.into_bytes(),
+                                            )
                                         }
-                                        Some(Err(error)) => error_to_response(
+                                        (mime::APPLICATION, mime::WWW_FORM_URLENCODED) => {
+                                            match parse_urlencoded_query_request(&body.into_bytes())
+                                                {
+                                                    Ok(parsed_request) => evaluate_sparql_query::<D>(
+                                                        &mut state,
+                                                        &parsed_request.query.as_bytes(),
+                                                    ),
+                                                    Err(error) => error_to_response(
+                                                        &state,
+                                                        &error,
+                                                        StatusCode::BAD_REQUEST,
+                                                    ),
+                                                }
+                                        }
+                                        _ => error_to_response(
                                             &state,
-                                            &format_err!("The request  contains an invalid Content-Type header: {}", error),
+                                            &format_err!("Unsupported Content-Type: {:?}", content_type),
                                             StatusCode::BAD_REQUEST,
-                                        ),
-                                        None => error_to_response(
-                                            &state,
-                                            &format_err!("The request should contain a Content-Type header"),
-                                            StatusCode::BAD_REQUEST,
-                                        ),
-                                    };
+                                        )
+                                    }
+                                    Some(Err(error)) => error_to_response(
+                                        &state,
+                                        &format_err!("The request  contains an invalid Content-Type header: {}", error),
+                                        StatusCode::BAD_REQUEST,
+                                    ),
+                                    None => error_to_response(
+                                        &state,
+                                        &format_err!("The request should contain a Content-Type header"),
+                                        StatusCode::BAD_REQUEST,
+                                    ),
+                                };
                                 future::ok((state, response))
                             }
                             Err(e) => future::err((state, e.into_handler_error())),
@@ -202,12 +207,18 @@ fn router<D: SparqlDataset + Send + Sync + RefUnwindSafe + 'static>(
 }
 
 #[derive(StateData)]
-struct GothamState<D: SparqlDataset + Send + Sync + RefUnwindSafe + 'static> {
+struct GothamState<D: Send + Sync + RefUnwindSafe + 'static>
+where
+    for<'a> &'a D: Repository,
+{
     dataset: Arc<D>,
     base: String,
 }
 
-impl<D: SparqlDataset + Send + Sync + RefUnwindSafe + 'static> Clone for GothamState<D> {
+impl<D: Send + Sync + RefUnwindSafe + 'static> Clone for GothamState<D>
+where
+    for<'a> &'a D: Repository,
+{
     fn clone(&self) -> Self {
         Self {
             dataset: self.dataset.clone(),
@@ -230,20 +241,39 @@ fn parse_urlencoded_query_request(query: &[u8]) -> Result<QueryRequest, failure:
         .ok_or_else(|| format_err!("'query' parameter not found"))
 }
 
-fn evaluate_sparql_query<D: SparqlDataset + Send + Sync + RefUnwindSafe + 'static>(
+fn evaluate_sparql_query<D: Send + Sync + RefUnwindSafe + 'static>(
     state: &mut State,
     query: &[u8],
-) -> Response<Body> {
+) -> Response<Body>
+where
+    for<'a> &'a D: Repository,
+{
     let gotham_state: GothamState<D> = GothamState::take_from(state);
-    match gotham_state.dataset.prepare_query(query) {
+    let connection = match gotham_state.dataset.connection() {
+        Ok(connection) => connection,
+        Err(error) => return error_to_response(&state, &error, StatusCode::INTERNAL_SERVER_ERROR),
+    };
+    let result = match connection.prepare_query(query) {
         Ok(query) => match query.exec() {
             Ok(QueryResult::Graph(triples)) => {
-                let triples: Result<MemoryGraph, failure::Error> = triples.collect();
+                let mut result = String::default();
+                for triple in triples {
+                    match triple {
+                        Ok(triple) => write!(&mut result, "{}\n", triple).unwrap(),
+                        Err(error) => {
+                            return error_to_response(
+                                &state,
+                                &error,
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                            );
+                        }
+                    }
+                }
                 create_response(
                     &state,
                     StatusCode::OK,
                     APPLICATION_N_TRIPLES_UTF_8.clone(),
-                    triples.unwrap().to_string(),
+                    result,
                 )
             }
             Ok(result) => create_response(
@@ -255,7 +285,8 @@ fn evaluate_sparql_query<D: SparqlDataset + Send + Sync + RefUnwindSafe + 'stati
             Err(error) => error_to_response(&state, &error, StatusCode::INTERNAL_SERVER_ERROR),
         },
         Err(error) => error_to_response(&state, &error, StatusCode::BAD_REQUEST),
-    }
+    };
+    result
 }
 
 fn error_to_response(state: &State, error: &failure::Error, code: StatusCode) -> Response<Body> {
@@ -271,8 +302,11 @@ mod tests {
 
     #[test]
     fn get_ui() {
-        let test_server =
-            TestServer::new(router(Arc::new(MemoryDataset::default()), "".to_string())).unwrap();
+        let test_server = TestServer::new(router(
+            Arc::new(MemoryRepository::default()),
+            "".to_string(),
+        ))
+        .unwrap();
         let response = test_server
             .client()
             .get("http://localhost/")
@@ -283,8 +317,11 @@ mod tests {
 
     #[test]
     fn get_query() {
-        let test_server =
-            TestServer::new(router(Arc::new(MemoryDataset::default()), "".to_string())).unwrap();
+        let test_server = TestServer::new(router(
+            Arc::new(MemoryRepository::default()),
+            "".to_string(),
+        ))
+        .unwrap();
         let response = test_server
             .client()
             .get("http://localhost/query?query=SELECT+*+WHERE+{+?s+?p+?o+}")
@@ -295,8 +332,11 @@ mod tests {
 
     #[test]
     fn post_query() {
-        let test_server =
-            TestServer::new(router(Arc::new(MemoryDataset::default()), "".to_string())).unwrap();
+        let test_server = TestServer::new(router(
+            Arc::new(MemoryRepository::default()),
+            "".to_string(),
+        ))
+        .unwrap();
         let response = test_server
             .client()
             .post(

@@ -1,12 +1,11 @@
-# Rudf
+Rudf is a work in progress graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
 
-This library is a work in progress of a [RDF](https://www.w3.org/RDF/) stack implementation in [Rust](https://www.rust-lang.org).
+There is no released version yet.
 
-There is no released version yet but [automated documentation for the master branch is available](https://tpt.github.io/rudf/).
+Its goal is to provide a compliant, safe and fast graph database.
+It is written in Rust.
 
-Its goal is to provide a compliant, safe and fast implementation of W3C specifications in Rust.
-
-The `lib` directory contains the Rust library code and the `python` directory a beginning of Python bindings.
+The `lib` directory contains the database written as a Rust library.
 
 [![Build Status](https://travis-ci.org/Tpt/rudf.svg?branch=master)](https://travis-ci.org/Tpt/rudf)
 [![dependency status](https://deps.rs/repo/github/Tpt/rudf/status.svg)](https://deps.rs/repo/github/Tpt/rudf)

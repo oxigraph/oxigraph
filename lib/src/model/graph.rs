@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
 
-/// Simple data structure [RDF graphs](https://www.w3.org/TR/rdf11-concepts/#dfn-graph).
+/// A simple implementation of [RDF graphs](https://www.w3.org/TR/rdf11-concepts/#dfn-graph).
 ///
 /// It is not done to hold big graphs.
 ///
@@ -118,6 +118,8 @@ impl SimpleGraph {
     }
 
     /// Checks if the current graph is [isomorphic](https://www.w3.org/TR/rdf11-concepts/#dfn-graph-isomorphism) with an other one
+    ///
+    /// Warning: This algorithm as a worst case complexity in n!
     pub fn is_isomorphic(&self, other: &SimpleGraph) -> bool {
         are_graphs_isomorphic(self, other)
     }
@@ -129,6 +131,15 @@ impl IntoIterator for SimpleGraph {
 
     fn into_iter(self) -> Self::IntoIter {
         self.triples.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a SimpleGraph {
+    type Item = &'a Triple;
+    type IntoIter = <&'a HashSet<Triple> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.triples.iter()
     }
 }
 

@@ -17,7 +17,7 @@ travis-ci = { repository = "Tpt/rudf" }
 
 [dependencies]
 lazy_static = "1"
-rocksdb = { version = "0.11", optional = true }
+rocksdb = { version = "0.12", optional = true }
 url = "2"
 uuid = { version = "0.7", features = ["v4"] }
 bzip2 = "0.3"
@@ -32,7 +32,6 @@ regex = "1"
 rio_api = "0.2"
 rio_turtle = "0.2"
 rio_xml = "0.2"
-permutohedron = "0.2"
 
 [build-dependencies]
 peg = "0.5"

@@ -3,7 +3,6 @@
 //! Inspired by [RDFjs](http://rdf.js.org/) and [Apache Commons RDF](http://commons.apache.org/proper/commons-rdf/)
 
 mod blank_node;
-mod dataset;
 mod graph;
 mod isomorphism;
 mod language_tag;
@@ -13,9 +12,6 @@ mod triple;
 pub mod vocab;
 
 pub use crate::model::blank_node::BlankNode;
-pub use crate::model::dataset::Dataset;
-pub use crate::model::dataset::Graph;
-pub use crate::model::dataset::NamedGraph;
 pub use crate::model::graph::SimpleGraph;
 pub use crate::model::language_tag::LanguageTag;
 pub use crate::model::literal::Literal;

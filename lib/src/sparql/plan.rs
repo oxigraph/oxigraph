@@ -1,9 +1,9 @@
 use crate::model::vocab::xsd;
 use crate::model::Literal;
 use crate::sparql::algebra::*;
-use crate::store::encoded::EncodedQuadsStore;
 use crate::store::numeric_encoder::EncodedTerm;
 use crate::store::numeric_encoder::ENCODED_DEFAULT_GRAPH;
+use crate::store::StoreConnection;
 use crate::Result;
 use failure::format_err;
 use std::collections::BTreeSet;
@@ -355,12 +355,12 @@ pub enum TripleTemplateValue {
     Variable(usize),
 }
 
-pub struct PlanBuilder<'a, S: EncodedQuadsStore> {
+pub struct PlanBuilder<'a, S: StoreConnection> {
     store: &'a S,
 }
 
-impl<'a, S: EncodedQuadsStore> PlanBuilder<'a, S> {
-    pub fn build(store: &S, pattern: &GraphPattern) -> Result<(PlanNode, Vec<Variable>)> {
+impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
+    pub fn build(store: &'a S, pattern: &GraphPattern) -> Result<(PlanNode, Vec<Variable>)> {
         let mut variables = Vec::default();
         let plan = PlanBuilder { store }.build_for_graph_pattern(
             pattern,
