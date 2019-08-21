@@ -47,4 +47,5 @@ pub use crate::store::MemoryRepository;
 pub use crate::store::RocksDbRepository;
 pub use repository::Repository;
 pub use repository::RepositoryConnection;
+pub use rio::DatasetSyntax;
 pub use rio::GraphSyntax;

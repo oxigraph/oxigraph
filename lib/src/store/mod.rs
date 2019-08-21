@@ -12,9 +12,9 @@ pub use crate::store::rocksdb::RocksDbRepository;
 use crate::model::*;
 use crate::sparql::SimplePreparedQuery;
 use crate::store::numeric_encoder::*;
-use crate::{GraphSyntax, RepositoryConnection, Result};
-use rio_api::parser::TripleParser;
-use rio_turtle::{NTriplesParser, TurtleParser};
+use crate::{DatasetSyntax, GraphSyntax, RepositoryConnection, Result};
+use rio_api::parser::{QuadParser, TripleParser};
+use rio_turtle::{NQuadsParser, NTriplesParser, TriGParser, TurtleParser};
 use rio_xml::RdfXmlParser;
 use std::collections::HashMap;
 use std::io::{BufRead, Read};
@@ -139,6 +139,19 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
         }
     }
 
+    fn load_dataset(
+        &self,
+        reader: impl BufRead,
+        syntax: DatasetSyntax,
+        base_iri: Option<&str>,
+    ) -> Result<()> {
+        let base_iri = base_iri.unwrap_or(&"");
+        match syntax {
+            DatasetSyntax::NQuads => self.load_from_quad_parser(NQuadsParser::new(reader)?),
+            DatasetSyntax::TriG => self.load_from_quad_parser(TriGParser::new(reader, base_iri)?),
+        }
+    }
+
     fn contains(&self, quad: &Quad) -> Result<bool> {
         self.inner
             .contains(&self.inner.encoder().encode_quad(quad)?)
@@ -177,6 +190,21 @@ impl<S: StoreConnection> StoreRepositoryConnection<S> {
                         .encode_rio_triple_in_graph(t, graph_name, &mut bnode_map)
                         .unwrap(),
                 )
+                .unwrap()
+        })?;
+        Ok(())
+    }
+
+    fn load_from_quad_parser<P: QuadParser>(&self, mut parser: P) -> Result<()>
+    where
+        P::Error: Send + Sync + 'static,
+    {
+        //TODO: handle errors
+        let mut bnode_map = HashMap::default();
+        let encoder = self.inner.encoder();
+        parser.parse_all(&mut move |q| {
+            self.inner
+                .insert(&encoder.encode_rio_quad(q, &mut bnode_map).unwrap())
                 .unwrap()
         })?;
         Ok(())

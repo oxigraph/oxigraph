@@ -1,6 +1,6 @@
 use crate::model::*;
 use crate::sparql::PreparedQuery;
-use crate::{GraphSyntax, Result};
+use crate::{DatasetSyntax, GraphSyntax, Result};
 use std::io::{BufRead, Read};
 
 /// A `Repository` stores a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
@@ -136,6 +136,32 @@ pub trait RepositoryConnection: Clone {
         reader: impl BufRead,
         syntax: GraphSyntax,
         to_graph_name: Option<&NamedOrBlankNode>,
+        base_iri: Option<&str>,
+    ) -> Result<()>;
+
+    /// Loads a dataset file (i.e. quads) into the repository
+    ///
+    /// Usage example:
+    /// ```
+    /// use rudf::model::*;
+    /// use rudf::{Repository, RepositoryConnection, MemoryRepository, Result, DatasetSyntax};
+    ///
+    /// let repository = MemoryRepository::default();
+    /// let connection = repository.connection().unwrap();
+    ///
+    /// // insertion
+    /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
+    /// connection.load_dataset(file.as_ref(), DatasetSyntax::NQuads, None);
+    ///
+    /// // quad filter
+    /// let results: Result<Vec<Quad>> = connection.quads_for_pattern(None, None, None, None).collect();
+    /// let ex = NamedNode::new("http://example.com");
+    /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), Some(ex.into()))], results.unwrap());
+    /// ```
+    fn load_dataset(
+        &self,
+        reader: impl BufRead,
+        syntax: DatasetSyntax,
         base_iri: Option<&str>,
     ) -> Result<()>;
 

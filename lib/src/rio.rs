@@ -8,3 +8,12 @@ pub enum GraphSyntax {
     /// [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/)
     RdfXml,
 }
+
+/// [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) serialization formats.
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub enum DatasetSyntax {
+    /// [N-Quads](https://www.w3.org/TR/n-quads/)
+    NQuads,
+    /// [TriG](https://www.w3.org/TR/trig/)
+    TriG,
+}
