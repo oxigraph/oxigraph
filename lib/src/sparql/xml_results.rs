@@ -1,9 +1,7 @@
 //! Implementation of [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/)
 
 use crate::model::*;
-use crate::sparql::algebra::BindingsIterator;
-use crate::sparql::algebra::QueryResult;
-use crate::sparql::algebra::Variable;
+use crate::sparql::model::*;
 use crate::Result;
 use failure::format_err;
 use quick_xml::events::BytesDecl;

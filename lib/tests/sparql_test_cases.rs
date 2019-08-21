@@ -3,14 +3,12 @@ use failure::format_err;
 use rudf::model::vocab::rdf;
 use rudf::model::vocab::rdfs;
 use rudf::model::*;
-use rudf::sparql::algebra::Query;
-use rudf::sparql::algebra::QueryResult;
-use rudf::sparql::parser::read_sparql_query;
-use rudf::sparql::xml_results::read_xml_results;
 use rudf::sparql::PreparedQuery;
+use rudf::sparql::{Query, QueryResult, QueryResultSyntax};
 use rudf::{GraphSyntax, MemoryRepository, Repository, RepositoryConnection, Result};
 use std::fmt;
 use std::fs::File;
+use std::io::Read;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 
@@ -21,7 +19,6 @@ fn sparql_w3c_syntax_testsuite() {
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest.ttl";
     let test_blacklist = vec![
         NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql2/manifest#syntax-form-construct02"),
-        //TODO: Deserialization of the serialization failing:
         NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql2/manifest#syntax-form-construct04"),
         NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql2/manifest#syntax-function-04"),
         NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql1/manifest#syntax-qname-04"),
@@ -34,10 +31,10 @@ fn sparql_w3c_syntax_testsuite() {
             continue;
         }
         if test.kind == "PositiveSyntaxTest" || test.kind == "PositiveSyntaxTest11" {
-            match load_sparql_query(&test.query) {
+            match load_query(&test.query) {
                 Err(error) => assert!(false, "Failure on {} with error: {}", test, error),
                 Ok(query) => {
-                    if let Err(error) = read_sparql_query(query.to_string().as_bytes(), None) {
+                    if let Err(error) = Query::read(query.to_string().as_bytes(), None) {
                         assert!(
                             false,
                             "Failure to deserialize \"{}\" of {} with error: {}",
@@ -50,7 +47,7 @@ fn sparql_w3c_syntax_testsuite() {
             }
         } else if test.kind == "NegativeSyntaxTest" || test.kind == "NegativeSyntaxTest11" {
             //TODO
-            if let Ok(result) = load_sparql_query(&test.query) {
+            if let Ok(result) = load_query(&test.query) {
                 eprintln!("Failure on {}. The output tree is: {}", test, result);
             }
         } else {
@@ -163,7 +160,7 @@ fn sparql_w3c_query_evaluation_testsuite() {
                                 test,
                                 expected_graph,
                                 actual_graph,
-                                load_sparql_query(&test.query).unwrap(),
+                                read_file_to_string(&test.query).unwrap(),
                                 repository_to_string(&repository)
                             )
                     }
@@ -210,16 +207,19 @@ fn load_graph_to_repository(
     connection.load_graph(read_file(url)?, syntax, to_graph_name, Some(url))
 }
 
-fn load_sparql_query(url: &str) -> Result<Query> {
-    read_sparql_query(read_file(url)?, Some(url))
-}
-
 fn load_sparql_query_result_graph(url: &str) -> Result<SimpleGraph> {
     if url.ends_with(".srx") {
-        to_graph(read_xml_results(read_file(url)?)?, false)
+        to_graph(
+            QueryResult::read(read_file(url)?, QueryResultSyntax::Xml)?,
+            false,
+        )
     } else {
         load_graph(url)
     }
+}
+
+fn load_query(url: &str) -> Result<Query> {
+    Query::read(read_file(&url)?, Some(&url))
 }
 
 fn to_relative_path(url: &str) -> Result<String> {
@@ -246,6 +246,12 @@ fn read_file(url: &str) -> Result<impl BufRead> {
     Ok(BufReader::new(File::open(&base_path).map_err(|e| {
         format_err!("Opening file {} failed with {}", base_path.display(), e)
     })?))
+}
+
+fn read_file_to_string(url: &str) -> Result<String> {
+    let mut string = String::default();
+    read_file(url)?.read_to_string(&mut string)?;
+    Ok(string)
 }
 
 mod rs {

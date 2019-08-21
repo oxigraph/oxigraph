@@ -1,6 +1,7 @@
 use crate::model::vocab::xsd;
 use crate::model::Literal;
 use crate::sparql::algebra::*;
+use crate::sparql::model::*;
 use crate::store::numeric_encoder::EncodedTerm;
 use crate::store::numeric_encoder::ENCODED_DEFAULT_GRAPH;
 use crate::store::StoreConnection;

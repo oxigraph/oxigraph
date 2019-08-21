@@ -7,11 +7,13 @@ mod grammar {
         clippy::naive_bytecount,
         clippy::cognitive_complexity,
         clippy::many_single_char_names,
-        clippy::type_complexity
+        clippy::type_complexity,
+        ellipsis_inclusive_range_patterns
     )]
 
     use crate::model::*;
     use crate::sparql::algebra::*;
+    use crate::sparql::model::*;
     use lazy_static::lazy_static;
     use std::borrow::Cow;
     use std::char;
@@ -532,7 +534,7 @@ mod grammar {
     pub fn read_sparql_query<'a, R: Read + 'a>(
         source: R,
         base_uri: Option<&'a str>,
-    ) -> super::super::super::Result<Query> {
+    ) -> super::super::super::Result<QueryVariants> {
         let mut state = ParserState {
             base_uri: if let Some(base_uri) = base_uri {
                 Some(Url::parse(base_uri)?)

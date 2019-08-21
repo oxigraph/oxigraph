@@ -12,7 +12,7 @@
 //! use rudf::model::*;
 //! use rudf::{Repository, RepositoryConnection, MemoryRepository, Result};
 //! use crate::rudf::sparql::PreparedQuery;
-//! use rudf::sparql::algebra::QueryResult;
+//! use rudf::sparql::QueryResult;
 //!
 //! let repository = MemoryRepository::default();
 //! let connection = repository.connection().unwrap();
@@ -36,16 +36,16 @@
 
 pub mod model;
 mod repository;
-mod rio;
 pub mod sparql;
 pub(crate) mod store;
+mod syntax;
 
 pub use failure::Error;
 pub type Result<T> = ::std::result::Result<T, failure::Error>;
+pub use crate::repository::Repository;
+pub use crate::repository::RepositoryConnection;
 pub use crate::store::MemoryRepository;
 #[cfg(feature = "rocksdb")]
 pub use crate::store::RocksDbRepository;
-pub use repository::Repository;
-pub use repository::RepositoryConnection;
-pub use rio::DatasetSyntax;
-pub use rio::GraphSyntax;
+pub use crate::syntax::DatasetSyntax;
+pub use crate::syntax::GraphSyntax;

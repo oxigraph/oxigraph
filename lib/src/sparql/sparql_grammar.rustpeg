@@ -8,10 +8,10 @@ use std::str::FromStr;
 
 
 //[1]
-pub QueryUnit -> Query = Query
+pub QueryUnit -> QueryVariants = Query
 
 //[2]
-Query -> Query = _ Prologue _ q:(SelectQuery / ConstructQuery / DescribeQuery / AskQuery) _ { //TODO: ValuesClause
+Query -> QueryVariants = _ Prologue _ q:(SelectQuery / ConstructQuery / DescribeQuery / AskQuery) _ { //TODO: ValuesClause
     q
 }
 
@@ -35,8 +35,8 @@ PrefixDecl -> () = "PREFIX"i _ ns:PNAME_NS _ i:IRIREF {
 }
 
 //[7]
-SelectQuery -> Query = s:SelectClause _ d:DatasetClauses _ w:WhereClause _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {  //TODO: Modifier
-    Query::Select {
+SelectQuery -> QueryVariants = s:SelectClause _ d:DatasetClauses _ w:WhereClause _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {  //TODO: Modifier
+    QueryVariants::Select {
         dataset: d,
         algebra: build_select(s, w, g, h, o, l, v, state)
     }
@@ -66,16 +66,16 @@ SelectClause_member -> SelectionMember =
     '(' _ e:Expression _ "AS"i _ v:Var _ ')' _ { SelectionMember::Expression(e, v) }
 
 //[10]
-ConstructQuery -> Query =
+ConstructQuery -> QueryVariants =
     "CONSTRUCT"i _ c:ConstructTemplate _ d:DatasetClauses _ w:WhereClause _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
-        Query::Construct {
+        QueryVariants::Construct {
             construct: c,
             dataset: d,
             algebra: build_select(Selection::default(), w, g, h, o, l, v, state)
         }
     } /
     "CONSTRUCT"i _ d:DatasetClauses _ "WHERE"i _ '{' _ c:ConstructQuery_optional_triple_template _ '}' _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
-        Query::Construct {
+        QueryVariants::Construct {
             construct: c.clone(),
             dataset: d,
             algebra: build_select(
@@ -89,15 +89,15 @@ ConstructQuery -> Query =
 ConstructQuery_optional_triple_template -> Vec<TriplePattern> = TriplesTemplate / { Vec::default() }
 
 //[11]
-DescribeQuery -> Query =
+DescribeQuery -> QueryVariants =
     "DESCRIBE"i _ '*' _ d:DatasetClauses w:WhereClause? _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
-        Query::Describe {
+        QueryVariants::Describe {
             dataset: d,
             algebra: build_select(Selection::default(), w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state)
         }
     } /
     "DESCRIBE"i _ p:DescribeQuery_item+ _ d:DatasetClauses w:WhereClause? _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
-        Query::Describe {
+        QueryVariants::Describe {
             dataset: d,
             algebra: build_select(Selection {
                 option: SelectionOption::Default,
@@ -111,8 +111,8 @@ DescribeQuery -> Query =
 DescribeQuery_item -> NamedNodeOrVariable = i:VarOrIri _ { i }
 
 //[12]
-AskQuery -> Query = "ASK"i _ d:DatasetClauses w:WhereClause _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
-    Query::Ask {
+AskQuery -> QueryVariants = "ASK"i _ d:DatasetClauses w:WhereClause _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
+    QueryVariants::Ask {
         dataset: d,
         algebra: build_select(Selection::default(), w, g, h, o, l, v, state)
     }

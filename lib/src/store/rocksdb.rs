@@ -28,7 +28,7 @@ use std::sync::Mutex;
 /// use rudf::model::*;
 /// use rudf::{Repository, RepositoryConnection, RocksDbRepository, Result};
 /// use crate::rudf::sparql::PreparedQuery;
-/// use rudf::sparql::algebra::QueryResult;
+/// use rudf::sparql::QueryResult;
 ///
 /// let repository = RocksDbRepository::open("example.db").unwrap();
 /// let connection = repository.connection().unwrap();

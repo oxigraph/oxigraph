@@ -27,9 +27,8 @@ use hyper::StatusCode;
 use lazy_static::lazy_static;
 use mime;
 use mime::Mime;
-use rudf::sparql::algebra::QueryResult;
-use rudf::sparql::xml_results::write_xml_results;
-use rudf::sparql::PreparedQuery;
+use rudf::sparql::QueryResult;
+use rudf::sparql::{PreparedQuery, QueryResultSyntax};
 use rudf::RepositoryConnection;
 use rudf::{GraphSyntax, Repository};
 use rudf::{MemoryRepository, RocksDbRepository};
@@ -282,7 +281,9 @@ where
                 &state,
                 StatusCode::OK,
                 APPLICATION_SPARQL_RESULTS_UTF_8.clone(),
-                write_xml_results(result, Vec::default()).unwrap(),
+                result
+                    .write(Vec::default(), QueryResultSyntax::Xml)
+                    .unwrap(),
             ),
             Err(error) => error_to_response(&state, &error, StatusCode::INTERNAL_SERVER_ERROR),
         },

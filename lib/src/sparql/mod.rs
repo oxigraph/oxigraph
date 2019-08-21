@@ -1,8 +1,13 @@
 //! [SPARQL](https://www.w3.org/TR/sparql11-overview/) implementation.
 
-use crate::sparql::algebra::Query;
-use crate::sparql::algebra::QueryResult;
-use crate::sparql::algebra::Variable;
+mod algebra;
+mod eval;
+mod model;
+mod parser;
+mod plan;
+mod xml_results;
+
+use crate::sparql::algebra::QueryVariants;
 use crate::sparql::eval::SimpleEvaluator;
 use crate::sparql::parser::read_sparql_query;
 use crate::sparql::plan::PlanBuilder;
@@ -10,15 +15,15 @@ use crate::sparql::plan::PlanNode;
 use crate::sparql::plan::TripleTemplate;
 use crate::store::StoreConnection;
 use crate::Result;
+use std::fmt;
 use std::io::Read;
 
-pub mod algebra;
-mod eval;
-pub mod parser;
-mod plan;
-pub mod xml_results;
+pub use crate::sparql::model::BindingsIterator;
+pub use crate::sparql::model::QueryResult;
+pub use crate::sparql::model::QueryResultSyntax;
+pub use crate::sparql::model::Variable;
 
-/// A prepared [SPARQL 1.1](https://www.w3.org/TR/sparql11-query/) query
+/// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/)
 pub trait PreparedQuery {
     /// Evaluates the query and returns its results
     fn exec(&self) -> Result<QueryResult<'_>>;
@@ -51,7 +56,7 @@ enum SimplePreparedQueryOptions<S: StoreConnection> {
 impl<S: StoreConnection> SimplePreparedQuery<S> {
     pub(crate) fn new(connection: S, query: impl Read) -> Result<Self> {
         Ok(Self(match read_sparql_query(query, None)? {
-            Query::Select {
+            QueryVariants::Select {
                 algebra,
                 dataset: _,
             } => {
@@ -62,7 +67,7 @@ impl<S: StoreConnection> SimplePreparedQuery<S> {
                     evaluator: SimpleEvaluator::new(connection),
                 }
             }
-            Query::Ask {
+            QueryVariants::Ask {
                 algebra,
                 dataset: _,
             } => {
@@ -72,7 +77,7 @@ impl<S: StoreConnection> SimplePreparedQuery<S> {
                     evaluator: SimpleEvaluator::new(connection),
                 }
             }
-            Query::Construct {
+            QueryVariants::Construct {
                 construct,
                 algebra,
                 dataset: _,
@@ -88,7 +93,7 @@ impl<S: StoreConnection> SimplePreparedQuery<S> {
                     evaluator: SimpleEvaluator::new(connection),
                 }
             }
-            Query::Describe {
+            QueryVariants::Describe {
                 algebra,
                 dataset: _,
             } => {
@@ -122,5 +127,22 @@ impl<S: StoreConnection> PreparedQuery for SimplePreparedQuery<S> {
                 evaluator.evaluate_describe_plan(&plan)
             }
         }
+    }
+}
+
+/// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/)
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+pub struct Query(QueryVariants);
+
+impl fmt::Display for Query {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Query {
+    /// Parses a SPARQL query
+    pub fn read<'a>(reader: impl Read + 'a, base_iri: Option<&'a str>) -> Result<Self> {
+        Ok(Query(read_sparql_query(reader, base_iri)?))
     }
 }

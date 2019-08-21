@@ -1,6 +1,6 @@
 use crate::model::BlankNode;
 use crate::model::Triple;
-use crate::sparql::algebra::*;
+use crate::sparql::model::*;
 use crate::sparql::plan::*;
 use crate::store::numeric_encoder::*;
 use crate::store::StoreConnection;

@@ -151,7 +151,7 @@ fn build_and_check_containment_from_hashes<'a>(
 
         let mut new_b_nodes = b_bnodes_by_hash
             .get(&hash)
-            .map_or(BTreeSet::default(), |v| v.into_iter().cloned().collect());
+            .map_or(BTreeSet::default(), |v| v.iter().cloned().collect());
         if new_a_nodes.len() != new_b_nodes.len() {
             return false;
         }
