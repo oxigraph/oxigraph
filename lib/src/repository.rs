@@ -1,7 +1,7 @@
 use crate::model::*;
 use crate::sparql::PreparedQuery;
-use crate::Result;
-use std::io::Read;
+use crate::{GraphSyntax, Result};
+use std::io::{BufRead, Read};
 
 /// A `Repository` stores a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
 /// and allows to query and update it using SPARQL.
@@ -15,7 +15,6 @@ use std::io::Read;
 /// use rudf::model::*;
 /// use rudf::{Repository, RepositoryConnection, MemoryRepository, Result};
 /// use crate::rudf::sparql::PreparedQuery;
-/// use std::str::FromStr;
 /// use rudf::sparql::algebra::QueryResult;
 ///
 /// let repository = MemoryRepository::default();
@@ -67,7 +66,6 @@ pub trait RepositoryConnection: Clone {
     /// use rudf::{Repository, RepositoryConnection, MemoryRepository};
     /// use rudf::sparql::PreparedQuery;
     /// use rudf::sparql::algebra::QueryResult;
-    /// use std::str::FromStr;
     ///
     /// let repository = MemoryRepository::default();
     /// let connection = repository.connection().unwrap();
@@ -91,7 +89,6 @@ pub trait RepositoryConnection: Clone {
     /// ```
     /// use rudf::model::*;
     /// use rudf::{Repository, RepositoryConnection, MemoryRepository, Result};
-    /// use std::str::FromStr;
     ///
     /// let repository = MemoryRepository::default();
     /// let connection = repository.connection().unwrap();
@@ -110,17 +107,44 @@ pub trait RepositoryConnection: Clone {
         subject: Option<&NamedOrBlankNode>,
         predicate: Option<&NamedNode>,
         object: Option<&Term>,
-        graph_name: Option<&NamedOrBlankNode>,
+        graph_name: Option<Option<&NamedOrBlankNode>>,
     ) -> Box<dyn Iterator<Item = Result<Quad>> + 'a>
     where
         Self: 'a;
 
-    /// Checks if this dataset contains a given quad
+    /// Loads a graph file (i.e. triples) into the repository
+    ///
+    /// Usage example:
+    /// ```
+    /// use rudf::model::*;
+    /// use rudf::{Repository, RepositoryConnection, MemoryRepository, Result, GraphSyntax};
+    ///
+    /// let repository = MemoryRepository::default();
+    /// let connection = repository.connection().unwrap();
+    ///
+    /// // insertion
+    /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
+    /// connection.load_graph(file.as_ref(), GraphSyntax::NTriples, None, None);
+    ///
+    /// // quad filter
+    /// let results: Result<Vec<Quad>> = connection.quads_for_pattern(None, None, None, None).collect();
+    /// let ex = NamedNode::new("http://example.com");
+    /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results.unwrap());
+    /// ```
+    fn load_graph(
+        &self,
+        reader: impl BufRead,
+        syntax: GraphSyntax,
+        to_graph_name: Option<&NamedOrBlankNode>,
+        base_iri: Option<&str>,
+    ) -> Result<()>;
+
+    /// Checks if this repository contains a given quad
     fn contains(&self, quad: &Quad) -> Result<bool>;
 
-    /// Adds a quad to this dataset
+    /// Adds a quad to this repository
     fn insert(&self, quad: &Quad) -> Result<()>;
 
-    /// Removes a quad from this dataset
+    /// Removes a quad from this repository
     fn remove(&self, quad: &Quad) -> Result<()>;
 }

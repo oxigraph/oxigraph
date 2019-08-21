@@ -27,12 +27,11 @@ use hyper::StatusCode;
 use lazy_static::lazy_static;
 use mime;
 use mime::Mime;
-use rudf::rio::read_ntriples;
 use rudf::sparql::algebra::QueryResult;
 use rudf::sparql::xml_results::write_xml_results;
 use rudf::sparql::PreparedQuery;
-use rudf::Repository;
 use rudf::RepositoryConnection;
+use rudf::{GraphSyntax, Repository};
 use rudf::{MemoryRepository, RocksDbRepository};
 use serde_derive::Deserialize;
 use std::fmt::Write;
@@ -104,9 +103,12 @@ where
         let connection = dataset.connection()?;
         if let Some(nt_file) = matches.value_of("ntriples") {
             println!("Loading NTriples file {}", nt_file);
-            for triple in read_ntriples(BufReader::new(File::open(nt_file)?))? {
-                connection.insert(&triple?.in_graph(None))?
-            }
+            connection.load_graph(
+                BufReader::new(File::open(nt_file)?),
+                GraphSyntax::NTriples,
+                None,
+                None,
+            )?;
         }
     }
 
@@ -259,7 +261,7 @@ where
                 let mut result = String::default();
                 for triple in triples {
                     match triple {
-                        Ok(triple) => write!(&mut result, "{}\n", triple).unwrap(),
+                        Ok(triple) => writeln!(&mut result, "{}", triple).unwrap(),
                         Err(error) => {
                             return error_to_response(
                                 &state,

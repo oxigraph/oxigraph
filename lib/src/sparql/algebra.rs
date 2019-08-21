@@ -1280,9 +1280,7 @@ impl<'a> fmt::Display for SparqlAggregation<'a> {
 }
 
 fn fmt_str(value: &str) -> rio::Literal {
-    rio::Literal::Simple {
-        value: value.into(),
-    }
+    rio::Literal::Simple { value }
 }
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]

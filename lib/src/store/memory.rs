@@ -18,7 +18,6 @@ use std::sync::RwLockWriteGuard;
 /// use rudf::model::*;
 /// use rudf::{Repository, RepositoryConnection, MemoryRepository, Result};
 /// use crate::rudf::sparql::PreparedQuery;
-/// use std::str::FromStr;
 /// use rudf::sparql::algebra::QueryResult;
 ///
 /// let repository = MemoryRepository::default();

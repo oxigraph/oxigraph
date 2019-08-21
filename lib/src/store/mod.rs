@@ -12,8 +12,12 @@ pub use crate::store::rocksdb::RocksDbRepository;
 use crate::model::*;
 use crate::sparql::SimplePreparedQuery;
 use crate::store::numeric_encoder::*;
-use crate::{RepositoryConnection, Result};
-use std::io::Read;
+use crate::{GraphSyntax, RepositoryConnection, Result};
+use rio_api::parser::TripleParser;
+use rio_turtle::{NTriplesParser, TurtleParser};
+use rio_xml::RdfXmlParser;
+use std::collections::HashMap;
+use std::io::{BufRead, Read};
 use std::iter::{once, Iterator};
 
 /// Defines the `Store` traits that is used to have efficient binary storage
@@ -64,7 +68,7 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
         subject: Option<&NamedOrBlankNode>,
         predicate: Option<&NamedNode>,
         object: Option<&Term>,
-        graph_name: Option<&NamedOrBlankNode>,
+        graph_name: Option<Option<&NamedOrBlankNode>>,
     ) -> Box<dyn Iterator<Item = Result<Quad>> + 'a>
     where
         Self: 'a,
@@ -95,10 +99,14 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
             None
         };
         let graph_name = if let Some(graph_name) = graph_name {
-            match encoder.encode_named_or_blank_node(graph_name) {
-                Ok(subject) => Some(subject),
-                Err(error) => return Box::new(once(Err(error))),
-            }
+            Some(if let Some(graph_name) = graph_name {
+                match encoder.encode_named_or_blank_node(graph_name) {
+                    Ok(graph_name) => graph_name,
+                    Err(error) => return Box::new(once(Err(error))),
+                }
+            } else {
+                EncodedTerm::DefaultGraph
+            })
         } else {
             None
         };
@@ -108,6 +116,27 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
                 .quads_for_pattern(subject, predicate, object, graph_name)
                 .map(move |quad| self.inner.encoder().decode_quad(&quad?)),
         )
+    }
+
+    fn load_graph(
+        &self,
+        reader: impl BufRead,
+        syntax: GraphSyntax,
+        to_graph_name: Option<&NamedOrBlankNode>,
+        base_iri: Option<&str>,
+    ) -> Result<()> {
+        let base_iri = base_iri.unwrap_or(&"");
+        match syntax {
+            GraphSyntax::NTriples => {
+                self.load_from_triple_parser(NTriplesParser::new(reader)?, to_graph_name)
+            }
+            GraphSyntax::Turtle => {
+                self.load_from_triple_parser(TurtleParser::new(reader, base_iri)?, to_graph_name)
+            }
+            GraphSyntax::RdfXml => {
+                self.load_from_triple_parser(RdfXmlParser::new(reader, base_iri)?, to_graph_name)
+            }
+        }
     }
 
     fn contains(&self, quad: &Quad) -> Result<bool> {
@@ -121,5 +150,35 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
 
     fn remove(&self, quad: &Quad) -> Result<()> {
         self.inner.remove(&self.inner.encoder().encode_quad(quad)?)
+    }
+}
+
+impl<S: StoreConnection> StoreRepositoryConnection<S> {
+    fn load_from_triple_parser<P: TripleParser>(
+        &self,
+        mut parser: P,
+        to_graph_name: Option<&NamedOrBlankNode>,
+    ) -> Result<()>
+    where
+        P::Error: Send + Sync + 'static,
+    {
+        //TODO: handle errors
+        let mut bnode_map = HashMap::default();
+        let encoder = self.inner.encoder();
+        let graph_name = if let Some(graph_name) = to_graph_name {
+            encoder.encode_named_or_blank_node(graph_name)?
+        } else {
+            EncodedTerm::DefaultGraph
+        };
+        parser.parse_all(&mut move |t| {
+            self.inner
+                .insert(
+                    &encoder
+                        .encode_rio_triple_in_graph(t, graph_name, &mut bnode_map)
+                        .unwrap(),
+                )
+                .unwrap()
+        })?;
+        Ok(())
     }
 }

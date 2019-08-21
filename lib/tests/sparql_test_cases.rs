@@ -3,14 +3,12 @@ use failure::format_err;
 use rudf::model::vocab::rdf;
 use rudf::model::vocab::rdfs;
 use rudf::model::*;
-use rudf::rio::read_rdf_xml;
-use rudf::rio::read_turtle;
 use rudf::sparql::algebra::Query;
 use rudf::sparql::algebra::QueryResult;
 use rudf::sparql::parser::read_sparql_query;
 use rudf::sparql::xml_results::read_xml_results;
 use rudf::sparql::PreparedQuery;
-use rudf::{MemoryRepository, Repository, RepositoryConnection, Result};
+use rudf::{GraphSyntax, MemoryRepository, Repository, RepositoryConnection, Result};
 use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -123,29 +121,17 @@ fn sparql_w3c_query_evaluation_testsuite() {
             continue;
         }
         if test.kind == "QueryEvaluationTest" {
-            let repository = match &test.data {
-                Some(data) => {
-                    let repository = MemoryRepository::default();
-                    let connection = repository.connection().unwrap();
-                    load_graph(&data)
-                        .unwrap()
-                        .into_iter()
-                        .for_each(|triple| connection.insert(&triple.in_graph(None)).unwrap());
-                    repository
-                }
-                None => MemoryRepository::default(),
-            };
+            let repository = MemoryRepository::default();
+            if let Some(data) = &test.data {
+                load_graph_to_repository(&data, &repository.connection().unwrap(), None).unwrap();
+            }
             for graph_data in &test.graph_data {
-                let graph_name = NamedNode::new(graph_data);
-                let connection = repository.connection().unwrap();
-                load_graph(&graph_data)
-                    .unwrap()
-                    .into_iter()
-                    .for_each(move |triple| {
-                        connection
-                            .insert(&triple.in_graph(Some(graph_name.clone().into())))
-                            .unwrap()
-                    });
+                load_graph_to_repository(
+                    &graph_data,
+                    &repository.connection().unwrap(),
+                    Some(&NamedNode::new(graph_data).into()),
+                )
+                .unwrap();
             }
             match repository
                 .connection()
@@ -199,13 +185,29 @@ fn repository_to_string(repository: impl Repository) -> String {
 }
 
 fn load_graph(url: &str) -> Result<SimpleGraph> {
-    if url.ends_with(".ttl") {
-        read_turtle(read_file(url)?, Some(url))?.collect()
+    let repository = MemoryRepository::default();
+    load_graph_to_repository(url, &repository.connection().unwrap(), None)?;
+    Ok(repository
+        .connection()
+        .unwrap()
+        .quads_for_pattern(None, None, None, Some(None))
+        .map(|q| q.unwrap().into_triple())
+        .collect())
+}
+
+fn load_graph_to_repository(
+    url: &str,
+    connection: &<&MemoryRepository as Repository>::Connection,
+    to_graph_name: Option<&NamedOrBlankNode>,
+) -> Result<()> {
+    let syntax = if url.ends_with(".ttl") {
+        GraphSyntax::Turtle
     } else if url.ends_with(".rdf") {
-        read_rdf_xml(read_file(url)?, Some(url))?.collect()
+        GraphSyntax::RdfXml
     } else {
-        Err(format_err!("Serialization type not found for {}", url))
-    }
+        return Err(format_err!("Serialization type not found for {}", url));
+    };
+    connection.load_graph(read_file(url)?, syntax, to_graph_name, Some(url))
 }
 
 fn load_sparql_query(url: &str) -> Result<Query> {

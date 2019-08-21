@@ -12,7 +12,6 @@
 //! use rudf::model::*;
 //! use rudf::{Repository, RepositoryConnection, MemoryRepository, Result};
 //! use crate::rudf::sparql::PreparedQuery;
-//! use std::str::FromStr;
 //! use rudf::sparql::algebra::QueryResult;
 //!
 //! let repository = MemoryRepository::default();
@@ -37,7 +36,7 @@
 
 pub mod model;
 mod repository;
-pub mod rio;
+mod rio;
 pub mod sparql;
 pub(crate) mod store;
 
@@ -48,3 +47,4 @@ pub use crate::store::MemoryRepository;
 pub use crate::store::RocksDbRepository;
 pub use repository::Repository;
 pub use repository::RepositoryConnection;
+pub use rio::GraphSyntax;

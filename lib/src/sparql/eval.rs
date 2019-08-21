@@ -739,7 +739,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
 
     fn to_string_id(&self, term: EncodedTerm) -> Option<u64> {
         match term {
-            EncodedTerm::DefaultGraph {} => None,
+            EncodedTerm::DefaultGraph => None,
             EncodedTerm::NamedNode { iri_id } => Some(iri_id),
             EncodedTerm::BlankNode(_) => None,
             EncodedTerm::StringLiteral { value_id }
@@ -1201,7 +1201,7 @@ impl<'a, S: StoreConnection> Iterator for UnionIterator<'a, S> {
     type Item = Result<EncodedTuple>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple>> {
-        while let Some(tuple) = self.current.pop() {
+        if let Some(tuple) = self.current.pop() {
             return Some(tuple);
         }
         match self.input_iter.next()? {
@@ -1320,7 +1320,7 @@ impl<'a, S: StoreConnection> Iterator for DescribeIterator<'a, S> {
     type Item = Result<Triple>;
 
     fn next(&mut self) -> Option<Result<Triple>> {
-        while let Some(quad) = self.quads.pop() {
+        if let Some(quad) = self.quads.pop() {
             return Some(match quad {
                 Ok(quad) => self
                     .store

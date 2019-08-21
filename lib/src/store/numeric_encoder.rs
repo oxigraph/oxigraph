@@ -8,8 +8,9 @@ use failure::format_err;
 use failure::Backtrace;
 use failure::Fail;
 use ordered_float::OrderedFloat;
+use rio_api::model as rio;
 use rust_decimal::Decimal;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::Read;
 use std::io::Write;
 use std::ops::Deref;
@@ -142,7 +143,7 @@ const TYPE_NAIVE_DATE_TIME_LITERAL: u8 = 14;
 const TYPE_NAIVE_DATE_LITERAL: u8 = 15;
 const TYPE_NAIVE_TIME_LITERAL: u8 = 16;
 
-pub static ENCODED_DEFAULT_GRAPH: EncodedTerm = EncodedTerm::DefaultGraph {};
+pub static ENCODED_DEFAULT_GRAPH: EncodedTerm = EncodedTerm::DefaultGraph;
 pub static ENCODED_EMPTY_STRING_LITERAL: EncodedTerm = EncodedTerm::StringLiteral {
     value_id: EMPTY_STRING_ID,
 };
@@ -179,7 +180,7 @@ pub static ENCODED_XSD_DATE_TIME_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNod
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
 pub enum EncodedTerm {
-    DefaultGraph {},
+    DefaultGraph,
     NamedNode { iri_id: u64 },
     BlankNode(Uuid),
     StringLiteral { value_id: u64 },
@@ -378,7 +379,7 @@ pub trait TermReader {
 impl<R: Read> TermReader for R {
     fn read_term(&mut self) -> Result<EncodedTerm> {
         match self.read_u8()? {
-            TYPE_DEFAULT_GRAPH_ID => Ok(EncodedTerm::DefaultGraph {}),
+            TYPE_DEFAULT_GRAPH_ID => Ok(EncodedTerm::DefaultGraph),
             TYPE_NAMED_NODE_ID => Ok(EncodedTerm::NamedNode {
                 iri_id: self.read_u64::<LittleEndian>()?,
             }),
@@ -496,7 +497,7 @@ impl<R: Write> TermWriter for R {
     fn write_term(&mut self, term: EncodedTerm) -> Result<()> {
         self.write_u8(term.type_id())?;
         match term {
-            EncodedTerm::DefaultGraph {} => {}
+            EncodedTerm::DefaultGraph => {}
             EncodedTerm::NamedNode { iri_id } => self.write_u64::<LittleEndian>(iri_id)?,
             EncodedTerm::BlankNode(id) => self.write_all(id.as_bytes())?,
             EncodedTerm::StringLiteral { value_id } => {
@@ -576,8 +577,8 @@ impl<S: StringStore> Encoder<S> {
     }
 
     pub fn encode_named_node(&self, named_node: &NamedNode) -> Result<EncodedTerm> {
-        Ok(EncodedTerm::NamedNode {
-            iri_id: self.string_store.insert_str(named_node.as_str())?,
+        self.encode_rio_named_node(rio::NamedNode {
+            iri: named_node.as_str(),
         })
     }
 
@@ -688,9 +689,108 @@ impl<S: StringStore> Encoder<S> {
         })
     }
 
+    pub fn encode_rio_named_node(&self, named_node: rio::NamedNode) -> Result<EncodedTerm> {
+        Ok(EncodedTerm::NamedNode {
+            iri_id: self.string_store.insert_str(named_node.iri)?,
+        })
+    }
+
+    pub fn encode_rio_blank_node(
+        &self,
+        blank_node: rio::BlankNode,
+        bnodes_map: &mut HashMap<String, Uuid>,
+    ) -> Result<EncodedTerm> {
+        Ok(if let Some(uuid) = bnodes_map.get(blank_node.id) {
+            EncodedTerm::BlankNode(*uuid)
+        } else {
+            let uuid = Uuid::new_v4();
+            bnodes_map.insert(blank_node.id.to_owned(), uuid);
+            EncodedTerm::BlankNode(uuid)
+        })
+    }
+
+    pub fn encode_rio_literal(&self, literal: rio::Literal) -> Result<EncodedTerm> {
+        match literal {
+            rio::Literal::Simple { value } => Ok(EncodedTerm::StringLiteral {
+                value_id: self.string_store.insert_str(value)?,
+            }),
+            rio::Literal::LanguageTaggedString { value, language } => {
+                Ok(EncodedTerm::LangStringLiteral {
+                    value_id: self.string_store.insert_str(value)?,
+                    language_id: self
+                        .string_store
+                        .insert_str(LanguageTag::parse(language)?.as_str())?,
+                    //TODO: avoid
+                })
+            }
+            rio::Literal::Typed { value, datatype } => {
+                //TODO: optimize
+                self.encode_literal(&Literal::new_typed_literal(
+                    value,
+                    NamedNode::new(datatype.iri),
+                ))
+            }
+        }
+    }
+
+    pub fn encode_rio_named_or_blank_node(
+        &self,
+        term: rio::NamedOrBlankNode,
+        bnodes_map: &mut HashMap<String, Uuid>,
+    ) -> Result<EncodedTerm> {
+        match term {
+            rio::NamedOrBlankNode::NamedNode(named_node) => self.encode_rio_named_node(named_node),
+            rio::NamedOrBlankNode::BlankNode(blank_node) => {
+                self.encode_rio_blank_node(blank_node, bnodes_map)
+            }
+        }
+    }
+
+    pub fn encode_rio_term(
+        &self,
+        term: rio::Term,
+        bnodes_map: &mut HashMap<String, Uuid>,
+    ) -> Result<EncodedTerm> {
+        match term {
+            rio::Term::NamedNode(named_node) => self.encode_rio_named_node(named_node),
+            rio::Term::BlankNode(blank_node) => self.encode_rio_blank_node(blank_node, bnodes_map),
+            rio::Term::Literal(literal) => self.encode_rio_literal(literal),
+        }
+    }
+
+    pub fn encode_rio_quad(
+        &self,
+        quad: rio::Quad,
+        bnodes_map: &mut HashMap<String, Uuid>,
+    ) -> Result<EncodedQuad> {
+        Ok(EncodedQuad {
+            subject: self.encode_rio_named_or_blank_node(quad.subject, bnodes_map)?,
+            predicate: self.encode_rio_named_node(quad.predicate)?,
+            object: self.encode_rio_term(quad.object, bnodes_map)?,
+            graph_name: match quad.graph_name {
+                Some(graph_name) => self.encode_rio_named_or_blank_node(graph_name, bnodes_map)?,
+                None => ENCODED_DEFAULT_GRAPH,
+            },
+        })
+    }
+
+    pub fn encode_rio_triple_in_graph(
+        &self,
+        triple: rio::Triple,
+        graph_name: EncodedTerm,
+        bnodes_map: &mut HashMap<String, Uuid>,
+    ) -> Result<EncodedQuad> {
+        Ok(EncodedQuad {
+            subject: self.encode_rio_named_or_blank_node(triple.subject, bnodes_map)?,
+            predicate: self.encode_rio_named_node(triple.predicate)?,
+            object: self.encode_rio_term(triple.object, bnodes_map)?,
+            graph_name,
+        })
+    }
+
     pub fn decode_term(&self, encoded: EncodedTerm) -> Result<Term> {
         match encoded {
-            EncodedTerm::DefaultGraph {} => {
+            EncodedTerm::DefaultGraph => {
                 Err(format_err!("The default graph tag is not a valid term"))
             }
             EncodedTerm::NamedNode { iri_id } => {
@@ -764,7 +864,7 @@ impl<S: StringStore> Encoder<S> {
             self.decode_named_node(encoded.predicate)?,
             self.decode_term(encoded.object)?,
             match encoded.graph_name {
-                EncodedTerm::DefaultGraph {} => None,
+                EncodedTerm::DefaultGraph => None,
                 graph_name => Some(self.decode_named_or_blank_node(graph_name)?),
             },
         ))

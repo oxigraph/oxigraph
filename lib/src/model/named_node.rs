@@ -9,7 +9,6 @@ use std::fmt;
 /// The default string formatter is returning a N-Triples, Turtle and SPARQL compatible representation:
 /// ```
 /// use rudf::model::NamedNode;
-/// use std::str::FromStr;
 ///
 /// assert_eq!(
 ///     "<http://example.com/foo>",

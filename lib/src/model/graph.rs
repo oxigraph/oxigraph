@@ -12,7 +12,6 @@ use std::iter::FromIterator;
 /// ```
 /// use rudf::model::*;
 /// use rudf::model::SimpleGraph;
-/// use std::str::FromStr;
 ///
 /// let mut graph = SimpleGraph::default();
 /// let ex = NamedNode::new("http://example.com");
