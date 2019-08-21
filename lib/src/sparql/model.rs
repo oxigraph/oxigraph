@@ -17,10 +17,7 @@ pub enum QueryResult<'a> {
 }
 
 impl<'a> QueryResult<'a> {
-    pub fn read(
-        reader: impl BufRead + 'static,
-        syntax: QueryResultSyntax,
-    ) -> Result<QueryResult<'static>> {
+    pub fn read(reader: impl BufRead + 'a, syntax: QueryResultSyntax) -> Result<Self> {
         match syntax {
             QueryResultSyntax::Xml => read_xml_results(reader),
         }

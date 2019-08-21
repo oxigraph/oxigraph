@@ -107,7 +107,7 @@ pub fn write_xml_results<W: Write>(results: QueryResult<'_>, sink: W) -> Result<
     Ok(writer.into_inner())
 }
 
-pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResult<'static>> {
+pub fn read_xml_results<'a>(source: impl BufRead + 'a) -> Result<QueryResult<'a>> {
     enum State {
         Start,
         Sparql,
