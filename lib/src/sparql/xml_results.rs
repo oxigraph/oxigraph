@@ -333,10 +333,7 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
                                 if let Ok(attr) = attr {
                                     if attr.key == b"xml:lang" {
                                         match attr.unescape_and_decode_value(&self.reader) {
-                                            Ok(val) => match LanguageTag::parse(&val) {
-                                                Ok(val) => lang = Some(val),
-                                                Err(error) => return Some(Err(error.into())),
-                                            },
+                                            Ok(val) => lang = Some(val),
                                             Err(error) => return Some(Err(error.into())),
                                         }
                                     } else if attr.key == b"datatype" {
@@ -424,7 +421,7 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
 
 fn build_literal(
     value: impl Into<String>,
-    lang: &Option<LanguageTag>,
+    lang: &Option<String>,
     datatype: &Option<NamedNode>,
 ) -> Literal {
     match datatype {

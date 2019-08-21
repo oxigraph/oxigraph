@@ -5,7 +5,6 @@
 mod blank_node;
 mod graph;
 mod isomorphism;
-mod language_tag;
 mod literal;
 mod named_node;
 mod triple;
@@ -13,7 +12,6 @@ pub mod vocab;
 
 pub use crate::model::blank_node::BlankNode;
 pub use crate::model::graph::SimpleGraph;
-pub use crate::model::language_tag::LanguageTag;
 pub use crate::model::literal::Literal;
 pub use crate::model::named_node::NamedNode;
 pub use crate::model::triple::NamedOrBlankNode;

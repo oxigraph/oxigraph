@@ -948,11 +948,8 @@ VAR1 -> &'input str = '?' v:$(VARNAME) { v }
 VAR2 -> &'input str = '$' v:$(VARNAME) { v }
 
 //[145]
-LANGTAG -> LanguageTag = "@" l:$([a-zA-Z]+ ("-" [a-zA-Z0-9]+)*) {?
-    match LanguageTag::parse(&l) {
-        Ok(langtag) => Ok(langtag),
-        Err(error) => Err("language tag parsing failed")
-    }
+LANGTAG -> String = "@" l:$([a-zA-Z]+ ("-" [a-zA-Z0-9]+)*) {
+    l.to_ascii_lowercase()
 }
 
 //[146]

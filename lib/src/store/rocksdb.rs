@@ -1,4 +1,3 @@
-use crate::model::LanguageTag;
 use crate::store::numeric_encoder::*;
 use crate::store::{Store, StoreConnection, StoreRepositoryConnection};
 use crate::{Repository, Result};
@@ -161,10 +160,6 @@ impl StringStore for RocksDbStoreConnection<'_> {
         } else {
             Err(format_err!("value not found in the dictionary"))
         }
-    }
-
-    fn get_language_tag(&self, id: u64) -> Result<LanguageTag> {
-        Ok(LanguageTag::parse(&self.get_str(id)?)?)
     }
 }
 

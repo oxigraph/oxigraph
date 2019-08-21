@@ -1,4 +1,3 @@
-use crate::model::LanguageTag;
 use crate::store::numeric_encoder::*;
 use crate::store::*;
 use crate::{Repository, Result};
@@ -84,10 +83,6 @@ impl StringStore for MemoryStore {
 
     fn get_str(&self, id: u64) -> Result<String> {
         self.string_store.get_str(id)
-    }
-
-    fn get_language_tag(&self, id: u64) -> Result<LanguageTag> {
-        self.string_store.get_language_tag(id)
     }
 }
 
