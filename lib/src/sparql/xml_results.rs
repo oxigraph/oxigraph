@@ -17,7 +17,6 @@ use std::collections::BTreeMap;
 use std::io::BufRead;
 use std::io::Write;
 use std::iter::empty;
-use std::str::FromStr;
 
 pub fn write_xml_results<W: Write>(results: QueryResult<'_>, sink: W) -> Result<W> {
     let mut writer = Writer::new(sink);
@@ -345,11 +344,9 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
                                     } else if attr.key == b"datatype" {
                                         match attr.unescaped_value() {
                                             Ok(val) => {
-                                                match NamedNode::from_str(&self.reader.decode(&val))
-                                                {
-                                                    Ok(dt) => datatype = Some(dt),
-                                                    Err(error) => return Some(Err(error)),
-                                                }
+                                                datatype = Some(NamedNode::new(
+                                                    self.reader.decode(&val).to_string(),
+                                                ));
                                             }
                                             Err(error) => return Some(Err(error.into())),
                                         }
@@ -368,10 +365,7 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
                 },
                 Event::Text(event) => match event.unescaped() {
                     Ok(data) => match state {
-                        State::Uri => match NamedNode::from_str(&self.reader.decode(&data)) {
-                            Ok(named_node) => term = Some(named_node.into()),
-                            Err(error) => return Some(Err(error)),
-                        },
+                        State::Uri => term = Some(NamedNode::new(self.reader.decode(&data)).into()),
                         State::BNode => {
                             term = Some(
                                 self.bnodes_map

@@ -15,7 +15,7 @@ use std::iter::FromIterator;
 /// use std::str::FromStr;
 ///
 /// let mut graph = SimpleGraph::default();
-/// let ex = NamedNode::from_str("http://example.com").unwrap();
+/// let ex = NamedNode::new("http://example.com");
 /// let triple = Triple::new(ex.clone(), ex.clone(), ex.clone());
 /// graph.insert(triple.clone());
 /// let results: Vec<Triple> = graph.triples_for_subject(&ex.into()).cloned().collect();

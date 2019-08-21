@@ -200,24 +200,18 @@ impl TestManifest {
 pub mod mf {
     use lazy_static::lazy_static;
     use rudf::model::NamedNode;
-    use std::str::FromStr;
 
     lazy_static! {
         pub static ref INCLUDE: NamedNode =
-            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#include")
-                .unwrap();
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#include");
         pub static ref ENTRIES: NamedNode =
-            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#entries")
-                .unwrap();
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#entries");
         pub static ref NAME: NamedNode =
-            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#name")
-                .unwrap();
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#name");
         pub static ref ACTION: NamedNode =
-            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action")
-                .unwrap();
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action");
         pub static ref RESULT: NamedNode =
-            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#result")
-                .unwrap();
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#result");
     }
 }
 

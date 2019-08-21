@@ -8,7 +8,6 @@ use rio_turtle::{NTriplesParser, TurtleParser};
 use rio_xml::RdfXmlParser;
 use std::collections::BTreeMap;
 use std::io::BufRead;
-use std::str::FromStr;
 
 /// Reads a [N-Triples](https://www.w3.org/TR/n-triples/) file from a Rust `BufRead` and returns an iterator of the read `Triple`s
 pub fn read_ntriples<R: BufRead>(reader: R) -> Result<impl Iterator<Item = Result<Triple>>> {
@@ -68,7 +67,7 @@ fn convert_named_or_blank_node(
 }
 
 fn convert_named_node(value: rio::NamedNode) -> Result<NamedNode> {
-    NamedNode::from_str(value.iri)
+    Ok(NamedNode::new(value.iri))
 }
 
 fn convert_blank_node(

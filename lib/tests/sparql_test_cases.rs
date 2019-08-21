@@ -15,7 +15,6 @@ use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::str::FromStr;
 
 #[test]
 fn sparql_w3c_syntax_testsuite() {
@@ -23,11 +22,11 @@ fn sparql_w3c_syntax_testsuite() {
     let manifest_11_url =
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest.ttl";
     let test_blacklist = vec![
-        NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql2/manifest#syntax-form-construct02").unwrap(),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql2/manifest#syntax-form-construct02"),
         //TODO: Deserialization of the serialization failing:
-        NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql2/manifest#syntax-form-construct04").unwrap(),
-        NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql2/manifest#syntax-function-04").unwrap(),
-        NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql1/manifest#syntax-qname-04").unwrap(),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql2/manifest#syntax-form-construct04"),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql2/manifest#syntax-function-04"),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql1/manifest#syntax-qname-04"),
     ];
 
     for test_result in TestManifest::new(manifest_10_url).chain(TestManifest::new(manifest_11_url))
@@ -90,63 +89,29 @@ fn sparql_w3c_query_evaluation_testsuite() {
     ];
     let test_blacklist = vec![
         //Multiple writing of the same xsd:integer. Our system does strong normalization.
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-1",
-        ).unwrap(),
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-9",
-        ).unwrap(),
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-str-1",
-        ).unwrap(),
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-str-2",
-        ).unwrap(),
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest#eq-graph-1",
-        ).unwrap(),
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest#eq-graph-2",
-        ).unwrap(),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-1"),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-9"),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-str-1"),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-str-2"),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest#eq-graph-1"),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest#eq-graph-2"),
         //Multiple writing of the same xsd:double. Our system does strong normalization.
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm",
-        ).unwrap(),
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm-simple",
-        ).unwrap(),
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm-eq",
-        ).unwrap(),
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm-not-eq",
-        ).unwrap(),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm"),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm-simple"),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm-eq"),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm-not-eq"),
         //Simple literal vs xsd:string. We apply RDF 1.1
-        NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-2").unwrap(),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-2"),
         //URI normalization: we are not normalizing well
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest#normalization-1",
-        ).unwrap(),
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest#normalization-2",
-        ).unwrap(),
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest#normalization-3",
-        ).unwrap(),
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest#kanji-1",
-        ).unwrap(),
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest#kanji-2",
-        ).unwrap(),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest#normalization-1"),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest#normalization-2"),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest#normalization-3"),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest#kanji-1"),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest#kanji-2"),
         //Test on curly brace scoping with OPTIONAL filter
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest#dawg-optional-filter-005-not-simplified",
-        ).unwrap(),
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest#dawg-optional-filter-005-not-simplified"),
         //DATATYPE("foo"@en) returns rdf:langString in SPARQL 1.1
-        NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-datatype-2",
-        ).unwrap()
+        NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-datatype-2")
     ];
 
     for test_result in manifest_10_urls
@@ -284,34 +249,24 @@ fn read_file(url: &str) -> Result<impl BufRead> {
 mod rs {
     use lazy_static::lazy_static;
     use rudf::model::NamedNode;
-    use std::str::FromStr;
 
     lazy_static! {
         pub static ref RESULT_SET: NamedNode =
-            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/result-set#ResultSet")
-                .unwrap();
-        pub static ref RESULT_VARIABLE: NamedNode = NamedNode::from_str(
-            "http://www.w3.org/2001/sw/DataAccess/tests/result-set#resultVariable"
-        )
-        .unwrap();
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/result-set#ResultSet");
+        pub static ref RESULT_VARIABLE: NamedNode =
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/result-set#resultVariable");
         pub static ref SOLUTION: NamedNode =
-            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/result-set#solution")
-                .unwrap();
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/result-set#solution");
         pub static ref BINDING: NamedNode =
-            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/result-set#binding")
-                .unwrap();
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/result-set#binding");
         pub static ref VALUE: NamedNode =
-            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/result-set#value")
-                .unwrap();
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/result-set#value");
         pub static ref VARIABLE: NamedNode =
-            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/result-set#variable")
-                .unwrap();
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/result-set#variable");
         pub static ref INDEX: NamedNode =
-            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/result-set#index")
-                .unwrap();
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/result-set#index");
         pub static ref BOOLEAN: NamedNode =
-            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/result-set#boolean")
-                .unwrap();
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/result-set#boolean");
     }
 }
 
@@ -443,42 +398,32 @@ impl TestManifest {
 pub mod mf {
     use lazy_static::lazy_static;
     use rudf::model::NamedNode;
-    use std::str::FromStr;
 
     lazy_static! {
         pub static ref INCLUDE: NamedNode =
-            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#include")
-                .unwrap();
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#include");
         pub static ref ENTRIES: NamedNode =
-            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#entries")
-                .unwrap();
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#entries");
         pub static ref NAME: NamedNode =
-            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#name")
-                .unwrap();
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#name");
         pub static ref ACTION: NamedNode =
-            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action")
-                .unwrap();
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action");
         pub static ref RESULT: NamedNode =
-            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#result")
-                .unwrap();
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#result");
     }
 }
 
 pub mod qt {
     use lazy_static::lazy_static;
     use rudf::model::NamedNode;
-    use std::str::FromStr;
 
     lazy_static! {
         pub static ref QUERY: NamedNode =
-            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/test-query#query")
-                .unwrap();
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/test-query#query");
         pub static ref DATA: NamedNode =
-            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/test-query#data")
-                .unwrap();
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/test-query#data");
         pub static ref GRAPH_DATA: NamedNode =
-            NamedNode::from_str("http://www.w3.org/2001/sw/DataAccess/tests/test-query#graphData")
-                .unwrap();
+            NamedNode::new("http://www.w3.org/2001/sw/DataAccess/tests/test-query#graphData");
     }
 }
 

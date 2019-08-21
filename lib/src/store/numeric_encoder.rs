@@ -795,13 +795,11 @@ impl<T> From<PoisonError<T>> for MutexPoisonError {
 
 #[test]
 fn test_encoding() {
-    use std::str::FromStr;
-
     let encoder: Encoder<MemoryStringStore> = Encoder::default();
     let terms: Vec<Term> = vec![
-        NamedNode::from_str("http://foo.com").unwrap().into(),
-        NamedNode::from_str("http://bar.com").unwrap().into(),
-        NamedNode::from_str("http://foo.com").unwrap().into(),
+        NamedNode::new("http://foo.com").into(),
+        NamedNode::new("http://bar.com").into(),
+        NamedNode::new("http://foo.com").into(),
         BlankNode::default().into(),
         Literal::new_simple_literal("foo").into(),
         Literal::from(true).into(),

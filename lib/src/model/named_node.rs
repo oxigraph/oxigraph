@@ -1,8 +1,5 @@
-use crate::Error;
-use crate::Result;
 use rio_api::model as rio;
 use std::fmt;
-use std::str::FromStr;
 
 /// A RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
 ///
@@ -16,7 +13,7 @@ use std::str::FromStr;
 ///
 /// assert_eq!(
 ///     "<http://example.com/foo>",
-///     NamedNode::from_str("http://example.com/foo").unwrap().to_string()
+///     NamedNode::new("http://example.com/foo").to_string()
 /// )
 /// ```
 ///
@@ -46,13 +43,5 @@ impl NamedNode {
 
     pub fn into_string(self) -> String {
         self.iri
-    }
-}
-
-impl FromStr for NamedNode {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        Ok(Self::new(s))
     }
 }

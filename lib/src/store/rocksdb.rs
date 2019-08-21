@@ -35,7 +35,7 @@ use std::sync::Mutex;
 /// let connection = repository.connection().unwrap();
 ///
 /// // insertion
-/// let ex = NamedNode::from_str("http://example.com").unwrap();
+/// let ex = NamedNode::new("http://example.com");
 /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
 /// connection.insert(&quad);
 ///

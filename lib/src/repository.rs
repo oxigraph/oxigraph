@@ -22,7 +22,7 @@ use std::io::Read;
 /// let connection = repository.connection().unwrap();
 ///
 /// // insertion
-/// let ex = NamedNode::from_str("http://example.com").unwrap();
+/// let ex = NamedNode::new("http://example.com");
 /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
 /// connection.insert(&quad);
 ///
@@ -73,7 +73,7 @@ pub trait RepositoryConnection: Clone {
     /// let connection = repository.connection().unwrap();
     ///
     /// // insertions
-    /// let ex = NamedNode::from_str("http://example.com").unwrap();
+    /// let ex = NamedNode::new("http://example.com");
     /// connection.insert(&Quad::new(ex.clone(), ex.clone(), ex.clone(), None));
     ///
     /// // SPARQL query
@@ -97,7 +97,7 @@ pub trait RepositoryConnection: Clone {
     /// let connection = repository.connection().unwrap();
     ///
     /// // insertion
-    /// let ex = NamedNode::from_str("http://example.com").unwrap();
+    /// let ex = NamedNode::new("http://example.com");
     /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
     /// connection.insert(&quad);
     ///
