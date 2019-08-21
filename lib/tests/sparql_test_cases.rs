@@ -13,7 +13,7 @@ use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 
 #[test]
-fn sparql_w3c_syntax_testsuite() {
+fn sparql_w3c_syntax_testsuite() -> Result<()> {
     let manifest_10_url = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/manifest-syntax.ttl";
     let manifest_11_url =
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest.ttl";
@@ -54,10 +54,11 @@ fn sparql_w3c_syntax_testsuite() {
             assert!(false, "Not supported test: {}", test);
         }
     }
+    Ok(())
 }
 
 #[test]
-fn sparql_w3c_query_evaluation_testsuite() {
+fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
     //TODO: dataset open-world
     let manifest_10_urls = vec![
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/algebra/manifest.ttl",
@@ -113,27 +114,25 @@ fn sparql_w3c_query_evaluation_testsuite() {
         .into_iter()
         .flat_map(|manifest| TestManifest::new(manifest))
     {
-        let test = test_result.unwrap();
+        let test = test_result?;
         if test_blacklist.contains(&test.id) {
             continue;
         }
         if test.kind == "QueryEvaluationTest" {
             let repository = MemoryRepository::default();
             if let Some(data) = &test.data {
-                load_graph_to_repository(&data, &repository.connection().unwrap(), None).unwrap();
+                load_graph_to_repository(&data, &repository.connection()?, None)?;
             }
             for graph_data in &test.graph_data {
                 load_graph_to_repository(
                     &graph_data,
-                    &repository.connection().unwrap(),
+                    &repository.connection()?,
                     Some(&NamedNode::new(graph_data).into()),
-                )
-                .unwrap();
+                )?;
             }
             match repository
-                .connection()
-                .unwrap()
-                .prepare_query(read_file(&test.query).unwrap())
+                .connection()?
+                .prepare_query(read_file(&test.query)?)
             {
                 Err(error) => assert!(
                     false,
@@ -148,19 +147,19 @@ fn sparql_w3c_query_evaluation_testsuite() {
                     ),
                     Ok(result) => {
                         let expected_graph =
-                            load_sparql_query_result_graph(test.result.as_ref().unwrap()).unwrap();
+                            load_sparql_query_result_graph(test.result.as_ref().unwrap())?;
                         let with_order = expected_graph
                             .triples_for_predicate(&rs::INDEX)
                             .next()
                             .is_some();
-                        let actual_graph = to_graph(result, with_order).unwrap();
+                        let actual_graph = to_graph(result, with_order)?;
                         assert!(
                                 actual_graph.is_isomorphic(&expected_graph),
                                 "Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
                                 test,
                                 expected_graph,
                                 actual_graph,
-                                read_file_to_string(&test.query).unwrap(),
+                                read_file_to_string(&test.query)?,
                                 repository_to_string(&repository)
                             )
                     }
@@ -170,6 +169,7 @@ fn sparql_w3c_query_evaluation_testsuite() {
             assert!(false, "Not supported test: {}", test);
         }
     }
+    Ok(())
 }
 
 fn repository_to_string(repository: impl Repository) -> String {
