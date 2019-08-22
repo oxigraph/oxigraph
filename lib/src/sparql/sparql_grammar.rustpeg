@@ -741,12 +741,12 @@ UnaryExpression -> Expression =
 //[119]
 PrimaryExpression -> Expression =
     BrackettedExpression /
-    BuiltInCall /
     iriOrFunction /
+    v:Var { Expression::Constant(v.into()) } /
     l:RDFLiteral { Expression::Constant(l.into()) } /
     l:NumericLiteral { Expression::Constant(l.into()) } /
     l:BooleanLiteral { Expression::Constant(l.into()) } /
-    v:Var { Expression::Constant(v.into()) }
+    BuiltInCall
 
 //[120]
 BrackettedExpression -> Expression = '(' _ e:Expression _ ')' { e }
