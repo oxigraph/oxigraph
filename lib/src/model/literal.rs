@@ -133,14 +133,11 @@ impl Literal {
         value: impl Into<String>,
         language: impl Into<String>,
     ) -> Self {
-        let language = language.into();
+        let mut language = language.into();
+        language.make_ascii_lowercase();
         Literal(LiteralContent::LanguageTaggedString {
             value: value.into(),
-            language: if language.bytes().all(|c| c.is_ascii_lowercase()) {
-                language
-            } else {
-                language.to_ascii_lowercase()
-            },
+            language,
         })
     }
 

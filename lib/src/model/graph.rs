@@ -14,7 +14,7 @@ use std::iter::FromIterator;
 /// use rudf::model::SimpleGraph;
 ///
 /// let mut graph = SimpleGraph::default();
-/// let ex = NamedNode::new("http://example.com");
+/// let ex = NamedNode::parse("http://example.com").unwrap();
 /// let triple = Triple::new(ex.clone(), ex.clone(), ex.clone());
 /// graph.insert(triple.clone());
 /// let results: Vec<Triple> = graph.triples_for_subject(&ex.into()).cloned().collect();

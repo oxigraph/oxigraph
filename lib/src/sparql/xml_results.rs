@@ -339,9 +339,12 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
                                     } else if attr.key == b"datatype" {
                                         match attr.unescaped_value() {
                                             Ok(val) => {
-                                                datatype = Some(NamedNode::new(
+                                                match NamedNode::parse(
                                                     self.reader.decode(&val).to_string(),
-                                                ));
+                                                ) {
+                                                    Ok(iri) => datatype = Some(iri),
+                                                    Err(error) => return Some(Err(error)),
+                                                }
                                             }
                                             Err(error) => return Some(Err(error.into())),
                                         }
@@ -360,7 +363,12 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
                 },
                 Event::Text(event) => match event.unescaped() {
                     Ok(data) => match state {
-                        State::Uri => term = Some(NamedNode::new(self.reader.decode(&data)).into()),
+                        State::Uri => match NamedNode::parse(self.reader.decode(&data)) {
+                            Ok(uri) => {
+                                term = Some(uri.into());
+                            }
+                            Err(error) => return Some(Err(error)),
+                        },
                         State::BNode => {
                             term = Some(
                                 self.bnodes_map

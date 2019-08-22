@@ -18,7 +18,7 @@
 //! let connection = repository.connection().unwrap();
 //!
 //! // insertion
-//! let ex = NamedNode::new("http://example.com");
+//! let ex = NamedNode::parse("http://example.com").unwrap();
 //! let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
 //! connection.insert(&quad);
 //!

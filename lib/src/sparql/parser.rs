@@ -22,8 +22,6 @@ mod grammar {
     use std::io::BufReader;
     use std::io::Read;
     use std::str::Chars;
-    use url::ParseOptions;
-    use url::Url;
 
     struct FocusedTriplePattern<F> {
         focus: F,
@@ -296,15 +294,19 @@ mod grammar {
     }
 
     pub struct ParserState {
-        base_uri: Option<Url>,
+        base_iri: Option<Iri>,
         namespaces: HashMap<String, String>,
         bnodes_map: BTreeMap<String, BlankNode>,
         aggregations: BTreeMap<Aggregation, Variable>,
     }
 
     impl ParserState {
-        fn url_parser(&self) -> ParseOptions<'_> {
-            Url::options().base_url(self.base_uri.as_ref())
+        fn parse_iri(&self, iri: &str) -> Result<Iri, IriParseError> {
+            if let Some(base_iri) = &self.base_iri {
+                base_iri.resolve(iri)
+            } else {
+                Iri::parse(iri.to_owned())
+            }
         }
 
         fn new_aggregation(&mut self, agg: Aggregation) -> Variable {
@@ -533,11 +535,11 @@ mod grammar {
 
     pub fn read_sparql_query<'a, R: Read + 'a>(
         source: R,
-        base_uri: Option<&'a str>,
+        base_iri: Option<&'a str>,
     ) -> super::super::super::Result<QueryVariants> {
         let mut state = ParserState {
-            base_uri: if let Some(base_uri) = base_uri {
-                Some(Url::parse(base_uri)?)
+            base_iri: if let Some(base_iri) = base_iri {
+                Some(Iri::parse(base_iri.to_owned())?)
             } else {
                 None
             },

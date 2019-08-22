@@ -1,10 +1,9 @@
+use crate::model::Iri;
+use crate::Result;
 use rio_api::model as rio;
 use std::fmt;
 
 /// A RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
-///
-/// The common way to build it is to use the `FromStr::from_str` trait method.
-/// This method takes care of usual IRI normalization and validation.
 ///
 /// The default string formatter is returning a N-Triples, Turtle and SPARQL compatible representation:
 /// ```
@@ -12,7 +11,7 @@ use std::fmt;
 ///
 /// assert_eq!(
 ///     "<http://example.com/foo>",
-///     NamedNode::new("http://example.com/foo").to_string()
+///     NamedNode::parse("http://example.com/foo").unwrap().to_string()
 /// )
 /// ```
 ///
@@ -31,8 +30,16 @@ impl fmt::Display for NamedNode {
 }
 
 impl NamedNode {
-    /// Builds a RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
-    pub fn new(iri: impl Into<String>) -> Self {
+    /// Builds and validate a RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
+    pub fn parse(iri: impl Into<String>) -> Result<Self> {
+        Ok(Self::new_from_iri(Iri::parse(iri.into())?))
+    }
+
+    pub(crate) fn new_from_iri(iri: Iri) -> Self {
+        Self::new_from_string(iri.into_string())
+    }
+
+    pub(crate) fn new_from_string(iri: impl Into<String>) -> Self {
         Self { iri: iri.into() }
     }
 

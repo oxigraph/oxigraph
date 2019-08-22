@@ -18,9 +18,7 @@ travis-ci = { repository = "Tpt/rudf" }
 [dependencies]
 lazy_static = "1"
 rocksdb = { version = "0.12", optional = true }
-url = "2"
 uuid = { version = "0.7", features = ["v4"] }
-bzip2 = "0.3"
 byteorder = {version="1", features = ["i128"] }
 quick-xml = "0.15"
 ordered-float = "1"

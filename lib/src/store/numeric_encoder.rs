@@ -714,7 +714,7 @@ impl<S: StringStore> Encoder<S> {
                 //TODO: optimize
                 self.encode_literal(&Literal::new_typed_literal(
                     value,
-                    NamedNode::new(datatype.iri),
+                    NamedNode::new_from_string(datatype.iri),
                 ))
             }
         }
@@ -781,7 +781,7 @@ impl<S: StringStore> Encoder<S> {
                 Err(format_err!("The default graph tag is not a valid term"))
             }
             EncodedTerm::NamedNode { iri_id } => {
-                Ok(NamedNode::new(self.string_store.get_str(iri_id)?).into())
+                Ok(NamedNode::new_from_string(self.string_store.get_str(iri_id)?).into())
             }
             EncodedTerm::BlankNode(id) => Ok(BlankNode::from(id).into()),
             EncodedTerm::StringLiteral { value_id } => {
@@ -800,7 +800,7 @@ impl<S: StringStore> Encoder<S> {
                 datatype_id,
             } => Ok(Literal::new_typed_literal(
                 self.string_store.get_str(value_id)?,
-                NamedNode::new(self.string_store.get_str(datatype_id)?),
+                NamedNode::new_from_string(self.string_store.get_str(datatype_id)?),
             )
             .into()),
             EncodedTerm::BooleanLiteral(value) => Ok(Literal::from(value).into()),
@@ -884,9 +884,9 @@ impl<T> From<PoisonError<T>> for MutexPoisonError {
 fn test_encoding() {
     let encoder: Encoder<MemoryStringStore> = Encoder::default();
     let terms: Vec<Term> = vec![
-        NamedNode::new("http://foo.com").into(),
-        NamedNode::new("http://bar.com").into(),
-        NamedNode::new("http://foo.com").into(),
+        NamedNode::new_from_string("http://foo.com").into(),
+        NamedNode::new_from_string("http://bar.com").into(),
+        NamedNode::new_from_string("http://foo.com").into(),
         BlankNode::default().into(),
         Literal::new_simple_literal("foo").into(),
         Literal::from(true).into(),

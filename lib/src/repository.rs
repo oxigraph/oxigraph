@@ -21,7 +21,7 @@ use std::io::{BufRead, Read};
 /// let connection = repository.connection().unwrap();
 ///
 /// // insertion
-/// let ex = NamedNode::new("http://example.com");
+/// let ex = NamedNode::parse("http://example.com").unwrap();
 /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
 /// connection.insert(&quad);
 ///
@@ -71,7 +71,7 @@ pub trait RepositoryConnection: Clone {
     /// let connection = repository.connection().unwrap();
     ///
     /// // insertions
-    /// let ex = NamedNode::new("http://example.com");
+    /// let ex = NamedNode::parse("http://example.com").unwrap();
     /// connection.insert(&Quad::new(ex.clone(), ex.clone(), ex.clone(), None));
     ///
     /// // SPARQL query
@@ -94,7 +94,7 @@ pub trait RepositoryConnection: Clone {
     /// let connection = repository.connection().unwrap();
     ///
     /// // insertion
-    /// let ex = NamedNode::new("http://example.com");
+    /// let ex = NamedNode::parse("http://example.com").unwrap();
     /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
     /// connection.insert(&quad);
     ///
@@ -128,7 +128,7 @@ pub trait RepositoryConnection: Clone {
     ///
     /// // quad filter
     /// let results: Result<Vec<Quad>> = connection.quads_for_pattern(None, None, None, None).collect();
-    /// let ex = NamedNode::new("http://example.com");
+    /// let ex = NamedNode::parse("http://example.com").unwrap();
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results.unwrap());
     /// ```
     fn load_graph(
@@ -155,7 +155,7 @@ pub trait RepositoryConnection: Clone {
     ///
     /// // quad filter
     /// let results: Result<Vec<Quad>> = connection.quads_for_pattern(None, None, None, None).collect();
-    /// let ex = NamedNode::new("http://example.com");
+    /// let ex = NamedNode::parse("http://example.com").unwrap();
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), Some(ex.into()))], results.unwrap());
     /// ```
     fn load_dataset(
