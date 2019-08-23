@@ -5,14 +5,15 @@ mod eval;
 mod model;
 mod parser;
 mod plan;
+mod plan_builder;
 mod xml_results;
 
 use crate::sparql::algebra::QueryVariants;
 use crate::sparql::eval::SimpleEvaluator;
 use crate::sparql::parser::read_sparql_query;
-use crate::sparql::plan::PlanBuilder;
 use crate::sparql::plan::PlanNode;
 use crate::sparql::plan::TripleTemplate;
+use crate::sparql::plan_builder::PlanBuilder;
 use crate::store::StoreConnection;
 use crate::Result;
 use std::fmt;
