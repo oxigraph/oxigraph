@@ -7,6 +7,7 @@ use crate::store::numeric_encoder::ENCODED_DEFAULT_GRAPH;
 use crate::store::StoreConnection;
 use crate::Result;
 use failure::format_err;
+use std::collections::HashSet;
 
 pub struct PlanBuilder<'a, S: StoreConnection> {
     store: &'a S,
@@ -180,7 +181,7 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
         graph_name: PatternValue,
     ) -> Result<PlanNode> {
         let mut plan = input;
-        for pattern in p {
+        for pattern in sort_bgp(p) {
             plan = match pattern {
                 TripleOrPathPattern::Triple(pattern) => PlanNode::QuadPatternJoin {
                     child: Box::new(plan),
@@ -580,4 +581,63 @@ fn slice_key<T: Eq>(slice: &[T], element: &T) -> Option<usize> {
         }
     }
     None
+}
+
+fn sort_bgp(p: &[TripleOrPathPattern]) -> Vec<&TripleOrPathPattern> {
+    let mut assigned_variables = HashSet::default();
+    let mut new_p: Vec<_> = p.iter().collect();
+
+    for i in 0..new_p.len() {
+        (&mut new_p[i..]).sort_by(|p1, p2| {
+            count_pattern_binds(p2, &assigned_variables)
+                .cmp(&count_pattern_binds(p1, &assigned_variables))
+        });
+        add_pattern_variables(new_p[i], &mut assigned_variables);
+    }
+
+    new_p
+}
+
+fn count_pattern_binds(
+    pattern: &TripleOrPathPattern,
+    assigned_variables: &HashSet<&Variable>,
+) -> u8 {
+    let mut count = 3;
+    if let TermOrVariable::Variable(v) = pattern.subject() {
+        if !assigned_variables.contains(v) {
+            count -= 1;
+        }
+    }
+    if let TripleOrPathPattern::Triple(t) = pattern {
+        if let NamedNodeOrVariable::Variable(v) = &t.predicate {
+            if !assigned_variables.contains(v) {
+                count -= 1;
+            }
+        }
+    } else {
+        count -= 1;
+    }
+    if let TermOrVariable::Variable(v) = pattern.object() {
+        if !assigned_variables.contains(v) {
+            count -= 1;
+        }
+    }
+    count
+}
+
+fn add_pattern_variables<'a>(
+    pattern: &'a TripleOrPathPattern,
+    variables: &mut HashSet<&'a Variable>,
+) {
+    if let TermOrVariable::Variable(v) = pattern.subject() {
+        variables.insert(v);
+    }
+    if let TripleOrPathPattern::Triple(t) = pattern {
+        if let NamedNodeOrVariable::Variable(v) = &t.predicate {
+            variables.insert(v);
+        }
+    }
+    if let TermOrVariable::Variable(v) = pattern.object() {
+        variables.insert(v);
+    }
 }

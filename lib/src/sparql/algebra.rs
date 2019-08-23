@@ -194,6 +194,22 @@ pub enum TripleOrPathPattern {
     Path(PathPattern),
 }
 
+impl TripleOrPathPattern {
+    pub(crate) fn subject(&self) -> &TermOrVariable {
+        match self {
+            TripleOrPathPattern::Triple(t) => &t.subject,
+            TripleOrPathPattern::Path(t) => &t.subject,
+        }
+    }
+
+    pub(crate) fn object(&self) -> &TermOrVariable {
+        match self {
+            TripleOrPathPattern::Triple(t) => &t.object,
+            TripleOrPathPattern::Path(t) => &t.object,
+        }
+    }
+}
+
 impl<'a> fmt::Display for TripleOrPathPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
