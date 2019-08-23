@@ -262,7 +262,6 @@ pub fn are_graphs_isomorphic(a: &SimpleGraph, b: &SimpleGraph) -> bool {
     for distance in 0..5 {
         let max_size = a_bnodes_by_hash
             .values()
-            .into_iter()
             .map(|l| l.len())
             .max()
             .unwrap_or(0);

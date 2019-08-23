@@ -3,3 +3,6 @@ members = [
     "lib",
     "server"
 ]
+
+[profile.release]
+lto = true
