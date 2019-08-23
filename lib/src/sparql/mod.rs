@@ -17,7 +17,6 @@ use crate::sparql::plan_builder::PlanBuilder;
 use crate::store::StoreConnection;
 use crate::Result;
 use std::fmt;
-use std::io::Read;
 
 pub use crate::sparql::model::BindingsIterator;
 pub use crate::sparql::model::QueryResult;
@@ -55,7 +54,7 @@ enum SimplePreparedQueryOptions<S: StoreConnection> {
 }
 
 impl<S: StoreConnection> SimplePreparedQuery<S> {
-    pub(crate) fn new(connection: S, query: impl Read) -> Result<Self> {
+    pub(crate) fn new(connection: S, query: &str) -> Result<Self> {
         Ok(Self(match read_sparql_query(query, None)? {
             QueryVariants::Select {
                 algebra,
@@ -143,7 +142,7 @@ impl fmt::Display for Query {
 
 impl Query {
     /// Parses a SPARQL query
-    pub fn read<'a>(reader: impl Read + 'a, base_iri: Option<&'a str>) -> Result<Self> {
-        Ok(Query(read_sparql_query(reader, base_iri)?))
+    pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self> {
+        Ok(Query(read_sparql_query(query, base_iri)?))
     }
 }

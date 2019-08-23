@@ -96,7 +96,9 @@ fn handle_request<R: RepositoryConnection>(
             if let Some(mut body) = request.data() {
                 if let Some(content_type) = request.header("Content-Type") {
                     if content_type.starts_with("application/sparql-query") {
-                        evaluate_sparql_query(connection, body)
+                        let mut buffer = String::default();
+                        body.read_to_string(&mut buffer).unwrap();
+                        evaluate_sparql_query(connection, &buffer)
                     } else if content_type.starts_with("application/x-www-form-urlencoded") {
                         let mut buffer = Vec::default();
                         body.read_to_end(&mut buffer).unwrap();
@@ -124,13 +126,13 @@ fn evaluate_urlencoded_sparql_query<R: RepositoryConnection>(
     encoded: &[u8],
 ) -> Response {
     if let Some((_, query)) = form_urlencoded::parse(encoded).find(|(k, _)| k == "query") {
-        evaluate_sparql_query(connection, query.as_bytes())
+        evaluate_sparql_query(connection, &query)
     } else {
         Response::text("You should set the 'query' parameter").with_status_code(400)
     }
 }
 
-fn evaluate_sparql_query<R: RepositoryConnection>(connection: R, query: impl Read) -> Response {
+fn evaluate_sparql_query<R: RepositoryConnection>(connection: R, query: &str) -> Response {
     //TODO: stream
     match connection.prepare_query(query) {
         Ok(query) => match query.exec().unwrap() {

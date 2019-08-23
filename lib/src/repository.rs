@@ -1,7 +1,7 @@
 use crate::model::*;
 use crate::sparql::PreparedQuery;
 use crate::{DatasetSyntax, GraphSyntax, Result};
-use std::io::{BufRead, Read};
+use std::io::BufRead;
 
 /// A `Repository` stores a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
 /// and allows to query and update it using SPARQL.
@@ -30,7 +30,7 @@ use std::io::{BufRead, Read};
 /// assert_eq!(vec![quad], results.unwrap());
 ///
 /// // SPARQL query
-/// let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }".as_bytes()).unwrap();
+/// let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }").unwrap();
 /// let results = prepared_query.exec().unwrap();
 /// if let QueryResult::Bindings(results) = results {
 ///     assert_eq!(results.into_values_iter().next().unwrap().unwrap()[0], Some(ex.into()));
@@ -75,13 +75,13 @@ pub trait RepositoryConnection: Clone {
     /// connection.insert(&Quad::new(ex.clone(), ex.clone(), ex.clone(), None));
     ///
     /// // SPARQL query
-    /// let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }".as_bytes()).unwrap();
+    /// let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }").unwrap();
     /// let results = prepared_query.exec().unwrap();
     /// if let QueryResult::Bindings(results) = results {
     ///     assert_eq!(results.into_values_iter().next().unwrap().unwrap()[0], Some(ex.into()));
     /// }
     /// ```
-    fn prepare_query(&self, query: impl Read) -> Result<Self::PreparedQuery>;
+    fn prepare_query(&self, query: &str) -> Result<Self::PreparedQuery>;
 
     /// Retrieves quads with a filter on each quad component
     ///

@@ -17,7 +17,7 @@ use rio_api::parser::{QuadParser, TripleParser};
 use rio_turtle::{NQuadsParser, NTriplesParser, TriGParser, TurtleParser};
 use rio_xml::RdfXmlParser;
 use std::collections::HashMap;
-use std::io::{BufRead, Read};
+use std::io::BufRead;
 use std::iter::{once, Iterator};
 
 /// Defines the `Store` traits that is used to have efficient binary storage
@@ -59,7 +59,7 @@ impl<S: StoreConnection> From<S> for StoreRepositoryConnection<S> {
 impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
     type PreparedQuery = SimplePreparedQuery<S>;
 
-    fn prepare_query(&self, query: impl Read) -> Result<SimplePreparedQuery<S>> {
+    fn prepare_query(&self, query: &str) -> Result<SimplePreparedQuery<S>> {
         SimplePreparedQuery::new(self.inner.clone(), query) //TODO: avoid clone
     }
 

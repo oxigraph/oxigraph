@@ -31,10 +31,10 @@ fn sparql_w3c_syntax_testsuite() -> Result<()> {
             continue;
         }
         if test.kind == "PositiveSyntaxTest" || test.kind == "PositiveSyntaxTest11" {
-            match load_query(&test.query) {
+            match Query::parse(&read_file_to_string(&test.query)?, Some(&test.query)) {
                 Err(error) => assert!(false, "Failure on {} with error: {}", test, error),
                 Ok(query) => {
-                    if let Err(error) = Query::read(query.to_string().as_bytes(), None) {
+                    if let Err(error) = Query::parse(&query.to_string(), None) {
                         assert!(
                             false,
                             "Failure to deserialize \"{}\" of {} with error: {}",
@@ -47,7 +47,8 @@ fn sparql_w3c_syntax_testsuite() -> Result<()> {
             }
         } else if test.kind == "NegativeSyntaxTest" || test.kind == "NegativeSyntaxTest11" {
             //TODO
-            if let Ok(result) = load_query(&test.query) {
+            if let Ok(result) = Query::parse(&read_file_to_string(&test.query)?, Some(&test.query))
+            {
                 eprintln!("Failure on {}. The output tree is: {}", test, result);
             }
         } else {
@@ -128,7 +129,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
             }
             match repository
                 .connection()?
-                .prepare_query(read_file(&test.query)?)
+                .prepare_query(&read_file_to_string(&test.query)?)
             {
                 Err(error) => assert!(
                     false,
@@ -212,10 +213,6 @@ fn load_sparql_query_result_graph(url: &str) -> Result<SimpleGraph> {
     } else {
         load_graph(url)
     }
-}
-
-fn load_query(url: &str) -> Result<Query> {
-    Query::read(read_file(&url)?, Some(&url))
 }
 
 fn to_relative_path(url: &str) -> Result<String> {

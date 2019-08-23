@@ -19,8 +19,6 @@ mod grammar {
     use std::char;
     use std::collections::BTreeMap;
     use std::collections::HashMap;
-    use std::io::BufReader;
-    use std::io::Read;
     use std::str::Chars;
 
     struct FocusedTriplePattern<F> {
@@ -533,9 +531,9 @@ mod grammar {
 
     include!(concat!(env!("OUT_DIR"), "/sparql_grammar.rs"));
 
-    pub fn read_sparql_query<'a, R: Read + 'a>(
-        source: R,
-        base_iri: Option<&'a str>,
+    pub fn read_sparql_query(
+        query: &str,
+        base_iri: Option<&str>,
     ) -> super::super::super::Result<QueryVariants> {
         let mut state = ParserState {
             base_iri: if let Some(base_iri) = base_iri {
@@ -548,13 +546,7 @@ mod grammar {
             aggregations: BTreeMap::default(),
         };
 
-        let mut string_buffer = String::default();
-        BufReader::new(source).read_to_string(&mut string_buffer)?;
-
-        Ok(QueryUnit(
-            &unescape_unicode_codepoints(&string_buffer),
-            &mut state,
-        )?)
+        Ok(QueryUnit(&unescape_unicode_codepoints(query), &mut state)?)
     }
 }
 
