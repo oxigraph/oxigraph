@@ -48,4 +48,5 @@ pub use crate::store::MemoryRepository;
 #[cfg(feature = "rocksdb")]
 pub use crate::store::RocksDbRepository;
 pub use crate::syntax::DatasetSyntax;
+pub use crate::syntax::FileSyntax;
 pub use crate::syntax::GraphSyntax;

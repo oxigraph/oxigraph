@@ -31,7 +31,7 @@ impl<'a> QueryResult<'a> {
 }
 
 /// [SPARQL query](https://www.w3.org/TR/sparql11-query/) serialization formats
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub enum QueryResultSyntax {
     /// [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/)
     Xml,

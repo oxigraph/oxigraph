@@ -12,15 +12,5 @@ edition = "2018"
 
 [dependencies]
 rudf = {path = "../lib", features=["rocksdb"]}
-gotham = "0.4"
-gotham_derive = "0.4"
-hyper = "0.12"
-futures = "0.1"
-serde = "1"
-serde_derive = "1"
-mime = "0.3"
-failure = "0.1"
-url = "2"
 clap = "2"
-tera = "0.11"
-lazy_static = "1"
+rouille = "3"
