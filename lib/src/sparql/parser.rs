@@ -17,8 +17,8 @@ mod grammar {
     use lazy_static::lazy_static;
     use std::borrow::Cow;
     use std::char;
-    use std::collections::BTreeMap;
     use std::collections::HashMap;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::str::Chars;
 
     struct FocusedTriplePattern<F> {
@@ -295,6 +295,7 @@ mod grammar {
         base_iri: Option<Iri>,
         namespaces: HashMap<String, String>,
         bnodes_map: BTreeMap<String, BlankNode>,
+        used_bnodes: BTreeSet<String>,
         aggregations: BTreeMap<Aggregation, Variable>,
     }
 
@@ -543,6 +544,7 @@ mod grammar {
             },
             namespaces: HashMap::default(),
             bnodes_map: BTreeMap::default(),
+            used_bnodes: BTreeSet::default(),
             aggregations: BTreeMap::default(),
         };
 

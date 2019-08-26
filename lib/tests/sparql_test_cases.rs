@@ -17,19 +17,9 @@ fn sparql_w3c_syntax_testsuite() -> Result<()> {
     let manifest_10_url = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/manifest-syntax.ttl";
     let manifest_11_url =
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest.ttl";
-    let test_blacklist = vec![
-        NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql2/manifest#syntax-form-construct02").unwrap(),
-        NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql2/manifest#syntax-form-construct04").unwrap(),
-        NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql2/manifest#syntax-function-04").unwrap(),
-        NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql1/manifest#syntax-qname-04").unwrap(),
-    ];
-
     for test_result in TestManifest::new(manifest_10_url).chain(TestManifest::new(manifest_11_url))
     {
         let test = test_result.unwrap();
-        if test_blacklist.contains(&test.id) {
-            continue;
-        }
         if test.kind == "PositiveSyntaxTest" || test.kind == "PositiveSyntaxTest11" {
             match Query::parse(&read_file_to_string(&test.query)?, Some(&test.query)) {
                 Err(error) => assert!(false, "Failure on {} with error: {}", test, error),

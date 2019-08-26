@@ -240,16 +240,23 @@ GroupGraphPatternSub -> GraphPattern = a:TriplesBlock? _ b:GroupGraphPatternSub_
             PartialGraphPattern::Bind(expr, var) => {
                 g = GraphPattern::Extend(Box::new(g), var, expr)
             }
-            PartialGraphPattern::Filter(expr) => match filter {
-                Some(f) => { filter = Some(Expression::And(Box::new(f), Box::new(expr))) },
-                None => { filter = Some(expr) }
-            },
+            PartialGraphPattern::Filter(expr) => filter = Some(if let Some(f) = filter {
+                Expression::And(Box::new(f), Box::new(expr))
+            } else {
+                expr
+            }),
             PartialGraphPattern::Other(e) => g = new_join(g, e),
         }
     }
-    match filter {
-        Some(filter) => GraphPattern::Filter(filter, Box::new(g)),
-        None => g
+
+    // We deal with blank nodes aliases rule (TODO: partial for now)
+    state.used_bnodes.extend(state.bnodes_map.keys().cloned());
+    state.bnodes_map.clear();
+
+    if let Some(filter) = filter {
+        GraphPattern::Filter(filter, Box::new(g))
+    } else {
+        g
     }
 }
 GroupGraphPatternSub_item -> Vec<PartialGraphPattern> = a:GraphPatternNotTriples _ ('.' _)? b:TriplesBlock? _ {
@@ -353,7 +360,7 @@ FunctionCall -> Expression = f: iri _ a: ArgList {
 
 //[71]
 ArgList -> Vec<Expression> = //TODO: support DISTINCT
-    '(' _ 'DISTINCT'? _ e:ArgList_item **<1,> (',' _) _ ')' { e } /
+    '(' _ 'DISTINCT'i? _ e:ArgList_item **<1,> (',' _) _ ')' { e } /
     NIL { Vec::new() }
 ArgList_item -> Expression = e:Expression _ { e }
 
@@ -367,7 +374,7 @@ ExpressionList_item -> Expression = e:Expression _ { e }
 ConstructTemplate -> Vec<TriplePattern> = '{' _ t:ConstructTriples _ '}' { t }
 
 //[74]
-ConstructTriples -> Vec<TriplePattern> = p:ConstructTriples_item ** ('.' _) {
+ConstructTriples -> Vec<TriplePattern> = p:ConstructTriples_item ** ('.' _) '.'? {
     p.into_iter().flat_map(|c| c.into_iter()).collect()
 }
 ConstructTriples_item -> Vec<TriplePattern> = t:TriplesSameSubject _ { t }
@@ -415,7 +422,7 @@ PropertyListNotEmpty_item -> FocusedTriplePattern<(NamedNodeOrVariable,Vec<TermO
 }
 
 //[78]
-Verb -> NamedNodeOrVariable = 'a' { rdf::TYPE.clone().into() } / VarOrIri
+Verb -> NamedNodeOrVariable = VarOrIri / 'a' { rdf::TYPE.clone().into() }
 
 //[79]
 ObjectList -> FocusedTriplePattern<Vec<TermOrVariable>> = o:ObjectList_item **<1,> (',' _) {
@@ -534,8 +541,8 @@ PathEltOrInverse -> PropertyPath =
 
 //[94]
 PathPrimary -> PropertyPath =
-    'a' { rdf::TYPE.clone().into() } /
     v:iri { v.into() } /
+    'a' { rdf::TYPE.clone().into() } /
     '!' _ p:PathNegatedPropertySet { p } /
     '(' _ p:Path _ ')' { p }
 
@@ -571,10 +578,10 @@ PathNegatedPropertySet_item -> Either<NamedNode,NamedNode> = p:PathOneInProperty
 
 //[96]
 PathOneInPropertySet -> Either<NamedNode,NamedNode> =
-    '^' _ 'a' { Either::Right(rdf::TYPE.clone()) } /
     '^' _ v:iri { Either::Right(v) } /
-    'a' { Either::Left(rdf::TYPE.clone()) } /
-    v:iri { Either::Left(v) }
+    '^' _ 'a' { Either::Right(rdf::TYPE.clone()) } /
+    v:iri { Either::Left(v) } /
+    'a' { Either::Left(rdf::TYPE.clone()) }
 
 //[98]
 TriplesNode -> FocusedTriplePattern<TermOrVariable> = Collection / BlankNodePropertyList
@@ -700,12 +707,17 @@ ValueLogical -> Expression = RelationalExpression
 
 //[114]
 RelationalExpression -> Expression =
-    a:NumericExpression _ "=" _ b:NumericExpression { Expression::Equal(Box::new(a), Box::new(b)) } /
-    a:NumericExpression _ "!=" _ b:NumericExpression { Expression::NotEqual(Box::new(a), Box::new(b)) } /
-    a:NumericExpression _ ">" _ b:NumericExpression { Expression::Greater(Box::new(a), Box::new(b)) } /
-    a:NumericExpression _ ">=" _ b:NumericExpression { Expression::GreaterOrEq(Box::new(a), Box::new(b)) } /
-    a:NumericExpression _ "<" _ b:NumericExpression { Expression::Lower(Box::new(a), Box::new(b)) } /
-    a:NumericExpression _ "<=" _ b:NumericExpression { Expression::LowerOrEq(Box::new(a), Box::new(b)) } /
+    a:NumericExpression _ s: $("="  / "!=" / ">=" / ">" / "<=" / "<") _ b:NumericExpression {
+        match s {
+            "=" => Expression::Equal(Box::new(a), Box::new(b)),
+            "!=" => Expression::NotEqual(Box::new(a), Box::new(b)),
+            ">" => Expression::Greater(Box::new(a), Box::new(b)),
+            ">=" => Expression::GreaterOrEq(Box::new(a), Box::new(b)),
+            "<" => Expression::Lower(Box::new(a), Box::new(b)),
+            "<=" => Expression::LowerOrEq(Box::new(a), Box::new(b)),
+            _ => panic!() // Could never happen
+        }
+    } /
     a:NumericExpression _ "IN"i _ b:ExpressionList { Expression::In(Box::new(a), b) } /
     a:NumericExpression _ "NOT"i _ "IN"i _ b:ExpressionList { Expression::NotIn(Box::new(a), b) } /
     NumericExpression
@@ -715,22 +727,28 @@ NumericExpression -> Expression = AdditiveExpression
 
 //[116]
 AdditiveExpression -> Expression =
-    a:MultiplicativeExpression _ '+' _ b:AdditiveExpression { Expression::Add(Box::new(a), Box::new(b)) } /
-    a:MultiplicativeExpression _ '-' _ b:AdditiveExpression { Expression::Sub(Box::new(a), Box::new(b)) } /
-    MultiplicativeExpression
+    a:MultiplicativeExpression _ s: $('+' / '-') _ b:AdditiveExpression { match s {
+        "+" => Expression::Add(Box::new(a), Box::new(b)),
+        "-" => Expression::Sub(Box::new(a), Box::new(b)),
+        _ => panic!() // Could never happen
+    } } / MultiplicativeExpression
 
 //[117]
 MultiplicativeExpression -> Expression =
-    a:UnaryExpression _ '*' _ b:MultiplicativeExpression { Expression::Mul(Box::new(a), Box::new(b)) } /
-    a:UnaryExpression _ '/' _ b:MultiplicativeExpression { Expression::Div(Box::new(a), Box::new(b)) } /
-    UnaryExpression
+    a:UnaryExpression _ s: $('*' / '/') _ b:MultiplicativeExpression { match s {
+        "*" => Expression::Mul(Box::new(a), Box::new(b)),
+        "/" => Expression::Div(Box::new(a), Box::new(b)),
+        _ => panic!() // Could never happen
+    } } / UnaryExpression
 
 //[118]
-UnaryExpression -> Expression =
-    '!' _ e:PrimaryExpression { Expression::UnaryNot(Box::new(e)) } /
-    '+' _ e:PrimaryExpression { Expression::UnaryPlus(Box::new(e)) } /
-    '-' _ e:PrimaryExpression { Expression::UnaryMinus(Box::new(e)) } /
-    PrimaryExpression
+UnaryExpression -> Expression = s: $('!' / '+' / '-')? _ e:PrimaryExpression { match s {
+    "!" => Expression::UnaryNot(Box::new(e)),
+    "+" => Expression::UnaryPlus(Box::new(e)),
+    "-" => Expression::UnaryMinus(Box::new(e)),
+    "" => e,
+    _ => panic!() // Could never happen
+} }
 
 //[119]
 PrimaryExpression -> Expression =
@@ -913,7 +931,13 @@ PrefixedName -> Iri = PNAME_LN /
 
 //[138]
 BlankNode -> BlankNode =
-    b:BLANK_NODE_LABEL { state.bnodes_map.entry(b.to_string()).or_insert_with(BlankNode::default).clone() } /
+    b:BLANK_NODE_LABEL {?
+        if state.used_bnodes.contains(b) {
+            Err("Already used blank node id")
+        } else {
+            Ok(state.bnodes_map.entry(b.to_string()).or_insert_with(BlankNode::default).clone())
+        }
+    } /
     ANON { BlankNode::default() }
 
 //[139]
@@ -922,12 +946,12 @@ IRIREF -> Iri = "<" i:$(([^\u{00}-\u{20}<>"{}|^\u{60}\u{5c}])*) ">" {?
 }
 
 //[140]
-PNAME_NS -> &'input str = ns:$(PN_PREFIX? ":") {
+PNAME_NS -> &'input str = ns:$(PN_PREFIX?) ':' {
     ns
 }
 
 //[141]
-PNAME_LN -> Iri = ns:$(PNAME_NS) local:$(PN_LOCAL) {?
+PNAME_LN -> Iri = ns:PNAME_NS local:$(PN_LOCAL) {?
     if let Some(iri) = state.namespaces.get(ns).map(|v| v.clone() + &unescape_pn_local(local)) {
         Iri::parse(iri).map_err(|_| "IRI parsing failed")
     } else {
