@@ -89,8 +89,6 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm-not-eq").unwrap(),
         //Simple literal vs xsd:string. We apply RDF 1.1
         NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-2").unwrap(),
-        //URI normalization: we are not normalizing well
-        NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest#normalization-2").unwrap(),
         //Test on curly brace scoping with OPTIONAL filter
         NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest#dawg-optional-filter-005-not-simplified").unwrap(),
         //DATATYPE("foo"@en) returns rdf:langString in SPARQL 1.1
@@ -119,7 +117,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
             }
             match repository
                 .connection()?
-                .prepare_query(&read_file_to_string(&test.query)?)
+                .prepare_query(&read_file_to_string(&test.query)?, Some(&test.query))
             {
                 Err(error) => assert!(
                     false,
@@ -140,15 +138,17 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
                             .next()
                             .is_some();
                         let actual_graph = to_graph(result, with_order)?;
-                        assert!(
-                                actual_graph.is_isomorphic(&expected_graph),
+                        if !actual_graph.is_isomorphic(&expected_graph) {
+                            assert!(
+                                false,
                                 "Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
                                 test,
                                 expected_graph,
                                 actual_graph,
-                                read_file_to_string(&test.query)?,
+                                Query::parse(&read_file_to_string(&test.query)?, Some(&test.query)).unwrap(),
                                 repository_to_string(&repository)
                             )
+                        }
                     }
                 },
             }

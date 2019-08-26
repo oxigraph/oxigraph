@@ -27,7 +27,7 @@
 //! assert_eq!(vec![quad], results.unwrap());
 //!
 //! // SPARQL query
-//! let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }").unwrap();
+//! let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", None).unwrap();
 //! let results = prepared_query.exec().unwrap();
 //! if let QueryResult::Bindings(results) = results {
 //!     assert_eq!(results.into_values_iter().next().unwrap().unwrap()[0], Some(ex.into()));

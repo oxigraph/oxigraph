@@ -134,7 +134,7 @@ fn evaluate_urlencoded_sparql_query<R: RepositoryConnection>(
 
 fn evaluate_sparql_query<R: RepositoryConnection>(connection: R, query: &str) -> Response {
     //TODO: stream
-    match connection.prepare_query(query) {
+    match connection.prepare_query(query, None) {
         Ok(query) => match query.exec().unwrap() {
             QueryResult::Graph(triples) => {
                 let mut result = String::default();

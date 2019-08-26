@@ -54,8 +54,8 @@ enum SimplePreparedQueryOptions<S: StoreConnection> {
 }
 
 impl<S: StoreConnection> SimplePreparedQuery<S> {
-    pub(crate) fn new(connection: S, query: &str) -> Result<Self> {
-        Ok(Self(match read_sparql_query(query, None)? {
+    pub(crate) fn new(connection: S, query: &str, base_iri: Option<&str>) -> Result<Self> {
+        Ok(Self(match read_sparql_query(query, base_iri)? {
             QueryVariants::Select {
                 algebra,
                 dataset: _,

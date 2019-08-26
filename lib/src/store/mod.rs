@@ -59,8 +59,8 @@ impl<S: StoreConnection> From<S> for StoreRepositoryConnection<S> {
 impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
     type PreparedQuery = SimplePreparedQuery<S>;
 
-    fn prepare_query(&self, query: &str) -> Result<SimplePreparedQuery<S>> {
-        SimplePreparedQuery::new(self.inner.clone(), query) //TODO: avoid clone
+    fn prepare_query(&self, query: &str, base_iri: Option<&str>) -> Result<SimplePreparedQuery<S>> {
+        SimplePreparedQuery::new(self.inner.clone(), query, base_iri) //TODO: avoid clone
     }
 
     fn quads_for_pattern<'a>(
