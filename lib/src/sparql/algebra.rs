@@ -3,6 +3,7 @@
 use crate::model::*;
 use crate::sparql::model::*;
 use lazy_static::lazy_static;
+use rio_api::iri::Iri;
 use rio_api::model as rio;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -1203,74 +1204,111 @@ lazy_static! {
     static ref EMPTY_DATASET: DatasetSpec = DatasetSpec::default();
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum QueryVariants {
     Select {
         dataset: DatasetSpec,
         algebra: GraphPattern,
+        base_iri: Option<Iri<String>>,
     },
     Construct {
         construct: Vec<TriplePattern>,
         dataset: DatasetSpec,
         algebra: GraphPattern,
+        base_iri: Option<Iri<String>>,
     },
     Describe {
         dataset: DatasetSpec,
         algebra: GraphPattern,
+        base_iri: Option<Iri<String>>,
     },
     Ask {
         dataset: DatasetSpec,
         algebra: GraphPattern,
+        base_iri: Option<Iri<String>>,
     },
 }
 
 impl fmt::Display for QueryVariants {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            QueryVariants::Select { dataset, algebra } => write!(
-                f,
-                "{}",
-                SparqlGraphRootPattern {
-                    algebra: &algebra,
-                    dataset: &dataset
+            QueryVariants::Select {
+                dataset,
+                algebra,
+                base_iri,
+            } => {
+                if let Some(base_iri) = base_iri {
+                    writeln!(f, "BASE <{}>", base_iri)?;
                 }
-            ),
+                write!(
+                    f,
+                    "{}",
+                    SparqlGraphRootPattern {
+                        algebra: &algebra,
+                        dataset: &dataset
+                    }
+                )
+            }
             QueryVariants::Construct {
                 construct,
                 dataset,
                 algebra,
-            } => write!(
-                f,
-                "CONSTRUCT {{ {} }} {} WHERE {{ {} }}",
-                construct
-                    .iter()
-                    .map(|t| t.to_string())
-                    .collect::<Vec<String>>()
-                    .join(" . "),
-                dataset,
-                SparqlGraphRootPattern {
-                    algebra: &algebra,
-                    dataset: &EMPTY_DATASET
+                base_iri,
+            } => {
+                if let Some(base_iri) = base_iri {
+                    writeln!(f, "BASE <{}>", base_iri)?;
                 }
-            ),
-            QueryVariants::Describe { dataset, algebra } => write!(
-                f,
-                "DESCRIBE * {} WHERE {{ {} }}",
+                write!(
+                    f,
+                    "CONSTRUCT {{ {} }} {} WHERE {{ {} }}",
+                    construct
+                        .iter()
+                        .map(|t| t.to_string())
+                        .collect::<Vec<String>>()
+                        .join(" . "),
+                    dataset,
+                    SparqlGraphRootPattern {
+                        algebra: &algebra,
+                        dataset: &EMPTY_DATASET
+                    }
+                )
+            }
+            QueryVariants::Describe {
                 dataset,
-                SparqlGraphRootPattern {
-                    algebra: &algebra,
-                    dataset: &EMPTY_DATASET
+                algebra,
+                base_iri,
+            } => {
+                if let Some(base_iri) = base_iri {
+                    writeln!(f, "BASE <{}>", base_iri.as_str())?;
                 }
-            ),
-            QueryVariants::Ask { dataset, algebra } => write!(
-                f,
-                "ASK {} WHERE {{ {} }}",
+                write!(
+                    f,
+                    "DESCRIBE * {} WHERE {{ {} }}",
+                    dataset,
+                    SparqlGraphRootPattern {
+                        algebra: &algebra,
+                        dataset: &EMPTY_DATASET
+                    }
+                )
+            }
+            QueryVariants::Ask {
                 dataset,
-                SparqlGraphRootPattern {
-                    algebra: &algebra,
-                    dataset: &EMPTY_DATASET
+                algebra,
+                base_iri,
+            } => {
+                if let Some(base_iri) = base_iri {
+                    writeln!(f, "BASE <{}>", base_iri)?;
                 }
-            ),
+                write!(
+                    f,
+                    "ASK {} WHERE {{ {} }}",
+                    dataset,
+                    SparqlGraphRootPattern {
+                        algebra: &algebra,
+                        dataset: &EMPTY_DATASET
+                    }
+                )
+            }
         }
     }
 }

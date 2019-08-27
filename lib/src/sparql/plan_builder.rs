@@ -305,6 +305,91 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
                     )),
                     None => None,
                 }),
+                Function::Rand => PlanExpression::Rand,
+                Function::Abs => PlanExpression::Abs(Box::new(self.build_for_expression(
+                    &parameters[0],
+                    variables,
+                    graph_name,
+                )?)),
+                Function::Ceil => PlanExpression::Ceil(Box::new(self.build_for_expression(
+                    &parameters[0],
+                    variables,
+                    graph_name,
+                )?)),
+                Function::Floor => PlanExpression::Floor(Box::new(self.build_for_expression(
+                    &parameters[0],
+                    variables,
+                    graph_name,
+                )?)),
+                Function::Round => PlanExpression::Round(Box::new(self.build_for_expression(
+                    &parameters[0],
+                    variables,
+                    graph_name,
+                )?)),
+                Function::Concat => PlanExpression::Concat(self.expression_list(
+                    &parameters,
+                    variables,
+                    graph_name,
+                )?),
+                Function::SubStr => PlanExpression::SubStr(
+                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
+                    match parameters.get(2) {
+                        Some(flags) => Some(Box::new(
+                            self.build_for_expression(flags, variables, graph_name)?,
+                        )),
+                        None => None,
+                    },
+                ),
+                Function::StrLen => PlanExpression::StrLen(Box::new(self.build_for_expression(
+                    &parameters[0],
+                    variables,
+                    graph_name,
+                )?)),
+                Function::Replace => PlanExpression::Replace(
+                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[2], variables, graph_name)?),
+                    match parameters.get(3) {
+                        Some(flags) => Some(Box::new(
+                            self.build_for_expression(flags, variables, graph_name)?,
+                        )),
+                        None => None,
+                    },
+                ),
+                Function::UCase => PlanExpression::UCase(Box::new(self.build_for_expression(
+                    &parameters[0],
+                    variables,
+                    graph_name,
+                )?)),
+                Function::LCase => PlanExpression::LCase(Box::new(self.build_for_expression(
+                    &parameters[0],
+                    variables,
+                    graph_name,
+                )?)),
+                Function::EncodeForURI => PlanExpression::EncodeForURI(Box::new(
+                    self.build_for_expression(&parameters[0], variables, graph_name)?,
+                )),
+                Function::Contains => PlanExpression::Contains(
+                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
+                ),
+                Function::StrStarts => PlanExpression::StrStarts(
+                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
+                ),
+                Function::StrEnds => PlanExpression::StrEnds(
+                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
+                ),
+                Function::StrBefore => PlanExpression::StrBefore(
+                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
+                ),
+                Function::StrAfter => PlanExpression::StrAfter(
+                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
+                ),
                 Function::Year => PlanExpression::Year(Box::new(self.build_for_expression(
                     &parameters[0],
                     variables,
@@ -335,8 +420,42 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
                     variables,
                     graph_name,
                 )?)),
-                Function::UUID => PlanExpression::UUID(),
-                Function::StrUUID => PlanExpression::StrUUID(),
+                Function::Timezone => PlanExpression::Timezone(Box::new(
+                    self.build_for_expression(&parameters[0], variables, graph_name)?,
+                )),
+                Function::Tz => PlanExpression::Tz(Box::new(self.build_for_expression(
+                    &parameters[0],
+                    variables,
+                    graph_name,
+                )?)),
+                Function::Now => PlanExpression::Now,
+                Function::UUID => PlanExpression::UUID,
+                Function::StrUUID => PlanExpression::StrUUID,
+                Function::MD5 => PlanExpression::MD5(Box::new(self.build_for_expression(
+                    &parameters[0],
+                    variables,
+                    graph_name,
+                )?)),
+                Function::SHA1 => PlanExpression::SHA1(Box::new(self.build_for_expression(
+                    &parameters[0],
+                    variables,
+                    graph_name,
+                )?)),
+                Function::SHA256 => PlanExpression::SHA256(Box::new(self.build_for_expression(
+                    &parameters[0],
+                    variables,
+                    graph_name,
+                )?)),
+                Function::SHA384 => PlanExpression::SHA384(Box::new(self.build_for_expression(
+                    &parameters[0],
+                    variables,
+                    graph_name,
+                )?)),
+                Function::SHA512 => PlanExpression::SHA512(Box::new(self.build_for_expression(
+                    &parameters[0],
+                    variables,
+                    graph_name,
+                )?)),
                 Function::Coalesce => PlanExpression::Coalesce(self.expression_list(
                     &parameters,
                     variables,
@@ -348,6 +467,10 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
                     Box::new(self.build_for_expression(&parameters[2], variables, graph_name)?),
                 ),
                 Function::StrLang => PlanExpression::StrLang(
+                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
+                ),
+                Function::StrDT => PlanExpression::StrDT(
                     Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
                     Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
                 ),
@@ -458,7 +581,6 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
                         Err(format_err!("Not supported custom function {}", expression))?
                     }
                 }
-                _ => unimplemented!(),
             },
             Expression::Bound(v) => PlanExpression::Bound(variable_key(variables, v)),
             Expression::Exists(n) => PlanExpression::Exists(Box::new(

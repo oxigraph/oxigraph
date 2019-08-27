@@ -60,28 +60,31 @@ impl<S: StoreConnection> SimplePreparedQuery<S> {
             QueryVariants::Select {
                 algebra,
                 dataset: _,
+                base_iri,
             } => {
                 let (plan, variables) = PlanBuilder::build(&connection, &algebra)?;
                 SimplePreparedQueryOptions::Select {
                     plan,
                     variables,
-                    evaluator: SimpleEvaluator::new(connection),
+                    evaluator: SimpleEvaluator::new(connection, base_iri),
                 }
             }
             QueryVariants::Ask {
                 algebra,
                 dataset: _,
+                base_iri,
             } => {
                 let (plan, _) = PlanBuilder::build(&connection, &algebra)?;
                 SimplePreparedQueryOptions::Ask {
                     plan,
-                    evaluator: SimpleEvaluator::new(connection),
+                    evaluator: SimpleEvaluator::new(connection, base_iri),
                 }
             }
             QueryVariants::Construct {
                 construct,
                 algebra,
                 dataset: _,
+                base_iri,
             } => {
                 let (plan, variables) = PlanBuilder::build(&connection, &algebra)?;
                 SimplePreparedQueryOptions::Construct {
@@ -91,17 +94,18 @@ impl<S: StoreConnection> SimplePreparedQuery<S> {
                         &construct,
                         variables,
                     )?,
-                    evaluator: SimpleEvaluator::new(connection),
+                    evaluator: SimpleEvaluator::new(connection, base_iri),
                 }
             }
             QueryVariants::Describe {
                 algebra,
                 dataset: _,
+                base_iri,
             } => {
                 let (plan, _) = PlanBuilder::build(&connection, &algebra)?;
                 SimplePreparedQueryOptions::Describe {
                     plan,
-                    evaluator: SimpleEvaluator::new(connection),
+                    evaluator: SimpleEvaluator::new(connection, base_iri),
                 }
             }
         }))
@@ -132,7 +136,7 @@ impl<S: StoreConnection> PreparedQuery for SimplePreparedQuery<S> {
 }
 
 /// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/)
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Query(QueryVariants);
 
 impl fmt::Display for Query {

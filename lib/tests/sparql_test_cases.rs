@@ -89,6 +89,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/bind/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/construct/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/exists/manifest.ttl",
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest.ttl",
     ];
 
     let test_blacklist = vec![
@@ -116,6 +117,10 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-datatype-2").unwrap(),
         // FROM support
         NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/construct/manifest#constructwhere04").unwrap(),
+        //BNODE() scope is currently wrong
+        NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#bnode01").unwrap(),
+        //Decimal precision problem
+        NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#coalesce01").unwrap(),
     ];
 
     let mut failed = Vec::default();
@@ -211,7 +216,9 @@ fn load_graph_to_repository(
     connection: &<&MemoryRepository as Repository>::Connection,
     to_graph_name: Option<&NamedOrBlankNode>,
 ) -> Result<()> {
-    let syntax = if url.ends_with(".ttl") {
+    let syntax = if url.ends_with(".nt") {
+        GraphSyntax::NTriples
+    } else if url.ends_with(".ttl") {
         GraphSyntax::Turtle
     } else if url.ends_with(".rdf") {
         GraphSyntax::RdfXml

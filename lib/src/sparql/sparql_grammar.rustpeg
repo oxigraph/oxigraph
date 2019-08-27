@@ -32,7 +32,8 @@ PrefixDecl -> () = "PREFIX"i _ ns:PNAME_NS _ i:IRIREF {
 SelectQuery -> QueryVariants = s:SelectClause _ d:DatasetClauses _ w:WhereClause _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {  //TODO: Modifier
     QueryVariants::Select {
         dataset: d,
-        algebra: build_select(s, w, g, h, o, l, v, state)
+        algebra: build_select(s, w, g, h, o, l, v, state),
+        base_iri: state.base_iri.clone()
     }
 }
 
@@ -65,7 +66,8 @@ ConstructQuery -> QueryVariants =
         QueryVariants::Construct {
             construct: c,
             dataset: d,
-            algebra: build_select(Selection::default(), w, g, h, o, l, v, state)
+            algebra: build_select(Selection::default(), w, g, h, o, l, v, state),
+            base_iri: state.base_iri.clone()
         }
     } /
     "CONSTRUCT"i _ d:DatasetClauses _ "WHERE"i _ '{' _ c:ConstructQuery_optional_triple_template _ '}' _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
@@ -76,7 +78,8 @@ ConstructQuery -> QueryVariants =
                 Selection::default(),
                 GraphPattern::BGP(c.into_iter().map(TripleOrPathPattern::from).collect()),
                 g, h, o, l, v, state
-            )
+            ),
+            base_iri: state.base_iri.clone()
         }
     }
 
@@ -87,7 +90,8 @@ DescribeQuery -> QueryVariants =
     "DESCRIBE"i _ '*' _ d:DatasetClauses w:WhereClause? _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
         QueryVariants::Describe {
             dataset: d,
-            algebra: build_select(Selection::default(), w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state)
+            algebra: build_select(Selection::default(), w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state),
+            base_iri: state.base_iri.clone()
         }
     } /
     "DESCRIBE"i _ p:DescribeQuery_item+ _ d:DatasetClauses w:WhereClause? _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
@@ -99,7 +103,8 @@ DescribeQuery -> QueryVariants =
                     NamedNodeOrVariable::NamedNode(n) => SelectionMember::Expression(n.into(), Variable::default()),
                     NamedNodeOrVariable::Variable(v) => SelectionMember::Variable(v)
                 }).collect())
-            }, w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state)
+            }, w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state),
+            base_iri: state.base_iri.clone()
         }
     }
 DescribeQuery_item -> NamedNodeOrVariable = i:VarOrIri _ { i }
@@ -108,7 +113,8 @@ DescribeQuery_item -> NamedNodeOrVariable = i:VarOrIri _ { i }
 AskQuery -> QueryVariants = "ASK"i _ d:DatasetClauses w:WhereClause _ g:GroupClause? _ h:HavingClause? _ o:OrderClause? _ l:LimitOffsetClauses? _ v:ValuesClause {
     QueryVariants::Ask {
         dataset: d,
-        algebra: build_select(Selection::default(), w, g, h, o, l, v, state)
+        algebra: build_select(Selection::default(), w, g, h, o, l, v, state),
+        base_iri: state.base_iri.clone()
     }
 }
 

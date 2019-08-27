@@ -1,5 +1,6 @@
 use rio_api::model as rio;
 use std::fmt;
+use std::str;
 use uuid::Uuid;
 
 /// A RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
@@ -15,13 +16,13 @@ use uuid::Uuid;
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct BlankNode {
     uuid: Uuid,
-    id: String,
+    str: [u8; 32],
 }
 
 impl BlankNode {
     /// Returns the underlying ID of this blank node
     pub fn as_str(&self) -> &str {
-        &self.id
+        str::from_utf8(&self.str).unwrap()
     }
 
     /// Returns the underlying UUID of this blank node
@@ -45,10 +46,9 @@ impl Default for BlankNode {
 
 impl From<Uuid> for BlankNode {
     fn from(id: Uuid) -> Self {
-        Self {
-            uuid: id,
-            id: id.to_simple().to_string(),
-        }
+        let mut str = [0; 32];
+        id.to_simple().encode_lower(&mut str);
+        Self { uuid: id, str }
     }
 }
 

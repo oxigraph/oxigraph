@@ -154,10 +154,18 @@ pub fn read_xml_results<'a>(source: impl BufRead + 'a) -> Result<QueryResult<'a>
                         return Err(format_err!("Expecting <head> tag, found {}", reader.decode(event.name())?));
                     }
                 }
-                State::Head => if event.name() == b"variable" || event.name() == b"link" {
-                    return Err(format_err!("<variable> and <link> tag should be autoclosing"));
-                } else {
-                    return Err(format_err!("Expecting <variable> or <link> tag, found {}", reader.decode(event.name())?));
+                State::Head => {
+                    if event.name() == b"variable" {
+                        let name = event.attributes()
+                            .filter_map(|attr| attr.ok())
+                            .find(|attr| attr.key == b"name")
+                            .ok_or_else(|| format_err!("No name attribute found for the <variable> tag"))?;
+                        variables.push(name.unescape_and_decode_value(&reader)?);
+                    } else if event.name() == b"link" {
+                        // no op
+                    } else {
+                        return Err(format_err!("Expecting <variable> or <link> tag, found {}", reader.decode(event.name())?));
+                    }
                 }
                 State::AfterHead => {
                     if event.name() == b"boolean" {
@@ -184,6 +192,13 @@ pub fn read_xml_results<'a>(source: impl BufRead + 'a) -> Result<QueryResult<'a>
                 State::Boolean => return Err(format_err!("Unexpected tag inside of <boolean> tag: {}", reader.decode(event.name())?))
             },
             Event::Empty(event) => match state {
+                State::Sparql => {
+                    if event.name() == b"head" {
+                        state = State::AfterHead;
+                    } else {
+                        return Err(format_err!("Expecting <head> tag, found {}", reader.decode(event.name())?));
+                    }
+                }
                 State::Head => {
                     if event.name() == b"variable" {
                         let name = event.attributes()
@@ -366,7 +381,12 @@ impl<R: BufRead> ResultsIterator<R> {
                         }
                         State::Literal => {
                             term = Some(
-                                build_literal(self.reader.decode(&data)?, &lang, &datatype).into(),
+                                build_literal(
+                                    self.reader.decode(&data)?,
+                                    lang.take(),
+                                    datatype.take(),
+                                )
+                                .into(),
                             );
                         }
                         _ => {
@@ -400,7 +420,7 @@ impl<R: BufRead> ResultsIterator<R> {
                     State::Literal => {
                         if term.is_none() {
                             //We default to the empty literal
-                            term = Some(build_literal("", &lang, &datatype).into())
+                            term = Some(build_literal("", lang.take(), datatype.take()).into())
                         }
                         state = State::Binding;
                     }
@@ -415,13 +435,13 @@ impl<R: BufRead> ResultsIterator<R> {
 
 fn build_literal(
     value: impl Into<String>,
-    lang: &Option<String>,
-    datatype: &Option<NamedNode>,
+    lang: Option<String>,
+    datatype: Option<NamedNode>,
 ) -> Literal {
     match datatype {
-        Some(datatype) => Literal::new_typed_literal(value, datatype.clone()),
+        Some(datatype) => Literal::new_typed_literal(value, datatype),
         None => match lang {
-            Some(lang) => Literal::new_language_tagged_literal(value, lang.clone()),
+            Some(lang) => Literal::new_language_tagged_literal(value, lang),
             None => Literal::new_simple_literal(value),
         },
     }

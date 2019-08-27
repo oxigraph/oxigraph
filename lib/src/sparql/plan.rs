@@ -179,13 +179,17 @@ pub enum PlanExpression {
     Bound(usize),
     IRI(Box<PlanExpression>),
     BNode(Option<Box<PlanExpression>>),
-    /*Rand(),
+    Rand,
     Abs(Box<PlanExpression>),
     Ceil(Box<PlanExpression>),
     Floor(Box<PlanExpression>),
     Round(Box<PlanExpression>),
     Concat(Vec<PlanExpression>),
-    SubStr(Box<PlanExpression>, Box<PlanExpression>, Option<Box<PlanExpression>>),
+    SubStr(
+        Box<PlanExpression>,
+        Box<PlanExpression>,
+        Option<Box<PlanExpression>>,
+    ),
     StrLen(Box<PlanExpression>),
     Replace(
         Box<PlanExpression>,
@@ -200,23 +204,23 @@ pub enum PlanExpression {
     StrStarts(Box<PlanExpression>, Box<PlanExpression>),
     StrEnds(Box<PlanExpression>, Box<PlanExpression>),
     StrBefore(Box<PlanExpression>, Box<PlanExpression>),
-    StrAfter(Box<PlanExpression>, Box<PlanExpression>),*/
+    StrAfter(Box<PlanExpression>, Box<PlanExpression>),
     Year(Box<PlanExpression>),
     Month(Box<PlanExpression>),
     Day(Box<PlanExpression>),
     Hours(Box<PlanExpression>),
     Minutes(Box<PlanExpression>),
     Seconds(Box<PlanExpression>),
-    /*Timezone(Box<PlanExpression>),
+    Timezone(Box<PlanExpression>),
     Tz(Box<PlanExpression>),
-    Now(),*/
-    UUID(),
-    StrUUID(),
-    /*MD5(Box<PlanExpression>),
+    Now,
+    UUID,
+    StrUUID,
+    MD5(Box<PlanExpression>),
     SHA1(Box<PlanExpression>),
     SHA256(Box<PlanExpression>),
     SHA384(Box<PlanExpression>),
-    SHA512(Box<PlanExpression>),*/
+    SHA512(Box<PlanExpression>),
     Coalesce(Vec<PlanExpression>),
     If(
         Box<PlanExpression>,
@@ -224,7 +228,7 @@ pub enum PlanExpression {
         Box<PlanExpression>,
     ),
     StrLang(Box<PlanExpression>, Box<PlanExpression>),
-    //StrDT(Box<PlanExpression>, Box<PlanExpression>),
+    StrDT(Box<PlanExpression>, Box<PlanExpression>),
     SameTerm(Box<PlanExpression>, Box<PlanExpression>),
     IsIRI(Box<PlanExpression>),
     IsBlank(Box<PlanExpression>),
@@ -251,29 +255,12 @@ impl PlanExpression {
         match self {
             PlanExpression::Constant(_)
             | PlanExpression::BNode(None)
-            | PlanExpression::UUID()
-            | PlanExpression::StrUUID() => (),
+            | PlanExpression::UUID
+            | PlanExpression::StrUUID
+            | PlanExpression::Rand
+            | PlanExpression::Now => (),
             PlanExpression::Variable(v) | PlanExpression::Bound(v) => {
                 set.insert(*v);
-            }
-            PlanExpression::Or(a, b)
-            | PlanExpression::And(a, b)
-            | PlanExpression::Equal(a, b)
-            | PlanExpression::NotEqual(a, b)
-            | PlanExpression::Greater(a, b)
-            | PlanExpression::GreaterOrEq(a, b)
-            | PlanExpression::Lower(a, b)
-            | PlanExpression::LowerOrEq(a, b)
-            | PlanExpression::Add(a, b)
-            | PlanExpression::Sub(a, b)
-            | PlanExpression::Mul(a, b)
-            | PlanExpression::Div(a, b)
-            | PlanExpression::SameTerm(a, b)
-            | PlanExpression::LangMatches(a, b)
-            | PlanExpression::StrLang(a, b)
-            | PlanExpression::Regex(a, b, None) => {
-                a.add_variables(set);
-                b.add_variables(set);
             }
             PlanExpression::UnaryPlus(e)
             | PlanExpression::UnaryMinus(e)
@@ -301,23 +288,68 @@ impl PlanExpression {
             | PlanExpression::DateCast(e)
             | PlanExpression::TimeCast(e)
             | PlanExpression::DateTimeCast(e)
-            | PlanExpression::StringCast(e) => {
+            | PlanExpression::StringCast(e)
+            | PlanExpression::Abs(e)
+            | PlanExpression::Ceil(e)
+            | PlanExpression::Floor(e)
+            | PlanExpression::Round(e)
+            | PlanExpression::StrLen(e)
+            | PlanExpression::UCase(e)
+            | PlanExpression::LCase(e)
+            | PlanExpression::EncodeForURI(e)
+            | PlanExpression::Timezone(e)
+            | PlanExpression::Tz(e)
+            | PlanExpression::MD5(e)
+            | PlanExpression::SHA1(e)
+            | PlanExpression::SHA256(e)
+            | PlanExpression::SHA384(e)
+            | PlanExpression::SHA512(e) => {
                 e.add_variables(set);
             }
-            PlanExpression::Coalesce(l) => {
+            PlanExpression::Or(a, b)
+            | PlanExpression::And(a, b)
+            | PlanExpression::Equal(a, b)
+            | PlanExpression::NotEqual(a, b)
+            | PlanExpression::Greater(a, b)
+            | PlanExpression::GreaterOrEq(a, b)
+            | PlanExpression::Lower(a, b)
+            | PlanExpression::LowerOrEq(a, b)
+            | PlanExpression::Add(a, b)
+            | PlanExpression::Sub(a, b)
+            | PlanExpression::Mul(a, b)
+            | PlanExpression::Div(a, b)
+            | PlanExpression::SameTerm(a, b)
+            | PlanExpression::LangMatches(a, b)
+            | PlanExpression::StrLang(a, b)
+            | PlanExpression::Contains(a, b)
+            | PlanExpression::StrStarts(a, b)
+            | PlanExpression::StrEnds(a, b)
+            | PlanExpression::StrBefore(a, b)
+            | PlanExpression::StrAfter(a, b)
+            | PlanExpression::StrDT(a, b)
+            | PlanExpression::Regex(a, b, None)
+            | PlanExpression::SubStr(a, b, None) => {
+                a.add_variables(set);
+                b.add_variables(set);
+            }
+            PlanExpression::If(a, b, c)
+            | PlanExpression::SubStr(a, b, Some(c))
+            | PlanExpression::Replace(a, b, c, None)
+            | PlanExpression::Regex(a, b, Some(c)) => {
+                a.add_variables(set);
+                b.add_variables(set);
+                c.add_variables(set);
+            }
+            PlanExpression::Replace(a, b, c, Some(d)) => {
+                a.add_variables(set);
+                b.add_variables(set);
+                c.add_variables(set);
+                d.add_variables(set);
+            }
+            PlanExpression::Coalesce(l) | PlanExpression::Concat(l) => {
                 for e in l {
                     e.add_variables(set);
                 }
-            }
-            PlanExpression::If(a, b, c) => {
-                a.add_variables(set);
-                b.add_variables(set);
-                c.add_variables(set);
-            }
-            PlanExpression::Regex(a, b, Some(c)) => {
-                a.add_variables(set);
-                b.add_variables(set);
-                c.add_variables(set);
             }
             PlanExpression::In(e, l) => {
                 e.add_variables(set);

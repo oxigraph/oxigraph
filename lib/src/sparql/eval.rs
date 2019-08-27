@@ -2,23 +2,33 @@ use crate::model::BlankNode;
 use crate::model::Triple;
 use crate::sparql::model::*;
 use crate::sparql::plan::*;
-use crate::store::numeric_encoder::MemoryStringStore;
 use crate::store::numeric_encoder::*;
+use crate::store::numeric_encoder::{MemoryStringStore, ENCODED_EMPTY_STRING_LITERAL};
 use crate::store::StoreConnection;
 use crate::Result;
 use chrono::prelude::*;
+use digest::Digest;
+use md5::Md5;
 use num_traits::identities::Zero;
 use num_traits::FromPrimitive;
 use num_traits::One;
 use num_traits::ToPrimitive;
-use regex::RegexBuilder;
-use rust_decimal::Decimal;
+use rand::random;
+use regex::{Regex, RegexBuilder};
+use rio_api::iri::Iri;
+use rio_api::model as rio;
+use rust_decimal::{Decimal, RoundingStrategy};
+use sha1::Sha1;
+use sha2::{Sha256, Sha384, Sha512};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::HashSet;
+use std::convert::TryInto;
+use std::fmt::Write;
 use std::iter::once;
 use std::iter::Iterator;
 use std::ops::Deref;
+use std::str;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::u64;
@@ -32,13 +42,17 @@ type EncodedTuplesIterator<'a> = Box<dyn Iterator<Item = Result<EncodedTuple>> +
 pub struct SimpleEvaluator<S: StoreConnection> {
     dataset: DatasetView<S>,
     bnodes_map: Arc<Mutex<BTreeMap<u64, Uuid>>>,
+    base_iri: Option<Arc<Iri<String>>>,
+    now: DateTime<FixedOffset>,
 }
 
 impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
-    pub fn new(dataset: S) -> Self {
+    pub fn new(dataset: S, base_iri: Option<Iri<String>>) -> Self {
         Self {
             dataset: DatasetView::new(dataset),
             bnodes_map: Arc::new(Mutex::new(BTreeMap::default())),
+            base_iri: base_iri.map(Arc::new),
+            now: Utc::now().with_timezone(&FixedOffset::east(0)),
         }
     }
 
@@ -412,25 +426,25 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 NumericBinaryOperands::Float(v1, v2) => (v1 + v2).into(),
                 NumericBinaryOperands::Double(v1, v2) => (v1 + v2).into(),
                 NumericBinaryOperands::Integer(v1, v2) => v1.checked_add(v2)?.into(),
-                NumericBinaryOperands::Decimal(v1, v2) => (v1 + v2).into(),
+                NumericBinaryOperands::Decimal(v1, v2) => v1.checked_add(v2)?.into(),
             }),
             PlanExpression::Sub(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
                 NumericBinaryOperands::Float(v1, v2) => (v1 - v2).into(),
                 NumericBinaryOperands::Double(v1, v2) => (v1 - v2).into(),
                 NumericBinaryOperands::Integer(v1, v2) => v1.checked_sub(v2)?.into(),
-                NumericBinaryOperands::Decimal(v1, v2) => (v1 - v2).into(),
+                NumericBinaryOperands::Decimal(v1, v2) => v1.checked_sub(v2)?.into(),
             }),
             PlanExpression::Mul(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
                 NumericBinaryOperands::Float(v1, v2) => (v1 * v2).into(),
                 NumericBinaryOperands::Double(v1, v2) => (v1 * v2).into(),
                 NumericBinaryOperands::Integer(v1, v2) => v1.checked_mul(v2)?.into(),
-                NumericBinaryOperands::Decimal(v1, v2) => (v1 * v2).into(),
+                NumericBinaryOperands::Decimal(v1, v2) => v1.checked_mul(v2)?.into(),
             }),
             PlanExpression::Div(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
                 NumericBinaryOperands::Float(v1, v2) => (v1 / v2).into(),
                 NumericBinaryOperands::Double(v1, v2) => (v1 / v2).into(),
                 NumericBinaryOperands::Integer(v1, v2) => v1.checked_div(v2)?.into(),
-                NumericBinaryOperands::Decimal(v1, v2) => (v1 / v2).into(),
+                NumericBinaryOperands::Decimal(v1, v2) => v1.checked_div(v2)?.into(),
             }),
             PlanExpression::UnaryPlus(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::FloatLiteral(value) => Some((*value).into()),
@@ -461,29 +475,267 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 e if e.is_literal() => Some(ENCODED_EMPTY_STRING_LITERAL),
                 _ => None,
             },
+            PlanExpression::LangMatches(language_tag, language_range) => {
+                let language_tag =
+                    self.to_simple_string(self.eval_expression(language_tag, tuple)?)?;
+                let language_range =
+                    self.to_simple_string(self.eval_expression(language_range, tuple)?)?;
+                Some(
+                    if &*language_range == "*" {
+                        !language_tag.is_empty()
+                    } else {
+                        !ZipLongest::new(language_range.split('-'), language_tag.split('-')).any(
+                            |parts| match parts {
+                                (Some(range_subtag), Some(language_subtag)) => {
+                                    !range_subtag.eq_ignore_ascii_case(language_subtag)
+                                }
+                                (Some(_), None) => true,
+                                (None, _) => false,
+                            },
+                        )
+                    }
+                    .into(),
+                )
+            }
             PlanExpression::Datatype(e) => self.eval_expression(e, tuple)?.datatype(),
             PlanExpression::Bound(v) => Some(has_tuple_value(*v, tuple).into()),
-            PlanExpression::IRI(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::NamedNode { iri_id } => Some(EncodedTerm::NamedNode { iri_id }),
-                EncodedTerm::StringLiteral { value_id } => {
-                    Some(EncodedTerm::NamedNode { iri_id: value_id })
-                }
-                _ => None,
-            },
-            PlanExpression::BNode(id) => match id {
-                Some(id) => match self.eval_expression(id, tuple)? {
-                    EncodedTerm::StringLiteral { value_id } => Some(EncodedTerm::BlankNode(
-                        *self
-                            .bnodes_map
-                            .lock()
-                            .ok()?
-                            .entry(value_id)
-                            .or_insert_with(Uuid::new_v4),
-                    )),
+            PlanExpression::IRI(e) => {
+                let iri_id = match self.eval_expression(e, tuple)? {
+                    EncodedTerm::NamedNode { iri_id } => Some(iri_id),
+                    EncodedTerm::StringLiteral { value_id } => Some(value_id),
                     _ => None,
-                },
+                }?;
+                let iri = self.dataset.get_str(iri_id).ok()??;
+                Some(if let Some(base_iri) = &self.base_iri {
+                    EncodedTerm::NamedNode {
+                        iri_id: self
+                            .dataset
+                            .insert_str(&base_iri.resolve(&iri).ok()?.into_inner())
+                            .ok()?,
+                    }
+                } else {
+                    Iri::parse(iri).ok()?;
+                    EncodedTerm::NamedNode { iri_id }
+                })
+            }
+            PlanExpression::BNode(id) => match id {
+                Some(id) => {
+                    if let EncodedTerm::StringLiteral { value_id } =
+                        self.eval_expression(id, tuple)?
+                    {
+                        Some(EncodedTerm::BlankNode(
+                            *self
+                                .bnodes_map
+                                .lock()
+                                .ok()?
+                                .entry(value_id)
+                                .or_insert_with(Uuid::new_v4),
+                        ))
+                    } else {
+                        None
+                    }
+                }
                 None => Some(EncodedTerm::BlankNode(Uuid::new_v4())),
             },
+            PlanExpression::Rand => Some(random::<f64>().into()),
+            PlanExpression::Abs(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::IntegerLiteral(value) => Some(value.checked_abs()?.into()),
+                EncodedTerm::DecimalLiteral(value) => Some(value.abs().into()),
+                EncodedTerm::FloatLiteral(value) => Some(value.abs().into()),
+                EncodedTerm::DoubleLiteral(value) => Some(value.abs().into()),
+                _ => None,
+            },
+            PlanExpression::Ceil(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::IntegerLiteral(value) => Some(value.into()),
+                EncodedTerm::DecimalLiteral(value) => Some(value.ceil().into()),
+                EncodedTerm::FloatLiteral(value) => Some(value.ceil().into()),
+                EncodedTerm::DoubleLiteral(value) => Some(value.ceil().into()),
+                _ => None,
+            },
+            PlanExpression::Floor(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::IntegerLiteral(value) => Some(value.into()),
+                EncodedTerm::DecimalLiteral(value) => Some(value.floor().into()),
+                EncodedTerm::FloatLiteral(value) => Some(value.floor().into()),
+                EncodedTerm::DoubleLiteral(value) => Some(value.floor().into()),
+                _ => None,
+            },
+            PlanExpression::Round(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::IntegerLiteral(value) => Some(value.into()),
+                EncodedTerm::DecimalLiteral(value) => Some(
+                    value
+                        .round_dp_with_strategy(0, RoundingStrategy::RoundHalfUp)
+                        .into(),
+                ),
+                EncodedTerm::FloatLiteral(value) => Some(value.round().into()),
+                EncodedTerm::DoubleLiteral(value) => Some(value.round().into()),
+                _ => None,
+            },
+            PlanExpression::Concat(l) => {
+                let mut result = String::default();
+                let mut language = None;
+                for e in l {
+                    let (value, e_language) =
+                        self.to_string_and_language(self.eval_expression(e, tuple)?)?;
+                    if let Some(lang) = language {
+                        if lang != e_language {
+                            language = Some(None)
+                        }
+                    } else {
+                        language = Some(e_language)
+                    }
+                    result += &value
+                }
+                self.build_plain_literal(&result, language.and_then(|v| v))
+            }
+            PlanExpression::SubStr(source, starting_loc, length) => {
+                let (source, language) =
+                    self.to_string_and_language(self.eval_expression(source, tuple)?)?;
+
+                let starting_location: usize = if let EncodedTerm::IntegerLiteral(v) =
+                    self.eval_expression(starting_loc, tuple)?
+                {
+                    v.try_into().ok()?
+                } else {
+                    return None;
+                };
+                let length: Option<usize> = if let Some(length) = length {
+                    if let EncodedTerm::IntegerLiteral(v) = self.eval_expression(length, tuple)? {
+                        Some(v.try_into().ok()?)
+                    } else {
+                        return None;
+                    }
+                } else {
+                    None
+                };
+
+                // We want to slice on char indices, not byte indices
+                let mut start_iter = source
+                    .char_indices()
+                    .skip(starting_location.checked_sub(1)?)
+                    .peekable();
+                let result = if let Some((start_position, _)) = start_iter.peek().cloned() {
+                    if let Some(length) = length {
+                        let mut end_iter = start_iter.skip(length).peekable();
+                        if let Some((end_position, _)) = end_iter.peek() {
+                            &source[start_position..*end_position]
+                        } else {
+                            &source[start_position..]
+                        }
+                    } else {
+                        &source[start_position..]
+                    }
+                } else {
+                    ""
+                };
+                self.build_plain_literal(result, language)
+            }
+            PlanExpression::StrLen(arg) => Some(
+                (self
+                    .to_string(self.eval_expression(arg, tuple)?)?
+                    .chars()
+                    .count() as i128)
+                    .into(),
+            ),
+            PlanExpression::Replace(arg, pattern, replacement, flags) => {
+                let regex = self.compile_pattern(
+                    self.eval_expression(pattern, tuple)?,
+                    if let Some(flags) = flags {
+                        Some(self.eval_expression(flags, tuple)?)
+                    } else {
+                        None
+                    },
+                )?;
+                let (text, language) =
+                    self.to_string_and_language(self.eval_expression(arg, tuple)?)?;
+                let replacement =
+                    self.to_simple_string(self.eval_expression(replacement, tuple)?)?;
+                self.build_plain_literal(&regex.replace_all(&text, &replacement as &str), language)
+            }
+            PlanExpression::UCase(e) => {
+                let (value, language) =
+                    self.to_string_and_language(self.eval_expression(e, tuple)?)?;
+                self.build_plain_literal(&value.to_uppercase(), language)
+            }
+            PlanExpression::LCase(e) => {
+                let (value, language) =
+                    self.to_string_and_language(self.eval_expression(e, tuple)?)?;
+                self.build_plain_literal(&value.to_lowercase(), language)
+            }
+            PlanExpression::StrStarts(arg1, arg2) => {
+                let (arg1, arg2, _) = self.to_argument_compatible_strings(
+                    self.eval_expression(arg1, tuple)?,
+                    self.eval_expression(arg2, tuple)?,
+                )?;
+                Some((&arg1).starts_with(&arg2 as &str).into())
+            }
+            PlanExpression::EncodeForURI(ltrl) => {
+                let ltlr = self.to_string(self.eval_expression(ltrl, tuple)?)?;
+                let mut result = Vec::with_capacity(ltlr.len());
+                for c in ltlr.bytes() {
+                    match c {
+                        b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                            result.push(c)
+                        }
+                        _ => {
+                            result.push(b'%');
+                            let hight = c / 16;
+                            let low = c % 16;
+                            result.push(if hight < 10 {
+                                b'0' + hight
+                            } else {
+                                b'A' + (hight - 10)
+                            });
+                            result.push(if low < 10 {
+                                b'0' + low
+                            } else {
+                                b'A' + (low - 10)
+                            });
+                        }
+                    }
+                }
+                Some(EncodedTerm::StringLiteral {
+                    value_id: self
+                        .dataset
+                        .insert_str(str::from_utf8(&result).ok()?)
+                        .ok()?,
+                })
+            }
+            PlanExpression::StrEnds(arg1, arg2) => {
+                let (arg1, arg2, _) = self.to_argument_compatible_strings(
+                    self.eval_expression(arg1, tuple)?,
+                    self.eval_expression(arg2, tuple)?,
+                )?;
+                Some((&arg1).ends_with(&arg2 as &str).into())
+            }
+            PlanExpression::Contains(arg1, arg2) => {
+                let (arg1, arg2, _) = self.to_argument_compatible_strings(
+                    self.eval_expression(arg1, tuple)?,
+                    self.eval_expression(arg2, tuple)?,
+                )?;
+                Some((&arg1).contains(&arg2 as &str).into())
+            }
+            PlanExpression::StrBefore(arg1, arg2) => {
+                let (arg1, arg2, language) = self.to_argument_compatible_strings(
+                    self.eval_expression(arg1, tuple)?,
+                    self.eval_expression(arg2, tuple)?,
+                )?;
+                if let Some(position) = (&arg1).find(&arg2 as &str) {
+                    self.build_plain_literal(&arg1[..position], language)
+                } else {
+                    Some(ENCODED_EMPTY_STRING_LITERAL)
+                }
+            }
+            PlanExpression::StrAfter(arg1, arg2) => {
+                let (arg1, arg2, language) = self.to_argument_compatible_strings(
+                    self.eval_expression(arg1, tuple)?,
+                    self.eval_expression(arg2, tuple)?,
+                )?;
+                if let Some(position) = (&arg1).find(&arg2 as &str) {
+                    self.build_plain_literal(&arg1[position + arg2.len()..], language)
+                } else {
+                    Some(ENCODED_EMPTY_STRING_LITERAL)
+                }
+            }
             PlanExpression::Year(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::DateLiteral(date) => Some(date.year().into()),
                 EncodedTerm::NaiveDateLiteral(date) => Some(date.year().into()),
@@ -518,23 +770,105 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 _ => None,
             },
             PlanExpression::Seconds(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::NaiveTimeLiteral(time) => Some(time.second().into()),
-                EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.second().into()),
-                EncodedTerm::NaiveDateTimeLiteral(date_time) => Some(date_time.second().into()),
+                EncodedTerm::NaiveTimeLiteral(time) => Some(
+                    (Decimal::new(time.nanosecond().into(), 9) + Decimal::from(time.second()))
+                        .into(),
+                ),
+                EncodedTerm::DateTimeLiteral(date_time) => Some(
+                    (Decimal::new(date_time.nanosecond().into(), 9)
+                        + Decimal::from(date_time.second()))
+                    .into(),
+                ),
+                EncodedTerm::NaiveDateTimeLiteral(date_time) => Some(
+                    (Decimal::new(date_time.nanosecond().into(), 9)
+                        + Decimal::from(date_time.second()))
+                    .into(),
+                ),
                 _ => None,
             },
-            PlanExpression::UUID() => Some(EncodedTerm::NamedNode {
+            PlanExpression::Timezone(e) => {
+                let timezone = match self.eval_expression(e, tuple)? {
+                    EncodedTerm::DateLiteral(date) => date.timezone(),
+                    EncodedTerm::DateTimeLiteral(date_time) => date_time.timezone(),
+                    _ => return None,
+                };
+                let mut result = String::with_capacity(9);
+                let mut shift = timezone.local_minus_utc();
+                if shift < 0 {
+                    write!(&mut result, "-").ok()?;
+                    shift = -shift
+                };
+                write!(&mut result, "PT").ok()?;
+
+                let hours = shift / 3600;
+                if hours > 0 {
+                    write!(&mut result, "{}H", hours).ok()?;
+                }
+
+                let minutes = (shift / 60) % 60;
+                if minutes > 0 {
+                    write!(&mut result, "{}M", minutes).ok()?;
+                }
+
+                let seconds = shift % 60;
+                if seconds > 0 || shift == 0 {
+                    write!(&mut result, "{}S", seconds).ok()?;
+                }
+                Some(EncodedTerm::TypedLiteral {
+                    value_id: self.dataset.insert_str(&result).ok()?,
+                    datatype_id: self
+                        .dataset
+                        .insert_str("http://www.w3.org/2001/XMLSchema#dayTimeDuration")
+                        .ok()?,
+                })
+            }
+            PlanExpression::Tz(e) => {
+                let timezone = match self.eval_expression(e, tuple)? {
+                    EncodedTerm::DateLiteral(date) => Some(date.timezone()),
+                    EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.timezone()),
+                    EncodedTerm::NaiveDateLiteral(_)
+                    | EncodedTerm::NaiveTimeLiteral(_)
+                    | EncodedTerm::NaiveDateTimeLiteral(_) => None,
+                    _ => return None,
+                };
+                Some(if let Some(timezone) = timezone {
+                    EncodedTerm::StringLiteral {
+                        value_id: if timezone.local_minus_utc() == 0 {
+                            self.dataset.insert_str("Z").ok()?
+                        } else {
+                            self.dataset.insert_str(&timezone.to_string()).ok()?
+                        },
+                    }
+                } else {
+                    ENCODED_EMPTY_STRING_LITERAL
+                })
+            }
+            PlanExpression::Now => Some(self.now.into()),
+            PlanExpression::UUID => Some(EncodedTerm::NamedNode {
                 iri_id: self
                     .dataset
-                    .insert_str(&Uuid::new_v4().to_urn().to_string())
+                    .insert_str(
+                        Uuid::new_v4()
+                            .to_urn()
+                            .encode_lower(&mut Uuid::encode_buffer()),
+                    )
                     .ok()?,
             }),
-            PlanExpression::StrUUID() => Some(EncodedTerm::StringLiteral {
+            PlanExpression::StrUUID => Some(EncodedTerm::StringLiteral {
                 value_id: self
                     .dataset
-                    .insert_str(&Uuid::new_v4().to_simple().to_string())
+                    .insert_str(
+                        Uuid::new_v4()
+                            .to_hyphenated()
+                            .encode_lower(&mut Uuid::encode_buffer()),
+                    )
                     .ok()?,
             }),
+            PlanExpression::MD5(arg) => self.hash::<Md5>(arg, tuple),
+            PlanExpression::SHA1(arg) => self.hash::<Sha1>(arg, tuple),
+            PlanExpression::SHA256(arg) => self.hash::<Sha256>(arg, tuple),
+            PlanExpression::SHA384(arg) => self.hash::<Sha384>(arg, tuple),
+            PlanExpression::SHA512(arg) => self.hash::<Sha512>(arg, tuple),
             PlanExpression::Coalesce(l) => {
                 for e in l {
                     if let Some(result) = self.eval_expression(e, tuple) {
@@ -558,6 +892,23 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                         .to_simple_string_id(self.eval_expression(lang_tag, tuple)?)?,
                 })
             }
+            PlanExpression::StrDT(lexical_form, datatype) => {
+                let value = self.to_simple_string(self.eval_expression(lexical_form, tuple)?)?;
+                let datatype = if let EncodedTerm::NamedNode { iri_id } =
+                    self.eval_expression(datatype, tuple)?
+                {
+                    self.dataset.get_str(iri_id).ok()?
+                } else {
+                    None
+                }?;
+                self.dataset
+                    .encoder()
+                    .encode_rio_literal(rio::Literal::Typed {
+                        value: &value,
+                        datatype: rio::NamedNode { iri: &datatype },
+                    })
+                    .ok()
+            }
             PlanExpression::SameTerm(a, b) => {
                 Some((self.eval_expression(a, tuple)? == self.eval_expression(b, tuple)?).into())
             }
@@ -580,55 +931,15 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 }
                 .into(),
             ),
-            PlanExpression::LangMatches(language_tag, language_range) => {
-                let language_tag =
-                    self.to_simple_string(self.eval_expression(language_tag, tuple)?)?;
-                let language_range =
-                    self.to_simple_string(self.eval_expression(language_range, tuple)?)?;
-                Some(
-                    if &*language_range == "*" {
-                        !language_tag.is_empty()
-                    } else {
-                        !ZipLongest::new(language_range.split('-'), language_tag.split('-')).any(
-                            |parts| match parts {
-                                (Some(range_subtag), Some(language_subtag)) => {
-                                    !range_subtag.eq_ignore_ascii_case(language_subtag)
-                                }
-                                (Some(_), None) => true,
-                                (None, _) => false,
-                            },
-                        )
-                    }
-                    .into(),
-                )
-            }
             PlanExpression::Regex(text, pattern, flags) => {
-                // TODO Avoid to compile the regex each time
-                let pattern = self.to_simple_string(self.eval_expression(pattern, tuple)?)?;
-                let mut regex_builder = RegexBuilder::new(&pattern);
-                regex_builder.size_limit(REGEX_SIZE_LIMIT);
-                if let Some(flags) = flags {
-                    let flags = self.to_simple_string(self.eval_expression(flags, tuple)?)?;
-                    for flag in flags.chars() {
-                        match flag {
-                            's' => {
-                                regex_builder.dot_matches_new_line(true);
-                            }
-                            'm' => {
-                                regex_builder.multi_line(true);
-                            }
-                            'i' => {
-                                regex_builder.case_insensitive(true);
-                            }
-                            'x' => {
-                                regex_builder.ignore_whitespace(true);
-                            }
-                            'q' => (), //TODO: implement
-                            _ => (),
-                        }
-                    }
-                }
-                let regex = regex_builder.build().ok()?;
+                let regex = self.compile_pattern(
+                    self.eval_expression(pattern, tuple)?,
+                    if let Some(flags) = flags {
+                        Some(self.eval_expression(flags, tuple)?)
+                    } else {
+                        None
+                    },
+                )?;
                 let text = self.to_string(self.eval_expression(text, tuple)?)?;
                 Some(regex.is_match(&text).into())
             }
@@ -804,6 +1115,82 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             }
             _ => None,
         }
+    }
+
+    fn to_string_and_language(
+        &self,
+        term: EncodedTerm,
+    ) -> Option<(<DatasetView<S> as StringStore>::StringType, Option<u64>)> {
+        match term {
+            EncodedTerm::StringLiteral { value_id } => {
+                Some((self.dataset.get_str(value_id).ok()??, None))
+            }
+            EncodedTerm::LangStringLiteral {
+                value_id,
+                language_id,
+            } => Some((self.dataset.get_str(value_id).ok()??, Some(language_id))),
+            _ => None,
+        }
+    }
+
+    fn build_plain_literal(&self, value: &str, language: Option<u64>) -> Option<EncodedTerm> {
+        Some(if let Some(language_id) = language {
+            EncodedTerm::LangStringLiteral {
+                value_id: self.dataset.insert_str(value).ok()?,
+                language_id,
+            }
+        } else {
+            EncodedTerm::StringLiteral {
+                value_id: self.dataset.insert_str(value).ok()?,
+            }
+        })
+    }
+
+    fn to_argument_compatible_strings(
+        &self,
+        arg1: EncodedTerm,
+        arg2: EncodedTerm,
+    ) -> Option<(
+        <DatasetView<S> as StringStore>::StringType,
+        <DatasetView<S> as StringStore>::StringType,
+        Option<u64>,
+    )> {
+        let (value1, language1) = self.to_string_and_language(arg1)?;
+        let (value2, language2) = self.to_string_and_language(arg2)?;
+        if language2.is_none() || language1 == language2 {
+            Some((value1, value2, language1))
+        } else {
+            None
+        }
+    }
+
+    fn compile_pattern(&self, pattern: EncodedTerm, flags: Option<EncodedTerm>) -> Option<Regex> {
+        // TODO Avoid to compile the regex each time
+        let pattern = self.to_simple_string(pattern)?;
+        let mut regex_builder = RegexBuilder::new(&pattern);
+        regex_builder.size_limit(REGEX_SIZE_LIMIT);
+        if let Some(flags) = flags {
+            let flags = self.to_simple_string(flags)?;
+            for flag in flags.chars() {
+                match flag {
+                    's' => {
+                        regex_builder.dot_matches_new_line(true);
+                    }
+                    'm' => {
+                        regex_builder.multi_line(true);
+                    }
+                    'i' => {
+                        regex_builder.case_insensitive(true);
+                    }
+                    'x' => {
+                        regex_builder.ignore_whitespace(true);
+                    }
+                    'q' => (), //TODO: implement
+                    _ => (),
+                }
+            }
+        }
+        regex_builder.build().ok()
     }
 
     fn parse_numeric_operands(
@@ -1117,6 +1504,18 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 .ok()??
                 .cmp(&self.dataset.get_str(b).ok()??),
         )
+    }
+
+    fn hash<H: Digest>(
+        &self,
+        arg: &PlanExpression,
+        tuple: &[Option<EncodedTerm>],
+    ) -> Option<EncodedTerm> {
+        let input = self.to_simple_string(self.eval_expression(arg, tuple)?)?;
+        let hash = hex::encode(H::new().chain(&input as &str).result());
+        Some(EncodedTerm::StringLiteral {
+            value_id: self.dataset.insert_str(&hash).ok()?,
+        })
     }
 }
 
