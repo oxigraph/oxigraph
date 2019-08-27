@@ -319,31 +319,44 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         match expression {
             PlanExpression::Constant(t) => Some(*t),
             PlanExpression::Variable(v) => get_tuple_value(*v, tuple),
-            PlanExpression::Or(a, b) => match self.to_bool(self.eval_expression(a, tuple)?) {
-                Some(true) => Some(true.into()),
-                Some(false) => self.eval_expression(b, tuple),
-                None => match self.to_bool(self.eval_expression(b, tuple)?) {
+            PlanExpression::Or(a, b) => {
+                match self.eval_expression(a, tuple).and_then(|v| self.to_bool(v)) {
                     Some(true) => Some(true.into()),
-                    _ => None,
-                },
-            },
-            PlanExpression::And(a, b) => match self.to_bool(self.eval_expression(a, tuple)?) {
+                    Some(false) => self.eval_expression(b, tuple),
+                    None => {
+                        if Some(true)
+                            == self.eval_expression(b, tuple).and_then(|v| self.to_bool(v))
+                        {
+                            Some(true.into())
+                        } else {
+                            None
+                        }
+                    }
+                }
+            }
+            PlanExpression::And(a, b) => match self
+                .eval_expression(a, tuple)
+                .and_then(|v| self.to_bool(v))
+            {
                 Some(true) => self.eval_expression(b, tuple),
                 Some(false) => Some(false.into()),
-                None => match self.to_bool(self.eval_expression(b, tuple)?) {
-                    Some(false) => Some(false.into()),
-                    _ => None,
-                },
+                None => {
+                    if Some(false) == self.eval_expression(b, tuple).and_then(|v| self.to_bool(v)) {
+                        Some(false.into())
+                    } else {
+                        None
+                    }
+                }
             },
             PlanExpression::Equal(a, b) => {
                 let a = self.eval_expression(a, tuple)?;
                 let b = self.eval_expression(b, tuple)?;
-                Some(self.equals(a, b).into())
+                self.equals(a, b).map(|v| v.into())
             }
             PlanExpression::NotEqual(a, b) => {
                 let a = self.eval_expression(a, tuple)?;
                 let b = self.eval_expression(b, tuple)?;
-                Some(self.not_equals(a, b).into())
+                self.equals(a, b).map(|v| (!v).into())
             }
             PlanExpression::Greater(a, b) => Some(
                 (self.partial_cmp_literals(
@@ -384,7 +397,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 let mut error = false;
                 for possible in l {
                     if let Some(possible) = self.eval_expression(possible, tuple) {
-                        if self.equals(needed, possible) {
+                        if Some(true) == self.equals(needed, possible) {
                             return Some(true.into());
                         }
                     } else {
@@ -475,18 +488,21 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 None => Some(BlankNode::default().into()),
             },
             PlanExpression::Year(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::Date(date) => Some(date.year().into()),
                 EncodedTerm::NaiveDate(date) => Some(date.year().into()),
                 EncodedTerm::DateTime(date_time) => Some(date_time.year().into()),
                 EncodedTerm::NaiveDateTime(date_time) => Some(date_time.year().into()),
                 _ => None,
             },
             PlanExpression::Month(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::Date(date) => Some(date.year().into()),
                 EncodedTerm::NaiveDate(date) => Some(date.month().into()),
                 EncodedTerm::DateTime(date_time) => Some(date_time.month().into()),
                 EncodedTerm::NaiveDateTime(date_time) => Some(date_time.month().into()),
                 _ => None,
             },
             PlanExpression::Day(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::Date(date) => Some(date.year().into()),
                 EncodedTerm::NaiveDate(date) => Some(date.day().into()),
                 EncodedTerm::DateTime(date_time) => Some(date_time.day().into()),
                 EncodedTerm::NaiveDateTime(date_time) => Some(date_time.day().into()),
@@ -753,6 +769,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             EncodedTerm::DoubleLiteral(value) => self.store.insert_str(&value.to_string()).ok(),
             EncodedTerm::IntegerLiteral(value) => self.store.insert_str(&value.to_string()).ok(),
             EncodedTerm::DecimalLiteral(value) => self.store.insert_str(&value.to_string()).ok(),
+            EncodedTerm::Date(value) => self.store.insert_str(&value.to_string()).ok(),
             EncodedTerm::NaiveDate(value) => self.store.insert_str(&value.to_string()).ok(),
             EncodedTerm::NaiveTime(value) => self.store.insert_str(&value.to_string()).ok(),
             EncodedTerm::DateTime(value) => self.store.insert_str(&value.to_string()).ok(),
@@ -874,12 +891,116 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         )
     }
 
-    fn equals(&self, a: EncodedTerm, b: EncodedTerm) -> bool {
-        (a == b || self.partial_cmp_literals(a, b) == Some(Ordering::Equal))
-    }
-
-    fn not_equals(&self, a: EncodedTerm, b: EncodedTerm) -> bool {
-        (a != b && self.partial_cmp_literals(a, b) != Some(Ordering::Equal))
+    #[allow(clippy::float_cmp)]
+    fn equals(&self, a: EncodedTerm, b: EncodedTerm) -> Option<bool> {
+        match a {
+            EncodedTerm::DefaultGraph
+            | EncodedTerm::NamedNode { .. }
+            | EncodedTerm::BlankNode(_)
+            | EncodedTerm::LangStringLiteral { .. } => Some(a == b),
+            EncodedTerm::StringLiteral { value_id: a } => match b {
+                EncodedTerm::StringLiteral { value_id: b } => Some(a == b),
+                EncodedTerm::TypedLiteral { .. } => None,
+                _ => Some(false),
+            },
+            EncodedTerm::BooleanLiteral(a) => match b {
+                EncodedTerm::BooleanLiteral(b) => Some(a == b),
+                EncodedTerm::TypedLiteral { .. } => None,
+                _ => Some(false),
+            },
+            EncodedTerm::FloatLiteral(a) => match b {
+                EncodedTerm::FloatLiteral(b) => Some(a == b),
+                EncodedTerm::DoubleLiteral(b) => Some(a.to_f64()? == *b),
+                EncodedTerm::IntegerLiteral(b) => Some(*a == b.to_f32()?),
+                EncodedTerm::DecimalLiteral(b) => Some(*a == b.to_f32()?),
+                EncodedTerm::TypedLiteral { .. } => None,
+                _ => Some(false),
+            },
+            EncodedTerm::DoubleLiteral(a) => match b {
+                EncodedTerm::FloatLiteral(b) => Some(*a == b.to_f64()?),
+                EncodedTerm::DoubleLiteral(b) => Some(a == b),
+                EncodedTerm::IntegerLiteral(b) => Some(*a == b.to_f64()?),
+                EncodedTerm::DecimalLiteral(b) => Some(*a == b.to_f64()?),
+                EncodedTerm::TypedLiteral { .. } => None,
+                _ => Some(false),
+            },
+            EncodedTerm::IntegerLiteral(a) => match b {
+                EncodedTerm::FloatLiteral(b) => Some(a.to_f32()? == *b),
+                EncodedTerm::DoubleLiteral(b) => Some(a.to_f64()? == *b),
+                EncodedTerm::IntegerLiteral(b) => Some(a == b),
+                EncodedTerm::DecimalLiteral(b) => Some(Decimal::from_i128(a)? == b),
+                EncodedTerm::TypedLiteral { .. } => None,
+                _ => Some(false),
+            },
+            EncodedTerm::DecimalLiteral(a) => match b {
+                EncodedTerm::FloatLiteral(b) => Some(a.to_f32()? == *b),
+                EncodedTerm::DoubleLiteral(b) => Some(a.to_f64()? == *b),
+                EncodedTerm::IntegerLiteral(b) => Some(a == Decimal::from_i128(b)?),
+                EncodedTerm::DecimalLiteral(b) => Some(a == b),
+                EncodedTerm::TypedLiteral { .. } => None,
+                _ => Some(false),
+            },
+            EncodedTerm::TypedLiteral { .. } => match b {
+                EncodedTerm::TypedLiteral { .. } if a == b => Some(true),
+                EncodedTerm::NamedNode { .. }
+                | EncodedTerm::BlankNode { .. }
+                | EncodedTerm::LangStringLiteral { .. } => Some(false),
+                _ => None,
+            },
+            EncodedTerm::Date(a) => match b {
+                EncodedTerm::Date(b) => Some(a == b),
+                EncodedTerm::NaiveDate(b) => {
+                    if a.naive_utc() == b {
+                        None
+                    } else {
+                        Some(false)
+                    }
+                }
+                EncodedTerm::TypedLiteral { .. } => None,
+                _ => Some(false),
+            },
+            EncodedTerm::NaiveDate(a) => match b {
+                EncodedTerm::NaiveDate(b) => Some(a == b),
+                EncodedTerm::Date(b) => {
+                    if a == b.naive_utc() {
+                        None
+                    } else {
+                        Some(false)
+                    }
+                }
+                EncodedTerm::TypedLiteral { .. } => None,
+                _ => Some(false),
+            },
+            EncodedTerm::NaiveTime(a) => match b {
+                EncodedTerm::NaiveTime(b) => Some(a == b),
+                EncodedTerm::TypedLiteral { .. } => None,
+                _ => Some(false),
+            },
+            EncodedTerm::DateTime(a) => match b {
+                EncodedTerm::DateTime(b) => Some(a == b),
+                EncodedTerm::NaiveDateTime(b) => {
+                    if a.naive_utc() == b {
+                        None
+                    } else {
+                        Some(false)
+                    }
+                }
+                EncodedTerm::TypedLiteral { .. } => None,
+                _ => Some(false),
+            },
+            EncodedTerm::NaiveDateTime(a) => match b {
+                EncodedTerm::NaiveDateTime(b) => Some(a == b),
+                EncodedTerm::DateTime(b) => {
+                    if a == b.naive_utc() {
+                        None
+                    } else {
+                        Some(false)
+                    }
+                }
+                EncodedTerm::TypedLiteral { .. } => None,
+                _ => Some(false),
+            },
+        }
     }
 
     fn cmp_according_to_expression(
@@ -955,13 +1076,16 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&b),
                 _ => None,
             },
-            EncodedTerm::NaiveDate(a) => {
-                if let EncodedTerm::NaiveDate(ref b) = b {
-                    a.partial_cmp(b)
-                } else {
-                    None
-                }
-            }
+            EncodedTerm::Date(a) => match b {
+                EncodedTerm::Date(ref b) => a.partial_cmp(b),
+                EncodedTerm::NaiveDate(ref b) => a.naive_utc().partial_cmp(b), //TODO: check edges
+                _ => None,
+            },
+            EncodedTerm::NaiveDate(a) => match b {
+                EncodedTerm::NaiveDate(ref b) => a.partial_cmp(b),
+                EncodedTerm::Date(ref b) => a.partial_cmp(&b.naive_utc()), //TODO: check edges
+                _ => None,
+            },
             EncodedTerm::NaiveTime(a) => {
                 if let EncodedTerm::NaiveTime(ref b) = b {
                     a.partial_cmp(b)
@@ -969,20 +1093,16 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     None
                 }
             }
-            EncodedTerm::DateTime(a) => {
-                if let EncodedTerm::DateTime(ref b) = b {
-                    a.partial_cmp(b)
-                } else {
-                    None
-                }
-            }
-            EncodedTerm::NaiveDateTime(a) => {
-                if let EncodedTerm::NaiveDateTime(ref b) = b {
-                    a.partial_cmp(b)
-                } else {
-                    None
-                }
-            }
+            EncodedTerm::DateTime(a) => match b {
+                EncodedTerm::DateTime(ref b) => a.partial_cmp(b),
+                EncodedTerm::NaiveDateTime(ref b) => a.naive_utc().partial_cmp(b), //TODO: check edges
+                _ => None,
+            },
+            EncodedTerm::NaiveDateTime(a) => match b {
+                EncodedTerm::NaiveDateTime(ref b) => a.partial_cmp(b),
+                EncodedTerm::DateTime(ref b) => a.partial_cmp(&b.naive_utc()), //TODO: check edges
+                _ => None,
+            },
             _ => None,
         }
     }

@@ -1,6 +1,7 @@
 use crate::model::named_node::NamedNode;
 use crate::model::vocab::rdf;
 use crate::model::vocab::xsd;
+use chrono::format::{parse, Parsed, StrftimeItems};
 use chrono::prelude::*;
 use num_traits::identities::Zero;
 use num_traits::FromPrimitive;
@@ -47,6 +48,7 @@ enum LiteralContent {
     Double(OrderedFloat<f64>),
     Integer(i128),
     Decimal(Decimal),
+    Date(Date<FixedOffset>),
     NaiveDate(NaiveDate),
     NaiveTime(NaiveTime),
     DateTime(DateTime<FixedOffset>),
@@ -106,9 +108,21 @@ impl Literal {
                 Err(_) => LiteralContent::TypedLiteral { value, datatype },
             }
         } else if datatype == *xsd::DATE {
-            match NaiveDate::parse_from_str(&value, "%Y-%m-%d") {
-                Ok(value) => LiteralContent::NaiveDate(value),
-                Err(_) => LiteralContent::TypedLiteral { value, datatype },
+            let mut parsed = Parsed::new();
+            match parse(&mut parsed, &value, StrftimeItems::new("%Y-%m-%d%:z")).and_then(|_| {
+                Ok(Date::from_utc(
+                    parsed.to_naive_date()?,
+                    parsed.to_fixed_offset()?,
+                ))
+            }) {
+                Ok(value) => LiteralContent::Date(value),
+                Err(_) => match NaiveDate::parse_from_str(&value, "%Y-%m-%dZ") {
+                    Ok(value) => LiteralContent::Date(Date::from_utc(value, FixedOffset::east(0))),
+                    Err(_) => match NaiveDate::parse_from_str(&value, "%Y-%m-%d") {
+                        Ok(value) => LiteralContent::NaiveDate(value),
+                        Err(_) => LiteralContent::TypedLiteral { value, datatype },
+                    },
+                },
             }
         } else if datatype == *xsd::TIME {
             match NaiveTime::parse_from_str(&value, "%H:%M:%S") {
@@ -152,6 +166,7 @@ impl Literal {
             LiteralContent::Double(value) => Cow::Owned(value.to_string()),
             LiteralContent::Integer(value) => Cow::Owned(value.to_string()),
             LiteralContent::Decimal(value) => Cow::Owned(value.to_string()),
+            LiteralContent::Date(value) => Cow::Owned(value.to_string()),
             LiteralContent::NaiveDate(value) => Cow::Owned(value.to_string()),
             LiteralContent::NaiveTime(value) => Cow::Owned(value.to_string()),
             LiteralContent::DateTime(value) => Cow::Owned(value.to_string()),
@@ -183,7 +198,7 @@ impl Literal {
             LiteralContent::Double(_) => &xsd::DOUBLE,
             LiteralContent::Integer(_) => &xsd::INTEGER,
             LiteralContent::Decimal(_) => &xsd::DECIMAL,
-            LiteralContent::NaiveDate(_) => &xsd::DATE,
+            LiteralContent::Date(_) | LiteralContent::NaiveDate(_) => &xsd::DATE,
             LiteralContent::NaiveTime(_) => &xsd::TIME,
             LiteralContent::DateTime(_) | LiteralContent::NaiveDateTime(_) => &xsd::DATE_TIME,
             LiteralContent::TypedLiteral { ref datatype, .. } => datatype,
@@ -252,7 +267,7 @@ impl Literal {
     /// Checks if the literal has the datatype [xsd:date](http://www.w3.org/2001/XMLSchema#date) and is valid
     pub fn is_date(&self) -> bool {
         match self.0 {
-            LiteralContent::NaiveDate(_) => true,
+            LiteralContent::Date(_) | LiteralContent::NaiveDate(_) => true,
             _ => false,
         }
     }
@@ -351,9 +366,18 @@ impl Literal {
     }
 
     /// Returns the value of this literal as NaiveDate if possible
-    pub(crate) fn to_date(&self) -> Option<NaiveDate> {
+    pub(crate) fn to_naive_date(&self) -> Option<NaiveDate> {
         match self.0 {
+            LiteralContent::Date(value) => Some(value.naive_utc()),
             LiteralContent::NaiveDate(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    /// Returns the value of this literal as Date if possible
+    pub(crate) fn to_date(&self) -> Option<Date<FixedOffset>> {
+        match self.0 {
+            LiteralContent::Date(value) => Some(value),
             _ => None,
         }
     }
@@ -495,6 +519,12 @@ impl From<f64> for Literal {
 impl From<Decimal> for Literal {
     fn from(value: Decimal) -> Self {
         Literal(LiteralContent::Decimal(value))
+    }
+}
+
+impl From<Date<FixedOffset>> for Literal {
+    fn from(value: Date<FixedOffset>) -> Self {
+        Literal(LiteralContent::Date(value))
     }
 }
 

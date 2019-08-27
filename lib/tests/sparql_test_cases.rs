@@ -50,7 +50,7 @@ fn sparql_w3c_syntax_testsuite() -> Result<()> {
 
 #[test]
 fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
-    //TODO: dataset open-world
+    //TODO: dataset
     let manifest_10_urls = vec![
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/algebra/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/ask/manifest.ttl",
@@ -66,6 +66,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-ops/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/graph/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/regex/manifest.ttl",
@@ -82,6 +83,8 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-str-2").unwrap(),
         NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest#eq-graph-1").unwrap(),
         NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest#eq-graph-2").unwrap(),
+        NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-01").unwrap(),
+        NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-04").unwrap(),
         //Multiple writing of the same xsd:double. Our system does strong normalization.
         NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm").unwrap(),
         NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm-simple").unwrap(),
@@ -89,12 +92,15 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm-not-eq").unwrap(),
         //Simple literal vs xsd:string. We apply RDF 1.1
         NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-2").unwrap(),
-        //Test on curly brace scoping with OPTIONAL filter
-        NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest#dawg-optional-filter-005-not-simplified").unwrap(),
-        //DATATYPE("foo"@en) returns rdf:langString in SPARQL 1.1
-        NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-datatype-2").unwrap()
+        NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-08").unwrap(),
+        NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-10").unwrap(),
+        NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-11").unwrap(),
+        NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-12").unwrap(),
+        //DATATYPE("foo"@en) returns rdf:langString in RDF 1.1
+        NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-datatype-2").unwrap(),
     ];
 
+    let mut failed = Vec::default();
     for test_result in manifest_10_urls
         .into_iter()
         .flat_map(|manifest| TestManifest::new(manifest))
@@ -119,17 +125,15 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
                 .connection()?
                 .prepare_query(&read_file_to_string(&test.query)?, Some(&test.query))
             {
-                Err(error) => assert!(
-                    false,
+                Err(error) => failed.push(format!(
                     "Failure to parse query of {} with error: {}",
                     test, error
-                ),
+                )),
                 Ok(query) => match query.exec() {
-                    Err(error) => assert!(
-                        false,
+                    Err(error) => failed.push(format!(
                         "Failure to execute query of {} with error: {}",
                         test, error
-                    ),
+                    )),
                     Ok(result) => {
                         let expected_graph =
                             load_sparql_query_result_graph(test.result.as_ref().unwrap())?;
@@ -139,15 +143,13 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
                             .is_some();
                         let actual_graph = to_graph(result, with_order)?;
                         if !actual_graph.is_isomorphic(&expected_graph) {
-                            assert!(
-                                false,
-                                "Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
+                            failed.push(format!("Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
                                 test,
                                 expected_graph,
                                 actual_graph,
                                 Query::parse(&read_file_to_string(&test.query)?, Some(&test.query)).unwrap(),
                                 repository_to_string(&repository)
-                            )
+                            ))
                         }
                     }
                 },
@@ -156,6 +158,12 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
             assert!(false, "Not supported test: {}", test);
         }
     }
+    assert!(
+        failed.is_empty(),
+        "{} tests failed:\n{}",
+        failed.len(),
+        failed.join("\n")
+    );
     Ok(())
 }
 

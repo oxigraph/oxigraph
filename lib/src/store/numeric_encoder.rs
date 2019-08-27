@@ -126,8 +126,9 @@ const TYPE_INTEGER_LITERAL: u8 = 11;
 const TYPE_DECIMAL_LITERAL: u8 = 12;
 const TYPE_DATE_TIME_LITERAL: u8 = 13;
 const TYPE_NAIVE_DATE_TIME_LITERAL: u8 = 14;
-const TYPE_NAIVE_DATE_LITERAL: u8 = 15;
-const TYPE_NAIVE_TIME_LITERAL: u8 = 16;
+const TYPE_DATE_LITERAL: u8 = 15;
+const TYPE_NAIVE_DATE_LITERAL: u8 = 16;
+const TYPE_NAIVE_TIME_LITERAL: u8 = 17;
 
 pub static ENCODED_DEFAULT_GRAPH: EncodedTerm = EncodedTerm::DefaultGraph;
 pub static ENCODED_EMPTY_STRING_LITERAL: EncodedTerm = EncodedTerm::StringLiteral {
@@ -177,6 +178,7 @@ pub enum EncodedTerm {
     DoubleLiteral(OrderedFloat<f64>),
     IntegerLiteral(i128),
     DecimalLiteral(Decimal),
+    Date(Date<FixedOffset>),
     NaiveDate(NaiveDate),
     NaiveTime(NaiveTime),
     DateTime(DateTime<FixedOffset>),
@@ -208,6 +210,7 @@ impl EncodedTerm {
             | EncodedTerm::DoubleLiteral(_)
             | EncodedTerm::IntegerLiteral(_)
             | EncodedTerm::DecimalLiteral(_)
+            | EncodedTerm::Date(_)
             | EncodedTerm::NaiveDate(_)
             | EncodedTerm::NaiveTime(_)
             | EncodedTerm::DateTime(_)
@@ -228,6 +231,7 @@ impl EncodedTerm {
             EncodedTerm::DoubleLiteral(..) => Some(ENCODED_XSD_DOUBLE_NAMED_NODE),
             EncodedTerm::IntegerLiteral(..) => Some(ENCODED_XSD_INTEGER_NAMED_NODE),
             EncodedTerm::DecimalLiteral(..) => Some(ENCODED_XSD_DECIMAL_NAMED_NODE),
+            EncodedTerm::Date(..) => Some(ENCODED_XSD_DATE_NAMED_NODE),
             EncodedTerm::NaiveDate(..) => Some(ENCODED_XSD_DATE_NAMED_NODE),
             EncodedTerm::NaiveTime(..) => Some(ENCODED_XSD_TIME_NAMED_NODE),
             EncodedTerm::DateTime(..) | EncodedTerm::NaiveDateTime(..) => {
@@ -251,6 +255,7 @@ impl EncodedTerm {
             EncodedTerm::DoubleLiteral(_) => TYPE_DOUBLE_LITERAL,
             EncodedTerm::IntegerLiteral(_) => TYPE_INTEGER_LITERAL,
             EncodedTerm::DecimalLiteral(_) => TYPE_DECIMAL_LITERAL,
+            EncodedTerm::Date(_) => TYPE_DATE_LITERAL,
             EncodedTerm::NaiveDate(_) => TYPE_NAIVE_DATE_LITERAL,
             EncodedTerm::NaiveTime(_) => TYPE_NAIVE_TIME_LITERAL,
             EncodedTerm::DateTime(_) => TYPE_DATE_TIME_LITERAL,
@@ -298,6 +303,12 @@ impl From<u32> for EncodedTerm {
 impl From<Decimal> for EncodedTerm {
     fn from(value: Decimal) -> Self {
         EncodedTerm::DecimalLiteral(value)
+    }
+}
+
+impl From<Date<FixedOffset>> for EncodedTerm {
+    fn from(value: Date<FixedOffset>) -> Self {
+        EncodedTerm::Date(value)
     }
 }
 
@@ -401,6 +412,12 @@ impl<R: Read> TermReader for R {
                 self.read_exact(&mut buffer)?;
                 Ok(EncodedTerm::DecimalLiteral(Decimal::deserialize(buffer)))
             }
+            TYPE_DATE_LITERAL => Ok(EncodedTerm::Date(Date::from_utc(
+                NaiveDate::from_num_days_from_ce_opt(self.read_i32::<LittleEndian>()?)
+                    .ok_or_else(|| format_err!("Invalid date serialization"))?,
+                FixedOffset::east_opt(self.read_i32::<LittleEndian>()?)
+                    .ok_or_else(|| format_err!("Invalid timezone offset"))?,
+            ))),
             TYPE_NAIVE_DATE_LITERAL => Ok(EncodedTerm::NaiveDate(
                 NaiveDate::from_num_days_from_ce_opt(self.read_i32::<LittleEndian>()?)
                     .ok_or_else(|| format_err!("Invalid date serialization"))?,
@@ -508,6 +525,10 @@ impl<R: Write> TermWriter for R {
             EncodedTerm::DoubleLiteral(value) => self.write_f64::<LittleEndian>(*value)?,
             EncodedTerm::IntegerLiteral(value) => self.write_i128::<LittleEndian>(value)?,
             EncodedTerm::DecimalLiteral(value) => self.write_all(&value.serialize())?,
+            EncodedTerm::Date(value) => {
+                self.write_i32::<LittleEndian>(value.num_days_from_ce())?;
+                self.write_i32::<LittleEndian>(value.timezone().local_minus_utc())?;
+            }
             EncodedTerm::NaiveDate(value) => {
                 self.write_i32::<LittleEndian>(value.num_days_from_ce())?;
             }
@@ -608,10 +629,14 @@ impl<S: StringStore> Encoder<S> {
                 .ok_or_else(|| format_err!("decimal literal without decimal value"))?
                 .into()
         } else if literal.is_date() {
-            literal
-                .to_date()
-                .ok_or_else(|| format_err!("date literal without date value"))?
-                .into()
+            if let Some(date) = literal.to_date() {
+                date.into()
+            } else {
+                literal
+                    .to_naive_date()
+                    .ok_or_else(|| format_err!("date literal without date value"))?
+                    .into()
+            }
         } else if literal.is_time() {
             literal
                 .to_time()
@@ -808,6 +833,7 @@ impl<S: StringStore> Encoder<S> {
             EncodedTerm::DoubleLiteral(value) => Ok(Literal::from(*value).into()),
             EncodedTerm::IntegerLiteral(value) => Ok(Literal::from(value).into()),
             EncodedTerm::DecimalLiteral(value) => Ok(Literal::from(value).into()),
+            EncodedTerm::Date(value) => Ok(Literal::from(value).into()),
             EncodedTerm::NaiveDate(value) => Ok(Literal::from(value).into()),
             EncodedTerm::NaiveTime(value) => Ok(Literal::from(value).into()),
             EncodedTerm::DateTime(value) => Ok(Literal::from(value).into()),
