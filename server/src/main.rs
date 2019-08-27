@@ -1,6 +1,7 @@
 use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
+use rouille::input::priority_header_preferred;
 use rouille::url::form_urlencoded;
 use rouille::{start_server, Request, Response};
 use rudf::sparql::QueryResult;
@@ -89,20 +90,22 @@ fn handle_request<R: RepositoryConnection>(
                 Response::text("No content given").with_status_code(400)
             }
         }
-        ("/query", "GET") => {
-            evaluate_urlencoded_sparql_query(connection, request.raw_query_string().as_bytes())
-        }
+        ("/query", "GET") => evaluate_urlencoded_sparql_query(
+            connection,
+            request.raw_query_string().as_bytes(),
+            request,
+        ),
         ("/query", "POST") => {
             if let Some(mut body) = request.data() {
                 if let Some(content_type) = request.header("Content-Type") {
                     if content_type.starts_with("application/sparql-query") {
                         let mut buffer = String::default();
                         body.read_to_string(&mut buffer).unwrap();
-                        evaluate_sparql_query(connection, &buffer)
+                        evaluate_sparql_query(connection, &buffer, request)
                     } else if content_type.starts_with("application/x-www-form-urlencoded") {
                         let mut buffer = Vec::default();
                         body.read_to_end(&mut buffer).unwrap();
-                        evaluate_urlencoded_sparql_query(connection, &buffer)
+                        evaluate_urlencoded_sparql_query(connection, &buffer, request)
                     } else {
                         Response::text(format!(
                             "No supported content Content-Type given: {}",
@@ -124,31 +127,77 @@ fn handle_request<R: RepositoryConnection>(
 fn evaluate_urlencoded_sparql_query<R: RepositoryConnection>(
     connection: R,
     encoded: &[u8],
+    request: &Request,
 ) -> Response {
     if let Some((_, query)) = form_urlencoded::parse(encoded).find(|(k, _)| k == "query") {
-        evaluate_sparql_query(connection, &query)
+        evaluate_sparql_query(connection, &query, request)
     } else {
         Response::text("You should set the 'query' parameter").with_status_code(400)
     }
 }
 
-fn evaluate_sparql_query<R: RepositoryConnection>(connection: R, query: &str) -> Response {
+fn evaluate_sparql_query<R: RepositoryConnection>(
+    connection: R,
+    query: &str,
+    request: &Request,
+) -> Response {
     //TODO: stream
     match connection.prepare_query(query, None) {
         Ok(query) => match query.exec().unwrap() {
             QueryResult::Graph(triples) => {
+                let supported_formats = [
+                    GraphSyntax::NTriples.media_type(),
+                    GraphSyntax::Turtle.media_type(),
+                ];
+                let format = if let Some(accept) = request.header("Accept") {
+                    if let Some(media_type) =
+                        priority_header_preferred(accept, supported_formats.iter().cloned())
+                            .and_then(|p| GraphSyntax::from_mime_type(supported_formats[p]))
+                    {
+                        media_type
+                    } else {
+                        return Response::text(format!(
+                            "No supported Accept given: {}. Supported format: {:?}",
+                            accept, supported_formats
+                        ))
+                        .with_status_code(415);
+                    }
+                } else {
+                    GraphSyntax::NTriples
+                };
                 let mut result = String::default();
                 for triple in triples {
                     writeln!(&mut result, "{}", triple.unwrap()).unwrap()
                 }
-                Response::from_data(GraphSyntax::NTriples.media_type(), result.into_bytes())
+                Response::from_data(format.media_type(), result.into_bytes())
             }
-            result => Response::from_data(
-                "application/sparql-results",
-                result
-                    .write(Vec::default(), QueryResultSyntax::Xml)
-                    .unwrap(),
-            ),
+            result => {
+                let supported_formats = [
+                    QueryResultSyntax::Xml.media_type(),
+                    QueryResultSyntax::Json.media_type(),
+                ];
+                let format = if let Some(accept) = request.header("Accept") {
+                    if let Some(media_type) =
+                        priority_header_preferred(accept, supported_formats.iter().cloned())
+                            .and_then(|p| QueryResultSyntax::from_mime_type(supported_formats[p]))
+                    {
+                        media_type
+                    } else {
+                        return Response::text(format!(
+                            "No supported Accept given: {}. Supported format: {:?}",
+                            accept, supported_formats
+                        ))
+                        .with_status_code(415);
+                    }
+                } else {
+                    QueryResultSyntax::Xml
+                };
+
+                Response::from_data(
+                    format.media_type(),
+                    result.write(Vec::default(), format).unwrap(),
+                )
+            }
         },
         Err(error) => Response::text(error.to_string()).with_status_code(400),
     }

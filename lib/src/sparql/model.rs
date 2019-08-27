@@ -1,6 +1,7 @@
 use crate::model::*;
+use crate::sparql::json_results::write_json_results;
 use crate::sparql::xml_results::{read_xml_results, write_xml_results};
-use crate::Result;
+use crate::{FileSyntax, Result};
 use failure::format_err;
 use std::fmt;
 use std::io::{BufRead, Write};
@@ -20,12 +21,14 @@ impl<'a> QueryResult<'a> {
     pub fn read(reader: impl BufRead + 'a, syntax: QueryResultSyntax) -> Result<Self> {
         match syntax {
             QueryResultSyntax::Xml => read_xml_results(reader),
+            QueryResultSyntax::Json => unimplemented!(),
         }
     }
 
     pub fn write<W: Write>(self, writer: W, syntax: QueryResultSyntax) -> Result<W> {
         match syntax {
             QueryResultSyntax::Xml => write_xml_results(self, writer),
+            QueryResultSyntax::Json => write_json_results(self, writer),
         }
     }
 }
@@ -35,6 +38,40 @@ impl<'a> QueryResult<'a> {
 pub enum QueryResultSyntax {
     /// [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/)
     Xml,
+    /// [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/)
+    Json,
+}
+
+impl FileSyntax for QueryResultSyntax {
+    fn iri(self) -> &'static str {
+        unimplemented!()
+    }
+
+    fn media_type(self) -> &'static str {
+        match self {
+            QueryResultSyntax::Xml => "application/sparql-results+xml",
+            QueryResultSyntax::Json => "application/sparql-results+json",
+        }
+    }
+
+    fn file_extension(self) -> &'static str {
+        match self {
+            QueryResultSyntax::Xml => "srx",
+            QueryResultSyntax::Json => "srj",
+        }
+    }
+
+    fn from_mime_type(media_type: &str) -> Option<Self> {
+        if let Some(base_type) = media_type.split(';').next() {
+            match base_type {
+                "application/sparql-results+xml" => Some(QueryResultSyntax::Xml),
+                "application/sparql-results+json" => Some(QueryResultSyntax::Json),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
 }
 
 /// An iterator over results bindings

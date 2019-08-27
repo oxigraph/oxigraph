@@ -2,6 +2,7 @@
 
 mod algebra;
 mod eval;
+mod json_results;
 mod model;
 mod parser;
 mod plan;
