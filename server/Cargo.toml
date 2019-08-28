@@ -11,6 +11,6 @@ Rudf based SPARQL server
 edition = "2018"
 
 [dependencies]
-rudf = {path = "../lib", features=["rocksdb"]}
+rudf = {path = "../lib", features = ["rocksdb"] }
 clap = "2"
 rouille = "3"

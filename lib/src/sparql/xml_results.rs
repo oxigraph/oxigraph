@@ -132,7 +132,7 @@ pub fn read_xml_results<'a>(source: impl BufRead + 'a) -> Result<QueryResult<'a>
                 if ns != b"http://www.w3.org/2005/sparql-results#".as_ref() {
                     return Err(format_err!(
                         "Unexpected namespace found in RDF/XML query result: {}",
-                        reader.decode(ns)
+                        reader.decode(ns)?
                     ));
                 }
             }
@@ -144,20 +144,20 @@ pub fn read_xml_results<'a>(source: impl BufRead + 'a) -> Result<QueryResult<'a>
                     if event.name() == b"sparql" {
                         state = State::Sparql;
                     } else {
-                        return Err(format_err!("Expecting <sparql> tag, found {}", reader.decode(event.name())));
+                        return Err(format_err!("Expecting <sparql> tag, found {}", reader.decode(event.name())?));
                     }
                 }
                 State::Sparql => {
                     if event.name() == b"head" {
                         state = State::Head;
                     } else {
-                        return Err(format_err!("Expecting <head> tag, found {}", reader.decode(event.name())));
+                        return Err(format_err!("Expecting <head> tag, found {}", reader.decode(event.name())?));
                     }
                 }
                 State::Head => if event.name() == b"variable" || event.name() == b"link" {
                     return Err(format_err!("<variable> and <link> tag should be autoclosing"));
                 } else {
-                    return Err(format_err!("Expecting <variable> or <link> tag, found {}", reader.decode(event.name())));
+                    return Err(format_err!("Expecting <variable> or <link> tag, found {}", reader.decode(event.name())?));
                 }
                 State::AfterHead => {
                     if event.name() == b"boolean" {
@@ -178,10 +178,10 @@ pub fn read_xml_results<'a>(source: impl BufRead + 'a) -> Result<QueryResult<'a>
                             }),
                         )));
                     } else if event.name() != b"link" && event.name() != b"results" && event.name() != b"boolean" {
-                        return Err(format_err!("Expecting sparql tag, found {}", reader.decode(event.name())));
+                        return Err(format_err!("Expecting sparql tag, found {}", reader.decode(event.name())?));
                     }
                 }
-                State::Boolean => return Err(format_err!("Unexpected tag inside of <boolean> tag: {}", reader.decode(event.name())))
+                State::Boolean => return Err(format_err!("Unexpected tag inside of <boolean> tag: {}", reader.decode(event.name())?))
             },
             Event::Empty(event) => match state {
                 State::Head => {
@@ -194,7 +194,7 @@ pub fn read_xml_results<'a>(source: impl BufRead + 'a) -> Result<QueryResult<'a>
                     } else if event.name() == b"link" {
                         // no op
                     } else {
-                        return Err(format_err!("Expecting <variable> or <link> tag, found {}", reader.decode(event.name())));
+                        return Err(format_err!("Expecting <variable> or <link> tag, found {}", reader.decode(event.name())?));
                     }
                 },
                 State::AfterHead => {
@@ -204,10 +204,10 @@ pub fn read_xml_results<'a>(source: impl BufRead + 'a) -> Result<QueryResult<'a>
                             Box::new(empty()),
                         )))
                     } else {
-                        return Err(format_err!("Unexpected autoclosing tag <{}>", reader.decode(event.name())))
+                        return Err(format_err!("Unexpected autoclosing tag <{}>", reader.decode(event.name())?))
                     }
                 }
-                _ => return Err(format_err!("Unexpected autoclosing tag <{}>", reader.decode(event.name())))
+                _ => return Err(format_err!("Unexpected autoclosing tag <{}>", reader.decode(event.name())?))
             },
             Event::Text(event) => {
                 let value = event.unescaped()?;
@@ -218,10 +218,10 @@ pub fn read_xml_results<'a>(source: impl BufRead + 'a) -> Result<QueryResult<'a>
                         } else if value.as_ref() == b"false" {
                             Ok(QueryResult::Boolean(false))
                         } else {
-                            Err(format_err!("Unexpected boolean value. Found {}", reader.decode(&value)))
+                            Err(format_err!("Unexpected boolean value. Found {}", reader.decode(&value)?))
                         };
                     }
-                    _ => Err(format_err!("Unexpected textual value found: {}", reader.decode(&value)))
+                    _ => Err(format_err!("Unexpected textual value found: {}", reader.decode(&value)?))
                 };
             },
             Event::End(_) => if let State::Head = state {
@@ -247,6 +247,12 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
     type Item = Result<Vec<Option<Term>>>;
 
     fn next(&mut self) -> Option<Result<Vec<Option<Term>>>> {
+        self.read_next().transpose()
+    }
+}
+
+impl<R: BufRead> ResultsIterator<R> {
+    fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>> {
         enum State {
             Start,
             Result,
@@ -266,19 +272,15 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
         let mut lang = None;
         let mut datatype = None;
         loop {
-            let (ns, event) = match self
+            let (ns, event) = self
                 .reader
-                .read_namespaced_event(&mut self.buffer, &mut self.namespace_buffer)
-            {
-                Ok(v) => v,
-                Err(error) => return Some(Err(error.into())),
-            };
+                .read_namespaced_event(&mut self.buffer, &mut self.namespace_buffer)?;
             if let Some(ns) = ns {
                 if ns != b"http://www.w3.org/2005/sparql-results#".as_ref() {
-                    return Some(Err(format_err!(
+                    return Err(format_err!(
                         "Unexpected namespace found in RDF/XML query result: {}",
-                        self.reader.decode(ns)
-                    )));
+                        self.reader.decode(ns)?
+                    ));
                 }
             }
             match event {
@@ -287,10 +289,10 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
                         if event.name() == b"result" {
                             state = State::Result;
                         } else {
-                            return Some(Err(format_err!(
+                            return Err(format_err!(
                                 "Expecting <result>, found {}",
-                                self.reader.decode(event.name())
-                            )));
+                                self.reader.decode(event.name())?
+                            ));
                         }
                     }
                     State::Result => {
@@ -300,29 +302,26 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
                                 .filter_map(|attr| attr.ok())
                                 .find(|attr| attr.key == b"name")
                             {
-                                Some(attr) => match attr.unescaped_value() {
-                                    Ok(var) => current_var = Some(var.to_vec()),
-                                    Err(error) => return Some(Err(error.into())),
-                                },
+                                Some(attr) => current_var = Some(attr.unescaped_value()?.to_vec()),
                                 None => {
-                                    return Some(Err(format_err!(
+                                    return Err(format_err!(
                                         "No name attribute found for the <binding> tag"
-                                    )));
+                                    ));
                                 }
                             }
                             state = State::Binding;
                         } else {
-                            return Some(Err(format_err!(
+                            return Err(format_err!(
                                 "Expecting <binding>, found {}",
-                                self.reader.decode(event.name())
-                            )));
+                                self.reader.decode(event.name())?
+                            ));
                         }
                     }
                     State::Binding => {
                         if term.is_some() {
-                            return Some(Err(format_err!(
+                            return Err(format_err!(
                                 "There is already a value for the current binding"
-                            )));
+                            ));
                         }
                         if event.name() == b"uri" {
                             state = State::Uri;
@@ -332,43 +331,30 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
                             for attr in event.attributes() {
                                 if let Ok(attr) = attr {
                                     if attr.key == b"xml:lang" {
-                                        match attr.unescape_and_decode_value(&self.reader) {
-                                            Ok(val) => lang = Some(val),
-                                            Err(error) => return Some(Err(error.into())),
-                                        }
+                                        lang = Some(attr.unescape_and_decode_value(&self.reader)?);
                                     } else if attr.key == b"datatype" {
-                                        match attr.unescaped_value() {
-                                            Ok(val) => {
-                                                match NamedNode::parse(
-                                                    self.reader.decode(&val).to_string(),
-                                                ) {
-                                                    Ok(iri) => datatype = Some(iri),
-                                                    Err(error) => return Some(Err(error)),
-                                                }
-                                            }
-                                            Err(error) => return Some(Err(error.into())),
-                                        }
+                                        datatype = Some(NamedNode::parse(
+                                            attr.unescape_and_decode_value(&self.reader)?,
+                                        )?);
                                     }
                                 }
                             }
                             state = State::Literal;
                         } else {
-                            return Some(Err(format_err!(
+                            return Err(format_err!(
                                 "Expecting <uri>, <bnode> or <literal> found {}",
-                                self.reader.decode(event.name())
-                            )));
+                                self.reader.decode(event.name())?
+                            ));
                         }
                     }
                     _ => (),
                 },
-                Event::Text(event) => match event.unescaped() {
-                    Ok(data) => match state {
-                        State::Uri => match NamedNode::parse(self.reader.decode(&data)) {
-                            Ok(uri) => {
-                                term = Some(uri.into());
-                            }
-                            Err(error) => return Some(Err(error)),
-                        },
+                Event::Text(event) => {
+                    let data = event.unescaped()?;
+                    match state {
+                        State::Uri => {
+                            term = Some(NamedNode::parse(self.reader.decode(&data)?)?.into())
+                        }
                         State::BNode => {
                             term = Some(
                                 self.bnodes_map
@@ -379,33 +365,33 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
                             )
                         }
                         State::Literal => {
-                            let value = self.reader.decode(&data).to_string();
-                            term = Some(build_literal(value, &lang, &datatype).into());
+                            term = Some(
+                                build_literal(self.reader.decode(&data)?, &lang, &datatype).into(),
+                            );
                         }
                         _ => {
-                            return Some(Err(format_err!(
+                            return Err(format_err!(
                                 "Unexpected textual value found: {}",
-                                self.reader.decode(&data)
-                            )));
+                                self.reader.decode(&data)?
+                            ));
                         }
-                    },
-                    Err(error) => return Some(Err(error.into())),
-                },
+                    }
+                }
                 Event::End(_) => match state {
                     State::Start => state = State::End,
-                    State::Result => return Some(Ok(new_bindings)),
+                    State::Result => return Ok(Some(new_bindings)),
                     State::Binding => {
                         match (&current_var, &term) {
                             (Some(var), Some(term)) => {
                                 new_bindings[self.mapping[var]] = Some(term.clone())
                             }
                             (Some(var), None) => {
-                                return Some(Err(format_err!(
+                                return Err(format_err!(
                                     "No variable found for variable {}",
-                                    self.reader.decode(&var)
-                                )));
+                                    self.reader.decode(&var)?
+                                ));
                             }
-                            _ => return Some(Err(format_err!("No name found for <binding> tag"))),
+                            _ => return Err(format_err!("No name found for <binding> tag")),
                         }
                         term = None;
                         state = State::Result;
@@ -420,7 +406,7 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
                     }
                     _ => (),
                 },
-                Event::Eof => return None,
+                Event::Eof => return Ok(None),
                 _ => (),
             }
         }

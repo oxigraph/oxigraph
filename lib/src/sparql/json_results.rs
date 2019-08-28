@@ -53,7 +53,7 @@ pub fn write_json_results<W: Write>(results: QueryResult<'_>, mut sink: W) -> Re
                             }
                             Term::BlankNode(bnode) => {
                                 sink.write_all(b":{\"type\":\"bnode\",\"value\":")?;
-                                sink.write_fmt(format_args!("{}", bnode.as_uuid().to_simple()))?;
+                                write!(sink, "{}", bnode.as_uuid().to_simple())?;
                                 sink.write_all(b"}")?;
                             }
                             Term::Literal(literal) => {
@@ -113,7 +113,7 @@ fn write_escaped_json_string(s: &str, sink: &mut impl Write) -> Result<()> {
                         }
                     }
                 } else {
-                    sink.write_fmt(format_args!("{}", c))
+                    write!(sink, "{}", c)
                 }
             }
         }?;

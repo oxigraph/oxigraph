@@ -10,7 +10,6 @@ use rudf::{
     DatasetSyntax, FileSyntax, GraphSyntax, MemoryRepository, Repository, RepositoryConnection,
     RocksDbRepository,
 };
-use std::fmt::Write;
 use std::io::{BufReader, Read};
 use std::sync::Arc;
 
@@ -143,11 +142,13 @@ fn evaluate_sparql_query<R: RepositoryConnection>(
 ) -> Response {
     //TODO: stream
     match connection.prepare_query(query, None) {
-        Ok(query) => match query.exec().unwrap() {
-            QueryResult::Graph(triples) => {
+        Ok(query) => {
+            let results = query.exec().unwrap();
+            if let QueryResult::Graph(_) = results {
                 let supported_formats = [
                     GraphSyntax::NTriples.media_type(),
                     GraphSyntax::Turtle.media_type(),
+                    GraphSyntax::RdfXml.media_type(),
                 ];
                 let format = if let Some(accept) = request.header("Accept") {
                     if let Some(media_type) =
@@ -165,13 +166,12 @@ fn evaluate_sparql_query<R: RepositoryConnection>(
                 } else {
                     GraphSyntax::NTriples
                 };
-                let mut result = String::default();
-                for triple in triples {
-                    writeln!(&mut result, "{}", triple.unwrap()).unwrap()
-                }
-                Response::from_data(format.media_type(), result.into_bytes())
-            }
-            result => {
+
+                Response::from_data(
+                    format.media_type(),
+                    results.write_graph(Vec::default(), format).unwrap(),
+                )
+            } else {
                 let supported_formats = [
                     QueryResultSyntax::Xml.media_type(),
                     QueryResultSyntax::Json.media_type(),
@@ -190,15 +190,15 @@ fn evaluate_sparql_query<R: RepositoryConnection>(
                         .with_status_code(415);
                     }
                 } else {
-                    QueryResultSyntax::Xml
+                    QueryResultSyntax::Json
                 };
 
                 Response::from_data(
                     format.media_type(),
-                    result.write(Vec::default(), format).unwrap(),
+                    results.write(Vec::default(), format).unwrap(),
                 )
             }
-        },
+        }
         Err(error) => Response::text(error.to_string()).with_status_code(400),
     }
 }

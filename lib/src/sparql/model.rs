@@ -1,8 +1,10 @@
 use crate::model::*;
 use crate::sparql::json_results::write_json_results;
 use crate::sparql::xml_results::{read_xml_results, write_xml_results};
-use crate::{FileSyntax, Result};
+use crate::{FileSyntax, GraphSyntax, Result};
 use failure::format_err;
+use quick_xml::events::*;
+use quick_xml::Writer;
 use std::fmt;
 use std::io::{BufRead, Write};
 use uuid::Uuid;
@@ -29,6 +31,97 @@ impl<'a> QueryResult<'a> {
         match syntax {
             QueryResultSyntax::Xml => write_xml_results(self, writer),
             QueryResultSyntax::Json => write_json_results(self, writer),
+        }
+    }
+
+    pub fn write_graph<W: Write>(self, mut writer: W, syntax: GraphSyntax) -> Result<W> {
+        if let QueryResult::Graph(triples) = self {
+            match syntax {
+                GraphSyntax::NTriples | GraphSyntax::Turtle => {
+                    for triple in triples {
+                        writeln!(&mut writer, "{}", triple?)?
+                    }
+                    Ok(writer)
+                }
+                GraphSyntax::RdfXml => {
+                    let mut writer = Writer::new(writer);
+                    writer.write_event(Event::Decl(BytesDecl::new(b"1.0", None, None)))?;
+                    let mut rdf_open = BytesStart::borrowed_name(b"rdf:RDF");
+                    rdf_open.push_attribute((
+                        "xmlns:rdf",
+                        "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+                    ));
+                    writer.write_event(Event::Start(rdf_open))?;
+
+                    let mut current_subject = None;
+                    for triple in triples {
+                        let triple = triple?;
+
+                        // We open a new rdf:Description if useful
+                        if current_subject.as_ref() != Some(triple.subject()) {
+                            if current_subject.is_some() {
+                                writer.write_event(Event::End(BytesEnd::borrowed(
+                                    b"rdf:Description",
+                                )))?;
+                            }
+
+                            let mut description_open =
+                                BytesStart::borrowed_name(b"rdf:Description");
+                            match triple.subject() {
+                                NamedOrBlankNode::NamedNode(n) => {
+                                    description_open.push_attribute(("rdf:about", n.as_str()))
+                                }
+                                NamedOrBlankNode::BlankNode(n) => {
+                                    let id = n.as_uuid().to_simple().to_string();
+                                    description_open.push_attribute(("rdf:nodeID", id.as_str()))
+                                }
+                            }
+                            writer.write_event(Event::Start(description_open))?;
+                        }
+
+                        let mut property_open = BytesStart::borrowed_name(b"prop:");
+                        let mut content = None;
+                        property_open.push_attribute(("xmlns:prop", triple.predicate().as_str()));
+                        match triple.object() {
+                            Term::NamedNode(n) => {
+                                property_open.push_attribute(("rdf:resource", n.as_str()))
+                            }
+                            Term::BlankNode(n) => {
+                                let id = n.as_uuid().to_simple().to_string();
+                                property_open.push_attribute(("rdf:nodeID", id.as_str()))
+                            }
+                            Term::Literal(l) => {
+                                if let Some(language) = l.language() {
+                                    property_open.push_attribute(("xml:lang", language.as_str()))
+                                } else if !l.is_plain() {
+                                    property_open
+                                        .push_attribute(("rdf:datatype", l.datatype().as_str()))
+                                }
+                                content = Some(l.value());
+                            }
+                        }
+                        if let Some(content) = content {
+                            writer.write_event(Event::Start(property_open))?;
+                            writer.write_event(Event::Text(BytesText::from_plain_str(&content)))?;
+                            writer.write_event(Event::End(BytesEnd::borrowed(b"prop:")))?;
+                        } else {
+                            writer.write_event(Event::Empty(property_open))?;
+                        }
+
+                        current_subject = Some(triple.subject_owned());
+                    }
+
+                    if current_subject.is_some() {
+                        writer.write_event(Event::End(BytesEnd::borrowed(b"rdf:Description")))?;
+                    }
+                    writer.write_event(Event::End(BytesEnd::borrowed(b"rdf:RDF")))?;
+                    Ok(writer.into_inner())
+                }
+            }
+        } else {
+            Err(format_err!(
+                "Bindings or booleans could not be formatted as an RDF graph"
+            ))
         }
     }
 }
