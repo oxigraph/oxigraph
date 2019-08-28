@@ -132,34 +132,38 @@ impl StringStore for RocksDbStoreConnection<'_> {
     type StringType = RocksString;
 
     fn insert_str(&self, value: &str) -> Result<u64> {
-        let value = value.as_bytes();
-        Ok(
-            if let Some(id) = self.store.db.get_cf(self.str2id_cf, value)? {
-                LittleEndian::read_u64(&id)
-            } else {
-                let id = self
-                    .store
-                    .str_id_counter
-                    .lock()
-                    .map_err(MutexPoisonError::from)?
-                    .get_and_increment(&self.store.db)? as u64;
-                let id_bytes = to_bytes(id);
-                let mut batch = WriteBatch::default();
-                batch.put_cf(self.id2str_cf, &id_bytes, value)?;
-                batch.put_cf(self.str2id_cf, value, &id_bytes)?;
-                self.store.db.write(batch)?;
-                id
-            },
-        )
+        Ok(if let Some(id) = self.get_str_id(value)? {
+            id
+        } else {
+            let id = self
+                .store
+                .str_id_counter
+                .lock()
+                .map_err(MutexPoisonError::from)?
+                .get_and_increment(&self.store.db)? as u64;
+            let id_bytes = to_bytes(id);
+            let mut batch = WriteBatch::default();
+            batch.put_cf(self.id2str_cf, &id_bytes, value)?;
+            batch.put_cf(self.str2id_cf, value, &id_bytes)?;
+            self.store.db.write(batch)?;
+            id
+        })
     }
 
-    fn get_str(&self, id: u64) -> Result<RocksString> {
-        let value = self.store.db.get_cf(self.id2str_cf, &to_bytes(id))?;
-        if let Some(value) = value {
-            Ok(RocksString { vec: value })
-        } else {
-            Err(format_err!("value not found in the dictionary"))
-        }
+    fn get_str(&self, id: u64) -> Result<Option<RocksString>> {
+        Ok(self
+            .store
+            .db
+            .get_cf(self.id2str_cf, &to_bytes(id))?
+            .map(|v| RocksString { vec: v }))
+    }
+
+    fn get_str_id(&self, value: &str) -> Result<Option<u64>> {
+        Ok(self
+            .store
+            .db
+            .get_cf(self.str2id_cf, value.as_bytes())?
+            .map(|id| LittleEndian::read_u64(&id)))
     }
 }
 

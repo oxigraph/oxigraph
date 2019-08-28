@@ -34,8 +34,9 @@ const XSD_TIME_ID: u64 = 10;
 pub trait StringStore {
     type StringType: Deref<Target = str> + ToString + Into<String>;
 
+    fn get_str(&self, id: u64) -> Result<Option<Self::StringType>>;
+    fn get_str_id(&self, value: &str) -> Result<Option<u64>>;
     fn insert_str(&self, value: &str) -> Result<u64>;
-    fn get_str(&self, id: u64) -> Result<Self::StringType>;
 
     /// Should be called when the bytes store is created
     fn set_first_strings(&self) -> Result<()> {
@@ -67,8 +68,12 @@ impl<'a, S: StringStore> StringStore for &'a S {
         (*self).insert_str(value)
     }
 
-    fn get_str(&self, id: u64) -> Result<S::StringType> {
+    fn get_str(&self, id: u64) -> Result<Option<S::StringType>> {
         (*self).get_str(id)
+    }
+
+    fn get_str_id(&self, value: &str) -> Result<Option<u64>> {
+        (*self).get_str_id(value)
     }
 }
 
@@ -94,21 +99,29 @@ impl StringStore for MemoryStringStore {
     fn insert_str(&self, value: &str) -> Result<u64> {
         let mut id2str = self.id2str.write().map_err(MutexPoisonError::from)?;
         let mut str2id = self.str2id.write().map_err(MutexPoisonError::from)?;
-        let id = str2id.entry(value.to_string()).or_insert_with(|| {
+        Ok(if let Some(id) = str2id.get(value) {
+            *id
+        } else {
             let id = id2str.len() as u64;
             id2str.push(value.to_string());
+            str2id.insert(value.to_string(), id);
             id
-        });
-        Ok(*id)
+        })
     }
 
-    fn get_str(&self, id: u64) -> Result<String> {
+    fn get_str(&self, id: u64) -> Result<Option<String>> {
+        //TODO: avoid copy by adding a lifetime limit to get_str
         let id2str = self.id2str.read().map_err(MutexPoisonError::from)?;
-        if id2str.len() as u64 <= id {
-            Err(format_err!("value not found in the dictionary"))
+        Ok(if id2str.len() as u64 <= id {
+            None
         } else {
-            Ok(id2str[id as usize].to_owned())
-        }
+            Some(id2str[id as usize].to_owned())
+        })
+    }
+
+    fn get_str_id(&self, value: &str) -> Result<Option<u64>> {
+        let str2id = self.str2id.read().map_err(MutexPoisonError::from)?;
+        Ok(str2id.get(value).cloned())
     }
 }
 
@@ -806,26 +819,26 @@ impl<S: StringStore> Encoder<S> {
                 Err(format_err!("The default graph tag is not a valid term"))
             }
             EncodedTerm::NamedNode { iri_id } => {
-                Ok(NamedNode::new_from_string(self.string_store.get_str(iri_id)?).into())
+                Ok(NamedNode::new_from_string(self.get_str(iri_id)?).into())
             }
             EncodedTerm::BlankNode(id) => Ok(BlankNode::from(id).into()),
             EncodedTerm::StringLiteral { value_id } => {
-                Ok(Literal::new_simple_literal(self.string_store.get_str(value_id)?).into())
+                Ok(Literal::new_simple_literal(self.get_str(value_id)?).into())
             }
             EncodedTerm::LangStringLiteral {
                 value_id,
                 language_id,
             } => Ok(Literal::new_language_tagged_literal(
-                self.string_store.get_str(value_id)?,
-                self.string_store.get_str(language_id)?,
+                self.get_str(value_id)?,
+                self.get_str(language_id)?,
             )
             .into()),
             EncodedTerm::TypedLiteral {
                 value_id,
                 datatype_id,
             } => Ok(Literal::new_typed_literal(
-                self.string_store.get_str(value_id)?,
-                NamedNode::new_from_string(self.string_store.get_str(datatype_id)?),
+                self.get_str(value_id)?,
+                NamedNode::new_from_string(self.get_str(datatype_id)?),
             )
             .into()),
             EncodedTerm::BooleanLiteral(value) => Ok(Literal::from(value).into()),
@@ -839,6 +852,15 @@ impl<S: StringStore> Encoder<S> {
             EncodedTerm::DateTime(value) => Ok(Literal::from(value).into()),
             EncodedTerm::NaiveDateTime(value) => Ok(Literal::from(value).into()),
         }
+    }
+
+    fn get_str(&self, id: u64) -> Result<S::StringType> {
+        self.string_store.get_str(id)?.ok_or_else(|| {
+            format_err!(
+                "Not able to find the string with id {} in the string store",
+                id
+            )
+        })
     }
 
     pub fn decode_named_or_blank_node(&self, encoded: EncodedTerm) -> Result<NamedOrBlankNode> {

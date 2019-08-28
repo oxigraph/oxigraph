@@ -77,12 +77,16 @@ impl<'a> Store for &'a MemoryStore {
 impl StringStore for MemoryStore {
     type StringType = String;
 
-    fn insert_str(&self, value: &str) -> Result<u64> {
-        self.string_store.insert_str(value)
+    fn get_str(&self, id: u64) -> Result<Option<String>> {
+        self.string_store.get_str(id)
     }
 
-    fn get_str(&self, id: u64) -> Result<String> {
-        self.string_store.get_str(id)
+    fn get_str_id(&self, value: &str) -> Result<Option<u64>> {
+        self.string_store.get_str_id(value)
+    }
+
+    fn insert_str(&self, value: &str) -> Result<u64> {
+        self.string_store.insert_str(value)
     }
 }
 
