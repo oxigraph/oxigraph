@@ -241,20 +241,13 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 expression,
             } => {
                 let eval = self.clone();
-                Box::new(
-                    self.eval_plan(&*child, from)
-                        .filter_map(move |tuple| match tuple {
-                            Ok(mut tuple) => {
-                                put_value(
-                                    *position,
-                                    eval.eval_expression(&expression, &tuple)?,
-                                    &mut tuple,
-                                );
-                                Some(Ok(tuple))
-                            }
-                            Err(error) => Some(Err(error)),
-                        }),
-                )
+                Box::new(self.eval_plan(&*child, from).map(move |tuple| {
+                    let mut tuple = tuple?;
+                    if let Some(value) = eval.eval_expression(&expression, &tuple) {
+                        put_value(*position, value, &mut tuple)
+                    }
+                    Ok(tuple)
+                }))
             }
             PlanNode::Sort { child, by } => {
                 let iter = self.eval_plan(&*child, from);

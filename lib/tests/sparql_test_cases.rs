@@ -76,8 +76,10 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/type-promotion/manifest.ttl",
     ];
 
-    let manifest_11_urls =
-        vec!["http://www.w3.org/2009/sparql/docs/tests/data-sparql11/exists/manifest.ttl"];
+    let manifest_11_urls = vec![
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/bind/manifest.ttl",
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/exists/manifest.ttl",
+    ];
 
     let test_blacklist = vec![
         //Multiple writing of the same xsd:integer. Our system does strong normalization.
