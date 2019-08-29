@@ -1,13 +1,7 @@
 use crate::model::named_node::NamedNode;
 use crate::model::vocab::rdf;
 use crate::model::vocab::xsd;
-use chrono::format::{parse, Parsed, StrftimeItems};
 use chrono::prelude::*;
-use num_traits::identities::Zero;
-use num_traits::FromPrimitive;
-use num_traits::One;
-use num_traits::ToPrimitive;
-use ordered_float::OrderedFloat;
 use rio_api::model as rio;
 use rust_decimal::Decimal;
 use std::borrow::Cow;
@@ -22,8 +16,8 @@ use std::option::Option;
 /// use rudf::model::vocab::xsd;
 ///
 /// assert_eq!(
-///     "\"foo\\tbar\"",
-///     Literal::new_simple_literal("foo\tbar").to_string()
+///     "\"foo\\nbar\"",
+///     Literal::new_simple_literal("foo\nbar").to_string()
 /// );
 ///
 /// assert_eq!(
@@ -43,16 +37,6 @@ pub struct Literal(LiteralContent);
 enum LiteralContent {
     String(String),
     LanguageTaggedString { value: String, language: String },
-    Boolean(bool),
-    Float(OrderedFloat<f32>),
-    Double(OrderedFloat<f64>),
-    Integer(i128),
-    Decimal(Decimal),
-    Date(Date<FixedOffset>),
-    NaiveDate(NaiveDate),
-    NaiveTime(NaiveTime),
-    DateTime(DateTime<FixedOffset>),
-    NaiveDateTime(NaiveDateTime),
     TypedLiteral { value: String, datatype: NamedNode },
 }
 
@@ -66,77 +50,8 @@ impl Literal {
     pub fn new_typed_literal(value: impl Into<String>, datatype: impl Into<NamedNode>) -> Self {
         let value = value.into();
         let datatype = datatype.into();
-        Literal(if datatype == *xsd::BOOLEAN {
-            match value.as_str() {
-                "true" | "1" => LiteralContent::Boolean(true),
-                "false" | "0" => LiteralContent::Boolean(false),
-                _ => LiteralContent::TypedLiteral { value, datatype },
-            }
-        } else if datatype == *xsd::STRING {
+        Literal(if datatype == *xsd::STRING {
             LiteralContent::String(value)
-        } else if datatype == *xsd::FLOAT {
-            match value.parse() {
-                Ok(value) => LiteralContent::Float(OrderedFloat(value)),
-                Err(_) => LiteralContent::TypedLiteral { value, datatype },
-            }
-        } else if datatype == *xsd::DOUBLE {
-            match value.parse() {
-                Ok(value) => LiteralContent::Double(OrderedFloat(value)),
-                Err(_) => LiteralContent::TypedLiteral { value, datatype },
-            }
-        } else if datatype == *xsd::INTEGER
-            || datatype == *xsd::BYTE
-            || datatype == *xsd::SHORT
-            || datatype == *xsd::INT
-            || datatype == *xsd::LONG
-            || datatype == *xsd::UNSIGNED_BYTE
-            || datatype == *xsd::UNSIGNED_SHORT
-            || datatype == *xsd::UNSIGNED_INT
-            || datatype == *xsd::UNSIGNED_LONG
-            || datatype == *xsd::POSITIVE_INTEGER
-            || datatype == *xsd::NEGATIVE_INTEGER
-            || datatype == *xsd::NON_POSITIVE_INTEGER
-            || datatype == *xsd::NON_NEGATIVE_INTEGER
-        {
-            match value.parse() {
-                Ok(value) => LiteralContent::Integer(value),
-                Err(_) => LiteralContent::TypedLiteral { value, datatype },
-            }
-        } else if datatype == *xsd::DECIMAL {
-            match value.parse() {
-                Ok(value) => LiteralContent::Decimal(value),
-                Err(_) => LiteralContent::TypedLiteral { value, datatype },
-            }
-        } else if datatype == *xsd::DATE {
-            let mut parsed = Parsed::new();
-            match parse(&mut parsed, &value, StrftimeItems::new("%Y-%m-%d%:z")).and_then(|_| {
-                Ok(Date::from_utc(
-                    parsed.to_naive_date()?,
-                    parsed.to_fixed_offset()?,
-                ))
-            }) {
-                Ok(value) => LiteralContent::Date(value),
-                Err(_) => match NaiveDate::parse_from_str(&value, "%Y-%m-%dZ") {
-                    Ok(value) => LiteralContent::Date(Date::from_utc(value, FixedOffset::east(0))),
-                    Err(_) => match NaiveDate::parse_from_str(&value, "%Y-%m-%d") {
-                        Ok(value) => LiteralContent::NaiveDate(value),
-                        Err(_) => LiteralContent::TypedLiteral { value, datatype },
-                    },
-                },
-            }
-        } else if datatype == *xsd::TIME {
-            match NaiveTime::parse_from_str(&value, "%H:%M:%S") {
-                Ok(value) => LiteralContent::NaiveTime(value),
-                Err(_) => LiteralContent::TypedLiteral { value, datatype },
-            }
-        } else if datatype == *xsd::DATE_TIME || datatype == *xsd::DATE_TIME_STAMP {
-            match DateTime::parse_from_rfc3339(&value) {
-                Ok(value) => LiteralContent::DateTime(value),
-                Err(_) => match NaiveDateTime::parse_from_str(&value, "%Y-%m-%dT%H:%M:%S") {
-                    Ok(value) => LiteralContent::NaiveDateTime(value),
-                    Err(_) => LiteralContent::TypedLiteral { value, datatype },
-                },
-            }
         } else {
             LiteralContent::TypedLiteral { value, datatype }
         })
@@ -156,21 +71,11 @@ impl Literal {
     }
 
     /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form)
-    pub fn value(&self) -> Cow<'_, str> {
+    pub fn value(&self) -> &str {
         match self.0 {
             LiteralContent::String(ref value)
             | LiteralContent::LanguageTaggedString { ref value, .. }
-            | LiteralContent::TypedLiteral { ref value, .. } => Cow::Borrowed(value),
-            LiteralContent::Boolean(value) => Cow::Owned(value.to_string()),
-            LiteralContent::Float(value) => Cow::Owned(value.to_string()),
-            LiteralContent::Double(value) => Cow::Owned(value.to_string()),
-            LiteralContent::Integer(value) => Cow::Owned(value.to_string()),
-            LiteralContent::Decimal(value) => Cow::Owned(value.to_string()),
-            LiteralContent::Date(value) => Cow::Owned(value.to_string()),
-            LiteralContent::NaiveDate(value) => Cow::Owned(value.to_string()),
-            LiteralContent::NaiveTime(value) => Cow::Owned(value.to_string()),
-            LiteralContent::DateTime(value) => Cow::Owned(value.to_string()),
-            LiteralContent::NaiveDateTime(value) => Cow::Owned(value.to_string()),
+            | LiteralContent::TypedLiteral { ref value, .. } => value,
         }
     }
 
@@ -193,14 +98,6 @@ impl Literal {
         match self.0 {
             LiteralContent::String(_) => &xsd::STRING,
             LiteralContent::LanguageTaggedString { .. } => &rdf::LANG_STRING,
-            LiteralContent::Boolean(_) => &xsd::BOOLEAN,
-            LiteralContent::Float(_) => &xsd::FLOAT,
-            LiteralContent::Double(_) => &xsd::DOUBLE,
-            LiteralContent::Integer(_) => &xsd::INTEGER,
-            LiteralContent::Decimal(_) => &xsd::DECIMAL,
-            LiteralContent::Date(_) | LiteralContent::NaiveDate(_) => &xsd::DATE,
-            LiteralContent::NaiveTime(_) => &xsd::TIME,
-            LiteralContent::DateTime(_) | LiteralContent::NaiveDateTime(_) => &xsd::DATE_TIME,
             LiteralContent::TypedLiteral { ref datatype, .. } => datatype,
         }
     }
@@ -215,226 +112,11 @@ impl Literal {
             _ => false,
         }
     }
-
-    /// Checks if the literal has the datatype [xsd:string](http://www.w3.org/2001/XMLSchema#string) and is valid
-    pub fn is_string(&self) -> bool {
-        match self.0 {
-            LiteralContent::String(_) => true,
-            _ => false,
-        }
-    }
-
-    /// Checks if the literal has the datatype [xsd:boolean](http://www.w3.org/2001/XMLSchema#boolean) and is valid
-    pub fn is_boolean(&self) -> bool {
-        match self.0 {
-            LiteralContent::Boolean(_) => true,
-            _ => false,
-        }
-    }
-
-    /// Checks if the literal has the datatype [xsd:float](http://www.w3.org/2001/XMLSchema#float) and is valid
-    pub fn is_float(&self) -> bool {
-        match self.0 {
-            LiteralContent::Float(_) => true,
-            _ => false,
-        }
-    }
-
-    /// Checks if the literal has the datatype [xsd:double](http://www.w3.org/2001/XMLSchema#double) and is valid
-    pub fn is_double(&self) -> bool {
-        match self.0 {
-            LiteralContent::Double(_) => true,
-            _ => false,
-        }
-    }
-
-    /// Checks if the literal has the datatype [xsd:integer](http://www.w3.org/2001/XMLSchema#integer) and is valid
-    pub fn is_integer(&self) -> bool {
-        match self.0 {
-            LiteralContent::Integer(_) => true,
-            _ => false,
-        }
-    }
-
-    /// Checks if the literal has the datatype [xsd:decimal](http://www.w3.org/2001/XMLSchema#decimal) or one of its sub datatype and is valid
-    pub fn is_decimal(&self) -> bool {
-        match self.0 {
-            LiteralContent::Integer(_) | LiteralContent::Decimal(_) => true,
-            _ => false,
-        }
-    }
-
-    /// Checks if the literal has the datatype [xsd:date](http://www.w3.org/2001/XMLSchema#date) and is valid
-    pub fn is_date(&self) -> bool {
-        match self.0 {
-            LiteralContent::Date(_) | LiteralContent::NaiveDate(_) => true,
-            _ => false,
-        }
-    }
-
-    /// Checks if the literal has the datatype [xsd:date](http://www.w3.org/2001/XMLSchema#time) and is valid
-    pub fn is_time(&self) -> bool {
-        match self.0 {
-            LiteralContent::NaiveTime(_) => true,
-            _ => false,
-        }
-    }
-
-    /// Checks if the literal has the datatype [xsd:dateTime](http://www.w3.org/2001/XMLSchema#dateTime) or one of its sub datatype and is valid
-    pub fn is_date_time(&self) -> bool {
-        match self.0 {
-            LiteralContent::DateTime(_) | LiteralContent::NaiveDateTime(_) => true,
-            _ => false,
-        }
-    }
-
-    /// Checks if the literal has the datatype [xsd:dateTimeStamp](http://www.w3.org/2001/XMLSchema#dateTimeStamp) or [xsd:dateTime](http://www.w3.org/2001/XMLSchema#dateTime) with a fixed timezone and is valid
-    pub fn is_date_time_stamp(&self) -> bool {
-        match self.0 {
-            LiteralContent::DateTime(_) => true,
-            _ => false,
-        }
-    }
-
-    /// Returns the [effective boolean value](https://www.w3.org/TR/sparql11-query/#ebv) of the literal if it exists
-    pub fn to_bool(&self) -> Option<bool> {
-        match self.0 {
-            LiteralContent::String(ref value) => Some(!value.is_empty()),
-            LiteralContent::Boolean(value) => Some(value),
-            LiteralContent::Float(value) => Some(!value.is_zero()),
-            LiteralContent::Double(value) => Some(!value.is_zero()),
-            LiteralContent::Integer(value) => Some(!value.is_zero()),
-            LiteralContent::Decimal(value) => Some(!value.is_zero()),
-            _ => None,
-        }
-    }
-
-    /// Returns the value of this literal as an f32 if it exists following the rules of [XPath xsd:float casting](https://www.w3.org/TR/xpath-functions/#casting-to-float)
-    pub fn to_float(&self) -> Option<f32> {
-        match self.0 {
-            LiteralContent::Float(value) => value.to_f32(),
-            LiteralContent::Double(value) => value.to_f32(),
-            LiteralContent::Integer(value) => value.to_f32(),
-            LiteralContent::Decimal(value) => value.to_f32(),
-            LiteralContent::Boolean(value) => Some(if value { 1. } else { 0. }),
-            LiteralContent::String(ref value) => value.parse().ok(),
-            _ => None,
-        }
-    }
-
-    /// Returns the value of this literal as an f64 if it exists following the rules of [XPath xsd:double casting](https://www.w3.org/TR/xpath-functions/#casting-to-double)
-    pub fn to_double(&self) -> Option<f64> {
-        match self.0 {
-            LiteralContent::Float(value) => value.to_f64(),
-            LiteralContent::Double(value) => value.to_f64(),
-            LiteralContent::Integer(value) => value.to_f64(),
-            LiteralContent::Decimal(value) => value.to_f64(),
-            LiteralContent::Boolean(value) => Some(if value { 1. } else { 0. }),
-            LiteralContent::String(ref value) => value.parse().ok(),
-            _ => None,
-        }
-    }
-
-    /// Returns the value of this literal as an i128 if it exists following the rules of [XPath xsd:integer casting](https://www.w3.org/TR/xpath-functions/#casting-to-integer)
-    pub fn to_integer(&self) -> Option<i128> {
-        match self.0 {
-            LiteralContent::Float(value) => value.to_i128(),
-            LiteralContent::Double(value) => value.to_i128(),
-            LiteralContent::Integer(value) => value.to_i128(),
-            LiteralContent::Decimal(value) => value.to_i128(),
-            LiteralContent::Boolean(value) => Some(if value { 1 } else { 0 }),
-            LiteralContent::String(ref value) => value.parse().ok(),
-            _ => None,
-        }
-    }
-
-    /// Returns the value of this literal as Decimal if it exists following the rules of [XPath xsd:decimal casting](https://www.w3.org/TR/xpath-functions/#casting-to-decimal)
-    pub(crate) fn to_decimal(&self) -> Option<Decimal> {
-        match self.0 {
-            LiteralContent::Float(value) => Decimal::from_f32(*value),
-            LiteralContent::Double(value) => Decimal::from_f64(*value),
-            LiteralContent::Integer(value) => Decimal::from_i128(value),
-            LiteralContent::Decimal(value) => Some(value),
-            LiteralContent::Boolean(value) => Some(if value {
-                Decimal::one()
-            } else {
-                Decimal::zero()
-            }),
-            LiteralContent::String(ref value) => value.parse().ok(),
-            _ => None,
-        }
-    }
-
-    /// Returns the value of this literal as NaiveDate if possible
-    pub(crate) fn to_naive_date(&self) -> Option<NaiveDate> {
-        match self.0 {
-            LiteralContent::Date(value) => Some(value.naive_utc()),
-            LiteralContent::NaiveDate(value) => Some(value),
-            _ => None,
-        }
-    }
-
-    /// Returns the value of this literal as Date if possible
-    pub(crate) fn to_date(&self) -> Option<Date<FixedOffset>> {
-        match self.0 {
-            LiteralContent::Date(value) => Some(value),
-            _ => None,
-        }
-    }
-
-    /// Returns the value of this literal as NaiveTime if possible
-    pub(crate) fn to_time(&self) -> Option<NaiveTime> {
-        match self.0 {
-            LiteralContent::NaiveTime(value) => Some(value),
-            _ => None,
-        }
-    }
-
-    /// Returns the value of this literal as NaiveDateTime if possible
-    pub(crate) fn to_date_time(&self) -> Option<NaiveDateTime> {
-        match self.0 {
-            LiteralContent::DateTime(value) => Some(value.naive_utc()),
-            LiteralContent::NaiveDateTime(value) => Some(value),
-            _ => None,
-        }
-    }
-
-    /// Returns the value of this literal as DateTime<FixedOffset> if possible
-    pub(crate) fn to_date_time_stamp(&self) -> Option<DateTime<FixedOffset>> {
-        if let LiteralContent::DateTime(value) = self.0 {
-            Some(value)
-        } else {
-            None
-        }
-    }
 }
 
 impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.is_plain() {
-            self.language()
-                .map(|lang| {
-                    rio::Literal::LanguageTaggedString {
-                        value: &self.value(),
-                        language: lang.as_str(),
-                    }
-                    .fmt(f)
-                })
-                .unwrap_or_else(|| {
-                    rio::Literal::Simple {
-                        value: &self.value(),
-                    }
-                    .fmt(f)
-                })
-        } else {
-            rio::Literal::Typed {
-                value: &self.value(),
-                datatype: rio::NamedNode {
-                    iri: self.datatype().as_str(),
-                },
-            }
-            .fmt(f)
-        }
+        rio::Literal::from(self).fmt(f)
     }
 }
 
@@ -458,96 +140,165 @@ impl<'a> From<Cow<'a, str>> for Literal {
 
 impl From<bool> for Literal {
     fn from(value: bool) -> Self {
-        Literal(LiteralContent::Boolean(value))
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::BOOLEAN.clone(),
+        })
     }
 }
 
 impl From<i128> for Literal {
     fn from(value: i128) -> Self {
-        Literal(LiteralContent::Integer(value))
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::INTEGER.clone(),
+        })
     }
 }
 
 impl From<i64> for Literal {
     fn from(value: i64) -> Self {
-        Literal(LiteralContent::Integer(value.into()))
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::INTEGER.clone(),
+        })
     }
 }
 
 impl From<i32> for Literal {
     fn from(value: i32) -> Self {
-        Literal(LiteralContent::Integer(value.into()))
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::INTEGER.clone(),
+        })
     }
 }
 
 impl From<i16> for Literal {
     fn from(value: i16) -> Self {
-        Literal(LiteralContent::Integer(value.into()))
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::INTEGER.clone(),
+        })
     }
 }
 
 impl From<u64> for Literal {
     fn from(value: u64) -> Self {
-        Literal(LiteralContent::Integer(value.into()))
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::INTEGER.clone(),
+        })
     }
 }
 
 impl From<u32> for Literal {
     fn from(value: u32) -> Self {
-        Literal(LiteralContent::Integer(value.into()))
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::INTEGER.clone(),
+        })
     }
 }
 
 impl From<u16> for Literal {
     fn from(value: u16) -> Self {
-        Literal(LiteralContent::Integer(value.into()))
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::INTEGER.clone(),
+        })
     }
 }
 
 impl From<f32> for Literal {
     fn from(value: f32) -> Self {
-        Literal(LiteralContent::Float(value.into()))
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::FLOAT.clone(),
+        })
     }
 }
 
 impl From<f64> for Literal {
     fn from(value: f64) -> Self {
-        Literal(LiteralContent::Double(value.into()))
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::DOUBLE.clone(),
+        })
     }
 }
 
 impl From<Decimal> for Literal {
     fn from(value: Decimal) -> Self {
-        Literal(LiteralContent::Decimal(value))
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::DECIMAL.clone(),
+        })
     }
 }
 
 impl From<Date<FixedOffset>> for Literal {
     fn from(value: Date<FixedOffset>) -> Self {
-        Literal(LiteralContent::Date(value))
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::DATE.clone(),
+        })
     }
 }
 
 impl From<NaiveDate> for Literal {
     fn from(value: NaiveDate) -> Self {
-        Literal(LiteralContent::NaiveDate(value))
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::DATE.clone(),
+        })
     }
 }
 
 impl From<NaiveTime> for Literal {
     fn from(value: NaiveTime) -> Self {
-        Literal(LiteralContent::NaiveTime(value))
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::TIME.clone(),
+        })
     }
 }
 
 impl From<DateTime<FixedOffset>> for Literal {
     fn from(value: DateTime<FixedOffset>) -> Self {
-        Literal(LiteralContent::DateTime(value))
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_rfc3339(),
+            datatype: xsd::DATE_TIME.clone(),
+        })
     }
 }
 
 impl From<NaiveDateTime> for Literal {
     fn from(value: NaiveDateTime) -> Self {
-        Literal(LiteralContent::NaiveDateTime(value))
+        Literal(LiteralContent::TypedLiteral {
+            value: value.format("%Y-%m-%dT%H:%M:%S%.f").to_string(),
+            datatype: xsd::DATE_TIME.clone(),
+        })
+    }
+}
+
+impl<'a> From<&'a Literal> for rio::Literal<'a> {
+    fn from(literal: &'a Literal) -> Self {
+        if literal.is_plain() {
+            literal
+                .language()
+                .map(|lang| rio::Literal::LanguageTaggedString {
+                    value: literal.value(),
+                    language: &lang,
+                })
+                .unwrap_or_else(|| rio::Literal::Simple {
+                    value: literal.value(),
+                })
+        } else {
+            rio::Literal::Typed {
+                value: literal.value(),
+                datatype: literal.datatype().into(),
+            }
+        }
     }
 }

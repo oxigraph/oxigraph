@@ -203,14 +203,22 @@ fn load_graph_to_repository(
 }
 
 fn load_sparql_query_result_graph(url: &str) -> Result<SimpleGraph> {
+    let repository = MemoryRepository::default();
+    let connection = repository.connection()?;
     if url.ends_with(".srx") {
-        to_graph(
+        for t in to_graph(
             QueryResult::read(read_file(url)?, QueryResultSyntax::Xml)?,
             false,
-        )
+        )? {
+            connection.insert(&t.in_graph(None))?;
+        }
     } else {
-        load_graph(url)
+        load_graph_to_repository(url, &connection, None)?;
     }
+    Ok(connection
+        .quads_for_pattern(None, None, None, Some(None))
+        .map(|q| q.unwrap().into_triple())
+        .collect())
 }
 
 fn to_relative_path(url: &str) -> Result<String> {

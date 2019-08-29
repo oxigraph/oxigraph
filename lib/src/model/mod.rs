@@ -4,7 +4,6 @@
 
 mod blank_node;
 mod graph;
-mod iri;
 mod isomorphism;
 mod literal;
 mod named_node;
@@ -13,8 +12,6 @@ pub mod vocab;
 
 pub use crate::model::blank_node::BlankNode;
 pub use crate::model::graph::SimpleGraph;
-pub(crate) use crate::model::iri::Iri;
-pub(crate) use crate::model::iri::IriParseError;
 pub use crate::model::literal::Literal;
 pub use crate::model::named_node::NamedNode;
 pub use crate::model::triple::NamedOrBlankNode;

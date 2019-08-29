@@ -25,7 +25,7 @@ BaseDecl -> () = "BASE"i _ i:IRIREF {
 
 //[6]
 PrefixDecl -> () = "PREFIX"i _ ns:PNAME_NS _ i:IRIREF {
-    state.namespaces.insert(ns.into(), i.into_string());
+    state.namespaces.insert(ns.into(), i.into_inner());
 }
 
 //[7]
@@ -922,7 +922,7 @@ iri -> NamedNode = i:(IRIREF / PrefixedName) {
 }
 
 //[137]
-PrefixedName -> Iri = PNAME_LN /
+PrefixedName -> Iri<String> = PNAME_LN /
     ns:PNAME_NS {? if let Some(iri) = state.namespaces.get(ns).cloned() {
         Iri::parse(iri).map_err(|_| "IRI parsing failed")
     } else {
@@ -941,7 +941,7 @@ BlankNode -> BlankNode =
     ANON { BlankNode::default() }
 
 //[139]
-IRIREF -> Iri = "<" i:$(([^\u{00}-\u{20}<>"{}|^\u{60}\u{5c}])*) ">" {?
+IRIREF -> Iri<String> = "<" i:$(([^\u{00}-\u{20}<>"{}|^\u{60}\u{5c}])*) ">" {?
     state.parse_iri(i).map_err(|_| "IRI parsing failed")
 }
 
@@ -951,7 +951,7 @@ PNAME_NS -> &'input str = ns:$(PN_PREFIX?) ':' {
 }
 
 //[141]
-PNAME_LN -> Iri = ns:PNAME_NS local:$(PN_LOCAL) {?
+PNAME_LN -> Iri<String> = ns:PNAME_NS local:$(PN_LOCAL) {?
     if let Some(iri) = state.namespaces.get(ns).map(|v| v.clone() + &unescape_pn_local(local)) {
         Iri::parse(iri).map_err(|_| "IRI parsing failed")
     } else {

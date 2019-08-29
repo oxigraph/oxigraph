@@ -1,3 +1,4 @@
+use rio_api::model as rio;
 use std::fmt;
 use uuid::Uuid;
 
@@ -13,31 +14,46 @@ use uuid::Uuid;
 ///
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct BlankNode {
-    id: Uuid,
+    uuid: Uuid,
+    id: String,
 }
 
 impl BlankNode {
-    /// Returns the underlying UUID of this blank node
-    pub fn as_uuid(&self) -> &Uuid {
+    /// Returns the underlying ID of this blank node
+    pub fn as_str(&self) -> &str {
         &self.id
+    }
+
+    /// Returns the underlying UUID of this blank node
+    pub fn uuid(&self) -> Uuid {
+        self.uuid
     }
 }
 
 impl fmt::Display for BlankNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "_:{}", self.id.to_simple())
+        rio::BlankNode::from(self).fmt(f)
     }
 }
 
 impl Default for BlankNode {
     /// Builds a new RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a unique id
     fn default() -> Self {
-        Self { id: Uuid::new_v4() }
+        Self::from(Uuid::new_v4())
     }
 }
 
 impl From<Uuid> for BlankNode {
     fn from(id: Uuid) -> Self {
-        Self { id }
+        Self {
+            uuid: id,
+            id: id.to_simple().to_string(),
+        }
+    }
+}
+
+impl<'a> From<&'a BlankNode> for rio::BlankNode<'a> {
+    fn from(node: &'a BlankNode) -> Self {
+        rio::BlankNode { id: node.as_str() }
     }
 }

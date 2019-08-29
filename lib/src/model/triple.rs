@@ -1,6 +1,7 @@
 use crate::model::blank_node::BlankNode;
 use crate::model::literal::Literal;
 use crate::model::named_node::NamedNode;
+use rio_api::model as rio;
 use std::fmt;
 
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
@@ -47,6 +48,15 @@ impl From<BlankNode> for NamedOrBlankNode {
     }
 }
 
+impl<'a> From<&'a NamedOrBlankNode> for rio::NamedOrBlankNode<'a> {
+    fn from(node: &'a NamedOrBlankNode) -> Self {
+        match node {
+            NamedOrBlankNode::NamedNode(node) => rio::NamedNode::from(node).into(),
+            NamedOrBlankNode::BlankNode(node) => rio::BlankNode::from(node).into(),
+        }
+    }
+}
+
 /// A RDF [term](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term)
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) and [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
@@ -78,14 +88,6 @@ impl Term {
             Term::NamedNode(_) => false,
             Term::BlankNode(_) => false,
             Term::Literal(_) => true,
-        }
-    }
-
-    /// Returns the [effective boolean value](https://www.w3.org/TR/sparql11-query/#ebv) of the term if it exists
-    pub fn to_bool(&self) -> Option<bool> {
-        match self {
-            Term::Literal(literal) => literal.to_bool(),
-            _ => None,
         }
     }
 }
@@ -123,6 +125,16 @@ impl From<NamedOrBlankNode> for Term {
         match resource {
             NamedOrBlankNode::NamedNode(node) => Term::NamedNode(node),
             NamedOrBlankNode::BlankNode(node) => Term::BlankNode(node),
+        }
+    }
+}
+
+impl<'a> From<&'a Term> for rio::Term<'a> {
+    fn from(node: &'a Term) -> Self {
+        match node {
+            Term::NamedNode(node) => rio::NamedNode::from(node).into(),
+            Term::BlankNode(node) => rio::BlankNode::from(node).into(),
+            Term::Literal(node) => rio::Literal::from(node).into(),
         }
     }
 }
@@ -193,6 +205,16 @@ impl Triple {
 impl fmt::Display for Triple {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {} {} .", self.subject, self.predicate, self.object)
+    }
+}
+
+impl<'a> From<&'a Triple> for rio::Triple<'a> {
+    fn from(node: &'a Triple) -> Self {
+        rio::Triple {
+            subject: node.subject().into(),
+            predicate: node.predicate().into(),
+            object: node.object().into(),
+        }
     }
 }
 

@@ -53,12 +53,12 @@ pub fn write_json_results<W: Write>(results: QueryResult<'_>, mut sink: W) -> Re
                             }
                             Term::BlankNode(bnode) => {
                                 sink.write_all(b":{\"type\":\"bnode\",\"value\":")?;
-                                write!(sink, "{}", bnode.as_uuid().to_simple())?;
+                                write!(sink, "{}", bnode.as_str())?;
                                 sink.write_all(b"}")?;
                             }
                             Term::Literal(literal) => {
                                 sink.write_all(b":{\"type\":\"literal\",\"value\":")?;
-                                write_escaped_json_string(&literal.value(), &mut sink)?;
+                                write_escaped_json_string(literal.value(), &mut sink)?;
                                 if let Some(language) = literal.language() {
                                     sink.write_all(b",\"xml:lang\":")?;
                                     write_escaped_json_string(language, &mut sink)?;

@@ -13,7 +13,7 @@ use crate::model::*;
 use crate::sparql::SimplePreparedQuery;
 use crate::store::numeric_encoder::*;
 use crate::{DatasetSyntax, GraphSyntax, RepositoryConnection, Result};
-use rio_api::parser::{QuadParser, TripleParser};
+use rio_api::parser::{QuadsParser, TriplesParser};
 use rio_turtle::{NQuadsParser, NTriplesParser, TriGParser, TurtleParser};
 use rio_xml::RdfXmlParser;
 use std::collections::HashMap;
@@ -167,7 +167,7 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
 }
 
 impl<S: StoreConnection> StoreRepositoryConnection<S> {
-    fn load_from_triple_parser<P: TripleParser>(
+    fn load_from_triple_parser<P: TriplesParser>(
         &self,
         mut parser: P,
         to_graph_name: Option<&NamedOrBlankNode>,
@@ -185,17 +185,12 @@ impl<S: StoreConnection> StoreRepositoryConnection<S> {
         };
         parser.parse_all(&mut move |t| {
             self.inner
-                .insert(
-                    &encoder
-                        .encode_rio_triple_in_graph(t, graph_name, &mut bnode_map)
-                        .unwrap(),
-                )
-                .unwrap()
+                .insert(&encoder.encode_rio_triple_in_graph(t, graph_name, &mut bnode_map)?)
         })?;
         Ok(())
     }
 
-    fn load_from_quad_parser<P: QuadParser>(&self, mut parser: P) -> Result<()>
+    fn load_from_quad_parser<P: QuadsParser>(&self, mut parser: P) -> Result<()>
     where
         P::Error: Send + Sync + 'static,
     {
@@ -204,8 +199,7 @@ impl<S: StoreConnection> StoreRepositoryConnection<S> {
         let encoder = self.inner.encoder();
         parser.parse_all(&mut move |q| {
             self.inner
-                .insert(&encoder.encode_rio_quad(q, &mut bnode_map).unwrap())
-                .unwrap()
+                .insert(&encoder.encode_rio_quad(q, &mut bnode_map)?)
         })?;
         Ok(())
     }

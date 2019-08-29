@@ -15,6 +15,7 @@ mod grammar {
     use crate::sparql::algebra::*;
     use crate::sparql::model::*;
     use lazy_static::lazy_static;
+    use rio_api::iri::{Iri, IriParseError};
     use std::borrow::Cow;
     use std::char;
     use std::collections::HashMap;
@@ -292,7 +293,7 @@ mod grammar {
     }
 
     pub struct ParserState {
-        base_iri: Option<Iri>,
+        base_iri: Option<Iri<String>>,
         namespaces: HashMap<String, String>,
         bnodes_map: BTreeMap<String, BlankNode>,
         used_bnodes: BTreeSet<String>,
@@ -300,7 +301,7 @@ mod grammar {
     }
 
     impl ParserState {
-        fn parse_iri(&self, iri: &str) -> Result<Iri, IriParseError> {
+        fn parse_iri(&self, iri: &str) -> Result<Iri<String>, IriParseError> {
             if let Some(base_iri) = &self.base_iri {
                 base_iri.resolve(iri)
             } else {

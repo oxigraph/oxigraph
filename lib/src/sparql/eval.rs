@@ -32,7 +32,7 @@ type EncodedTuplesIterator<'a> = Box<dyn Iterator<Item = Result<EncodedTuple>> +
 #[derive(Clone)]
 pub struct SimpleEvaluator<S: StoreConnection> {
     dataset: DatasetView<S>,
-    bnodes_map: Arc<Mutex<BTreeMap<u64, BlankNode>>>,
+    bnodes_map: Arc<Mutex<BTreeMap<u64, Uuid>>>,
 }
 
 impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
@@ -477,56 +477,55 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             },
             PlanExpression::BNode(id) => match id {
                 Some(id) => match self.eval_expression(id, tuple)? {
-                    EncodedTerm::StringLiteral { value_id } => Some(
-                        self.bnodes_map
+                    EncodedTerm::StringLiteral { value_id } => Some(EncodedTerm::BlankNode(
+                        *self
+                            .bnodes_map
                             .lock()
                             .ok()?
                             .entry(value_id)
-                            .or_insert_with(BlankNode::default)
-                            .clone()
-                            .into(),
-                    ),
+                            .or_insert_with(Uuid::new_v4),
+                    )),
                     _ => None,
                 },
-                None => Some(BlankNode::default().into()),
+                None => Some(EncodedTerm::BlankNode(Uuid::new_v4())),
             },
             PlanExpression::Year(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::Date(date) => Some(date.year().into()),
-                EncodedTerm::NaiveDate(date) => Some(date.year().into()),
-                EncodedTerm::DateTime(date_time) => Some(date_time.year().into()),
-                EncodedTerm::NaiveDateTime(date_time) => Some(date_time.year().into()),
+                EncodedTerm::DateLiteral(date) => Some(date.year().into()),
+                EncodedTerm::NaiveDateLiteral(date) => Some(date.year().into()),
+                EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.year().into()),
+                EncodedTerm::NaiveDateTimeLiteral(date_time) => Some(date_time.year().into()),
                 _ => None,
             },
             PlanExpression::Month(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::Date(date) => Some(date.year().into()),
-                EncodedTerm::NaiveDate(date) => Some(date.month().into()),
-                EncodedTerm::DateTime(date_time) => Some(date_time.month().into()),
-                EncodedTerm::NaiveDateTime(date_time) => Some(date_time.month().into()),
+                EncodedTerm::DateLiteral(date) => Some(date.year().into()),
+                EncodedTerm::NaiveDateLiteral(date) => Some(date.month().into()),
+                EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.month().into()),
+                EncodedTerm::NaiveDateTimeLiteral(date_time) => Some(date_time.month().into()),
                 _ => None,
             },
             PlanExpression::Day(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::Date(date) => Some(date.year().into()),
-                EncodedTerm::NaiveDate(date) => Some(date.day().into()),
-                EncodedTerm::DateTime(date_time) => Some(date_time.day().into()),
-                EncodedTerm::NaiveDateTime(date_time) => Some(date_time.day().into()),
+                EncodedTerm::DateLiteral(date) => Some(date.year().into()),
+                EncodedTerm::NaiveDateLiteral(date) => Some(date.day().into()),
+                EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.day().into()),
+                EncodedTerm::NaiveDateTimeLiteral(date_time) => Some(date_time.day().into()),
                 _ => None,
             },
             PlanExpression::Hours(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::NaiveTime(time) => Some(time.hour().into()),
-                EncodedTerm::DateTime(date_time) => Some(date_time.hour().into()),
-                EncodedTerm::NaiveDateTime(date_time) => Some(date_time.hour().into()),
+                EncodedTerm::NaiveTimeLiteral(time) => Some(time.hour().into()),
+                EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.hour().into()),
+                EncodedTerm::NaiveDateTimeLiteral(date_time) => Some(date_time.hour().into()),
                 _ => None,
             },
             PlanExpression::Minutes(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::NaiveTime(time) => Some(time.minute().into()),
-                EncodedTerm::DateTime(date_time) => Some(date_time.minute().into()),
-                EncodedTerm::NaiveDateTime(date_time) => Some(date_time.minute().into()),
+                EncodedTerm::NaiveTimeLiteral(time) => Some(time.minute().into()),
+                EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.minute().into()),
+                EncodedTerm::NaiveDateTimeLiteral(date_time) => Some(date_time.minute().into()),
                 _ => None,
             },
             PlanExpression::Seconds(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::NaiveTime(time) => Some(time.second().into()),
-                EncodedTerm::DateTime(date_time) => Some(date_time.second().into()),
-                EncodedTerm::NaiveDateTime(date_time) => Some(date_time.second().into()),
+                EncodedTerm::NaiveTimeLiteral(time) => Some(time.second().into()),
+                EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.second().into()),
+                EncodedTerm::NaiveDateTimeLiteral(date_time) => Some(date_time.second().into()),
                 _ => None,
             },
             PlanExpression::UUID() => Some(EncodedTerm::NamedNode {
@@ -705,9 +704,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 _ => None,
             },
             PlanExpression::DateCast(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::NaiveDate(value) => Some(value.into()),
-                EncodedTerm::DateTime(value) => Some(value.date().naive_utc().into()), //TODO: use date with timezone
-                EncodedTerm::NaiveDateTime(value) => Some(value.date().into()),
+                EncodedTerm::NaiveDateLiteral(value) => Some(value.into()),
+                EncodedTerm::DateTimeLiteral(value) => Some(value.date().naive_utc().into()), //TODO: use date with timezone
+                EncodedTerm::NaiveDateTimeLiteral(value) => Some(value.date().into()),
                 EncodedTerm::StringLiteral { value_id } => {
                     let value = self.dataset.get_str(value_id).ok()??;
                     Some(NaiveDate::parse_from_str(&value, "%Y-%m-%d").ok()?.into())
@@ -715,9 +714,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 _ => None,
             },
             PlanExpression::TimeCast(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::NaiveTime(value) => Some(value.into()),
-                EncodedTerm::DateTime(value) => Some(value.time().into()),
-                EncodedTerm::NaiveDateTime(value) => Some(value.time().into()),
+                EncodedTerm::NaiveTimeLiteral(value) => Some(value.into()),
+                EncodedTerm::DateTimeLiteral(value) => Some(value.time().into()),
+                EncodedTerm::NaiveDateTimeLiteral(value) => Some(value.time().into()),
                 EncodedTerm::StringLiteral { value_id } => {
                     let value = self.dataset.get_str(value_id).ok()??;
                     Some(NaiveTime::parse_from_str(&value, "%H:%M:%S").ok()?.into())
@@ -725,8 +724,8 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 _ => None,
             },
             PlanExpression::DateTimeCast(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::DateTime(value) => Some(value.into()),
-                EncodedTerm::NaiveDateTime(value) => Some(value.into()),
+                EncodedTerm::DateTimeLiteral(value) => Some(value.into()),
+                EncodedTerm::NaiveDateTimeLiteral(value) => Some(value.into()),
                 EncodedTerm::StringLiteral { value_id } => {
                     let value = self.dataset.get_str(value_id).ok()??;
                     Some(match DateTime::parse_from_rfc3339(&value) {
@@ -772,11 +771,17 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             EncodedTerm::DoubleLiteral(value) => self.dataset.insert_str(&value.to_string()).ok(),
             EncodedTerm::IntegerLiteral(value) => self.dataset.insert_str(&value.to_string()).ok(),
             EncodedTerm::DecimalLiteral(value) => self.dataset.insert_str(&value.to_string()).ok(),
-            EncodedTerm::Date(value) => self.dataset.insert_str(&value.to_string()).ok(),
-            EncodedTerm::NaiveDate(value) => self.dataset.insert_str(&value.to_string()).ok(),
-            EncodedTerm::NaiveTime(value) => self.dataset.insert_str(&value.to_string()).ok(),
-            EncodedTerm::DateTime(value) => self.dataset.insert_str(&value.to_string()).ok(),
-            EncodedTerm::NaiveDateTime(value) => self.dataset.insert_str(&value.to_string()).ok(),
+            EncodedTerm::DateLiteral(value) => self.dataset.insert_str(&value.to_string()).ok(),
+            EncodedTerm::NaiveDateLiteral(value) => {
+                self.dataset.insert_str(&value.to_string()).ok()
+            }
+            EncodedTerm::NaiveTimeLiteral(value) => {
+                self.dataset.insert_str(&value.to_string()).ok()
+            }
+            EncodedTerm::DateTimeLiteral(value) => self.dataset.insert_str(&value.to_string()).ok(),
+            EncodedTerm::NaiveDateTimeLiteral(value) => {
+                self.dataset.insert_str(&value.to_string()).ok()
+            }
         }
     }
 
@@ -953,9 +958,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 | EncodedTerm::LangStringLiteral { .. } => Some(false),
                 _ => None,
             },
-            EncodedTerm::Date(a) => match b {
-                EncodedTerm::Date(b) => Some(a == b),
-                EncodedTerm::NaiveDate(b) => {
+            EncodedTerm::DateLiteral(a) => match b {
+                EncodedTerm::DateLiteral(b) => Some(a == b),
+                EncodedTerm::NaiveDateLiteral(b) => {
                     if a.naive_utc() == b {
                         None
                     } else {
@@ -965,9 +970,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 EncodedTerm::TypedLiteral { .. } => None,
                 _ => Some(false),
             },
-            EncodedTerm::NaiveDate(a) => match b {
-                EncodedTerm::NaiveDate(b) => Some(a == b),
-                EncodedTerm::Date(b) => {
+            EncodedTerm::NaiveDateLiteral(a) => match b {
+                EncodedTerm::NaiveDateLiteral(b) => Some(a == b),
+                EncodedTerm::DateLiteral(b) => {
                     if a == b.naive_utc() {
                         None
                     } else {
@@ -977,14 +982,14 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 EncodedTerm::TypedLiteral { .. } => None,
                 _ => Some(false),
             },
-            EncodedTerm::NaiveTime(a) => match b {
-                EncodedTerm::NaiveTime(b) => Some(a == b),
+            EncodedTerm::NaiveTimeLiteral(a) => match b {
+                EncodedTerm::NaiveTimeLiteral(b) => Some(a == b),
                 EncodedTerm::TypedLiteral { .. } => None,
                 _ => Some(false),
             },
-            EncodedTerm::DateTime(a) => match b {
-                EncodedTerm::DateTime(b) => Some(a == b),
-                EncodedTerm::NaiveDateTime(b) => {
+            EncodedTerm::DateTimeLiteral(a) => match b {
+                EncodedTerm::DateTimeLiteral(b) => Some(a == b),
+                EncodedTerm::NaiveDateTimeLiteral(b) => {
                     if a.naive_utc() == b {
                         None
                     } else {
@@ -994,9 +999,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 EncodedTerm::TypedLiteral { .. } => None,
                 _ => Some(false),
             },
-            EncodedTerm::NaiveDateTime(a) => match b {
-                EncodedTerm::NaiveDateTime(b) => Some(a == b),
-                EncodedTerm::DateTime(b) => {
+            EncodedTerm::NaiveDateTimeLiteral(a) => match b {
+                EncodedTerm::NaiveDateTimeLiteral(b) => Some(a == b),
+                EncodedTerm::DateTimeLiteral(b) => {
                     if a == b.naive_utc() {
                         None
                     } else {
@@ -1082,31 +1087,31 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&b),
                 _ => None,
             },
-            EncodedTerm::Date(a) => match b {
-                EncodedTerm::Date(ref b) => a.partial_cmp(b),
-                EncodedTerm::NaiveDate(ref b) => a.naive_utc().partial_cmp(b), //TODO: check edges
+            EncodedTerm::DateLiteral(a) => match b {
+                EncodedTerm::DateLiteral(ref b) => a.partial_cmp(b),
+                EncodedTerm::NaiveDateLiteral(ref b) => a.naive_utc().partial_cmp(b), //TODO: check edges
                 _ => None,
             },
-            EncodedTerm::NaiveDate(a) => match b {
-                EncodedTerm::NaiveDate(ref b) => a.partial_cmp(b),
-                EncodedTerm::Date(ref b) => a.partial_cmp(&b.naive_utc()), //TODO: check edges
+            EncodedTerm::NaiveDateLiteral(a) => match b {
+                EncodedTerm::NaiveDateLiteral(ref b) => a.partial_cmp(b),
+                EncodedTerm::DateLiteral(ref b) => a.partial_cmp(&b.naive_utc()), //TODO: check edges
                 _ => None,
             },
-            EncodedTerm::NaiveTime(a) => {
-                if let EncodedTerm::NaiveTime(ref b) = b {
+            EncodedTerm::NaiveTimeLiteral(a) => {
+                if let EncodedTerm::NaiveTimeLiteral(ref b) = b {
                     a.partial_cmp(b)
                 } else {
                     None
                 }
             }
-            EncodedTerm::DateTime(a) => match b {
-                EncodedTerm::DateTime(ref b) => a.partial_cmp(b),
-                EncodedTerm::NaiveDateTime(ref b) => a.naive_utc().partial_cmp(b), //TODO: check edges
+            EncodedTerm::DateTimeLiteral(a) => match b {
+                EncodedTerm::DateTimeLiteral(ref b) => a.partial_cmp(b),
+                EncodedTerm::NaiveDateTimeLiteral(ref b) => a.naive_utc().partial_cmp(b), //TODO: check edges
                 _ => None,
             },
-            EncodedTerm::NaiveDateTime(a) => match b {
-                EncodedTerm::NaiveDateTime(ref b) => a.partial_cmp(b),
-                EncodedTerm::DateTime(ref b) => a.partial_cmp(&b.naive_utc()), //TODO: check edges
+            EncodedTerm::NaiveDateTimeLiteral(a) => match b {
+                EncodedTerm::NaiveDateTimeLiteral(ref b) => a.partial_cmp(b),
+                EncodedTerm::DateTimeLiteral(ref b) => a.partial_cmp(&b.naive_utc()), //TODO: check edges
                 _ => None,
             },
             _ => None,

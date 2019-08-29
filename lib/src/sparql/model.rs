@@ -3,8 +3,9 @@ use crate::sparql::json_results::write_json_results;
 use crate::sparql::xml_results::{read_xml_results, write_xml_results};
 use crate::{FileSyntax, GraphSyntax, Result};
 use failure::format_err;
-use quick_xml::events::*;
-use quick_xml::Writer;
+use rio_api::formatter::TriplesFormatter;
+use rio_turtle::{NTriplesFormatter, TurtleFormatter};
+use rio_xml::RdfXmlFormatter;
 use std::fmt;
 use std::io::{BufRead, Write};
 use uuid::Uuid;
@@ -34,90 +35,31 @@ impl<'a> QueryResult<'a> {
         }
     }
 
-    pub fn write_graph<W: Write>(self, mut writer: W, syntax: GraphSyntax) -> Result<W> {
+    pub fn write_graph<W: Write>(self, write: W, syntax: GraphSyntax) -> Result<W> {
         if let QueryResult::Graph(triples) = self {
-            match syntax {
-                GraphSyntax::NTriples | GraphSyntax::Turtle => {
+            Ok(match syntax {
+                GraphSyntax::NTriples => {
+                    let mut formatter = NTriplesFormatter::new(write);
                     for triple in triples {
-                        writeln!(&mut writer, "{}", triple?)?
+                        formatter.format(&(&triple?).into())?;
                     }
-                    Ok(writer)
+                    formatter.finish()
+                }
+                GraphSyntax::Turtle => {
+                    let mut formatter = TurtleFormatter::new(write);
+                    for triple in triples {
+                        formatter.format(&(&triple?).into())?;
+                    }
+                    formatter.finish()?
                 }
                 GraphSyntax::RdfXml => {
-                    let mut writer = Writer::new(writer);
-                    writer.write_event(Event::Decl(BytesDecl::new(b"1.0", None, None)))?;
-                    let mut rdf_open = BytesStart::borrowed_name(b"rdf:RDF");
-                    rdf_open.push_attribute((
-                        "xmlns:rdf",
-                        "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-                    ));
-                    writer.write_event(Event::Start(rdf_open))?;
-
-                    let mut current_subject = None;
+                    let mut formatter = RdfXmlFormatter::new(write)?;
                     for triple in triples {
-                        let triple = triple?;
-
-                        // We open a new rdf:Description if useful
-                        if current_subject.as_ref() != Some(triple.subject()) {
-                            if current_subject.is_some() {
-                                writer.write_event(Event::End(BytesEnd::borrowed(
-                                    b"rdf:Description",
-                                )))?;
-                            }
-
-                            let mut description_open =
-                                BytesStart::borrowed_name(b"rdf:Description");
-                            match triple.subject() {
-                                NamedOrBlankNode::NamedNode(n) => {
-                                    description_open.push_attribute(("rdf:about", n.as_str()))
-                                }
-                                NamedOrBlankNode::BlankNode(n) => {
-                                    let id = n.as_uuid().to_simple().to_string();
-                                    description_open.push_attribute(("rdf:nodeID", id.as_str()))
-                                }
-                            }
-                            writer.write_event(Event::Start(description_open))?;
-                        }
-
-                        let mut property_open = BytesStart::borrowed_name(b"prop:");
-                        let mut content = None;
-                        property_open.push_attribute(("xmlns:prop", triple.predicate().as_str()));
-                        match triple.object() {
-                            Term::NamedNode(n) => {
-                                property_open.push_attribute(("rdf:resource", n.as_str()))
-                            }
-                            Term::BlankNode(n) => {
-                                let id = n.as_uuid().to_simple().to_string();
-                                property_open.push_attribute(("rdf:nodeID", id.as_str()))
-                            }
-                            Term::Literal(l) => {
-                                if let Some(language) = l.language() {
-                                    property_open.push_attribute(("xml:lang", language.as_str()))
-                                } else if !l.is_plain() {
-                                    property_open
-                                        .push_attribute(("rdf:datatype", l.datatype().as_str()))
-                                }
-                                content = Some(l.value());
-                            }
-                        }
-                        if let Some(content) = content {
-                            writer.write_event(Event::Start(property_open))?;
-                            writer.write_event(Event::Text(BytesText::from_plain_str(&content)))?;
-                            writer.write_event(Event::End(BytesEnd::borrowed(b"prop:")))?;
-                        } else {
-                            writer.write_event(Event::Empty(property_open))?;
-                        }
-
-                        current_subject = Some(triple.subject_owned());
+                        formatter.format(&(&triple?).into())?;
                     }
-
-                    if current_subject.is_some() {
-                        writer.write_event(Event::End(BytesEnd::borrowed(b"rdf:Description")))?;
-                    }
-                    writer.write_event(Event::End(BytesEnd::borrowed(b"rdf:RDF")))?;
-                    Ok(writer.into_inner())
+                    formatter.finish()?
                 }
-            }
+            })
         } else {
             Err(format_err!(
                 "Bindings or booleans could not be formatted as an RDF graph"
@@ -246,7 +188,7 @@ impl Default for Variable {
 impl From<BlankNode> for Variable {
     fn from(blank_node: BlankNode) -> Self {
         Variable::BlankNode {
-            id: *blank_node.as_uuid(),
+            id: blank_node.uuid(),
         }
     }
 }

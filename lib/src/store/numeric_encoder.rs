@@ -3,6 +3,7 @@ use crate::model::vocab::xsd;
 use crate::model::*;
 use crate::Result;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use chrono::format::{parse, Parsed, StrftimeItems};
 use chrono::prelude::*;
 use failure::format_err;
 use failure::Backtrace;
@@ -191,11 +192,11 @@ pub enum EncodedTerm {
     DoubleLiteral(OrderedFloat<f64>),
     IntegerLiteral(i128),
     DecimalLiteral(Decimal),
-    Date(Date<FixedOffset>),
-    NaiveDate(NaiveDate),
-    NaiveTime(NaiveTime),
-    DateTime(DateTime<FixedOffset>),
-    NaiveDateTime(NaiveDateTime),
+    DateLiteral(Date<FixedOffset>),
+    NaiveDateLiteral(NaiveDate),
+    NaiveTimeLiteral(NaiveTime),
+    DateTimeLiteral(DateTime<FixedOffset>),
+    NaiveDateTimeLiteral(NaiveDateTime),
 }
 
 impl EncodedTerm {
@@ -223,11 +224,11 @@ impl EncodedTerm {
             | EncodedTerm::DoubleLiteral(_)
             | EncodedTerm::IntegerLiteral(_)
             | EncodedTerm::DecimalLiteral(_)
-            | EncodedTerm::Date(_)
-            | EncodedTerm::NaiveDate(_)
-            | EncodedTerm::NaiveTime(_)
-            | EncodedTerm::DateTime(_)
-            | EncodedTerm::NaiveDateTime(_) => true,
+            | EncodedTerm::DateLiteral(_)
+            | EncodedTerm::NaiveDateLiteral(_)
+            | EncodedTerm::NaiveTimeLiteral(_)
+            | EncodedTerm::DateTimeLiteral(_)
+            | EncodedTerm::NaiveDateTimeLiteral(_) => true,
             _ => false,
         }
     }
@@ -244,10 +245,10 @@ impl EncodedTerm {
             EncodedTerm::DoubleLiteral(..) => Some(ENCODED_XSD_DOUBLE_NAMED_NODE),
             EncodedTerm::IntegerLiteral(..) => Some(ENCODED_XSD_INTEGER_NAMED_NODE),
             EncodedTerm::DecimalLiteral(..) => Some(ENCODED_XSD_DECIMAL_NAMED_NODE),
-            EncodedTerm::Date(..) => Some(ENCODED_XSD_DATE_NAMED_NODE),
-            EncodedTerm::NaiveDate(..) => Some(ENCODED_XSD_DATE_NAMED_NODE),
-            EncodedTerm::NaiveTime(..) => Some(ENCODED_XSD_TIME_NAMED_NODE),
-            EncodedTerm::DateTime(..) | EncodedTerm::NaiveDateTime(..) => {
+            EncodedTerm::DateLiteral(..) => Some(ENCODED_XSD_DATE_NAMED_NODE),
+            EncodedTerm::NaiveDateLiteral(..) => Some(ENCODED_XSD_DATE_NAMED_NODE),
+            EncodedTerm::NaiveTimeLiteral(..) => Some(ENCODED_XSD_TIME_NAMED_NODE),
+            EncodedTerm::DateTimeLiteral(..) | EncodedTerm::NaiveDateTimeLiteral(..) => {
                 Some(ENCODED_XSD_DATE_TIME_NAMED_NODE)
             }
             _ => None,
@@ -268,11 +269,11 @@ impl EncodedTerm {
             EncodedTerm::DoubleLiteral(_) => TYPE_DOUBLE_LITERAL,
             EncodedTerm::IntegerLiteral(_) => TYPE_INTEGER_LITERAL,
             EncodedTerm::DecimalLiteral(_) => TYPE_DECIMAL_LITERAL,
-            EncodedTerm::Date(_) => TYPE_DATE_LITERAL,
-            EncodedTerm::NaiveDate(_) => TYPE_NAIVE_DATE_LITERAL,
-            EncodedTerm::NaiveTime(_) => TYPE_NAIVE_TIME_LITERAL,
-            EncodedTerm::DateTime(_) => TYPE_DATE_TIME_LITERAL,
-            EncodedTerm::NaiveDateTime(_) => TYPE_NAIVE_DATE_TIME_LITERAL,
+            EncodedTerm::DateLiteral(_) => TYPE_DATE_LITERAL,
+            EncodedTerm::NaiveDateLiteral(_) => TYPE_NAIVE_DATE_LITERAL,
+            EncodedTerm::NaiveTimeLiteral(_) => TYPE_NAIVE_TIME_LITERAL,
+            EncodedTerm::DateTimeLiteral(_) => TYPE_DATE_TIME_LITERAL,
+            EncodedTerm::NaiveDateTimeLiteral(_) => TYPE_NAIVE_DATE_TIME_LITERAL,
         }
     }
 }
@@ -321,37 +322,37 @@ impl From<Decimal> for EncodedTerm {
 
 impl From<Date<FixedOffset>> for EncodedTerm {
     fn from(value: Date<FixedOffset>) -> Self {
-        EncodedTerm::Date(value)
+        EncodedTerm::DateLiteral(value)
     }
 }
 
 impl From<NaiveDate> for EncodedTerm {
     fn from(value: NaiveDate) -> Self {
-        EncodedTerm::NaiveDate(value)
+        EncodedTerm::NaiveDateLiteral(value)
     }
 }
 
 impl From<NaiveTime> for EncodedTerm {
     fn from(value: NaiveTime) -> Self {
-        EncodedTerm::NaiveTime(value)
+        EncodedTerm::NaiveTimeLiteral(value)
     }
 }
 
 impl From<DateTime<FixedOffset>> for EncodedTerm {
     fn from(value: DateTime<FixedOffset>) -> Self {
-        EncodedTerm::DateTime(value)
+        EncodedTerm::DateTimeLiteral(value)
     }
 }
 
 impl From<NaiveDateTime> for EncodedTerm {
     fn from(value: NaiveDateTime) -> Self {
-        EncodedTerm::NaiveDateTime(value)
+        EncodedTerm::NaiveDateTimeLiteral(value)
     }
 }
 
 impl From<BlankNode> for EncodedTerm {
     fn from(node: BlankNode) -> Self {
-        EncodedTerm::BlankNode(*node.as_uuid())
+        EncodedTerm::BlankNode(node.uuid())
     }
 }
 
@@ -425,24 +426,24 @@ impl<R: Read> TermReader for R {
                 self.read_exact(&mut buffer)?;
                 Ok(EncodedTerm::DecimalLiteral(Decimal::deserialize(buffer)))
             }
-            TYPE_DATE_LITERAL => Ok(EncodedTerm::Date(Date::from_utc(
+            TYPE_DATE_LITERAL => Ok(EncodedTerm::DateLiteral(Date::from_utc(
                 NaiveDate::from_num_days_from_ce_opt(self.read_i32::<LittleEndian>()?)
                     .ok_or_else(|| format_err!("Invalid date serialization"))?,
                 FixedOffset::east_opt(self.read_i32::<LittleEndian>()?)
                     .ok_or_else(|| format_err!("Invalid timezone offset"))?,
             ))),
-            TYPE_NAIVE_DATE_LITERAL => Ok(EncodedTerm::NaiveDate(
+            TYPE_NAIVE_DATE_LITERAL => Ok(EncodedTerm::NaiveDateLiteral(
                 NaiveDate::from_num_days_from_ce_opt(self.read_i32::<LittleEndian>()?)
                     .ok_or_else(|| format_err!("Invalid date serialization"))?,
             )),
-            TYPE_NAIVE_TIME_LITERAL => Ok(EncodedTerm::NaiveTime(
+            TYPE_NAIVE_TIME_LITERAL => Ok(EncodedTerm::NaiveTimeLiteral(
                 NaiveTime::from_num_seconds_from_midnight_opt(
                     self.read_u32::<LittleEndian>()?,
                     self.read_u32::<LittleEndian>()?,
                 )
                 .ok_or_else(|| format_err!("Invalid time serialization"))?,
             )),
-            TYPE_DATE_TIME_LITERAL => Ok(EncodedTerm::DateTime(DateTime::from_utc(
+            TYPE_DATE_TIME_LITERAL => Ok(EncodedTerm::DateTimeLiteral(DateTime::from_utc(
                 NaiveDateTime::from_timestamp_opt(
                     self.read_i64::<LittleEndian>()?,
                     self.read_u32::<LittleEndian>()?,
@@ -451,7 +452,7 @@ impl<R: Read> TermReader for R {
                 FixedOffset::east_opt(self.read_i32::<LittleEndian>()?)
                     .ok_or_else(|| format_err!("Invalid timezone offset"))?,
             ))),
-            TYPE_NAIVE_DATE_TIME_LITERAL => Ok(EncodedTerm::NaiveDateTime(
+            TYPE_NAIVE_DATE_TIME_LITERAL => Ok(EncodedTerm::NaiveDateTimeLiteral(
                 NaiveDateTime::from_timestamp_opt(
                     self.read_i64::<LittleEndian>()?,
                     self.read_u32::<LittleEndian>()?,
@@ -538,23 +539,23 @@ impl<R: Write> TermWriter for R {
             EncodedTerm::DoubleLiteral(value) => self.write_f64::<LittleEndian>(*value)?,
             EncodedTerm::IntegerLiteral(value) => self.write_i128::<LittleEndian>(value)?,
             EncodedTerm::DecimalLiteral(value) => self.write_all(&value.serialize())?,
-            EncodedTerm::Date(value) => {
+            EncodedTerm::DateLiteral(value) => {
                 self.write_i32::<LittleEndian>(value.num_days_from_ce())?;
                 self.write_i32::<LittleEndian>(value.timezone().local_minus_utc())?;
             }
-            EncodedTerm::NaiveDate(value) => {
+            EncodedTerm::NaiveDateLiteral(value) => {
                 self.write_i32::<LittleEndian>(value.num_days_from_ce())?;
             }
-            EncodedTerm::NaiveTime(value) => {
+            EncodedTerm::NaiveTimeLiteral(value) => {
                 self.write_u32::<LittleEndian>(value.num_seconds_from_midnight())?;
                 self.write_u32::<LittleEndian>(value.nanosecond())?;
             }
-            EncodedTerm::DateTime(value) => {
+            EncodedTerm::DateTimeLiteral(value) => {
                 self.write_i64::<LittleEndian>(value.timestamp())?;
                 self.write_u32::<LittleEndian>(value.timestamp_subsec_nanos())?;
                 self.write_i32::<LittleEndian>(value.timezone().local_minus_utc())?;
             }
-            EncodedTerm::NaiveDateTime(value) => {
+            EncodedTerm::NaiveDateTimeLiteral(value) => {
                 self.write_i64::<LittleEndian>(value.timestamp())?;
                 self.write_u32::<LittleEndian>(value.timestamp_subsec_nanos())?;
             }
@@ -597,80 +598,15 @@ impl<S: StringStore> Encoder<S> {
     }
 
     pub fn encode_named_node(&self, named_node: &NamedNode) -> Result<EncodedTerm> {
-        self.encode_rio_named_node(rio::NamedNode {
-            iri: named_node.as_str(),
-        })
+        self.encode_rio_named_node(named_node.into())
     }
 
     pub fn encode_blank_node(&self, blank_node: &BlankNode) -> Result<EncodedTerm> {
-        Ok(EncodedTerm::BlankNode(*blank_node.as_uuid()))
+        Ok(EncodedTerm::BlankNode(blank_node.uuid()))
     }
 
     pub fn encode_literal(&self, literal: &Literal) -> Result<EncodedTerm> {
-        Ok(if let Some(language) = literal.language() {
-            EncodedTerm::LangStringLiteral {
-                value_id: self.string_store.insert_str(&literal.value())?,
-                language_id: self.string_store.insert_str(language.as_str())?,
-            }
-        } else if literal.is_string() {
-            EncodedTerm::StringLiteral {
-                value_id: self.string_store.insert_str(&literal.value())?,
-            }
-        } else if literal.is_boolean() {
-            literal
-                .to_bool()
-                .ok_or_else(|| format_err!("boolean literal without boolean value"))?
-                .into()
-        } else if literal.is_float() {
-            literal
-                .to_float()
-                .ok_or_else(|| format_err!("float literal without float value"))?
-                .into()
-        } else if literal.is_double() {
-            literal
-                .to_double()
-                .ok_or_else(|| format_err!("double literal without double value"))?
-                .into()
-        } else if literal.is_integer() {
-            literal
-                .to_integer()
-                .ok_or_else(|| format_err!("integer literal without integer value"))?
-                .into()
-        } else if literal.is_decimal() {
-            literal
-                .to_decimal()
-                .ok_or_else(|| format_err!("decimal literal without decimal value"))?
-                .into()
-        } else if literal.is_date() {
-            if let Some(date) = literal.to_date() {
-                date.into()
-            } else {
-                literal
-                    .to_naive_date()
-                    .ok_or_else(|| format_err!("date literal without date value"))?
-                    .into()
-            }
-        } else if literal.is_time() {
-            literal
-                .to_time()
-                .ok_or_else(|| format_err!("time literal without time value"))?
-                .into()
-        } else if literal.is_date_time_stamp() {
-            literal
-                .to_date_time_stamp()
-                .ok_or_else(|| format_err!("dateTimeStamp literal without dateTimeStamp value"))?
-                .into()
-        } else if literal.is_decimal() {
-            literal
-                .to_date_time()
-                .ok_or_else(|| format_err!("dateTime literal without dateTime value"))?
-                .into()
-        } else {
-            EncodedTerm::TypedLiteral {
-                value_id: self.string_store.insert_str(&literal.value())?,
-                datatype_id: self.string_store.insert_str(literal.datatype().as_str())?,
-            }
-        })
+        self.encode_rio_literal(literal.into())
     }
 
     pub fn encode_named_or_blank_node(&self, term: &NamedOrBlankNode) -> Result<EncodedTerm> {
@@ -734,28 +670,128 @@ impl<S: StringStore> Encoder<S> {
     }
 
     pub fn encode_rio_literal(&self, literal: rio::Literal) -> Result<EncodedTerm> {
-        match literal {
-            rio::Literal::Simple { value } => Ok(EncodedTerm::StringLiteral {
+        Ok(match literal {
+            rio::Literal::Simple { value } => EncodedTerm::StringLiteral {
                 value_id: self.string_store.insert_str(value)?,
-            }),
+            },
             rio::Literal::LanguageTaggedString { value, language } => {
-                Ok(EncodedTerm::LangStringLiteral {
+                EncodedTerm::LangStringLiteral {
                     value_id: self.string_store.insert_str(value)?,
                     language_id: if language.bytes().all(|b| b.is_ascii_lowercase()) {
                         self.string_store.insert_str(language)
                     } else {
                         self.string_store.insert_str(&language.to_ascii_lowercase())
                     }?,
-                })
+                }
             }
-            rio::Literal::Typed { value, datatype } => {
-                //TODO: optimize
-                self.encode_literal(&Literal::new_typed_literal(
-                    value,
-                    NamedNode::new_from_string(datatype.iri),
-                ))
-            }
-        }
+            rio::Literal::Typed { value, datatype } => match datatype.iri {
+                "http://www.w3.org/2001/XMLSchema#boolean" => match value {
+                    "true" | "1" => EncodedTerm::BooleanLiteral(true),
+                    "false" | "0" => EncodedTerm::BooleanLiteral(false),
+                    _ => EncodedTerm::TypedLiteral {
+                        value_id: self.string_store.insert_str(value)?,
+                        datatype_id: XSD_BOOLEAN_ID,
+                    },
+                },
+                "http://www.w3.org/2001/XMLSchema#string" => EncodedTerm::StringLiteral {
+                    value_id: self.string_store.insert_str(value)?,
+                },
+                "http://www.w3.org/2001/XMLSchema#float" => match value.parse() {
+                    Ok(value) => EncodedTerm::FloatLiteral(OrderedFloat(value)),
+                    Err(_) => EncodedTerm::TypedLiteral {
+                        value_id: self.string_store.insert_str(value)?,
+                        datatype_id: XSD_FLOAT_ID,
+                    },
+                },
+                "http://www.w3.org/2001/XMLSchema#double" => match value.parse() {
+                    Ok(value) => EncodedTerm::DoubleLiteral(OrderedFloat(value)),
+                    Err(_) => EncodedTerm::TypedLiteral {
+                        value_id: self.string_store.insert_str(value)?,
+                        datatype_id: XSD_DOUBLE_ID,
+                    },
+                },
+                "http://www.w3.org/2001/XMLSchema#integer"
+                | "http://www.w3.org/2001/XMLSchema#byte"
+                | "http://www.w3.org/2001/XMLSchema#short"
+                | "http://www.w3.org/2001/XMLSchema#int"
+                | "http://www.w3.org/2001/XMLSchema#long"
+                | "http://www.w3.org/2001/XMLSchema#unsignedByte"
+                | "http://www.w3.org/2001/XMLSchema#unsignedShort"
+                | "http://www.w3.org/2001/XMLSchema#unsignedInt"
+                | "http://www.w3.org/2001/XMLSchema#unsignedLong"
+                | "http://www.w3.org/2001/XMLSchema#positiveInteger"
+                | "http://www.w3.org/2001/XMLSchema#negativeInteger"
+                | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
+                | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => match value.parse() {
+                    Ok(value) => EncodedTerm::IntegerLiteral(value),
+                    Err(_) => EncodedTerm::TypedLiteral {
+                        value_id: self.string_store.insert_str(value)?,
+                        datatype_id: self.string_store.insert_str(datatype.iri)?,
+                    },
+                },
+                "http://www.w3.org/2001/XMLSchema#decimal" => match value.parse() {
+                    Ok(value) => EncodedTerm::DecimalLiteral(value),
+                    Err(_) => EncodedTerm::TypedLiteral {
+                        value_id: self.string_store.insert_str(value)?,
+                        datatype_id: XSD_DECIMAL_ID,
+                    },
+                },
+                "http://www.w3.org/2001/XMLSchema#date" => {
+                    let mut parsed = Parsed::new();
+                    match parse(&mut parsed, &value, StrftimeItems::new("%Y-%m-%d%:z")).and_then(
+                        |_| {
+                            Ok(Date::from_utc(
+                                parsed.to_naive_date()?,
+                                parsed.to_fixed_offset()?,
+                            ))
+                        },
+                    ) {
+                        Ok(value) => EncodedTerm::DateLiteral(value),
+                        Err(_) => match NaiveDate::parse_from_str(&value, "%Y-%m-%dZ") {
+                            Ok(value) => EncodedTerm::DateLiteral(Date::from_utc(
+                                value,
+                                FixedOffset::east(0),
+                            )),
+                            Err(_) => match NaiveDate::parse_from_str(&value, "%Y-%m-%d") {
+                                Ok(value) => EncodedTerm::NaiveDateLiteral(value),
+                                Err(_) => EncodedTerm::TypedLiteral {
+                                    value_id: self.string_store.insert_str(value)?,
+                                    datatype_id: XSD_DATE_ID,
+                                },
+                            },
+                        },
+                    }
+                }
+                "http://www.w3.org/2001/XMLSchema#time" => {
+                    match NaiveTime::parse_from_str(&value, "%H:%M:%S") {
+                        Ok(value) => EncodedTerm::NaiveTimeLiteral(value),
+                        Err(_) => EncodedTerm::TypedLiteral {
+                            value_id: self.string_store.insert_str(value)?,
+                            datatype_id: XSD_TIME_ID,
+                        },
+                    }
+                }
+                "http://www.w3.org/2001/XMLSchema#dateTime"
+                | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => {
+                    match DateTime::parse_from_rfc3339(&value) {
+                        Ok(value) => EncodedTerm::DateTimeLiteral(value),
+                        Err(_) => {
+                            match NaiveDateTime::parse_from_str(&value, "%Y-%m-%dT%H:%M:%S") {
+                                Ok(value) => EncodedTerm::NaiveDateTimeLiteral(value),
+                                Err(_) => EncodedTerm::TypedLiteral {
+                                    value_id: self.string_store.insert_str(value)?,
+                                    datatype_id: XSD_DATE_TIME_ID,
+                                },
+                            }
+                        }
+                    }
+                }
+                _ => EncodedTerm::TypedLiteral {
+                    value_id: self.string_store.insert_str(value)?,
+                    datatype_id: self.string_store.insert_str(datatype.iri)?,
+                },
+            },
+        })
     }
 
     pub fn encode_rio_named_or_blank_node(
@@ -846,11 +882,11 @@ impl<S: StringStore> Encoder<S> {
             EncodedTerm::DoubleLiteral(value) => Ok(Literal::from(*value).into()),
             EncodedTerm::IntegerLiteral(value) => Ok(Literal::from(value).into()),
             EncodedTerm::DecimalLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::Date(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::NaiveDate(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::NaiveTime(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::DateTime(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::NaiveDateTime(value) => Ok(Literal::from(value).into()),
+            EncodedTerm::DateLiteral(value) => Ok(Literal::from(value).into()),
+            EncodedTerm::NaiveDateLiteral(value) => Ok(Literal::from(value).into()),
+            EncodedTerm::NaiveTimeLiteral(value) => Ok(Literal::from(value).into()),
+            EncodedTerm::DateTimeLiteral(value) => Ok(Literal::from(value).into()),
+            EncodedTerm::NaiveDateTimeLiteral(value) => Ok(Literal::from(value).into()),
         }
     }
 

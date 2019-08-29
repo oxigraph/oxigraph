@@ -71,7 +71,7 @@ pub fn write_xml_results<W: Write>(results: QueryResult<'_>, sink: W) -> Result<
                                     b"bnode",
                                 )))?;
                                 writer.write_event(Event::Text(BytesText::from_plain_str(
-                                    &bnode.as_uuid().to_simple().to_string(),
+                                    bnode.as_str(),
                                 )))?;
                                 writer.write_event(Event::End(BytesEnd::borrowed(b"bnode")))?;
                             }
