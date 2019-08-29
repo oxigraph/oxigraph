@@ -321,6 +321,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         match expression {
             PlanExpression::Constant(t) => Some(*t),
             PlanExpression::Variable(v) => get_tuple_value(*v, tuple),
+            PlanExpression::Exists(node) => {
+                Some(self.eval_plan(node, tuple.to_vec()).next().is_some().into())
+            }
             PlanExpression::Or(a, b) => {
                 match self.eval_expression(a, tuple).and_then(|v| self.to_bool(v)) {
                     Some(true) => Some(true.into()),

@@ -155,6 +155,7 @@ impl PatternValue {
 pub enum PlanExpression {
     Constant(EncodedTerm),
     Variable(usize),
+    Exists(Box<PlanNode>),
     Or(Box<PlanExpression>, Box<PlanExpression>),
     And(Box<PlanExpression>, Box<PlanExpression>),
     Equal(Box<PlanExpression>, Box<PlanExpression>),
@@ -324,6 +325,7 @@ impl PlanExpression {
                     e.add_variables(set);
                 }
             }
+            PlanExpression::Exists(n) => n.add_variables(set),
         }
     }
 }

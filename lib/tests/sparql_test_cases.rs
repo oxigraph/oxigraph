@@ -50,7 +50,6 @@ fn sparql_w3c_syntax_testsuite() -> Result<()> {
 
 #[test]
 fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
-    //TODO: dataset
     let manifest_10_urls = vec![
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/algebra/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/ask/manifest.ttl",
@@ -60,6 +59,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/bound/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/cast/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/construct/manifest.ttl",
+        // FROM and FROM NAMED "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/construct/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest.ttl",
@@ -75,6 +75,10 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/triple-match/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/type-promotion/manifest.ttl",
     ];
+
+    let manifest_11_urls =
+        vec!["http://www.w3.org/2009/sparql/docs/tests/data-sparql11/exists/manifest.ttl"];
+
     let test_blacklist = vec![
         //Multiple writing of the same xsd:integer. Our system does strong normalization.
         NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-1").unwrap(),
@@ -103,6 +107,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
     let mut failed = Vec::default();
     for test_result in manifest_10_urls
         .into_iter()
+        .chain(manifest_11_urls.into_iter())
         .flat_map(|manifest| TestManifest::new(manifest))
     {
         let test = test_result?;
