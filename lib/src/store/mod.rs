@@ -175,7 +175,6 @@ impl<S: StoreConnection> StoreRepositoryConnection<S> {
     where
         P::Error: Send + Sync + 'static,
     {
-        //TODO: handle errors
         let mut bnode_map = HashMap::default();
         let encoder = self.inner.encoder();
         let graph_name = if let Some(graph_name) = to_graph_name {
@@ -194,7 +193,6 @@ impl<S: StoreConnection> StoreRepositoryConnection<S> {
     where
         P::Error: Send + Sync + 'static,
     {
-        //TODO: handle errors
         let mut bnode_map = HashMap::default();
         let encoder = self.inner.encoder();
         parser.parse_all(&mut move |q| {

@@ -684,113 +684,45 @@ impl<S: StringStore> Encoder<S> {
                     }?,
                 }
             }
-            rio::Literal::Typed { value, datatype } => match datatype.iri {
-                "http://www.w3.org/2001/XMLSchema#boolean" => match value {
-                    "true" | "1" => EncodedTerm::BooleanLiteral(true),
-                    "false" | "0" => EncodedTerm::BooleanLiteral(false),
-                    _ => EncodedTerm::TypedLiteral {
+            rio::Literal::Typed { value, datatype } => {
+                match match datatype.iri {
+                    "http://www.w3.org/2001/XMLSchema#boolean" => self.encode_boolean_str(value),
+                    "http://www.w3.org/2001/XMLSchema#string" => Some(EncodedTerm::StringLiteral {
                         value_id: self.string_store.insert_str(value)?,
-                        datatype_id: XSD_BOOLEAN_ID,
-                    },
-                },
-                "http://www.w3.org/2001/XMLSchema#string" => EncodedTerm::StringLiteral {
-                    value_id: self.string_store.insert_str(value)?,
-                },
-                "http://www.w3.org/2001/XMLSchema#float" => match value.parse() {
-                    Ok(value) => EncodedTerm::FloatLiteral(OrderedFloat(value)),
-                    Err(_) => EncodedTerm::TypedLiteral {
-                        value_id: self.string_store.insert_str(value)?,
-                        datatype_id: XSD_FLOAT_ID,
-                    },
-                },
-                "http://www.w3.org/2001/XMLSchema#double" => match value.parse() {
-                    Ok(value) => EncodedTerm::DoubleLiteral(OrderedFloat(value)),
-                    Err(_) => EncodedTerm::TypedLiteral {
-                        value_id: self.string_store.insert_str(value)?,
-                        datatype_id: XSD_DOUBLE_ID,
-                    },
-                },
-                "http://www.w3.org/2001/XMLSchema#integer"
-                | "http://www.w3.org/2001/XMLSchema#byte"
-                | "http://www.w3.org/2001/XMLSchema#short"
-                | "http://www.w3.org/2001/XMLSchema#int"
-                | "http://www.w3.org/2001/XMLSchema#long"
-                | "http://www.w3.org/2001/XMLSchema#unsignedByte"
-                | "http://www.w3.org/2001/XMLSchema#unsignedShort"
-                | "http://www.w3.org/2001/XMLSchema#unsignedInt"
-                | "http://www.w3.org/2001/XMLSchema#unsignedLong"
-                | "http://www.w3.org/2001/XMLSchema#positiveInteger"
-                | "http://www.w3.org/2001/XMLSchema#negativeInteger"
-                | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
-                | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => match value.parse() {
-                    Ok(value) => EncodedTerm::IntegerLiteral(value),
-                    Err(_) => EncodedTerm::TypedLiteral {
+                    }),
+                    "http://www.w3.org/2001/XMLSchema#float" => self.encode_float_str(value),
+                    "http://www.w3.org/2001/XMLSchema#double" => self.encode_double_str(value),
+                    "http://www.w3.org/2001/XMLSchema#integer"
+                    | "http://www.w3.org/2001/XMLSchema#byte"
+                    | "http://www.w3.org/2001/XMLSchema#short"
+                    | "http://www.w3.org/2001/XMLSchema#int"
+                    | "http://www.w3.org/2001/XMLSchema#long"
+                    | "http://www.w3.org/2001/XMLSchema#unsignedByte"
+                    | "http://www.w3.org/2001/XMLSchema#unsignedShort"
+                    | "http://www.w3.org/2001/XMLSchema#unsignedInt"
+                    | "http://www.w3.org/2001/XMLSchema#unsignedLong"
+                    | "http://www.w3.org/2001/XMLSchema#positiveInteger"
+                    | "http://www.w3.org/2001/XMLSchema#negativeInteger"
+                    | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
+                    | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => {
+                        self.encode_integer_str(value)
+                    }
+                    "http://www.w3.org/2001/XMLSchema#decimal" => self.encode_decimal_str(value),
+                    "http://www.w3.org/2001/XMLSchema#date" => self.encode_date_str(value),
+                    "http://www.w3.org/2001/XMLSchema#time" => self.encode_time_str(value),
+                    "http://www.w3.org/2001/XMLSchema#dateTime"
+                    | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => {
+                        self.encode_date_time_str(value)
+                    }
+                    _ => None,
+                } {
+                    Some(v) => v,
+                    None => EncodedTerm::TypedLiteral {
                         value_id: self.string_store.insert_str(value)?,
                         datatype_id: self.string_store.insert_str(datatype.iri)?,
                     },
-                },
-                "http://www.w3.org/2001/XMLSchema#decimal" => match value.parse() {
-                    Ok(value) => EncodedTerm::DecimalLiteral(value),
-                    Err(_) => EncodedTerm::TypedLiteral {
-                        value_id: self.string_store.insert_str(value)?,
-                        datatype_id: XSD_DECIMAL_ID,
-                    },
-                },
-                "http://www.w3.org/2001/XMLSchema#date" => {
-                    let mut parsed = Parsed::new();
-                    match parse(&mut parsed, &value, StrftimeItems::new("%Y-%m-%d%:z")).and_then(
-                        |_| {
-                            Ok(Date::from_utc(
-                                parsed.to_naive_date()?,
-                                parsed.to_fixed_offset()?,
-                            ))
-                        },
-                    ) {
-                        Ok(value) => EncodedTerm::DateLiteral(value),
-                        Err(_) => match NaiveDate::parse_from_str(&value, "%Y-%m-%dZ") {
-                            Ok(value) => EncodedTerm::DateLiteral(Date::from_utc(
-                                value,
-                                FixedOffset::east(0),
-                            )),
-                            Err(_) => match NaiveDate::parse_from_str(&value, "%Y-%m-%d") {
-                                Ok(value) => EncodedTerm::NaiveDateLiteral(value),
-                                Err(_) => EncodedTerm::TypedLiteral {
-                                    value_id: self.string_store.insert_str(value)?,
-                                    datatype_id: XSD_DATE_ID,
-                                },
-                            },
-                        },
-                    }
                 }
-                "http://www.w3.org/2001/XMLSchema#time" => {
-                    match NaiveTime::parse_from_str(&value, "%H:%M:%S") {
-                        Ok(value) => EncodedTerm::NaiveTimeLiteral(value),
-                        Err(_) => EncodedTerm::TypedLiteral {
-                            value_id: self.string_store.insert_str(value)?,
-                            datatype_id: XSD_TIME_ID,
-                        },
-                    }
-                }
-                "http://www.w3.org/2001/XMLSchema#dateTime"
-                | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => {
-                    match DateTime::parse_from_rfc3339(&value) {
-                        Ok(value) => EncodedTerm::DateTimeLiteral(value),
-                        Err(_) => {
-                            match NaiveDateTime::parse_from_str(&value, "%Y-%m-%dT%H:%M:%S") {
-                                Ok(value) => EncodedTerm::NaiveDateTimeLiteral(value),
-                                Err(_) => EncodedTerm::TypedLiteral {
-                                    value_id: self.string_store.insert_str(value)?,
-                                    datatype_id: XSD_DATE_TIME_ID,
-                                },
-                            }
-                        }
-                    }
-                }
-                _ => EncodedTerm::TypedLiteral {
-                    value_id: self.string_store.insert_str(value)?,
-                    datatype_id: self.string_store.insert_str(datatype.iri)?,
-                },
-            },
+            }
         })
     }
 
@@ -847,6 +779,72 @@ impl<S: StringStore> Encoder<S> {
             object: self.encode_rio_term(triple.object, bnodes_map)?,
             graph_name,
         })
+    }
+
+    pub fn encode_boolean_str(&self, value: &str) -> Option<EncodedTerm> {
+        match value {
+            "true" | "1" => Some(EncodedTerm::BooleanLiteral(true)),
+            "false" | "0" => Some(EncodedTerm::BooleanLiteral(false)),
+            _ => None,
+        }
+    }
+
+    pub fn encode_float_str(&self, value: &str) -> Option<EncodedTerm> {
+        value
+            .parse()
+            .map(|value| EncodedTerm::FloatLiteral(OrderedFloat(value)))
+            .ok()
+    }
+
+    pub fn encode_double_str(&self, value: &str) -> Option<EncodedTerm> {
+        value
+            .parse()
+            .map(|value| EncodedTerm::DoubleLiteral(OrderedFloat(value)))
+            .ok()
+    }
+
+    pub fn encode_integer_str(&self, value: &str) -> Option<EncodedTerm> {
+        value.parse().map(EncodedTerm::IntegerLiteral).ok()
+    }
+
+    pub fn encode_decimal_str(&self, value: &str) -> Option<EncodedTerm> {
+        value.parse().map(EncodedTerm::DecimalLiteral).ok()
+    }
+
+    pub fn encode_date_str(&self, value: &str) -> Option<EncodedTerm> {
+        let mut parsed = Parsed::new();
+        match parse(&mut parsed, &value, StrftimeItems::new("%Y-%m-%d%:z")).and_then(|_| {
+            Ok(Date::from_utc(
+                parsed.to_naive_date()?,
+                parsed.to_fixed_offset()?,
+            ))
+        }) {
+            Ok(value) => Some(EncodedTerm::DateLiteral(value)),
+            Err(_) => match NaiveDate::parse_from_str(&value, "%Y-%m-%dZ") {
+                Ok(value) => Some(EncodedTerm::DateLiteral(Date::from_utc(
+                    value,
+                    FixedOffset::east(0),
+                ))),
+                Err(_) => NaiveDate::parse_from_str(&value, "%Y-%m-%d")
+                    .map(EncodedTerm::NaiveDateLiteral)
+                    .ok(),
+            },
+        }
+    }
+
+    pub fn encode_time_str(&self, value: &str) -> Option<EncodedTerm> {
+        NaiveTime::parse_from_str(&value, "%H:%M:%S")
+            .map(EncodedTerm::NaiveTimeLiteral)
+            .ok()
+    }
+
+    pub fn encode_date_time_str(&self, value: &str) -> Option<EncodedTerm> {
+        match DateTime::parse_from_rfc3339(&value) {
+            Ok(value) => Some(EncodedTerm::DateTimeLiteral(value)),
+            Err(_) => NaiveDateTime::parse_from_str(&value, "%Y-%m-%dT%H:%M:%S")
+                .map(EncodedTerm::NaiveDateTimeLiteral)
+                .ok(),
+        }
     }
 
     pub fn decode_term(&self, encoded: EncodedTerm) -> Result<Term> {
