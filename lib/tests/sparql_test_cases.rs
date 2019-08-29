@@ -14,10 +14,19 @@ use std::path::PathBuf;
 
 #[test]
 fn sparql_w3c_syntax_testsuite() -> Result<()> {
-    let manifest_10_url = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/manifest-syntax.ttl";
-    let manifest_11_url =
-        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest.ttl";
-    for test_result in TestManifest::new(manifest_10_url).chain(TestManifest::new(manifest_11_url))
+    let manifest_10_urls =
+        vec!["http://www.w3.org/2001/sw/DataAccess/tests/data-r2/manifest-syntax.ttl"];
+    let manifest_11_urls = vec![
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest.ttl",
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-fed/manifest.ttl",
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/construct/manifest.ttl",
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/grouping/manifest.ttl",
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest.ttl",
+    ];
+    for test_result in manifest_10_urls
+        .into_iter()
+        .chain(manifest_11_urls.into_iter())
+        .flat_map(|manifest| TestManifest::new(manifest))
     {
         let test = test_result.unwrap();
         if test.kind == "PositiveSyntaxTest" || test.kind == "PositiveSyntaxTest11" {
@@ -41,7 +50,7 @@ fn sparql_w3c_syntax_testsuite() -> Result<()> {
             {
                 eprintln!("Failure on {}. The output tree is: {}", test, result);
             }
-        } else {
+        } else if test.kind != "QueryEvaluationTest" {
             assert!(false, "Not supported test: {}", test);
         }
     }
@@ -78,6 +87,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
 
     let manifest_11_urls = vec![
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/bind/manifest.ttl",
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/construct/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/exists/manifest.ttl",
     ];
 
@@ -104,6 +114,8 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-12").unwrap(),
         //DATATYPE("foo"@en) returns rdf:langString in RDF 1.1
         NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-datatype-2").unwrap(),
+        // FROM support
+        NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/construct/manifest#constructwhere04").unwrap(),
     ];
 
     let mut failed = Vec::default();
@@ -161,7 +173,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
                     }
                 },
             }
-        } else {
+        } else if test.kind != "NegativeSyntaxTest11" {
             assert!(false, "Not supported test: {}", test);
         }
     }
