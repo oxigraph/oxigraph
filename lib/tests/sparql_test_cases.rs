@@ -1,5 +1,6 @@
 ///! Integration tests based on [SPARQL 1.1 Test Cases](https://www.w3.org/2009/sparql/docs/tests/README.html)
 use failure::format_err;
+use rayon::prelude::*;
 use rudf::model::vocab::rdf;
 use rudf::model::vocab::rdfs;
 use rudf::model::*;
@@ -123,17 +124,15 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#coalesce01").unwrap(),
     ];
 
-    let mut failed = Vec::default();
-    for test_result in manifest_10_urls
+    let tests: Result<Vec<_>> = manifest_10_urls
         .into_iter()
         .chain(manifest_11_urls.into_iter())
         .flat_map(|manifest| TestManifest::new(manifest))
-    {
-        let test = test_result?;
+        .collect();
+    let failed: Vec<_> = tests?.into_par_iter().map(|test| {
         if test_blacklist.contains(&test.id) {
-            continue;
-        }
-        if test.kind == "QueryEvaluationTest" {
+            Ok(())
+        } else if test.kind == "QueryEvaluationTest" {
             let repository = MemoryRepository::default();
             if let Some(data) = &test.data {
                 load_graph_to_repository(&data, &repository.connection()?, None)?;
@@ -149,12 +148,12 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
                 .connection()?
                 .prepare_query(&read_file_to_string(&test.query)?, Some(&test.query))
             {
-                Err(error) => failed.push(format!(
+                Err(error) => Err(format_err!(
                     "Failure to parse query of {} with error: {}",
                     test, error
                 )),
                 Ok(query) => match query.exec() {
-                    Err(error) => failed.push(format!(
+                    Err(error) => Err(format_err!(
                         "Failure to execute query of {} with error: {}",
                         test, error
                     )),
@@ -166,8 +165,10 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
                             .next()
                             .is_some();
                         let actual_graph = to_graph(result, with_order)?;
-                        if !actual_graph.is_isomorphic(&expected_graph) {
-                            failed.push(format!("Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
+                        if actual_graph.is_isomorphic(&expected_graph) {
+                            Ok(())
+                        } else {
+                            Err(format_err!("Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
                                 test,
                                 expected_graph,
                                 actual_graph,
@@ -179,9 +180,11 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
                 },
             }
         } else if test.kind != "NegativeSyntaxTest11" {
-            assert!(false, "Not supported test: {}", test);
+            panic!("Not supported test: {}", test)
+        } else {
+            Ok(())
         }
-    }
+    }).filter_map(|v| v.err()).map(|e| e.to_string()).collect();
     assert!(
         failed.is_empty(),
         "{} tests failed:\n{}",
