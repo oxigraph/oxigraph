@@ -20,6 +20,10 @@ pub enum PlanNode {
         left: Box<PlanNode>,
         right: Box<PlanNode>,
     },
+    AntiJoin {
+        left: Box<PlanNode>,
+        right: Box<PlanNode>,
+    },
     Filter {
         child: Box<PlanNode>,
         expression: PlanExpression,
@@ -109,11 +113,9 @@ impl PlanNode {
                     child.add_variables(set);
                 }
             }
-            PlanNode::Join { left, right } => {
-                left.add_variables(set);
-                right.add_variables(set);
-            }
-            PlanNode::LeftJoin { left, right, .. } => {
+            PlanNode::Join { left, right }
+            | PlanNode::AntiJoin { left, right }
+            | PlanNode::LeftJoin { left, right, .. } => {
                 left.add_variables(set);
                 right.add_variables(set);
             }

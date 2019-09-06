@@ -20,6 +20,7 @@ use rio_api::model as rio;
 use rust_decimal::{Decimal, RoundingStrategy};
 use sha1::Sha1;
 use sha2::{Sha256, Sha384, Sha512};
+use std::cmp::min;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::HashSet;
@@ -205,6 +206,17 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     left: left_values,
                     right_iter: self.eval_plan(&*right, from),
                     buffered_results: errors,
+                })
+            }
+            PlanNode::AntiJoin { left, right } => {
+                //TODO: dumb implementation
+                let right: Vec<_> = self
+                    .eval_plan(&*right, from.clone())
+                    .filter_map(|result| result.ok())
+                    .collect();
+                Box::new(AntiJoinIterator {
+                    left_iter: self.eval_plan(&*left, from),
+                    right,
                 })
             }
             PlanNode::LeftJoin {
@@ -1713,6 +1725,22 @@ fn combine_tuples(a: &[Option<EncodedTerm>], b: &[Option<EncodedTerm>]) -> Optio
     }
 }
 
+fn are_tuples_compatible_and_not_disjointed(
+    a: &[Option<EncodedTerm>],
+    b: &[Option<EncodedTerm>],
+) -> bool {
+    let mut found_intersection = false;
+    for i in 0..min(a.len(), b.len()) {
+        if let (Some(a_value), Some(b_value)) = (a[i], b[i]) {
+            if a_value != b_value {
+                return false;
+            }
+            found_intersection = true;
+        }
+    }
+    found_intersection
+}
+
 struct JoinIterator<'a> {
     left: Vec<EncodedTuple>,
     right_iter: EncodedTuplesIterator<'a>,
@@ -1736,6 +1764,31 @@ impl<'a> Iterator for JoinIterator<'a> {
             }
         }
         self.next()
+    }
+}
+
+struct AntiJoinIterator<'a> {
+    left_iter: EncodedTuplesIterator<'a>,
+    right: Vec<EncodedTuple>,
+}
+
+impl<'a> Iterator for AntiJoinIterator<'a> {
+    type Item = Result<EncodedTuple>;
+
+    fn next(&mut self) -> Option<Result<EncodedTuple>> {
+        loop {
+            match self.left_iter.next()? {
+                Ok(left_tuple) => {
+                    let exists_compatible_right = self.right.iter().any(|right_tuple| {
+                        are_tuples_compatible_and_not_disjointed(&left_tuple, right_tuple)
+                    });
+                    if !exists_compatible_right {
+                        return Some(Ok(left_tuple));
+                    }
+                }
+                Err(error) => return Some(Err(error)),
+            }
+        }
     }
 }
 

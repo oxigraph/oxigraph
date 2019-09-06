@@ -113,7 +113,15 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
                 position: variable_key(variables, &v),
                 expression: self.build_for_expression(e, variables, graph_name)?,
             },
-            GraphPattern::Minus(_a, _b) => unimplemented!(),
+            GraphPattern::Minus(a, b) => PlanNode::AntiJoin {
+                left: Box::new(self.build_for_graph_pattern(
+                    a,
+                    input.clone(),
+                    variables,
+                    graph_name,
+                )?),
+                right: Box::new(self.build_for_graph_pattern(b, input, variables, graph_name)?),
+            },
             GraphPattern::Service(_n, _p, _s) => unimplemented!(),
             GraphPattern::AggregateJoin(_g, _a) => unimplemented!(),
             GraphPattern::Data(bs) => PlanNode::StaticBindings {
