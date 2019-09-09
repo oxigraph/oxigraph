@@ -13,6 +13,7 @@ use rudf::{
 use std::io::{BufReader, Read};
 use std::sync::Arc;
 
+const MAX_SPARQL_BODY_SIZE: u64 = 1048576;
 const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
 
 pub fn main() {
@@ -95,15 +96,19 @@ fn handle_request<R: RepositoryConnection>(
             request,
         ),
         ("/query", "POST") => {
-            if let Some(mut body) = request.data() {
+            if let Some(body) = request.data() {
                 if let Some(content_type) = request.header("Content-Type") {
                     if content_type.starts_with("application/sparql-query") {
                         let mut buffer = String::default();
-                        body.read_to_string(&mut buffer).unwrap();
+                        body.take(MAX_SPARQL_BODY_SIZE)
+                            .read_to_string(&mut buffer)
+                            .unwrap();
                         evaluate_sparql_query(connection, &buffer, request)
                     } else if content_type.starts_with("application/x-www-form-urlencoded") {
                         let mut buffer = Vec::default();
-                        body.read_to_end(&mut buffer).unwrap();
+                        body.take(MAX_SPARQL_BODY_SIZE)
+                            .read_to_end(&mut buffer)
+                            .unwrap();
                         evaluate_urlencoded_sparql_query(connection, &buffer, request)
                     } else {
                         Response::text(format!(
