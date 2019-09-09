@@ -13,7 +13,7 @@ use rudf::{
 use std::io::{BufReader, Read};
 use std::sync::Arc;
 
-const MAX_SPARQL_BODY_SIZE: u64 = 1048576;
+const MAX_SPARQL_BODY_SIZE: u64 = 1_048_576;
 const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
 
 pub fn main() {
@@ -59,7 +59,7 @@ where
 
 fn handle_request<R: RepositoryConnection>(
     request: &Request,
-    connection: R,
+    mut connection: R,
     host: &str,
 ) -> Response {
     match (request.url().as_str(), request.method()) {

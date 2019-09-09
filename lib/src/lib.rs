@@ -15,7 +15,7 @@
 //! use rudf::sparql::QueryResult;
 //!
 //! let repository = MemoryRepository::default();
-//! let connection = repository.connection().unwrap();
+//! let mut connection = repository.connection().unwrap();
 //!
 //! // insertion
 //! let ex = NamedNode::parse("http://example.com").unwrap();

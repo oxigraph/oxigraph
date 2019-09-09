@@ -30,7 +30,7 @@ use std::sync::Mutex;
 /// use rudf::sparql::QueryResult;
 ///
 /// let repository = RocksDbRepository::open("example.db").unwrap();
-/// let connection = repository.connection().unwrap();
+/// let mut connection = repository.connection().unwrap();
 ///
 /// // insertion
 /// let ex = NamedNode::parse("http://example.com").unwrap();

@@ -136,12 +136,12 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         } else if test.kind == "QueryEvaluationTest" {
             let repository = MemoryRepository::default();
             if let Some(data) = &test.data {
-                load_graph_to_repository(&data, &repository.connection()?, None)?;
+                load_graph_to_repository(&data, &mut repository.connection()?, None)?;
             }
             for graph_data in &test.graph_data {
                 load_graph_to_repository(
                     &graph_data,
-                    &repository.connection()?,
+                    &mut repository.connection()?,
                     Some(&NamedNode::parse(graph_data)?.into()),
                 )?;
             }
@@ -206,7 +206,7 @@ fn repository_to_string(repository: impl Repository) -> String {
 
 fn load_graph(url: &str) -> Result<SimpleGraph> {
     let repository = MemoryRepository::default();
-    load_graph_to_repository(url, &repository.connection().unwrap(), None)?;
+    load_graph_to_repository(url, &mut repository.connection().unwrap(), None)?;
     Ok(repository
         .connection()
         .unwrap()
@@ -217,7 +217,7 @@ fn load_graph(url: &str) -> Result<SimpleGraph> {
 
 fn load_graph_to_repository(
     url: &str,
-    connection: &<&MemoryRepository as Repository>::Connection,
+    connection: &mut <&MemoryRepository as Repository>::Connection,
     to_graph_name: Option<&NamedOrBlankNode>,
 ) -> Result<()> {
     let syntax = if url.ends_with(".nt") {
@@ -234,7 +234,7 @@ fn load_graph_to_repository(
 
 fn load_sparql_query_result_graph(url: &str) -> Result<SimpleGraph> {
     let repository = MemoryRepository::default();
-    let connection = repository.connection()?;
+    let mut connection = repository.connection()?;
     if url.ends_with(".srx") {
         for t in to_graph(
             QueryResult::read(read_file(url)?, QueryResultSyntax::Xml)?,
@@ -243,7 +243,7 @@ fn load_sparql_query_result_graph(url: &str) -> Result<SimpleGraph> {
             connection.insert(&t.in_graph(None))?;
         }
     } else {
-        load_graph_to_repository(url, &connection, None)?;
+        load_graph_to_repository(url, &mut connection, None)?;
     }
     Ok(connection
         .quads_for_pattern(None, None, None, Some(None))

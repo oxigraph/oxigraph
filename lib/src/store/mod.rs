@@ -119,7 +119,7 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
     }
 
     fn load_graph(
-        &self,
+        &mut self,
         reader: impl BufRead,
         syntax: GraphSyntax,
         to_graph_name: Option<&NamedOrBlankNode>,
@@ -140,7 +140,7 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
     }
 
     fn load_dataset(
-        &self,
+        &mut self,
         reader: impl BufRead,
         syntax: DatasetSyntax,
         base_iri: Option<&str>,
@@ -157,11 +157,11 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
             .contains(&self.inner.encoder().encode_quad(quad)?)
     }
 
-    fn insert(&self, quad: &Quad) -> Result<()> {
+    fn insert(&mut self, quad: &Quad) -> Result<()> {
         self.inner.insert(&self.inner.encoder().encode_quad(quad)?)
     }
 
-    fn remove(&self, quad: &Quad) -> Result<()> {
+    fn remove(&mut self, quad: &Quad) -> Result<()> {
         self.inner.remove(&self.inner.encoder().encode_quad(quad)?)
     }
 }

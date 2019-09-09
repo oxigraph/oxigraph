@@ -18,7 +18,7 @@ use std::io::BufRead;
 /// use rudf::sparql::QueryResult;
 ///
 /// let repository = MemoryRepository::default();
-/// let connection = repository.connection().unwrap();
+/// let mut connection = repository.connection().unwrap();
 ///
 /// // insertion
 /// let ex = NamedNode::parse("http://example.com").unwrap();
@@ -68,7 +68,7 @@ pub trait RepositoryConnection: Clone {
     /// use rudf::sparql::QueryResult;
     ///
     /// let repository = MemoryRepository::default();
-    /// let connection = repository.connection().unwrap();
+    /// let mut connection = repository.connection().unwrap();
     ///
     /// // insertions
     /// let ex = NamedNode::parse("http://example.com").unwrap();
@@ -91,7 +91,7 @@ pub trait RepositoryConnection: Clone {
     /// use rudf::{Repository, RepositoryConnection, MemoryRepository, Result};
     ///
     /// let repository = MemoryRepository::default();
-    /// let connection = repository.connection().unwrap();
+    /// let mut connection = repository.connection().unwrap();
     ///
     /// // insertion
     /// let ex = NamedNode::parse("http://example.com").unwrap();
@@ -120,7 +120,7 @@ pub trait RepositoryConnection: Clone {
     /// use rudf::{Repository, RepositoryConnection, MemoryRepository, Result, GraphSyntax};
     ///
     /// let repository = MemoryRepository::default();
-    /// let connection = repository.connection().unwrap();
+    /// let mut connection = repository.connection().unwrap();
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
@@ -132,7 +132,7 @@ pub trait RepositoryConnection: Clone {
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results.unwrap());
     /// ```
     fn load_graph(
-        &self,
+        &mut self,
         reader: impl BufRead,
         syntax: GraphSyntax,
         to_graph_name: Option<&NamedOrBlankNode>,
@@ -147,7 +147,7 @@ pub trait RepositoryConnection: Clone {
     /// use rudf::{Repository, RepositoryConnection, MemoryRepository, Result, DatasetSyntax};
     ///
     /// let repository = MemoryRepository::default();
-    /// let connection = repository.connection().unwrap();
+    /// let mut connection = repository.connection().unwrap();
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
@@ -159,7 +159,7 @@ pub trait RepositoryConnection: Clone {
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), Some(ex.into()))], results.unwrap());
     /// ```
     fn load_dataset(
-        &self,
+        &mut self,
         reader: impl BufRead,
         syntax: DatasetSyntax,
         base_iri: Option<&str>,
@@ -169,8 +169,8 @@ pub trait RepositoryConnection: Clone {
     fn contains(&self, quad: &Quad) -> Result<bool>;
 
     /// Adds a quad to this repository
-    fn insert(&self, quad: &Quad) -> Result<()>;
+    fn insert(&mut self, quad: &Quad) -> Result<()>;
 
     /// Removes a quad from this repository
-    fn remove(&self, quad: &Quad) -> Result<()>;
+    fn remove(&mut self, quad: &Quad) -> Result<()>;
 }
