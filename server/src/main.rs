@@ -24,13 +24,14 @@ pub fn main() {
                 .short("b")
                 .long("bind")
                 .help("Specify a server socket to bind using the format $(HOST):$(PORT)")
+                .default_value("127.0.0.1:7878")
                 .takes_value(true),
         )
         .arg(
             Arg::with_name("file")
                 .long("file")
                 .short("f")
-                .help("File in which persist the dataset")
+                .help("Directory in which persist the data. By default data are kept in memory.")
                 .takes_value(true),
         )
         .get_matches();
@@ -47,10 +48,7 @@ fn main_with_dataset<R: Send + Sync + 'static>(repository: Arc<R>, matches: &Arg
 where
     for<'a> &'a R: Repository,
 {
-    let addr = matches
-        .value_of("bind")
-        .unwrap_or("127.0.0.1:7878")
-        .to_owned();
+    let addr = matches.value_of("bind").unwrap().to_owned();
     println!("Listening for requests at http://{}", &addr);
 
     start_server(addr.to_string(), move |request| {
