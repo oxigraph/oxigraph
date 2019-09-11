@@ -3,26 +3,25 @@
 <head>
     <meta charset="utf-8">
     <title>Rudf server</title>
-    <link href='http://cdn.jsdelivr.net/g/yasqe@2.2(yasqe.min.css),yasr@2.4(yasr.min.css)' rel='stylesheet' type='text/css'/>
+    <link rel="stylesheet" href="//tools-static.wmflabs.org/cdnjs/ajax/libs/yasqe/2.11.22/yasqe.min.css"/>
+    <link rel="stylesheet" href="//tools-static.wmflabs.org/cdnjs/ajax/libs/yasr/2.12.19/yasr.min.css"/>
 </head>
 <body>
 <div id="yasqe"></div>
 <div id="yasr"></div>
-<script src='http://cdn.jsdelivr.net/yasr/2.4/yasr.bundled.min.js'></script>
-<script src='http://cdn.jsdelivr.net/yasqe/2.2/yasqe.bundled.min.js'></script>
+<script src="//tools-static.wmflabs.org/cdnjs/ajax/libs/yasr/2.12.19/yasr.bundled.min.js"></script>
+<script src="//tools-static.wmflabs.org/cdnjs/ajax/libs/yasqe/2.11.22/yasqe.bundled.min.js"></script>
 <script>
     var yasqe = YASQE(document.getElementById("yasqe"), {
         sparql: {
             showQueryButton: true,
-            endpoint: '{{endpoint}}'
+            endpoint: "{{endpoint}}"
         }
     });
     var yasr = YASR(document.getElementById("yasr"), {
-        //this way, the URLs in the results are prettified using the defined prefixes in the query
-        getUsedPrefixes: yasqe.getPrefixesFromQuery
+        getUsedPrefixes: yasqe.getPrefixesFromQuery,
+        useGoogleCharts: false
     });
-
-    //link both together
     yasqe.options.sparql.callbacks.complete = yasr.setResponse;
 </script>
 </body>

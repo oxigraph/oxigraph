@@ -15,6 +15,7 @@ use std::sync::Arc;
 
 const MAX_SPARQL_BODY_SIZE: u64 = 1_048_576;
 const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
+const SERVER: &str = concat!("Rudf/", env!("CARGO_PKG_VERSION"));
 
 pub fn main() {
     let matches = App::new("Rudf SPARQL server")
@@ -54,6 +55,7 @@ where
 
     start_server(addr.to_string(), move |request| {
         handle_request(request, repository.connection().unwrap(), &addr)
+            .with_unique_header("Server", SERVER)
     })
 }
 
