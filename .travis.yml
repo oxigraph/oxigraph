@@ -12,3 +12,6 @@ addons:
   apt:
     packages:
       - clang
+script:
+  - travis_wait cargo build --verbose --all
+  - cargo test --verbose --all
