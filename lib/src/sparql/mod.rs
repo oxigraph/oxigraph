@@ -27,7 +27,7 @@ pub use crate::sparql::model::Variable;
 /// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/)
 pub trait PreparedQuery {
     /// Evaluates the query and returns its results
-    fn exec(&self) -> Result<QueryResult<'_>>;
+    fn exec(&self) -> Result<QueryResult>;
 }
 
 /// An implementation of `PreparedQuery` for internal use
