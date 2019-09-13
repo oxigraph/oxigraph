@@ -24,7 +24,7 @@ pub fn main() {
                 .short("b")
                 .long("bind")
                 .help("Specify a server socket to bind using the format $(HOST):$(PORT)")
-                .default_value("127.0.0.1:7878")
+                .default_value("localhost:7878")
                 .takes_value(true),
         )
         .arg(
