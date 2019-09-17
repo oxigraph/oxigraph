@@ -1,7 +1,7 @@
 Rudf
 ====
 
-[![Build Status](https://travis-ci.org/Tpt/rudf.svg?branch=master)](https://travis-ci.org/Tpt/rudf)
+[![actions status](https://github.com/Tpt/rudf/workflows/build/badge.svg)](https://github.com/Tpt/rudf/actions)
 [![dependency status](https://deps.rs/repo/github/Tpt/rudf/status.svg)](https://deps.rs/repo/github/Tpt/rudf)
 
 
