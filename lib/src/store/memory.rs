@@ -1,13 +1,9 @@
 use crate::store::numeric_encoder::*;
 use crate::store::*;
 use crate::{Repository, Result};
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::iter::empty;
-use std::iter::once;
-use std::sync::RwLock;
-use std::sync::RwLockReadGuard;
-use std::sync::RwLockWriteGuard;
+use std::collections::{BTreeMap, BTreeSet};
+use std::iter::{empty, once};
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// Memory based implementation of the `Repository` trait.
 /// They are cheap to build using the `MemoryRepository::default()` method.
@@ -44,18 +40,23 @@ pub struct MemoryRepository {
 }
 
 pub type MemoryRepositoryConnection<'a> = StoreRepositoryConnection<&'a MemoryStore>;
+type TripleMap<T> = BTreeMap<T, BTreeMap<T, BTreeSet<T>>>;
+type QuadMap<T> = BTreeMap<T, TripleMap<T>>;
 
 #[derive(Default)]
 pub struct MemoryStore {
     string_store: MemoryStringStore,
-    graph_indexes: RwLock<BTreeMap<EncodedTerm, MemoryGraphIndexes>>,
+    quad_indexes: RwLock<MemoryStoreIndexes>,
 }
 
 #[derive(Default)]
-struct MemoryGraphIndexes {
-    spo: BTreeMap<EncodedTerm, BTreeMap<EncodedTerm, BTreeSet<EncodedTerm>>>,
-    pos: BTreeMap<EncodedTerm, BTreeMap<EncodedTerm, BTreeSet<EncodedTerm>>>,
-    osp: BTreeMap<EncodedTerm, BTreeMap<EncodedTerm, BTreeSet<EncodedTerm>>>,
+struct MemoryStoreIndexes {
+    spog: QuadMap<EncodedTerm>,
+    posg: QuadMap<EncodedTerm>,
+    ospg: QuadMap<EncodedTerm>,
+    gspo: QuadMap<EncodedTerm>,
+    gpos: QuadMap<EncodedTerm>,
+    gosp: QuadMap<EncodedTerm>,
 }
 
 impl<'a> Repository for &'a MemoryRepository {
@@ -93,108 +94,108 @@ impl StringStore for MemoryStore {
 impl<'a> StoreConnection for &'a MemoryStore {
     fn contains(&self, quad: &EncodedQuad) -> Result<bool> {
         Ok(self
-            .graph_indexes()?
-            .get(&quad.graph_name)
-            .map_or(false, |graph| {
-                graph.spo.get(&quad.subject).map_or(false, |po| {
-                    po.get(&quad.predicate)
-                        .map_or(false, |o| o.contains(&quad.object))
+            .quad_indexes()?
+            .spog
+            .get(&quad.subject)
+            .map_or(false, |pog| {
+                pog.get(&quad.predicate).map_or(false, |og| {
+                    og.get(&quad.object)
+                        .map_or(false, |g| g.contains(&quad.graph_name))
                 })
             }))
     }
 
     fn insert(&self, quad: &EncodedQuad) -> Result<()> {
-        let mut graph_indexes = self.graph_indexes_mut()?;
-        let graph = graph_indexes
-            .entry(quad.graph_name)
-            .or_insert_with(MemoryGraphIndexes::default);
-        graph
-            .spo
-            .entry(quad.subject)
-            .or_default()
-            .entry(quad.predicate)
-            .or_default()
-            .insert(quad.object);
-        graph
-            .pos
-            .entry(quad.predicate)
-            .or_default()
-            .entry(quad.object)
-            .or_default()
-            .insert(quad.subject);
-        graph
-            .osp
-            .entry(quad.object)
-            .or_default()
-            .entry(quad.subject)
-            .or_default()
-            .insert(quad.predicate);
+        let mut quad_indexes = self.quad_indexes_mut()?;
+        insert_into_quad_map(
+            &mut quad_indexes.gosp,
+            quad.graph_name,
+            quad.object,
+            quad.subject,
+            quad.predicate,
+        );
+        insert_into_quad_map(
+            &mut quad_indexes.gpos,
+            quad.graph_name,
+            quad.predicate,
+            quad.object,
+            quad.subject,
+        );
+        insert_into_quad_map(
+            &mut quad_indexes.gspo,
+            quad.graph_name,
+            quad.subject,
+            quad.predicate,
+            quad.object,
+        );
+        insert_into_quad_map(
+            &mut quad_indexes.ospg,
+            quad.object,
+            quad.subject,
+            quad.predicate,
+            quad.graph_name,
+        );
+        insert_into_quad_map(
+            &mut quad_indexes.posg,
+            quad.predicate,
+            quad.object,
+            quad.subject,
+            quad.graph_name,
+        );
+        insert_into_quad_map(
+            &mut quad_indexes.spog,
+            quad.subject,
+            quad.predicate,
+            quad.object,
+            quad.graph_name,
+        );
         Ok(())
     }
 
     fn remove(&self, quad: &EncodedQuad) -> Result<()> {
-        let mut graph_indexes = self.graph_indexes_mut()?;
-        let mut empty_graph = false;
-        if let Some(graph) = graph_indexes.get_mut(&quad.graph_name) {
-            {
-                let mut empty_pos = false;
-                if let Some(pos) = graph.spo.get_mut(&quad.subject) {
-                    let mut empty_os = false;
-                    if let Some(os) = pos.get_mut(&quad.predicate) {
-                        os.remove(&quad.object);
-                        empty_os = os.is_empty();
-                    }
-                    if empty_os {
-                        pos.remove(&quad.predicate);
-                    }
-                    empty_pos = pos.is_empty();
-                }
-                if empty_pos {
-                    graph.spo.remove(&quad.subject);
-                }
-            }
-
-            {
-                let mut empty_oss = false;
-                if let Some(oss) = graph.pos.get_mut(&quad.predicate) {
-                    let mut empty_ss = false;
-                    if let Some(ss) = oss.get_mut(&quad.object) {
-                        ss.remove(&quad.subject);
-                        empty_ss = ss.is_empty();
-                    }
-                    if empty_ss {
-                        oss.remove(&quad.object);
-                    }
-                    empty_oss = oss.is_empty();
-                }
-                if empty_oss {
-                    graph.pos.remove(&quad.predicate);
-                }
-            }
-
-            {
-                let mut empty_sps = false;
-                if let Some(sps) = graph.osp.get_mut(&quad.object) {
-                    let mut empty_ps = false;
-                    if let Some(ps) = sps.get_mut(&quad.subject) {
-                        ps.remove(&quad.predicate);
-                        empty_ps = ps.is_empty();
-                    }
-                    if empty_ps {
-                        sps.remove(&quad.subject);
-                    }
-                    empty_sps = sps.is_empty();
-                }
-                if empty_sps {
-                    graph.osp.remove(&quad.object);
-                }
-            }
-
-            empty_graph = graph.spo.is_empty();
-        }
-        if empty_graph {
-            graph_indexes.remove(&quad.graph_name);
-        }
+        let mut quad_indexes = self.quad_indexes_mut()?;
+        remove_from_quad_map(
+            &mut quad_indexes.gosp,
+            &quad.graph_name,
+            &quad.object,
+            &quad.subject,
+            &quad.predicate,
+        );
+        remove_from_quad_map(
+            &mut quad_indexes.gpos,
+            &quad.graph_name,
+            &quad.predicate,
+            &quad.object,
+            &quad.subject,
+        );
+        remove_from_quad_map(
+            &mut quad_indexes.gspo,
+            &quad.graph_name,
+            &quad.subject,
+            &quad.predicate,
+            &quad.object,
+        );
+        remove_from_quad_map(
+            &mut quad_indexes.ospg,
+            &quad.object,
+            &quad.subject,
+            &quad.predicate,
+            &quad.graph_name,
+        );
+        remove_from_quad_map(
+            &mut quad_indexes.posg,
+            &quad.predicate,
+            &quad.object,
+            &quad.subject,
+            &quad.graph_name,
+        );
+        remove_from_quad_map(
+            &mut quad_indexes.spog,
+            &quad.subject,
+            &quad.predicate,
+            &quad.object,
+            &quad.graph_name,
+        );
         Ok(())
     }
 
@@ -276,65 +277,47 @@ impl<'a> StoreConnection for &'a MemoryStore {
 }
 
 impl MemoryStore {
-    fn graph_indexes(
-        &self,
-    ) -> Result<RwLockReadGuard<'_, BTreeMap<EncodedTerm, MemoryGraphIndexes>>> {
-        Ok(self.graph_indexes.read().map_err(MutexPoisonError::from)?)
+    fn quad_indexes(&self) -> Result<RwLockReadGuard<'_, MemoryStoreIndexes>> {
+        Ok(self.quad_indexes.read().map_err(MutexPoisonError::from)?)
     }
 
-    fn graph_indexes_mut(
-        &self,
-    ) -> Result<RwLockWriteGuard<'_, BTreeMap<EncodedTerm, MemoryGraphIndexes>>> {
-        Ok(self.graph_indexes.write().map_err(MutexPoisonError::from)?)
+    fn quad_indexes_mut(&self) -> Result<RwLockWriteGuard<'_, MemoryStoreIndexes>> {
+        Ok(self.quad_indexes.write().map_err(MutexPoisonError::from)?)
     }
 
-    fn quads(&self) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
-        let mut result = Vec::default();
-        for (graph_name, graph) in self.graph_indexes()?.iter() {
-            for (s, pos) in &graph.spo {
-                for (p, os) in pos.iter() {
-                    for o in os.iter() {
-                        result.push(Ok(EncodedQuad::new(*s, *p, *o, *graph_name)))
-                    }
-                }
-            }
-        }
-        Ok(result.into_iter())
+    fn quads<'a>(&'a self) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
+        Ok(quad_map_flatten(&self.quad_indexes()?.gspo)
+            .map(|(g, s, p, o)| Ok(EncodedQuad::new(s, p, o, g)))
+            .collect::<Vec<_>>()
+            .into_iter())
     }
 
     fn quads_for_subject(
         &self,
         subject: EncodedTerm,
-    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
-        let mut result = Vec::default();
-        for (graph_name, graph) in self.graph_indexes()?.iter() {
-            if let Some(pos) = graph.spo.get(&subject) {
-                for (p, os) in pos.iter() {
-                    for o in os.iter() {
-                        result.push(Ok(EncodedQuad::new(subject, *p, *o, *graph_name)))
-                    }
-                }
-            }
-        }
-        Ok(result.into_iter())
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(
+            option_triple_map_flatten(self.quad_indexes()?.spog.get(&subject))
+                .map(|(p, o, g)| Ok(EncodedQuad::new(subject, p, o, g)))
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
     }
 
     fn quads_for_subject_predicate(
         &self,
         subject: EncodedTerm,
         predicate: EncodedTerm,
-    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
-        let mut result = Vec::default();
-        for (graph_name, graph) in self.graph_indexes()?.iter() {
-            if let Some(pos) = graph.spo.get(&subject) {
-                if let Some(os) = pos.get(&predicate) {
-                    for o in os.iter() {
-                        result.push(Ok(EncodedQuad::new(subject, predicate, *o, *graph_name)))
-                    }
-                }
-            }
-        }
-        Ok(result.into_iter())
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_pair_map_flatten(
+            self.quad_indexes()?
+                .spog
+                .get(&subject)
+                .and_then(|pog| pog.get(&predicate)),
+        )
+        .map(|(o, g)| Ok(EncodedQuad::new(subject, predicate, o, g)))
+        .collect::<Vec<_>>()
+        .into_iter())
     }
 
     fn quads_for_subject_predicate_object(
@@ -342,128 +325,101 @@ impl MemoryStore {
         subject: EncodedTerm,
         predicate: EncodedTerm,
         object: EncodedTerm,
-    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
-        let mut result = Vec::default();
-        for (graph_name, graph) in self.graph_indexes()?.iter() {
-            if let Some(pos) = graph.spo.get(&subject) {
-                if let Some(os) = pos.get(&predicate) {
-                    if os.contains(&object) {
-                        result.push(Ok(EncodedQuad::new(
-                            subject,
-                            predicate,
-                            object,
-                            *graph_name,
-                        )))
-                    }
-                }
-            }
-        }
-        Ok(result.into_iter())
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_set_flatten(
+            self.quad_indexes()?
+                .spog
+                .get(&subject)
+                .and_then(|pog| pog.get(&predicate))
+                .and_then(|og| og.get(&object)),
+        )
+        .map(|g| Ok(EncodedQuad::new(subject, predicate, object, g)))
+        .collect::<Vec<_>>()
+        .into_iter())
     }
 
     fn quads_for_subject_object(
         &self,
         subject: EncodedTerm,
         object: EncodedTerm,
-    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
-        let mut result = Vec::default();
-        for (graph_name, graph) in self.graph_indexes()?.iter() {
-            if let Some(sps) = graph.osp.get(&object) {
-                if let Some(ps) = sps.get(&subject) {
-                    for p in ps.iter() {
-                        result.push(Ok(EncodedQuad::new(subject, *p, object, *graph_name)))
-                    }
-                }
-            }
-        }
-        Ok(result.into_iter())
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_pair_map_flatten(
+            self.quad_indexes()?
+                .ospg
+                .get(&object)
+                .and_then(|spg| spg.get(&subject)),
+        )
+        .map(|(p, g)| Ok(EncodedQuad::new(subject, p, object, g)))
+        .collect::<Vec<_>>()
+        .into_iter())
     }
 
     fn quads_for_predicate(
         &self,
         predicate: EncodedTerm,
-    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
-        let mut result = Vec::default();
-        for (graph_name, graph) in self.graph_indexes()?.iter() {
-            if let Some(oss) = graph.pos.get(&predicate) {
-                for (o, ss) in oss.iter() {
-                    for s in ss.iter() {
-                        result.push(Ok(EncodedQuad::new(*s, predicate, *o, *graph_name)))
-                    }
-                }
-            }
-        }
-        Ok(result.into_iter())
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(
+            option_triple_map_flatten(self.quad_indexes()?.posg.get(&predicate))
+                .map(|(o, s, g)| Ok(EncodedQuad::new(s, predicate, o, g)))
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
     }
 
     fn quads_for_predicate_object(
         &self,
         predicate: EncodedTerm,
         object: EncodedTerm,
-    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
-        let mut result = Vec::default();
-        for (graph_name, graph) in self.graph_indexes()?.iter() {
-            if let Some(oss) = graph.pos.get(&predicate) {
-                if let Some(ss) = oss.get(&object) {
-                    for s in ss.iter() {
-                        result.push(Ok(EncodedQuad::new(*s, predicate, object, *graph_name)))
-                    }
-                }
-            }
-        }
-        Ok(result.into_iter())
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_pair_map_flatten(
+            self.quad_indexes()?
+                .posg
+                .get(&predicate)
+                .and_then(|osg| osg.get(&object)),
+        )
+        .map(|(s, g)| Ok(EncodedQuad::new(s, predicate, object, g)))
+        .collect::<Vec<_>>()
+        .into_iter())
     }
 
     fn quads_for_object(
         &self,
         object: EncodedTerm,
-    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
-        let mut result = Vec::default();
-        for (graph_name, graph) in self.graph_indexes()?.iter() {
-            if let Some(sps) = graph.osp.get(&object) {
-                for (s, ps) in sps.iter() {
-                    for p in ps.iter() {
-                        result.push(Ok(EncodedQuad::new(*s, *p, object, *graph_name)))
-                    }
-                }
-            }
-        }
-        Ok(result.into_iter())
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(
+            option_triple_map_flatten(self.quad_indexes()?.ospg.get(&object))
+                .map(|(s, p, g)| Ok(EncodedQuad::new(s, p, object, g)))
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
     }
 
     fn quads_for_graph(
         &self,
         graph_name: EncodedTerm,
-    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
-        let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes()?.get(&graph_name) {
-            for (s, pos) in &graph.spo {
-                for (p, os) in pos.iter() {
-                    for o in os.iter() {
-                        result.push(Ok(EncodedQuad::new(*s, *p, *o, graph_name)))
-                    }
-                }
-            }
-        }
-        Ok(result.into_iter())
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(
+            option_triple_map_flatten(self.quad_indexes()?.gspo.get(&graph_name))
+                .map(|(s, p, o)| Ok(EncodedQuad::new(s, p, o, graph_name)))
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
     }
 
     fn quads_for_subject_graph(
         &self,
         subject: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
-        let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes()?.get(&graph_name) {
-            if let Some(pos) = graph.spo.get(&subject) {
-                for (p, os) in pos.iter() {
-                    for o in os.iter() {
-                        result.push(Ok(EncodedQuad::new(subject, *p, *o, graph_name)))
-                    }
-                }
-            }
-        }
-        Ok(result.into_iter())
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_pair_map_flatten(
+            self.quad_indexes()?
+                .gspo
+                .get(&graph_name)
+                .and_then(|spo| spo.get(&subject)),
+        )
+        .map(|(p, o)| Ok(EncodedQuad::new(subject, p, o, graph_name)))
+        .collect::<Vec<_>>()
+        .into_iter())
     }
 
     fn quads_for_subject_predicate_graph(
@@ -471,18 +427,17 @@ impl MemoryStore {
         subject: EncodedTerm,
         predicate: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
-        let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes()?.get(&graph_name) {
-            if let Some(pos) = graph.spo.get(&subject) {
-                if let Some(os) = pos.get(&predicate) {
-                    for o in os.iter() {
-                        result.push(Ok(EncodedQuad::new(subject, predicate, *o, graph_name)))
-                    }
-                }
-            }
-        }
-        Ok(result.into_iter())
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_set_flatten(
+            self.quad_indexes()?
+                .gspo
+                .get(&graph_name)
+                .and_then(|spo| spo.get(&subject))
+                .and_then(|po| po.get(&predicate)),
+        )
+        .map(|o| Ok(EncodedQuad::new(subject, predicate, o, graph_name)))
+        .collect::<Vec<_>>()
+        .into_iter())
     }
 
     fn quads_for_subject_object_graph(
@@ -490,36 +445,33 @@ impl MemoryStore {
         subject: EncodedTerm,
         object: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
-        let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes()?.get(&graph_name) {
-            if let Some(sps) = graph.osp.get(&object) {
-                if let Some(ps) = sps.get(&subject) {
-                    for p in ps.iter() {
-                        result.push(Ok(EncodedQuad::new(subject, *p, object, graph_name)))
-                    }
-                }
-            }
-        }
-        Ok(result.into_iter())
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_set_flatten(
+            self.quad_indexes()?
+                .gosp
+                .get(&graph_name)
+                .and_then(|osp| osp.get(&object))
+                .and_then(|sp| sp.get(&subject)),
+        )
+        .map(|p| Ok(EncodedQuad::new(subject, p, object, graph_name)))
+        .collect::<Vec<_>>()
+        .into_iter())
     }
 
     fn quads_for_predicate_graph(
         &self,
         predicate: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
-        let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes()?.get(&graph_name) {
-            if let Some(oss) = graph.pos.get(&predicate) {
-                for (o, ss) in oss.iter() {
-                    for s in ss.iter() {
-                        result.push(Ok(EncodedQuad::new(*s, predicate, *o, graph_name)))
-                    }
-                }
-            }
-        }
-        Ok(result.into_iter())
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_pair_map_flatten(
+            self.quad_indexes()?
+                .gpos
+                .get(&graph_name)
+                .and_then(|pos| pos.get(&predicate)),
+        )
+        .map(|(o, s)| Ok(EncodedQuad::new(s, predicate, o, graph_name)))
+        .collect::<Vec<_>>()
+        .into_iter())
     }
 
     fn quads_for_predicate_object_graph(
@@ -527,44 +479,118 @@ impl MemoryStore {
         predicate: EncodedTerm,
         object: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
-        let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes()?.get(&graph_name) {
-            if let Some(oss) = graph.pos.get(&predicate) {
-                if let Some(ss) = oss.get(&object) {
-                    for s in ss.iter() {
-                        result.push(Ok(EncodedQuad::new(*s, predicate, object, graph_name)))
-                    }
-                }
-            }
-        }
-        Ok(result.into_iter())
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_set_flatten(
+            self.quad_indexes()?
+                .gpos
+                .get(&graph_name)
+                .and_then(|pos| pos.get(&predicate))
+                .and_then(|os| os.get(&object)),
+        )
+        .map(|s| Ok(EncodedQuad::new(s, predicate, object, graph_name)))
+        .collect::<Vec<_>>()
+        .into_iter())
     }
 
     fn quads_for_object_graph(
         &self,
         object: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Result<<Vec<Result<EncodedQuad>> as IntoIterator>::IntoIter> {
-        let mut result = Vec::default();
-        if let Some(graph) = self.graph_indexes()?.get(&graph_name) {
-            if let Some(sps) = graph.osp.get(&object) {
-                for (s, ps) in sps.iter() {
-                    for p in ps.iter() {
-                        result.push(Ok(EncodedQuad::new(*s, *p, object, graph_name)))
-                    }
-                }
-            }
-        }
-        Ok(result.into_iter())
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_pair_map_flatten(
+            self.quad_indexes()?
+                .gosp
+                .get(&graph_name)
+                .and_then(|osp| osp.get(&object)),
+        )
+        .map(|(s, p)| Ok(EncodedQuad::new(s, p, object, graph_name)))
+        .collect::<Vec<_>>()
+        .into_iter())
     }
 }
 
-fn wrap_error<E: 'static, I: Iterator<Item = Result<E>> + 'static>(
+fn wrap_error<'a, E: 'static, I: Iterator<Item = Result<E>> + 'a>(
     iter: Result<I>,
-) -> Box<dyn Iterator<Item = Result<E>>> {
+) -> Box<dyn Iterator<Item = Result<E>> + 'a> {
     match iter {
         Ok(iter) => Box::new(iter),
         Err(error) => Box::new(once(Err(error))),
     }
+}
+
+fn insert_into_quad_map<T: Ord>(map: &mut QuadMap<T>, e1: T, e2: T, e3: T, e4: T) {
+    map.entry(e1)
+        .or_default()
+        .entry(e2)
+        .or_default()
+        .entry(e3)
+        .or_default()
+        .insert(e4);
+}
+
+fn remove_from_quad_map<T: Ord>(map1: &mut QuadMap<T>, e1: &T, e2: &T, e3: &T, e4: &T) {
+    let mut map2empty = false;
+    if let Some(map2) = map1.get_mut(e1) {
+        let mut map3empty = false;
+        if let Some(map3) = map2.get_mut(e2) {
+            let mut set4empty = false;
+            if let Some(set4) = map3.get_mut(e3) {
+                set4.remove(e4);
+                set4empty = set4.is_empty();
+            }
+            if set4empty {
+                map3.remove(e3);
+            }
+            map3empty = map3.is_empty();
+        }
+        if map3empty {
+            map2.remove(e2);
+        }
+        map2empty = map2.is_empty();
+    }
+    if map2empty {
+        map1.remove(e1);
+    }
+}
+
+fn option_set_flatten<'a, T: Clone>(i: Option<&'a BTreeSet<T>>) -> impl Iterator<Item = T> + 'a {
+    i.into_iter().flat_map(|s| s.iter().cloned())
+}
+
+fn option_pair_map_flatten<'a, T: Copy>(
+    i: Option<&'a BTreeMap<T, BTreeSet<T>>>,
+) -> impl Iterator<Item = (T, T)> + 'a {
+    i.into_iter().flat_map(|kv| {
+        kv.iter().flat_map(|(k, vs)| {
+            let k = *k;
+            vs.iter().map(move |v| (k, *v))
+        })
+    })
+}
+
+fn option_triple_map_flatten<'a, T: Copy>(
+    i: Option<&'a TripleMap<T>>,
+) -> impl Iterator<Item = (T, T, T)> + 'a {
+    i.into_iter().flat_map(|spo| {
+        spo.iter().flat_map(|(s, po)| {
+            let s = *s;
+            po.iter().flat_map(move |(p, os)| {
+                let p = *p;
+                os.iter().map(move |o| (s, p, *o))
+            })
+        })
+    })
+}
+
+fn quad_map_flatten<'a, T: Copy>(gspo: &'a QuadMap<T>) -> impl Iterator<Item = (T, T, T, T)> + 'a {
+    gspo.iter().flat_map(|(g, spo)| {
+        let g = *g;
+        spo.iter().flat_map(move |(s, po)| {
+            let s = *s;
+            po.iter().flat_map(move |(p, os)| {
+                let p = *p;
+                os.iter().map(move |o| (g, s, p, *o))
+            })
+        })
+    })
 }
