@@ -56,6 +56,7 @@ enum SimplePreparedQueryOptions<S: StoreConnection> {
 
 impl<S: StoreConnection> SimplePreparedQuery<S> {
     pub(crate) fn new(connection: S, query: &str, base_iri: Option<&str>) -> Result<Self> {
+        //TODO avoid inserting terms in the Repository StringStore
         Ok(Self(match read_sparql_query(query, base_iri)? {
             QueryVariants::Select {
                 algebra,

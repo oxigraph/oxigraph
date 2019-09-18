@@ -16,6 +16,13 @@ pub enum PlanNode {
         object: PatternValue,
         graph_name: PatternValue,
     },
+    PathPatternJoin {
+        child: Box<PlanNode>,
+        subject: PatternValue,
+        path: PlanPropertyPath,
+        object: PatternValue,
+        graph_name: PatternValue,
+    },
     Join {
         left: Box<PlanNode>,
         right: Box<PlanNode>,
@@ -93,6 +100,24 @@ impl PlanNode {
                     set.insert(*var);
                 }
                 if let PatternValue::Variable(var) = predicate {
+                    set.insert(*var);
+                }
+                if let PatternValue::Variable(var) = object {
+                    set.insert(*var);
+                }
+                if let PatternValue::Variable(var) = graph_name {
+                    set.insert(*var);
+                }
+                child.add_variables(set);
+            }
+            PlanNode::PathPatternJoin {
+                child,
+                subject,
+                object,
+                graph_name,
+                ..
+            } => {
+                if let PatternValue::Variable(var) = subject {
                     set.insert(*var);
                 }
                 if let PatternValue::Variable(var) = object {
@@ -362,6 +387,18 @@ impl PlanExpression {
             PlanExpression::Exists(n) => n.add_variables(set),
         }
     }
+}
+
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub enum PlanPropertyPath {
+    PredicatePath(EncodedTerm),
+    InversePath(Box<PlanPropertyPath>),
+    SequencePath(Box<PlanPropertyPath>, Box<PlanPropertyPath>),
+    AlternativePath(Box<PlanPropertyPath>, Box<PlanPropertyPath>),
+    ZeroOrMorePath(Box<PlanPropertyPath>),
+    OneOrMorePath(Box<PlanPropertyPath>),
+    ZeroOrOnePath(Box<PlanPropertyPath>),
+    NegatedPropertySet(Vec<EncodedTerm>),
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]

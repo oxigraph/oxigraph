@@ -92,6 +92,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/exists/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation/manifest.ttl",
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/property-path/manifest.ttl",
     ];
 
     let test_blacklist = vec![
@@ -123,6 +124,8 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#bnode01").unwrap(),
         //Decimal precision problem
         NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#coalesce01").unwrap(),
+        //Property path with unbound graph name are not supported yet
+        NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/property-path/manifest#pp35").unwrap()
     ];
 
     let tests: Result<Vec<_>> = manifest_10_urls
@@ -165,7 +168,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
                             .triples_for_predicate(&rs::INDEX)
                             .next()
                             .is_some();
-                        let actual_graph = to_graph(result, with_order)?;
+                        let actual_graph = to_graph(result, with_order).map_err(|e| format_err!("Error constructing result graph for {}: {}", test, e))?;
                         if actual_graph.is_isomorphic(&expected_graph) {
                             Ok(())
                         } else {

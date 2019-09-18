@@ -8,6 +8,7 @@ use crate::store::StoreConnection;
 use crate::Result;
 use chrono::prelude::*;
 use digest::Digest;
+use failure::format_err;
 use md5::Md5;
 use num_traits::identities::Zero;
 use num_traits::FromPrimitive;
@@ -26,6 +27,7 @@ use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::fmt::Write;
+use std::hash::Hash;
 use std::iter::Iterator;
 use std::iter::{empty, once};
 use std::ops::Deref;
@@ -121,72 +123,126 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 predicate,
                 object,
                 graph_name,
-            } => Box::new(
-                self.eval_plan(&*child, from)
-                    .flat_map(move |tuple| match tuple {
-                        Ok(tuple) => {
-                            let mut iter = self.dataset.quads_for_pattern(
-                                get_pattern_value(&subject, &tuple),
-                                get_pattern_value(&predicate, &tuple),
-                                get_pattern_value(&object, &tuple),
-                                get_pattern_value(&graph_name, &tuple),
-                            );
-                            if subject.is_var() && subject == predicate {
-                                iter = Box::new(iter.filter(|quad| match quad {
-                                    Err(_) => true,
-                                    Ok(quad) => quad.subject == quad.predicate,
-                                }))
-                            }
-                            if subject.is_var() && subject == object {
-                                iter = Box::new(iter.filter(|quad| match quad {
-                                    Err(_) => true,
-                                    Ok(quad) => quad.subject == quad.object,
-                                }))
-                            }
-                            if predicate.is_var() && predicate == object {
-                                iter = Box::new(iter.filter(|quad| match quad {
-                                    Err(_) => true,
-                                    Ok(quad) => quad.predicate == quad.object,
-                                }))
-                            }
-                            if graph_name.is_var() {
-                                iter = Box::new(iter.filter(|quad| match quad {
-                                    Err(_) => true,
-                                    Ok(quad) => quad.graph_name != ENCODED_DEFAULT_GRAPH,
-                                }));
-                                if graph_name == subject {
-                                    iter = Box::new(iter.filter(|quad| match quad {
-                                        Err(_) => true,
-                                        Ok(quad) => quad.graph_name == quad.subject,
-                                    }))
+            } => Box::new(self.eval_plan(&*child, from).flat_map_ok(move |tuple| {
+                let mut iter = self.dataset.quads_for_pattern(
+                    get_pattern_value(&subject, &tuple),
+                    get_pattern_value(&predicate, &tuple),
+                    get_pattern_value(&object, &tuple),
+                    get_pattern_value(&graph_name, &tuple),
+                );
+                if subject.is_var() && subject == predicate {
+                    iter = Box::new(iter.filter(|quad| match quad {
+                        Err(_) => true,
+                        Ok(quad) => quad.subject == quad.predicate,
+                    }))
+                }
+                if subject.is_var() && subject == object {
+                    iter = Box::new(iter.filter(|quad| match quad {
+                        Err(_) => true,
+                        Ok(quad) => quad.subject == quad.object,
+                    }))
+                }
+                if predicate.is_var() && predicate == object {
+                    iter = Box::new(iter.filter(|quad| match quad {
+                        Err(_) => true,
+                        Ok(quad) => quad.predicate == quad.object,
+                    }))
+                }
+                if graph_name.is_var() {
+                    iter = Box::new(iter.filter(|quad| match quad {
+                        Err(_) => true,
+                        Ok(quad) => quad.graph_name != ENCODED_DEFAULT_GRAPH,
+                    }));
+                    if graph_name == subject {
+                        iter = Box::new(iter.filter(|quad| match quad {
+                            Err(_) => true,
+                            Ok(quad) => quad.graph_name == quad.subject,
+                        }))
+                    }
+                    if graph_name == predicate {
+                        iter = Box::new(iter.filter(|quad| match quad {
+                            Err(_) => true,
+                            Ok(quad) => quad.graph_name == quad.predicate,
+                        }))
+                    }
+                    if graph_name == object {
+                        iter = Box::new(iter.filter(|quad| match quad {
+                            Err(_) => true,
+                            Ok(quad) => quad.graph_name == quad.object,
+                        }))
+                    }
+                }
+                let iter: EncodedTuplesIterator<'_> = Box::new(iter.map(move |quad| {
+                    let quad = quad?;
+                    let mut new_tuple = tuple.clone();
+                    put_pattern_value(&subject, quad.subject, &mut new_tuple);
+                    put_pattern_value(&predicate, quad.predicate, &mut new_tuple);
+                    put_pattern_value(&object, quad.object, &mut new_tuple);
+                    put_pattern_value(&graph_name, quad.graph_name, &mut new_tuple);
+                    Ok(new_tuple)
+                }));
+                iter
+            })),
+            PlanNode::PathPatternJoin {
+                child,
+                subject,
+                path,
+                object,
+                graph_name,
+            } => Box::new(self.eval_plan(&*child, from).flat_map_ok(move |tuple| {
+                let input_subject = get_pattern_value(&subject, &tuple);
+                let input_object = get_pattern_value(&object, &tuple);
+                let input_graph_name =
+                    if let Some(graph_name) = get_pattern_value(&graph_name, &tuple) {
+                        graph_name
+                    } else {
+                        return Box::new(once(Err(format_err!(
+                            "Unknown graph name is not allowed when evaluating property path"
+                        )))) as EncodedTuplesIterator<'_>;
+                    };
+                match (input_subject, input_object) {
+                    (Some(input_subject), Some(input_object)) => Box::new(
+                        self.eval_path_from(path, input_subject, input_graph_name)
+                            .filter_map(move |o| match o {
+                                Ok(o) => {
+                                    if o == input_object {
+                                        Some(Ok(tuple.clone()))
+                                    } else {
+                                        None
+                                    }
                                 }
-                                if graph_name == predicate {
-                                    iter = Box::new(iter.filter(|quad| match quad {
-                                        Err(_) => true,
-                                        Ok(quad) => quad.graph_name == quad.predicate,
-                                    }))
-                                }
-                                if graph_name == object {
-                                    iter = Box::new(iter.filter(|quad| match quad {
-                                        Err(_) => true,
-                                        Ok(quad) => quad.graph_name == quad.object,
-                                    }))
-                                }
-                            }
-                            let iter: EncodedTuplesIterator<'_> = Box::new(iter.map(move |quad| {
-                                let quad = quad?;
+                                Err(error) => Some(Err(error)),
+                            }),
+                    )
+                        as EncodedTuplesIterator<'_>,
+                    (Some(input_subject), None) => Box::new(
+                        self.eval_path_from(path, input_subject, input_graph_name)
+                            .map(move |o| {
                                 let mut new_tuple = tuple.clone();
-                                put_pattern_value(&subject, quad.subject, &mut new_tuple);
-                                put_pattern_value(&predicate, quad.predicate, &mut new_tuple);
-                                put_pattern_value(&object, quad.object, &mut new_tuple);
-                                put_pattern_value(&graph_name, quad.graph_name, &mut new_tuple);
+                                put_pattern_value(&object, o?, &mut new_tuple);
                                 Ok(new_tuple)
-                            }));
-                            iter
-                        }
-                        Err(error) => Box::new(once(Err(error))),
-                    }),
-            ),
+                            }),
+                    ),
+                    (None, Some(input_object)) => Box::new(
+                        self.eval_path_to(path, input_object, input_graph_name)
+                            .map(move |s| {
+                                let mut new_tuple = tuple.clone();
+                                put_pattern_value(&subject, s?, &mut new_tuple);
+                                Ok(new_tuple)
+                            }),
+                    ),
+                    (None, None) => {
+                        Box::new(self.eval_open_path(path, input_graph_name).map(move |so| {
+                            let mut new_tuple = tuple.clone();
+                            so.map(move |(s, o)| {
+                                put_pattern_value(&subject, s, &mut new_tuple);
+                                put_pattern_value(&object, o, &mut new_tuple);
+                                new_tuple
+                            })
+                        }))
+                    }
+                }
+            })),
             PlanNode::Join { left, right } => {
                 //TODO: very dumb implementation
                 let left_iter = self.eval_plan(&*left, from.clone());
@@ -311,9 +367,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 Box::new(errors.into_iter().chain(values.into_iter().map(Ok)))
             }
             PlanNode::HashDeduplicate { child } => {
-                let iter = self.eval_plan(&*child, from);
-                let already_seen = HashSet::with_capacity(iter.size_hint().0);
-                Box::new(HashDeduplicateIterator { iter, already_seen })
+                Box::new(hash_deduplicate(self.eval_plan(&*child, from)))
             }
             PlanNode::Skip { child, count } => Box::new(self.eval_plan(&*child, from).skip(*count)),
             PlanNode::Limit { child, count } => {
@@ -330,6 +384,171 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 }))
             }
         }
+    }
+
+    fn eval_path_from<'b>(
+        &'b self,
+        path: &'b PlanPropertyPath,
+        start: EncodedTerm,
+        graph_name: EncodedTerm,
+    ) -> Box<dyn Iterator<Item = Result<EncodedTerm>> + 'b>
+    where
+        'a: 'b,
+    {
+        match path {
+            PlanPropertyPath::PredicatePath(p) => Box::new(
+                self.dataset
+                    .quads_for_pattern(Some(start), Some(*p), None, Some(graph_name))
+                    .map(|t| Ok(t?.object)),
+            ),
+            PlanPropertyPath::InversePath(p) => self.eval_path_to(&p, start, graph_name),
+            PlanPropertyPath::SequencePath(a, b) => Box::new(
+                self.eval_path_from(&a, start, graph_name)
+                    .flat_map_ok(move |middle| self.eval_path_from(&b, middle, graph_name)),
+            ),
+            PlanPropertyPath::AlternativePath(a, b) => Box::new(
+                self.eval_path_from(&a, start, graph_name)
+                    .chain(self.eval_path_from(&b, start, graph_name)),
+            ),
+            PlanPropertyPath::ZeroOrMorePath(p) => {
+                Box::new(transitive_closure(Some(Ok(start)), move |e| {
+                    self.eval_path_from(p, e, graph_name)
+                }))
+            }
+            PlanPropertyPath::OneOrMorePath(p) => Box::new(transitive_closure(
+                self.eval_path_from(p, start, graph_name),
+                move |e| self.eval_path_from(p, e, graph_name),
+            )),
+            PlanPropertyPath::ZeroOrOnePath(p) => Box::new(hash_deduplicate(
+                once(Ok(start)).chain(self.eval_path_from(&p, start, graph_name)),
+            )),
+            PlanPropertyPath::NegatedPropertySet(ps) => Box::new(
+                self.dataset
+                    .quads_for_pattern(Some(start), None, None, Some(graph_name))
+                    .filter(move |t| match t {
+                        Ok(t) => !ps.contains(&t.predicate),
+                        Err(_) => true,
+                    })
+                    .map(|t| Ok(t?.object)),
+            ),
+        }
+    }
+
+    fn eval_path_to<'b>(
+        &'b self,
+        path: &'b PlanPropertyPath,
+        end: EncodedTerm,
+        graph_name: EncodedTerm,
+    ) -> Box<dyn Iterator<Item = Result<EncodedTerm>> + 'b>
+    where
+        'a: 'b,
+    {
+        match path {
+            PlanPropertyPath::PredicatePath(p) => Box::new(
+                self.dataset
+                    .quads_for_pattern(None, Some(*p), Some(end), Some(graph_name))
+                    .map(|t| Ok(t?.subject)),
+            ),
+            PlanPropertyPath::InversePath(p) => self.eval_path_from(&p, end, graph_name),
+            PlanPropertyPath::SequencePath(a, b) => Box::new(
+                self.eval_path_to(&b, end, graph_name)
+                    .flat_map_ok(move |middle| self.eval_path_to(&a, middle, graph_name)),
+            ),
+            PlanPropertyPath::AlternativePath(a, b) => Box::new(
+                self.eval_path_to(&a, end, graph_name)
+                    .chain(self.eval_path_to(&b, end, graph_name)),
+            ),
+            PlanPropertyPath::ZeroOrMorePath(p) => {
+                Box::new(transitive_closure(Some(Ok(end)), move |e| {
+                    self.eval_path_to(p, e, graph_name)
+                }))
+            }
+            PlanPropertyPath::OneOrMorePath(p) => Box::new(transitive_closure(
+                self.eval_path_to(p, end, graph_name),
+                move |e| self.eval_path_to(p, e, graph_name),
+            )),
+            PlanPropertyPath::ZeroOrOnePath(p) => Box::new(hash_deduplicate(
+                once(Ok(end)).chain(self.eval_path_to(&p, end, graph_name)),
+            )),
+            PlanPropertyPath::NegatedPropertySet(ps) => Box::new(
+                self.dataset
+                    .quads_for_pattern(None, None, Some(end), Some(graph_name))
+                    .filter(move |t| match t {
+                        Ok(t) => !ps.contains(&t.predicate),
+                        Err(_) => true,
+                    })
+                    .map(|t| Ok(t?.subject)),
+            ),
+        }
+    }
+
+    fn eval_open_path<'b>(
+        &'b self,
+        path: &'b PlanPropertyPath,
+        graph_name: EncodedTerm,
+    ) -> Box<dyn Iterator<Item = Result<(EncodedTerm, EncodedTerm)>> + 'b>
+    where
+        'a: 'b,
+    {
+        match path {
+            PlanPropertyPath::PredicatePath(p) => Box::new(
+                self.dataset
+                    .quads_for_pattern(None, Some(*p), None, Some(graph_name))
+                    .map(|t| t.map(|t| (t.subject, t.object))),
+            ),
+            PlanPropertyPath::InversePath(p) => Box::new(
+                self.eval_open_path(&p, graph_name)
+                    .map(|t| t.map(|(s, o)| (o, s))),
+            ),
+            PlanPropertyPath::SequencePath(a, b) => Box::new(
+                self.eval_open_path(&a, graph_name)
+                    .flat_map_ok(move |(start, middle)| {
+                        self.eval_path_from(&b, middle, graph_name)
+                            .map(move |end| Ok((start, end?)))
+                    }),
+            ),
+            PlanPropertyPath::AlternativePath(a, b) => Box::new(
+                self.eval_open_path(&a, graph_name)
+                    .chain(self.eval_open_path(&b, graph_name)),
+            ),
+            PlanPropertyPath::ZeroOrMorePath(p) => Box::new(transitive_closure(
+                self.get_subject_or_object_identity_pairs(graph_name), //TODO: avoid to inject everything
+                move |(start, middle)| {
+                    self.eval_path_from(p, middle, graph_name)
+                        .map(move |end| Ok((start, end?)))
+                },
+            )),
+            PlanPropertyPath::OneOrMorePath(p) => Box::new(transitive_closure(
+                self.eval_open_path(p, graph_name),
+                move |(start, middle)| {
+                    self.eval_path_from(p, middle, graph_name)
+                        .map(move |end| Ok((start, end?)))
+                },
+            )),
+            PlanPropertyPath::ZeroOrOnePath(p) => Box::new(hash_deduplicate(
+                self.get_subject_or_object_identity_pairs(graph_name)
+                    .chain(self.eval_open_path(&p, graph_name)),
+            )),
+            PlanPropertyPath::NegatedPropertySet(ps) => Box::new(
+                self.dataset
+                    .quads_for_pattern(None, None, None, Some(graph_name))
+                    .filter(move |t| match t {
+                        Ok(t) => !ps.contains(&t.predicate),
+                        Err(_) => true,
+                    })
+                    .map(|t| t.map(|t| (t.subject, t.object))),
+            ),
+        }
+    }
+
+    fn get_subject_or_object_identity_pairs<'b>(
+        &'b self,
+        graph_name: EncodedTerm,
+    ) -> impl Iterator<Item = Result<(EncodedTerm, EncodedTerm)>> + 'b {
+        self.dataset
+            .quads_for_pattern(None, None, None, Some(graph_name))
+            .flat_map_ok(|t| once(Ok(t.subject)).chain(once(Ok(t.object))))
+            .map(|e| e.map(|e| (e, e)))
     }
 
     fn eval_expression(
@@ -1895,28 +2114,6 @@ impl<'a, S: StoreConnection> Iterator for UnionIterator<'a, S> {
     }
 }
 
-struct HashDeduplicateIterator<'a> {
-    iter: EncodedTuplesIterator<'a>,
-    already_seen: HashSet<EncodedTuple>,
-}
-
-impl<'a> Iterator for HashDeduplicateIterator<'a> {
-    type Item = Result<EncodedTuple>;
-
-    fn next(&mut self) -> Option<Result<EncodedTuple>> {
-        loop {
-            match self.iter.next()? {
-                Ok(tuple) => {
-                    if self.already_seen.insert(tuple.clone()) {
-                        return Some(Ok(tuple));
-                    }
-                }
-                Err(error) => return Some(Err(error)),
-            }
-        }
-    }
-}
-
 struct ConstructIterator<'a, S: StoreConnection> {
     eval: &'a SimpleEvaluator<S>,
     iter: EncodedTuplesIterator<'a>,
@@ -2046,6 +2243,121 @@ impl<T1, T2, I1: Iterator<Item = T1>, I2: Iterator<Item = T2>> Iterator
         match (self.a.next(), self.b.next()) {
             (None, None) => None,
             r => Some(r),
+        }
+    }
+}
+
+fn transitive_closure<'a, T: 'a + Copy + Eq + Hash, NI: Iterator<Item = Result<T>> + 'a>(
+    start: impl IntoIterator<Item = Result<T>>,
+    next: impl Fn(T) -> NI,
+) -> impl Iterator<Item = Result<T>> + 'a {
+    //TODO: optimize
+    let mut all = HashSet::<T>::default();
+    let mut errors = Vec::default();
+    let mut current = start
+        .into_iter()
+        .filter_map(|e| match e {
+            Ok(e) => {
+                all.insert(e);
+                Some(e)
+            }
+            Err(error) => {
+                errors.push(error);
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+
+    while !current.is_empty() {
+        current = current
+            .into_iter()
+            .flat_map(|e| next(e))
+            .filter_map(|e| match e {
+                Ok(e) => {
+                    if all.contains(&e) {
+                        None
+                    } else {
+                        all.insert(e);
+                        Some(e)
+                    }
+                }
+                Err(error) => {
+                    errors.push(error);
+                    None
+                }
+            })
+            .collect();
+    }
+    errors.into_iter().map(Err).chain(all.into_iter().map(Ok))
+}
+
+fn hash_deduplicate<T: Eq + Hash + Clone>(
+    iter: impl Iterator<Item = Result<T>>,
+) -> impl Iterator<Item = Result<T>> {
+    let mut already_seen = HashSet::with_capacity(iter.size_hint().0);
+    iter.filter(move |e| {
+        if let Ok(e) = e {
+            if already_seen.contains(e) {
+                false
+            } else {
+                already_seen.insert(e.clone());
+                true
+            }
+        } else {
+            true
+        }
+    })
+}
+
+trait ResultIterator<T>: Iterator<Item = Result<T>> + Sized {
+    fn flat_map_ok<O, F: FnMut(T) -> U, U: IntoIterator<Item = Result<O>>>(
+        self,
+        f: F,
+    ) -> FlatMapOk<T, O, Self, F, U>;
+}
+
+impl<T, I: Iterator<Item = Result<T>> + Sized> ResultIterator<T> for I {
+    fn flat_map_ok<O, F: FnMut(T) -> U, U: IntoIterator<Item = Result<O>>>(
+        self,
+        f: F,
+    ) -> FlatMapOk<T, O, Self, F, U> {
+        FlatMapOk {
+            inner: self,
+            f,
+            current: None,
+        }
+    }
+}
+
+struct FlatMapOk<
+    T,
+    O,
+    I: Iterator<Item = Result<T>>,
+    F: FnMut(T) -> U,
+    U: IntoIterator<Item = Result<O>>,
+> {
+    inner: I,
+    f: F,
+    current: Option<U::IntoIter>,
+}
+
+impl<T, O, I: Iterator<Item = Result<T>>, F: FnMut(T) -> U, U: IntoIterator<Item = Result<O>>>
+    Iterator for FlatMapOk<T, O, I, F, U>
+{
+    type Item = Result<O>;
+
+    fn next(&mut self) -> Option<Result<O>> {
+        loop {
+            if let Some(current) = &mut self.current {
+                if let Some(next) = current.next() {
+                    return Some(next);
+                }
+            }
+            self.current = None;
+            match self.inner.next()? {
+                Ok(e) => self.current = Some((self.f)(e).into_iter()),
+                Err(error) => return Some(Err(error)),
+            }
         }
     }
 }

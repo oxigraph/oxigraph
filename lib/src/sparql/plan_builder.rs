@@ -2,6 +2,7 @@ use crate::model::vocab::xsd;
 use crate::model::Literal;
 use crate::sparql::algebra::*;
 use crate::sparql::model::*;
+use crate::sparql::plan::PlanPropertyPath;
 use crate::sparql::plan::*;
 use crate::store::numeric_encoder::ENCODED_DEFAULT_GRAPH;
 use crate::store::StoreConnection;
@@ -200,10 +201,50 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
                     object: self.pattern_value_from_term_or_variable(&pattern.object, variables)?,
                     graph_name,
                 },
-                TripleOrPathPattern::Path(_pattern) => unimplemented!(),
+                TripleOrPathPattern::Path(pattern) => PlanNode::PathPatternJoin {
+                    child: Box::new(plan),
+                    subject: self
+                        .pattern_value_from_term_or_variable(&pattern.subject, variables)?,
+                    path: self.build_for_path(&pattern.path)?,
+                    object: self.pattern_value_from_term_or_variable(&pattern.object, variables)?,
+                    graph_name,
+                },
             }
         }
         Ok(plan)
+    }
+
+    fn build_for_path(&self, path: &PropertyPath) -> Result<PlanPropertyPath> {
+        Ok(match path {
+            PropertyPath::PredicatePath(p) => {
+                PlanPropertyPath::PredicatePath(self.store.encoder().encode_named_node(p)?)
+            }
+            PropertyPath::InversePath(p) => {
+                PlanPropertyPath::InversePath(Box::new(self.build_for_path(p)?))
+            }
+            PropertyPath::AlternativePath(a, b) => PlanPropertyPath::AlternativePath(
+                Box::new(self.build_for_path(a)?),
+                Box::new(self.build_for_path(b)?),
+            ),
+            PropertyPath::SequencePath(a, b) => PlanPropertyPath::SequencePath(
+                Box::new(self.build_for_path(a)?),
+                Box::new(self.build_for_path(b)?),
+            ),
+            PropertyPath::ZeroOrMorePath(p) => {
+                PlanPropertyPath::ZeroOrMorePath(Box::new(self.build_for_path(p)?))
+            }
+            PropertyPath::OneOrMorePath(p) => {
+                PlanPropertyPath::OneOrMorePath(Box::new(self.build_for_path(p)?))
+            }
+            PropertyPath::ZeroOrOnePath(p) => {
+                PlanPropertyPath::ZeroOrOnePath(Box::new(self.build_for_path(p)?))
+            }
+            PropertyPath::NegatedPropertySet(p) => PlanPropertyPath::NegatedPropertySet(
+                p.iter()
+                    .map(|p| self.store.encoder().encode_named_node(p))
+                    .collect::<Result<Vec<_>>>()?,
+            ),
+        })
     }
 
     fn build_for_expression(
