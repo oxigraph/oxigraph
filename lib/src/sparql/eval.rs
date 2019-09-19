@@ -285,7 +285,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     eval: self,
                     right_plan: &*right,
                     left_iter: self.eval_plan(&*left, filtered_from),
-                    current_right: Vec::default(),
+                    current_right: Box::new(empty()),
                 };
                 if problem_vars.is_empty() {
                     Box::new(iter)
@@ -2015,24 +2015,20 @@ struct LeftJoinIterator<'a, S: StoreConnection + 'a> {
     eval: &'a SimpleEvaluator<S>,
     right_plan: &'a PlanNode,
     left_iter: EncodedTuplesIterator<'a>,
-    current_right: Vec<Result<EncodedTuple>>, //TODO: keep using an iterator?
+    current_right: EncodedTuplesIterator<'a>,
 }
 
 impl<'a, S: StoreConnection> Iterator for LeftJoinIterator<'a, S> {
     type Item = Result<EncodedTuple>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple>> {
-        if let Some(tuple) = self.current_right.pop() {
+        if let Some(tuple) = self.current_right.next() {
             return Some(tuple);
         }
         match self.left_iter.next()? {
             Ok(left_tuple) => {
-                let mut current_right: Vec<_> = self
-                    .eval
-                    .eval_plan(self.right_plan, left_tuple.clone())
-                    .collect();
-                if let Some(right_tuple) = current_right.pop() {
-                    self.current_right = current_right;
+                self.current_right = self.eval.eval_plan(self.right_plan, left_tuple.clone());
+                if let Some(right_tuple) = self.current_right.next() {
                     Some(right_tuple)
                 } else {
                     Some(Ok(left_tuple))
