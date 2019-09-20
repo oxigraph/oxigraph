@@ -320,7 +320,7 @@ DataBlock -> GraphPattern = l:(InlineDataOneVar / InlineDataFull) {
 InlineDataOneVar -> StaticBindings = var:Var _ '{' _ d:InlineDataOneVar_value* '}' {
     StaticBindings::new(vec![var], d)
 }
-InlineDataOneVar_value -> Vec<Option<Term>> = t:DataBlockValue { vec![t] }
+InlineDataOneVar_value -> Vec<Option<Term>> = t:DataBlockValue _ { vec![t] }
 
 //[64]
 InlineDataFull -> StaticBindings = '(' _ vars:InlineDataFull_var* _ ')' _ '{' _ val:InlineDataFull_values* '}' {
