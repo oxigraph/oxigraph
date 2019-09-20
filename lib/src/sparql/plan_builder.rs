@@ -123,7 +123,11 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
                 )?),
                 right: Box::new(self.build_for_graph_pattern(b, input, variables, graph_name)?),
             },
-            GraphPattern::Service(_n, _p, _s) => unimplemented!(),
+            GraphPattern::Service(_n, _p, _s) => {
+                return Err(format_err!(
+                    "SPARQL SERVICE clauses are not implemented yet"
+                ))
+            }
             GraphPattern::AggregateJoin(_g, _a) => unimplemented!(),
             GraphPattern::Data(bs) => PlanNode::StaticBindings {
                 tuples: self.encode_bindings(bs, variables)?,
