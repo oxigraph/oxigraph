@@ -88,12 +88,14 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
 
     let manifest_11_urls = vec![
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/bind/manifest.ttl",
+        //TODO "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/bindings/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/construct/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/exists/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/project-expression/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/property-path/manifest.ttl",
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/subquery/manifest.ttl",
     ];
 
     let test_blacklist = vec![
@@ -126,7 +128,9 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         //Decimal precision problem
         NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#coalesce01").unwrap(),
         //Property path with unbound graph name are not supported yet
-        NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/property-path/manifest#pp35").unwrap()
+        NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/property-path/manifest#pp35").unwrap(),
+        //Aggregate in subquery (TODO when aggregates are implemented)
+        NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/subquery/manifest#subquery08").unwrap(),
     ];
 
     let tests: Result<Vec<_>> = manifest_10_urls

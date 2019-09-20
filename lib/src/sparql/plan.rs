@@ -66,7 +66,7 @@ pub enum PlanNode {
     },
     Project {
         child: Box<PlanNode>,
-        mapping: Vec<usize>, // for each key in children the key of the returned vector (children is sliced at the vector length)
+        mapping: Vec<(usize, usize)>, // pairs of (variable key in child, variable key in output)
     },
 }
 

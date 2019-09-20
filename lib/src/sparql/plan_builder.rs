@@ -149,18 +149,38 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
                     by: by?,
                 }
             }
-            GraphPattern::Project(l, new_variables) => PlanNode::Project {
-                child: Box::new(self.build_for_graph_pattern(
-                    l,
-                    input,
-                    &mut new_variables.clone(),
-                    graph_name,
-                )?),
-                mapping: new_variables
-                    .iter()
-                    .map(|variable| variable_key(variables, variable))
-                    .collect(),
-            },
+            GraphPattern::Project(l, new_variables) => {
+                let mut inner_variables = new_variables.clone();
+                let inner_graph_name = match graph_name {
+                    PatternValue::Constant(graph_name) => PatternValue::Constant(graph_name),
+                    PatternValue::Variable(graph_name) => PatternValue::Variable(
+                        new_variables
+                            .iter()
+                            .enumerate()
+                            .find(|(_, var)| *var == &variables[graph_name])
+                            .map(|(new_key, _)| new_key)
+                            .unwrap_or_else(|| {
+                                inner_variables.push(Variable::default());
+                                inner_variables.len() - 1
+                            }),
+                    ),
+                };
+                PlanNode::Project {
+                    child: Box::new(self.build_for_graph_pattern(
+                        l,
+                        input,
+                        &mut inner_variables,
+                        inner_graph_name,
+                    )?),
+                    mapping: new_variables
+                        .iter()
+                        .enumerate()
+                        .map(|(new_variable, variable)| {
+                            (new_variable, variable_key(variables, variable))
+                        })
+                        .collect(),
+                }
+            }
             GraphPattern::Distinct(l) => PlanNode::HashDeduplicate {
                 child: Box::new(self.build_for_graph_pattern(l, input, variables, graph_name)?),
             },
