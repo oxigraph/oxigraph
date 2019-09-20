@@ -43,11 +43,14 @@ SubSelect -> GraphPattern = s:SelectClause _ w:WhereClause _ g:GroupClause? _ h:
 }
 
 //[9]
-SelectClause -> Selection = "SELECT"i _ o:SelectClause_option _ v:SelectClause_variables {
+SelectClause -> Selection = "SELECT"i _ Selection_init o:SelectClause_option _ v:SelectClause_variables {
     Selection {
         option: o,
         variables: v
     }
+}
+Selection_init = {
+    state.aggregations.push(BTreeMap::default())
 }
 SelectClause_option -> SelectionOption =
     "DISTINCT"i { SelectionOption::Distinct } /
@@ -143,15 +146,15 @@ WhereClause -> GraphPattern = "WHERE"i? _ p:GroupGraphPattern {
 }
 
 //[19]
-GroupClause -> (Vec<Expression>, Vec<(Expression,Variable)>) = "GROUP"i _ "BY"i _ c:GroupCondition_item+ {
+GroupClause -> (Vec<Variable>, Vec<(Expression,Variable)>) = "GROUP"i _ "BY"i _ c:GroupCondition_item+ {
     let mut projections: Vec<(Expression,Variable)> = Vec::default();
     let clauses = c.into_iter().map(|(e, vo)| {
-        match vo {
-            Some(v) => {
-                projections.push((e, v.clone()));
-                v.into()
-            },
-            None => e
+        if let Expression::Constant(TermOrVariable::Variable(v)) = e {
+            v
+        } else {
+            let v = vo.unwrap_or_else(Variable::default);
+            projections.push((e, v.clone()));
+            v
         }
     }).collect();
     (clauses, projections)
@@ -771,7 +774,7 @@ BrackettedExpression -> Expression = '(' _ e:Expression _ ')' { e }
 
 //[121]
 BuiltInCall -> Expression =
-    a:Aggregate { state.new_aggregation(a).into() } /
+    a:Aggregate {? state.new_aggregation(a).map(|v| v.into()) } /
     "STR"i _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::Str, vec![e]) } /
     "LANG"i _ '(' _ e:Expression _ ')' { Expression::FunctionCall(Function::Lang, vec![e]) } /
     "LANGMATCHES"i _ '(' _ a:Expression _ ',' _ b:Expression _ ')' { Expression::FunctionCall(Function::LangMatches, vec![a, b]) } /

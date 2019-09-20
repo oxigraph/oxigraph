@@ -207,7 +207,7 @@ mod grammar {
     fn build_select(
         select: Selection,
         wher: GraphPattern,
-        group: Option<(Vec<Expression>, Vec<(Expression, Variable)>)>,
+        mut group: Option<(Vec<Variable>, Vec<(Expression, Variable)>)>,
         having: Option<Expression>,
         order_by: Option<Vec<OrderComparator>>,
         offset_limit: Option<(usize, Option<usize>)>,
@@ -217,21 +217,22 @@ mod grammar {
         let mut p = wher;
 
         //GROUP BY
+        let aggregations = state.aggregations.pop().unwrap_or_else(BTreeMap::default);
+        if group.is_none() && !aggregations.is_empty() {
+            let const_variable = Variable::default();
+            group = Some((
+                vec![const_variable.clone()],
+                vec![(Literal::from(1).into(), const_variable)],
+            ));
+        }
+
         if let Some((clauses, binds)) = group {
             for (e, v) in binds {
                 p = GraphPattern::Extend(Box::new(p), v, e);
             }
             let g = GroupPattern(clauses, Box::new(p));
-            p = GraphPattern::AggregateJoin(g, state.aggregations.clone());
-            state.aggregations = BTreeMap::default();
+            p = GraphPattern::AggregateJoin(g, aggregations);
         }
-        if !state.aggregations.is_empty() {
-            let g = GroupPattern(vec![Literal::from(1).into()], Box::new(p));
-            p = GraphPattern::AggregateJoin(g, state.aggregations.clone());
-            state.aggregations = BTreeMap::default();
-        }
-
-        //TODO: not aggregated vars
 
         //HAVING
         if let Some(ex) = having {
@@ -297,7 +298,7 @@ mod grammar {
         namespaces: HashMap<String, String>,
         bnodes_map: BTreeMap<String, BlankNode>,
         used_bnodes: BTreeSet<String>,
-        aggregations: BTreeMap<Aggregation, Variable>,
+        aggregations: Vec<BTreeMap<Aggregation, Variable>>,
     }
 
     impl ParserState {
@@ -309,12 +310,16 @@ mod grammar {
             }
         }
 
-        fn new_aggregation(&mut self, agg: Aggregation) -> Variable {
-            self.aggregations.get(&agg).cloned().unwrap_or_else(|| {
+        fn new_aggregation(&mut self, agg: Aggregation) -> Result<Variable, &'static str> {
+            let aggregations = self
+                .aggregations
+                .last_mut()
+                .ok_or_else(|| "Unexpected aggregate")?;
+            Ok(aggregations.get(&agg).cloned().unwrap_or_else(|| {
                 let new_var = Variable::default();
-                self.aggregations.insert(agg, new_var.clone());
+                aggregations.insert(agg, new_var.clone());
                 new_var
-            })
+            }))
         }
     }
 
@@ -546,7 +551,7 @@ mod grammar {
             namespaces: HashMap::default(),
             bnodes_map: BTreeMap::default(),
             used_bnodes: BTreeSet::default(),
-            aggregations: BTreeMap::default(),
+            aggregations: Vec::default(),
         };
 
         Ok(QueryUnit(&unescape_unicode_codepoints(query), &mut state)?)

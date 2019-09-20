@@ -69,7 +69,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/bound/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/cast/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/construct/manifest.ttl",
-        // FROM and FROM NAMED "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/construct/manifest.ttl",
+        //TODO FROM and FROM NAMED "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/construct/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest.ttl",
@@ -87,11 +87,13 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
     ];
 
     let manifest_11_urls = vec![
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/bind/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/bindings/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/construct/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/exists/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest.ttl",
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/grouping/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/project-expression/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/property-path/manifest.ttl",
@@ -129,8 +131,9 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#coalesce01").unwrap(),
         //Property path with unbound graph name are not supported yet
         NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/property-path/manifest#pp35").unwrap(),
-        //Aggregate in subquery (TODO when aggregates are implemented)
-        NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/subquery/manifest#subquery08").unwrap(),
+        //We write "2"^^xsd:decimal instead of "2.0"^^xsd:decimal
+        NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-err-02").unwrap(),
+        NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-avg-02").unwrap()
     ];
 
     let tests: Result<Vec<_>> = manifest_10_urls

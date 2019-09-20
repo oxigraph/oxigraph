@@ -68,6 +68,12 @@ pub enum PlanNode {
         child: Box<PlanNode>,
         mapping: Vec<(usize, usize)>, // pairs of (variable key in child, variable key in output)
     },
+    Aggregate {
+        // By definition the group by key are the range 0..key_mapping.len()
+        child: Box<PlanNode>,
+        key_mapping: Vec<usize>, //index of the new key for each old key (that is the vec key)
+        aggregates: Vec<(PlanAggregation, usize)>,
+    },
 }
 
 impl PlanNode {
@@ -157,6 +163,16 @@ impl PlanNode {
             PlanNode::Project { child: _, mapping } => {
                 for i in 0..mapping.len() {
                     set.insert(i);
+                }
+            }
+            PlanNode::Aggregate {
+                key_mapping,
+                aggregates,
+                ..
+            } => {
+                set.extend(key_mapping);
+                for (_, var) in aggregates {
+                    set.insert(*var);
                 }
             }
         }
@@ -387,6 +403,24 @@ impl PlanExpression {
             PlanExpression::Exists(n) => n.add_variables(set),
         }
     }
+}
+
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct PlanAggregation {
+    pub function: PlanAggregationFunction,
+    pub parameter: Option<PlanExpression>,
+    pub distinct: bool,
+}
+
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub enum PlanAggregationFunction {
+    Count,
+    Sum,
+    Min,
+    Max,
+    Avg,
+    Sample,
+    GroupConcat { separator: String },
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]

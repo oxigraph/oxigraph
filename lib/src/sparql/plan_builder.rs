@@ -37,7 +37,7 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
     fn build_for_graph_pattern(
         &self,
         pattern: &GraphPattern,
-        input: PlanNode,
+        input: PlanNode, //TODO: is this parameter really useful?
         variables: &mut Vec<Variable>,
         graph_name: PatternValue,
     ) -> Result<PlanNode> {
@@ -128,7 +128,33 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
                     "SPARQL SERVICE clauses are not implemented yet"
                 ))
             }
-            GraphPattern::AggregateJoin(_g, _a) => unimplemented!(),
+            GraphPattern::AggregateJoin(GroupPattern(key, p), aggregates) => {
+                let mut inner_variables = key.clone();
+                let inner_graph_name =
+                    self.convert_pattern_value_id(graph_name, variables, &mut inner_variables);
+
+                PlanNode::Aggregate {
+                    child: Box::new(self.build_for_graph_pattern(
+                        p,
+                        input,
+                        &mut inner_variables,
+                        inner_graph_name,
+                    )?),
+                    key_mapping: key
+                        .iter()
+                        .map(|k| variable_key(&mut inner_variables, k))
+                        .collect(),
+                    aggregates: aggregates
+                        .iter()
+                        .map(|(a, v)| {
+                            Ok((
+                                self.build_for_aggregate(a, &mut inner_variables, graph_name)?,
+                                variable_key(variables, v),
+                            ))
+                        })
+                        .collect::<Result<Vec<_>>>()?,
+                }
+            }
             GraphPattern::Data(bs) => PlanNode::StaticBindings {
                 tuples: self.encode_bindings(bs, variables)?,
             },
@@ -151,20 +177,8 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
             }
             GraphPattern::Project(l, new_variables) => {
                 let mut inner_variables = new_variables.clone();
-                let inner_graph_name = match graph_name {
-                    PatternValue::Constant(graph_name) => PatternValue::Constant(graph_name),
-                    PatternValue::Variable(graph_name) => PatternValue::Variable(
-                        new_variables
-                            .iter()
-                            .enumerate()
-                            .find(|(_, var)| *var == &variables[graph_name])
-                            .map(|(new_key, _)| new_key)
-                            .unwrap_or_else(|| {
-                                inner_variables.push(Variable::default());
-                                inner_variables.len() - 1
-                            }),
-                    ),
-                };
+                let inner_graph_name =
+                    self.convert_pattern_value_id(graph_name, variables, &mut inner_variables);
                 PlanNode::Project {
                     child: Box::new(self.build_for_graph_pattern(
                         l,
@@ -731,20 +745,73 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
         variables: &mut Vec<Variable>,
     ) -> Result<Vec<EncodedTuple>> {
         let encoder = self.store.encoder();
-        let bindings_variables = bindings.variables();
+        let bindings_variables_keys = bindings
+            .variables()
+            .iter()
+            .map(|v| variable_key(variables, v))
+            .collect::<Vec<_>>();
         bindings
             .values_iter()
             .map(move |values| {
                 let mut result = vec![None; variables.len()];
                 for (key, value) in values.iter().enumerate() {
                     if let Some(term) = value {
-                        result[variable_key(variables, &bindings_variables[key])] =
-                            Some(encoder.encode_term(term)?);
+                        result[bindings_variables_keys[key]] = Some(encoder.encode_term(term)?);
                     }
                 }
                 Ok(result)
             })
             .collect()
+    }
+
+    fn build_for_aggregate(
+        &self,
+        aggregate: &Aggregation,
+        variables: &mut Vec<Variable>,
+        graph_name: PatternValue,
+    ) -> Result<PlanAggregation> {
+        Ok(match aggregate {
+            Aggregation::Count(e, distinct) => PlanAggregation {
+                function: PlanAggregationFunction::Count,
+                parameter: match e {
+                    Some(e) => Some(self.build_for_expression(&e, variables, graph_name)?),
+                    None => None,
+                },
+                distinct: *distinct,
+            },
+            Aggregation::Sum(e, distinct) => PlanAggregation {
+                function: PlanAggregationFunction::Sum,
+                parameter: Some(self.build_for_expression(&e, variables, graph_name)?),
+                distinct: *distinct,
+            },
+            Aggregation::Min(e, distinct) => PlanAggregation {
+                function: PlanAggregationFunction::Min,
+                parameter: Some(self.build_for_expression(&e, variables, graph_name)?),
+                distinct: *distinct,
+            },
+            Aggregation::Max(e, distinct) => PlanAggregation {
+                function: PlanAggregationFunction::Max,
+                parameter: Some(self.build_for_expression(&e, variables, graph_name)?),
+                distinct: *distinct,
+            },
+            Aggregation::Avg(e, distinct) => PlanAggregation {
+                function: PlanAggregationFunction::Avg,
+                parameter: Some(self.build_for_expression(&e, variables, graph_name)?),
+                distinct: *distinct,
+            },
+            Aggregation::Sample(e, distinct) => PlanAggregation {
+                function: PlanAggregationFunction::Sample,
+                parameter: Some(self.build_for_expression(&e, variables, graph_name)?),
+                distinct: *distinct,
+            },
+            Aggregation::GroupConcat(e, distinct, separator) => PlanAggregation {
+                function: PlanAggregationFunction::GroupConcat {
+                    separator: separator.clone().unwrap_or_else(|| " ".to_string()),
+                },
+                parameter: Some(self.build_for_expression(&e, variables, graph_name)?),
+                distinct: *distinct,
+            },
+        })
     }
 
     fn build_for_graph_template(
@@ -815,6 +882,39 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
                 }
             }
         })
+    }
+
+    fn convert_pattern_value_id(
+        &self,
+        from_value: PatternValue,
+        from: &[Variable],
+        to: &mut Vec<Variable>,
+    ) -> PatternValue {
+        match from_value {
+            PatternValue::Constant(v) => PatternValue::Constant(v),
+            PatternValue::Variable(from_id) => {
+                PatternValue::Variable(self.convert_variable_id(from_id, from, to))
+            }
+        }
+    }
+
+    fn convert_variable_id(
+        &self,
+        from_id: usize,
+        from: &[Variable],
+        to: &mut Vec<Variable>,
+    ) -> usize {
+        if let Some(to_id) = to
+            .iter()
+            .enumerate()
+            .find(|(_, var)| *var == &from[from_id])
+            .map(|(to_id, _)| to_id)
+        {
+            to_id
+        } else {
+            to.push(Variable::default());
+            to.len() - 1
+        }
     }
 }
 

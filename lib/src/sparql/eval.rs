@@ -23,8 +23,7 @@ use sha1::Sha1;
 use sha2::{Sha256, Sha384, Sha512};
 use std::cmp::min;
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryInto;
 use std::fmt::Write;
 use std::hash::Hash;
@@ -389,6 +388,119 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                         }),
                 )
             }
+            PlanNode::Aggregate {
+                child,
+                key_mapping,
+                aggregates,
+            } => {
+                let tuple_size = from.len(); //TODO: not nice
+                let mut errors = Vec::default();
+                let mut accumulators_for_group =
+                    HashMap::<Vec<Option<EncodedTerm>>, Vec<Box<dyn Accumulator>>>::default();
+                self.eval_plan(child, from)
+                    .filter_map(|result| match result {
+                        Ok(result) => Some(result),
+                        Err(error) => {
+                            errors.push(error);
+                            None
+                        }
+                    })
+                    .for_each(|tuple| {
+                        //TODO avoid copy for key?
+                        let key = (0..key_mapping.len())
+                            .map(|v| get_tuple_value(v, &tuple))
+                            .collect();
+
+                        let key_accumulators =
+                            accumulators_for_group.entry(key).or_insert_with(|| {
+                                aggregates
+                                    .iter()
+                                    .map(|(aggregate, _)| {
+                                        self.accumulator_for_aggregate(
+                                            &aggregate.function,
+                                            aggregate.distinct,
+                                        )
+                                    })
+                                    .collect::<Vec<_>>()
+                            });
+                        for (i, accumulator) in key_accumulators.iter_mut().enumerate() {
+                            let (aggregate, _) = &aggregates[i];
+                            accumulator.add(
+                                aggregate
+                                    .parameter
+                                    .as_ref()
+                                    .and_then(|parameter| self.eval_expression(&parameter, &tuple)),
+                            );
+                        }
+                    });
+                if accumulators_for_group.is_empty() {
+                    // There is always at least one group
+                    accumulators_for_group.insert(vec![None; key_mapping.len()], Vec::default());
+                }
+                Box::new(
+                    errors
+                        .into_iter()
+                        .map(Err)
+                        .chain(accumulators_for_group.into_iter().map(
+                            move |(key, accumulators)| {
+                                let mut result = vec![None; tuple_size];
+                                for (from_position, to_position) in key_mapping.iter().enumerate() {
+                                    if let Some(value) = key[from_position] {
+                                        put_value(*to_position, value, &mut result);
+                                    }
+                                }
+                                for (i, accumulator) in accumulators.into_iter().enumerate() {
+                                    if let Some(value) = accumulator.state() {
+                                        put_value(aggregates[i].1, value, &mut result);
+                                    }
+                                }
+                                Ok(result)
+                            },
+                        )),
+                )
+            }
+        }
+    }
+
+    fn accumulator_for_aggregate<'b>(
+        &'b self,
+        function: &'b PlanAggregationFunction,
+        distinct: bool,
+    ) -> Box<dyn Accumulator + 'b> {
+        match function {
+            PlanAggregationFunction::Count => {
+                if distinct {
+                    Box::new(DistinctAccumulator::new(CountAccumulator::default()))
+                } else {
+                    Box::new(CountAccumulator::default())
+                }
+            }
+            PlanAggregationFunction::Sum => {
+                if distinct {
+                    Box::new(DistinctAccumulator::new(SumAccumulator::default()))
+                } else {
+                    Box::new(SumAccumulator::default())
+                }
+            }
+            PlanAggregationFunction::Min => Box::new(MinAccumulator::new(self)), // DISTINCT does not make sense with min
+            PlanAggregationFunction::Max => Box::new(MaxAccumulator::new(self)), // DISTINCT does not make sense with max
+            PlanAggregationFunction::Avg => {
+                if distinct {
+                    Box::new(DistinctAccumulator::new(AvgAccumulator::default()))
+                } else {
+                    Box::new(AvgAccumulator::default())
+                }
+            }
+            PlanAggregationFunction::Sample => Box::new(SampleAccumulator::default()), // DISTINCT does not make sense with sample
+            PlanAggregationFunction::GroupConcat { separator } => {
+                if distinct {
+                    Box::new(DistinctAccumulator::new(GroupConcatAccumulator::new(
+                        self, separator,
+                    )))
+                } else {
+                    Box::new(GroupConcatAccumulator::new(self, separator))
+                }
+            }
         }
     }
 
@@ -680,7 +792,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             PlanExpression::Div(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
                 NumericBinaryOperands::Float(v1, v2) => (v1 / v2).into(),
                 NumericBinaryOperands::Double(v1, v2) => (v1 / v2).into(),
-                NumericBinaryOperands::Integer(v1, v2) => v1.checked_div(v2)?.into(),
+                NumericBinaryOperands::Integer(v1, v2) => Decimal::from_i128(v1)?
+                    .checked_div(Decimal::from_i128(v2)?)?
+                    .into(),
                 NumericBinaryOperands::Decimal(v1, v2) => v1.checked_div(v2)?.into(),
             }),
             PlanExpression::UnaryPlus(e) => match self.eval_expression(e, tuple)? {
@@ -1436,60 +1550,10 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         e2: &PlanExpression,
         tuple: &[Option<EncodedTerm>],
     ) -> Option<NumericBinaryOperands> {
-        match (
+        NumericBinaryOperands::new(
             self.eval_expression(&e1, tuple)?,
             self.eval_expression(&e2, tuple)?,
-        ) {
-            (EncodedTerm::FloatLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(NumericBinaryOperands::Float(*v1, v2.to_f32()?))
-            }
-            (EncodedTerm::FloatLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(v1.to_f64()?, *v2))
-            }
-            (EncodedTerm::FloatLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
-                Some(NumericBinaryOperands::Float(*v1, v2.to_f32()?))
-            }
-            (EncodedTerm::FloatLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
-                Some(NumericBinaryOperands::Float(*v1, v2.to_f32()?))
-            }
-            (EncodedTerm::DoubleLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(*v1, v2.to_f64()?))
-            }
-            (EncodedTerm::DoubleLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(*v1, *v2))
-            }
-            (EncodedTerm::DoubleLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(*v1, v2.to_f64()?))
-            }
-            (EncodedTerm::DoubleLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(*v1, v2.to_f64()?))
-            }
-            (EncodedTerm::IntegerLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(NumericBinaryOperands::Float(v1.to_f32()?, *v2))
-            }
-            (EncodedTerm::IntegerLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(v1.to_f64()?, *v2))
-            }
-            (EncodedTerm::IntegerLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
-                Some(NumericBinaryOperands::Integer(v1, v2))
-            }
-            (EncodedTerm::IntegerLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
-                Some(NumericBinaryOperands::Decimal(Decimal::from_i128(v1)?, v2))
-            }
-            (EncodedTerm::DecimalLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(NumericBinaryOperands::Float(v1.to_f32()?, *v2))
-            }
-            (EncodedTerm::DecimalLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(v1.to_f64()?, *v2))
-            }
-            (EncodedTerm::DecimalLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
-                Some(NumericBinaryOperands::Decimal(v1, Decimal::from_i128(v2)?))
-            }
-            (EncodedTerm::DecimalLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
-                Some(NumericBinaryOperands::Decimal(v1, v2))
-            }
-            _ => None,
-        }
+        )
     }
 
     fn decode_bindings<'b>(
@@ -1635,10 +1699,14 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         tuple_b: &[Option<EncodedTerm>],
         expression: &PlanExpression,
     ) -> Ordering {
-        match (
+        self.cmp_terms(
             self.eval_expression(expression, tuple_a),
             self.eval_expression(expression, tuple_b),
-        ) {
+        )
+    }
+
+    fn cmp_terms(&self, a: Option<EncodedTerm>, b: Option<EncodedTerm>) -> Ordering {
+        match (a, b) {
             (Some(a), Some(b)) => match a {
                 EncodedTerm::BlankNode(a) => {
                     if let EncodedTerm::BlankNode(b) = b {
@@ -1853,6 +1921,62 @@ enum NumericBinaryOperands {
     Double(f64, f64),
     Integer(i128, i128),
     Decimal(Decimal, Decimal),
+}
+
+impl NumericBinaryOperands {
+    fn new(a: EncodedTerm, b: EncodedTerm) -> Option<Self> {
+        match (a, b) {
+            (EncodedTerm::FloatLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
+                Some(NumericBinaryOperands::Float(*v1, v2.to_f32()?))
+            }
+            (EncodedTerm::FloatLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
+                Some(NumericBinaryOperands::Double(v1.to_f64()?, *v2))
+            }
+            (EncodedTerm::FloatLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
+                Some(NumericBinaryOperands::Float(*v1, v2.to_f32()?))
+            }
+            (EncodedTerm::FloatLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
+                Some(NumericBinaryOperands::Float(*v1, v2.to_f32()?))
+            }
+            (EncodedTerm::DoubleLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
+                Some(NumericBinaryOperands::Double(*v1, v2.to_f64()?))
+            }
+            (EncodedTerm::DoubleLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
+                Some(NumericBinaryOperands::Double(*v1, *v2))
+            }
+            (EncodedTerm::DoubleLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
+                Some(NumericBinaryOperands::Double(*v1, v2.to_f64()?))
+            }
+            (EncodedTerm::DoubleLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
+                Some(NumericBinaryOperands::Double(*v1, v2.to_f64()?))
+            }
+            (EncodedTerm::IntegerLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
+                Some(NumericBinaryOperands::Float(v1.to_f32()?, *v2))
+            }
+            (EncodedTerm::IntegerLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
+                Some(NumericBinaryOperands::Double(v1.to_f64()?, *v2))
+            }
+            (EncodedTerm::IntegerLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
+                Some(NumericBinaryOperands::Integer(v1, v2))
+            }
+            (EncodedTerm::IntegerLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
+                Some(NumericBinaryOperands::Decimal(Decimal::from_i128(v1)?, v2))
+            }
+            (EncodedTerm::DecimalLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
+                Some(NumericBinaryOperands::Float(v1.to_f32()?, *v2))
+            }
+            (EncodedTerm::DecimalLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
+                Some(NumericBinaryOperands::Double(v1.to_f64()?, *v2))
+            }
+            (EncodedTerm::DecimalLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
+                Some(NumericBinaryOperands::Decimal(v1, Decimal::from_i128(v2)?))
+            }
+            (EncodedTerm::DecimalLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
+                Some(NumericBinaryOperands::Decimal(v1, v2))
+            }
+            _ => None,
+        }
+    }
 }
 
 fn get_tuple_value(variable: usize, tuple: &[Option<EncodedTerm>]) -> Option<EncodedTerm> {
@@ -2357,5 +2481,240 @@ impl<T, O, I: Iterator<Item = Result<T>>, F: FnMut(T) -> U, U: IntoIterator<Item
                 Err(error) => return Some(Err(error)),
             }
         }
+    }
+}
+
+trait Accumulator {
+    fn add(&mut self, element: Option<EncodedTerm>);
+
+    fn state(&self) -> Option<EncodedTerm>;
+}
+
+#[derive(Default, Debug)]
+struct DistinctAccumulator<T: Accumulator> {
+    seen: HashSet<Option<EncodedTerm>>,
+    inner: T,
+}
+
+impl<T: Accumulator> DistinctAccumulator<T> {
+    fn new(inner: T) -> Self {
+        Self {
+            seen: HashSet::default(),
+            inner,
+        }
+    }
+}
+
+impl<T: Accumulator> Accumulator for DistinctAccumulator<T> {
+    fn add(&mut self, element: Option<EncodedTerm>) {
+        if self.seen.insert(element) {
+            self.inner.add(element)
+        }
+    }
+
+    fn state(&self) -> Option<EncodedTerm> {
+        self.inner.state()
+    }
+}
+
+#[derive(Default, Debug)]
+struct CountAccumulator {
+    count: u64,
+}
+
+impl Accumulator for CountAccumulator {
+    fn add(&mut self, _element: Option<EncodedTerm>) {
+        self.count += 1;
+    }
+
+    fn state(&self) -> Option<EncodedTerm> {
+        Some(self.count.into())
+    }
+}
+
+#[derive(Debug)]
+struct SumAccumulator {
+    sum: Option<EncodedTerm>,
+}
+
+impl Default for SumAccumulator {
+    fn default() -> Self {
+        Self {
+            sum: Some(0.into()),
+        }
+    }
+}
+
+impl Accumulator for SumAccumulator {
+    fn add(&mut self, element: Option<EncodedTerm>) {
+        if let Some(sum) = self.sum {
+            if let Some(operands) = element.and_then(|e| NumericBinaryOperands::new(sum, e)) {
+                //TODO: unify with addition?
+                self.sum = match operands {
+                    NumericBinaryOperands::Float(v1, v2) => Some((v1 + v2).into()),
+                    NumericBinaryOperands::Double(v1, v2) => Some((v1 + v2).into()),
+                    NumericBinaryOperands::Integer(v1, v2) => v1.checked_add(v2).map(|v| v.into()),
+                    NumericBinaryOperands::Decimal(v1, v2) => v1.checked_add(v2).map(|v| v.into()),
+                };
+            } else {
+                self.sum = None;
+            }
+        }
+    }
+
+    fn state(&self) -> Option<EncodedTerm> {
+        self.sum
+    }
+}
+
+#[derive(Debug, Default)]
+struct AvgAccumulator {
+    sum: SumAccumulator,
+    count: CountAccumulator,
+}
+
+impl Accumulator for AvgAccumulator {
+    fn add(&mut self, element: Option<EncodedTerm>) {
+        self.sum.add(element);
+        self.count.add(element);
+    }
+
+    fn state(&self) -> Option<EncodedTerm> {
+        let sum = self.sum.state()?;
+        let count = self.count.state()?;
+        if count == EncodedTerm::from(0) {
+            Some(0.into())
+        } else {
+            //TODO: deduplicate?
+            match NumericBinaryOperands::new(sum, count)? {
+                NumericBinaryOperands::Float(v1, v2) => Some((v1 / v2).into()),
+                NumericBinaryOperands::Double(v1, v2) => Some((v1 / v2).into()),
+                NumericBinaryOperands::Integer(v1, v2) => Decimal::from_i128(v1)?
+                    .checked_div(Decimal::from_i128(v2)?)
+                    .map(|v| v.into()),
+                NumericBinaryOperands::Decimal(v1, v2) => v1.checked_div(v2).map(|v| v.into()),
+            }
+        }
+    }
+}
+
+struct MinAccumulator<'a, S: StoreConnection + 'a> {
+    eval: &'a SimpleEvaluator<S>,
+    min: Option<Option<EncodedTerm>>,
+}
+
+impl<'a, S: StoreConnection + 'a> MinAccumulator<'a, S> {
+    fn new(eval: &'a SimpleEvaluator<S>) -> Self {
+        Self { eval, min: None }
+    }
+}
+
+impl<'a, S: StoreConnection + 'a> Accumulator for MinAccumulator<'a, S> {
+    fn add(&mut self, element: Option<EncodedTerm>) {
+        if let Some(min) = self.min {
+            if self.eval.cmp_terms(element, min) == Ordering::Less {
+                self.min = Some(element)
+            }
+        } else {
+            self.min = Some(element)
+        }
+    }
+
+    fn state(&self) -> Option<EncodedTerm> {
+        self.min.and_then(|v| v)
+    }
+}
+
+struct MaxAccumulator<'a, S: StoreConnection + 'a> {
+    eval: &'a SimpleEvaluator<S>,
+    max: Option<Option<EncodedTerm>>,
+}
+
+impl<'a, S: StoreConnection + 'a> MaxAccumulator<'a, S> {
+    fn new(eval: &'a SimpleEvaluator<S>) -> Self {
+        Self { eval, max: None }
+    }
+}
+
+impl<'a, S: StoreConnection + 'a> Accumulator for MaxAccumulator<'a, S> {
+    fn add(&mut self, element: Option<EncodedTerm>) {
+        if let Some(max) = self.max {
+            if self.eval.cmp_terms(element, max) == Ordering::Greater {
+                self.max = Some(element)
+            }
+        } else {
+            self.max = Some(element)
+        }
+    }
+
+    fn state(&self) -> Option<EncodedTerm> {
+        self.max.and_then(|v| v)
+    }
+}
+
+#[derive(Default, Debug)]
+struct SampleAccumulator {
+    value: Option<EncodedTerm>,
+}
+
+impl Accumulator for SampleAccumulator {
+    fn add(&mut self, element: Option<EncodedTerm>) {
+        if element.is_some() {
+            self.value = element
+        }
+    }
+
+    fn state(&self) -> Option<EncodedTerm> {
+        self.value
+    }
+}
+
+struct GroupConcatAccumulator<'a, S: StoreConnection + 'a> {
+    eval: &'a SimpleEvaluator<S>,
+    concat: Option<String>,
+    language: Option<Option<u64>>,
+    separator: &'a str,
+}
+
+impl<'a, S: StoreConnection + 'a> GroupConcatAccumulator<'a, S> {
+    fn new(eval: &'a SimpleEvaluator<S>, separator: &'a str) -> Self {
+        Self {
+            eval,
+            concat: Some("".to_owned()),
+            language: None,
+            separator,
+        }
+    }
+}
+
+impl<'a, S: StoreConnection + 'a> Accumulator for GroupConcatAccumulator<'a, S> {
+    fn add(&mut self, element: Option<EncodedTerm>) {
+        if let Some(concat) = self.concat.as_mut() {
+            let element = if let Some(element) = element {
+                self.eval.to_string_and_language(element)
+            } else {
+                None
+            };
+            if let Some((value, e_language)) = element {
+                if let Some(lang) = self.language {
+                    if lang != e_language {
+                        self.language = Some(None)
+                    }
+                    concat.push_str(self.separator);
+                } else {
+                    self.language = Some(e_language)
+                }
+                concat.push_str(&value);
+            } else {
+                self.concat = None;
+            }
+        }
+    }
+
+    fn state(&self) -> Option<EncodedTerm> {
+        self.concat.as_ref().and_then(|result| {
+            self.eval
+                .build_plain_literal(result, self.language.and_then(|v| v))
+        })
     }
 }

@@ -290,15 +290,15 @@ impl From<i128> for EncodedTerm {
     }
 }
 
-impl From<f32> for EncodedTerm {
-    fn from(value: f32) -> Self {
-        EncodedTerm::FloatLiteral(value.into())
+impl From<i64> for EncodedTerm {
+    fn from(value: i64) -> Self {
+        EncodedTerm::IntegerLiteral(value.into())
     }
 }
 
-impl From<f64> for EncodedTerm {
-    fn from(value: f64) -> Self {
-        EncodedTerm::DoubleLiteral(value.into())
+impl From<u64> for EncodedTerm {
+    fn from(value: u64) -> Self {
+        EncodedTerm::IntegerLiteral(value.into())
     }
 }
 
@@ -311,6 +311,18 @@ impl From<i32> for EncodedTerm {
 impl From<u32> for EncodedTerm {
     fn from(value: u32) -> Self {
         EncodedTerm::IntegerLiteral(value.into())
+    }
+}
+
+impl From<f32> for EncodedTerm {
+    fn from(value: f32) -> Self {
+        EncodedTerm::FloatLiteral(value.into())
+    }
+}
+
+impl From<f64> for EncodedTerm {
+    fn from(value: f64) -> Self {
+        EncodedTerm::DoubleLiteral(value.into())
     }
 }
 

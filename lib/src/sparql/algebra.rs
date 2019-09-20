@@ -820,6 +820,7 @@ impl<'a> fmt::Display for SparqlGraphPattern<'a> {
                 "{{ SELECT {} WHERE {{ {} }} GROUP BY {} }}",
                 agg.iter()
                     .map(|(a, v)| format!("({} AS {})", SparqlAggregation(&a), v))
+                    .chain(group.iter().map(|e| e.to_string()))
                     .collect::<Vec<String>>()
                     .join(" "),
                 SparqlGraphPattern(&*p),
@@ -919,7 +920,7 @@ impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
 }
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
-pub struct GroupPattern(pub Vec<Expression>, pub Box<GraphPattern>);
+pub struct GroupPattern(pub Vec<Variable>, pub Box<GraphPattern>);
 
 impl fmt::Display for GroupPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
