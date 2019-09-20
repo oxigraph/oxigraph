@@ -92,6 +92,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/exists/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation/manifest.ttl",
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/project-expression/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/property-path/manifest.ttl",
     ];
 
