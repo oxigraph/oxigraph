@@ -56,7 +56,7 @@ pub trait Repository {
 pub trait RepositoryConnection: Clone {
     type PreparedQuery: PreparedQuery;
 
-    /// Prepares a [SPARQL 1.1](https://www.w3.org/TR/sparql11-query/) query and returns an object that could be used to execute it.
+    /// Prepares a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) and returns an object that could be used to execute it.
     ///
     /// The implementation is a work in progress, SPARQL 1.1 specific features are not implemented yet.
     ///

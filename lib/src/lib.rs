@@ -2,7 +2,7 @@
 //!
 //! Its goal is to provide a compliant, safe and fast graph database.
 //!
-//! It currently provides two `Repository` implementation providing [SPARQL 1.0 query](https://www.w3.org/TR/rdf-sparql-query/) capability:
+//! It currently provides two `Repository` implementation providing [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) capability:
 //! * `MemoryRepository`: a simple in memory implementation.
 //! * `RocksDbRepository`: a file system implementation based on the [RocksDB](https://rocksdb.org/) key-value store.
 //!
