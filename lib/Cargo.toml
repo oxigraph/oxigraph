@@ -32,7 +32,7 @@ regex = "1"
 rio_api = "0.3"
 rio_turtle = "0.3"
 rio_xml = "0.3"
-hex = "0.3"
+hex = "0.4"
 
 [dev-dependencies]
 rayon = "1"
