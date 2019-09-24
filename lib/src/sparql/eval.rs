@@ -308,13 +308,12 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     }
                 }))
             }
-            PlanNode::Union { entry, children } => Box::new(UnionIterator {
+            PlanNode::Union { children } => Box::new(UnionIterator {
                 eval: self,
-                children_plan: &children,
-                input_iter: self.eval_plan(&*entry, from),
-                current_input: Vec::default(),
+                plans: &children,
+                input: from,
                 current_iterator: Box::new(empty()),
-                current_child: children.len(),
+                current_plan: 0,
             }),
             PlanNode::Extend {
                 child,
@@ -2206,11 +2205,10 @@ impl<'a, S: StoreConnection> Iterator for BadLeftJoinIterator<'a, S> {
 
 struct UnionIterator<'a, S: StoreConnection + 'a> {
     eval: &'a SimpleEvaluator<S>,
-    children_plan: &'a [PlanNode],
-    input_iter: EncodedTuplesIterator<'a>,
-    current_input: EncodedTuple,
+    plans: &'a [PlanNode],
+    input: EncodedTuple,
     current_iterator: EncodedTuplesIterator<'a>,
-    current_child: usize,
+    current_plan: usize,
 }
 
 impl<'a, S: StoreConnection> Iterator for UnionIterator<'a, S> {
@@ -2221,20 +2219,13 @@ impl<'a, S: StoreConnection> Iterator for UnionIterator<'a, S> {
             if let Some(tuple) = self.current_iterator.next() {
                 return Some(tuple);
             }
-            if self.current_child == self.children_plan.len() {
-                match self.input_iter.next()? {
-                    Ok(input_tuple) => {
-                        self.current_input = input_tuple;
-                        self.current_child = 0;
-                    }
-                    Err(error) => return Some(Err(error)),
-                }
+            if self.current_plan >= self.plans.len() {
+                return None;
             }
-            self.current_iterator = self.eval.eval_plan(
-                &self.children_plan[self.current_child],
-                self.current_input.clone(),
-            );
-            self.current_child += 1;
+            self.current_iterator = self
+                .eval
+                .eval_plan(&self.plans[self.current_plan], self.input.clone());
+            self.current_plan += 1;
         }
     }
 }

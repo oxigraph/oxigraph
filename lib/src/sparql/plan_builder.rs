@@ -19,7 +19,6 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
         let mut variables = Vec::default();
         let plan = PlanBuilder { store }.build_for_graph_pattern(
             pattern,
-            PlanNode::Init,
             &mut variables,
             PatternValue::Constant(ENCODED_DEFAULT_GRAPH),
         )?;
@@ -37,25 +36,18 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
     fn build_for_graph_pattern(
         &self,
         pattern: &GraphPattern,
-        input: PlanNode, //TODO: is this parameter really useful?
         variables: &mut Vec<Variable>,
         graph_name: PatternValue,
     ) -> Result<PlanNode> {
         Ok(match pattern {
-            GraphPattern::BGP(p) => self.build_for_bgp(p, input, variables, graph_name)?,
+            GraphPattern::BGP(p) => self.build_for_bgp(p, variables, graph_name)?,
             GraphPattern::Join(a, b) => PlanNode::Join {
-                left: Box::new(self.build_for_graph_pattern(
-                    a,
-                    input.clone(),
-                    variables,
-                    graph_name,
-                )?),
-                right: Box::new(self.build_for_graph_pattern(b, input, variables, graph_name)?),
+                left: Box::new(self.build_for_graph_pattern(a, variables, graph_name)?),
+                right: Box::new(self.build_for_graph_pattern(b, variables, graph_name)?),
             },
             GraphPattern::LeftJoin(a, b, e) => {
-                let left = self.build_for_graph_pattern(a, input, variables, graph_name)?;
-                let right =
-                    self.build_for_graph_pattern(b, PlanNode::Init, variables, graph_name)?;
+                let left = self.build_for_graph_pattern(a, variables, graph_name)?;
+                let right = self.build_for_graph_pattern(b, variables, graph_name)?;
                 //We add the extra filter if needed
                 let right = if *e == Expression::from(Literal::from(true)) {
                     right
@@ -78,7 +70,7 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
                 }
             }
             GraphPattern::Filter(e, p) => PlanNode::Filter {
-                child: Box::new(self.build_for_graph_pattern(p, input, variables, graph_name)?),
+                child: Box::new(self.build_for_graph_pattern(p, variables, graph_name)?),
                 expression: self.build_for_expression(e, variables, graph_name)?,
             },
             GraphPattern::Union(a, b) => {
@@ -92,36 +84,25 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
                             stack.push(a);
                             stack.push(b);
                         }
-                        Some(p) => children.push(self.build_for_graph_pattern(
-                            p,
-                            PlanNode::Init,
-                            variables,
-                            graph_name,
-                        )?),
+                        Some(p) => {
+                            children.push(self.build_for_graph_pattern(p, variables, graph_name)?)
+                        }
                     }
                 }
-                PlanNode::Union {
-                    entry: Box::new(input),
-                    children,
-                }
+                PlanNode::Union { children }
             }
             GraphPattern::Graph(g, p) => {
                 let graph_name = self.pattern_value_from_named_node_or_variable(g, variables)?;
-                self.build_for_graph_pattern(p, input, variables, graph_name)?
+                self.build_for_graph_pattern(p, variables, graph_name)?
             }
             GraphPattern::Extend(p, v, e) => PlanNode::Extend {
-                child: Box::new(self.build_for_graph_pattern(p, input, variables, graph_name)?),
+                child: Box::new(self.build_for_graph_pattern(p, variables, graph_name)?),
                 position: variable_key(variables, &v),
                 expression: self.build_for_expression(e, variables, graph_name)?,
             },
             GraphPattern::Minus(a, b) => PlanNode::AntiJoin {
-                left: Box::new(self.build_for_graph_pattern(
-                    a,
-                    input.clone(),
-                    variables,
-                    graph_name,
-                )?),
-                right: Box::new(self.build_for_graph_pattern(b, input, variables, graph_name)?),
+                left: Box::new(self.build_for_graph_pattern(a, variables, graph_name)?),
+                right: Box::new(self.build_for_graph_pattern(b, variables, graph_name)?),
             },
             GraphPattern::Service(_n, _p, _s) => {
                 return Err(format_err!(
@@ -136,7 +117,6 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
                 PlanNode::Aggregate {
                     child: Box::new(self.build_for_graph_pattern(
                         p,
-                        input,
                         &mut inner_variables,
                         inner_graph_name,
                     )?),
@@ -171,7 +151,7 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
                     })
                     .collect();
                 PlanNode::Sort {
-                    child: Box::new(self.build_for_graph_pattern(l, input, variables, graph_name)?),
+                    child: Box::new(self.build_for_graph_pattern(l, variables, graph_name)?),
                     by: by?,
                 }
             }
@@ -182,7 +162,6 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
                 PlanNode::Project {
                     child: Box::new(self.build_for_graph_pattern(
                         l,
-                        input,
                         &mut inner_variables,
                         inner_graph_name,
                     )?),
@@ -196,13 +175,11 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
                 }
             }
             GraphPattern::Distinct(l) => PlanNode::HashDeduplicate {
-                child: Box::new(self.build_for_graph_pattern(l, input, variables, graph_name)?),
+                child: Box::new(self.build_for_graph_pattern(l, variables, graph_name)?),
             },
-            GraphPattern::Reduced(l) => {
-                self.build_for_graph_pattern(l, input, variables, graph_name)?
-            }
+            GraphPattern::Reduced(l) => self.build_for_graph_pattern(l, variables, graph_name)?,
             GraphPattern::Slice(l, start, length) => {
-                let mut plan = self.build_for_graph_pattern(l, input, variables, graph_name)?;
+                let mut plan = self.build_for_graph_pattern(l, variables, graph_name)?;
                 if *start > 0 {
                     plan = PlanNode::Skip {
                         child: Box::new(plan),
@@ -223,11 +200,10 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
     fn build_for_bgp(
         &self,
         p: &[TripleOrPathPattern],
-        input: PlanNode,
         variables: &mut Vec<Variable>,
         graph_name: PatternValue,
     ) -> Result<PlanNode> {
-        let mut plan = input;
+        let mut plan = PlanNode::Init;
         for pattern in sort_bgp(p) {
             plan = match pattern {
                 TripleOrPathPattern::Triple(pattern) => PlanNode::QuadPatternJoin {
@@ -671,7 +647,7 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
             },
             Expression::Bound(v) => PlanExpression::Bound(variable_key(variables, v)),
             Expression::Exists(n) => PlanExpression::Exists(Box::new(
-                self.build_for_graph_pattern(n, PlanNode::Init, variables, graph_name)?,
+                self.build_for_graph_pattern(n, variables, graph_name)?,
             )),
         })
     }

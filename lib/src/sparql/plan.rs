@@ -36,7 +36,6 @@ pub enum PlanNode {
         expression: PlanExpression,
     },
     Union {
-        entry: Box<PlanNode>,
         children: Vec<PlanNode>,
     },
     LeftJoin {
@@ -137,9 +136,8 @@ impl PlanNode {
             PlanNode::Filter { child, expression } => {
                 child.add_variables(set);
                 expression.add_variables(set);
-            } //TODO: condition vars
-            PlanNode::Union { entry, children } => {
-                entry.add_variables(set);
+            }
+            PlanNode::Union { children } => {
                 for child in children {
                     child.add_variables(set);
                 }
