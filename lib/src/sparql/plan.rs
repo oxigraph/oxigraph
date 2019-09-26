@@ -1,5 +1,11 @@
-use crate::store::numeric_encoder::EncodedTerm;
+use crate::sparql::eval::StringOrStoreString;
+use crate::store::numeric_encoder::{
+    EncodedQuad, EncodedTerm, Encoder, MemoryStringStore, StringStore,
+};
+use crate::store::StoreConnection;
+use crate::Result;
 use std::collections::BTreeSet;
+use std::u64;
 
 pub type EncodedTuple = Vec<Option<EncodedTerm>>;
 
@@ -451,4 +457,63 @@ pub enum TripleTemplateValue {
     Constant(EncodedTerm),
     BlankNode(usize),
     Variable(usize),
+}
+
+pub struct DatasetView<S: StoreConnection> {
+    store: S,
+    extra: MemoryStringStore,
+}
+
+impl<S: StoreConnection> DatasetView<S> {
+    pub fn new(store: S) -> Self {
+        Self {
+            store,
+            extra: MemoryStringStore::default(),
+        }
+    }
+
+    pub fn quads_for_pattern<'a>(
+        &'a self,
+        subject: Option<EncodedTerm>,
+        predicate: Option<EncodedTerm>,
+        object: Option<EncodedTerm>,
+        graph_name: Option<EncodedTerm>,
+    ) -> Box<dyn Iterator<Item = Result<EncodedQuad>> + 'a> {
+        self.store
+            .quads_for_pattern(subject, predicate, object, graph_name)
+    }
+
+    pub fn encoder(&self) -> Encoder<&Self> {
+        Encoder::new(&self)
+    }
+}
+
+impl<S: StoreConnection> StringStore for DatasetView<S> {
+    type StringType = StringOrStoreString<S::StringType>;
+
+    fn get_str(&self, id: u64) -> Result<Option<StringOrStoreString<S::StringType>>> {
+        Ok(if let Some(value) = self.store.get_str(id)? {
+            Some(StringOrStoreString::Store(value))
+        } else if let Some(value) = self.extra.get_str(u64::MAX - id)? {
+            Some(StringOrStoreString::String(value))
+        } else {
+            None
+        })
+    }
+
+    fn get_str_id(&self, value: &str) -> Result<Option<u64>> {
+        Ok(if let Some(id) = self.store.get_str_id(value)? {
+            Some(id)
+        } else {
+            self.extra.get_str_id(value)?.map(|id| u64::MAX - id)
+        })
+    }
+
+    fn insert_str(&self, value: &str) -> Result<u64> {
+        Ok(if let Some(id) = self.store.get_str_id(value)? {
+            id
+        } else {
+            u64::MAX - self.extra.insert_str(value)?
+        })
+    }
 }

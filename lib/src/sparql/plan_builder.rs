@@ -4,20 +4,19 @@ use crate::sparql::algebra::*;
 use crate::sparql::model::*;
 use crate::sparql::plan::PlanPropertyPath;
 use crate::sparql::plan::*;
-use crate::store::numeric_encoder::ENCODED_DEFAULT_GRAPH;
-use crate::store::StoreConnection;
+use crate::store::numeric_encoder::{Encoder, StringStore, ENCODED_DEFAULT_GRAPH};
 use crate::Result;
 use failure::format_err;
 use std::collections::HashSet;
 
-pub struct PlanBuilder<'a, S: StoreConnection> {
-    store: &'a S,
+pub struct PlanBuilder<S: StringStore> {
+    encoder: Encoder<S>,
 }
 
-impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
-    pub fn build(store: &'a S, pattern: &GraphPattern) -> Result<(PlanNode, Vec<Variable>)> {
+impl<S: StringStore> PlanBuilder<S> {
+    pub fn build(encoder: Encoder<S>, pattern: &GraphPattern) -> Result<(PlanNode, Vec<Variable>)> {
         let mut variables = Vec::default();
-        let plan = PlanBuilder { store }.build_for_graph_pattern(
+        let plan = PlanBuilder { encoder }.build_for_graph_pattern(
             pattern,
             &mut variables,
             PatternValue::Constant(ENCODED_DEFAULT_GRAPH),
@@ -26,11 +25,11 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
     }
 
     pub fn build_graph_template(
-        store: &S,
+        encoder: Encoder<S>,
         template: &[TriplePattern],
         mut variables: Vec<Variable>,
     ) -> Result<Vec<TripleTemplate>> {
-        PlanBuilder { store }.build_for_graph_template(template, &mut variables)
+        PlanBuilder { encoder }.build_for_graph_template(template, &mut variables)
     }
 
     fn build_for_graph_pattern(
@@ -231,7 +230,7 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
     fn build_for_path(&self, path: &PropertyPath) -> Result<PlanPropertyPath> {
         Ok(match path {
             PropertyPath::PredicatePath(p) => {
-                PlanPropertyPath::PredicatePath(self.store.encoder().encode_named_node(p)?)
+                PlanPropertyPath::PredicatePath(self.encoder.encode_named_node(p)?)
             }
             PropertyPath::InversePath(p) => {
                 PlanPropertyPath::InversePath(Box::new(self.build_for_path(p)?))
@@ -255,7 +254,7 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
             }
             PropertyPath::NegatedPropertySet(p) => PlanPropertyPath::NegatedPropertySet(
                 p.iter()
-                    .map(|p| self.store.encoder().encode_named_node(p))
+                    .map(|p| self.encoder.encode_named_node(p))
                     .collect::<Result<Vec<_>>>()?,
             ),
         })
@@ -269,9 +268,7 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
     ) -> Result<PlanExpression> {
         Ok(match expression {
             Expression::Constant(t) => match t {
-                TermOrVariable::Term(t) => {
-                    PlanExpression::Constant(self.store.encoder().encode_term(t)?)
-                }
+                TermOrVariable::Term(t) => PlanExpression::Constant(self.encoder.encode_term(t)?),
                 TermOrVariable::Variable(v) => PlanExpression::Variable(variable_key(variables, v)),
             },
             Expression::Or(a, b) => PlanExpression::Or(
@@ -691,9 +688,7 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
         variables: &mut Vec<Variable>,
     ) -> Result<PatternValue> {
         Ok(match term_or_variable {
-            TermOrVariable::Term(term) => {
-                PatternValue::Constant(self.store.encoder().encode_term(term)?)
-            }
+            TermOrVariable::Term(term) => PatternValue::Constant(self.encoder.encode_term(term)?),
             TermOrVariable::Variable(variable) => {
                 PatternValue::Variable(variable_key(variables, variable))
             }
@@ -707,7 +702,7 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
     ) -> Result<PatternValue> {
         Ok(match named_node_or_variable {
             NamedNodeOrVariable::NamedNode(named_node) => {
-                PatternValue::Constant(self.store.encoder().encode_named_node(named_node)?)
+                PatternValue::Constant(self.encoder.encode_named_node(named_node)?)
             }
             NamedNodeOrVariable::Variable(variable) => {
                 PatternValue::Variable(variable_key(variables, variable))
@@ -720,7 +715,6 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
         bindings: &StaticBindings,
         variables: &mut Vec<Variable>,
     ) -> Result<Vec<EncodedTuple>> {
-        let encoder = self.store.encoder();
         let bindings_variables_keys = bindings
             .variables()
             .iter()
@@ -732,7 +726,8 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
                 let mut result = vec![None; variables.len()];
                 for (key, value) in values.iter().enumerate() {
                     if let Some(term) = value {
-                        result[bindings_variables_keys[key]] = Some(encoder.encode_term(term)?);
+                        result[bindings_variables_keys[key]] =
+                            Some(self.encoder.encode_term(term)?);
                     }
                 }
                 Ok(result)
@@ -828,7 +823,7 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
     ) -> Result<TripleTemplateValue> {
         Ok(match term_or_variable {
             TermOrVariable::Term(term) => {
-                TripleTemplateValue::Constant(self.store.encoder().encode_term(term)?)
+                TripleTemplateValue::Constant(self.encoder.encode_term(term)?)
             }
             TermOrVariable::Variable(variable) => {
                 if variable.has_name() {
@@ -848,7 +843,7 @@ impl<'a, S: StoreConnection> PlanBuilder<'a, S> {
     ) -> Result<TripleTemplateValue> {
         Ok(match named_node_or_variable {
             NamedNodeOrVariable::NamedNode(term) => {
-                TripleTemplateValue::Constant(self.store.encoder().encode_named_node(term)?)
+                TripleTemplateValue::Constant(self.encoder.encode_named_node(term)?)
             }
             NamedNodeOrVariable::Variable(variable) => {
                 if variable.has_name() {
