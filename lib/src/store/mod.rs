@@ -30,8 +30,8 @@ pub trait Store {
 /// A connection to a `Store`
 pub trait StoreConnection: StringStore + Sized + Clone {
     fn contains(&self, quad: &EncodedQuad) -> Result<bool>;
-    fn insert(&self, quad: &EncodedQuad) -> Result<()>;
-    fn remove(&self, quad: &EncodedQuad) -> Result<()>;
+    fn insert(&mut self, quad: &EncodedQuad) -> Result<()>;
+    fn remove(&mut self, quad: &EncodedQuad) -> Result<()>;
     fn quads_for_pattern<'a>(
         &'a self,
         subject: Option<EncodedTerm>,
@@ -168,7 +168,7 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
 
 impl<S: StoreConnection> StoreRepositoryConnection<S> {
     fn load_from_triple_parser<P: TriplesParser>(
-        &self,
+        &mut self,
         mut parser: P,
         to_graph_name: Option<&NamedOrBlankNode>,
     ) -> Result<()>
@@ -176,28 +176,32 @@ impl<S: StoreConnection> StoreRepositoryConnection<S> {
         P::Error: Send + Sync + 'static,
     {
         let mut bnode_map = HashMap::default();
-        let encoder = self.inner.encoder();
         let graph_name = if let Some(graph_name) = to_graph_name {
-            encoder.encode_named_or_blank_node(graph_name)?
+            self.inner
+                .encoder()
+                .encode_named_or_blank_node(graph_name)?
         } else {
             EncodedTerm::DefaultGraph
         };
         parser.parse_all(&mut move |t| {
             self.inner
-                .insert(&encoder.encode_rio_triple_in_graph(t, graph_name, &mut bnode_map)?)
+                .insert(&self.inner.encoder().encode_rio_triple_in_graph(
+                    t,
+                    graph_name,
+                    &mut bnode_map,
+                )?)
         })?;
         Ok(())
     }
 
-    fn load_from_quad_parser<P: QuadsParser>(&self, mut parser: P) -> Result<()>
+    fn load_from_quad_parser<P: QuadsParser>(&mut self, mut parser: P) -> Result<()>
     where
         P::Error: Send + Sync + 'static,
     {
         let mut bnode_map = HashMap::default();
-        let encoder = self.inner.encoder();
         parser.parse_all(&mut move |q| {
             self.inner
-                .insert(&encoder.encode_rio_quad(q, &mut bnode_map)?)
+                .insert(&self.inner.encoder().encode_rio_quad(q, &mut bnode_map)?)
         })?;
         Ok(())
     }

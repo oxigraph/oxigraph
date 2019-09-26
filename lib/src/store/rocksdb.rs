@@ -176,7 +176,7 @@ impl<'a> StoreConnection for RocksDbStoreConnection<'a> {
             .is_some())
     }
 
-    fn insert(&self, quad: &EncodedQuad) -> Result<()> {
+    fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
         let mut batch = WriteBatch::default();
         batch.put_cf(self.spog_cf, &encode_spog_quad(quad)?, &EMPTY_BUF)?;
         batch.put_cf(self.posg_cf, &encode_posg_quad(quad)?, &EMPTY_BUF)?;
@@ -185,7 +185,7 @@ impl<'a> StoreConnection for RocksDbStoreConnection<'a> {
         Ok(())
     }
 
-    fn remove(&self, quad: &EncodedQuad) -> Result<()> {
+    fn remove(&mut self, quad: &EncodedQuad) -> Result<()> {
         let mut batch = WriteBatch::default();
         batch.delete_cf(self.spog_cf, &encode_spog_quad(quad)?)?;
         batch.delete_cf(self.posg_cf, &encode_posg_quad(quad)?)?;

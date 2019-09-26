@@ -105,7 +105,7 @@ impl<'a> StoreConnection for &'a MemoryStore {
             }))
     }
 
-    fn insert(&self, quad: &EncodedQuad) -> Result<()> {
+    fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
         let mut quad_indexes = self.quad_indexes_mut()?;
         insert_into_quad_map(
             &mut quad_indexes.gosp,
@@ -152,7 +152,7 @@ impl<'a> StoreConnection for &'a MemoryStore {
         Ok(())
     }
 
-    fn remove(&self, quad: &EncodedQuad) -> Result<()> {
+    fn remove(&mut self, quad: &EncodedQuad) -> Result<()> {
         let mut quad_indexes = self.quad_indexes_mut()?;
         remove_from_quad_map(
             &mut quad_indexes.gosp,
