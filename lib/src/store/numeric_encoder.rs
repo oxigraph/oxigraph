@@ -14,6 +14,7 @@ use rust_decimal::Decimal;
 use std::collections::{BTreeMap, HashMap};
 use std::io::Read;
 use std::io::Write;
+use std::mem::size_of;
 use std::ops::Deref;
 use std::str;
 use std::sync::PoisonError;
@@ -65,16 +66,16 @@ pub trait StringStore {
 impl<'a, S: StringStore> StringStore for &'a S {
     type StringType = S::StringType;
 
-    fn insert_str(&self, value: &str) -> Result<u64> {
-        (*self).insert_str(value)
-    }
-
     fn get_str(&self, id: u64) -> Result<Option<S::StringType>> {
         (*self).get_str(id)
     }
 
     fn get_str_id(&self, value: &str) -> Result<Option<u64>> {
         (*self).get_str_id(value)
+    }
+
+    fn insert_str(&self, value: &str) -> Result<u64> {
+        (*self).insert_str(value)
     }
 }
 
@@ -97,19 +98,6 @@ impl Default for MemoryStringStore {
 impl StringStore for MemoryStringStore {
     type StringType = String;
 
-    fn insert_str(&self, value: &str) -> Result<u64> {
-        let mut id2str = self.id2str.write().map_err(MutexPoisonError::from)?;
-        let mut str2id = self.str2id.write().map_err(MutexPoisonError::from)?;
-        Ok(if let Some(id) = str2id.get(value) {
-            *id
-        } else {
-            let id = id2str.len() as u64;
-            id2str.push(value.to_string());
-            str2id.insert(value.to_string(), id);
-            id
-        })
-    }
-
     fn get_str(&self, id: u64) -> Result<Option<String>> {
         //TODO: avoid copy by adding a lifetime limit to get_str
         let id2str = self.id2str.read().map_err(MutexPoisonError::from)?;
@@ -123,6 +111,19 @@ impl StringStore for MemoryStringStore {
     fn get_str_id(&self, value: &str) -> Result<Option<u64>> {
         let str2id = self.str2id.read().map_err(MutexPoisonError::from)?;
         Ok(str2id.get(value).cloned())
+    }
+
+    fn insert_str(&self, value: &str) -> Result<u64> {
+        let mut id2str = self.id2str.write().map_err(MutexPoisonError::from)?;
+        let mut str2id = self.str2id.write().map_err(MutexPoisonError::from)?;
+        Ok(if let Some(id) = str2id.get(value) {
+            *id
+        } else {
+            let id = id2str.len() as u64;
+            id2str.push(value.to_string());
+            str2id.insert(value.to_string(), id);
+            id
+        })
     }
 }
 
@@ -144,38 +145,38 @@ const TYPE_DATE_LITERAL: u8 = 15;
 const TYPE_NAIVE_DATE_LITERAL: u8 = 16;
 const TYPE_NAIVE_TIME_LITERAL: u8 = 17;
 
-pub static ENCODED_DEFAULT_GRAPH: EncodedTerm = EncodedTerm::DefaultGraph;
-pub static ENCODED_EMPTY_STRING_LITERAL: EncodedTerm = EncodedTerm::StringLiteral {
+pub const ENCODED_DEFAULT_GRAPH: EncodedTerm = EncodedTerm::DefaultGraph;
+pub const ENCODED_EMPTY_STRING_LITERAL: EncodedTerm = EncodedTerm::StringLiteral {
     value_id: EMPTY_STRING_ID,
 };
-pub static ENCODED_RDF_LANG_STRING_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+pub const ENCODED_RDF_LANG_STRING_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
     iri_id: RDF_LANG_STRING_ID,
 };
-pub static ENCODED_XSD_STRING_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+pub const ENCODED_XSD_STRING_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
     iri_id: XSD_STRING_ID,
 };
-pub static ENCODED_XSD_BOOLEAN_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+pub const ENCODED_XSD_BOOLEAN_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
     iri_id: XSD_BOOLEAN_ID,
 };
-pub static ENCODED_XSD_FLOAT_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+pub const ENCODED_XSD_FLOAT_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
     iri_id: XSD_FLOAT_ID,
 };
-pub static ENCODED_XSD_DOUBLE_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+pub const ENCODED_XSD_DOUBLE_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
     iri_id: XSD_DOUBLE_ID,
 };
-pub static ENCODED_XSD_INTEGER_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+pub const ENCODED_XSD_INTEGER_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
     iri_id: XSD_INTEGER_ID,
 };
-pub static ENCODED_XSD_DECIMAL_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+pub const ENCODED_XSD_DECIMAL_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
     iri_id: XSD_DECIMAL_ID,
 };
-pub static ENCODED_XSD_DATE_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+pub const ENCODED_XSD_DATE_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
     iri_id: XSD_DATE_ID,
 };
-pub static ENCODED_XSD_TIME_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+pub const ENCODED_XSD_TIME_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
     iri_id: XSD_TIME_ID,
 };
-pub static ENCODED_XSD_DATE_TIME_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+pub const ENCODED_XSD_DATE_TIME_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
     iri_id: XSD_DATE_TIME_ID,
 };
 
@@ -397,6 +398,9 @@ pub trait TermReader {
     fn read_spog_quad(&mut self) -> Result<EncodedQuad>;
     fn read_posg_quad(&mut self) -> Result<EncodedQuad>;
     fn read_ospg_quad(&mut self) -> Result<EncodedQuad>;
+    fn read_gspo_quad(&mut self) -> Result<EncodedQuad>;
+    fn read_gpos_quad(&mut self) -> Result<EncodedQuad>;
+    fn read_gosp_quad(&mut self) -> Result<EncodedQuad>;
 }
 
 impl<R: Read> TermReader for R {
@@ -513,16 +517,60 @@ impl<R: Read> TermReader for R {
             graph_name,
         })
     }
+
+    fn read_gspo_quad(&mut self) -> Result<EncodedQuad> {
+        let graph_name = self.read_term()?;
+        let subject = self.read_term()?;
+        let predicate = self.read_term()?;
+        let object = self.read_term()?;
+        Ok(EncodedQuad {
+            subject,
+            predicate,
+            object,
+            graph_name,
+        })
+    }
+
+    fn read_gpos_quad(&mut self) -> Result<EncodedQuad> {
+        let graph_name = self.read_term()?;
+        let predicate = self.read_term()?;
+        let object = self.read_term()?;
+        let subject = self.read_term()?;
+        Ok(EncodedQuad {
+            subject,
+            predicate,
+            object,
+            graph_name,
+        })
+    }
+
+    fn read_gosp_quad(&mut self) -> Result<EncodedQuad> {
+        let graph_name = self.read_term()?;
+        let object = self.read_term()?;
+        let subject = self.read_term()?;
+        let predicate = self.read_term()?;
+        Ok(EncodedQuad {
+            subject,
+            predicate,
+            object,
+            graph_name,
+        })
+    }
 }
+
+pub const WRITTEN_TERM_MAX_SIZE: usize = size_of::<u8>() + 2 * size_of::<u64>();
 
 pub trait TermWriter {
     fn write_term(&mut self, term: EncodedTerm) -> Result<()>;
     fn write_spog_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
     fn write_posg_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
     fn write_ospg_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
+    fn write_gspo_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
+    fn write_gpos_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
+    fn write_gosp_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
 }
 
-impl<R: Write> TermWriter for R {
+impl<W: Write> TermWriter for W {
     fn write_term(&mut self, term: EncodedTerm) -> Result<()> {
         self.write_u8(term.type_id())?;
         match term {
@@ -596,6 +644,30 @@ impl<R: Write> TermWriter for R {
         self.write_term(quad.subject)?;
         self.write_term(quad.predicate)?;
         self.write_term(quad.graph_name)?;
+        Ok(())
+    }
+
+    fn write_gspo_quad(&mut self, quad: &EncodedQuad) -> Result<()> {
+        self.write_term(quad.graph_name)?;
+        self.write_term(quad.subject)?;
+        self.write_term(quad.predicate)?;
+        self.write_term(quad.object)?;
+        Ok(())
+    }
+
+    fn write_gpos_quad(&mut self, quad: &EncodedQuad) -> Result<()> {
+        self.write_term(quad.graph_name)?;
+        self.write_term(quad.predicate)?;
+        self.write_term(quad.object)?;
+        self.write_term(quad.subject)?;
+        Ok(())
+    }
+
+    fn write_gosp_quad(&mut self, quad: &EncodedQuad) -> Result<()> {
+        self.write_term(quad.graph_name)?;
+        self.write_term(quad.object)?;
+        self.write_term(quad.subject)?;
+        self.write_term(quad.predicate)?;
         Ok(())
     }
 }

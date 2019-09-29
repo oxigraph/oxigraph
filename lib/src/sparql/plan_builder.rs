@@ -638,7 +638,7 @@ impl<S: StringStore> PlanBuilder<S> {
                             "string",
                         )?
                     } else {
-                        Err(format_err!("Not supported custom function {}", expression))?
+                        return Err(format_err!("Not supported custom function {}", expression));
                     }
                 }
             },

@@ -59,6 +59,9 @@ const STR2ID_CF: &str = "id2str";
 const SPOG_CF: &str = "spog";
 const POSG_CF: &str = "posg";
 const OSPG_CF: &str = "ospg";
+const GSPO_CF: &str = "gspo";
+const GPOS_CF: &str = "gpos";
+const GOSP_CF: &str = "gosp";
 
 const EMPTY_BUF: [u8; 0] = [0 as u8; 0];
 
@@ -74,11 +77,15 @@ struct RocksDbStore {
 #[derive(Clone)]
 pub struct RocksDbStoreConnection<'a> {
     store: &'a RocksDbStore,
+    buffer: Vec<u8>,
     id2str_cf: ColumnFamily<'a>,
     str2id_cf: ColumnFamily<'a>,
     spog_cf: ColumnFamily<'a>,
     posg_cf: ColumnFamily<'a>,
     ospg_cf: ColumnFamily<'a>,
+    gspo_cf: ColumnFamily<'a>,
+    gpos_cf: ColumnFamily<'a>,
+    gosp_cf: ColumnFamily<'a>,
 }
 
 impl RocksDbRepository {
@@ -119,17 +126,37 @@ impl<'a> Store for &'a RocksDbStore {
     fn connection(self) -> Result<RocksDbStoreConnection<'a>> {
         Ok(RocksDbStoreConnection {
             store: self,
+            buffer: Vec::default(),
             id2str_cf: get_cf(&self.db, ID2STR_CF)?,
             str2id_cf: get_cf(&self.db, STR2ID_CF)?,
             spog_cf: get_cf(&self.db, SPOG_CF)?,
             posg_cf: get_cf(&self.db, POSG_CF)?,
             ospg_cf: get_cf(&self.db, OSPG_CF)?,
+            gspo_cf: get_cf(&self.db, GSPO_CF)?,
+            gpos_cf: get_cf(&self.db, GPOS_CF)?,
+            gosp_cf: get_cf(&self.db, GOSP_CF)?,
         })
     }
 }
 
 impl StringStore for RocksDbStoreConnection<'_> {
     type StringType = RocksString;
+
+    fn get_str(&self, id: u64) -> Result<Option<RocksString>> {
+        Ok(self
+            .store
+            .db
+            .get_cf(self.id2str_cf, &to_bytes(id))?
+            .map(|v| RocksString { vec: v }))
+    }
+
+    fn get_str_id(&self, value: &str) -> Result<Option<u64>> {
+        Ok(self
+            .store
+            .db
+            .get_cf(self.str2id_cf, value.as_bytes())?
+            .map(|id| LittleEndian::read_u64(&id)))
+    }
 
     fn insert_str(&self, value: &str) -> Result<u64> {
         Ok(if let Some(id) = self.get_str_id(value)? {
@@ -149,47 +176,73 @@ impl StringStore for RocksDbStoreConnection<'_> {
             id
         })
     }
-
-    fn get_str(&self, id: u64) -> Result<Option<RocksString>> {
-        Ok(self
-            .store
-            .db
-            .get_cf(self.id2str_cf, &to_bytes(id))?
-            .map(|v| RocksString { vec: v }))
-    }
-
-    fn get_str_id(&self, value: &str) -> Result<Option<u64>> {
-        Ok(self
-            .store
-            .db
-            .get_cf(self.str2id_cf, value.as_bytes())?
-            .map(|id| LittleEndian::read_u64(&id)))
-    }
 }
 
 impl<'a> StoreConnection for RocksDbStoreConnection<'a> {
     fn contains(&self, quad: &EncodedQuad) -> Result<bool> {
-        Ok(self
-            .store
-            .db
-            .get_cf(self.spog_cf, &encode_spog_quad(quad)?)?
-            .is_some())
+        let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
+        buffer.write_spog_quad(quad)?;
+        Ok(self.store.db.get_cf(self.spog_cf, &buffer)?.is_some())
     }
 
     fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
         let mut batch = WriteBatch::default();
-        batch.put_cf(self.spog_cf, &encode_spog_quad(quad)?, &EMPTY_BUF)?;
-        batch.put_cf(self.posg_cf, &encode_posg_quad(quad)?, &EMPTY_BUF)?;
-        batch.put_cf(self.ospg_cf, &encode_ospg_quad(quad)?, &EMPTY_BUF)?;
+
+        self.buffer.write_spog_quad(quad)?;
+        batch.put_cf(self.spog_cf, &self.buffer, &EMPTY_BUF)?;
+        self.buffer.clear();
+
+        self.buffer.write_posg_quad(quad)?;
+        batch.put_cf(self.posg_cf, &self.buffer, &EMPTY_BUF)?;
+        self.buffer.clear();
+
+        self.buffer.write_ospg_quad(quad)?;
+        batch.put_cf(self.ospg_cf, &self.buffer, &EMPTY_BUF)?;
+        self.buffer.clear();
+
+        self.buffer.write_gspo_quad(quad)?;
+        batch.put_cf(self.gspo_cf, &self.buffer, &EMPTY_BUF)?;
+        self.buffer.clear();
+
+        self.buffer.write_gpos_quad(quad)?;
+        batch.put_cf(self.gpos_cf, &self.buffer, &EMPTY_BUF)?;
+        self.buffer.clear();
+
+        self.buffer.write_gosp_quad(quad)?;
+        batch.put_cf(self.gosp_cf, &self.buffer, &EMPTY_BUF)?;
+        self.buffer.clear();
+
         self.store.db.write(batch)?; //TODO: check what's going on if the key already exists
         Ok(())
     }
 
     fn remove(&mut self, quad: &EncodedQuad) -> Result<()> {
         let mut batch = WriteBatch::default();
-        batch.delete_cf(self.spog_cf, &encode_spog_quad(quad)?)?;
-        batch.delete_cf(self.posg_cf, &encode_posg_quad(quad)?)?;
-        batch.delete_cf(self.ospg_cf, &encode_ospg_quad(quad)?)?;
+
+        self.buffer.write_spog_quad(quad)?;
+        batch.delete_cf(self.spog_cf, &self.buffer)?;
+        self.buffer.clear();
+
+        self.buffer.write_posg_quad(quad)?;
+        batch.delete_cf(self.posg_cf, &self.buffer)?;
+        self.buffer.clear();
+
+        self.buffer.write_ospg_quad(quad)?;
+        batch.delete_cf(self.ospg_cf, &self.buffer)?;
+        self.buffer.clear();
+
+        self.buffer.write_gspo_quad(quad)?;
+        batch.delete_cf(self.gspo_cf, &self.buffer)?;
+        self.buffer.clear();
+
+        self.buffer.write_gpos_quad(quad)?;
+        batch.delete_cf(self.gpos_cf, &self.buffer)?;
+        self.buffer.clear();
+
+        self.buffer.write_gosp_quad(quad)?;
+        batch.delete_cf(self.gosp_cf, &self.buffer)?;
+        self.buffer.clear();
+
         self.store.db.write(batch)?;
         Ok(())
     }
@@ -370,10 +423,12 @@ impl<'a> RocksDbStoreConnection<'a> {
     fn quads_for_graph(
         &self,
         graph_name: EncodedTerm,
-    ) -> Result<InGraphQuadsIterator<SPOGIndexIterator>> {
-        Ok(InGraphQuadsIterator {
-            iter: self.quads()?,
-            graph_name,
+    ) -> Result<FilteringEncodedQuadsIterator<GSPOIndexIterator>> {
+        let mut iter = self.store.db.raw_iterator_cf(self.gspo_cf)?;
+        iter.seek(&encode_term(graph_name)?);
+        Ok(FilteringEncodedQuadsIterator {
+            iter: GSPOIndexIterator { iter },
+            filter: EncodedQuadPattern::new(None, None, None, Some(graph_name)),
         })
     }
 
@@ -381,10 +436,12 @@ impl<'a> RocksDbStoreConnection<'a> {
         &self,
         subject: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<SPOGIndexIterator>>> {
-        Ok(InGraphQuadsIterator {
-            iter: self.quads_for_subject(subject)?,
-            graph_name,
+    ) -> Result<FilteringEncodedQuadsIterator<GSPOIndexIterator>> {
+        let mut iter = self.store.db.raw_iterator_cf(self.gspo_cf)?;
+        iter.seek(&encode_term_pair(graph_name, subject)?);
+        Ok(FilteringEncodedQuadsIterator {
+            iter: GSPOIndexIterator { iter },
+            filter: EncodedQuadPattern::new(Some(subject), None, None, Some(graph_name)),
         })
     }
 
@@ -393,10 +450,12 @@ impl<'a> RocksDbStoreConnection<'a> {
         subject: EncodedTerm,
         predicate: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<SPOGIndexIterator>>> {
-        Ok(InGraphQuadsIterator {
-            iter: self.quads_for_subject_predicate(subject, predicate)?,
-            graph_name,
+    ) -> Result<FilteringEncodedQuadsIterator<GSPOIndexIterator>> {
+        let mut iter = self.store.db.raw_iterator_cf(self.spog_cf)?;
+        iter.seek(&encode_term_triple(graph_name, subject, predicate)?);
+        Ok(FilteringEncodedQuadsIterator {
+            iter: GSPOIndexIterator { iter },
+            filter: EncodedQuadPattern::new(Some(subject), Some(predicate), None, Some(graph_name)),
         })
     }
 
@@ -405,10 +464,12 @@ impl<'a> RocksDbStoreConnection<'a> {
         subject: EncodedTerm,
         object: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<OSPGIndexIterator>>> {
-        Ok(InGraphQuadsIterator {
-            iter: self.quads_for_subject_object(subject, object)?,
-            graph_name,
+    ) -> Result<FilteringEncodedQuadsIterator<GOSPIndexIterator>> {
+        let mut iter = self.store.db.raw_iterator_cf(self.gosp_cf)?;
+        iter.seek(&encode_term_triple(graph_name, object, subject)?);
+        Ok(FilteringEncodedQuadsIterator {
+            iter: GOSPIndexIterator { iter },
+            filter: EncodedQuadPattern::new(Some(subject), None, Some(object), Some(graph_name)),
         })
     }
 
@@ -416,10 +477,12 @@ impl<'a> RocksDbStoreConnection<'a> {
         &self,
         predicate: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<POSGIndexIterator>>> {
-        Ok(InGraphQuadsIterator {
-            iter: self.quads_for_predicate(predicate)?,
-            graph_name,
+    ) -> Result<FilteringEncodedQuadsIterator<GPOSIndexIterator>> {
+        let mut iter = self.store.db.raw_iterator_cf(self.gpos_cf)?;
+        iter.seek(&encode_term_pair(graph_name, predicate)?);
+        Ok(FilteringEncodedQuadsIterator {
+            iter: GPOSIndexIterator { iter },
+            filter: EncodedQuadPattern::new(None, Some(predicate), None, Some(graph_name)),
         })
     }
 
@@ -428,10 +491,12 @@ impl<'a> RocksDbStoreConnection<'a> {
         predicate: EncodedTerm,
         object: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<POSGIndexIterator>>> {
-        Ok(InGraphQuadsIterator {
-            iter: self.quads_for_predicate_object(predicate, object)?,
-            graph_name,
+    ) -> Result<FilteringEncodedQuadsIterator<GPOSIndexIterator>> {
+        let mut iter = self.store.db.raw_iterator_cf(self.gosp_cf)?;
+        iter.seek(&encode_term_triple(graph_name, predicate, object)?);
+        Ok(FilteringEncodedQuadsIterator {
+            iter: GPOSIndexIterator { iter },
+            filter: EncodedQuadPattern::new(None, Some(predicate), Some(object), Some(graph_name)),
         })
     }
 
@@ -439,10 +504,12 @@ impl<'a> RocksDbStoreConnection<'a> {
         &self,
         object: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Result<InGraphQuadsIterator<FilteringEncodedQuadsIterator<OSPGIndexIterator>>> {
-        Ok(InGraphQuadsIterator {
-            iter: self.quads_for_object(object)?,
-            graph_name,
+    ) -> Result<FilteringEncodedQuadsIterator<GOSPIndexIterator>> {
+        let mut iter = self.store.db.raw_iterator_cf(self.gosp_cf)?;
+        iter.seek(&encode_term_pair(graph_name, object)?);
+        Ok(FilteringEncodedQuadsIterator {
+            iter: GOSPIndexIterator { iter },
+            filter: EncodedQuadPattern::new(None, None, Some(object), Some(graph_name)),
         })
     }
 }
@@ -527,42 +594,78 @@ impl EncodedQuadPattern {
 }
 
 fn encode_term(t: EncodedTerm) -> Result<Vec<u8>> {
-    let mut vec = Vec::default();
+    let mut vec = Vec::with_capacity(WRITTEN_TERM_MAX_SIZE);
     vec.write_term(t)?;
     Ok(vec)
 }
 
 fn encode_term_pair(t1: EncodedTerm, t2: EncodedTerm) -> Result<Vec<u8>> {
-    let mut vec = Vec::default();
+    let mut vec = Vec::with_capacity(2 * WRITTEN_TERM_MAX_SIZE);
     vec.write_term(t1)?;
     vec.write_term(t2)?;
     Ok(vec)
 }
 
 fn encode_term_triple(t1: EncodedTerm, t2: EncodedTerm, t3: EncodedTerm) -> Result<Vec<u8>> {
-    let mut vec = Vec::default();
+    let mut vec = Vec::with_capacity(3 * WRITTEN_TERM_MAX_SIZE);
     vec.write_term(t1)?;
     vec.write_term(t2)?;
     vec.write_term(t3)?;
     Ok(vec)
 }
 
-fn encode_spog_quad(quad: &EncodedQuad) -> Result<Vec<u8>> {
-    let mut vec = Vec::default();
-    vec.write_spog_quad(quad)?;
-    Ok(vec)
+struct GSPOIndexIterator<'a> {
+    iter: DBRawIterator<'a>,
 }
 
-fn encode_posg_quad(quad: &EncodedQuad) -> Result<Vec<u8>> {
-    let mut vec = Vec::default();
-    vec.write_posg_quad(quad)?;
-    Ok(vec)
+impl<'a> Iterator for GSPOIndexIterator<'a> {
+    type Item = Result<EncodedQuad>;
+
+    fn next(&mut self) -> Option<Result<EncodedQuad>> {
+        self.iter.next();
+        unsafe {
+            //This is safe because we are not keeping the buffer
+            self.iter
+                .key_inner()
+                .map(|buffer| Cursor::new(buffer).read_gspo_quad())
+        }
+    }
 }
 
-fn encode_ospg_quad(quad: &EncodedQuad) -> Result<Vec<u8>> {
-    let mut vec = Vec::default();
-    vec.write_ospg_quad(quad)?;
-    Ok(vec)
+struct GPOSIndexIterator<'a> {
+    iter: DBRawIterator<'a>,
+}
+
+impl<'a> Iterator for GPOSIndexIterator<'a> {
+    type Item = Result<EncodedQuad>;
+
+    fn next(&mut self) -> Option<Result<EncodedQuad>> {
+        self.iter.next();
+        unsafe {
+            //This is safe because we are not keeping the buffer
+            self.iter
+                .key_inner()
+                .map(|buffer| Cursor::new(buffer).read_gpos_quad())
+        }
+    }
+}
+
+struct GOSPIndexIterator<'a> {
+    iter: DBRawIterator<'a>,
+}
+
+impl<'a> Iterator for GOSPIndexIterator<'a> {
+    type Item = Result<EncodedQuad>;
+
+    fn next(&mut self) -> Option<Result<EncodedQuad>> {
+        self.iter.next();
+        unsafe {
+            //This is safe because we are not keeping the buffer
+            self.iter
+                .key_inner()
+                .map(|buffer| Cursor::new(buffer).read_gosp_quad())
+        }
+    }
 }
 
 struct SPOGIndexIterator<'a> {
@@ -630,23 +733,6 @@ impl<I: Iterator<Item = Result<EncodedQuad>>> Iterator for FilteringEncodedQuads
     fn next(&mut self) -> Option<Result<EncodedQuad>> {
         self.iter.next().filter(|quad| match quad {
             Ok(quad) => self.filter.filter(quad),
-            Err(_) => true,
-        })
-    }
-}
-
-struct InGraphQuadsIterator<I: Iterator<Item = Result<EncodedQuad>>> {
-    iter: I,
-    graph_name: EncodedTerm,
-}
-
-impl<I: Iterator<Item = Result<EncodedQuad>>> Iterator for InGraphQuadsIterator<I> {
-    type Item = Result<EncodedQuad>;
-
-    fn next(&mut self) -> Option<Result<EncodedQuad>> {
-        let graph_name = &self.graph_name;
-        self.iter.find(|quad| match quad {
-            Ok(quad) => graph_name == &quad.graph_name,
             Err(_) => true,
         })
     }
