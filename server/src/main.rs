@@ -3,7 +3,7 @@ use clap::Arg;
 use clap::ArgMatches;
 use rouille::input::priority_header_preferred;
 use rouille::url::form_urlencoded;
-use rouille::{start_server, Request, Response};
+use rouille::{content_encoding, start_server, Request, Response};
 use rudf::sparql::QueryResult;
 use rudf::sparql::{PreparedQuery, QueryResultSyntax};
 use rudf::{
@@ -52,8 +52,11 @@ where
     println!("Listening for requests at http://{}", &addr);
 
     start_server(addr.to_string(), move |request| {
-        handle_request(request, repository.connection().unwrap(), &addr)
-            .with_unique_header("Server", SERVER)
+        content_encoding::apply(
+            request,
+            handle_request(request, repository.connection().unwrap(), &addr),
+        )
+        .with_unique_header("Server", SERVER)
     })
 }
 
