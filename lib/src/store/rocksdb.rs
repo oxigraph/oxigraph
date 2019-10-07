@@ -67,7 +67,9 @@ const EMPTY_BUF: [u8; 0] = [0 as u8; 0];
 
 //TODO: indexes for the default graph and indexes for the named graphs (no more Optional and space saving)
 
-const COLUMN_FAMILIES: [&str; 5] = [ID2STR_CF, STR2ID_CF, SPOG_CF, POSG_CF, OSPG_CF];
+const COLUMN_FAMILIES: [&str; 8] = [
+    ID2STR_CF, STR2ID_CF, SPOG_CF, POSG_CF, OSPG_CF, GSPO_CF, GPOS_CF, GOSP_CF,
+];
 
 struct RocksDbStore {
     db: DB,
