@@ -9,6 +9,7 @@ use failure::format_err;
 use failure::Backtrace;
 use failure::Fail;
 use ordered_float::OrderedFloat;
+use rand::random;
 use rio_api::model as rio;
 use rust_decimal::Decimal;
 use std::collections::{BTreeMap, HashMap};
@@ -19,7 +20,6 @@ use std::ops::Deref;
 use std::str;
 use std::sync::PoisonError;
 use std::sync::RwLock;
-use uuid::Uuid;
 
 const EMPTY_STRING_ID: u64 = 0;
 const RDF_LANG_STRING_ID: u64 = 1;
@@ -184,7 +184,7 @@ pub const ENCODED_XSD_DATE_TIME_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode
 pub enum EncodedTerm {
     DefaultGraph,
     NamedNode { iri_id: u64 },
-    BlankNode(Uuid),
+    BlankNode { id: u128 },
     StringLiteral { value_id: u64 },
     LangStringLiteral { value_id: u64, language_id: u64 },
     TypedLiteral { value_id: u64, datatype_id: u64 },
@@ -210,7 +210,7 @@ impl EncodedTerm {
 
     pub fn is_blank_node(&self) -> bool {
         match self {
-            EncodedTerm::BlankNode(_) => true,
+            EncodedTerm::BlankNode { .. } => true,
             _ => false,
         }
     }
@@ -260,7 +260,7 @@ impl EncodedTerm {
         match self {
             EncodedTerm::DefaultGraph { .. } => TYPE_DEFAULT_GRAPH_ID,
             EncodedTerm::NamedNode { .. } => TYPE_NAMED_NODE_ID,
-            EncodedTerm::BlankNode(_) => TYPE_BLANK_NODE_ID,
+            EncodedTerm::BlankNode { .. } => TYPE_BLANK_NODE_ID,
             EncodedTerm::StringLiteral { .. } => TYPE_STRING_LITERAL,
             EncodedTerm::LangStringLiteral { .. } => TYPE_LANG_STRING_LITERAL_ID,
             EncodedTerm::TypedLiteral { .. } => TYPE_TYPED_LITERAL_ID,
@@ -365,7 +365,7 @@ impl From<NaiveDateTime> for EncodedTerm {
 
 impl From<BlankNode> for EncodedTerm {
     fn from(node: BlankNode) -> Self {
-        EncodedTerm::BlankNode(node.uuid())
+        EncodedTerm::BlankNode { id: node.id() }
     }
 }
 
@@ -410,11 +410,9 @@ impl<R: Read> TermReader for R {
             TYPE_NAMED_NODE_ID => Ok(EncodedTerm::NamedNode {
                 iri_id: self.read_u64::<LittleEndian>()?,
             }),
-            TYPE_BLANK_NODE_ID => {
-                let mut uuid_buffer = [0 as u8; 16];
-                self.read_exact(&mut uuid_buffer)?;
-                Ok(EncodedTerm::BlankNode(Uuid::from_bytes(uuid_buffer)))
-            }
+            TYPE_BLANK_NODE_ID => Ok(EncodedTerm::BlankNode {
+                id: self.read_u128::<LittleEndian>()?,
+            }),
             TYPE_LANG_STRING_LITERAL_ID => Ok(EncodedTerm::LangStringLiteral {
                 language_id: self.read_u64::<LittleEndian>()?,
                 value_id: self.read_u64::<LittleEndian>()?,
@@ -576,7 +574,7 @@ impl<W: Write> TermWriter for W {
         match term {
             EncodedTerm::DefaultGraph => {}
             EncodedTerm::NamedNode { iri_id } => self.write_u64::<LittleEndian>(iri_id)?,
-            EncodedTerm::BlankNode(id) => self.write_all(id.as_bytes())?,
+            EncodedTerm::BlankNode { id } => self.write_u128::<LittleEndian>(id)?,
             EncodedTerm::StringLiteral { value_id } => {
                 self.write_u64::<LittleEndian>(value_id)?;
             }
@@ -686,7 +684,9 @@ impl<S: StringStore> Encoder<S> {
     }
 
     pub fn encode_blank_node(&self, blank_node: &BlankNode) -> Result<EncodedTerm> {
-        Ok(EncodedTerm::BlankNode(blank_node.uuid()))
+        Ok(EncodedTerm::BlankNode {
+            id: blank_node.id(),
+        })
     }
 
     pub fn encode_literal(&self, literal: &Literal) -> Result<EncodedTerm> {
@@ -742,14 +742,14 @@ impl<S: StringStore> Encoder<S> {
     pub fn encode_rio_blank_node(
         &self,
         blank_node: rio::BlankNode,
-        bnodes_map: &mut HashMap<String, Uuid>,
+        bnodes_map: &mut HashMap<String, u128>,
     ) -> Result<EncodedTerm> {
-        Ok(if let Some(uuid) = bnodes_map.get(blank_node.id) {
-            EncodedTerm::BlankNode(*uuid)
+        Ok(if let Some(id) = bnodes_map.get(blank_node.id) {
+            EncodedTerm::BlankNode { id: *id }
         } else {
-            let uuid = Uuid::new_v4();
-            bnodes_map.insert(blank_node.id.to_owned(), uuid);
-            EncodedTerm::BlankNode(uuid)
+            let id = random::<u128>();
+            bnodes_map.insert(blank_node.id.to_owned(), id);
+            EncodedTerm::BlankNode { id }
         })
     }
 
@@ -813,7 +813,7 @@ impl<S: StringStore> Encoder<S> {
     pub fn encode_rio_named_or_blank_node(
         &self,
         term: rio::NamedOrBlankNode,
-        bnodes_map: &mut HashMap<String, Uuid>,
+        bnodes_map: &mut HashMap<String, u128>,
     ) -> Result<EncodedTerm> {
         match term {
             rio::NamedOrBlankNode::NamedNode(named_node) => self.encode_rio_named_node(named_node),
@@ -826,7 +826,7 @@ impl<S: StringStore> Encoder<S> {
     pub fn encode_rio_term(
         &self,
         term: rio::Term,
-        bnodes_map: &mut HashMap<String, Uuid>,
+        bnodes_map: &mut HashMap<String, u128>,
     ) -> Result<EncodedTerm> {
         match term {
             rio::Term::NamedNode(named_node) => self.encode_rio_named_node(named_node),
@@ -838,7 +838,7 @@ impl<S: StringStore> Encoder<S> {
     pub fn encode_rio_quad(
         &self,
         quad: rio::Quad,
-        bnodes_map: &mut HashMap<String, Uuid>,
+        bnodes_map: &mut HashMap<String, u128>,
     ) -> Result<EncodedQuad> {
         Ok(EncodedQuad {
             subject: self.encode_rio_named_or_blank_node(quad.subject, bnodes_map)?,
@@ -855,7 +855,7 @@ impl<S: StringStore> Encoder<S> {
         &self,
         triple: rio::Triple,
         graph_name: EncodedTerm,
-        bnodes_map: &mut HashMap<String, Uuid>,
+        bnodes_map: &mut HashMap<String, u128>,
     ) -> Result<EncodedQuad> {
         Ok(EncodedQuad {
             subject: self.encode_rio_named_or_blank_node(triple.subject, bnodes_map)?,
@@ -939,7 +939,7 @@ impl<S: StringStore> Encoder<S> {
             EncodedTerm::NamedNode { iri_id } => {
                 Ok(NamedNode::new_from_string(self.get_str(iri_id)?).into())
             }
-            EncodedTerm::BlankNode(id) => Ok(BlankNode::from(id).into()),
+            EncodedTerm::BlankNode { id } => Ok(BlankNode::new_from_unique_id(id).into()),
             EncodedTerm::StringLiteral { value_id } => {
                 Ok(Literal::new_simple_literal(self.get_str(value_id)?).into())
             }

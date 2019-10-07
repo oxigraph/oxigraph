@@ -770,9 +770,7 @@ impl<'a> fmt::Display for SparqlGraphPattern<'a> {
                 SparqlGraphPattern(&*a),
                 SparqlGraphPattern(&*b),
             ),
-            GraphPattern::Graph(g, p) => {
-                write!(f, "GRAPH {} {{ {} }}", g, SparqlGraphPattern(&*p),)
-            }
+            GraphPattern::Graph(g, p) => write!(f, "GRAPH {} {{ {} }}", g, SparqlGraphPattern(&*p),),
             GraphPattern::Extend(p, v, e) => write!(
                 f,
                 "{} BIND({} AS {})",

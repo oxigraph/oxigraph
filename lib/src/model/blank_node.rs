@@ -1,11 +1,12 @@
+use rand::random;
 use rio_api::model as rio;
 use std::fmt;
+use std::io::Write;
 use std::str;
-use uuid::Uuid;
 
 /// A RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 ///
-/// This implementation enforces that the blank node id is an UUID to easily ensure
+/// This implementation enforces that the blank node id is a uniquely generated ID to easily ensure
 /// that it is not possible for two blank nodes to share an id.
 ///
 /// The common way to create a new blank node is to use the `Default::default` trait method.
@@ -15,19 +16,26 @@ use uuid::Uuid;
 ///
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct BlankNode {
-    uuid: Uuid,
+    id: u128,
     str: [u8; 32],
 }
 
 impl BlankNode {
+    /// Creates a blank node from a unique id
+    pub(crate) fn new_from_unique_id(id: u128) -> Self {
+        let mut str = [0; 32];
+        write!(&mut str[..], "{:x}", id).unwrap();
+        Self { id, str }
+    }
+
     /// Returns the underlying ID of this blank node
     pub fn as_str(&self) -> &str {
         str::from_utf8(&self.str).unwrap()
     }
 
-    /// Returns the underlying UUID of this blank node
-    pub fn uuid(&self) -> Uuid {
-        self.uuid
+    /// Returns the underlying ID of this blank node
+    pub(crate) fn id(&self) -> u128 {
+        self.id
     }
 }
 
@@ -40,15 +48,7 @@ impl fmt::Display for BlankNode {
 impl Default for BlankNode {
     /// Builds a new RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a unique id
     fn default() -> Self {
-        Self::from(Uuid::new_v4())
-    }
-}
-
-impl From<Uuid> for BlankNode {
-    fn from(id: Uuid) -> Self {
-        let mut str = [0; 32];
-        id.to_simple().encode_lower(&mut str);
-        Self { uuid: id, str }
+        Self::new_from_unique_id(random::<u128>())
     }
 }
 

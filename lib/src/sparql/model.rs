@@ -3,12 +3,12 @@ use crate::sparql::json_results::write_json_results;
 use crate::sparql::xml_results::{read_xml_results, write_xml_results};
 use crate::{FileSyntax, GraphSyntax, Result};
 use failure::format_err;
+use rand::random;
 use rio_api::formatter::TriplesFormatter;
 use rio_turtle::{NTriplesFormatter, TurtleFormatter};
 use rio_xml::RdfXmlFormatter;
 use std::fmt;
 use std::io::{BufRead, Write};
-use uuid::Uuid;
 
 /// Results of a [SPARQL query](https://www.w3.org/TR/sparql11-query/)
 pub enum QueryResult<'a> {
@@ -145,8 +145,8 @@ impl<'a> BindingsIterator<'a> {
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum Variable {
     Variable { name: String },
-    BlankNode { id: Uuid },
-    Internal { id: Uuid },
+    BlankNode { id: u128 },
+    Internal { id: u128 },
 }
 
 impl Variable {
@@ -173,22 +173,24 @@ impl fmt::Display for Variable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Variable::Variable { name } => write!(f, "?{}", name),
-            Variable::BlankNode { id } => write!(f, "_:{}", id.to_simple()),
-            Variable::Internal { id } => write!(f, "?{}", id.to_simple()),
+            Variable::BlankNode { id } => write!(f, "_:{:x}", id),
+            Variable::Internal { id } => write!(f, "?{:x}", id),
         }
     }
 }
 
 impl Default for Variable {
     fn default() -> Self {
-        Variable::Internal { id: Uuid::new_v4() }
+        Variable::Internal {
+            id: random::<u128>(),
+        }
     }
 }
 
 impl From<BlankNode> for Variable {
     fn from(blank_node: BlankNode) -> Self {
         Variable::BlankNode {
-            id: blank_node.uuid(),
+            id: blank_node.id(),
         }
     }
 }

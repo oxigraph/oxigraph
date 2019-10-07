@@ -40,7 +40,7 @@ type EncodedTuplesIterator<'a> = Box<dyn Iterator<Item = Result<EncodedTuple>> +
 
 pub struct SimpleEvaluator<S: StoreConnection> {
     dataset: DatasetView<S>,
-    bnodes_map: Mutex<BTreeMap<u64, Uuid>>,
+    bnodes_map: Mutex<BTreeMap<u64, u128>>,
     base_iri: Option<Iri<String>>,
     now: DateTime<FixedOffset>,
 }
@@ -872,19 +872,21 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     if let EncodedTerm::StringLiteral { value_id } =
                         self.eval_expression(id, tuple)?
                     {
-                        Some(EncodedTerm::BlankNode(
-                            *self
+                        Some(EncodedTerm::BlankNode {
+                            id: *self
                                 .bnodes_map
                                 .lock()
                                 .ok()?
                                 .entry(value_id)
-                                .or_insert_with(Uuid::new_v4),
-                        ))
+                                .or_insert_with(random::<u128>),
+                        })
                     } else {
                         None
                     }
                 }
-                None => Some(EncodedTerm::BlankNode(Uuid::new_v4())),
+                None => Some(EncodedTerm::BlankNode {
+                    id: random::<u128>(),
+                }),
             },
             PlanExpression::Rand => Some(random::<f64>().into()),
             PlanExpression::Abs(e) => match self.eval_expression(e, tuple)? {
@@ -1411,7 +1413,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         match term {
             EncodedTerm::DefaultGraph => None,
             EncodedTerm::NamedNode { iri_id } => Some(iri_id),
-            EncodedTerm::BlankNode(_) => None,
+            EncodedTerm::BlankNode { .. } => None,
             EncodedTerm::StringLiteral { value_id }
             | EncodedTerm::LangStringLiteral { value_id, .. }
             | EncodedTerm::TypedLiteral { value_id, .. } => Some(value_id),
@@ -1584,7 +1586,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         match a {
             EncodedTerm::DefaultGraph
             | EncodedTerm::NamedNode { .. }
-            | EncodedTerm::BlankNode(_)
+            | EncodedTerm::BlankNode { .. }
             | EncodedTerm::LangStringLiteral { .. } => Some(a == b),
             EncodedTerm::StringLiteral { value_id: a } => match b {
                 EncodedTerm::StringLiteral { value_id: b } => Some(a == b),
@@ -1706,8 +1708,8 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
     fn cmp_terms(&self, a: Option<EncodedTerm>, b: Option<EncodedTerm>) -> Ordering {
         match (a, b) {
             (Some(a), Some(b)) => match a {
-                EncodedTerm::BlankNode(a) => {
-                    if let EncodedTerm::BlankNode(b) = b {
+                EncodedTerm::BlankNode { id: a } => {
+                    if let EncodedTerm::BlankNode { id: b } = b {
                         a.cmp(&b)
                     } else {
                         Ordering::Less
@@ -1717,11 +1719,13 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     EncodedTerm::NamedNode { iri_id: b } => {
                         self.compare_str_ids(a, b).unwrap_or(Ordering::Equal)
                     }
-                    EncodedTerm::BlankNode(_) => Ordering::Greater,
+                    EncodedTerm::BlankNode { .. } => Ordering::Greater,
                     _ => Ordering::Less,
                 },
                 a => match b {
-                    EncodedTerm::NamedNode { .. } | EncodedTerm::BlankNode(_) => Ordering::Greater,
+                    EncodedTerm::NamedNode { .. } | EncodedTerm::BlankNode { .. } => {
+                        Ordering::Greater
+                    }
                     b => self.partial_cmp_literals(a, b).unwrap_or(Ordering::Equal),
                 },
             },
