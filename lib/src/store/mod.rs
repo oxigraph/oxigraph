@@ -18,7 +18,7 @@ use rio_turtle::{NQuadsParser, NTriplesParser, TriGParser, TurtleParser};
 use rio_xml::RdfXmlParser;
 use std::collections::HashMap;
 use std::io::BufRead;
-use std::iter::{once, Iterator};
+use std::iter::Iterator;
 
 /// Defines the `Store` traits that is used to have efficient binary storage
 pub trait Store {
@@ -28,10 +28,13 @@ pub trait Store {
 }
 
 /// A connection to a `Store`
-pub trait StoreConnection: StringStore + Sized + Clone {
+pub trait StoreConnection: StrContainer + StrLookup + Sized + Clone {
     fn contains(&self, quad: &EncodedQuad) -> Result<bool>;
+
     fn insert(&mut self, quad: &EncodedQuad) -> Result<()>;
+
     fn remove(&mut self, quad: &EncodedQuad) -> Result<()>;
+
     fn quads_for_pattern<'a>(
         &'a self,
         subject: Option<EncodedTerm>,
@@ -39,9 +42,6 @@ pub trait StoreConnection: StringStore + Sized + Clone {
         object: Option<EncodedTerm>,
         graph_name: Option<EncodedTerm>,
     ) -> Box<dyn Iterator<Item = Result<EncodedQuad>> + 'a>;
-    fn encoder(&self) -> Encoder<&Self> {
-        Encoder::new(&self)
-    }
 }
 
 /// A `RepositoryConnection` from a `StoreConnection`
@@ -73,48 +73,14 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
     where
         Self: 'a,
     {
-        let encoder = self.inner.encoder();
-        let subject = if let Some(subject) = subject {
-            match encoder.encode_named_or_blank_node(subject) {
-                Ok(subject) => Some(subject),
-                Err(error) => return Box::new(once(Err(error))),
-            }
-        } else {
-            None
-        };
-        let predicate = if let Some(predicate) = predicate {
-            match encoder.encode_named_node(predicate) {
-                Ok(predicate) => Some(predicate),
-                Err(error) => return Box::new(once(Err(error))),
-            }
-        } else {
-            None
-        };
-        let object = if let Some(object) = object {
-            match encoder.encode_term(object) {
-                Ok(object) => Some(object),
-                Err(error) => return Box::new(once(Err(error))),
-            }
-        } else {
-            None
-        };
-        let graph_name = if let Some(graph_name) = graph_name {
-            Some(if let Some(graph_name) = graph_name {
-                match encoder.encode_named_or_blank_node(graph_name) {
-                    Ok(graph_name) => graph_name,
-                    Err(error) => return Box::new(once(Err(error))),
-                }
-            } else {
-                EncodedTerm::DefaultGraph
-            })
-        } else {
-            None
-        };
-
+        let subject = subject.map(|s| s.into());
+        let predicate = predicate.map(|p| p.into());
+        let object = object.map(|o| o.into());
+        let graph_name = graph_name.map(|g| g.map_or(ENCODED_DEFAULT_GRAPH, |g| g.into()));
         Box::new(
             self.inner
                 .quads_for_pattern(subject, predicate, object, graph_name)
-                .map(move |quad| self.inner.encoder().decode_quad(&quad?)),
+                .map(move |quad| self.inner.decode_quad(&quad?)),
         )
     }
 
@@ -153,16 +119,15 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
     }
 
     fn contains(&self, quad: &Quad) -> Result<bool> {
-        self.inner
-            .contains(&self.inner.encoder().encode_quad(quad)?)
+        self.inner.contains(&quad.into())
     }
 
     fn insert(&mut self, quad: &Quad) -> Result<()> {
-        self.inner.insert(&self.inner.encoder().encode_quad(quad)?)
+        self.inner.insert(&self.inner.encode_quad(quad)?)
     }
 
     fn remove(&mut self, quad: &Quad) -> Result<()> {
-        self.inner.remove(&self.inner.encoder().encode_quad(quad)?)
+        self.inner.remove(&self.inner.encode_quad(quad)?)
     }
 }
 
@@ -177,19 +142,16 @@ impl<S: StoreConnection> StoreRepositoryConnection<S> {
     {
         let mut bnode_map = HashMap::default();
         let graph_name = if let Some(graph_name) = to_graph_name {
-            self.inner
-                .encoder()
-                .encode_named_or_blank_node(graph_name)?
+            self.inner.encode_named_or_blank_node(graph_name)?
         } else {
             EncodedTerm::DefaultGraph
         };
         parser.parse_all(&mut move |t| {
-            self.inner
-                .insert(&self.inner.encoder().encode_rio_triple_in_graph(
-                    t,
-                    graph_name,
-                    &mut bnode_map,
-                )?)
+            self.inner.insert(&self.inner.encode_rio_triple_in_graph(
+                t,
+                graph_name,
+                &mut bnode_map,
+            )?)
         })?;
         Ok(())
     }
@@ -201,7 +163,7 @@ impl<S: StoreConnection> StoreRepositoryConnection<S> {
         let mut bnode_map = HashMap::default();
         parser.parse_all(&mut move |q| {
             self.inner
-                .insert(&self.inner.encoder().encode_rio_quad(q, &mut bnode_map)?)
+                .insert(&self.inner.encode_rio_quad(q, &mut bnode_map)?)
         })?;
         Ok(())
     }

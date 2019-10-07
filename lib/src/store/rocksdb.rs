@@ -1,8 +1,6 @@
 use crate::store::numeric_encoder::*;
 use crate::store::{Store, StoreConnection, StoreRepositoryConnection};
 use crate::{Repository, Result};
-use byteorder::ByteOrder;
-use byteorder::LittleEndian;
 use failure::format_err;
 use rocksdb::ColumnFamily;
 use rocksdb::DBCompactionStyle;
@@ -16,7 +14,6 @@ use std::iter::{empty, once};
 use std::ops::Deref;
 use std::path::Path;
 use std::str;
-use std::sync::Mutex;
 
 /// `Repository` implementation based on the [RocksDB](https://rocksdb.org/) key-value store
 ///
@@ -55,7 +52,6 @@ pub struct RocksDbRepository {
 pub type RocksDbRepositoryConnection<'a> = StoreRepositoryConnection<RocksDbStoreConnection<'a>>;
 
 const ID2STR_CF: &str = "id2str";
-const STR2ID_CF: &str = "id2str";
 const SPOG_CF: &str = "spog";
 const POSG_CF: &str = "posg";
 const OSPG_CF: &str = "ospg";
@@ -67,13 +63,12 @@ const EMPTY_BUF: [u8; 0] = [0 as u8; 0];
 
 //TODO: indexes for the default graph and indexes for the named graphs (no more Optional and space saving)
 
-const COLUMN_FAMILIES: [&str; 8] = [
-    ID2STR_CF, STR2ID_CF, SPOG_CF, POSG_CF, OSPG_CF, GSPO_CF, GPOS_CF, GOSP_CF,
+const COLUMN_FAMILIES: [&str; 7] = [
+    ID2STR_CF, SPOG_CF, POSG_CF, OSPG_CF, GSPO_CF, GPOS_CF, GOSP_CF,
 ];
 
 struct RocksDbStore {
     db: DB,
-    str_id_counter: Mutex<RocksDBCounter>,
 }
 
 #[derive(Clone)]
@@ -81,7 +76,6 @@ pub struct RocksDbStoreConnection<'a> {
     store: &'a RocksDbStore,
     buffer: Vec<u8>,
     id2str_cf: ColumnFamily<'a>,
-    str2id_cf: ColumnFamily<'a>,
     spog_cf: ColumnFamily<'a>,
     posg_cf: ColumnFamily<'a>,
     ospg_cf: ColumnFamily<'a>,
@@ -115,7 +109,6 @@ impl RocksDbStore {
 
         let new = Self {
             db: DB::open_cf(&options, path, &COLUMN_FAMILIES)?,
-            str_id_counter: Mutex::new(RocksDBCounter::new("bsc")),
         };
         (&new).connection()?.set_first_strings()?;
         Ok(new)
@@ -130,7 +123,6 @@ impl<'a> Store for &'a RocksDbStore {
             store: self,
             buffer: Vec::default(),
             id2str_cf: get_cf(&self.db, ID2STR_CF)?,
-            str2id_cf: get_cf(&self.db, STR2ID_CF)?,
             spog_cf: get_cf(&self.db, SPOG_CF)?,
             posg_cf: get_cf(&self.db, POSG_CF)?,
             ospg_cf: get_cf(&self.db, OSPG_CF)?,
@@ -141,42 +133,24 @@ impl<'a> Store for &'a RocksDbStore {
     }
 }
 
-impl StringStore for RocksDbStoreConnection<'_> {
-    type StringType = RocksString;
+impl StrLookup for RocksDbStoreConnection<'_> {
+    type StrType = RocksString;
 
-    fn get_str(&self, id: u64) -> Result<Option<RocksString>> {
+    fn get_str(&self, id: u128) -> Result<Option<RocksString>> {
         Ok(self
             .store
             .db
-            .get_cf(self.id2str_cf, &to_bytes(id))?
+            .get_cf(self.id2str_cf, &id.to_le_bytes())?
             .map(|v| RocksString { vec: v }))
     }
+}
 
-    fn get_str_id(&self, value: &str) -> Result<Option<u64>> {
-        Ok(self
-            .store
+impl StrContainer for RocksDbStoreConnection<'_> {
+    fn insert_str(&self, key: u128, value: &str) -> Result<()> {
+        self.store
             .db
-            .get_cf(self.str2id_cf, value.as_bytes())?
-            .map(|id| LittleEndian::read_u64(&id)))
-    }
-
-    fn insert_str(&self, value: &str) -> Result<u64> {
-        Ok(if let Some(id) = self.get_str_id(value)? {
-            id
-        } else {
-            let id = self
-                .store
-                .str_id_counter
-                .lock()
-                .map_err(MutexPoisonError::from)?
-                .get_and_increment(&self.store.db)? as u64;
-            let id_bytes = to_bytes(id);
-            let mut batch = WriteBatch::default();
-            batch.put_cf(self.id2str_cf, &id_bytes, value)?;
-            batch.put_cf(self.str2id_cf, value, &id_bytes)?;
-            self.store.db.write(batch)?;
-            id
-        })
+            .put_cf(self.id2str_cf, &key.to_le_bytes(), value)?;
+        Ok(())
     }
 }
 
@@ -530,24 +504,6 @@ fn wrap_error<'a, E: 'a, I: Iterator<Item = Result<E>> + 'a>(
     }
 }
 
-struct RocksDBCounter {
-    name: &'static str,
-}
-
-impl RocksDBCounter {
-    fn new(name: &'static str) -> Self {
-        Self { name }
-    }
-
-    fn get_and_increment(&self, db: &DB) -> Result<u64> {
-        let value = db
-            .get(self.name.as_bytes())?
-            .map_or(0, |b| LittleEndian::read_u64(&b));
-        db.put(self.name.as_bytes(), &to_bytes(value + 1))?;
-        Ok(value)
-    }
-}
-
 struct EncodedQuadPattern {
     subject: Option<EncodedTerm>,
     predicate: Option<EncodedTerm>,
@@ -738,12 +694,6 @@ impl<I: Iterator<Item = Result<EncodedQuad>>> Iterator for FilteringEncodedQuads
             Err(_) => true,
         })
     }
-}
-
-fn to_bytes(int: u64) -> [u8; 8] {
-    let mut buf = [0 as u8; 8];
-    LittleEndian::write_u64(&mut buf, int);
-    buf
 }
 
 pub struct RocksString {

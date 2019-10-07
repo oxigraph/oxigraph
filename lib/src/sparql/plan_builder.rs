@@ -4,17 +4,17 @@ use crate::sparql::algebra::*;
 use crate::sparql::model::*;
 use crate::sparql::plan::PlanPropertyPath;
 use crate::sparql::plan::*;
-use crate::store::numeric_encoder::{Encoder, StringStore, ENCODED_DEFAULT_GRAPH};
+use crate::store::numeric_encoder::{Encoder, ENCODED_DEFAULT_GRAPH};
 use crate::Result;
 use failure::format_err;
 use std::collections::HashSet;
 
-pub struct PlanBuilder<S: StringStore> {
-    encoder: Encoder<S>,
+pub struct PlanBuilder<E: Encoder> {
+    encoder: E,
 }
 
-impl<S: StringStore> PlanBuilder<S> {
-    pub fn build(encoder: Encoder<S>, pattern: &GraphPattern) -> Result<(PlanNode, Vec<Variable>)> {
+impl<E: Encoder> PlanBuilder<E> {
+    pub fn build(encoder: E, pattern: &GraphPattern) -> Result<(PlanNode, Vec<Variable>)> {
         let mut variables = Vec::default();
         let plan = PlanBuilder { encoder }.build_for_graph_pattern(
             pattern,
@@ -25,7 +25,7 @@ impl<S: StringStore> PlanBuilder<S> {
     }
 
     pub fn build_graph_template(
-        encoder: Encoder<S>,
+        encoder: E,
         template: &[TriplePattern],
         mut variables: Vec<Variable>,
     ) -> Result<Vec<TripleTemplate>> {

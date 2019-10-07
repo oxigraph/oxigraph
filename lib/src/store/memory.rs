@@ -45,7 +45,7 @@ type QuadMap<T> = BTreeMap<T, TripleMap<T>>;
 
 #[derive(Default)]
 pub struct MemoryStore {
-    string_store: MemoryStringStore,
+    str_store: MemoryStrStore,
     quad_indexes: RwLock<MemoryStoreIndexes>,
 }
 
@@ -75,19 +75,17 @@ impl<'a> Store for &'a MemoryStore {
     }
 }
 
-impl StringStore for MemoryStore {
-    type StringType = String;
+impl StrLookup for MemoryStore {
+    type StrType = String;
 
-    fn get_str(&self, id: u64) -> Result<Option<String>> {
-        self.string_store.get_str(id)
+    fn get_str(&self, id: u128) -> Result<Option<String>> {
+        self.str_store.get_str(id)
     }
+}
 
-    fn get_str_id(&self, value: &str) -> Result<Option<u64>> {
-        self.string_store.get_str_id(value)
-    }
-
-    fn insert_str(&self, value: &str) -> Result<u64> {
-        self.string_store.insert_str(value)
+impl StrContainer for MemoryStore {
+    fn insert_str(&self, key: u128, value: &str) -> Result<()> {
+        self.str_store.insert_str(key, value)
     }
 }
 

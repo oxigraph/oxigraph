@@ -31,7 +31,6 @@ use std::iter::{empty, once};
 use std::ops::Deref;
 use std::str;
 use std::sync::Mutex;
-use std::u64;
 use uuid::Uuid;
 
 const REGEX_SIZE_LIMIT: usize = 1_000_000;
@@ -40,7 +39,7 @@ type EncodedTuplesIterator<'a> = Box<dyn Iterator<Item = Result<EncodedTuple>> +
 
 pub struct SimpleEvaluator<S: StoreConnection> {
     dataset: DatasetView<S>,
-    bnodes_map: Mutex<BTreeMap<u64, u128>>,
+    bnodes_map: Mutex<BTreeMap<u128, u128>>,
     base_iri: Option<Iri<String>>,
     now: DateTime<FixedOffset>,
 }
@@ -855,17 +854,12 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     _ => None,
                 }?;
                 let iri = self.dataset.get_str(iri_id).ok()??;
-                Some(if let Some(base_iri) = &self.base_iri {
-                    EncodedTerm::NamedNode {
-                        iri_id: self
-                            .dataset
-                            .insert_str(&base_iri.resolve(&iri).ok()?.into_inner())
-                            .ok()?,
-                    }
+                if let Some(base_iri) = &self.base_iri {
+                    self.build_named_node(&base_iri.resolve(&iri).ok()?.into_inner())
                 } else {
                     Iri::parse(iri).ok()?;
-                    EncodedTerm::NamedNode { iri_id }
-                })
+                    Some(EncodedTerm::NamedNode { iri_id })
+                }
             }
             PlanExpression::BNode(id) => match id {
                 Some(id) => {
@@ -1044,12 +1038,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                         }
                     }
                 }
-                Some(EncodedTerm::StringLiteral {
-                    value_id: self
-                        .dataset
-                        .insert_str(str::from_utf8(&result).ok()?)
-                        .ok()?,
-                })
+                self.build_string_literal(str::from_utf8(&result).ok()?)
             }
             PlanExpression::StrEnds(arg1, arg2) => {
                 let (arg1, arg2, _) = self.to_argument_compatible_strings(
@@ -1166,11 +1155,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     write!(&mut result, "{}S", seconds).ok()?;
                 }
                 Some(EncodedTerm::TypedLiteral {
-                    value_id: self.dataset.insert_str(&result).ok()?,
+                    value_id: self.build_string_id(&result)?,
                     datatype_id: self
-                        .dataset
-                        .insert_str("http://www.w3.org/2001/XMLSchema#dayTimeDuration")
-                        .ok()?,
+                        .build_string_id("http://www.w3.org/2001/XMLSchema#dayTimeDuration")?,
                 })
             }
             PlanExpression::Tz(e) => {
@@ -1185,9 +1172,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 Some(if let Some(timezone) = timezone {
                     EncodedTerm::StringLiteral {
                         value_id: if timezone.local_minus_utc() == 0 {
-                            self.dataset.insert_str("Z").ok()?
+                            self.build_string_id("Z")?
                         } else {
-                            self.dataset.insert_str(&timezone.to_string()).ok()?
+                            self.build_string_id(&timezone.to_string())?
                         },
                     }
                 } else {
@@ -1195,26 +1182,16 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 })
             }
             PlanExpression::Now => Some(self.now.into()),
-            PlanExpression::UUID => Some(EncodedTerm::NamedNode {
-                iri_id: self
-                    .dataset
-                    .insert_str(
-                        Uuid::new_v4()
-                            .to_urn()
-                            .encode_lower(&mut Uuid::encode_buffer()),
-                    )
-                    .ok()?,
-            }),
-            PlanExpression::StrUUID => Some(EncodedTerm::StringLiteral {
-                value_id: self
-                    .dataset
-                    .insert_str(
-                        Uuid::new_v4()
-                            .to_hyphenated()
-                            .encode_lower(&mut Uuid::encode_buffer()),
-                    )
-                    .ok()?,
-            }),
+            PlanExpression::UUID => self.build_named_node(
+                Uuid::new_v4()
+                    .to_urn()
+                    .encode_lower(&mut Uuid::encode_buffer()),
+            ),
+            PlanExpression::StrUUID => self.build_string_literal(
+                Uuid::new_v4()
+                    .to_hyphenated()
+                    .encode_lower(&mut Uuid::encode_buffer()),
+            ),
             PlanExpression::MD5(arg) => self.hash::<Md5>(arg, tuple),
             PlanExpression::SHA1(arg) => self.hash::<Sha1>(arg, tuple),
             PlanExpression::SHA256(arg) => self.hash::<Sha256>(arg, tuple),
@@ -1253,7 +1230,6 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     None
                 }?;
                 self.dataset
-                    .encoder()
                     .encode_rio_literal(rio::Literal::Typed {
                         value: &value,
                         datatype: rio::NamedNode { iri: &datatype },
@@ -1296,10 +1272,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             }
             PlanExpression::BooleanCast(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::BooleanLiteral(value) => Some(value.into()),
-                EncodedTerm::StringLiteral { value_id } => self
-                    .dataset
-                    .encoder()
-                    .encode_boolean_str(&*self.dataset.get_str(value_id).ok()??),
+                EncodedTerm::StringLiteral { value_id } => {
+                    parse_boolean_str(&*self.dataset.get_str(value_id).ok()??)
+                }
                 _ => None,
             },
             PlanExpression::DoubleCast(e) => match self.eval_expression(e, tuple)? {
@@ -1310,10 +1285,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 EncodedTerm::BooleanLiteral(value) => {
                     Some(if value { 1. as f64 } else { 0. }.into())
                 }
-                EncodedTerm::StringLiteral { value_id } => self
-                    .dataset
-                    .encoder()
-                    .encode_double_str(&*self.dataset.get_str(value_id).ok()??),
+                EncodedTerm::StringLiteral { value_id } => {
+                    parse_double_str(&*self.dataset.get_str(value_id).ok()??)
+                }
                 _ => None,
             },
             PlanExpression::FloatCast(e) => match self.eval_expression(e, tuple)? {
@@ -1324,10 +1298,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 EncodedTerm::BooleanLiteral(value) => {
                     Some(if value { 1. as f32 } else { 0. }.into())
                 }
-                EncodedTerm::StringLiteral { value_id } => self
-                    .dataset
-                    .encoder()
-                    .encode_float_str(&*self.dataset.get_str(value_id).ok()??),
+                EncodedTerm::StringLiteral { value_id } => {
+                    parse_float_str(&*self.dataset.get_str(value_id).ok()??)
+                }
                 _ => None,
             },
             PlanExpression::IntegerCast(e) => match self.eval_expression(e, tuple)? {
@@ -1336,10 +1309,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 EncodedTerm::IntegerLiteral(value) => Some(value.to_i128()?.into()),
                 EncodedTerm::DecimalLiteral(value) => Some(value.to_i128()?.into()),
                 EncodedTerm::BooleanLiteral(value) => Some(if value { 1 } else { 0 }.into()),
-                EncodedTerm::StringLiteral { value_id } => self
-                    .dataset
-                    .encoder()
-                    .encode_integer_str(&*self.dataset.get_str(value_id).ok()??),
+                EncodedTerm::StringLiteral { value_id } => {
+                    parse_integer_str(&*self.dataset.get_str(value_id).ok()??)
+                }
                 _ => None,
             },
             PlanExpression::DecimalCast(e) => match self.eval_expression(e, tuple)? {
@@ -1355,10 +1327,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     }
                     .into(),
                 ),
-                EncodedTerm::StringLiteral { value_id } => self
-                    .dataset
-                    .encoder()
-                    .encode_decimal_str(&*self.dataset.get_str(value_id).ok()??),
+                EncodedTerm::StringLiteral { value_id } => {
+                    parse_decimal_str(&*self.dataset.get_str(value_id).ok()??)
+                }
                 _ => None,
             },
             PlanExpression::DateCast(e) => match self.eval_expression(e, tuple)? {
@@ -1366,29 +1337,26 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 EncodedTerm::NaiveDateLiteral(value) => Some(value.into()),
                 EncodedTerm::DateTimeLiteral(value) => Some(value.date().into()),
                 EncodedTerm::NaiveDateTimeLiteral(value) => Some(value.date().into()),
-                EncodedTerm::StringLiteral { value_id } => self
-                    .dataset
-                    .encoder()
-                    .encode_date_str(&*self.dataset.get_str(value_id).ok()??),
+                EncodedTerm::StringLiteral { value_id } => {
+                    parse_date_str(&*self.dataset.get_str(value_id).ok()??)
+                }
                 _ => None,
             },
             PlanExpression::TimeCast(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::NaiveTimeLiteral(value) => Some(value.into()),
                 EncodedTerm::DateTimeLiteral(value) => Some(value.time().into()),
                 EncodedTerm::NaiveDateTimeLiteral(value) => Some(value.time().into()),
-                EncodedTerm::StringLiteral { value_id } => self
-                    .dataset
-                    .encoder()
-                    .encode_time_str(&*self.dataset.get_str(value_id).ok()??),
+                EncodedTerm::StringLiteral { value_id } => {
+                    parse_time_str(&*self.dataset.get_str(value_id).ok()??)
+                }
                 _ => None,
             },
             PlanExpression::DateTimeCast(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::DateTimeLiteral(value) => Some(value.into()),
                 EncodedTerm::NaiveDateTimeLiteral(value) => Some(value.into()),
-                EncodedTerm::StringLiteral { value_id } => self
-                    .dataset
-                    .encoder()
-                    .encode_date_time_str(&*self.dataset.get_str(value_id).ok()??),
+                EncodedTerm::StringLiteral { value_id } => {
+                    parse_date_time_str(&*self.dataset.get_str(value_id).ok()??)
+                }
                 _ => None,
             },
             PlanExpression::StringCast(e) => Some(EncodedTerm::StringLiteral {
@@ -1409,7 +1377,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         }
     }
 
-    fn to_string_id(&self, term: EncodedTerm) -> Option<u64> {
+    fn to_string_id(&self, term: EncodedTerm) -> Option<u128> {
         match term {
             EncodedTerm::DefaultGraph => None,
             EncodedTerm::NamedNode { iri_id } => Some(iri_id),
@@ -1417,32 +1385,25 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             EncodedTerm::StringLiteral { value_id }
             | EncodedTerm::LangStringLiteral { value_id, .. }
             | EncodedTerm::TypedLiteral { value_id, .. } => Some(value_id),
-            EncodedTerm::BooleanLiteral(value) => self
-                .dataset
-                .insert_str(if value { "true" } else { "false" })
-                .ok(),
-            EncodedTerm::FloatLiteral(value) => self.dataset.insert_str(&value.to_string()).ok(),
-            EncodedTerm::DoubleLiteral(value) => self.dataset.insert_str(&value.to_string()).ok(),
-            EncodedTerm::IntegerLiteral(value) => self.dataset.insert_str(&value.to_string()).ok(),
-            EncodedTerm::DecimalLiteral(value) => self.dataset.insert_str(&value.to_string()).ok(),
-            EncodedTerm::DateLiteral(value) => self.dataset.insert_str(&value.to_string()).ok(),
-            EncodedTerm::NaiveDateLiteral(value) => {
-                self.dataset.insert_str(&value.to_string()).ok()
+            EncodedTerm::BooleanLiteral(value) => {
+                self.build_string_id(if value { "true" } else { "false" })
             }
-            EncodedTerm::NaiveTimeLiteral(value) => {
-                self.dataset.insert_str(&value.to_string()).ok()
-            }
-            EncodedTerm::DateTimeLiteral(value) => self.dataset.insert_str(&value.to_string()).ok(),
-            EncodedTerm::NaiveDateTimeLiteral(value) => {
-                self.dataset.insert_str(&value.to_string()).ok()
-            }
+            EncodedTerm::FloatLiteral(value) => self.build_string_id(&value.to_string()),
+            EncodedTerm::DoubleLiteral(value) => self.build_string_id(&value.to_string()),
+            EncodedTerm::IntegerLiteral(value) => self.build_string_id(&value.to_string()),
+            EncodedTerm::DecimalLiteral(value) => self.build_string_id(&value.to_string()),
+            EncodedTerm::DateLiteral(value) => self.build_string_id(&value.to_string()),
+            EncodedTerm::NaiveDateLiteral(value) => self.build_string_id(&value.to_string()),
+            EncodedTerm::NaiveTimeLiteral(value) => self.build_string_id(&value.to_string()),
+            EncodedTerm::DateTimeLiteral(value) => self.build_string_id(&value.to_string()),
+            EncodedTerm::NaiveDateTimeLiteral(value) => self.build_string_id(&value.to_string()),
         }
     }
 
     fn to_simple_string(
         &self,
         term: EncodedTerm,
-    ) -> Option<<DatasetView<S> as StringStore>::StringType> {
+    ) -> Option<<DatasetView<S> as StrLookup>::StrType> {
         if let EncodedTerm::StringLiteral { value_id } = term {
             self.dataset.get_str(value_id).ok()?
         } else {
@@ -1450,7 +1411,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         }
     }
 
-    fn to_simple_string_id(&self, term: EncodedTerm) -> Option<u64> {
+    fn to_simple_string_id(&self, term: EncodedTerm) -> Option<u128> {
         if let EncodedTerm::StringLiteral { value_id } = term {
             Some(value_id)
         } else {
@@ -1458,7 +1419,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         }
     }
 
-    fn to_string(&self, term: EncodedTerm) -> Option<<DatasetView<S> as StringStore>::StringType> {
+    fn to_string(&self, term: EncodedTerm) -> Option<<DatasetView<S> as StrLookup>::StrType> {
         match term {
             EncodedTerm::StringLiteral { value_id }
             | EncodedTerm::LangStringLiteral { value_id, .. } => {
@@ -1471,7 +1432,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
     fn to_string_and_language(
         &self,
         term: EncodedTerm,
-    ) -> Option<(<DatasetView<S> as StringStore>::StringType, Option<u64>)> {
+    ) -> Option<(<DatasetView<S> as StrLookup>::StrType, Option<u128>)> {
         match term {
             EncodedTerm::StringLiteral { value_id } => {
                 Some((self.dataset.get_str(value_id).ok()??, None))
@@ -1484,17 +1445,37 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         }
     }
 
-    fn build_plain_literal(&self, value: &str, language: Option<u64>) -> Option<EncodedTerm> {
-        Some(if let Some(language_id) = language {
-            EncodedTerm::LangStringLiteral {
-                value_id: self.dataset.insert_str(value).ok()?,
-                language_id,
-            }
-        } else {
-            EncodedTerm::StringLiteral {
-                value_id: self.dataset.insert_str(value).ok()?,
-            }
+    fn build_named_node(&self, iri: &str) -> Option<EncodedTerm> {
+        Some(EncodedTerm::NamedNode {
+            iri_id: self.build_string_id(iri)?,
         })
+    }
+
+    fn build_string_literal(&self, value: &str) -> Option<EncodedTerm> {
+        Some(EncodedTerm::StringLiteral {
+            value_id: self.build_string_id(value)?,
+        })
+    }
+
+    fn build_lang_string_literal(&self, value: &str, language_id: u128) -> Option<EncodedTerm> {
+        Some(EncodedTerm::LangStringLiteral {
+            value_id: self.build_string_id(value)?,
+            language_id,
+        })
+    }
+
+    fn build_plain_literal(&self, value: &str, language: Option<u128>) -> Option<EncodedTerm> {
+        if let Some(language_id) = language {
+            self.build_lang_string_literal(value, language_id)
+        } else {
+            self.build_string_literal(value)
+        }
+    }
+
+    fn build_string_id(&self, value: &str) -> Option<u128> {
+        let value_id = get_str_id(value);
+        self.dataset.insert_str(value_id, value).ok()?;
+        Some(value_id)
     }
 
     fn to_argument_compatible_strings(
@@ -1502,9 +1483,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         arg1: EncodedTerm,
         arg2: EncodedTerm,
     ) -> Option<(
-        <DatasetView<S> as StringStore>::StringType,
-        <DatasetView<S> as StringStore>::StringType,
-        Option<u64>,
+        <DatasetView<S> as StrLookup>::StrType,
+        <DatasetView<S> as StrLookup>::StrType,
+        Option<u128>,
     )> {
         let (value1, language1) = self.to_string_and_language(arg1)?;
         let (value2, language2) = self.to_string_and_language(arg2)?;
@@ -1569,11 +1550,10 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         BindingsIterator::new(
             variables,
             Box::new(iter.map(move |values| {
-                let encoder = eval.dataset.encoder();
                 let mut result = vec![None; tuple_size];
                 for (i, value) in values?.into_iter().enumerate() {
                     if let Some(term) = value {
-                        result[i] = Some(encoder.decode_term(term)?)
+                        result[i] = Some(eval.dataset.decode_term(term)?)
                     }
                 }
                 Ok(result)
@@ -1803,7 +1783,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         }
     }
 
-    fn compare_str_ids(&self, a: u64, b: u64) -> Option<Ordering> {
+    fn compare_str_ids(&self, a: u128, b: u128) -> Option<Ordering> {
         Some(
             self.dataset
                 .get_str(a)
@@ -1819,9 +1799,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
     ) -> Option<EncodedTerm> {
         let input = self.to_simple_string(self.eval_expression(arg, tuple)?)?;
         let hash = hex::encode(H::new().chain(&input as &str).result());
-        Some(EncodedTerm::StringLiteral {
-            value_id: self.dataset.insert_str(&hash).ok()?,
-        })
+        self.build_string_literal(&hash)
     }
 }
 
@@ -2195,15 +2173,18 @@ impl<'a, S: StoreConnection> Iterator for ConstructIterator<'a, S> {
                     Ok(tuple) => tuple,
                     Err(error) => return Some(Err(error)),
                 };
-                let encoder = self.eval.dataset.encoder();
                 for template in self.template {
                     if let (Some(subject), Some(predicate), Some(object)) = (
                         get_triple_template_value(&template.subject, &tuple, &mut self.bnodes),
                         get_triple_template_value(&template.predicate, &tuple, &mut self.bnodes),
                         get_triple_template_value(&template.object, &tuple, &mut self.bnodes),
                     ) {
-                        self.buffered_results
-                            .push(decode_triple(&encoder, subject, predicate, object));
+                        self.buffered_results.push(decode_triple(
+                            &self.eval.dataset,
+                            subject,
+                            predicate,
+                            object,
+                        ));
                     }
                 }
                 self.bnodes.clear(); //We do not reuse old bnodes
@@ -2229,16 +2210,16 @@ fn get_triple_template_value(
     }
 }
 
-fn decode_triple<S: StringStore>(
-    encoder: &Encoder<S>,
+fn decode_triple(
+    decoder: impl Decoder,
     subject: EncodedTerm,
     predicate: EncodedTerm,
     object: EncodedTerm,
 ) -> Result<Triple> {
     Ok(Triple::new(
-        encoder.decode_named_or_blank_node(subject)?,
-        encoder.decode_named_node(predicate)?,
-        encoder.decode_term(object)?,
+        decoder.decode_named_or_blank_node(subject)?,
+        decoder.decode_named_node(predicate)?,
+        decoder.decode_term(object)?,
     ))
 }
 
@@ -2258,7 +2239,6 @@ impl<'a, S: StoreConnection> Iterator for DescribeIterator<'a, S> {
                     Ok(quad) => self
                         .eval
                         .dataset
-                        .encoder()
                         .decode_quad(&quad)
                         .map(|q| q.into_triple()),
                     Err(error) => Err(error),
@@ -2607,7 +2587,7 @@ impl Accumulator for SampleAccumulator {
 struct GroupConcatAccumulator<'a, S: StoreConnection + 'a> {
     eval: &'a SimpleEvaluator<S>,
     concat: Option<String>,
-    language: Option<Option<u64>>,
+    language: Option<Option<u128>>,
     separator: &'a str,
 }
 

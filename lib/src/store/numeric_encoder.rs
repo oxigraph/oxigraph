@@ -8,11 +8,13 @@ use chrono::prelude::*;
 use failure::format_err;
 use failure::Backtrace;
 use failure::Fail;
+use md5::digest::Digest;
+use md5::Md5;
 use ordered_float::OrderedFloat;
 use rand::random;
 use rio_api::model as rio;
 use rust_decimal::Decimal;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::io::Read;
 use std::io::Write;
 use std::mem::size_of;
@@ -21,110 +23,22 @@ use std::str;
 use std::sync::PoisonError;
 use std::sync::RwLock;
 
-const EMPTY_STRING_ID: u64 = 0;
-const RDF_LANG_STRING_ID: u64 = 1;
-const XSD_STRING_ID: u64 = 2;
-const XSD_BOOLEAN_ID: u64 = 3;
-const XSD_FLOAT_ID: u64 = 4;
-const XSD_DOUBLE_ID: u64 = 5;
-const XSD_INTEGER_ID: u64 = 6;
-const XSD_DECIMAL_ID: u64 = 7;
-const XSD_DATE_TIME_ID: u64 = 8;
-const XSD_DATE_ID: u64 = 9;
-const XSD_TIME_ID: u64 = 10;
+const EMPTY_STRING_ID: u128 = 167830467844043968176572005485231480276;
+const RDF_LANG_STRING_ID: u128 = 32982328051974780078994098831023510434;
+const XSD_STRING_ID: u128 = 13800943641695357404848007879689460046;
+const XSD_BOOLEAN_ID: u128 = 95660596900939122510990529520735927827;
+const XSD_FLOAT_ID: u128 = 31528676610345933421445910151629221319;
+const XSD_DOUBLE_ID: u128 = 55169043483206236595575765215713332225;
+const XSD_INTEGER_ID: u128 = 264492531517574030670228763493245709866;
+const XSD_DECIMAL_ID: u128 = 80624473126247401518595349505346497075;
+const XSD_DATE_TIME_ID: u128 = 257903479904871420659358808477547675664;
+const XSD_DATE_ID: u128 = 269408747350206033502011401422135526584;
+const XSD_TIME_ID: u128 = 163434887606038564205926318428306098363;
 
-pub trait StringStore {
-    type StringType: Deref<Target = str> + ToString + Into<String>;
-
-    fn get_str(&self, id: u64) -> Result<Option<Self::StringType>>;
-    fn get_str_id(&self, value: &str) -> Result<Option<u64>>;
-    fn insert_str(&self, value: &str) -> Result<u64>;
-
-    /// Should be called when the bytes store is created
-    fn set_first_strings(&self) -> Result<()> {
-        if EMPTY_STRING_ID == self.insert_str("")?
-            && RDF_LANG_STRING_ID == self.insert_str(rdf::LANG_STRING.as_str())?
-            && XSD_STRING_ID == self.insert_str(xsd::STRING.as_str())?
-            && XSD_BOOLEAN_ID == self.insert_str(xsd::BOOLEAN.as_str())?
-            && XSD_FLOAT_ID == self.insert_str(xsd::FLOAT.as_str())?
-            && XSD_DOUBLE_ID == self.insert_str(xsd::DOUBLE.as_str())?
-            && XSD_INTEGER_ID == self.insert_str(xsd::INTEGER.as_str())?
-            && XSD_DECIMAL_ID == self.insert_str(xsd::DECIMAL.as_str())?
-            && XSD_DATE_TIME_ID == self.insert_str(xsd::DATE_TIME.as_str())?
-            && XSD_DATE_ID == self.insert_str(xsd::DATE.as_str())?
-            && XSD_TIME_ID == self.insert_str(xsd::TIME.as_str())?
-        {
-            Ok(())
-        } else {
-            Err(format_err!(
-                "Failed to properly setup the basic string ids in the dictionnary"
-            ))
-        }
-    }
-}
-
-impl<'a, S: StringStore> StringStore for &'a S {
-    type StringType = S::StringType;
-
-    fn get_str(&self, id: u64) -> Result<Option<S::StringType>> {
-        (*self).get_str(id)
-    }
-
-    fn get_str_id(&self, value: &str) -> Result<Option<u64>> {
-        (*self).get_str_id(value)
-    }
-
-    fn insert_str(&self, value: &str) -> Result<u64> {
-        (*self).insert_str(value)
-    }
-}
-
-pub struct MemoryStringStore {
-    id2str: RwLock<Vec<String>>,
-    str2id: RwLock<BTreeMap<String, u64>>,
-}
-
-impl Default for MemoryStringStore {
-    fn default() -> Self {
-        let new = Self {
-            id2str: RwLock::default(),
-            str2id: RwLock::default(),
-        };
-        new.set_first_strings().unwrap();
-        new
-    }
-}
-
-impl StringStore for MemoryStringStore {
-    type StringType = String;
-
-    fn get_str(&self, id: u64) -> Result<Option<String>> {
-        //TODO: avoid copy by adding a lifetime limit to get_str
-        let id2str = self.id2str.read().map_err(MutexPoisonError::from)?;
-        Ok(if id2str.len() as u64 <= id {
-            None
-        } else {
-            Some(id2str[id as usize].to_owned())
-        })
-    }
-
-    fn get_str_id(&self, value: &str) -> Result<Option<u64>> {
-        let str2id = self.str2id.read().map_err(MutexPoisonError::from)?;
-        Ok(str2id.get(value).cloned())
-    }
-
-    fn insert_str(&self, value: &str) -> Result<u64> {
-        let mut id2str = self.id2str.write().map_err(MutexPoisonError::from)?;
-        let mut str2id = self.str2id.write().map_err(MutexPoisonError::from)?;
-        Ok(if let Some(id) = str2id.get(value) {
-            *id
-        } else {
-            let id = id2str.len() as u64;
-            id2str.push(value.to_string());
-            str2id.insert(value.to_string(), id);
-            id
-        })
-    }
+pub fn get_str_id(value: &str) -> u128 {
+    let mut id = [0 as u8; 16];
+    id.copy_from_slice(&Md5::new().chain(value).result());
+    u128::from_le_bytes(id)
 }
 
 const TYPE_DEFAULT_GRAPH_ID: u8 = 0;
@@ -183,11 +97,11 @@ pub const ENCODED_XSD_DATE_TIME_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
 pub enum EncodedTerm {
     DefaultGraph,
-    NamedNode { iri_id: u64 },
+    NamedNode { iri_id: u128 },
     BlankNode { id: u128 },
-    StringLiteral { value_id: u64 },
-    LangStringLiteral { value_id: u64, language_id: u64 },
-    TypedLiteral { value_id: u64, datatype_id: u64 },
+    StringLiteral { value_id: u128 },
+    LangStringLiteral { value_id: u128, language_id: u128 },
+    TypedLiteral { value_id: u128, datatype_id: u128 },
     BooleanLiteral(bool),
     FloatLiteral(OrderedFloat<f32>),
     DoubleLiteral(OrderedFloat<f64>),
@@ -363,9 +277,107 @@ impl From<NaiveDateTime> for EncodedTerm {
     }
 }
 
-impl From<BlankNode> for EncodedTerm {
-    fn from(node: BlankNode) -> Self {
+impl From<&NamedNode> for EncodedTerm {
+    fn from(node: &NamedNode) -> Self {
+        rio::NamedNode::from(node).into()
+    }
+}
+
+impl<'a> From<rio::NamedNode<'a>> for EncodedTerm {
+    fn from(node: rio::NamedNode<'a>) -> Self {
+        EncodedTerm::NamedNode {
+            iri_id: get_str_id(node.iri),
+        }
+    }
+}
+
+impl From<&BlankNode> for EncodedTerm {
+    fn from(node: &BlankNode) -> Self {
         EncodedTerm::BlankNode { id: node.id() }
+    }
+}
+
+impl From<&Literal> for EncodedTerm {
+    fn from(literal: &Literal) -> Self {
+        rio::Literal::from(literal).into()
+    }
+}
+
+impl<'a> From<rio::Literal<'a>> for EncodedTerm {
+    fn from(literal: rio::Literal<'a>) -> Self {
+        match literal {
+            rio::Literal::Simple { value } => EncodedTerm::StringLiteral {
+                value_id: get_str_id(value),
+            },
+            rio::Literal::LanguageTaggedString { value, language } => {
+                EncodedTerm::LangStringLiteral {
+                    value_id: get_str_id(value),
+                    language_id: if language.bytes().all(|b| b.is_ascii_lowercase()) {
+                        get_str_id(language)
+                    } else {
+                        get_str_id(&language.to_ascii_lowercase())
+                    },
+                }
+            }
+            rio::Literal::Typed { value, datatype } => {
+                match match datatype.iri {
+                    "http://www.w3.org/2001/XMLSchema#boolean" => parse_boolean_str(value),
+                    "http://www.w3.org/2001/XMLSchema#string" => Some(EncodedTerm::StringLiteral {
+                        value_id: get_str_id(value),
+                    }),
+                    "http://www.w3.org/2001/XMLSchema#float" => parse_float_str(value),
+                    "http://www.w3.org/2001/XMLSchema#double" => parse_double_str(value),
+                    "http://www.w3.org/2001/XMLSchema#integer"
+                    | "http://www.w3.org/2001/XMLSchema#byte"
+                    | "http://www.w3.org/2001/XMLSchema#short"
+                    | "http://www.w3.org/2001/XMLSchema#int"
+                    | "http://www.w3.org/2001/XMLSchema#long"
+                    | "http://www.w3.org/2001/XMLSchema#unsignedByte"
+                    | "http://www.w3.org/2001/XMLSchema#unsignedShort"
+                    | "http://www.w3.org/2001/XMLSchema#unsignedInt"
+                    | "http://www.w3.org/2001/XMLSchema#unsignedLong"
+                    | "http://www.w3.org/2001/XMLSchema#positiveInteger"
+                    | "http://www.w3.org/2001/XMLSchema#negativeInteger"
+                    | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
+                    | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => {
+                        parse_integer_str(value)
+                    }
+                    "http://www.w3.org/2001/XMLSchema#decimal" => parse_decimal_str(value),
+                    "http://www.w3.org/2001/XMLSchema#date" => parse_date_str(value),
+                    "http://www.w3.org/2001/XMLSchema#time" => parse_time_str(value),
+                    "http://www.w3.org/2001/XMLSchema#dateTime"
+                    | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => {
+                        parse_date_time_str(value)
+                    }
+                    _ => None,
+                } {
+                    Some(v) => v,
+                    None => EncodedTerm::TypedLiteral {
+                        value_id: get_str_id(value),
+                        datatype_id: get_str_id(datatype.iri),
+                    },
+                }
+            }
+        }
+    }
+}
+
+impl From<&NamedOrBlankNode> for EncodedTerm {
+    fn from(node: &NamedOrBlankNode) -> Self {
+        match node {
+            NamedOrBlankNode::NamedNode(node) => node.into(),
+            NamedOrBlankNode::BlankNode(node) => node.into(),
+        }
+    }
+}
+
+impl From<&Term> for EncodedTerm {
+    fn from(node: &Term) -> Self {
+        match node {
+            Term::NamedNode(node) => node.into(),
+            Term::BlankNode(node) => node.into(),
+            Term::Literal(literal) => literal.into(),
+        }
     }
 }
 
@@ -393,6 +405,20 @@ impl EncodedQuad {
     }
 }
 
+impl From<&Quad> for EncodedQuad {
+    fn from(quad: &Quad) -> Self {
+        Self {
+            subject: quad.subject().into(),
+            predicate: quad.predicate().into(),
+            object: quad.object().into(),
+            graph_name: quad
+                .graph_name()
+                .as_ref()
+                .map_or(ENCODED_DEFAULT_GRAPH, |g| g.into()),
+        }
+    }
+}
+
 pub trait TermReader {
     fn read_term(&mut self) -> Result<EncodedTerm>;
     fn read_spog_quad(&mut self) -> Result<EncodedQuad>;
@@ -408,21 +434,21 @@ impl<R: Read> TermReader for R {
         match self.read_u8()? {
             TYPE_DEFAULT_GRAPH_ID => Ok(EncodedTerm::DefaultGraph),
             TYPE_NAMED_NODE_ID => Ok(EncodedTerm::NamedNode {
-                iri_id: self.read_u64::<LittleEndian>()?,
+                iri_id: self.read_u128::<LittleEndian>()?,
             }),
             TYPE_BLANK_NODE_ID => Ok(EncodedTerm::BlankNode {
                 id: self.read_u128::<LittleEndian>()?,
             }),
             TYPE_LANG_STRING_LITERAL_ID => Ok(EncodedTerm::LangStringLiteral {
-                language_id: self.read_u64::<LittleEndian>()?,
-                value_id: self.read_u64::<LittleEndian>()?,
+                language_id: self.read_u128::<LittleEndian>()?,
+                value_id: self.read_u128::<LittleEndian>()?,
             }),
             TYPE_TYPED_LITERAL_ID => Ok(EncodedTerm::TypedLiteral {
-                datatype_id: self.read_u64::<LittleEndian>()?,
-                value_id: self.read_u64::<LittleEndian>()?,
+                datatype_id: self.read_u128::<LittleEndian>()?,
+                value_id: self.read_u128::<LittleEndian>()?,
             }),
             TYPE_STRING_LITERAL => Ok(EncodedTerm::StringLiteral {
-                value_id: self.read_u64::<LittleEndian>()?,
+                value_id: self.read_u128::<LittleEndian>()?,
             }),
             TYPE_BOOLEAN_LITERAL_TRUE => Ok(EncodedTerm::BooleanLiteral(true)),
             TYPE_BOOLEAN_LITERAL_FALSE => Ok(EncodedTerm::BooleanLiteral(false)),
@@ -556,7 +582,7 @@ impl<R: Read> TermReader for R {
     }
 }
 
-pub const WRITTEN_TERM_MAX_SIZE: usize = size_of::<u8>() + 2 * size_of::<u64>();
+pub const WRITTEN_TERM_MAX_SIZE: usize = size_of::<u8>() + 2 * size_of::<u128>();
 
 pub trait TermWriter {
     fn write_term(&mut self, term: EncodedTerm) -> Result<()>;
@@ -573,24 +599,24 @@ impl<W: Write> TermWriter for W {
         self.write_u8(term.type_id())?;
         match term {
             EncodedTerm::DefaultGraph => {}
-            EncodedTerm::NamedNode { iri_id } => self.write_u64::<LittleEndian>(iri_id)?,
+            EncodedTerm::NamedNode { iri_id } => self.write_u128::<LittleEndian>(iri_id)?,
             EncodedTerm::BlankNode { id } => self.write_u128::<LittleEndian>(id)?,
             EncodedTerm::StringLiteral { value_id } => {
-                self.write_u64::<LittleEndian>(value_id)?;
+                self.write_u128::<LittleEndian>(value_id)?;
             }
             EncodedTerm::LangStringLiteral {
                 value_id,
                 language_id,
             } => {
-                self.write_u64::<LittleEndian>(language_id)?;
-                self.write_u64::<LittleEndian>(value_id)?;
+                self.write_u128::<LittleEndian>(language_id)?;
+                self.write_u128::<LittleEndian>(value_id)?;
             }
             EncodedTerm::TypedLiteral {
                 value_id,
                 datatype_id,
             } => {
-                self.write_u64::<LittleEndian>(datatype_id)?;
-                self.write_u64::<LittleEndian>(value_id)?;
+                self.write_u128::<LittleEndian>(datatype_id)?;
+                self.write_u128::<LittleEndian>(value_id)?;
             }
             EncodedTerm::BooleanLiteral(_) => {}
             EncodedTerm::FloatLiteral(value) => self.write_f32::<LittleEndian>(*value)?,
@@ -670,37 +696,160 @@ impl<W: Write> TermWriter for W {
     }
 }
 
-pub struct Encoder<S: StringStore> {
-    string_store: S,
+pub trait StrLookup {
+    type StrType: Deref<Target = str> + ToString + Into<String>;
+
+    fn get_str(&self, id: u128) -> Result<Option<Self::StrType>>;
 }
 
-impl<S: StringStore> Encoder<S> {
-    pub fn new(string_store: S) -> Self {
-        Self { string_store }
-    }
+pub trait StrContainer {
+    fn insert_str(&self, key: u128, value: &str) -> Result<()>;
 
-    pub fn encode_named_node(&self, named_node: &NamedNode) -> Result<EncodedTerm> {
+    /// Should be called when the bytes store is created
+    fn set_first_strings(&self) -> Result<()> {
+        self.insert_str(EMPTY_STRING_ID, "")?;
+        self.insert_str(RDF_LANG_STRING_ID, rdf::LANG_STRING.as_str())?;
+        self.insert_str(XSD_STRING_ID, xsd::STRING.as_str())?;
+        self.insert_str(XSD_BOOLEAN_ID, xsd::BOOLEAN.as_str())?;
+        self.insert_str(XSD_FLOAT_ID, xsd::FLOAT.as_str())?;
+        self.insert_str(XSD_DOUBLE_ID, xsd::DOUBLE.as_str())?;
+        self.insert_str(XSD_INTEGER_ID, xsd::INTEGER.as_str())?;
+        self.insert_str(XSD_DECIMAL_ID, xsd::DECIMAL.as_str())?;
+        self.insert_str(XSD_DATE_TIME_ID, xsd::DATE_TIME.as_str())?;
+        self.insert_str(XSD_DATE_ID, xsd::DATE.as_str())?;
+        self.insert_str(XSD_TIME_ID, xsd::TIME.as_str())?;
+        Ok(())
+    }
+}
+
+impl<'a, S: StrLookup + 'a> StrLookup for &'a S {
+    type StrType = S::StrType;
+
+    fn get_str(&self, id: u128) -> Result<Option<S::StrType>> {
+        (*self).get_str(id)
+    }
+}
+
+impl<'a, S: StrContainer + 'a> StrContainer for &'a S {
+    fn insert_str(&self, key: u128, value: &str) -> Result<()> {
+        (*self).insert_str(key, value)
+    }
+}
+
+pub struct MemoryStrStore {
+    id2str: RwLock<HashMap<u128, String>>,
+}
+
+impl Default for MemoryStrStore {
+    fn default() -> Self {
+        let new = Self {
+            id2str: RwLock::default(),
+        };
+        new.set_first_strings().unwrap();
+        new
+    }
+}
+
+impl StrLookup for MemoryStrStore {
+    type StrType = String;
+
+    fn get_str(&self, id: u128) -> Result<Option<String>> {
+        //TODO: avoid copy by adding a lifetime limit to get_str
+        Ok(self
+            .id2str
+            .read()
+            .map_err(MutexPoisonError::from)?
+            .get(&id)
+            .cloned())
+    }
+}
+
+impl StrContainer for MemoryStrStore {
+    fn insert_str(&self, key: u128, value: &str) -> Result<()> {
+        let mut id2str = self.id2str.write().map_err(MutexPoisonError::from)?;
+        if !id2str.contains_key(&key) {
+            id2str.insert(key, value.to_owned());
+        }
+        Ok(())
+    }
+}
+
+pub trait Encoder {
+    fn encode_named_node(&self, named_node: &NamedNode) -> Result<EncodedTerm>;
+
+    fn encode_blank_node(&self, blank_node: &BlankNode) -> Result<EncodedTerm>;
+
+    fn encode_literal(&self, literal: &Literal) -> Result<EncodedTerm>;
+
+    fn encode_named_or_blank_node(&self, term: &NamedOrBlankNode) -> Result<EncodedTerm>;
+
+    fn encode_term(&self, term: &Term) -> Result<EncodedTerm>;
+
+    fn encode_quad(&self, quad: &Quad) -> Result<EncodedQuad>;
+
+    fn encode_triple_in_graph(
+        &self,
+        triple: &Triple,
+        graph_name: EncodedTerm,
+    ) -> Result<EncodedQuad>;
+
+    fn encode_rio_named_node(&self, named_node: rio::NamedNode) -> Result<EncodedTerm>;
+
+    fn encode_rio_blank_node(
+        &self,
+        blank_node: rio::BlankNode,
+        bnodes_map: &mut HashMap<String, u128>,
+    ) -> Result<EncodedTerm>;
+
+    fn encode_rio_literal(&self, literal: rio::Literal) -> Result<EncodedTerm>;
+
+    fn encode_rio_named_or_blank_node(
+        &self,
+        term: rio::NamedOrBlankNode,
+        bnodes_map: &mut HashMap<String, u128>,
+    ) -> Result<EncodedTerm>;
+
+    fn encode_rio_term(
+        &self,
+        term: rio::Term,
+        bnodes_map: &mut HashMap<String, u128>,
+    ) -> Result<EncodedTerm>;
+
+    fn encode_rio_quad(
+        &self,
+        quad: rio::Quad,
+        bnodes_map: &mut HashMap<String, u128>,
+    ) -> Result<EncodedQuad>;
+
+    fn encode_rio_triple_in_graph(
+        &self,
+        triple: rio::Triple,
+        graph_name: EncodedTerm,
+        bnodes_map: &mut HashMap<String, u128>,
+    ) -> Result<EncodedQuad>;
+}
+
+impl<S: StrContainer> Encoder for S {
+    fn encode_named_node(&self, named_node: &NamedNode) -> Result<EncodedTerm> {
         self.encode_rio_named_node(named_node.into())
     }
 
-    pub fn encode_blank_node(&self, blank_node: &BlankNode) -> Result<EncodedTerm> {
-        Ok(EncodedTerm::BlankNode {
-            id: blank_node.id(),
-        })
+    fn encode_blank_node(&self, blank_node: &BlankNode) -> Result<EncodedTerm> {
+        Ok(blank_node.into())
     }
 
-    pub fn encode_literal(&self, literal: &Literal) -> Result<EncodedTerm> {
+    fn encode_literal(&self, literal: &Literal) -> Result<EncodedTerm> {
         self.encode_rio_literal(literal.into())
     }
 
-    pub fn encode_named_or_blank_node(&self, term: &NamedOrBlankNode) -> Result<EncodedTerm> {
+    fn encode_named_or_blank_node(&self, term: &NamedOrBlankNode) -> Result<EncodedTerm> {
         match term {
             NamedOrBlankNode::NamedNode(named_node) => self.encode_named_node(named_node),
             NamedOrBlankNode::BlankNode(blank_node) => self.encode_blank_node(blank_node),
         }
     }
 
-    pub fn encode_term(&self, term: &Term) -> Result<EncodedTerm> {
+    fn encode_term(&self, term: &Term) -> Result<EncodedTerm> {
         match term {
             Term::NamedNode(named_node) => self.encode_named_node(named_node),
             Term::BlankNode(blank_node) => self.encode_blank_node(blank_node),
@@ -708,7 +857,7 @@ impl<S: StringStore> Encoder<S> {
         }
     }
 
-    pub fn encode_quad(&self, quad: &Quad) -> Result<EncodedQuad> {
+    fn encode_quad(&self, quad: &Quad) -> Result<EncodedQuad> {
         Ok(EncodedQuad {
             subject: self.encode_named_or_blank_node(quad.subject())?,
             predicate: self.encode_named_node(quad.predicate())?,
@@ -720,7 +869,7 @@ impl<S: StringStore> Encoder<S> {
         })
     }
 
-    pub fn encode_triple_in_graph(
+    fn encode_triple_in_graph(
         &self,
         triple: &Triple,
         graph_name: EncodedTerm,
@@ -733,13 +882,13 @@ impl<S: StringStore> Encoder<S> {
         })
     }
 
-    pub fn encode_rio_named_node(&self, named_node: rio::NamedNode) -> Result<EncodedTerm> {
-        Ok(EncodedTerm::NamedNode {
-            iri_id: self.string_store.insert_str(named_node.iri)?,
-        })
+    fn encode_rio_named_node(&self, named_node: rio::NamedNode) -> Result<EncodedTerm> {
+        let iri_id = get_str_id(named_node.iri);
+        self.insert_str(iri_id, named_node.iri)?;
+        Ok(EncodedTerm::NamedNode { iri_id })
     }
 
-    pub fn encode_rio_blank_node(
+    fn encode_rio_blank_node(
         &self,
         blank_node: rio::BlankNode,
         bnodes_map: &mut HashMap<String, u128>,
@@ -753,29 +902,43 @@ impl<S: StringStore> Encoder<S> {
         })
     }
 
-    pub fn encode_rio_literal(&self, literal: rio::Literal) -> Result<EncodedTerm> {
+    fn encode_rio_literal(&self, literal: rio::Literal) -> Result<EncodedTerm> {
         Ok(match literal {
-            rio::Literal::Simple { value } => EncodedTerm::StringLiteral {
-                value_id: self.string_store.insert_str(value)?,
-            },
+            rio::Literal::Simple { value } => {
+                let value_id = get_str_id(value);
+                self.insert_str(value_id, value)?;
+                EncodedTerm::StringLiteral { value_id }
+            }
             rio::Literal::LanguageTaggedString { value, language } => {
+                let value_id = get_str_id(value);
+                self.insert_str(value_id, value)?;
+
+                let language_id = if language.bytes().all(|b| b.is_ascii_lowercase()) {
+                    let language_id = get_str_id(language);
+                    self.insert_str(language_id, language)?;
+                    language_id
+                } else {
+                    let language = language.to_ascii_lowercase();
+                    let language_id = get_str_id(&language);
+                    self.insert_str(language_id, &language)?;
+                    language_id
+                };
+
                 EncodedTerm::LangStringLiteral {
-                    value_id: self.string_store.insert_str(value)?,
-                    language_id: if language.bytes().all(|b| b.is_ascii_lowercase()) {
-                        self.string_store.insert_str(language)
-                    } else {
-                        self.string_store.insert_str(&language.to_ascii_lowercase())
-                    }?,
+                    value_id,
+                    language_id,
                 }
             }
             rio::Literal::Typed { value, datatype } => {
                 match match datatype.iri {
-                    "http://www.w3.org/2001/XMLSchema#boolean" => self.encode_boolean_str(value),
-                    "http://www.w3.org/2001/XMLSchema#string" => Some(EncodedTerm::StringLiteral {
-                        value_id: self.string_store.insert_str(value)?,
-                    }),
-                    "http://www.w3.org/2001/XMLSchema#float" => self.encode_float_str(value),
-                    "http://www.w3.org/2001/XMLSchema#double" => self.encode_double_str(value),
+                    "http://www.w3.org/2001/XMLSchema#boolean" => parse_boolean_str(value),
+                    "http://www.w3.org/2001/XMLSchema#string" => {
+                        let value_id = get_str_id(value);
+                        self.insert_str(value_id, value)?;
+                        Some(EncodedTerm::StringLiteral { value_id })
+                    }
+                    "http://www.w3.org/2001/XMLSchema#float" => parse_float_str(value),
+                    "http://www.w3.org/2001/XMLSchema#double" => parse_double_str(value),
                     "http://www.w3.org/2001/XMLSchema#integer"
                     | "http://www.w3.org/2001/XMLSchema#byte"
                     | "http://www.w3.org/2001/XMLSchema#short"
@@ -789,28 +952,34 @@ impl<S: StringStore> Encoder<S> {
                     | "http://www.w3.org/2001/XMLSchema#negativeInteger"
                     | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
                     | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => {
-                        self.encode_integer_str(value)
+                        parse_integer_str(value)
                     }
-                    "http://www.w3.org/2001/XMLSchema#decimal" => self.encode_decimal_str(value),
-                    "http://www.w3.org/2001/XMLSchema#date" => self.encode_date_str(value),
-                    "http://www.w3.org/2001/XMLSchema#time" => self.encode_time_str(value),
+                    "http://www.w3.org/2001/XMLSchema#decimal" => parse_decimal_str(value),
+                    "http://www.w3.org/2001/XMLSchema#date" => parse_date_str(value),
+                    "http://www.w3.org/2001/XMLSchema#time" => parse_time_str(value),
                     "http://www.w3.org/2001/XMLSchema#dateTime"
                     | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => {
-                        self.encode_date_time_str(value)
+                        parse_date_time_str(value)
                     }
                     _ => None,
                 } {
                     Some(v) => v,
-                    None => EncodedTerm::TypedLiteral {
-                        value_id: self.string_store.insert_str(value)?,
-                        datatype_id: self.string_store.insert_str(datatype.iri)?,
-                    },
+                    None => {
+                        let value_id = get_str_id(value);
+                        self.insert_str(value_id, value)?;
+                        let datatype_id = get_str_id(datatype.iri);
+                        self.insert_str(datatype_id, datatype.iri)?;
+                        EncodedTerm::TypedLiteral {
+                            value_id,
+                            datatype_id,
+                        }
+                    }
                 }
             }
         })
     }
 
-    pub fn encode_rio_named_or_blank_node(
+    fn encode_rio_named_or_blank_node(
         &self,
         term: rio::NamedOrBlankNode,
         bnodes_map: &mut HashMap<String, u128>,
@@ -823,7 +992,7 @@ impl<S: StringStore> Encoder<S> {
         }
     }
 
-    pub fn encode_rio_term(
+    fn encode_rio_term(
         &self,
         term: rio::Term,
         bnodes_map: &mut HashMap<String, u128>,
@@ -835,7 +1004,7 @@ impl<S: StringStore> Encoder<S> {
         }
     }
 
-    pub fn encode_rio_quad(
+    fn encode_rio_quad(
         &self,
         quad: rio::Quad,
         bnodes_map: &mut HashMap<String, u128>,
@@ -851,7 +1020,7 @@ impl<S: StringStore> Encoder<S> {
         })
     }
 
-    pub fn encode_rio_triple_in_graph(
+    fn encode_rio_triple_in_graph(
         &self,
         triple: rio::Triple,
         graph_name: EncodedTerm,
@@ -864,99 +1033,147 @@ impl<S: StringStore> Encoder<S> {
             graph_name,
         })
     }
+}
 
-    pub fn encode_boolean_str(&self, value: &str) -> Option<EncodedTerm> {
-        match value {
-            "true" | "1" => Some(EncodedTerm::BooleanLiteral(true)),
-            "false" | "0" => Some(EncodedTerm::BooleanLiteral(false)),
-            _ => None,
-        }
+pub fn parse_boolean_str(value: &str) -> Option<EncodedTerm> {
+    match value {
+        "true" | "1" => Some(EncodedTerm::BooleanLiteral(true)),
+        "false" | "0" => Some(EncodedTerm::BooleanLiteral(false)),
+        _ => None,
     }
+}
 
-    pub fn encode_float_str(&self, value: &str) -> Option<EncodedTerm> {
-        value
-            .parse()
-            .map(|value| EncodedTerm::FloatLiteral(OrderedFloat(value)))
-            .ok()
-    }
+pub fn parse_float_str(value: &str) -> Option<EncodedTerm> {
+    value
+        .parse()
+        .map(|value| EncodedTerm::FloatLiteral(OrderedFloat(value)))
+        .ok()
+}
 
-    pub fn encode_double_str(&self, value: &str) -> Option<EncodedTerm> {
-        value
-            .parse()
-            .map(|value| EncodedTerm::DoubleLiteral(OrderedFloat(value)))
-            .ok()
-    }
+pub fn parse_double_str(value: &str) -> Option<EncodedTerm> {
+    value
+        .parse()
+        .map(|value| EncodedTerm::DoubleLiteral(OrderedFloat(value)))
+        .ok()
+}
 
-    pub fn encode_integer_str(&self, value: &str) -> Option<EncodedTerm> {
-        value.parse().map(EncodedTerm::IntegerLiteral).ok()
-    }
+pub fn parse_integer_str(value: &str) -> Option<EncodedTerm> {
+    value.parse().map(EncodedTerm::IntegerLiteral).ok()
+}
 
-    pub fn encode_decimal_str(&self, value: &str) -> Option<EncodedTerm> {
-        value.parse().map(EncodedTerm::DecimalLiteral).ok()
-    }
+pub fn parse_decimal_str(value: &str) -> Option<EncodedTerm> {
+    value.parse().map(EncodedTerm::DecimalLiteral).ok()
+}
 
-    pub fn encode_date_str(&self, value: &str) -> Option<EncodedTerm> {
-        let mut parsed = Parsed::new();
-        match parse(&mut parsed, &value, StrftimeItems::new("%Y-%m-%d%:z")).and_then(|_| {
-            Ok(Date::from_utc(
-                parsed.to_naive_date()?,
-                parsed.to_fixed_offset()?,
-            ))
-        }) {
-            Ok(value) => Some(EncodedTerm::DateLiteral(value)),
-            Err(_) => match NaiveDate::parse_from_str(&value, "%Y-%m-%dZ") {
-                Ok(value) => Some(EncodedTerm::DateLiteral(Date::from_utc(
-                    value,
-                    FixedOffset::east(0),
-                ))),
-                Err(_) => NaiveDate::parse_from_str(&value, "%Y-%m-%d")
-                    .map(EncodedTerm::NaiveDateLiteral)
-                    .ok(),
-            },
-        }
-    }
-
-    pub fn encode_time_str(&self, value: &str) -> Option<EncodedTerm> {
-        NaiveTime::parse_from_str(&value, "%H:%M:%S")
-            .map(EncodedTerm::NaiveTimeLiteral)
-            .ok()
-    }
-
-    pub fn encode_date_time_str(&self, value: &str) -> Option<EncodedTerm> {
-        match DateTime::parse_from_rfc3339(&value) {
-            Ok(value) => Some(EncodedTerm::DateTimeLiteral(value)),
-            Err(_) => NaiveDateTime::parse_from_str(&value, "%Y-%m-%dT%H:%M:%S")
-                .map(EncodedTerm::NaiveDateTimeLiteral)
+pub fn parse_date_str(value: &str) -> Option<EncodedTerm> {
+    let mut parsed = Parsed::new();
+    match parse(&mut parsed, &value, StrftimeItems::new("%Y-%m-%d%:z")).and_then(|_| {
+        Ok(Date::from_utc(
+            parsed.to_naive_date()?,
+            parsed.to_fixed_offset()?,
+        ))
+    }) {
+        Ok(value) => Some(EncodedTerm::DateLiteral(value)),
+        Err(_) => match NaiveDate::parse_from_str(&value, "%Y-%m-%dZ") {
+            Ok(value) => Some(EncodedTerm::DateLiteral(Date::from_utc(
+                value,
+                FixedOffset::east(0),
+            ))),
+            Err(_) => NaiveDate::parse_from_str(&value, "%Y-%m-%d")
+                .map(EncodedTerm::NaiveDateLiteral)
                 .ok(),
+        },
+    }
+}
+
+pub fn parse_time_str(value: &str) -> Option<EncodedTerm> {
+    NaiveTime::parse_from_str(&value, "%H:%M:%S")
+        .map(EncodedTerm::NaiveTimeLiteral)
+        .ok()
+}
+
+pub fn parse_date_time_str(value: &str) -> Option<EncodedTerm> {
+    match DateTime::parse_from_rfc3339(&value) {
+        Ok(value) => Some(EncodedTerm::DateTimeLiteral(value)),
+        Err(_) => NaiveDateTime::parse_from_str(&value, "%Y-%m-%dT%H:%M:%S")
+            .map(EncodedTerm::NaiveDateTimeLiteral)
+            .ok(),
+    }
+}
+
+pub trait Decoder {
+    fn decode_term(&self, encoded: EncodedTerm) -> Result<Term>;
+
+    fn decode_named_or_blank_node(&self, encoded: EncodedTerm) -> Result<NamedOrBlankNode> {
+        match self.decode_term(encoded)? {
+            Term::NamedNode(named_node) => Ok(named_node.into()),
+            Term::BlankNode(blank_node) => Ok(blank_node.into()),
+            Term::Literal(_) => Err(format_err!(
+                "A literal has ben found instead of a named node"
+            )),
         }
     }
 
-    pub fn decode_term(&self, encoded: EncodedTerm) -> Result<Term> {
+    fn decode_named_node(&self, encoded: EncodedTerm) -> Result<NamedNode> {
+        match self.decode_term(encoded)? {
+            Term::NamedNode(named_node) => Ok(named_node),
+            Term::BlankNode(_) => Err(format_err!(
+                "A blank node has been found instead of a named node"
+            )),
+            Term::Literal(_) => Err(format_err!(
+                "A literal has ben found instead of a named node"
+            )),
+        }
+    }
+
+    fn decode_triple(&self, encoded: &EncodedQuad) -> Result<Triple> {
+        Ok(Triple::new(
+            self.decode_named_or_blank_node(encoded.subject)?,
+            self.decode_named_node(encoded.predicate)?,
+            self.decode_term(encoded.object)?,
+        ))
+    }
+
+    fn decode_quad(&self, encoded: &EncodedQuad) -> Result<Quad> {
+        Ok(Quad::new(
+            self.decode_named_or_blank_node(encoded.subject)?,
+            self.decode_named_node(encoded.predicate)?,
+            self.decode_term(encoded.object)?,
+            match encoded.graph_name {
+                EncodedTerm::DefaultGraph => None,
+                graph_name => Some(self.decode_named_or_blank_node(graph_name)?),
+            },
+        ))
+    }
+}
+
+impl<S: StrLookup> Decoder for S {
+    fn decode_term(&self, encoded: EncodedTerm) -> Result<Term> {
         match encoded {
             EncodedTerm::DefaultGraph => {
                 Err(format_err!("The default graph tag is not a valid term"))
             }
             EncodedTerm::NamedNode { iri_id } => {
-                Ok(NamedNode::new_from_string(self.get_str(iri_id)?).into())
+                Ok(NamedNode::new_from_string(get_required_str(self, iri_id)?).into())
             }
             EncodedTerm::BlankNode { id } => Ok(BlankNode::new_from_unique_id(id).into()),
             EncodedTerm::StringLiteral { value_id } => {
-                Ok(Literal::new_simple_literal(self.get_str(value_id)?).into())
+                Ok(Literal::new_simple_literal(get_required_str(self, value_id)?).into())
             }
             EncodedTerm::LangStringLiteral {
                 value_id,
                 language_id,
             } => Ok(Literal::new_language_tagged_literal(
-                self.get_str(value_id)?,
-                self.get_str(language_id)?,
+                get_required_str(self, value_id)?,
+                get_required_str(self, language_id)?,
             )
             .into()),
             EncodedTerm::TypedLiteral {
                 value_id,
                 datatype_id,
             } => Ok(Literal::new_typed_literal(
-                self.get_str(value_id)?,
-                NamedNode::new_from_string(self.get_str(datatype_id)?),
+                get_required_str(self, value_id)?,
+                NamedNode::new_from_string(get_required_str(self, datatype_id)?),
             )
             .into()),
             EncodedTerm::BooleanLiteral(value) => Ok(Literal::from(value).into()),
@@ -971,65 +1188,15 @@ impl<S: StringStore> Encoder<S> {
             EncodedTerm::NaiveDateTimeLiteral(value) => Ok(Literal::from(value).into()),
         }
     }
-
-    fn get_str(&self, id: u64) -> Result<S::StringType> {
-        self.string_store.get_str(id)?.ok_or_else(|| {
-            format_err!(
-                "Not able to find the string with id {} in the string store",
-                id
-            )
-        })
-    }
-
-    pub fn decode_named_or_blank_node(&self, encoded: EncodedTerm) -> Result<NamedOrBlankNode> {
-        match self.decode_term(encoded)? {
-            Term::NamedNode(named_node) => Ok(named_node.into()),
-            Term::BlankNode(blank_node) => Ok(blank_node.into()),
-            Term::Literal(_) => Err(format_err!(
-                "A literal has ben found instead of a named node"
-            )),
-        }
-    }
-
-    pub fn decode_named_node(&self, encoded: EncodedTerm) -> Result<NamedNode> {
-        match self.decode_term(encoded)? {
-            Term::NamedNode(named_node) => Ok(named_node),
-            Term::BlankNode(_) => Err(format_err!(
-                "A blank node has been found instead of a named node"
-            )),
-            Term::Literal(_) => Err(format_err!(
-                "A literal has ben found instead of a named node"
-            )),
-        }
-    }
-
-    pub fn decode_triple(&self, encoded: &EncodedQuad) -> Result<Triple> {
-        Ok(Triple::new(
-            self.decode_named_or_blank_node(encoded.subject)?,
-            self.decode_named_node(encoded.predicate)?,
-            self.decode_term(encoded.object)?,
-        ))
-    }
-
-    pub fn decode_quad(&self, encoded: &EncodedQuad) -> Result<Quad> {
-        Ok(Quad::new(
-            self.decode_named_or_blank_node(encoded.subject)?,
-            self.decode_named_node(encoded.predicate)?,
-            self.decode_term(encoded.object)?,
-            match encoded.graph_name {
-                EncodedTerm::DefaultGraph => None,
-                graph_name => Some(self.decode_named_or_blank_node(graph_name)?),
-            },
-        ))
-    }
 }
 
-impl<S: StringStore + Default> Default for Encoder<S> {
-    fn default() -> Self {
-        Self {
-            string_store: S::default(),
-        }
-    }
+fn get_required_str<S: StrLookup>(lookup: S, id: u128) -> Result<S::StrType> {
+    lookup.get_str(id)?.ok_or_else(|| {
+        format_err!(
+            "Not able to find the string with id {} in the string store",
+            id
+        )
+    })
 }
 
 #[derive(Debug, Fail)]
@@ -1048,7 +1215,7 @@ impl<T> From<PoisonError<T>> for MutexPoisonError {
 
 #[test]
 fn test_encoding() {
-    let encoder: Encoder<MemoryStringStore> = Encoder::default();
+    let store = MemoryStrStore::default();
     let terms: Vec<Term> = vec![
         NamedNode::new_from_string("http://foo.com").into(),
         NamedNode::new_from_string("http://bar.com").into(),
@@ -1063,14 +1230,8 @@ fn test_encoding() {
         Literal::new_language_tagged_literal("foo", "FR").into(),
     ];
     for term in terms {
-        let encoded = encoder.encode_term(&term).unwrap();
-        assert_eq!(term, encoder.decode_term(encoded).unwrap())
+        let encoded = store.encode_term(&term).unwrap();
+        assert_eq!(term, store.decode_term(encoded).unwrap());
+        assert_eq!(encoded, EncodedTerm::from(&term));
     }
-}
-
-#[test]
-fn test_encoded_term_size() {
-    use std::mem::size_of;
-
-    assert_eq!(size_of::<EncodedTerm>(), 24);
 }
