@@ -28,12 +28,15 @@ pub trait Store {
 }
 
 /// A connection to a `Store`
-pub trait StoreConnection: StrContainer + StrLookup + Sized + Clone {
+pub trait StoreConnection: StrLookup + Sized + Clone {
+    type Transaction: StoreTransaction;
+
+    /// Creates an edition transaction
+    /// TODO: current transaction implementations could commit before the call to commit()
+    /// It's why this API is not exposed publicly yet
+    fn transaction(&self) -> Result<Self::Transaction>;
+
     fn contains(&self, quad: &EncodedQuad) -> Result<bool>;
-
-    fn insert(&mut self, quad: &EncodedQuad) -> Result<()>;
-
-    fn remove(&mut self, quad: &EncodedQuad) -> Result<()>;
 
     fn quads_for_pattern<'a>(
         &'a self,
@@ -42,6 +45,15 @@ pub trait StoreConnection: StrContainer + StrLookup + Sized + Clone {
         object: Option<EncodedTerm>,
         graph_name: Option<EncodedTerm>,
     ) -> Box<dyn Iterator<Item = Result<EncodedQuad>> + 'a>;
+}
+
+/// A transaction
+pub trait StoreTransaction: StrContainer + Sized {
+    fn insert(&mut self, quad: &EncodedQuad) -> Result<()>;
+
+    fn remove(&mut self, quad: &EncodedQuad) -> Result<()>;
+
+    fn commit(self) -> Result<()>;
 }
 
 /// A `RepositoryConnection` from a `StoreConnection`
@@ -123,13 +135,17 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
     }
 
     fn insert(&mut self, quad: &Quad) -> Result<()> {
-        let quad = self.inner.encode_quad(quad)?;
-        self.inner.insert(&quad)
+        let mut transaction = self.inner.transaction()?;
+        let quad = transaction.encode_quad(quad)?;
+        transaction.insert(&quad)?;
+        transaction.commit()
     }
 
     fn remove(&mut self, quad: &Quad) -> Result<()> {
-        let quad = self.inner.encode_quad(quad)?;
-        self.inner.remove(&quad)
+        let mut transaction = self.inner.transaction()?;
+        let quad = transaction.encode_quad(quad)?;
+        transaction.remove(&quad)?;
+        transaction.commit()
     }
 }
 
@@ -142,30 +158,32 @@ impl<S: StoreConnection> StoreRepositoryConnection<S> {
     where
         P::Error: Send + Sync + 'static,
     {
+        let mut transaction = self.inner.transaction()?;
         let mut bnode_map = HashMap::default();
         let graph_name = if let Some(graph_name) = to_graph_name {
-            self.inner.encode_named_or_blank_node(graph_name)?
+            transaction.encode_named_or_blank_node(graph_name)?
         } else {
             EncodedTerm::DefaultGraph
         };
+        let tr = &mut transaction;
         parser.parse_all(&mut move |t| {
-            let quad = self
-                .inner
-                .encode_rio_triple_in_graph(t, graph_name, &mut bnode_map)?;
-            self.inner.insert(&quad)
+            let quad = tr.encode_rio_triple_in_graph(t, graph_name, &mut bnode_map)?;
+            tr.insert(&quad)
         })?;
-        Ok(())
+        transaction.commit() //TODO: partials commits
     }
 
     fn load_from_quad_parser<P: QuadsParser>(&mut self, mut parser: P) -> Result<()>
     where
         P::Error: Send + Sync + 'static,
     {
+        let mut transaction = self.inner.transaction()?;
         let mut bnode_map = HashMap::default();
+        let tr = &mut transaction;
         parser.parse_all(&mut move |q| {
-            let quad = self.inner.encode_rio_quad(q, &mut bnode_map)?;
-            self.inner.insert(&quad)
+            let quad = tr.encode_rio_quad(q, &mut bnode_map)?;
+            tr.insert(&quad)
         })?;
-        Ok(())
+        transaction.commit() //TODO: partials commits
     }
 }

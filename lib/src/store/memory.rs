@@ -91,6 +91,12 @@ impl<'a> StrContainer for &'a MemoryStore {
 }
 
 impl<'a> StoreConnection for &'a MemoryStore {
+    type Transaction = &'a MemoryStore;
+
+    fn transaction(&self) -> Result<&'a MemoryStore> {
+        Ok(self)
+    }
+
     fn contains(&self, quad: &EncodedQuad) -> Result<bool> {
         Ok(self
             .indexes()?
@@ -104,6 +110,85 @@ impl<'a> StoreConnection for &'a MemoryStore {
             }))
     }
 
+    fn quads_for_pattern<'b>(
+        &'b self,
+        subject: Option<EncodedTerm>,
+        predicate: Option<EncodedTerm>,
+        object: Option<EncodedTerm>,
+        graph_name: Option<EncodedTerm>,
+    ) -> Box<dyn Iterator<Item = Result<EncodedQuad>> + 'b> {
+        match subject {
+            Some(subject) => match predicate {
+                Some(predicate) => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => {
+                            let quad = EncodedQuad::new(subject, predicate, object, graph_name);
+                            match self.contains(&quad) {
+                                Ok(true) => Box::new(once(Ok(quad))),
+                                Ok(false) => Box::new(empty()),
+                                Err(error) => Box::new(once(Err(error))),
+                            }
+                        }
+                        None => wrap_error(
+                            self.quads_for_subject_predicate_object(subject, predicate, object),
+                        ),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => wrap_error(
+                            self.quads_for_subject_predicate_graph(subject, predicate, graph_name),
+                        ),
+                        None => wrap_error(self.quads_for_subject_predicate(subject, predicate)),
+                    },
+                },
+                None => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => wrap_error(
+                            self.quads_for_subject_object_graph(subject, object, graph_name),
+                        ),
+                        None => wrap_error(self.quads_for_subject_object(subject, object)),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => {
+                            wrap_error(self.quads_for_subject_graph(subject, graph_name))
+                        }
+                        None => wrap_error(self.quads_for_subject(subject)),
+                    },
+                },
+            },
+            None => match predicate {
+                Some(predicate) => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => wrap_error(
+                            self.quads_for_predicate_object_graph(predicate, object, graph_name),
+                        ),
+                        None => wrap_error(self.quads_for_predicate_object(predicate, object)),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => {
+                            wrap_error(self.quads_for_predicate_graph(predicate, graph_name))
+                        }
+                        None => wrap_error(self.quads_for_predicate(predicate)),
+                    },
+                },
+                None => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => {
+                            wrap_error(self.quads_for_object_graph(object, graph_name))
+                        }
+                        None => wrap_error(self.quads_for_object(object)),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => wrap_error(self.quads_for_graph(graph_name)),
+                        None => wrap_error(self.quads()),
+                    },
+                },
+            },
+        }
+    }
+}
+
+/// TODO: implement properly
+impl<'a> StoreTransaction for &'a MemoryStore {
     fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
         let mut quad_indexes = self.indexes_mut()?;
         insert_into_quad_map(
@@ -198,80 +283,8 @@ impl<'a> StoreConnection for &'a MemoryStore {
         Ok(())
     }
 
-    fn quads_for_pattern<'b>(
-        &'b self,
-        subject: Option<EncodedTerm>,
-        predicate: Option<EncodedTerm>,
-        object: Option<EncodedTerm>,
-        graph_name: Option<EncodedTerm>,
-    ) -> Box<dyn Iterator<Item = Result<EncodedQuad>> + 'b> {
-        match subject {
-            Some(subject) => match predicate {
-                Some(predicate) => match object {
-                    Some(object) => match graph_name {
-                        Some(graph_name) => {
-                            let quad = EncodedQuad::new(subject, predicate, object, graph_name);
-                            match self.contains(&quad) {
-                                Ok(true) => Box::new(once(Ok(quad))),
-                                Ok(false) => Box::new(empty()),
-                                Err(error) => Box::new(once(Err(error))),
-                            }
-                        }
-                        None => wrap_error(
-                            self.quads_for_subject_predicate_object(subject, predicate, object),
-                        ),
-                    },
-                    None => match graph_name {
-                        Some(graph_name) => wrap_error(
-                            self.quads_for_subject_predicate_graph(subject, predicate, graph_name),
-                        ),
-                        None => wrap_error(self.quads_for_subject_predicate(subject, predicate)),
-                    },
-                },
-                None => match object {
-                    Some(object) => match graph_name {
-                        Some(graph_name) => wrap_error(
-                            self.quads_for_subject_object_graph(subject, object, graph_name),
-                        ),
-                        None => wrap_error(self.quads_for_subject_object(subject, object)),
-                    },
-                    None => match graph_name {
-                        Some(graph_name) => {
-                            wrap_error(self.quads_for_subject_graph(subject, graph_name))
-                        }
-                        None => wrap_error(self.quads_for_subject(subject)),
-                    },
-                },
-            },
-            None => match predicate {
-                Some(predicate) => match object {
-                    Some(object) => match graph_name {
-                        Some(graph_name) => wrap_error(
-                            self.quads_for_predicate_object_graph(predicate, object, graph_name),
-                        ),
-                        None => wrap_error(self.quads_for_predicate_object(predicate, object)),
-                    },
-                    None => match graph_name {
-                        Some(graph_name) => {
-                            wrap_error(self.quads_for_predicate_graph(predicate, graph_name))
-                        }
-                        None => wrap_error(self.quads_for_predicate(predicate)),
-                    },
-                },
-                None => match object {
-                    Some(object) => match graph_name {
-                        Some(graph_name) => {
-                            wrap_error(self.quads_for_object_graph(object, graph_name))
-                        }
-                        None => wrap_error(self.quads_for_object(object)),
-                    },
-                    None => match graph_name {
-                        Some(graph_name) => wrap_error(self.quads_for_graph(graph_name)),
-                        None => wrap_error(self.quads()),
-                    },
-                },
-            },
-        }
+    fn commit(self) -> Result<()> {
+        Ok(())
     }
 }
 

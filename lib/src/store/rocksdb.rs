@@ -1,5 +1,5 @@
 use crate::store::numeric_encoder::*;
-use crate::store::{Store, StoreConnection, StoreRepositoryConnection};
+use crate::store::{Store, StoreConnection, StoreRepositoryConnection, StoreTransaction};
 use crate::{Repository, Result};
 use failure::format_err;
 use rocksdb::ColumnFamily;
@@ -11,6 +11,7 @@ use rocksdb::WriteBatch;
 use rocksdb::DB;
 use std::io::Cursor;
 use std::iter::{empty, once};
+use std::mem::swap;
 use std::ops::Deref;
 use std::path::Path;
 use std::str;
@@ -67,6 +68,8 @@ const COLUMN_FAMILIES: [&str; 7] = [
     ID2STR_CF, SPOG_CF, POSG_CF, OSPG_CF, GSPO_CF, GPOS_CF, GOSP_CF,
 ];
 
+const MAX_TRANSACTION_SIZE: usize = 1024;
+
 struct RocksDbStore {
     db: DB,
 }
@@ -74,7 +77,6 @@ struct RocksDbStore {
 #[derive(Clone)]
 pub struct RocksDbStoreConnection<'a> {
     store: &'a RocksDbStore,
-    buffer: Vec<u8>,
     id2str_cf: ColumnFamily<'a>,
     spog_cf: ColumnFamily<'a>,
     posg_cf: ColumnFamily<'a>,
@@ -110,7 +112,11 @@ impl RocksDbStore {
         let new = Self {
             db: DB::open_cf(&options, path, &COLUMN_FAMILIES)?,
         };
-        (&new).connection()?.set_first_strings()?;
+
+        let mut transaction = (&new).connection()?.transaction()?;
+        transaction.set_first_strings()?;
+        transaction.commit()?;
+
         Ok(new)
     }
 }
@@ -121,7 +127,6 @@ impl<'a> Store for &'a RocksDbStore {
     fn connection(self) -> Result<RocksDbStoreConnection<'a>> {
         Ok(RocksDbStoreConnection {
             store: self,
-            buffer: Vec::default(),
             id2str_cf: get_cf(&self.db, ID2STR_CF)?,
             spog_cf: get_cf(&self.db, SPOG_CF)?,
             posg_cf: get_cf(&self.db, POSG_CF)?,
@@ -145,82 +150,21 @@ impl StrLookup for RocksDbStoreConnection<'_> {
     }
 }
 
-impl StrContainer for RocksDbStoreConnection<'_> {
-    fn insert_str(&mut self, key: u128, value: &str) -> Result<()> {
-        self.store
-            .db
-            .put_cf(self.id2str_cf, &key.to_le_bytes(), value)?;
-        Ok(())
-    }
-}
-
 impl<'a> StoreConnection for RocksDbStoreConnection<'a> {
+    type Transaction = RocksDbStoreTransaction<'a>;
+
+    fn transaction(&self) -> Result<RocksDbStoreTransaction<'a>> {
+        Ok(RocksDbStoreTransaction {
+            connection: self.clone(),
+            batch: WriteBatch::default(),
+            buffer: Vec::default(),
+        })
+    }
+
     fn contains(&self, quad: &EncodedQuad) -> Result<bool> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
         buffer.write_spog_quad(quad)?;
         Ok(self.store.db.get_cf(self.spog_cf, &buffer)?.is_some())
-    }
-
-    fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
-        let mut batch = WriteBatch::default();
-
-        self.buffer.write_spog_quad(quad)?;
-        batch.put_cf(self.spog_cf, &self.buffer, &EMPTY_BUF)?;
-        self.buffer.clear();
-
-        self.buffer.write_posg_quad(quad)?;
-        batch.put_cf(self.posg_cf, &self.buffer, &EMPTY_BUF)?;
-        self.buffer.clear();
-
-        self.buffer.write_ospg_quad(quad)?;
-        batch.put_cf(self.ospg_cf, &self.buffer, &EMPTY_BUF)?;
-        self.buffer.clear();
-
-        self.buffer.write_gspo_quad(quad)?;
-        batch.put_cf(self.gspo_cf, &self.buffer, &EMPTY_BUF)?;
-        self.buffer.clear();
-
-        self.buffer.write_gpos_quad(quad)?;
-        batch.put_cf(self.gpos_cf, &self.buffer, &EMPTY_BUF)?;
-        self.buffer.clear();
-
-        self.buffer.write_gosp_quad(quad)?;
-        batch.put_cf(self.gosp_cf, &self.buffer, &EMPTY_BUF)?;
-        self.buffer.clear();
-
-        self.store.db.write(batch)?; //TODO: check what's going on if the key already exists
-        Ok(())
-    }
-
-    fn remove(&mut self, quad: &EncodedQuad) -> Result<()> {
-        let mut batch = WriteBatch::default();
-
-        self.buffer.write_spog_quad(quad)?;
-        batch.delete_cf(self.spog_cf, &self.buffer)?;
-        self.buffer.clear();
-
-        self.buffer.write_posg_quad(quad)?;
-        batch.delete_cf(self.posg_cf, &self.buffer)?;
-        self.buffer.clear();
-
-        self.buffer.write_ospg_quad(quad)?;
-        batch.delete_cf(self.ospg_cf, &self.buffer)?;
-        self.buffer.clear();
-
-        self.buffer.write_gspo_quad(quad)?;
-        batch.delete_cf(self.gspo_cf, &self.buffer)?;
-        self.buffer.clear();
-
-        self.buffer.write_gpos_quad(quad)?;
-        batch.delete_cf(self.gpos_cf, &self.buffer)?;
-        self.buffer.clear();
-
-        self.buffer.write_gosp_quad(quad)?;
-        batch.delete_cf(self.gosp_cf, &self.buffer)?;
-        self.buffer.clear();
-
-        self.store.db.write(batch)?;
-        Ok(())
     }
 
     fn quads_for_pattern<'b>(
@@ -487,6 +431,107 @@ impl<'a> RocksDbStoreConnection<'a> {
             iter: GOSPIndexIterator { iter },
             filter: EncodedQuadPattern::new(None, None, Some(object), Some(graph_name)),
         })
+    }
+}
+
+pub struct RocksDbStoreTransaction<'a> {
+    connection: RocksDbStoreConnection<'a>,
+    batch: WriteBatch,
+    buffer: Vec<u8>,
+}
+
+impl StrContainer for RocksDbStoreTransaction<'_> {
+    fn insert_str(&mut self, key: u128, value: &str) -> Result<()> {
+        self.batch
+            .put_cf(self.connection.id2str_cf, &key.to_le_bytes(), value)?;
+        Ok(())
+    }
+}
+
+impl<'a> StoreTransaction for RocksDbStoreTransaction<'a> {
+    fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
+        self.buffer.write_spog_quad(quad)?;
+        self.batch
+            .put_cf(self.connection.spog_cf, &self.buffer, &EMPTY_BUF)?;
+        self.buffer.clear();
+
+        self.buffer.write_posg_quad(quad)?;
+        self.batch
+            .put_cf(self.connection.posg_cf, &self.buffer, &EMPTY_BUF)?;
+        self.buffer.clear();
+
+        self.buffer.write_ospg_quad(quad)?;
+        self.batch
+            .put_cf(self.connection.ospg_cf, &self.buffer, &EMPTY_BUF)?;
+        self.buffer.clear();
+
+        self.buffer.write_gspo_quad(quad)?;
+        self.batch
+            .put_cf(self.connection.gspo_cf, &self.buffer, &EMPTY_BUF)?;
+        self.buffer.clear();
+
+        self.buffer.write_gpos_quad(quad)?;
+        self.batch
+            .put_cf(self.connection.gpos_cf, &self.buffer, &EMPTY_BUF)?;
+        self.buffer.clear();
+
+        self.buffer.write_gosp_quad(quad)?;
+        self.batch
+            .put_cf(self.connection.gosp_cf, &self.buffer, &EMPTY_BUF)?;
+        self.buffer.clear();
+
+        if self.batch.len() > MAX_TRANSACTION_SIZE {
+            let mut tmp_batch = WriteBatch::default();
+            swap(&mut self.batch, &mut tmp_batch);
+            self.connection.store.db.write(tmp_batch)?;
+        }
+
+        Ok(())
+    }
+
+    fn remove(&mut self, quad: &EncodedQuad) -> Result<()> {
+        self.buffer.write_spog_quad(quad)?;
+        self.batch
+            .delete_cf(self.connection.spog_cf, &self.buffer)?;
+        self.buffer.clear();
+
+        self.buffer.write_posg_quad(quad)?;
+        self.batch
+            .delete_cf(self.connection.posg_cf, &self.buffer)?;
+        self.buffer.clear();
+
+        self.buffer.write_ospg_quad(quad)?;
+        self.batch
+            .delete_cf(self.connection.ospg_cf, &self.buffer)?;
+        self.buffer.clear();
+
+        self.buffer.write_gspo_quad(quad)?;
+        self.batch
+            .delete_cf(self.connection.gspo_cf, &self.buffer)?;
+        self.buffer.clear();
+
+        self.buffer.write_gpos_quad(quad)?;
+        self.batch
+            .delete_cf(self.connection.gpos_cf, &self.buffer)?;
+        self.buffer.clear();
+
+        self.buffer.write_gosp_quad(quad)?;
+        self.batch
+            .delete_cf(self.connection.gosp_cf, &self.buffer)?;
+        self.buffer.clear();
+
+        if self.batch.len() > MAX_TRANSACTION_SIZE {
+            let mut tmp_batch = WriteBatch::default();
+            swap(&mut self.batch, &mut tmp_batch);
+            self.connection.store.db.write(tmp_batch)?;
+        }
+
+        Ok(())
+    }
+
+    fn commit(self) -> Result<()> {
+        self.connection.store.db.write(self.batch)?;
+        Ok(())
     }
 }
 
