@@ -6,8 +6,6 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use chrono::format::{parse, Parsed, StrftimeItems};
 use chrono::prelude::*;
 use failure::format_err;
-use failure::Backtrace;
-use failure::Fail;
 use md5::digest::Digest;
 use md5::Md5;
 use ordered_float::OrderedFloat;
@@ -20,8 +18,6 @@ use std::io::Write;
 use std::mem::size_of;
 use std::ops::Deref;
 use std::str;
-use std::sync::PoisonError;
-use std::sync::RwLock;
 
 const EMPTY_STRING_ID: u128 = 167830467844043968176572005485231480276;
 const RDF_LANG_STRING_ID: u128 = 32982328051974780078994098831023510434;
@@ -703,10 +699,10 @@ pub trait StrLookup {
 }
 
 pub trait StrContainer {
-    fn insert_str(&self, key: u128, value: &str) -> Result<()>;
+    fn insert_str(&mut self, key: u128, value: &str) -> Result<()>;
 
     /// Should be called when the bytes store is created
-    fn set_first_strings(&self) -> Result<()> {
+    fn set_first_strings(&mut self) -> Result<()> {
         self.insert_str(EMPTY_STRING_ID, "")?;
         self.insert_str(RDF_LANG_STRING_ID, rdf::LANG_STRING.as_str())?;
         self.insert_str(XSD_STRING_ID, xsd::STRING.as_str())?;
@@ -722,28 +718,14 @@ pub trait StrContainer {
     }
 }
 
-impl<'a, S: StrLookup + 'a> StrLookup for &'a S {
-    type StrType = S::StrType;
-
-    fn get_str(&self, id: u128) -> Result<Option<S::StrType>> {
-        (*self).get_str(id)
-    }
-}
-
-impl<'a, S: StrContainer + 'a> StrContainer for &'a S {
-    fn insert_str(&self, key: u128, value: &str) -> Result<()> {
-        (*self).insert_str(key, value)
-    }
-}
-
 pub struct MemoryStrStore {
-    id2str: RwLock<HashMap<u128, String>>,
+    id2str: HashMap<u128, String>,
 }
 
 impl Default for MemoryStrStore {
     fn default() -> Self {
-        let new = Self {
-            id2str: RwLock::default(),
+        let mut new = Self {
+            id2str: HashMap::default(),
         };
         new.set_first_strings().unwrap();
         new
@@ -755,82 +737,19 @@ impl StrLookup for MemoryStrStore {
 
     fn get_str(&self, id: u128) -> Result<Option<String>> {
         //TODO: avoid copy by adding a lifetime limit to get_str
-        Ok(self
-            .id2str
-            .read()
-            .map_err(MutexPoisonError::from)?
-            .get(&id)
-            .cloned())
+        Ok(self.id2str.get(&id).cloned())
     }
 }
 
 impl StrContainer for MemoryStrStore {
-    fn insert_str(&self, key: u128, value: &str) -> Result<()> {
-        let mut id2str = self.id2str.write().map_err(MutexPoisonError::from)?;
-        if !id2str.contains_key(&key) {
-            id2str.insert(key, value.to_owned());
-        }
+    fn insert_str(&mut self, key: u128, value: &str) -> Result<()> {
+        self.id2str.entry(key).or_insert_with(|| value.to_owned());
         Ok(())
     }
 }
 
 pub trait Encoder {
-    fn encode_named_node(&self, named_node: &NamedNode) -> Result<EncodedTerm>;
-
-    fn encode_blank_node(&self, blank_node: &BlankNode) -> Result<EncodedTerm>;
-
-    fn encode_literal(&self, literal: &Literal) -> Result<EncodedTerm>;
-
-    fn encode_named_or_blank_node(&self, term: &NamedOrBlankNode) -> Result<EncodedTerm>;
-
-    fn encode_term(&self, term: &Term) -> Result<EncodedTerm>;
-
-    fn encode_quad(&self, quad: &Quad) -> Result<EncodedQuad>;
-
-    fn encode_triple_in_graph(
-        &self,
-        triple: &Triple,
-        graph_name: EncodedTerm,
-    ) -> Result<EncodedQuad>;
-
-    fn encode_rio_named_node(&self, named_node: rio::NamedNode) -> Result<EncodedTerm>;
-
-    fn encode_rio_blank_node(
-        &self,
-        blank_node: rio::BlankNode,
-        bnodes_map: &mut HashMap<String, u128>,
-    ) -> Result<EncodedTerm>;
-
-    fn encode_rio_literal(&self, literal: rio::Literal) -> Result<EncodedTerm>;
-
-    fn encode_rio_named_or_blank_node(
-        &self,
-        term: rio::NamedOrBlankNode,
-        bnodes_map: &mut HashMap<String, u128>,
-    ) -> Result<EncodedTerm>;
-
-    fn encode_rio_term(
-        &self,
-        term: rio::Term,
-        bnodes_map: &mut HashMap<String, u128>,
-    ) -> Result<EncodedTerm>;
-
-    fn encode_rio_quad(
-        &self,
-        quad: rio::Quad,
-        bnodes_map: &mut HashMap<String, u128>,
-    ) -> Result<EncodedQuad>;
-
-    fn encode_rio_triple_in_graph(
-        &self,
-        triple: rio::Triple,
-        graph_name: EncodedTerm,
-        bnodes_map: &mut HashMap<String, u128>,
-    ) -> Result<EncodedQuad>;
-}
-
-impl<S: StrContainer> Encoder for S {
-    fn encode_named_node(&self, named_node: &NamedNode) -> Result<EncodedTerm> {
+    fn encode_named_node(&mut self, named_node: &NamedNode) -> Result<EncodedTerm> {
         self.encode_rio_named_node(named_node.into())
     }
 
@@ -838,18 +757,18 @@ impl<S: StrContainer> Encoder for S {
         Ok(blank_node.into())
     }
 
-    fn encode_literal(&self, literal: &Literal) -> Result<EncodedTerm> {
+    fn encode_literal(&mut self, literal: &Literal) -> Result<EncodedTerm> {
         self.encode_rio_literal(literal.into())
     }
 
-    fn encode_named_or_blank_node(&self, term: &NamedOrBlankNode) -> Result<EncodedTerm> {
+    fn encode_named_or_blank_node(&mut self, term: &NamedOrBlankNode) -> Result<EncodedTerm> {
         match term {
             NamedOrBlankNode::NamedNode(named_node) => self.encode_named_node(named_node),
             NamedOrBlankNode::BlankNode(blank_node) => self.encode_blank_node(blank_node),
         }
     }
 
-    fn encode_term(&self, term: &Term) -> Result<EncodedTerm> {
+    fn encode_term(&mut self, term: &Term) -> Result<EncodedTerm> {
         match term {
             Term::NamedNode(named_node) => self.encode_named_node(named_node),
             Term::BlankNode(blank_node) => self.encode_blank_node(blank_node),
@@ -857,7 +776,7 @@ impl<S: StrContainer> Encoder for S {
         }
     }
 
-    fn encode_quad(&self, quad: &Quad) -> Result<EncodedQuad> {
+    fn encode_quad(&mut self, quad: &Quad) -> Result<EncodedQuad> {
         Ok(EncodedQuad {
             subject: self.encode_named_or_blank_node(quad.subject())?,
             predicate: self.encode_named_node(quad.predicate())?,
@@ -870,7 +789,7 @@ impl<S: StrContainer> Encoder for S {
     }
 
     fn encode_triple_in_graph(
-        &self,
+        &mut self,
         triple: &Triple,
         graph_name: EncodedTerm,
     ) -> Result<EncodedQuad> {
@@ -882,14 +801,81 @@ impl<S: StrContainer> Encoder for S {
         })
     }
 
-    fn encode_rio_named_node(&self, named_node: rio::NamedNode) -> Result<EncodedTerm> {
+    fn encode_rio_named_node(&mut self, named_node: rio::NamedNode) -> Result<EncodedTerm>;
+
+    fn encode_rio_blank_node(
+        &mut self,
+        blank_node: rio::BlankNode,
+        bnodes_map: &mut HashMap<String, u128>,
+    ) -> Result<EncodedTerm>;
+
+    fn encode_rio_literal(&mut self, literal: rio::Literal) -> Result<EncodedTerm>;
+
+    fn encode_rio_named_or_blank_node(
+        &mut self,
+        term: rio::NamedOrBlankNode,
+        bnodes_map: &mut HashMap<String, u128>,
+    ) -> Result<EncodedTerm> {
+        match term {
+            rio::NamedOrBlankNode::NamedNode(named_node) => self.encode_rio_named_node(named_node),
+            rio::NamedOrBlankNode::BlankNode(blank_node) => {
+                self.encode_rio_blank_node(blank_node, bnodes_map)
+            }
+        }
+    }
+
+    fn encode_rio_term(
+        &mut self,
+        term: rio::Term,
+        bnodes_map: &mut HashMap<String, u128>,
+    ) -> Result<EncodedTerm> {
+        match term {
+            rio::Term::NamedNode(named_node) => self.encode_rio_named_node(named_node),
+            rio::Term::BlankNode(blank_node) => self.encode_rio_blank_node(blank_node, bnodes_map),
+            rio::Term::Literal(literal) => self.encode_rio_literal(literal),
+        }
+    }
+
+    fn encode_rio_quad(
+        &mut self,
+        quad: rio::Quad,
+        bnodes_map: &mut HashMap<String, u128>,
+    ) -> Result<EncodedQuad> {
+        Ok(EncodedQuad {
+            subject: self.encode_rio_named_or_blank_node(quad.subject, bnodes_map)?,
+            predicate: self.encode_rio_named_node(quad.predicate)?,
+            object: self.encode_rio_term(quad.object, bnodes_map)?,
+            graph_name: match quad.graph_name {
+                Some(graph_name) => self.encode_rio_named_or_blank_node(graph_name, bnodes_map)?,
+                None => ENCODED_DEFAULT_GRAPH,
+            },
+        })
+    }
+
+    fn encode_rio_triple_in_graph(
+        &mut self,
+        triple: rio::Triple,
+        graph_name: EncodedTerm,
+        bnodes_map: &mut HashMap<String, u128>,
+    ) -> Result<EncodedQuad> {
+        Ok(EncodedQuad {
+            subject: self.encode_rio_named_or_blank_node(triple.subject, bnodes_map)?,
+            predicate: self.encode_rio_named_node(triple.predicate)?,
+            object: self.encode_rio_term(triple.object, bnodes_map)?,
+            graph_name,
+        })
+    }
+}
+
+impl<S: StrContainer> Encoder for S {
+    fn encode_rio_named_node(&mut self, named_node: rio::NamedNode) -> Result<EncodedTerm> {
         let iri_id = get_str_id(named_node.iri);
         self.insert_str(iri_id, named_node.iri)?;
         Ok(EncodedTerm::NamedNode { iri_id })
     }
 
     fn encode_rio_blank_node(
-        &self,
+        &mut self,
         blank_node: rio::BlankNode,
         bnodes_map: &mut HashMap<String, u128>,
     ) -> Result<EncodedTerm> {
@@ -902,7 +888,7 @@ impl<S: StrContainer> Encoder for S {
         })
     }
 
-    fn encode_rio_literal(&self, literal: rio::Literal) -> Result<EncodedTerm> {
+    fn encode_rio_literal(&mut self, literal: rio::Literal) -> Result<EncodedTerm> {
         Ok(match literal {
             rio::Literal::Simple { value } => {
                 let value_id = get_str_id(value);
@@ -976,61 +962,6 @@ impl<S: StrContainer> Encoder for S {
                     }
                 }
             }
-        })
-    }
-
-    fn encode_rio_named_or_blank_node(
-        &self,
-        term: rio::NamedOrBlankNode,
-        bnodes_map: &mut HashMap<String, u128>,
-    ) -> Result<EncodedTerm> {
-        match term {
-            rio::NamedOrBlankNode::NamedNode(named_node) => self.encode_rio_named_node(named_node),
-            rio::NamedOrBlankNode::BlankNode(blank_node) => {
-                self.encode_rio_blank_node(blank_node, bnodes_map)
-            }
-        }
-    }
-
-    fn encode_rio_term(
-        &self,
-        term: rio::Term,
-        bnodes_map: &mut HashMap<String, u128>,
-    ) -> Result<EncodedTerm> {
-        match term {
-            rio::Term::NamedNode(named_node) => self.encode_rio_named_node(named_node),
-            rio::Term::BlankNode(blank_node) => self.encode_rio_blank_node(blank_node, bnodes_map),
-            rio::Term::Literal(literal) => self.encode_rio_literal(literal),
-        }
-    }
-
-    fn encode_rio_quad(
-        &self,
-        quad: rio::Quad,
-        bnodes_map: &mut HashMap<String, u128>,
-    ) -> Result<EncodedQuad> {
-        Ok(EncodedQuad {
-            subject: self.encode_rio_named_or_blank_node(quad.subject, bnodes_map)?,
-            predicate: self.encode_rio_named_node(quad.predicate)?,
-            object: self.encode_rio_term(quad.object, bnodes_map)?,
-            graph_name: match quad.graph_name {
-                Some(graph_name) => self.encode_rio_named_or_blank_node(graph_name, bnodes_map)?,
-                None => ENCODED_DEFAULT_GRAPH,
-            },
-        })
-    }
-
-    fn encode_rio_triple_in_graph(
-        &self,
-        triple: rio::Triple,
-        graph_name: EncodedTerm,
-        bnodes_map: &mut HashMap<String, u128>,
-    ) -> Result<EncodedQuad> {
-        Ok(EncodedQuad {
-            subject: self.encode_rio_named_or_blank_node(triple.subject, bnodes_map)?,
-            predicate: self.encode_rio_named_node(triple.predicate)?,
-            object: self.encode_rio_term(triple.object, bnodes_map)?,
-            graph_name,
         })
     }
 }
@@ -1190,7 +1121,7 @@ impl<S: StrLookup> Decoder for S {
     }
 }
 
-fn get_required_str<S: StrLookup>(lookup: S, id: u128) -> Result<S::StrType> {
+fn get_required_str<S: StrLookup>(lookup: &S, id: u128) -> Result<S::StrType> {
     lookup.get_str(id)?.ok_or_else(|| {
         format_err!(
             "Not able to find the string with id {} in the string store",
@@ -1199,23 +1130,9 @@ fn get_required_str<S: StrLookup>(lookup: S, id: u128) -> Result<S::StrType> {
     })
 }
 
-#[derive(Debug, Fail)]
-#[fail(display = "Mutex Mutex was poisoned")]
-pub struct MutexPoisonError {
-    backtrace: Backtrace,
-}
-
-impl<T> From<PoisonError<T>> for MutexPoisonError {
-    fn from(_: PoisonError<T>) -> Self {
-        Self {
-            backtrace: Backtrace::new(),
-        }
-    }
-}
-
 #[test]
 fn test_encoding() {
-    let store = MemoryStrStore::default();
+    let mut store = MemoryStrStore::default();
     let terms: Vec<Term> = vec![
         NamedNode::new_from_string("http://foo.com").into(),
         NamedNode::new_from_string("http://bar.com").into(),

@@ -64,7 +64,7 @@ impl<S: StoreConnection> SimplePreparedQuery<S> {
                 dataset: _,
                 base_iri,
             } => {
-                let (plan, variables) = PlanBuilder::build(&dataset, &algebra)?;
+                let (plan, variables) = PlanBuilder::build(dataset.encoder(), &algebra)?;
                 SimplePreparedQueryOptions::Select {
                     plan,
                     variables,
@@ -76,7 +76,7 @@ impl<S: StoreConnection> SimplePreparedQuery<S> {
                 dataset: _,
                 base_iri,
             } => {
-                let (plan, _) = PlanBuilder::build(&dataset, &algebra)?;
+                let (plan, _) = PlanBuilder::build(dataset.encoder(), &algebra)?;
                 SimplePreparedQueryOptions::Ask {
                     plan,
                     evaluator: SimpleEvaluator::new(dataset, base_iri),
@@ -88,10 +88,14 @@ impl<S: StoreConnection> SimplePreparedQuery<S> {
                 dataset: _,
                 base_iri,
             } => {
-                let (plan, variables) = PlanBuilder::build(&dataset, &algebra)?;
+                let (plan, variables) = PlanBuilder::build(dataset.encoder(), &algebra)?;
                 SimplePreparedQueryOptions::Construct {
                     plan,
-                    construct: PlanBuilder::build_graph_template(&dataset, &construct, variables)?,
+                    construct: PlanBuilder::build_graph_template(
+                        dataset.encoder(),
+                        &construct,
+                        variables,
+                    )?,
                     evaluator: SimpleEvaluator::new(dataset, base_iri),
                 }
             }
@@ -100,7 +104,7 @@ impl<S: StoreConnection> SimplePreparedQuery<S> {
                 dataset: _,
                 base_iri,
             } => {
-                let (plan, _) = PlanBuilder::build(&dataset, &algebra)?;
+                let (plan, _) = PlanBuilder::build(dataset.encoder(), &algebra)?;
                 SimplePreparedQueryOptions::Describe {
                     plan,
                     evaluator: SimpleEvaluator::new(dataset, base_iri),

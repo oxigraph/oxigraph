@@ -146,7 +146,7 @@ impl StrLookup for RocksDbStoreConnection<'_> {
 }
 
 impl StrContainer for RocksDbStoreConnection<'_> {
-    fn insert_str(&self, key: u128, value: &str) -> Result<()> {
+    fn insert_str(&mut self, key: u128, value: &str) -> Result<()> {
         self.store
             .db
             .put_cf(self.id2str_cf, &key.to_le_bytes(), value)?;

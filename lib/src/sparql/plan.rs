@@ -1,9 +1,10 @@
 use crate::sparql::eval::StringOrStoreString;
 use crate::store::numeric_encoder::{
-    EncodedQuad, EncodedTerm, MemoryStrStore, StrContainer, StrLookup,
+    EncodedQuad, EncodedTerm, Encoder, MemoryStrStore, StrContainer, StrLookup,
 };
 use crate::store::StoreConnection;
 use crate::Result;
+use std::cell::{RefCell, RefMut};
 use std::collections::BTreeSet;
 
 pub type EncodedTuple = Vec<Option<EncodedTerm>>;
@@ -460,14 +461,14 @@ pub enum TripleTemplateValue {
 
 pub struct DatasetView<S: StoreConnection> {
     store: S,
-    extra: MemoryStrStore,
+    extra: RefCell<MemoryStrStore>,
 }
 
 impl<S: StoreConnection> DatasetView<S> {
     pub fn new(store: S) -> Self {
         Self {
             store,
-            extra: MemoryStrStore::default(),
+            extra: RefCell::new(MemoryStrStore::default()),
         }
     }
 
@@ -481,13 +482,20 @@ impl<S: StoreConnection> DatasetView<S> {
         self.store
             .quads_for_pattern(subject, predicate, object, graph_name)
     }
+
+    pub fn encoder<'a>(&'a self) -> impl Encoder + StrContainer + 'a {
+        DatasetViewStrContainer {
+            store: &self.store,
+            extra: self.extra.borrow_mut(),
+        }
+    }
 }
 
 impl<S: StoreConnection> StrLookup for DatasetView<S> {
     type StrType = StringOrStoreString<S::StrType>;
 
     fn get_str(&self, id: u128) -> Result<Option<StringOrStoreString<S::StrType>>> {
-        Ok(if let Some(value) = self.extra.get_str(id)? {
+        Ok(if let Some(value) = self.extra.borrow().get_str(id)? {
             Some(StringOrStoreString::String(value))
         } else if let Some(value) = self.store.get_str(id)? {
             Some(StringOrStoreString::Store(value))
@@ -497,8 +505,13 @@ impl<S: StoreConnection> StrLookup for DatasetView<S> {
     }
 }
 
-impl<S: StoreConnection> StrContainer for DatasetView<S> {
-    fn insert_str(&self, key: u128, value: &str) -> Result<()> {
+struct DatasetViewStrContainer<'a, S: StoreConnection> {
+    store: &'a S,
+    extra: RefMut<'a, MemoryStrStore>,
+}
+
+impl<'a, S: StoreConnection> StrContainer for DatasetViewStrContainer<'a, S> {
+    fn insert_str(&mut self, key: u128, value: &str) -> Result<()> {
         if self.store.get_str(key)?.is_none() {
             self.extra.insert_str(key, value)
         } else {

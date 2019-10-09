@@ -123,11 +123,13 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
     }
 
     fn insert(&mut self, quad: &Quad) -> Result<()> {
-        self.inner.insert(&self.inner.encode_quad(quad)?)
+        let quad = self.inner.encode_quad(quad)?;
+        self.inner.insert(&quad)
     }
 
     fn remove(&mut self, quad: &Quad) -> Result<()> {
-        self.inner.remove(&self.inner.encode_quad(quad)?)
+        let quad = self.inner.encode_quad(quad)?;
+        self.inner.remove(&quad)
     }
 }
 
@@ -147,11 +149,10 @@ impl<S: StoreConnection> StoreRepositoryConnection<S> {
             EncodedTerm::DefaultGraph
         };
         parser.parse_all(&mut move |t| {
-            self.inner.insert(&self.inner.encode_rio_triple_in_graph(
-                t,
-                graph_name,
-                &mut bnode_map,
-            )?)
+            let quad = self
+                .inner
+                .encode_rio_triple_in_graph(t, graph_name, &mut bnode_map)?;
+            self.inner.insert(&quad)
         })?;
         Ok(())
     }
@@ -162,8 +163,8 @@ impl<S: StoreConnection> StoreRepositoryConnection<S> {
     {
         let mut bnode_map = HashMap::default();
         parser.parse_all(&mut move |q| {
-            self.inner
-                .insert(&self.inner.encode_rio_quad(q, &mut bnode_map)?)
+            let quad = self.inner.encode_rio_quad(q, &mut bnode_map)?;
+            self.inner.insert(&quad)
         })?;
         Ok(())
     }

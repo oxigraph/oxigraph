@@ -1,9 +1,10 @@
 use crate::store::numeric_encoder::*;
 use crate::store::*;
 use crate::{Repository, Result};
+use failure::{Backtrace, Fail};
 use std::collections::{BTreeMap, BTreeSet};
 use std::iter::{empty, once};
-use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// Memory based implementation of the `Repository` trait.
 /// They are cheap to build using the `MemoryRepository::default()` method.
@@ -45,8 +46,7 @@ type QuadMap<T> = BTreeMap<T, TripleMap<T>>;
 
 #[derive(Default)]
 pub struct MemoryStore {
-    str_store: MemoryStrStore,
-    quad_indexes: RwLock<MemoryStoreIndexes>,
+    indexes: RwLock<MemoryStoreIndexes>,
 }
 
 #[derive(Default)]
@@ -57,6 +57,7 @@ struct MemoryStoreIndexes {
     gspo: QuadMap<EncodedTerm>,
     gpos: QuadMap<EncodedTerm>,
     gosp: QuadMap<EncodedTerm>,
+    str_store: MemoryStrStore,
 }
 
 impl<'a> Repository for &'a MemoryRepository {
@@ -75,24 +76,24 @@ impl<'a> Store for &'a MemoryStore {
     }
 }
 
-impl StrLookup for MemoryStore {
+impl<'a> StrLookup for &'a MemoryStore {
     type StrType = String;
 
     fn get_str(&self, id: u128) -> Result<Option<String>> {
-        self.str_store.get_str(id)
+        self.indexes()?.str_store.get_str(id)
     }
 }
 
-impl StrContainer for MemoryStore {
-    fn insert_str(&self, key: u128, value: &str) -> Result<()> {
-        self.str_store.insert_str(key, value)
+impl<'a> StrContainer for &'a MemoryStore {
+    fn insert_str(&mut self, key: u128, value: &str) -> Result<()> {
+        self.indexes_mut()?.str_store.insert_str(key, value)
     }
 }
 
 impl<'a> StoreConnection for &'a MemoryStore {
     fn contains(&self, quad: &EncodedQuad) -> Result<bool> {
         Ok(self
-            .quad_indexes()?
+            .indexes()?
             .spog
             .get(&quad.subject)
             .map_or(false, |pog| {
@@ -104,7 +105,7 @@ impl<'a> StoreConnection for &'a MemoryStore {
     }
 
     fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
-        let mut quad_indexes = self.quad_indexes_mut()?;
+        let mut quad_indexes = self.indexes_mut()?;
         insert_into_quad_map(
             &mut quad_indexes.gosp,
             quad.graph_name,
@@ -151,7 +152,7 @@ impl<'a> StoreConnection for &'a MemoryStore {
     }
 
     fn remove(&mut self, quad: &EncodedQuad) -> Result<()> {
-        let mut quad_indexes = self.quad_indexes_mut()?;
+        let mut quad_indexes = self.indexes_mut()?;
         remove_from_quad_map(
             &mut quad_indexes.gosp,
             &quad.graph_name,
@@ -275,16 +276,16 @@ impl<'a> StoreConnection for &'a MemoryStore {
 }
 
 impl MemoryStore {
-    fn quad_indexes(&self) -> Result<RwLockReadGuard<'_, MemoryStoreIndexes>> {
-        Ok(self.quad_indexes.read().map_err(MutexPoisonError::from)?)
+    fn indexes(&self) -> Result<RwLockReadGuard<'_, MemoryStoreIndexes>> {
+        Ok(self.indexes.read().map_err(MutexPoisonError::from)?)
     }
 
-    fn quad_indexes_mut(&self) -> Result<RwLockWriteGuard<'_, MemoryStoreIndexes>> {
-        Ok(self.quad_indexes.write().map_err(MutexPoisonError::from)?)
+    fn indexes_mut(&self) -> Result<RwLockWriteGuard<'_, MemoryStoreIndexes>> {
+        Ok(self.indexes.write().map_err(MutexPoisonError::from)?)
     }
 
     fn quads<'a>(&'a self) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        Ok(quad_map_flatten(&self.quad_indexes()?.gspo)
+        Ok(quad_map_flatten(&self.indexes()?.gspo)
             .map(|(g, s, p, o)| Ok(EncodedQuad::new(s, p, o, g)))
             .collect::<Vec<_>>()
             .into_iter())
@@ -295,7 +296,7 @@ impl MemoryStore {
         subject: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
         Ok(
-            option_triple_map_flatten(self.quad_indexes()?.spog.get(&subject))
+            option_triple_map_flatten(self.indexes()?.spog.get(&subject))
                 .map(|(p, o, g)| Ok(EncodedQuad::new(subject, p, o, g)))
                 .collect::<Vec<_>>()
                 .into_iter(),
@@ -308,7 +309,7 @@ impl MemoryStore {
         predicate: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
         Ok(option_pair_map_flatten(
-            self.quad_indexes()?
+            self.indexes()?
                 .spog
                 .get(&subject)
                 .and_then(|pog| pog.get(&predicate)),
@@ -325,7 +326,7 @@ impl MemoryStore {
         object: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
         Ok(option_set_flatten(
-            self.quad_indexes()?
+            self.indexes()?
                 .spog
                 .get(&subject)
                 .and_then(|pog| pog.get(&predicate))
@@ -342,7 +343,7 @@ impl MemoryStore {
         object: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
         Ok(option_pair_map_flatten(
-            self.quad_indexes()?
+            self.indexes()?
                 .ospg
                 .get(&object)
                 .and_then(|spg| spg.get(&subject)),
@@ -357,7 +358,7 @@ impl MemoryStore {
         predicate: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
         Ok(
-            option_triple_map_flatten(self.quad_indexes()?.posg.get(&predicate))
+            option_triple_map_flatten(self.indexes()?.posg.get(&predicate))
                 .map(|(o, s, g)| Ok(EncodedQuad::new(s, predicate, o, g)))
                 .collect::<Vec<_>>()
                 .into_iter(),
@@ -370,7 +371,7 @@ impl MemoryStore {
         object: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
         Ok(option_pair_map_flatten(
-            self.quad_indexes()?
+            self.indexes()?
                 .posg
                 .get(&predicate)
                 .and_then(|osg| osg.get(&object)),
@@ -384,12 +385,10 @@ impl MemoryStore {
         &self,
         object: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
-        Ok(
-            option_triple_map_flatten(self.quad_indexes()?.ospg.get(&object))
-                .map(|(s, p, g)| Ok(EncodedQuad::new(s, p, object, g)))
-                .collect::<Vec<_>>()
-                .into_iter(),
-        )
+        Ok(option_triple_map_flatten(self.indexes()?.ospg.get(&object))
+            .map(|(s, p, g)| Ok(EncodedQuad::new(s, p, object, g)))
+            .collect::<Vec<_>>()
+            .into_iter())
     }
 
     fn quads_for_graph(
@@ -397,7 +396,7 @@ impl MemoryStore {
         graph_name: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
         Ok(
-            option_triple_map_flatten(self.quad_indexes()?.gspo.get(&graph_name))
+            option_triple_map_flatten(self.indexes()?.gspo.get(&graph_name))
                 .map(|(s, p, o)| Ok(EncodedQuad::new(s, p, o, graph_name)))
                 .collect::<Vec<_>>()
                 .into_iter(),
@@ -410,7 +409,7 @@ impl MemoryStore {
         graph_name: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
         Ok(option_pair_map_flatten(
-            self.quad_indexes()?
+            self.indexes()?
                 .gspo
                 .get(&graph_name)
                 .and_then(|spo| spo.get(&subject)),
@@ -427,7 +426,7 @@ impl MemoryStore {
         graph_name: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
         Ok(option_set_flatten(
-            self.quad_indexes()?
+            self.indexes()?
                 .gspo
                 .get(&graph_name)
                 .and_then(|spo| spo.get(&subject))
@@ -445,7 +444,7 @@ impl MemoryStore {
         graph_name: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
         Ok(option_set_flatten(
-            self.quad_indexes()?
+            self.indexes()?
                 .gosp
                 .get(&graph_name)
                 .and_then(|osp| osp.get(&object))
@@ -462,7 +461,7 @@ impl MemoryStore {
         graph_name: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
         Ok(option_pair_map_flatten(
-            self.quad_indexes()?
+            self.indexes()?
                 .gpos
                 .get(&graph_name)
                 .and_then(|pos| pos.get(&predicate)),
@@ -479,7 +478,7 @@ impl MemoryStore {
         graph_name: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
         Ok(option_set_flatten(
-            self.quad_indexes()?
+            self.indexes()?
                 .gpos
                 .get(&graph_name)
                 .and_then(|pos| pos.get(&predicate))
@@ -496,7 +495,7 @@ impl MemoryStore {
         graph_name: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
         Ok(option_pair_map_flatten(
-            self.quad_indexes()?
+            self.indexes()?
                 .gosp
                 .get(&graph_name)
                 .and_then(|osp| osp.get(&object)),
@@ -591,4 +590,18 @@ fn quad_map_flatten<'a, T: Copy>(gspo: &'a QuadMap<T>) -> impl Iterator<Item = (
             })
         })
     })
+}
+
+#[derive(Debug, Fail)]
+#[fail(display = "Mutex Mutex was poisoned")]
+pub struct MutexPoisonError {
+    backtrace: Backtrace,
+}
+
+impl<T> From<PoisonError<T>> for MutexPoisonError {
+    fn from(_: PoisonError<T>) -> Self {
+        Self {
+            backtrace: Backtrace::new(),
+        }
+    }
 }

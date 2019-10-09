@@ -33,7 +33,7 @@ impl<E: Encoder> PlanBuilder<E> {
     }
 
     fn build_for_graph_pattern(
-        &self,
+        &mut self,
         pattern: &GraphPattern,
         variables: &mut Vec<Variable>,
         graph_name: PatternValue,
@@ -197,7 +197,7 @@ impl<E: Encoder> PlanBuilder<E> {
     }
 
     fn build_for_bgp(
-        &self,
+        &mut self,
         p: &[TripleOrPathPattern],
         variables: &mut Vec<Variable>,
         graph_name: PatternValue,
@@ -227,7 +227,7 @@ impl<E: Encoder> PlanBuilder<E> {
         Ok(plan)
     }
 
-    fn build_for_path(&self, path: &PropertyPath) -> Result<PlanPropertyPath> {
+    fn build_for_path(&mut self, path: &PropertyPath) -> Result<PlanPropertyPath> {
         Ok(match path {
             PropertyPath::PredicatePath(p) => {
                 PlanPropertyPath::PredicatePath(self.encoder.encode_named_node(p)?)
@@ -261,7 +261,7 @@ impl<E: Encoder> PlanBuilder<E> {
     }
 
     fn build_for_expression(
-        &self,
+        &mut self,
         expression: &Expression,
         variables: &mut Vec<Variable>,
         graph_name: PatternValue,
@@ -650,7 +650,7 @@ impl<E: Encoder> PlanBuilder<E> {
     }
 
     fn build_cast(
-        &self,
+        &mut self,
         parameters: &[Expression],
         constructor: impl Fn(Box<PlanExpression>) -> PlanExpression,
         variables: &mut Vec<Variable>,
@@ -672,7 +672,7 @@ impl<E: Encoder> PlanBuilder<E> {
     }
 
     fn expression_list(
-        &self,
+        &mut self,
         l: &[Expression],
         variables: &mut Vec<Variable>,
         graph_name: PatternValue,
@@ -683,7 +683,7 @@ impl<E: Encoder> PlanBuilder<E> {
     }
 
     fn pattern_value_from_term_or_variable(
-        &self,
+        &mut self,
         term_or_variable: &TermOrVariable,
         variables: &mut Vec<Variable>,
     ) -> Result<PatternValue> {
@@ -696,7 +696,7 @@ impl<E: Encoder> PlanBuilder<E> {
     }
 
     fn pattern_value_from_named_node_or_variable(
-        &self,
+        &mut self,
         named_node_or_variable: &NamedNodeOrVariable,
         variables: &mut Vec<Variable>,
     ) -> Result<PatternValue> {
@@ -711,7 +711,7 @@ impl<E: Encoder> PlanBuilder<E> {
     }
 
     fn encode_bindings(
-        &self,
+        &mut self,
         bindings: &StaticBindings,
         variables: &mut Vec<Variable>,
     ) -> Result<Vec<EncodedTuple>> {
@@ -736,7 +736,7 @@ impl<E: Encoder> PlanBuilder<E> {
     }
 
     fn build_for_aggregate(
-        &self,
+        &mut self,
         aggregate: &Aggregation,
         variables: &mut Vec<Variable>,
         graph_name: PatternValue,
@@ -786,7 +786,7 @@ impl<E: Encoder> PlanBuilder<E> {
     }
 
     fn build_for_graph_template(
-        &self,
+        &mut self,
         template: &[TriplePattern],
         variables: &mut Vec<Variable>,
     ) -> Result<Vec<TripleTemplate>> {
@@ -816,7 +816,7 @@ impl<E: Encoder> PlanBuilder<E> {
     }
 
     fn template_value_from_term_or_variable(
-        &self,
+        &mut self,
         term_or_variable: &TermOrVariable,
         variables: &mut Vec<Variable>,
         bnodes: &mut Vec<Variable>,
@@ -836,7 +836,7 @@ impl<E: Encoder> PlanBuilder<E> {
     }
 
     fn template_value_from_named_node_or_variable(
-        &self,
+        &mut self,
         named_node_or_variable: &NamedNodeOrVariable,
         variables: &mut Vec<Variable>,
         bnodes: &mut Vec<Variable>,

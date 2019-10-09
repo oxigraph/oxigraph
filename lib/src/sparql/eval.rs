@@ -1230,6 +1230,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     None
                 }?;
                 self.dataset
+                    .encoder()
                     .encode_rio_literal(rio::Literal::Typed {
                         value: &value,
                         datatype: rio::NamedNode { iri: &datatype },
@@ -1474,7 +1475,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
 
     fn build_string_id(&self, value: &str) -> Option<u128> {
         let value_id = get_str_id(value);
-        self.dataset.insert_str(value_id, value).ok()?;
+        self.dataset.encoder().insert_str(value_id, value).ok()?;
         Some(value_id)
     }
 
@@ -2211,7 +2212,7 @@ fn get_triple_template_value(
 }
 
 fn decode_triple(
-    decoder: impl Decoder,
+    decoder: &impl Decoder,
     subject: EncodedTerm,
     predicate: EncodedTerm,
     object: EncodedTerm,
