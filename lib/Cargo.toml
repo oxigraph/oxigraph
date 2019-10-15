@@ -1,6 +1,6 @@
 [package]
 name = "rudf"
-version = "0.0.1"
+version = "0.1.0"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT/Apache-2.0"
 readme = "../README.md"

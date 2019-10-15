@@ -62,7 +62,7 @@ impl FileSyntax for GraphSyntax {
             match base_type {
                 "application/n-triples" => Some(GraphSyntax::NTriples),
                 "text/turtle" => Some(GraphSyntax::Turtle),
-                "application/rdf+xml" => Some(GraphSyntax::RdfXml),
+                "application/xml" | "application/rdf+xml" => Some(GraphSyntax::RdfXml),
                 _ => None,
             }
         } else {

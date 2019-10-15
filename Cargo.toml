@@ -1,7 +1,8 @@
 [workspace]
 members = [
     "lib",
-    "server"
+    "server",
+    "wikibase"
 ]
 
 [profile.release]
