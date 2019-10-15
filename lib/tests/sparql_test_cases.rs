@@ -4,7 +4,7 @@ use rayon::prelude::*;
 use rudf::model::vocab::rdf;
 use rudf::model::vocab::rdfs;
 use rudf::model::*;
-use rudf::sparql::PreparedQuery;
+use rudf::sparql::{PreparedQuery, QueryOptions};
 use rudf::sparql::{Query, QueryResult, QueryResultSyntax};
 use rudf::{GraphSyntax, MemoryRepository, Repository, RepositoryConnection, Result};
 use std::fmt;
@@ -158,7 +158,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
             }
             match repository
                 .connection()?
-                .prepare_query(&read_file_to_string(&test.query)?, Some(&test.query))
+                .prepare_query(&read_file_to_string(&test.query)?, QueryOptions::default().with_base_iri(&test.query))
             {
                 Err(error) => Err(format_err!(
                     "Failure to parse query of {} with error: {}",

@@ -1,5 +1,5 @@
 use crate::model::*;
-use crate::sparql::PreparedQuery;
+use crate::sparql::{PreparedQuery, QueryOptions};
 use crate::{DatasetSyntax, GraphSyntax, Result};
 use std::io::BufRead;
 
@@ -14,7 +14,7 @@ use std::io::BufRead;
 /// ```
 /// use rudf::model::*;
 /// use rudf::{Repository, RepositoryConnection, MemoryRepository, Result};
-/// use crate::rudf::sparql::PreparedQuery;
+/// use crate::rudf::sparql::{PreparedQuery, QueryOptions};
 /// use rudf::sparql::QueryResult;
 ///
 /// let repository = MemoryRepository::default();
@@ -30,7 +30,7 @@ use std::io::BufRead;
 /// assert_eq!(vec![quad], results.unwrap());
 ///
 /// // SPARQL query
-/// let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", None).unwrap();
+/// let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default()).unwrap();
 /// let results = prepared_query.exec().unwrap();
 /// if let QueryResult::Bindings(results) = results {
 ///     assert_eq!(results.into_values_iter().next().unwrap().unwrap()[0], Some(ex.into()));
@@ -64,7 +64,7 @@ pub trait RepositoryConnection: Clone {
     /// ```
     /// use rudf::model::*;
     /// use rudf::{Repository, RepositoryConnection, MemoryRepository};
-    /// use rudf::sparql::PreparedQuery;
+    /// use rudf::sparql::{PreparedQuery, QueryOptions};
     /// use rudf::sparql::QueryResult;
     ///
     /// let repository = MemoryRepository::default();
@@ -75,13 +75,13 @@ pub trait RepositoryConnection: Clone {
     /// connection.insert(&Quad::new(ex.clone(), ex.clone(), ex.clone(), None));
     ///
     /// // SPARQL query
-    /// let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", None).unwrap();
+    /// let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default()).unwrap();
     /// let results = prepared_query.exec().unwrap();
     /// if let QueryResult::Bindings(results) = results {
     ///     assert_eq!(results.into_values_iter().next().unwrap().unwrap()[0], Some(ex.into()));
     /// }
     /// ```
-    fn prepare_query(&self, query: &str, base_iri: Option<&str>) -> Result<Self::PreparedQuery>;
+    fn prepare_query(&self, query: &str, options: QueryOptions) -> Result<Self::PreparedQuery>;
 
     /// Retrieves quads with a filter on each quad component
     ///

@@ -24,7 +24,7 @@ use std::str;
 /// ```ignored
 /// use rudf::model::*;
 /// use rudf::{Repository, RepositoryConnection, RocksDbRepository, Result};
-/// use crate::rudf::sparql::PreparedQuery;
+/// use crate::rudf::sparql::{PreparedQuery, QueryOptions};
 /// use rudf::sparql::QueryResult;
 ///
 /// let repository = RocksDbRepository::open("example.db").unwrap();
@@ -40,7 +40,7 @@ use std::str;
 /// assert_eq!(vec![quad], results.unwrap());
 ///
 /// // SPARQL query
-/// let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", None).unwrap();
+/// let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default()).unwrap();
 /// let results = prepared_query.exec().unwrap();
 /// if let QueryResult::Bindings(results) = results {
 ///     assert_eq!(results.into_values_iter().next().unwrap().unwrap()[0], Some(ex.into()));

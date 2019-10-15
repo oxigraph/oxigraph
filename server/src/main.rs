@@ -4,8 +4,7 @@ use clap::ArgMatches;
 use rouille::input::priority_header_preferred;
 use rouille::url::form_urlencoded;
 use rouille::{content_encoding, start_server, Request, Response};
-use rudf::sparql::QueryResult;
-use rudf::sparql::{PreparedQuery, QueryResultSyntax};
+use rudf::sparql::{PreparedQuery, QueryOptions, QueryResult, QueryResultSyntax};
 use rudf::{
     DatasetSyntax, FileSyntax, GraphSyntax, MemoryRepository, Repository, RepositoryConnection,
     RocksDbRepository,
@@ -149,7 +148,7 @@ fn evaluate_sparql_query<R: RepositoryConnection>(
     request: &Request,
 ) -> Response {
     //TODO: stream
-    match connection.prepare_query(query, None) {
+    match connection.prepare_query(query, QueryOptions::default()) {
         Ok(query) => {
             let results = query.exec().unwrap();
             if let QueryResult::Graph(_) = results {
