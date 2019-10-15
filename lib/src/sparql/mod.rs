@@ -9,6 +9,7 @@ mod plan;
 mod plan_builder;
 mod xml_results;
 
+use crate::model::NamedNode;
 use crate::sparql::algebra::QueryVariants;
 use crate::sparql::eval::SimpleEvaluator;
 use crate::sparql::parser::read_sparql_query;
@@ -19,6 +20,7 @@ use crate::store::StoreConnection;
 use crate::Result;
 use std::fmt;
 
+pub use crate::sparql::algebra::GraphPattern;
 pub use crate::sparql::model::BindingsIterator;
 pub use crate::sparql::model::QueryResult;
 pub use crate::sparql::model::QueryResultSyntax;
@@ -27,7 +29,7 @@ pub use crate::sparql::model::Variable;
 /// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/)
 pub trait PreparedQuery {
     /// Evaluates the query and returns its results
-    fn exec(&self) -> Result<QueryResult>;
+    fn exec<'a>(&'a self, options: &'a QueryOptions<'a>) -> Result<QueryResult<'a>>;
 }
 
 /// An implementation of `PreparedQuery` for internal use
@@ -115,32 +117,37 @@ impl<S: StoreConnection> SimplePreparedQuery<S> {
 }
 
 impl<S: StoreConnection> PreparedQuery for SimplePreparedQuery<S> {
-    fn exec(&self) -> Result<QueryResult<'_>> {
+    fn exec<'a>(&'a self, options: &'a QueryOptions<'a>) -> Result<QueryResult<'a>> {
         match &self.0 {
             SimplePreparedQueryAction::Select {
                 plan,
                 variables,
                 evaluator,
-            } => evaluator.evaluate_select_plan(&plan, &variables),
+            } => evaluator.evaluate_select_plan(&plan, &variables, options),
             SimplePreparedQueryAction::Ask { plan, evaluator } => {
-                evaluator.evaluate_ask_plan(&plan)
+                evaluator.evaluate_ask_plan(&plan, options)
             }
             SimplePreparedQueryAction::Construct {
                 plan,
                 construct,
                 evaluator,
-            } => evaluator.evaluate_construct_plan(&plan, &construct),
+            } => evaluator.evaluate_construct_plan(&plan, &construct, &options),
             SimplePreparedQueryAction::Describe { plan, evaluator } => {
-                evaluator.evaluate_describe_plan(&plan)
+                evaluator.evaluate_describe_plan(&plan, &options)
             }
         }
     }
+}
+
+pub trait ServiceHandler {
+    fn handle<'a>(&'a self, node: NamedNode) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'a>>)>;
 }
 
 /// Options for SPARQL query parsing and evaluation like the query base IRI
 pub struct QueryOptions<'a> {
     pub(crate) base_iri: Option<&'a str>,
     pub(crate) default_graph_as_union: bool,
+    pub(crate) service_handler: Option<Box<dyn ServiceHandler>>,
 }
 
 impl<'a> Default for QueryOptions<'a> {
@@ -148,6 +155,7 @@ impl<'a> Default for QueryOptions<'a> {
         Self {
             base_iri: None,
             default_graph_as_union: false,
+            service_handler: None as Option<Box<dyn ServiceHandler>>,
         }
     }
 }
