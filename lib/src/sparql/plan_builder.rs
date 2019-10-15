@@ -108,6 +108,7 @@ impl<E: Encoder> PlanBuilder<E> {
                 let graph_pattern = *p.clone();
                 PlanNode::Service {
                     service_name,
+                    variables: variables.clone(),
                     child: Box::new(self.build_for_graph_pattern(p, variables, service_name)?),
                     graph_pattern,
                     silent: *s,

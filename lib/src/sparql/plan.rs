@@ -1,4 +1,5 @@
 use crate::sparql::GraphPattern;
+use crate::sparql::model::Variable;
 use crate::sparql::eval::StringOrStoreString;
 use crate::store::numeric_encoder::{
     EncodedQuad, EncodedTerm, Encoder, MemoryStrStore, StrContainer, StrLookup,
@@ -19,6 +20,7 @@ pub enum PlanNode {
     },
     Service {
         service_name: PatternValue,
+        variables: Vec<Variable>,
         child: Box<PlanNode>,
         graph_pattern: GraphPattern,
         silent: bool,
