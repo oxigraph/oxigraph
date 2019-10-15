@@ -188,6 +188,12 @@ impl<'a> QueryOptions<'a> {
         self.default_graph_as_union = true;
         self
     }
+
+    /// Consider the union of all graphs in the repository as the default graph
+    pub fn with_service_handler(mut self, service_handler: Box<dyn ServiceHandler>) -> Self {
+        self.service_handler = Some(service_handler);
+        self
+    }
 }
 
 /// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/)

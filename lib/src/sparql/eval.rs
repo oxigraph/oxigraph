@@ -131,11 +131,56 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             PlanNode::Init => Box::new(once(Ok(from))),
             PlanNode::StaticBindings { tuples } => Box::new(tuples.iter().cloned().map(Ok)),
             PlanNode::Service {
-                child,
+                variables,
+                silent,
+                service_name,
+                graph_pattern,
                 ..
             } => {
-                println!("Service!");
-                self.eval_plan(&*child, from, options)
+                match &options.service_handler {
+                    None => if *silent {
+                        return Box::new(vec![].into_iter());
+                    } else {
+                        return Box::new(once(Err(format_err!(
+                            "No handler was supplied to resolve the given service"
+                        )))) as EncodedTuplesIterator<'_>;
+                    },
+                    Some(handler) => {
+                        let pattern_option = match get_pattern_value(service_name, &[]) {
+                            None => if *silent {
+                                        return Box::new(vec![].into_iter());
+                                    } else {
+                                        return Box::new(once(Err(format_err!(
+                                            "The handler supplied was unable to evaluate the given service"
+                                        )))) as EncodedTuplesIterator<'_>;
+                                    },
+                            Some(term) => {
+                                let named_node = self.dataset.decode_named_node(term).unwrap();
+                                handler.handle(named_node)
+                            },
+                        };
+                            
+                        match pattern_option {
+                            None => if *silent {
+                                        return Box::new(vec![].into_iter());
+                                    } else {
+                                        return Box::new(once(Err(format_err!(
+                                            "The handler supplied was unable to produce any result set on the given service"
+                                        )))) as EncodedTuplesIterator<'_>;
+                                    }, 
+                            Some(pattern_fn) => {
+                                let bindings = pattern_fn(graph_pattern.clone()).unwrap();
+                                let encoded = self.encode_bindings(variables, bindings);
+                                let collected = encoded.collect::<Vec<_>>();
+                                Box::new(JoinIterator {
+                                    left: vec![from],
+                                    right_iter: Box::new(collected.into_iter()),
+                                    buffered_results: vec![],
+                                })
+                           },
+                        }
+                    }
+                }
             },
             PlanNode::QuadPatternJoin {
                 child,
@@ -1589,6 +1634,45 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         )
     }
 
+    fn encode_bindings<'b>(
+        &'b self,
+        variables: &'b [Variable],
+        iter: BindingsIterator<'b>,
+    ) -> EncodedTuplesIterator<'b>
+    where
+        'a: 'b,
+    {
+        let mut encoder = self.dataset.encoder();
+        let (binding_variables, iter) = BindingsIterator::destruct(iter);
+        let mut combined_variables = variables.clone().to_vec();
+        for v in binding_variables.clone() {
+            if !combined_variables.contains(&v) {
+                combined_variables.resize(combined_variables.len() + 1, v);
+            }
+        }
+
+        println!("binding_variables: {:?}", binding_variables.clone());
+        println!("variables: {:?}", variables.clone());
+        println!("combined_variables: {:?}", combined_variables.clone());
+        println!("\n\n");
+        Box::new(iter.map(move |terms| {
+            let mut encoded_terms = vec![None; combined_variables.len()];
+            for (i, term_option) in terms?.into_iter().enumerate() {
+                match term_option {
+                    None => (),
+                    Some(term) => {
+                        if let Ok(encoded) = encoder.encode_term(&term) {
+                            let variable = binding_variables[i].clone();
+                            put_variable_value(&variable, &combined_variables, encoded, &mut encoded_terms)
+                        }
+                    }
+                }
+            }
+            Ok(encoded_terms)
+        }))
+    }
+
+
     #[allow(clippy::float_cmp)]
     fn equals(&self, a: EncodedTerm, b: EncodedTerm) -> Option<bool> {
         match a {
@@ -1962,6 +2046,16 @@ fn put_pattern_value(selector: &PatternValue, value: EncodedTerm, tuple: &mut En
         PatternValue::Variable(v) => put_value(*v, value, tuple),
     }
 }
+
+fn put_variable_value(selector: &Variable, variables: &[Variable], value: EncodedTerm, tuple: &mut EncodedTuple) {
+    for (i, v) in variables.iter().enumerate() {
+        if selector == v {
+            put_value(i, value, tuple);
+            break;
+        }
+    }
+}
+
 
 fn put_value(position: usize, value: EncodedTerm, tuple: &mut EncodedTuple) {
     if position < tuple.len() {
