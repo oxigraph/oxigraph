@@ -116,7 +116,7 @@ pub struct BindingsIterator<'a> {
 }
 
 impl<'a> BindingsIterator<'a> {
-    pub(crate) fn new(
+    pub fn new(
         variables: Vec<Variable>,
         iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>>> + 'a>,
     ) -> Self {

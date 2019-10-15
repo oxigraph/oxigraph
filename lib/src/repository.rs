@@ -1,5 +1,5 @@
 use crate::model::*;
-use crate::sparql::{PreparedQuery, QueryOptions};
+use crate::sparql::{GraphPattern, PreparedQuery, QueryOptions};
 use crate::{DatasetSyntax, GraphSyntax, Result};
 use std::io::BufRead;
 
@@ -81,7 +81,7 @@ pub trait RepositoryConnection: Clone {
     ///     assert_eq!(results.into_values_iter().next().unwrap().unwrap()[0], Some(ex.into()));
     /// }
     /// ```
-    fn prepare_query(&self, query: &str, options: QueryOptions) -> Result<Self::PreparedQuery>;
+    fn prepare_query<'a>(&'a self, query: &str, options: &'a QueryOptions<'a>) -> Result<Self::PreparedQuery>;
 
     /// Retrieves quads with a filter on each quad component
     ///
@@ -111,6 +111,13 @@ pub trait RepositoryConnection: Clone {
     ) -> Box<dyn Iterator<Item = Result<Quad>> + 'a>
     where
         Self: 'a;
+
+    fn prepare_query_from_pattern<'a>(
+        &'a self,
+        graph_pattern: &'a GraphPattern,
+        options: &'a QueryOptions<'a>
+    ) -> Result<Self::PreparedQuery>;
+
 
     /// Loads a graph file (i.e. triples) into the repository
     ///

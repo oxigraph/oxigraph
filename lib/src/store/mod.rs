@@ -5,6 +5,7 @@ pub(crate) mod numeric_encoder;
 #[cfg(feature = "rocksdb")]
 mod rocksdb;
 
+pub use crate::sparql::GraphPattern;
 pub use crate::store::memory::MemoryRepository;
 #[cfg(feature = "rocksdb")]
 pub use crate::store::rocksdb::RocksDbRepository;
@@ -71,7 +72,7 @@ impl<S: StoreConnection> From<S> for StoreRepositoryConnection<S> {
 impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
     type PreparedQuery = SimplePreparedQuery<S>;
 
-    fn prepare_query(&self, query: &str, options: QueryOptions) -> Result<SimplePreparedQuery<S>> {
+    fn prepare_query<'a>(&self, query: &str, options: &'a QueryOptions<'a>) -> Result<SimplePreparedQuery<S>> {
         SimplePreparedQuery::new(self.inner.clone(), query, options) //TODO: avoid clone
     }
 
@@ -95,6 +96,17 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
                 .map(move |quad| self.inner.decode_quad(&quad?)),
         )
     }
+
+
+    fn prepare_query_from_pattern<'a>(
+        &'a self,
+        pattern: &GraphPattern,
+        options: &'a QueryOptions<'a>
+    ) -> Result<Self::PreparedQuery> {
+        SimplePreparedQuery::new_from_pattern(self.inner.clone(), pattern, options) //TODO: avoid clone
+    }
+
+
 
     fn load_graph(
         &mut self,

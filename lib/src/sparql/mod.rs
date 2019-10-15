@@ -19,6 +19,7 @@ use crate::sparql::plan_builder::PlanBuilder;
 use crate::store::StoreConnection;
 use crate::Result;
 use std::fmt;
+use rio_api::iri::Iri;
 
 pub use crate::sparql::algebra::GraphPattern;
 pub use crate::sparql::model::BindingsIterator;
@@ -56,8 +57,8 @@ enum SimplePreparedQueryAction<S: StoreConnection> {
     },
 }
 
-impl<S: StoreConnection> SimplePreparedQuery<S> {
-    pub(crate) fn new(connection: S, query: &str, options: QueryOptions) -> Result<Self> {
+impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
+    pub(crate) fn new(connection: S, query: &str, options: &'a QueryOptions<'a>) -> Result<Self> {
         let dataset = DatasetView::new(connection, options.default_graph_as_union);
         //TODO avoid inserting terms in the Repository StringStore
         Ok(Self(match read_sparql_query(query, options.base_iri)? {
@@ -112,6 +113,21 @@ impl<S: StoreConnection> SimplePreparedQuery<S> {
                     evaluator: SimpleEvaluator::new(dataset, base_iri),
                 }
             }
+        }))
+    }
+
+    pub(crate) fn new_from_pattern(
+        connection: S,
+        pattern: &GraphPattern,
+        options: &'a QueryOptions<'a>
+    ) -> Result<Self> {
+        let dataset = DatasetView::new(connection, options.default_graph_as_union);
+        let iri = options.base_iri.map(|i| Iri::parse(i.to_string()).unwrap());
+        let (plan, variables) = PlanBuilder::build(dataset.encoder(), pattern)?;
+        Ok(Self(SimplePreparedQueryAction::Select {
+            plan,
+            variables,
+            evaluator: SimpleEvaluator::new(dataset, iri),
         }))
     }
 }

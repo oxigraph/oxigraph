@@ -130,6 +130,13 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         match node {
             PlanNode::Init => Box::new(once(Ok(from))),
             PlanNode::StaticBindings { tuples } => Box::new(tuples.iter().cloned().map(Ok)),
+            PlanNode::Service {
+                child,
+                ..
+            } => {
+                println!("Service!");
+                self.eval_plan(&*child, from, options)
+            },
             PlanNode::QuadPatternJoin {
                 child,
                 subject,

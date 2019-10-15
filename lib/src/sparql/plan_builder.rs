@@ -103,11 +103,16 @@ impl<E: Encoder> PlanBuilder<E> {
                 left: Box::new(self.build_for_graph_pattern(a, variables, graph_name)?),
                 right: Box::new(self.build_for_graph_pattern(b, variables, graph_name)?),
             },
-            GraphPattern::Service(_n, _p, _s) => {
-                return Err(format_err!(
-                    "SPARQL SERVICE clauses are not implemented yet"
-                ))
-            }
+            GraphPattern::Service(n, p, s) => {
+                let service_name = self.pattern_value_from_named_node_or_variable(n, variables)?;
+                let graph_pattern = *p.clone();
+                PlanNode::Service {
+                    service_name,
+                    child: Box::new(self.build_for_graph_pattern(p, variables, service_name)?),
+                    graph_pattern,
+                    silent: *s,
+                }
+            },
             GraphPattern::AggregateJoin(GroupPattern(key, p), aggregates) => {
                 let mut inner_variables = key.clone();
                 let inner_graph_name =
