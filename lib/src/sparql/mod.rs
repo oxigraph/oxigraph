@@ -31,9 +31,9 @@ pub trait PreparedQuery {
 }
 
 /// An implementation of `PreparedQuery` for internal use
-pub struct SimplePreparedQuery<S: StoreConnection>(SimplePreparedQueryOptions<S>);
+pub struct SimplePreparedQuery<S: StoreConnection>(SimplePreparedQueryAction<S>);
 
-enum SimplePreparedQueryOptions<S: StoreConnection> {
+enum SimplePreparedQueryAction<S: StoreConnection> {
     Select {
         plan: PlanNode,
         variables: Vec<Variable>,
@@ -55,17 +55,17 @@ enum SimplePreparedQueryOptions<S: StoreConnection> {
 }
 
 impl<S: StoreConnection> SimplePreparedQuery<S> {
-    pub(crate) fn new(connection: S, query: &str, base_iri: Option<&str>) -> Result<Self> {
-        let dataset = DatasetView::new(connection);
+    pub(crate) fn new(connection: S, query: &str, options: QueryOptions) -> Result<Self> {
+        let dataset = DatasetView::new(connection, options.default_graph_as_union);
         //TODO avoid inserting terms in the Repository StringStore
-        Ok(Self(match read_sparql_query(query, base_iri)? {
+        Ok(Self(match read_sparql_query(query, options.base_iri)? {
             QueryVariants::Select {
                 algebra,
                 dataset: _,
                 base_iri,
             } => {
                 let (plan, variables) = PlanBuilder::build(dataset.encoder(), &algebra)?;
-                SimplePreparedQueryOptions::Select {
+                SimplePreparedQueryAction::Select {
                     plan,
                     variables,
                     evaluator: SimpleEvaluator::new(dataset, base_iri),
@@ -77,7 +77,7 @@ impl<S: StoreConnection> SimplePreparedQuery<S> {
                 base_iri,
             } => {
                 let (plan, _) = PlanBuilder::build(dataset.encoder(), &algebra)?;
-                SimplePreparedQueryOptions::Ask {
+                SimplePreparedQueryAction::Ask {
                     plan,
                     evaluator: SimpleEvaluator::new(dataset, base_iri),
                 }
@@ -89,7 +89,7 @@ impl<S: StoreConnection> SimplePreparedQuery<S> {
                 base_iri,
             } => {
                 let (plan, variables) = PlanBuilder::build(dataset.encoder(), &algebra)?;
-                SimplePreparedQueryOptions::Construct {
+                SimplePreparedQueryAction::Construct {
                     plan,
                     construct: PlanBuilder::build_graph_template(
                         dataset.encoder(),
@@ -105,7 +105,7 @@ impl<S: StoreConnection> SimplePreparedQuery<S> {
                 base_iri,
             } => {
                 let (plan, _) = PlanBuilder::build(dataset.encoder(), &algebra)?;
-                SimplePreparedQueryOptions::Describe {
+                SimplePreparedQueryAction::Describe {
                     plan,
                     evaluator: SimpleEvaluator::new(dataset, base_iri),
                 }
@@ -117,23 +117,52 @@ impl<S: StoreConnection> SimplePreparedQuery<S> {
 impl<S: StoreConnection> PreparedQuery for SimplePreparedQuery<S> {
     fn exec(&self) -> Result<QueryResult<'_>> {
         match &self.0 {
-            SimplePreparedQueryOptions::Select {
+            SimplePreparedQueryAction::Select {
                 plan,
                 variables,
                 evaluator,
             } => evaluator.evaluate_select_plan(&plan, &variables),
-            SimplePreparedQueryOptions::Ask { plan, evaluator } => {
+            SimplePreparedQueryAction::Ask { plan, evaluator } => {
                 evaluator.evaluate_ask_plan(&plan)
             }
-            SimplePreparedQueryOptions::Construct {
+            SimplePreparedQueryAction::Construct {
                 plan,
                 construct,
                 evaluator,
             } => evaluator.evaluate_construct_plan(&plan, &construct),
-            SimplePreparedQueryOptions::Describe { plan, evaluator } => {
+            SimplePreparedQueryAction::Describe { plan, evaluator } => {
                 evaluator.evaluate_describe_plan(&plan)
             }
         }
+    }
+}
+
+/// Options for SPARQL query parsing and evaluation like the query base IRI
+pub struct QueryOptions<'a> {
+    pub(crate) base_iri: Option<&'a str>,
+    pub(crate) default_graph_as_union: bool,
+}
+
+impl<'a> Default for QueryOptions<'a> {
+    fn default() -> Self {
+        Self {
+            base_iri: None,
+            default_graph_as_union: false,
+        }
+    }
+}
+
+impl<'a> QueryOptions<'a> {
+    /// Allows to set the base IRI of the query
+    pub fn with_base_iri(mut self, base_iri: &'a str) -> Self {
+        self.base_iri = Some(base_iri);
+        self
+    }
+
+    /// Consider the union of all graphs in the repository as the default graph
+    pub fn with_default_graph_as_union(mut self) -> Self {
+        self.default_graph_as_union = true;
+        self
     }
 }
 

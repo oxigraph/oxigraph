@@ -1,6 +1,7 @@
 use crate::sparql::eval::StringOrStoreString;
 use crate::store::numeric_encoder::{
     EncodedQuad, EncodedTerm, Encoder, MemoryStrStore, StrContainer, StrLookup,
+    ENCODED_DEFAULT_GRAPH,
 };
 use crate::store::StoreConnection;
 use crate::Result;
@@ -462,13 +463,15 @@ pub enum TripleTemplateValue {
 pub struct DatasetView<S: StoreConnection> {
     store: S,
     extra: RefCell<MemoryStrStore>,
+    default_graph_as_union: bool,
 }
 
 impl<S: StoreConnection> DatasetView<S> {
-    pub fn new(store: S) -> Self {
+    pub fn new(store: S, default_graph_as_union: bool) -> Self {
         Self {
             store,
             extra: RefCell::new(MemoryStrStore::default()),
+            default_graph_as_union,
         }
     }
 
@@ -479,8 +482,33 @@ impl<S: StoreConnection> DatasetView<S> {
         object: Option<EncodedTerm>,
         graph_name: Option<EncodedTerm>,
     ) -> Box<dyn Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.store
-            .quads_for_pattern(subject, predicate, object, graph_name)
+        if graph_name == None {
+            Box::new(
+                self.store
+                    .quads_for_pattern(subject, predicate, object, None)
+                    .filter(|quad| match quad {
+                        Err(_) => true,
+                        Ok(quad) => quad.graph_name != ENCODED_DEFAULT_GRAPH,
+                    }),
+            )
+        } else if graph_name == Some(ENCODED_DEFAULT_GRAPH) && self.default_graph_as_union {
+            Box::new(
+                self.store
+                    .quads_for_pattern(subject, predicate, object, None)
+                    .map(|quad| {
+                        let quad = quad?;
+                        Ok(EncodedQuad::new(
+                            quad.subject,
+                            quad.predicate,
+                            quad.object,
+                            ENCODED_DEFAULT_GRAPH,
+                        ))
+                    }),
+            )
+        } else {
+            self.store
+                .quads_for_pattern(subject, predicate, object, graph_name)
+        }
     }
 
     pub fn encoder<'a>(&'a self) -> impl Encoder + StrContainer + 'a {
