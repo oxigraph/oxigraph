@@ -1,7 +1,6 @@
 use crate::model::*;
-use crate::sparql::{GraphPattern, PreparedQuery, QueryOptions};
+use crate::sparql::{GraphPattern, PreparedQuery};
 use crate::{DatasetSyntax, GraphSyntax, Result};
-use rio_api::iri::Iri;
 use std::io::BufRead;
 
 /// A `Repository` stores a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)

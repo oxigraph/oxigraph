@@ -64,7 +64,7 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
             QueryVariants::Select {
                 algebra,
                 dataset: _,
-                base_iri,
+                ..
             } => {
                 let (plan, variables) = PlanBuilder::build(dataset.encoder(), &algebra)?;
                 SimplePreparedQueryAction::Select {
@@ -76,7 +76,7 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
             QueryVariants::Ask {
                 algebra,
                 dataset: _,
-                base_iri,
+                ..
             } => {
                 let (plan, _) = PlanBuilder::build(dataset.encoder(), &algebra)?;
                 SimplePreparedQueryAction::Ask {
@@ -88,7 +88,7 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
                 construct,
                 algebra,
                 dataset: _,
-                base_iri,
+                ..
             } => {
                 let (plan, variables) = PlanBuilder::build(dataset.encoder(), &algebra)?;
                 SimplePreparedQueryAction::Construct {
@@ -104,7 +104,7 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
             QueryVariants::Describe {
                 algebra,
                 dataset: _,
-                base_iri,
+                ..
             } => {
                 let (plan, _) = PlanBuilder::build(dataset.encoder(), &algebra)?;
                 SimplePreparedQueryAction::Describe {

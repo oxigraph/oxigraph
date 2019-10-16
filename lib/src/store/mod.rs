@@ -14,7 +14,6 @@ use crate::model::*;
 use crate::sparql::{SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::{DatasetSyntax, GraphSyntax, RepositoryConnection, Result};
-use rio_api::iri::Iri;
 use rio_api::parser::{QuadsParser, TriplesParser};
 use rio_turtle::{NQuadsParser, NTriplesParser, TriGParser, TurtleParser};
 use rio_xml::RdfXmlParser;
