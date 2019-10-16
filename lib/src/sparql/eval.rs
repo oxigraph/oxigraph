@@ -138,7 +138,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             } => {
                 match &options.service_handler {
                     None => if *silent {
-                        return Box::new(vec![].into_iter());
+                        return Box::new(empty());
                     } else {
                         return Box::new(once(Err(format_err!(
                             "No handler was supplied to resolve the given service"
@@ -147,21 +147,30 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     Some(handler) => {
                         let pattern_option = match get_pattern_value(service_name, &[]) {
                             None => if *silent {
-                                        return Box::new(vec![].into_iter());
+                                        return Box::new(empty());
                                     } else {
                                         return Box::new(once(Err(format_err!(
                                             "The handler supplied was unable to evaluate the given service"
                                         )))) as EncodedTuplesIterator<'_>;
                                     },
                             Some(term) => {
-                                let named_node = self.dataset.decode_named_node(term).unwrap();
-                                handler.handle(named_node)
+                                match self.dataset.decode_named_node(term) {
+                                    Err(err) => if *silent {
+                                        return Box::new(empty());
+                                    } else {
+                                        return Box::new(once(Err(err))) as EncodedTuplesIterator<'_>;
+                                    },
+                                    Ok(named_node) => {
+                                        println!("named_node: {:?}", named_node);
+                                        handler.handle(named_node)
+                                    }
+                                    
+                                }
                             },
                         };
-                            
                         match pattern_option {
                             None => if *silent {
-                                        return Box::new(vec![].into_iter());
+                                        return Box::new(empty());
                                     } else {
                                         return Box::new(once(Err(format_err!(
                                             "The handler supplied was unable to produce any result set on the given service"
@@ -178,7 +187,13 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                                             buffered_results: vec![],
                                         })
                                     },
-                                    Err(err) => return Box::new(once(Err(err))) as EncodedTuplesIterator<'_>
+                                    Err(err) => {
+                                        if *silent {
+                                            return Box::new(empty());
+                                        } else {
+                                            return Box::new(once(Err(err))) as EncodedTuplesIterator<'_>
+                                        }   
+                                    }
                                 }
                            },
                         }
@@ -933,13 +948,22 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     _ => None,
                 }?;
                 let iri = self.dataset.get_str(iri_id).ok()??;
-                let base_iri = options.base_iri.map(|base_iri| Iri::parse(base_iri));
-                if let Some(Ok(base_iri)) = base_iri {
-                    self.build_named_node(&base_iri.resolve(&iri).ok()?.into_inner())
-                } else {
-                    Iri::parse(iri).ok()?;
-                    Some(EncodedTerm::NamedNode { iri_id })
+                match options.base_iri {
+                    None => {
+                        Iri::parse(iri).ok()?;
+                        Some(EncodedTerm::NamedNode { iri_id })
+                    },
+                    Some(str_iri) => {
+                        match Iri::parse(str_iri) {
+                            Ok(base_iri) => self.build_named_node(&base_iri.resolve(&iri).ok()?.into_inner()),
+                            _ => {
+                               Iri::parse(iri).ok()?;
+                               Some(EncodedTerm::NamedNode { iri_id })
+                            }
+                        }
+                    }
                 }
+                
             }
             PlanExpression::BNode(id) => match id {
                 Some(id) => {

@@ -105,18 +105,17 @@ fn two_service_test() {
 }
 
 #[test]
-fn silent_service_test() {
+fn silent_service_empty_set_test() {
 
   #[derive(Clone,Copy)]
-  struct TwoServiceTest;
-  impl ServiceHandler for TwoServiceTest {
+  struct ServiceTest;
+  impl ServiceHandler for ServiceTest {
       fn handle<'a>(&'a self, _named_node: NamedNode) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'a>>)> {
-         Some(TwoServiceTest::handle_service) 
+         Some(ServiceTest::handle_service) 
       }
   }
 
-
-  impl TwoServiceTest {
+  impl ServiceTest {
     fn handle_service<'a>(_graph_pattern: GraphPattern) -> Result<BindingsIterator<'a>> {
       Err(format_err!("This is supposed to fail"))
     }
@@ -127,30 +126,60 @@ fn silent_service_test() {
   SELECT ?name ?mbox 
   WHERE
     { 
-      SERVICE <http://service1.org>
+      SERVICE SILENT <http://service1.org>
       { ?s foaf:name ?name
       }
-
-      SERVICE <http://service2.org>
-      { ?s foaf:mbox ?mbox
-      }
+      
     }
   ORDER BY ?name
   "#.to_string();
   
-  let triples = br#"
-    <http://example.com/bob> <http://xmlns.com/foaf/0.1/name> "Bob" .
-    <http://example.com/alice> <http://xmlns.com/foaf/0.1/name> "Alice" .
-    "#.as_ref();
-
-  let options = QueryOptions::default().with_service_handler(Box::new(TwoServiceTest));
+  let triples = b"".as_ref();
+  let options = QueryOptions::default().with_service_handler(Box::new(ServiceTest));
   let results = do_query(triples, query, options).unwrap();
   let collected = results.into_values_iter().map(move |b| b.unwrap()).collect::<Vec<_>>();
-  let solution = vec![
-      vec![ Some(literal("Alice".to_string())), Some(mailto("alice@example.com".to_string())) ],
-      vec![ Some(literal("Bob".to_string())), Some(mailto("bob@example.com".to_string())) ],
-    ];
-  assert_eq!(collected, solution);
+  println!("Collected: {:?}", collected);
+  assert_eq!(collected.len(), 0);
+}
+
+#[test]
+fn non_silent_service_test() {
+
+  #[derive(Clone,Copy)]
+  struct ServiceTest;
+  impl ServiceHandler for ServiceTest {
+      fn handle<'a>(&'a self, _named_node: NamedNode) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'a>>)> {
+         Some(ServiceTest::handle_service) 
+      }
+  }
+
+  impl ServiceTest {
+    fn handle_service<'a>(_graph_pattern: GraphPattern) -> Result<BindingsIterator<'a>> {
+      Err(format_err!("This is supposed to fail"))
+    }
+  }
+
+  let query = r#"
+  PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+  SELECT ?name
+  WHERE
+    { 
+      SERVICE <http://service1.org>
+      { ?s foaf:name ?name
+      }
+      
+    }
+  ORDER BY ?name
+  "#.to_string();
+  
+  let triples = b"".as_ref();
+  let options = QueryOptions::default().with_service_handler(Box::new(ServiceTest));
+  let results = do_query(triples, query, options).unwrap();
+  let result = results.into_values_iter().next();
+  match result {
+    Some(Err(_)) => assert_eq!(true, true),
+    _ => assert_eq!(true, false, "This should have been an error since the service fails"),
+  }
 }
 
 fn ex(id: String) -> Term {
