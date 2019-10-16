@@ -169,14 +169,18 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                                         )))) as EncodedTuplesIterator<'_>;
                                     }, 
                             Some(pattern_fn) => {
-                                let bindings = pattern_fn(graph_pattern.clone()).unwrap();
-                                let encoded = self.encode_bindings(variables, bindings);
-                                let collected = encoded.collect::<Vec<_>>();
-                                Box::new(JoinIterator {
-                                    left: vec![from],
-                                    right_iter: Box::new(collected.into_iter()),
-                                    buffered_results: vec![],
-                                })
+                                match pattern_fn(graph_pattern.clone()) {
+                                    Ok(bindings) => {
+                                        let encoded = self.encode_bindings(variables, bindings);
+                                        let collected = encoded.collect::<Vec<_>>();
+                                        Box::new(JoinIterator {
+                                            left: vec![from],
+                                            right_iter: Box::new(collected.into_iter()),
+                                            buffered_results: vec![],
+                                        })
+                                    },
+                                    Err(err) => return Box::new(once(Err(err))) as EncodedTuplesIterator<'_>
+                                }
                            },
                         }
                     }
@@ -1644,17 +1648,12 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
     {
         let mut encoder = self.dataset.encoder();
         let (binding_variables, iter) = BindingsIterator::destruct(iter);
-        let mut combined_variables = variables.clone().to_vec();
+        let mut combined_variables = variables.to_vec();
         for v in binding_variables.clone() {
             if !combined_variables.contains(&v) {
                 combined_variables.resize(combined_variables.len() + 1, v);
             }
         }
-
-        println!("binding_variables: {:?}", binding_variables.clone());
-        println!("variables: {:?}", variables.clone());
-        println!("combined_variables: {:?}", combined_variables.clone());
-        println!("\n\n");
         Box::new(iter.map(move |terms| {
             let mut encoded_terms = vec![None; combined_variables.len()];
             for (i, term_option) in terms?.into_iter().enumerate() {
