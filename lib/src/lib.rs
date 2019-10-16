@@ -44,7 +44,7 @@ pub use failure::Error;
 pub type Result<T> = ::std::result::Result<T, failure::Error>;
 pub use crate::repository::Repository;
 pub use crate::repository::RepositoryConnection;
-pub use crate::store::{MemoryRepository, MemoryRepositoryConnection};
+pub use crate::store::MemoryRepository;
 #[cfg(feature = "rocksdb")]
 pub use crate::store::RocksDbRepository;
 pub use crate::syntax::DatasetSyntax;

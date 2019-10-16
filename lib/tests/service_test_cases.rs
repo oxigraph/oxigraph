@@ -104,6 +104,55 @@ fn two_service_test() {
   assert_eq!(collected, solution);
 }
 
+#[test]
+fn silent_service_test() {
+
+  #[derive(Clone,Copy)]
+  struct TwoServiceTest;
+  impl ServiceHandler for TwoServiceTest {
+      fn handle<'a>(&'a self, named_node: NamedNode) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'a>>)> {
+         Some(TwoServiceTest::handle_service) 
+      }
+  }
+
+
+  impl TwoServiceTest {
+    fn handle_service<'a>(_graph_pattern: GraphPattern) -> Result<BindingsIterator<'a>> {
+      Err(format_err!("This is supposed to fail"))
+    }
+  }
+
+  let query = r#"
+  PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+  SELECT ?name ?mbox 
+  WHERE
+    { 
+      SERVICE <http://service1.org>
+      { ?s foaf:name ?name
+      }
+
+      SERVICE <http://service2.org>
+      { ?s foaf:mbox ?mbox
+      }
+    }
+  ORDER BY ?name
+  "#.to_string();
+  
+  let triples = br#"
+    <http://example.com/bob> <http://xmlns.com/foaf/0.1/name> "Bob" .
+    <http://example.com/alice> <http://xmlns.com/foaf/0.1/name> "Alice" .
+    "#.as_ref();
+
+  let options = QueryOptions::default().with_service_handler(Box::new(TwoServiceTest));
+  let results = do_query(triples, query, options).unwrap();
+  let collected = results.into_values_iter().map(move |b| b.unwrap()).collect::<Vec<_>>();
+  let solution = vec![
+      vec![ Some(literal("Alice".to_string())), Some(mailto("alice@example.com".to_string())) ],
+      vec![ Some(literal("Bob".to_string())), Some(mailto("bob@example.com".to_string())) ],
+    ];
+  assert_eq!(collected, solution);
+}
+
 fn ex(id: String) -> Term {
   Term::NamedNode(NamedNode::parse(format!("http://example.com/{}", &id)).unwrap())
 }

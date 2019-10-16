@@ -6,7 +6,7 @@ pub(crate) mod numeric_encoder;
 mod rocksdb;
 
 pub use crate::sparql::GraphPattern;
-pub use crate::store::memory::{MemoryRepository, MemoryRepositoryConnection};
+pub use crate::store::memory::MemoryRepository;
 #[cfg(feature = "rocksdb")]
 pub use crate::store::rocksdb::RocksDbRepository;
 
