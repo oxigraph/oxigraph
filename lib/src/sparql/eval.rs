@@ -40,15 +40,17 @@ type EncodedTuplesIterator<'a> = Box<dyn Iterator<Item = Result<EncodedTuple>> +
 
 pub struct SimpleEvaluator<S: StoreConnection> {
     dataset: DatasetView<S>,
+    base_iri: Option<Iri<String>>,
     bnodes_map: Mutex<BTreeMap<u128, u128>>,
     now: DateTime<FixedOffset>,
 }
 
 impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
-    pub fn new(dataset: DatasetView<S>) -> Self {
+    pub fn new(dataset: DatasetView<S>, base_iri: Option<Iri<String>>) -> Self {
         Self {
             dataset,
             bnodes_map: Mutex::new(BTreeMap::default()),
+            base_iri,
             now: Utc::now().with_timezone(&FixedOffset::east(0)),
         }
     }
@@ -948,22 +950,15 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     _ => None,
                 }?;
                 let iri = self.dataset.get_str(iri_id).ok()??;
-                match options.base_iri {
-                    None => {
-                        Iri::parse(iri).ok()?;
-                        Some(EncodedTerm::NamedNode { iri_id })
-                    },
-                    Some(str_iri) => {
-                        match Iri::parse(str_iri) {
-                            Ok(base_iri) => self.build_named_node(&base_iri.resolve(&iri).ok()?.into_inner()),
-                            _ => {
-                               Iri::parse(iri).ok()?;
-                               Some(EncodedTerm::NamedNode { iri_id })
-                            }
-                        }
-                    }
+                let base_iri = options.base_iri
+                                .map(|base_iri| Iri::parse(base_iri.to_string()))
+                                .or(self.base_iri.as_ref().map(|iri| Ok(iri.clone())));
+                if let Some(Ok(base_iri)) = base_iri {
+                    self.build_named_node(&base_iri.resolve(&iri).ok()?.into_inner())
+                } else {
+                    Iri::parse(iri).ok()?;
+                    Some(EncodedTerm::NamedNode { iri_id })
                 }
-                
             }
             PlanExpression::BNode(id) => match id {
                 Some(id) => {

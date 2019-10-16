@@ -164,7 +164,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
                     "Failure to parse query of {} with error: {}",
                     test, error
                 )),
-                Ok(query) => match query.exec(&QueryOptions::default().with_base_iri(&test.query)) {
+                Ok(query) => match query.exec(&QueryOptions::default()) {
                     Err(error) => Err(format_err!(
                         "Failure to execute query of {} with error: {}",
                         test, error

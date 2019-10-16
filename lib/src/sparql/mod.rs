@@ -18,6 +18,8 @@ use crate::sparql::plan::{DatasetView, PlanNode};
 use crate::sparql::plan_builder::PlanBuilder;
 use crate::store::StoreConnection;
 use crate::Result;
+use failure::format_err;
+use rio_api::iri::Iri;
 use std::fmt;
 
 pub use crate::sparql::algebra::GraphPattern;
@@ -64,31 +66,31 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
             QueryVariants::Select {
                 algebra,
                 dataset: _,
-                ..
+                base_iri,
             } => {
                 let (plan, variables) = PlanBuilder::build(dataset.encoder(), &algebra)?;
                 SimplePreparedQueryAction::Select {
                     plan,
                     variables,
-                    evaluator: SimpleEvaluator::new(dataset),
+                    evaluator: SimpleEvaluator::new(dataset, base_iri),
                 }
             }
             QueryVariants::Ask {
                 algebra,
                 dataset: _,
-                ..
+                base_iri,
             } => {
                 let (plan, _) = PlanBuilder::build(dataset.encoder(), &algebra)?;
                 SimplePreparedQueryAction::Ask {
                     plan,
-                    evaluator: SimpleEvaluator::new(dataset),
+                    evaluator: SimpleEvaluator::new(dataset, base_iri),
                 }
             }
             QueryVariants::Construct {
                 construct,
                 algebra,
                 dataset: _,
-                ..
+                base_iri,
             } => {
                 let (plan, variables) = PlanBuilder::build(dataset.encoder(), &algebra)?;
                 SimplePreparedQueryAction::Construct {
@@ -98,18 +100,18 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
                         &construct,
                         variables,
                     )?,
-                    evaluator: SimpleEvaluator::new(dataset),
+                    evaluator: SimpleEvaluator::new(dataset, base_iri),
                 }
             }
             QueryVariants::Describe {
                 algebra,
                 dataset: _,
-                ..
+                base_iri,
             } => {
                 let (plan, _) = PlanBuilder::build(dataset.encoder(), &algebra)?;
                 SimplePreparedQueryAction::Describe {
                     plan,
-                    evaluator: SimpleEvaluator::new(dataset),
+                    evaluator: SimpleEvaluator::new(dataset, base_iri),
                 }
             }
         }))
@@ -118,14 +120,27 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
     pub(crate) fn new_from_pattern(
         connection: S,
         pattern: &GraphPattern,
+        base_iri: Option<&'a str>
     ) -> Result<Self> {
         let dataset = DatasetView::new(connection);
         let (plan, variables) = PlanBuilder::build(dataset.encoder(), pattern)?;
-        Ok(Self(SimplePreparedQueryAction::Select {
-            plan,
-            variables,
-            evaluator: SimpleEvaluator::new(dataset),
-        }))
+        let base_iri = base_iri.map(|str_iri| Iri::parse(str_iri.to_string()));
+        match base_iri {
+            Some(Err(_)) => Err(format_err!("Failed to parse base_iri")),
+            Some(Ok(base_iri)) =>  
+                Ok(Self(SimplePreparedQueryAction::Select {
+                    plan,
+                    variables,
+                    evaluator: SimpleEvaluator::new(dataset, Some(base_iri)),
+                })),
+            None =>  
+                Ok(Self(SimplePreparedQueryAction::Select {
+                    plan,
+                    variables,
+                    evaluator: SimpleEvaluator::new(dataset, None),
+                }))
+        }
+        
     }
 }
 

@@ -217,7 +217,7 @@ fn query_repository<'a>(repository: MemoryRepository, query: String, options: Qu
 
 fn pattern_repository<'a>(repository: MemoryRepository, pattern: GraphPattern, options: QueryOptions<'a>) -> Result<BindingsIterator<'a>> {
   let connection = repository.connection()?;
-  let prepared_query = connection.prepare_query_from_pattern(&pattern)?;
+  let prepared_query = connection.prepare_query_from_pattern(&pattern, None)?;
   let result = prepared_query.exec(&options)?;
   match result {
     QueryResult::Bindings(iterator) => {

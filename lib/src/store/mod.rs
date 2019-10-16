@@ -101,8 +101,9 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
     fn prepare_query_from_pattern<'a>(
         &'a self,
         pattern: &GraphPattern,
+        base_iri: Option<&'a str>
     ) -> Result<Self::PreparedQuery> {
-        SimplePreparedQuery::new_from_pattern(self.inner.clone(), pattern) //TODO: avoid clone
+        SimplePreparedQuery::new_from_pattern(self.inner.clone(), pattern, base_iri) //TODO: avoid clone
     }
 
     fn load_graph(
