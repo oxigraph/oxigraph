@@ -473,15 +473,13 @@ pub enum TripleTemplateValue {
 pub struct DatasetView<S: StoreConnection> {
     store: S,
     extra: RefCell<MemoryStrStore>,
-    default_graph_as_union: bool,
 }
 
 impl<S: StoreConnection> DatasetView<S> {
-    pub fn new(store: S, default_graph_as_union: bool) -> Self {
+    pub fn new(store: S) -> Self {
         Self {
             store,
             extra: RefCell::new(MemoryStrStore::default()),
-            default_graph_as_union,
         }
     }
 
@@ -491,6 +489,7 @@ impl<S: StoreConnection> DatasetView<S> {
         predicate: Option<EncodedTerm>,
         object: Option<EncodedTerm>,
         graph_name: Option<EncodedTerm>,
+        default_graph_as_union: bool,
     ) -> Box<dyn Iterator<Item = Result<EncodedQuad>> + 'a> {
         if graph_name == None {
             Box::new(
@@ -501,7 +500,7 @@ impl<S: StoreConnection> DatasetView<S> {
                         Ok(quad) => quad.graph_name != ENCODED_DEFAULT_GRAPH,
                     }),
             )
-        } else if graph_name == Some(ENCODED_DEFAULT_GRAPH) && self.default_graph_as_union {
+        } else if graph_name == Some(ENCODED_DEFAULT_GRAPH) && default_graph_as_union {
             Box::new(
                 self.store
                     .quads_for_pattern(subject, predicate, object, None)

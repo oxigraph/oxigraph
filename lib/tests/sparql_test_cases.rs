@@ -158,7 +158,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
             }
             match repository
                 .connection()?
-                .prepare_query(&read_file_to_string(&test.query)?, &QueryOptions::default().with_base_iri(&test.query))
+                .prepare_query(&read_file_to_string(&test.query)?, None)
             {
                 Err(error) => Err(format_err!(
                     "Failure to parse query of {} with error: {}",

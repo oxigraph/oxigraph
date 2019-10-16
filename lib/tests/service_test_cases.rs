@@ -110,7 +110,7 @@ fn silent_service_test() {
   #[derive(Clone,Copy)]
   struct TwoServiceTest;
   impl ServiceHandler for TwoServiceTest {
-      fn handle<'a>(&'a self, named_node: NamedNode) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'a>>)> {
+      fn handle<'a>(&'a self, _named_node: NamedNode) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'a>>)> {
          Some(TwoServiceTest::handle_service) 
       }
   }
@@ -174,7 +174,7 @@ fn make_repository(reader: impl BufRead) -> Result<MemoryRepository> {
 
 fn query_repository<'a>(repository: MemoryRepository, query: String, options: QueryOptions<'a>) -> Result<BindingsIterator<'a>> {
   let connection = repository.connection()?;
-  let prepared_query = connection.prepare_query(&query, &options)?;
+  let prepared_query = connection.prepare_query(&query, None)?;
   let result = prepared_query.exec(&options)?;
   match result {
     QueryResult::Bindings(iterator) => {
@@ -186,10 +186,9 @@ fn query_repository<'a>(repository: MemoryRepository, query: String, options: Qu
   }
 } 
 
-//fn pattern_repository<'a>(repository: MemoryRepository, pattern: GraphPattern, options: QueryOptions<'a>) -> Result<Vec<Vec<Option<Term>>>> {
 fn pattern_repository<'a>(repository: MemoryRepository, pattern: GraphPattern, options: QueryOptions<'a>) -> Result<BindingsIterator<'a>> {
   let connection = repository.connection()?;
-  let prepared_query = connection.prepare_query_from_pattern(&pattern, &options)?;
+  let prepared_query = connection.prepare_query_from_pattern(&pattern)?;
   let result = prepared_query.exec(&options)?;
   match result {
     QueryResult::Bindings(iterator) => {
@@ -201,13 +200,11 @@ fn pattern_repository<'a>(repository: MemoryRepository, pattern: GraphPattern, o
   }
 }
 
-//fn do_query<'a>(reader: impl BufRead, query: String, options: QueryOptions<'a>) -> Result<Vec<Vec<Option<Term>>>> {
 fn do_query<'a>(reader: impl BufRead, query: String, options: QueryOptions<'a>) -> Result<BindingsIterator<'a>> {
   let repository = make_repository(reader)?;
   query_repository(repository, query, options)
 }
 
-//fn do_pattern<'a>(reader: impl BufRead, pattern: GraphPattern, options: QueryOptions<'a>) -> Result<Vec<Vec<Option<Term>>>> {
 fn do_pattern<'a>(reader: impl BufRead, pattern: GraphPattern, options: QueryOptions<'a>) -> Result<BindingsIterator<'a>> {
   let repository = make_repository(reader)?;
   pattern_repository(repository, pattern, options)

@@ -19,7 +19,6 @@ use crate::sparql::plan_builder::PlanBuilder;
 use crate::store::StoreConnection;
 use crate::Result;
 use std::fmt;
-use rio_api::iri::Iri;
 
 pub use crate::sparql::algebra::GraphPattern;
 pub use crate::sparql::model::BindingsIterator;
@@ -58,10 +57,10 @@ enum SimplePreparedQueryAction<S: StoreConnection> {
 }
 
 impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
-    pub(crate) fn new(connection: S, query: &str, options: &'a QueryOptions<'a>) -> Result<Self> {
-        let dataset = DatasetView::new(connection, options.default_graph_as_union);
+    pub(crate) fn new(connection: S, query: &str, base_iri: Option<&'a str>) -> Result<Self> {
+        let dataset = DatasetView::new(connection);
         //TODO avoid inserting terms in the Repository StringStore
-        Ok(Self(match read_sparql_query(query, options.base_iri)? {
+        Ok(Self(match read_sparql_query(query, base_iri)? {
             QueryVariants::Select {
                 algebra,
                 dataset: _,
@@ -71,7 +70,7 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
                 SimplePreparedQueryAction::Select {
                     plan,
                     variables,
-                    evaluator: SimpleEvaluator::new(dataset, base_iri),
+                    evaluator: SimpleEvaluator::new(dataset),
                 }
             }
             QueryVariants::Ask {
@@ -82,7 +81,7 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
                 let (plan, _) = PlanBuilder::build(dataset.encoder(), &algebra)?;
                 SimplePreparedQueryAction::Ask {
                     plan,
-                    evaluator: SimpleEvaluator::new(dataset, base_iri),
+                    evaluator: SimpleEvaluator::new(dataset),
                 }
             }
             QueryVariants::Construct {
@@ -99,7 +98,7 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
                         &construct,
                         variables,
                     )?,
-                    evaluator: SimpleEvaluator::new(dataset, base_iri),
+                    evaluator: SimpleEvaluator::new(dataset),
                 }
             }
             QueryVariants::Describe {
@@ -110,7 +109,7 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
                 let (plan, _) = PlanBuilder::build(dataset.encoder(), &algebra)?;
                 SimplePreparedQueryAction::Describe {
                     plan,
-                    evaluator: SimpleEvaluator::new(dataset, base_iri),
+                    evaluator: SimpleEvaluator::new(dataset),
                 }
             }
         }))
@@ -119,15 +118,13 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
     pub(crate) fn new_from_pattern(
         connection: S,
         pattern: &GraphPattern,
-        options: &'a QueryOptions<'a>
     ) -> Result<Self> {
-        let dataset = DatasetView::new(connection, options.default_graph_as_union);
-        let iri = options.base_iri.map(|i| Iri::parse(i.to_string()).unwrap());
+        let dataset = DatasetView::new(connection);
         let (plan, variables) = PlanBuilder::build(dataset.encoder(), pattern)?;
         Ok(Self(SimplePreparedQueryAction::Select {
             plan,
             variables,
-            evaluator: SimpleEvaluator::new(dataset, iri),
+            evaluator: SimpleEvaluator::new(dataset),
         }))
     }
 }

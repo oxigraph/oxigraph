@@ -41,16 +41,14 @@ type EncodedTuplesIterator<'a> = Box<dyn Iterator<Item = Result<EncodedTuple>> +
 pub struct SimpleEvaluator<S: StoreConnection> {
     dataset: DatasetView<S>,
     bnodes_map: Mutex<BTreeMap<u128, u128>>,
-    base_iri: Option<Iri<String>>,
     now: DateTime<FixedOffset>,
 }
 
 impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
-    pub fn new(dataset: DatasetView<S>, base_iri: Option<Iri<String>>) -> Self {
+    pub fn new(dataset: DatasetView<S>) -> Self {
         Self {
             dataset,
             bnodes_map: Mutex::new(BTreeMap::default()),
-            base_iri,
             now: Utc::now().with_timezone(&FixedOffset::east(0)),
         }
     }
@@ -113,6 +111,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
     {
         Ok(QueryResult::Graph(Box::new(DescribeIterator {
             eval: self,
+            options,
             iter: self.eval_plan(plan, vec![], options),
             quads: Box::new(empty()),
         })))
@@ -198,6 +197,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     get_pattern_value(&predicate, &tuple),
                     get_pattern_value(&object, &tuple),
                     get_pattern_value(&graph_name, &tuple),
+                    options.default_graph_as_union
                 );
                 if subject.is_var() && subject == predicate {
                     iter = Box::new(iter.filter(|quad| match quad {
@@ -271,7 +271,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     };
                 match (input_subject, input_object) {
                     (Some(input_subject), Some(input_object)) => Box::new(
-                        self.eval_path_from(path, input_subject, input_graph_name)
+                        self.eval_path_from(path, input_subject, input_graph_name, options)
                             .filter_map(move |o| match o {
                                 Ok(o) => {
                                     if o == input_object {
@@ -285,7 +285,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     )
                         as EncodedTuplesIterator<'_>,
                     (Some(input_subject), None) => Box::new(
-                        self.eval_path_from(path, input_subject, input_graph_name)
+                        self.eval_path_from(path, input_subject, input_graph_name, options)
                             .map(move |o| {
                                 let mut new_tuple = tuple.clone();
                                 put_pattern_value(&object, o?, &mut new_tuple);
@@ -293,7 +293,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                             }),
                     ),
                     (None, Some(input_object)) => Box::new(
-                        self.eval_path_to(path, input_object, input_graph_name)
+                        self.eval_path_to(path, input_object, input_graph_name, options)
                             .map(move |s| {
                                 let mut new_tuple = tuple.clone();
                                 put_pattern_value(&subject, s?, &mut new_tuple);
@@ -301,7 +301,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                             }),
                     ),
                     (None, None) => {
-                        Box::new(self.eval_open_path(path, input_graph_name).map(move |so| {
+                        Box::new(self.eval_open_path(path, input_graph_name, options).map(move |so| {
                             let mut new_tuple = tuple.clone();
                             so.map(move |(s, o)| {
                                 put_pattern_value(&subject, s, &mut new_tuple);
@@ -580,6 +580,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         path: &'b PlanPropertyPath,
         start: EncodedTerm,
         graph_name: EncodedTerm,
+        options: &'b QueryOptions<'b>
     ) -> Box<dyn Iterator<Item = Result<EncodedTerm>> + 'b>
     where
         'a: 'b,
@@ -587,33 +588,33 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         match path {
             PlanPropertyPath::PredicatePath(p) => Box::new(
                 self.dataset
-                    .quads_for_pattern(Some(start), Some(*p), None, Some(graph_name))
+                    .quads_for_pattern(Some(start), Some(*p), None, Some(graph_name), options.default_graph_as_union)
                     .map(|t| Ok(t?.object)),
             ),
-            PlanPropertyPath::InversePath(p) => self.eval_path_to(&p, start, graph_name),
+            PlanPropertyPath::InversePath(p) => self.eval_path_to(&p, start, graph_name, options),
             PlanPropertyPath::SequencePath(a, b) => Box::new(
-                self.eval_path_from(&a, start, graph_name)
-                    .flat_map_ok(move |middle| self.eval_path_from(&b, middle, graph_name)),
+                self.eval_path_from(&a, start, graph_name, options)
+                    .flat_map_ok(move |middle| self.eval_path_from(&b, middle, graph_name, options)),
             ),
             PlanPropertyPath::AlternativePath(a, b) => Box::new(
-                self.eval_path_from(&a, start, graph_name)
-                    .chain(self.eval_path_from(&b, start, graph_name)),
+                self.eval_path_from(&a, start, graph_name, options)
+                    .chain(self.eval_path_from(&b, start, graph_name, options)),
             ),
             PlanPropertyPath::ZeroOrMorePath(p) => {
                 Box::new(transitive_closure(Some(Ok(start)), move |e| {
-                    self.eval_path_from(p, e, graph_name)
+                    self.eval_path_from(p, e, graph_name, options)
                 }))
             }
             PlanPropertyPath::OneOrMorePath(p) => Box::new(transitive_closure(
-                self.eval_path_from(p, start, graph_name),
-                move |e| self.eval_path_from(p, e, graph_name),
+                self.eval_path_from(p, start, graph_name, options),
+                move |e| self.eval_path_from(p, e, graph_name, options),
             )),
             PlanPropertyPath::ZeroOrOnePath(p) => Box::new(hash_deduplicate(
-                once(Ok(start)).chain(self.eval_path_from(&p, start, graph_name)),
+                once(Ok(start)).chain(self.eval_path_from(&p, start, graph_name, options)),
             )),
             PlanPropertyPath::NegatedPropertySet(ps) => Box::new(
                 self.dataset
-                    .quads_for_pattern(Some(start), None, None, Some(graph_name))
+                    .quads_for_pattern(Some(start), None, None, Some(graph_name), options.default_graph_as_union)
                     .filter(move |t| match t {
                         Ok(t) => !ps.contains(&t.predicate),
                         Err(_) => true,
@@ -628,6 +629,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         path: &'b PlanPropertyPath,
         end: EncodedTerm,
         graph_name: EncodedTerm,
+        options: &'a QueryOptions<'b>
     ) -> Box<dyn Iterator<Item = Result<EncodedTerm>> + 'b>
     where
         'a: 'b,
@@ -635,33 +637,33 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         match path {
             PlanPropertyPath::PredicatePath(p) => Box::new(
                 self.dataset
-                    .quads_for_pattern(None, Some(*p), Some(end), Some(graph_name))
+                    .quads_for_pattern(None, Some(*p), Some(end), Some(graph_name), options.default_graph_as_union)
                     .map(|t| Ok(t?.subject)),
             ),
-            PlanPropertyPath::InversePath(p) => self.eval_path_from(&p, end, graph_name),
+            PlanPropertyPath::InversePath(p) => self.eval_path_from(&p, end, graph_name, options),
             PlanPropertyPath::SequencePath(a, b) => Box::new(
-                self.eval_path_to(&b, end, graph_name)
-                    .flat_map_ok(move |middle| self.eval_path_to(&a, middle, graph_name)),
+                self.eval_path_to(&b, end, graph_name, options)
+                    .flat_map_ok(move |middle| self.eval_path_to(&a, middle, graph_name, options)),
             ),
             PlanPropertyPath::AlternativePath(a, b) => Box::new(
-                self.eval_path_to(&a, end, graph_name)
-                    .chain(self.eval_path_to(&b, end, graph_name)),
+                self.eval_path_to(&a, end, graph_name, options)
+                    .chain(self.eval_path_to(&b, end, graph_name, options)),
             ),
             PlanPropertyPath::ZeroOrMorePath(p) => {
                 Box::new(transitive_closure(Some(Ok(end)), move |e| {
-                    self.eval_path_to(p, e, graph_name)
+                    self.eval_path_to(p, e, graph_name, options)
                 }))
             }
             PlanPropertyPath::OneOrMorePath(p) => Box::new(transitive_closure(
-                self.eval_path_to(p, end, graph_name),
-                move |e| self.eval_path_to(p, e, graph_name),
+                self.eval_path_to(p, end, graph_name, options),
+                move |e| self.eval_path_to(p, e, graph_name, options),
             )),
             PlanPropertyPath::ZeroOrOnePath(p) => Box::new(hash_deduplicate(
-                once(Ok(end)).chain(self.eval_path_to(&p, end, graph_name)),
+                once(Ok(end)).chain(self.eval_path_to(&p, end, graph_name, options)),
             )),
             PlanPropertyPath::NegatedPropertySet(ps) => Box::new(
                 self.dataset
-                    .quads_for_pattern(None, None, Some(end), Some(graph_name))
+                    .quads_for_pattern(None, None, Some(end), Some(graph_name), options.default_graph_as_union)
                     .filter(move |t| match t {
                         Ok(t) => !ps.contains(&t.predicate),
                         Err(_) => true,
@@ -675,6 +677,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         &'b self,
         path: &'b PlanPropertyPath,
         graph_name: EncodedTerm,
+        options: &'b QueryOptions<'b>
     ) -> Box<dyn Iterator<Item = Result<(EncodedTerm, EncodedTerm)>> + 'b>
     where
         'a: 'b,
@@ -682,45 +685,45 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         match path {
             PlanPropertyPath::PredicatePath(p) => Box::new(
                 self.dataset
-                    .quads_for_pattern(None, Some(*p), None, Some(graph_name))
+                    .quads_for_pattern(None, Some(*p), None, Some(graph_name), options.default_graph_as_union)
                     .map(|t| t.map(|t| (t.subject, t.object))),
             ),
             PlanPropertyPath::InversePath(p) => Box::new(
-                self.eval_open_path(&p, graph_name)
+                self.eval_open_path(&p, graph_name, options)
                     .map(|t| t.map(|(s, o)| (o, s))),
             ),
             PlanPropertyPath::SequencePath(a, b) => Box::new(
-                self.eval_open_path(&a, graph_name)
+                self.eval_open_path(&a, graph_name, options)
                     .flat_map_ok(move |(start, middle)| {
-                        self.eval_path_from(&b, middle, graph_name)
+                        self.eval_path_from(&b, middle, graph_name, options)
                             .map(move |end| Ok((start, end?)))
                     }),
             ),
             PlanPropertyPath::AlternativePath(a, b) => Box::new(
-                self.eval_open_path(&a, graph_name)
-                    .chain(self.eval_open_path(&b, graph_name)),
+                self.eval_open_path(&a, graph_name, options)
+                    .chain(self.eval_open_path(&b, graph_name, options)),
             ),
             PlanPropertyPath::ZeroOrMorePath(p) => Box::new(transitive_closure(
-                self.get_subject_or_object_identity_pairs(graph_name), //TODO: avoid to inject everything
+                self.get_subject_or_object_identity_pairs(graph_name, options), //TODO: avoid to inject everything
                 move |(start, middle)| {
-                    self.eval_path_from(p, middle, graph_name)
+                    self.eval_path_from(p, middle, graph_name, options)
                         .map(move |end| Ok((start, end?)))
                 },
             )),
             PlanPropertyPath::OneOrMorePath(p) => Box::new(transitive_closure(
-                self.eval_open_path(p, graph_name),
+                self.eval_open_path(p, graph_name, options),
                 move |(start, middle)| {
-                    self.eval_path_from(p, middle, graph_name)
+                    self.eval_path_from(p, middle, graph_name, options)
                         .map(move |end| Ok((start, end?)))
                 },
             )),
             PlanPropertyPath::ZeroOrOnePath(p) => Box::new(hash_deduplicate(
-                self.get_subject_or_object_identity_pairs(graph_name)
-                    .chain(self.eval_open_path(&p, graph_name)),
+                self.get_subject_or_object_identity_pairs(graph_name, options)
+                    .chain(self.eval_open_path(&p, graph_name, options)),
             )),
             PlanPropertyPath::NegatedPropertySet(ps) => Box::new(
                 self.dataset
-                    .quads_for_pattern(None, None, None, Some(graph_name))
+                    .quads_for_pattern(None, None, None, Some(graph_name), options.default_graph_as_union)
                     .filter(move |t| match t {
                         Ok(t) => !ps.contains(&t.predicate),
                         Err(_) => true,
@@ -733,9 +736,10 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
     fn get_subject_or_object_identity_pairs<'b>(
         &'b self,
         graph_name: EncodedTerm,
+        options: &'b QueryOptions<'b>
     ) -> impl Iterator<Item = Result<(EncodedTerm, EncodedTerm)>> + 'b {
         self.dataset
-            .quads_for_pattern(None, None, None, Some(graph_name))
+            .quads_for_pattern(None, None, None, Some(graph_name), options.default_graph_as_union)
             .flat_map_ok(|t| once(Ok(t.subject)).chain(once(Ok(t.object))))
             .map(|e| e.map(|e| (e, e)))
     }
@@ -929,7 +933,8 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     _ => None,
                 }?;
                 let iri = self.dataset.get_str(iri_id).ok()??;
-                if let Some(base_iri) = &self.base_iri {
+                let base_iri = options.base_iri.map(|base_iri| Iri::parse(base_iri));
+                if let Some(Ok(base_iri)) = base_iri {
                     self.build_named_node(&base_iri.resolve(&iri).ok()?.into_inner())
                 } else {
                     Iri::parse(iri).ok()?;
@@ -2350,6 +2355,7 @@ fn decode_triple(
 
 struct DescribeIterator<'a, S: StoreConnection + 'a> {
     eval: &'a SimpleEvaluator<S>,
+    options: &'a QueryOptions<'a>,
     iter: EncodedTuplesIterator<'a>,
     quads: Box<dyn Iterator<Item = Result<EncodedQuad>> + 'a>,
 }
@@ -2378,7 +2384,7 @@ impl<'a, S: StoreConnection + 'a> Iterator for DescribeIterator<'a, S> {
                     self.quads =
                         self.eval
                             .dataset
-                            .quads_for_pattern(Some(subject), None, None, None);
+                            .quads_for_pattern(Some(subject), None, None, None, self.options.default_graph_as_union);
                 }
             }
         }
