@@ -12,7 +12,7 @@ fn simple_service_test() {
     impl ServiceHandler for TestServiceHandler {
         fn handle<'a>(
             &'a self,
-            _named_node: NamedNode,
+            _named_node: &NamedNode,
         ) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'a>>)> {
             fn pattern_handler<'a>(graph_pattern: GraphPattern) -> Result<BindingsIterator<'a>> {
                 let triples =
@@ -56,13 +56,13 @@ fn two_service_test() {
     impl ServiceHandler for TwoServiceTest {
         fn handle<'a>(
             &'a self,
-            named_node: NamedNode,
+            named_node: &NamedNode,
         ) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'a>>)> {
             let service1 = NamedNode::parse("http://service1.org").unwrap();
             let service2 = NamedNode::parse("http://service2.org").unwrap();
-            if named_node == service1 {
+            if named_node == &service1 {
                 Some(TwoServiceTest::handle_service1)
-            } else if named_node == service2 {
+            } else if named_node == &service2 {
                 Some(TwoServiceTest::handle_service2)
             } else {
                 None
@@ -133,7 +133,7 @@ fn silent_service_empty_set_test() {
     impl ServiceHandler for ServiceTest {
         fn handle<'a>(
             &'a self,
-            _named_node: NamedNode,
+            _named_node: &NamedNode,
         ) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'a>>)> {
             Some(ServiceTest::handle_service)
         }
@@ -177,7 +177,7 @@ fn non_silent_service_test() {
     impl ServiceHandler for ServiceTest {
         fn handle<'a>(
             &'a self,
-            _named_node: NamedNode,
+            _named_node: &NamedNode,
         ) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'a>>)> {
             Some(ServiceTest::handle_service)
         }
@@ -242,10 +242,11 @@ fn query_repository<'a>(
     query: String,
     options: QueryOptions<'a>,
 ) -> Result<BindingsIterator<'a>> {
-    let connection = repository.connection()?;
-    let prepared_query = connection.prepare_query(&query, None)?;
-    let result = prepared_query.exec(&options)?;
-    match result {
+    match repository
+        .connection()?
+        .prepare_query(&query, options)?
+        .exec()?
+    {
         QueryResult::Bindings(iterator) => {
             let (varaibles, iter) = iterator.destruct();
             let collected = iter.collect::<Vec<_>>();
@@ -265,10 +266,11 @@ fn pattern_repository<'a>(
     pattern: GraphPattern,
     options: QueryOptions<'a>,
 ) -> Result<BindingsIterator<'a>> {
-    let connection = repository.connection()?;
-    let prepared_query = connection.prepare_query_from_pattern(&pattern, None)?;
-    let result = prepared_query.exec(&options)?;
-    match result {
+    match repository
+        .connection()?
+        .prepare_query_from_pattern(&pattern, options)?
+        .exec()?
+    {
         QueryResult::Bindings(iterator) => {
             let (varaibles, iter) = iterator.destruct();
             let collected = iter.collect::<Vec<_>>();
@@ -277,9 +279,7 @@ fn pattern_repository<'a>(
                 Box::new(collected.into_iter()),
             ))
         }
-        _ => Err(format_err!(
-            "Excpected bindings but got another QueryResult"
-        )),
+        _ => Err(format_err!("Expected bindings but got another QueryResult")),
     }
 }
 

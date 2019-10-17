@@ -23,7 +23,7 @@ pub enum PlanNode {
         service_name: PatternValue,
         variables: Vec<Variable>,
         child: Box<PlanNode>,
-        graph_pattern: GraphPattern,
+        graph_pattern: Box<GraphPattern>,
         silent: bool,
     },
     QuadPatternJoin {
@@ -176,7 +176,7 @@ impl PlanNode {
             PlanNode::HashDeduplicate { child } => child.add_variables(set),
             PlanNode::Skip { child, .. } => child.add_variables(set),
             PlanNode::Limit { child, .. } => child.add_variables(set),
-            PlanNode::Project { child: _, mapping } => {
+            PlanNode::Project { mapping, .. } => {
                 for i in 0..mapping.len() {
                     set.insert(i);
                 }
@@ -483,13 +483,15 @@ pub enum TripleTemplateValue {
 pub struct DatasetView<S: StoreConnection> {
     store: S,
     extra: RefCell<MemoryStrStore>,
+    default_graph_as_union: bool,
 }
 
 impl<S: StoreConnection> DatasetView<S> {
-    pub fn new(store: S) -> Self {
+    pub fn new(store: S, default_graph_as_union: bool) -> Self {
         Self {
             store,
             extra: RefCell::new(MemoryStrStore::default()),
+            default_graph_as_union,
         }
     }
 
@@ -499,7 +501,6 @@ impl<S: StoreConnection> DatasetView<S> {
         predicate: Option<EncodedTerm>,
         object: Option<EncodedTerm>,
         graph_name: Option<EncodedTerm>,
-        default_graph_as_union: bool,
     ) -> Box<dyn Iterator<Item = Result<EncodedQuad>> + 'a> {
         if graph_name == None {
             Box::new(
@@ -510,7 +511,7 @@ impl<S: StoreConnection> DatasetView<S> {
                         Ok(quad) => quad.graph_name != ENCODED_DEFAULT_GRAPH,
                     }),
             )
-        } else if graph_name == Some(ENCODED_DEFAULT_GRAPH) && default_graph_as_union {
+        } else if graph_name == Some(ENCODED_DEFAULT_GRAPH) && self.default_graph_as_union {
             Box::new(
                 self.store
                     .quads_for_pattern(subject, predicate, object, None)
