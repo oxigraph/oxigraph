@@ -85,7 +85,7 @@ pub trait RepositoryConnection: Clone {
     /// ```
     fn prepare_query<'a>(&'a self, query: &str, base_iri: Option<&'a str>) -> Result<Self::PreparedQuery>;
 
-
+    /// This is similar to `prepare_query`, but useful if a SPARQL query has already been parsed, which is the case when building `ServiceHandler`s for federated queries with `SERVICE` clauses. For examples, look in the tests.
     fn prepare_query_from_pattern<'a>(
         &'a self,
         graph_pattern: &'a GraphPattern,

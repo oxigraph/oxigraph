@@ -117,6 +117,7 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
         }))
     }
 
+    /// Builds SimplePreparedQuery from an existing `GraphPattern`. This is used to support federated queries via `SERVICE` clauses
     pub(crate) fn new_from_pattern(
         connection: S,
         pattern: &GraphPattern,

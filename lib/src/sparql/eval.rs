@@ -1662,6 +1662,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         )
     }
 
+    // this is used to encode results froma BindingIterator into an EncodedTuplesIterator. This happens when SERVICE clauses are evaluated
     fn encode_bindings<'b>(
         &'b self,
         variables: &'b [Variable],
