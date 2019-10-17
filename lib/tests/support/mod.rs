@@ -6,7 +6,6 @@ use rudf::sparql::{BindingsIterator, GraphPattern, PreparedQuery, QueryOptions, 
 use rudf::{GraphSyntax, MemoryRepository, Repository, RepositoryConnection, Result};
 use std::io::BufRead;
 
-
 pub(crate) fn ex(id: String) -> Term {
     Term::NamedNode(NamedNode::parse(format!("http://example.com/{}", &id)).unwrap())
 }

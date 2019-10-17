@@ -646,7 +646,10 @@ impl<E: Encoder> PlanBuilder<E> {
                         )?
                     } else {
                         let parameters = self.expression_list(parameters, variables, graph_name)?;
-                        PlanExpression::CustomFunction { name: name.clone(), parameters }
+                        PlanExpression::CustomFunction {
+                            name: name.clone(),
+                            parameters,
+                        }
                     }
                 }
             },

@@ -1416,13 +1416,14 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             }),
             PlanExpression::CustomFunction { name, parameters } => {
                 let parameters = parameters
-                                    .iter()
-                                    .map(|p| {
-                                        self.eval_expression(p, tuple)
-                                            .and_then(|encoded| self.dataset.decode_term(encoded).ok())
-                                    })
-                                    .collect::<Vec<_>>();
-                self.custom_functions_handler.handle(name, &parameters)
+                    .iter()
+                    .map(|p| {
+                        self.eval_expression(p, tuple)
+                            .and_then(|encoded| self.dataset.decode_term(encoded).ok())
+                    })
+                    .collect::<Vec<_>>();
+                self.custom_functions_handler
+                    .handle(name, &parameters)
                     .and_then(|term| self.dataset.encoder().encode_term(&term).ok())
             }
         }

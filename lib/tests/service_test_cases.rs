@@ -1,8 +1,6 @@
 use failure::format_err;
 use rudf::model::*;
-use rudf::sparql::{
-    BindingsIterator, GraphPattern, QueryOptions, ServiceHandler,
-};
+use rudf::sparql::{BindingsIterator, GraphPattern, QueryOptions, ServiceHandler};
 use rudf::Result;
 
 mod support;

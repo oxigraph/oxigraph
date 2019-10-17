@@ -1,7 +1,7 @@
 use crate::model::NamedNode;
-use crate::sparql::GraphPattern;
-use crate::sparql::model::Variable;
 use crate::sparql::eval::StringOrStoreString;
+use crate::sparql::model::Variable;
+use crate::sparql::GraphPattern;
 use crate::store::numeric_encoder::{
     EncodedQuad, EncodedTerm, Encoder, MemoryStrStore, StrContainer, StrLookup,
     ENCODED_DEFAULT_GRAPH,
@@ -307,9 +307,9 @@ pub enum PlanExpression {
     TimeCast(Box<PlanExpression>),
     DateTimeCast(Box<PlanExpression>),
     StringCast(Box<PlanExpression>),
-    CustomFunction { 
+    CustomFunction {
         name: NamedNode,
-        parameters: Vec<PlanExpression>
+        parameters: Vec<PlanExpression>,
     },
 }
 
@@ -420,7 +420,7 @@ impl PlanExpression {
                     e.add_variables(set);
                 }
             }
-            PlanExpression::CustomFunction{ parameters, .. } => {
+            PlanExpression::CustomFunction { parameters, .. } => {
                 for p in parameters {
                     p.add_variables(set);
                 }
