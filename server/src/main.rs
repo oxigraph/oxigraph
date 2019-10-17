@@ -148,9 +148,10 @@ fn evaluate_sparql_query<R: RepositoryConnection>(
     request: &Request,
 ) -> Response {
     //TODO: stream
-    match connection.prepare_query(query, QueryOptions::default()) {
+    let options = QueryOptions::default();
+    match connection.prepare_query(query, None) {
         Ok(query) => {
-            let results = query.exec().unwrap();
+            let results = query.exec(&options).unwrap();
             if let QueryResult::Graph(_) = results {
                 let supported_formats = [
                     GraphSyntax::NTriples.media_type(),

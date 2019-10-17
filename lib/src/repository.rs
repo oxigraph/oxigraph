@@ -1,5 +1,5 @@
 use crate::model::*;
-use crate::sparql::{PreparedQuery, QueryOptions};
+use crate::sparql::{GraphPattern, PreparedQuery};
 use crate::{DatasetSyntax, GraphSyntax, Result};
 use std::io::BufRead;
 
@@ -30,8 +30,9 @@ use std::io::BufRead;
 /// assert_eq!(vec![quad], results.unwrap());
 ///
 /// // SPARQL query
-/// let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default()).unwrap();
-/// let results = prepared_query.exec().unwrap();
+/// let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", None).unwrap();
+/// let options = QueryOptions::default();
+/// let results = prepared_query.exec(&options).unwrap();
 /// if let QueryResult::Bindings(results) = results {
 ///     assert_eq!(results.into_values_iter().next().unwrap().unwrap()[0], Some(ex.into()));
 /// }
@@ -75,13 +76,21 @@ pub trait RepositoryConnection: Clone {
     /// connection.insert(&Quad::new(ex.clone(), ex.clone(), ex.clone(), None));
     ///
     /// // SPARQL query
-    /// let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default()).unwrap();
-    /// let results = prepared_query.exec().unwrap();
+    /// let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", None).unwrap();
+    /// let options = QueryOptions::default();
+    /// let results = prepared_query.exec(&options).unwrap();
     /// if let QueryResult::Bindings(results) = results {
     ///     assert_eq!(results.into_values_iter().next().unwrap().unwrap()[0], Some(ex.into()));
     /// }
     /// ```
-    fn prepare_query(&self, query: &str, options: QueryOptions) -> Result<Self::PreparedQuery>;
+    fn prepare_query<'a>(&'a self, query: &str, base_iri: Option<&'a str>) -> Result<Self::PreparedQuery>;
+
+    /// This is similar to `prepare_query`, but useful if a SPARQL query has already been parsed, which is the case when building `ServiceHandler`s for federated queries with `SERVICE` clauses. For examples, look in the tests.
+    fn prepare_query_from_pattern<'a>(
+        &'a self,
+        graph_pattern: &'a GraphPattern,
+        base_iri: Option<&str>,
+    ) -> Result<Self::PreparedQuery>;
 
     /// Retrieves quads with a filter on each quad component
     ///

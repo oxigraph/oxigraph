@@ -9,6 +9,7 @@ mod plan;
 mod plan_builder;
 mod xml_results;
 
+use crate::model::NamedNode;
 use crate::sparql::algebra::QueryVariants;
 use crate::sparql::eval::SimpleEvaluator;
 use crate::sparql::parser::read_sparql_query;
@@ -17,8 +18,11 @@ use crate::sparql::plan::{DatasetView, PlanNode};
 use crate::sparql::plan_builder::PlanBuilder;
 use crate::store::StoreConnection;
 use crate::Result;
+use failure::format_err;
+use rio_api::iri::Iri;
 use std::fmt;
 
+pub use crate::sparql::algebra::GraphPattern;
 pub use crate::sparql::model::BindingsIterator;
 pub use crate::sparql::model::QueryResult;
 pub use crate::sparql::model::QueryResultSyntax;
@@ -27,7 +31,7 @@ pub use crate::sparql::model::Variable;
 /// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/)
 pub trait PreparedQuery {
     /// Evaluates the query and returns its results
-    fn exec(&self) -> Result<QueryResult>;
+    fn exec<'a>(&'a self, options: &'a QueryOptions<'a>) -> Result<QueryResult<'a>>;
 }
 
 /// An implementation of `PreparedQuery` for internal use
@@ -54,11 +58,11 @@ enum SimplePreparedQueryAction<S: StoreConnection> {
     },
 }
 
-impl<S: StoreConnection> SimplePreparedQuery<S> {
-    pub(crate) fn new(connection: S, query: &str, options: QueryOptions) -> Result<Self> {
-        let dataset = DatasetView::new(connection, options.default_graph_as_union);
+impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
+    pub(crate) fn new(connection: S, query: &str, base_iri: Option<&'a str>) -> Result<Self> {
+        let dataset = DatasetView::new(connection);
         //TODO avoid inserting terms in the Repository StringStore
-        Ok(Self(match read_sparql_query(query, options.base_iri)? {
+        Ok(Self(match read_sparql_query(query, base_iri)? {
             QueryVariants::Select {
                 algebra,
                 dataset: _,
@@ -112,35 +116,67 @@ impl<S: StoreConnection> SimplePreparedQuery<S> {
             }
         }))
     }
+
+    /// Builds SimplePreparedQuery from an existing `GraphPattern`. This is used to support federated queries via `SERVICE` clauses
+    pub(crate) fn new_from_pattern(
+        connection: S,
+        pattern: &GraphPattern,
+        base_iri: Option<&'a str>
+    ) -> Result<Self> {
+        let dataset = DatasetView::new(connection);
+        let (plan, variables) = PlanBuilder::build(dataset.encoder(), pattern)?;
+        let base_iri = base_iri.map(|str_iri| Iri::parse(str_iri.to_string()));
+        match base_iri {
+            Some(Err(_)) => Err(format_err!("Failed to parse base_iri")),
+            Some(Ok(base_iri)) =>  
+                Ok(Self(SimplePreparedQueryAction::Select {
+                    plan,
+                    variables,
+                    evaluator: SimpleEvaluator::new(dataset, Some(base_iri)),
+                })),
+            None =>  
+                Ok(Self(SimplePreparedQueryAction::Select {
+                    plan,
+                    variables,
+                    evaluator: SimpleEvaluator::new(dataset, None),
+                }))
+        }
+        
+    }
 }
 
 impl<S: StoreConnection> PreparedQuery for SimplePreparedQuery<S> {
-    fn exec(&self) -> Result<QueryResult<'_>> {
+    fn exec<'a>(&'a self, options: &'a QueryOptions<'a>) -> Result<QueryResult<'a>> {
         match &self.0 {
             SimplePreparedQueryAction::Select {
                 plan,
                 variables,
                 evaluator,
-            } => evaluator.evaluate_select_plan(&plan, &variables),
+            } => evaluator.evaluate_select_plan(&plan, &variables, options),
             SimplePreparedQueryAction::Ask { plan, evaluator } => {
-                evaluator.evaluate_ask_plan(&plan)
+                evaluator.evaluate_ask_plan(&plan, options)
             }
             SimplePreparedQueryAction::Construct {
                 plan,
                 construct,
                 evaluator,
-            } => evaluator.evaluate_construct_plan(&plan, &construct),
+            } => evaluator.evaluate_construct_plan(&plan, &construct, &options),
             SimplePreparedQueryAction::Describe { plan, evaluator } => {
-                evaluator.evaluate_describe_plan(&plan)
+                evaluator.evaluate_describe_plan(&plan, &options)
             }
         }
     }
+}
+
+pub trait ServiceHandler {
+    fn handle<'a>(&'a self, node: NamedNode) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'a>>)>;
 }
 
 /// Options for SPARQL query parsing and evaluation like the query base IRI
 pub struct QueryOptions<'a> {
     pub(crate) base_iri: Option<&'a str>,
     pub(crate) default_graph_as_union: bool,
+    pub(crate) service_handler: Option<Box<dyn ServiceHandler>>,
 }
 
 impl<'a> Default for QueryOptions<'a> {
@@ -148,6 +184,7 @@ impl<'a> Default for QueryOptions<'a> {
         Self {
             base_iri: None,
             default_graph_as_union: false,
+            service_handler: None as Option<Box<dyn ServiceHandler>>,
         }
     }
 }
@@ -162,6 +199,12 @@ impl<'a> QueryOptions<'a> {
     /// Consider the union of all graphs in the repository as the default graph
     pub fn with_default_graph_as_union(mut self) -> Self {
         self.default_graph_as_union = true;
+        self
+    }
+
+    /// Consider the union of all graphs in the repository as the default graph
+    pub fn with_service_handler(mut self, service_handler: Box<dyn ServiceHandler>) -> Self {
+        self.service_handler = Some(service_handler);
         self
     }
 }
