@@ -1,8 +1,8 @@
 use crate::model::BlankNode;
 use crate::model::Triple;
 use crate::sparql::model::*;
-use crate::sparql::QueryOptions;
 use crate::sparql::plan::*;
+use crate::sparql::QueryOptions;
 use crate::store::numeric_encoder::*;
 use crate::store::StoreConnection;
 use crate::Result;
@@ -59,7 +59,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         &'b self,
         plan: &'b PlanNode,
         variables: &[Variable],
-        options: &'b QueryOptions<'b>
+        options: &'b QueryOptions<'b>,
     ) -> Result<QueryResult<'b>>
     where
         'a: 'b,
@@ -73,7 +73,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
     pub fn evaluate_ask_plan<'b>(
         &'b self,
         plan: &'b PlanNode,
-        options: &'b QueryOptions<'b>
+        options: &'b QueryOptions<'b>,
     ) -> Result<QueryResult<'b>>
     where
         'a: 'b,
@@ -89,7 +89,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         &'b self,
         plan: &'b PlanNode,
         construct: &'b [TripleTemplate],
-        options: &'b QueryOptions<'b>
+        options: &'b QueryOptions<'b>,
     ) -> Result<QueryResult<'b>>
     where
         'a: 'b,
@@ -106,7 +106,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
     pub fn evaluate_describe_plan<'b>(
         &'b self,
         plan: &'b PlanNode,
-        options: &'b QueryOptions<'b>
+        options: &'b QueryOptions<'b>,
     ) -> Result<QueryResult<'b>>
     where
         'a: 'b,
@@ -123,7 +123,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         &'b self,
         node: &'b PlanNode,
         from: EncodedTuple,
-        options: &'b QueryOptions<'b>
+        options: &'b QueryOptions<'b>,
     ) -> EncodedTuplesIterator<'b>
     where
         'a: 'b,
@@ -137,68 +137,70 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 service_name,
                 graph_pattern,
                 ..
-            } => {
-                match &options.service_handler {
-                    None => if *silent {
+            } => match &options.service_handler {
+                None => {
+                    if *silent {
                         return Box::new(empty());
                     } else {
                         return Box::new(once(Err(format_err!(
                             "No handler was supplied to resolve the given service"
                         )))) as EncodedTuplesIterator<'_>;
-                    },
-                    Some(handler) => {
-                        let pattern_option = match get_pattern_value(service_name, &[]) {
-                            None => if *silent {
-                                        return Box::new(empty());
-                                    } else {
-                                        return Box::new(once(Err(format_err!(
-                                            "The handler supplied was unable to evaluate the given service"
-                                        )))) as EncodedTuplesIterator<'_>;
-                                    },
-                            Some(term) => {
-                                match self.dataset.decode_named_node(term) {
-                                    Err(err) => if *silent {
-                                        return Box::new(empty());
-                                    } else {
-                                        return Box::new(once(Err(err))) as EncodedTuplesIterator<'_>;
-                                    },
-                                    Ok(named_node) => {
-                                        println!("named_node: {:?}", named_node);
-                                        handler.handle(named_node)
-                                    }
-                                    
+                    }
+                }
+                Some(handler) => {
+                    let pattern_option = match get_pattern_value(service_name, &[]) {
+                        None => {
+                            if *silent {
+                                return Box::new(empty());
+                            } else {
+                                return Box::new(once(Err(format_err!(
+                                    "The handler supplied was unable to evaluate the given service"
+                                ))))
+                                    as EncodedTuplesIterator<'_>;
+                            }
+                        }
+                        Some(term) => match self.dataset.decode_named_node(term) {
+                            Err(err) => {
+                                if *silent {
+                                    return Box::new(empty());
+                                } else {
+                                    return Box::new(once(Err(err))) as EncodedTuplesIterator<'_>;
                                 }
-                            },
-                        };
-                        match pattern_option {
-                            None => if *silent {
-                                        return Box::new(empty());
-                                    } else {
-                                        return Box::new(once(Err(format_err!(
+                            }
+                            Ok(named_node) => {
+                                println!("named_node: {:?}", named_node);
+                                handler.handle(named_node)
+                            }
+                        },
+                    };
+                    match pattern_option {
+                        None => {
+                            if *silent {
+                                return Box::new(empty());
+                            } else {
+                                return Box::new(once(Err(format_err!(
                                             "The handler supplied was unable to produce any result set on the given service"
                                         )))) as EncodedTuplesIterator<'_>;
-                                    }, 
-                            Some(pattern_fn) => {
-                                match pattern_fn(graph_pattern.clone()) {
-                                    Ok(bindings) => {
-                                        let encoded = self.encode_bindings(variables, bindings);
-                                        let collected = encoded.collect::<Vec<_>>();
-                                        Box::new(JoinIterator {
-                                            left: vec![from],
-                                            right_iter: Box::new(collected.into_iter()),
-                                            buffered_results: vec![],
-                                        })
-                                    },
-                                    Err(err) => {
-                                        if *silent {
-                                            return Box::new(empty());
-                                        } else {
-                                            return Box::new(once(Err(err))) as EncodedTuplesIterator<'_>
-                                        }   
-                                    }
-                                }
-                           },
+                            }
                         }
+                        Some(pattern_fn) => match pattern_fn(graph_pattern.clone()) {
+                            Ok(bindings) => {
+                                let encoded = self.encode_bindings(variables, bindings);
+                                let collected = encoded.collect::<Vec<_>>();
+                                Box::new(JoinIterator {
+                                    left: vec![from],
+                                    right_iter: Box::new(collected.into_iter()),
+                                    buffered_results: vec![],
+                                })
+                            }
+                            Err(err) => {
+                                if *silent {
+                                    return Box::new(empty());
+                                } else {
+                                    return Box::new(once(Err(err))) as EncodedTuplesIterator<'_>;
+                                }
+                            }
+                        },
                     }
                 }
             },
@@ -208,127 +210,135 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 predicate,
                 object,
                 graph_name,
-            } => Box::new(self.eval_plan(&*child, from, options).flat_map_ok(move |tuple| {
-                let mut iter = self.dataset.quads_for_pattern(
-                    get_pattern_value(&subject, &tuple),
-                    get_pattern_value(&predicate, &tuple),
-                    get_pattern_value(&object, &tuple),
-                    get_pattern_value(&graph_name, &tuple),
-                    options.default_graph_as_union
-                );
-                if subject.is_var() && subject == predicate {
-                    iter = Box::new(iter.filter(|quad| match quad {
-                        Err(_) => true,
-                        Ok(quad) => quad.subject == quad.predicate,
-                    }))
-                }
-                if subject.is_var() && subject == object {
-                    iter = Box::new(iter.filter(|quad| match quad {
-                        Err(_) => true,
-                        Ok(quad) => quad.subject == quad.object,
-                    }))
-                }
-                if predicate.is_var() && predicate == object {
-                    iter = Box::new(iter.filter(|quad| match quad {
-                        Err(_) => true,
-                        Ok(quad) => quad.predicate == quad.object,
-                    }))
-                }
-                if graph_name.is_var() {
-                    iter = Box::new(iter.filter(|quad| match quad {
-                        Err(_) => true,
-                        Ok(quad) => quad.graph_name != ENCODED_DEFAULT_GRAPH,
-                    }));
-                    if graph_name == subject {
-                        iter = Box::new(iter.filter(|quad| match quad {
-                            Err(_) => true,
-                            Ok(quad) => quad.graph_name == quad.subject,
-                        }))
-                    }
-                    if graph_name == predicate {
-                        iter = Box::new(iter.filter(|quad| match quad {
-                            Err(_) => true,
-                            Ok(quad) => quad.graph_name == quad.predicate,
-                        }))
-                    }
-                    if graph_name == object {
-                        iter = Box::new(iter.filter(|quad| match quad {
-                            Err(_) => true,
-                            Ok(quad) => quad.graph_name == quad.object,
-                        }))
-                    }
-                }
-                let iter: EncodedTuplesIterator<'_> = Box::new(iter.map(move |quad| {
-                    let quad = quad?;
-                    let mut new_tuple = tuple.clone();
-                    put_pattern_value(&subject, quad.subject, &mut new_tuple);
-                    put_pattern_value(&predicate, quad.predicate, &mut new_tuple);
-                    put_pattern_value(&object, quad.object, &mut new_tuple);
-                    put_pattern_value(&graph_name, quad.graph_name, &mut new_tuple);
-                    Ok(new_tuple)
-                }));
-                iter
-            })),
+            } => Box::new(
+                self.eval_plan(&*child, from, options)
+                    .flat_map_ok(move |tuple| {
+                        let mut iter = self.dataset.quads_for_pattern(
+                            get_pattern_value(&subject, &tuple),
+                            get_pattern_value(&predicate, &tuple),
+                            get_pattern_value(&object, &tuple),
+                            get_pattern_value(&graph_name, &tuple),
+                            options.default_graph_as_union,
+                        );
+                        if subject.is_var() && subject == predicate {
+                            iter = Box::new(iter.filter(|quad| match quad {
+                                Err(_) => true,
+                                Ok(quad) => quad.subject == quad.predicate,
+                            }))
+                        }
+                        if subject.is_var() && subject == object {
+                            iter = Box::new(iter.filter(|quad| match quad {
+                                Err(_) => true,
+                                Ok(quad) => quad.subject == quad.object,
+                            }))
+                        }
+                        if predicate.is_var() && predicate == object {
+                            iter = Box::new(iter.filter(|quad| match quad {
+                                Err(_) => true,
+                                Ok(quad) => quad.predicate == quad.object,
+                            }))
+                        }
+                        if graph_name.is_var() {
+                            iter = Box::new(iter.filter(|quad| match quad {
+                                Err(_) => true,
+                                Ok(quad) => quad.graph_name != ENCODED_DEFAULT_GRAPH,
+                            }));
+                            if graph_name == subject {
+                                iter = Box::new(iter.filter(|quad| match quad {
+                                    Err(_) => true,
+                                    Ok(quad) => quad.graph_name == quad.subject,
+                                }))
+                            }
+                            if graph_name == predicate {
+                                iter = Box::new(iter.filter(|quad| match quad {
+                                    Err(_) => true,
+                                    Ok(quad) => quad.graph_name == quad.predicate,
+                                }))
+                            }
+                            if graph_name == object {
+                                iter = Box::new(iter.filter(|quad| match quad {
+                                    Err(_) => true,
+                                    Ok(quad) => quad.graph_name == quad.object,
+                                }))
+                            }
+                        }
+                        let iter: EncodedTuplesIterator<'_> = Box::new(iter.map(move |quad| {
+                            let quad = quad?;
+                            let mut new_tuple = tuple.clone();
+                            put_pattern_value(&subject, quad.subject, &mut new_tuple);
+                            put_pattern_value(&predicate, quad.predicate, &mut new_tuple);
+                            put_pattern_value(&object, quad.object, &mut new_tuple);
+                            put_pattern_value(&graph_name, quad.graph_name, &mut new_tuple);
+                            Ok(new_tuple)
+                        }));
+                        iter
+                    }),
+            ),
             PlanNode::PathPatternJoin {
                 child,
                 subject,
                 path,
                 object,
                 graph_name,
-            } => Box::new(self.eval_plan(&*child, from, options).flat_map_ok(move |tuple| {
-                let input_subject = get_pattern_value(&subject, &tuple);
-                let input_object = get_pattern_value(&object, &tuple);
-                let input_graph_name =
-                    if let Some(graph_name) = get_pattern_value(&graph_name, &tuple) {
-                        graph_name
-                    } else {
-                        return Box::new(once(Err(format_err!(
+            } => Box::new(
+                self.eval_plan(&*child, from, options)
+                    .flat_map_ok(move |tuple| {
+                        let input_subject = get_pattern_value(&subject, &tuple);
+                        let input_object = get_pattern_value(&object, &tuple);
+                        let input_graph_name =
+                            if let Some(graph_name) = get_pattern_value(&graph_name, &tuple) {
+                                graph_name
+                            } else {
+                                return Box::new(once(Err(format_err!(
                             "Unknown graph name is not allowed when evaluating property path"
                         )))) as EncodedTuplesIterator<'_>;
-                    };
-                match (input_subject, input_object) {
-                    (Some(input_subject), Some(input_object)) => Box::new(
-                        self.eval_path_from(path, input_subject, input_graph_name, options)
-                            .filter_map(move |o| match o {
-                                Ok(o) => {
-                                    if o == input_object {
-                                        Some(Ok(tuple.clone()))
-                                    } else {
-                                        None
-                                    }
-                                }
-                                Err(error) => Some(Err(error)),
-                            }),
-                    )
-                        as EncodedTuplesIterator<'_>,
-                    (Some(input_subject), None) => Box::new(
-                        self.eval_path_from(path, input_subject, input_graph_name, options)
-                            .map(move |o| {
-                                let mut new_tuple = tuple.clone();
-                                put_pattern_value(&object, o?, &mut new_tuple);
-                                Ok(new_tuple)
-                            }),
-                    ),
-                    (None, Some(input_object)) => Box::new(
-                        self.eval_path_to(path, input_object, input_graph_name, options)
-                            .map(move |s| {
-                                let mut new_tuple = tuple.clone();
-                                put_pattern_value(&subject, s?, &mut new_tuple);
-                                Ok(new_tuple)
-                            }),
-                    ),
-                    (None, None) => {
-                        Box::new(self.eval_open_path(path, input_graph_name, options).map(move |so| {
-                            let mut new_tuple = tuple.clone();
-                            so.map(move |(s, o)| {
-                                put_pattern_value(&subject, s, &mut new_tuple);
-                                put_pattern_value(&object, o, &mut new_tuple);
-                                new_tuple
-                            })
-                        }))
-                    }
-                }
-            })),
+                            };
+                        match (input_subject, input_object) {
+                            (Some(input_subject), Some(input_object)) => Box::new(
+                                self.eval_path_from(path, input_subject, input_graph_name, options)
+                                    .filter_map(move |o| match o {
+                                        Ok(o) => {
+                                            if o == input_object {
+                                                Some(Ok(tuple.clone()))
+                                            } else {
+                                                None
+                                            }
+                                        }
+                                        Err(error) => Some(Err(error)),
+                                    }),
+                            )
+                                as EncodedTuplesIterator<'_>,
+                            (Some(input_subject), None) => Box::new(
+                                self.eval_path_from(path, input_subject, input_graph_name, options)
+                                    .map(move |o| {
+                                        let mut new_tuple = tuple.clone();
+                                        put_pattern_value(&object, o?, &mut new_tuple);
+                                        Ok(new_tuple)
+                                    }),
+                            ),
+                            (None, Some(input_object)) => Box::new(
+                                self.eval_path_to(path, input_object, input_graph_name, options)
+                                    .map(move |s| {
+                                        let mut new_tuple = tuple.clone();
+                                        put_pattern_value(&subject, s?, &mut new_tuple);
+                                        Ok(new_tuple)
+                                    }),
+                            ),
+                            (None, None) => {
+                                Box::new(self.eval_open_path(path, input_graph_name, options).map(
+                                    move |so| {
+                                        let mut new_tuple = tuple.clone();
+                                        so.map(move |(s, o)| {
+                                            put_pattern_value(&subject, s, &mut new_tuple);
+                                            put_pattern_value(&object, o, &mut new_tuple);
+                                            new_tuple
+                                        })
+                                    },
+                                ))
+                            }
+                        }
+                    }),
+            ),
             PlanNode::Join { left, right } => {
                 //TODO: very dumb implementation
                 let mut errors = Vec::default();
@@ -456,7 +466,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             PlanNode::HashDeduplicate { child } => {
                 Box::new(hash_deduplicate(self.eval_plan(&*child, from, options)))
             }
-            PlanNode::Skip { child, count } => Box::new(self.eval_plan(&*child, from, options).skip(*count)),
+            PlanNode::Skip { child, count } => {
+                Box::new(self.eval_plan(&*child, from, options).skip(*count))
+            }
             PlanNode::Limit { child, count } => {
                 Box::new(self.eval_plan(&*child, from, options).take(*count))
             }
@@ -513,12 +525,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                             });
                         for (i, accumulator) in key_accumulators.iter_mut().enumerate() {
                             let (aggregate, _) = &aggregates[i];
-                            accumulator.add(
-                                aggregate
-                                    .parameter
-                                    .as_ref()
-                                    .and_then(|parameter| self.eval_expression(&parameter, &tuple, options)),
-                            );
+                            accumulator.add(aggregate.parameter.as_ref().and_then(|parameter| {
+                                self.eval_expression(&parameter, &tuple, options)
+                            }));
                         }
                     });
                 if accumulators_for_group.is_empty() {
@@ -597,7 +606,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         path: &'b PlanPropertyPath,
         start: EncodedTerm,
         graph_name: EncodedTerm,
-        options: &'b QueryOptions<'b>
+        options: &'b QueryOptions<'b>,
     ) -> Box<dyn Iterator<Item = Result<EncodedTerm>> + 'b>
     where
         'a: 'b,
@@ -605,13 +614,21 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         match path {
             PlanPropertyPath::PredicatePath(p) => Box::new(
                 self.dataset
-                    .quads_for_pattern(Some(start), Some(*p), None, Some(graph_name), options.default_graph_as_union)
+                    .quads_for_pattern(
+                        Some(start),
+                        Some(*p),
+                        None,
+                        Some(graph_name),
+                        options.default_graph_as_union,
+                    )
                     .map(|t| Ok(t?.object)),
             ),
             PlanPropertyPath::InversePath(p) => self.eval_path_to(&p, start, graph_name, options),
             PlanPropertyPath::SequencePath(a, b) => Box::new(
                 self.eval_path_from(&a, start, graph_name, options)
-                    .flat_map_ok(move |middle| self.eval_path_from(&b, middle, graph_name, options)),
+                    .flat_map_ok(move |middle| {
+                        self.eval_path_from(&b, middle, graph_name, options)
+                    }),
             ),
             PlanPropertyPath::AlternativePath(a, b) => Box::new(
                 self.eval_path_from(&a, start, graph_name, options)
@@ -631,7 +648,13 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             )),
             PlanPropertyPath::NegatedPropertySet(ps) => Box::new(
                 self.dataset
-                    .quads_for_pattern(Some(start), None, None, Some(graph_name), options.default_graph_as_union)
+                    .quads_for_pattern(
+                        Some(start),
+                        None,
+                        None,
+                        Some(graph_name),
+                        options.default_graph_as_union,
+                    )
                     .filter(move |t| match t {
                         Ok(t) => !ps.contains(&t.predicate),
                         Err(_) => true,
@@ -646,7 +669,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         path: &'b PlanPropertyPath,
         end: EncodedTerm,
         graph_name: EncodedTerm,
-        options: &'a QueryOptions<'b>
+        options: &'a QueryOptions<'b>,
     ) -> Box<dyn Iterator<Item = Result<EncodedTerm>> + 'b>
     where
         'a: 'b,
@@ -654,7 +677,13 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         match path {
             PlanPropertyPath::PredicatePath(p) => Box::new(
                 self.dataset
-                    .quads_for_pattern(None, Some(*p), Some(end), Some(graph_name), options.default_graph_as_union)
+                    .quads_for_pattern(
+                        None,
+                        Some(*p),
+                        Some(end),
+                        Some(graph_name),
+                        options.default_graph_as_union,
+                    )
                     .map(|t| Ok(t?.subject)),
             ),
             PlanPropertyPath::InversePath(p) => self.eval_path_from(&p, end, graph_name, options),
@@ -680,7 +709,13 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             )),
             PlanPropertyPath::NegatedPropertySet(ps) => Box::new(
                 self.dataset
-                    .quads_for_pattern(None, None, Some(end), Some(graph_name), options.default_graph_as_union)
+                    .quads_for_pattern(
+                        None,
+                        None,
+                        Some(end),
+                        Some(graph_name),
+                        options.default_graph_as_union,
+                    )
                     .filter(move |t| match t {
                         Ok(t) => !ps.contains(&t.predicate),
                         Err(_) => true,
@@ -694,7 +729,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         &'b self,
         path: &'b PlanPropertyPath,
         graph_name: EncodedTerm,
-        options: &'b QueryOptions<'b>
+        options: &'b QueryOptions<'b>,
     ) -> Box<dyn Iterator<Item = Result<(EncodedTerm, EncodedTerm)>> + 'b>
     where
         'a: 'b,
@@ -702,7 +737,13 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         match path {
             PlanPropertyPath::PredicatePath(p) => Box::new(
                 self.dataset
-                    .quads_for_pattern(None, Some(*p), None, Some(graph_name), options.default_graph_as_union)
+                    .quads_for_pattern(
+                        None,
+                        Some(*p),
+                        None,
+                        Some(graph_name),
+                        options.default_graph_as_union,
+                    )
                     .map(|t| t.map(|t| (t.subject, t.object))),
             ),
             PlanPropertyPath::InversePath(p) => Box::new(
@@ -740,7 +781,13 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             )),
             PlanPropertyPath::NegatedPropertySet(ps) => Box::new(
                 self.dataset
-                    .quads_for_pattern(None, None, None, Some(graph_name), options.default_graph_as_union)
+                    .quads_for_pattern(
+                        None,
+                        None,
+                        None,
+                        Some(graph_name),
+                        options.default_graph_as_union,
+                    )
                     .filter(move |t| match t {
                         Ok(t) => !ps.contains(&t.predicate),
                         Err(_) => true,
@@ -753,10 +800,16 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
     fn get_subject_or_object_identity_pairs<'b>(
         &'b self,
         graph_name: EncodedTerm,
-        options: &'b QueryOptions<'b>
+        options: &'b QueryOptions<'b>,
     ) -> impl Iterator<Item = Result<(EncodedTerm, EncodedTerm)>> + 'b {
         self.dataset
-            .quads_for_pattern(None, None, None, Some(graph_name), options.default_graph_as_union)
+            .quads_for_pattern(
+                None,
+                None,
+                None,
+                Some(graph_name),
+                options.default_graph_as_union,
+            )
             .flat_map_ok(|t| once(Ok(t.subject)).chain(once(Ok(t.object))))
             .map(|e| e.map(|e| (e, e)))
     }
@@ -765,21 +818,29 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         &'b self,
         expression: &PlanExpression,
         tuple: &[Option<EncodedTerm>],
-        options: &QueryOptions<'b>
+        options: &QueryOptions<'b>,
     ) -> Option<EncodedTerm> {
         match expression {
             PlanExpression::Constant(t) => Some(*t),
             PlanExpression::Variable(v) => get_tuple_value(*v, tuple),
-            PlanExpression::Exists(node) => {
-                Some(self.eval_plan(node, tuple.to_vec(), options).next().is_some().into())
-            }
+            PlanExpression::Exists(node) => Some(
+                self.eval_plan(node, tuple.to_vec(), options)
+                    .next()
+                    .is_some()
+                    .into(),
+            ),
             PlanExpression::Or(a, b) => {
-                match self.eval_expression(a, tuple, options).and_then(|v| self.to_bool(v)) {
+                match self
+                    .eval_expression(a, tuple, options)
+                    .and_then(|v| self.to_bool(v))
+                {
                     Some(true) => Some(true.into()),
                     Some(false) => self.eval_expression(b, tuple, options),
                     None => {
                         if Some(true)
-                            == self.eval_expression(b, tuple, options).and_then(|v| self.to_bool(v))
+                            == self
+                                .eval_expression(b, tuple, options)
+                                .and_then(|v| self.to_bool(v))
                         {
                             Some(true.into())
                         } else {
@@ -795,7 +856,11 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 Some(true) => self.eval_expression(b, tuple, options),
                 Some(false) => Some(false.into()),
                 None => {
-                    if Some(false) == self.eval_expression(b, tuple, options).and_then(|v| self.to_bool(v)) {
+                    if Some(false)
+                        == self
+                            .eval_expression(b, tuple, options)
+                            .and_then(|v| self.to_bool(v))
+                    {
                         Some(false.into())
                     } else {
                         None
@@ -864,32 +929,40 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     Some(false.into())
                 }
             }
-            PlanExpression::Add(a, b) => Some(match self.parse_numeric_operands(a, b, tuple, options)? {
-                NumericBinaryOperands::Float(v1, v2) => (v1 + v2).into(),
-                NumericBinaryOperands::Double(v1, v2) => (v1 + v2).into(),
-                NumericBinaryOperands::Integer(v1, v2) => v1.checked_add(v2)?.into(),
-                NumericBinaryOperands::Decimal(v1, v2) => v1.checked_add(v2)?.into(),
-            }),
-            PlanExpression::Sub(a, b) => Some(match self.parse_numeric_operands(a, b, tuple, options)? {
-                NumericBinaryOperands::Float(v1, v2) => (v1 - v2).into(),
-                NumericBinaryOperands::Double(v1, v2) => (v1 - v2).into(),
-                NumericBinaryOperands::Integer(v1, v2) => v1.checked_sub(v2)?.into(),
-                NumericBinaryOperands::Decimal(v1, v2) => v1.checked_sub(v2)?.into(),
-            }),
-            PlanExpression::Mul(a, b) => Some(match self.parse_numeric_operands(a, b, tuple, options)? {
-                NumericBinaryOperands::Float(v1, v2) => (v1 * v2).into(),
-                NumericBinaryOperands::Double(v1, v2) => (v1 * v2).into(),
-                NumericBinaryOperands::Integer(v1, v2) => v1.checked_mul(v2)?.into(),
-                NumericBinaryOperands::Decimal(v1, v2) => v1.checked_mul(v2)?.into(),
-            }),
-            PlanExpression::Div(a, b) => Some(match self.parse_numeric_operands(a, b, tuple, options)? {
-                NumericBinaryOperands::Float(v1, v2) => (v1 / v2).into(),
-                NumericBinaryOperands::Double(v1, v2) => (v1 / v2).into(),
-                NumericBinaryOperands::Integer(v1, v2) => Decimal::from_i128(v1)?
-                    .checked_div(Decimal::from_i128(v2)?)?
-                    .into(),
-                NumericBinaryOperands::Decimal(v1, v2) => v1.checked_div(v2)?.into(),
-            }),
+            PlanExpression::Add(a, b) => {
+                Some(match self.parse_numeric_operands(a, b, tuple, options)? {
+                    NumericBinaryOperands::Float(v1, v2) => (v1 + v2).into(),
+                    NumericBinaryOperands::Double(v1, v2) => (v1 + v2).into(),
+                    NumericBinaryOperands::Integer(v1, v2) => v1.checked_add(v2)?.into(),
+                    NumericBinaryOperands::Decimal(v1, v2) => v1.checked_add(v2)?.into(),
+                })
+            }
+            PlanExpression::Sub(a, b) => {
+                Some(match self.parse_numeric_operands(a, b, tuple, options)? {
+                    NumericBinaryOperands::Float(v1, v2) => (v1 - v2).into(),
+                    NumericBinaryOperands::Double(v1, v2) => (v1 - v2).into(),
+                    NumericBinaryOperands::Integer(v1, v2) => v1.checked_sub(v2)?.into(),
+                    NumericBinaryOperands::Decimal(v1, v2) => v1.checked_sub(v2)?.into(),
+                })
+            }
+            PlanExpression::Mul(a, b) => {
+                Some(match self.parse_numeric_operands(a, b, tuple, options)? {
+                    NumericBinaryOperands::Float(v1, v2) => (v1 * v2).into(),
+                    NumericBinaryOperands::Double(v1, v2) => (v1 * v2).into(),
+                    NumericBinaryOperands::Integer(v1, v2) => v1.checked_mul(v2)?.into(),
+                    NumericBinaryOperands::Decimal(v1, v2) => v1.checked_mul(v2)?.into(),
+                })
+            }
+            PlanExpression::Div(a, b) => {
+                Some(match self.parse_numeric_operands(a, b, tuple, options)? {
+                    NumericBinaryOperands::Float(v1, v2) => (v1 / v2).into(),
+                    NumericBinaryOperands::Double(v1, v2) => (v1 / v2).into(),
+                    NumericBinaryOperands::Integer(v1, v2) => Decimal::from_i128(v1)?
+                        .checked_div(Decimal::from_i128(v2)?)?
+                        .into(),
+                    NumericBinaryOperands::Decimal(v1, v2) => v1.checked_div(v2)?.into(),
+                })
+            }
             PlanExpression::UnaryPlus(e) => match self.eval_expression(e, tuple, options)? {
                 EncodedTerm::FloatLiteral(value) => Some((*value).into()),
                 EncodedTerm::DoubleLiteral(value) => Some((*value).into()),
@@ -950,9 +1023,10 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     _ => None,
                 }?;
                 let iri = self.dataset.get_str(iri_id).ok()??;
-                let base_iri = options.base_iri
-                                .map(|base_iri| Iri::parse(base_iri.to_string()))
-                                .or(self.base_iri.as_ref().map(|iri| Ok(iri.clone())));
+                let base_iri = options
+                    .base_iri
+                    .map(|base_iri| Iri::parse(base_iri.to_string()))
+                    .or(self.base_iri.as_ref().map(|iri| Ok(iri.clone())));
                 if let Some(Ok(base_iri)) = base_iri {
                     self.build_named_node(&base_iri.resolve(&iri).ok()?.into_inner())
                 } else {
@@ -1043,7 +1117,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     return None;
                 };
                 let length: Option<usize> = if let Some(length) = length {
-                    if let EncodedTerm::IntegerLiteral(v) = self.eval_expression(length, tuple, options)? {
+                    if let EncodedTerm::IntegerLiteral(v) =
+                        self.eval_expression(length, tuple, options)?
+                    {
                         Some(v.try_into().ok()?)
                     } else {
                         return None;
@@ -1313,14 +1389,18 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             }
             PlanExpression::StrLang(lexical_form, lang_tag) => {
                 Some(EncodedTerm::LangStringLiteral {
-                    value_id: self
-                        .to_simple_string_id(self.eval_expression(lexical_form, tuple, options)?)?,
+                    value_id: self.to_simple_string_id(self.eval_expression(
+                        lexical_form,
+                        tuple,
+                        options,
+                    )?)?,
                     language_id: self
                         .to_simple_string_id(self.eval_expression(lang_tag, tuple, options)?)?,
                 })
             }
             PlanExpression::StrDT(lexical_form, datatype) => {
-                let value = self.to_simple_string(self.eval_expression(lexical_form, tuple, options)?)?;
+                let value =
+                    self.to_simple_string(self.eval_expression(lexical_form, tuple, options)?)?;
                 let datatype = if let EncodedTerm::NamedNode { iri_id } =
                     self.eval_expression(datatype, tuple, options)?
                 {
@@ -1336,15 +1416,21 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     })
                     .ok()
             }
-            PlanExpression::SameTerm(a, b) => {
-                Some((self.eval_expression(a, tuple, options)? == self.eval_expression(b, tuple, options)?).into())
-            }
-            PlanExpression::IsIRI(e) => {
-                Some(self.eval_expression(e, tuple, options)?.is_named_node().into())
-            }
-            PlanExpression::IsBlank(e) => {
-                Some(self.eval_expression(e, tuple, options)?.is_blank_node().into())
-            }
+            PlanExpression::SameTerm(a, b) => Some(
+                (self.eval_expression(a, tuple, options)?
+                    == self.eval_expression(b, tuple, options)?)
+                .into(),
+            ),
+            PlanExpression::IsIRI(e) => Some(
+                self.eval_expression(e, tuple, options)?
+                    .is_named_node()
+                    .into(),
+            ),
+            PlanExpression::IsBlank(e) => Some(
+                self.eval_expression(e, tuple, options)?
+                    .is_blank_node()
+                    .into(),
+            ),
             PlanExpression::IsLiteral(e) => {
                 Some(self.eval_expression(e, tuple, options)?.is_literal().into())
             }
@@ -1645,7 +1731,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         e1: &PlanExpression,
         e2: &PlanExpression,
         tuple: &[Option<EncodedTerm>],
-        options: &QueryOptions<'b>
+        options: &QueryOptions<'b>,
     ) -> Option<NumericBinaryOperands> {
         NumericBinaryOperands::new(
             self.eval_expression(&e1, tuple, options)?,
@@ -1702,7 +1788,12 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     Some(term) => {
                         if let Ok(encoded) = encoder.encode_term(&term) {
                             let variable = binding_variables[i].clone();
-                            put_variable_value(&variable, &combined_variables, encoded, &mut encoded_terms)
+                            put_variable_value(
+                                &variable,
+                                &combined_variables,
+                                encoded,
+                                &mut encoded_terms,
+                            )
                         }
                     }
                 }
@@ -1710,7 +1801,6 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             Ok(encoded_terms)
         }))
     }
-
 
     #[allow(clippy::float_cmp)]
     fn equals(&self, a: EncodedTerm, b: EncodedTerm) -> Option<bool> {
@@ -1829,7 +1919,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         tuple_a: &[Option<EncodedTerm>],
         tuple_b: &[Option<EncodedTerm>],
         expression: &PlanExpression,
-        options: &QueryOptions<'b>
+        options: &QueryOptions<'b>,
     ) -> Ordering {
         self.cmp_terms(
             self.eval_expression(expression, tuple_a, options),
@@ -1948,7 +2038,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         &'b self,
         arg: &PlanExpression,
         tuple: &[Option<EncodedTerm>],
-        options: &QueryOptions<'b>
+        options: &QueryOptions<'b>,
     ) -> Option<EncodedTerm> {
         let input = self.to_simple_string(self.eval_expression(arg, tuple, options)?)?;
         let hash = hex::encode(H::new().chain(&input as &str).result());
@@ -2086,7 +2176,12 @@ fn put_pattern_value(selector: &PatternValue, value: EncodedTerm, tuple: &mut En
     }
 }
 
-fn put_variable_value(selector: &Variable, variables: &[Variable], value: EncodedTerm, tuple: &mut EncodedTuple) {
+fn put_variable_value(
+    selector: &Variable,
+    variables: &[Variable],
+    value: EncodedTerm,
+    tuple: &mut EncodedTuple,
+) {
     for (i, v) in variables.iter().enumerate() {
         if selector == v {
             put_value(i, value, tuple);
@@ -2094,7 +2189,6 @@ fn put_variable_value(selector: &Variable, variables: &[Variable], value: Encode
         }
     }
 }
-
 
 fn put_value(position: usize, value: EncodedTerm, tuple: &mut EncodedTuple) {
     if position < tuple.len() {
@@ -2241,7 +2335,9 @@ impl<'a, S: StoreConnection> Iterator for LeftJoinIterator<'a, S> {
         }
         match self.left_iter.next()? {
             Ok(left_tuple) => {
-                self.current_right = self.eval.eval_plan(self.right_plan, left_tuple.clone(), self.options);
+                self.current_right =
+                    self.eval
+                        .eval_plan(self.right_plan, left_tuple.clone(), self.options);
                 if let Some(right_tuple) = self.current_right.next() {
                     Some(right_tuple)
                 } else {
@@ -2309,9 +2405,11 @@ impl<'a, S: StoreConnection> Iterator for UnionIterator<'a, S> {
             if self.current_plan >= self.plans.len() {
                 return None;
             }
-            self.current_iterator = self
-                .eval
-                .eval_plan(&self.plans[self.current_plan], self.input.clone(), self.options);
+            self.current_iterator = self.eval.eval_plan(
+                &self.plans[self.current_plan],
+                self.input.clone(),
+                self.options,
+            );
             self.current_plan += 1;
         }
     }
@@ -2416,10 +2514,13 @@ impl<'a, S: StoreConnection + 'a> Iterator for DescribeIterator<'a, S> {
             };
             for subject in tuple {
                 if let Some(subject) = subject {
-                    self.quads =
-                        self.eval
-                            .dataset
-                            .quads_for_pattern(Some(subject), None, None, None, self.options.default_graph_as_union);
+                    self.quads = self.eval.dataset.quads_for_pattern(
+                        Some(subject),
+                        None,
+                        None,
+                        None,
+                        self.options.default_graph_as_union,
+                    );
                 }
             }
         }
