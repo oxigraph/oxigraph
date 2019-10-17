@@ -159,7 +159,14 @@ impl<S: StoreConnection> PreparedQuery for SimplePreparedQuery<S> {
     }
 }
 
+/// Handler for SPARQL SERVICEs.
+///
+/// Might be used to implement [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/)
 pub trait ServiceHandler {
+    /// Get the handler for a given service identified by a RDF IRI.
+    ///
+    /// A service is a function that returns an iterator of bindings from a `GraphPattern`.
+    /// Returns `None` if there is no handler for the service.
     fn handle<'a>(
         &'a self,
         node: &NamedNode,
@@ -170,10 +177,10 @@ pub trait ServiceHandler {
 struct EmptyServiceHandler {}
 
 impl ServiceHandler for EmptyServiceHandler {
-    fn handle<'a>(
-        &'a self,
+    fn handle(
+        &self,
         _node: &NamedNode,
-    ) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'a>>)> {
+    ) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'static>>)> {
         None
     }
 }
