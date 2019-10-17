@@ -1462,6 +1462,21 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             PlanExpression::StringCast(e) => Some(EncodedTerm::StringLiteral {
                 value_id: self.to_string_id(self.eval_expression(e, tuple, options)?)?,
             }),
+            PlanExpression::CustomFunction { name, parameters } => {
+                println!("name: {:?}", name);
+                println!("parameters: {:?}", parameters);
+                println!("tuple: {:?}", tuple);
+                let parameters = parameters
+                                    .iter()
+                                    .map(|p| {
+                                        self.eval_expression(p, tuple, options)
+                                            .and_then(|encoded| self.dataset.decode_term(encoded).ok())
+                                    })
+                                    .collect::<Vec<_>>();
+                
+                println!("parameters: {:?}", parameters);
+                None
+            }
         }
     }
 

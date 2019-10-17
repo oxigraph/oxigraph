@@ -1,3 +1,4 @@
+use crate::model::NamedNode;
 use crate::sparql::GraphPattern;
 use crate::sparql::model::Variable;
 use crate::sparql::eval::StringOrStoreString;
@@ -306,6 +307,10 @@ pub enum PlanExpression {
     TimeCast(Box<PlanExpression>),
     DateTimeCast(Box<PlanExpression>),
     StringCast(Box<PlanExpression>),
+    CustomFunction { 
+        name: NamedNode,
+        parameters: Vec<PlanExpression>
+    },
 }
 
 impl PlanExpression {
@@ -413,6 +418,11 @@ impl PlanExpression {
                 e.add_variables(set);
                 for e in l {
                     e.add_variables(set);
+                }
+            }
+            PlanExpression::CustomFunction{ parameters, .. } => {
+                for p in parameters {
+                    p.add_variables(set);
                 }
             }
             PlanExpression::Exists(n) => n.add_variables(set),

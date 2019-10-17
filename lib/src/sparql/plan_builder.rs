@@ -644,7 +644,8 @@ impl<E: Encoder> PlanBuilder<E> {
                             "string",
                         )?
                     } else {
-                        return Err(format_err!("Not supported custom function {}", expression));
+                        let parameters = self.expression_list(parameters, variables, graph_name)?;
+                        PlanExpression::CustomFunction { name: name.clone(), parameters }
                     }
                 }
             },
