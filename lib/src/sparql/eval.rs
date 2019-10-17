@@ -1417,7 +1417,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 let parameters = parameters
                                     .iter()
                                     .map(|p| {
-                                        self.eval_expression(p, tuple, options)
+                                        self.eval_expression(p, tuple)
                                             .and_then(|encoded| self.dataset.decode_term(encoded).ok())
                                     })
                                     .collect::<Vec<_>>();
