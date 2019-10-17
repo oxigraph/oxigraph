@@ -11,7 +11,7 @@ pub use crate::store::memory::MemoryRepository;
 pub use crate::store::rocksdb::RocksDbRepository;
 
 use crate::model::*;
-use crate::sparql::SimplePreparedQuery;
+use crate::sparql::{QueryOptions, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::{DatasetSyntax, GraphSyntax, RepositoryConnection, Result};
 use rio_api::parser::{QuadsParser, TriplesParser};
@@ -72,12 +72,8 @@ impl<S: StoreConnection> From<S> for StoreRepositoryConnection<S> {
 impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
     type PreparedQuery = SimplePreparedQuery<S>;
 
-    fn prepare_query<'a>(
-        &self,
-        query: &str,
-        base_iri: Option<&'a str>,
-    ) -> Result<SimplePreparedQuery<S>> {
-        SimplePreparedQuery::new(self.inner.clone(), query, base_iri) //TODO: avoid clone
+    fn prepare_query(&self, query: &str, options: QueryOptions) -> Result<SimplePreparedQuery<S>> {
+        SimplePreparedQuery::new(self.inner.clone(), query, options) //TODO: avoid clone
     }
 
     fn quads_for_pattern<'a>(
@@ -101,12 +97,12 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
         )
     }
 
-    fn prepare_query_from_pattern<'a>(
-        &'a self,
+    fn prepare_query_from_pattern(
+        &self,
         pattern: &GraphPattern,
-        base_iri: Option<&'a str>,
+        options: QueryOptions,
     ) -> Result<Self::PreparedQuery> {
-        SimplePreparedQuery::new_from_pattern(self.inner.clone(), pattern, base_iri)
+        SimplePreparedQuery::new_from_pattern(self.inner.clone(), pattern, options)
         //TODO: avoid clone
     }
 
