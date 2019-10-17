@@ -113,7 +113,7 @@ impl<E: Encoder> PlanBuilder<E> {
                     graph_pattern,
                     silent: *s,
                 }
-            },
+            }
             GraphPattern::AggregateJoin(GroupPattern(key, p), aggregates) => {
                 let mut inner_variables = key.clone();
                 let inner_graph_name =

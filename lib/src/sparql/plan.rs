@@ -1,6 +1,6 @@
-use crate::sparql::GraphPattern;
-use crate::sparql::model::Variable;
 use crate::sparql::eval::StringOrStoreString;
+use crate::sparql::model::Variable;
+use crate::sparql::GraphPattern;
 use crate::store::numeric_encoder::{
     EncodedQuad, EncodedTerm, Encoder, MemoryStrStore, StrContainer, StrLookup,
     ENCODED_DEFAULT_GRAPH,

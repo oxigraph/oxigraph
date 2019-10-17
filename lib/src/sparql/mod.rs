@@ -121,27 +121,24 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
     pub(crate) fn new_from_pattern(
         connection: S,
         pattern: &GraphPattern,
-        base_iri: Option<&'a str>
+        base_iri: Option<&'a str>,
     ) -> Result<Self> {
         let dataset = DatasetView::new(connection);
         let (plan, variables) = PlanBuilder::build(dataset.encoder(), pattern)?;
         let base_iri = base_iri.map(|str_iri| Iri::parse(str_iri.to_string()));
         match base_iri {
             Some(Err(_)) => Err(format_err!("Failed to parse base_iri")),
-            Some(Ok(base_iri)) =>  
-                Ok(Self(SimplePreparedQueryAction::Select {
-                    plan,
-                    variables,
-                    evaluator: SimpleEvaluator::new(dataset, Some(base_iri)),
-                })),
-            None =>  
-                Ok(Self(SimplePreparedQueryAction::Select {
-                    plan,
-                    variables,
-                    evaluator: SimpleEvaluator::new(dataset, None),
-                }))
+            Some(Ok(base_iri)) => Ok(Self(SimplePreparedQueryAction::Select {
+                plan,
+                variables,
+                evaluator: SimpleEvaluator::new(dataset, Some(base_iri)),
+            })),
+            None => Ok(Self(SimplePreparedQueryAction::Select {
+                plan,
+                variables,
+                evaluator: SimpleEvaluator::new(dataset, None),
+            })),
         }
-        
     }
 }
 
@@ -169,7 +166,10 @@ impl<S: StoreConnection> PreparedQuery for SimplePreparedQuery<S> {
 }
 
 pub trait ServiceHandler {
-    fn handle<'a>(&'a self, node: NamedNode) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'a>>)>;
+    fn handle<'a>(
+        &'a self,
+        node: NamedNode,
+    ) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'a>>)>;
 }
 
 /// Options for SPARQL query parsing and evaluation like the query base IRI
