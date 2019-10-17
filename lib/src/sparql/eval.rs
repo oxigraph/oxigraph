@@ -3,7 +3,7 @@ use crate::model::Triple;
 use crate::sparql::algebra::GraphPattern;
 use crate::sparql::model::*;
 use crate::sparql::plan::*;
-use crate::sparql::ServiceHandler;
+use crate::sparql::{CustomFunctionsHandler, ServiceHandler};
 use crate::store::numeric_encoder::*;
 use crate::store::StoreConnection;
 use crate::Result;
@@ -45,6 +45,7 @@ pub struct SimpleEvaluator<S: StoreConnection> {
     bnodes_map: Mutex<BTreeMap<u128, u128>>,
     now: DateTime<FixedOffset>,
     service_handler: Box<dyn ServiceHandler>,
+    custom_functions_handler: Box<dyn CustomFunctionsHandler>,
 }
 
 impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
@@ -52,6 +53,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         dataset: DatasetView<S>,
         base_iri: Option<Iri<String>>,
         service_handler: Box<dyn ServiceHandler>,
+        custom_functions_handler: Box<dyn CustomFunctionsHandler>,
     ) -> Self {
         Self {
             dataset,
@@ -59,6 +61,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             base_iri,
             now: Utc::now().with_timezone(&FixedOffset::east(0)),
             service_handler,
+            custom_functions_handler,
         }
     }
 
@@ -1412,9 +1415,6 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 value_id: self.to_string_id(self.eval_expression(e, tuple)?)?,
             }),
             PlanExpression::CustomFunction { name, parameters } => {
-                println!("name: {:?}", name);
-                println!("parameters: {:?}", parameters);
-                println!("tuple: {:?}", tuple);
                 let parameters = parameters
                                     .iter()
                                     .map(|p| {
@@ -1422,9 +1422,8 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                                             .and_then(|encoded| self.dataset.decode_term(encoded).ok())
                                     })
                                     .collect::<Vec<_>>();
-                
-                println!("parameters: {:?}", parameters);
-                None
+                self.custom_functions_handler.handle(name, &parameters)
+                    .and_then(|term| self.dataset.encoder().encode_term(&term).ok())
             }
         }
     }

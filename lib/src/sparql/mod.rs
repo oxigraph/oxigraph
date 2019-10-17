@@ -9,7 +9,7 @@ mod plan;
 mod plan_builder;
 mod xml_results;
 
-use crate::model::NamedNode;
+use crate::model::{NamedNode,Term};
 use crate::sparql::algebra::QueryVariants;
 use crate::sparql::eval::SimpleEvaluator;
 use crate::sparql::parser::read_sparql_query;
@@ -70,7 +70,7 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
                 SimplePreparedQueryAction::Select {
                     plan,
                     variables,
-                    evaluator: SimpleEvaluator::new(dataset, base_iri, options.service_handler),
+                    evaluator: SimpleEvaluator::new(dataset, base_iri, options.service_handler, options.custom_functions_handler),
                 }
             }
             QueryVariants::Ask {
@@ -81,7 +81,7 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
                 let (plan, _) = PlanBuilder::build(dataset.encoder(), &algebra)?;
                 SimplePreparedQueryAction::Ask {
                     plan,
-                    evaluator: SimpleEvaluator::new(dataset, base_iri, options.service_handler),
+                    evaluator: SimpleEvaluator::new(dataset, base_iri, options.service_handler, options.custom_functions_handler),
                 }
             }
             QueryVariants::Construct {
@@ -98,7 +98,7 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
                         &construct,
                         variables,
                     )?,
-                    evaluator: SimpleEvaluator::new(dataset, base_iri, options.service_handler),
+                    evaluator: SimpleEvaluator::new(dataset, base_iri, options.service_handler, options.custom_functions_handler),
                 }
             }
             QueryVariants::Describe {
@@ -109,7 +109,7 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
                 let (plan, _) = PlanBuilder::build(dataset.encoder(), &algebra)?;
                 SimplePreparedQueryAction::Describe {
                     plan,
-                    evaluator: SimpleEvaluator::new(dataset, base_iri, options.service_handler),
+                    evaluator: SimpleEvaluator::new(dataset, base_iri, options.service_handler, options.custom_functions_handler),
                 }
             }
         }))
@@ -131,7 +131,7 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
         Ok(Self(SimplePreparedQueryAction::Select {
             plan,
             variables,
-            evaluator: SimpleEvaluator::new(dataset, base_iri, options.service_handler),
+            evaluator: SimpleEvaluator::new(dataset, base_iri, options.service_handler, options.custom_functions_handler),
         }))
     }
 }
@@ -185,11 +185,25 @@ impl ServiceHandler for EmptyServiceHandler {
     }
 }
 
+pub trait CustomFunctionsHandler {
+    fn handle(&self, node: &NamedNode, parameters: &Vec<Option<Term>>) -> Option<Term>; 
+}
+
+#[derive(Default)]
+struct EmptyCustomFunctionsHandler {}
+
+impl CustomFunctionsHandler for EmptyCustomFunctionsHandler {
+    fn handle(&self, _node: &NamedNode, _parameters: &Vec<Option<Term>>) -> Option<Term> {
+        None
+    }
+}
+
 /// Options for SPARQL query parsing and evaluation like the query base IRI
 pub struct QueryOptions<'a> {
     pub(crate) base_iri: Option<&'a str>,
     pub(crate) default_graph_as_union: bool,
     pub(crate) service_handler: Box<dyn ServiceHandler>,
+    pub(crate) custom_functions_handler: Box<dyn CustomFunctionsHandler>,
 }
 
 impl<'a> Default for QueryOptions<'a> {
@@ -198,6 +212,7 @@ impl<'a> Default for QueryOptions<'a> {
             base_iri: None,
             default_graph_as_union: false,
             service_handler: Box::new(EmptyServiceHandler::default()),
+            custom_functions_handler: Box::new(EmptyCustomFunctionsHandler::default()),
         }
     }
 }
@@ -215,11 +230,19 @@ impl<'a> QueryOptions<'a> {
         self
     }
 
-    /// Consider the union of all graphs in the repository as the default graph
+    /// Set a ServiceHandler to handle SERVICE clauses
     pub fn with_service_handler(mut self, service_handler: Box<dyn ServiceHandler>) -> Self {
         self.service_handler = service_handler;
         self
     }
+
+    /// Set a CustomFunctionHandler to add your own functions
+    pub fn with_custom_functions_handler(mut self, custom_functions_handler: Box<dyn CustomFunctionsHandler>) -> Self {
+        self.custom_functions_handler = custom_functions_handler;
+        self
+    }
+
+
 }
 
 /// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/)

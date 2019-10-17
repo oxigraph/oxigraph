@@ -1,6 +1,6 @@
 use rudf::model::*;
 use rudf::{GraphSyntax, Repository, RepositoryConnection, MemoryRepository, Result};
-use rudf::sparql::{BindingsIterator, PreparedQuery, QueryOptions, QueryResult};
+use rudf::sparql::{BindingsIterator, CustomFunctionsHandler, PreparedQuery, QueryOptions, QueryResult};
 use failure::format_err;
 use std::io::BufRead;
 
@@ -8,6 +8,27 @@ use std::io::BufRead;
 
 #[test]
 fn simple_custom_function_test() {
+
+  struct TestHandler;
+
+  impl CustomFunctionsHandler for TestHandler {
+    fn handle(&self, node: &NamedNode, parameters: &Vec<Option<Term>>) -> Option<Term> {
+      let reverse = NamedNode::parse("http://example.com#REVERSE").ok()?;
+      if *node == reverse {
+        let param = &parameters[0];
+        if let Some(Term::Literal(literal)) = param {
+          let value = literal.value();
+          let reversed = value.chars().rev().collect::<String>();
+          let literal = Literal::new_simple_literal(reversed);
+          Some(Term::Literal(literal))
+        } else {
+          None 
+        }
+      } else {
+        None
+      }
+    }
+  }
 
   let query = r#"
   PREFIX ex: <http://example.com#>
@@ -21,7 +42,7 @@ fn simple_custom_function_test() {
   "#.to_string();
 
 
-  let options = QueryOptions::default();
+  let options = QueryOptions::default().with_custom_functions_handler(Box::new(TestHandler));
   let triples = br#"
     <http://example.com/bob> <http://xmlns.com/foaf/0.1/name> "Bob" .
     <http://example.com/alice> <http://xmlns.com/foaf/0.1/name> "Alice" .
