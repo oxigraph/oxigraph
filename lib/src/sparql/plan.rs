@@ -22,7 +22,7 @@ pub enum PlanNode {
         service_name: PatternValue,
         variables: Vec<Variable>,
         child: Box<PlanNode>,
-        graph_pattern: GraphPattern,
+        graph_pattern: Box<GraphPattern>,
         silent: bool,
     },
     QuadPatternJoin {

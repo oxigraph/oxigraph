@@ -104,13 +104,14 @@ impl<E: Encoder> PlanBuilder<E> {
                 right: Box::new(self.build_for_graph_pattern(b, variables, graph_name)?),
             },
             GraphPattern::Service(n, p, s) => {
+                // Child building should be at the begging in order for `variables` to be filled
+                let child = self.build_for_graph_pattern(p, variables, graph_name)?;
                 let service_name = self.pattern_value_from_named_node_or_variable(n, variables)?;
-                let graph_pattern = *p.clone();
                 PlanNode::Service {
                     service_name,
                     variables: variables.clone(),
-                    child: Box::new(self.build_for_graph_pattern(p, variables, service_name)?),
-                    graph_pattern,
+                    child: Box::new(child),
+                    graph_pattern: Box::new(*p.clone()),
                     silent: *s,
                 }
             }
