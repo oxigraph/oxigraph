@@ -185,7 +185,28 @@ impl ServiceHandler for EmptyServiceHandler {
     }
 }
 
+
+/// Handler for custom functions.
+/// 
+/// For example, the following query uses a custom function to reverse a string:
+///
+///```sparql 
+/// PREFIX ex: <http://example.com#>
+/// PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+/// SELECT ?name ?reverse
+/// WHERE
+///   { 
+///     ?s foaf:name ?name .
+///     BIND(ex:REVERSE(?name) as ?reverse)
+///   }
+/// ```
 pub trait CustomFunctionsHandler {
+    /// Handles all custom functions for a given query
+    /// 
+    /// For the example above node would have the value http://example.com#REVERSE
+    /// and would recieve one parameter with the value mapped to ?name 
+    /// 
+    /// Returns `None` if there is an error or the given NamedNode isn't recognized
     fn handle(&self, node: &NamedNode, parameters: &Vec<Option<Term>>) -> Option<Term>; 
 }
 

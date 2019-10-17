@@ -30,10 +30,11 @@ fn simple_custom_function_test() {
 
   let query = r#"
   PREFIX ex: <http://example.com#>
+  PREFIX foaf: <http://xmlns.com/foaf/0.1/>
   SELECT ?name ?reverse
   WHERE
     { 
-      ?s <http://xmlns.com/foaf/0.1/name> ?name .
+      ?s foaf:name ?name .
       BIND(ex:REVERSE(?name) as ?reverse)
     }
   ORDER BY ?name
