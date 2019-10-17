@@ -170,10 +170,6 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     }))
                 }
                 if graph_name.is_var() {
-                    iter = Box::new(iter.filter(|quad| match quad {
-                        Err(_) => true,
-                        Ok(quad) => quad.graph_name != ENCODED_DEFAULT_GRAPH,
-                    }));
                     if graph_name == subject {
                         iter = Box::new(iter.filter(|quad| match quad {
                             Err(_) => true,
