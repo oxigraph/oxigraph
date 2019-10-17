@@ -479,13 +479,13 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         }
     }
 
-    fn evaluate_service(
-        &self,
+    fn evaluate_service<'b>(
+        &'b self,
         service_name: &PatternValue,
         graph_pattern: &GraphPattern,
-        variables: &[Variable],
+        variables: &'b [Variable],
         from: EncodedTuple,
-    ) -> Result<EncodedTuplesIterator> {
+    ) -> Result<EncodedTuplesIterator<'b>> {
         let service_name =
             self.dataset
                 .decode_named_node(get_pattern_value(service_name, &[]).ok_or_else(|| {
@@ -497,13 +497,14 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 service_name
             )
         })?;
-        let encoded = self.encode_bindings(variables, service(graph_pattern.clone())?);
-        let collected = encoded.collect::<Vec<_>>();
-        Ok(Box::new(JoinIterator {
-            left: vec![from],
-            right_iter: Box::new(collected.into_iter()),
-            buffered_results: vec![],
-        }))
+        Ok(Box::new(
+            self.encode_bindings(variables, service(graph_pattern.clone())?)
+                .flat_map(move |binding| {
+                    binding
+                        .map(|binding| combine_tuples(&binding, &from))
+                        .transpose()
+                }),
+        ))
     }
 
     fn accumulator_for_aggregate<'b>(
@@ -1618,7 +1619,6 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
     where
         'a: 'b,
     {
-        let mut encoder = self.dataset.encoder();
         let (binding_variables, iter) = BindingsIterator::destruct(iter);
         let mut combined_variables = variables.to_vec();
         for v in binding_variables.clone() {
@@ -1627,6 +1627,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             }
         }
         Box::new(iter.map(move |terms| {
+            let mut encoder = self.dataset.encoder();
             let mut encoded_terms = vec![None; combined_variables.len()];
             for (i, term_option) in terms?.into_iter().enumerate() {
                 match term_option {
