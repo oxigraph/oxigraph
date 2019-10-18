@@ -401,17 +401,10 @@ impl<R: BufRead> ResultsIterator<R> {
                     State::Start => state = State::End,
                     State::Result => return Ok(Some(new_bindings)),
                     State::Binding => {
-                        match (&current_var, &term) {
-                            (Some(var), Some(term)) => {
-                                new_bindings[self.mapping[var]] = Some(term.clone())
-                            }
-                            (Some(var), None) => {
-                                return Err(format_err!(
-                                    "No variable found for variable {}",
-                                    self.reader.decode(&var)?
-                                ));
-                            }
-                            _ => return Err(format_err!("No name found for <binding> tag")),
+                        if let Some(var) = &current_var {
+                            new_bindings[self.mapping[var]] = term.clone()
+                        } else {
+                            return Err(format_err!("No name found for <binding> tag"));
                         }
                         term = None;
                         state = State::Result;

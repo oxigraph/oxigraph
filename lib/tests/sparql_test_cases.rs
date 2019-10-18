@@ -4,14 +4,15 @@ use rayon::prelude::*;
 use rudf::model::vocab::rdf;
 use rudf::model::vocab::rdfs;
 use rudf::model::*;
-use rudf::sparql::{PreparedQuery, QueryOptions};
-use rudf::sparql::{Query, QueryResult, QueryResultSyntax};
-use rudf::{GraphSyntax, MemoryRepository, Repository, RepositoryConnection, Result};
+use rudf::sparql::*;
+use rudf::*;
+use std::collections::HashMap;
 use std::fmt;
 use std::fs::File;
 use std::io::Read;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[test]
 fn sparql_w3c_syntax_testsuite() -> Result<()> {
@@ -97,6 +98,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/project-expression/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/property-path/manifest.ttl",
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/service/manifest.ttl",
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/subquery/manifest.ttl",
     ];
 
@@ -133,7 +135,10 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/property-path/manifest#pp35").unwrap(),
         //We write "2"^^xsd:decimal instead of "2.0"^^xsd:decimal
         NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-err-02").unwrap(),
-        NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-avg-02").unwrap()
+        NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-avg-02").unwrap(),
+        //SERVICE name from a BGP
+        NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/service/manifest#service5").unwrap(),
+
     ];
 
     let tests: Result<Vec<_>> = manifest_10_urls
@@ -158,39 +163,39 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
             }
             match repository
                 .connection()?
-                .prepare_query(&read_file_to_string(&test.query)?, QueryOptions::default().with_base_iri(&test.query))
-            {
-                Err(error) => Err(format_err!(
+                .prepare_query(&read_file_to_string(&test.query)?, QueryOptions::default().with_base_iri(&test.query).with_service_handler(StaticServiceHandler::new(&test.service_data)?))
+                {
+                    Err(error) => Err(format_err!(
                     "Failure to parse query of {} with error: {}",
                     test, error
                 )),
-                Ok(query) => match query.exec() {
-                    Err(error) => Err(format_err!(
+                    Ok(query) => match query.exec() {
+                        Err(error) => Err(format_err!(
                         "Failure to execute query of {} with error: {}",
                         test, error
                     )),
-                    Ok(result) => {
-                        let expected_graph =
-                            load_sparql_query_result_graph(test.result.as_ref().unwrap())?;
-                        let with_order = expected_graph
-                            .triples_for_predicate(&rs::INDEX)
-                            .next()
-                            .is_some();
-                        let actual_graph = to_graph(result, with_order).map_err(|e| format_err!("Error constructing result graph for {}: {}", test, e))?;
-                        if actual_graph.is_isomorphic(&expected_graph) {
-                            Ok(())
-                        } else {
-                            Err(format_err!("Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
+                        Ok(result) => {
+                            let expected_graph =
+                                load_sparql_query_result_graph(test.result.as_ref().unwrap()).map_err(|e| format_err!("Error constructing expected graph for {}: {}", test, e))?;
+                            let with_order = expected_graph
+                                .triples_for_predicate(&rs::INDEX)
+                                .next()
+                                .is_some();
+                            let actual_graph = to_graph(result, with_order).map_err(|e| format_err!("Error constructing result graph for {}: {}", test, e))?;
+                            if actual_graph.is_isomorphic(&expected_graph) {
+                                Ok(())
+                            } else {
+                                Err(format_err!("Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
                                 test,
                                 expected_graph,
                                 actual_graph,
                                 Query::parse(&read_file_to_string(&test.query)?, Some(&test.query)).unwrap(),
                                 repository_to_string(&repository)
                             ))
+                            }
                         }
-                    }
-                },
-            }
+                    },
+                }
         } else if test.kind != "NegativeSyntaxTest11" {
             panic!("Not supported test: {}", test)
         } else {
@@ -410,6 +415,7 @@ pub struct Test {
     pub query: String,
     pub data: Option<String>,
     pub graph_data: Vec<String>,
+    pub service_data: Vec<(String, String)>,
     pub result: Option<String>,
 }
 
@@ -488,6 +494,12 @@ pub mod qt {
         pub static ref GRAPH_DATA: NamedNode =
             NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-query#graphData")
                 .unwrap();
+        pub static ref SERVICE_DATA: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-query#serviceData")
+                .unwrap();
+        pub static ref ENDPOINT: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-query#endpoint")
+                .unwrap();
     }
 }
 
@@ -522,31 +534,53 @@ impl Iterator for TestManifest {
                     Some(Term::Literal(c)) => Some(c.value().to_string()),
                     _ => None,
                 };
-                let (query, data, graph_data) = match self
+                let (query, data, graph_data, service_data) = match self
                     .graph
                     .object_for_subject_predicate(&test_subject, &*mf::ACTION)
                 {
-                    Some(Term::NamedNode(n)) => (n.as_str().to_string(), None, vec![]),
+                    Some(Term::NamedNode(n)) => (n.as_str().to_owned(), None, vec![], vec![]),
                     Some(Term::BlankNode(n)) => {
                         let n = n.clone().into();
                         let query = match self.graph.object_for_subject_predicate(&n, &qt::QUERY) {
-                            Some(Term::NamedNode(q)) => q.as_str().to_string(),
+                            Some(Term::NamedNode(q)) => q.as_str().to_owned(),
                             Some(_) => return Some(Err(format_err!("invalid query"))),
                             None => return Some(Err(format_err!("query not found"))),
                         };
                         let data = match self.graph.object_for_subject_predicate(&n, &qt::DATA) {
-                            Some(Term::NamedNode(q)) => Some(q.as_str().to_string()),
+                            Some(Term::NamedNode(q)) => Some(q.as_str().to_owned()),
                             _ => None,
                         };
                         let graph_data = self
                             .graph
                             .objects_for_subject_predicate(&n, &qt::GRAPH_DATA)
                             .filter_map(|g| match g {
-                                Term::NamedNode(q) => Some(q.as_str().to_string()),
+                                Term::NamedNode(q) => Some(q.as_str().to_owned()),
                                 _ => None,
                             })
                             .collect();
-                        (query, data, graph_data)
+                        let service_data = self
+                            .graph
+                            .objects_for_subject_predicate(&n, &qt::SERVICE_DATA)
+                            .filter_map(|g| match g {
+                                Term::NamedNode(g) => Some(g.clone().into()),
+                                Term::BlankNode(g) => Some(g.clone().into()),
+                                _ => None,
+                            })
+                            .filter_map(|g| {
+                                if let (
+                                    Some(Term::NamedNode(endpoint)),
+                                    Some(Term::NamedNode(data)),
+                                ) = (
+                                    self.graph.object_for_subject_predicate(&g, &qt::ENDPOINT),
+                                    self.graph.object_for_subject_predicate(&g, &qt::DATA),
+                                ) {
+                                    Some((endpoint.as_str().to_owned(), data.as_str().to_owned()))
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        (query, data, graph_data, service_data)
                     }
                     Some(_) => return Some(Err(format_err!("invalid action"))),
                     None => {
@@ -560,7 +594,7 @@ impl Iterator for TestManifest {
                     .graph
                     .object_for_subject_predicate(&test_subject, &*mf::RESULT)
                 {
-                    Some(Term::NamedNode(n)) => Some(n.as_str().to_string()),
+                    Some(Term::NamedNode(n)) => Some(n.as_str().to_owned()),
                     Some(_) => return Some(Err(format_err!("invalid result"))),
                     None => None,
                 };
@@ -572,6 +606,7 @@ impl Iterator for TestManifest {
                     query,
                     data,
                     graph_data,
+                    service_data,
                     result,
                 }))
             }
@@ -595,7 +630,7 @@ impl Iterator for TestManifest {
                                 self.manifests_to_do.extend(
                                     RdfListIterator::iter(&self.graph, list.clone().into())
                                         .filter_map(|m| match m {
-                                            Term::NamedNode(nm) => Some(nm.as_str().to_string()),
+                                            Term::NamedNode(nm) => Some(nm.into_string()),
                                             _ => None,
                                         }),
                                 );
@@ -667,6 +702,59 @@ impl<'a> Iterator for RdfListIterator<'a> {
                 result.cloned()
             }
             None => None,
+        }
+    }
+}
+
+#[derive(Clone)]
+struct StaticServiceHandler {
+    services: Arc<HashMap<NamedNode, MemoryRepository>>,
+}
+
+impl StaticServiceHandler {
+    fn new(services: &[(String, String)]) -> Result<Self> {
+        Ok(Self {
+            services: Arc::new(
+                services
+                    .iter()
+                    .map(|(name, data)| {
+                        let name = NamedNode::parse(name)?;
+                        let repository = MemoryRepository::default();
+                        load_graph_to_repository(&data, &mut repository.connection()?, None)?;
+                        Ok((name, repository))
+                    })
+                    .collect::<Result<_>>()?,
+            ),
+        })
+    }
+}
+
+impl ServiceHandler for StaticServiceHandler {
+    fn handle<'a>(
+        &'a self,
+        service_name: &NamedNode,
+        graph_pattern: &'a GraphPattern,
+    ) -> Result<BindingsIterator<'a>> {
+        if let QueryResult::Bindings(iterator) = self
+            .services
+            .get(service_name)
+            .ok_or_else(|| format_err!("Service {} not found", service_name))?
+            .connection()?
+            .prepare_query_from_pattern(
+                &graph_pattern,
+                QueryOptions::default().with_service_handler(self.clone()),
+            )?
+            .exec()?
+        {
+            //TODO: very hugly
+            let (variables, iter) = iterator.destruct();
+            let collected = iter.collect::<Vec<_>>();
+            Ok(BindingsIterator::new(
+                variables,
+                Box::new(collected.into_iter()),
+            ))
+        } else {
+            Err(format_err!("Expected bindings but got another QueryResult"))
         }
     }
 }
