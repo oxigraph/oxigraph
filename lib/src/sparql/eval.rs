@@ -128,11 +128,15 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 service_name,
                 graph_pattern,
                 ..
-            } => match self.evaluate_service(service_name, graph_pattern, variables, from) {
-                Ok(result) => result,
+            } => match self.evaluate_service(service_name, graph_pattern, variables) {
+                Ok(result) => Box::new(result.flat_map(move |binding| {
+                    binding
+                        .map(|binding| combine_tuples(&binding, &from))
+                        .transpose()
+                })),
                 Err(e) => {
                     if *silent {
-                        Box::new(empty())
+                        Box::new(once(Ok(from)))
                     } else {
                         Box::new(once(Err(e)))
                     }
@@ -484,22 +488,14 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         service_name: &PatternValue,
         graph_pattern: &'b GraphPattern,
         variables: &'b [Variable],
-        from: EncodedTuple,
     ) -> Result<EncodedTuplesIterator<'b>> {
         let service_name = self.dataset.decode_named_node(
             get_pattern_value(service_name, &[])
                 .ok_or_else(|| format_err!("The SERVICE name is not bound"))?,
         )?;
-        Ok(Box::new(
-            self.encode_bindings(
-                variables,
-                self.service_handler.handle(&service_name, &graph_pattern)?,
-            )
-            .flat_map(move |binding| {
-                binding
-                    .map(|binding| combine_tuples(&binding, &from))
-                    .transpose()
-            }),
+        Ok(self.encode_bindings(
+            variables,
+            self.service_handler.handle(&service_name, &graph_pattern)?,
         ))
     }
 

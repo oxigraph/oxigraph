@@ -149,8 +149,7 @@ fn silent_service_empty_set_test() {
         .into_values_iter()
         .map(move |b| b.unwrap())
         .collect::<Vec<_>>();
-    println!("Collected: {:?}", collected);
-    assert_eq!(collected.len(), 0);
+    assert_eq!(collected.len(), 1);
 }
 
 #[test]
