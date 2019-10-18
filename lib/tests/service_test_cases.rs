@@ -12,15 +12,12 @@ fn simple_service_test() {
     impl ServiceHandler for TestServiceHandler {
         fn handle<'a>(
             &'a self,
-            _named_node: &NamedNode,
-        ) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'a>>)> {
-            fn pattern_handler<'a>(graph_pattern: GraphPattern) -> Result<BindingsIterator<'a>> {
-                let triples =
-                    b"<http://example.com/s> <http://example.com/p> <http://example.com/o> ."
-                        .as_ref();
-                do_pattern(triples, graph_pattern, QueryOptions::default())
-            };
-            Some(pattern_handler)
+            _: &NamedNode,
+            graph_pattern: &'a GraphPattern,
+        ) -> Result<BindingsIterator<'a>> {
+            let triples =
+                b"<http://example.com/s> <http://example.com/p> <http://example.com/o> .".as_ref();
+            do_pattern(triples, graph_pattern, QueryOptions::default())
         }
     }
 
@@ -35,7 +32,7 @@ fn simple_service_test() {
   "#
     .to_string();
 
-    let options = QueryOptions::default().with_service_handler(Box::new(TestServiceHandler));
+    let options = QueryOptions::default().with_service_handler(TestServiceHandler);
     let results = do_query(b"".as_ref(), query, options).unwrap();
     let collected = results
         .into_values_iter()
@@ -57,36 +54,27 @@ fn two_service_test() {
         fn handle<'a>(
             &'a self,
             named_node: &NamedNode,
-        ) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'a>>)> {
+            graph_pattern: &'a GraphPattern,
+        ) -> Result<BindingsIterator<'a>> {
             let service1 = NamedNode::parse("http://service1.org").unwrap();
             let service2 = NamedNode::parse("http://service2.org").unwrap();
             if named_node == &service1 {
-                Some(TwoServiceTest::handle_service1)
-            } else if named_node == &service2 {
-                Some(TwoServiceTest::handle_service2)
-            } else {
-                None
-            }
-        }
-    }
-
-    impl TwoServiceTest {
-        fn handle_service1<'a>(graph_pattern: GraphPattern) -> Result<BindingsIterator<'a>> {
-            let triples = br#"
+                let triples = br#"
         <http://example.com/bob> <http://xmlns.com/foaf/0.1/name> "Bob" .
         <http://example.com/alice> <http://xmlns.com/foaf/0.1/name> "Alice" .
         "#
-            .as_ref();
-            do_pattern(triples, graph_pattern, QueryOptions::default())
-        }
-
-        fn handle_service2<'a>(graph_pattern: GraphPattern) -> Result<BindingsIterator<'a>> {
-            let triples = br#"
+                .as_ref();
+                do_pattern(triples, graph_pattern, QueryOptions::default())
+            } else if named_node == &service2 {
+                let triples = br#"
         <http://example.com/bob> <http://xmlns.com/foaf/0.1/mbox> <mailto:bob@example.com> .
         <http://example.com/alice> <http://xmlns.com/foaf/0.1/mbox> <mailto:alice@example.com> .
         "#
-            .as_ref();
-            do_pattern(triples, graph_pattern, QueryOptions::default())
+                .as_ref();
+                do_pattern(triples, graph_pattern, QueryOptions::default())
+            } else {
+                Err(format_err!("not found"))
+            }
         }
     }
 
@@ -107,7 +95,7 @@ fn two_service_test() {
   "#
     .to_string();
 
-    let options = QueryOptions::default().with_service_handler(Box::new(TwoServiceTest));
+    let options = QueryOptions::default().with_service_handler(TwoServiceTest);
     let results = do_query(b"".as_ref(), query, options).unwrap();
     let collected = results
         .into_values_iter()
@@ -133,14 +121,9 @@ fn silent_service_empty_set_test() {
     impl ServiceHandler for ServiceTest {
         fn handle<'a>(
             &'a self,
-            _named_node: &NamedNode,
-        ) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'a>>)> {
-            Some(ServiceTest::handle_service)
-        }
-    }
-
-    impl ServiceTest {
-        fn handle_service<'a>(_graph_pattern: GraphPattern) -> Result<BindingsIterator<'a>> {
+            _: &NamedNode,
+            _: &'a GraphPattern,
+        ) -> Result<BindingsIterator<'a>> {
             Err(format_err!("This is supposed to fail"))
         }
     }
@@ -160,7 +143,7 @@ fn silent_service_empty_set_test() {
     .to_string();
 
     let triples = b"".as_ref();
-    let options = QueryOptions::default().with_service_handler(Box::new(ServiceTest));
+    let options = QueryOptions::default().with_service_handler(ServiceTest);
     let results = do_query(triples, query, options).unwrap();
     let collected = results
         .into_values_iter()
@@ -177,14 +160,9 @@ fn non_silent_service_test() {
     impl ServiceHandler for ServiceTest {
         fn handle<'a>(
             &'a self,
-            _named_node: &NamedNode,
-        ) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'a>>)> {
-            Some(ServiceTest::handle_service)
-        }
-    }
-
-    impl ServiceTest {
-        fn handle_service<'a>(_graph_pattern: GraphPattern) -> Result<BindingsIterator<'a>> {
+            _: &NamedNode,
+            _: &'a GraphPattern,
+        ) -> Result<BindingsIterator<'a>> {
             Err(format_err!("This is supposed to fail"))
         }
     }
@@ -204,7 +182,7 @@ fn non_silent_service_test() {
     .to_string();
 
     let triples = b"".as_ref();
-    let options = QueryOptions::default().with_service_handler(Box::new(ServiceTest));
+    let options = QueryOptions::default().with_service_handler(ServiceTest);
     let results = do_query(triples, query, options).unwrap();
     let result = results.into_values_iter().next();
     match result {
@@ -263,7 +241,7 @@ fn query_repository<'a>(
 
 fn pattern_repository<'a>(
     repository: MemoryRepository,
-    pattern: GraphPattern,
+    pattern: &'a GraphPattern,
     options: QueryOptions<'a>,
 ) -> Result<BindingsIterator<'a>> {
     match repository
@@ -294,7 +272,7 @@ fn do_query<'a>(
 
 fn do_pattern<'a>(
     reader: impl BufRead,
-    pattern: GraphPattern,
+    pattern: &'a GraphPattern,
     options: QueryOptions<'a>,
 ) -> Result<BindingsIterator<'a>> {
     let repository = make_repository(reader)?;

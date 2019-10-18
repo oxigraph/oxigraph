@@ -18,6 +18,7 @@ use crate::sparql::plan::{DatasetView, PlanNode};
 use crate::sparql::plan_builder::PlanBuilder;
 use crate::store::StoreConnection;
 use crate::Result;
+use failure::format_err;
 use rio_api::iri::Iri;
 use std::fmt;
 
@@ -163,25 +164,31 @@ impl<S: StoreConnection> PreparedQuery for SimplePreparedQuery<S> {
 ///
 /// Might be used to implement [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/)
 pub trait ServiceHandler {
-    /// Get the handler for a given service identified by a RDF IRI.
-    ///
-    /// A service is a function that returns an iterator of bindings from a `GraphPattern`.
-    /// Returns `None` if there is no handler for the service.
+    /// Evaluates a `GraphPattern` against a given service identified by a `NamedNode`.
     fn handle<'a>(
         &'a self,
-        node: &NamedNode,
-    ) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'a>>)>;
+        service_name: &NamedNode,
+        graph_pattern: &'a GraphPattern,
+    ) -> Result<BindingsIterator<'a>>;
 }
 
-#[derive(Default)]
-struct EmptyServiceHandler {}
+impl<F: for<'a> Fn(&NamedNode, &'a GraphPattern) -> Result<BindingsIterator<'a>>> ServiceHandler
+    for F
+{
+    fn handle<'a>(
+        &'a self,
+        service_name: &NamedNode,
+        graph_pattern: &'a GraphPattern,
+    ) -> Result<BindingsIterator<'a>> {
+        self(service_name, graph_pattern)
+    }
+}
+
+struct EmptyServiceHandler;
 
 impl ServiceHandler for EmptyServiceHandler {
-    fn handle(
-        &self,
-        _node: &NamedNode,
-    ) -> Option<(fn(GraphPattern) -> Result<BindingsIterator<'static>>)> {
-        None
+    fn handle<'a>(&'a self, _: &NamedNode, _: &'a GraphPattern) -> Result<BindingsIterator<'a>> {
+        Err(format_err!("The SERVICE feature is not implemented"))
     }
 }
 
@@ -197,7 +204,7 @@ impl<'a> Default for QueryOptions<'a> {
         Self {
             base_iri: None,
             default_graph_as_union: false,
-            service_handler: Box::new(EmptyServiceHandler::default()),
+            service_handler: Box::new(EmptyServiceHandler),
         }
     }
 }
@@ -216,8 +223,8 @@ impl<'a> QueryOptions<'a> {
     }
 
     /// Consider the union of all graphs in the repository as the default graph
-    pub fn with_service_handler(mut self, service_handler: Box<dyn ServiceHandler>) -> Self {
-        self.service_handler = service_handler;
+    pub fn with_service_handler(mut self, service_handler: impl ServiceHandler + 'static) -> Self {
+        self.service_handler = Box::new(service_handler);
         self
     }
 }
