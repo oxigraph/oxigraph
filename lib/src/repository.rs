@@ -12,10 +12,10 @@ use std::io::BufRead;
 ///
 /// Usage example with `MemoryRepository`:
 /// ```
-/// use rudf::model::*;
-/// use rudf::{Repository, RepositoryConnection, MemoryRepository, Result};
-/// use crate::rudf::sparql::{PreparedQuery, QueryOptions};
-/// use rudf::sparql::QueryResult;
+/// use oxigraph::model::*;
+/// use oxigraph::{Repository, RepositoryConnection, MemoryRepository, Result};
+/// use crate::oxigraph::sparql::{PreparedQuery, QueryOptions};
+/// use oxigraph::sparql::QueryResult;
 ///
 /// let repository = MemoryRepository::default();
 /// let mut connection = repository.connection().unwrap();
@@ -40,7 +40,7 @@ use std::io::BufRead;
 /// The implementation based on RocksDB if disabled by default and requires the `"rocksdb"` feature to be activated.
 /// A `RocksDbRepository` could be built using `RocksDbRepository::open` and works just like its in-memory equivalent:
 /// ```ignore
-/// use rudf::RocksDbRepository;
+/// use oxigraph::RocksDbRepository;
 /// let dataset = RocksDbRepository::open("example.db").unwrap();
 /// ```
 ///
@@ -62,10 +62,10 @@ pub trait RepositoryConnection: Clone {
     ///
     /// Usage example:
     /// ```
-    /// use rudf::model::*;
-    /// use rudf::{Repository, RepositoryConnection, MemoryRepository};
-    /// use rudf::sparql::{PreparedQuery, QueryOptions};
-    /// use rudf::sparql::QueryResult;
+    /// use oxigraph::model::*;
+    /// use oxigraph::{Repository, RepositoryConnection, MemoryRepository};
+    /// use oxigraph::sparql::{PreparedQuery, QueryOptions};
+    /// use oxigraph::sparql::QueryResult;
     ///
     /// let repository = MemoryRepository::default();
     /// let mut connection = repository.connection().unwrap();
@@ -94,8 +94,8 @@ pub trait RepositoryConnection: Clone {
     ///
     /// Usage example:
     /// ```
-    /// use rudf::model::*;
-    /// use rudf::{Repository, RepositoryConnection, MemoryRepository, Result};
+    /// use oxigraph::model::*;
+    /// use oxigraph::{Repository, RepositoryConnection, MemoryRepository, Result};
     ///
     /// let repository = MemoryRepository::default();
     /// let mut connection = repository.connection().unwrap();
@@ -123,8 +123,8 @@ pub trait RepositoryConnection: Clone {
     ///
     /// Usage example:
     /// ```
-    /// use rudf::model::*;
-    /// use rudf::{Repository, RepositoryConnection, MemoryRepository, Result, GraphSyntax};
+    /// use oxigraph::model::*;
+    /// use oxigraph::{Repository, RepositoryConnection, MemoryRepository, Result, GraphSyntax};
     ///
     /// let repository = MemoryRepository::default();
     /// let mut connection = repository.connection().unwrap();
@@ -150,8 +150,8 @@ pub trait RepositoryConnection: Clone {
     ///
     /// Usage example:
     /// ```
-    /// use rudf::model::*;
-    /// use rudf::{Repository, RepositoryConnection, MemoryRepository, Result, DatasetSyntax};
+    /// use oxigraph::model::*;
+    /// use oxigraph::{Repository, RepositoryConnection, MemoryRepository, Result, DatasetSyntax};
     ///
     /// let repository = MemoryRepository::default();
     /// let mut connection = repository.connection().unwrap();

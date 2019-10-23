@@ -11,10 +11,10 @@ use std::sync::{PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 ///
 /// Usage example:
 /// ```
-/// use rudf::model::*;
-/// use rudf::{Repository, RepositoryConnection, MemoryRepository, Result};
-/// use crate::rudf::sparql::PreparedQuery;
-/// use rudf::sparql::{QueryResult, QueryOptions};
+/// use oxigraph::model::*;
+/// use oxigraph::{Repository, RepositoryConnection, MemoryRepository, Result};
+/// use crate::oxigraph::sparql::PreparedQuery;
+/// use oxigraph::sparql::{QueryResult, QueryOptions};
 ///
 /// let repository = MemoryRepository::default();
 /// let mut connection = repository.connection().unwrap();

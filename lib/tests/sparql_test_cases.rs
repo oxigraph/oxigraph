@@ -1,11 +1,11 @@
 ///! Integration tests based on [SPARQL 1.1 Test Cases](https://www.w3.org/2009/sparql/docs/tests/README.html)
 use failure::format_err;
+use oxigraph::model::vocab::rdf;
+use oxigraph::model::vocab::rdfs;
+use oxigraph::model::*;
+use oxigraph::sparql::*;
+use oxigraph::*;
 use rayon::prelude::*;
-use rudf::model::vocab::rdf;
-use rudf::model::vocab::rdfs;
-use rudf::model::*;
-use rudf::sparql::*;
-use rudf::*;
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::File;
@@ -301,7 +301,7 @@ fn read_file_to_string(url: &str) -> Result<String> {
 
 mod rs {
     use lazy_static::lazy_static;
-    use rudf::model::NamedNode;
+    use oxigraph::model::NamedNode;
 
     lazy_static! {
         pub static ref RESULT_SET: NamedNode =
@@ -460,7 +460,7 @@ impl TestManifest {
 
 pub mod mf {
     use lazy_static::lazy_static;
-    use rudf::model::NamedNode;
+    use oxigraph::model::NamedNode;
 
     lazy_static! {
         pub static ref INCLUDE: NamedNode =
@@ -483,7 +483,7 @@ pub mod mf {
 
 pub mod qt {
     use lazy_static::lazy_static;
-    use rudf::model::NamedNode;
+    use oxigraph::model::NamedNode;
 
     lazy_static! {
         pub static ref QUERY: NamedNode =

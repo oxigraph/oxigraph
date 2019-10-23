@@ -1,4 +1,4 @@
-//! Provides implementations of the `rudf::Repository` trait.
+//! Provides implementations of the `oxigraph::Repository` trait.
 
 mod memory;
 pub(crate) mod numeric_encoder;

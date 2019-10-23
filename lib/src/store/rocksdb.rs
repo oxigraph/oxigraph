@@ -22,10 +22,10 @@ use std::str;
 ///
 /// Usage example:
 /// ```ignored
-/// use rudf::model::*;
-/// use rudf::{Repository, RepositoryConnection, RocksDbRepository, Result};
-/// use crate::rudf::sparql::{PreparedQuery, QueryOptions};
-/// use rudf::sparql::QueryResult;
+/// use oxigraph::model::*;
+/// use oxigraph::{Repository, RepositoryConnection, RocksDbRepository, Result};
+/// use crate::oxigraph::sparql::{PreparedQuery, QueryOptions};
+/// use oxigraph::sparql::QueryResult;
 ///
 /// let repository = RocksDbRepository::open("example.db").unwrap();
 /// let mut connection = repository.connection().unwrap();

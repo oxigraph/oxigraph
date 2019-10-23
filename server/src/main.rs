@@ -1,23 +1,23 @@
 use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
-use rouille::input::priority_header_preferred;
-use rouille::url::form_urlencoded;
-use rouille::{content_encoding, start_server, Request, Response};
-use rudf::sparql::{PreparedQuery, QueryOptions, QueryResult, QueryResultSyntax};
-use rudf::{
+use oxigraph::sparql::{PreparedQuery, QueryOptions, QueryResult, QueryResultSyntax};
+use oxigraph::{
     DatasetSyntax, FileSyntax, GraphSyntax, MemoryRepository, Repository, RepositoryConnection,
     RocksDbRepository,
 };
+use rouille::input::priority_header_preferred;
+use rouille::url::form_urlencoded;
+use rouille::{content_encoding, start_server, Request, Response};
 use std::io::{BufReader, Read};
 use std::sync::Arc;
 
 const MAX_SPARQL_BODY_SIZE: u64 = 1_048_576;
 const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
-const SERVER: &str = concat!("Rudf/", env!("CARGO_PKG_VERSION"));
+const SERVER: &str = concat!("Oxigraph/", env!("CARGO_PKG_VERSION"));
 
 pub fn main() {
-    let matches = App::new("Rudf SPARQL server")
+    let matches = App::new("Oxigraph SPARQL server")
         .arg(
             Arg::with_name("bind")
                 .short("b")
@@ -213,8 +213,8 @@ fn evaluate_sparql_query<R: RepositoryConnection>(
 #[cfg(test)]
 mod tests {
     use crate::handle_request;
+    use oxigraph::{MemoryRepository, Repository};
     use rouille::Request;
-    use rudf::{MemoryRepository, Repository};
     use std::io::Read;
 
     #[test]

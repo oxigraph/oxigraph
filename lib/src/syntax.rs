@@ -15,7 +15,7 @@ pub trait FileSyntax: Sized {
     ///
     /// Example:
     /// ```
-    /// use rudf::{GraphSyntax, FileSyntax};
+    /// use oxigraph::{GraphSyntax, FileSyntax};
     /// assert_eq!(GraphSyntax::from_mime_type("text/turtle; charset=utf-8"), Some(GraphSyntax::Turtle))
     /// ```
     fn from_mime_type(media_type: &str) -> Option<Self>;

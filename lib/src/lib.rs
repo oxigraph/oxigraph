@@ -1,4 +1,4 @@
-//! Rudf is a work in progress graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
+//! Oxigraph is a work in progress graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
 //!
 //! Its goal is to provide a compliant, safe and fast graph database.
 //!
@@ -9,10 +9,10 @@
 //! Usage example with the `MemoryRepository`:
 //!
 //! ```
-//! use rudf::model::*;
-//! use rudf::{Repository, RepositoryConnection, MemoryRepository, Result};
-//! use crate::rudf::sparql::{PreparedQuery, QueryOptions};
-//! use rudf::sparql::QueryResult;
+//! use oxigraph::model::*;
+//! use oxigraph::{Repository, RepositoryConnection, MemoryRepository, Result};
+//! use crate::oxigraph::sparql::{PreparedQuery, QueryOptions};
+//! use oxigraph::sparql::QueryResult;
 //!
 //! let repository = MemoryRepository::default();
 //! let mut connection = repository.connection().unwrap();

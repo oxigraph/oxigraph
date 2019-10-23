@@ -10,8 +10,8 @@ use std::iter::FromIterator;
 ///
 /// Usage example:
 /// ```
-/// use rudf::model::*;
-/// use rudf::model::SimpleGraph;
+/// use oxigraph::model::*;
+/// use oxigraph::model::SimpleGraph;
 ///
 /// let mut graph = SimpleGraph::default();
 /// let ex = NamedNode::parse("http://example.com").unwrap();

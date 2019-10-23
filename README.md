@@ -1,11 +1,11 @@
-Rudf
-====
+Oxigraph
+========
 
-[![actions status](https://github.com/Tpt/rudf/workflows/build/badge.svg)](https://github.com/Tpt/rudf/actions)
-[![dependency status](https://deps.rs/repo/github/Tpt/rudf/status.svg)](https://deps.rs/repo/github/Tpt/rudf)
+[![actions status](https://github.com/Tpt/oxigraph/workflows/build/badge.svg)](https://github.com/Tpt/oxigraph/actions)
+[![dependency status](https://deps.rs/repo/github/Tpt/oxigraph/status.svg)](https://deps.rs/repo/github/Tpt/oxigraph)
 
 
-Rudf is a work in progress graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
+Oxigraph is a work in progress graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
 
 There is no released version yet.
 
@@ -28,11 +28,11 @@ Are currently implemented:
 You need to have [a recent stable version of Rust and Cargo installed](https://www.rust-lang.org/tools/install).
 
 If it's done, executing `cargo build --release` in the root directory of this repository should compile the full server after having downloaded its dependencies.
-It will create a fat binary in `target/release/rudf_server`.
+It will create a fat binary in `target/release/oxigraph_server`.
 
 ### Usage
 
-Run `./rudf_server` to start the server. It listen by default on `localhost:7878`.
+Run `./oxigraph_server` to start the server. It listen by default on `localhost:7878`.
 
 The server provides an HTML UI with a form to execute SPARQL requests.
 
@@ -45,7 +45,7 @@ It provides the following routes:
   This route supports content negotiation and could return [Turtle](https://www.w3.org/TR/turtle/), [N-Triples](https://www.w3.org/TR/n-triples/), [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/), [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/) and [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/).
 
 
-Use `rudf_server --help` to see the possible options when starting the server.
+Use `oxigraph_server --help` to see the possible options when starting the server.
 
 
 ## Run the web server for Wikibase
@@ -54,13 +54,13 @@ Use `rudf_server --help` to see the possible options when starting the server.
 You need to have [a recent stable version of Rust and Cargo installed](https://www.rust-lang.org/tools/install).
 
 If it's done, executing `cargo build --release` in the root directory of this repository should compile the full server after having downloaded its dependencies.
-It will create a fat binary in `target/release/rudf_wikibase`.
+It will create a fat binary in `target/release/oxigraph_wikibase`.
 
 ### Usage
 
 To start a server that is synchronized with [test.wikidata.org](https://test.wikidata.org) you should run:
 ```bash
-./rudf_wikibase --mediawiki_api=https://test.wikidata.org/w/api.php --mediawiki_base_url=https://test.wikidata.org/wiki/ --namespaces=0,120 --file=test.wikidata
+./oxigraph_wikibase --mediawiki_api=https://test.wikidata.org/w/api.php --mediawiki_base_url=https://test.wikidata.org/wiki/ --namespaces=0,120 --file=test.wikidata
 ```
 
 It creates a SPARQL endpoint listening to `localhost:7878/query` that could be queried just like Blazegraph.
@@ -69,7 +69,7 @@ The configuration parameters are:
 * `mediawiki_api` URL of the MediaWiki API to use
 * `mediawiki_base_url` Base URL of MediaWiki pages like `https://test.wikidata.org/wiki/` for test.wikidata.org or `http://localhost/w/index.php?title=` for "vanilla" installations.
 * `namespaces` The ids of the Wikibase namespaces to synchronize with, separated by `,`.
-* `file` Path of where Rudf should store its data.
+* `file` Path of where Oxigraph should store its data.
 
 
 ## License

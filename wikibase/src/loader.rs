@@ -1,9 +1,9 @@
 use crate::SERVER;
 use chrono::{DateTime, Utc};
+use oxigraph::model::NamedNode;
+use oxigraph::{GraphSyntax, Repository, RepositoryConnection, Result};
 use reqwest::header::USER_AGENT;
 use reqwest::{Client, Url};
-use rudf::model::NamedNode;
-use rudf::{GraphSyntax, Repository, RepositoryConnection, Result};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::io::{BufReader, Read};

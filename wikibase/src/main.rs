@@ -2,13 +2,13 @@ use crate::loader::WikibaseLoader;
 use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
+use oxigraph::sparql::{PreparedQuery, QueryOptions, QueryResult, QueryResultSyntax};
+use oxigraph::{
+    FileSyntax, GraphSyntax, MemoryRepository, Repository, RepositoryConnection, RocksDbRepository,
+};
 use rouille::input::priority_header_preferred;
 use rouille::url::form_urlencoded;
 use rouille::{content_encoding, start_server, Request, Response};
-use rudf::sparql::{PreparedQuery, QueryOptions, QueryResult, QueryResultSyntax};
-use rudf::{
-    FileSyntax, GraphSyntax, MemoryRepository, Repository, RepositoryConnection, RocksDbRepository,
-};
 use std::io::Read;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -18,10 +18,10 @@ use std::time::Duration;
 mod loader;
 
 const MAX_SPARQL_BODY_SIZE: u64 = 1_048_576;
-const SERVER: &str = concat!("Rudf/", env!("CARGO_PKG_VERSION"));
+const SERVER: &str = concat!("Oxigraph/", env!("CARGO_PKG_VERSION"));
 
 pub fn main() {
-    let matches = App::new("Rudf SPARQL server")
+    let matches = App::new("Oxigraph SPARQL server")
         .arg(
             Arg::with_name("bind")
                 .long("bind")

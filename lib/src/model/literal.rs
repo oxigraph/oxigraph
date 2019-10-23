@@ -12,8 +12,8 @@ use std::option::Option;
 ///
 /// The default string formatter is returning a N-Triples, Turtle and SPARQL compatible representation:
 /// ```
-/// use rudf::model::Literal;
-/// use rudf::model::vocab::xsd;
+/// use oxigraph::model::Literal;
+/// use oxigraph::model::vocab::xsd;
 ///
 /// assert_eq!(
 ///     "\"foo\\nbar\"",

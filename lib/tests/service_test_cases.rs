@@ -1,9 +1,9 @@
 use failure::format_err;
-use rudf::model::*;
-use rudf::sparql::{
+use oxigraph::model::*;
+use oxigraph::sparql::{
     BindingsIterator, GraphPattern, PreparedQuery, QueryOptions, QueryResult, ServiceHandler,
 };
-use rudf::{GraphSyntax, MemoryRepository, Repository, RepositoryConnection, Result};
+use oxigraph::{GraphSyntax, MemoryRepository, Repository, RepositoryConnection, Result};
 use std::io::BufRead;
 
 #[test]

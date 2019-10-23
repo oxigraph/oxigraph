@@ -1,17 +1,17 @@
 [package]
-name = "rudf_wikibase"
+name = "oxigraph_wikibase"
 version = "0.1.0"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT/Apache-2.0"
 readme = "../README.md"
-repository = "https://github.com/Tpt/rudf"
+repository = "https://github.com/Tpt/oxigraph"
 description = """
-Rudf based SPARQL server for Wikibase instances
+SPARQL server based on Oxigraph for Wikibase instances
 """
 edition = "2018"
 
 [dependencies]
-rudf = {path = "../lib", features = ["rocksdb"] }
+oxigraph = {path = "../lib", features = ["rocksdb"] }
 clap = "2"
 rouille = "3"
 reqwest = "0.9"
