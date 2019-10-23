@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 DATASET_SIZE=100000
-cd bsbmtools-0.2
+cd bsbm-tools
 ./generate -fc -pc ${DATASET_SIZE} -s nt -fn "explore-${DATASET_SIZE}"
 export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
 ../graphdb-free-8.11.0/bin/graphdb -s -Dgraphdb.logger.root.level=WARN &

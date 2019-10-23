@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 DATASET_SIZE=100000
-cd bsbmtools-0.2
+cd bsbm-tools
 ./generate -fc -pc ${DATASET_SIZE} -s nt -fn "explore-${DATASET_SIZE}"
 cargo build --release --manifest-path="../../server/Cargo.toml" 
 ./../../target/release/rudf_server --file rudf_data &

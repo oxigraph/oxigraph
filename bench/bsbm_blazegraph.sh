@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 DATASET_SIZE=100000
-cd bsbmtools-0.2
+cd bsbm-tools
 ./generate -fc -pc ${DATASET_SIZE} -s nt -fn "explore-${DATASET_SIZE}"
 wget https://github.com/blazegraph/database/releases/download/BLAZEGRAPH_RELEASE_2_1_5/blazegraph.jar
 /usr/lib/jvm/java-8-openjdk-amd64/bin/java -server -jar blazegraph.jar &
