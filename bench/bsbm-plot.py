@@ -27,7 +27,7 @@ for file in glob('bsbm.explore.*.xml'):
         val =  float(query.find('aqet').text)
         if val > 0:
             aqet[run][int(query.attrib['nr'])] = val
-plot_y_per_x_per_plot(aqet, 'query id', 'execution time (s)', 'bsbm.explore.png')
+plot_y_per_x_per_plot(aqet, 'query id', 'execution time (s)', 'bsbm.explore.svg')
 
 # BSBM business intelligence
 aqet = defaultdict(dict)
@@ -37,6 +37,6 @@ for file in glob('bsbm.businessIntelligence.*.xml'):
         val =  float(query.find('aqet').text)
         if val > 0:
             aqet[run][int(query.attrib['nr'])] = val
-plot_y_per_x_per_plot(aqet, 'query id', 'execution time (s) - log scale', 'bsbm.businessIntelligence.png', log=True)
+plot_y_per_x_per_plot(aqet, 'query id', 'execution time (s) - log scale', 'bsbm.businessIntelligence.svg', log=True)
 
 plt.show()
