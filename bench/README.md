@@ -24,6 +24,9 @@ The [business intelligence use case](http://wifo5-03.informatik.uni-mannheim.de/
 
 Query 4 seems to be failing on Virtuoso and query 5 on Blazegraph and GraphDB.
 
+Oxigraph is still too slow to evaluate most of the queries.
+It will be added in the graph after enough optimizations are done.
+
 ![explore use case results](bsbm.businessIntelligence.svg)
 
 ## How to reproduce the benchmark
