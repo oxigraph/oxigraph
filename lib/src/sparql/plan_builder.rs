@@ -934,25 +934,31 @@ fn count_pattern_binds(
     pattern: &TripleOrPathPattern,
     assigned_variables: &HashSet<&Variable>,
 ) -> u8 {
-    let mut count = 3;
+    let mut count = 12;
     if let TermOrVariable::Variable(v) = pattern.subject() {
         if !assigned_variables.contains(v) {
-            count -= 1;
-        }
-    }
-    if let TripleOrPathPattern::Triple(t) = pattern {
-        if let NamedNodeOrVariable::Variable(v) = &t.predicate {
-            if !assigned_variables.contains(v) {
-                count -= 1;
-            }
+            count -= 4;
         }
     } else {
         count -= 1;
     }
-    if let TermOrVariable::Variable(v) = pattern.object() {
-        if !assigned_variables.contains(v) {
+    if let TripleOrPathPattern::Triple(t) = pattern {
+        if let NamedNodeOrVariable::Variable(v) = &t.predicate {
+            if !assigned_variables.contains(v) {
+                count -= 4;
+            }
+        } else {
             count -= 1;
         }
+    } else {
+        count -= 3;
+    }
+    if let TermOrVariable::Variable(v) = pattern.object() {
+        if !assigned_variables.contains(v) {
+            count -= 4;
+        }
+    } else {
+        count -= 1;
     }
     count
 }
