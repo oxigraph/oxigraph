@@ -15,7 +15,6 @@ edition = "2018"
 [dependencies]
 lazy_static = "1"
 rocksdb = { version = "0.12", optional = true }
-uuid = { version = "0.8", features = ["v4"] }
 byteorder = { version = "1", features = ["i128"] }
 quick-xml = "0.17"
 ordered-float = "1"

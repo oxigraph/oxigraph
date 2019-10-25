@@ -33,7 +33,6 @@ use std::iter::{empty, once};
 use std::ops::Deref;
 use std::str;
 use std::sync::Mutex;
-use uuid::Uuid;
 
 const REGEX_SIZE_LIMIT: usize = 1_000_000;
 
@@ -1222,16 +1221,17 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 })
             }
             PlanExpression::Now => Some(self.now.into()),
-            PlanExpression::UUID => self.build_named_node(
-                Uuid::new_v4()
-                    .to_urn()
-                    .encode_lower(&mut Uuid::encode_buffer()),
-            ),
-            PlanExpression::StrUUID => self.build_string_literal(
-                Uuid::new_v4()
-                    .to_hyphenated()
-                    .encode_lower(&mut Uuid::encode_buffer()),
-            ),
+            PlanExpression::UUID => {
+                let mut buffer = String::with_capacity(44);
+                buffer.push_str("urn:uuid:");
+                generate_uuid(&mut buffer);
+                self.build_named_node(&buffer)
+            }
+            PlanExpression::StrUUID => {
+                let mut buffer = String::with_capacity(36);
+                generate_uuid(&mut buffer);
+                self.build_string_literal(&buffer)
+            }
             PlanExpression::MD5(arg) => self.hash::<Md5>(arg, tuple),
             PlanExpression::SHA1(arg) => self.hash::<Sha1>(arg, tuple),
             PlanExpression::SHA256(arg) => self.hash::<Sha256>(arg, tuple),
@@ -2726,4 +2726,50 @@ impl<'a, S: StoreConnection + 'a> Accumulator for GroupConcatAccumulator<'a, S> 
                 .build_plain_literal(result, self.language.and_then(|v| v))
         })
     }
+}
+
+fn generate_uuid(buffer: &mut String) {
+    let mut uuid = random::<u128>().to_ne_bytes();
+    uuid[6] = (uuid[6] & 0x0F) | 0x40;
+    uuid[8] = (uuid[8] & 0x3F) | 0x80;
+
+    write_hexa_bytes(&uuid[0..4], buffer);
+    buffer.push('-');
+    write_hexa_bytes(&uuid[4..6], buffer);
+    buffer.push('-');
+    write_hexa_bytes(&uuid[6..8], buffer);
+    buffer.push('-');
+    write_hexa_bytes(&uuid[8..10], buffer);
+    buffer.push('-');
+    write_hexa_bytes(&uuid[10..16], buffer);
+}
+
+fn write_hexa_bytes(bytes: &[u8], buffer: &mut String) {
+    for b in bytes {
+        let high = b / 16;
+        buffer.push(char::from(if high < 10 {
+            b'0' + high
+        } else {
+            b'a' + (high - 10)
+        }));
+        let low = b % 16;
+        buffer.push(char::from(if low < 10 {
+            b'0' + low
+        } else {
+            b'a' + (low - 10)
+        }));
+    }
+}
+
+#[test]
+fn uuid() {
+    let mut buffer = String::default();
+    generate_uuid(&mut buffer);
+    assert!(
+        Regex::new("^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+            .unwrap()
+            .is_match(&buffer),
+        "{} is not a valid UUID",
+        buffer
+    );
 }
