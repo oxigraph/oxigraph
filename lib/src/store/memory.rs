@@ -17,23 +17,24 @@ use std::sync::{PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 /// use oxigraph::sparql::{QueryResult, QueryOptions};
 ///
 /// let repository = MemoryRepository::default();
-/// let mut connection = repository.connection().unwrap();
+/// let mut connection = repository.connection()?;
 ///
 /// // insertion
-/// let ex = NamedNode::parse("http://example.com").unwrap();
+/// let ex = NamedNode::parse("http://example.com")?;
 /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
-/// connection.insert(&quad);
+/// connection.insert(&quad)?;
 ///
 /// // quad filter
 /// let results: Result<Vec<Quad>> = connection.quads_for_pattern(None, None, None, None).collect();
-/// assert_eq!(vec![quad], results.unwrap());
+/// assert_eq!(vec![quad], results?);
 ///
 /// // SPARQL query
-/// let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default()).unwrap();
-/// let results = prepared_query.exec().unwrap();
+/// let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
+/// let results = prepared_query.exec()?;
 /// if let QueryResult::Bindings(results) = results {
-///     assert_eq!(results.into_values_iter().next().unwrap().unwrap()[0], Some(ex.into()));
+///     assert_eq!(results.into_values_iter().next().unwrap()?[0], Some(ex.into()));
 /// }
+/// # Result::Ok(())
 /// ```
 #[derive(Default)]
 pub struct MemoryRepository {
@@ -44,7 +45,6 @@ pub type MemoryRepositoryConnection<'a> = StoreRepositoryConnection<&'a MemorySt
 type TripleMap<T> = BTreeMap<T, BTreeMap<T, BTreeSet<T>>>;
 type QuadMap<T> = BTreeMap<T, TripleMap<T>>;
 
-#[derive(Default)]
 pub struct MemoryStore {
     indexes: RwLock<MemoryStoreIndexes>,
 }
@@ -57,7 +57,21 @@ struct MemoryStoreIndexes {
     gspo: QuadMap<EncodedTerm>,
     gpos: QuadMap<EncodedTerm>,
     gosp: QuadMap<EncodedTerm>,
-    str_store: MemoryStrStore,
+    id2str: BTreeMap<u128, String>,
+}
+
+impl Default for MemoryStore {
+    fn default() -> Self {
+        let new = Self {
+            indexes: RwLock::default(),
+        };
+
+        let mut transaction = (&new).connection().unwrap().transaction();
+        transaction.set_first_strings().unwrap();
+        transaction.commit().unwrap();
+
+        new
+    }
 }
 
 impl<'a> Repository for &'a MemoryRepository {
@@ -78,21 +92,35 @@ impl<'a> Store for &'a MemoryStore {
 
 impl<'a> StrLookup for &'a MemoryStore {
     fn get_str(&self, id: u128) -> Result<Option<String>> {
-        self.indexes()?.str_store.get_str(id)
+        //TODO: avoid copy by adding a lifetime limit to get_str
+        Ok(self.indexes()?.id2str.get(&id).cloned())
     }
 }
 
 impl<'a> StrContainer for &'a MemoryStore {
     fn insert_str(&mut self, key: u128, value: &str) -> Result<()> {
-        self.indexes_mut()?.str_store.insert_str(key, value)
+        self.indexes_mut()?
+            .id2str
+            .entry(key)
+            .or_insert_with(|| value.to_owned());
+        Ok(())
     }
 }
 
 impl<'a> StoreConnection for &'a MemoryStore {
-    type Transaction = &'a MemoryStore;
+    type Transaction = MemoryTransaction<'a>;
+    type AutoTransaction = &'a MemoryStore;
 
-    fn transaction(&self) -> Result<&'a MemoryStore> {
-        Ok(self)
+    fn transaction(&self) -> MemoryTransaction<'a> {
+        MemoryTransaction {
+            store: self,
+            ops: Vec::default(),
+            strings: Vec::default(),
+        }
+    }
+
+    fn auto_transaction(&self) -> &'a MemoryStore {
+        self
     }
 
     fn contains(&self, quad: &EncodedQuad) -> Result<bool> {
@@ -185,99 +213,14 @@ impl<'a> StoreConnection for &'a MemoryStore {
     }
 }
 
-/// TODO: implement properly
 impl<'a> StoreTransaction for &'a MemoryStore {
     fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
-        let mut quad_indexes = self.indexes_mut()?;
-        insert_into_quad_map(
-            &mut quad_indexes.gosp,
-            quad.graph_name,
-            quad.object,
-            quad.subject,
-            quad.predicate,
-        );
-        insert_into_quad_map(
-            &mut quad_indexes.gpos,
-            quad.graph_name,
-            quad.predicate,
-            quad.object,
-            quad.subject,
-        );
-        insert_into_quad_map(
-            &mut quad_indexes.gspo,
-            quad.graph_name,
-            quad.subject,
-            quad.predicate,
-            quad.object,
-        );
-        insert_into_quad_map(
-            &mut quad_indexes.ospg,
-            quad.object,
-            quad.subject,
-            quad.predicate,
-            quad.graph_name,
-        );
-        insert_into_quad_map(
-            &mut quad_indexes.posg,
-            quad.predicate,
-            quad.object,
-            quad.subject,
-            quad.graph_name,
-        );
-        insert_into_quad_map(
-            &mut quad_indexes.spog,
-            quad.subject,
-            quad.predicate,
-            quad.object,
-            quad.graph_name,
-        );
+        self.indexes_mut()?.insert_quad(quad);
         Ok(())
     }
 
     fn remove(&mut self, quad: &EncodedQuad) -> Result<()> {
-        let mut quad_indexes = self.indexes_mut()?;
-        remove_from_quad_map(
-            &mut quad_indexes.gosp,
-            &quad.graph_name,
-            &quad.object,
-            &quad.subject,
-            &quad.predicate,
-        );
-        remove_from_quad_map(
-            &mut quad_indexes.gpos,
-            &quad.graph_name,
-            &quad.predicate,
-            &quad.object,
-            &quad.subject,
-        );
-        remove_from_quad_map(
-            &mut quad_indexes.gspo,
-            &quad.graph_name,
-            &quad.subject,
-            &quad.predicate,
-            &quad.object,
-        );
-        remove_from_quad_map(
-            &mut quad_indexes.ospg,
-            &quad.object,
-            &quad.subject,
-            &quad.predicate,
-            &quad.graph_name,
-        );
-        remove_from_quad_map(
-            &mut quad_indexes.posg,
-            &quad.predicate,
-            &quad.object,
-            &quad.subject,
-            &quad.graph_name,
-        );
-        remove_from_quad_map(
-            &mut quad_indexes.spog,
-            &quad.subject,
-            &quad.predicate,
-            &quad.object,
-            &quad.graph_name,
-        );
+        self.indexes_mut()?.remove_quad(quad);
         Ok(())
     }
 
@@ -517,6 +460,98 @@ impl MemoryStore {
     }
 }
 
+impl MemoryStoreIndexes {
+    fn insert_quad(&mut self, quad: &EncodedQuad) {
+        insert_into_quad_map(
+            &mut self.gosp,
+            quad.graph_name,
+            quad.object,
+            quad.subject,
+            quad.predicate,
+        );
+        insert_into_quad_map(
+            &mut self.gpos,
+            quad.graph_name,
+            quad.predicate,
+            quad.object,
+            quad.subject,
+        );
+        insert_into_quad_map(
+            &mut self.gspo,
+            quad.graph_name,
+            quad.subject,
+            quad.predicate,
+            quad.object,
+        );
+        insert_into_quad_map(
+            &mut self.ospg,
+            quad.object,
+            quad.subject,
+            quad.predicate,
+            quad.graph_name,
+        );
+        insert_into_quad_map(
+            &mut self.posg,
+            quad.predicate,
+            quad.object,
+            quad.subject,
+            quad.graph_name,
+        );
+        insert_into_quad_map(
+            &mut self.spog,
+            quad.subject,
+            quad.predicate,
+            quad.object,
+            quad.graph_name,
+        );
+    }
+
+    fn remove_quad(&mut self, quad: &EncodedQuad) {
+        remove_from_quad_map(
+            &mut self.gosp,
+            &quad.graph_name,
+            &quad.object,
+            &quad.subject,
+            &quad.predicate,
+        );
+        remove_from_quad_map(
+            &mut self.gpos,
+            &quad.graph_name,
+            &quad.predicate,
+            &quad.object,
+            &quad.subject,
+        );
+        remove_from_quad_map(
+            &mut self.gspo,
+            &quad.graph_name,
+            &quad.subject,
+            &quad.predicate,
+            &quad.object,
+        );
+        remove_from_quad_map(
+            &mut self.ospg,
+            &quad.object,
+            &quad.subject,
+            &quad.predicate,
+            &quad.graph_name,
+        );
+        remove_from_quad_map(
+            &mut self.posg,
+            &quad.predicate,
+            &quad.object,
+            &quad.subject,
+            &quad.graph_name,
+        );
+        remove_from_quad_map(
+            &mut self.spog,
+            &quad.subject,
+            &quad.predicate,
+            &quad.object,
+            &quad.graph_name,
+        );
+    }
+}
+
 fn wrap_error<'a, E: 'static, I: Iterator<Item = Result<E>> + 'a>(
     iter: Result<I>,
 ) -> Box<dyn Iterator<Item = Result<E>> + 'a> {
@@ -601,6 +636,48 @@ fn quad_map_flatten<'a, T: Copy>(gspo: &'a QuadMap<T>) -> impl Iterator<Item = (
             })
         })
     })
+}
+
+pub struct MemoryTransaction<'a> {
+    store: &'a MemoryStore,
+    ops: Vec<TransactionOp>,
+    strings: Vec<(u128, String)>,
+}
+
+enum TransactionOp {
+    Insert(EncodedQuad),
+    Delete(EncodedQuad),
+}
+
+impl StrContainer for MemoryTransaction<'_> {
+    fn insert_str(&mut self, key: u128, value: &str) -> Result<()> {
+        self.strings.push((key, value.to_owned()));
+        Ok(())
+    }
+}
+
+impl StoreTransaction for MemoryTransaction<'_> {
+    fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
+        self.ops.push(TransactionOp::Insert(quad.clone()));
+        Ok(())
+    }
+
+    fn remove(&mut self, quad: &EncodedQuad) -> Result<()> {
+        self.ops.push(TransactionOp::Delete(quad.clone()));
+        Ok(())
+    }
+
+    fn commit(self) -> Result<()> {
+        let mut indexes = self.store.indexes_mut()?;
+        indexes.id2str.extend(self.strings);
+        for op in self.ops {
+            match op {
+                TransactionOp::Insert(quad) => indexes.insert_quad(&quad),
+                TransactionOp::Delete(quad) => indexes.remove_quad(&quad),
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Fail)]

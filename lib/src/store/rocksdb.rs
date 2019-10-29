@@ -14,30 +14,36 @@ use std::str;
 /// To use it, the `"rocksdb"` feature need to be activated.
 ///
 /// Usage example:
-/// ```ignored
+/// ```
 /// use oxigraph::model::*;
-/// use oxigraph::{Repository, RepositoryConnection, RocksDbRepository, Result};
+/// use oxigraph::{Repository, RepositoryConnection, RepositoryTransaction, RocksDbRepository, Result};
 /// use crate::oxigraph::sparql::{PreparedQuery, QueryOptions};
 /// use oxigraph::sparql::QueryResult;
+/// # use std::fs::remove_dir_all;
 ///
-/// let repository = RocksDbRepository::open("example.db").unwrap();
-/// let mut connection = repository.connection().unwrap();
+/// # {
+/// let repository = RocksDbRepository::open("example.db")?;
+/// let mut connection = repository.connection()?;
 ///
 /// // insertion
-/// let ex = NamedNode::parse("http://example.com").unwrap();
+/// let ex = NamedNode::parse("http://example.com")?;
 /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
-/// connection.insert(&quad);
+/// connection.insert(&quad)?;
 ///
 /// // quad filter
 /// let results: Result<Vec<Quad>> = connection.quads_for_pattern(None, None, None, None).collect();
-/// assert_eq!(vec![quad], results.unwrap());
+/// assert_eq!(vec![quad], results?);
 ///
 /// // SPARQL query
-/// let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default()).unwrap();
-/// let results = prepared_query.exec().unwrap();
+/// let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
+/// let results = prepared_query.exec()?;
 /// if let QueryResult::Bindings(results) = results {
-///     assert_eq!(results.into_values_iter().next().unwrap().unwrap()[0], Some(ex.into()));
+///     assert_eq!(results.into_values_iter().next().unwrap()?[0], Some(ex.into()));
 /// }
+/// #
+/// # }
+/// # remove_dir_all("example.db")?;
+/// # Result::Ok(())
 /// ```
 pub struct RocksDbRepository {
     inner: RocksDbStore,
@@ -106,7 +112,7 @@ impl RocksDbStore {
             db: DB::open_cf(&options, path, &COLUMN_FAMILIES)?,
         };
 
-        let mut transaction = (&new).connection()?.transaction()?;
+        let mut transaction = (&new).connection()?.transaction();
         transaction.set_first_strings()?;
         transaction.commit()?;
 
@@ -143,13 +149,26 @@ impl StrLookup for RocksDbStoreConnection<'_> {
 
 impl<'a> StoreConnection for RocksDbStoreConnection<'a> {
     type Transaction = RocksDbStoreTransaction<'a>;
+    type AutoTransaction = RocksDbStoreAutoTransaction<'a>;
 
-    fn transaction(&self) -> Result<RocksDbStoreTransaction<'a>> {
-        Ok(RocksDbStoreTransaction {
-            connection: self.clone(),
-            batch: WriteBatch::default(),
-            buffer: Vec::default(),
-        })
+    fn transaction(&self) -> RocksDbStoreTransaction<'a> {
+        RocksDbStoreTransaction {
+            inner: RocksDbStoreInnerTransaction {
+                connection: self.clone(),
+                batch: WriteBatch::default(),
+                buffer: Vec::default(),
+            },
+        }
+    }
+
+    fn auto_transaction(&self) -> RocksDbStoreAutoTransaction<'a> {
+        RocksDbStoreAutoTransaction {
+            inner: RocksDbStoreInnerTransaction {
+                connection: self.clone(),
+                batch: WriteBatch::default(),
+                buffer: Vec::default(),
+            },
+        }
     }
 
     fn contains(&self, quad: &EncodedQuad) -> Result<bool> {
@@ -427,20 +446,81 @@ impl<'a> RocksDbStoreConnection<'a> {
 }
 
 pub struct RocksDbStoreTransaction<'a> {
+    inner: RocksDbStoreInnerTransaction<'a>,
+}
+
+impl StrContainer for RocksDbStoreTransaction<'_> {
+    fn insert_str(&mut self, key: u128, value: &str) -> Result<()> {
+        self.inner.insert_str(key, value)
+    }
+}
+
+impl StoreTransaction for RocksDbStoreTransaction<'_> {
+    fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
+        self.inner.insert(quad)
+    }
+
+    fn remove(&mut self, quad: &EncodedQuad) -> Result<()> {
+        self.inner.remove(quad)
+    }
+
+    fn commit(self) -> Result<()> {
+        self.inner.commit()
+    }
+}
+
+pub struct RocksDbStoreAutoTransaction<'a> {
+    inner: RocksDbStoreInnerTransaction<'a>,
+}
+
+impl StrContainer for RocksDbStoreAutoTransaction<'_> {
+    fn insert_str(&mut self, key: u128, value: &str) -> Result<()> {
+        self.inner.insert_str(key, value)
+    }
+}
+
+impl StoreTransaction for RocksDbStoreAutoTransaction<'_> {
+    fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
+        self.inner.insert(quad)?;
+        self.commit_if_big()
+    }
+
+    fn remove(&mut self, quad: &EncodedQuad) -> Result<()> {
+        self.inner.remove(quad)?;
+        self.commit_if_big()
+    }
+
+    fn commit(self) -> Result<()> {
+        self.inner.commit()
+    }
+}
+
+impl RocksDbStoreAutoTransaction<'_> {
+    fn commit_if_big(&mut self) -> Result<()> {
+        if self.inner.batch.len() > MAX_TRANSACTION_SIZE {
+            self.inner
+                .connection
+                .store
+                .db
+                .write(replace(&mut self.inner.batch, WriteBatch::default()))?;
+        }
+        Ok(())
+    }
+}
+
+struct RocksDbStoreInnerTransaction<'a> {
     connection: RocksDbStoreConnection<'a>,
     batch: WriteBatch,
     buffer: Vec<u8>,
 }
 
-impl StrContainer for RocksDbStoreTransaction<'_> {
+impl RocksDbStoreInnerTransaction<'_> {
     fn insert_str(&mut self, key: u128, value: &str) -> Result<()> {
         self.batch
             .put_cf(self.connection.id2str_cf, &key.to_le_bytes(), value)?;
         Ok(())
     }
-}
 
-impl<'a> StoreTransaction for RocksDbStoreTransaction<'a> {
     fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
         self.buffer.write_spog_quad(quad)?;
         self.batch
@@ -471,13 +551,6 @@ impl<'a> StoreTransaction for RocksDbStoreTransaction<'a> {
         self.batch
             .put_cf(self.connection.gosp_cf, &self.buffer, &EMPTY_BUF)?;
         self.buffer.clear();
-
-        if self.batch.len() > MAX_TRANSACTION_SIZE {
-            self.connection
-                .store
-                .db
-                .write(replace(&mut self.batch, WriteBatch::default()))?;
-        }
 
         Ok(())
     }
@@ -512,13 +585,6 @@ impl<'a> StoreTransaction for RocksDbStoreTransaction<'a> {
         self.batch
             .delete_cf(self.connection.gosp_cf, &self.buffer)?;
         self.buffer.clear();
-
-        if self.batch.len() > MAX_TRANSACTION_SIZE {
-            self.connection
-                .store
-                .db
-                .write(replace(&mut self.batch, WriteBatch::default()))?;
-        }
 
         Ok(())
     }
@@ -593,7 +659,7 @@ impl<'a, F: Fn(&[u8]) -> Result<EncodedQuad>> Iterator for DecodingIndexIterator
 #[test]
 fn repository() -> Result<()> {
     use crate::model::*;
-    use crate::repository::RepositoryConnection;
+    use crate::*;
     use rand::random;
     use std::env::temp_dir;
     use std::fs::remove_dir_all;

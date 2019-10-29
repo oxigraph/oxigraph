@@ -11,6 +11,7 @@ pub use crate::store::memory::MemoryRepository;
 pub use crate::store::rocksdb::RocksDbRepository;
 
 use crate::model::*;
+use crate::repository::RepositoryTransaction;
 use crate::sparql::{QueryOptions, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::{DatasetSyntax, GraphSyntax, RepositoryConnection, Result};
@@ -31,11 +32,11 @@ pub trait Store {
 /// A connection to a `Store`
 pub trait StoreConnection: StrLookup + Sized + Clone {
     type Transaction: StoreTransaction;
+    type AutoTransaction: StoreTransaction;
 
-    /// Creates an edition transaction
-    /// TODO: current transaction implementations could commit before the call to commit()
-    /// It's why this API is not exposed publicly yet
-    fn transaction(&self) -> Result<Self::Transaction>;
+    fn transaction(&self) -> Self::Transaction;
+
+    fn auto_transaction(&self) -> Self::AutoTransaction;
 
     fn contains(&self, quad: &EncodedQuad) -> Result<bool>;
 
@@ -69,11 +70,30 @@ impl<S: StoreConnection> From<S> for StoreRepositoryConnection<S> {
     }
 }
 
+impl<S: StoreConnection> StoreRepositoryConnection<S> {
+    #[must_use]
+    fn auto_transaction(&self) -> StoreRepositoryTransaction<S::AutoTransaction> {
+        StoreRepositoryTransaction {
+            inner: self.inner.auto_transaction(),
+        }
+    }
+}
+
 impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
+    type Transaction = StoreRepositoryTransaction<S::Transaction>;
     type PreparedQuery = SimplePreparedQuery<S>;
 
     fn prepare_query(&self, query: &str, options: QueryOptions) -> Result<SimplePreparedQuery<S>> {
         SimplePreparedQuery::new(self.inner.clone(), query, options) //TODO: avoid clone
+    }
+
+    fn prepare_query_from_pattern(
+        &self,
+        pattern: &GraphPattern,
+        options: QueryOptions,
+    ) -> Result<Self::PreparedQuery> {
+        SimplePreparedQuery::new_from_pattern(self.inner.clone(), pattern, options)
+        //TODO: avoid clone
     }
 
     fn quads_for_pattern<'a>(
@@ -97,15 +117,60 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
         )
     }
 
-    fn prepare_query_from_pattern(
-        &self,
-        pattern: &GraphPattern,
-        options: QueryOptions,
-    ) -> Result<Self::PreparedQuery> {
-        SimplePreparedQuery::new_from_pattern(self.inner.clone(), pattern, options)
-        //TODO: avoid clone
+    fn contains(&self, quad: &Quad) -> Result<bool> {
+        self.inner.contains(&quad.into())
     }
 
+    #[must_use]
+    fn transaction(&self, f: impl FnOnce(&mut Self::Transaction) -> Result<()>) -> Result<()> {
+        let mut transaction = StoreRepositoryTransaction {
+            inner: self.inner.transaction(),
+        };
+        f(&mut transaction)?;
+        transaction.inner.commit()
+    }
+
+    fn load_graph(
+        &mut self,
+        reader: impl BufRead,
+        syntax: GraphSyntax,
+        to_graph_name: Option<&NamedOrBlankNode>,
+        base_iri: Option<&str>,
+    ) -> Result<()> {
+        let mut transaction = self.auto_transaction();
+        transaction.load_graph(reader, syntax, to_graph_name, base_iri)?;
+        transaction.inner.commit()
+    }
+
+    fn load_dataset(
+        &mut self,
+        reader: impl BufRead,
+        syntax: DatasetSyntax,
+        base_iri: Option<&str>,
+    ) -> Result<()> {
+        let mut transaction = self.auto_transaction();
+        transaction.load_dataset(reader, syntax, base_iri)?;
+        transaction.inner.commit()
+    }
+
+    fn insert(&mut self, quad: &Quad) -> Result<()> {
+        let mut transaction = self.auto_transaction();
+        transaction.insert(&quad)?;
+        transaction.inner.commit()
+    }
+
+    fn remove(&mut self, quad: &Quad) -> Result<()> {
+        let mut transaction = self.auto_transaction();
+        transaction.remove(&quad)?;
+        transaction.inner.commit()
+    }
+}
+
+pub struct StoreRepositoryTransaction<T: StoreTransaction> {
+    inner: T,
+}
+
+impl<T: StoreTransaction> RepositoryTransaction for StoreRepositoryTransaction<T> {
     fn load_graph(
         &mut self,
         reader: impl BufRead,
@@ -140,26 +205,18 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
         }
     }
 
-    fn contains(&self, quad: &Quad) -> Result<bool> {
-        self.inner.contains(&quad.into())
-    }
-
     fn insert(&mut self, quad: &Quad) -> Result<()> {
-        let mut transaction = self.inner.transaction()?;
-        let quad = transaction.encode_quad(quad)?;
-        transaction.insert(&quad)?;
-        transaction.commit()
+        let quad = self.inner.encode_quad(quad)?;
+        self.inner.insert(&quad)
     }
 
     fn remove(&mut self, quad: &Quad) -> Result<()> {
-        let mut transaction = self.inner.transaction()?;
-        let quad = transaction.encode_quad(quad)?;
-        transaction.remove(&quad)?;
-        transaction.commit()
+        let quad = quad.into();
+        self.inner.remove(&quad)
     }
 }
 
-impl<S: StoreConnection> StoreRepositoryConnection<S> {
+impl<T: StoreTransaction> StoreRepositoryTransaction<T> {
     fn load_from_triple_parser<P: TriplesParser>(
         &mut self,
         mut parser: P,
@@ -168,32 +225,28 @@ impl<S: StoreConnection> StoreRepositoryConnection<S> {
     where
         P::Error: Send + Sync + 'static,
     {
-        let mut transaction = self.inner.transaction()?;
         let mut bnode_map = HashMap::default();
         let graph_name = if let Some(graph_name) = to_graph_name {
-            transaction.encode_named_or_blank_node(graph_name)?
+            self.inner.encode_named_or_blank_node(graph_name)?
         } else {
             EncodedTerm::DefaultGraph
         };
-        let tr = &mut transaction;
         parser.parse_all(&mut move |t| {
-            let quad = tr.encode_rio_triple_in_graph(t, graph_name, &mut bnode_map)?;
-            tr.insert(&quad)
-        })?;
-        transaction.commit() //TODO: partials commits
+            let quad = self
+                .inner
+                .encode_rio_triple_in_graph(t, graph_name, &mut bnode_map)?;
+            self.inner.insert(&quad)
+        })
     }
 
     fn load_from_quad_parser<P: QuadsParser>(&mut self, mut parser: P) -> Result<()>
     where
         P::Error: Send + Sync + 'static,
     {
-        let mut transaction = self.inner.transaction()?;
         let mut bnode_map = HashMap::default();
-        let tr = &mut transaction;
         parser.parse_all(&mut move |q| {
-            let quad = tr.encode_rio_quad(q, &mut bnode_map)?;
-            tr.insert(&quad)
-        })?;
-        transaction.commit() //TODO: partials commits
+            let quad = self.inner.encode_rio_quad(q, &mut bnode_map)?;
+            self.inner.insert(&quad)
+        })
     }
 }

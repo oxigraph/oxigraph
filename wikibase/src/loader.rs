@@ -1,7 +1,7 @@
 use crate::SERVER;
 use chrono::{DateTime, Utc};
 use oxigraph::model::NamedNode;
-use oxigraph::{GraphSyntax, Repository, RepositoryConnection, Result};
+use oxigraph::*;
 use reqwest::header::USER_AGENT;
 use reqwest::{Client, Url};
 use serde_json::Value;
@@ -192,21 +192,22 @@ impl<R: Repository + Copy> WikibaseLoader<R> {
     }
 
     fn load_entity_data(&self, uri: &str, data: impl Read) -> Result<()> {
-        let mut connection = self.repository.connection()?;
+        let connection = self.repository.connection()?;
         let graph_name = NamedNode::parse(uri)?.into();
+        connection.transaction(|transaction| {
+            let to_remove = connection
+                .quads_for_pattern(None, None, None, Some(Some(&graph_name)))
+                .collect::<Result<Vec<_>>>()?;
+            for q in to_remove {
+                transaction.remove(&q)?;
+            }
 
-        let to_remove = connection
-            .quads_for_pattern(None, None, None, Some(Some(&graph_name)))
-            .collect::<Result<Vec<_>>>()?;
-        for q in to_remove {
-            connection.remove(&q)?;
-        }
-
-        connection.load_graph(
-            BufReader::new(data),
-            GraphSyntax::NTriples,
-            Some(&NamedNode::parse(uri)?.into()),
-            None,
-        )
+            transaction.load_graph(
+                BufReader::new(data),
+                GraphSyntax::NTriples,
+                Some(&NamedNode::parse(uri)?.into()),
+                None,
+            )
+        })
     }
 }
