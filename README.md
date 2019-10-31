@@ -27,7 +27,7 @@ A preliminary benchmark [is provided](bench/README.md).
 ## Run the web server
 
 ### Build
-You need to have [a recent stable version of Rust and Cargo installed](https://www.rust-lang.org/tools/install).
+You need to have [a recent stable version of Rust and Cargo installed](https://www.rust-lang.org/tools/install). You also need [llvm](http://www.llvm.org/) (and [clang](https://clang.llvm.org/)) to build the rocksDB and other bindings.
 
 If it's done, executing `cargo build --release` in the root directory of this repository should compile the full server after having downloaded its dependencies.
 It will create a fat binary in `target/release/oxigraph_server`.
