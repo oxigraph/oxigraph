@@ -246,17 +246,14 @@ impl<'a> StoreConnection for RocksDbStoreConnection<'a> {
 
 impl<'a> RocksDbStoreConnection<'a> {
     fn quads(&self) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.spog_quads(b"", EncodedQuadPattern::new(None, None, None, None))
+        self.spog_quads(Vec::default())
     }
 
     fn quads_for_subject(
         &self,
         subject: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.spog_quads(
-            &encode_term(subject)?,
-            EncodedQuadPattern::new(Some(subject), None, None, None),
-        )
+        self.spog_quads(encode_term(subject)?)
     }
 
     fn quads_for_subject_predicate(
@@ -264,10 +261,7 @@ impl<'a> RocksDbStoreConnection<'a> {
         subject: EncodedTerm,
         predicate: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.spog_quads(
-            &encode_term_pair(subject, predicate)?,
-            EncodedQuadPattern::new(Some(subject), Some(predicate), None, None),
-        )
+        self.spog_quads(encode_term_pair(subject, predicate)?)
     }
 
     fn quads_for_subject_predicate_object(
@@ -276,10 +270,7 @@ impl<'a> RocksDbStoreConnection<'a> {
         predicate: EncodedTerm,
         object: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.spog_quads(
-            &encode_term_triple(subject, predicate, object)?,
-            EncodedQuadPattern::new(Some(subject), Some(predicate), Some(object), None),
-        )
+        self.spog_quads(encode_term_triple(subject, predicate, object)?)
     }
 
     fn quads_for_subject_object(
@@ -287,20 +278,14 @@ impl<'a> RocksDbStoreConnection<'a> {
         subject: EncodedTerm,
         object: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.ospg_quads(
-            &encode_term_pair(object, subject)?,
-            EncodedQuadPattern::new(Some(subject), None, Some(object), None),
-        )
+        self.ospg_quads(encode_term_pair(object, subject)?)
     }
 
     fn quads_for_predicate(
         &self,
         predicate: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.posg_quads(
-            &encode_term(predicate)?,
-            EncodedQuadPattern::new(None, Some(predicate), None, None),
-        )
+        self.posg_quads(encode_term(predicate)?)
     }
 
     fn quads_for_predicate_object(
@@ -308,30 +293,21 @@ impl<'a> RocksDbStoreConnection<'a> {
         predicate: EncodedTerm,
         object: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.posg_quads(
-            &encode_term_pair(predicate, object)?,
-            EncodedQuadPattern::new(None, Some(predicate), Some(object), None),
-        )
+        self.posg_quads(encode_term_pair(predicate, object)?)
     }
 
     fn quads_for_object(
         &self,
         object: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.ospg_quads(
-            &encode_term(object)?,
-            EncodedQuadPattern::new(None, None, Some(object), None),
-        )
+        self.ospg_quads(encode_term(object)?)
     }
 
     fn quads_for_graph(
         &self,
         graph_name: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.gspo_quads(
-            &encode_term(graph_name)?,
-            EncodedQuadPattern::new(None, None, None, Some(graph_name)),
-        )
+        self.gspo_quads(encode_term(graph_name)?)
     }
 
     fn quads_for_subject_graph(
@@ -339,10 +315,7 @@ impl<'a> RocksDbStoreConnection<'a> {
         subject: EncodedTerm,
         graph_name: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.gspo_quads(
-            &encode_term_pair(graph_name, subject)?,
-            EncodedQuadPattern::new(Some(subject), None, None, Some(graph_name)),
-        )
+        self.gspo_quads(encode_term_pair(graph_name, subject)?)
     }
 
     fn quads_for_subject_predicate_graph(
@@ -351,10 +324,7 @@ impl<'a> RocksDbStoreConnection<'a> {
         predicate: EncodedTerm,
         graph_name: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.gspo_quads(
-            &encode_term_triple(graph_name, subject, predicate)?,
-            EncodedQuadPattern::new(Some(subject), Some(predicate), None, Some(graph_name)),
-        )
+        self.gspo_quads(encode_term_triple(graph_name, subject, predicate)?)
     }
 
     fn quads_for_subject_object_graph(
@@ -363,10 +333,7 @@ impl<'a> RocksDbStoreConnection<'a> {
         object: EncodedTerm,
         graph_name: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.gosp_quads(
-            &encode_term_triple(graph_name, object, subject)?,
-            EncodedQuadPattern::new(Some(subject), None, Some(object), Some(graph_name)),
-        )
+        self.gosp_quads(encode_term_triple(graph_name, object, subject)?)
     }
 
     fn quads_for_predicate_graph(
@@ -374,10 +341,7 @@ impl<'a> RocksDbStoreConnection<'a> {
         predicate: EncodedTerm,
         graph_name: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.gpos_quads(
-            &encode_term_pair(graph_name, predicate)?,
-            EncodedQuadPattern::new(None, Some(predicate), None, Some(graph_name)),
-        )
+        self.gpos_quads(encode_term_pair(graph_name, predicate)?)
     }
 
     fn quads_for_predicate_object_graph(
@@ -386,10 +350,7 @@ impl<'a> RocksDbStoreConnection<'a> {
         object: EncodedTerm,
         graph_name: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.gpos_quads(
-            &encode_term_triple(graph_name, predicate, object)?,
-            EncodedQuadPattern::new(None, Some(predicate), Some(object), Some(graph_name)),
-        )
+        self.gpos_quads(encode_term_triple(graph_name, predicate, object)?)
     }
 
     fn quads_for_object_graph(
@@ -397,102 +358,75 @@ impl<'a> RocksDbStoreConnection<'a> {
         object: EncodedTerm,
         graph_name: EncodedTerm,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.gosp_quads(
-            &encode_term_pair(graph_name, object)?,
-            EncodedQuadPattern::new(None, None, Some(object), Some(graph_name)),
-        )
+        self.gosp_quads(encode_term_pair(graph_name, object)?)
     }
 
     fn spog_quads(
         &self,
-        start: &[u8],
-        filter: EncodedQuadPattern,
+        prefix: Vec<u8>,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.inner_quads(
-            self.spog_cf,
-            &start,
-            |buffer| Cursor::new(buffer).read_spog_quad(),
-            filter,
-        )
+        self.inner_quads(self.spog_cf, prefix, |buffer| {
+            Cursor::new(buffer).read_spog_quad()
+        })
     }
 
     fn posg_quads(
         &self,
-        start: &[u8],
-        filter: EncodedQuadPattern,
+        prefix: Vec<u8>,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.inner_quads(
-            self.posg_cf,
-            &start,
-            |buffer| Cursor::new(buffer).read_posg_quad(),
-            filter,
-        )
+        self.inner_quads(self.posg_cf, prefix, |buffer| {
+            Cursor::new(buffer).read_posg_quad()
+        })
     }
 
     fn ospg_quads(
         &self,
-        start: &[u8],
-        filter: EncodedQuadPattern,
+        prefix: Vec<u8>,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.inner_quads(
-            self.ospg_cf,
-            &start,
-            |buffer| Cursor::new(buffer).read_ospg_quad(),
-            filter,
-        )
+        self.inner_quads(self.ospg_cf, prefix, |buffer| {
+            Cursor::new(buffer).read_ospg_quad()
+        })
     }
 
     fn gspo_quads(
         &self,
-        start: &[u8],
-        filter: EncodedQuadPattern,
+        prefix: Vec<u8>,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.inner_quads(
-            self.gspo_cf,
-            &start,
-            |buffer| Cursor::new(buffer).read_gspo_quad(),
-            filter,
-        )
+        self.inner_quads(self.gspo_cf, prefix, |buffer| {
+            Cursor::new(buffer).read_gspo_quad()
+        })
     }
 
     fn gpos_quads(
         &self,
-        start: &[u8],
-        filter: EncodedQuadPattern,
+        prefix: Vec<u8>,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.inner_quads(
-            self.gpos_cf,
-            &start,
-            |buffer| Cursor::new(buffer).read_gpos_quad(),
-            filter,
-        )
+        self.inner_quads(self.gpos_cf, prefix, |buffer| {
+            Cursor::new(buffer).read_gpos_quad()
+        })
     }
 
     fn gosp_quads(
         &self,
-        start: &[u8],
-        filter: EncodedQuadPattern,
+        prefix: Vec<u8>,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        self.inner_quads(
-            self.gosp_cf,
-            &start,
-            |buffer| Cursor::new(buffer).read_gosp_quad(),
-            filter,
-        )
+        self.inner_quads(self.gosp_cf, prefix, |buffer| {
+            Cursor::new(buffer).read_gosp_quad()
+        })
     }
 
     fn inner_quads(
         &self,
         cf: ColumnFamily,
-        start: &[u8],
+        prefix: Vec<u8>,
         decode: impl Fn(&[u8]) -> Result<EncodedQuad> + 'a,
-        filter: EncodedQuadPattern,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
         let mut iter = self.store.db.raw_iterator_cf(cf)?;
-        iter.seek(&start);
-        Ok(FilteringEncodedQuadsIterator {
-            iter: DecodingIndexIterator { iter, decode },
-            filter,
+        iter.seek(&prefix);
+        Ok(DecodingIndexIterator {
+            iter,
+            prefix,
+            decode,
         })
     }
 }
@@ -612,53 +546,6 @@ fn wrap_error<'a, E: 'a, I: Iterator<Item = Result<E>> + 'a>(
     }
 }
 
-struct EncodedQuadPattern {
-    subject: Option<EncodedTerm>,
-    predicate: Option<EncodedTerm>,
-    object: Option<EncodedTerm>,
-    graph_name: Option<EncodedTerm>,
-}
-
-impl EncodedQuadPattern {
-    fn new(
-        subject: Option<EncodedTerm>,
-        predicate: Option<EncodedTerm>,
-        object: Option<EncodedTerm>,
-        graph_name: Option<EncodedTerm>,
-    ) -> Self {
-        Self {
-            subject,
-            predicate,
-            object,
-            graph_name,
-        }
-    }
-
-    fn filter(&self, quad: &EncodedQuad) -> bool {
-        if let Some(ref subject) = self.subject {
-            if &quad.subject != subject {
-                return false;
-            }
-        }
-        if let Some(ref predicate) = self.predicate {
-            if &quad.predicate != predicate {
-                return false;
-            }
-        }
-        if let Some(ref object) = self.object {
-            if &quad.object != object {
-                return false;
-            }
-        }
-        if let Some(ref graph_name) = self.graph_name {
-            if &quad.graph_name != graph_name {
-                return false;
-            }
-        }
-        true
-    }
-}
-
 fn encode_term(t: EncodedTerm) -> Result<Vec<u8>> {
     let mut vec = Vec::with_capacity(WRITTEN_TERM_MAX_SIZE);
     vec.write_term(t)?;
@@ -682,6 +569,7 @@ fn encode_term_triple(t1: EncodedTerm, t2: EncodedTerm, t3: EncodedTerm) -> Resu
 
 struct DecodingIndexIterator<'a, F: Fn(&[u8]) -> Result<EncodedQuad>> {
     iter: DBRawIterator<'a>,
+    prefix: Vec<u8>,
     decode: F,
 }
 
@@ -690,28 +578,20 @@ impl<'a, F: Fn(&[u8]) -> Result<EncodedQuad>> Iterator for DecodingIndexIterator
 
     fn next(&mut self) -> Option<Result<EncodedQuad>> {
         if self.iter.valid() {
-            let result = unsafe { self.iter.key_inner().map(|buffer| (self.decode)(buffer)) };
+            let result = unsafe {
+                self.iter.key_inner().and_then(|key| {
+                    if key.starts_with(&self.prefix) {
+                        Some((self.decode)(key))
+                    } else {
+                        None
+                    }
+                })
+            };
             self.iter.next();
             result
         } else {
             None
         }
-    }
-}
-
-struct FilteringEncodedQuadsIterator<I: Iterator<Item = Result<EncodedQuad>>> {
-    iter: I,
-    filter: EncodedQuadPattern,
-}
-
-impl<I: Iterator<Item = Result<EncodedQuad>>> Iterator for FilteringEncodedQuadsIterator<I> {
-    type Item = Result<EncodedQuad>;
-
-    fn next(&mut self) -> Option<Result<EncodedQuad>> {
-        self.iter.next().filter(|quad| match quad {
-            Ok(quad) => self.filter.filter(quad),
-            Err(_) => true,
-        })
     }
 }
 
@@ -752,6 +632,11 @@ fn repository() -> Result<()> {
     let main_o = Term::from(Literal::from(1));
 
     let main_quad = Quad::new(main_s.clone(), main_p.clone(), main_o.clone(), None);
+    let all_o = vec![
+        Quad::new(main_s.clone(), main_p.clone(), Literal::from(0), None),
+        Quad::new(main_s.clone(), main_p.clone(), main_o.clone(), None),
+        Quad::new(main_s.clone(), main_p.clone(), Literal::from(2), None),
+    ];
 
     let mut repo_path = temp_dir();
     repo_path.push(random::<u128>().to_string());
@@ -760,25 +645,28 @@ fn repository() -> Result<()> {
         let repository = RocksDbRepository::open(&repo_path)?;
         let mut connection = repository.connection()?;
         connection.insert(&main_quad)?;
+        for t in &all_o {
+            connection.insert(&t)?;
+        }
 
         let target = vec![main_quad];
         assert_eq!(
             connection
                 .quads_for_pattern(None, None, None, None)
                 .collect::<Result<Vec<_>>>()?,
-            target
+            all_o
         );
         assert_eq!(
             connection
                 .quads_for_pattern(Some(&main_s), None, None, None)
                 .collect::<Result<Vec<_>>>()?,
-            target
+            all_o
         );
         assert_eq!(
             connection
                 .quads_for_pattern(Some(&main_s), Some(&main_p), None, None)
                 .collect::<Result<Vec<_>>>()?,
-            target
+            all_o
         );
         assert_eq!(
             connection
@@ -796,7 +684,7 @@ fn repository() -> Result<()> {
             connection
                 .quads_for_pattern(Some(&main_s), Some(&main_p), None, Some(None))
                 .collect::<Result<Vec<_>>>()?,
-            target
+            all_o
         );
         assert_eq!(
             connection
@@ -814,13 +702,13 @@ fn repository() -> Result<()> {
             connection
                 .quads_for_pattern(Some(&main_s), None, None, Some(None))
                 .collect::<Result<Vec<_>>>()?,
-            target
+            all_o
         );
         assert_eq!(
             connection
                 .quads_for_pattern(None, Some(&main_p), None, None)
                 .collect::<Result<Vec<_>>>()?,
-            target
+            all_o
         );
         assert_eq!(
             connection
@@ -838,7 +726,7 @@ fn repository() -> Result<()> {
             connection
                 .quads_for_pattern(None, None, None, Some(None))
                 .collect::<Result<Vec<_>>>()?,
-            target
+            all_o
         );
         assert_eq!(
             connection
