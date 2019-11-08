@@ -735,11 +735,13 @@ impl<E: Encoder> PlanBuilder<E> {
         bindings
             .values_iter()
             .map(move |values| {
-                let mut result = vec![None; variables.len()];
+                let mut result = EncodedTuple::with_capacity(variables.len());
                 for (key, value) in values.iter().enumerate() {
                     if let Some(term) = value {
-                        result[bindings_variables_keys[key]] =
-                            Some(self.encoder.encode_term(term)?);
+                        result.set(
+                            bindings_variables_keys[key],
+                            self.encoder.encode_term(term)?,
+                        );
                     }
                 }
                 Ok(result)

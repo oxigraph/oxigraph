@@ -22,7 +22,6 @@ use rio_api::model as rio;
 use rust_decimal::{Decimal, RoundingStrategy};
 use sha1::Sha1;
 use sha2::{Sha256, Sha384, Sha512};
-use std::cmp::min;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryInto;
@@ -69,7 +68,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
     where
         'a: 'b,
     {
-        let iter = self.eval_plan(plan, vec![None; variables.len()]);
+        let iter = self.eval_plan(plan, EncodedTuple::with_capacity(variables.len()));
         Ok(QueryResult::Bindings(
             self.decode_bindings(iter, variables.to_vec()),
         ))
@@ -79,7 +78,13 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
     where
         'a: 'b,
     {
-        match self.eval_plan(plan, vec![]).next() {
+        match self
+            .eval_plan(
+                plan,
+                EncodedTuple::with_capacity(plan.maybe_bound_variables().len()),
+            )
+            .next()
+        {
             Some(Ok(_)) => Ok(QueryResult::Boolean(true)),
             Some(Err(error)) => Err(error),
             None => Ok(QueryResult::Boolean(false)),
@@ -96,7 +101,10 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
     {
         Ok(QueryResult::Graph(Box::new(ConstructIterator {
             eval: self,
-            iter: self.eval_plan(plan, vec![]),
+            iter: self.eval_plan(
+                plan,
+                EncodedTuple::with_capacity(plan.maybe_bound_variables().len()),
+            ),
             template: construct,
             buffered_results: Vec::default(),
             bnodes: Vec::default(),
@@ -109,7 +117,10 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
     {
         Ok(QueryResult::Graph(Box::new(DescribeIterator {
             eval: self,
-            iter: self.eval_plan(plan, vec![]),
+            iter: self.eval_plan(
+                plan,
+                EncodedTuple::with_capacity(plan.maybe_bound_variables().len()),
+            ),
             quads: Box::new(empty()),
         })))
     }
@@ -127,10 +138,10 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 service_name,
                 graph_pattern,
                 ..
-            } => match self.evaluate_service(service_name, graph_pattern, variables) {
+            } => match self.evaluate_service(service_name, graph_pattern, variables, &from) {
                 Ok(result) => Box::new(result.flat_map(move |binding| {
                     binding
-                        .map(|binding| combine_tuples(&binding, &from))
+                        .map(|binding| binding.combine_with(&from))
                         .transpose()
                 })),
                 Err(e) => {
@@ -345,7 +356,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 Box::new(self.eval_plan(&*child, from).map(move |tuple| {
                     let mut tuple = tuple?;
                     if let Some(value) = eval.eval_expression(&expression, &tuple) {
-                        put_value(*position, value, &mut tuple)
+                        tuple.set(*position, value)
                     }
                     Ok(tuple)
                 }))
@@ -395,13 +406,13 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             PlanNode::Project { child, mapping } => {
                 //TODO: use from somewhere?
                 Box::new(
-                    self.eval_plan(&*child, vec![None; mapping.len()])
+                    self.eval_plan(&*child, EncodedTuple::with_capacity(mapping.len()))
                         .map(move |tuple| {
                             let tuple = tuple?;
-                            let mut output_tuple = vec![None; from.len()];
+                            let mut output_tuple = EncodedTuple::with_capacity(from.capacity());
                             for (input_key, output_key) in mapping.iter() {
-                                if let Some(value) = tuple[*input_key] {
-                                    put_value(*output_key, value, &mut output_tuple)
+                                if let Some(value) = tuple.get(*input_key) {
+                                    output_tuple.set(*output_key, value)
                                 }
                             }
                             Ok(output_tuple)
@@ -413,7 +424,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 key_mapping,
                 aggregates,
             } => {
-                let tuple_size = from.len(); //TODO: not nice
+                let tuple_size = from.capacity(); //TODO: not nice
                 let mut errors = Vec::default();
                 let mut accumulators_for_group =
                     HashMap::<Vec<Option<EncodedTerm>>, Vec<Box<dyn Accumulator>>>::default();
@@ -427,10 +438,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     })
                     .for_each(|tuple| {
                         //TODO avoid copy for key?
-                        let key = key_mapping
-                            .iter()
-                            .map(|(v, _)| get_tuple_value(*v, &tuple))
-                            .collect();
+                        let key = key_mapping.iter().map(|(v, _)| tuple.get(*v)).collect();
 
                         let key_accumulators =
                             accumulators_for_group.entry(key).or_insert_with(|| {
@@ -464,15 +472,15 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                         .map(Err)
                         .chain(accumulators_for_group.into_iter().map(
                             move |(key, accumulators)| {
-                                let mut result = vec![None; tuple_size];
+                                let mut result = EncodedTuple::with_capacity(tuple_size);
                                 for (from_position, to_position) in key_mapping.iter() {
                                     if let Some(value) = key[*from_position] {
-                                        put_value(*to_position, value, &mut result);
+                                        result.set(*to_position, value);
                                     }
                                 }
                                 for (i, accumulator) in accumulators.into_iter().enumerate() {
                                     if let Some(value) = accumulator.state() {
-                                        put_value(aggregates[i].1, value, &mut result);
+                                        result.set(aggregates[i].1, value);
                                     }
                                 }
                                 Ok(result)
@@ -488,9 +496,10 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         service_name: &PatternValue,
         graph_pattern: &'b GraphPattern,
         variables: &'b [Variable],
+        from: &EncodedTuple,
     ) -> Result<EncodedTuplesIterator<'b>> {
         let service_name = self.dataset.decode_named_node(
-            get_pattern_value(service_name, &[])
+            get_pattern_value(service_name, &from)
                 .ok_or_else(|| format_err!("The SERVICE name is not bound"))?,
         )?;
         Ok(self.encode_bindings(
@@ -709,13 +718,13 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
     fn eval_expression<'b>(
         &'b self,
         expression: &PlanExpression,
-        tuple: &[Option<EncodedTerm>],
+        tuple: &EncodedTuple,
     ) -> Option<EncodedTerm> {
         match expression {
             PlanExpression::Constant(t) => Some(*t),
-            PlanExpression::Variable(v) => get_tuple_value(*v, tuple),
+            PlanExpression::Variable(v) => tuple.get(*v),
             PlanExpression::Exists(node) => {
-                Some(self.eval_plan(node, tuple.to_vec()).next().is_some().into())
+                Some(self.eval_plan(node, tuple.clone()).next().is_some().into())
             }
             PlanExpression::Or(a, b) => {
                 match self.eval_expression(a, tuple).and_then(|v| self.to_bool(v)) {
@@ -886,7 +895,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 )
             }
             PlanExpression::Datatype(e) => self.eval_expression(e, tuple)?.datatype(),
-            PlanExpression::Bound(v) => Some(has_tuple_value(*v, tuple).into()),
+            PlanExpression::Bound(v) => Some(tuple.contains(*v).into()),
             PlanExpression::IRI(e) => {
                 let iri_id = match self.eval_expression(e, tuple)? {
                     EncodedTerm::NamedNode { iri_id } => Some(iri_id),
@@ -1571,7 +1580,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         &'b self,
         e1: &PlanExpression,
         e2: &PlanExpression,
-        tuple: &[Option<EncodedTerm>],
+        tuple: &EncodedTuple,
     ) -> Option<NumericBinaryOperands> {
         NumericBinaryOperands::new(
             self.eval_expression(&e1, tuple)?,
@@ -1593,7 +1602,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             variables,
             Box::new(iter.map(move |values| {
                 let mut result = vec![None; tuple_size];
-                for (i, value) in values?.into_iter().enumerate() {
+                for (i, value) in values?.iter().enumerate() {
                     if let Some(term) = value {
                         result[i] = Some(eval.dataset.decode_term(term)?)
                     }
@@ -1621,7 +1630,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         }
         Box::new(iter.map(move |terms| {
             let mut encoder = self.dataset.encoder();
-            let mut encoded_terms = vec![None; combined_variables.len()];
+            let mut encoded_terms = EncodedTuple::with_capacity(combined_variables.len());
             for (i, term_option) in terms?.into_iter().enumerate() {
                 match term_option {
                     None => (),
@@ -1756,8 +1765,8 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
 
     fn cmp_according_to_expression<'b>(
         &'b self,
-        tuple_a: &[Option<EncodedTerm>],
-        tuple_b: &[Option<EncodedTerm>],
+        tuple_a: &EncodedTuple,
+        tuple_b: &EncodedTuple,
         expression: &PlanExpression,
     ) -> Ordering {
         self.cmp_terms(
@@ -1876,7 +1885,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
     fn hash<'b, H: Digest>(
         &'b self,
         arg: &PlanExpression,
-        tuple: &[Option<EncodedTerm>],
+        tuple: &EncodedTuple,
     ) -> Option<EncodedTerm> {
         let input = self.to_simple_string(self.eval_expression(arg, tuple)?)?;
         let hash = hex::encode(H::new().chain(&input as &str).result());
@@ -1981,36 +1990,17 @@ impl NumericBinaryOperands {
     }
 }
 
-fn get_tuple_value(variable: usize, tuple: &[Option<EncodedTerm>]) -> Option<EncodedTerm> {
-    if variable < tuple.len() {
-        tuple[variable]
-    } else {
-        None
-    }
-}
-
-fn has_tuple_value(variable: usize, tuple: &[Option<EncodedTerm>]) -> bool {
-    if variable < tuple.len() {
-        tuple[variable].is_some()
-    } else {
-        false
-    }
-}
-
-fn get_pattern_value(
-    selector: &PatternValue,
-    tuple: &[Option<EncodedTerm>],
-) -> Option<EncodedTerm> {
+fn get_pattern_value(selector: &PatternValue, tuple: &EncodedTuple) -> Option<EncodedTerm> {
     match selector {
         PatternValue::Constant(term) => Some(*term),
-        PatternValue::Variable(v) => get_tuple_value(*v, tuple),
+        PatternValue::Variable(v) => tuple.get(*v),
     }
 }
 
 fn put_pattern_value(selector: &PatternValue, value: EncodedTerm, tuple: &mut EncodedTuple) {
     match selector {
         PatternValue::Constant(_) => (),
-        PatternValue::Variable(v) => put_value(*v, value, tuple),
+        PatternValue::Variable(v) => tuple.set(*v, value),
     }
 }
 
@@ -2022,79 +2012,29 @@ fn put_variable_value(
 ) {
     for (i, v) in variables.iter().enumerate() {
         if selector == v {
-            put_value(i, value, tuple);
+            tuple.set(i, value);
             break;
         }
     }
 }
 
-fn put_value(position: usize, value: EncodedTerm, tuple: &mut EncodedTuple) {
-    if position < tuple.len() {
-        tuple[position] = Some(value)
-    } else {
-        if position > tuple.len() {
-            tuple.resize(position, None);
-        }
-        tuple.push(Some(value))
-    }
-}
-
-fn bind_variables_in_set(binding: &[Option<EncodedTerm>], set: &[usize]) -> Vec<usize> {
+fn bind_variables_in_set(binding: &EncodedTuple, set: &[usize]) -> Vec<usize> {
     set.iter()
         .cloned()
-        .filter(|key| *key < binding.len() && binding[*key].is_some())
+        .filter(|key| binding.contains(*key))
         .collect()
 }
 
-fn unbind_variables(binding: &mut [Option<EncodedTerm>], variables: &[usize]) {
+fn unbind_variables(binding: &mut EncodedTuple, variables: &[usize]) {
     for var in variables {
-        if *var < binding.len() {
-            binding[*var] = None
-        }
+        binding.unset(*var)
     }
 }
 
-fn combine_tuples(a: &[Option<EncodedTerm>], b: &[Option<EncodedTerm>]) -> Option<EncodedTuple> {
-    if a.len() < b.len() {
-        let mut result = b.to_owned();
-        for (key, a_value) in a.iter().enumerate() {
-            if let Some(a_value) = a_value {
-                match b[key] {
-                    Some(ref b_value) => {
-                        if a_value != b_value {
-                            return None;
-                        }
-                    }
-                    None => result[key] = Some(*a_value),
-                }
-            }
-        }
-        Some(result)
-    } else {
-        let mut result = a.to_owned();
-        for (key, b_value) in b.iter().enumerate() {
-            if let Some(b_value) = b_value {
-                match a[key] {
-                    Some(ref a_value) => {
-                        if a_value != b_value {
-                            return None;
-                        }
-                    }
-                    None => result[key] = Some(*b_value),
-                }
-            }
-        }
-        Some(result)
-    }
-}
-
-fn are_tuples_compatible_and_not_disjointed(
-    a: &[Option<EncodedTerm>],
-    b: &[Option<EncodedTerm>],
-) -> bool {
+pub fn are_compatible_and_not_disjointed(a: &EncodedTuple, b: &EncodedTuple) -> bool {
     let mut found_intersection = false;
-    for i in 0..min(a.len(), b.len()) {
-        if let (Some(a_value), Some(b_value)) = (a[i], b[i]) {
+    for (a_value, b_value) in a.iter().zip(b.iter()) {
+        if let (Some(a_value), Some(b_value)) = (a_value, b_value) {
             if a_value != b_value {
                 return false;
             }
@@ -2123,7 +2063,7 @@ impl<'a> Iterator for JoinIterator<'a> {
                 Err(error) => return Some(Err(error)),
             };
             for left_tuple in &self.left {
-                if let Some(result_tuple) = combine_tuples(left_tuple, &right_tuple) {
+                if let Some(result_tuple) = left_tuple.combine_with(&right_tuple) {
                     self.buffered_results.push(Ok(result_tuple))
                 }
             }
@@ -2144,7 +2084,7 @@ impl<'a> Iterator for AntiJoinIterator<'a> {
             match self.left_iter.next()? {
                 Ok(left_tuple) => {
                     let exists_compatible_right = self.right.iter().any(|right_tuple| {
-                        are_tuples_compatible_and_not_disjointed(&left_tuple, right_tuple)
+                        are_compatible_and_not_disjointed(&left_tuple, right_tuple)
                     });
                     if !exists_compatible_right {
                         return Some(Ok(left_tuple));
@@ -2199,14 +2139,14 @@ impl<'a, S: StoreConnection> Iterator for BadLeftJoinIterator<'a, S> {
                 Ok(mut tuple) => {
                     let mut conflict = false;
                     for problem_var in &self.problem_vars {
-                        if let Some(input_value) = self.input[*problem_var] {
-                            if let Some(result_value) = get_tuple_value(*problem_var, &tuple) {
+                        if let Some(input_value) = self.input.get(*problem_var) {
+                            if let Some(result_value) = tuple.get(*problem_var) {
                                 if input_value != result_value {
                                     conflict = true;
                                     continue; //Binding conflict
                                 }
                             } else {
-                                put_value(*problem_var, input_value, &mut tuple);
+                                tuple.set(*problem_var, input_value);
                             }
                         }
                     }
@@ -2290,17 +2230,17 @@ impl<'a, S: StoreConnection + 'a> Iterator for ConstructIterator<'a, S> {
 
 fn get_triple_template_value(
     selector: &TripleTemplateValue,
-    tuple: &[Option<EncodedTerm>],
+    tuple: &EncodedTuple,
     bnodes: &mut Vec<BlankNode>,
 ) -> Option<EncodedTerm> {
     match selector {
         TripleTemplateValue::Constant(term) => Some(*term),
-        TripleTemplateValue::Variable(v) => get_tuple_value(*v, tuple),
+        TripleTemplateValue::Variable(v) => tuple.get(*v),
         TripleTemplateValue::BlankNode(id) => {
-            if *id >= tuple.len() {
+            if *id >= bnodes.len() {
                 bnodes.resize_with(*id, BlankNode::default)
             }
-            tuple[*id]
+            Some((&bnodes[*id]).into())
         }
     }
 }
@@ -2343,7 +2283,7 @@ impl<'a, S: StoreConnection + 'a> Iterator for DescribeIterator<'a, S> {
                 Ok(tuple) => tuple,
                 Err(error) => return Some(Err(error)),
             };
-            for subject in tuple {
+            for subject in tuple.iter() {
                 if let Some(subject) = subject {
                     self.quads =
                         self.eval

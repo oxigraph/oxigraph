@@ -10,8 +10,6 @@ use crate::Result;
 use std::cell::{RefCell, RefMut};
 use std::collections::BTreeSet;
 
-pub type EncodedTuple = Vec<Option<EncodedTerm>>;
-
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum PlanNode {
     Init,
@@ -357,6 +355,82 @@ pub enum TripleTemplateValue {
     Constant(EncodedTerm),
     BlankNode(usize),
     Variable(usize),
+}
+
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct EncodedTuple {
+    inner: Vec<Option<EncodedTerm>>,
+}
+
+impl EncodedTuple {
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            inner: Vec::with_capacity(capacity),
+        }
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.inner.capacity()
+    }
+
+    pub fn contains(&self, index: usize) -> bool {
+        self.inner.get(index).map_or(false, |v| v.is_some())
+    }
+
+    pub fn get(&self, index: usize) -> Option<EncodedTerm> {
+        self.inner.get(index).cloned().unwrap_or(None)
+    }
+
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = Option<EncodedTerm>> + 'a {
+        self.inner.iter().cloned()
+    }
+
+    pub fn set(&mut self, index: usize, value: EncodedTerm) {
+        if self.inner.len() <= index {
+            self.inner.resize(index + 1, None);
+        }
+        self.inner[index] = Some(value);
+    }
+
+    pub fn unset(&mut self, index: usize) {
+        if let Some(v) = self.inner.get_mut(index) {
+            *v = None;
+        }
+    }
+
+    pub fn combine_with(&self, other: &EncodedTuple) -> Option<Self> {
+        if self.inner.len() < other.inner.len() {
+            let mut result = other.inner.to_owned();
+            for (key, self_value) in self.inner.iter().enumerate() {
+                if let Some(self_value) = self_value {
+                    match other.inner[key] {
+                        Some(ref other_value) => {
+                            if self_value != other_value {
+                                return None;
+                            }
+                        }
+                        None => result[key] = Some(*self_value),
+                    }
+                }
+            }
+            Some(EncodedTuple { inner: result })
+        } else {
+            let mut result = self.inner.to_owned();
+            for (key, other_value) in other.inner.iter().enumerate() {
+                if let Some(other_value) = other_value {
+                    match self.inner[key] {
+                        Some(ref self_value) => {
+                            if self_value != other_value {
+                                return None;
+                            }
+                        }
+                        None => result[key] = Some(*other_value),
+                    }
+                }
+            }
+            Some(EncodedTuple { inner: result })
+        }
+    }
 }
 
 pub struct DatasetView<S: StoreConnection> {
