@@ -57,8 +57,8 @@ impl<E: Encoder> PlanBuilder<E> {
                     }
                 };
                 let possible_problem_vars = right
-                    .variables()
-                    .difference(&left.variables())
+                    .maybe_bound_variables()
+                    .difference(&left.maybe_bound_variables())
                     .cloned()
                     .collect();
 
@@ -128,7 +128,12 @@ impl<E: Encoder> PlanBuilder<E> {
                     )?),
                     key_mapping: key
                         .iter()
-                        .map(|k| variable_key(&mut inner_variables, k))
+                        .map(|k| {
+                            (
+                                variable_key(&mut inner_variables, k),
+                                variable_key(variables, k),
+                            )
+                        })
                         .collect(),
                     aggregates: aggregates
                         .iter()

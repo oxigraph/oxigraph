@@ -86,19 +86,20 @@ pub enum PlanNode {
     Aggregate {
         // By definition the group by key are the range 0..key_mapping.len()
         child: Box<PlanNode>,
-        key_mapping: Vec<usize>, //index of the new key for each old key (that is the vec key)
+        key_mapping: Vec<(usize, usize)>, // aggregate key pairs of (variable key in child, variable key in output)
         aggregates: Vec<(PlanAggregation, usize)>,
     },
 }
 
 impl PlanNode {
-    pub fn variables(&self) -> BTreeSet<usize> {
+    /// Returns variables that might be bound in the result set
+    pub fn maybe_bound_variables(&self) -> BTreeSet<usize> {
         let mut set = BTreeSet::default();
-        self.add_variables(&mut set);
+        self.add_maybe_bound_variables(&mut set);
         set
     }
 
-    fn add_variables(&self, set: &mut BTreeSet<usize>) {
+    fn add_maybe_bound_variables(&self, set: &mut BTreeSet<usize>) {
         match self {
             PlanNode::Init => (),
             PlanNode::StaticBindings { tuples } => {
@@ -129,7 +130,7 @@ impl PlanNode {
                 if let PatternValue::Variable(var) = graph_name {
                     set.insert(*var);
                 }
-                child.add_variables(set);
+                child.add_maybe_bound_variables(set);
             }
             PlanNode::PathPatternJoin {
                 child,
@@ -147,37 +148,37 @@ impl PlanNode {
                 if let PatternValue::Variable(var) = graph_name {
                     set.insert(*var);
                 }
-                child.add_variables(set);
+                child.add_maybe_bound_variables(set);
             }
-            PlanNode::Filter { child, expression } => {
-                child.add_variables(set);
-                expression.add_variables(set);
-            }
+            PlanNode::Filter { child, .. } => child.add_maybe_bound_variables(set),
             PlanNode::Union { children } => {
                 for child in children {
-                    child.add_variables(set);
+                    child.add_maybe_bound_variables(set);
                 }
             }
-            PlanNode::Join { left, right }
-            | PlanNode::AntiJoin { left, right }
+            PlanNode::Join { left, right, .. }
+            | PlanNode::AntiJoin { left, right, .. }
             | PlanNode::LeftJoin { left, right, .. } => {
-                left.add_variables(set);
-                right.add_variables(set);
+                left.add_maybe_bound_variables(set);
+                right.add_maybe_bound_variables(set);
             }
             PlanNode::Extend {
                 child, position, ..
             } => {
                 set.insert(*position);
-                child.add_variables(set);
+                child.add_maybe_bound_variables(set);
             }
-            PlanNode::Service { child, .. } => child.add_variables(set),
-            PlanNode::Sort { child, .. } => child.add_variables(set),
-            PlanNode::HashDeduplicate { child } => child.add_variables(set),
-            PlanNode::Skip { child, .. } => child.add_variables(set),
-            PlanNode::Limit { child, .. } => child.add_variables(set),
-            PlanNode::Project { mapping, .. } => {
-                for i in 0..mapping.len() {
-                    set.insert(i);
+            PlanNode::Service { child, .. } => child.add_maybe_bound_variables(set),
+            PlanNode::Sort { child, .. } => child.add_maybe_bound_variables(set),
+            PlanNode::HashDeduplicate { child } => child.add_maybe_bound_variables(set),
+            PlanNode::Skip { child, .. } => child.add_maybe_bound_variables(set),
+            PlanNode::Limit { child, .. } => child.add_maybe_bound_variables(set),
+            PlanNode::Project { mapping, child } => {
+                let child_bound = child.maybe_bound_variables();
+                for (child_i, output_i) in mapping.iter() {
+                    if child_bound.contains(child_i) {
+                        set.insert(*output_i);
+                    }
                 }
             }
             PlanNode::Aggregate {
@@ -185,7 +186,7 @@ impl PlanNode {
                 aggregates,
                 ..
             } => {
-                set.extend(key_mapping);
+                set.extend(key_mapping.iter().map(|(_, o)| o));
                 for (_, var) in aggregates {
                     set.insert(*var);
                 }
@@ -306,118 +307,6 @@ pub enum PlanExpression {
     TimeCast(Box<PlanExpression>),
     DateTimeCast(Box<PlanExpression>),
     StringCast(Box<PlanExpression>),
-}
-
-impl PlanExpression {
-    fn add_variables(&self, set: &mut BTreeSet<usize>) {
-        match self {
-            PlanExpression::Constant(_)
-            | PlanExpression::BNode(None)
-            | PlanExpression::UUID
-            | PlanExpression::StrUUID
-            | PlanExpression::Rand
-            | PlanExpression::Now => (),
-            PlanExpression::Variable(v) | PlanExpression::Bound(v) => {
-                set.insert(*v);
-            }
-            PlanExpression::UnaryPlus(e)
-            | PlanExpression::UnaryMinus(e)
-            | PlanExpression::UnaryNot(e)
-            | PlanExpression::Str(e)
-            | PlanExpression::Lang(e)
-            | PlanExpression::Datatype(e)
-            | PlanExpression::IRI(e)
-            | PlanExpression::BNode(Some(e))
-            | PlanExpression::Year(e)
-            | PlanExpression::Month(e)
-            | PlanExpression::Day(e)
-            | PlanExpression::Hours(e)
-            | PlanExpression::Minutes(e)
-            | PlanExpression::Seconds(e)
-            | PlanExpression::IsIRI(e)
-            | PlanExpression::IsBlank(e)
-            | PlanExpression::IsLiteral(e)
-            | PlanExpression::IsNumeric(e)
-            | PlanExpression::BooleanCast(e)
-            | PlanExpression::DoubleCast(e)
-            | PlanExpression::FloatCast(e)
-            | PlanExpression::IntegerCast(e)
-            | PlanExpression::DecimalCast(e)
-            | PlanExpression::DateCast(e)
-            | PlanExpression::TimeCast(e)
-            | PlanExpression::DateTimeCast(e)
-            | PlanExpression::StringCast(e)
-            | PlanExpression::Abs(e)
-            | PlanExpression::Ceil(e)
-            | PlanExpression::Floor(e)
-            | PlanExpression::Round(e)
-            | PlanExpression::StrLen(e)
-            | PlanExpression::UCase(e)
-            | PlanExpression::LCase(e)
-            | PlanExpression::EncodeForURI(e)
-            | PlanExpression::Timezone(e)
-            | PlanExpression::Tz(e)
-            | PlanExpression::MD5(e)
-            | PlanExpression::SHA1(e)
-            | PlanExpression::SHA256(e)
-            | PlanExpression::SHA384(e)
-            | PlanExpression::SHA512(e) => {
-                e.add_variables(set);
-            }
-            PlanExpression::Or(a, b)
-            | PlanExpression::And(a, b)
-            | PlanExpression::Equal(a, b)
-            | PlanExpression::NotEqual(a, b)
-            | PlanExpression::Greater(a, b)
-            | PlanExpression::GreaterOrEq(a, b)
-            | PlanExpression::Lower(a, b)
-            | PlanExpression::LowerOrEq(a, b)
-            | PlanExpression::Add(a, b)
-            | PlanExpression::Sub(a, b)
-            | PlanExpression::Mul(a, b)
-            | PlanExpression::Div(a, b)
-            | PlanExpression::SameTerm(a, b)
-            | PlanExpression::LangMatches(a, b)
-            | PlanExpression::StrLang(a, b)
-            | PlanExpression::Contains(a, b)
-            | PlanExpression::StrStarts(a, b)
-            | PlanExpression::StrEnds(a, b)
-            | PlanExpression::StrBefore(a, b)
-            | PlanExpression::StrAfter(a, b)
-            | PlanExpression::StrDT(a, b)
-            | PlanExpression::Regex(a, b, None)
-            | PlanExpression::SubStr(a, b, None) => {
-                a.add_variables(set);
-                b.add_variables(set);
-            }
-            PlanExpression::If(a, b, c)
-            | PlanExpression::SubStr(a, b, Some(c))
-            | PlanExpression::Replace(a, b, c, None)
-            | PlanExpression::Regex(a, b, Some(c)) => {
-                a.add_variables(set);
-                b.add_variables(set);
-                c.add_variables(set);
-            }
-            PlanExpression::Replace(a, b, c, Some(d)) => {
-                a.add_variables(set);
-                b.add_variables(set);
-                c.add_variables(set);
-                d.add_variables(set);
-            }
-            PlanExpression::Coalesce(l) | PlanExpression::Concat(l) => {
-                for e in l {
-                    e.add_variables(set);
-                }
-            }
-            PlanExpression::In(e, l) => {
-                e.add_variables(set);
-                for e in l {
-                    e.add_variables(set);
-                }
-            }
-            PlanExpression::Exists(n) => n.add_variables(set),
-        }
-    }
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]

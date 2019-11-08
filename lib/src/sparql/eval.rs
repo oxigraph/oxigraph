@@ -427,8 +427,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     })
                     .for_each(|tuple| {
                         //TODO avoid copy for key?
-                        let key = (0..key_mapping.len())
-                            .map(|v| get_tuple_value(v, &tuple))
+                        let key = key_mapping
+                            .iter()
+                            .map(|(v, _)| get_tuple_value(*v, &tuple))
                             .collect();
 
                         let key_accumulators =
@@ -464,8 +465,8 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                         .chain(accumulators_for_group.into_iter().map(
                             move |(key, accumulators)| {
                                 let mut result = vec![None; tuple_size];
-                                for (from_position, to_position) in key_mapping.iter().enumerate() {
-                                    if let Some(value) = key[from_position] {
+                                for (from_position, to_position) in key_mapping.iter() {
+                                    if let Some(value) = key[*from_position] {
                                         put_value(*to_position, value, &mut result);
                                     }
                                 }
