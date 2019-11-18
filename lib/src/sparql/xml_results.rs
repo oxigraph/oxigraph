@@ -78,7 +78,7 @@ pub fn write_xml_results<W: Write>(results: QueryResult<'_>, sink: W) -> Result<
                             Term::Literal(literal) => {
                                 let mut literal_tag = BytesStart::borrowed_name(b"literal");
                                 if let Some(language) = literal.language() {
-                                    literal_tag.push_attribute(("xml:lang", language.as_str()));
+                                    literal_tag.push_attribute(("xml:lang", language));
                                 } else if !literal.is_plain() {
                                     literal_tag
                                         .push_attribute(("datatype", literal.datatype().as_str()));

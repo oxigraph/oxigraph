@@ -7,7 +7,7 @@ use std::iter::{empty, once};
 use std::sync::{PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// Memory based implementation of the `Repository` trait.
-/// They are cheap to build using the `MemoryRepository::default()` method.
+/// It is cheap to build using the `MemoryRepository::default()` method.
 ///
 /// Usage example:
 /// ```

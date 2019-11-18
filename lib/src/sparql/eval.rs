@@ -2503,6 +2503,7 @@ impl Accumulator for AvgAccumulator {
     }
 }
 
+#[allow(clippy::option_option)]
 struct MinAccumulator<'a, S: StoreConnection + 'a> {
     eval: &'a SimpleEvaluator<S>,
     min: Option<Option<EncodedTerm>>,
@@ -2530,6 +2531,7 @@ impl<'a, S: StoreConnection + 'a> Accumulator for MinAccumulator<'a, S> {
     }
 }
 
+#[allow(clippy::option_option)]
 struct MaxAccumulator<'a, S: StoreConnection + 'a> {
     eval: &'a SimpleEvaluator<S>,
     max: Option<Option<EncodedTerm>>,
@@ -2574,6 +2576,7 @@ impl Accumulator for SampleAccumulator {
     }
 }
 
+#[allow(clippy::option_option)]
 struct GroupConcatAccumulator<'a, S: StoreConnection + 'a> {
     eval: &'a SimpleEvaluator<S>,
     concat: Option<String>,

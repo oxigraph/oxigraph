@@ -63,9 +63,7 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
         let dataset = DatasetView::new(connection, options.default_graph_as_union);
         Ok(Self(match read_sparql_query(query, options.base_iri)? {
             QueryVariants::Select {
-                algebra,
-                dataset: _,
-                base_iri,
+                algebra, base_iri, ..
             } => {
                 let (plan, variables) = PlanBuilder::build(dataset.encoder(), &algebra)?;
                 SimplePreparedQueryAction::Select {
@@ -75,9 +73,7 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
                 }
             }
             QueryVariants::Ask {
-                algebra,
-                dataset: _,
-                base_iri,
+                algebra, base_iri, ..
             } => {
                 let (plan, _) = PlanBuilder::build(dataset.encoder(), &algebra)?;
                 SimplePreparedQueryAction::Ask {
@@ -88,8 +84,8 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
             QueryVariants::Construct {
                 construct,
                 algebra,
-                dataset: _,
                 base_iri,
+                ..
             } => {
                 let (plan, variables) = PlanBuilder::build(dataset.encoder(), &algebra)?;
                 SimplePreparedQueryAction::Construct {
@@ -103,9 +99,7 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
                 }
             }
             QueryVariants::Describe {
-                algebra,
-                dataset: _,
-                base_iri,
+                algebra, base_iri, ..
             } => {
                 let (plan, _) = PlanBuilder::build(dataset.encoder(), &algebra)?;
                 SimplePreparedQueryAction::Describe {

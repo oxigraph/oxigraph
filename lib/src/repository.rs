@@ -113,6 +113,7 @@ pub trait RepositoryConnection: Clone {
     /// assert_eq!(vec![quad], results?);
     /// # Result::Ok(())
     /// ```
+    #[allow(clippy::option_option)]
     fn quads_for_pattern<'a>(
         &'a self,
         subject: Option<&NamedOrBlankNode>,

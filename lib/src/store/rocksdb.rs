@@ -11,7 +11,7 @@ use std::str;
 
 /// `Repository` implementation based on the [RocksDB](https://rocksdb.org/) key-value store
 ///
-/// To use it, the `"rocksdb"` feature need to be activated.
+/// To use it, the `"rocksdb"` feature needs to be activated.
 ///
 /// Usage example:
 /// ```

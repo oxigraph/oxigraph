@@ -72,10 +72,10 @@ impl Literal {
 
     /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form)
     pub fn value(&self) -> &str {
-        match self.0 {
-            LiteralContent::String(ref value)
-            | LiteralContent::LanguageTaggedString { ref value, .. }
-            | LiteralContent::TypedLiteral { ref value, .. } => value,
+        match &self.0 {
+            LiteralContent::String(value)
+            | LiteralContent::LanguageTaggedString { value, .. }
+            | LiteralContent::TypedLiteral { value, .. } => value,
         }
     }
 
@@ -83,9 +83,9 @@ impl Literal {
     ///
     /// Language tags are defined by the [BCP47](https://tools.ietf.org/html/bcp47).
     /// They are normalized to lowercase by this implementation.
-    pub fn language(&self) -> Option<&String> {
-        match self.0 {
-            LiteralContent::LanguageTaggedString { ref language, .. } => Some(language),
+    pub fn language(&self) -> Option<&str> {
+        match &self.0 {
+            LiteralContent::LanguageTaggedString { language, .. } => Some(language),
             _ => None,
         }
     }
@@ -95,10 +95,10 @@ impl Literal {
     /// The datatype of [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string) is always [rdf:langString](http://www.w3.org/1999/02/22-rdf-syntax-ns#langString).
     /// The datatype of [simple literals](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal) is [xsd:string](http://www.w3.org/2001/XMLSchema#string).
     pub fn datatype(&self) -> &NamedNode {
-        match self.0 {
+        match &self.0 {
             LiteralContent::String(_) => &xsd::STRING,
             LiteralContent::LanguageTaggedString { .. } => &rdf::LANG_STRING,
-            LiteralContent::TypedLiteral { ref datatype, .. } => datatype,
+            LiteralContent::TypedLiteral { datatype, .. } => datatype,
         }
     }
 
