@@ -770,9 +770,10 @@ impl<'a> fmt::Display for SparqlGraphPattern<'a> {
                 SparqlGraphPattern(&*a),
                 SparqlGraphPattern(&*b),
             ),
+            #[rustfmt::skip] // TODO: Discrepancy between the latest cargo fmt and the one on GitHub CI
             GraphPattern::Graph(g, p) => {
                 write!(f, "GRAPH {} {{ {} }}", g, SparqlGraphPattern(&*p),)
-            }
+            },
             GraphPattern::Extend(p, v, e) => write!(
                 f,
                 "{} BIND({} AS {})",

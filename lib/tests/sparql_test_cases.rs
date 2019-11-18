@@ -28,12 +28,12 @@ fn sparql_w3c_syntax_testsuite() -> Result<()> {
     for test_result in manifest_10_urls
         .into_iter()
         .chain(manifest_11_urls.into_iter())
-        .flat_map(|manifest| TestManifest::new(manifest))
+        .flat_map(TestManifest::new)
     {
         let test = test_result.unwrap();
         if test.kind == "PositiveSyntaxTest" || test.kind == "PositiveSyntaxTest11" {
             match Query::parse(&read_file_to_string(&test.query)?, Some(&test.query)) {
-                Err(error) => assert!(false, "Failure on {} with error: {}", test, error),
+                Err(error) => panic!("Failure on {} with error: {}", test, error),
                 Ok(query) => {
                     if let Err(error) = Query::parse(&query.to_string(), None) {
                         assert!(
@@ -53,7 +53,7 @@ fn sparql_w3c_syntax_testsuite() -> Result<()> {
                 eprintln!("Failure on {}. The output tree is: {}", test, result);
             }
         } else if test.kind != "QueryEvaluationTest" {
-            assert!(false, "Not supported test: {}", test);
+            panic!("Not supported test: {}", test);
         }
     }
     Ok(())
@@ -144,7 +144,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
     let tests: Result<Vec<_>> = manifest_10_urls
         .into_iter()
         .chain(manifest_11_urls.into_iter())
-        .flat_map(|manifest| TestManifest::new(manifest))
+        .flat_map(TestManifest::new)
         .collect();
     let failed: Vec<_> = tests?.into_par_iter().map(|test| {
         if test_blacklist.contains(&test.id) {
@@ -514,7 +514,7 @@ impl Iterator for TestManifest {
                     .graph
                     .object_for_subject_predicate(&test_subject, &rdf::TYPE)
                 {
-                    Some(Term::NamedNode(c)) => match c.as_str().split("#").last() {
+                    Some(Term::NamedNode(c)) => match c.as_str().split('#').last() {
                         Some(k) => k.to_string(),
                         None => return self.next(), //We ignore the test
                     },
@@ -618,7 +618,7 @@ impl Iterator for TestManifest {
                             NamedOrBlankNode::from(NamedNode::parse(url.clone()).unwrap());
                         match load_graph(&url) {
                             Ok(g) => self.graph.extend(g.into_iter()),
-                            Err(e) => return Some(Err(e.into())),
+                            Err(e) => return Some(Err(e)),
                         }
 
                         // New manifests

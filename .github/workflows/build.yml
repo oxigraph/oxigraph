@@ -3,13 +3,29 @@ name: build
 on: [push, pull_request]
 
 jobs:
-  build:
+  fmt:
+    name: fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - run: rustup component add rustfmt
+      - run: cargo fmt -- --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - run: rustup component add clippy
+      - run: cargo clippy --all --all-targets
+
+  test:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
       with:
         submodules: true
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+    - run: cargo build
+    - run: cargo test --verbose --all
+      env:
+        RUST_BACKTRACE: 1
