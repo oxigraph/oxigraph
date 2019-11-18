@@ -5,7 +5,7 @@ use failure::format_err;
 use rocksdb::*;
 use std::io::Cursor;
 use std::iter::{empty, once};
-use std::mem::swap;
+use std::mem::replace;
 use std::path::Path;
 use std::str;
 
@@ -473,9 +473,10 @@ impl<'a> StoreTransaction for RocksDbStoreTransaction<'a> {
         self.buffer.clear();
 
         if self.batch.len() > MAX_TRANSACTION_SIZE {
-            let mut tmp_batch = WriteBatch::default();
-            swap(&mut self.batch, &mut tmp_batch);
-            self.connection.store.db.write(tmp_batch)?;
+            self.connection
+                .store
+                .db
+                .write(replace(&mut self.batch, WriteBatch::default()))?;
         }
 
         Ok(())
@@ -513,9 +514,10 @@ impl<'a> StoreTransaction for RocksDbStoreTransaction<'a> {
         self.buffer.clear();
 
         if self.batch.len() > MAX_TRANSACTION_SIZE {
-            let mut tmp_batch = WriteBatch::default();
-            swap(&mut self.batch, &mut tmp_batch);
-            self.connection.store.db.write(tmp_batch)?;
+            self.connection
+                .store
+                .db
+                .write(replace(&mut self.batch, WriteBatch::default()))?;
         }
 
         Ok(())
