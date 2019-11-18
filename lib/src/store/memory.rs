@@ -77,8 +77,6 @@ impl<'a> Store for &'a MemoryStore {
 }
 
 impl<'a> StrLookup for &'a MemoryStore {
-    type StrType = String;
-
     fn get_str(&self, id: u128) -> Result<Option<String>> {
         self.indexes()?.str_store.get_str(id)
     }

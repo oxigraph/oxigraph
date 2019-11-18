@@ -2,17 +2,10 @@ use crate::store::numeric_encoder::*;
 use crate::store::{Store, StoreConnection, StoreRepositoryConnection, StoreTransaction};
 use crate::{Repository, Result};
 use failure::format_err;
-use rocksdb::ColumnFamily;
-use rocksdb::DBCompactionStyle;
-use rocksdb::DBRawIterator;
-use rocksdb::DBVector;
-use rocksdb::Options;
-use rocksdb::WriteBatch;
-use rocksdb::DB;
+use rocksdb::*;
 use std::io::Cursor;
 use std::iter::{empty, once};
 use std::mem::swap;
-use std::ops::Deref;
 use std::path::Path;
 use std::str;
 
@@ -77,13 +70,13 @@ struct RocksDbStore {
 #[derive(Clone)]
 pub struct RocksDbStoreConnection<'a> {
     store: &'a RocksDbStore,
-    id2str_cf: ColumnFamily<'a>,
-    spog_cf: ColumnFamily<'a>,
-    posg_cf: ColumnFamily<'a>,
-    ospg_cf: ColumnFamily<'a>,
-    gspo_cf: ColumnFamily<'a>,
-    gpos_cf: ColumnFamily<'a>,
-    gosp_cf: ColumnFamily<'a>,
+    id2str_cf: &'a ColumnFamily,
+    spog_cf: &'a ColumnFamily,
+    posg_cf: &'a ColumnFamily,
+    ospg_cf: &'a ColumnFamily,
+    gspo_cf: &'a ColumnFamily,
+    gpos_cf: &'a ColumnFamily,
+    gosp_cf: &'a ColumnFamily,
 }
 
 impl RocksDbRepository {
@@ -139,14 +132,12 @@ impl<'a> Store for &'a RocksDbStore {
 }
 
 impl StrLookup for RocksDbStoreConnection<'_> {
-    type StrType = RocksString;
-
-    fn get_str(&self, id: u128) -> Result<Option<RocksString>> {
+    fn get_str(&self, id: u128) -> Result<Option<String>> {
         Ok(self
             .store
             .db
             .get_cf(self.id2str_cf, &id.to_le_bytes())?
-            .map(|v| RocksString { vec: v }))
+            .map(|v| unsafe { String::from_utf8_unchecked(v) }))
     }
 }
 
@@ -164,7 +155,11 @@ impl<'a> StoreConnection for RocksDbStoreConnection<'a> {
     fn contains(&self, quad: &EncodedQuad) -> Result<bool> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
         buffer.write_spog_quad(quad)?;
-        Ok(self.store.db.get_cf(self.spog_cf, &buffer)?.is_some())
+        Ok(self
+            .store
+            .db
+            .get_pinned_cf(self.spog_cf, &buffer)?
+            .is_some())
     }
 
     fn quads_for_pattern<'b>(
@@ -417,7 +412,7 @@ impl<'a> RocksDbStoreConnection<'a> {
 
     fn inner_quads(
         &self,
-        cf: ColumnFamily,
+        cf: &ColumnFamily,
         prefix: Vec<u8>,
         decode: impl Fn(&[u8]) -> Result<EncodedQuad> + 'a,
     ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
@@ -532,7 +527,7 @@ impl<'a> StoreTransaction for RocksDbStoreTransaction<'a> {
     }
 }
 
-fn get_cf<'a>(db: &'a DB, name: &str) -> Result<ColumnFamily<'a>> {
+fn get_cf<'a>(db: &'a DB, name: &str) -> Result<&'a ColumnFamily> {
     db.cf_handle(name)
         .ok_or_else(|| format_err!("column family {} not found", name))
 }
@@ -578,44 +573,18 @@ impl<'a, F: Fn(&[u8]) -> Result<EncodedQuad>> Iterator for DecodingIndexIterator
 
     fn next(&mut self) -> Option<Result<EncodedQuad>> {
         if self.iter.valid() {
-            let result = unsafe {
-                self.iter.key_inner().and_then(|key| {
-                    if key.starts_with(&self.prefix) {
-                        Some((self.decode)(key))
-                    } else {
-                        None
-                    }
-                })
-            };
+            let result = self.iter.key().and_then(|key| {
+                if key.starts_with(&self.prefix) {
+                    Some((self.decode)(key))
+                } else {
+                    None
+                }
+            });
             self.iter.next();
             result
         } else {
             None
         }
-    }
-}
-
-pub struct RocksString {
-    vec: DBVector,
-}
-
-impl Deref for RocksString {
-    type Target = str;
-
-    fn deref(&self) -> &str {
-        unsafe { str::from_utf8_unchecked(&self.vec) }
-    }
-}
-
-impl ToString for RocksString {
-    fn to_string(&self) -> String {
-        self.deref().to_owned()
-    }
-}
-
-impl From<RocksString> for String {
-    fn from(val: RocksString) -> String {
-        val.deref().to_owned()
     }
 }
 

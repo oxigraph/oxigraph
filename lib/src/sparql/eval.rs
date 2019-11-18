@@ -29,7 +29,6 @@ use std::fmt::Write;
 use std::hash::Hash;
 use std::iter::Iterator;
 use std::iter::{empty, once};
-use std::ops::Deref;
 use std::str;
 use std::sync::Mutex;
 
@@ -1451,10 +1450,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         }
     }
 
-    fn to_simple_string(
-        &self,
-        term: EncodedTerm,
-    ) -> Option<<DatasetView<S> as StrLookup>::StrType> {
+    fn to_simple_string(&self, term: EncodedTerm) -> Option<String> {
         if let EncodedTerm::StringLiteral { value_id } = term {
             self.dataset.get_str(value_id).ok()?
         } else {
@@ -1470,7 +1466,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         }
     }
 
-    fn to_string(&self, term: EncodedTerm) -> Option<<DatasetView<S> as StrLookup>::StrType> {
+    fn to_string(&self, term: EncodedTerm) -> Option<String> {
         match term {
             EncodedTerm::StringLiteral { value_id }
             | EncodedTerm::LangStringLiteral { value_id, .. } => {
@@ -1480,10 +1476,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         }
     }
 
-    fn to_string_and_language(
-        &self,
-        term: EncodedTerm,
-    ) -> Option<(<DatasetView<S> as StrLookup>::StrType, Option<u128>)> {
+    fn to_string_and_language(&self, term: EncodedTerm) -> Option<(String, Option<u128>)> {
         match term {
             EncodedTerm::StringLiteral { value_id } => {
                 Some((self.dataset.get_str(value_id).ok()??, None))
@@ -1533,11 +1526,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         &self,
         arg1: EncodedTerm,
         arg2: EncodedTerm,
-    ) -> Option<(
-        <DatasetView<S> as StrLookup>::StrType,
-        <DatasetView<S> as StrLookup>::StrType,
-        Option<u128>,
-    )> {
+    ) -> Option<(String, String, Option<u128>)> {
         let (value1, language1) = self.to_string_and_language(arg1)?;
         let (value2, language2) = self.to_string_and_language(arg2)?;
         if language2.is_none() || language1 == language2 {
@@ -1890,40 +1879,6 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         let input = self.to_simple_string(self.eval_expression(arg, tuple)?)?;
         let hash = hex::encode(H::new().chain(&input as &str).result());
         self.build_string_literal(&hash)
-    }
-}
-
-pub enum StringOrStoreString<S: Deref<Target = str> + ToString + Into<String>> {
-    String(String),
-    Store(S),
-}
-
-impl<S: Deref<Target = str> + ToString + Into<String>> Deref for StringOrStoreString<S> {
-    type Target = str;
-
-    fn deref(&self) -> &str {
-        match self {
-            StringOrStoreString::String(s) => &*s,
-            StringOrStoreString::Store(s) => &*s,
-        }
-    }
-}
-
-impl<S: Deref<Target = str> + ToString + Into<String>> ToString for StringOrStoreString<S> {
-    fn to_string(&self) -> String {
-        match self {
-            StringOrStoreString::String(s) => s.to_string(),
-            StringOrStoreString::Store(s) => s.to_string(),
-        }
-    }
-}
-
-impl<S: Deref<Target = str> + ToString + Into<String>> From<StringOrStoreString<S>> for String {
-    fn from(string: StringOrStoreString<S>) -> Self {
-        match string {
-            StringOrStoreString::String(s) => s,
-            StringOrStoreString::Store(s) => s.into(),
-        }
     }
 }
 

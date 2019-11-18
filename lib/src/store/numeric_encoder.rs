@@ -16,7 +16,6 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::io::Write;
 use std::mem::size_of;
-use std::ops::Deref;
 use std::str;
 
 const EMPTY_STRING_ID: u128 = 0x7e42_f8ec_9809_80e9_04b2_008f_d98c_1dd4;
@@ -693,9 +692,7 @@ impl<W: Write> TermWriter for W {
 }
 
 pub trait StrLookup {
-    type StrType: Deref<Target = str> + ToString + Into<String>;
-
-    fn get_str(&self, id: u128) -> Result<Option<Self::StrType>>;
+    fn get_str(&self, id: u128) -> Result<Option<String>>;
 }
 
 pub trait StrContainer {
@@ -733,8 +730,6 @@ impl Default for MemoryStrStore {
 }
 
 impl StrLookup for MemoryStrStore {
-    type StrType = String;
-
     fn get_str(&self, id: u128) -> Result<Option<String>> {
         //TODO: avoid copy by adding a lifetime limit to get_str
         Ok(self.id2str.get(&id).cloned())
@@ -1121,7 +1116,7 @@ impl<S: StrLookup> Decoder for S {
     }
 }
 
-fn get_required_str<S: StrLookup>(lookup: &S, id: u128) -> Result<S::StrType> {
+fn get_required_str(lookup: &impl StrLookup, id: u128) -> Result<String> {
     lookup.get_str(id)?.ok_or_else(|| {
         format_err!(
             "Not able to find the string with id {} in the string store",

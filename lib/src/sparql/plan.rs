@@ -1,4 +1,3 @@
-use crate::sparql::eval::StringOrStoreString;
 use crate::sparql::model::Variable;
 use crate::sparql::GraphPattern;
 use crate::store::numeric_encoder::{
@@ -493,16 +492,12 @@ impl<S: StoreConnection> DatasetView<S> {
 }
 
 impl<S: StoreConnection> StrLookup for DatasetView<S> {
-    type StrType = StringOrStoreString<S::StrType>;
-
-    fn get_str(&self, id: u128) -> Result<Option<StringOrStoreString<S::StrType>>> {
-        Ok(if let Some(value) = self.extra.borrow().get_str(id)? {
-            Some(StringOrStoreString::String(value))
-        } else if let Some(value) = self.store.get_str(id)? {
-            Some(StringOrStoreString::Store(value))
+    fn get_str(&self, id: u128) -> Result<Option<String>> {
+        if let Some(value) = self.extra.borrow().get_str(id)? {
+            Ok(Some(value))
         } else {
-            None
-        })
+            self.store.get_str(id)
+        }
     }
 }
 
