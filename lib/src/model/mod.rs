@@ -9,6 +9,7 @@ mod literal;
 mod named_node;
 mod triple;
 pub mod vocab;
+pub(crate) mod xsd;
 
 pub use crate::model::blank_node::BlankNode;
 pub use crate::model::graph::SimpleGraph;

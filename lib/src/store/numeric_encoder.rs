@@ -1,5 +1,6 @@
 use crate::model::vocab::rdf;
 use crate::model::vocab::xsd;
+use crate::model::xsd::Decimal;
 use crate::model::*;
 use crate::Result;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
@@ -11,7 +12,6 @@ use md5::Md5;
 use ordered_float::OrderedFloat;
 use rand::random;
 use rio_api::model as rio;
-use rust_decimal::Decimal;
 use std::collections::HashMap;
 use std::io::Read;
 use std::io::Write;
@@ -100,7 +100,7 @@ pub enum EncodedTerm {
     BooleanLiteral(bool),
     FloatLiteral(OrderedFloat<f32>),
     DoubleLiteral(OrderedFloat<f64>),
-    IntegerLiteral(i128),
+    IntegerLiteral(i64),
     DecimalLiteral(Decimal),
     DateLiteral(Date<FixedOffset>),
     NaiveDateLiteral(NaiveDate),
@@ -194,21 +194,9 @@ impl From<bool> for EncodedTerm {
     }
 }
 
-impl From<i128> for EncodedTerm {
-    fn from(value: i128) -> Self {
-        EncodedTerm::IntegerLiteral(value)
-    }
-}
-
 impl From<i64> for EncodedTerm {
     fn from(value: i64) -> Self {
-        EncodedTerm::IntegerLiteral(value.into())
-    }
-}
-
-impl From<u64> for EncodedTerm {
-    fn from(value: u64) -> Self {
-        EncodedTerm::IntegerLiteral(value.into())
+        EncodedTerm::IntegerLiteral(value)
     }
 }
 
@@ -454,12 +442,12 @@ impl<R: Read> TermReader for R {
                 self.read_f64::<LittleEndian>()?,
             ))),
             TYPE_INTEGER_LITERAL => Ok(EncodedTerm::IntegerLiteral(
-                self.read_i128::<LittleEndian>()?,
+                self.read_i64::<LittleEndian>()?,
             )),
             TYPE_DECIMAL_LITERAL => {
                 let mut buffer = [0 as u8; 16];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::DecimalLiteral(Decimal::deserialize(buffer)))
+                Ok(EncodedTerm::DecimalLiteral(Decimal::from_le_bytes(buffer)))
             }
             TYPE_DATE_LITERAL => Ok(EncodedTerm::DateLiteral(Date::from_utc(
                 NaiveDate::from_num_days_from_ce_opt(self.read_i32::<LittleEndian>()?)
@@ -594,49 +582,47 @@ impl<W: Write> TermWriter for W {
         self.write_u8(term.type_id())?;
         match term {
             EncodedTerm::DefaultGraph => {}
-            EncodedTerm::NamedNode { iri_id } => self.write_u128::<LittleEndian>(iri_id)?,
-            EncodedTerm::BlankNode { id } => self.write_u128::<LittleEndian>(id)?,
-            EncodedTerm::StringLiteral { value_id } => {
-                self.write_u128::<LittleEndian>(value_id)?;
-            }
+            EncodedTerm::NamedNode { iri_id } => self.write_all(&iri_id.to_le_bytes())?,
+            EncodedTerm::BlankNode { id } => self.write_all(&id.to_le_bytes())?,
+            EncodedTerm::StringLiteral { value_id } => self.write_all(&value_id.to_le_bytes())?,
             EncodedTerm::LangStringLiteral {
                 value_id,
                 language_id,
             } => {
-                self.write_u128::<LittleEndian>(language_id)?;
-                self.write_u128::<LittleEndian>(value_id)?;
+                self.write_all(&language_id.to_le_bytes())?;
+                self.write_all(&value_id.to_le_bytes())?;
             }
             EncodedTerm::TypedLiteral {
                 value_id,
                 datatype_id,
             } => {
-                self.write_u128::<LittleEndian>(datatype_id)?;
-                self.write_u128::<LittleEndian>(value_id)?;
+                self.write_all(&datatype_id.to_le_bytes())?;
+                self.write_all(&value_id.to_le_bytes())?;
             }
             EncodedTerm::BooleanLiteral(_) => {}
             EncodedTerm::FloatLiteral(value) => self.write_f32::<LittleEndian>(*value)?,
             EncodedTerm::DoubleLiteral(value) => self.write_f64::<LittleEndian>(*value)?,
-            EncodedTerm::IntegerLiteral(value) => self.write_i128::<LittleEndian>(value)?,
-            EncodedTerm::DecimalLiteral(value) => self.write_all(&value.serialize())?,
+            EncodedTerm::IntegerLiteral(value) => self.write_all(&value.to_le_bytes())?,
+            EncodedTerm::DecimalLiteral(value) => self.write_all(&value.to_le_bytes())?,
             EncodedTerm::DateLiteral(value) => {
-                self.write_i32::<LittleEndian>(value.num_days_from_ce())?;
-                self.write_i32::<LittleEndian>(value.timezone().local_minus_utc())?;
+                self.write_all(&value.num_days_from_ce().to_le_bytes())?;
+                self.write_all(&value.timezone().local_minus_utc().to_le_bytes())?;
             }
             EncodedTerm::NaiveDateLiteral(value) => {
-                self.write_i32::<LittleEndian>(value.num_days_from_ce())?;
+                self.write_all(&value.num_days_from_ce().to_le_bytes())?
             }
             EncodedTerm::NaiveTimeLiteral(value) => {
-                self.write_u32::<LittleEndian>(value.num_seconds_from_midnight())?;
-                self.write_u32::<LittleEndian>(value.nanosecond())?;
+                self.write_all(&value.num_seconds_from_midnight().to_le_bytes())?;
+                self.write_all(&value.nanosecond().to_le_bytes())?;
             }
             EncodedTerm::DateTimeLiteral(value) => {
-                self.write_i64::<LittleEndian>(value.timestamp())?;
-                self.write_u32::<LittleEndian>(value.timestamp_subsec_nanos())?;
-                self.write_i32::<LittleEndian>(value.timezone().local_minus_utc())?;
+                self.write_all(&value.timestamp().to_le_bytes())?;
+                self.write_all(&value.timestamp_subsec_nanos().to_le_bytes())?;
+                self.write_all(&value.timezone().local_minus_utc().to_le_bytes())?;
             }
             EncodedTerm::NaiveDateTimeLiteral(value) => {
-                self.write_i64::<LittleEndian>(value.timestamp())?;
-                self.write_u32::<LittleEndian>(value.timestamp_subsec_nanos())?;
+                self.write_all(&value.timestamp().to_le_bytes())?;
+                self.write_all(&value.timestamp_subsec_nanos().to_le_bytes())?;
             }
         }
         Ok(())
@@ -1140,6 +1126,8 @@ fn test_encoding() {
         Literal::from("foo").into(),
         Literal::new_language_tagged_literal("foo", "fr").into(),
         Literal::new_language_tagged_literal("foo", "FR").into(),
+        Literal::new_typed_literal("-1.32", xsd::DECIMAL.clone()).into(),
+        Literal::new_typed_literal("-foo", NamedNode::new_from_string("http://foo.com")).into(),
     ];
     for term in terms {
         let encoded = store.encode_term(&term).unwrap();

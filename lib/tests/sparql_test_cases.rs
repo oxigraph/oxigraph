@@ -129,13 +129,8 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/construct/manifest#constructwhere04").unwrap(),
         //BNODE() scope is currently wrong
         NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#bnode01").unwrap(),
-        //Decimal precision problem
-        NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#coalesce01").unwrap(),
         //Property path with unbound graph name are not supported yet
         NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/property-path/manifest#pp35").unwrap(),
-        //We write "2"^^xsd:decimal instead of "2.0"^^xsd:decimal
-        NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-err-02").unwrap(),
-        NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-avg-02").unwrap(),
         //SERVICE name from a BGP
         NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/service/manifest#service5").unwrap(),
 

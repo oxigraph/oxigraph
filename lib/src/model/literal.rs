@@ -1,9 +1,9 @@
 use crate::model::named_node::NamedNode;
 use crate::model::vocab::rdf;
 use crate::model::vocab::xsd;
+use crate::model::xsd::Decimal;
 use chrono::prelude::*;
 use rio_api::model as rio;
-use rust_decimal::Decimal;
 use std::borrow::Cow;
 use std::fmt;
 use std::option::Option;

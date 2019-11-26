@@ -1,3 +1,4 @@
+use crate::model::xsd::Decimal;
 use crate::model::BlankNode;
 use crate::model::Triple;
 use crate::sparql::algebra::GraphPattern;
@@ -11,20 +12,16 @@ use chrono::prelude::*;
 use digest::Digest;
 use failure::format_err;
 use md5::Md5;
-use num_traits::identities::Zero;
-use num_traits::FromPrimitive;
-use num_traits::One;
 use num_traits::ToPrimitive;
 use rand::random;
 use regex::{Regex, RegexBuilder};
 use rio_api::iri::Iri;
 use rio_api::model as rio;
-use rust_decimal::{Decimal, RoundingStrategy};
 use sha1::Sha1;
 use sha2::{Sha256, Sha384, Sha512};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::fmt::Write;
 use std::hash::Hash;
 use std::iter::Iterator;
@@ -837,9 +834,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             PlanExpression::Div(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
                 NumericBinaryOperands::Float(v1, v2) => (v1 / v2).into(),
                 NumericBinaryOperands::Double(v1, v2) => (v1 / v2).into(),
-                NumericBinaryOperands::Integer(v1, v2) => Decimal::from_i128(v1)?
-                    .checked_div(Decimal::from_i128(v2)?)?
-                    .into(),
+                NumericBinaryOperands::Integer(v1, v2) => {
+                    Decimal::from(v1).checked_div(Decimal::from(v2))?.into()
+                }
                 NumericBinaryOperands::Decimal(v1, v2) => v1.checked_div(v2)?.into(),
             }),
             PlanExpression::UnaryPlus(e) => match self.eval_expression(e, tuple)? {
@@ -954,11 +951,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             },
             PlanExpression::Round(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::IntegerLiteral(value) => Some(value.into()),
-                EncodedTerm::DecimalLiteral(value) => Some(
-                    value
-                        .round_dp_with_strategy(0, RoundingStrategy::RoundHalfUp)
-                        .into(),
-                ),
+                EncodedTerm::DecimalLiteral(value) => Some(value.round().into()),
                 EncodedTerm::FloatLiteral(value) => Some(value.round().into()),
                 EncodedTerm::DoubleLiteral(value) => Some(value.round().into()),
                 _ => None,
@@ -1026,7 +1019,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 (self
                     .to_string(self.eval_expression(arg, tuple)?)?
                     .chars()
-                    .count() as i128)
+                    .count() as i64)
                     .into(),
             ),
             PlanExpression::Replace(arg, pattern, replacement, flags) => {
@@ -1159,18 +1152,22 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             },
             PlanExpression::Seconds(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::NaiveTimeLiteral(time) => Some(
-                    (Decimal::new(time.nanosecond().into(), 9) + Decimal::from(time.second()))
+                    Decimal::from(time.nanosecond())
+                        .checked_div(Decimal::from(1_000_000_000))?
+                        .checked_add(Decimal::from(time.second()))?
                         .into(),
                 ),
                 EncodedTerm::DateTimeLiteral(date_time) => Some(
-                    (Decimal::new(date_time.nanosecond().into(), 9)
-                        + Decimal::from(date_time.second()))
-                    .into(),
+                    Decimal::from(date_time.nanosecond())
+                        .checked_div(Decimal::from(1_000_000_000))?
+                        .checked_add(Decimal::from(date_time.second()))?
+                        .into(),
                 ),
                 EncodedTerm::NaiveDateTimeLiteral(date_time) => Some(
-                    (Decimal::new(date_time.nanosecond().into(), 9)
-                        + Decimal::from(date_time.second()))
-                    .into(),
+                    Decimal::from(date_time.nanosecond())
+                        .checked_div(Decimal::from(1_000_000_000))?
+                        .checked_add(Decimal::from(date_time.second()))?
+                        .into(),
                 ),
                 _ => None,
             },
@@ -1354,10 +1351,10 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 _ => None,
             },
             PlanExpression::IntegerCast(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::FloatLiteral(value) => Some(value.to_i128()?.into()),
-                EncodedTerm::DoubleLiteral(value) => Some(value.to_i128()?.into()),
-                EncodedTerm::IntegerLiteral(value) => Some(value.to_i128()?.into()),
-                EncodedTerm::DecimalLiteral(value) => Some(value.to_i128()?.into()),
+                EncodedTerm::FloatLiteral(value) => Some(value.to_i64()?.into()),
+                EncodedTerm::DoubleLiteral(value) => Some(value.to_i64()?.into()),
+                EncodedTerm::IntegerLiteral(value) => Some(value.to_i64()?.into()),
+                EncodedTerm::DecimalLiteral(value) => Some(i64::try_from(value).ok()?.into()),
                 EncodedTerm::BooleanLiteral(value) => Some(if value { 1 } else { 0 }.into()),
                 EncodedTerm::StringLiteral { value_id } => {
                     parse_integer_str(&*self.dataset.get_str(value_id).ok()??)
@@ -1365,18 +1362,13 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 _ => None,
             },
             PlanExpression::DecimalCast(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::FloatLiteral(value) => Some(Decimal::from_f32(*value)?.into()),
-                EncodedTerm::DoubleLiteral(value) => Some(Decimal::from_f64(*value)?.into()),
-                EncodedTerm::IntegerLiteral(value) => Some(Decimal::from_i128(value)?.into()),
+                //TODO: code EncodedTerm::FloatLiteral(value) => Some(Decimal::from_f32(*value)?.into()),
+                //TODO: code EncodedTerm::DoubleLiteral(value) => Some(Decimal::from_f64(*value)?.into()),
+                EncodedTerm::IntegerLiteral(value) => Some(Decimal::from(value).into()),
                 EncodedTerm::DecimalLiteral(value) => Some(value.into()),
-                EncodedTerm::BooleanLiteral(value) => Some(
-                    if value {
-                        Decimal::one()
-                    } else {
-                        Decimal::zero()
-                    }
-                    .into(),
-                ),
+                EncodedTerm::BooleanLiteral(value) => {
+                    Some(Decimal::from(if value { 1 } else { 0 }).into())
+                }
                 EncodedTerm::StringLiteral { value_id } => {
                     parse_decimal_str(&*self.dataset.get_str(value_id).ok()??)
                 }
@@ -1419,10 +1411,10 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         match term {
             EncodedTerm::BooleanLiteral(value) => Some(value),
             EncodedTerm::StringLiteral { .. } => Some(term != ENCODED_EMPTY_STRING_LITERAL),
-            EncodedTerm::FloatLiteral(value) => Some(!value.is_zero()),
-            EncodedTerm::DoubleLiteral(value) => Some(!value.is_zero()),
-            EncodedTerm::IntegerLiteral(value) => Some(!value.is_zero()),
-            EncodedTerm::DecimalLiteral(value) => Some(!value.is_zero()),
+            EncodedTerm::FloatLiteral(value) => Some(*value != 0f32),
+            EncodedTerm::DoubleLiteral(value) => Some(*value != 0f64),
+            EncodedTerm::IntegerLiteral(value) => Some(value != 0),
+            EncodedTerm::DecimalLiteral(value) => Some(value != Decimal::from(0)),
             _ => None,
         }
     }
@@ -1677,14 +1669,14 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 EncodedTerm::FloatLiteral(b) => Some(a.to_f32()? == *b),
                 EncodedTerm::DoubleLiteral(b) => Some(a.to_f64()? == *b),
                 EncodedTerm::IntegerLiteral(b) => Some(a == b),
-                EncodedTerm::DecimalLiteral(b) => Some(Decimal::from_i128(a)? == b),
+                EncodedTerm::DecimalLiteral(b) => Some(Decimal::from(a) == b),
                 EncodedTerm::TypedLiteral { .. } => None,
                 _ => Some(false),
             },
             EncodedTerm::DecimalLiteral(a) => match b {
                 EncodedTerm::FloatLiteral(b) => Some(a.to_f32()? == *b),
                 EncodedTerm::DoubleLiteral(b) => Some(a.to_f64()? == *b),
-                EncodedTerm::IntegerLiteral(b) => Some(a == Decimal::from_i128(b)?),
+                EncodedTerm::IntegerLiteral(b) => Some(a == Decimal::from(b)),
                 EncodedTerm::DecimalLiteral(b) => Some(a == b),
                 EncodedTerm::TypedLiteral { .. } => None,
                 _ => Some(false),
@@ -1821,13 +1813,13 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 EncodedTerm::FloatLiteral(b) => a.to_f32()?.partial_cmp(&*b),
                 EncodedTerm::DoubleLiteral(b) => a.to_f64()?.partial_cmp(&*b),
                 EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&b),
-                EncodedTerm::DecimalLiteral(b) => Decimal::from_i128(a)?.partial_cmp(&b),
+                EncodedTerm::DecimalLiteral(b) => Decimal::from(a).partial_cmp(&b),
                 _ => None,
             },
             EncodedTerm::DecimalLiteral(a) => match b {
                 EncodedTerm::FloatLiteral(b) => a.to_f32()?.partial_cmp(&*b),
                 EncodedTerm::DoubleLiteral(b) => a.to_f64()?.partial_cmp(&*b),
-                EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&Decimal::from_i128(b)?),
+                EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&Decimal::from(b)),
                 EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&b),
                 _ => None,
             },
@@ -1885,7 +1877,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
 enum NumericBinaryOperands {
     Float(f32, f32),
     Double(f64, f64),
-    Integer(i128, i128),
+    Integer(i64, i64),
     Decimal(Decimal, Decimal),
 }
 
@@ -1926,7 +1918,7 @@ impl NumericBinaryOperands {
                 Some(NumericBinaryOperands::Integer(v1, v2))
             }
             (EncodedTerm::IntegerLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
-                Some(NumericBinaryOperands::Decimal(Decimal::from_i128(v1)?, v2))
+                Some(NumericBinaryOperands::Decimal(Decimal::from(v1), v2))
             }
             (EncodedTerm::DecimalLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
                 Some(NumericBinaryOperands::Float(v1.to_f32()?, *v2))
@@ -1935,7 +1927,7 @@ impl NumericBinaryOperands {
                 Some(NumericBinaryOperands::Double(v1.to_f64()?, *v2))
             }
             (EncodedTerm::DecimalLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
-                Some(NumericBinaryOperands::Decimal(v1, Decimal::from_i128(v2)?))
+                Some(NumericBinaryOperands::Decimal(v1, Decimal::from(v2)))
             }
             (EncodedTerm::DecimalLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
                 Some(NumericBinaryOperands::Decimal(v1, v2))
@@ -2424,7 +2416,7 @@ impl<T: Accumulator> Accumulator for DistinctAccumulator<T> {
 
 #[derive(Default, Debug)]
 struct CountAccumulator {
-    count: u64,
+    count: i64,
 }
 
 impl Accumulator for CountAccumulator {
@@ -2494,8 +2486,8 @@ impl Accumulator for AvgAccumulator {
             match NumericBinaryOperands::new(sum, count)? {
                 NumericBinaryOperands::Float(v1, v2) => Some((v1 / v2).into()),
                 NumericBinaryOperands::Double(v1, v2) => Some((v1 / v2).into()),
-                NumericBinaryOperands::Integer(v1, v2) => Decimal::from_i128(v1)?
-                    .checked_div(Decimal::from_i128(v2)?)
+                NumericBinaryOperands::Integer(v1, v2) => Decimal::from(v1)
+                    .checked_div(Decimal::from(v2))
                     .map(|v| v.into()),
                 NumericBinaryOperands::Decimal(v1, v2) => v1.checked_div(v2).map(|v| v.into()),
             }

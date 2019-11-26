@@ -19,7 +19,6 @@ byteorder = { version = "1", features = ["i128"] }
 quick-xml = "0.17"
 ordered-float = "1"
 num-traits = "0.2"
-rust_decimal = "1"
 chrono = "0.4"
 rand = "0.7"
 md-5 = "0.8"
