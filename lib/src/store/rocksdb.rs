@@ -640,16 +640,14 @@ impl<'a, F: Fn(&[u8]) -> Result<EncodedQuad>> Iterator for DecodingIndexIterator
     type Item = Result<EncodedQuad>;
 
     fn next(&mut self) -> Option<Result<EncodedQuad>> {
-        if self.iter.valid() {
-            let result = self.iter.key().and_then(|key| {
-                if key.starts_with(&self.prefix) {
-                    Some((self.decode)(key))
-                } else {
-                    None
-                }
-            });
-            self.iter.next();
-            result
+        if let Some(key) = self.iter.key() {
+            if key.starts_with(&self.prefix) {
+                let result = (self.decode)(key);
+                self.iter.next();
+                Some(result)
+            } else {
+                None
+            }
         } else {
             None
         }
