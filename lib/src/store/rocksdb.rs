@@ -5,7 +5,7 @@ use failure::format_err;
 use rocksdb::*;
 use std::io::Cursor;
 use std::iter::{empty, once};
-use std::mem::replace;
+use std::mem::take;
 use std::path::Path;
 use std::str;
 
@@ -502,7 +502,7 @@ impl RocksDbStoreAutoTransaction<'_> {
                 .connection
                 .store
                 .db
-                .write(replace(&mut self.inner.batch, WriteBatch::default()))?;
+                .write(take(&mut self.inner.batch))?;
         }
         Ok(())
     }

@@ -97,7 +97,7 @@ where
         loader.update_loop();
     });
 
-    start_server(addr.to_string(), move |request| {
+    start_server(addr, move |request| {
         content_encoding::apply(
             request,
             handle_request(request, repository.connection().unwrap()),

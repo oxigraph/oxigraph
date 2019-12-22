@@ -3,7 +3,7 @@ use crate::model::vocab::xsd;
 use crate::model::xsd::Decimal;
 use crate::model::*;
 use crate::Result;
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{LittleEndian, ReadBytesExt};
 use chrono::format::{parse, Parsed, StrftimeItems};
 use chrono::prelude::*;
 use failure::format_err;
@@ -579,7 +579,7 @@ pub trait TermWriter {
 
 impl<W: Write> TermWriter for W {
     fn write_term(&mut self, term: EncodedTerm) -> Result<()> {
-        self.write_u8(term.type_id())?;
+        self.write_all(&term.type_id().to_le_bytes())?;
         match term {
             EncodedTerm::DefaultGraph => {}
             EncodedTerm::NamedNode { iri_id } => self.write_all(&iri_id.to_le_bytes())?,
@@ -600,8 +600,8 @@ impl<W: Write> TermWriter for W {
                 self.write_all(&value_id.to_le_bytes())?;
             }
             EncodedTerm::BooleanLiteral(_) => {}
-            EncodedTerm::FloatLiteral(value) => self.write_f32::<LittleEndian>(*value)?,
-            EncodedTerm::DoubleLiteral(value) => self.write_f64::<LittleEndian>(*value)?,
+            EncodedTerm::FloatLiteral(value) => self.write_all(&value.to_le_bytes())?,
+            EncodedTerm::DoubleLiteral(value) => self.write_all(&value.to_le_bytes())?,
             EncodedTerm::IntegerLiteral(value) => self.write_all(&value.to_le_bytes())?,
             EncodedTerm::DecimalLiteral(value) => self.write_all(&value.to_le_bytes())?,
             EncodedTerm::DateLiteral(value) => {
