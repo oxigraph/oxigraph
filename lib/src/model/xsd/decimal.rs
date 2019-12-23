@@ -19,6 +19,7 @@ pub struct Decimal {
 }
 
 impl Decimal {
+    #[inline]
     pub fn from_le_bytes(bytes: [u8; 16]) -> Self {
         Self {
             value: i128::from_le_bytes(bytes),
@@ -27,6 +28,7 @@ impl Decimal {
 }
 
 impl<I: Into<i64>> From<I> for Decimal {
+    #[inline]
     fn from(value: I) -> Self {
         let value: i64 = value.into();
         Self {
@@ -194,6 +196,7 @@ impl fmt::Display for Decimal {
 impl Neg for Decimal {
     type Output = Self;
 
+    #[inline]
     fn neg(self) -> Self {
         Self {
             value: self.value.neg(),
@@ -206,11 +209,13 @@ impl Decimal {
         (self.value / DECIMAL_PART_POW) as i64
     }*/
 
+    #[inline]
     pub fn to_le_bytes(&self) -> [u8; 16] {
         self.value.to_le_bytes()
     }
 
     /// [op:numeric-add](https://www.w3.org/TR/xpath-functions/#func-numeric-add)
+    #[inline]
     pub fn checked_add(&self, rhs: Self) -> Option<Self> {
         Some(Self {
             value: self.value.checked_add(rhs.value)?,
@@ -218,6 +223,7 @@ impl Decimal {
     }
 
     /// [op:numeric-subtract](https://www.w3.org/TR/xpath-functions/#func-numeric-subtract)
+    #[inline]
     pub fn checked_sub(&self, rhs: Self) -> Option<Self> {
         Some(Self {
             value: self.value.checked_sub(rhs.value)?,
@@ -225,6 +231,7 @@ impl Decimal {
     }
 
     /// [op:numeric-multiply](https://www.w3.org/TR/xpath-functions/#func-numeric-multiply)
+    #[inline]
     pub fn checked_mul(&self, rhs: Self) -> Option<Self> {
         //TODO: better algorithm to keep precision
         Some(Self {
@@ -236,6 +243,7 @@ impl Decimal {
     }
 
     /// [op:numeric-divide](https://www.w3.org/TR/xpath-functions/#func-numeric-divide)
+    #[inline]
     pub fn checked_div(&self, rhs: Self) -> Option<Self> {
         //TODO: better algorithm to keep precision
         Some(Self {
@@ -248,6 +256,7 @@ impl Decimal {
     }
 
     /// [fn:abs](https://www.w3.org/TR/xpath-functions/#func-abs)
+    #[inline]
     pub fn abs(&self) -> Decimal {
         Self {
             value: self.value.abs(),
@@ -255,6 +264,7 @@ impl Decimal {
     }
 
     /// [fn:round](https://www.w3.org/TR/xpath-functions/#func-round)
+    #[inline]
     pub fn round(&self) -> Decimal {
         let value = self.value / DECIMAL_PART_POW_MINUS_ONE;
         Self {
@@ -267,6 +277,7 @@ impl Decimal {
     }
 
     /// [fn:ceiling](https://www.w3.org/TR/xpath-functions/#func-ceiling)
+    #[inline]
     pub fn ceil(&self) -> Decimal {
         Self {
             value: if self.value >= 0 && self.value % DECIMAL_PART_POW != 0 {
@@ -278,6 +289,7 @@ impl Decimal {
     }
 
     /// [fn:floor](https://www.w3.org/TR/xpath-functions/#func-floor)
+    #[inline]
     pub fn floor(&self) -> Decimal {
         Self {
             value: if self.value >= 0 || self.value % DECIMAL_PART_POW == 0 {
@@ -288,14 +300,32 @@ impl Decimal {
         }
     }
 
-    pub fn to_f32(&self) -> Option<f32> {
-        //TODO: precision?
-        Some((self.value as f32) / (DECIMAL_PART_POW as f32))
+    /// Creates a `Decimal` from a `f32` without taking care of precision
+    #[inline]
+    pub fn from_f32(v: f32) -> Self {
+        Self {
+            value: (v * (DECIMAL_PART_POW as f32)) as i128,
+        }
     }
 
-    pub fn to_f64(&self) -> Option<f64> {
-        //TODO: precision?
-        Some((self.value as f64) / (DECIMAL_PART_POW as f64))
+    /// Creates a `f32` from a `Decimal` without taking care of precision
+    #[inline]
+    pub fn to_f32(&self) -> f32 {
+        (self.value as f32) / (DECIMAL_PART_POW as f32)
+    }
+
+    /// Creates a `Decimal` from a `f64` without taking care of precision
+    #[inline]
+    pub fn from_f64(v: f64) -> Self {
+        Self {
+            value: (v * (DECIMAL_PART_POW as f64)) as i128,
+        }
+    }
+
+    /// Creates a `f64` from a `Decimal` without taking care of precision
+    #[inline]
+    pub fn to_f64(&self) -> f64 {
+        (self.value as f64) / (DECIMAL_PART_POW as f64)
     }
 }
 
