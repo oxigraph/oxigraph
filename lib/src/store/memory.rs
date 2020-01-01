@@ -2,7 +2,8 @@ use crate::store::numeric_encoder::*;
 use crate::store::*;
 use crate::{Repository, Result};
 use failure::{Backtrace, Fail};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 use std::iter::{empty, once};
 use std::sync::{PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -42,8 +43,8 @@ pub struct MemoryRepository {
 }
 
 pub type MemoryRepositoryConnection<'a> = StoreRepositoryConnection<&'a MemoryStore>;
-type TripleMap<T> = BTreeMap<T, BTreeMap<T, BTreeSet<T>>>;
-type QuadMap<T> = BTreeMap<T, TripleMap<T>>;
+type TripleMap<T> = HashMap<T, HashMap<T, HashSet<T>>>;
+type QuadMap<T> = HashMap<T, TripleMap<T>>;
 
 pub struct MemoryStore {
     indexes: RwLock<MemoryStoreIndexes>,
@@ -57,7 +58,7 @@ struct MemoryStoreIndexes {
     gspo: QuadMap<EncodedTerm>,
     gpos: QuadMap<EncodedTerm>,
     gosp: QuadMap<EncodedTerm>,
-    id2str: BTreeMap<u128, String>,
+    id2str: HashMap<u128, String>,
 }
 
 impl Default for MemoryStore {
@@ -561,7 +562,7 @@ fn wrap_error<'a, E: 'static, I: Iterator<Item = Result<E>> + 'a>(
     }
 }
 
-fn insert_into_quad_map<T: Ord>(map: &mut QuadMap<T>, e1: T, e2: T, e3: T, e4: T) {
+fn insert_into_quad_map<T: Eq + Hash>(map: &mut QuadMap<T>, e1: T, e2: T, e3: T, e4: T) {
     map.entry(e1)
         .or_default()
         .entry(e2)
@@ -571,7 +572,7 @@ fn insert_into_quad_map<T: Ord>(map: &mut QuadMap<T>, e1: T, e2: T, e3: T, e4: T
         .insert(e4);
 }
 
-fn remove_from_quad_map<T: Ord>(map1: &mut QuadMap<T>, e1: &T, e2: &T, e3: &T, e4: &T) {
+fn remove_from_quad_map<T: Eq + Hash>(map1: &mut QuadMap<T>, e1: &T, e2: &T, e3: &T, e4: &T) {
     let mut map2empty = false;
     if let Some(map2) = map1.get_mut(e1) {
         let mut map3empty = false;
@@ -596,12 +597,12 @@ fn remove_from_quad_map<T: Ord>(map1: &mut QuadMap<T>, e1: &T, e2: &T, e3: &T, e
     }
 }
 
-fn option_set_flatten<'a, T: Clone>(i: Option<&'a BTreeSet<T>>) -> impl Iterator<Item = T> + 'a {
+fn option_set_flatten<'a, T: Clone>(i: Option<&'a HashSet<T>>) -> impl Iterator<Item = T> + 'a {
     i.into_iter().flat_map(|s| s.iter().cloned())
 }
 
 fn option_pair_map_flatten<'a, T: Copy>(
-    i: Option<&'a BTreeMap<T, BTreeSet<T>>>,
+    i: Option<&'a HashMap<T, HashSet<T>>>,
 ) -> impl Iterator<Item = (T, T)> + 'a {
     i.into_iter().flat_map(|kv| {
         kv.iter().flat_map(|(k, vs)| {
