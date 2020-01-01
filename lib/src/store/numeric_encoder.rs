@@ -9,10 +9,11 @@ use chrono::prelude::*;
 use failure::format_err;
 use md5::digest::Digest;
 use md5::Md5;
-use ordered_float::OrderedFloat;
 use rand::random;
 use rio_api::model as rio;
 use std::collections::HashMap;
+use std::hash::Hash;
+use std::hash::Hasher;
 use std::io::Read;
 use std::io::Write;
 use std::mem::size_of;
@@ -89,7 +90,7 @@ pub const ENCODED_XSD_DATE_TIME_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode
     iri_id: XSD_DATE_TIME_ID,
 };
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
+#[derive(Debug, Clone, Copy)]
 pub enum EncodedTerm {
     DefaultGraph,
     NamedNode { iri_id: u128 },
@@ -98,8 +99,8 @@ pub enum EncodedTerm {
     LangStringLiteral { value_id: u128, language_id: u128 },
     TypedLiteral { value_id: u128, datatype_id: u128 },
     BooleanLiteral(bool),
-    FloatLiteral(OrderedFloat<f32>),
-    DoubleLiteral(OrderedFloat<f64>),
+    FloatLiteral(f32),
+    DoubleLiteral(f64),
     IntegerLiteral(i64),
     DecimalLiteral(Decimal),
     DateLiteral(Date<FixedOffset>),
@@ -107,6 +108,109 @@ pub enum EncodedTerm {
     NaiveTimeLiteral(NaiveTime),
     DateTimeLiteral(DateTime<FixedOffset>),
     NaiveDateTimeLiteral(NaiveDateTime),
+}
+
+impl PartialEq for EncodedTerm {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (EncodedTerm::DefaultGraph, EncodedTerm::DefaultGraph) => true,
+            (
+                EncodedTerm::NamedNode { iri_id: iri_id_a },
+                EncodedTerm::NamedNode { iri_id: iri_id_b },
+            ) => iri_id_a == iri_id_b,
+            (EncodedTerm::BlankNode { id: id_a }, EncodedTerm::BlankNode { id: id_b }) => {
+                id_a == id_b
+            }
+            (
+                EncodedTerm::StringLiteral {
+                    value_id: value_id_a,
+                },
+                EncodedTerm::StringLiteral {
+                    value_id: value_id_b,
+                },
+            ) => value_id_a == value_id_b,
+            (
+                EncodedTerm::LangStringLiteral {
+                    value_id: value_id_a,
+                    language_id: language_id_a,
+                },
+                EncodedTerm::LangStringLiteral {
+                    value_id: value_id_b,
+                    language_id: language_id_b,
+                },
+            ) => value_id_a == value_id_b && language_id_a == language_id_b,
+            (
+                EncodedTerm::TypedLiteral {
+                    value_id: value_id_a,
+                    datatype_id: datatype_id_a,
+                },
+                EncodedTerm::TypedLiteral {
+                    value_id: value_id_b,
+                    datatype_id: datatype_id_b,
+                },
+            ) => value_id_a == value_id_b && datatype_id_a == datatype_id_b,
+            (EncodedTerm::BooleanLiteral(a), EncodedTerm::BooleanLiteral(b)) => a == b,
+            (EncodedTerm::FloatLiteral(a), EncodedTerm::FloatLiteral(b)) => {
+                if a.is_nan() {
+                    b.is_nan()
+                } else {
+                    a == b
+                }
+            }
+            (EncodedTerm::DoubleLiteral(a), EncodedTerm::DoubleLiteral(b)) => {
+                if a.is_nan() {
+                    b.is_nan()
+                } else {
+                    a == b
+                }
+            }
+            (EncodedTerm::IntegerLiteral(a), EncodedTerm::IntegerLiteral(b)) => a == b,
+            (EncodedTerm::DecimalLiteral(a), EncodedTerm::DecimalLiteral(b)) => a == b,
+            (EncodedTerm::DateLiteral(a), EncodedTerm::DateLiteral(b)) => a == b,
+            (EncodedTerm::NaiveDateLiteral(a), EncodedTerm::NaiveDateLiteral(b)) => a == b,
+            (EncodedTerm::NaiveTimeLiteral(a), EncodedTerm::NaiveTimeLiteral(b)) => a == b,
+            (EncodedTerm::DateTimeLiteral(a), EncodedTerm::DateTimeLiteral(b)) => a == b,
+            (EncodedTerm::NaiveDateTimeLiteral(a), EncodedTerm::NaiveDateTimeLiteral(b)) => a == b,
+            (_, _) => false,
+        }
+    }
+}
+
+impl Eq for EncodedTerm {}
+
+impl Hash for EncodedTerm {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            EncodedTerm::NamedNode { iri_id } => iri_id.hash(state),
+            EncodedTerm::BlankNode { id } => id.hash(state),
+            EncodedTerm::DefaultGraph => (),
+            EncodedTerm::StringLiteral { value_id } => value_id.hash(state),
+            EncodedTerm::LangStringLiteral {
+                value_id,
+                language_id,
+            } => {
+                value_id.hash(state);
+                language_id.hash(state);
+            }
+            EncodedTerm::TypedLiteral {
+                value_id,
+                datatype_id,
+            } => {
+                value_id.hash(state);
+                datatype_id.hash(state);
+            }
+            EncodedTerm::BooleanLiteral(value) => value.hash(state),
+            EncodedTerm::FloatLiteral(value) => state.write(&value.to_ne_bytes()),
+            EncodedTerm::DoubleLiteral(value) => state.write(&value.to_ne_bytes()),
+            EncodedTerm::IntegerLiteral(value) => value.hash(state),
+            EncodedTerm::DecimalLiteral(value) => value.hash(state),
+            EncodedTerm::DateLiteral(value) => value.hash(state),
+            EncodedTerm::NaiveDateLiteral(value) => value.hash(state),
+            EncodedTerm::NaiveTimeLiteral(value) => value.hash(state),
+            EncodedTerm::DateTimeLiteral(value) => value.hash(state),
+            EncodedTerm::NaiveDateTimeLiteral(value) => value.hash(state),
+        }
+    }
 }
 
 impl EncodedTerm {
@@ -214,13 +318,13 @@ impl From<u32> for EncodedTerm {
 
 impl From<f32> for EncodedTerm {
     fn from(value: f32) -> Self {
-        EncodedTerm::FloatLiteral(value.into())
+        EncodedTerm::FloatLiteral(value)
     }
 }
 
 impl From<f64> for EncodedTerm {
     fn from(value: f64) -> Self {
-        EncodedTerm::DoubleLiteral(value.into())
+        EncodedTerm::DoubleLiteral(value)
     }
 }
 
@@ -364,7 +468,7 @@ impl From<&Term> for EncodedTerm {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct EncodedQuad {
     pub subject: EncodedTerm,
     pub predicate: EncodedTerm,
@@ -435,12 +539,8 @@ impl<R: Read> TermReader for R {
             }),
             TYPE_BOOLEAN_LITERAL_TRUE => Ok(EncodedTerm::BooleanLiteral(true)),
             TYPE_BOOLEAN_LITERAL_FALSE => Ok(EncodedTerm::BooleanLiteral(false)),
-            TYPE_FLOAT_LITERAL => Ok(EncodedTerm::FloatLiteral(OrderedFloat(
-                self.read_f32::<LittleEndian>()?,
-            ))),
-            TYPE_DOUBLE_LITERAL => Ok(EncodedTerm::DoubleLiteral(OrderedFloat(
-                self.read_f64::<LittleEndian>()?,
-            ))),
+            TYPE_FLOAT_LITERAL => Ok(EncodedTerm::FloatLiteral(self.read_f32::<LittleEndian>()?)),
+            TYPE_DOUBLE_LITERAL => Ok(EncodedTerm::DoubleLiteral(self.read_f64::<LittleEndian>()?)),
             TYPE_INTEGER_LITERAL => Ok(EncodedTerm::IntegerLiteral(
                 self.read_i64::<LittleEndian>()?,
             )),
@@ -956,17 +1056,11 @@ pub fn parse_boolean_str(value: &str) -> Option<EncodedTerm> {
 }
 
 pub fn parse_float_str(value: &str) -> Option<EncodedTerm> {
-    value
-        .parse()
-        .map(|value| EncodedTerm::FloatLiteral(OrderedFloat(value)))
-        .ok()
+    value.parse().map(EncodedTerm::FloatLiteral).ok()
 }
 
 pub fn parse_double_str(value: &str) -> Option<EncodedTerm> {
-    value
-        .parse()
-        .map(|value| EncodedTerm::DoubleLiteral(OrderedFloat(value)))
-        .ok()
+    value.parse().map(EncodedTerm::DoubleLiteral).ok()
 }
 
 pub fn parse_integer_str(value: &str) -> Option<EncodedTerm> {
@@ -1089,8 +1183,8 @@ impl<S: StrLookup> Decoder for S {
             )
             .into()),
             EncodedTerm::BooleanLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::FloatLiteral(value) => Ok(Literal::from(*value).into()),
-            EncodedTerm::DoubleLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::FloatLiteral(value) => Ok(Literal::from(value).into()),
+            EncodedTerm::DoubleLiteral(value) => Ok(Literal::from(value).into()),
             EncodedTerm::IntegerLiteral(value) => Ok(Literal::from(value).into()),
             EncodedTerm::DecimalLiteral(value) => Ok(Literal::from(value).into()),
             EncodedTerm::DateLiteral(value) => Ok(Literal::from(value).into()),
