@@ -2,6 +2,7 @@ use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 use std::fmt;
 use std::fmt::Write;
+use std::i128;
 use std::ops::Neg;
 use std::str::FromStr;
 
@@ -9,6 +10,13 @@ const DECIMAL_PART_DIGITS: usize = 18;
 const DECIMAL_PART_POW: i128 = 1_000_000_000_000_000_000;
 const DECIMAL_PART_POW_MINUS_ONE: i128 = 100_000_000_000_000_000;
 const DECIMAL_PART_HALF_POW: i128 = 1_000_000_000;
+
+#[cfg(test)]
+pub(super) const MIN: Decimal = Decimal { value: i128::MIN };
+#[cfg(test)]
+pub(super) const MAX: Decimal = Decimal { value: i128::MAX };
+#[cfg(test)]
+pub(super) const STEP: Decimal = Decimal { value: 1 };
 
 /// [XML Schema `decimal` datatype](https://www.w3.org/TR/xmlschema11-2/#decimal) implementation.
 ///
@@ -19,6 +27,17 @@ pub struct Decimal {
 }
 
 impl Decimal {
+    /// Constructs the decimal i / 10^n
+    pub fn new(i: i128, n: u32) -> Result<Self, DecimalOverflowError> {
+        if n > DECIMAL_PART_DIGITS as u32 {
+            //TODO: check if end with zeros?
+            return Err(DecimalOverflowError);
+        }
+        Ok(Self {
+            value: i.checked_div(10i128.pow(n)).ok_or(DecimalOverflowError)?,
+        })
+    }
+
     #[inline]
     pub fn from_le_bytes(bytes: [u8; 16]) -> Self {
         Self {
@@ -27,13 +46,86 @@ impl Decimal {
     }
 }
 
-impl<I: Into<i64>> From<I> for Decimal {
+impl From<i8> for Decimal {
     #[inline]
-    fn from(value: I) -> Self {
-        let value: i64 = value.into();
+    fn from(value: i8) -> Self {
         Self {
             value: i128::from(value) * DECIMAL_PART_POW,
         }
+    }
+}
+impl From<i16> for Decimal {
+    fn from(value: i16) -> Self {
+        Self {
+            value: i128::from(value) * DECIMAL_PART_POW,
+        }
+    }
+}
+impl From<i32> for Decimal {
+    fn from(value: i32) -> Self {
+        Self {
+            value: i128::from(value) * DECIMAL_PART_POW,
+        }
+    }
+}
+impl From<i64> for Decimal {
+    fn from(value: i64) -> Self {
+        Self {
+            value: i128::from(value) * DECIMAL_PART_POW,
+        }
+    }
+}
+impl From<u8> for Decimal {
+    fn from(value: u8) -> Self {
+        Self {
+            value: i128::from(value) * DECIMAL_PART_POW,
+        }
+    }
+}
+impl From<u16> for Decimal {
+    fn from(value: u16) -> Self {
+        Self {
+            value: i128::from(value) * DECIMAL_PART_POW,
+        }
+    }
+}
+impl From<u32> for Decimal {
+    fn from(value: u32) -> Self {
+        Self {
+            value: i128::from(value) * DECIMAL_PART_POW,
+        }
+    }
+}
+impl From<u64> for Decimal {
+    fn from(value: u64) -> Self {
+        Self {
+            value: i128::from(value) * DECIMAL_PART_POW,
+        }
+    }
+}
+
+impl TryFrom<i128> for Decimal {
+    type Error = DecimalOverflowError;
+
+    fn try_from(value: i128) -> Result<Self, DecimalOverflowError> {
+        Ok(Self {
+            value: value
+                .checked_mul(DECIMAL_PART_POW)
+                .ok_or(DecimalOverflowError)?,
+        })
+    }
+}
+
+impl TryFrom<u128> for Decimal {
+    type Error = DecimalOverflowError;
+
+    fn try_from(value: u128) -> Result<Self, DecimalOverflowError> {
+        Ok(Self {
+            value: i128::try_from(value)
+                .map_err(|_| DecimalOverflowError)?
+                .checked_mul(DECIMAL_PART_POW)
+                .ok_or(DecimalOverflowError)?,
+        })
     }
 }
 
@@ -146,11 +238,41 @@ impl fmt::Display for ParseDecimalError {
 
 impl Error for ParseDecimalError {}
 
+impl From<DecimalOverflowError> for ParseDecimalError {
+    fn from(_: DecimalOverflowError) -> Self {
+        Self {
+            kind: ParseDecimalErrorKind::Overflow,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DecimalOverflowError;
+
+impl fmt::Display for DecimalOverflowError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Value overflow")
+    }
+}
+
+impl Error for DecimalOverflowError {}
+
 impl fmt::Display for Decimal {
     /// Formats the decimal following its canonical representation
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.value == 0 {
+            return if let Some(width) = f.width() {
+                for _ in 0..width {
+                    f.write_char('0')?;
+                }
+                Ok(())
+            } else {
+                f.write_char('0')
+            };
+        }
+
         let mut value = self.value;
-        if value < 0 {
+        if self.value.is_negative() {
             f.write_char('-')?;
         }
 
@@ -160,10 +282,6 @@ impl fmt::Display for Decimal {
             digits[i] = b'0' + ((value % 10).abs() as u8);
             value /= 10;
             i += 1;
-        }
-
-        if i == 0 {
-            return f.write_char('0');
         }
 
         let last_non_zero = i - 1;
@@ -176,7 +294,19 @@ impl fmt::Display for Decimal {
             .unwrap_or(40);
 
         if last_non_zero >= DECIMAL_PART_DIGITS {
-            for c in digits[DECIMAL_PART_DIGITS..=last_non_zero].iter().rev() {
+            let end = if let Some(mut width) = f.width() {
+                if self.value.is_negative() {
+                    width -= 1;
+                }
+                if last_non_zero - DECIMAL_PART_DIGITS + 1 < width {
+                    DECIMAL_PART_DIGITS + width
+                } else {
+                    last_non_zero + 1
+                }
+            } else {
+                last_non_zero + 1
+            };
+            for c in digits[DECIMAL_PART_DIGITS..end].iter().rev() {
                 f.write_char(char::from(*c))?;
             }
         } else {
@@ -184,7 +314,16 @@ impl fmt::Display for Decimal {
         }
         if DECIMAL_PART_DIGITS > first_non_zero {
             f.write_char('.')?;
-            for c in digits[first_non_zero..DECIMAL_PART_DIGITS].iter().rev() {
+            let start = if let Some(precision) = f.precision() {
+                if DECIMAL_PART_DIGITS - first_non_zero > precision {
+                    DECIMAL_PART_DIGITS - precision
+                } else {
+                    first_non_zero
+                }
+            } else {
+                first_non_zero
+            };
+            for c in digits[start..DECIMAL_PART_DIGITS].iter().rev() {
                 f.write_char(char::from(*c))?;
             }
         }
@@ -205,53 +344,61 @@ impl Neg for Decimal {
 }
 
 impl Decimal {
-    /*pub fn trunc(self) -> i64 {
-        (self.value / DECIMAL_PART_POW) as i64
-    }*/
-
-    #[inline]
     pub fn to_le_bytes(&self) -> [u8; 16] {
         self.value.to_le_bytes()
     }
 
     /// [op:numeric-add](https://www.w3.org/TR/xpath-functions/#func-numeric-add)
     #[inline]
-    pub fn checked_add(&self, rhs: Self) -> Option<Self> {
+    pub fn checked_add(&self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
-            value: self.value.checked_add(rhs.value)?,
+            value: self.value.checked_add(rhs.into().value)?,
         })
     }
 
     /// [op:numeric-subtract](https://www.w3.org/TR/xpath-functions/#func-numeric-subtract)
     #[inline]
-    pub fn checked_sub(&self, rhs: Self) -> Option<Self> {
+    pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
-            value: self.value.checked_sub(rhs.value)?,
+            value: self.value.checked_sub(rhs.into().value)?,
         })
     }
 
     /// [op:numeric-multiply](https://www.w3.org/TR/xpath-functions/#func-numeric-multiply)
     #[inline]
-    pub fn checked_mul(&self, rhs: Self) -> Option<Self> {
+    pub fn checked_mul(&self, rhs: impl Into<Self>) -> Option<Self> {
         //TODO: better algorithm to keep precision
         Some(Self {
             value: self
                 .value
                 .checked_div(DECIMAL_PART_HALF_POW)?
-                .checked_mul(rhs.value.checked_div(DECIMAL_PART_HALF_POW)?)?,
+                .checked_mul(rhs.into().value.checked_div(DECIMAL_PART_HALF_POW)?)?,
         })
     }
 
     /// [op:numeric-divide](https://www.w3.org/TR/xpath-functions/#func-numeric-divide)
     #[inline]
-    pub fn checked_div(&self, rhs: Self) -> Option<Self> {
+    pub fn checked_div(&self, rhs: impl Into<Self>) -> Option<Self> {
         //TODO: better algorithm to keep precision
         Some(Self {
             value: self
                 .value
                 .checked_mul(DECIMAL_PART_HALF_POW)?
-                .checked_div(rhs.value)?
+                .checked_div(rhs.into().value)?
                 .checked_mul(DECIMAL_PART_HALF_POW)?,
+        })
+    }
+
+    /// TODO: XSD? is well defined for not integer
+    pub fn checked_rem(&self, rhs: impl Into<Self>) -> Option<Self> {
+        Some(Self {
+            value: self.value.checked_rem(rhs.into().value)?,
+        })
+    }
+
+    pub fn checked_rem_euclid(&self, rhs: impl Into<Self>) -> Option<Self> {
+        Some(Self {
+            value: self.value.checked_rem_euclid(rhs.into().value)?,
         })
     }
 
@@ -300,9 +447,17 @@ impl Decimal {
         }
     }
 
+    pub fn is_negative(&self) -> bool {
+        self.value < 0
+    }
+
+    pub fn is_positive(&self) -> bool {
+        self.value > 0
+    }
+
     /// Creates a `Decimal` from a `f32` without taking care of precision
     #[inline]
-    pub fn from_f32(v: f32) -> Self {
+    pub(crate) fn from_f32(v: f32) -> Self {
         Self {
             value: (v * (DECIMAL_PART_POW as f32)) as i128,
         }
@@ -316,7 +471,7 @@ impl Decimal {
 
     /// Creates a `Decimal` from a `f64` without taking care of precision
     #[inline]
-    pub fn from_f64(v: f64) -> Self {
+    pub(crate) fn from_f64(v: f64) -> Self {
         Self {
             value: (v * (DECIMAL_PART_POW as f64)) as i128,
         }
@@ -327,30 +482,29 @@ impl Decimal {
     pub fn to_f64(&self) -> f64 {
         (self.value as f64) / (DECIMAL_PART_POW as f64)
     }
+
+    pub(super) fn as_i128(&self) -> i128 {
+        self.value / DECIMAL_PART_POW
+    }
 }
 
 impl TryFrom<Decimal> for i64 {
-    type Error = ();
+    type Error = DecimalOverflowError;
 
-    fn try_from(value: Decimal) -> Result<i64, ()> {
+    fn try_from(value: Decimal) -> Result<i64, DecimalOverflowError> {
         value
             .value
             .checked_div(DECIMAL_PART_POW)
-            .ok_or(())?
+            .ok_or(DecimalOverflowError)?
             .try_into()
-            .map_err(|_| ())
+            .map_err(|_| DecimalOverflowError)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::i128;
     use std::i64;
-
-    const MIN: Decimal = Decimal { value: i128::MIN };
-    const MAX: Decimal = Decimal { value: i128::MAX };
-    const STEP: Decimal = Decimal { value: 1 };
 
     #[test]
     fn from_str() {
@@ -372,6 +526,16 @@ mod tests {
             Decimal::from_str(&MIN.checked_add(STEP).unwrap().to_string()).unwrap(),
             MIN.checked_add(STEP).unwrap()
         );
+    }
+
+    #[test]
+    fn format() {
+        assert_eq!(format!("{:02}", Decimal::from(0)), "00");
+        assert_eq!(format!("{:02}", Decimal::from(1)), "01");
+        assert_eq!(format!("{:02}", Decimal::from(10)), "10");
+        assert_eq!(format!("{:02}", Decimal::from(100)), "100");
+        assert_eq!(format!("{:02}", Decimal::from(-1)), "-1");
+        assert_eq!(format!("{:02}", Decimal::from(-10)), "-10");
     }
 
     #[test]

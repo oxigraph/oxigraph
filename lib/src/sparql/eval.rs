@@ -1,4 +1,4 @@
-use crate::model::xsd::Decimal;
+use crate::model::xsd::*;
 use crate::model::BlankNode;
 use crate::model::Triple;
 use crate::sparql::algebra::GraphPattern;
@@ -8,7 +8,6 @@ use crate::sparql::ServiceHandler;
 use crate::store::numeric_encoder::*;
 use crate::store::StoreConnection;
 use crate::Result;
-use chrono::prelude::*;
 use digest::Digest;
 use failure::format_err;
 use md5::Md5;
@@ -22,7 +21,6 @@ use sha2::{Sha256, Sha384, Sha512};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
-use std::fmt::Write;
 use std::hash::Hash;
 use std::iter::Iterator;
 use std::iter::{empty, once};
@@ -37,7 +35,7 @@ pub struct SimpleEvaluator<S: StoreConnection> {
     dataset: DatasetView<S>,
     base_iri: Option<Iri<String>>,
     bnodes_map: Mutex<BTreeMap<u128, u128>>,
-    now: DateTime<FixedOffset>,
+    now: DateTime,
     service_handler: Box<dyn ServiceHandler>,
 }
 
@@ -51,7 +49,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             dataset,
             bnodes_map: Mutex::new(BTreeMap::default()),
             base_iri,
-            now: Utc::now().with_timezone(&FixedOffset::east(0)),
+            now: DateTime::now().unwrap(),
             service_handler,
         }
     }
@@ -813,37 +811,60 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     Some(false.into())
                 }
             }
-            PlanExpression::Add(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
-                NumericBinaryOperands::Float(v1, v2) => (v1 + v2).into(),
-                NumericBinaryOperands::Double(v1, v2) => (v1 + v2).into(),
-                NumericBinaryOperands::Integer(v1, v2) => v1.checked_add(v2)?.into(),
-                NumericBinaryOperands::Decimal(v1, v2) => v1.checked_add(v2)?.into(),
-            }),
+            PlanExpression::Add(a, b) => match self.parse_numeric_operands(a, b, tuple)? {
+                NumericBinaryOperands::Float(v1, v2) => Some((v1 + v2).into()),
+                NumericBinaryOperands::Double(v1, v2) => Some((v1 + v2).into()),
+                NumericBinaryOperands::Integer(v1, v2) => Some(v1.checked_add(v2)?.into()),
+                NumericBinaryOperands::Decimal(v1, v2) => Some(v1.checked_add(v2)?.into()),
+                NumericBinaryOperands::Duration(v1, v2) => Some(v1.checked_add(v2)?.into()),
+                NumericBinaryOperands::DateTimeDuration(v1, v2) => {
+                    Some(v1.checked_add_duration(v2)?.into())
+                }
+                NumericBinaryOperands::DateDuration(v1, v2) => {
+                    Some(v1.checked_add_duration(v2)?.into())
+                }
+                NumericBinaryOperands::TimeDuration(v1, v2) => {
+                    Some(v1.checked_add_duration(v2)?.into())
+                }
+                _ => None,
+            },
             PlanExpression::Sub(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
                 NumericBinaryOperands::Float(v1, v2) => (v1 - v2).into(),
                 NumericBinaryOperands::Double(v1, v2) => (v1 - v2).into(),
                 NumericBinaryOperands::Integer(v1, v2) => v1.checked_sub(v2)?.into(),
                 NumericBinaryOperands::Decimal(v1, v2) => v1.checked_sub(v2)?.into(),
-            }),
-            PlanExpression::Mul(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
-                NumericBinaryOperands::Float(v1, v2) => (v1 * v2).into(),
-                NumericBinaryOperands::Double(v1, v2) => (v1 * v2).into(),
-                NumericBinaryOperands::Integer(v1, v2) => v1.checked_mul(v2)?.into(),
-                NumericBinaryOperands::Decimal(v1, v2) => v1.checked_mul(v2)?.into(),
-            }),
-            PlanExpression::Div(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
-                NumericBinaryOperands::Float(v1, v2) => (v1 / v2).into(),
-                NumericBinaryOperands::Double(v1, v2) => (v1 / v2).into(),
-                NumericBinaryOperands::Integer(v1, v2) => {
-                    Decimal::from(v1).checked_div(Decimal::from(v2))?.into()
+                NumericBinaryOperands::Duration(v1, v2) => v1.checked_sub(v2)?.into(),
+                NumericBinaryOperands::DateTime(v1, v2) => v1.checked_sub(v2)?.into(),
+                NumericBinaryOperands::Date(v1, v2) => v1.checked_sub(v2)?.into(),
+                NumericBinaryOperands::Time(v1, v2) => v1.checked_sub(v2)?.into(),
+                NumericBinaryOperands::DateTimeDuration(v1, v2) => {
+                    v1.checked_sub_duration(v2)?.into()
                 }
-                NumericBinaryOperands::Decimal(v1, v2) => v1.checked_div(v2)?.into(),
+                NumericBinaryOperands::DateDuration(v1, v2) => v1.checked_sub_duration(v2)?.into(),
+                NumericBinaryOperands::TimeDuration(v1, v2) => v1.checked_sub_duration(v2)?.into(),
             }),
+            PlanExpression::Mul(a, b) => match self.parse_numeric_operands(a, b, tuple)? {
+                NumericBinaryOperands::Float(v1, v2) => Some((v1 * v2).into()),
+                NumericBinaryOperands::Double(v1, v2) => Some((v1 * v2).into()),
+                NumericBinaryOperands::Integer(v1, v2) => Some(v1.checked_mul(v2)?.into()),
+                NumericBinaryOperands::Decimal(v1, v2) => Some(v1.checked_mul(v2)?.into()),
+                _ => None,
+            },
+            PlanExpression::Div(a, b) => match self.parse_numeric_operands(a, b, tuple)? {
+                NumericBinaryOperands::Float(v1, v2) => Some((v1 / v2).into()),
+                NumericBinaryOperands::Double(v1, v2) => Some((v1 / v2).into()),
+                NumericBinaryOperands::Integer(v1, v2) => {
+                    Some(Decimal::from(v1).checked_div(v2)?.into())
+                }
+                NumericBinaryOperands::Decimal(v1, v2) => Some(v1.checked_div(v2)?.into()),
+                _ => None,
+            },
             PlanExpression::UnaryPlus(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::FloatLiteral(value) => Some(value.into()),
                 EncodedTerm::DoubleLiteral(value) => Some(value.into()),
                 EncodedTerm::IntegerLiteral(value) => Some(value.into()),
                 EncodedTerm::DecimalLiteral(value) => Some(value.into()),
+                EncodedTerm::DurationLiteral(value) => Some(value.into()),
                 _ => None,
             },
             PlanExpression::UnaryMinus(e) => match self.eval_expression(e, tuple)? {
@@ -851,6 +872,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 EncodedTerm::DoubleLiteral(value) => Some((-value).into()),
                 EncodedTerm::IntegerLiteral(value) => Some((-value).into()),
                 EncodedTerm::DecimalLiteral(value) => Some((-value).into()),
+                EncodedTerm::DurationLiteral(value) => Some((-value).into()),
                 _ => None,
             },
             PlanExpression::UnaryNot(e) => self
@@ -1119,111 +1141,55 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             }
             PlanExpression::Year(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::DateLiteral(date) => Some(date.year().into()),
-                EncodedTerm::NaiveDateLiteral(date) => Some(date.year().into()),
                 EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.year().into()),
-                EncodedTerm::NaiveDateTimeLiteral(date_time) => Some(date_time.year().into()),
                 _ => None,
             },
             PlanExpression::Month(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::DateLiteral(date) => Some(date.year().into()),
-                EncodedTerm::NaiveDateLiteral(date) => Some(date.month().into()),
                 EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.month().into()),
-                EncodedTerm::NaiveDateTimeLiteral(date_time) => Some(date_time.month().into()),
                 _ => None,
             },
             PlanExpression::Day(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::DateLiteral(date) => Some(date.year().into()),
-                EncodedTerm::NaiveDateLiteral(date) => Some(date.day().into()),
                 EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.day().into()),
-                EncodedTerm::NaiveDateTimeLiteral(date_time) => Some(date_time.day().into()),
                 _ => None,
             },
             PlanExpression::Hours(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::NaiveTimeLiteral(time) => Some(time.hour().into()),
+                EncodedTerm::TimeLiteral(time) => Some(time.hour().into()),
                 EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.hour().into()),
-                EncodedTerm::NaiveDateTimeLiteral(date_time) => Some(date_time.hour().into()),
                 _ => None,
             },
             PlanExpression::Minutes(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::NaiveTimeLiteral(time) => Some(time.minute().into()),
+                EncodedTerm::TimeLiteral(time) => Some(time.minute().into()),
                 EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.minute().into()),
-                EncodedTerm::NaiveDateTimeLiteral(date_time) => Some(date_time.minute().into()),
                 _ => None,
             },
             PlanExpression::Seconds(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::NaiveTimeLiteral(time) => Some(
-                    Decimal::from(time.nanosecond())
-                        .checked_div(Decimal::from(1_000_000_000))?
-                        .checked_add(Decimal::from(time.second()))?
-                        .into(),
-                ),
-                EncodedTerm::DateTimeLiteral(date_time) => Some(
-                    Decimal::from(date_time.nanosecond())
-                        .checked_div(Decimal::from(1_000_000_000))?
-                        .checked_add(Decimal::from(date_time.second()))?
-                        .into(),
-                ),
-                EncodedTerm::NaiveDateTimeLiteral(date_time) => Some(
-                    Decimal::from(date_time.nanosecond())
-                        .checked_div(Decimal::from(1_000_000_000))?
-                        .checked_add(Decimal::from(date_time.second()))?
-                        .into(),
-                ),
+                EncodedTerm::TimeLiteral(time) => Some(time.second().into()),
+                EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.second().into()),
                 _ => None,
             },
-            PlanExpression::Timezone(e) => {
-                let timezone = match self.eval_expression(e, tuple)? {
+            PlanExpression::Timezone(e) => Some(
+                match self.eval_expression(e, tuple)? {
                     EncodedTerm::DateLiteral(date) => date.timezone(),
+                    EncodedTerm::TimeLiteral(time) => time.timezone(),
                     EncodedTerm::DateTimeLiteral(date_time) => date_time.timezone(),
-                    _ => return None,
-                };
-                let mut result = String::with_capacity(9);
-                let mut shift = timezone.local_minus_utc();
-                if shift < 0 {
-                    write!(&mut result, "-").ok()?;
-                    shift = -shift
-                };
-                write!(&mut result, "PT").ok()?;
-
-                let hours = shift / 3600;
-                if hours > 0 {
-                    write!(&mut result, "{}H", hours).ok()?;
-                }
-
-                let minutes = (shift / 60) % 60;
-                if minutes > 0 {
-                    write!(&mut result, "{}M", minutes).ok()?;
-                }
-
-                let seconds = shift % 60;
-                if seconds > 0 || shift == 0 {
-                    write!(&mut result, "{}S", seconds).ok()?;
-                }
-                Some(EncodedTerm::TypedLiteral {
-                    value_id: self.build_string_id(&result)?,
-                    datatype_id: self
-                        .build_string_id("http://www.w3.org/2001/XMLSchema#dayTimeDuration")?,
-                })
-            }
+                    _ => None,
+                }?
+                .into(),
+            ),
             PlanExpression::Tz(e) => {
-                let timezone = match self.eval_expression(e, tuple)? {
-                    EncodedTerm::DateLiteral(date) => Some(date.timezone()),
-                    EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.timezone()),
-                    EncodedTerm::NaiveDateLiteral(_)
-                    | EncodedTerm::NaiveTimeLiteral(_)
-                    | EncodedTerm::NaiveDateTimeLiteral(_) => None,
+                let timezone_offset = match self.eval_expression(e, tuple)? {
+                    EncodedTerm::DateLiteral(date) => date.timezone_offset(),
+                    EncodedTerm::TimeLiteral(time) => time.timezone_offset(),
+                    EncodedTerm::DateTimeLiteral(date_time) => date_time.timezone_offset(),
                     _ => return None,
                 };
-                Some(if let Some(timezone) = timezone {
-                    EncodedTerm::StringLiteral {
-                        value_id: if timezone.local_minus_utc() == 0 {
-                            self.build_string_id("Z")?
-                        } else {
-                            self.build_string_id(&timezone.to_string())?
-                        },
+                Some(match timezone_offset {
+                    Some(timezone_offset) => {
+                        self.build_string_literal(&timezone_offset.to_string())?
                     }
-                } else {
-                    ENCODED_EMPTY_STRING_LITERAL
+                    None => ENCODED_EMPTY_STRING_LITERAL,
                 })
             }
             PlanExpression::Now => Some(self.now.into()),
@@ -1376,18 +1342,15 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             },
             PlanExpression::DateCast(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::DateLiteral(value) => Some(value.into()),
-                EncodedTerm::NaiveDateLiteral(value) => Some(value.into()),
-                EncodedTerm::DateTimeLiteral(value) => Some(value.date().into()),
-                EncodedTerm::NaiveDateTimeLiteral(value) => Some(value.date().into()),
+                EncodedTerm::DateTimeLiteral(value) => Some(Date::from(value).into()),
                 EncodedTerm::StringLiteral { value_id } => {
                     parse_date_str(&*self.dataset.get_str(value_id).ok()??)
                 }
                 _ => None,
             },
             PlanExpression::TimeCast(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::NaiveTimeLiteral(value) => Some(value.into()),
-                EncodedTerm::DateTimeLiteral(value) => Some(value.time().into()),
-                EncodedTerm::NaiveDateTimeLiteral(value) => Some(value.time().into()),
+                EncodedTerm::TimeLiteral(value) => Some(value.into()),
+                EncodedTerm::DateTimeLiteral(value) => Some(Time::from(value).into()),
                 EncodedTerm::StringLiteral { value_id } => {
                     parse_time_str(&*self.dataset.get_str(value_id).ok()??)
                 }
@@ -1395,9 +1358,16 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             },
             PlanExpression::DateTimeCast(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::DateTimeLiteral(value) => Some(value.into()),
-                EncodedTerm::NaiveDateTimeLiteral(value) => Some(value.into()),
+                EncodedTerm::DateLiteral(value) => Some(DateTime::from(value).into()),
                 EncodedTerm::StringLiteral { value_id } => {
                     parse_date_time_str(&*self.dataset.get_str(value_id).ok()??)
+                }
+                _ => None,
+            },
+            PlanExpression::DurationCast(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::DurationLiteral(value) => Some(value.into()),
+                EncodedTerm::StringLiteral { value_id } => {
+                    parse_duration_str(&*self.dataset.get_str(value_id).ok()??)
                 }
                 _ => None,
             },
@@ -1414,7 +1384,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             EncodedTerm::FloatLiteral(value) => Some(value != 0f32),
             EncodedTerm::DoubleLiteral(value) => Some(value != 0f64),
             EncodedTerm::IntegerLiteral(value) => Some(value != 0),
-            EncodedTerm::DecimalLiteral(value) => Some(value != Decimal::from(0)),
+            EncodedTerm::DecimalLiteral(value) => Some(value != Decimal::default()),
             _ => None,
         }
     }
@@ -1435,10 +1405,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             EncodedTerm::IntegerLiteral(value) => self.build_string_id(&value.to_string()),
             EncodedTerm::DecimalLiteral(value) => self.build_string_id(&value.to_string()),
             EncodedTerm::DateLiteral(value) => self.build_string_id(&value.to_string()),
-            EncodedTerm::NaiveDateLiteral(value) => self.build_string_id(&value.to_string()),
-            EncodedTerm::NaiveTimeLiteral(value) => self.build_string_id(&value.to_string()),
+            EncodedTerm::TimeLiteral(value) => self.build_string_id(&value.to_string()),
             EncodedTerm::DateTimeLiteral(value) => self.build_string_id(&value.to_string()),
-            EncodedTerm::NaiveDateTimeLiteral(value) => self.build_string_id(&value.to_string()),
+            EncodedTerm::DurationLiteral(value) => self.build_string_id(&value.to_string()),
         }
     }
 
@@ -1690,54 +1659,21 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             },
             EncodedTerm::DateLiteral(a) => match b {
                 EncodedTerm::DateLiteral(b) => Some(a == b),
-                EncodedTerm::NaiveDateLiteral(b) => {
-                    if a.naive_utc() == b {
-                        None
-                    } else {
-                        Some(false)
-                    }
-                }
                 EncodedTerm::TypedLiteral { .. } => None,
                 _ => Some(false),
             },
-            EncodedTerm::NaiveDateLiteral(a) => match b {
-                EncodedTerm::NaiveDateLiteral(b) => Some(a == b),
-                EncodedTerm::DateLiteral(b) => {
-                    if a == b.naive_utc() {
-                        None
-                    } else {
-                        Some(false)
-                    }
-                }
-                EncodedTerm::TypedLiteral { .. } => None,
-                _ => Some(false),
-            },
-            EncodedTerm::NaiveTimeLiteral(a) => match b {
-                EncodedTerm::NaiveTimeLiteral(b) => Some(a == b),
+            EncodedTerm::TimeLiteral(a) => match b {
+                EncodedTerm::TimeLiteral(b) => Some(a == b),
                 EncodedTerm::TypedLiteral { .. } => None,
                 _ => Some(false),
             },
             EncodedTerm::DateTimeLiteral(a) => match b {
                 EncodedTerm::DateTimeLiteral(b) => Some(a == b),
-                EncodedTerm::NaiveDateTimeLiteral(b) => {
-                    if a.naive_utc() == b {
-                        None
-                    } else {
-                        Some(false)
-                    }
-                }
                 EncodedTerm::TypedLiteral { .. } => None,
                 _ => Some(false),
             },
-            EncodedTerm::NaiveDateTimeLiteral(a) => match b {
-                EncodedTerm::NaiveDateTimeLiteral(b) => Some(a == b),
-                EncodedTerm::DateTimeLiteral(b) => {
-                    if a == b.naive_utc() {
-                        None
-                    } else {
-                        Some(false)
-                    }
-                }
+            EncodedTerm::DurationLiteral(a) => match b {
+                EncodedTerm::DurationLiteral(b) => Some(a == b),
                 EncodedTerm::TypedLiteral { .. } => None,
                 _ => Some(false),
             },
@@ -1796,60 +1732,61 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 }
             }
             EncodedTerm::FloatLiteral(a) => match b {
-                EncodedTerm::FloatLiteral(b) => a.partial_cmp(&b),
-                EncodedTerm::DoubleLiteral(b) => a.to_f64()?.partial_cmp(&b),
+                EncodedTerm::FloatLiteral(ref b) => a.partial_cmp(b),
+                EncodedTerm::DoubleLiteral(ref b) => a.to_f64()?.partial_cmp(b),
                 EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&b.to_f32()?),
                 EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&b.to_f32()),
                 _ => None,
             },
             EncodedTerm::DoubleLiteral(a) => match b {
                 EncodedTerm::FloatLiteral(b) => a.partial_cmp(&b.to_f64()?),
-                EncodedTerm::DoubleLiteral(b) => a.partial_cmp(&b),
+                EncodedTerm::DoubleLiteral(ref b) => a.partial_cmp(b),
                 EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&b.to_f64()?),
                 EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&b.to_f64()),
                 _ => None,
             },
             EncodedTerm::IntegerLiteral(a) => match b {
-                EncodedTerm::FloatLiteral(b) => a.to_f32()?.partial_cmp(&b),
-                EncodedTerm::DoubleLiteral(b) => a.to_f64()?.partial_cmp(&b),
-                EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&b),
+                EncodedTerm::FloatLiteral(ref b) => a.to_f32()?.partial_cmp(b),
+                EncodedTerm::DoubleLiteral(ref b) => a.to_f64()?.partial_cmp(b),
+                EncodedTerm::IntegerLiteral(ref b) => a.partial_cmp(b),
                 EncodedTerm::DecimalLiteral(b) => Decimal::from(a).partial_cmp(&b),
                 _ => None,
             },
             EncodedTerm::DecimalLiteral(a) => match b {
-                EncodedTerm::FloatLiteral(b) => a.to_f32().partial_cmp(&b),
-                EncodedTerm::DoubleLiteral(b) => a.to_f64().partial_cmp(&b),
+                EncodedTerm::FloatLiteral(ref b) => a.to_f32().partial_cmp(b),
+                EncodedTerm::DoubleLiteral(ref b) => a.to_f64().partial_cmp(b),
                 EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&Decimal::from(b)),
-                EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&b),
+                EncodedTerm::DecimalLiteral(ref b) => a.partial_cmp(b),
                 _ => None,
             },
-            EncodedTerm::DateLiteral(a) => match b {
-                EncodedTerm::DateLiteral(ref b) => a.partial_cmp(b),
-                EncodedTerm::NaiveDateLiteral(ref b) => a.naive_utc().partial_cmp(b), //TODO: check edges
-                _ => None,
-            },
-            EncodedTerm::NaiveDateLiteral(a) => match b {
-                EncodedTerm::NaiveDateLiteral(ref b) => a.partial_cmp(b),
-                EncodedTerm::DateLiteral(ref b) => a.partial_cmp(&b.naive_utc()), //TODO: check edges
-                _ => None,
-            },
-            EncodedTerm::NaiveTimeLiteral(a) => {
-                if let EncodedTerm::NaiveTimeLiteral(ref b) = b {
+            EncodedTerm::DateLiteral(a) => {
+                if let EncodedTerm::DateLiteral(ref b) = b {
                     a.partial_cmp(b)
                 } else {
                     None
                 }
             }
-            EncodedTerm::DateTimeLiteral(a) => match b {
-                EncodedTerm::DateTimeLiteral(ref b) => a.partial_cmp(b),
-                EncodedTerm::NaiveDateTimeLiteral(ref b) => a.naive_utc().partial_cmp(b), //TODO: check edges
-                _ => None,
-            },
-            EncodedTerm::NaiveDateTimeLiteral(a) => match b {
-                EncodedTerm::NaiveDateTimeLiteral(ref b) => a.partial_cmp(b),
-                EncodedTerm::DateTimeLiteral(ref b) => a.partial_cmp(&b.naive_utc()), //TODO: check edges
-                _ => None,
-            },
+            EncodedTerm::TimeLiteral(a) => {
+                if let EncodedTerm::TimeLiteral(ref b) = b {
+                    a.partial_cmp(b)
+                } else {
+                    None
+                }
+            }
+            EncodedTerm::DateTimeLiteral(a) => {
+                if let EncodedTerm::DateTimeLiteral(ref b) = b {
+                    a.partial_cmp(b)
+                } else {
+                    None
+                }
+            }
+            EncodedTerm::DurationLiteral(a) => {
+                if let EncodedTerm::DurationLiteral(ref b) = b {
+                    a.partial_cmp(b)
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
@@ -1879,6 +1816,13 @@ enum NumericBinaryOperands {
     Double(f64, f64),
     Integer(i64, i64),
     Decimal(Decimal, Decimal),
+    Duration(Duration, Duration),
+    DateTime(DateTime, DateTime),
+    Time(Time, Time),
+    Date(Date, Date),
+    DateTimeDuration(DateTime, Duration),
+    TimeDuration(Time, Duration),
+    DateDuration(Date, Duration),
 }
 
 impl NumericBinaryOperands {
@@ -1931,6 +1875,27 @@ impl NumericBinaryOperands {
             }
             (EncodedTerm::DecimalLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
                 Some(NumericBinaryOperands::Decimal(v1, v2))
+            }
+            (EncodedTerm::DurationLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
+                Some(NumericBinaryOperands::Duration(v1, v2))
+            }
+            (EncodedTerm::DateTimeLiteral(v1), EncodedTerm::DateTimeLiteral(v2)) => {
+                Some(NumericBinaryOperands::DateTime(v1, v2))
+            }
+            (EncodedTerm::DateLiteral(v1), EncodedTerm::DateLiteral(v2)) => {
+                Some(NumericBinaryOperands::Date(v1, v2))
+            }
+            (EncodedTerm::TimeLiteral(v1), EncodedTerm::TimeLiteral(v2)) => {
+                Some(NumericBinaryOperands::Time(v1, v2))
+            }
+            (EncodedTerm::DateTimeLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
+                Some(NumericBinaryOperands::DateTimeDuration(v1, v2))
+            }
+            (EncodedTerm::DateLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
+                Some(NumericBinaryOperands::DateDuration(v1, v2))
+            }
+            (EncodedTerm::TimeLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
+                Some(NumericBinaryOperands::TimeDuration(v1, v2))
             }
             _ => None,
         }
@@ -2452,6 +2417,8 @@ impl Accumulator for SumAccumulator {
                     NumericBinaryOperands::Double(v1, v2) => Some((v1 + v2).into()),
                     NumericBinaryOperands::Integer(v1, v2) => v1.checked_add(v2).map(|v| v.into()),
                     NumericBinaryOperands::Decimal(v1, v2) => v1.checked_add(v2).map(|v| v.into()),
+                    NumericBinaryOperands::Duration(v1, v2) => v1.checked_add(v2).map(|v| v.into()),
+                    _ => None,
                 };
             } else {
                 self.sum = None;
@@ -2483,13 +2450,15 @@ impl Accumulator for AvgAccumulator {
             Some(0.into())
         } else {
             //TODO: deduplicate?
+            //TODO: duration?
             match NumericBinaryOperands::new(sum, count)? {
                 NumericBinaryOperands::Float(v1, v2) => Some((v1 / v2).into()),
                 NumericBinaryOperands::Double(v1, v2) => Some((v1 / v2).into()),
-                NumericBinaryOperands::Integer(v1, v2) => Decimal::from(v1)
-                    .checked_div(Decimal::from(v2))
-                    .map(|v| v.into()),
+                NumericBinaryOperands::Integer(v1, v2) => {
+                    Decimal::from(v1).checked_div(v2).map(|v| v.into())
+                }
                 NumericBinaryOperands::Decimal(v1, v2) => v1.checked_div(v2).map(|v| v.into()),
+                _ => None,
             }
         }
     }

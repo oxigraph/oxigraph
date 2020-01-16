@@ -121,7 +121,6 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
         self.inner.contains(&quad.into())
     }
 
-    #[must_use]
     fn transaction(&self, f: impl FnOnce(&mut Self::Transaction) -> Result<()>) -> Result<()> {
         let mut transaction = StoreRepositoryTransaction {
             inner: self.inner.transaction(),

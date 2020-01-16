@@ -18,7 +18,6 @@ rocksdb = { version = "0.13", optional = true }
 byteorder = { version = "1", features = ["i128"] }
 quick-xml = "0.17"
 num-traits = "0.2"
-chrono = "0.4"
 rand = "0.7"
 md-5 = "0.8"
 sha-1 = "0.8"
@@ -26,10 +25,11 @@ sha2 = "0.8"
 digest = "0.8"
 failure = "0.1"
 regex = "1"
-rio_api = "0.4"
-rio_turtle = "0.4"
-rio_xml = "0.4"
+rio_api = "0.3"
+rio_turtle = "0.3"
+rio_xml = "0.3"
 hex = "0.4"
+nom = "5"
 
 [dev-dependencies]
 rayon = "1"

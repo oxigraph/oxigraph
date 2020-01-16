@@ -1,8 +1,7 @@
 use crate::model::named_node::NamedNode;
 use crate::model::vocab::rdf;
 use crate::model::vocab::xsd;
-use crate::model::xsd::Decimal;
-use chrono::prelude::*;
+use crate::model::xsd::*;
 use rio_api::model as rio;
 use std::borrow::Cow;
 use std::fmt;
@@ -237,8 +236,8 @@ impl From<Decimal> for Literal {
     }
 }
 
-impl From<Date<FixedOffset>> for Literal {
-    fn from(value: Date<FixedOffset>) -> Self {
+impl From<Date> for Literal {
+    fn from(value: Date) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::DATE.clone(),
@@ -246,17 +245,8 @@ impl From<Date<FixedOffset>> for Literal {
     }
 }
 
-impl From<NaiveDate> for Literal {
-    fn from(value: NaiveDate) -> Self {
-        Literal(LiteralContent::TypedLiteral {
-            value: value.to_string(),
-            datatype: xsd::DATE.clone(),
-        })
-    }
-}
-
-impl From<NaiveTime> for Literal {
-    fn from(value: NaiveTime) -> Self {
+impl From<Time> for Literal {
+    fn from(value: Time) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::TIME.clone(),
@@ -264,20 +254,20 @@ impl From<NaiveTime> for Literal {
     }
 }
 
-impl From<DateTime<FixedOffset>> for Literal {
-    fn from(value: DateTime<FixedOffset>) -> Self {
+impl From<DateTime> for Literal {
+    fn from(value: DateTime) -> Self {
         Literal(LiteralContent::TypedLiteral {
-            value: value.to_rfc3339(),
+            value: value.to_string(),
             datatype: xsd::DATE_TIME.clone(),
         })
     }
 }
 
-impl From<NaiveDateTime> for Literal {
-    fn from(value: NaiveDateTime) -> Self {
+impl From<Duration> for Literal {
+    fn from(value: Duration) -> Self {
         Literal(LiteralContent::TypedLiteral {
-            value: value.format("%Y-%m-%dT%H:%M:%S%.f").to_string(),
-            datatype: xsd::DATE_TIME.clone(),
+            value: value.to_string(),
+            datatype: xsd::DURATION.clone(),
         })
     }
 }

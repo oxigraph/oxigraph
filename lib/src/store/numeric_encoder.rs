@@ -1,11 +1,9 @@
 use crate::model::vocab::rdf;
 use crate::model::vocab::xsd;
-use crate::model::xsd::Decimal;
+use crate::model::xsd::*;
 use crate::model::*;
 use crate::Result;
 use byteorder::{LittleEndian, ReadBytesExt};
-use chrono::format::{parse, Parsed, StrftimeItems};
-use chrono::prelude::*;
 use failure::format_err;
 use md5::digest::Digest;
 use md5::Md5;
@@ -30,6 +28,7 @@ const XSD_DECIMAL_ID: u128 = 0x3ca7_b56d_a746_719a_6800_081f_bb59_ea33;
 const XSD_DATE_TIME_ID: u128 = 0xc206_6749_e0e5_015e_f7ee_33b7_b28c_c010;
 const XSD_DATE_ID: u128 = 0xcaae_3cc4_f23f_4c5a_7717_dd19_e30a_84b8;
 const XSD_TIME_ID: u128 = 0x7af4_6a16_1b02_35d7_9a79_07ba_3da9_48bb;
+const XSD_DURATION_ID: u128 = 0x78ab_8431_984b_6b06_c42d_6271_b82e_487d;
 
 pub fn get_str_id(value: &str) -> u128 {
     let mut id = [0 as u8; 16];
@@ -50,10 +49,9 @@ const TYPE_DOUBLE_LITERAL: u8 = 10;
 const TYPE_INTEGER_LITERAL: u8 = 11;
 const TYPE_DECIMAL_LITERAL: u8 = 12;
 const TYPE_DATE_TIME_LITERAL: u8 = 13;
-const TYPE_NAIVE_DATE_TIME_LITERAL: u8 = 14;
-const TYPE_DATE_LITERAL: u8 = 15;
-const TYPE_NAIVE_DATE_LITERAL: u8 = 16;
-const TYPE_NAIVE_TIME_LITERAL: u8 = 17;
+const TYPE_DATE_LITERAL: u8 = 14;
+const TYPE_TIME_LITERAL: u8 = 15;
+const TYPE_DURATION_LITERAL: u8 = 16;
 
 pub const ENCODED_DEFAULT_GRAPH: EncodedTerm = EncodedTerm::DefaultGraph;
 pub const ENCODED_EMPTY_STRING_LITERAL: EncodedTerm = EncodedTerm::StringLiteral {
@@ -89,6 +87,9 @@ pub const ENCODED_XSD_TIME_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
 pub const ENCODED_XSD_DATE_TIME_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
     iri_id: XSD_DATE_TIME_ID,
 };
+pub const ENCODED_XSD_DURATION_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+    iri_id: XSD_DURATION_ID,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub enum EncodedTerm {
@@ -103,11 +104,10 @@ pub enum EncodedTerm {
     DoubleLiteral(f64),
     IntegerLiteral(i64),
     DecimalLiteral(Decimal),
-    DateLiteral(Date<FixedOffset>),
-    NaiveDateLiteral(NaiveDate),
-    NaiveTimeLiteral(NaiveTime),
-    DateTimeLiteral(DateTime<FixedOffset>),
-    NaiveDateTimeLiteral(NaiveDateTime),
+    DateLiteral(Date),
+    TimeLiteral(Time),
+    DateTimeLiteral(DateTime),
+    DurationLiteral(Duration),
 }
 
 impl PartialEq for EncodedTerm {
@@ -167,10 +167,9 @@ impl PartialEq for EncodedTerm {
             (EncodedTerm::IntegerLiteral(a), EncodedTerm::IntegerLiteral(b)) => a == b,
             (EncodedTerm::DecimalLiteral(a), EncodedTerm::DecimalLiteral(b)) => a == b,
             (EncodedTerm::DateLiteral(a), EncodedTerm::DateLiteral(b)) => a == b,
-            (EncodedTerm::NaiveDateLiteral(a), EncodedTerm::NaiveDateLiteral(b)) => a == b,
-            (EncodedTerm::NaiveTimeLiteral(a), EncodedTerm::NaiveTimeLiteral(b)) => a == b,
+            (EncodedTerm::TimeLiteral(a), EncodedTerm::TimeLiteral(b)) => a == b,
             (EncodedTerm::DateTimeLiteral(a), EncodedTerm::DateTimeLiteral(b)) => a == b,
-            (EncodedTerm::NaiveDateTimeLiteral(a), EncodedTerm::NaiveDateTimeLiteral(b)) => a == b,
+            (EncodedTerm::DurationLiteral(a), EncodedTerm::DurationLiteral(b)) => a == b,
             (_, _) => false,
         }
     }
@@ -205,10 +204,9 @@ impl Hash for EncodedTerm {
             EncodedTerm::IntegerLiteral(value) => value.hash(state),
             EncodedTerm::DecimalLiteral(value) => value.hash(state),
             EncodedTerm::DateLiteral(value) => value.hash(state),
-            EncodedTerm::NaiveDateLiteral(value) => value.hash(state),
-            EncodedTerm::NaiveTimeLiteral(value) => value.hash(state),
+            EncodedTerm::TimeLiteral(value) => value.hash(state),
             EncodedTerm::DateTimeLiteral(value) => value.hash(state),
-            EncodedTerm::NaiveDateTimeLiteral(value) => value.hash(state),
+            EncodedTerm::DurationLiteral(value) => value.hash(state),
         }
     }
 }
@@ -239,10 +237,9 @@ impl EncodedTerm {
             | EncodedTerm::IntegerLiteral(_)
             | EncodedTerm::DecimalLiteral(_)
             | EncodedTerm::DateLiteral(_)
-            | EncodedTerm::NaiveDateLiteral(_)
-            | EncodedTerm::NaiveTimeLiteral(_)
+            | EncodedTerm::TimeLiteral(_)
             | EncodedTerm::DateTimeLiteral(_)
-            | EncodedTerm::NaiveDateTimeLiteral(_) => true,
+            | EncodedTerm::DurationLiteral(_) => true,
             _ => false,
         }
     }
@@ -260,11 +257,9 @@ impl EncodedTerm {
             EncodedTerm::IntegerLiteral(..) => Some(ENCODED_XSD_INTEGER_NAMED_NODE),
             EncodedTerm::DecimalLiteral(..) => Some(ENCODED_XSD_DECIMAL_NAMED_NODE),
             EncodedTerm::DateLiteral(..) => Some(ENCODED_XSD_DATE_NAMED_NODE),
-            EncodedTerm::NaiveDateLiteral(..) => Some(ENCODED_XSD_DATE_NAMED_NODE),
-            EncodedTerm::NaiveTimeLiteral(..) => Some(ENCODED_XSD_TIME_NAMED_NODE),
-            EncodedTerm::DateTimeLiteral(..) | EncodedTerm::NaiveDateTimeLiteral(..) => {
-                Some(ENCODED_XSD_DATE_TIME_NAMED_NODE)
-            }
+            EncodedTerm::TimeLiteral(..) => Some(ENCODED_XSD_TIME_NAMED_NODE),
+            EncodedTerm::DateTimeLiteral(..) => Some(ENCODED_XSD_DATE_TIME_NAMED_NODE),
+            EncodedTerm::DurationLiteral(..) => Some(ENCODED_XSD_DURATION_NAMED_NODE),
             _ => None,
         }
     }
@@ -284,10 +279,9 @@ impl EncodedTerm {
             EncodedTerm::IntegerLiteral(_) => TYPE_INTEGER_LITERAL,
             EncodedTerm::DecimalLiteral(_) => TYPE_DECIMAL_LITERAL,
             EncodedTerm::DateLiteral(_) => TYPE_DATE_LITERAL,
-            EncodedTerm::NaiveDateLiteral(_) => TYPE_NAIVE_DATE_LITERAL,
-            EncodedTerm::NaiveTimeLiteral(_) => TYPE_NAIVE_TIME_LITERAL,
+            EncodedTerm::TimeLiteral(_) => TYPE_TIME_LITERAL,
             EncodedTerm::DateTimeLiteral(_) => TYPE_DATE_TIME_LITERAL,
-            EncodedTerm::NaiveDateTimeLiteral(_) => TYPE_NAIVE_DATE_TIME_LITERAL,
+            EncodedTerm::DurationLiteral(_) => TYPE_DURATION_LITERAL,
         }
     }
 }
@@ -316,6 +310,11 @@ impl From<u32> for EncodedTerm {
     }
 }
 
+impl From<u8> for EncodedTerm {
+    fn from(value: u8) -> Self {
+        EncodedTerm::IntegerLiteral(value.into())
+    }
+}
 impl From<f32> for EncodedTerm {
     fn from(value: f32) -> Self {
         EncodedTerm::FloatLiteral(value)
@@ -334,33 +333,27 @@ impl From<Decimal> for EncodedTerm {
     }
 }
 
-impl From<Date<FixedOffset>> for EncodedTerm {
-    fn from(value: Date<FixedOffset>) -> Self {
+impl From<Date> for EncodedTerm {
+    fn from(value: Date) -> Self {
         EncodedTerm::DateLiteral(value)
     }
 }
 
-impl From<NaiveDate> for EncodedTerm {
-    fn from(value: NaiveDate) -> Self {
-        EncodedTerm::NaiveDateLiteral(value)
+impl From<Time> for EncodedTerm {
+    fn from(value: Time) -> Self {
+        EncodedTerm::TimeLiteral(value)
     }
 }
 
-impl From<NaiveTime> for EncodedTerm {
-    fn from(value: NaiveTime) -> Self {
-        EncodedTerm::NaiveTimeLiteral(value)
-    }
-}
-
-impl From<DateTime<FixedOffset>> for EncodedTerm {
-    fn from(value: DateTime<FixedOffset>) -> Self {
+impl From<DateTime> for EncodedTerm {
+    fn from(value: DateTime) -> Self {
         EncodedTerm::DateTimeLiteral(value)
     }
 }
 
-impl From<NaiveDateTime> for EncodedTerm {
-    fn from(value: NaiveDateTime) -> Self {
-        EncodedTerm::NaiveDateTimeLiteral(value)
+impl From<Duration> for EncodedTerm {
+    fn from(value: Duration) -> Self {
+        EncodedTerm::DurationLiteral(value)
     }
 }
 
@@ -435,6 +428,11 @@ impl<'a> From<rio::Literal<'a>> for EncodedTerm {
                     "http://www.w3.org/2001/XMLSchema#dateTime"
                     | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => {
                         parse_date_time_str(value)
+                    }
+                    "http://www.w3.org/2001/XMLSchema#duration"
+                    | "http://www.w3.org/2001/XMLSchema#yearMonthDuration"
+                    | "http://www.w3.org/2001/XMLSchema#dayTimeDuration" => {
+                        parse_duration_str(value)
                     }
                     _ => None,
                 } {
@@ -545,43 +543,34 @@ impl<R: Read> TermReader for R {
                 self.read_i64::<LittleEndian>()?,
             )),
             TYPE_DECIMAL_LITERAL => {
-                let mut buffer = [0 as u8; 16];
+                let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
                 Ok(EncodedTerm::DecimalLiteral(Decimal::from_le_bytes(buffer)))
             }
-            TYPE_DATE_LITERAL => Ok(EncodedTerm::DateLiteral(Date::from_utc(
-                NaiveDate::from_num_days_from_ce_opt(self.read_i32::<LittleEndian>()?)
-                    .ok_or_else(|| format_err!("Invalid date serialization"))?,
-                FixedOffset::east_opt(self.read_i32::<LittleEndian>()?)
-                    .ok_or_else(|| format_err!("Invalid timezone offset"))?,
-            ))),
-            TYPE_NAIVE_DATE_LITERAL => Ok(EncodedTerm::NaiveDateLiteral(
-                NaiveDate::from_num_days_from_ce_opt(self.read_i32::<LittleEndian>()?)
-                    .ok_or_else(|| format_err!("Invalid date serialization"))?,
-            )),
-            TYPE_NAIVE_TIME_LITERAL => Ok(EncodedTerm::NaiveTimeLiteral(
-                NaiveTime::from_num_seconds_from_midnight_opt(
-                    self.read_u32::<LittleEndian>()?,
-                    self.read_u32::<LittleEndian>()?,
-                )
-                .ok_or_else(|| format_err!("Invalid time serialization"))?,
-            )),
-            TYPE_DATE_TIME_LITERAL => Ok(EncodedTerm::DateTimeLiteral(DateTime::from_utc(
-                NaiveDateTime::from_timestamp_opt(
-                    self.read_i64::<LittleEndian>()?,
-                    self.read_u32::<LittleEndian>()?,
-                )
-                .ok_or_else(|| format_err!("Invalid date time serialization"))?,
-                FixedOffset::east_opt(self.read_i32::<LittleEndian>()?)
-                    .ok_or_else(|| format_err!("Invalid timezone offset"))?,
-            ))),
-            TYPE_NAIVE_DATE_TIME_LITERAL => Ok(EncodedTerm::NaiveDateTimeLiteral(
-                NaiveDateTime::from_timestamp_opt(
-                    self.read_i64::<LittleEndian>()?,
-                    self.read_u32::<LittleEndian>()?,
-                )
-                .ok_or_else(|| format_err!("Invalid date time serialization"))?,
-            )),
+            TYPE_DATE_LITERAL => {
+                let mut buffer = [0; 18];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::DateLiteral(Date::from_le_bytes(buffer)))
+            }
+            TYPE_TIME_LITERAL => {
+                let mut buffer = [0; 18];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::TimeLiteral(Time::from_le_bytes(buffer)))
+            }
+            TYPE_DATE_TIME_LITERAL => {
+                let mut buffer = [0; 18];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::DateTimeLiteral(DateTime::from_le_bytes(
+                    buffer,
+                )))
+            }
+            TYPE_DURATION_LITERAL => {
+                let mut buffer = [0; 24];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::DurationLiteral(Duration::from_le_bytes(
+                    buffer,
+                )))
+            }
             _ => Err(format_err!("the term buffer has an invalid type id")),
         }
     }
@@ -704,26 +693,10 @@ impl<W: Write> TermWriter for W {
             EncodedTerm::DoubleLiteral(value) => self.write_all(&value.to_le_bytes())?,
             EncodedTerm::IntegerLiteral(value) => self.write_all(&value.to_le_bytes())?,
             EncodedTerm::DecimalLiteral(value) => self.write_all(&value.to_le_bytes())?,
-            EncodedTerm::DateLiteral(value) => {
-                self.write_all(&value.num_days_from_ce().to_le_bytes())?;
-                self.write_all(&value.timezone().local_minus_utc().to_le_bytes())?;
-            }
-            EncodedTerm::NaiveDateLiteral(value) => {
-                self.write_all(&value.num_days_from_ce().to_le_bytes())?
-            }
-            EncodedTerm::NaiveTimeLiteral(value) => {
-                self.write_all(&value.num_seconds_from_midnight().to_le_bytes())?;
-                self.write_all(&value.nanosecond().to_le_bytes())?;
-            }
-            EncodedTerm::DateTimeLiteral(value) => {
-                self.write_all(&value.timestamp().to_le_bytes())?;
-                self.write_all(&value.timestamp_subsec_nanos().to_le_bytes())?;
-                self.write_all(&value.timezone().local_minus_utc().to_le_bytes())?;
-            }
-            EncodedTerm::NaiveDateTimeLiteral(value) => {
-                self.write_all(&value.timestamp().to_le_bytes())?;
-                self.write_all(&value.timestamp_subsec_nanos().to_le_bytes())?;
-            }
+            EncodedTerm::DateLiteral(value) => self.write_all(&value.to_le_bytes())?,
+            EncodedTerm::TimeLiteral(value) => self.write_all(&value.to_le_bytes())?,
+            EncodedTerm::DateTimeLiteral(value) => self.write_all(&value.to_le_bytes())?,
+            EncodedTerm::DurationLiteral(value) => self.write_all(&value.to_le_bytes())?,
         }
         Ok(())
     }
@@ -797,6 +770,7 @@ pub trait StrContainer {
         self.insert_str(XSD_DATE_TIME_ID, xsd::DATE_TIME.as_str())?;
         self.insert_str(XSD_DATE_ID, xsd::DATE.as_str())?;
         self.insert_str(XSD_TIME_ID, xsd::TIME.as_str())?;
+        self.insert_str(XSD_DURATION_ID, xsd::DURATION.as_str())?;
         Ok(())
     }
 }
@@ -1028,6 +1002,11 @@ impl<S: StrContainer> Encoder for S {
                     | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => {
                         parse_date_time_str(value)
                     }
+                    "http://www.w3.org/2001/XMLSchema#duration"
+                    | "http://www.w3.org/2001/XMLSchema#yearMonthDuration"
+                    | "http://www.w3.org/2001/XMLSchema#dayTimeDuration" => {
+                        parse_duration_str(value)
+                    }
                     _ => None,
                 } {
                     Some(v) => v,
@@ -1072,39 +1051,19 @@ pub fn parse_decimal_str(value: &str) -> Option<EncodedTerm> {
 }
 
 pub fn parse_date_str(value: &str) -> Option<EncodedTerm> {
-    let mut parsed = Parsed::new();
-    match parse(&mut parsed, &value, StrftimeItems::new("%Y-%m-%d%:z")).and_then(|_| {
-        Ok(Date::from_utc(
-            parsed.to_naive_date()?,
-            parsed.to_fixed_offset()?,
-        ))
-    }) {
-        Ok(value) => Some(EncodedTerm::DateLiteral(value)),
-        Err(_) => match NaiveDate::parse_from_str(&value, "%Y-%m-%dZ") {
-            Ok(value) => Some(EncodedTerm::DateLiteral(Date::from_utc(
-                value,
-                FixedOffset::east(0),
-            ))),
-            Err(_) => NaiveDate::parse_from_str(&value, "%Y-%m-%d")
-                .map(EncodedTerm::NaiveDateLiteral)
-                .ok(),
-        },
-    }
+    value.parse().map(EncodedTerm::DateLiteral).ok()
 }
 
 pub fn parse_time_str(value: &str) -> Option<EncodedTerm> {
-    NaiveTime::parse_from_str(&value, "%H:%M:%S")
-        .map(EncodedTerm::NaiveTimeLiteral)
-        .ok()
+    value.parse().map(EncodedTerm::TimeLiteral).ok()
 }
 
 pub fn parse_date_time_str(value: &str) -> Option<EncodedTerm> {
-    match DateTime::parse_from_rfc3339(&value) {
-        Ok(value) => Some(EncodedTerm::DateTimeLiteral(value)),
-        Err(_) => NaiveDateTime::parse_from_str(&value, "%Y-%m-%dT%H:%M:%S")
-            .map(EncodedTerm::NaiveDateTimeLiteral)
-            .ok(),
-    }
+    value.parse().map(EncodedTerm::DateTimeLiteral).ok()
+}
+
+pub fn parse_duration_str(value: &str) -> Option<EncodedTerm> {
+    value.parse().map(EncodedTerm::DurationLiteral).ok()
 }
 
 pub trait Decoder {
@@ -1188,10 +1147,9 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::IntegerLiteral(value) => Ok(Literal::from(value).into()),
             EncodedTerm::DecimalLiteral(value) => Ok(Literal::from(value).into()),
             EncodedTerm::DateLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::NaiveDateLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::NaiveTimeLiteral(value) => Ok(Literal::from(value).into()),
+            EncodedTerm::TimeLiteral(value) => Ok(Literal::from(value).into()),
             EncodedTerm::DateTimeLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::NaiveDateTimeLiteral(value) => Ok(Literal::from(value).into()),
+            EncodedTerm::DurationLiteral(value) => Ok(Literal::from(value).into()),
         }
     }
 }

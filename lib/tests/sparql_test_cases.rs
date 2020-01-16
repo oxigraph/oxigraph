@@ -133,6 +133,8 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/property-path/manifest#pp35").unwrap(),
         //SERVICE name from a BGP
         NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/service/manifest#service5").unwrap(),
+        // We use XSD 1.1 equality on dates
+        NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#date-2").unwrap(),
 
     ];
 

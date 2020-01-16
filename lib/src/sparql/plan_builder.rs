@@ -641,6 +641,14 @@ impl<E: Encoder> PlanBuilder<E> {
                             graph_name,
                             "dateTime",
                         )?
+                    } else if *name == *xsd::DURATION {
+                        self.build_cast(
+                            parameters,
+                            PlanExpression::DurationCast,
+                            variables,
+                            graph_name,
+                            "duration",
+                        )?
                     } else if *name == *xsd::STRING {
                         self.build_cast(
                             parameters,

@@ -303,6 +303,7 @@ pub enum PlanExpression {
     DateCast(Box<PlanExpression>),
     TimeCast(Box<PlanExpression>),
     DateTimeCast(Box<PlanExpression>),
+    DurationCast(Box<PlanExpression>),
     StringCast(Box<PlanExpression>),
 }
 
