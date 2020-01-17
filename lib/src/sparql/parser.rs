@@ -14,7 +14,6 @@ mod grammar {
     use crate::model::*;
     use crate::sparql::algebra::*;
     use crate::sparql::model::*;
-    use lazy_static::lazy_static;
     use rio_api::iri::{Iri, IriParseError};
     use std::borrow::Cow;
     use std::char;
@@ -416,7 +415,7 @@ mod grammar {
     pub fn unescape_characters<'a>(
         input: &'a str,
         characters: &'static [u8],
-        replacement: &'static StaticSliceMap<char, char>,
+        replacement: &'static StaticCharSliceMap,
     ) -> Cow<'a, str> {
         if needs_unescape_characters(input, characters) {
             UnescapeCharsIterator::new(input, replacement).collect()
@@ -438,11 +437,11 @@ mod grammar {
     struct UnescapeCharsIterator<'a> {
         iter: Chars<'a>,
         buffer: Option<char>,
-        replacement: &'static StaticSliceMap<char, char>,
+        replacement: &'static StaticCharSliceMap,
     }
 
     impl<'a> UnescapeCharsIterator<'a> {
-        fn new(string: &'a str, replacement: &'static StaticSliceMap<char, char>) -> Self {
+        fn new(string: &'a str, replacement: &'static StaticCharSliceMap) -> Self {
             Self {
                 iter: string.chars(),
                 buffer: None,
@@ -475,22 +474,17 @@ mod grammar {
         }
     }
 
-    pub struct StaticSliceMap<K: 'static + Copy + Eq, V: 'static + Copy> {
-        keys: &'static [K],
-        values: &'static [V],
+    pub struct StaticCharSliceMap {
+        keys: &'static [char],
+        values: &'static [char],
     }
 
-    impl<K: 'static + Copy + Eq, V: 'static + Copy> StaticSliceMap<K, V> {
-        pub fn new(keys: &'static [K], values: &'static [V]) -> Self {
-            assert_eq!(
-                keys.len(),
-                values.len(),
-                "keys and values slices of StaticSliceMap should have the same size"
-            );
+    impl StaticCharSliceMap {
+        pub const fn new(keys: &'static [char], values: &'static [char]) -> Self {
             Self { keys, values }
         }
 
-        pub fn get(&self, key: K) -> Option<V> {
+        pub fn get(&self, key: char) -> Option<char> {
             for i in 0..self.keys.len() {
                 if self.keys[i] == key {
                     return Some(self.values[i]);
@@ -501,15 +495,13 @@ mod grammar {
     }
 
     const UNESCAPE_CHARACTERS: [u8; 8] = [b't', b'b', b'n', b'r', b'f', b'"', b'\'', b'\\'];
-    lazy_static! {
-        static ref UNESCAPE_REPLACEMENT: StaticSliceMap<char, char> = StaticSliceMap::new(
-            &['t', 'b', 'n', 'r', 'f', '"', '\'', '\\'],
-            &[
-                '\u{0009}', '\u{0008}', '\u{000A}', '\u{000D}', '\u{000C}', '\u{0022}', '\u{0027}',
-                '\u{005C}'
-            ]
-        );
-    }
+    const UNESCAPE_REPLACEMENT: StaticCharSliceMap = StaticCharSliceMap::new(
+        &['t', 'b', 'n', 'r', 'f', '"', '\'', '\\'],
+        &[
+            '\u{0009}', '\u{0008}', '\u{000A}', '\u{000D}', '\u{000C}', '\u{0022}', '\u{0027}',
+            '\u{005C}',
+        ],
+    );
 
     fn unescape_echars(input: &str) -> Cow<'_, str> {
         unescape_characters(input, &UNESCAPE_CHARACTERS, &UNESCAPE_REPLACEMENT)
@@ -519,18 +511,16 @@ mod grammar {
         b'_', b'~', b'.', b'-', b'!', b'$', b'&', b'\'', b'(', b')', b'*', b'+', b',', b';', b'=',
         b'/', b'?', b'#', b'@', b'%',
     ];
-    lazy_static! {
-        static ref UNESCAPE_PN_REPLACEMENT: StaticSliceMap<char, char> = StaticSliceMap::new(
-            &[
-                '_', '~', '.', '-', '!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '=', '/',
-                '?', '#', '@', '%'
-            ],
-            &[
-                '_', '~', '.', '-', '!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '=', '/',
-                '?', '#', '@', '%'
-            ]
-        );
-    }
+    const UNESCAPE_PN_REPLACEMENT: StaticCharSliceMap = StaticCharSliceMap::new(
+        &[
+            '_', '~', '.', '-', '!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '=', '/', '?',
+            '#', '@', '%',
+        ],
+        &[
+            '_', '~', '.', '-', '!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '=', '/', '?',
+            '#', '@', '%',
+        ],
+    );
 
     pub fn unescape_pn_local(input: &str) -> Cow<'_, str> {
         unescape_characters(input, &UNESCAPE_PN_CHARACTERS, &UNESCAPE_PN_REPLACEMENT)

@@ -2,7 +2,6 @@
 
 use crate::model::*;
 use crate::sparql::model::*;
-use lazy_static::lazy_static;
 use rio_api::iri::Iri;
 use rio_api::model as rio;
 use std::collections::BTreeMap;
@@ -1201,9 +1200,10 @@ impl fmt::Display for DatasetSpec {
     }
 }
 
-lazy_static! {
-    static ref EMPTY_DATASET: DatasetSpec = DatasetSpec::default();
-}
+const EMPTY_DATASET: DatasetSpec = DatasetSpec {
+    default: Vec::new(),
+    named: Vec::new(),
+};
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum QueryVariants {
