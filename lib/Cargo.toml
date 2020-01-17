@@ -17,7 +17,6 @@ lazy_static = "1"
 rocksdb = { version = "0.13", optional = true }
 byteorder = { version = "1", features = ["i128"] }
 quick-xml = "0.17"
-num-traits = "0.2"
 rand = "0.7"
 md-5 = "0.8"
 sha-1 = "0.8"

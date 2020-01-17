@@ -11,7 +11,6 @@ use crate::Result;
 use digest::Digest;
 use failure::format_err;
 use md5::Md5;
-use num_traits::ToPrimitive;
 use rand::random;
 use regex::{Regex, RegexBuilder};
 use rio_api::iri::Iri;
@@ -1291,35 +1290,31 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 _ => None,
             },
             PlanExpression::DoubleCast(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::FloatLiteral(value) => Some(value.to_f64()?.into()),
-                EncodedTerm::DoubleLiteral(value) => Some(value.to_f64()?.into()),
-                EncodedTerm::IntegerLiteral(value) => Some(value.to_f64()?.into()),
+                EncodedTerm::FloatLiteral(value) => Some(f64::from(value).into()),
+                EncodedTerm::DoubleLiteral(value) => Some(value.into()),
+                EncodedTerm::IntegerLiteral(value) => Some((value as f64).into()),
                 EncodedTerm::DecimalLiteral(value) => Some(value.to_f64().into()),
-                EncodedTerm::BooleanLiteral(value) => {
-                    Some(if value { 1. as f64 } else { 0. }.into())
-                }
+                EncodedTerm::BooleanLiteral(value) => Some(if value { 1f64 } else { 0f64 }.into()),
                 EncodedTerm::StringLiteral { value_id } => {
                     parse_double_str(&*self.dataset.get_str(value_id).ok()??)
                 }
                 _ => None,
             },
             PlanExpression::FloatCast(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::FloatLiteral(value) => Some(value.to_f32()?.into()),
-                EncodedTerm::DoubleLiteral(value) => Some(value.to_f32()?.into()),
-                EncodedTerm::IntegerLiteral(value) => Some(value.to_f32()?.into()),
+                EncodedTerm::FloatLiteral(value) => Some(value.into()),
+                EncodedTerm::DoubleLiteral(value) => Some((value as f32).into()),
+                EncodedTerm::IntegerLiteral(value) => Some((value as f32).into()),
                 EncodedTerm::DecimalLiteral(value) => Some(value.to_f32().into()),
-                EncodedTerm::BooleanLiteral(value) => {
-                    Some(if value { 1. as f32 } else { 0. }.into())
-                }
+                EncodedTerm::BooleanLiteral(value) => Some(if value { 1f32 } else { 0f32 }.into()),
                 EncodedTerm::StringLiteral { value_id } => {
                     parse_float_str(&*self.dataset.get_str(value_id).ok()??)
                 }
                 _ => None,
             },
             PlanExpression::IntegerCast(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::FloatLiteral(value) => Some(value.to_i64()?.into()),
-                EncodedTerm::DoubleLiteral(value) => Some(value.to_i64()?.into()),
-                EncodedTerm::IntegerLiteral(value) => Some(value.to_i64()?.into()),
+                EncodedTerm::FloatLiteral(value) => Some((value as i64).into()),
+                EncodedTerm::DoubleLiteral(value) => Some((value as i64).into()),
+                EncodedTerm::IntegerLiteral(value) => Some(value.into()),
                 EncodedTerm::DecimalLiteral(value) => Some(i64::try_from(value).ok()?.into()),
                 EncodedTerm::BooleanLiteral(value) => Some(if value { 1 } else { 0 }.into()),
                 EncodedTerm::StringLiteral { value_id } => {
@@ -1620,23 +1615,23 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             },
             EncodedTerm::FloatLiteral(a) => match b {
                 EncodedTerm::FloatLiteral(b) => Some(a == b),
-                EncodedTerm::DoubleLiteral(b) => Some(a.to_f64()? == b),
-                EncodedTerm::IntegerLiteral(b) => Some(a == b.to_f32()?),
+                EncodedTerm::DoubleLiteral(b) => Some(f64::from(a) == b),
+                EncodedTerm::IntegerLiteral(b) => Some(a == b as f32),
                 EncodedTerm::DecimalLiteral(b) => Some(a == b.to_f32()),
                 EncodedTerm::TypedLiteral { .. } => None,
                 _ => Some(false),
             },
             EncodedTerm::DoubleLiteral(a) => match b {
-                EncodedTerm::FloatLiteral(b) => Some(a == b.to_f64()?),
+                EncodedTerm::FloatLiteral(b) => Some(a == f64::from(b)),
                 EncodedTerm::DoubleLiteral(b) => Some(a == b),
-                EncodedTerm::IntegerLiteral(b) => Some(a == b.to_f64()?),
+                EncodedTerm::IntegerLiteral(b) => Some(a == (b as f64)),
                 EncodedTerm::DecimalLiteral(b) => Some(a == b.to_f64()),
                 EncodedTerm::TypedLiteral { .. } => None,
                 _ => Some(false),
             },
             EncodedTerm::IntegerLiteral(a) => match b {
-                EncodedTerm::FloatLiteral(b) => Some(a.to_f32()? == b),
-                EncodedTerm::DoubleLiteral(b) => Some(a.to_f64()? == b),
+                EncodedTerm::FloatLiteral(b) => Some((a as f32) == b),
+                EncodedTerm::DoubleLiteral(b) => Some((a as f64) == b),
                 EncodedTerm::IntegerLiteral(b) => Some(a == b),
                 EncodedTerm::DecimalLiteral(b) => Some(Decimal::from(a) == b),
                 EncodedTerm::TypedLiteral { .. } => None,
@@ -1733,21 +1728,21 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             }
             EncodedTerm::FloatLiteral(a) => match b {
                 EncodedTerm::FloatLiteral(ref b) => a.partial_cmp(b),
-                EncodedTerm::DoubleLiteral(ref b) => a.to_f64()?.partial_cmp(b),
-                EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&b.to_f32()?),
+                EncodedTerm::DoubleLiteral(ref b) => f64::from(a).partial_cmp(b),
+                EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&(b as f32)),
                 EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&b.to_f32()),
                 _ => None,
             },
             EncodedTerm::DoubleLiteral(a) => match b {
-                EncodedTerm::FloatLiteral(b) => a.partial_cmp(&b.to_f64()?),
+                EncodedTerm::FloatLiteral(b) => a.partial_cmp(&b.into()),
                 EncodedTerm::DoubleLiteral(ref b) => a.partial_cmp(b),
-                EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&b.to_f64()?),
+                EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&(b as f64)),
                 EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&b.to_f64()),
                 _ => None,
             },
             EncodedTerm::IntegerLiteral(a) => match b {
-                EncodedTerm::FloatLiteral(ref b) => a.to_f32()?.partial_cmp(b),
-                EncodedTerm::DoubleLiteral(ref b) => a.to_f64()?.partial_cmp(b),
+                EncodedTerm::FloatLiteral(ref b) => (a as f32).partial_cmp(b),
+                EncodedTerm::DoubleLiteral(ref b) => (a as f64).partial_cmp(b),
                 EncodedTerm::IntegerLiteral(ref b) => a.partial_cmp(b),
                 EncodedTerm::DecimalLiteral(b) => Decimal::from(a).partial_cmp(&b),
                 _ => None,
@@ -1829,34 +1824,34 @@ impl NumericBinaryOperands {
     fn new(a: EncodedTerm, b: EncodedTerm) -> Option<Self> {
         match (a, b) {
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(NumericBinaryOperands::Float(v1, v2.to_f32()?))
+                Some(NumericBinaryOperands::Float(v1, v2))
             }
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(v1.to_f64()?, v2))
+                Some(NumericBinaryOperands::Double(v1.into(), v2))
             }
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
-                Some(NumericBinaryOperands::Float(v1, v2.to_f32()?))
+                Some(NumericBinaryOperands::Float(v1, v2 as f32))
             }
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
                 Some(NumericBinaryOperands::Float(v1, v2.to_f32()))
             }
             (EncodedTerm::DoubleLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(v1, v2.to_f64()?))
+                Some(NumericBinaryOperands::Double(v1, v2.into()))
             }
             (EncodedTerm::DoubleLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
                 Some(NumericBinaryOperands::Double(v1, v2))
             }
             (EncodedTerm::DoubleLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(v1, v2.to_f64()?))
+                Some(NumericBinaryOperands::Double(v1, v2 as f64))
             }
             (EncodedTerm::DoubleLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
                 Some(NumericBinaryOperands::Double(v1, v2.to_f64()))
             }
             (EncodedTerm::IntegerLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(NumericBinaryOperands::Float(v1.to_f32()?, v2))
+                Some(NumericBinaryOperands::Float(v1 as f32, v2))
             }
             (EncodedTerm::IntegerLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(v1.to_f64()?, v2))
+                Some(NumericBinaryOperands::Double(v1 as f64, v2))
             }
             (EncodedTerm::IntegerLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
                 Some(NumericBinaryOperands::Integer(v1, v2))

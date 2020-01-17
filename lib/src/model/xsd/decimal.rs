@@ -458,15 +458,13 @@ impl Decimal {
     /// Creates a `Decimal` from a `f32` without taking care of precision
     #[inline]
     pub(crate) fn from_f32(v: f32) -> Self {
-        Self {
-            value: (v * (DECIMAL_PART_POW as f32)) as i128,
-        }
+        Self::from_f64(v.into())
     }
 
     /// Creates a `f32` from a `Decimal` without taking care of precision
     #[inline]
     pub fn to_f32(&self) -> f32 {
-        (self.value as f32) / (DECIMAL_PART_POW as f32)
+        self.to_f64() as f32
     }
 
     /// Creates a `Decimal` from a `f64` without taking care of precision
