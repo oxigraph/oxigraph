@@ -41,7 +41,7 @@
     missing_copy_implementations,
     trivial_casts,
     trivial_numeric_casts,
-    //TODO unsafe_code,
+    unsafe_code,
     unused_qualifications
 )]
 #![warn(

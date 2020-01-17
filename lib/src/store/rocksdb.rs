@@ -141,7 +141,8 @@ impl StrLookup for RocksDbStoreConnection<'_> {
             .store
             .db
             .get_cf(self.id2str_cf, &id.to_le_bytes())?
-            .map(|v| unsafe { String::from_utf8_unchecked(v) }))
+            .map(String::from_utf8)
+            .transpose()?)
     }
 }
 
