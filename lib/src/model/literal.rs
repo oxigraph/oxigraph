@@ -275,15 +275,15 @@ impl From<Duration> for Literal {
 impl<'a> From<&'a Literal> for rio::Literal<'a> {
     fn from(literal: &'a Literal) -> Self {
         if literal.is_plain() {
-            literal
-                .language()
-                .map(|lang| rio::Literal::LanguageTaggedString {
+            literal.language().map_or_else(
+                || rio::Literal::Simple {
                     value: literal.value(),
-                    language: &lang,
-                })
-                .unwrap_or_else(|| rio::Literal::Simple {
+                },
+                |lang| rio::Literal::LanguageTaggedString {
                     value: literal.value(),
-                })
+                    language: lang,
+                },
+            )
         } else {
             rio::Literal::Typed {
                 value: literal.value(),

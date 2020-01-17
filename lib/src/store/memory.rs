@@ -659,12 +659,12 @@ impl StrContainer for MemoryTransaction<'_> {
 
 impl StoreTransaction for MemoryTransaction<'_> {
     fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
-        self.ops.push(TransactionOp::Insert(quad.clone()));
+        self.ops.push(TransactionOp::Insert(*quad));
         Ok(())
     }
 
     fn remove(&mut self, quad: &EncodedQuad) -> Result<()> {
-        self.ops.push(TransactionOp::Delete(quad.clone()));
+        self.ops.push(TransactionOp::Delete(*quad));
         Ok(())
     }
 

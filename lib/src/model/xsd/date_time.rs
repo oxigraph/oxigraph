@@ -26,7 +26,7 @@ impl DateTime {
         timezone_offset: Option<TimezoneOffset>,
     ) -> Result<Self, DateTimeError> {
         Ok(Self {
-            timestamp: Timestamp::new(DateTimeSevenPropertyModel {
+            timestamp: Timestamp::new(&DateTimeSevenPropertyModel {
                 year: Some(year),
                 month: Some(month),
                 day: Some(day),
@@ -49,56 +49,7 @@ impl DateTime {
             timestamp: Timestamp::from_le_bytes(bytes),
         }
     }
-}
 
-/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
-impl From<Date> for DateTime {
-    fn from(date: Date) -> Self {
-        DateTime::new(
-            date.year(),
-            date.month(),
-            date.day(),
-            0,
-            0,
-            Decimal::default(),
-            date.timezone_offset(),
-        )
-        .unwrap()
-    }
-}
-
-impl FromStr for DateTime {
-    type Err = XsdParseError;
-
-    fn from_str(input: &str) -> Result<Self, XsdParseError> {
-        parse_value(date_time_lexical_rep, input)
-    }
-}
-
-impl fmt::Display for DateTime {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let year = self.year();
-        if year < 0 {
-            write!(f, "-")?;
-        }
-        write!(
-            f,
-            "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}",
-            year.abs(),
-            self.month(),
-            self.day(),
-            self.hour(),
-            self.minute(),
-            self.second()
-        )?;
-        if let Some(timezone_offset) = self.timezone_offset() {
-            write!(f, "{}", timezone_offset)?;
-        }
-        Ok(())
-    }
-}
-
-impl DateTime {
     /// [fn:year-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-year-from-dateTime)
     pub fn year(&self) -> i64 {
         self.timestamp.year()
@@ -168,7 +119,8 @@ impl DateTime {
             })
         } else {
             Some(Self {
-                timestamp: Timestamp::new(date_time_plus_duration(rhs, self.properties())?).ok()?,
+                timestamp: Timestamp::new(&date_time_plus_duration(rhs, &self.properties())?)
+                    .ok()?,
             })
         }
     }
@@ -182,10 +134,57 @@ impl DateTime {
             })
         } else {
             Some(Self {
-                timestamp: Timestamp::new(date_time_plus_duration(-rhs, self.properties())?)
+                timestamp: Timestamp::new(&date_time_plus_duration(-rhs, &self.properties())?)
                     .ok()?,
             })
         }
+    }
+}
+
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+impl From<Date> for DateTime {
+    fn from(date: Date) -> Self {
+        DateTime::new(
+            date.year(),
+            date.month(),
+            date.day(),
+            0,
+            0,
+            Decimal::default(),
+            date.timezone_offset(),
+        )
+        .unwrap()
+    }
+}
+
+impl FromStr for DateTime {
+    type Err = XsdParseError;
+
+    fn from_str(input: &str) -> Result<Self, XsdParseError> {
+        parse_value(date_time_lexical_rep, input)
+    }
+}
+
+impl fmt::Display for DateTime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let year = self.year();
+        if year < 0 {
+            write!(f, "-")?;
+        }
+        write!(
+            f,
+            "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}",
+            year.abs(),
+            self.month(),
+            self.day(),
+            self.hour(),
+            self.minute(),
+            self.second()
+        )?;
+        if let Some(timezone_offset) = self.timezone_offset() {
+            write!(f, "{}", timezone_offset)?;
+        }
+        Ok(())
     }
 }
 
@@ -206,7 +205,7 @@ impl Time {
             hour = 0;
         }
         Ok(Self {
-            timestamp: Timestamp::new(DateTimeSevenPropertyModel {
+            timestamp: Timestamp::new(&DateTimeSevenPropertyModel {
                 year: None,
                 month: None,
                 day: None,
@@ -223,46 +222,7 @@ impl Time {
             timestamp: Timestamp::from_le_bytes(bytes),
         }
     }
-}
 
-/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
-impl From<DateTime> for Time {
-    fn from(date_time: DateTime) -> Self {
-        Time::new(
-            date_time.hour(),
-            date_time.minute(),
-            date_time.second(),
-            date_time.timezone_offset(),
-        )
-        .unwrap()
-    }
-}
-
-impl FromStr for Time {
-    type Err = XsdParseError;
-
-    fn from_str(input: &str) -> Result<Self, XsdParseError> {
-        parse_value(time_lexical_rep, input)
-    }
-}
-
-impl fmt::Display for Time {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{:02}:{:02}:{:02}",
-            self.hour(),
-            self.minute(),
-            self.second()
-        )?;
-        if let Some(timezone_offset) = self.timezone_offset() {
-            write!(f, "{}", timezone_offset)?;
-        }
-        Ok(())
-    }
-}
-
-impl Time {
     /// [fn:hour-from-time](https://www.w3.org/TR/xpath-functions/#func-hour-from-time)
     pub fn hour(&self) -> u8 {
         self.timestamp.hour()
@@ -335,6 +295,43 @@ impl Time {
     }
 }
 
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+impl From<DateTime> for Time {
+    fn from(date_time: DateTime) -> Self {
+        Time::new(
+            date_time.hour(),
+            date_time.minute(),
+            date_time.second(),
+            date_time.timezone_offset(),
+        )
+        .unwrap()
+    }
+}
+
+impl FromStr for Time {
+    type Err = XsdParseError;
+
+    fn from_str(input: &str) -> Result<Self, XsdParseError> {
+        parse_value(time_lexical_rep, input)
+    }
+}
+
+impl fmt::Display for Time {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{:02}:{:02}:{:02}",
+            self.hour(),
+            self.minute(),
+            self.second()
+        )?;
+        if let Some(timezone_offset) = self.timezone_offset() {
+            write!(f, "{}", timezone_offset)?;
+        }
+        Ok(())
+    }
+}
+
 /// [XML Schema `date` datatype](https://www.w3.org/TR/xmlschema11-2/#date) implementation.
 #[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct Date {
@@ -349,7 +346,7 @@ impl Date {
         timezone_offset: Option<TimezoneOffset>,
     ) -> Result<Self, DateTimeError> {
         Ok(Self {
-            timestamp: Timestamp::new(DateTimeSevenPropertyModel {
+            timestamp: Timestamp::new(&DateTimeSevenPropertyModel {
                 year: Some(year),
                 month: Some(month),
                 day: Some(day),
@@ -366,44 +363,7 @@ impl Date {
             timestamp: Timestamp::from_le_bytes(bytes),
         }
     }
-}
 
-/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
-impl From<DateTime> for Date {
-    fn from(date_time: DateTime) -> Self {
-        Date::new(
-            date_time.year(),
-            date_time.month(),
-            date_time.day(),
-            date_time.timezone_offset(),
-        )
-        .unwrap()
-    }
-}
-
-impl FromStr for Date {
-    type Err = XsdParseError;
-
-    fn from_str(input: &str) -> Result<Self, XsdParseError> {
-        parse_value(date_lexical_rep, input)
-    }
-}
-
-impl fmt::Display for Date {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let year = self.year();
-        if year < 0 {
-            write!(f, "-")?;
-        }
-        write!(f, "{:04}-{:02}-{:02}", year.abs(), self.month(), self.day())?;
-        if let Some(timezone_offset) = self.timezone_offset() {
-            write!(f, "{}", timezone_offset)?;
-        }
-        Ok(())
-    }
-}
-
-impl Date {
     /// [fn:year-from-date](https://www.w3.org/TR/xpath-functions/#func-year-from-date)
     pub fn year(&self) -> i64 {
         self.timestamp.year()
@@ -448,6 +408,41 @@ impl Date {
     }
 }
 
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+impl From<DateTime> for Date {
+    fn from(date_time: DateTime) -> Self {
+        Date::new(
+            date_time.year(),
+            date_time.month(),
+            date_time.day(),
+            date_time.timezone_offset(),
+        )
+        .unwrap()
+    }
+}
+
+impl FromStr for Date {
+    type Err = XsdParseError;
+
+    fn from_str(input: &str) -> Result<Self, XsdParseError> {
+        parse_value(date_lexical_rep, input)
+    }
+}
+
+impl fmt::Display for Date {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let year = self.year();
+        if year < 0 {
+            write!(f, "-")?;
+        }
+        write!(f, "{:04}-{:02}-{:02}", year.abs(), self.month(), self.day())?;
+        if let Some(timezone_offset) = self.timezone_offset() {
+            write!(f, "{}", timezone_offset)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct TimezoneOffset {
     offset: i16, // in minute with respect to UTC
@@ -467,6 +462,10 @@ impl TimezoneOffset {
         TimezoneOffset {
             offset: i16::from_le_bytes(bytes),
         }
+    }
+
+    pub fn to_le_bytes(self) -> [u8; 2] {
+        self.offset.to_le_bytes()
     }
 }
 
@@ -489,12 +488,6 @@ impl fmt::Display for TimezoneOffset {
             offset if offset < 0 => write!(f, "-{:02}:{:02}", -offset / 60, -offset % 60),
             offset => write!(f, "+{:02}:{:02}", offset / 60, offset % 60),
         }
-    }
-}
-
-impl TimezoneOffset {
-    pub fn to_le_bytes(self) -> [u8; 2] {
-        self.offset.to_le_bytes()
     }
 }
 
@@ -564,7 +557,7 @@ impl Hash for Timestamp {
 }
 
 impl Timestamp {
-    fn new(props: DateTimeSevenPropertyModel) -> Result<Self, DateTimeError> {
+    fn new(props: &DateTimeSevenPropertyModel) -> Result<Self, DateTimeError> {
         // Validation
         if let (Some(day), Some(month)) = (props.day, props.month) {
             // Constraint: Day-of-month Values
@@ -585,14 +578,14 @@ impl Timestamp {
 
     fn now() -> Result<Self, DateTimeError> {
         Timestamp::new(
-            date_time_plus_duration(
+            &date_time_plus_duration(
                 SystemTime::now()
                     .duration_since(SystemTime::UNIX_EPOCH)?
                     .try_into()
                     .map_err(|_| DateTimeError {
                         kind: DateTimeErrorKind::Overflow,
                     })?,
-                DateTimeSevenPropertyModel {
+                &DateTimeSevenPropertyModel {
                     year: Some(1970),
                     month: Some(1),
                     day: Some(1),
@@ -624,6 +617,7 @@ impl Timestamp {
         }
     }
 
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     fn year_month_day(&self) -> (i64, u8, u8) {
         let mut days = (self.value.as_i128()
             + i128::from(
@@ -697,6 +691,7 @@ impl Timestamp {
         day
     }
 
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     fn hour(&self) -> u8 {
         (((self.value.as_i128()
             + i128::from(
@@ -708,6 +703,7 @@ impl Timestamp {
             / 3600) as u8
     }
 
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     fn minute(&self) -> u8 {
         (((self.value.as_i128()
             + i128::from(
@@ -723,7 +719,7 @@ impl Timestamp {
         self.value.checked_rem_euclid(60).unwrap().abs()
     }
 
-    fn timezone_offset(&self) -> Option<TimezoneOffset> {
+    const fn timezone_offset(&self) -> Option<TimezoneOffset> {
         self.timezone_offset
     }
 
@@ -771,7 +767,7 @@ fn normalize_month(yr: i64, mo: i64) -> Option<(i64, u8)> {
         // Needed to make it work with negative durations
         let yr = yr.checked_add(mo.checked_sub(1)?.checked_div(12)?.checked_sub(1)?)?;
         let mo = u8::try_from(
-            12i64
+            12_i64
                 .checked_add(mo.checked_sub(1)?.checked_rem(12)?)?
                 .checked_add(1)?,
         )
@@ -847,7 +843,7 @@ fn days_in_month(y: Option<i64>, m: u8) -> u8 {
 /// The [dateTimePlusDuration](https://www.w3.org/TR/xmlschema11-2/#vp-dt-dateTimePlusDuration) function
 fn date_time_plus_duration(
     du: Duration,
-    dt: DateTimeSevenPropertyModel,
+    dt: &DateTimeSevenPropertyModel,
 ) -> Option<DateTimeSevenPropertyModel> {
     let yr = dt.year.unwrap_or(1);
     let mo = dt.month.unwrap_or(1);
@@ -874,7 +870,7 @@ fn date_time_plus_duration(
 }
 
 /// The [timeOnTimeline](https://www.w3.org/TR/xmlschema11-2/#vp-dt-timeOnTimeline) function
-fn time_on_timeline(props: DateTimeSevenPropertyModel) -> Option<Decimal> {
+fn time_on_timeline(props: &DateTimeSevenPropertyModel) -> Option<Decimal> {
     let yr = props.year.map_or(1971, |y| y - 1);
     let mo = props.month.unwrap_or(12);
     let da = props

@@ -28,13 +28,14 @@ pub struct Decimal {
 
 impl Decimal {
     /// Constructs the decimal i / 10^n
+    #[allow(clippy::cast_possible_truncation)]
     pub fn new(i: i128, n: u32) -> Result<Self, DecimalOverflowError> {
         if n > DECIMAL_PART_DIGITS as u32 {
             //TODO: check if end with zeros?
             return Err(DecimalOverflowError);
         }
         Ok(Self {
-            value: i.checked_div(10i128.pow(n)).ok_or(DecimalOverflowError)?,
+            value: i.checked_div(10_i128.pow(n)).ok_or(DecimalOverflowError)?,
         })
     }
 
@@ -43,6 +44,150 @@ impl Decimal {
         Self {
             value: i128::from_le_bytes(bytes),
         }
+    }
+
+    pub fn to_le_bytes(&self) -> [u8; 16] {
+        self.value.to_le_bytes()
+    }
+
+    /// [op:numeric-add](https://www.w3.org/TR/xpath-functions/#func-numeric-add)
+    #[inline]
+    pub fn checked_add(&self, rhs: impl Into<Self>) -> Option<Self> {
+        Some(Self {
+            value: self.value.checked_add(rhs.into().value)?,
+        })
+    }
+
+    /// [op:numeric-subtract](https://www.w3.org/TR/xpath-functions/#func-numeric-subtract)
+    #[inline]
+    pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<Self> {
+        Some(Self {
+            value: self.value.checked_sub(rhs.into().value)?,
+        })
+    }
+
+    /// [op:numeric-multiply](https://www.w3.org/TR/xpath-functions/#func-numeric-multiply)
+    #[inline]
+    pub fn checked_mul(&self, rhs: impl Into<Self>) -> Option<Self> {
+        //TODO: better algorithm to keep precision
+        Some(Self {
+            value: self
+                .value
+                .checked_div(DECIMAL_PART_HALF_POW)?
+                .checked_mul(rhs.into().value.checked_div(DECIMAL_PART_HALF_POW)?)?,
+        })
+    }
+
+    /// [op:numeric-divide](https://www.w3.org/TR/xpath-functions/#func-numeric-divide)
+    #[inline]
+    pub fn checked_div(&self, rhs: impl Into<Self>) -> Option<Self> {
+        //TODO: better algorithm to keep precision
+        Some(Self {
+            value: self
+                .value
+                .checked_mul(DECIMAL_PART_HALF_POW)?
+                .checked_div(rhs.into().value)?
+                .checked_mul(DECIMAL_PART_HALF_POW)?,
+        })
+    }
+
+    /// TODO: XSD? is well defined for not integer
+    pub fn checked_rem(&self, rhs: impl Into<Self>) -> Option<Self> {
+        Some(Self {
+            value: self.value.checked_rem(rhs.into().value)?,
+        })
+    }
+
+    pub fn checked_rem_euclid(&self, rhs: impl Into<Self>) -> Option<Self> {
+        Some(Self {
+            value: self.value.checked_rem_euclid(rhs.into().value)?,
+        })
+    }
+
+    /// [fn:abs](https://www.w3.org/TR/xpath-functions/#func-abs)
+    #[inline]
+    pub const fn abs(&self) -> Decimal {
+        Self {
+            value: self.value.abs(),
+        }
+    }
+
+    /// [fn:round](https://www.w3.org/TR/xpath-functions/#func-round)
+    #[inline]
+    pub fn round(&self) -> Decimal {
+        let value = self.value / DECIMAL_PART_POW_MINUS_ONE;
+        Self {
+            value: if value >= 0 {
+                (value / 10 + if value % 10 >= 5 { 1 } else { 0 }) * DECIMAL_PART_POW
+            } else {
+                (value / 10 + if -value % 10 > 5 { -1 } else { 0 }) * DECIMAL_PART_POW
+            },
+        }
+    }
+
+    /// [fn:ceiling](https://www.w3.org/TR/xpath-functions/#func-ceiling)
+    #[inline]
+    pub fn ceil(&self) -> Decimal {
+        Self {
+            value: if self.value >= 0 && self.value % DECIMAL_PART_POW != 0 {
+                (self.value / DECIMAL_PART_POW + 1) * DECIMAL_PART_POW
+            } else {
+                (self.value / DECIMAL_PART_POW) * DECIMAL_PART_POW
+            },
+        }
+    }
+
+    /// [fn:floor](https://www.w3.org/TR/xpath-functions/#func-floor)
+    #[inline]
+    pub fn floor(&self) -> Decimal {
+        Self {
+            value: if self.value >= 0 || self.value % DECIMAL_PART_POW == 0 {
+                (self.value / DECIMAL_PART_POW) * DECIMAL_PART_POW
+            } else {
+                (self.value / DECIMAL_PART_POW - 1) * DECIMAL_PART_POW
+            },
+        }
+    }
+
+    pub const fn is_negative(&self) -> bool {
+        self.value < 0
+    }
+
+    pub const fn is_positive(&self) -> bool {
+        self.value > 0
+    }
+
+    /// Creates a `Decimal` from a `f32` without taking care of precision
+    #[inline]
+    pub(crate) fn from_f32(v: f32) -> Self {
+        Self::from_f64(v.into())
+    }
+
+    /// Creates a `f32` from a `Decimal` without taking care of precision
+    #[inline]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn to_f32(&self) -> f32 {
+        self.to_f64() as f32
+    }
+
+    /// Creates a `Decimal` from a `f64` without taking care of precision
+    #[inline]
+    #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+    pub(crate) fn from_f64(v: f64) -> Self {
+        Self {
+            value: (v * (DECIMAL_PART_POW as f64)) as i128,
+        }
+    }
+
+    /// Creates a `f64` from a `Decimal` without taking care of precision
+    #[inline]
+    #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+    pub fn to_f64(&self) -> f64 {
+        (self.value as f64) / (DECIMAL_PART_POW as f64)
+    }
+
+    pub(super) const fn as_i128(&self) -> i128 {
+        self.value / DECIMAL_PART_POW
     }
 }
 
@@ -146,7 +291,7 @@ impl FromStr for Decimal {
             _ => (1, 0),
         };
 
-        let mut value = 0i128;
+        let mut value = 0_i128;
         let mut with_before_dot = false;
         while cursor < input.len() && b'0' <= input[cursor] && input[cursor] <= b'9' {
             value = value
@@ -246,7 +391,7 @@ impl From<DecimalOverflowError> for ParseDecimalError {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct DecimalOverflowError;
 
 impl fmt::Display for DecimalOverflowError {
@@ -259,6 +404,7 @@ impl Error for DecimalOverflowError {}
 
 impl fmt::Display for Decimal {
     /// Formats the decimal following its canonical representation
+    #[allow(clippy::cast_possible_truncation)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.value == 0 {
             return if let Some(width) = f.width() {
@@ -289,8 +435,7 @@ impl fmt::Display for Decimal {
             .iter()
             .cloned()
             .enumerate()
-            .find(|(_, v)| *v != b'0')
-            .map(|(i, _)| i)
+            .find_map(|(i, v)| if v == b'0' { None } else { Some(i) })
             .unwrap_or(40);
 
         if last_non_zero >= DECIMAL_PART_DIGITS {
@@ -340,149 +485,6 @@ impl Neg for Decimal {
         Self {
             value: self.value.neg(),
         }
-    }
-}
-
-impl Decimal {
-    pub fn to_le_bytes(&self) -> [u8; 16] {
-        self.value.to_le_bytes()
-    }
-
-    /// [op:numeric-add](https://www.w3.org/TR/xpath-functions/#func-numeric-add)
-    #[inline]
-    pub fn checked_add(&self, rhs: impl Into<Self>) -> Option<Self> {
-        Some(Self {
-            value: self.value.checked_add(rhs.into().value)?,
-        })
-    }
-
-    /// [op:numeric-subtract](https://www.w3.org/TR/xpath-functions/#func-numeric-subtract)
-    #[inline]
-    pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<Self> {
-        Some(Self {
-            value: self.value.checked_sub(rhs.into().value)?,
-        })
-    }
-
-    /// [op:numeric-multiply](https://www.w3.org/TR/xpath-functions/#func-numeric-multiply)
-    #[inline]
-    pub fn checked_mul(&self, rhs: impl Into<Self>) -> Option<Self> {
-        //TODO: better algorithm to keep precision
-        Some(Self {
-            value: self
-                .value
-                .checked_div(DECIMAL_PART_HALF_POW)?
-                .checked_mul(rhs.into().value.checked_div(DECIMAL_PART_HALF_POW)?)?,
-        })
-    }
-
-    /// [op:numeric-divide](https://www.w3.org/TR/xpath-functions/#func-numeric-divide)
-    #[inline]
-    pub fn checked_div(&self, rhs: impl Into<Self>) -> Option<Self> {
-        //TODO: better algorithm to keep precision
-        Some(Self {
-            value: self
-                .value
-                .checked_mul(DECIMAL_PART_HALF_POW)?
-                .checked_div(rhs.into().value)?
-                .checked_mul(DECIMAL_PART_HALF_POW)?,
-        })
-    }
-
-    /// TODO: XSD? is well defined for not integer
-    pub fn checked_rem(&self, rhs: impl Into<Self>) -> Option<Self> {
-        Some(Self {
-            value: self.value.checked_rem(rhs.into().value)?,
-        })
-    }
-
-    pub fn checked_rem_euclid(&self, rhs: impl Into<Self>) -> Option<Self> {
-        Some(Self {
-            value: self.value.checked_rem_euclid(rhs.into().value)?,
-        })
-    }
-
-    /// [fn:abs](https://www.w3.org/TR/xpath-functions/#func-abs)
-    #[inline]
-    pub fn abs(&self) -> Decimal {
-        Self {
-            value: self.value.abs(),
-        }
-    }
-
-    /// [fn:round](https://www.w3.org/TR/xpath-functions/#func-round)
-    #[inline]
-    pub fn round(&self) -> Decimal {
-        let value = self.value / DECIMAL_PART_POW_MINUS_ONE;
-        Self {
-            value: if value >= 0 {
-                (value / 10 + if value % 10 >= 5 { 1 } else { 0 }) * DECIMAL_PART_POW
-            } else {
-                (value / 10 + if -value % 10 > 5 { -1 } else { 0 }) * DECIMAL_PART_POW
-            },
-        }
-    }
-
-    /// [fn:ceiling](https://www.w3.org/TR/xpath-functions/#func-ceiling)
-    #[inline]
-    pub fn ceil(&self) -> Decimal {
-        Self {
-            value: if self.value >= 0 && self.value % DECIMAL_PART_POW != 0 {
-                (self.value / DECIMAL_PART_POW + 1) * DECIMAL_PART_POW
-            } else {
-                (self.value / DECIMAL_PART_POW) * DECIMAL_PART_POW
-            },
-        }
-    }
-
-    /// [fn:floor](https://www.w3.org/TR/xpath-functions/#func-floor)
-    #[inline]
-    pub fn floor(&self) -> Decimal {
-        Self {
-            value: if self.value >= 0 || self.value % DECIMAL_PART_POW == 0 {
-                (self.value / DECIMAL_PART_POW) * DECIMAL_PART_POW
-            } else {
-                (self.value / DECIMAL_PART_POW - 1) * DECIMAL_PART_POW
-            },
-        }
-    }
-
-    pub fn is_negative(&self) -> bool {
-        self.value < 0
-    }
-
-    pub fn is_positive(&self) -> bool {
-        self.value > 0
-    }
-
-    /// Creates a `Decimal` from a `f32` without taking care of precision
-    #[inline]
-    pub(crate) fn from_f32(v: f32) -> Self {
-        Self::from_f64(v.into())
-    }
-
-    /// Creates a `f32` from a `Decimal` without taking care of precision
-    #[inline]
-    pub fn to_f32(&self) -> f32 {
-        self.to_f64() as f32
-    }
-
-    /// Creates a `Decimal` from a `f64` without taking care of precision
-    #[inline]
-    pub(crate) fn from_f64(v: f64) -> Self {
-        Self {
-            value: (v * (DECIMAL_PART_POW as f64)) as i128,
-        }
-    }
-
-    /// Creates a `f64` from a `Decimal` without taking care of precision
-    #[inline]
-    pub fn to_f64(&self) -> f64 {
-        (self.value as f64) / (DECIMAL_PART_POW as f64)
-    }
-
-    pub(super) fn as_i128(&self) -> i128 {
-        self.value / DECIMAL_PART_POW
     }
 }
 

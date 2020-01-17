@@ -31,7 +31,7 @@ pub use crate::sparql::model::Variable;
 /// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/)
 pub trait PreparedQuery {
     /// Evaluates the query and returns its results
-    fn exec(&self) -> Result<QueryResult>;
+    fn exec(&self) -> Result<QueryResult<'_>>;
 }
 
 /// An implementation of `PreparedQuery` for internal use
@@ -59,7 +59,7 @@ enum SimplePreparedQueryAction<S: StoreConnection> {
 }
 
 impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
-    pub(crate) fn new(connection: S, query: &str, options: QueryOptions) -> Result<Self> {
+    pub(crate) fn new(connection: S, query: &str, options: QueryOptions<'_>) -> Result<Self> {
         let dataset = DatasetView::new(connection, options.default_graph_as_union);
         Ok(Self(match read_sparql_query(query, options.base_iri)? {
             QueryVariants::Select {
@@ -110,11 +110,11 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
         }))
     }
 
-    /// Builds SimplePreparedQuery from an existing `GraphPattern`. This is used to support federated queries via `SERVICE` clauses
+    /// Builds `SimplePreparedQuery` from an existing `GraphPattern`. This is used to support federated queries via `SERVICE` clauses
     pub(crate) fn new_from_pattern(
         connection: S,
         pattern: &GraphPattern,
-        options: QueryOptions,
+        options: QueryOptions<'_>,
     ) -> Result<Self> {
         let dataset = DatasetView::new(connection, options.default_graph_as_union);
         let (plan, variables) = PlanBuilder::build(dataset.encoder(), pattern)?;
@@ -132,23 +132,21 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
 }
 
 impl<S: StoreConnection> PreparedQuery for SimplePreparedQuery<S> {
-    fn exec(&self) -> Result<QueryResult> {
+    fn exec(&self) -> Result<QueryResult<'_>> {
         match &self.0 {
             SimplePreparedQueryAction::Select {
                 plan,
                 variables,
                 evaluator,
-            } => evaluator.evaluate_select_plan(&plan, &variables),
-            SimplePreparedQueryAction::Ask { plan, evaluator } => {
-                evaluator.evaluate_ask_plan(&plan)
-            }
+            } => evaluator.evaluate_select_plan(plan, variables),
+            SimplePreparedQueryAction::Ask { plan, evaluator } => evaluator.evaluate_ask_plan(plan),
             SimplePreparedQueryAction::Construct {
                 plan,
                 construct,
                 evaluator,
-            } => evaluator.evaluate_construct_plan(&plan, &construct),
+            } => evaluator.evaluate_construct_plan(plan, construct),
             SimplePreparedQueryAction::Describe { plan, evaluator } => {
-                evaluator.evaluate_describe_plan(&plan)
+                evaluator.evaluate_describe_plan(plan)
             }
         }
     }
@@ -211,7 +209,7 @@ impl<'a> QueryOptions<'a> {
     }
 
     /// Consider the union of all graphs in the repository as the default graph
-    pub fn with_default_graph_as_union(mut self) -> Self {
+    pub const fn with_default_graph_as_union(mut self) -> Self {
         self.default_graph_as_union = true;
         self
     }

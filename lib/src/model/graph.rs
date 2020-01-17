@@ -43,9 +43,13 @@ impl SimpleGraph {
         subject: &'a NamedOrBlankNode,
         predicate: &'a NamedNode,
     ) -> impl Iterator<Item = &Term> + 'a {
-        self.iter()
-            .filter(move |t| t.subject() == subject && t.predicate() == predicate)
-            .map(|t| t.object())
+        self.iter().filter_map(move |t| {
+            if t.subject() == subject && t.predicate() == predicate {
+                Some(t.object())
+            } else {
+                None
+            }
+        })
     }
 
     pub fn object_for_subject_predicate<'a>(
@@ -62,9 +66,13 @@ impl SimpleGraph {
         subject: &'a NamedOrBlankNode,
         object: &'a Term,
     ) -> impl Iterator<Item = &NamedNode> + 'a {
-        self.iter()
-            .filter(move |t| t.subject() == subject && t.object() == object)
-            .map(|t| t.predicate())
+        self.iter().filter_map(move |t| {
+            if t.subject() == subject && t.object() == object {
+                Some(t.predicate())
+            } else {
+                None
+            }
+        })
     }
 
     pub fn triples_for_predicate<'a>(
@@ -79,9 +87,13 @@ impl SimpleGraph {
         predicate: &'a NamedNode,
         object: &'a Term,
     ) -> impl Iterator<Item = &NamedOrBlankNode> + 'a {
-        self.iter()
-            .filter(move |t| t.predicate() == predicate && t.object() == object)
-            .map(|t| t.subject())
+        self.iter().filter_map(move |t| {
+            if t.predicate() == predicate && t.object() == object {
+                Some(t.subject())
+            } else {
+                None
+            }
+        })
     }
 
     pub fn triples_for_object<'a>(
@@ -157,7 +169,7 @@ impl Extend<Triple> for SimpleGraph {
 }
 
 impl fmt::Display for SimpleGraph {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for t in &self.triples {
             writeln!(f, "{}", t)?;
         }

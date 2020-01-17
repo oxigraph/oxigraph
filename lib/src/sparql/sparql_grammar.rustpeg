@@ -944,7 +944,7 @@ BlankNode -> BlankNode =
         if state.used_bnodes.contains(b) {
             Err("Already used blank node id")
         } else {
-            Ok(state.bnodes_map.entry(b.to_string()).or_insert_with(BlankNode::default).clone())
+            Ok(*state.bnodes_map.entry(b.to_string()).or_insert_with(BlankNode::default))
         }
     } /
     ANON { BlankNode::default() }
@@ -961,7 +961,9 @@ PNAME_NS -> &'input str = ns:$(PN_PREFIX?) ':' {
 
 //[141]
 PNAME_LN -> Iri<String> = ns:PNAME_NS local:$(PN_LOCAL) {?
-    if let Some(iri) = state.namespaces.get(ns).map(|v| v.clone() + &unescape_pn_local(local)) {
+    if let Some(base) = state.namespaces.get(ns) {
+        let mut iri = base.clone();
+        iri.push_str(&unescape_pn_local(local));
         Iri::parse(iri).map_err(|_| "IRI parsing failed")
     } else {
         Err("Prefix not found")

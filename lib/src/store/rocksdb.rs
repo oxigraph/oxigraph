@@ -59,8 +59,6 @@ const GSPO_CF: &str = "gspo";
 const GPOS_CF: &str = "gpos";
 const GOSP_CF: &str = "gosp";
 
-const EMPTY_BUF: [u8; 0] = [0 as u8; 0];
-
 //TODO: indexes for the default graph and indexes for the named graphs (no more Optional and space saving)
 
 const COLUMN_FAMILIES: [&str; 7] = [
@@ -524,32 +522,32 @@ impl RocksDbStoreInnerTransaction<'_> {
     fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
         self.buffer.write_spog_quad(quad)?;
         self.batch
-            .put_cf(self.connection.spog_cf, &self.buffer, &EMPTY_BUF)?;
+            .put_cf(self.connection.spog_cf, &self.buffer, &[])?;
         self.buffer.clear();
 
         self.buffer.write_posg_quad(quad)?;
         self.batch
-            .put_cf(self.connection.posg_cf, &self.buffer, &EMPTY_BUF)?;
+            .put_cf(self.connection.posg_cf, &self.buffer, &[])?;
         self.buffer.clear();
 
         self.buffer.write_ospg_quad(quad)?;
         self.batch
-            .put_cf(self.connection.ospg_cf, &self.buffer, &EMPTY_BUF)?;
+            .put_cf(self.connection.ospg_cf, &self.buffer, &[])?;
         self.buffer.clear();
 
         self.buffer.write_gspo_quad(quad)?;
         self.batch
-            .put_cf(self.connection.gspo_cf, &self.buffer, &EMPTY_BUF)?;
+            .put_cf(self.connection.gspo_cf, &self.buffer, &[])?;
         self.buffer.clear();
 
         self.buffer.write_gpos_quad(quad)?;
         self.batch
-            .put_cf(self.connection.gpos_cf, &self.buffer, &EMPTY_BUF)?;
+            .put_cf(self.connection.gpos_cf, &self.buffer, &[])?;
         self.buffer.clear();
 
         self.buffer.write_gosp_quad(quad)?;
         self.batch
-            .put_cf(self.connection.gosp_cf, &self.buffer, &EMPTY_BUF)?;
+            .put_cf(self.connection.gosp_cf, &self.buffer, &[])?;
         self.buffer.clear();
 
         Ok(())

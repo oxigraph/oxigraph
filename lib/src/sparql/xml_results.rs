@@ -85,7 +85,7 @@ pub fn write_xml_results<W: Write>(results: QueryResult<'_>, sink: W) -> Result<
                                 }
                                 writer.write_event(Event::Start(literal_tag))?;
                                 writer.write_event(Event::Text(BytesText::from_plain_str(
-                                    &literal.value(),
+                                    literal.value(),
                                 )))?;
                                 writer.write_event(Event::End(BytesEnd::borrowed(b"literal")))?;
                             }
@@ -202,7 +202,7 @@ pub fn read_xml_results<'a>(source: impl BufRead + 'a) -> Result<QueryResult<'a>
                 State::Head => {
                     if event.name() == b"variable" {
                         let name = event.attributes()
-                            .filter_map(|attr| attr.ok())
+                            .filter_map(|v| v.ok())
                             .find(|attr| attr.key == b"name")
                             .ok_or_else(|| format_err!("No name attribute found for the <variable> tag"))?;
                         variables.push(name.unescape_and_decode_value(&reader)?);
@@ -314,7 +314,7 @@ impl<R: BufRead> ResultsIterator<R> {
                         if event.name() == b"binding" {
                             match event
                                 .attributes()
-                                .filter_map(|attr| attr.ok())
+                                .filter_map(|v| v.ok())
                                 .find(|attr| attr.key == b"name")
                             {
                                 Some(attr) => current_var = Some(attr.unescaped_value()?.to_vec()),

@@ -8,7 +8,8 @@ mod grammar {
         clippy::cognitive_complexity,
         clippy::many_single_char_names,
         clippy::type_complexity,
-        ellipsis_inclusive_range_patterns
+        ellipsis_inclusive_range_patterns,
+        elided_lifetimes_in_paths
     )]
 
     use crate::model::*;

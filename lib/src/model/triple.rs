@@ -162,7 +162,7 @@ impl Triple {
     }
 
     /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
-    pub fn subject(&self) -> &NamedOrBlankNode {
+    pub const fn subject(&self) -> &NamedOrBlankNode {
         &self.subject
     }
 
@@ -172,7 +172,7 @@ impl Triple {
     }
 
     /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
-    pub fn predicate(&self) -> &NamedNode {
+    pub const fn predicate(&self) -> &NamedNode {
         &self.predicate
     }
 
@@ -182,7 +182,7 @@ impl Triple {
     }
 
     /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple
-    pub fn object(&self) -> &Term {
+    pub const fn object(&self) -> &Term {
         &self.object
     }
 
@@ -244,7 +244,7 @@ impl Quad {
     }
 
     /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
-    pub fn subject(&self) -> &NamedOrBlankNode {
+    pub const fn subject(&self) -> &NamedOrBlankNode {
         &self.subject
     }
 
@@ -254,7 +254,7 @@ impl Quad {
     }
 
     /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
-    pub fn predicate(&self) -> &NamedNode {
+    pub const fn predicate(&self) -> &NamedNode {
         &self.predicate
     }
 
@@ -264,7 +264,7 @@ impl Quad {
     }
 
     /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple
-    pub fn object(&self) -> &Term {
+    pub const fn object(&self) -> &Term {
         &self.object
     }
 
@@ -274,7 +274,7 @@ impl Quad {
     }
 
     /// The name of the RDF [graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph) in which the triple is or None if it is in the [default graph](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph)
-    pub fn graph_name(&self) -> &Option<NamedOrBlankNode> {
+    pub const fn graph_name(&self) -> &Option<NamedOrBlankNode> {
         &self.graph_name
     }
 

@@ -153,10 +153,10 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 graph_name,
             } => Box::new(self.eval_plan(&*child, from).flat_map_ok(move |tuple| {
                 let mut iter = self.dataset.quads_for_pattern(
-                    get_pattern_value(&subject, &tuple),
-                    get_pattern_value(&predicate, &tuple),
-                    get_pattern_value(&object, &tuple),
-                    get_pattern_value(&graph_name, &tuple),
+                    get_pattern_value(subject, &tuple),
+                    get_pattern_value(predicate, &tuple),
+                    get_pattern_value(object, &tuple),
+                    get_pattern_value(graph_name, &tuple),
                 );
                 if subject.is_var() && subject == predicate {
                     iter = Box::new(iter.filter(|quad| match quad {
@@ -199,10 +199,10 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 let iter: EncodedTuplesIterator<'_> = Box::new(iter.map(move |quad| {
                     let quad = quad?;
                     let mut new_tuple = tuple.clone();
-                    put_pattern_value(&subject, quad.subject, &mut new_tuple);
-                    put_pattern_value(&predicate, quad.predicate, &mut new_tuple);
-                    put_pattern_value(&object, quad.object, &mut new_tuple);
-                    put_pattern_value(&graph_name, quad.graph_name, &mut new_tuple);
+                    put_pattern_value(subject, quad.subject, &mut new_tuple);
+                    put_pattern_value(predicate, quad.predicate, &mut new_tuple);
+                    put_pattern_value(object, quad.object, &mut new_tuple);
+                    put_pattern_value(graph_name, quad.graph_name, &mut new_tuple);
                     Ok(new_tuple)
                 }));
                 iter
@@ -214,15 +214,16 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 object,
                 graph_name,
             } => Box::new(self.eval_plan(&*child, from).flat_map_ok(move |tuple| {
-                let input_subject = get_pattern_value(&subject, &tuple);
-                let input_object = get_pattern_value(&object, &tuple);
+                let input_subject = get_pattern_value(subject, &tuple);
+                let input_object = get_pattern_value(object, &tuple);
                 let input_graph_name =
-                    if let Some(graph_name) = get_pattern_value(&graph_name, &tuple) {
+                    if let Some(graph_name) = get_pattern_value(graph_name, &tuple) {
                         graph_name
                     } else {
-                        return Box::new(once(Err(format_err!(
+                        let result: EncodedTuplesIterator<'_> = Box::new(once(Err(format_err!(
                             "Unknown graph name is not allowed when evaluating property path"
-                        )))) as EncodedTuplesIterator<'_>;
+                        ))));
+                        return result;
                     };
                 match (input_subject, input_object) {
                     (Some(input_subject), Some(input_object)) => Box::new(
@@ -237,13 +238,12 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                                 }
                                 Err(error) => Some(Err(error)),
                             }),
-                    )
-                        as EncodedTuplesIterator<'_>,
+                    ),
                     (Some(input_subject), None) => Box::new(
                         self.eval_path_from(path, input_subject, input_graph_name)
                             .map(move |o| {
                                 let mut new_tuple = tuple.clone();
-                                put_pattern_value(&object, o?, &mut new_tuple);
+                                put_pattern_value(object, o?, &mut new_tuple);
                                 Ok(new_tuple)
                             }),
                     ),
@@ -251,7 +251,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                         self.eval_path_to(path, input_object, input_graph_name)
                             .map(move |s| {
                                 let mut new_tuple = tuple.clone();
-                                put_pattern_value(&subject, s?, &mut new_tuple);
+                                put_pattern_value(subject, s?, &mut new_tuple);
                                 Ok(new_tuple)
                             }),
                     ),
@@ -259,8 +259,8 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                         Box::new(self.eval_open_path(path, input_graph_name).map(move |so| {
                             let mut new_tuple = tuple.clone();
                             so.map(move |(s, o)| {
-                                put_pattern_value(&subject, s, &mut new_tuple);
-                                put_pattern_value(&object, o, &mut new_tuple);
+                                put_pattern_value(subject, s, &mut new_tuple);
+                                put_pattern_value(object, o, &mut new_tuple);
                                 new_tuple
                             })
                         }))
@@ -302,7 +302,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 right,
                 possible_problem_vars,
             } => {
-                let problem_vars = bind_variables_in_set(&from, &possible_problem_vars);
+                let problem_vars = bind_variables_in_set(&from, possible_problem_vars);
                 let mut filtered_from = from.clone();
                 unbind_variables(&mut filtered_from, &problem_vars);
                 let iter = LeftJoinIterator {
@@ -326,7 +326,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 Box::new(self.eval_plan(&*child, from).filter(move |tuple| {
                     match tuple {
                         Ok(tuple) => eval
-                            .eval_expression(&expression, tuple)
+                            .eval_expression(expression, tuple)
                             .and_then(|term| eval.to_bool(term))
                             .unwrap_or(false),
                         Err(_) => true,
@@ -335,7 +335,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             }
             PlanNode::Union { children } => Box::new(UnionIterator {
                 eval: self,
-                plans: &children,
+                plans: children,
                 input: from,
                 current_iterator: Box::new(empty()),
                 current_plan: 0,
@@ -348,7 +348,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 let eval = self;
                 Box::new(self.eval_plan(&*child, from).map(move |tuple| {
                     let mut tuple = tuple?;
-                    if let Some(value) = eval.eval_expression(&expression, &tuple) {
+                    if let Some(value) = eval.eval_expression(expression, &tuple) {
                         tuple.set(*position, value)
                     }
                     Ok(tuple)
@@ -370,14 +370,14 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     for comp in by {
                         match comp {
                             Comparator::Asc(expression) => {
-                                match self.cmp_according_to_expression(a, b, &expression) {
+                                match self.cmp_according_to_expression(a, b, expression) {
                                     Ordering::Greater => return Ordering::Greater,
                                     Ordering::Less => return Ordering::Less,
                                     Ordering::Equal => (),
                                 }
                             }
                             Comparator::Desc(expression) => {
-                                match self.cmp_according_to_expression(a, b, &expression) {
+                                match self.cmp_according_to_expression(a, b, expression) {
                                     Ordering::Greater => return Ordering::Less,
                                     Ordering::Less => return Ordering::Greater,
                                     Ordering::Equal => (),
@@ -451,7 +451,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                                 aggregate
                                     .parameter
                                     .as_ref()
-                                    .and_then(|parameter| self.eval_expression(&parameter, &tuple)),
+                                    .and_then(|parameter| self.eval_expression(parameter, &tuple)),
                             );
                         }
                     });
@@ -492,12 +492,12 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         from: &EncodedTuple,
     ) -> Result<EncodedTuplesIterator<'b>> {
         let service_name = self.dataset.decode_named_node(
-            get_pattern_value(service_name, &from)
+            get_pattern_value(service_name, from)
                 .ok_or_else(|| format_err!("The SERVICE name is not bound"))?,
         )?;
         Ok(self.encode_bindings(
             variables,
-            self.service_handler.handle(&service_name, &graph_pattern)?,
+            self.service_handler.handle(&service_name, graph_pattern)?,
         ))
     }
 
@@ -558,14 +558,14 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     .quads_for_pattern(Some(start), Some(*p), None, Some(graph_name))
                     .map(|t| Ok(t?.object)),
             ),
-            PlanPropertyPath::InversePath(p) => self.eval_path_to(&p, start, graph_name),
+            PlanPropertyPath::InversePath(p) => self.eval_path_to(p, start, graph_name),
             PlanPropertyPath::SequencePath(a, b) => Box::new(
-                self.eval_path_from(&a, start, graph_name)
-                    .flat_map_ok(move |middle| self.eval_path_from(&b, middle, graph_name)),
+                self.eval_path_from(a, start, graph_name)
+                    .flat_map_ok(move |middle| self.eval_path_from(b, middle, graph_name)),
             ),
             PlanPropertyPath::AlternativePath(a, b) => Box::new(
-                self.eval_path_from(&a, start, graph_name)
-                    .chain(self.eval_path_from(&b, start, graph_name)),
+                self.eval_path_from(a, start, graph_name)
+                    .chain(self.eval_path_from(b, start, graph_name)),
             ),
             PlanPropertyPath::ZeroOrMorePath(p) => {
                 Box::new(transitive_closure(Some(Ok(start)), move |e| {
@@ -577,16 +577,21 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 move |e| self.eval_path_from(p, e, graph_name),
             )),
             PlanPropertyPath::ZeroOrOnePath(p) => Box::new(hash_deduplicate(
-                once(Ok(start)).chain(self.eval_path_from(&p, start, graph_name)),
+                once(Ok(start)).chain(self.eval_path_from(p, start, graph_name)),
             )),
             PlanPropertyPath::NegatedPropertySet(ps) => Box::new(
                 self.dataset
                     .quads_for_pattern(Some(start), None, None, Some(graph_name))
-                    .filter(move |t| match t {
-                        Ok(t) => !ps.contains(&t.predicate),
-                        Err(_) => true,
-                    })
-                    .map(|t| Ok(t?.object)),
+                    .filter_map(move |t| match t {
+                        Ok(t) => {
+                            if ps.contains(&t.predicate) {
+                                None
+                            } else {
+                                Some(Ok(t.object))
+                            }
+                        }
+                        Err(e) => Some(Err(e)),
+                    }),
             ),
         }
     }
@@ -606,14 +611,14 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     .quads_for_pattern(None, Some(*p), Some(end), Some(graph_name))
                     .map(|t| Ok(t?.subject)),
             ),
-            PlanPropertyPath::InversePath(p) => self.eval_path_from(&p, end, graph_name),
+            PlanPropertyPath::InversePath(p) => self.eval_path_from(p, end, graph_name),
             PlanPropertyPath::SequencePath(a, b) => Box::new(
-                self.eval_path_to(&b, end, graph_name)
-                    .flat_map_ok(move |middle| self.eval_path_to(&a, middle, graph_name)),
+                self.eval_path_to(b, end, graph_name)
+                    .flat_map_ok(move |middle| self.eval_path_to(a, middle, graph_name)),
             ),
             PlanPropertyPath::AlternativePath(a, b) => Box::new(
-                self.eval_path_to(&a, end, graph_name)
-                    .chain(self.eval_path_to(&b, end, graph_name)),
+                self.eval_path_to(a, end, graph_name)
+                    .chain(self.eval_path_to(b, end, graph_name)),
             ),
             PlanPropertyPath::ZeroOrMorePath(p) => {
                 Box::new(transitive_closure(Some(Ok(end)), move |e| {
@@ -625,16 +630,21 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 move |e| self.eval_path_to(p, e, graph_name),
             )),
             PlanPropertyPath::ZeroOrOnePath(p) => Box::new(hash_deduplicate(
-                once(Ok(end)).chain(self.eval_path_to(&p, end, graph_name)),
+                once(Ok(end)).chain(self.eval_path_to(p, end, graph_name)),
             )),
             PlanPropertyPath::NegatedPropertySet(ps) => Box::new(
                 self.dataset
                     .quads_for_pattern(None, None, Some(end), Some(graph_name))
-                    .filter(move |t| match t {
-                        Ok(t) => !ps.contains(&t.predicate),
-                        Err(_) => true,
-                    })
-                    .map(|t| Ok(t?.subject)),
+                    .filter_map(move |t| match t {
+                        Ok(t) => {
+                            if ps.contains(&t.predicate) {
+                                None
+                            } else {
+                                Some(Ok(t.subject))
+                            }
+                        }
+                        Err(e) => Some(Err(e)),
+                    }),
             ),
         }
     }
@@ -654,19 +664,19 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     .map(|t| t.map(|t| (t.subject, t.object))),
             ),
             PlanPropertyPath::InversePath(p) => Box::new(
-                self.eval_open_path(&p, graph_name)
+                self.eval_open_path(p, graph_name)
                     .map(|t| t.map(|(s, o)| (o, s))),
             ),
             PlanPropertyPath::SequencePath(a, b) => Box::new(
-                self.eval_open_path(&a, graph_name)
+                self.eval_open_path(a, graph_name)
                     .flat_map_ok(move |(start, middle)| {
-                        self.eval_path_from(&b, middle, graph_name)
+                        self.eval_path_from(b, middle, graph_name)
                             .map(move |end| Ok((start, end?)))
                     }),
             ),
             PlanPropertyPath::AlternativePath(a, b) => Box::new(
-                self.eval_open_path(&a, graph_name)
-                    .chain(self.eval_open_path(&b, graph_name)),
+                self.eval_open_path(a, graph_name)
+                    .chain(self.eval_open_path(b, graph_name)),
             ),
             PlanPropertyPath::ZeroOrMorePath(p) => Box::new(transitive_closure(
                 self.get_subject_or_object_identity_pairs(graph_name), //TODO: avoid to inject everything
@@ -684,16 +694,21 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             )),
             PlanPropertyPath::ZeroOrOnePath(p) => Box::new(hash_deduplicate(
                 self.get_subject_or_object_identity_pairs(graph_name)
-                    .chain(self.eval_open_path(&p, graph_name)),
+                    .chain(self.eval_open_path(p, graph_name)),
             )),
             PlanPropertyPath::NegatedPropertySet(ps) => Box::new(
                 self.dataset
                     .quads_for_pattern(None, None, None, Some(graph_name))
-                    .filter(move |t| match t {
-                        Ok(t) => !ps.contains(&t.predicate),
-                        Err(_) => true,
-                    })
-                    .map(|t| t.map(|t| (t.subject, t.object))),
+                    .filter_map(move |t| match t {
+                        Ok(t) => {
+                            if ps.contains(&t.predicate) {
+                                None
+                            } else {
+                                Some(Ok((t.subject, t.object)))
+                            }
+                        }
+                        Err(e) => Some(Err(e)),
+                    }),
             ),
         }
     }
@@ -708,6 +723,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             .map(|e| e.map(|e| (e, e)))
     }
 
+    #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
     fn eval_expression<'b>(
         &'b self,
         expression: &PlanExpression,
@@ -1056,7 +1072,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     self.to_string_and_language(self.eval_expression(arg, tuple)?)?;
                 let replacement =
                     self.to_simple_string(self.eval_expression(replacement, tuple)?)?;
-                self.build_plain_literal(&regex.replace_all(&text, &replacement as &str), language)
+                self.build_plain_literal(&regex.replace_all(&text, replacement.as_str()), language)
             }
             PlanExpression::UCase(e) => {
                 let (value, language) =
@@ -1073,7 +1089,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     self.eval_expression(arg1, tuple)?,
                     self.eval_expression(arg2, tuple)?,
                 )?;
-                Some((&arg1).starts_with(&arg2 as &str).into())
+                Some((&arg1).starts_with(arg2.as_str()).into())
             }
             PlanExpression::EncodeForURI(ltrl) => {
                 let ltlr = self.to_string(self.eval_expression(ltrl, tuple)?)?;
@@ -1107,21 +1123,21 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     self.eval_expression(arg1, tuple)?,
                     self.eval_expression(arg2, tuple)?,
                 )?;
-                Some((&arg1).ends_with(&arg2 as &str).into())
+                Some((&arg1).ends_with(arg2.as_str()).into())
             }
             PlanExpression::Contains(arg1, arg2) => {
                 let (arg1, arg2, _) = self.to_argument_compatible_strings(
                     self.eval_expression(arg1, tuple)?,
                     self.eval_expression(arg2, tuple)?,
                 )?;
-                Some((&arg1).contains(&arg2 as &str).into())
+                Some((&arg1).contains(arg2.as_str()).into())
             }
             PlanExpression::StrBefore(arg1, arg2) => {
                 let (arg1, arg2, language) = self.to_argument_compatible_strings(
                     self.eval_expression(arg1, tuple)?,
                     self.eval_expression(arg2, tuple)?,
                 )?;
-                if let Some(position) = (&arg1).find(&arg2 as &str) {
+                if let Some(position) = (&arg1).find(arg2.as_str()) {
                     self.build_plain_literal(&arg1[..position], language)
                 } else {
                     Some(ENCODED_EMPTY_STRING_LITERAL)
@@ -1132,7 +1148,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     self.eval_expression(arg1, tuple)?,
                     self.eval_expression(arg2, tuple)?,
                 )?;
-                if let Some(position) = (&arg1).find(&arg2 as &str) {
+                if let Some(position) = (&arg1).find(arg2.as_str()) {
                     self.build_plain_literal(&arg1[position + arg2.len()..], language)
                 } else {
                     Some(ENCODED_EMPTY_STRING_LITERAL)
@@ -1294,7 +1310,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 EncodedTerm::DoubleLiteral(value) => Some(value.into()),
                 EncodedTerm::IntegerLiteral(value) => Some((value as f64).into()),
                 EncodedTerm::DecimalLiteral(value) => Some(value.to_f64().into()),
-                EncodedTerm::BooleanLiteral(value) => Some(if value { 1f64 } else { 0f64 }.into()),
+                EncodedTerm::BooleanLiteral(value) => {
+                    Some(if value { 1_f64 } else { 0_f64 }.into())
+                }
                 EncodedTerm::StringLiteral { value_id } => {
                     parse_double_str(&*self.dataset.get_str(value_id).ok()??)
                 }
@@ -1305,7 +1323,9 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 EncodedTerm::DoubleLiteral(value) => Some((value as f32).into()),
                 EncodedTerm::IntegerLiteral(value) => Some((value as f32).into()),
                 EncodedTerm::DecimalLiteral(value) => Some(value.to_f32().into()),
-                EncodedTerm::BooleanLiteral(value) => Some(if value { 1f32 } else { 0f32 }.into()),
+                EncodedTerm::BooleanLiteral(value) => {
+                    Some(if value { 1_f32 } else { 0_f32 }.into())
+                }
                 EncodedTerm::StringLiteral { value_id } => {
                     parse_float_str(&*self.dataset.get_str(value_id).ok()??)
                 }
@@ -1376,8 +1396,8 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         match term {
             EncodedTerm::BooleanLiteral(value) => Some(value),
             EncodedTerm::StringLiteral { .. } => Some(term != ENCODED_EMPTY_STRING_LITERAL),
-            EncodedTerm::FloatLiteral(value) => Some(value != 0f32),
-            EncodedTerm::DoubleLiteral(value) => Some(value != 0f64),
+            EncodedTerm::FloatLiteral(value) => Some(value != 0_f32),
+            EncodedTerm::DoubleLiteral(value) => Some(value != 0_f64),
             EncodedTerm::IntegerLiteral(value) => Some(value != 0),
             EncodedTerm::DecimalLiteral(value) => Some(value != Decimal::default()),
             _ => None,
@@ -1528,8 +1548,8 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         tuple: &EncodedTuple,
     ) -> Option<NumericBinaryOperands> {
         NumericBinaryOperands::new(
-            self.eval_expression(&e1, tuple)?,
-            self.eval_expression(&e2, tuple)?,
+            self.eval_expression(e1, tuple)?,
+            self.eval_expression(e2, tuple)?,
         )
     }
 
@@ -1596,7 +1616,11 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         }))
     }
 
-    #[allow(clippy::float_cmp)]
+    #[allow(
+        clippy::float_cmp,
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss
+    )]
     fn equals(&self, a: EncodedTerm, b: EncodedTerm) -> Option<bool> {
         match a {
             EncodedTerm::DefaultGraph
@@ -1717,6 +1741,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         }
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn partial_cmp_literals(&self, a: EncodedTerm, b: EncodedTerm) -> Option<Ordering> {
         match a {
             EncodedTerm::StringLiteral { value_id: a } => {
@@ -1801,7 +1826,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         tuple: &EncodedTuple,
     ) -> Option<EncodedTerm> {
         let input = self.to_simple_string(self.eval_expression(arg, tuple)?)?;
-        let hash = hex::encode(H::new().chain(&input as &str).result());
+        let hash = hex::encode(H::new().chain(input.as_str()).result());
         self.build_string_literal(&hash)
     }
 }
@@ -1821,6 +1846,7 @@ enum NumericBinaryOperands {
 }
 
 impl NumericBinaryOperands {
+    #[allow(clippy::cast_precision_loss)]
     fn new(a: EncodedTerm, b: EncodedTerm) -> Option<Self> {
         match (a, b) {
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {

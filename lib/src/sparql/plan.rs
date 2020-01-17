@@ -165,11 +165,11 @@ impl PlanNode {
                 set.insert(*position);
                 child.add_maybe_bound_variables(set);
             }
-            PlanNode::Service { child, .. } => child.add_maybe_bound_variables(set),
-            PlanNode::Sort { child, .. } => child.add_maybe_bound_variables(set),
-            PlanNode::HashDeduplicate { child } => child.add_maybe_bound_variables(set),
-            PlanNode::Skip { child, .. } => child.add_maybe_bound_variables(set),
-            PlanNode::Limit { child, .. } => child.add_maybe_bound_variables(set),
+            PlanNode::Service { child, .. }
+            | PlanNode::Sort { child, .. }
+            | PlanNode::HashDeduplicate { child }
+            | PlanNode::Skip { child, .. }
+            | PlanNode::Limit { child, .. } => child.add_maybe_bound_variables(set),
             PlanNode::Project { mapping, child } => {
                 let child_bound = child.maybe_bound_variables();
                 for (child_i, output_i) in mapping.iter() {
@@ -374,7 +374,7 @@ impl EncodedTuple {
     }
 
     pub fn contains(&self, index: usize) -> bool {
-        self.inner.get(index).map_or(false, |v| v.is_some())
+        self.inner.get(index).map_or(false, Option::is_some)
     }
 
     pub fn get(&self, index: usize) -> Option<EncodedTerm> {

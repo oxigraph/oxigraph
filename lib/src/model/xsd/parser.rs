@@ -167,32 +167,32 @@ pub fn parse_value<'a, T>(
 //TODO: check every computation
 
 // [6]   duYearFrag ::= unsignedNoDecimalPtNumeral 'Y'
-fn du_year_frag(input: &str) -> XsdResult<i64> {
+fn du_year_frag(input: &str) -> XsdResult<'_, i64> {
     terminated(unsigned_no_decimal_pt_numeral, char('Y'))(input)
 }
 
 // [7]   duMonthFrag ::= unsignedNoDecimalPtNumeral 'M'
-fn du_month_frag(input: &str) -> XsdResult<i64> {
+fn du_month_frag(input: &str) -> XsdResult<'_, i64> {
     terminated(unsigned_no_decimal_pt_numeral, char('M'))(input)
 }
 
 //  [8]   duDayFrag ::= unsignedNoDecimalPtNumeral 'D'
-fn du_day_frag(input: &str) -> XsdResult<i64> {
+fn du_day_frag(input: &str) -> XsdResult<'_, i64> {
     terminated(unsigned_no_decimal_pt_numeral, char('D'))(input)
 }
 
 // [9]   duHourFrag ::= unsignedNoDecimalPtNumeral 'H'
-fn du_hour_frag(input: &str) -> XsdResult<i64> {
+fn du_hour_frag(input: &str) -> XsdResult<'_, i64> {
     terminated(unsigned_no_decimal_pt_numeral, char('H'))(input)
 }
 
 // [10]   duMinuteFrag ::= unsignedNoDecimalPtNumeral 'M'
-fn du_minute_frag(input: &str) -> XsdResult<i64> {
+fn du_minute_frag(input: &str) -> XsdResult<'_, i64> {
     terminated(unsigned_no_decimal_pt_numeral, char('M'))(input)
 }
 
 // [11]   duSecondFrag ::= (unsignedNoDecimalPtNumeral | unsignedDecimalPtNumeral) 'S'
-fn du_second_frag(input: &str) -> XsdResult<Decimal> {
+fn du_second_frag(input: &str) -> XsdResult<'_, Decimal> {
     terminated(
         map_res(
             recognize(tuple((digit0, opt(preceded(char('.'), digit0))))),
@@ -203,7 +203,7 @@ fn du_second_frag(input: &str) -> XsdResult<Decimal> {
 }
 
 // [12]   duYearMonthFrag ::= (duYearFrag duMonthFrag?) | duMonthFrag
-fn du_year_month_frag(input: &str) -> XsdResult<i64> {
+fn du_year_month_frag(input: &str) -> XsdResult<'_, i64> {
     alt((
         map(tuple((du_year_frag, opt(du_month_frag))), |(y, m)| {
             12 * y + m.unwrap_or(0)
@@ -213,7 +213,7 @@ fn du_year_month_frag(input: &str) -> XsdResult<i64> {
 }
 
 // [13]   duTimeFrag ::= 'T' ((duHourFrag duMinuteFrag? duSecondFrag?) | (duMinuteFrag duSecondFrag?) | duSecondFrag)
-fn du_time_frag(input: &str) -> XsdResult<Decimal> {
+fn du_time_frag(input: &str) -> XsdResult<'_, Decimal> {
     preceded(
         char('T'),
         alt((
@@ -236,7 +236,7 @@ fn du_time_frag(input: &str) -> XsdResult<Decimal> {
 }
 
 // [14]   duDayTimeFrag ::= (duDayFrag duTimeFrag?) | duTimeFrag
-fn du_day_time_frag(input: &str) -> XsdResult<Decimal> {
+fn du_day_time_frag(input: &str) -> XsdResult<'_, Decimal> {
     alt((
         map_res(tuple((du_day_frag, opt(du_time_frag))), |(d, t)| {
             Decimal::from(d)
@@ -250,7 +250,7 @@ fn du_day_time_frag(input: &str) -> XsdResult<Decimal> {
 }
 
 // [15]   durationLexicalRep ::= '-'? 'P' ((duYearMonthFrag duDayTimeFrag?) | duDayTimeFrag)
-pub fn duration_lexical_rep(input: &str) -> XsdResult<Duration> {
+pub fn duration_lexical_rep(input: &str) -> XsdResult<'_, Duration> {
     map(
         tuple((
             opt(char('-')),
@@ -276,7 +276,7 @@ pub fn duration_lexical_rep(input: &str) -> XsdResult<Duration> {
 }
 
 // [16]   dateTimeLexicalRep ::= yearFrag '-' monthFrag '-' dayFrag 'T' ((hourFrag ':' minuteFrag ':' secondFrag) | endOfDayFrag) timezoneFrag?
-pub fn date_time_lexical_rep(input: &str) -> XsdResult<DateTime> {
+pub fn date_time_lexical_rep(input: &str) -> XsdResult<'_, DateTime> {
     map_res(
         tuple((
             year_frag,
@@ -301,7 +301,7 @@ pub fn date_time_lexical_rep(input: &str) -> XsdResult<DateTime> {
 }
 
 // [17]   timeLexicalRep ::= ((hourFrag ':' minuteFrag ':' secondFrag) | endOfDayFrag) timezoneFrag?
-pub fn time_lexical_rep(input: &str) -> XsdResult<Time> {
+pub fn time_lexical_rep(input: &str) -> XsdResult<'_, Time> {
     map_res(
         tuple((
             alt((
@@ -318,7 +318,7 @@ pub fn time_lexical_rep(input: &str) -> XsdResult<Time> {
 }
 
 // [18]   dateLexicalRep ::= yearFrag '-' monthFrag '-' dayFrag timezoneFrag?   Constraint:  Day-of-month Representations
-pub fn date_lexical_rep(input: &str) -> XsdResult<Date> {
+pub fn date_lexical_rep(input: &str) -> XsdResult<'_, Date> {
     map_res(
         tuple((
             year_frag,
@@ -333,12 +333,12 @@ pub fn date_lexical_rep(input: &str) -> XsdResult<Date> {
 }
 
 //  [46]   unsignedNoDecimalPtNumeral ::= digit+
-fn unsigned_no_decimal_pt_numeral(input: &str) -> XsdResult<i64> {
+fn unsigned_no_decimal_pt_numeral(input: &str) -> XsdResult<'_, i64> {
     map_res(digit1, |i| i64::from_str(i))(input)
 }
 
 // [56]   yearFrag ::= '-'? (([1-9] digit digit digit+)) | ('0' digit digit digit))
-fn year_frag(input: &str) -> XsdResult<i64> {
+fn year_frag(input: &str) -> XsdResult<'_, i64> {
     map_res(
         recognize(tuple((
             opt(char('-')),
@@ -349,35 +349,36 @@ fn year_frag(input: &str) -> XsdResult<i64> {
 }
 
 // [57]   monthFrag ::= ('0' [1-9]) | ('1' [0-2])
-fn month_frag(input: &str) -> XsdResult<u8> {
+fn month_frag(input: &str) -> XsdResult<'_, u8> {
     map_res(take_while_m_n(2, 2, |c: char| c.is_ascii_digit()), |v| {
         parsed_u8_range(v, 1, 12)
     })(input)
 }
 
 // [58]   dayFrag ::= ('0' [1-9]) | ([12] digit) | ('3' [01])
-fn day_frag(input: &str) -> XsdResult<u8> {
+fn day_frag(input: &str) -> XsdResult<'_, u8> {
     map_res(take_while_m_n(2, 2, |c: char| c.is_ascii_digit()), |v| {
         parsed_u8_range(v, 1, 31)
     })(input)
 }
 
 // [59]   hourFrag ::= ([01] digit) | ('2' [0-3])
-fn hour_frag(input: &str) -> XsdResult<u8> {
+fn hour_frag(input: &str) -> XsdResult<'_, u8> {
     map_res(take_while_m_n(2, 2, |c: char| c.is_ascii_digit()), |v| {
         parsed_u8_range(v, 0, 23)
     })(input)
 }
 
 // [60]   minuteFrag ::= [0-5] digit
-fn minute_frag(input: &str) -> XsdResult<u8> {
+fn minute_frag(input: &str) -> XsdResult<'_, u8> {
     map_res(take_while_m_n(2, 2, |c: char| c.is_ascii_digit()), |v| {
         parsed_u8_range(v, 0, 59)
     })(input)
 }
 
 // [61]   secondFrag ::= ([0-5] digit) ('.' digit+)?
-fn second_frag(input: &str) -> XsdResult<Decimal> {
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn second_frag(input: &str) -> XsdResult<'_, Decimal> {
     map_res(
         recognize(tuple((
             take_while_m_n(2, 2, |c: char| c.is_ascii_digit()),
@@ -404,7 +405,7 @@ fn second_frag(input: &str) -> XsdResult<Decimal> {
 }
 
 // [62]   endOfDayFrag ::= '24:00:00' ('.' '0'+)?
-fn end_of_day_frag(input: &str) -> XsdResult<(u8, u8, Decimal)> {
+fn end_of_day_frag(input: &str) -> XsdResult<'_, (u8, u8, Decimal)> {
     map(
         recognize(tuple((
             tag("24:00:00"),
@@ -415,7 +416,7 @@ fn end_of_day_frag(input: &str) -> XsdResult<(u8, u8, Decimal)> {
 }
 
 // [63]   timezoneFrag ::= 'Z' | ('+' | '-') (('0' digit | '1' [0-3]) ':' minuteFrag | '14:00')
-fn timezone_frag(input: &str) -> XsdResult<TimezoneOffset> {
+fn timezone_frag(input: &str) -> XsdResult<'_, TimezoneOffset> {
     alt((
         map(char('Z'), |_| TimezoneOffset::utc()),
         map(

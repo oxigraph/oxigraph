@@ -237,7 +237,7 @@ impl<'a> fmt::Display for SparqlTripleOrPathPattern<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
             TripleOrPathPattern::Triple(tp) => write!(f, "{}", tp),
-            TripleOrPathPattern::Path(ppp) => write!(f, "{}", SparqlPathPattern(&ppp)),
+            TripleOrPathPattern::Path(ppp) => write!(f, "{}", SparqlPathPattern(ppp)),
         }
     }
 }
@@ -605,7 +605,7 @@ impl fmt::Display for GraphPattern {
                     write!(f, "{{")?;
                     for i in 0..values.len() {
                         if let Some(ref val) = values[i] {
-                            write!(f, " {} → {} ", variables[i], val)?;
+                            write!(f, " {} \u{2192} {} ", variables[i], val)?;
                         }
                     }
                     write!(f, "}}")?;
@@ -712,7 +712,7 @@ impl GraphPattern {
             }
             GraphPattern::Extend(p, v, _) => {
                 p.add_visible_variables(vars);
-                adds_if_has_name(vars, &v);
+                adds_if_has_name(vars, v);
             }
             GraphPattern::Minus(a, _) => a.add_visible_variables(vars),
             GraphPattern::Service(_, p, _) => p.add_visible_variables(vars),
@@ -818,7 +818,7 @@ impl<'a> fmt::Display for SparqlGraphPattern<'a> {
                 f,
                 "{{ SELECT {} WHERE {{ {} }} GROUP BY {} }}",
                 agg.iter()
-                    .map(|(a, v)| format!("({} AS {})", SparqlAggregation(&a), v))
+                    .map(|(a, v)| format!("({} AS {})", SparqlAggregation(a), v))
                     .chain(group.iter().map(|e| e.to_string()))
                     .collect::<Vec<String>>()
                     .join(" "),
@@ -963,13 +963,15 @@ impl fmt::Display for Aggregation {
         match self {
             Aggregation::Count(e, distinct) => {
                 if *distinct {
-                    e.as_ref()
-                        .map(|ex| write!(f, "COUNT(DISTINCT {})", ex))
-                        .unwrap_or_else(|| write!(f, "COUNT(DISTINCT *)"))
+                    if let Some(ex) = e {
+                        write!(f, "COUNT(DISTINCT {})", ex)
+                    } else {
+                        write!(f, "COUNT(DISTINCT *)")
+                    }
+                } else if let Some(ex) = e {
+                    write!(f, "COUNT({})", ex)
                 } else {
-                    e.as_ref()
-                        .map(|ex| write!(f, "COUNT({})", ex))
-                        .unwrap_or_else(|| write!(f, "COUNT(*)"))
+                    write!(f, "COUNT(*)")
                 }
             }
             Aggregation::Sum(e, distinct) => {
@@ -1009,31 +1011,25 @@ impl fmt::Display for Aggregation {
             }
             Aggregation::GroupConcat(e, distinct, sep) => {
                 if *distinct {
-                    sep.as_ref()
-                        .map(|s| {
-                            write!(
-                                f,
-                                "Aggregation(Distinct({}), GroupConcat, {{\"separator\" → {}}})",
-                                e,
-                                fmt_str(s)
-                            )
-                        })
-                        .unwrap_or_else(|| {
-                            write!(f, "Aggregation(Distinct({}), GroupConcat, {{}})", e)
-                        })
+                    if let Some(s) = sep {
+                        write!(
+                            f,
+                            "Aggregation(Distinct({}), GroupConcat, {{\"separator\" \u{2192} {}}})",
+                            e,
+                            fmt_str(s)
+                        )
+                    } else {
+                        write!(f, "Aggregation(Distinct({}), GroupConcat, {{}})", e)
+                    }
+                } else if let Some(s) = sep {
+                    write!(
+                        f,
+                        "Aggregation({}, GroupConcat, {{\"separator\" \u{2192} {}}})",
+                        e,
+                        fmt_str(s)
+                    )
                 } else {
-                    sep.as_ref()
-                        .map(|s| {
-                            write!(
-                                f,
-                                "Aggregation({}, GroupConcat, {{\"separator\" → {}}})",
-                                e,
-                                fmt_str(s)
-                            )
-                        })
-                        .unwrap_or_else(|| {
-                            write!(f, "Aggregation(Distinct({}), GroupConcat, {{}})", e)
-                        })
+                    write!(f, "Aggregation(Distinct({}), GroupConcat, {{}})", e)
                 }
             }
         }
@@ -1120,7 +1116,7 @@ impl<'a> fmt::Display for SparqlAggregation<'a> {
     }
 }
 
-fn fmt_str(value: &str) -> rio::Literal {
+fn fmt_str(value: &str) -> rio::Literal<'_> {
     rio::Literal::Simple { value }
 }
 
@@ -1241,14 +1237,7 @@ impl fmt::Display for QueryVariants {
                 if let Some(base_iri) = base_iri {
                     writeln!(f, "BASE <{}>", base_iri)?;
                 }
-                write!(
-                    f,
-                    "{}",
-                    SparqlGraphRootPattern {
-                        algebra: &algebra,
-                        dataset: &dataset
-                    }
-                )
+                write!(f, "{}", SparqlGraphRootPattern { algebra, dataset })
             }
             QueryVariants::Construct {
                 construct,
@@ -1269,7 +1258,7 @@ impl fmt::Display for QueryVariants {
                         .join(" . "),
                     dataset,
                     SparqlGraphRootPattern {
-                        algebra: &algebra,
+                        algebra,
                         dataset: &EMPTY_DATASET
                     }
                 )
@@ -1287,7 +1276,7 @@ impl fmt::Display for QueryVariants {
                     "DESCRIBE * {} WHERE {{ {} }}",
                     dataset,
                     SparqlGraphRootPattern {
-                        algebra: &algebra,
+                        algebra,
                         dataset: &EMPTY_DATASET
                     }
                 )
@@ -1305,7 +1294,7 @@ impl fmt::Display for QueryVariants {
                     "ASK {} WHERE {{ {} }}",
                     dataset,
                     SparqlGraphRootPattern {
-                        algebra: &algebra,
+                        algebra,
                         dataset: &EMPTY_DATASET
                     }
                 )

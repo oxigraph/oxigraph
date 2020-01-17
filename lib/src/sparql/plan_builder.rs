@@ -96,7 +96,7 @@ impl<E: Encoder> PlanBuilder<E> {
             }
             GraphPattern::Extend(p, v, e) => PlanNode::Extend {
                 child: Box::new(self.build_for_graph_pattern(p, variables, graph_name)?),
-                position: variable_key(variables, &v),
+                position: variable_key(variables, v),
                 expression: self.build_for_expression(e, variables, graph_name)?,
             },
             GraphPattern::Minus(a, b) => PlanNode::AntiJoin {
@@ -398,11 +398,9 @@ impl<E: Encoder> PlanBuilder<E> {
                     variables,
                     graph_name,
                 )?)),
-                Function::Concat => PlanExpression::Concat(self.expression_list(
-                    &parameters,
-                    variables,
-                    graph_name,
-                )?),
+                Function::Concat => {
+                    PlanExpression::Concat(self.expression_list(parameters, variables, graph_name)?)
+                }
                 Function::SubStr => PlanExpression::SubStr(
                     Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
                     Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
@@ -528,11 +526,9 @@ impl<E: Encoder> PlanBuilder<E> {
                     variables,
                     graph_name,
                 )?)),
-                Function::Coalesce => PlanExpression::Coalesce(self.expression_list(
-                    &parameters,
-                    variables,
-                    graph_name,
-                )?),
+                Function::Coalesce => PlanExpression::Coalesce(
+                    self.expression_list(parameters, variables, graph_name)?,
+                ),
                 Function::If => PlanExpression::If(
                     Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
                     Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
@@ -767,41 +763,41 @@ impl<E: Encoder> PlanBuilder<E> {
             Aggregation::Count(e, distinct) => PlanAggregation {
                 function: PlanAggregationFunction::Count,
                 parameter: match e {
-                    Some(e) => Some(self.build_for_expression(&e, variables, graph_name)?),
+                    Some(e) => Some(self.build_for_expression(e, variables, graph_name)?),
                     None => None,
                 },
                 distinct: *distinct,
             },
             Aggregation::Sum(e, distinct) => PlanAggregation {
                 function: PlanAggregationFunction::Sum,
-                parameter: Some(self.build_for_expression(&e, variables, graph_name)?),
+                parameter: Some(self.build_for_expression(e, variables, graph_name)?),
                 distinct: *distinct,
             },
             Aggregation::Min(e, distinct) => PlanAggregation {
                 function: PlanAggregationFunction::Min,
-                parameter: Some(self.build_for_expression(&e, variables, graph_name)?),
+                parameter: Some(self.build_for_expression(e, variables, graph_name)?),
                 distinct: *distinct,
             },
             Aggregation::Max(e, distinct) => PlanAggregation {
                 function: PlanAggregationFunction::Max,
-                parameter: Some(self.build_for_expression(&e, variables, graph_name)?),
+                parameter: Some(self.build_for_expression(e, variables, graph_name)?),
                 distinct: *distinct,
             },
             Aggregation::Avg(e, distinct) => PlanAggregation {
                 function: PlanAggregationFunction::Avg,
-                parameter: Some(self.build_for_expression(&e, variables, graph_name)?),
+                parameter: Some(self.build_for_expression(e, variables, graph_name)?),
                 distinct: *distinct,
             },
             Aggregation::Sample(e, distinct) => PlanAggregation {
                 function: PlanAggregationFunction::Sample,
-                parameter: Some(self.build_for_expression(&e, variables, graph_name)?),
+                parameter: Some(self.build_for_expression(e, variables, graph_name)?),
                 distinct: *distinct,
             },
             Aggregation::GroupConcat(e, distinct, separator) => PlanAggregation {
                 function: PlanAggregationFunction::GroupConcat {
                     separator: separator.clone().unwrap_or_else(|| " ".to_string()),
                 },
-                parameter: Some(self.build_for_expression(&e, variables, graph_name)?),
+                parameter: Some(self.build_for_expression(e, variables, graph_name)?),
                 distinct: *distinct,
             },
         })
@@ -897,12 +893,13 @@ impl<E: Encoder> PlanBuilder<E> {
         from: &[Variable],
         to: &mut Vec<Variable>,
     ) -> usize {
-        if let Some(to_id) = to
-            .iter()
-            .enumerate()
-            .find(|(_, var)| *var == &from[from_id])
-            .map(|(to_id, _)| to_id)
-        {
+        if let Some(to_id) = to.iter().enumerate().find_map(|(to_id, var)| {
+            if *var == from[from_id] {
+                Some(to_id)
+            } else {
+                None
+            }
+        }) {
             to_id
         } else {
             to.push(Variable::default());

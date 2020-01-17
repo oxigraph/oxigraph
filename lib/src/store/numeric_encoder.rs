@@ -30,7 +30,7 @@ const XSD_TIME_ID: u128 = 0x7af4_6a16_1b02_35d7_9a79_07ba_3da9_48bb;
 const XSD_DURATION_ID: u128 = 0x78ab_8431_984b_6b06_c42d_6271_b82e_487d;
 
 pub fn get_str_id(value: &str) -> u128 {
-    let mut id = [0 as u8; 16];
+    let mut id = [0; 16];
     id.copy_from_slice(&Md5::new().chain(value).result());
     u128::from_le_bytes(id)
 }
@@ -465,7 +465,7 @@ impl From<&Term> for EncodedTerm {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct EncodedQuad {
     pub subject: EncodedTerm,
     pub predicate: EncodedTerm,
@@ -474,7 +474,7 @@ pub struct EncodedQuad {
 }
 
 impl EncodedQuad {
-    pub fn new(
+    pub const fn new(
         subject: EncodedTerm,
         predicate: EncodedTerm,
         object: EncodedTerm,
@@ -872,7 +872,7 @@ pub trait Encoder {
             predicate: self.encode_named_node(quad.predicate())?,
             object: self.encode_term(quad.object())?,
             graph_name: match quad.graph_name() {
-                Some(graph_name) => self.encode_named_or_blank_node(&graph_name)?,
+                Some(graph_name) => self.encode_named_or_blank_node(graph_name)?,
                 None => ENCODED_DEFAULT_GRAPH,
             },
         })
@@ -891,19 +891,19 @@ pub trait Encoder {
         })
     }
 
-    fn encode_rio_named_node(&mut self, named_node: rio::NamedNode) -> Result<EncodedTerm>;
+    fn encode_rio_named_node(&mut self, named_node: rio::NamedNode<'_>) -> Result<EncodedTerm>;
 
     fn encode_rio_blank_node(
         &mut self,
-        blank_node: rio::BlankNode,
+        blank_node: rio::BlankNode<'_>,
         bnodes_map: &mut HashMap<String, u128>,
     ) -> Result<EncodedTerm>;
 
-    fn encode_rio_literal(&mut self, literal: rio::Literal) -> Result<EncodedTerm>;
+    fn encode_rio_literal(&mut self, literal: rio::Literal<'_>) -> Result<EncodedTerm>;
 
     fn encode_rio_named_or_blank_node(
         &mut self,
-        term: rio::NamedOrBlankNode,
+        term: rio::NamedOrBlankNode<'_>,
         bnodes_map: &mut HashMap<String, u128>,
     ) -> Result<EncodedTerm> {
         match term {
@@ -916,7 +916,7 @@ pub trait Encoder {
 
     fn encode_rio_term(
         &mut self,
-        term: rio::Term,
+        term: rio::Term<'_>,
         bnodes_map: &mut HashMap<String, u128>,
     ) -> Result<EncodedTerm> {
         match term {
@@ -928,7 +928,7 @@ pub trait Encoder {
 
     fn encode_rio_quad(
         &mut self,
-        quad: rio::Quad,
+        quad: rio::Quad<'_>,
         bnodes_map: &mut HashMap<String, u128>,
     ) -> Result<EncodedQuad> {
         Ok(EncodedQuad {
@@ -944,7 +944,7 @@ pub trait Encoder {
 
     fn encode_rio_triple_in_graph(
         &mut self,
-        triple: rio::Triple,
+        triple: rio::Triple<'_>,
         graph_name: EncodedTerm,
         bnodes_map: &mut HashMap<String, u128>,
     ) -> Result<EncodedQuad> {
@@ -958,7 +958,7 @@ pub trait Encoder {
 }
 
 impl<S: StrContainer> Encoder for S {
-    fn encode_rio_named_node(&mut self, named_node: rio::NamedNode) -> Result<EncodedTerm> {
+    fn encode_rio_named_node(&mut self, named_node: rio::NamedNode<'_>) -> Result<EncodedTerm> {
         let iri_id = get_str_id(named_node.iri);
         self.insert_str(iri_id, named_node.iri)?;
         Ok(EncodedTerm::NamedNode { iri_id })
@@ -966,7 +966,7 @@ impl<S: StrContainer> Encoder for S {
 
     fn encode_rio_blank_node(
         &mut self,
-        blank_node: rio::BlankNode,
+        blank_node: rio::BlankNode<'_>,
         bnodes_map: &mut HashMap<String, u128>,
     ) -> Result<EncodedTerm> {
         Ok(if let Some(id) = bnodes_map.get(blank_node.id) {
@@ -978,7 +978,7 @@ impl<S: StrContainer> Encoder for S {
         })
     }
 
-    fn encode_rio_literal(&mut self, literal: rio::Literal) -> Result<EncodedTerm> {
+    fn encode_rio_literal(&mut self, literal: rio::Literal<'_>) -> Result<EncodedTerm> {
         Ok(match literal {
             rio::Literal::Simple { value } => {
                 let value_id = get_str_id(value);

@@ -48,7 +48,7 @@ fn split_hash_buckets<'a>(
             new_bnodes_by_hash.insert(hash, bnodes); // Nothing to improve
         } else {
             for bnode in bnodes {
-                let mut starts = vec![NamedOrBlankNode::from(bnode.clone())];
+                let mut starts = vec![NamedOrBlankNode::from(*bnode)];
                 for _ in 0..distance {
                     let mut new_starts = Vec::default();
                     for s in starts {
@@ -71,7 +71,7 @@ fn split_hash_buckets<'a>(
                 hash.hash(&mut hasher); // We start with the previous hash
 
                 // NB: we need to sort the triples to have the same hash
-                let mut po_set: BTreeSet<PredicateObject> = BTreeSet::default();
+                let mut po_set: BTreeSet<PredicateObject<'_>> = BTreeSet::default();
                 for start in &starts {
                     for po in predicate_objects_for_subject(graph, start) {
                         match &po.object {
@@ -86,7 +86,7 @@ fn split_hash_buckets<'a>(
                     po.hash(&mut hasher);
                 }
 
-                let mut sp_set: BTreeSet<SubjectPredicate> = BTreeSet::default();
+                let mut sp_set: BTreeSet<SubjectPredicate<'_>> = BTreeSet::default();
                 let term_starts: Vec<_> = starts.into_iter().map(|t| t.into()).collect();
                 for start in &term_starts {
                     for sp in subject_predicates_for_object(graph, start) {
@@ -123,7 +123,7 @@ fn build_and_check_containment_from_hashes<'a>(
 ) -> bool {
     if let Some((a_node, remaining_a_node)) = current_a_nodes.split_last() {
         let b_nodes = current_b_nodes.iter().cloned().collect::<Vec<_>>();
-        for b_node in b_nodes.into_iter() {
+        for b_node in b_nodes {
             current_b_nodes.remove(b_node);
             a_to_b_mapping.insert(a_node, b_node);
             if check_is_contained_focused(a_to_b_mapping, a_node, a, b)
@@ -260,11 +260,7 @@ pub fn are_graphs_isomorphic(a: &SimpleGraph, b: &SimpleGraph) -> bool {
     b_bnodes_by_hash.insert(0, graph_blank_nodes(&b_bnodes_triples));
 
     for distance in 0..5 {
-        let max_size = a_bnodes_by_hash
-            .values()
-            .map(|l| l.len())
-            .max()
-            .unwrap_or(0);
+        let max_size = a_bnodes_by_hash.values().map(Vec::len).max().unwrap_or(0);
         if max_size < 2 {
             break; // We only have small buckets
         }

@@ -83,14 +83,18 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
     type Transaction = StoreRepositoryTransaction<S::Transaction>;
     type PreparedQuery = SimplePreparedQuery<S>;
 
-    fn prepare_query(&self, query: &str, options: QueryOptions) -> Result<SimplePreparedQuery<S>> {
+    fn prepare_query(
+        &self,
+        query: &str,
+        options: QueryOptions<'_>,
+    ) -> Result<SimplePreparedQuery<S>> {
         SimplePreparedQuery::new(self.inner.clone(), query, options) //TODO: avoid clone
     }
 
     fn prepare_query_from_pattern(
         &self,
         pattern: &GraphPattern,
-        options: QueryOptions,
+        options: QueryOptions<'_>,
     ) -> Result<Self::PreparedQuery> {
         SimplePreparedQuery::new_from_pattern(self.inner.clone(), pattern, options)
         //TODO: avoid clone
@@ -154,13 +158,13 @@ impl<S: StoreConnection> RepositoryConnection for StoreRepositoryConnection<S> {
 
     fn insert(&mut self, quad: &Quad) -> Result<()> {
         let mut transaction = self.auto_transaction();
-        transaction.insert(&quad)?;
+        transaction.insert(quad)?;
         transaction.inner.commit()
     }
 
     fn remove(&mut self, quad: &Quad) -> Result<()> {
         let mut transaction = self.auto_transaction();
-        transaction.remove(&quad)?;
+        transaction.remove(quad)?;
         transaction.inner.commit()
     }
 }
@@ -177,7 +181,7 @@ impl<T: StoreTransaction> RepositoryTransaction for StoreRepositoryTransaction<T
         to_graph_name: Option<&NamedOrBlankNode>,
         base_iri: Option<&str>,
     ) -> Result<()> {
-        let base_iri = base_iri.unwrap_or(&"");
+        let base_iri = base_iri.unwrap_or("");
         match syntax {
             GraphSyntax::NTriples => {
                 self.load_from_triple_parser(NTriplesParser::new(reader)?, to_graph_name)
@@ -197,7 +201,7 @@ impl<T: StoreTransaction> RepositoryTransaction for StoreRepositoryTransaction<T
         syntax: DatasetSyntax,
         base_iri: Option<&str>,
     ) -> Result<()> {
-        let base_iri = base_iri.unwrap_or(&"");
+        let base_iri = base_iri.unwrap_or("");
         match syntax {
             DatasetSyntax::NQuads => self.load_from_quad_parser(NQuadsParser::new(reader)?),
             DatasetSyntax::TriG => self.load_from_quad_parser(TriGParser::new(reader, base_iri)?),

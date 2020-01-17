@@ -84,13 +84,13 @@ pub trait RepositoryConnection: Clone {
     /// }
     /// # Result::Ok(())
     /// ```
-    fn prepare_query(&self, query: &str, options: QueryOptions) -> Result<Self::PreparedQuery>;
+    fn prepare_query(&self, query: &str, options: QueryOptions<'_>) -> Result<Self::PreparedQuery>;
 
     /// This is similar to `prepare_query`, but useful if a SPARQL query has already been parsed, which is the case when building `ServiceHandler`s for federated queries with `SERVICE` clauses. For examples, look in the tests.
     fn prepare_query_from_pattern(
         &self,
         graph_pattern: &GraphPattern,
-        options: QueryOptions,
+        options: QueryOptions<'_>,
     ) -> Result<Self::PreparedQuery>;
 
     /// Retrieves quads with a filter on each quad component
