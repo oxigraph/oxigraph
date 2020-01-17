@@ -3,7 +3,6 @@ use crate::model::vocab::xsd;
 use crate::model::xsd::*;
 use crate::model::*;
 use crate::Result;
-use byteorder::{LittleEndian, ReadBytesExt};
 use failure::format_err;
 use md5::digest::Digest;
 use md5::Md5;
@@ -516,32 +515,68 @@ pub trait TermReader {
 
 impl<R: Read> TermReader for R {
     fn read_term(&mut self) -> Result<EncodedTerm> {
-        match self.read_u8()? {
+        let mut type_buffer = [0];
+        self.read_exact(&mut type_buffer)?;
+        match type_buffer[0] {
             TYPE_DEFAULT_GRAPH_ID => Ok(EncodedTerm::DefaultGraph),
-            TYPE_NAMED_NODE_ID => Ok(EncodedTerm::NamedNode {
-                iri_id: self.read_u128::<LittleEndian>()?,
-            }),
-            TYPE_BLANK_NODE_ID => Ok(EncodedTerm::BlankNode {
-                id: self.read_u128::<LittleEndian>()?,
-            }),
-            TYPE_LANG_STRING_LITERAL_ID => Ok(EncodedTerm::LangStringLiteral {
-                language_id: self.read_u128::<LittleEndian>()?,
-                value_id: self.read_u128::<LittleEndian>()?,
-            }),
-            TYPE_TYPED_LITERAL_ID => Ok(EncodedTerm::TypedLiteral {
-                datatype_id: self.read_u128::<LittleEndian>()?,
-                value_id: self.read_u128::<LittleEndian>()?,
-            }),
-            TYPE_STRING_LITERAL => Ok(EncodedTerm::StringLiteral {
-                value_id: self.read_u128::<LittleEndian>()?,
-            }),
+            TYPE_NAMED_NODE_ID => {
+                let mut buffer = [0; 16];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::NamedNode {
+                    iri_id: u128::from_le_bytes(buffer),
+                })
+            }
+            TYPE_BLANK_NODE_ID => {
+                let mut buffer = [0; 16];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::BlankNode {
+                    id: u128::from_le_bytes(buffer),
+                })
+            }
+            TYPE_LANG_STRING_LITERAL_ID => {
+                let mut language_buffer = [0; 16];
+                self.read_exact(&mut language_buffer)?;
+                let mut value_buffer = [0; 16];
+                self.read_exact(&mut value_buffer)?;
+                Ok(EncodedTerm::LangStringLiteral {
+                    language_id: u128::from_le_bytes(language_buffer),
+                    value_id: u128::from_le_bytes(value_buffer),
+                })
+            }
+            TYPE_TYPED_LITERAL_ID => {
+                let mut datatype_buffer = [0; 16];
+                self.read_exact(&mut datatype_buffer)?;
+                let mut value_buffer = [0; 16];
+                self.read_exact(&mut value_buffer)?;
+                Ok(EncodedTerm::TypedLiteral {
+                    datatype_id: u128::from_le_bytes(datatype_buffer),
+                    value_id: u128::from_le_bytes(value_buffer),
+                })
+            }
+            TYPE_STRING_LITERAL => {
+                let mut buffer = [0; 16];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::StringLiteral {
+                    value_id: u128::from_le_bytes(buffer),
+                })
+            }
             TYPE_BOOLEAN_LITERAL_TRUE => Ok(EncodedTerm::BooleanLiteral(true)),
             TYPE_BOOLEAN_LITERAL_FALSE => Ok(EncodedTerm::BooleanLiteral(false)),
-            TYPE_FLOAT_LITERAL => Ok(EncodedTerm::FloatLiteral(self.read_f32::<LittleEndian>()?)),
-            TYPE_DOUBLE_LITERAL => Ok(EncodedTerm::DoubleLiteral(self.read_f64::<LittleEndian>()?)),
-            TYPE_INTEGER_LITERAL => Ok(EncodedTerm::IntegerLiteral(
-                self.read_i64::<LittleEndian>()?,
-            )),
+            TYPE_FLOAT_LITERAL => {
+                let mut buffer = [0; 4];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::FloatLiteral(f32::from_le_bytes(buffer)))
+            }
+            TYPE_DOUBLE_LITERAL => {
+                let mut buffer = [0; 8];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::DoubleLiteral(f64::from_le_bytes(buffer)))
+            }
+            TYPE_INTEGER_LITERAL => {
+                let mut buffer = [0; 8];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::IntegerLiteral(i64::from_le_bytes(buffer)))
+            }
             TYPE_DECIMAL_LITERAL => {
                 let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
