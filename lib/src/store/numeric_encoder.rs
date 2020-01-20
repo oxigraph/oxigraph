@@ -30,9 +30,7 @@ const XSD_TIME_ID: u128 = 0x7af4_6a16_1b02_35d7_9a79_07ba_3da9_48bb;
 const XSD_DURATION_ID: u128 = 0x78ab_8431_984b_6b06_c42d_6271_b82e_487d;
 
 pub fn get_str_id(value: &str) -> u128 {
-    let mut id = [0; 16];
-    id.copy_from_slice(&Md5::new().chain(value).result());
-    u128::from_le_bytes(id)
+    u128::from_le_bytes(Md5::new().chain(value).result().into())
 }
 
 const TYPE_DEFAULT_GRAPH_ID: u8 = 0;
@@ -523,14 +521,14 @@ impl<R: Read> TermReader for R {
                 let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
                 Ok(EncodedTerm::NamedNode {
-                    iri_id: u128::from_le_bytes(buffer),
+                    iri_id: u128::from_be_bytes(buffer),
                 })
             }
             TYPE_BLANK_NODE_ID => {
                 let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
                 Ok(EncodedTerm::BlankNode {
-                    id: u128::from_le_bytes(buffer),
+                    id: u128::from_be_bytes(buffer),
                 })
             }
             TYPE_LANG_STRING_LITERAL_ID => {
@@ -539,8 +537,8 @@ impl<R: Read> TermReader for R {
                 let mut value_buffer = [0; 16];
                 self.read_exact(&mut value_buffer)?;
                 Ok(EncodedTerm::LangStringLiteral {
-                    language_id: u128::from_le_bytes(language_buffer),
-                    value_id: u128::from_le_bytes(value_buffer),
+                    language_id: u128::from_be_bytes(language_buffer),
+                    value_id: u128::from_be_bytes(value_buffer),
                 })
             }
             TYPE_TYPED_LITERAL_ID => {
@@ -549,15 +547,15 @@ impl<R: Read> TermReader for R {
                 let mut value_buffer = [0; 16];
                 self.read_exact(&mut value_buffer)?;
                 Ok(EncodedTerm::TypedLiteral {
-                    datatype_id: u128::from_le_bytes(datatype_buffer),
-                    value_id: u128::from_le_bytes(value_buffer),
+                    datatype_id: u128::from_be_bytes(datatype_buffer),
+                    value_id: u128::from_be_bytes(value_buffer),
                 })
             }
             TYPE_STRING_LITERAL => {
                 let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
                 Ok(EncodedTerm::StringLiteral {
-                    value_id: u128::from_le_bytes(buffer),
+                    value_id: u128::from_be_bytes(buffer),
                 })
             }
             TYPE_BOOLEAN_LITERAL_TRUE => Ok(EncodedTerm::BooleanLiteral(true)),
@@ -565,44 +563,44 @@ impl<R: Read> TermReader for R {
             TYPE_FLOAT_LITERAL => {
                 let mut buffer = [0; 4];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::FloatLiteral(f32::from_le_bytes(buffer)))
+                Ok(EncodedTerm::FloatLiteral(f32::from_be_bytes(buffer)))
             }
             TYPE_DOUBLE_LITERAL => {
                 let mut buffer = [0; 8];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::DoubleLiteral(f64::from_le_bytes(buffer)))
+                Ok(EncodedTerm::DoubleLiteral(f64::from_be_bytes(buffer)))
             }
             TYPE_INTEGER_LITERAL => {
                 let mut buffer = [0; 8];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::IntegerLiteral(i64::from_le_bytes(buffer)))
+                Ok(EncodedTerm::IntegerLiteral(i64::from_be_bytes(buffer)))
             }
             TYPE_DECIMAL_LITERAL => {
                 let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::DecimalLiteral(Decimal::from_le_bytes(buffer)))
+                Ok(EncodedTerm::DecimalLiteral(Decimal::from_be_bytes(buffer)))
             }
             TYPE_DATE_LITERAL => {
                 let mut buffer = [0; 18];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::DateLiteral(Date::from_le_bytes(buffer)))
+                Ok(EncodedTerm::DateLiteral(Date::from_be_bytes(buffer)))
             }
             TYPE_TIME_LITERAL => {
                 let mut buffer = [0; 18];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::TimeLiteral(Time::from_le_bytes(buffer)))
+                Ok(EncodedTerm::TimeLiteral(Time::from_be_bytes(buffer)))
             }
             TYPE_DATE_TIME_LITERAL => {
                 let mut buffer = [0; 18];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::DateTimeLiteral(DateTime::from_le_bytes(
+                Ok(EncodedTerm::DateTimeLiteral(DateTime::from_be_bytes(
                     buffer,
                 )))
             }
             TYPE_DURATION_LITERAL => {
                 let mut buffer = [0; 24];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::DurationLiteral(Duration::from_le_bytes(
+                Ok(EncodedTerm::DurationLiteral(Duration::from_be_bytes(
                     buffer,
                 )))
             }
@@ -703,35 +701,35 @@ pub trait TermWriter {
 
 impl<W: Write> TermWriter for W {
     fn write_term(&mut self, term: EncodedTerm) -> Result<()> {
-        self.write_all(&term.type_id().to_le_bytes())?;
+        self.write_all(&term.type_id().to_be_bytes())?;
         match term {
             EncodedTerm::DefaultGraph => {}
-            EncodedTerm::NamedNode { iri_id } => self.write_all(&iri_id.to_le_bytes())?,
-            EncodedTerm::BlankNode { id } => self.write_all(&id.to_le_bytes())?,
-            EncodedTerm::StringLiteral { value_id } => self.write_all(&value_id.to_le_bytes())?,
+            EncodedTerm::NamedNode { iri_id } => self.write_all(&iri_id.to_be_bytes())?,
+            EncodedTerm::BlankNode { id } => self.write_all(&id.to_be_bytes())?,
+            EncodedTerm::StringLiteral { value_id } => self.write_all(&value_id.to_be_bytes())?,
             EncodedTerm::LangStringLiteral {
                 value_id,
                 language_id,
             } => {
-                self.write_all(&language_id.to_le_bytes())?;
-                self.write_all(&value_id.to_le_bytes())?;
+                self.write_all(&language_id.to_be_bytes())?;
+                self.write_all(&value_id.to_be_bytes())?;
             }
             EncodedTerm::TypedLiteral {
                 value_id,
                 datatype_id,
             } => {
-                self.write_all(&datatype_id.to_le_bytes())?;
-                self.write_all(&value_id.to_le_bytes())?;
+                self.write_all(&datatype_id.to_be_bytes())?;
+                self.write_all(&value_id.to_be_bytes())?;
             }
             EncodedTerm::BooleanLiteral(_) => {}
-            EncodedTerm::FloatLiteral(value) => self.write_all(&value.to_le_bytes())?,
-            EncodedTerm::DoubleLiteral(value) => self.write_all(&value.to_le_bytes())?,
-            EncodedTerm::IntegerLiteral(value) => self.write_all(&value.to_le_bytes())?,
-            EncodedTerm::DecimalLiteral(value) => self.write_all(&value.to_le_bytes())?,
-            EncodedTerm::DateLiteral(value) => self.write_all(&value.to_le_bytes())?,
-            EncodedTerm::TimeLiteral(value) => self.write_all(&value.to_le_bytes())?,
-            EncodedTerm::DateTimeLiteral(value) => self.write_all(&value.to_le_bytes())?,
-            EncodedTerm::DurationLiteral(value) => self.write_all(&value.to_le_bytes())?,
+            EncodedTerm::FloatLiteral(value) => self.write_all(&value.to_be_bytes())?,
+            EncodedTerm::DoubleLiteral(value) => self.write_all(&value.to_be_bytes())?,
+            EncodedTerm::IntegerLiteral(value) => self.write_all(&value.to_be_bytes())?,
+            EncodedTerm::DecimalLiteral(value) => self.write_all(&value.to_be_bytes())?,
+            EncodedTerm::DateLiteral(value) => self.write_all(&value.to_be_bytes())?,
+            EncodedTerm::TimeLiteral(value) => self.write_all(&value.to_be_bytes())?,
+            EncodedTerm::DateTimeLiteral(value) => self.write_all(&value.to_be_bytes())?,
+            EncodedTerm::DurationLiteral(value) => self.write_all(&value.to_be_bytes())?,
         }
         Ok(())
     }
@@ -1214,6 +1212,10 @@ fn test_encoding() {
         Literal::new_language_tagged_literal("foo", "fr").into(),
         Literal::new_language_tagged_literal("foo", "FR").into(),
         Literal::new_typed_literal("-1.32", xsd::DECIMAL.clone()).into(),
+        Literal::new_typed_literal("2020-01-01T01:01:01Z", xsd::DATE_TIME.clone()).into(),
+        Literal::new_typed_literal("2020-01-01", xsd::DATE.clone()).into(),
+        Literal::new_typed_literal("01:01:01Z", xsd::TIME.clone()).into(),
+        Literal::new_typed_literal("PT1S", xsd::DURATION.clone()).into(),
         Literal::new_typed_literal("-foo", NamedNode::new_from_string("http://foo.com")).into(),
     ];
     for term in terms {

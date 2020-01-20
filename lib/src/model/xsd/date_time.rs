@@ -44,9 +44,9 @@ impl DateTime {
         })
     }
 
-    pub fn from_le_bytes(bytes: [u8; 18]) -> Self {
+    pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
         Self {
-            timestamp: Timestamp::from_le_bytes(bytes),
+            timestamp: Timestamp::from_be_bytes(bytes),
         }
     }
 
@@ -101,8 +101,8 @@ impl DateTime {
         }
     }
 
-    pub fn to_le_bytes(&self) -> [u8; 18] {
-        self.timestamp.to_le_bytes()
+    pub fn to_be_bytes(&self) -> [u8; 18] {
+        self.timestamp.to_be_bytes()
     }
 
     /// [op:subtract-dateTimes](https://www.w3.org/TR/xpath-functions/#func-subtract-dateTimes)
@@ -217,9 +217,9 @@ impl Time {
         })
     }
 
-    pub fn from_le_bytes(bytes: [u8; 18]) -> Self {
+    pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
         Self {
-            timestamp: Timestamp::from_le_bytes(bytes),
+            timestamp: Timestamp::from_be_bytes(bytes),
         }
     }
 
@@ -247,8 +247,8 @@ impl Time {
         self.timestamp.timezone_offset()
     }
 
-    pub fn to_le_bytes(&self) -> [u8; 18] {
-        self.timestamp.to_le_bytes()
+    pub fn to_be_bytes(&self) -> [u8; 18] {
+        self.timestamp.to_be_bytes()
     }
 
     /// [op:subtract-times](https://www.w3.org/TR/xpath-functions/#func-subtract-times)
@@ -358,9 +358,9 @@ impl Date {
         })
     }
 
-    pub fn from_le_bytes(bytes: [u8; 18]) -> Self {
+    pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
         Self {
-            timestamp: Timestamp::from_le_bytes(bytes),
+            timestamp: Timestamp::from_be_bytes(bytes),
         }
     }
 
@@ -388,8 +388,8 @@ impl Date {
         self.timestamp.timezone_offset()
     }
 
-    pub fn to_le_bytes(&self) -> [u8; 18] {
-        self.timestamp.to_le_bytes()
+    pub fn to_be_bytes(&self) -> [u8; 18] {
+        self.timestamp.to_be_bytes()
     }
 
     /// [op:subtract-dates](https://www.w3.org/TR/xpath-functions/#func-subtract-dates)
@@ -458,14 +458,14 @@ impl TimezoneOffset {
         Self { offset }
     }
 
-    pub fn from_le_bytes(bytes: [u8; 2]) -> Self {
+    pub fn from_be_bytes(bytes: [u8; 2]) -> Self {
         TimezoneOffset {
-            offset: i16::from_le_bytes(bytes),
+            offset: i16::from_be_bytes(bytes),
         }
     }
 
-    pub fn to_le_bytes(self) -> [u8; 2] {
-        self.offset.to_le_bytes()
+    pub fn to_be_bytes(self) -> [u8; 2] {
+        self.offset.to_be_bytes()
     }
 }
 
@@ -601,18 +601,18 @@ impl Timestamp {
         )
     }
 
-    fn from_le_bytes(bytes: [u8; 18]) -> Self {
+    fn from_be_bytes(bytes: [u8; 18]) -> Self {
         let mut value = [0; 16];
         value.copy_from_slice(&bytes[0..16]);
         let mut timezone_offset = [0; 2];
         timezone_offset.copy_from_slice(&bytes[16..18]);
 
         Self {
-            value: Decimal::from_le_bytes(value),
+            value: Decimal::from_be_bytes(value),
             timezone_offset: if timezone_offset == [u8::MAX; 2] {
                 None
             } else {
-                Some(TimezoneOffset::from_le_bytes(timezone_offset))
+                Some(TimezoneOffset::from_be_bytes(timezone_offset))
             },
         }
     }
@@ -746,11 +746,11 @@ impl Timestamp {
         })
     }
 
-    fn to_le_bytes(&self) -> [u8; 18] {
+    fn to_be_bytes(&self) -> [u8; 18] {
         let mut bytes = [0; 18];
-        bytes[0..16].copy_from_slice(&self.value.to_le_bytes());
+        bytes[0..16].copy_from_slice(&self.value.to_be_bytes());
         bytes[16..18].copy_from_slice(&match &self.timezone_offset {
-            Some(timezone_offset) => timezone_offset.to_le_bytes(),
+            Some(timezone_offset) => timezone_offset.to_be_bytes(),
             None => [u8::MAX; 2],
         });
         bytes

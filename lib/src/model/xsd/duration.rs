@@ -29,14 +29,14 @@ impl Duration {
         }
     }
 
-    pub fn from_le_bytes(bytes: [u8; 24]) -> Self {
+    pub fn from_be_bytes(bytes: [u8; 24]) -> Self {
         let mut months = [0; 8];
         months.copy_from_slice(&bytes[0..8]);
         let mut seconds = [8; 16];
         seconds.copy_from_slice(&bytes[8..24]);
         Self {
-            months: i64::from_le_bytes(months),
-            seconds: Decimal::from_le_bytes(seconds),
+            months: i64::from_be_bytes(months),
+            seconds: Decimal::from_be_bytes(seconds),
         }
     }
 
@@ -81,10 +81,10 @@ impl Duration {
         self.seconds
     }
 
-    pub fn to_le_bytes(&self) -> [u8; 24] {
+    pub fn to_be_bytes(&self) -> [u8; 24] {
         let mut bytes = [0; 24];
-        bytes[0..8].copy_from_slice(&self.months.to_le_bytes());
-        bytes[8..24].copy_from_slice(&self.seconds.to_le_bytes());
+        bytes[0..8].copy_from_slice(&self.months.to_be_bytes());
+        bytes[8..24].copy_from_slice(&self.seconds.to_be_bytes());
         bytes
     }
 

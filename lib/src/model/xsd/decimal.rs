@@ -40,14 +40,14 @@ impl Decimal {
     }
 
     #[inline]
-    pub fn from_le_bytes(bytes: [u8; 16]) -> Self {
+    pub fn from_be_bytes(bytes: [u8; 16]) -> Self {
         Self {
-            value: i128::from_le_bytes(bytes),
+            value: i128::from_be_bytes(bytes),
         }
     }
 
-    pub fn to_le_bytes(&self) -> [u8; 16] {
-        self.value.to_le_bytes()
+    pub fn to_be_bytes(&self) -> [u8; 16] {
+        self.value.to_be_bytes()
     }
 
     /// [op:numeric-add](https://www.w3.org/TR/xpath-functions/#func-numeric-add)
