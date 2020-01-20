@@ -1,3 +1,14 @@
+#![deny(
+    future_incompatible,
+    nonstandard_style,
+    rust_2018_idioms,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unsafe_code,
+    unused_qualifications
+)]
+
 use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
@@ -43,7 +54,7 @@ pub fn main() {
     }
 }
 
-fn main_with_dataset<R: Send + Sync + 'static>(repository: Arc<R>, matches: &ArgMatches)
+fn main_with_dataset<R: Send + Sync + 'static>(repository: Arc<R>, matches: &ArgMatches<'_>)
 where
     for<'a> &'a R: Repository,
 {
