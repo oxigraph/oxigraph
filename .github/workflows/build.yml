@@ -32,3 +32,11 @@ jobs:
     - run: cargo test --verbose --all
       env:
         RUST_BACKTRACE: 1
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - run: rustup update
+      - run: cargo install wasm-pack
+      - run: wasm-pack test --node lib
