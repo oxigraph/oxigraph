@@ -29,8 +29,14 @@ rio_xml = "0.4"
 hex = "0.4"
 nom = "5"
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+
 [dev-dependencies]
 rayon = "1"
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
 
 [build-dependencies]
 peg = "0.5"

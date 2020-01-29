@@ -579,12 +579,7 @@ impl Timestamp {
     fn now() -> Result<Self, DateTimeError> {
         Timestamp::new(
             &date_time_plus_duration(
-                SystemTime::now()
-                    .duration_since(SystemTime::UNIX_EPOCH)?
-                    .try_into()
-                    .map_err(|_| DateTimeError {
-                        kind: DateTimeErrorKind::Overflow,
-                    })?,
+                since_unix_epoch()?,
                 &DateTimeSevenPropertyModel {
                     year: Some(1970),
                     month: Some(1),
@@ -755,6 +750,24 @@ impl Timestamp {
         });
         bytes
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn since_unix_epoch() -> Result<Duration, DateTimeError> {
+    Ok(Duration::new(
+        0,
+        Decimal::from_f64(js_sys::Date::now() / 1000.),
+    ))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn since_unix_epoch() -> Result<Duration, DateTimeError> {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)?
+        .try_into()
+        .map_err(|_| DateTimeError {
+            kind: DateTimeErrorKind::Overflow,
+        })
 }
 
 /// The [normalizeMonth](https://www.w3.org/TR/xmlschema11-2/#f-dt-normMo) function
