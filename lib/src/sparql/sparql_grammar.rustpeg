@@ -724,7 +724,7 @@ RelationalExpression -> Expression =
             ">=" => Expression::GreaterOrEq(Box::new(a), Box::new(b)),
             "<" => Expression::Lower(Box::new(a), Box::new(b)),
             "<=" => Expression::LowerOrEq(Box::new(a), Box::new(b)),
-            _ => panic!() // Could never happen
+            _ => unreachable!()
         }
     } /
     a:NumericExpression _ "IN"i _ b:ExpressionList { Expression::In(Box::new(a), b) } /
@@ -739,7 +739,7 @@ AdditiveExpression -> Expression =
     a:MultiplicativeExpression _ s: $('+' / '-') _ b:AdditiveExpression { match s {
         "+" => Expression::Add(Box::new(a), Box::new(b)),
         "-" => Expression::Sub(Box::new(a), Box::new(b)),
-        _ => panic!() // Could never happen
+        _ => unreachable!()
     } } / MultiplicativeExpression
 
 //[117]
@@ -747,7 +747,7 @@ MultiplicativeExpression -> Expression =
     a:UnaryExpression _ s: $('*' / '/') _ b:MultiplicativeExpression { match s {
         "*" => Expression::Mul(Box::new(a), Box::new(b)),
         "/" => Expression::Div(Box::new(a), Box::new(b)),
-        _ => panic!() // Could never happen
+        _ => unreachable!()
     } } / UnaryExpression
 
 //[118]
@@ -756,7 +756,7 @@ UnaryExpression -> Expression = s: $('!' / '+' / '-')? _ e:PrimaryExpression { m
     "+" => Expression::UnaryPlus(Box::new(e)),
     "-" => Expression::UnaryMinus(Box::new(e)),
     "" => e,
-    _ => panic!() // Could never happen
+    _ => unreachable!()
 } }
 
 //[119]

@@ -5,7 +5,6 @@ use crate::model::xsd::decimal::DecimalOverflowError;
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::fmt;
-use std::i64;
 use std::ops::Neg;
 use std::str::FromStr;
 use std::time::Duration as StdDuration;
@@ -238,10 +237,10 @@ mod tests {
     #[test]
     fn from_str() {
         let min = Duration::new(
-            i64::MIN + 1,
-            decimal::MIN.checked_add(decimal::STEP).unwrap(),
+            i64::min_value() + 1,
+            Decimal::min_value().checked_add(Decimal::step()).unwrap(),
         );
-        let max = Duration::new(i64::MAX, decimal::MAX);
+        let max = Duration::new(i64::max_value(), Decimal::max_value());
 
         assert_eq!(Duration::from_str("P1Y").unwrap().to_string(), "P1Y");
         assert_eq!(Duration::from_str("P1M").unwrap().to_string(), "P1M");

@@ -2,7 +2,6 @@ use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 use std::fmt;
 use std::fmt::Write;
-use std::i128;
 use std::ops::Neg;
 use std::str::FromStr;
 
@@ -10,13 +9,6 @@ const DECIMAL_PART_DIGITS: usize = 18;
 const DECIMAL_PART_POW: i128 = 1_000_000_000_000_000_000;
 const DECIMAL_PART_POW_MINUS_ONE: i128 = 100_000_000_000_000_000;
 const DECIMAL_PART_HALF_POW: i128 = 1_000_000_000;
-
-#[cfg(test)]
-pub(super) const MIN: Decimal = Decimal { value: i128::MIN };
-#[cfg(test)]
-pub(super) const MAX: Decimal = Decimal { value: i128::MAX };
-#[cfg(test)]
-pub(super) const STEP: Decimal = Decimal { value: 1 };
 
 /// [XML Schema `decimal` datatype](https://www.w3.org/TR/xmlschema11-2/#decimal) implementation.
 ///
@@ -188,6 +180,25 @@ impl Decimal {
 
     pub(super) const fn as_i128(&self) -> i128 {
         self.value / DECIMAL_PART_POW
+    }
+
+    #[cfg(test)]
+    pub(super) const fn min_value() -> Decimal {
+        Self {
+            value: i128::min_value(),
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) const fn max_value() -> Decimal {
+        Self {
+            value: i128::max_value(),
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) const fn step() -> Decimal {
+        Self { value: 1 }
     }
 }
 
@@ -504,7 +515,6 @@ impl TryFrom<Decimal> for i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::i64;
 
     #[test]
     fn from_str() {
@@ -521,10 +531,19 @@ mod tests {
         );
         assert_eq!(Decimal::from_str("0.1220").unwrap().to_string(), "0.122");
         assert_eq!(Decimal::from_str(".12200").unwrap().to_string(), "0.122");
-        assert_eq!(Decimal::from_str(&MAX.to_string()).unwrap(), MAX);
         assert_eq!(
-            Decimal::from_str(&MIN.checked_add(STEP).unwrap().to_string()).unwrap(),
-            MIN.checked_add(STEP).unwrap()
+            Decimal::from_str(&Decimal::max_value().to_string()).unwrap(),
+            Decimal::max_value()
+        );
+        assert_eq!(
+            Decimal::from_str(
+                &Decimal::min_value()
+                    .checked_add(Decimal::step())
+                    .unwrap()
+                    .to_string()
+            )
+            .unwrap(),
+            Decimal::min_value().checked_add(Decimal::step()).unwrap()
         );
     }
 
@@ -540,15 +559,18 @@ mod tests {
 
     #[test]
     fn add() {
-        assert!(MIN.checked_add(STEP).is_some());
-        assert!(MAX.checked_add(STEP).is_none());
-        assert_eq!(MAX.checked_add(MIN), Some(-STEP));
+        assert!(Decimal::min_value().checked_add(Decimal::step()).is_some());
+        assert!(Decimal::max_value().checked_add(Decimal::step()).is_none());
+        assert_eq!(
+            Decimal::max_value().checked_add(Decimal::min_value()),
+            Some(-Decimal::step())
+        );
     }
 
     #[test]
     fn sub() {
-        assert!(MIN.checked_sub(STEP).is_none());
-        assert!(MAX.checked_sub(STEP).is_some());
+        assert!(Decimal::min_value().checked_sub(Decimal::step()).is_none());
+        assert!(Decimal::max_value().checked_sub(Decimal::step()).is_some());
     }
 
     #[test]
@@ -611,8 +633,14 @@ mod tests {
             Decimal::from_str("-2.5").unwrap().round(),
             Decimal::from(-2)
         );
-        assert_eq!(Decimal::from(i64::MIN).round(), Decimal::from(i64::MIN));
-        assert_eq!(Decimal::from(i64::MAX).round(), Decimal::from(i64::MAX));
+        assert_eq!(
+            Decimal::from(i64::min_value()).round(),
+            Decimal::from(i64::min_value())
+        );
+        assert_eq!(
+            Decimal::from(i64::max_value()).round(),
+            Decimal::from(i64::max_value())
+        );
     }
 
     #[test]
@@ -624,8 +652,14 @@ mod tests {
             Decimal::from_str("-10.5").unwrap().ceil(),
             Decimal::from(-10)
         );
-        assert_eq!(Decimal::from(i64::MIN).ceil(), Decimal::from(i64::MIN));
-        assert_eq!(Decimal::from(i64::MAX).ceil(), Decimal::from(i64::MAX));
+        assert_eq!(
+            Decimal::from(i64::min_value()).ceil(),
+            Decimal::from(i64::min_value())
+        );
+        assert_eq!(
+            Decimal::from(i64::max_value()).ceil(),
+            Decimal::from(i64::max_value())
+        );
     }
 
     #[test]
@@ -640,7 +674,13 @@ mod tests {
             Decimal::from_str("-10.5").unwrap().floor(),
             Decimal::from(-11)
         );
-        assert_eq!(Decimal::from(i64::MIN).floor(), Decimal::from(i64::MIN));
-        assert_eq!(Decimal::from(i64::MAX).floor(), Decimal::from(i64::MAX));
+        assert_eq!(
+            Decimal::from(i64::min_value()).floor(),
+            Decimal::from(i64::min_value())
+        );
+        assert_eq!(
+            Decimal::from(i64::max_value()).floor(),
+            Decimal::from(i64::max_value())
+        );
     }
 }

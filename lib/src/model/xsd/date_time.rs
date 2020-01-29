@@ -1204,6 +1204,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::neg_cmp_op_on_partial_ord)]
     fn cmp() {
         assert!(
             Date::from_str("2004-12-25Z").unwrap() < Date::from_str("2004-12-25-05:00").unwrap()

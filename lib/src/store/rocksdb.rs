@@ -680,7 +680,7 @@ fn repository() -> Result<()> {
         let mut connection = repository.connection()?;
         connection.insert(&main_quad)?;
         for t in &all_o {
-            connection.insert(&t)?;
+            connection.insert(t)?;
         }
 
         let target = vec![main_quad];

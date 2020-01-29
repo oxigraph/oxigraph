@@ -336,12 +336,12 @@ fn to_graph(result: QueryResult<'_>, with_order: bool) -> Result<SimpleGraph> {
             let mut graph = SimpleGraph::default();
             let result_set = BlankNode::default();
             graph.insert(Triple::new(
-                result_set.clone(),
+                result_set,
                 rdf::TYPE.clone(),
                 rs::RESULT_SET.clone(),
             ));
             graph.insert(Triple::new(
-                result_set.clone(),
+                result_set,
                 rs::BOOLEAN.clone(),
                 Literal::from(value),
             ));
@@ -351,14 +351,14 @@ fn to_graph(result: QueryResult<'_>, with_order: bool) -> Result<SimpleGraph> {
             let mut graph = SimpleGraph::default();
             let result_set = BlankNode::default();
             graph.insert(Triple::new(
-                result_set.clone(),
+                result_set,
                 rdf::TYPE.clone(),
                 rs::RESULT_SET.clone(),
             ));
             let (variables, iter) = bindings.destruct();
             for variable in &variables {
                 graph.insert(Triple::new(
-                    result_set.clone(),
+                    result_set,
                     rs::RESULT_VARIABLE.clone(),
                     Literal::new_simple_literal(variable.name()?),
                 ));
@@ -366,26 +366,14 @@ fn to_graph(result: QueryResult<'_>, with_order: bool) -> Result<SimpleGraph> {
             for (i, binding_values) in iter.enumerate() {
                 let binding_values = binding_values?;
                 let solution = BlankNode::default();
-                graph.insert(Triple::new(
-                    result_set.clone(),
-                    rs::SOLUTION.clone(),
-                    solution.clone(),
-                ));
+                graph.insert(Triple::new(result_set, rs::SOLUTION.clone(), solution));
                 for i in 0..variables.len() {
                     if let Some(ref value) = binding_values[i] {
                         let binding = BlankNode::default();
+                        graph.insert(Triple::new(solution, rs::BINDING.clone(), binding));
+                        graph.insert(Triple::new(binding, rs::VALUE.clone(), value.clone()));
                         graph.insert(Triple::new(
-                            solution.clone(),
-                            rs::BINDING.clone(),
-                            binding.clone(),
-                        ));
-                        graph.insert(Triple::new(
-                            binding.clone(),
-                            rs::VALUE.clone(),
-                            value.clone(),
-                        ));
-                        graph.insert(Triple::new(
-                            binding.clone(),
+                            binding,
                             rs::VARIABLE.clone(),
                             Literal::new_simple_literal(variables[i].name()?),
                         ));
@@ -393,7 +381,7 @@ fn to_graph(result: QueryResult<'_>, with_order: bool) -> Result<SimpleGraph> {
                 }
                 if with_order {
                     graph.insert(Triple::new(
-                        solution.clone(),
+                        solution,
                         rs::INDEX.clone(),
                         Literal::from((i + 1) as i128),
                     ));
