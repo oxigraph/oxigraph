@@ -360,7 +360,7 @@ Filter -> PartialGraphPattern = "FILTER"i _ c:Constraint {
 }
 
 //[69]
-Constraint -> Expression = BrackettedExpression / BuiltInCall / FunctionCall
+Constraint -> Expression = BrackettedExpression / FunctionCall / BuiltInCall
 
 //[70]
 FunctionCall -> Expression = f: iri _ a: ArgList {
@@ -715,40 +715,47 @@ ConditionalAndExpression_item -> Expression = e:ValueLogical _ { e }
 ValueLogical -> Expression = RelationalExpression
 
 //[114]
-RelationalExpression -> Expression =
-    a:NumericExpression _ s: $("="  / "!=" / ">=" / ">" / "<=" / "<") _ b:NumericExpression {
-        match s {
-            "=" => Expression::Equal(Box::new(a), Box::new(b)),
-            "!=" => Expression::NotEqual(Box::new(a), Box::new(b)),
-            ">" => Expression::Greater(Box::new(a), Box::new(b)),
-            ">=" => Expression::GreaterOrEq(Box::new(a), Box::new(b)),
-            "<" => Expression::Lower(Box::new(a), Box::new(b)),
-            "<=" => Expression::LowerOrEq(Box::new(a), Box::new(b)),
-            _ => unreachable!()
-        }
-    } /
-    a:NumericExpression _ "IN"i _ b:ExpressionList { Expression::In(Box::new(a), b) } /
-    a:NumericExpression _ "NOT"i _ "IN"i _ b:ExpressionList { Expression::NotIn(Box::new(a), b) } /
-    NumericExpression
+RelationalExpression -> Expression = a:NumericExpression _ o: RelationalExpression_inner? { match o {
+    Some(("=", Some(b), None)) => Expression::Equal(Box::new(a), Box::new(b)),
+    Some(("!=", Some(b), None)) => Expression::NotEqual(Box::new(a), Box::new(b)),
+    Some((">", Some(b), None)) => Expression::Greater(Box::new(a), Box::new(b)),
+    Some((">=", Some(b), None)) => Expression::GreaterOrEq(Box::new(a), Box::new(b)),
+    Some(("<", Some(b), None)) => Expression::Lower(Box::new(a), Box::new(b)),
+    Some(("<=", Some(b), None)) => Expression::LowerOrEq(Box::new(a), Box::new(b)),
+    Some(("IN", None, Some(l))) => Expression::In(Box::new(a), l),
+    Some(("NOT IN", None, Some(l))) => Expression::NotIn(Box::new(a), l),
+    Some(_) => unreachable!(),
+    None => a
+} }
+RelationalExpression_inner -> (&'input str, Option<Expression>, Option<Vec<Expression>>) =
+    s: $("="  / "!=" / ">=" / ">" / "<=" / "<") _ e:NumericExpression { (s, Some(e), None) } /
+    "IN"i _ l:ExpressionList { ("IN", None, Some(l)) } /
+    "NOT"i _ "IN"i _ l:ExpressionList { ("NOT IN", None, Some(l)) }
 
 //[115]
 NumericExpression -> Expression = AdditiveExpression
 
 //[116]
-AdditiveExpression -> Expression =
-    a:MultiplicativeExpression _ s: $('+' / '-') _ b:AdditiveExpression { match s {
-        "+" => Expression::Add(Box::new(a), Box::new(b)),
-        "-" => Expression::Sub(Box::new(a), Box::new(b)),
-        _ => unreachable!()
-    } } / MultiplicativeExpression
+AdditiveExpression -> Expression = a:MultiplicativeExpression _ o:AdditiveExpression_inner? { match o {
+    Some(("+", b)) => Expression::Add(Box::new(a), Box::new(b)),
+    Some(("-", b)) => Expression::Sub(Box::new(a), Box::new(b)),
+    Some(_) => unreachable!(),
+    None => a,
+} }
+AdditiveExpression_inner -> (&'input str, Expression) = s: $('+' / '-') _ e:AdditiveExpression {
+    (s, e)
+}
 
 //[117]
-MultiplicativeExpression -> Expression =
-    a:UnaryExpression _ s: $('*' / '/') _ b:MultiplicativeExpression { match s {
-        "*" => Expression::Mul(Box::new(a), Box::new(b)),
-        "/" => Expression::Div(Box::new(a), Box::new(b)),
-        _ => unreachable!()
-    } } / UnaryExpression
+MultiplicativeExpression -> Expression = a:UnaryExpression _ o: MultiplicativeExpression_inner? { match o {
+    Some(("*", b)) => Expression::Mul(Box::new(a), Box::new(b)),
+    Some(("/", b)) => Expression::Div(Box::new(a), Box::new(b)),
+    Some(_) => unreachable!(),
+    None => a
+} }
+MultiplicativeExpression_inner -> (&'input str, Expression) = s: $('*' / '/') _ e:MultiplicativeExpression {
+    (s, e)
+}
 
 //[118]
 UnaryExpression -> Expression = s: $('!' / '+' / '-')? _ e:PrimaryExpression { match s {
