@@ -34,9 +34,14 @@ js-sys = "0.3"
 
 [dev-dependencies]
 rayon = "1"
+criterion = "0.3"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
 
 [build-dependencies]
 peg = "0.5"
+
+[[bench]]
+name = "sparql_query"
+harness = false
