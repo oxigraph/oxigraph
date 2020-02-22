@@ -9,7 +9,6 @@ repository = "https://github.com/Tpt/oxigraph"
 description = """
 An RDF and SPARQL library in Rust
 """
-build = "build.rs"
 edition = "2018"
 
 [dependencies]
@@ -28,6 +27,7 @@ rio_turtle = "0.4"
 rio_xml = "0.4"
 hex = "0.4"
 nom = "5"
+peg = "0.6"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"
@@ -38,9 +38,6 @@ criterion = "0.3"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
-
-[build-dependencies]
-peg = "0.5"
 
 [[bench]]
 name = "sparql_query"
