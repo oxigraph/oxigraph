@@ -37,7 +37,7 @@
 #![deny(
     future_incompatible,
     nonstandard_style,
-    //TODO rust_2018_idioms,
+    rust_2018_idioms,
     missing_copy_implementations,
     trivial_casts,
     trivial_numeric_casts,

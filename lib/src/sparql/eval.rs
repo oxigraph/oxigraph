@@ -2029,7 +2029,7 @@ impl<'a> Iterator for AntiJoinIterator<'a> {
     }
 }
 
-struct LeftJoinIterator<'a, S: StoreConnection + 'a> {
+struct LeftJoinIterator<'a, S: StoreConnection> {
     eval: &'a SimpleEvaluator<S>,
     right_plan: &'a PlanNode,
     left_iter: EncodedTuplesIterator<'a>,
@@ -2093,7 +2093,7 @@ impl<'a, S: StoreConnection> Iterator for BadLeftJoinIterator<'a, S> {
     }
 }
 
-struct UnionIterator<'a, S: StoreConnection + 'a> {
+struct UnionIterator<'a, S: StoreConnection> {
     eval: &'a SimpleEvaluator<S>,
     plans: &'a [PlanNode],
     input: EncodedTuple,
@@ -2120,7 +2120,7 @@ impl<'a, S: StoreConnection> Iterator for UnionIterator<'a, S> {
     }
 }
 
-struct ConstructIterator<'a, S: StoreConnection + 'a> {
+struct ConstructIterator<'a, S: StoreConnection> {
     eval: &'a SimpleEvaluator<S>,
     iter: EncodedTuplesIterator<'a>,
     template: &'a [TripleTemplate],
@@ -2191,7 +2191,7 @@ fn decode_triple(
     ))
 }
 
-struct DescribeIterator<'a, S: StoreConnection + 'a> {
+struct DescribeIterator<'a, S: StoreConnection> {
     eval: &'a SimpleEvaluator<S>,
     iter: EncodedTuplesIterator<'a>,
     quads: Box<dyn Iterator<Item = Result<EncodedQuad>> + 'a>,
@@ -2486,7 +2486,7 @@ impl Accumulator for AvgAccumulator {
 }
 
 #[allow(clippy::option_option)]
-struct MinAccumulator<'a, S: StoreConnection + 'a> {
+struct MinAccumulator<'a, S: StoreConnection> {
     eval: &'a SimpleEvaluator<S>,
     min: Option<Option<EncodedTerm>>,
 }
@@ -2514,7 +2514,7 @@ impl<'a, S: StoreConnection + 'a> Accumulator for MinAccumulator<'a, S> {
 }
 
 #[allow(clippy::option_option)]
-struct MaxAccumulator<'a, S: StoreConnection + 'a> {
+struct MaxAccumulator<'a, S: StoreConnection> {
     eval: &'a SimpleEvaluator<S>,
     max: Option<Option<EncodedTerm>>,
 }
@@ -2559,7 +2559,7 @@ impl Accumulator for SampleAccumulator {
 }
 
 #[allow(clippy::option_option)]
-struct GroupConcatAccumulator<'a, S: StoreConnection + 'a> {
+struct GroupConcatAccumulator<'a, S: StoreConnection> {
     eval: &'a SimpleEvaluator<S>,
     concat: Option<String>,
     language: Option<Option<u128>>,
