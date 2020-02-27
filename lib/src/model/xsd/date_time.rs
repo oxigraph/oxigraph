@@ -142,8 +142,10 @@ impl DateTime {
 }
 
 /// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
-impl From<Date> for DateTime {
-    fn from(date: Date) -> Self {
+impl TryFrom<Date> for DateTime {
+    type Error = DateTimeError;
+
+    fn try_from(date: Date) -> Result<Self, DateTimeError> {
         DateTime::new(
             date.year(),
             date.month(),
@@ -153,7 +155,6 @@ impl From<Date> for DateTime {
             Decimal::default(),
             date.timezone_offset(),
         )
-        .unwrap()
     }
 }
 
@@ -258,53 +259,50 @@ impl Time {
 
     /// [op:add-dayTimeDuration-to-time](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDuration-to-time)
     pub fn checked_add_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
-        let rhs = rhs.into();
-        Some(
-            DateTime::new(
-                1972,
-                12,
-                31,
-                self.hour(),
-                self.minute(),
-                self.second(),
-                self.timezone_offset(),
-            )
-            .ok()?
-            .checked_add_duration(rhs)?
-            .into(),
+        DateTime::new(
+            1972,
+            12,
+            31,
+            self.hour(),
+            self.minute(),
+            self.second(),
+            self.timezone_offset(),
         )
+        .ok()?
+        .checked_add_duration(rhs)?
+        .try_into()
+        .ok()
     }
 
     /// [op:sub-dayTimeDuration-from-time](https://www.w3.org/TR/xpath-functions/#func-sub-dayTimeDuration-from-time)
     pub fn checked_sub_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
-        let rhs = rhs.into();
-        Some(
-            DateTime::new(
-                1972,
-                12,
-                31,
-                self.hour(),
-                self.minute(),
-                self.second(),
-                self.timezone_offset(),
-            )
-            .ok()?
-            .checked_sub_duration(rhs)?
-            .into(),
+        DateTime::new(
+            1972,
+            12,
+            31,
+            self.hour(),
+            self.minute(),
+            self.second(),
+            self.timezone_offset(),
         )
+        .ok()?
+        .checked_sub_duration(rhs)?
+        .try_into()
+        .ok()
     }
 }
 
 /// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
-impl From<DateTime> for Time {
-    fn from(date_time: DateTime) -> Self {
+impl TryFrom<DateTime> for Time {
+    type Error = DateTimeError;
+
+    fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
         Time::new(
             date_time.hour(),
             date_time.minute(),
             date_time.second(),
             date_time.timezone_offset(),
         )
-        .unwrap()
     }
 }
 
@@ -399,25 +397,34 @@ impl Date {
 
     /// [op:add-yearMonthDuration-to-date](https://www.w3.org/TR/xpath-functions/#func-add-yearMonthDuration-to-date) and [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDuration-to-date)
     pub fn checked_add_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
-        Some(DateTime::from(*self).checked_add_duration(rhs)?.into())
+        DateTime::try_from(*self)
+            .ok()?
+            .checked_add_duration(rhs)?
+            .try_into()
+            .ok()
     }
 
     /// [op:sub-yearMonthDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-sub-yearMonthDuration-from-date) and [op:sub-dayTimeDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-sub-dayTimeDuration-from-date)
     pub fn checked_sub_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
-        Some(DateTime::from(*self).checked_sub_duration(rhs)?.into())
+        DateTime::try_from(*self)
+            .ok()?
+            .checked_sub_duration(rhs)?
+            .try_into()
+            .ok()
     }
 }
 
 /// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
-impl From<DateTime> for Date {
-    fn from(date_time: DateTime) -> Self {
+impl TryFrom<DateTime> for Date {
+    type Error = DateTimeError;
+
+    fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
         Date::new(
             date_time.year(),
             date_time.month(),
             date_time.day(),
             date_time.timezone_offset(),
         )
-        .unwrap()
     }
 }
 

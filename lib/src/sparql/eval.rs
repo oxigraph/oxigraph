@@ -1357,7 +1357,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             },
             PlanExpression::DateCast(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::DateLiteral(value) => Some(value.into()),
-                EncodedTerm::DateTimeLiteral(value) => Some(Date::from(value).into()),
+                EncodedTerm::DateTimeLiteral(value) => Some(Date::try_from(value).ok()?.into()),
                 EncodedTerm::StringLiteral { value_id } => {
                     parse_date_str(&*self.dataset.get_str(value_id).ok()??)
                 }
@@ -1365,7 +1365,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             },
             PlanExpression::TimeCast(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::TimeLiteral(value) => Some(value.into()),
-                EncodedTerm::DateTimeLiteral(value) => Some(Time::from(value).into()),
+                EncodedTerm::DateTimeLiteral(value) => Some(Time::try_from(value).ok()?.into()),
                 EncodedTerm::StringLiteral { value_id } => {
                     parse_time_str(&*self.dataset.get_str(value_id).ok()??)
                 }
@@ -1373,7 +1373,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
             },
             PlanExpression::DateTimeCast(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::DateTimeLiteral(value) => Some(value.into()),
-                EncodedTerm::DateLiteral(value) => Some(DateTime::from(value).into()),
+                EncodedTerm::DateLiteral(value) => Some(DateTime::try_from(value).ok()?.into()),
                 EncodedTerm::StringLiteral { value_id } => {
                     parse_date_time_str(&*self.dataset.get_str(value_id).ok()??)
                 }
