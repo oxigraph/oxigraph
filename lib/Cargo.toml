@@ -14,7 +14,7 @@ edition = "2018"
 [dependencies]
 lazy_static = "1"
 rocksdb = { version = "0.13", optional = true }
-quick-xml = "0.17"
+quick-xml = "0.18"
 rand = "0.7"
 md-5 = "0.8"
 sha-1 = "0.8"
