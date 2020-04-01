@@ -1,4 +1,4 @@
-//! Implementation of [SPARQL Query Results XML Format](https://www.w3.org/TR/sparql11-results-json/)
+//! Implementation of [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/)
 
 use crate::model::*;
 use crate::sparql::model::*;

@@ -41,3 +41,17 @@ jobs:
         working-directory: ./js
       - run: npm test
         working-directory: ./js
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: rustup update
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.5
+      - run: python -m pip install --upgrade pip maturin
+      - run: maturin develop
+        working-directory: ./python
+      - run: python -m unittest
+        working-directory: ./python/tests

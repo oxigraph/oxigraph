@@ -8,7 +8,7 @@ use crate::{DatasetSyntax, GraphSyntax, Result};
 use sled::{Config, Iter, Tree};
 use std::io::BufRead;
 use std::path::Path;
-use std::str;
+use std::{fmt, str};
 
 /// Store based on the [Sled](https://sled.rs/) key-value database.
 /// It encodes a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) and allows to query and update it using SPARQL.
@@ -136,6 +136,16 @@ impl SledStore {
     pub fn contains(&self, quad: &Quad) -> Result<bool> {
         let quad = quad.into();
         self.contains_encoded(&quad)
+    }
+
+    /// Returns the number of quads in the store
+    pub fn len(&self) -> usize {
+        self.spog.len()
+    }
+
+    /// Returns if the store is empty
+    pub fn is_empty(&self) -> bool {
+        self.spog.is_empty()
     }
 
     /// Loads a graph file (i.e. triples) into the store
@@ -391,6 +401,15 @@ impl SledStore {
             iter: tree.scan_prefix(prefix),
             order,
         }
+    }
+}
+
+impl fmt::Display for SledStore {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for t in self.quads_for_pattern(None, None, None, None) {
+            writeln!(f, "{}", t.map_err(|_| fmt::Error)?)?;
+        }
+        Ok(())
     }
 }
 

@@ -9,8 +9,8 @@ use rocksdb::*;
 use std::io::BufRead;
 use std::mem::take;
 use std::path::Path;
-use std::str;
 use std::sync::Arc;
+use std::{fmt, str};
 
 /// Store based on the [RocksDB](https://rocksdb.org/) key-value database.
 /// It encodes a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) and allows to query and update it using SPARQL.
@@ -155,6 +155,21 @@ impl RocksDbStore {
         self.handle().contains(&quad)
     }
 
+    /// Returns the number of quads in the store
+    pub fn len(&self) -> usize {
+        self.db
+            .full_iterator_cf(self.handle().spog_cf, IteratorMode::Start)
+            .count()
+    }
+
+    /// Returns if the store is empty
+    pub fn is_empty(&self) -> bool {
+        self.db
+            .full_iterator_cf(self.handle().spog_cf, IteratorMode::Start)
+            .next()
+            .is_none()
+    }
+
     /// Executes a transaction.
     ///
     /// The transaction is executed if the given closure returns `Ok`.
@@ -232,6 +247,15 @@ impl RocksDbStore {
             gpos_cf: get_cf(&self.db, GPOS_CF),
             gosp_cf: get_cf(&self.db, GOSP_CF),
         }
+    }
+}
+
+impl fmt::Display for RocksDbStore {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for t in self.quads_for_pattern(None, None, None, None) {
+            writeln!(f, "{}", t.map_err(|_| fmt::Error)?)?;
+        }
+        Ok(())
     }
 }
 

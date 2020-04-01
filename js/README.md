@@ -23,6 +23,21 @@ npm install oxigraph
 const oxigraph = require('oxigraph');
 ```
 
+## Example
+
+Insert the triple `<http://example/> <http://schema.org/name> "example"` and log the name of `<http://example/>` in SPARQL:
+```js
+const { MemoryStore } = require('oxigraph');
+const store = new MemoryStore();
+const dataFactory = store.dataFactory;
+const ex = dataFactory.namedNode("http://example/");
+const schemaName = dataFactory.namedNode("http://schema.org/name");
+store.add(dataFactory.triple(ex, schemaName, dataFactory.literal("example")));
+for (binding of store.query("SELECT ?name WHERE { <http://example/> <http://schema.org/name> ?name }")) {
+    console.log(binding.get("name").value);
+}
+```
+
 ## API
 
 Oxigraph currently provides a simple JS API.
@@ -138,21 +153,6 @@ The available formats are:
 Example of loading a Turtle file into the named graph `<http://example.com/graph>` with the base IRI `http://example.com`:
 ```js
 store.load("<http://example.com> <http://example.com> <> .", "text/turtle", "http://example.com", store.dataFactory.namedNode("http://example.com/graph"));
-```
-
-## Example
-
-Insert the triple `<http://example/> <http://schema.org/name> "example"` and log the name of `<http://example/>` in SPARQL:
-```js
-const { MemoryStore } = require('oxigraph');
-const store = new MemoryStore();
-const dataFactory = store.dataFactory;
-const ex = dataFactory.namedNode("http://example/");
-const schemaName = dataFactory.namedNode("http://schema.org/name");
-store.add(dataFactory.triple(ex, schemaName, dataFactory.literal("example")));
-for (binding of store.query("SELECT ?name WHERE { <http://example/> <http://schema.org/name> ?name }")) {
-    console.log(binding.get("name").value);
-}
 ```
 
 
