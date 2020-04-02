@@ -27,10 +27,16 @@ impl NamedNode {
     }
 
     pub(crate) fn new_from_iri(iri: Iri<String>) -> Self {
-        Self::new_from_string(iri.into_inner())
+        Self::new_unchecked(iri.into_inner())
     }
 
-    pub(crate) fn new_from_string(iri: impl Into<String>) -> Self {
+    /// Builds a RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) from a string.
+    ///
+    /// Note that it is the caller's responsibility to ensure that `iri`
+    /// is a valid IRI.
+    ///
+    /// See also [`parse`](#method.parse).
+    pub fn new_unchecked(iri: impl Into<String>) -> Self {
         Self { iri: iri.into() }
     }
 
