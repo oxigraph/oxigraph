@@ -61,24 +61,18 @@ where
     let addr = matches.value_of("bind").unwrap().to_owned();
     println!("Listening for requests at http://{}", &addr);
 
-    start_server(addr.to_string(), move |request| {
+    start_server(addr, move |request| {
         content_encoding::apply(
             request,
-            handle_request(request, repository.connection().unwrap(), &addr),
+            handle_request(request, repository.connection().unwrap()),
         )
         .with_unique_header("Server", SERVER)
     })
 }
 
-fn handle_request<R: RepositoryConnection>(
-    request: &Request,
-    mut connection: R,
-    host: &str,
-) -> Response {
+fn handle_request<R: RepositoryConnection>(request: &Request, mut connection: R) -> Response {
     match (request.url().as_str(), request.method()) {
-        ("/", "GET") => {
-            Response::html(HTML_ROOT_PAGE.replace("{{endpoint}}", &format!("//{}/query", host)))
-        }
+        ("/", "GET") => Response::html(HTML_ROOT_PAGE),
         ("/", "POST") => {
             if let Some(body) = request.data() {
                 if let Some(content_type) = request.header("Content-Type") {
@@ -260,11 +254,7 @@ mod tests {
     }
 
     fn exec(request: Request) {
-        let response = handle_request(
-            &request,
-            MemoryRepository::default().connection().unwrap(),
-            "localhost",
-        );
+        let response = handle_request(&request, MemoryRepository::default().connection().unwrap());
         let mut body = String::default();
         request
             .data()
