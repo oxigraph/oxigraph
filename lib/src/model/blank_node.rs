@@ -22,7 +22,13 @@ pub struct BlankNode {
 
 impl BlankNode {
     /// Creates a blank node from a unique id
-    pub(crate) fn new_from_unique_id(id: u128) -> Self {
+    ///
+    /// In most cases, you **should not*** create a blank node this way,
+    /// but should use `Default::default` instead.
+    ///
+    /// This method is only exposed for low-level library,
+    /// in particular bindings to other languages or APIs.
+    pub fn new_from_unique_id(id: u128) -> Self {
         let mut str = [0; 32];
         write!(&mut str[..], "{:x}", id).unwrap();
         Self { id, str }
@@ -33,8 +39,8 @@ impl BlankNode {
         str::from_utf8(&self.str).unwrap()
     }
 
-    /// Returns the underlying ID of this blank node
-    pub(crate) const fn id(&self) -> u128 {
+    /// Returns the internal ID of this blank node
+    pub const fn id(&self) -> u128 {
         self.id
     }
 }
