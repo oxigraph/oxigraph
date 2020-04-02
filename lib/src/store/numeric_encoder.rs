@@ -1152,7 +1152,7 @@ impl<S: StrLookup> Decoder for S {
                 Err(format_err!("The default graph tag is not a valid term"))
             }
             EncodedTerm::NamedNode { iri_id } => {
-                Ok(NamedNode::new_from_string(get_required_str(self, iri_id)?).into())
+                Ok(NamedNode::new_unchecked(get_required_str(self, iri_id)?).into())
             }
             EncodedTerm::BlankNode { id } => Ok(BlankNode::new_from_unique_id(id).into()),
             EncodedTerm::StringLiteral { value_id } => {
@@ -1171,7 +1171,7 @@ impl<S: StrLookup> Decoder for S {
                 datatype_id,
             } => Ok(Literal::new_typed_literal(
                 get_required_str(self, value_id)?,
-                NamedNode::new_from_string(get_required_str(self, datatype_id)?),
+                NamedNode::new_unchecked(get_required_str(self, datatype_id)?),
             )
             .into()),
             EncodedTerm::BooleanLiteral(value) => Ok(Literal::from(value).into()),
@@ -1200,9 +1200,9 @@ fn get_required_str(lookup: &impl StrLookup, id: u128) -> Result<String> {
 fn test_encoding() {
     let mut store = MemoryStrStore::default();
     let terms: Vec<Term> = vec![
-        NamedNode::new_from_string("http://foo.com").into(),
-        NamedNode::new_from_string("http://bar.com").into(),
-        NamedNode::new_from_string("http://foo.com").into(),
+        NamedNode::new_unchecked("http://foo.com").into(),
+        NamedNode::new_unchecked("http://bar.com").into(),
+        NamedNode::new_unchecked("http://foo.com").into(),
         BlankNode::default().into(),
         Literal::new_simple_literal("foo").into(),
         Literal::from(true).into(),
@@ -1216,7 +1216,7 @@ fn test_encoding() {
         Literal::new_typed_literal("2020-01-01", xsd::DATE.clone()).into(),
         Literal::new_typed_literal("01:01:01Z", xsd::TIME.clone()).into(),
         Literal::new_typed_literal("PT1S", xsd::DURATION.clone()).into(),
-        Literal::new_typed_literal("-foo", NamedNode::new_from_string("http://foo.com")).into(),
+        Literal::new_typed_literal("-foo", NamedNode::new_unchecked("http://foo.com")).into(),
     ];
     for term in terms {
         let encoded = store.encode_term(&term).unwrap();
