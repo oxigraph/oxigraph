@@ -27,7 +27,8 @@ A preliminary benchmark [is provided](bench/README.md).
 ## Run the web server
 
 ### Build
-You need to have [a recent stable version of Rust and Cargo installed](https://www.rust-lang.org/tools/install). You also need [llvm](http://www.llvm.org/) (and [clang](https://clang.llvm.org/)) to build the rocksDB and other bindings.
+
+You need to have [a recent stable version of Rust and Cargo installed](https://www.rust-lang.org/tools/install). You also need [clang](https://clang.llvm.org/) to build RocksDB.
 
 If it's done, executing `cargo build --release` in the root directory of this repository should compile the full server after having downloaded its dependencies.
 It will create a fat binary in `target/release/oxigraph_server`.
@@ -38,13 +39,13 @@ Run `./oxigraph_server` to start the server. It listen by default on `localhost:
 
 The server provides an HTML UI with a form to execute SPARQL requests.
 
-It provides the following routes:
+It provides the following REST actions:
 * `/` allows to `POST` data to the server.
   For example `curl -f -X POST -H 'Content-Type:application/n-triples' --data-binary "@MY_FILE.nt" http://localhost:7878/`
   will add the N-Triples file MY_FILE.nt to the server repository. [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/) and [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) are supported.
 * `/query` allows to evaluate SPARQL queries against the server repository following the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/#query-operation).
   For example `curl -f -X POST -H 'Content-Type:application/sparql-query' --data 'SELECT * WHERE { ?s ?p ?o } LIMIT 10' http://localhost:7878/query`.
-  This route supports content negotiation and could return [Turtle](https://www.w3.org/TR/turtle/), [N-Triples](https://www.w3.org/TR/n-triples/), [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/), [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/) and [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/).
+  This action supports content negotiation and could return [Turtle](https://www.w3.org/TR/turtle/), [N-Triples](https://www.w3.org/TR/n-triples/), [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/), [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/) and [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/).
 
 
 Use `oxigraph_server --help` to see the possible options when starting the server.
@@ -53,6 +54,7 @@ Use `oxigraph_server --help` to see the possible options when starting the serve
 ## Run the web server for Wikibase
 
 ### Build
+
 You need to have [a recent stable version of Rust and Cargo installed](https://www.rust-lang.org/tools/install).
 
 If it's done, executing `cargo build --release` in the root directory of this repository should compile the full server after having downloaded its dependencies.
