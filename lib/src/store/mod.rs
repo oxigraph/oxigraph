@@ -14,7 +14,7 @@ use crate::model::*;
 use crate::repository::RepositoryTransaction;
 use crate::sparql::{QueryOptions, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
-use crate::{DatasetSyntax, GraphSyntax, RepositoryConnection, Result};
+use crate::{DatasetSyntax, Error, GraphSyntax, RepositoryConnection, Result};
 use rio_api::parser::{QuadsParser, TriplesParser};
 use rio_turtle::{NQuadsParser, NTriplesParser, TriGParser, TurtleParser};
 use rio_xml::RdfXmlParser;
@@ -226,7 +226,7 @@ impl<T: StoreTransaction> StoreRepositoryTransaction<T> {
         to_graph_name: Option<&NamedOrBlankNode>,
     ) -> Result<()>
     where
-        P::Error: Send + Sync + 'static,
+        Error: From<P::Error>,
     {
         let mut bnode_map = HashMap::default();
         let graph_name = if let Some(graph_name) = to_graph_name {
@@ -244,7 +244,7 @@ impl<T: StoreTransaction> StoreRepositoryTransaction<T> {
 
     fn load_from_quad_parser<P: QuadsParser>(&mut self, mut parser: P) -> Result<()>
     where
-        P::Error: Send + Sync + 'static,
+        Error: From<P::Error>,
     {
         let mut bnode_map = HashMap::default();
         parser.parse_all(&mut move |q| {

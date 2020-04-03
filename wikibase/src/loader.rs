@@ -30,8 +30,9 @@ impl<R: Repository + Copy> WikibaseLoader<R> {
     ) -> Result<Self> {
         Ok(Self {
             repository,
-            api_url: Url::parse(api_url)?,
-            entity_data_url: Url::parse(&(pages_base_url.to_owned() + "Special:EntityData"))?,
+            api_url: Url::parse(api_url).map_err(Error::wrap)?,
+            entity_data_url: Url::parse(&(pages_base_url.to_owned() + "Special:EntityData"))
+                .map_err(Error::wrap)?,
             client: Client::new(),
             namespaces: namespaces.to_vec(),
             start: Utc::now(),
@@ -176,9 +177,12 @@ impl<R: Repository + Copy> WikibaseLoader<R> {
             .get(self.api_url.clone())
             .query(parameters)
             .header(USER_AGENT, SERVER)
-            .send()?
-            .error_for_status()?
-            .json()?)
+            .send()
+            .map_err(Error::wrap)?
+            .error_for_status()
+            .map_err(Error::wrap)?
+            .json()
+            .map_err(Error::wrap)?)
     }
 
     fn get_entity_data(&self, id: &str) -> Result<impl Read> {
@@ -187,8 +191,10 @@ impl<R: Repository + Copy> WikibaseLoader<R> {
             .get(self.entity_data_url.clone())
             .query(&[("id", id), ("format", "nt"), ("flavor", "dump")])
             .header(USER_AGENT, SERVER)
-            .send()?
-            .error_for_status()?)
+            .send()
+            .map_err(Error::wrap)?
+            .error_for_status()
+            .map_err(Error::wrap)?)
     }
 
     fn load_entity_data(&self, uri: &str, data: impl Read) -> Result<()> {
@@ -208,6 +214,7 @@ impl<R: Repository + Copy> WikibaseLoader<R> {
                 Some(&NamedNode::parse(uri)?.into()),
                 None,
             )
-        })
+        })?;
+        Ok(())
     }
 }

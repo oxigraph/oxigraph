@@ -3,6 +3,7 @@
 //! Inspired by [RDFjs](http://rdf.js.org/) and [Apache Commons RDF](http://commons.apache.org/proper/commons-rdf/)
 
 mod blank_node;
+mod error;
 mod graph;
 mod isomorphism;
 mod literal;
@@ -12,6 +13,7 @@ pub mod vocab;
 pub(crate) mod xsd;
 
 pub use crate::model::blank_node::BlankNode;
+pub use crate::model::error::ModelError;
 pub use crate::model::graph::SimpleGraph;
 pub use crate::model::literal::Literal;
 pub use crate::model::named_node::NamedNode;

@@ -5,8 +5,8 @@ use crate::sparql::model::*;
 use crate::sparql::plan::PlanPropertyPath;
 use crate::sparql::plan::*;
 use crate::store::numeric_encoder::{Encoder, ENCODED_DEFAULT_GRAPH};
+use crate::Error;
 use crate::Result;
-use anyhow::anyhow;
 use std::collections::HashSet;
 
 pub struct PlanBuilder<E: Encoder> {
@@ -654,7 +654,10 @@ impl<E: Encoder> PlanBuilder<E> {
                             "string",
                         )?
                     } else {
-                        return Err(anyhow!("Not supported custom function {}", expression));
+                        return Err(Error::msg(format!(
+                            "Not supported custom function {}",
+                            expression
+                        )));
                     }
                 }
             },
@@ -680,7 +683,10 @@ impl<E: Encoder> PlanBuilder<E> {
                 graph_name,
             )?)))
         } else {
-            Err(anyhow!("The xsd:{} casting takes only one parameter", name))
+            Err(Error::msg(format!(
+                "The xsd:{} casting takes only one parameter",
+                name
+            )))
         }
     }
 

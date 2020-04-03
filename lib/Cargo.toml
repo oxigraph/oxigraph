@@ -20,7 +20,6 @@ md-5 = "0.8"
 sha-1 = "0.8"
 sha2 = "0.8"
 digest = "0.8"
-anyhow = "1"
 regex = "1"
 rio_api = "0.4"
 rio_turtle = "0.4"
@@ -35,6 +34,7 @@ js-sys = "0.3"
 [dev-dependencies]
 rayon = "1"
 criterion = "0.3"
+anyhow = "1"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"

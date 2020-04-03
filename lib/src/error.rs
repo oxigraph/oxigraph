@@ -1,0 +1,130 @@
+use crate::model::ModelError;
+use peg::error::ParseError;
+use peg::str::LineCol;
+use rio_turtle::TurtleError;
+use rio_xml::RdfXmlError;
+use std::error;
+use std::fmt;
+use std::io;
+use std::string::FromUtf8Error;
+use std::sync::PoisonError;
+
+#[derive(Debug)]
+pub struct Error {
+    inner: ErrorKind,
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.inner {
+            ErrorKind::Msg { msg } => write!(f, "{}", msg),
+            ErrorKind::Io(e) => e.fmt(f),
+            ErrorKind::FromUtf8(e) => e.fmt(f),
+            ErrorKind::Poison => write!(f, "Mutex was poisoned"),
+            ErrorKind::Model(e) => e.fmt(f),
+            ErrorKind::Other(e) => e.fmt(f),
+        }
+    }
+}
+
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match &self.inner {
+            ErrorKind::Msg { .. } => None,
+            ErrorKind::Io(e) => Some(e),
+            ErrorKind::FromUtf8(e) => Some(e),
+            ErrorKind::Poison => None,
+            ErrorKind::Model(e) => Some(e),
+            ErrorKind::Other(e) => Some(e.as_ref()),
+        }
+    }
+}
+
+impl Error {
+    /// Wrap an other error
+    pub fn wrap(error: impl error::Error + Send + Sync + 'static) -> Self {
+        Self {
+            inner: ErrorKind::Other(Box::new(error)),
+        }
+    }
+
+    /// Builds an error from a printable error message.
+    pub fn msg(msg: impl Into<String>) -> Self {
+        Self {
+            inner: ErrorKind::Msg { msg: msg.into() },
+        }
+    }
+}
+
+#[derive(Debug)]
+enum ErrorKind {
+    Msg { msg: String },
+    Io(io::Error),
+    FromUtf8(FromUtf8Error),
+    Poison,
+    Model(ModelError),
+    Other(Box<dyn error::Error + Send + Sync + 'static>),
+}
+
+impl From<io::Error> for Error {
+    fn from(error: io::Error) -> Self {
+        Self {
+            inner: ErrorKind::Io(error),
+        }
+    }
+}
+
+impl From<FromUtf8Error> for Error {
+    fn from(error: FromUtf8Error) -> Self {
+        Self {
+            inner: ErrorKind::FromUtf8(error),
+        }
+    }
+}
+
+impl<E: Into<ModelError>> From<E> for Error {
+    fn from(error: E) -> Self {
+        Self {
+            inner: ErrorKind::Model(error.into()),
+        }
+    }
+}
+
+impl From<TurtleError> for Error {
+    fn from(error: TurtleError) -> Self {
+        Self::wrap(error)
+    }
+}
+
+impl From<RdfXmlError> for Error {
+    fn from(error: RdfXmlError) -> Self {
+        Self::wrap(error)
+    }
+}
+
+impl From<quick_xml::Error> for Error {
+    fn from(error: quick_xml::Error) -> Self {
+        Self::wrap(error)
+    }
+}
+
+impl From<ParseError<LineCol>> for Error {
+    fn from(error: ParseError<LineCol>) -> Self {
+        Self::wrap(error)
+    }
+}
+
+impl<T> From<PoisonError<T>> for Error {
+    fn from(_: PoisonError<T>) -> Self {
+        Self {
+            inner: ErrorKind::Poison,
+        }
+    }
+}
+
+#[cfg(feature = "rocksdb")]
+impl From<rocksdb::Error> for Error {
+    fn from(error: rocksdb::Error) -> Self {
+        Self::wrap(error)
+    }
+}

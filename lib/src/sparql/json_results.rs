@@ -2,8 +2,8 @@
 
 use crate::model::*;
 use crate::sparql::model::*;
+use crate::Error;
 use crate::Result;
-use anyhow::anyhow;
 use std::io::Write;
 
 pub fn write_json_results<W: Write>(results: QueryResult<'_>, mut sink: W) -> Result<W> {
@@ -79,8 +79,8 @@ pub fn write_json_results<W: Write>(results: QueryResult<'_>, mut sink: W) -> Re
             sink.write_all(b"]}}")?;
         }
         QueryResult::Graph(_) => {
-            return Err(anyhow!(
-                "Graphs could not be formatted to SPARQL query results XML format"
+            return Err(Error::msg(
+                "Graphs could not be formatted to SPARQL query results XML format",
             ));
         }
     }

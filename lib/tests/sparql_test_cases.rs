@@ -1,5 +1,4 @@
 ///! Integration tests based on [SPARQL 1.1 Test Cases](https://www.w3.org/2009/sparql/docs/tests/README.html)
-use anyhow::anyhow;
 use oxigraph::model::vocab::rdf;
 use oxigraph::model::vocab::rdfs;
 use oxigraph::model::*;
@@ -162,33 +161,33 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
                 .connection()?
                 .prepare_query(&read_file_to_string(&test.query)?, QueryOptions::default().with_base_iri(&test.query).with_service_handler(StaticServiceHandler::new(&test.service_data)?))
                 {
-                    Err(error) => Err(anyhow!(
+                    Err(error) => Err(Error::msg(format!(
                     "Failure to parse query of {} with error: {}",
                     test, error
-                )),
+                ))),
                     Ok(query) => match query.exec() {
-                        Err(error) => Err(anyhow!(
+                        Err(error) => Err(Error::msg(format!(
                         "Failure to execute query of {} with error: {}",
                         test, error
-                    )),
+                    ))),
                         Ok(result) => {
                             let expected_graph =
-                                load_sparql_query_result_graph(test.result.as_ref().unwrap()).map_err(|e| anyhow!("Error constructing expected graph for {}: {}", test, e))?;
+                                load_sparql_query_result_graph(test.result.as_ref().unwrap()).map_err(|e| Error::msg(format!("Error constructing expected graph for {}: {}", test, e)))?;
                             let with_order = expected_graph
                                 .triples_for_predicate(&rs::INDEX)
                                 .next()
                                 .is_some();
-                            let actual_graph = to_graph(result, with_order).map_err(|e| anyhow!("Error constructing result graph for {}: {}", test, e))?;
+                            let actual_graph = to_graph(result, with_order).map_err(|e| Error::msg(format!("Error constructing result graph for {}: {}", test, e)))?;
                             if actual_graph.is_isomorphic(&expected_graph) {
                                 Ok(())
                             } else {
-                                Err(anyhow!("Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
+                                Err(Error::msg(format!("Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
                                 test,
                                 expected_graph,
                                 actual_graph,
                                 Query::parse(&read_file_to_string(&test.query)?, Some(&test.query)).unwrap(),
                                 repository_to_string(&repository)
-                            ))
+                            )))
                             }
                         }
                     },
@@ -240,7 +239,10 @@ fn load_graph_to_repository(
     } else if url.ends_with(".rdf") {
         GraphSyntax::RdfXml
     } else {
-        return Err(anyhow!("Serialization type not found for {}", url));
+        return Err(Error::msg(format!(
+            "Serialization type not found for {}",
+            url
+        )));
     };
     connection.load_graph(read_file(url)?, syntax, to_graph_name, Some(url))
 }
@@ -276,7 +278,7 @@ fn to_relative_path(url: &str) -> Result<String> {
             "rdf-tests/sparql11/",
         ))
     } else {
-        Err(anyhow!("Not supported url for file: {}", url))
+        Err(Error::msg(format!("Not supported url for file: {}", url)))
     }
 }
 
@@ -286,7 +288,11 @@ fn read_file(url: &str) -> Result<impl BufRead> {
     base_path.push(to_relative_path(url)?);
 
     Ok(BufReader::new(File::open(&base_path).map_err(|e| {
-        anyhow!("Opening file {} failed with {}", base_path.display(), e)
+        Error::msg(format!(
+            "Opening file {} failed with {}",
+            base_path.display(),
+            e,
+        ))
     })?))
 }
 
@@ -528,8 +534,8 @@ impl Iterator for TestManifest {
                         let n = n.clone().into();
                         let query = match self.graph.object_for_subject_predicate(&n, &qt::QUERY) {
                             Some(Term::NamedNode(q)) => q.as_str().to_owned(),
-                            Some(_) => return Some(Err(anyhow!("invalid query"))),
-                            None => return Some(Err(anyhow!("query not found"))),
+                            Some(_) => return Some(Err(Error::msg("invalid query"))),
+                            None => return Some(Err(Error::msg("query not found"))),
                         };
                         let data = match self.graph.object_for_subject_predicate(&n, &qt::DATA) {
                             Some(Term::NamedNode(q)) => Some(q.as_str().to_owned()),
@@ -567,9 +573,12 @@ impl Iterator for TestManifest {
                             .collect();
                         (query, data, graph_data, service_data)
                     }
-                    Some(_) => return Some(Err(anyhow!("invalid action"))),
+                    Some(_) => return Some(Err(Error::msg("invalid action"))),
                     None => {
-                        return Some(Err(anyhow!("action not found for test {}", test_subject)));
+                        return Some(Err(Error::msg(format!(
+                            "action not found for test {}",
+                            test_subject
+                        ))));
                     }
                 };
                 let result = match self
@@ -577,7 +586,7 @@ impl Iterator for TestManifest {
                     .object_for_subject_predicate(&test_subject, &*mf::RESULT)
                 {
                     Some(Term::NamedNode(n)) => Some(n.as_str().to_owned()),
-                    Some(_) => return Some(Err(anyhow!("invalid result"))),
+                    Some(_) => return Some(Err(Error::msg("invalid result"))),
                     None => None,
                 };
                 Some(Ok(Test {
@@ -592,7 +601,7 @@ impl Iterator for TestManifest {
                     result,
                 }))
             }
-            Some(_) => Some(Err(anyhow!("invalid test list"))),
+            Some(_) => Some(Err(Error::msg("invalid test list"))),
             None => {
                 match self.manifests_to_do.pop() {
                     Some(url) => {
@@ -617,7 +626,7 @@ impl Iterator for TestManifest {
                                         }),
                                 );
                             }
-                            Some(_) => return Some(Err(anyhow!("invalid tests list"))),
+                            Some(_) => return Some(Err(Error::msg("invalid tests list"))),
                             None => (),
                         }
 
@@ -633,7 +642,10 @@ impl Iterator for TestManifest {
                                 ));
                             }
                             Some(term) => {
-                                return Some(Err(anyhow!("Invalid tests list. Got term {}", term)));
+                                return Some(Err(Error::msg(format!(
+                                    "Invalid tests list. Got term {}",
+                                    term
+                                ))));
                             }
                             None => (),
                         }
@@ -717,7 +729,7 @@ impl ServiceHandler for StaticServiceHandler {
         if let QueryResult::Bindings(iterator) = self
             .services
             .get(service_name)
-            .ok_or_else(|| anyhow!("Service {} not found", service_name))?
+            .ok_or_else(|| Error::msg(format!("Service {} not found", service_name)))?
             .connection()?
             .prepare_query_from_pattern(
                 &graph_pattern,
@@ -733,7 +745,7 @@ impl ServiceHandler for StaticServiceHandler {
                 Box::new(collected.into_iter()),
             ))
         } else {
-            Err(anyhow!("Expected bindings but got another QueryResult"))
+            Err(Error::msg("Expected bindings but got another QueryResult"))
         }
     }
 }

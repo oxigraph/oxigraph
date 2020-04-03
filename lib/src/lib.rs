@@ -103,13 +103,14 @@
     clippy::wrong_pub_self_convention,
 )]
 
+mod error;
 pub mod model;
 mod repository;
 pub mod sparql;
 pub(crate) mod store;
 mod syntax;
 
-pub use anyhow::Error;
+pub use error::Error;
 pub type Result<T> = ::std::result::Result<T, Error>;
 pub use crate::repository::Repository;
 pub use crate::repository::RepositoryConnection;

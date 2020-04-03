@@ -2,11 +2,9 @@ use crate::store::numeric_encoder::*;
 use crate::store::*;
 use crate::{Repository, Result};
 use std::collections::{HashMap, HashSet};
-use std::error::Error;
-use std::fmt;
 use std::hash::Hash;
 use std::iter::{empty, once};
-use std::sync::{PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// Memory based implementation of the `Repository` trait.
 /// It is cheap to build using the `MemoryRepository::default()` method.
@@ -233,11 +231,11 @@ impl<'a> StoreTransaction for &'a MemoryStore {
 
 impl MemoryStore {
     fn indexes(&self) -> Result<RwLockReadGuard<'_, MemoryStoreIndexes>> {
-        Ok(self.indexes.read().map_err(MutexPoisonError::from)?)
+        Ok(self.indexes.read()?)
     }
 
     fn indexes_mut(&self) -> Result<RwLockWriteGuard<'_, MemoryStoreIndexes>> {
-        Ok(self.indexes.write().map_err(MutexPoisonError::from)?)
+        Ok(self.indexes.write()?)
     }
 
     fn quads<'a>(&'a self) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
@@ -679,22 +677,5 @@ impl StoreTransaction for MemoryTransaction<'_> {
             }
         }
         Ok(())
-    }
-}
-
-#[derive(Debug)]
-struct MutexPoisonError {}
-
-impl fmt::Display for MutexPoisonError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Mutex was poisoned")
-    }
-}
-
-impl Error for MutexPoisonError {}
-
-impl<T> From<PoisonError<T>> for MutexPoisonError {
-    fn from(_: PoisonError<T>) -> Self {
-        Self {}
     }
 }
