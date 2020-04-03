@@ -1,8 +1,7 @@
-use crate::model::ModelError;
+use crate::Result;
 use rio_api::iri::Iri;
 use rio_api::model as rio;
 use std::fmt;
-use std::result::Result;
 
 /// A RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
 ///
@@ -23,7 +22,7 @@ pub struct NamedNode {
 
 impl NamedNode {
     /// Builds and validate a RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
-    pub fn parse(iri: impl Into<String>) -> Result<Self, ModelError> {
+    pub fn parse(iri: impl Into<String>) -> Result<Self> {
         Ok(Self::new_from_iri(Iri::parse(iri.into())?))
     }
 

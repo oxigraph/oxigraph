@@ -1,6 +1,6 @@
-use crate::model::ModelError;
 use peg::error::ParseError;
 use peg::str::LineCol;
+use rio_api::iri::IriParseError;
 use rio_turtle::TurtleError;
 use rio_xml::RdfXmlError;
 use std::error;
@@ -21,7 +21,7 @@ impl fmt::Display for Error {
             ErrorKind::Io(e) => e.fmt(f),
             ErrorKind::FromUtf8(e) => e.fmt(f),
             ErrorKind::Poison => write!(f, "Mutex was poisoned"),
-            ErrorKind::Model(e) => e.fmt(f),
+            ErrorKind::Iri(e) => e.fmt(f),
             ErrorKind::Other(e) => e.fmt(f),
         }
     }
@@ -34,7 +34,7 @@ impl error::Error for Error {
             ErrorKind::Io(e) => Some(e),
             ErrorKind::FromUtf8(e) => Some(e),
             ErrorKind::Poison => None,
-            ErrorKind::Model(e) => Some(e),
+            ErrorKind::Iri(e) => Some(e),
             ErrorKind::Other(e) => Some(e.as_ref()),
         }
     }
@@ -62,7 +62,7 @@ enum ErrorKind {
     Io(io::Error),
     FromUtf8(FromUtf8Error),
     Poison,
-    Model(ModelError),
+    Iri(IriParseError),
     Other(Box<dyn error::Error + Send + Sync + 'static>),
 }
 
@@ -82,10 +82,10 @@ impl From<FromUtf8Error> for Error {
     }
 }
 
-impl<E: Into<ModelError>> From<E> for Error {
-    fn from(error: E) -> Self {
+impl From<IriParseError> for Error {
+    fn from(error: IriParseError) -> Self {
         Self {
-            inner: ErrorKind::Model(error.into()),
+            inner: ErrorKind::Iri(error),
         }
     }
 }
