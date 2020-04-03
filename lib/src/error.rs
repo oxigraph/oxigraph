@@ -9,6 +9,10 @@ use std::io;
 use std::string::FromUtf8Error;
 use std::sync::PoisonError;
 
+/// The Oxigraph error type.
+///
+/// The `wrap` method allows to make this type wrap any implementation of `std::error::Error`.
+/// This type also avoids heap allocations for the most common cases of Oxigraph errors.
 #[derive(Debug)]
 pub struct Error {
     inner: ErrorKind,
@@ -41,7 +45,7 @@ impl error::Error for Error {
 }
 
 impl Error {
-    /// Wrap an other error
+    /// Wraps an other error.
     pub fn wrap(error: impl error::Error + Send + Sync + 'static) -> Self {
         Self {
             inner: ErrorKind::Other(Box::new(error)),
