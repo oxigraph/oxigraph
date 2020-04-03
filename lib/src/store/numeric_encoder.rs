@@ -3,7 +3,7 @@ use crate::model::vocab::xsd;
 use crate::model::xsd::*;
 use crate::model::*;
 use crate::Result;
-use failure::format_err;
+use anyhow::anyhow;
 use md5::digest::Digest;
 use md5::Md5;
 use rand::random;
@@ -604,7 +604,7 @@ impl<R: Read> TermReader for R {
                     buffer,
                 )))
             }
-            _ => Err(format_err!("the term buffer has an invalid type id")),
+            _ => Err(anyhow!("the term buffer has an invalid type id")),
         }
     }
 
@@ -1106,21 +1106,17 @@ pub trait Decoder {
         match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node.into()),
             Term::BlankNode(blank_node) => Ok(blank_node.into()),
-            Term::Literal(_) => Err(format_err!(
-                "A literal has ben found instead of a named node"
-            )),
+            Term::Literal(_) => Err(anyhow!("A literal has ben found instead of a named node")),
         }
     }
 
     fn decode_named_node(&self, encoded: EncodedTerm) -> Result<NamedNode> {
         match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node),
-            Term::BlankNode(_) => Err(format_err!(
+            Term::BlankNode(_) => Err(anyhow!(
                 "A blank node has been found instead of a named node"
             )),
-            Term::Literal(_) => Err(format_err!(
-                "A literal has ben found instead of a named node"
-            )),
+            Term::Literal(_) => Err(anyhow!("A literal has ben found instead of a named node")),
         }
     }
 
@@ -1148,9 +1144,7 @@ pub trait Decoder {
 impl<S: StrLookup> Decoder for S {
     fn decode_term(&self, encoded: EncodedTerm) -> Result<Term> {
         match encoded {
-            EncodedTerm::DefaultGraph => {
-                Err(format_err!("The default graph tag is not a valid term"))
-            }
+            EncodedTerm::DefaultGraph => Err(anyhow!("The default graph tag is not a valid term")),
             EncodedTerm::NamedNode { iri_id } => {
                 Ok(NamedNode::new_unchecked(get_required_str(self, iri_id)?).into())
             }
@@ -1189,7 +1183,7 @@ impl<S: StrLookup> Decoder for S {
 
 fn get_required_str(lookup: &impl StrLookup, id: u128) -> Result<String> {
     lookup.get_str(id)?.ok_or_else(|| {
-        format_err!(
+        anyhow!(
             "Not able to find the string with id {} in the string store",
             id
         )

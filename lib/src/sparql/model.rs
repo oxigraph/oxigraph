@@ -2,7 +2,7 @@ use crate::model::*;
 use crate::sparql::json_results::write_json_results;
 use crate::sparql::xml_results::{read_xml_results, write_xml_results};
 use crate::{FileSyntax, GraphSyntax, Result};
-use failure::format_err;
+use anyhow::anyhow;
 use rand::random;
 use rio_api::formatter::TriplesFormatter;
 use rio_turtle::{NTriplesFormatter, TurtleFormatter};
@@ -61,7 +61,7 @@ impl<'a> QueryResult<'a> {
                 }
             })
         } else {
-            Err(format_err!(
+            Err(anyhow!(
                 "Bindings or booleans could not be formatted as an RDF graph"
             ))
         }
@@ -168,7 +168,7 @@ impl Variable {
     pub fn name(&self) -> Result<&str> {
         match self {
             Variable::Variable { name } => Ok(name),
-            _ => Err(format_err!("The variable {} has no name", self)),
+            _ => Err(anyhow!("The variable {} has no name", self)),
         }
     }
 }

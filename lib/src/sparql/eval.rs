@@ -8,8 +8,8 @@ use crate::sparql::ServiceHandler;
 use crate::store::numeric_encoder::*;
 use crate::store::StoreConnection;
 use crate::Result;
+use anyhow::anyhow;
 use digest::Digest;
-use failure::format_err;
 use md5::Md5;
 use rand::random;
 use regex::{Regex, RegexBuilder};
@@ -220,7 +220,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                     if let Some(graph_name) = get_pattern_value(graph_name, &tuple) {
                         graph_name
                     } else {
-                        let result: EncodedTuplesIterator<'_> = Box::new(once(Err(format_err!(
+                        let result: EncodedTuplesIterator<'_> = Box::new(once(Err(anyhow!(
                             "Unknown graph name is not allowed when evaluating property path"
                         ))));
                         return result;
@@ -493,7 +493,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
     ) -> Result<EncodedTuplesIterator<'b>> {
         let service_name = self.dataset.decode_named_node(
             get_pattern_value(service_name, from)
-                .ok_or_else(|| format_err!("The SERVICE name is not bound"))?,
+                .ok_or_else(|| anyhow!("The SERVICE name is not bound"))?,
         )?;
         Ok(self.encode_bindings(
             variables,

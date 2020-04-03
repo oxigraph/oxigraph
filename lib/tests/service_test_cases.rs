@@ -1,4 +1,4 @@
-use failure::format_err;
+use anyhow::anyhow;
 use oxigraph::model::*;
 use oxigraph::sparql::{
     BindingsIterator, GraphPattern, PreparedQuery, QueryOptions, QueryResult, ServiceHandler,
@@ -73,7 +73,7 @@ fn two_service_test() {
                 .as_ref();
                 do_pattern(triples, graph_pattern, QueryOptions::default())
             } else {
-                Err(format_err!("not found"))
+                Err(anyhow!("not found"))
             }
         }
     }
@@ -124,7 +124,7 @@ fn silent_service_empty_set_test() {
             _: &NamedNode,
             _: &'a GraphPattern,
         ) -> Result<BindingsIterator<'a>> {
-            Err(format_err!("This is supposed to fail"))
+            Err(anyhow!("This is supposed to fail"))
         }
     }
 
@@ -162,7 +162,7 @@ fn non_silent_service_test() {
             _: &NamedNode,
             _: &'a GraphPattern,
         ) -> Result<BindingsIterator<'a>> {
-            Err(format_err!("This is supposed to fail"))
+            Err(anyhow!("This is supposed to fail"))
         }
     }
 
@@ -232,9 +232,7 @@ fn query_repository<'a>(
                 Box::new(collected.into_iter()),
             ))
         }
-        _ => Err(format_err!(
-            "Excpected bindings but got another QueryResult"
-        )),
+        _ => Err(anyhow!("Excpected bindings but got another QueryResult")),
     }
 }
 
@@ -256,7 +254,7 @@ fn pattern_repository<'a>(
                 Box::new(collected.into_iter()),
             ))
         }
-        _ => Err(format_err!("Expected bindings but got another QueryResult")),
+        _ => Err(anyhow!("Expected bindings but got another QueryResult")),
     }
 }
 

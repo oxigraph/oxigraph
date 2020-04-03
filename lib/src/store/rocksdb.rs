@@ -1,7 +1,7 @@
 use crate::store::numeric_encoder::*;
 use crate::store::{Store, StoreConnection, StoreRepositoryConnection, StoreTransaction};
 use crate::{Repository, Result};
-use failure::format_err;
+use anyhow::anyhow;
 use rocksdb::*;
 use std::io::Cursor;
 use std::iter::{empty, once};
@@ -596,7 +596,7 @@ impl RocksDbStoreInnerTransaction<'_> {
 
 fn get_cf<'a>(db: &'a DB, name: &str) -> Result<&'a ColumnFamily> {
     db.cf_handle(name)
-        .ok_or_else(|| format_err!("column family {} not found", name))
+        .ok_or_else(|| anyhow!("column family {} not found", name))
 }
 
 fn wrap_error<'a, E: 'a, I: Iterator<Item = Result<E>> + 'a>(

@@ -1,8 +1,9 @@
 use crate::store::numeric_encoder::*;
 use crate::store::*;
 use crate::{Repository, Result};
-use failure::{Backtrace, Fail};
 use std::collections::{HashMap, HashSet};
+use std::error::Error;
+use std::fmt;
 use std::hash::Hash;
 use std::iter::{empty, once};
 use std::sync::{PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -681,16 +682,19 @@ impl StoreTransaction for MemoryTransaction<'_> {
     }
 }
 
-#[derive(Debug, Fail)]
-#[fail(display = "Mutex Mutex was poisoned")]
-pub struct MutexPoisonError {
-    backtrace: Backtrace,
+#[derive(Debug)]
+struct MutexPoisonError {}
+
+impl fmt::Display for MutexPoisonError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Mutex was poisoned")
+    }
 }
+
+impl Error for MutexPoisonError {}
 
 impl<T> From<PoisonError<T>> for MutexPoisonError {
     fn from(_: PoisonError<T>) -> Self {
-        Self {
-            backtrace: Backtrace::new(),
-        }
+        Self {}
     }
 }

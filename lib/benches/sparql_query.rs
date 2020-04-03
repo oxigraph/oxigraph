@@ -1,5 +1,5 @@
+use anyhow::anyhow;
 use criterion::{criterion_group, criterion_main, Criterion};
-use failure::format_err;
 use oxigraph::model::vocab::rdf;
 use oxigraph::model::*;
 use oxigraph::sparql::*;
@@ -55,7 +55,7 @@ fn to_relative_path(url: &str) -> Result<String> {
             "rdf-tests/sparql11/",
         ))
     } else {
-        Err(format_err!("Not supported url for file: {}", url))
+        Err(anyhow!("Not supported url for file: {}", url))
     }
 }
 
@@ -65,7 +65,7 @@ fn read_file(url: &str) -> Result<impl BufRead> {
     base_path.push(to_relative_path(url)?);
 
     Ok(BufReader::new(File::open(&base_path).map_err(|e| {
-        format_err!("Opening file {} failed with {}", base_path.display(), e)
+        anyhow!("Opening file {} failed with {}", base_path.display(), e)
     })?))
 }
 
@@ -98,7 +98,7 @@ fn load_graph_to_repository(
     } else if url.ends_with(".rdf") {
         GraphSyntax::RdfXml
     } else {
-        return Err(format_err!("Serialization type not found for {}", url));
+        return Err(anyhow!("Serialization type not found for {}", url));
     };
     connection.load_graph(read_file(url)?, syntax, to_graph_name, Some(url))
 }
@@ -214,21 +214,18 @@ impl Iterator for TestManifest {
                         let n = n.clone().into();
                         match self.graph.object_for_subject_predicate(&n, &qt::QUERY) {
                             Some(Term::NamedNode(q)) => q.as_str().to_owned(),
-                            Some(_) => return Some(Err(format_err!("invalid query"))),
-                            None => return Some(Err(format_err!("query not found"))),
+                            Some(_) => return Some(Err(anyhow!("invalid query"))),
+                            None => return Some(Err(anyhow!("query not found"))),
                         }
                     }
-                    Some(_) => return Some(Err(format_err!("invalid action"))),
+                    Some(_) => return Some(Err(anyhow!("invalid action"))),
                     None => {
-                        return Some(Err(format_err!(
-                            "action not found for test {}",
-                            test_subject
-                        )));
+                        return Some(Err(anyhow!("action not found for test {}", test_subject)));
                     }
                 };
                 Some(Ok(Test { kind, query }))
             }
-            Some(_) => Some(Err(format_err!("invalid test list"))),
+            Some(_) => Some(Err(anyhow!("invalid test list"))),
             None => {
                 match self.manifests_to_do.pop() {
                     Some(url) => {
@@ -253,7 +250,7 @@ impl Iterator for TestManifest {
                                         }),
                                 );
                             }
-                            Some(_) => return Some(Err(format_err!("invalid tests list"))),
+                            Some(_) => return Some(Err(anyhow!("invalid tests list"))),
                             None => (),
                         }
 
@@ -269,10 +266,7 @@ impl Iterator for TestManifest {
                                 ));
                             }
                             Some(term) => {
-                                return Some(Err(format_err!(
-                                    "Invalid tests list. Got term {}",
-                                    term
-                                )));
+                                return Some(Err(anyhow!("Invalid tests list. Got term {}", term)));
                             }
                             None => (),
                         }

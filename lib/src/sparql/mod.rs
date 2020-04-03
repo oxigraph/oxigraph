@@ -18,7 +18,7 @@ use crate::sparql::plan::{DatasetView, PlanNode};
 use crate::sparql::plan_builder::PlanBuilder;
 use crate::store::StoreConnection;
 use crate::Result;
-use failure::format_err;
+use anyhow::anyhow;
 use rio_api::iri::Iri;
 use std::fmt;
 
@@ -180,7 +180,7 @@ struct EmptyServiceHandler;
 
 impl ServiceHandler for EmptyServiceHandler {
     fn handle<'a>(&'a self, _: &NamedNode, _: &'a GraphPattern) -> Result<BindingsIterator<'a>> {
-        Err(format_err!("The SERVICE feature is not implemented"))
+        Err(anyhow!("The SERVICE feature is not implemented"))
     }
 }
 
