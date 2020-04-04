@@ -1431,7 +1431,7 @@ parser! {
         //[129]
         rule RDFLiteral() -> Literal =
             v:String() _ "^^" _ t:iri() { Literal::new_typed_literal(v, t) } /
-            v:String() _ l:LANGTAG() { Literal::new_language_tagged_literal(v, l) } /
+            v:String() _ l:LANGTAG() {? Literal::new_language_tagged_literal(v, l).map_err(|_| "language tag parsing failed") } /
             v:String() { Literal::new_simple_literal(v) }
 
         //[130]

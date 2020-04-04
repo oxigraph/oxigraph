@@ -389,11 +389,7 @@ impl<'a> From<rio::Literal<'a>> for EncodedTerm {
             rio::Literal::LanguageTaggedString { value, language } => {
                 EncodedTerm::LangStringLiteral {
                     value_id: get_str_id(value),
-                    language_id: if language.bytes().all(|b| b.is_ascii_lowercase()) {
-                        get_str_id(language)
-                    } else {
-                        get_str_id(&language.to_ascii_lowercase())
-                    },
+                    language_id: get_str_id(language),
                 }
             }
             rio::Literal::Typed { value, datatype } => {
@@ -986,18 +982,8 @@ impl<S: StrContainer> Encoder for S {
             rio::Literal::LanguageTaggedString { value, language } => {
                 let value_id = get_str_id(value);
                 self.insert_str(value_id, value)?;
-
-                let language_id = if language.bytes().all(|b| b.is_ascii_lowercase()) {
-                    let language_id = get_str_id(language);
-                    self.insert_str(language_id, language)?;
-                    language_id
-                } else {
-                    let language = language.to_ascii_lowercase();
-                    let language_id = get_str_id(&language);
-                    self.insert_str(language_id, &language)?;
-                    language_id
-                };
-
+                let language_id = get_str_id(language);
+                self.insert_str(language_id, language)?;
                 EncodedTerm::LangStringLiteral {
                     value_id,
                     language_id,
@@ -1161,7 +1147,7 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::LangStringLiteral {
                 value_id,
                 language_id,
-            } => Ok(Literal::new_language_tagged_literal(
+            } => Ok(Literal::new_language_tagged_literal_unchecked(
                 get_required_str(self, value_id)?,
                 get_required_str(self, language_id)?,
             )
@@ -1209,8 +1195,12 @@ fn test_encoding() {
         Literal::from(1.2).into(),
         Literal::from(1).into(),
         Literal::from("foo").into(),
-        Literal::new_language_tagged_literal("foo", "fr").into(),
-        Literal::new_language_tagged_literal("foo", "FR").into(),
+        Literal::new_language_tagged_literal("foo", "fr")
+            .unwrap()
+            .into(),
+        Literal::new_language_tagged_literal("foo", "FR")
+            .unwrap()
+            .into(),
         Literal::new_typed_literal("-1.32", xsd::DECIMAL.clone()).into(),
         Literal::new_typed_literal("2020-01-01T01:01:01Z", xsd::DATE_TIME.clone()).into(),
         Literal::new_typed_literal("2020-01-01", xsd::DATE.clone()).into(),

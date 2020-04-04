@@ -14,6 +14,7 @@ use md5::Md5;
 use rand::random;
 use regex::{Regex, RegexBuilder};
 use rio_api::iri::Iri;
+use rio_api::language_tag::LanguageTag;
 use rio_api::model as rio;
 use sha1::Sha1;
 use sha2::{Sha256, Sha384, Sha512};
@@ -906,10 +907,12 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 _ => None,
             },
             PlanExpression::LangMatches(language_tag, language_range) => {
-                let language_tag =
+                let mut language_tag =
                     self.to_simple_string(self.eval_expression(language_tag, tuple)?)?;
-                let language_range =
+                language_tag.make_ascii_lowercase();
+                let mut language_range =
                     self.to_simple_string(self.eval_expression(language_range, tuple)?)?;
+                language_range.make_ascii_lowercase();
                 Some(
                     if &*language_range == "*" {
                         !language_tag.is_empty()
@@ -917,7 +920,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                         !ZipLongest::new(language_range.split('-'), language_tag.split('-')).any(
                             |parts| match parts {
                                 (Some(range_subtag), Some(language_subtag)) => {
-                                    !range_subtag.eq_ignore_ascii_case(language_subtag)
+                                    range_subtag != language_subtag
                                 }
                                 (Some(_), None) => true,
                                 (None, _) => false,
@@ -1243,8 +1246,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 Some(EncodedTerm::LangStringLiteral {
                     value_id: self
                         .to_simple_string_id(self.eval_expression(lexical_form, tuple)?)?,
-                    language_id: self
-                        .to_simple_string_id(self.eval_expression(lang_tag, tuple)?)?,
+                    language_id: self.build_language_id(self.eval_expression(lang_tag, tuple)?)?,
                 })
             }
             PlanExpression::StrDT(lexical_form, datatype) => {
@@ -1496,6 +1498,12 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         let value_id = get_str_id(value);
         self.dataset.encoder().insert_str(value_id, value).ok()?;
         Some(value_id)
+    }
+
+    fn build_language_id(&self, value: EncodedTerm) -> Option<u128> {
+        let mut language = self.to_simple_string(value)?;
+        language.make_ascii_lowercase();
+        self.build_string_id(LanguageTag::parse(language).ok()?.as_str())
     }
 
     fn to_argument_compatible_strings(

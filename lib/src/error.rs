@@ -1,6 +1,7 @@
 use peg::error::ParseError;
 use peg::str::LineCol;
 use rio_api::iri::IriParseError;
+use rio_api::language_tag::LanguageTagParseError;
 use rio_turtle::TurtleError;
 use rio_xml::RdfXmlError;
 use std::error;
@@ -26,6 +27,7 @@ impl fmt::Display for Error {
             ErrorKind::FromUtf8(e) => e.fmt(f),
             ErrorKind::Poison => write!(f, "Mutex was poisoned"),
             ErrorKind::Iri(e) => e.fmt(f),
+            ErrorKind::LanguageTag(e) => e.fmt(f),
             ErrorKind::Other(e) => e.fmt(f),
         }
     }
@@ -39,6 +41,7 @@ impl error::Error for Error {
             ErrorKind::FromUtf8(e) => Some(e),
             ErrorKind::Poison => None,
             ErrorKind::Iri(e) => Some(e),
+            ErrorKind::LanguageTag(e) => Some(e),
             ErrorKind::Other(e) => Some(e.as_ref()),
         }
     }
@@ -67,6 +70,7 @@ enum ErrorKind {
     FromUtf8(FromUtf8Error),
     Poison,
     Iri(IriParseError),
+    LanguageTag(LanguageTagParseError),
     Other(Box<dyn error::Error + Send + Sync + 'static>),
 }
 
@@ -90,6 +94,14 @@ impl From<IriParseError> for Error {
     fn from(error: IriParseError) -> Self {
         Self {
             inner: ErrorKind::Iri(error),
+        }
+    }
+}
+
+impl From<LanguageTagParseError> for Error {
+    fn from(error: LanguageTagParseError) -> Self {
+        Self {
+            inner: ErrorKind::LanguageTag(error),
         }
     }
 }

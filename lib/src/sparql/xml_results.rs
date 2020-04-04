@@ -385,7 +385,7 @@ impl<R: BufRead> ResultsIterator<R> {
                                     self.reader.decode(&data)?,
                                     lang.take(),
                                     datatype.take(),
-                                )
+                                )?
                                 .into(),
                             );
                         }
@@ -413,7 +413,7 @@ impl<R: BufRead> ResultsIterator<R> {
                     State::Literal => {
                         if term.is_none() {
                             //We default to the empty literal
-                            term = Some(build_literal("", lang.take(), datatype.take()).into())
+                            term = Some(build_literal("", lang.take(), datatype.take())?.into())
                         }
                         state = State::Binding;
                     }
@@ -430,12 +430,12 @@ fn build_literal(
     value: impl Into<String>,
     lang: Option<String>,
     datatype: Option<NamedNode>,
-) -> Literal {
+) -> Result<Literal> {
     match datatype {
-        Some(datatype) => Literal::new_typed_literal(value, datatype),
+        Some(datatype) => Ok(Literal::new_typed_literal(value, datatype)),
         None => match lang {
             Some(lang) => Literal::new_language_tagged_literal(value, lang),
-            None => Literal::new_simple_literal(value),
+            None => Ok(Literal::new_simple_literal(value)),
         },
     }
 }
