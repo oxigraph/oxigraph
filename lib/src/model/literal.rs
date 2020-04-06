@@ -76,7 +76,8 @@ impl Literal {
     /// Builds a RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
     ///
     /// It is the responability of the caller to check that `language`
-    /// is valid [BCP47](https://tools.ietf.org/html/bcp47) language tag.
+    /// is valid [BCP47](https://tools.ietf.org/html/bcp47) language tag,
+    /// and is lowercase.
     ///
     /// If in doubt, you should rather use
     /// [`new_language_tagged_literal`](#method.new_language_tagged_literal).
