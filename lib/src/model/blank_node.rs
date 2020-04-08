@@ -36,7 +36,8 @@ impl BlankNode {
 
     /// Returns the underlying ID of this blank node
     pub fn as_str(&self) -> &str {
-        str::from_utf8(&self.str).unwrap()
+        let len = self.str.iter().position(|x| x == &0).unwrap_or(32);
+        str::from_utf8(&self.str[..len]).unwrap()
     }
 
     /// Returns the internal ID of this blank node
@@ -61,5 +62,22 @@ impl Default for BlankNode {
 impl<'a> From<&'a BlankNode> for rio::BlankNode<'a> {
     fn from(node: &'a BlankNode) -> Self {
         rio::BlankNode { id: node.as_str() }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn as_str_partial() {
+        let b = BlankNode::new_from_unique_id(0x42);
+        assert_eq!(b.as_str(), "42");
+    }
+
+    #[test]
+    fn as_str_full() {
+        let b = BlankNode::new_from_unique_id(0x77776666555544443333222211110000);
+        assert_eq!(b.as_str(), "77776666555544443333222211110000");
     }
 }
