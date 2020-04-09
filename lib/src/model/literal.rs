@@ -133,6 +133,17 @@ impl Literal {
             _ => false,
         }
     }
+
+    /// Extract components from this literal
+    pub fn destruct(self) -> (String, Option<NamedNode>, Option<String>) {
+        match self.0 {
+            LiteralContent::String(s) => (s, None, None),
+            LiteralContent::LanguageTaggedString { value, language } => {
+                (value, None, Some(language))
+            }
+            LiteralContent::TypedLiteral { value, datatype } => (value, Some(datatype), None),
+        }
+    }
 }
 
 impl fmt::Display for Literal {

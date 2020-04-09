@@ -287,6 +287,11 @@ impl Quad {
     pub fn into_triple(self) -> Triple {
         Triple::new(self.subject, self.predicate, self.object)
     }
+
+    /// Extract components from this quad
+    pub fn destruct(self) -> (NamedOrBlankNode, NamedNode, Term, Option<NamedOrBlankNode>) {
+        (self.subject, self.predicate, self.object, self.graph_name)
+    }
 }
 
 impl fmt::Display for Quad {
