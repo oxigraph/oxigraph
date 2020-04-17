@@ -65,8 +65,15 @@ pub fn main() {
         .arg(
             Arg::with_name("namespaces")
                 .long("namespaces")
-                .help("Namespaces ids, to load in Blazegraph like \"0,120\"")
-                .required(true)
+                .help("Namespaces ids to load like \"0,120\"")
+                .required(false)
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("slot")
+                .long("slot")
+                .help("Slot to load like \"mediainfo\". Could not be use with namespaces")
+                .required(false)
                 .takes_value(true),
         )
         .get_matches();
@@ -91,16 +98,25 @@ where
     let mediawiki_base_url = matches.value_of("mediawiki_base_url").unwrap().to_owned();
     let namespaces = matches
         .value_of("namespaces")
-        .unwrap()
+        .unwrap_or("")
         .split(',')
-        .map(|t| u32::from_str(t.trim()).unwrap())
+        .flat_map(|t| {
+            let t = t.trim();
+            if t.is_empty() {
+                None
+            } else {
+                Some(u32::from_str(t).unwrap())
+            }
+        })
         .collect::<Vec<_>>();
+    let slot = matches.value_of("slot").map(|t| t.to_owned());
     thread::spawn(move || {
         let mut loader = WikibaseLoader::new(
             repo.as_ref(),
             &mediawiki_api,
             &mediawiki_base_url,
             &namespaces,
+            slot.as_deref(),
             Duration::new(10, 0),
         )
         .unwrap();

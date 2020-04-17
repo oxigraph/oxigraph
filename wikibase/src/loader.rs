@@ -1,5 +1,5 @@
 use crate::SERVER;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Datelike, Utc};
 use oxigraph::model::NamedNode;
 use oxigraph::*;
 use reqwest::header::USER_AGENT;
@@ -16,6 +16,7 @@ pub struct WikibaseLoader<R: Repository + Copy> {
     entity_data_url: Url,
     client: Client,
     namespaces: Vec<u32>,
+    slot: Option<String>,
     frequency: Duration,
     start: DateTime<Utc>,
 }
@@ -26,6 +27,7 @@ impl<R: Repository + Copy> WikibaseLoader<R> {
         api_url: &str,
         pages_base_url: &str,
         namespaces: &[u32],
+        slot: Option<&str>,
         frequency: Duration,
     ) -> Result<Self> {
         Ok(Self {
@@ -35,16 +37,23 @@ impl<R: Repository + Copy> WikibaseLoader<R> {
                 .map_err(Error::wrap)?,
             client: Client::new(),
             namespaces: namespaces.to_vec(),
+            slot: slot.map(|t| t.to_owned()),
             start: Utc::now(),
             frequency,
         })
     }
 
     pub fn initial_loading(&mut self) -> Result<()> {
-        println!("Initial loading ");
-
         self.start = Utc::now();
 
+        if self.slot.is_some() {
+            println!("Skipping initial loading because a slot is required");
+            // No good initial loading
+            self.start = self.start.with_year(2018).unwrap();
+            return Ok(());
+        }
+
+        println!("Initial loading ");
         for namespace in &self.namespaces {
             let mut parameters = HashMap::default();
             parameters.insert("action".to_owned(), "query".to_owned());
@@ -104,14 +113,18 @@ impl<R: Repository + Copy> WikibaseLoader<R> {
         let mut parameters = HashMap::default();
         parameters.insert("action".to_owned(), "query".to_owned());
         parameters.insert("list".to_owned(), "recentchanges".to_owned());
-        parameters.insert(
-            "rcnamespace".to_owned(),
-            self.namespaces
-                .iter()
-                .map(|ns| ns.to_string())
-                .collect::<Vec<_>>()
-                .join("|"),
-        );
+        if let Some(slot) = &self.slot {
+            parameters.insert("rcslot".to_owned(), slot.to_owned());
+        } else {
+            parameters.insert(
+                "rcnamespace".to_owned(),
+                self.namespaces
+                    .iter()
+                    .map(|ns| ns.to_string())
+                    .collect::<Vec<_>>()
+                    .join("|"),
+            );
+        }
         parameters.insert("rcend".to_owned(), start.to_rfc2822());
         parameters.insert("rcprop".to_owned(), "title|ids".to_owned());
         parameters.insert("limit".to_owned(), "50".to_owned());
@@ -128,20 +141,21 @@ impl<R: Repository + Copy> WikibaseLoader<R> {
                 .unwrap()
             {
                 let desc = change.as_object().unwrap();
-                let title = desc.get("title").unwrap().as_str().unwrap();
-
-                let id = title.split(':').last().unwrap_or(title);
-                if seen.contains(id) {
+                let id = if desc.get("ns").unwrap().as_u64().unwrap() == 6 {
+                    // Hack for media info
+                    format!("M{}", desc.get("pageid").unwrap().as_u64().unwrap())
+                } else {
+                    let title = desc.get("title").unwrap().as_str().unwrap();
+                    title.split(':').last().unwrap_or(title).to_owned()
+                };
+                if seen.contains(&id) {
                     continue;
                 }
-                seen.insert(id.to_owned());
+                seen.insert(id.clone());
 
-                match self.get_entity_data(id) {
+                match self.get_entity_data(&id) {
                     Ok(data) => {
-                        self.load_entity_data(
-                            &(self.entity_data_url.to_string() + "/" + id),
-                            data,
-                        )?;
+                        self.load_entity_data(&format!("{}/{}", self.entity_data_url, id), data)?;
                     }
                     Err(e) => eprintln!("Error while retrieving data for entity {}: {}", id, e),
                 }
