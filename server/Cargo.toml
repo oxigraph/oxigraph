@@ -11,6 +11,9 @@ SPARQL server based on Oxigraph
 edition = "2018"
 
 [dependencies]
-oxigraph = {path = "../lib", features = ["rocksdb"] }
+oxigraph = { path = "../lib", features = ["rocksdb"] }
+async-std = { version = "1", features = ["attributes"] }
+async-h1 = "1"
 clap = "2"
-rouille = "3"
+http-types = "1"
+url = "2"
