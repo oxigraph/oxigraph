@@ -77,7 +77,7 @@ mod test {
 
     #[test]
     fn as_str_full() {
-        let b = BlankNode::new_from_unique_id(0x77776666555544443333222211110000);
+        let b = BlankNode::new_from_unique_id(0x7777_6666_5555_4444_3333_2222_1111_0000);
         assert_eq!(b.as_str(), "77776666555544443333222211110000");
     }
 }

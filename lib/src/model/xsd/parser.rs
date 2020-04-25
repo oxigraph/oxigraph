@@ -14,7 +14,6 @@ use super::date_time::DateTimeError;
 use super::decimal::ParseDecimalError;
 use crate::model::xsd::date_time::TimezoneOffset;
 use nom::bytes::streaming::take_while_m_n;
-use rand::distributions::weighted::alias_method::Weight;
 use std::error::Error;
 use std::fmt;
 use std::num::ParseIntError;

@@ -1,6 +1,5 @@
 use super::parser::{date_lexical_rep, date_time_lexical_rep, parse_value, time_lexical_rep};
 use super::{Decimal, Duration, XsdParseError};
-use rand::distributions::weighted::alias_method::Weight;
 use std::cmp::{min, Ordering};
 use std::convert::{TryFrom, TryInto};
 use std::error::Error;
