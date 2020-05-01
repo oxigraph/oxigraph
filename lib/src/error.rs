@@ -1,7 +1,7 @@
+use oxilangtag::LanguageTagParseError;
+use oxiri::IriParseError;
 use peg::error::ParseError;
 use peg::str::LineCol;
-use rio_api::iri::IriParseError;
-use rio_api::language_tag::LanguageTagParseError;
 use rio_turtle::TurtleError;
 use rio_xml::RdfXmlError;
 use std::error;

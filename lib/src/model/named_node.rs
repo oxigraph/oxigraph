@@ -1,5 +1,5 @@
 use crate::Result;
-use rio_api::iri::Iri;
+use oxiri::Iri;
 use rio_api::model as rio;
 use std::fmt;
 

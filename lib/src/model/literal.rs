@@ -3,7 +3,7 @@ use crate::model::vocab::rdf;
 use crate::model::vocab::xsd;
 use crate::model::xsd::*;
 use crate::Result;
-use rio_api::language_tag::LanguageTag;
+use oxilangtag::LanguageTag;
 use rio_api::model as rio;
 use std::borrow::Cow;
 use std::fmt;

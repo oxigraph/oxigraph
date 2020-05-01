@@ -19,7 +19,7 @@ use crate::sparql::plan_builder::PlanBuilder;
 use crate::store::StoreConnection;
 use crate::Error;
 use crate::Result;
-use rio_api::iri::Iri;
+use oxiri::Iri;
 use std::fmt;
 
 pub use crate::sparql::algebra::GraphPattern;

@@ -2,7 +2,7 @@
 
 use crate::model::*;
 use crate::sparql::model::*;
-use rio_api::iri::Iri;
+use oxiri::Iri;
 use rio_api::model as rio;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
