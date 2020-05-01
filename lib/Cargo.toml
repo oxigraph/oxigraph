@@ -5,7 +5,7 @@ authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT/Apache-2.0"
 readme = "../README.md"
 keywords = ["RDF", "N-Triples", "Turtle", "RDF/XML", "SPARQL"]
-repository = "https://github.com/Tpt/oxigraph"
+repository = "https://github.com/oxigraph/oxigraph"
 description = """
 An RDF and SPARQL library in Rust
 """
