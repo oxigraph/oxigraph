@@ -4,8 +4,7 @@ use crate::model::xsd::*;
 use crate::model::*;
 use crate::Error;
 use crate::Result;
-use md5::digest::Digest;
-use md5::Md5;
+use md5::{Digest, Md5};
 use rand::random;
 use rio_api::model as rio;
 use std::collections::HashMap;
@@ -16,22 +15,61 @@ use std::io::Write;
 use std::mem::size_of;
 use std::str;
 
-const EMPTY_STRING_ID: u128 = 0x7e42_f8ec_9809_80e9_04b2_008f_d98c_1dd4;
-const RDF_LANG_STRING_ID: u128 = 0x18d0_2a52_9d31_6816_3312_0bf8_c4c1_93a2;
-const XSD_STRING_ID: u128 = 0x0a61_f70e_4e33_60d3_9bef_c9b2_d18f_594e;
-const XSD_BOOLEAN_ID: u128 = 0x47f7_8f91_0b4b_158f_11dc_ff5f_9b78_be13;
-const XSD_FLOAT_ID: u128 = 0x17b8_33c5_f0ac_43f4_fafe_fc02_0b2d_adc7;
-const XSD_DOUBLE_ID: u128 = 0x2981_2bd9_5143_2783_9885_73e5_138a_8c01;
-const XSD_INTEGER_ID: u128 = 0xc6fb_689d_64f7_dd7b_dad0_36f9_d4f4_ee2a;
-const XSD_DECIMAL_ID: u128 = 0x3ca7_b56d_a746_719a_6800_081f_bb59_ea33;
-const XSD_DATE_TIME_ID: u128 = 0xc206_6749_e0e5_015e_f7ee_33b7_b28c_c010;
-const XSD_DATE_ID: u128 = 0xcaae_3cc4_f23f_4c5a_7717_dd19_e30a_84b8;
-const XSD_TIME_ID: u128 = 0x7af4_6a16_1b02_35d7_9a79_07ba_3da9_48bb;
-const XSD_DURATION_ID: u128 = 0x78ab_8431_984b_6b06_c42d_6271_b82e_487d;
-
-pub fn get_str_id(value: &str) -> u128 {
-    u128::from_le_bytes(Md5::new().chain(value).result().into())
+#[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Copy, Clone, Hash)]
+#[repr(transparent)]
+pub struct StrHash {
+    hash: u128,
 }
+
+impl StrHash {
+    pub fn new(value: &str) -> Self {
+        Self {
+            hash: u128::from_le_bytes(Md5::new().chain(value).result().into()),
+        }
+    }
+
+    const fn constant(hash: u128) -> Self {
+        Self { hash }
+    }
+
+    #[inline]
+    pub fn from_be_bytes(bytes: [u8; 16]) -> Self {
+        Self {
+            hash: u128::from_be_bytes(bytes),
+        }
+    }
+
+    #[inline]
+    pub fn to_be_bytes(&self) -> [u8; 16] {
+        self.hash.to_be_bytes()
+    }
+
+    #[inline]
+    pub fn from_le_bytes(bytes: [u8; 16]) -> Self {
+        Self {
+            hash: u128::from_le_bytes(bytes),
+        }
+    }
+
+    #[inline]
+    pub fn to_le_bytes(&self) -> [u8; 16] {
+        // TODO: remove when changing hash
+        self.hash.to_le_bytes()
+    }
+}
+
+const EMPTY_STRING_ID: StrHash = StrHash::constant(0x7e42_f8ec_9809_80e9_04b2_008f_d98c_1dd4);
+const RDF_LANG_STRING_ID: StrHash = StrHash::constant(0x18d0_2a52_9d31_6816_3312_0bf8_c4c1_93a2);
+const XSD_STRING_ID: StrHash = StrHash::constant(0x0a61_f70e_4e33_60d3_9bef_c9b2_d18f_594e);
+const XSD_BOOLEAN_ID: StrHash = StrHash::constant(0x47f7_8f91_0b4b_158f_11dc_ff5f_9b78_be13);
+const XSD_FLOAT_ID: StrHash = StrHash::constant(0x17b8_33c5_f0ac_43f4_fafe_fc02_0b2d_adc7);
+const XSD_DOUBLE_ID: StrHash = StrHash::constant(0x2981_2bd9_5143_2783_9885_73e5_138a_8c01);
+const XSD_INTEGER_ID: StrHash = StrHash::constant(0xc6fb_689d_64f7_dd7b_dad0_36f9_d4f4_ee2a);
+const XSD_DECIMAL_ID: StrHash = StrHash::constant(0x3ca7_b56d_a746_719a_6800_081f_bb59_ea33);
+const XSD_DATE_TIME_ID: StrHash = StrHash::constant(0xc206_6749_e0e5_015e_f7ee_33b7_b28c_c010);
+const XSD_DATE_ID: StrHash = StrHash::constant(0xcaae_3cc4_f23f_4c5a_7717_dd19_e30a_84b8);
+const XSD_TIME_ID: StrHash = StrHash::constant(0x7af4_6a16_1b02_35d7_9a79_07ba_3da9_48bb);
+const XSD_DURATION_ID: StrHash = StrHash::constant(0x78ab_8431_984b_6b06_c42d_6271_b82e_487d);
 
 const TYPE_DEFAULT_GRAPH_ID: u8 = 0;
 const TYPE_NAMED_NODE_ID: u8 = 1;
@@ -91,11 +129,23 @@ pub const ENCODED_XSD_DURATION_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode 
 #[derive(Debug, Clone, Copy)]
 pub enum EncodedTerm {
     DefaultGraph,
-    NamedNode { iri_id: u128 },
-    BlankNode { id: u128 },
-    StringLiteral { value_id: u128 },
-    LangStringLiteral { value_id: u128, language_id: u128 },
-    TypedLiteral { value_id: u128, datatype_id: u128 },
+    NamedNode {
+        iri_id: StrHash,
+    },
+    BlankNode {
+        id: u128,
+    },
+    StringLiteral {
+        value_id: StrHash,
+    },
+    LangStringLiteral {
+        value_id: StrHash,
+        language_id: StrHash,
+    },
+    TypedLiteral {
+        value_id: StrHash,
+        datatype_id: StrHash,
+    },
     BooleanLiteral(bool),
     FloatLiteral(f32),
     DoubleLiteral(f64),
@@ -363,7 +413,7 @@ impl From<&NamedNode> for EncodedTerm {
 impl<'a> From<rio::NamedNode<'a>> for EncodedTerm {
     fn from(node: rio::NamedNode<'a>) -> Self {
         EncodedTerm::NamedNode {
-            iri_id: get_str_id(node.iri),
+            iri_id: StrHash::new(node.iri),
         }
     }
 }
@@ -384,19 +434,19 @@ impl<'a> From<rio::Literal<'a>> for EncodedTerm {
     fn from(literal: rio::Literal<'a>) -> Self {
         match literal {
             rio::Literal::Simple { value } => EncodedTerm::StringLiteral {
-                value_id: get_str_id(value),
+                value_id: StrHash::new(value),
             },
             rio::Literal::LanguageTaggedString { value, language } => {
                 EncodedTerm::LangStringLiteral {
-                    value_id: get_str_id(value),
-                    language_id: get_str_id(language),
+                    value_id: StrHash::new(value),
+                    language_id: StrHash::new(language),
                 }
             }
             rio::Literal::Typed { value, datatype } => {
                 match match datatype.iri {
                     "http://www.w3.org/2001/XMLSchema#boolean" => parse_boolean_str(value),
                     "http://www.w3.org/2001/XMLSchema#string" => Some(EncodedTerm::StringLiteral {
-                        value_id: get_str_id(value),
+                        value_id: StrHash::new(value),
                     }),
                     "http://www.w3.org/2001/XMLSchema#float" => parse_float_str(value),
                     "http://www.w3.org/2001/XMLSchema#double" => parse_double_str(value),
@@ -431,8 +481,8 @@ impl<'a> From<rio::Literal<'a>> for EncodedTerm {
                 } {
                     Some(v) => v,
                     None => EncodedTerm::TypedLiteral {
-                        value_id: get_str_id(value),
-                        datatype_id: get_str_id(datatype.iri),
+                        value_id: StrHash::new(value),
+                        datatype_id: StrHash::new(datatype.iri),
                     },
                 }
             }
@@ -517,7 +567,7 @@ impl<R: Read> TermReader for R {
                 let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
                 Ok(EncodedTerm::NamedNode {
-                    iri_id: u128::from_be_bytes(buffer),
+                    iri_id: StrHash::from_be_bytes(buffer),
                 })
             }
             TYPE_BLANK_NODE_ID => {
@@ -533,8 +583,8 @@ impl<R: Read> TermReader for R {
                 let mut value_buffer = [0; 16];
                 self.read_exact(&mut value_buffer)?;
                 Ok(EncodedTerm::LangStringLiteral {
-                    language_id: u128::from_be_bytes(language_buffer),
-                    value_id: u128::from_be_bytes(value_buffer),
+                    language_id: StrHash::from_be_bytes(language_buffer),
+                    value_id: StrHash::from_be_bytes(value_buffer),
                 })
             }
             TYPE_TYPED_LITERAL_ID => {
@@ -543,15 +593,15 @@ impl<R: Read> TermReader for R {
                 let mut value_buffer = [0; 16];
                 self.read_exact(&mut value_buffer)?;
                 Ok(EncodedTerm::TypedLiteral {
-                    datatype_id: u128::from_be_bytes(datatype_buffer),
-                    value_id: u128::from_be_bytes(value_buffer),
+                    datatype_id: StrHash::from_be_bytes(datatype_buffer),
+                    value_id: StrHash::from_be_bytes(value_buffer),
                 })
             }
             TYPE_STRING_LITERAL => {
                 let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
                 Ok(EncodedTerm::StringLiteral {
-                    value_id: u128::from_be_bytes(buffer),
+                    value_id: StrHash::from_be_bytes(buffer),
                 })
             }
             TYPE_BOOLEAN_LITERAL_TRUE => Ok(EncodedTerm::BooleanLiteral(true)),
@@ -683,7 +733,7 @@ impl<R: Read> TermReader for R {
     }
 }
 
-pub const WRITTEN_TERM_MAX_SIZE: usize = size_of::<u8>() + 2 * size_of::<u128>();
+pub const WRITTEN_TERM_MAX_SIZE: usize = size_of::<u8>() + 2 * size_of::<StrHash>();
 
 pub trait TermWriter {
     fn write_term(&mut self, term: EncodedTerm) -> Result<()>;
@@ -780,11 +830,11 @@ impl<W: Write> TermWriter for W {
 }
 
 pub trait StrLookup {
-    fn get_str(&self, id: u128) -> Result<Option<String>>;
+    fn get_str(&self, id: StrHash) -> Result<Option<String>>;
 }
 
 pub trait StrContainer {
-    fn insert_str(&mut self, key: u128, value: &str) -> Result<()>;
+    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()>;
 
     /// Should be called when the bytes store is created
     fn set_first_strings(&mut self) -> Result<()> {
@@ -805,7 +855,7 @@ pub trait StrContainer {
 }
 
 pub struct MemoryStrStore {
-    id2str: HashMap<u128, String>,
+    id2str: HashMap<StrHash, String>,
 }
 
 impl Default for MemoryStrStore {
@@ -819,14 +869,14 @@ impl Default for MemoryStrStore {
 }
 
 impl StrLookup for MemoryStrStore {
-    fn get_str(&self, id: u128) -> Result<Option<String>> {
+    fn get_str(&self, id: StrHash) -> Result<Option<String>> {
         //TODO: avoid copy by adding a lifetime limit to get_str
         Ok(self.id2str.get(&id).cloned())
     }
 }
 
 impl StrContainer for MemoryStrStore {
-    fn insert_str(&mut self, key: u128, value: &str) -> Result<()> {
+    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
         self.id2str.entry(key).or_insert_with(|| value.to_owned());
         Ok(())
     }
@@ -953,7 +1003,7 @@ pub trait Encoder {
 
 impl<S: StrContainer> Encoder for S {
     fn encode_rio_named_node(&mut self, named_node: rio::NamedNode<'_>) -> Result<EncodedTerm> {
-        let iri_id = get_str_id(named_node.iri);
+        let iri_id = StrHash::new(named_node.iri);
         self.insert_str(iri_id, named_node.iri)?;
         Ok(EncodedTerm::NamedNode { iri_id })
     }
@@ -975,14 +1025,14 @@ impl<S: StrContainer> Encoder for S {
     fn encode_rio_literal(&mut self, literal: rio::Literal<'_>) -> Result<EncodedTerm> {
         Ok(match literal {
             rio::Literal::Simple { value } => {
-                let value_id = get_str_id(value);
+                let value_id = StrHash::new(value);
                 self.insert_str(value_id, value)?;
                 EncodedTerm::StringLiteral { value_id }
             }
             rio::Literal::LanguageTaggedString { value, language } => {
-                let value_id = get_str_id(value);
+                let value_id = StrHash::new(value);
                 self.insert_str(value_id, value)?;
-                let language_id = get_str_id(language);
+                let language_id = StrHash::new(language);
                 self.insert_str(language_id, language)?;
                 EncodedTerm::LangStringLiteral {
                     value_id,
@@ -993,7 +1043,7 @@ impl<S: StrContainer> Encoder for S {
                 match match datatype.iri {
                     "http://www.w3.org/2001/XMLSchema#boolean" => parse_boolean_str(value),
                     "http://www.w3.org/2001/XMLSchema#string" => {
-                        let value_id = get_str_id(value);
+                        let value_id = StrHash::new(value);
                         self.insert_str(value_id, value)?;
                         Some(EncodedTerm::StringLiteral { value_id })
                     }
@@ -1030,9 +1080,9 @@ impl<S: StrContainer> Encoder for S {
                 } {
                     Some(v) => v,
                     None => {
-                        let value_id = get_str_id(value);
+                        let value_id = StrHash::new(value);
                         self.insert_str(value_id, value)?;
-                        let datatype_id = get_str_id(datatype.iri);
+                        let datatype_id = StrHash::new(datatype.iri);
                         self.insert_str(datatype_id, datatype.iri)?;
                         EncodedTerm::TypedLiteral {
                             value_id,
@@ -1173,10 +1223,10 @@ impl<S: StrLookup> Decoder for S {
     }
 }
 
-fn get_required_str(lookup: &impl StrLookup, id: u128) -> Result<String> {
+fn get_required_str(lookup: &impl StrLookup, id: StrHash) -> Result<String> {
     lookup.get_str(id)?.ok_or_else(|| {
         Error::msg(format!(
-            "Not able to find the string with id {} in the string store",
+            "Not able to find the string with id {:?} in the string store",
             id
         ))
     })

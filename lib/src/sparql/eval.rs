@@ -34,7 +34,7 @@ type EncodedTuplesIterator<'a> = Box<dyn Iterator<Item = Result<EncodedTuple>> +
 pub struct SimpleEvaluator<S: StoreConnection> {
     dataset: DatasetView<S>,
     base_iri: Option<Iri<String>>,
-    bnodes_map: Mutex<BTreeMap<u128, u128>>,
+    bnodes_map: Mutex<BTreeMap<StrHash, u128>>,
     now: DateTime,
     service_handler: Box<dyn ServiceHandler>,
 }
@@ -1406,7 +1406,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         }
     }
 
-    fn to_string_id(&self, term: EncodedTerm) -> Option<u128> {
+    fn to_string_id(&self, term: EncodedTerm) -> Option<StrHash> {
         match term {
             EncodedTerm::DefaultGraph => None,
             EncodedTerm::NamedNode { iri_id } => Some(iri_id),
@@ -1436,7 +1436,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         }
     }
 
-    fn to_simple_string_id(&self, term: EncodedTerm) -> Option<u128> {
+    fn to_simple_string_id(&self, term: EncodedTerm) -> Option<StrHash> {
         if let EncodedTerm::StringLiteral { value_id } = term {
             Some(value_id)
         } else {
@@ -1454,7 +1454,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         }
     }
 
-    fn to_string_and_language(&self, term: EncodedTerm) -> Option<(String, Option<u128>)> {
+    fn to_string_and_language(&self, term: EncodedTerm) -> Option<(String, Option<StrHash>)> {
         match term {
             EncodedTerm::StringLiteral { value_id } => {
                 Some((self.dataset.get_str(value_id).ok()??, None))
@@ -1479,14 +1479,14 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         })
     }
 
-    fn build_lang_string_literal(&self, value: &str, language_id: u128) -> Option<EncodedTerm> {
+    fn build_lang_string_literal(&self, value: &str, language_id: StrHash) -> Option<EncodedTerm> {
         Some(EncodedTerm::LangStringLiteral {
             value_id: self.build_string_id(value)?,
             language_id,
         })
     }
 
-    fn build_plain_literal(&self, value: &str, language: Option<u128>) -> Option<EncodedTerm> {
+    fn build_plain_literal(&self, value: &str, language: Option<StrHash>) -> Option<EncodedTerm> {
         if let Some(language_id) = language {
             self.build_lang_string_literal(value, language_id)
         } else {
@@ -1494,13 +1494,13 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         }
     }
 
-    fn build_string_id(&self, value: &str) -> Option<u128> {
-        let value_id = get_str_id(value);
+    fn build_string_id(&self, value: &str) -> Option<StrHash> {
+        let value_id = StrHash::new(value);
         self.dataset.encoder().insert_str(value_id, value).ok()?;
         Some(value_id)
     }
 
-    fn build_language_id(&self, value: EncodedTerm) -> Option<u128> {
+    fn build_language_id(&self, value: EncodedTerm) -> Option<StrHash> {
         let mut language = self.to_simple_string(value)?;
         language.make_ascii_lowercase();
         self.build_string_id(LanguageTag::parse(language).ok()?.as_str())
@@ -1510,7 +1510,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         &self,
         arg1: EncodedTerm,
         arg2: EncodedTerm,
-    ) -> Option<(String, String, Option<u128>)> {
+    ) -> Option<(String, String, Option<StrHash>)> {
         let (value1, language1) = self.to_string_and_language(arg1)?;
         let (value2, language2) = self.to_string_and_language(arg2)?;
         if language2.is_none() || language1 == language2 {
@@ -1819,7 +1819,7 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
         }
     }
 
-    fn compare_str_ids(&self, a: u128, b: u128) -> Option<Ordering> {
+    fn compare_str_ids(&self, a: StrHash, b: StrHash) -> Option<Ordering> {
         Some(
             self.dataset
                 .get_str(a)
@@ -2570,7 +2570,7 @@ impl Accumulator for SampleAccumulator {
 struct GroupConcatAccumulator<'a, S: StoreConnection> {
     eval: &'a SimpleEvaluator<S>,
     concat: Option<String>,
-    language: Option<Option<u128>>,
+    language: Option<Option<StrHash>>,
     separator: &'a str,
 }
 

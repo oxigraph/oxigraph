@@ -136,7 +136,7 @@ impl<'a> Store for &'a RocksDbStore {
 }
 
 impl StrLookup for RocksDbStoreConnection<'_> {
-    fn get_str(&self, id: u128) -> Result<Option<String>> {
+    fn get_str(&self, id: StrHash) -> Result<Option<String>> {
         Ok(self
             .store
             .db
@@ -431,7 +431,7 @@ pub struct RocksDbStoreTransaction<'a> {
 }
 
 impl StrContainer for RocksDbStoreTransaction<'_> {
-    fn insert_str(&mut self, key: u128, value: &str) -> Result<()> {
+    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
         self.inner.insert_str(key, value);
         Ok(())
     }
@@ -456,7 +456,7 @@ pub struct RocksDbStoreAutoTransaction<'a> {
 }
 
 impl StrContainer for RocksDbStoreAutoTransaction<'_> {
-    fn insert_str(&mut self, key: u128, value: &str) -> Result<()> {
+    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
         self.inner.insert_str(key, value);
         Ok(())
     }
@@ -498,7 +498,7 @@ struct RocksDbStoreInnerTransaction<'a> {
 }
 
 impl RocksDbStoreInnerTransaction<'_> {
-    fn insert_str(&mut self, key: u128, value: &str) {
+    fn insert_str(&mut self, key: StrHash, value: &str) {
         self.batch
             .put_cf(self.connection.id2str_cf, &key.to_le_bytes(), value)
     }

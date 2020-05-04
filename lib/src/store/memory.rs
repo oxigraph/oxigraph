@@ -57,7 +57,7 @@ struct MemoryStoreIndexes {
     gspo: QuadMap<EncodedTerm>,
     gpos: QuadMap<EncodedTerm>,
     gosp: QuadMap<EncodedTerm>,
-    id2str: HashMap<u128, String>,
+    id2str: HashMap<StrHash, String>,
 }
 
 impl Default for MemoryStore {
@@ -91,14 +91,14 @@ impl<'a> Store for &'a MemoryStore {
 }
 
 impl<'a> StrLookup for &'a MemoryStore {
-    fn get_str(&self, id: u128) -> Result<Option<String>> {
+    fn get_str(&self, id: StrHash) -> Result<Option<String>> {
         //TODO: avoid copy by adding a lifetime limit to get_str
         Ok(self.indexes()?.id2str.get(&id).cloned())
     }
 }
 
 impl<'a> StrContainer for &'a MemoryStore {
-    fn insert_str(&mut self, key: u128, value: &str) -> Result<()> {
+    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
         self.indexes_mut()?
             .id2str
             .entry(key)
@@ -641,7 +641,7 @@ fn quad_map_flatten<'a, T: Copy>(gspo: &'a QuadMap<T>) -> impl Iterator<Item = (
 pub struct MemoryTransaction<'a> {
     store: &'a MemoryStore,
     ops: Vec<TransactionOp>,
-    strings: Vec<(u128, String)>,
+    strings: Vec<(StrHash, String)>,
 }
 
 enum TransactionOp {
@@ -650,7 +650,7 @@ enum TransactionOp {
 }
 
 impl StrContainer for MemoryTransaction<'_> {
-    fn insert_str(&mut self, key: u128, value: &str) -> Result<()> {
+    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
         self.strings.push((key, value.to_owned()));
         Ok(())
     }

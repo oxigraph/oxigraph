@@ -1,7 +1,7 @@
 use crate::sparql::model::Variable;
 use crate::sparql::GraphPattern;
 use crate::store::numeric_encoder::{
-    EncodedQuad, EncodedTerm, Encoder, MemoryStrStore, StrContainer, StrLookup,
+    EncodedQuad, EncodedTerm, Encoder, MemoryStrStore, StrContainer, StrHash, StrLookup,
     ENCODED_DEFAULT_GRAPH,
 };
 use crate::store::StoreConnection;
@@ -493,7 +493,7 @@ impl<S: StoreConnection> DatasetView<S> {
 }
 
 impl<S: StoreConnection> StrLookup for DatasetView<S> {
-    fn get_str(&self, id: u128) -> Result<Option<String>> {
+    fn get_str(&self, id: StrHash) -> Result<Option<String>> {
         if let Some(value) = self.extra.borrow().get_str(id)? {
             Ok(Some(value))
         } else {
@@ -508,7 +508,7 @@ struct DatasetViewStrContainer<'a, S: StoreConnection> {
 }
 
 impl<'a, S: StoreConnection> StrContainer for DatasetViewStrContainer<'a, S> {
-    fn insert_str(&mut self, key: u128, value: &str) -> Result<()> {
+    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
         if self.store.get_str(key)?.is_none() {
             self.extra.insert_str(key, value)
         } else {

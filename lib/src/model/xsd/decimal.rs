@@ -38,6 +38,7 @@ impl Decimal {
         }
     }
 
+    #[inline]
     pub fn to_be_bytes(&self) -> [u8; 16] {
         self.value.to_be_bytes()
     }
