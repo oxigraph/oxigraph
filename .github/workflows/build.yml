@@ -7,7 +7,7 @@ jobs:
     name: fmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - run: rustup update
       - run: rustup component add rustfmt
       - run: cargo fmt -- --check
@@ -16,7 +16,7 @@ jobs:
     name: clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - run: rustup update
       - run: rustup component add clippy
       - run: cargo clippy --all --all-targets
@@ -36,7 +36,18 @@ jobs:
   wasm:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - run: rustup update
       - run: cargo install wasm-pack
       - run: wasm-pack test --node lib
+      - run: wasm-pack test --node js
+
+  js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: rustup update
+      - run: cargo install wasm-pack
+      - run: cd js
+      - run: npm install
+      - run: npm test

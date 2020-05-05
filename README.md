@@ -12,7 +12,8 @@ Its goal is to provide a compliant, safe and fast graph database based on the [R
 It is written in Rust.
 
 It is split into multiple parts:
-* The `lib` directory contains the database written as a Rust library
+* The `lib` directory contains the database written as a Rust library.
+* The `js` directory contains bindings to use Oxigraph in JavaScript with the help of WebAssembly. See [its README](https://github.com/oxigraph/oxigraph/blob/master/js/README.md) for the JS bindings documentation.
 * The `server` directory contains a stand-alone binary of a web server implementing the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/).
 * The `wikibase` directory contains a stand-alone binary of a web server able to synchronize with a [Wikibase instance](https://wikiba.se/).
 

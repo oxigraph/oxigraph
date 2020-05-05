@@ -3,3 +3,4 @@ target/
 Cargo.lock
 .idea
 *.iml
+js/node_modules
