@@ -554,7 +554,7 @@ impl fmt::Display for Function {
 pub enum GraphPattern {
     BGP(Vec<TripleOrPathPattern>),
     Join(Box<GraphPattern>, Box<GraphPattern>),
-    LeftJoin(Box<GraphPattern>, Box<GraphPattern>, Expression),
+    LeftJoin(Box<GraphPattern>, Box<GraphPattern>, Option<Expression>),
     Filter(Expression, Box<GraphPattern>),
     Union(Box<GraphPattern>, Box<GraphPattern>),
     Graph(NamedNodeOrVariable, Box<GraphPattern>),
@@ -582,7 +582,13 @@ impl fmt::Display for GraphPattern {
                     .join(" . ")
             ),
             GraphPattern::Join(a, b) => write!(f, "Join({}, {})", a, b),
-            GraphPattern::LeftJoin(a, b, e) => write!(f, "LeftJoin({}, {}, {})", a, b, e),
+            GraphPattern::LeftJoin(a, b, e) => {
+                if let Some(e) = e {
+                    write!(f, "LeftJoin({}, {}, {})", a, b, e)
+                } else {
+                    write!(f, "LeftJoin({}, {})", a, b)
+                }
+            }
             GraphPattern::Filter(e, p) => write!(f, "Filter({}, {})", e, p),
             GraphPattern::Union(a, b) => write!(f, "Union({}, {})", a, b),
             GraphPattern::Graph(g, p) => write!(f, "Graph({}, {})", g, p),
@@ -750,13 +756,24 @@ impl<'a> fmt::Display for SparqlGraphPattern<'a> {
                 SparqlGraphPattern(&*a),
                 SparqlGraphPattern(&*b)
             ),
-            GraphPattern::LeftJoin(a, b, e) => write!(
-                f,
-                "{} OPTIONAL {{ {} FILTER({}) }}",
-                SparqlGraphPattern(&*a),
-                SparqlGraphPattern(&*b),
-                SparqlExpression(e)
-            ),
+            GraphPattern::LeftJoin(a, b, e) => {
+                if let Some(e) = e {
+                    write!(
+                        f,
+                        "{} OPTIONAL {{ {} FILTER({}) }}",
+                        SparqlGraphPattern(&*a),
+                        SparqlGraphPattern(&*b),
+                        SparqlExpression(e)
+                    )
+                } else {
+                    write!(
+                        f,
+                        "{} OPTIONAL {{ {} }}",
+                        SparqlGraphPattern(&*a),
+                        SparqlGraphPattern(&*b)
+                    )
+                }
+            }
             GraphPattern::Filter(e, p) => write!(
                 f,
                 "{} FILTER({})",

@@ -132,7 +132,7 @@ impl<F, T: From<F>> From<FocusedTriplePattern<F>> for FocusedTripleOrPathPattern
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 enum PartialGraphPattern {
-    Optional(GraphPattern),
+    Optional(GraphPattern, Option<Expression>),
     Minus(GraphPattern),
     Bind(Expression, Variable),
     Filter(Expression),
@@ -776,13 +776,8 @@ parser! {
             let mut g = GraphPattern::default();
             for e in p {
                 match e {
-                    PartialGraphPattern::Optional(p) => match p {
-                            GraphPattern::Filter(f, a2) => {
-                                g = GraphPattern::LeftJoin(Box::new(g), a2, f)
-                            }
-                            a => {
-                                g = GraphPattern::LeftJoin(Box::new(g), Box::new(a), Literal::from(true).into())
-                            }
+                    PartialGraphPattern::Optional(p, f) => {
+                        g = GraphPattern::LeftJoin(Box::new(g), Box::new(p), f)
                     }
                     PartialGraphPattern::Minus(p) => {
                         g = GraphPattern::Minus(Box::new(g), Box::new(p))
@@ -834,7 +829,11 @@ parser! {
 
         //[57]
         rule OptionalGraphPattern() -> PartialGraphPattern = i("OPTIONAL") _ p:GroupGraphPattern() {
-            PartialGraphPattern::Optional(p)
+            if let GraphPattern::Filter(f, p) =  p {
+               PartialGraphPattern::Optional(*p, Some(f))
+            } else {
+               PartialGraphPattern::Optional(p, None)
+            }
         }
 
         //[58]

@@ -1,5 +1,4 @@
 use crate::model::vocab::xsd;
-use crate::model::Literal;
 use crate::sparql::algebra::*;
 use crate::sparql::model::*;
 use crate::sparql::plan::PlanPropertyPath;
@@ -7,7 +6,7 @@ use crate::sparql::plan::*;
 use crate::store::numeric_encoder::{Encoder, ENCODED_DEFAULT_GRAPH};
 use crate::Error;
 use crate::Result;
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 pub struct PlanBuilder<E: Encoder> {
     encoder: E,
@@ -47,25 +46,24 @@ impl<E: Encoder> PlanBuilder<E> {
             GraphPattern::LeftJoin(a, b, e) => {
                 let left = self.build_for_graph_pattern(a, variables, graph_name)?;
                 let right = self.build_for_graph_pattern(b, variables, graph_name)?;
+
+                let mut possible_problem_vars = BTreeSet::new();
+                self.add_left_join_problematic_variables(&right, &mut possible_problem_vars);
+
                 //We add the extra filter if needed
-                let right = if *e == Expression::from(Literal::from(true)) {
-                    right
-                } else {
+                let right = if let Some(e) = e {
                     PlanNode::Filter {
                         child: Box::new(right),
                         expression: self.build_for_expression(e, variables, graph_name)?,
                     }
+                } else {
+                    right
                 };
-                let possible_problem_vars = right
-                    .maybe_bound_variables()
-                    .difference(&left.maybe_bound_variables())
-                    .cloned()
-                    .collect();
 
                 PlanNode::LeftJoin {
                     left: Box::new(left),
                     right: Box::new(right),
-                    possible_problem_vars,
+                    possible_problem_vars: possible_problem_vars.into_iter().collect(),
                 }
             }
             GraphPattern::Filter(e, p) => PlanNode::Filter {
@@ -909,6 +907,69 @@ impl<E: Encoder> PlanBuilder<E> {
             to.len() - 1
         }
     }
+
+    fn add_left_join_problematic_variables(&self, node: &PlanNode, set: &mut BTreeSet<usize>) {
+        match node {
+            PlanNode::Init
+            | PlanNode::StaticBindings { .. }
+            | PlanNode::QuadPatternJoin { .. }
+            | PlanNode::PathPatternJoin { .. } => (),
+            PlanNode::Filter { child, expression } => {
+                expression.add_maybe_bound_variables(set); //TODO: only if it is not already bound
+                self.add_left_join_problematic_variables(&*child, set);
+            }
+            PlanNode::Union { children } => {
+                for child in children {
+                    self.add_left_join_problematic_variables(&*child, set);
+                }
+            }
+            PlanNode::Join { left, right, .. } => {
+                self.add_left_join_problematic_variables(&*left, set);
+                self.add_left_join_problematic_variables(&*right, set);
+            }
+            PlanNode::AntiJoin { left, .. } => {
+                self.add_left_join_problematic_variables(&*left, set);
+            }
+            PlanNode::LeftJoin { left, right, .. } => {
+                self.add_left_join_problematic_variables(&*left, set);
+                right.add_maybe_bound_variables(set);
+            }
+            PlanNode::Extend {
+                child, expression, ..
+            } => {
+                expression.add_maybe_bound_variables(set); //TODO: only if it is not already bound
+                self.add_left_join_problematic_variables(&*child, set);
+                self.add_left_join_problematic_variables(&*child, set);
+            }
+            PlanNode::Service { child, .. }
+            | PlanNode::Sort { child, .. }
+            | PlanNode::HashDeduplicate { child }
+            | PlanNode::Skip { child, .. }
+            | PlanNode::Limit { child, .. } => {
+                self.add_left_join_problematic_variables(&*child, set)
+            }
+            PlanNode::Project { mapping, child } => {
+                let mut child_bound = BTreeSet::new();
+                self.add_left_join_problematic_variables(&*child, &mut child_bound);
+                for (child_i, output_i) in mapping.iter() {
+                    if child_bound.contains(child_i) {
+                        set.insert(*output_i);
+                    }
+                }
+            }
+            PlanNode::Aggregate {
+                key_mapping,
+                aggregates,
+                ..
+            } => {
+                set.extend(key_mapping.iter().map(|(_, o)| o));
+                //TODO: This is too harsh
+                for (_, var) in aggregates {
+                    set.insert(*var);
+                }
+            }
+        }
+    }
 }
 
 fn variable_key(variables: &mut Vec<Variable>, variable: &Variable) -> usize {
@@ -931,7 +992,7 @@ fn slice_key<T: Eq>(slice: &[T], element: &T) -> Option<usize> {
 }
 
 fn sort_bgp(p: &[TripleOrPathPattern]) -> Vec<&TripleOrPathPattern> {
-    let mut assigned_variables = HashSet::default();
+    let mut assigned_variables = BTreeSet::default();
     let mut new_p: Vec<_> = p.iter().collect();
 
     for i in 0..new_p.len() {
@@ -947,7 +1008,7 @@ fn sort_bgp(p: &[TripleOrPathPattern]) -> Vec<&TripleOrPathPattern> {
 
 fn count_pattern_binds(
     pattern: &TripleOrPathPattern,
-    assigned_variables: &HashSet<&Variable>,
+    assigned_variables: &BTreeSet<&Variable>,
 ) -> u8 {
     let mut count = 12;
     if let TermOrVariable::Variable(v) = pattern.subject() {
@@ -980,7 +1041,7 @@ fn count_pattern_binds(
 
 fn add_pattern_variables<'a>(
     pattern: &'a TripleOrPathPattern,
-    variables: &mut HashSet<&'a Variable>,
+    variables: &mut BTreeSet<&'a Variable>,
 ) {
     if let TermOrVariable::Variable(v) = pattern.subject() {
         variables.insert(v);

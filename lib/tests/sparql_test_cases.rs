@@ -78,6 +78,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional/manifest.ttl",
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/regex/manifest.ttl",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/solution-seq/manifest.ttl",
@@ -134,7 +135,8 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         NamedNode::parse("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/service/manifest#service5").unwrap(),
         // We use XSD 1.1 equality on dates
         NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#date-2").unwrap(),
-
+        // We choose to simplify first the nested group patterns in OPTIONAL
+        NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest#dawg-optional-filter-005-not-simplified").unwrap(),
     ];
 
     let tests: Result<Vec<_>> = manifest_10_urls

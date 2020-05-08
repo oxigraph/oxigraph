@@ -303,22 +303,21 @@ impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
                 right,
                 possible_problem_vars,
             } => {
-                let problem_vars = bind_variables_in_set(&from, possible_problem_vars);
-                let mut filtered_from = from.clone();
-                unbind_variables(&mut filtered_from, &problem_vars);
-                let iter = LeftJoinIterator {
-                    eval: self,
-                    right_plan: &*right,
-                    left_iter: self.eval_plan(&*left, filtered_from),
-                    current_right: Box::new(empty()),
-                };
-                if problem_vars.is_empty() {
-                    Box::new(iter)
+                if possible_problem_vars.is_empty() {
+                    Box::new(LeftJoinIterator {
+                        eval: self,
+                        right_plan: &*right,
+                        left_iter: self.eval_plan(&*left, from),
+                        current_right: Box::new(empty()),
+                    })
                 } else {
                     Box::new(BadLeftJoinIterator {
-                        input: from,
-                        iter,
-                        problem_vars,
+                        eval: self,
+                        right_plan: &*right,
+                        left_iter: self.eval_plan(&*left, from),
+                        current_left: None,
+                        current_right: Box::new(empty()),
+                        problem_vars: possible_problem_vars.as_slice(),
                     })
                 }
             }
@@ -1959,17 +1958,25 @@ fn put_variable_value(
     }
 }
 
-fn bind_variables_in_set(binding: &EncodedTuple, set: &[usize]) -> Vec<usize> {
-    set.iter()
-        .cloned()
-        .filter(|key| binding.contains(*key))
-        .collect()
-}
-
 fn unbind_variables(binding: &mut EncodedTuple, variables: &[usize]) {
     for var in variables {
         binding.unset(*var)
     }
+}
+
+fn combine_tuples(mut a: EncodedTuple, b: &EncodedTuple, vars: &[usize]) -> Option<EncodedTuple> {
+    for var in vars {
+        if let Some(b_value) = b.get(*var) {
+            if let Some(a_value) = a.get(*var) {
+                if a_value != b_value {
+                    return None;
+                }
+            } else {
+                a.set(*var, b_value);
+            }
+        }
+    }
+    Some(a)
 }
 
 pub fn are_compatible_and_not_disjointed(a: &EncodedTuple, b: &EncodedTuple) -> bool {
@@ -2066,37 +2073,53 @@ impl<'a, S: StoreConnection> Iterator for LeftJoinIterator<'a, S> {
 }
 
 struct BadLeftJoinIterator<'a, S: StoreConnection> {
-    input: EncodedTuple,
-    iter: LeftJoinIterator<'a, S>,
-    problem_vars: Vec<usize>,
+    eval: &'a SimpleEvaluator<S>,
+    right_plan: &'a PlanNode,
+    left_iter: EncodedTuplesIterator<'a>,
+    current_left: Option<EncodedTuple>,
+    current_right: EncodedTuplesIterator<'a>,
+    problem_vars: &'a [usize],
 }
 
 impl<'a, S: StoreConnection> Iterator for BadLeftJoinIterator<'a, S> {
     type Item = Result<EncodedTuple>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple>> {
-        loop {
-            match self.iter.next()? {
-                Ok(mut tuple) => {
-                    let mut conflict = false;
-                    for problem_var in &self.problem_vars {
-                        if let Some(input_value) = self.input.get(*problem_var) {
-                            if let Some(result_value) = tuple.get(*problem_var) {
-                                if input_value != result_value {
-                                    conflict = true;
-                                    continue; //Binding conflict
-                                }
-                            } else {
-                                tuple.set(*problem_var, input_value);
-                            }
-                        }
-                    }
-                    if !conflict {
-                        return Some(Ok(tuple));
+        while let Some(right_tuple) = self.current_right.next() {
+            match right_tuple {
+                Ok(right_tuple) => {
+                    if let Some(combined) = combine_tuples(
+                        right_tuple,
+                        self.current_left.as_ref().unwrap(),
+                        self.problem_vars,
+                    ) {
+                        return Some(Ok(combined));
                     }
                 }
                 Err(error) => return Some(Err(error)),
             }
+        }
+        match self.left_iter.next()? {
+            Ok(left_tuple) => {
+                let mut filtered_left = left_tuple.clone();
+                unbind_variables(&mut filtered_left, self.problem_vars);
+                self.current_right = self.eval.eval_plan(self.right_plan, filtered_left);
+                while let Some(right_tuple) = self.current_right.next() {
+                    match right_tuple {
+                        Ok(right_tuple) => {
+                            if let Some(combined) =
+                                combine_tuples(right_tuple, &left_tuple, self.problem_vars)
+                            {
+                                self.current_left = Some(left_tuple);
+                                return Some(Ok(combined));
+                            }
+                        }
+                        Err(error) => return Some(Err(error)),
+                    }
+                }
+                Some(Ok(left_tuple))
+            }
+            Err(error) => Some(Err(error)),
         }
     }
 }

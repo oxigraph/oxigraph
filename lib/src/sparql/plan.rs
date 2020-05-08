@@ -96,7 +96,7 @@ impl PlanNode {
         set
     }
 
-    fn add_maybe_bound_variables(&self, set: &mut BTreeSet<usize>) {
+    pub fn add_maybe_bound_variables(&self, set: &mut BTreeSet<usize>) {
         match self {
             PlanNode::Init => (),
             PlanNode::StaticBindings { tuples } => {
@@ -147,7 +147,10 @@ impl PlanNode {
                 }
                 child.add_maybe_bound_variables(set);
             }
-            PlanNode::Filter { child, .. } => child.add_maybe_bound_variables(set),
+            PlanNode::Filter { child, expression } => {
+                expression.add_maybe_bound_variables(set);
+                child.add_maybe_bound_variables(set);
+            }
             PlanNode::Union { children } => {
                 for child in children {
                     child.add_maybe_bound_variables(set);
@@ -160,9 +163,12 @@ impl PlanNode {
                 right.add_maybe_bound_variables(set);
             }
             PlanNode::Extend {
-                child, position, ..
+                child,
+                position,
+                expression,
             } => {
                 set.insert(*position);
+                expression.add_maybe_bound_variables(set);
                 child.add_maybe_bound_variables(set);
             }
             PlanNode::Service { child, .. }
@@ -305,6 +311,120 @@ pub enum PlanExpression {
     DateTimeCast(Box<PlanExpression>),
     DurationCast(Box<PlanExpression>),
     StringCast(Box<PlanExpression>),
+}
+
+impl PlanExpression {
+    pub fn add_maybe_bound_variables(&self, set: &mut BTreeSet<usize>) {
+        match self {
+            PlanExpression::Variable(v) | PlanExpression::Bound(v) => {
+                set.insert(*v);
+            }
+            PlanExpression::Constant(_)
+            | PlanExpression::Rand
+            | PlanExpression::Now
+            | PlanExpression::UUID
+            | PlanExpression::StrUUID
+            | PlanExpression::BNode(None) => (),
+            PlanExpression::UnaryPlus(e)
+            | PlanExpression::UnaryMinus(e)
+            | PlanExpression::UnaryNot(e)
+            | PlanExpression::BNode(Some(e))
+            | PlanExpression::Str(e)
+            | PlanExpression::Lang(e)
+            | PlanExpression::Datatype(e)
+            | PlanExpression::IRI(e)
+            | PlanExpression::Abs(e)
+            | PlanExpression::Ceil(e)
+            | PlanExpression::Floor(e)
+            | PlanExpression::Round(e)
+            | PlanExpression::UCase(e)
+            | PlanExpression::LCase(e)
+            | PlanExpression::StrLen(e)
+            | PlanExpression::EncodeForURI(e)
+            | PlanExpression::Year(e)
+            | PlanExpression::Month(e)
+            | PlanExpression::Day(e)
+            | PlanExpression::Hours(e)
+            | PlanExpression::Minutes(e)
+            | PlanExpression::Seconds(e)
+            | PlanExpression::Timezone(e)
+            | PlanExpression::Tz(e)
+            | PlanExpression::MD5(e)
+            | PlanExpression::SHA1(e)
+            | PlanExpression::SHA256(e)
+            | PlanExpression::SHA384(e)
+            | PlanExpression::SHA512(e)
+            | PlanExpression::IsIRI(e)
+            | PlanExpression::IsBlank(e)
+            | PlanExpression::IsLiteral(e)
+            | PlanExpression::IsNumeric(e)
+            | PlanExpression::BooleanCast(e)
+            | PlanExpression::DoubleCast(e)
+            | PlanExpression::FloatCast(e)
+            | PlanExpression::DecimalCast(e)
+            | PlanExpression::IntegerCast(e)
+            | PlanExpression::DateCast(e)
+            | PlanExpression::TimeCast(e)
+            | PlanExpression::DateTimeCast(e)
+            | PlanExpression::DurationCast(e)
+            | PlanExpression::StringCast(e) => e.add_maybe_bound_variables(set),
+            PlanExpression::Or(a, b)
+            | PlanExpression::And(a, b)
+            | PlanExpression::Equal(a, b)
+            | PlanExpression::NotEqual(a, b)
+            | PlanExpression::Greater(a, b)
+            | PlanExpression::GreaterOrEq(a, b)
+            | PlanExpression::Lower(a, b)
+            | PlanExpression::LowerOrEq(a, b)
+            | PlanExpression::Add(a, b)
+            | PlanExpression::Sub(a, b)
+            | PlanExpression::Mul(a, b)
+            | PlanExpression::Div(a, b)
+            | PlanExpression::LangMatches(a, b)
+            | PlanExpression::Contains(a, b)
+            | PlanExpression::StrStarts(a, b)
+            | PlanExpression::StrEnds(a, b)
+            | PlanExpression::StrBefore(a, b)
+            | PlanExpression::StrAfter(a, b)
+            | PlanExpression::StrLang(a, b)
+            | PlanExpression::StrDT(a, b)
+            | PlanExpression::SameTerm(a, b)
+            | PlanExpression::SubStr(a, b, None)
+            | PlanExpression::Regex(a, b, None) => {
+                a.add_maybe_bound_variables(set);
+                b.add_maybe_bound_variables(set);
+            }
+            PlanExpression::If(a, b, c)
+            | PlanExpression::SubStr(a, b, Some(c))
+            | PlanExpression::Regex(a, b, Some(c))
+            | PlanExpression::Replace(a, b, c, None) => {
+                a.add_maybe_bound_variables(set);
+                b.add_maybe_bound_variables(set);
+                c.add_maybe_bound_variables(set);
+            }
+            PlanExpression::Replace(a, b, c, Some(d)) => {
+                a.add_maybe_bound_variables(set);
+                b.add_maybe_bound_variables(set);
+                c.add_maybe_bound_variables(set);
+                d.add_maybe_bound_variables(set);
+            }
+
+            PlanExpression::Concat(es) | PlanExpression::Coalesce(es) => {
+                for e in es {
+                    e.add_maybe_bound_variables(set);
+                }
+            }
+            PlanExpression::In(a, bs) => {
+                a.add_maybe_bound_variables(set);
+                for b in bs {
+                    b.add_maybe_bound_variables(set);
+                }
+            }
+            PlanExpression::Exists(e) => {
+                e.add_maybe_bound_variables(set);
+            }
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
