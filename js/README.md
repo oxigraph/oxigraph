@@ -10,6 +10,9 @@ Oxigraph is a work in progress graph database written in Rust implementing the [
 
 It is a work in progress and currently offers a simple in-memory store with [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/) capabilities.
 
+The store is also able to load RDF serialized in [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/) and [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/).
+
+
 It is distributed using a [a NPM package](https://www.npmjs.com/package/oxigraph) that should work with nodeJS.
 
 ```bash
@@ -116,6 +119,26 @@ if (store.query("ASK { ?s ?s ?s }")) {
 }
 ```
 
+### `MemoryStore.prototype.load(String data, String mimeType, NamedNode|String? baseIRI, NamedNode|BlankNode|DefaultGraph? toNamedGraph)`
+
+Loads serialized RDF triples or quad into the store.
+The method arguments are:
+1. `data`: the serialized RDF triples or quads.
+2. `mimeType`: the MIME type of the serialization. See below for the supported mime types.
+3. `baseIRI`: the base IRI to use to resolve the relative IRIs in the serialization.
+4. `toNamedGraph`: for triple serialization formats, the name of the named graph the triple should be loaded to.
+
+The available formats are:
+* [Turtle](https://www.w3.org/TR/turtle/): `text/turtle`
+* [TriG](https://www.w3.org/TR/trig/): `application/trig`
+* [N-Triples](https://www.w3.org/TR/n-triples/): `application/n-triples`
+* [N-Quads](https://www.w3.org/TR/n-quads/): `application/n-quads`
+* [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/): `application/rdf+xml`
+
+Example of loading a Turtle file into the named graph `<http://example.com/graph>` with the base IRI `http://example.com`:
+```js
+store.load("<http://example.com> <http://example.com> <> .", "text/turtle", "http://example.com", store.dataFactory.namedNode("http://example.com/graph"));
+```
 
 ## Example
 

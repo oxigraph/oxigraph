@@ -63,4 +63,36 @@ describe('MemoryStore', function() {
       assert(ex.equals(results[0].get("s")));
     });
   });
+
+  describe('#load()', function() {
+    it('load NTriples in the default graph', function() {
+      const store = new MemoryStore();
+      store.load("<http://example.com> <http://example.com> <http://example.com> .", "application/n-triples");
+      assert(store.has(dataFactory.triple(ex, ex, ex)));
+    });
+
+    it('load NTriples in an other graph', function() {
+      const store = new MemoryStore();
+      store.load("<http://example.com> <http://example.com> <http://example.com> .", "application/n-triples", null, ex);
+      assert(store.has(dataFactory.quad(ex, ex, ex, ex)));
+    });
+
+    it('load Turtle with a base IRI', function() {
+      const store = new MemoryStore();
+      store.load("<http://example.com> <http://example.com> <> .", "text/turtle", "http://example.com");
+      assert(store.has(dataFactory.triple(ex, ex, ex)));
+    });
+
+    it('load NQuads', function() {
+      const store = new MemoryStore();
+      store.load("<http://example.com> <http://example.com> <http://example.com> <http://example.com> .", "application/n-quads");
+      assert(store.has(dataFactory.quad(ex, ex, ex, ex)));
+    });
+
+    it('load TriG with a base IRI', function() {
+      const store = new MemoryStore();
+      store.load("GRAPH <> { <http://example.com> <http://example.com> <> }", "application/trig", "http://example.com");
+      assert(store.has(dataFactory.quad(ex, ex, ex, ex)));
+    });
+  });
 });

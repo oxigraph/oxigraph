@@ -2,9 +2,14 @@ use crate::format_err;
 use crate::model::*;
 use crate::utils::to_err;
 use js_sys::{Array, Map};
+use oxigraph::model::NamedOrBlankNode;
 use oxigraph::sparql::{PreparedQuery, QueryOptions, QueryResult};
-use oxigraph::{Error, MemoryRepository, Repository, RepositoryConnection};
+use oxigraph::{
+    DatasetSyntax, Error, FileSyntax, GraphSyntax, MemoryRepository, Repository,
+    RepositoryConnection,
+};
 use std::convert::TryInto;
+use std::io::Cursor;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(js_name = MemoryStore)]
@@ -153,5 +158,64 @@ impl JsMemoryStore {
             QueryResult::Boolean(b) => b.into(),
         };
         Ok(output)
+    }
+
+    pub fn load(
+        &self,
+        data: &str,
+        mime_type: &str,
+        base_iri: &JsValue,
+        to_graph_name: &JsValue,
+    ) -> Result<(), JsValue> {
+        let base_iri = if base_iri.is_null() || base_iri.is_undefined() {
+            None
+        } else if base_iri.is_string() {
+            base_iri.as_string()
+        } else if let JsTerm::NamedNode(base_iri) = self.from_js.to_term(&base_iri)? {
+            Some(base_iri.value())
+        } else {
+            return Err(format_err!(
+                "If provided, the base IRI should be a NamedNode or a string"
+            ));
+        };
+
+        let to_graph_name: Option<NamedOrBlankNode> =
+            match self.from_js.to_optional_term(to_graph_name)? {
+                Some(JsTerm::NamedNode(node)) => Some(node.into()),
+                Some(JsTerm::BlankNode(node)) => Some(node.into()),
+                Some(JsTerm::DefaultGraph(_)) => None,
+                Some(_) => {
+                    return Err(format_err!(
+                        "If provided, the target graph name should be a NamedNode or a BlankNode"
+                    ))
+                }
+                None => None,
+            };
+
+        if let Some(graph_syntax) = GraphSyntax::from_mime_type(mime_type) {
+            self.store
+                .connection()
+                .map_err(to_err)?
+                .load_graph(
+                    Cursor::new(data),
+                    graph_syntax,
+                    to_graph_name.as_ref(),
+                    base_iri.as_deref(),
+                )
+                .map_err(to_err)
+        } else if let Some(dataset_syntax) = DatasetSyntax::from_mime_type(mime_type) {
+            if to_graph_name.is_some() {
+                return Err(format_err!(
+                    "The target graph name parameter is not available for dataset formats"
+                ));
+            }
+            self.store
+                .connection()
+                .map_err(to_err)?
+                .load_dataset(Cursor::new(data), dataset_syntax, base_iri.as_deref())
+                .map_err(to_err)
+        } else {
+            Err(format_err!("Not supported MIME type: {}", mime_type))
+        }
     }
 }

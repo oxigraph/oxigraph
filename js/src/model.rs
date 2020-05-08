@@ -101,7 +101,7 @@ impl JsDataFactory {
 
     #[wasm_bindgen(js_name = fromQuad)]
     pub fn convert_quad(&self, original: &JsValue) -> Result<JsQuad, JsValue> {
-        Ok(self.from_js.to_quad(original)?.into())
+        Ok(self.from_js.to_quad(original)?)
     }
 }
 
