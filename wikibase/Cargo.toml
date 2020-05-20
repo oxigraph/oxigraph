@@ -11,9 +11,12 @@ SPARQL server based on Oxigraph for Wikibase instances
 edition = "2018"
 
 [dependencies]
-oxigraph = {path = "../lib", features = ["rocksdb"] }
 argh = "0.1"
-rouille = "3"
-reqwest = "0.9"
-serde_json = "1"
+async-std = { version = "1", features = ["attributes"] }
+async-h1 = "1"
 chrono = "0.4"
+http-client = { version = "2.0", features = ["h1_client"] }
+http-types = "1"
+oxigraph = { path = "../lib", features = ["rocksdb"] }
+serde_json = "1"
+url = "2"

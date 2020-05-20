@@ -11,18 +11,20 @@
 
 use crate::loader::WikibaseLoader;
 use argh::FromArgs;
+use async_std::future::Future;
+use async_std::net::{TcpListener, TcpStream};
+use async_std::prelude::*;
+use async_std::sync::Arc;
+use async_std::task::{spawn, spawn_blocking};
+use http_types::headers::HeaderName;
+use http_types::{headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode};
 use oxigraph::sparql::{PreparedQuery, QueryOptions, QueryResult, QueryResultSyntax};
 use oxigraph::{
     FileSyntax, GraphSyntax, MemoryRepository, Repository, RepositoryConnection, RocksDbRepository,
 };
-use rouille::input::priority_header_preferred;
-use rouille::url::form_urlencoded;
-use rouille::{content_encoding, start_server, Request, Response};
-use std::io::Read;
 use std::str::FromStr;
-use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
+use url::form_urlencoded;
 
 mod loader;
 
@@ -57,23 +59,22 @@ struct Args {
     slot: Option<String>,
 }
 
-pub fn main() {
+#[async_std::main]
+pub async fn main() -> Result<()> {
     let args: Args = argh::from_env();
 
     let file = args.file.clone();
     if let Some(file) = file {
-        main_with_dataset(Arc::new(RocksDbRepository::open(file).unwrap()), args)
+        main_with_dataset(Arc::new(RocksDbRepository::open(file)?), args).await
     } else {
-        main_with_dataset(Arc::new(MemoryRepository::default()), args)
+        main_with_dataset(Arc::new(MemoryRepository::default()), args).await
     }
 }
 
-fn main_with_dataset<R: Send + Sync + 'static>(repository: Arc<R>, args: Args)
+async fn main_with_dataset<R: Send + Sync + 'static>(repository: Arc<R>, args: Args) -> Result<()>
 where
     for<'a> &'a R: Repository,
 {
-    println!("Listening for requests at http://{}", &args.bind);
-
     let repo = repository.clone();
     let mediawiki_api = args.mediawiki_api.clone();
     let mediawiki_base_url = args.mediawiki_base_url.clone();
@@ -92,7 +93,7 @@ where
         })
         .collect::<Vec<_>>();
     let slot = args.slot.clone();
-    thread::spawn(move || {
+    spawn_blocking(move || {
         let mut loader = WikibaseLoader::new(
             repo.as_ref(),
             &mediawiki_api,
@@ -106,131 +107,216 @@ where
         loader.update_loop();
     });
 
-    start_server(args.bind, move |request| {
-        content_encoding::apply(
-            request,
-            handle_request(request, repository.connection().unwrap()),
-        )
-        .with_unique_header("Server", SERVER)
+    println!("Listening for requests at http://{}", &args.bind);
+
+    http_server(args.bind, move |request| {
+        handle_request(request, Arc::clone(&repository))
     })
+    .await
 }
 
-fn handle_request<R: RepositoryConnection>(request: &Request, connection: R) -> Response {
-    match (request.url().as_str(), request.method()) {
-        ("/query", "GET") => evaluate_urlencoded_sparql_query(
-            connection,
-            request.raw_query_string().as_bytes(),
-            request,
-        ),
-        ("/query", "POST") => {
-            if let Some(body) = request.data() {
-                if let Some(content_type) = request.header("Content-Type") {
-                    if content_type.starts_with("application/sparql-query") {
-                        let mut buffer = String::default();
-                        body.take(MAX_SPARQL_BODY_SIZE)
-                            .read_to_string(&mut buffer)
-                            .unwrap();
-                        evaluate_sparql_query(connection, &buffer, request)
-                    } else if content_type.starts_with("application/x-www-form-urlencoded") {
-                        let mut buffer = Vec::default();
-                        body.take(MAX_SPARQL_BODY_SIZE)
-                            .read_to_end(&mut buffer)
-                            .unwrap();
-                        evaluate_urlencoded_sparql_query(connection, &buffer, request)
-                    } else {
-                        Response::text(format!(
-                            "No supported content Content-Type given: {}",
-                            content_type
-                        ))
-                        .with_status_code(415)
-                    }
+async fn handle_request<R: Send + Sync + 'static>(
+    request: Request,
+    repository: Arc<R>,
+) -> Result<Response>
+where
+    for<'a> &'a R: Repository,
+{
+    let mut response = match (request.url().path(), request.method()) {
+        ("/query", Method::Get) => {
+            evaluate_urlencoded_sparql_query(
+                repository,
+                request.url().query().unwrap_or("").as_bytes().to_vec(),
+                request,
+            )
+            .await?
+        }
+        ("/query", Method::Post) => {
+            if let Some(content_type) = request.content_type() {
+                if essence(&content_type) == "application/sparql-query" {
+                    let mut buffer = String::new();
+                    let mut request = request;
+                    request
+                        .take_body()
+                        .take(MAX_SPARQL_BODY_SIZE)
+                        .read_to_string(&mut buffer)
+                        .await?;
+                    evaluate_sparql_query(repository, buffer, request).await?
+                } else if essence(&content_type) == "application/x-www-form-urlencoded" {
+                    let mut buffer = Vec::new();
+                    let mut request = request;
+                    request
+                        .take_body()
+                        .take(MAX_SPARQL_BODY_SIZE)
+                        .read_to_end(&mut buffer)
+                        .await?;
+                    evaluate_urlencoded_sparql_query(repository, buffer, request).await?
                 } else {
-                    Response::text("No Content-Type given").with_status_code(400)
+                    simple_response(
+                        StatusCode::UnsupportedMediaType,
+                        format!("No supported Content-Type given: {}", content_type),
+                    )
                 }
             } else {
-                Response::text("No content given").with_status_code(400)
+                simple_response(StatusCode::BadRequest, "No Content-Type given")
             }
         }
-        _ => Response::empty_404(),
-    }
+        _ => Response::new(StatusCode::NotFound),
+    };
+    response.append_header("Server", SERVER)?;
+    Ok(response)
 }
 
-fn evaluate_urlencoded_sparql_query<R: RepositoryConnection>(
-    connection: R,
-    encoded: &[u8],
-    request: &Request,
-) -> Response {
-    if let Some((_, query)) = form_urlencoded::parse(encoded).find(|(k, _)| k == "query") {
-        evaluate_sparql_query(connection, &query, request)
+/// TODO: bad hack to overcome http_types limitations
+fn essence(mime: &Mime) -> &str {
+    mime.essence().split(';').next().unwrap_or("")
+}
+
+fn simple_response(status: StatusCode, body: impl Into<Body>) -> Response {
+    let mut response = Response::new(status);
+    response.set_body(body);
+    response
+}
+
+async fn evaluate_urlencoded_sparql_query<R: Send + Sync + 'static>(
+    repository: Arc<R>,
+    encoded: Vec<u8>,
+    request: Request,
+) -> Result<Response>
+where
+    for<'a> &'a R: Repository,
+{
+    if let Some((_, query)) = form_urlencoded::parse(&encoded).find(|(k, _)| k == "query") {
+        evaluate_sparql_query(repository, query.to_string(), request).await
     } else {
-        Response::text("You should set the 'query' parameter").with_status_code(400)
+        Ok(simple_response(
+            StatusCode::BadRequest,
+            "You should set the 'query' parameter",
+        ))
     }
 }
 
-fn evaluate_sparql_query<R: RepositoryConnection>(
-    connection: R,
-    query: &str,
-    request: &Request,
-) -> Response {
-    //TODO: stream
-    match connection.prepare_query(query, QueryOptions::default().with_default_graph_as_union()) {
-        Ok(query) => {
-            let results = query.exec().unwrap();
-            if let QueryResult::Graph(_) = results {
-                let supported_formats = [
+async fn evaluate_sparql_query<R: Send + Sync + 'static>(
+    repository: Arc<R>,
+    query: String,
+    request: Request,
+) -> Result<Response>
+where
+    for<'a> &'a R: Repository,
+{
+    spawn_blocking(move || {
+        //TODO: stream
+        let query = repository
+            .connection()?
+            .prepare_query(&query, QueryOptions::default())
+            .map_err(|e| {
+                let mut e = Error::from(e);
+                e.set_status(StatusCode::BadRequest);
+                e
+            })?;
+        let results = query.exec()?;
+        if let QueryResult::Graph(_) = results {
+            let format = content_negotiation(
+                request,
+                &[
                     GraphSyntax::NTriples.media_type(),
                     GraphSyntax::Turtle.media_type(),
                     GraphSyntax::RdfXml.media_type(),
-                ];
-                let format = if let Some(accept) = request.header("Accept") {
-                    if let Some(media_type) =
-                        priority_header_preferred(accept, supported_formats.iter().cloned())
-                            .and_then(|p| GraphSyntax::from_mime_type(supported_formats[p]))
-                    {
-                        media_type
-                    } else {
-                        return Response::text(format!(
-                            "No supported Accept given: {}. Supported format: {:?}",
-                            accept, supported_formats
-                        ))
-                        .with_status_code(415);
-                    }
-                } else {
-                    GraphSyntax::NTriples
-                };
+                ],
+            )?;
 
-                Response::from_data(
-                    format.media_type(),
-                    results.write_graph(Vec::default(), format).unwrap(),
-                )
-            } else {
-                let supported_formats = [
+            let mut response = Response::from(results.write_graph(Vec::default(), format)?);
+            response.insert_header(headers::CONTENT_TYPE, format.media_type())?;
+            Ok(response)
+        } else {
+            let format = content_negotiation(
+                request,
+                &[
                     QueryResultSyntax::Xml.media_type(),
                     QueryResultSyntax::Json.media_type(),
-                ];
-                let format = if let Some(accept) = request.header("Accept") {
-                    if let Some(media_type) =
-                        priority_header_preferred(accept, supported_formats.iter().cloned())
-                            .and_then(|p| QueryResultSyntax::from_mime_type(supported_formats[p]))
-                    {
-                        media_type
-                    } else {
-                        return Response::text(format!(
-                            "No supported Accept given: {}. Supported format: {:?}",
-                            accept, supported_formats
-                        ))
-                        .with_status_code(415);
-                    }
-                } else {
-                    QueryResultSyntax::Json
-                };
+                ],
+            )?;
+            let mut response = Response::from(results.write(Vec::default(), format)?);
+            response.insert_header(headers::CONTENT_TYPE, format.media_type())?;
+            Ok(response)
+        }
+    })
+    .await
+}
 
-                Response::from_data(
-                    format.media_type(),
-                    results.write(Vec::default(), format).unwrap(),
-                )
+async fn http_server<
+    F: Clone + Send + Sync + 'static + Fn(Request) -> Fut,
+    Fut: Send + Future<Output = Result<Response>>,
+>(
+    host: String,
+    handle: F,
+) -> Result<()> {
+    async fn accept<F: Fn(Request) -> Fut, Fut: Future<Output = Result<Response>>>(
+        addr: String,
+        stream: TcpStream,
+        handle: F,
+    ) -> Result<()> {
+        async_h1::accept(&addr, stream, |request| async {
+            Ok(match handle(request).await {
+                Ok(result) => result,
+                Err(error) => simple_response(error.status(), error.to_string()),
+            })
+        })
+        .await
+    }
+
+    let listener = TcpListener::bind(&host).await?;
+    let mut incoming = listener.incoming();
+    while let Some(stream) = incoming.next().await {
+        let stream = stream?.clone(); //TODO: clone stream?
+        let handle = handle.clone();
+        let addr = format!("http://{}", host);
+        spawn(async {
+            if let Err(err) = accept(addr, stream, handle).await {
+                eprintln!("{}", err);
+            };
+        });
+    }
+    Ok(())
+}
+
+fn content_negotiation<F: FileSyntax>(request: Request, supported: &[&str]) -> Result<F> {
+    let header = request
+        .header(&HeaderName::from_str("Accept").unwrap())
+        .and_then(|h| h.last())
+        .map(|h| h.as_str().trim())
+        .unwrap_or("");
+    let supported: Vec<Mime> = supported
+        .iter()
+        .map(|h| Mime::from_str(h).unwrap())
+        .collect();
+
+    let mut result = supported.first().unwrap();
+    let mut result_score = 0f32;
+
+    if !header.is_empty() {
+        for possible in header.split(',') {
+            let possible = Mime::from_str(possible.trim())?;
+            let score = if let Some(q) = possible.param("q") {
+                f32::from_str(q)?
+            } else {
+                1.
+            };
+            if score <= result_score {
+                continue;
+            }
+            for candidate in &supported {
+                if (possible.basetype() == candidate.basetype() || possible.basetype() == "*")
+                    && (possible.subtype() == candidate.subtype() || possible.subtype() == "*")
+                {
+                    result = candidate;
+                    result_score = score;
+                    break;
+                }
             }
         }
-        Err(error) => Response::text(error.to_string()).with_status_code(400),
     }
+
+    F::from_mime_type(essence(result))
+        .ok_or_else(|| Error::from_str(StatusCode::InternalServerError, "Unknown mime type"))
 }

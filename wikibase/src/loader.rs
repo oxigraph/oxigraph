@@ -1,20 +1,24 @@
 use crate::SERVER;
+use async_std::prelude::*;
+use async_std::task::block_on;
 use chrono::{DateTime, Datelike, Utc};
+use http_client::h1::H1Client;
+use http_client::HttpClient;
+use http_types::{Method, Request, Result};
 use oxigraph::model::NamedNode;
-use oxigraph::*;
-use reqwest::header::USER_AGENT;
-use reqwest::{Client, Url};
+use oxigraph::{GraphSyntax, Repository, RepositoryConnection, RepositoryTransaction};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Cursor, Read};
 use std::thread::sleep;
 use std::time::Duration;
+use url::{form_urlencoded, Url};
 
 pub struct WikibaseLoader<R: Repository + Copy> {
     repository: R,
     api_url: Url,
     entity_data_url: Url,
-    client: Client,
+    client: H1Client,
     namespaces: Vec<u32>,
     slot: Option<String>,
     frequency: Duration,
@@ -32,10 +36,9 @@ impl<R: Repository + Copy> WikibaseLoader<R> {
     ) -> Result<Self> {
         Ok(Self {
             repository,
-            api_url: Url::parse(api_url).map_err(Error::wrap)?,
-            entity_data_url: Url::parse(&(pages_base_url.to_owned() + "Special:EntityData"))
-                .map_err(Error::wrap)?,
-            client: Client::new(),
+            api_url: Url::parse(api_url)?,
+            entity_data_url: Url::parse(&(pages_base_url.to_owned() + "Special:EntityData"))?,
+            client: H1Client::new(),
             namespaces: namespaces.to_vec(),
             slot: slot.map(|t| t.to_owned()),
             start: Utc::now(),
@@ -59,6 +62,7 @@ impl<R: Repository + Copy> WikibaseLoader<R> {
             parameters.insert("action".to_owned(), "query".to_owned());
             parameters.insert("list".to_owned(), "allpages".to_owned());
             parameters.insert("apnamespace".to_owned(), namespace.to_string());
+            parameters.insert("aplimit".to_owned(), "50".to_owned());
 
             self.api_get_with_continue(parameters, |results| {
                 println!("*");
@@ -81,7 +85,7 @@ impl<R: Repository + Copy> WikibaseLoader<R> {
                         Ok(data) => {
                             self.load_entity_data(
                                 &(self.entity_data_url.to_string() + "/" + id),
-                                data,
+                                Cursor::new(data),
                             )?;
                         }
                         Err(e) => eprintln!("Error while retrieving data for entity {}: {}", id, e),
@@ -127,7 +131,7 @@ impl<R: Repository + Copy> WikibaseLoader<R> {
         }
         parameters.insert("rcend".to_owned(), start.to_rfc2822());
         parameters.insert("rcprop".to_owned(), "title|ids".to_owned());
-        parameters.insert("limit".to_owned(), "50".to_owned());
+        parameters.insert("rclimit".to_owned(), "50".to_owned());
 
         self.api_get_with_continue(parameters, |results| {
             for change in results
@@ -155,7 +159,10 @@ impl<R: Repository + Copy> WikibaseLoader<R> {
 
                 match self.get_entity_data(&id) {
                     Ok(data) => {
-                        self.load_entity_data(&format!("{}/{}", self.entity_data_url, id), data)?;
+                        self.load_entity_data(
+                            &format!("{}/{}", self.entity_data_url, id),
+                            Cursor::new(data),
+                        )?;
                     }
                     Err(e) => eprintln!("Error while retrieving data for entity {}: {}", id, e),
                 }
@@ -186,29 +193,39 @@ impl<R: Repository + Copy> WikibaseLoader<R> {
     fn api_get(&self, parameters: &mut HashMap<String, String>) -> Result<Value> {
         parameters.insert("format".to_owned(), "json".to_owned());
 
-        Ok(self
-            .client
-            .get(self.api_url.clone())
-            .query(parameters)
-            .header(USER_AGENT, SERVER)
-            .send()
-            .map_err(Error::wrap)?
-            .error_for_status()
-            .map_err(Error::wrap)?
-            .json()
-            .map_err(Error::wrap)?)
+        Ok(serde_json::from_slice(
+            &self.get_request(&self.api_url, parameters)?,
+        )?)
     }
 
-    fn get_entity_data(&self, id: &str) -> Result<impl Read> {
-        Ok(self
-            .client
-            .get(self.entity_data_url.clone())
-            .query(&[("id", id), ("format", "nt"), ("flavor", "dump")])
-            .header(USER_AGENT, SERVER)
-            .send()
-            .map_err(Error::wrap)?
-            .error_for_status()
-            .map_err(Error::wrap)?)
+    fn get_entity_data(&self, id: &str) -> Result<Vec<u8>> {
+        Ok(self.get_request(
+            &self.entity_data_url,
+            [("id", id), ("format", "nt"), ("flavor", "dump")]
+                .iter()
+                .cloned(),
+        )?)
+    }
+
+    fn get_request<K: AsRef<str>, V: AsRef<str>>(
+        &self,
+        url: &Url,
+        params: impl IntoIterator<Item = (K, V)>,
+    ) -> Result<Vec<u8>> {
+        let mut query_serializer = form_urlencoded::Serializer::new(String::new());
+        for (k, v) in params {
+            query_serializer.append_pair(k.as_ref(), v.as_ref());
+        }
+        let url = url.join(&("?".to_owned() + &query_serializer.finish()))?;
+        let mut request = Request::new(Method::Get, url);
+        request.append_header("user-agent", SERVER)?;
+        let response = self.client.send(request);
+        block_on(async {
+            let mut response = response.await?;
+            let mut buffer = Vec::new();
+            response.read_to_end(&mut buffer).await?;
+            Ok(buffer)
+        })
     }
 
     fn load_entity_data(&self, uri: &str, data: impl Read) -> Result<()> {
@@ -217,7 +234,7 @@ impl<R: Repository + Copy> WikibaseLoader<R> {
         connection.transaction(|transaction| {
             let to_remove = connection
                 .quads_for_pattern(None, None, None, Some(Some(&graph_name)))
-                .collect::<Result<Vec<_>>>()?;
+                .collect::<oxigraph::Result<Vec<_>>>()?;
             for q in to_remove {
                 transaction.remove(&q)?;
             }
