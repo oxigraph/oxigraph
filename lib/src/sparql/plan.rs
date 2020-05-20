@@ -4,7 +4,7 @@ use crate::store::numeric_encoder::{
     EncodedQuad, EncodedTerm, Encoder, MemoryStrStore, StrContainer, StrHash, StrLookup,
     ENCODED_DEFAULT_GRAPH,
 };
-use crate::store::StoreConnection;
+use crate::store::ReadableEncodedStore;
 use crate::Result;
 use std::cell::{RefCell, RefMut};
 use std::collections::BTreeSet;
@@ -553,13 +553,13 @@ impl EncodedTuple {
     }
 }
 
-pub struct DatasetView<S: StoreConnection> {
+pub struct DatasetView<S: ReadableEncodedStore> {
     store: S,
     extra: RefCell<MemoryStrStore>,
     default_graph_as_union: bool,
 }
 
-impl<S: StoreConnection> DatasetView<S> {
+impl<S: ReadableEncodedStore> DatasetView<S> {
     pub fn new(store: S, default_graph_as_union: bool) -> Self {
         Self {
             store,
@@ -578,7 +578,7 @@ impl<S: StoreConnection> DatasetView<S> {
         if graph_name == None {
             Box::new(
                 self.store
-                    .quads_for_pattern(subject, predicate, object, None)
+                    .encoded_quads_for_pattern(subject, predicate, object, None)
                     .filter(|quad| match quad {
                         Err(_) => true,
                         Ok(quad) => quad.graph_name != ENCODED_DEFAULT_GRAPH,
@@ -587,7 +587,7 @@ impl<S: StoreConnection> DatasetView<S> {
         } else if graph_name == Some(ENCODED_DEFAULT_GRAPH) && self.default_graph_as_union {
             Box::new(
                 self.store
-                    .quads_for_pattern(subject, predicate, object, None)
+                    .encoded_quads_for_pattern(subject, predicate, object, None)
                     .map(|quad| {
                         let quad = quad?;
                         Ok(EncodedQuad::new(
@@ -600,7 +600,7 @@ impl<S: StoreConnection> DatasetView<S> {
             )
         } else {
             self.store
-                .quads_for_pattern(subject, predicate, object, graph_name)
+                .encoded_quads_for_pattern(subject, predicate, object, graph_name)
         }
     }
 
@@ -612,7 +612,7 @@ impl<S: StoreConnection> DatasetView<S> {
     }
 }
 
-impl<S: StoreConnection> StrLookup for DatasetView<S> {
+impl<S: ReadableEncodedStore> StrLookup for DatasetView<S> {
     fn get_str(&self, id: StrHash) -> Result<Option<String>> {
         if let Some(value) = self.extra.borrow().get_str(id)? {
             Ok(Some(value))
@@ -622,12 +622,12 @@ impl<S: StoreConnection> StrLookup for DatasetView<S> {
     }
 }
 
-struct DatasetViewStrContainer<'a, S: StoreConnection> {
+struct DatasetViewStrContainer<'a, S: ReadableEncodedStore> {
     store: &'a S,
     extra: RefMut<'a, MemoryStrStore>,
 }
 
-impl<'a, S: StoreConnection> StrContainer for DatasetViewStrContainer<'a, S> {
+impl<'a, S: ReadableEncodedStore> StrContainer for DatasetViewStrContainer<'a, S> {
     fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
         if self.store.get_str(key)?.is_none() {
             self.extra.insert_str(key, value)

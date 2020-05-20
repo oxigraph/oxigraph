@@ -58,6 +58,28 @@ pub trait StoreTransaction: StrContainer + Sized {
     fn commit(self) -> Result<()>;
 }
 
+pub trait ReadableEncodedStore: StrLookup + Sized {
+    fn encoded_quads_for_pattern<'a>(
+        &'a self,
+        subject: Option<EncodedTerm>,
+        predicate: Option<EncodedTerm>,
+        object: Option<EncodedTerm>,
+        graph_name: Option<EncodedTerm>,
+    ) -> Box<dyn Iterator<Item = Result<EncodedQuad>> + 'a>;
+}
+
+impl<S: StoreConnection> ReadableEncodedStore for S {
+    fn encoded_quads_for_pattern<'a>(
+        &'a self,
+        subject: Option<EncodedTerm>,
+        predicate: Option<EncodedTerm>,
+        object: Option<EncodedTerm>,
+        graph_name: Option<EncodedTerm>,
+    ) -> Box<dyn Iterator<Item = Result<EncodedQuad>> + 'a> {
+        self.quads_for_pattern(subject, predicate, object, graph_name)
+    }
+}
+
 /// A `RepositoryConnection` from a `StoreConnection`
 #[derive(Clone)]
 pub struct StoreRepositoryConnection<S: StoreConnection> {

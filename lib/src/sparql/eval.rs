@@ -6,7 +6,7 @@ use crate::sparql::model::*;
 use crate::sparql::plan::*;
 use crate::sparql::ServiceHandler;
 use crate::store::numeric_encoder::*;
-use crate::store::StoreConnection;
+use crate::store::ReadableEncodedStore;
 use crate::Error;
 use crate::Result;
 use digest::Digest;
@@ -31,7 +31,7 @@ const REGEX_SIZE_LIMIT: usize = 1_000_000;
 
 type EncodedTuplesIterator<'a> = Box<dyn Iterator<Item = Result<EncodedTuple>> + 'a>;
 
-pub struct SimpleEvaluator<S: StoreConnection> {
+pub struct SimpleEvaluator<S: ReadableEncodedStore> {
     dataset: DatasetView<S>,
     base_iri: Option<Iri<String>>,
     bnodes_map: Mutex<BTreeMap<StrHash, u128>>,
@@ -39,7 +39,7 @@ pub struct SimpleEvaluator<S: StoreConnection> {
     service_handler: Box<dyn ServiceHandler>,
 }
 
-impl<'a, S: StoreConnection + 'a> SimpleEvaluator<S> {
+impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
     pub fn new(
         dataset: DatasetView<S>,
         base_iri: Option<Iri<String>>,
@@ -2044,14 +2044,14 @@ impl<'a> Iterator for AntiJoinIterator<'a> {
     }
 }
 
-struct LeftJoinIterator<'a, S: StoreConnection> {
+struct LeftJoinIterator<'a, S: ReadableEncodedStore> {
     eval: &'a SimpleEvaluator<S>,
     right_plan: &'a PlanNode,
     left_iter: EncodedTuplesIterator<'a>,
     current_right: EncodedTuplesIterator<'a>,
 }
 
-impl<'a, S: StoreConnection> Iterator for LeftJoinIterator<'a, S> {
+impl<'a, S: ReadableEncodedStore> Iterator for LeftJoinIterator<'a, S> {
     type Item = Result<EncodedTuple>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple>> {
@@ -2072,7 +2072,7 @@ impl<'a, S: StoreConnection> Iterator for LeftJoinIterator<'a, S> {
     }
 }
 
-struct BadLeftJoinIterator<'a, S: StoreConnection> {
+struct BadLeftJoinIterator<'a, S: ReadableEncodedStore> {
     eval: &'a SimpleEvaluator<S>,
     right_plan: &'a PlanNode,
     left_iter: EncodedTuplesIterator<'a>,
@@ -2081,7 +2081,7 @@ struct BadLeftJoinIterator<'a, S: StoreConnection> {
     problem_vars: &'a [usize],
 }
 
-impl<'a, S: StoreConnection> Iterator for BadLeftJoinIterator<'a, S> {
+impl<'a, S: ReadableEncodedStore> Iterator for BadLeftJoinIterator<'a, S> {
     type Item = Result<EncodedTuple>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple>> {
@@ -2124,7 +2124,7 @@ impl<'a, S: StoreConnection> Iterator for BadLeftJoinIterator<'a, S> {
     }
 }
 
-struct UnionIterator<'a, S: StoreConnection> {
+struct UnionIterator<'a, S: ReadableEncodedStore> {
     eval: &'a SimpleEvaluator<S>,
     plans: &'a [PlanNode],
     input: EncodedTuple,
@@ -2132,7 +2132,7 @@ struct UnionIterator<'a, S: StoreConnection> {
     current_plan: usize,
 }
 
-impl<'a, S: StoreConnection> Iterator for UnionIterator<'a, S> {
+impl<'a, S: ReadableEncodedStore> Iterator for UnionIterator<'a, S> {
     type Item = Result<EncodedTuple>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple>> {
@@ -2151,7 +2151,7 @@ impl<'a, S: StoreConnection> Iterator for UnionIterator<'a, S> {
     }
 }
 
-struct ConstructIterator<'a, S: StoreConnection> {
+struct ConstructIterator<'a, S: ReadableEncodedStore> {
     eval: &'a SimpleEvaluator<S>,
     iter: EncodedTuplesIterator<'a>,
     template: &'a [TripleTemplate],
@@ -2159,7 +2159,7 @@ struct ConstructIterator<'a, S: StoreConnection> {
     bnodes: Vec<BlankNode>,
 }
 
-impl<'a, S: StoreConnection + 'a> Iterator for ConstructIterator<'a, S> {
+impl<'a, S: ReadableEncodedStore + 'a> Iterator for ConstructIterator<'a, S> {
     type Item = Result<Triple>;
 
     fn next(&mut self) -> Option<Result<Triple>> {
@@ -2222,13 +2222,13 @@ fn decode_triple(
     ))
 }
 
-struct DescribeIterator<'a, S: StoreConnection> {
+struct DescribeIterator<'a, S: ReadableEncodedStore> {
     eval: &'a SimpleEvaluator<S>,
     iter: EncodedTuplesIterator<'a>,
     quads: Box<dyn Iterator<Item = Result<EncodedQuad>> + 'a>,
 }
 
-impl<'a, S: StoreConnection + 'a> Iterator for DescribeIterator<'a, S> {
+impl<'a, S: ReadableEncodedStore + 'a> Iterator for DescribeIterator<'a, S> {
     type Item = Result<Triple>;
 
     fn next(&mut self) -> Option<Result<Triple>> {
@@ -2517,18 +2517,18 @@ impl Accumulator for AvgAccumulator {
 }
 
 #[allow(clippy::option_option)]
-struct MinAccumulator<'a, S: StoreConnection> {
+struct MinAccumulator<'a, S: ReadableEncodedStore> {
     eval: &'a SimpleEvaluator<S>,
     min: Option<Option<EncodedTerm>>,
 }
 
-impl<'a, S: StoreConnection + 'a> MinAccumulator<'a, S> {
+impl<'a, S: ReadableEncodedStore + 'a> MinAccumulator<'a, S> {
     fn new(eval: &'a SimpleEvaluator<S>) -> Self {
         Self { eval, min: None }
     }
 }
 
-impl<'a, S: StoreConnection + 'a> Accumulator for MinAccumulator<'a, S> {
+impl<'a, S: ReadableEncodedStore + 'a> Accumulator for MinAccumulator<'a, S> {
     fn add(&mut self, element: Option<EncodedTerm>) {
         if let Some(min) = self.min {
             if self.eval.cmp_terms(element, min) == Ordering::Less {
@@ -2545,18 +2545,18 @@ impl<'a, S: StoreConnection + 'a> Accumulator for MinAccumulator<'a, S> {
 }
 
 #[allow(clippy::option_option)]
-struct MaxAccumulator<'a, S: StoreConnection> {
+struct MaxAccumulator<'a, S: ReadableEncodedStore> {
     eval: &'a SimpleEvaluator<S>,
     max: Option<Option<EncodedTerm>>,
 }
 
-impl<'a, S: StoreConnection + 'a> MaxAccumulator<'a, S> {
+impl<'a, S: ReadableEncodedStore + 'a> MaxAccumulator<'a, S> {
     fn new(eval: &'a SimpleEvaluator<S>) -> Self {
         Self { eval, max: None }
     }
 }
 
-impl<'a, S: StoreConnection + 'a> Accumulator for MaxAccumulator<'a, S> {
+impl<'a, S: ReadableEncodedStore + 'a> Accumulator for MaxAccumulator<'a, S> {
     fn add(&mut self, element: Option<EncodedTerm>) {
         if let Some(max) = self.max {
             if self.eval.cmp_terms(element, max) == Ordering::Greater {
@@ -2590,14 +2590,14 @@ impl Accumulator for SampleAccumulator {
 }
 
 #[allow(clippy::option_option)]
-struct GroupConcatAccumulator<'a, S: StoreConnection> {
+struct GroupConcatAccumulator<'a, S: ReadableEncodedStore> {
     eval: &'a SimpleEvaluator<S>,
     concat: Option<String>,
     language: Option<Option<StrHash>>,
     separator: &'a str,
 }
 
-impl<'a, S: StoreConnection + 'a> GroupConcatAccumulator<'a, S> {
+impl<'a, S: ReadableEncodedStore + 'a> GroupConcatAccumulator<'a, S> {
     fn new(eval: &'a SimpleEvaluator<S>, separator: &'a str) -> Self {
         Self {
             eval,
@@ -2608,7 +2608,7 @@ impl<'a, S: StoreConnection + 'a> GroupConcatAccumulator<'a, S> {
     }
 }
 
-impl<'a, S: StoreConnection + 'a> Accumulator for GroupConcatAccumulator<'a, S> {
+impl<'a, S: ReadableEncodedStore + 'a> Accumulator for GroupConcatAccumulator<'a, S> {
     fn add(&mut self, element: Option<EncodedTerm>) {
         if let Some(concat) = self.concat.as_mut() {
             let element = if let Some(element) = element {

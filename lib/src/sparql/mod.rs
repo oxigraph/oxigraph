@@ -16,7 +16,7 @@ use crate::sparql::parser::read_sparql_query;
 use crate::sparql::plan::TripleTemplate;
 use crate::sparql::plan::{DatasetView, PlanNode};
 use crate::sparql::plan_builder::PlanBuilder;
-use crate::store::StoreConnection;
+use crate::store::ReadableEncodedStore;
 use crate::Error;
 use crate::Result;
 use oxiri::Iri;
@@ -35,9 +35,9 @@ pub trait PreparedQuery {
 }
 
 /// An implementation of `PreparedQuery` for internal use
-pub struct SimplePreparedQuery<S: StoreConnection>(SimplePreparedQueryAction<S>);
+pub struct SimplePreparedQuery<S: ReadableEncodedStore>(SimplePreparedQueryAction<S>);
 
-enum SimplePreparedQueryAction<S: StoreConnection> {
+enum SimplePreparedQueryAction<S: ReadableEncodedStore> {
     Select {
         plan: PlanNode,
         variables: Vec<Variable>,
@@ -58,7 +58,7 @@ enum SimplePreparedQueryAction<S: StoreConnection> {
     },
 }
 
-impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
+impl<'a, S: ReadableEncodedStore + 'a> SimplePreparedQuery<S> {
     pub(crate) fn new(connection: S, query: &str, options: QueryOptions<'_>) -> Result<Self> {
         let dataset = DatasetView::new(connection, options.default_graph_as_union);
         Ok(Self(match read_sparql_query(query, options.base_iri)? {
@@ -131,7 +131,7 @@ impl<'a, S: StoreConnection + 'a> SimplePreparedQuery<S> {
     }
 }
 
-impl<S: StoreConnection> PreparedQuery for SimplePreparedQuery<S> {
+impl<S: ReadableEncodedStore> PreparedQuery for SimplePreparedQuery<S> {
     fn exec(&self) -> Result<QueryResult<'_>> {
         match &self.0 {
             SimplePreparedQueryAction::Select {
