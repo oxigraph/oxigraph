@@ -10,9 +10,7 @@
 )]
 
 use crate::loader::WikibaseLoader;
-use clap::App;
-use clap::Arg;
-use clap::ArgMatches;
+use argh::FromArgs;
 use oxigraph::sparql::{PreparedQuery, QueryOptions, QueryResult, QueryResultSyntax};
 use oxigraph::{
     FileSyntax, GraphSyntax, MemoryRepository, Repository, RepositoryConnection, RocksDbRepository,
@@ -31,73 +29,57 @@ mod loader;
 const MAX_SPARQL_BODY_SIZE: u64 = 1_048_576;
 const SERVER: &str = concat!("Oxigraph/", env!("CARGO_PKG_VERSION"));
 
-pub fn main() {
-    let matches = App::new("Oxigraph SPARQL server")
-        .arg(
-            Arg::with_name("bind")
-                .long("bind")
-                .short("b")
-                .help("Specify a server socket to bind using the format $(HOST):$(PORT)")
-                .default_value("localhost:7878")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("file")
-                .long("file")
-                .short("f")
-                .help("Directory in which persist the data. By default data are kept in memory.")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("mediawiki_api")
-                .long("mediawiki_api")
-                .help("URL of the MediaWiki API like https://www.wikidata.org/w/api.php.")
-                .required(true)
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("mediawiki_base_url")
-                .long("mediawiki_base_url")
-                .help("Base URL of MediaWiki like https://www.wikidata.org/wiki/")
-                .required(true)
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("namespaces")
-                .long("namespaces")
-                .help("Namespaces ids to load like \"0,120\"")
-                .required(false)
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("slot")
-                .long("slot")
-                .help("Slot to load like \"mediainfo\". Could not be use with namespaces")
-                .required(false)
-                .takes_value(true),
-        )
-        .get_matches();
+#[derive(FromArgs)]
+/// Oxigraph SPARQL server for Wikibase
+struct Args {
+    /// specify a server socket to bind using the format $(HOST):$(PORT)
+    #[argh(option, short = 'b', default = "\"localhost:7878\".to_string()")]
+    bind: String,
 
-    let file = matches.value_of("file").map(|v| v.to_string());
+    /// directory in which persist the data. By default data are kept in memory
+    #[argh(option, short = 'f')]
+    file: Option<String>,
+
+    #[argh(option)]
+    /// base URL of the MediaWiki API like https://www.wikidata.org/w/api.php
+    mediawiki_api: String,
+
+    #[argh(option)]
+    /// base URL of MediaWiki like https://www.wikidata.org/wiki/
+    mediawiki_base_url: String,
+
+    #[argh(option)]
+    /// namespaces ids to load like "0,120"
+    namespaces: Option<String>,
+
+    #[argh(option)]
+    /// slot to load like "mediainfo". Could not be use with namespaces
+    slot: Option<String>,
+}
+
+pub fn main() {
+    let args: Args = argh::from_env();
+
+    let file = args.file.clone();
     if let Some(file) = file {
-        main_with_dataset(Arc::new(RocksDbRepository::open(file).unwrap()), &matches)
+        main_with_dataset(Arc::new(RocksDbRepository::open(file).unwrap()), args)
     } else {
-        main_with_dataset(Arc::new(MemoryRepository::default()), &matches)
+        main_with_dataset(Arc::new(MemoryRepository::default()), args)
     }
 }
 
-fn main_with_dataset<R: Send + Sync + 'static>(repository: Arc<R>, matches: &ArgMatches<'_>)
+fn main_with_dataset<R: Send + Sync + 'static>(repository: Arc<R>, args: Args)
 where
     for<'a> &'a R: Repository,
 {
-    let addr = matches.value_of("bind").unwrap().to_owned();
-    println!("Listening for requests at http://{}", &addr);
+    println!("Listening for requests at http://{}", &args.bind);
 
     let repo = repository.clone();
-    let mediawiki_api = matches.value_of("mediawiki_api").unwrap().to_owned();
-    let mediawiki_base_url = matches.value_of("mediawiki_base_url").unwrap().to_owned();
-    let namespaces = matches
-        .value_of("namespaces")
+    let mediawiki_api = args.mediawiki_api.clone();
+    let mediawiki_base_url = args.mediawiki_base_url.clone();
+    let namespaces = args
+        .namespaces
+        .as_deref()
         .unwrap_or("")
         .split(',')
         .flat_map(|t| {
@@ -109,7 +91,7 @@ where
             }
         })
         .collect::<Vec<_>>();
-    let slot = matches.value_of("slot").map(|t| t.to_owned());
+    let slot = args.slot.clone();
     thread::spawn(move || {
         let mut loader = WikibaseLoader::new(
             repo.as_ref(),
@@ -124,7 +106,7 @@ where
         loader.update_loop();
     });
 
-    start_server(addr, move |request| {
+    start_server(args.bind, move |request| {
         content_encoding::apply(
             request,
             handle_request(request, repository.connection().unwrap()),

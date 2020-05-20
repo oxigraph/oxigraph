@@ -12,7 +12,7 @@ edition = "2018"
 
 [dependencies]
 oxigraph = {path = "../lib", features = ["rocksdb"] }
-clap = "2"
+argh = "0.1"
 rouille = "3"
 reqwest = "0.9"
 serde_json = "1"

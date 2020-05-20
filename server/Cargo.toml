@@ -12,8 +12,8 @@ edition = "2018"
 
 [dependencies]
 oxigraph = { path = "../lib", features = ["rocksdb"] }
+argh = "0.1"
 async-std = { version = "1", features = ["attributes"] }
 async-h1 = "1"
-clap = "2"
 http-types = "1"
 url = "2"

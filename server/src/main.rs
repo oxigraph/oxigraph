@@ -9,15 +9,13 @@
     unused_qualifications
 )]
 
+use argh::FromArgs;
 use async_std::future::Future;
 use async_std::io::{BufRead, Read};
 use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::sync::Arc;
 use async_std::task::{block_on, spawn, spawn_blocking};
-use clap::App;
-use clap::Arg;
-use clap::ArgMatches;
 use http_types::headers::HeaderName;
 use http_types::{headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode};
 use oxigraph::sparql::{PreparedQuery, QueryOptions, QueryResult, QueryResultSyntax};
@@ -32,45 +30,36 @@ const MAX_SPARQL_BODY_SIZE: u64 = 1_048_576;
 const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
 const SERVER: &str = concat!("Oxigraph/", env!("CARGO_PKG_VERSION"));
 
+#[derive(FromArgs)]
+/// Oxigraph SPARQL server
+struct Args {
+    /// specify a server socket to bind using the format $(HOST):$(PORT)
+    #[argh(option, short = 'b', default = "\"localhost:7878\".to_string()")]
+    bind: String,
+
+    /// directory in which persist the data. By default data are kept in memory
+    #[argh(option, short = 'f')]
+    file: Option<String>,
+}
+
 #[async_std::main]
 pub async fn main() -> Result<()> {
-    let matches = App::new("Oxigraph SPARQL server")
-        .arg(
-            Arg::with_name("bind")
-                .short("b")
-                .long("bind")
-                .help("Specify a server socket to bind using the format $(HOST):$(PORT)")
-                .default_value("localhost:7878")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("file")
-                .long("file")
-                .short("f")
-                .help("Directory in which persist the data. By default data are kept in memory.")
-                .takes_value(true),
-        )
-        .get_matches();
+    let args: Args = argh::from_env();
 
-    let file = matches.value_of("file").map(|v| v.to_string());
-    if let Some(file) = file {
-        main_with_dataset(Arc::new(RocksDbRepository::open(file)?), &matches).await
+    if let Some(file) = args.file {
+        main_with_dataset(Arc::new(RocksDbRepository::open(file)?), args.bind).await
     } else {
-        main_with_dataset(Arc::new(MemoryRepository::default()), &matches).await
+        main_with_dataset(Arc::new(MemoryRepository::default()), args.bind).await
     }
 }
 
-async fn main_with_dataset<R: Send + Sync + 'static>(
-    repository: Arc<R>,
-    matches: &ArgMatches<'_>,
-) -> Result<()>
+async fn main_with_dataset<R: Send + Sync + 'static>(repository: Arc<R>, host: String) -> Result<()>
 where
     for<'a> &'a R: Repository,
 {
-    let addr = matches.value_of("bind").unwrap().to_owned();
-    println!("Listening for requests at http://{}", &addr);
+    println!("Listening for requests at http://{}", &host);
 
-    http_server(addr, move |request| {
+    http_server(host, move |request| {
         handle_request(request, Arc::clone(&repository))
     })
     .await
