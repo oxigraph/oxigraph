@@ -6,7 +6,7 @@ use http_client::h1::H1Client;
 use http_client::HttpClient;
 use http_types::{Method, Request, Result};
 use oxigraph::model::NamedNode;
-use oxigraph::{GraphSyntax, Repository, RepositoryConnection, RepositoryTransaction};
+use oxigraph::{GraphSyntax, RocksDbStore};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::io::{BufReader, Cursor, Read};
@@ -14,8 +14,8 @@ use std::thread::sleep;
 use std::time::Duration;
 use url::{form_urlencoded, Url};
 
-pub struct WikibaseLoader<R: Repository + Copy> {
-    repository: R,
+pub struct WikibaseLoader {
+    store: RocksDbStore,
     api_url: Url,
     entity_data_url: Url,
     client: H1Client,
@@ -25,9 +25,9 @@ pub struct WikibaseLoader<R: Repository + Copy> {
     start: DateTime<Utc>,
 }
 
-impl<R: Repository + Copy> WikibaseLoader<R> {
+impl WikibaseLoader {
     pub fn new(
-        repository: R,
+        store: RocksDbStore,
         api_url: &str,
         pages_base_url: &str,
         namespaces: &[u32],
@@ -35,7 +35,7 @@ impl<R: Repository + Copy> WikibaseLoader<R> {
         frequency: Duration,
     ) -> Result<Self> {
         Ok(Self {
-            repository,
+            store,
             api_url: Url::parse(api_url)?,
             entity_data_url: Url::parse(&(pages_base_url.to_owned() + "Special:EntityData"))?,
             client: H1Client::new(),
@@ -229,10 +229,10 @@ impl<R: Repository + Copy> WikibaseLoader<R> {
     }
 
     fn load_entity_data(&self, uri: &str, data: impl Read) -> Result<()> {
-        let connection = self.repository.connection()?;
         let graph_name = NamedNode::parse(uri)?.into();
-        connection.transaction(|transaction| {
-            let to_remove = connection
+        self.store.transaction(|transaction| {
+            let to_remove = self
+                .store
                 .quads_for_pattern(None, None, None, Some(Some(&graph_name)))
                 .collect::<oxigraph::Result<Vec<_>>>()?;
             for q in to_remove {

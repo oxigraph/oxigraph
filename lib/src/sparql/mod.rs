@@ -35,7 +35,7 @@ pub trait PreparedQuery {
 }
 
 /// An implementation of `PreparedQuery` for internal use
-pub struct SimplePreparedQuery<S: ReadableEncodedStore>(SimplePreparedQueryAction<S>);
+pub(crate) struct SimplePreparedQuery<S: ReadableEncodedStore>(SimplePreparedQueryAction<S>);
 
 enum SimplePreparedQueryAction<S: ReadableEncodedStore> {
     Select {
@@ -59,8 +59,8 @@ enum SimplePreparedQueryAction<S: ReadableEncodedStore> {
 }
 
 impl<'a, S: ReadableEncodedStore + 'a> SimplePreparedQuery<S> {
-    pub(crate) fn new(connection: S, query: &str, options: QueryOptions<'_>) -> Result<Self> {
-        let dataset = DatasetView::new(connection, options.default_graph_as_union);
+    pub(crate) fn new(store: S, query: &str, options: QueryOptions<'_>) -> Result<Self> {
+        let dataset = DatasetView::new(store, options.default_graph_as_union);
         Ok(Self(match read_sparql_query(query, options.base_iri)? {
             QueryVariants::Select {
                 algebra, base_iri, ..
@@ -112,11 +112,11 @@ impl<'a, S: ReadableEncodedStore + 'a> SimplePreparedQuery<S> {
 
     /// Builds `SimplePreparedQuery` from an existing `GraphPattern`. This is used to support federated queries via `SERVICE` clauses
     pub(crate) fn new_from_pattern(
-        connection: S,
+        store: S,
         pattern: &GraphPattern,
         options: QueryOptions<'_>,
     ) -> Result<Self> {
-        let dataset = DatasetView::new(connection, options.default_graph_as_union);
+        let dataset = DatasetView::new(store, options.default_graph_as_union);
         let (plan, variables) = PlanBuilder::build(dataset.encoder(), pattern)?;
         let base_iri = if let Some(base_iri) = options.base_iri {
             Some(Iri::parse(base_iri.to_string())?)
@@ -208,13 +208,12 @@ impl<'a> QueryOptions<'a> {
         self
     }
 
-    /// Consider the union of all graphs in the repository as the default graph
+    /// Consider the union of all graphs in the store as the default graph
     pub const fn with_default_graph_as_union(mut self) -> Self {
         self.default_graph_as_union = true;
         self
     }
 
-    /// Consider the union of all graphs in the repository as the default graph
     pub fn with_service_handler(mut self, service_handler: impl ServiceHandler + 'static) -> Self {
         self.service_handler = Box::new(service_handler);
         self

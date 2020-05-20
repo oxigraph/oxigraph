@@ -8,7 +8,6 @@ use std::error;
 use std::fmt;
 use std::io;
 use std::string::FromUtf8Error;
-use std::sync::PoisonError;
 
 /// The Oxigraph error type.
 ///
@@ -25,7 +24,6 @@ impl fmt::Display for Error {
             ErrorKind::Msg { msg } => write!(f, "{}", msg),
             ErrorKind::Io(e) => e.fmt(f),
             ErrorKind::FromUtf8(e) => e.fmt(f),
-            ErrorKind::Poison => write!(f, "Mutex was poisoned"),
             ErrorKind::Iri(e) => e.fmt(f),
             ErrorKind::LanguageTag(e) => e.fmt(f),
             ErrorKind::Other(e) => e.fmt(f),
@@ -39,7 +37,6 @@ impl error::Error for Error {
             ErrorKind::Msg { .. } => None,
             ErrorKind::Io(e) => Some(e),
             ErrorKind::FromUtf8(e) => Some(e),
-            ErrorKind::Poison => None,
             ErrorKind::Iri(e) => Some(e),
             ErrorKind::LanguageTag(e) => Some(e),
             ErrorKind::Other(e) => Some(e.as_ref()),
@@ -68,7 +65,6 @@ enum ErrorKind {
     Msg { msg: String },
     Io(io::Error),
     FromUtf8(FromUtf8Error),
-    Poison,
     Iri(IriParseError),
     LanguageTag(LanguageTagParseError),
     Other(Box<dyn error::Error + Send + Sync + 'static>),
@@ -127,14 +123,6 @@ impl From<quick_xml::Error> for Error {
 impl From<ParseError<LineCol>> for Error {
     fn from(error: ParseError<LineCol>) -> Self {
         Self::wrap(error)
-    }
-}
-
-impl<T> From<PoisonError<T>> for Error {
-    fn from(_: PoisonError<T>) -> Self {
-        Self {
-            inner: ErrorKind::Poison,
-        }
     }
 }
 

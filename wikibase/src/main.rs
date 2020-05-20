@@ -14,14 +14,11 @@ use argh::FromArgs;
 use async_std::future::Future;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
-use async_std::sync::Arc;
 use async_std::task::{spawn, spawn_blocking};
 use http_types::headers::HeaderName;
 use http_types::{headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode};
 use oxigraph::sparql::{PreparedQuery, QueryOptions, QueryResult, QueryResultSyntax};
-use oxigraph::{
-    FileSyntax, GraphSyntax, MemoryRepository, Repository, RepositoryConnection, RocksDbRepository,
-};
+use oxigraph::{FileSyntax, GraphSyntax, RocksDbStore};
 use std::str::FromStr;
 use std::time::Duration;
 use url::form_urlencoded;
@@ -38,9 +35,9 @@ struct Args {
     #[argh(option, short = 'b', default = "\"localhost:7878\".to_string()")]
     bind: String,
 
-    /// directory in which persist the data. By default data are kept in memory
+    /// directory in which persist the data
     #[argh(option, short = 'f')]
-    file: Option<String>,
+    file: String,
 
     #[argh(option)]
     /// base URL of the MediaWiki API like https://www.wikidata.org/w/api.php
@@ -63,19 +60,7 @@ struct Args {
 pub async fn main() -> Result<()> {
     let args: Args = argh::from_env();
 
-    let file = args.file.clone();
-    if let Some(file) = file {
-        main_with_dataset(Arc::new(RocksDbRepository::open(file)?), args).await
-    } else {
-        main_with_dataset(Arc::new(MemoryRepository::default()), args).await
-    }
-}
-
-async fn main_with_dataset<R: Send + Sync + 'static>(repository: Arc<R>, args: Args) -> Result<()>
-where
-    for<'a> &'a R: Repository,
-{
-    let repo = repository.clone();
+    let store = RocksDbStore::open(args.file)?;
     let mediawiki_api = args.mediawiki_api.clone();
     let mediawiki_base_url = args.mediawiki_base_url.clone();
     let namespaces = args
@@ -93,9 +78,10 @@ where
         })
         .collect::<Vec<_>>();
     let slot = args.slot.clone();
+    let repo = store.clone();
     spawn_blocking(move || {
         let mut loader = WikibaseLoader::new(
-            repo.as_ref(),
+            repo,
             &mediawiki_api,
             &mediawiki_base_url,
             &namespaces,
@@ -110,22 +96,16 @@ where
     println!("Listening for requests at http://{}", &args.bind);
 
     http_server(args.bind, move |request| {
-        handle_request(request, Arc::clone(&repository))
+        handle_request(request, store.clone())
     })
     .await
 }
 
-async fn handle_request<R: Send + Sync + 'static>(
-    request: Request,
-    repository: Arc<R>,
-) -> Result<Response>
-where
-    for<'a> &'a R: Repository,
-{
+async fn handle_request(request: Request, store: RocksDbStore) -> Result<Response> {
     let mut response = match (request.url().path(), request.method()) {
         ("/query", Method::Get) => {
             evaluate_urlencoded_sparql_query(
-                repository,
+                store,
                 request.url().query().unwrap_or("").as_bytes().to_vec(),
                 request,
             )
@@ -141,7 +121,7 @@ where
                         .take(MAX_SPARQL_BODY_SIZE)
                         .read_to_string(&mut buffer)
                         .await?;
-                    evaluate_sparql_query(repository, buffer, request).await?
+                    evaluate_sparql_query(store, buffer, request).await?
                 } else if essence(&content_type) == "application/x-www-form-urlencoded" {
                     let mut buffer = Vec::new();
                     let mut request = request;
@@ -150,7 +130,7 @@ where
                         .take(MAX_SPARQL_BODY_SIZE)
                         .read_to_end(&mut buffer)
                         .await?;
-                    evaluate_urlencoded_sparql_query(repository, buffer, request).await?
+                    evaluate_urlencoded_sparql_query(store, buffer, request).await?
                 } else {
                     simple_response(
                         StatusCode::UnsupportedMediaType,
@@ -178,16 +158,13 @@ fn simple_response(status: StatusCode, body: impl Into<Body>) -> Response {
     response
 }
 
-async fn evaluate_urlencoded_sparql_query<R: Send + Sync + 'static>(
-    repository: Arc<R>,
+async fn evaluate_urlencoded_sparql_query(
+    store: RocksDbStore,
     encoded: Vec<u8>,
     request: Request,
-) -> Result<Response>
-where
-    for<'a> &'a R: Repository,
-{
+) -> Result<Response> {
     if let Some((_, query)) = form_urlencoded::parse(&encoded).find(|(k, _)| k == "query") {
-        evaluate_sparql_query(repository, query.to_string(), request).await
+        evaluate_sparql_query(store, query.to_string(), request).await
     } else {
         Ok(simple_response(
             StatusCode::BadRequest,
@@ -196,18 +173,14 @@ where
     }
 }
 
-async fn evaluate_sparql_query<R: Send + Sync + 'static>(
-    repository: Arc<R>,
+async fn evaluate_sparql_query(
+    store: RocksDbStore,
     query: String,
     request: Request,
-) -> Result<Response>
-where
-    for<'a> &'a R: Repository,
-{
+) -> Result<Response> {
     spawn_blocking(move || {
         //TODO: stream
-        let query = repository
-            .connection()?
+        let query = store
             .prepare_query(&query, QueryOptions::default())
             .map_err(|e| {
                 let mut e = Error::from(e);

@@ -79,19 +79,17 @@ fn read_file_to_string(url: &str) -> Result<String> {
 }
 
 fn load_graph(url: &str) -> Result<SimpleGraph> {
-    let repository = MemoryRepository::default();
-    load_graph_to_repository(url, &mut repository.connection().unwrap(), None)?;
-    Ok(repository
-        .connection()
-        .unwrap()
+    let mut store = MemoryStore::default();
+    load_graph_to_store(url, &store, None)?;
+    Ok(store
         .quads_for_pattern(None, None, None, Some(None))
         .map(|q| q.unwrap().into_triple())
         .collect())
 }
 
-fn load_graph_to_repository(
+fn load_graph_to_store(
     url: &str,
-    connection: &mut <&MemoryRepository as Repository>::Connection,
+    store: &MemoryStore,
     to_graph_name: Option<&NamedOrBlankNode>,
 ) -> Result<()> {
     let syntax = if url.ends_with(".nt") {
@@ -106,7 +104,7 @@ fn load_graph_to_repository(
             url
         )));
     };
-    connection.load_graph(read_file(url)?, syntax, to_graph_name, Some(url))
+    store.load_graph(read_file(url)?, syntax, to_graph_name, Some(url))
 }
 
 mod mf {

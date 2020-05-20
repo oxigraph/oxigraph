@@ -4,10 +4,7 @@ use crate::utils::to_err;
 use js_sys::{Array, Map};
 use oxigraph::model::NamedOrBlankNode;
 use oxigraph::sparql::{PreparedQuery, QueryOptions, QueryResult};
-use oxigraph::{
-    DatasetSyntax, Error, FileSyntax, GraphSyntax, MemoryRepository, Repository,
-    RepositoryConnection,
-};
+use oxigraph::{DatasetSyntax, Error, FileSyntax, GraphSyntax, MemoryStore};
 use std::convert::TryInto;
 use std::io::Cursor;
 use wasm_bindgen::prelude::*;
@@ -15,7 +12,7 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen(js_name = MemoryStore)]
 #[derive(Default)]
 pub struct JsMemoryStore {
-    store: MemoryRepository,
+    store: MemoryStore,
     from_js: FromJsConverter,
 }
 
@@ -25,13 +22,13 @@ impl JsMemoryStore {
     pub fn new(quads: Option<Box<[JsValue]>>) -> Result<JsMemoryStore, JsValue> {
         console_error_panic_hook::set_once();
 
-        let this = Self::default();
+        let store = Self::default();
         if let Some(quads) = quads {
             for quad in quads.iter() {
-                this.add(quad)?;
+                store.add(quad)?;
             }
         }
-        Ok(this)
+        Ok(store)
     }
 
     #[wasm_bindgen(js_name = dataFactory, getter)]
@@ -41,26 +38,20 @@ impl JsMemoryStore {
 
     pub fn add(&self, quad: &JsValue) -> Result<(), JsValue> {
         self.store
-            .connection()
-            .map_err(to_err)?
             .insert(&self.from_js.to_quad(quad)?.try_into()?)
             .map_err(to_err)
     }
 
     pub fn delete(&self, quad: &JsValue) -> Result<(), JsValue> {
         self.store
-            .connection()
-            .map_err(to_err)?
             .remove(&self.from_js.to_quad(quad)?.try_into()?)
             .map_err(to_err)
     }
 
     pub fn has(&self, quad: &JsValue) -> Result<bool, JsValue> {
-        self.store
-            .connection()
-            .map_err(to_err)?
-            .contains(&self.from_js.to_quad(quad)?.try_into()?)
-            .map_err(to_err)
+        Ok(self
+            .store
+            .contains(&self.from_js.to_quad(quad)?.try_into()?))
     }
 
     #[wasm_bindgen(js_name = match)]
@@ -73,8 +64,6 @@ impl JsMemoryStore {
     ) -> Result<Box<[JsValue]>, JsValue> {
         Ok(self
             .store
-            .connection()
-            .map_err(to_err)?
             .quads_for_pattern(
                 match self.from_js.to_optional_term(subject)? {
                     Some(JsTerm::NamedNode(node)) => Some(node.into()),
@@ -123,8 +112,6 @@ impl JsMemoryStore {
     pub fn query(&self, query: &str) -> Result<JsValue, JsValue> {
         let query = self
             .store
-            .connection()
-            .map_err(to_err)?
             .prepare_query(query, QueryOptions::default())
             .map_err(to_err)?;
         let results = query.exec().map_err(to_err)?;
@@ -194,8 +181,6 @@ impl JsMemoryStore {
 
         if let Some(graph_syntax) = GraphSyntax::from_mime_type(mime_type) {
             self.store
-                .connection()
-                .map_err(to_err)?
                 .load_graph(
                     Cursor::new(data),
                     graph_syntax,
@@ -210,8 +195,6 @@ impl JsMemoryStore {
                 ));
             }
             self.store
-                .connection()
-                .map_err(to_err)?
                 .load_dataset(Cursor::new(data), dataset_syntax, base_iri.as_deref())
                 .map_err(to_err)
         } else {

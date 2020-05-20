@@ -1,41 +1,42 @@
+use crate::model::*;
+use crate::sparql::{GraphPattern, PreparedQuery, QueryOptions, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
-use crate::store::{Store, StoreConnection, StoreRepositoryConnection, StoreTransaction};
-use crate::Error;
-use crate::{Repository, Result};
+use crate::store::{load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore};
+use crate::{DatasetSyntax, Error, GraphSyntax, Result};
 use rocksdb::*;
-use std::io::Cursor;
+use std::io::{BufRead, Cursor};
 use std::iter::{empty, once};
 use std::mem::take;
 use std::path::Path;
 use std::str;
+use std::sync::Arc;
 
-/// `Repository` implementation based on the [RocksDB](https://rocksdb.org/) key-value store
+/// Store based on the [RocksDB](https://rocksdb.org/) key-value database.
+/// It encodes a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) and allows to query and update it using SPARQL.
 ///
 /// To use it, the `"rocksdb"` feature needs to be activated.
 ///
 /// Usage example:
 /// ```
 /// use oxigraph::model::*;
-/// use oxigraph::{Repository, RepositoryConnection, RepositoryTransaction, RocksDbRepository, Result};
-/// use crate::oxigraph::sparql::{PreparedQuery, QueryOptions};
-/// use oxigraph::sparql::QueryResult;
+/// use oxigraph::{Result, RocksDbStore};
+/// use oxigraph::sparql::{PreparedQuery, QueryOptions, QueryResult};
 /// # use std::fs::remove_dir_all;
 ///
 /// # {
-/// let repository = RocksDbRepository::open("example.db")?;
-/// let mut connection = repository.connection()?;
+/// let store = RocksDbStore::open("example.db")?;
 ///
 /// // insertion
 /// let ex = NamedNode::parse("http://example.com")?;
 /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
-/// connection.insert(&quad)?;
+/// store.insert(&quad)?;
 ///
 /// // quad filter
-/// let results: Result<Vec<Quad>> = connection.quads_for_pattern(None, None, None, None).collect();
+/// let results: Result<Vec<Quad>> = store.quads_for_pattern(None, None, None, None).collect();
 /// assert_eq!(vec![quad], results?);
 ///
 /// // SPARQL query
-/// let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
+/// let prepared_query = store.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
 /// let results = prepared_query.exec()?;
 /// if let QueryResult::Bindings(results) = results {
 ///     assert_eq!(results.into_values_iter().next().unwrap()?[0], Some(ex.into()));
@@ -45,11 +46,10 @@ use std::str;
 /// # remove_dir_all("example.db")?;
 /// # Result::Ok(())
 /// ```
-pub struct RocksDbRepository {
-    inner: RocksDbStore,
+#[derive(Clone)]
+pub struct RocksDbStore {
+    db: Arc<DB>,
 }
-
-pub type RocksDbRepositoryConnection<'a> = StoreRepositoryConnection<RocksDbStoreConnection<'a>>;
 
 const ID2STR_CF: &str = "id2str";
 const SPOG_CF: &str = "spog";
@@ -67,13 +67,9 @@ const COLUMN_FAMILIES: [&str; 7] = [
 
 const MAX_TRANSACTION_SIZE: usize = 1024;
 
-struct RocksDbStore {
-    db: DB,
-}
-
 #[derive(Clone)]
-pub struct RocksDbStoreConnection<'a> {
-    store: &'a RocksDbStore,
+struct RocksDbStoreHandle<'a> {
+    db: &'a DB,
     id2str_cf: &'a ColumnFamily,
     spog_cf: &'a ColumnFamily,
     posg_cf: &'a ColumnFamily,
@@ -83,47 +79,144 @@ pub struct RocksDbStoreConnection<'a> {
     gosp_cf: &'a ColumnFamily,
 }
 
-impl RocksDbRepository {
-    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
-        Ok(Self {
-            inner: RocksDbStore::open(path)?,
-        })
-    }
-}
-
-impl<'a> Repository for &'a RocksDbRepository {
-    type Connection = RocksDbRepositoryConnection<'a>;
-
-    fn connection(self) -> Result<StoreRepositoryConnection<RocksDbStoreConnection<'a>>> {
-        Ok(self.inner.connection()?.into())
-    }
-}
-
 impl RocksDbStore {
-    fn open(path: impl AsRef<Path>) -> Result<Self> {
+    /// Opens a `RocksDbStore`
+    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let mut options = Options::default();
         options.create_if_missing(true);
         options.create_missing_column_families(true);
         options.set_compaction_style(DBCompactionStyle::Universal);
 
         let new = Self {
-            db: DB::open_cf(&options, path, &COLUMN_FAMILIES)?,
+            db: Arc::new(DB::open_cf(&options, path, &COLUMN_FAMILIES)?),
         };
 
-        let mut transaction = (&new).connection()?.transaction();
+        let mut transaction = new.handle()?.auto_transaction();
         transaction.set_first_strings()?;
         transaction.commit()?;
 
         Ok(new)
     }
-}
 
-impl<'a> Store for &'a RocksDbStore {
-    type Connection = RocksDbStoreConnection<'a>;
+    /// Prepares a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) and returns an object that could be used to execute it.
+    ///
+    /// See `MemoryStore` for a usage example.
+    pub fn prepare_query<'a>(
+        &'a self,
+        query: &str,
+        options: QueryOptions<'_>,
+    ) -> Result<impl PreparedQuery + 'a> {
+        SimplePreparedQuery::new((*self).clone(), query, options)
+    }
 
-    fn connection(self) -> Result<RocksDbStoreConnection<'a>> {
-        Ok(RocksDbStoreConnection {
-            store: self,
+    /// This is similar to `prepare_query`, but useful if a SPARQL query has already been parsed, which is the case when building `ServiceHandler`s for federated queries with `SERVICE` clauses. For examples, look in the tests.
+    pub fn prepare_query_from_pattern<'a>(
+        &'a self,
+        graph_pattern: &GraphPattern,
+        options: QueryOptions<'_>,
+    ) -> Result<impl PreparedQuery + 'a> {
+        SimplePreparedQuery::new_from_pattern((*self).clone(), graph_pattern, options)
+    }
+
+    /// Retrieves quads with a filter on each quad component
+    ///
+    /// See `MemoryStore` for a usage example.
+    #[allow(clippy::option_option)]
+    pub fn quads_for_pattern<'a>(
+        &'a self,
+        subject: Option<&NamedOrBlankNode>,
+        predicate: Option<&NamedNode>,
+        object: Option<&Term>,
+        graph_name: Option<Option<&NamedOrBlankNode>>,
+    ) -> Box<dyn Iterator<Item = Result<Quad>> + 'a>
+    where
+        Self: 'a,
+    {
+        let subject = subject.map(|s| s.into());
+        let predicate = predicate.map(|p| p.into());
+        let object = object.map(|o| o.into());
+        let graph_name = graph_name.map(|g| g.map_or(ENCODED_DEFAULT_GRAPH, |g| g.into()));
+        Box::new(
+            self.encoded_quads_for_pattern(subject, predicate, object, graph_name)
+                .map(move |quad| self.decode_quad(&quad?)),
+        )
+    }
+
+    /// Checks if this store contains a given quad
+    pub fn contains(&self, quad: &Quad) -> Result<bool> {
+        let quad = quad.into();
+        self.handle()?.contains(&quad)
+    }
+
+    /// Executes a transaction.
+    ///
+    /// The transaction is executed if the given closure returns `Ok`.
+    /// Nothing is done if the clusre returns `Err`.
+    ///
+    /// See `MemoryStore` for a usage example.
+    pub fn transaction<'a>(
+        &'a self,
+        f: impl FnOnce(&mut RocksDbTransaction<'a>) -> Result<()>,
+    ) -> Result<()> {
+        let mut transaction = self.handle()?.transaction();
+        f(&mut transaction)?;
+        transaction.commit()
+    }
+
+    /// Loads a graph file (i.e. triples) into the store
+    ///
+    /// Warning: This functions saves the triples in batch. If the parsing fails in the middle of the file,
+    /// only a part of it may be written. Use a (memory greedy) transaction if you do not want that.
+    ///
+    /// See `MemoryStore` for a usage example.
+    pub fn load_graph(
+        &self,
+        reader: impl BufRead,
+        syntax: GraphSyntax,
+        to_graph_name: Option<&NamedOrBlankNode>,
+        base_iri: Option<&str>,
+    ) -> Result<()> {
+        let mut transaction = self.handle()?.auto_transaction();
+        load_graph(&mut transaction, reader, syntax, to_graph_name, base_iri)?;
+        transaction.commit()
+    }
+
+    /// Loads a dataset file (i.e. quads) into the store.
+    ///
+    /// Warning: This functions saves the quads in batch. If the parsing fails in the middle of the file,
+    /// only a part of it may be written. Use a (memory greedy) transaction if you do not want that.
+    ///
+    /// See `MemoryStore` for a usage example.
+    pub fn load_dataset(
+        &self,
+        reader: impl BufRead,
+        syntax: DatasetSyntax,
+        base_iri: Option<&str>,
+    ) -> Result<()> {
+        let mut transaction = self.handle()?.auto_transaction();
+        load_dataset(&mut transaction, reader, syntax, base_iri)?;
+        transaction.commit()
+    }
+
+    /// Adds a quad to this store.
+    pub fn insert(&self, quad: &Quad) -> Result<()> {
+        let mut transaction = self.handle()?.auto_transaction();
+        let quad = transaction.encode_quad(quad)?;
+        transaction.insert_encoded(&quad)?;
+        transaction.commit()
+    }
+
+    /// Removes a quad from this store.
+    pub fn remove(&self, quad: &Quad) -> Result<()> {
+        let mut transaction = self.handle()?.auto_transaction();
+        let quad = quad.into();
+        transaction.remove_encoded(&quad)?;
+        transaction.commit()
+    }
+
+    fn handle<'a>(&'a self) -> Result<RocksDbStoreHandle<'a>> {
+        Ok(RocksDbStoreHandle {
+            db: &self.db,
             id2str_cf: get_cf(&self.db, ID2STR_CF)?,
             spog_cf: get_cf(&self.db, SPOG_CF)?,
             posg_cf: get_cf(&self.db, POSG_CF)?,
@@ -135,35 +228,114 @@ impl<'a> Store for &'a RocksDbStore {
     }
 }
 
-impl StrLookup for RocksDbStoreConnection<'_> {
+impl StrLookup for RocksDbStore {
     fn get_str(&self, id: StrHash) -> Result<Option<String>> {
         Ok(self
-            .store
             .db
-            .get_cf(self.id2str_cf, &id.to_le_bytes())?
+            .get_cf(get_cf(&self.db, ID2STR_CF)?, &id.to_le_bytes())?
             .map(String::from_utf8)
             .transpose()?)
     }
 }
 
-impl<'a> StoreConnection for RocksDbStoreConnection<'a> {
-    type Transaction = RocksDbStoreTransaction<'a>;
-    type AutoTransaction = RocksDbStoreAutoTransaction<'a>;
+impl ReadableEncodedStore for RocksDbStore {
+    fn encoded_quads_for_pattern<'a>(
+        &'a self,
+        subject: Option<EncodedTerm>,
+        predicate: Option<EncodedTerm>,
+        object: Option<EncodedTerm>,
+        graph_name: Option<EncodedTerm>,
+    ) -> Box<dyn Iterator<Item = Result<EncodedQuad>> + 'a> {
+        let handle = match self.handle() {
+            Ok(handle) => handle,
+            Err(error) => return Box::new(once(Err(error))),
+        };
+        match subject {
+            Some(subject) => match predicate {
+                Some(predicate) => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => {
+                            let quad = EncodedQuad::new(subject, predicate, object, graph_name);
+                            match handle.contains(&quad) {
+                                Ok(true) => Box::new(once(Ok(quad))),
+                                Ok(false) => Box::new(empty()),
+                                Err(error) => Box::new(once(Err(error))),
+                            }
+                        }
+                        None => wrap_error(
+                            handle.quads_for_subject_predicate_object(subject, predicate, object),
+                        ),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => wrap_error(
+                            handle
+                                .quads_for_subject_predicate_graph(subject, predicate, graph_name),
+                        ),
+                        None => wrap_error(handle.quads_for_subject_predicate(subject, predicate)),
+                    },
+                },
+                None => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => wrap_error(
+                            handle.quads_for_subject_object_graph(subject, object, graph_name),
+                        ),
+                        None => wrap_error(handle.quads_for_subject_object(subject, object)),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => {
+                            wrap_error(handle.quads_for_subject_graph(subject, graph_name))
+                        }
+                        None => wrap_error(handle.quads_for_subject(subject)),
+                    },
+                },
+            },
+            None => match predicate {
+                Some(predicate) => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => wrap_error(
+                            handle.quads_for_predicate_object_graph(predicate, object, graph_name),
+                        ),
+                        None => wrap_error(handle.quads_for_predicate_object(predicate, object)),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => {
+                            wrap_error(handle.quads_for_predicate_graph(predicate, graph_name))
+                        }
+                        None => wrap_error(handle.quads_for_predicate(predicate)),
+                    },
+                },
+                None => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => {
+                            wrap_error(handle.quads_for_object_graph(object, graph_name))
+                        }
+                        None => wrap_error(handle.quads_for_object(object)),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => wrap_error(handle.quads_for_graph(graph_name)),
+                        None => Box::new(handle.quads()),
+                    },
+                },
+            },
+        }
+    }
+}
 
-    fn transaction(&self) -> RocksDbStoreTransaction<'a> {
-        RocksDbStoreTransaction {
-            inner: RocksDbStoreInnerTransaction {
-                connection: self.clone(),
+impl<'a> RocksDbStoreHandle<'a> {
+    fn transaction(&self) -> RocksDbTransaction<'a> {
+        RocksDbTransaction {
+            inner: RocksDbInnerTransaction {
+                handle: self.clone(),
                 batch: WriteBatch::default(),
                 buffer: Vec::default(),
             },
         }
     }
 
-    fn auto_transaction(&self) -> RocksDbStoreAutoTransaction<'a> {
-        RocksDbStoreAutoTransaction {
-            inner: RocksDbStoreInnerTransaction {
-                connection: self.clone(),
+    fn auto_transaction(&self) -> RocksDbAutoTransaction<'a> {
+        RocksDbAutoTransaction {
+            inner: RocksDbInnerTransaction {
+                handle: self.clone(),
                 batch: WriteBatch::default(),
                 buffer: Vec::default(),
             },
@@ -173,91 +345,9 @@ impl<'a> StoreConnection for RocksDbStoreConnection<'a> {
     fn contains(&self, quad: &EncodedQuad) -> Result<bool> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
         buffer.write_spog_quad(quad)?;
-        Ok(self
-            .store
-            .db
-            .get_pinned_cf(self.spog_cf, &buffer)?
-            .is_some())
+        Ok(self.db.get_pinned_cf(self.spog_cf, &buffer)?.is_some())
     }
 
-    fn quads_for_pattern<'b>(
-        &'b self,
-        subject: Option<EncodedTerm>,
-        predicate: Option<EncodedTerm>,
-        object: Option<EncodedTerm>,
-        graph_name: Option<EncodedTerm>,
-    ) -> Box<dyn Iterator<Item = Result<EncodedQuad>> + 'b> {
-        match subject {
-            Some(subject) => match predicate {
-                Some(predicate) => match object {
-                    Some(object) => match graph_name {
-                        Some(graph_name) => {
-                            let quad = EncodedQuad::new(subject, predicate, object, graph_name);
-                            match self.contains(&quad) {
-                                Ok(true) => Box::new(once(Ok(quad))),
-                                Ok(false) => Box::new(empty()),
-                                Err(error) => Box::new(once(Err(error))),
-                            }
-                        }
-                        None => wrap_error(
-                            self.quads_for_subject_predicate_object(subject, predicate, object),
-                        ),
-                    },
-                    None => match graph_name {
-                        Some(graph_name) => wrap_error(
-                            self.quads_for_subject_predicate_graph(subject, predicate, graph_name),
-                        ),
-                        None => wrap_error(self.quads_for_subject_predicate(subject, predicate)),
-                    },
-                },
-                None => match object {
-                    Some(object) => match graph_name {
-                        Some(graph_name) => wrap_error(
-                            self.quads_for_subject_object_graph(subject, object, graph_name),
-                        ),
-                        None => wrap_error(self.quads_for_subject_object(subject, object)),
-                    },
-                    None => match graph_name {
-                        Some(graph_name) => {
-                            wrap_error(self.quads_for_subject_graph(subject, graph_name))
-                        }
-                        None => wrap_error(self.quads_for_subject(subject)),
-                    },
-                },
-            },
-            None => match predicate {
-                Some(predicate) => match object {
-                    Some(object) => match graph_name {
-                        Some(graph_name) => wrap_error(
-                            self.quads_for_predicate_object_graph(predicate, object, graph_name),
-                        ),
-                        None => wrap_error(self.quads_for_predicate_object(predicate, object)),
-                    },
-                    None => match graph_name {
-                        Some(graph_name) => {
-                            wrap_error(self.quads_for_predicate_graph(predicate, graph_name))
-                        }
-                        None => wrap_error(self.quads_for_predicate(predicate)),
-                    },
-                },
-                None => match object {
-                    Some(object) => match graph_name {
-                        Some(graph_name) => {
-                            wrap_error(self.quads_for_object_graph(object, graph_name))
-                        }
-                        None => wrap_error(self.quads_for_object(object)),
-                    },
-                    None => match graph_name {
-                        Some(graph_name) => wrap_error(self.quads_for_graph(graph_name)),
-                        None => Box::new(self.quads()),
-                    },
-                },
-            },
-        }
-    }
-}
-
-impl<'a> RocksDbStoreConnection<'a> {
     fn quads(&self) -> impl Iterator<Item = Result<EncodedQuad>> + 'a {
         self.spog_quads(Vec::default())
     }
@@ -416,7 +506,7 @@ impl<'a> RocksDbStoreConnection<'a> {
         prefix: Vec<u8>,
         decode: impl Fn(&[u8]) -> Result<EncodedQuad> + 'a,
     ) -> impl Iterator<Item = Result<EncodedQuad>> + 'a {
-        let mut iter = self.store.db.raw_iterator_cf(cf);
+        let mut iter = self.db.raw_iterator_cf(cf);
         iter.seek(&prefix);
         DecodingIndexIterator {
             iter,
@@ -426,24 +516,72 @@ impl<'a> RocksDbStoreConnection<'a> {
     }
 }
 
-pub struct RocksDbStoreTransaction<'a> {
-    inner: RocksDbStoreInnerTransaction<'a>,
+/// Allows to insert and delete quads during a transaction with the `RocksDbStore`.
+pub struct RocksDbTransaction<'a> {
+    inner: RocksDbInnerTransaction<'a>,
 }
 
-impl StrContainer for RocksDbStoreTransaction<'_> {
+impl StrContainer for RocksDbTransaction<'_> {
     fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
         self.inner.insert_str(key, value);
         Ok(())
     }
 }
 
-impl StoreTransaction for RocksDbStoreTransaction<'_> {
-    fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
+impl WritableEncodedStore for RocksDbTransaction<'_> {
+    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
         self.inner.insert(quad)
     }
 
-    fn remove(&mut self, quad: &EncodedQuad) -> Result<()> {
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
         self.inner.remove(quad)
+    }
+}
+
+impl RocksDbTransaction<'_> {
+    /// Loads a graph file (i.e. triples) into the store during the transaction.
+    ///
+    /// Warning: Because the load happens during a transaction,
+    /// the full file content might be temporarily stored in main memory.
+    /// Do not use for big files.
+    ///
+    /// See `MemoryTransaction` for a usage example.
+    pub fn load_graph(
+        &mut self,
+        reader: impl BufRead,
+        syntax: GraphSyntax,
+        to_graph_name: Option<&NamedOrBlankNode>,
+        base_iri: Option<&str>,
+    ) -> Result<()> {
+        load_graph(self, reader, syntax, to_graph_name, base_iri)
+    }
+
+    /// Loads a dataset file (i.e. quads) into the store. into the store during the transaction.
+    ///
+    /// Warning: Because the load happens during a transaction,
+    /// the full file content might be temporarily stored in main memory.
+    /// Do not use for big files.
+    ///
+    /// See `MemoryTransaction` for a usage example.
+    pub fn load_dataset(
+        &mut self,
+        reader: impl BufRead,
+        syntax: DatasetSyntax,
+        base_iri: Option<&str>,
+    ) -> Result<()> {
+        load_dataset(self, reader, syntax, base_iri)
+    }
+
+    /// Adds a quad to this store during the transaction.
+    pub fn insert(&mut self, quad: &Quad) -> Result<()> {
+        let quad = self.encode_quad(quad)?;
+        self.insert_encoded(&quad)
+    }
+
+    /// Removes a quad from this store during the transaction.
+    pub fn remove(&mut self, quad: &Quad) -> Result<()> {
+        let quad = quad.into();
+        self.remove_encoded(&quad)
     }
 
     fn commit(self) -> Result<()> {
@@ -451,87 +589,77 @@ impl StoreTransaction for RocksDbStoreTransaction<'_> {
     }
 }
 
-pub struct RocksDbStoreAutoTransaction<'a> {
-    inner: RocksDbStoreInnerTransaction<'a>,
+pub struct RocksDbAutoTransaction<'a> {
+    inner: RocksDbInnerTransaction<'a>,
 }
 
-impl StrContainer for RocksDbStoreAutoTransaction<'_> {
+impl StrContainer for RocksDbAutoTransaction<'_> {
     fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
         self.inner.insert_str(key, value);
         Ok(())
     }
 }
 
-impl StoreTransaction for RocksDbStoreAutoTransaction<'_> {
-    fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
+impl WritableEncodedStore for RocksDbAutoTransaction<'_> {
+    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
         self.inner.insert(quad)?;
         self.commit_if_big()
     }
 
-    fn remove(&mut self, quad: &EncodedQuad) -> Result<()> {
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
         self.inner.remove(quad)?;
         self.commit_if_big()
     }
+}
 
+impl RocksDbAutoTransaction<'_> {
     fn commit(self) -> Result<()> {
         self.inner.commit()
     }
-}
 
-impl RocksDbStoreAutoTransaction<'_> {
     fn commit_if_big(&mut self) -> Result<()> {
         if self.inner.batch.len() > MAX_TRANSACTION_SIZE {
-            self.inner
-                .connection
-                .store
-                .db
-                .write(take(&mut self.inner.batch))?;
+            self.inner.handle.db.write(take(&mut self.inner.batch))?;
         }
         Ok(())
     }
 }
 
-struct RocksDbStoreInnerTransaction<'a> {
-    connection: RocksDbStoreConnection<'a>,
+struct RocksDbInnerTransaction<'a> {
+    handle: RocksDbStoreHandle<'a>,
     batch: WriteBatch,
     buffer: Vec<u8>,
 }
 
-impl RocksDbStoreInnerTransaction<'_> {
+impl RocksDbInnerTransaction<'_> {
     fn insert_str(&mut self, key: StrHash, value: &str) {
         self.batch
-            .put_cf(self.connection.id2str_cf, &key.to_le_bytes(), value)
+            .put_cf(self.handle.id2str_cf, &key.to_le_bytes(), value)
     }
 
     fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
         self.buffer.write_spog_quad(quad)?;
-        self.batch
-            .put_cf(self.connection.spog_cf, &self.buffer, &[]);
+        self.batch.put_cf(self.handle.spog_cf, &self.buffer, &[]);
         self.buffer.clear();
 
         self.buffer.write_posg_quad(quad)?;
-        self.batch
-            .put_cf(self.connection.posg_cf, &self.buffer, &[]);
+        self.batch.put_cf(self.handle.posg_cf, &self.buffer, &[]);
         self.buffer.clear();
 
         self.buffer.write_ospg_quad(quad)?;
-        self.batch
-            .put_cf(self.connection.ospg_cf, &self.buffer, &[]);
+        self.batch.put_cf(self.handle.ospg_cf, &self.buffer, &[]);
         self.buffer.clear();
 
         self.buffer.write_gspo_quad(quad)?;
-        self.batch
-            .put_cf(self.connection.gspo_cf, &self.buffer, &[]);
+        self.batch.put_cf(self.handle.gspo_cf, &self.buffer, &[]);
         self.buffer.clear();
 
         self.buffer.write_gpos_quad(quad)?;
-        self.batch
-            .put_cf(self.connection.gpos_cf, &self.buffer, &[]);
+        self.batch.put_cf(self.handle.gpos_cf, &self.buffer, &[]);
         self.buffer.clear();
 
         self.buffer.write_gosp_quad(quad)?;
-        self.batch
-            .put_cf(self.connection.gosp_cf, &self.buffer, &[]);
+        self.batch.put_cf(self.handle.gosp_cf, &self.buffer, &[]);
         self.buffer.clear();
 
         Ok(())
@@ -539,34 +667,34 @@ impl RocksDbStoreInnerTransaction<'_> {
 
     fn remove(&mut self, quad: &EncodedQuad) -> Result<()> {
         self.buffer.write_spog_quad(quad)?;
-        self.batch.delete_cf(self.connection.spog_cf, &self.buffer);
+        self.batch.delete_cf(self.handle.spog_cf, &self.buffer);
         self.buffer.clear();
 
         self.buffer.write_posg_quad(quad)?;
-        self.batch.delete_cf(self.connection.posg_cf, &self.buffer);
+        self.batch.delete_cf(self.handle.posg_cf, &self.buffer);
         self.buffer.clear();
 
         self.buffer.write_ospg_quad(quad)?;
-        self.batch.delete_cf(self.connection.ospg_cf, &self.buffer);
+        self.batch.delete_cf(self.handle.ospg_cf, &self.buffer);
         self.buffer.clear();
 
         self.buffer.write_gspo_quad(quad)?;
-        self.batch.delete_cf(self.connection.gspo_cf, &self.buffer);
+        self.batch.delete_cf(self.handle.gspo_cf, &self.buffer);
         self.buffer.clear();
 
         self.buffer.write_gpos_quad(quad)?;
-        self.batch.delete_cf(self.connection.gpos_cf, &self.buffer);
+        self.batch.delete_cf(self.handle.gpos_cf, &self.buffer);
         self.buffer.clear();
 
         self.buffer.write_gosp_quad(quad)?;
-        self.batch.delete_cf(self.connection.gosp_cf, &self.buffer);
+        self.batch.delete_cf(self.handle.gosp_cf, &self.buffer);
         self.buffer.clear();
 
         Ok(())
     }
 
     fn commit(self) -> Result<()> {
-        self.connection.store.db.write(self.batch)?;
+        self.handle.db.write(self.batch)?;
         Ok(())
     }
 }
@@ -631,7 +759,7 @@ impl<'a, F: Fn(&[u8]) -> Result<EncodedQuad>> Iterator for DecodingIndexIterator
 }
 
 #[test]
-fn repository() -> Result<()> {
+fn store() -> Result<()> {
     use crate::model::*;
     use crate::*;
     use rand::random;
@@ -653,94 +781,93 @@ fn repository() -> Result<()> {
     repo_path.push(random::<u128>().to_string());
 
     {
-        let repository = RocksDbRepository::open(&repo_path)?;
-        let mut connection = repository.connection()?;
-        connection.insert(&main_quad)?;
+        let store = RocksDbStore::open(&repo_path)?;
+        store.insert(&main_quad)?;
         for t in &all_o {
-            connection.insert(t)?;
+            store.insert(t)?;
         }
 
         let target = vec![main_quad];
         assert_eq!(
-            connection
+            store
                 .quads_for_pattern(None, None, None, None)
                 .collect::<Result<Vec<_>>>()?,
             all_o
         );
         assert_eq!(
-            connection
+            store
                 .quads_for_pattern(Some(&main_s), None, None, None)
                 .collect::<Result<Vec<_>>>()?,
             all_o
         );
         assert_eq!(
-            connection
+            store
                 .quads_for_pattern(Some(&main_s), Some(&main_p), None, None)
                 .collect::<Result<Vec<_>>>()?,
             all_o
         );
         assert_eq!(
-            connection
+            store
                 .quads_for_pattern(Some(&main_s), Some(&main_p), Some(&main_o), None)
                 .collect::<Result<Vec<_>>>()?,
             target
         );
         assert_eq!(
-            connection
+            store
                 .quads_for_pattern(Some(&main_s), Some(&main_p), Some(&main_o), Some(None))
                 .collect::<Result<Vec<_>>>()?,
             target
         );
         assert_eq!(
-            connection
+            store
                 .quads_for_pattern(Some(&main_s), Some(&main_p), None, Some(None))
                 .collect::<Result<Vec<_>>>()?,
             all_o
         );
         assert_eq!(
-            connection
+            store
                 .quads_for_pattern(Some(&main_s), None, Some(&main_o), None)
                 .collect::<Result<Vec<_>>>()?,
             target
         );
         assert_eq!(
-            connection
+            store
                 .quads_for_pattern(Some(&main_s), None, Some(&main_o), Some(None))
                 .collect::<Result<Vec<_>>>()?,
             target
         );
         assert_eq!(
-            connection
+            store
                 .quads_for_pattern(Some(&main_s), None, None, Some(None))
                 .collect::<Result<Vec<_>>>()?,
             all_o
         );
         assert_eq!(
-            connection
+            store
                 .quads_for_pattern(None, Some(&main_p), None, None)
                 .collect::<Result<Vec<_>>>()?,
             all_o
         );
         assert_eq!(
-            connection
+            store
                 .quads_for_pattern(None, Some(&main_p), Some(&main_o), None)
                 .collect::<Result<Vec<_>>>()?,
             target
         );
         assert_eq!(
-            connection
+            store
                 .quads_for_pattern(None, None, Some(&main_o), None)
                 .collect::<Result<Vec<_>>>()?,
             target
         );
         assert_eq!(
-            connection
+            store
                 .quads_for_pattern(None, None, None, Some(None))
                 .collect::<Result<Vec<_>>>()?,
             all_o
         );
         assert_eq!(
-            connection
+            store
                 .quads_for_pattern(None, Some(&main_p), Some(&main_o), Some(None))
                 .collect::<Result<Vec<_>>>()?,
             target

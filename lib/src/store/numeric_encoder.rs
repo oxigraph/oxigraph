@@ -1264,3 +1264,12 @@ fn test_encoding() {
         assert_eq!(encoded, EncodedTerm::from(&term));
     }
 }
+
+#[test]
+fn test_str_hash() {
+    assert_eq!(StrHash::new(""), EMPTY_STRING_ID);
+    assert_eq!(
+        StrHash::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"),
+        RDF_LANG_STRING_ID
+    );
+}

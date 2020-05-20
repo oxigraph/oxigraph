@@ -202,25 +202,20 @@ fn literal(str: String) -> Term {
     Term::Literal(Literal::new_simple_literal(str))
 }
 
-fn make_repository(reader: impl BufRead) -> Result<MemoryRepository> {
-    let repository = MemoryRepository::default();
-    let mut connection = repository.connection()?;
-    connection
+fn make_store(reader: impl BufRead) -> Result<MemoryStore> {
+    let store = MemoryStore::default();
+    store
         .load_graph(reader, GraphSyntax::NTriples, None, None)
         .unwrap();
-    Ok(repository)
+    Ok(store)
 }
 
-fn query_repository<'a>(
-    repository: MemoryRepository,
+fn query_store<'a>(
+    store: MemoryStore,
     query: String,
     options: QueryOptions<'a>,
 ) -> Result<BindingsIterator<'a>> {
-    match repository
-        .connection()?
-        .prepare_query(&query, options)?
-        .exec()?
-    {
+    match store.prepare_query(&query, options)?.exec()? {
         QueryResult::Bindings(iterator) => {
             let (varaibles, iter) = iterator.destruct();
             let collected = iter.collect::<Vec<_>>();
@@ -233,13 +228,12 @@ fn query_repository<'a>(
     }
 }
 
-fn pattern_repository<'a>(
-    repository: MemoryRepository,
+fn pattern_store<'a>(
+    store: MemoryStore,
     pattern: &'a GraphPattern,
     options: QueryOptions<'a>,
 ) -> Result<BindingsIterator<'a>> {
-    match repository
-        .connection()?
+    match store
         .prepare_query_from_pattern(&pattern, options)?
         .exec()?
     {
@@ -260,8 +254,8 @@ fn do_query<'a>(
     query: String,
     options: QueryOptions<'a>,
 ) -> Result<BindingsIterator<'a>> {
-    let repository = make_repository(reader)?;
-    query_repository(repository, query, options)
+    let store = make_store(reader)?;
+    query_store(store, query, options)
 }
 
 fn do_pattern<'a>(
@@ -269,6 +263,6 @@ fn do_pattern<'a>(
     pattern: &'a GraphPattern,
     options: QueryOptions<'a>,
 ) -> Result<BindingsIterator<'a>> {
-    let repository = make_repository(reader)?;
-    pattern_repository(repository, pattern, options)
+    let store = make_store(reader)?;
+    pattern_store(store, pattern, options)
 }

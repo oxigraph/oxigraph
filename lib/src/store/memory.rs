@@ -1,53 +1,50 @@
+use crate::model::*;
+use crate::sparql::{PreparedQuery, QueryOptions, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::store::*;
-use crate::{Repository, Result};
+use crate::{DatasetSyntax, GraphSyntax, Result};
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
+use std::io::BufRead;
 use std::iter::{empty, once};
-use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-/// Memory based implementation of the `Repository` trait.
-/// It is cheap to build using the `MemoryRepository::default()` method.
+/// Memory based store.
+/// It encodes a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) and allows to query and update it using SPARQL.
+/// It is cheap to build using the `MemoryStore::new()` method.
 ///
 /// Usage example:
 /// ```
 /// use oxigraph::model::*;
-/// use oxigraph::{Repository, RepositoryConnection, MemoryRepository, Result};
-/// use crate::oxigraph::sparql::PreparedQuery;
-/// use oxigraph::sparql::{QueryResult, QueryOptions};
+/// use oxigraph::{MemoryStore, Result};
+/// use oxigraph::sparql::{PreparedQuery, QueryResult, QueryOptions};
 ///
-/// let repository = MemoryRepository::default();
-/// let mut connection = repository.connection()?;
+/// let store = MemoryStore::new();
 ///
 /// // insertion
 /// let ex = NamedNode::parse("http://example.com")?;
 /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
-/// connection.insert(&quad)?;
+/// store.insert(&quad)?;
 ///
 /// // quad filter
-/// let results: Result<Vec<Quad>> = connection.quads_for_pattern(None, None, None, None).collect();
+/// let results: Result<Vec<Quad>> = store.quads_for_pattern(None, None, None, None).collect();
 /// assert_eq!(vec![quad], results?);
 ///
 /// // SPARQL query
-/// let prepared_query = connection.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
+/// let prepared_query = store.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
 /// let results = prepared_query.exec()?;
 /// if let QueryResult::Bindings(results) = results {
 ///     assert_eq!(results.into_values_iter().next().unwrap()?[0], Some(ex.into()));
 /// }
 /// # Result::Ok(())
 /// ```
-#[derive(Default)]
-pub struct MemoryRepository {
-    inner: MemoryStore,
+#[derive(Clone)]
+pub struct MemoryStore {
+    indexes: Arc<RwLock<MemoryStoreIndexes>>,
 }
 
-pub type MemoryRepositoryConnection<'a> = StoreRepositoryConnection<&'a MemoryStore>;
 type TripleMap<T> = HashMap<T, HashMap<T, HashSet<T>>>;
 type QuadMap<T> = HashMap<T, TripleMap<T>>;
-
-pub struct MemoryStore {
-    indexes: RwLock<MemoryStoreIndexes>,
-}
 
 #[derive(Default)]
 struct MemoryStoreIndexes {
@@ -62,81 +59,491 @@ struct MemoryStoreIndexes {
 
 impl Default for MemoryStore {
     fn default() -> Self {
-        let new = Self {
-            indexes: RwLock::default(),
+        Self::new()
+    }
+}
+
+impl MemoryStore {
+    /// Constructs a new `MemoryStore`
+    pub fn new() -> Self {
+        let mut new = Self {
+            indexes: Arc::new(RwLock::default()),
         };
-
-        let mut transaction = (&new).connection().unwrap().transaction();
-        transaction.set_first_strings().unwrap();
-        transaction.commit().unwrap();
-
+        new.set_first_strings().unwrap();
         new
     }
-}
 
-impl<'a> Repository for &'a MemoryRepository {
-    type Connection = MemoryRepositoryConnection<'a>;
+    /// Prepares a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) and returns an object that could be used to execute it.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::{MemoryStore, Result};
+    /// use oxigraph::sparql::{PreparedQuery, QueryOptions, QueryResult};
+    ///
+    /// let store = MemoryStore::default();
+    ///
+    /// // insertions
+    /// let ex = NamedNode::parse("http://example.com")?;
+    /// store.insert(&Quad::new(ex.clone(), ex.clone(), ex.clone(), None));
+    ///
+    /// // SPARQL query
+    /// let prepared_query = store.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
+    /// let results = prepared_query.exec()?;
+    /// if let QueryResult::Bindings(results) = results {
+    ///     assert_eq!(results.into_values_iter().next().unwrap()?[0], Some(ex.into()));
+    /// }
+    /// # Result::Ok(())
+    /// ```
+    pub fn prepare_query(
+        &self,
+        query: &str,
+        options: QueryOptions<'_>,
+    ) -> Result<impl PreparedQuery> {
+        SimplePreparedQuery::new(self.clone(), query, options)
+    }
 
-    fn connection(self) -> Result<StoreRepositoryConnection<&'a MemoryStore>> {
-        Ok(self.inner.connection()?.into())
+    /// This is similar to `prepare_query`, but useful if a SPARQL query has already been parsed, which is the case when building `ServiceHandler`s for federated queries with `SERVICE` clauses. For examples, look in the tests.
+    pub fn prepare_query_from_pattern(
+        &self,
+        graph_pattern: &GraphPattern,
+        options: QueryOptions<'_>,
+    ) -> Result<impl PreparedQuery> {
+        SimplePreparedQuery::new_from_pattern(self.clone(), graph_pattern, options)
+    }
+
+    /// Retrieves quads with a filter on each quad component
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::{MemoryStore, Result};
+    ///
+    /// let store = MemoryStore::default();
+    ///
+    /// // insertion
+    /// let ex = NamedNode::parse("http://example.com")?;
+    /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
+    /// store.insert(&quad);
+    ///
+    /// // quad filter
+    /// let results: Result<Vec<Quad>> = store.quads_for_pattern(None, None, None, None).collect();
+    /// assert_eq!(vec![quad], results?);
+    /// # Result::Ok(())
+    /// ```
+    #[allow(clippy::option_option)]
+    pub fn quads_for_pattern<'a>(
+        &'a self,
+        subject: Option<&NamedOrBlankNode>,
+        predicate: Option<&NamedNode>,
+        object: Option<&Term>,
+        graph_name: Option<Option<&NamedOrBlankNode>>,
+    ) -> Box<dyn Iterator<Item = Result<Quad>> + 'a>
+    where
+        Self: 'a,
+    {
+        let subject = subject.map(|s| s.into());
+        let predicate = predicate.map(|p| p.into());
+        let object = object.map(|o| o.into());
+        let graph_name = graph_name.map(|g| g.map_or(ENCODED_DEFAULT_GRAPH, |g| g.into()));
+        Box::new(
+            self.encoded_quads_for_pattern(subject, predicate, object, graph_name)
+                .map(move |quad| self.decode_quad(&quad?)),
+        )
+    }
+
+    /// Checks if this store contains a given quad
+    pub fn contains(&self, quad: &Quad) -> bool {
+        let quad = quad.into();
+        self.contains_encoded(&quad)
+    }
+
+    /// Executes a transaction.
+    ///
+    /// The transaction is executed if the given closure returns `Ok`.
+    /// Nothing is done if the clusre returns `Err`.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::{MemoryStore, Result};
+    ///
+    /// let store = MemoryStore::default();
+    ///
+    /// let ex = NamedNode::parse("http://example.com")?;
+    /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
+    ///
+    /// // transaction
+    /// store.transaction(|transaction| {
+    ///     transaction.insert(&quad)
+    /// });
+    ///
+    /// // quad filter
+    /// assert!(store.contains(&quad));
+    /// # Result::Ok(())
+    /// ```
+    pub fn transaction<'a>(
+        &'a self,
+        f: impl FnOnce(&mut MemoryTransaction<'a>) -> Result<()>,
+    ) -> Result<()> {
+        let mut transaction = MemoryTransaction {
+            store: self,
+            ops: Vec::new(),
+            strings: Vec::new(),
+        };
+        f(&mut transaction)?;
+        transaction.commit()
+    }
+
+    /// Loads a graph file (i.e. triples) into the store.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::{MemoryStore, Result, GraphSyntax};
+    ///
+    /// let store = MemoryStore::default();
+    ///
+    /// // insertion
+    /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
+    /// store.load_graph(file.as_ref(), GraphSyntax::NTriples, None, None);
+    ///
+    /// // quad filter
+    /// let results: Result<Vec<Quad>> = store.quads_for_pattern(None, None, None, None).collect();
+    /// let ex = NamedNode::parse("http://example.com")?;
+    /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results?);
+    /// # Result::Ok(())
+    /// ```
+    pub fn load_graph(
+        &self,
+        reader: impl BufRead,
+        syntax: GraphSyntax,
+        to_graph_name: Option<&NamedOrBlankNode>,
+        base_iri: Option<&str>,
+    ) -> Result<()> {
+        let mut store = self;
+        load_graph(&mut store, reader, syntax, to_graph_name, base_iri)
+    }
+
+    /// Loads a dataset file (i.e. quads) into the store.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::{MemoryStore, Result, DatasetSyntax};
+    ///
+    /// let store = MemoryStore::default();
+    ///
+    /// // insertion
+    /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
+    /// store.load_dataset(file.as_ref(), DatasetSyntax::NQuads, None);
+    ///
+    /// // quad filter
+    /// let results: Result<Vec<Quad>> = store.quads_for_pattern(None, None, None, None).collect();
+    /// let ex = NamedNode::parse("http://example.com")?;
+    /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), Some(ex.into()))], results?);
+    /// # Result::Ok(())
+    /// ```
+    pub fn load_dataset(
+        &self,
+        reader: impl BufRead,
+        syntax: DatasetSyntax,
+        base_iri: Option<&str>,
+    ) -> Result<()> {
+        let mut store = self;
+        load_dataset(&mut store, reader, syntax, base_iri)
+    }
+
+    /// Adds a quad to this store.
+    pub fn insert(&self, quad: &Quad) -> Result<()> {
+        let mut store = self;
+        let quad = store.encode_quad(quad)?;
+        store.insert_encoded(&quad)
+    }
+
+    /// Removes a quad from this store.
+    pub fn remove(&self, quad: &Quad) -> Result<()> {
+        let mut store = self;
+        let quad = quad.into();
+        store.remove_encoded(&quad)
+    }
+
+    fn indexes(&self) -> RwLockReadGuard<'_, MemoryStoreIndexes> {
+        self.indexes
+            .read()
+            .expect("the Memory store mutex has been poisoned because of a panic")
+    }
+
+    fn indexes_mut(&self) -> RwLockWriteGuard<'_, MemoryStoreIndexes> {
+        self.indexes
+            .write()
+            .expect("the Memory store mutex has been poisoned because of a panic")
+    }
+
+    fn contains_encoded(&self, quad: &EncodedQuad) -> bool {
+        self.indexes().spog.get(&quad.subject).map_or(false, |pog| {
+            pog.get(&quad.predicate).map_or(false, |og| {
+                og.get(&quad.object)
+                    .map_or(false, |g| g.contains(&quad.graph_name))
+            })
+        })
+    }
+
+    fn encoded_quads<'a>(&'a self) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
+        Ok(quad_map_flatten(&self.indexes().gspo)
+            .map(|(g, s, p, o)| Ok(EncodedQuad::new(s, p, o, g)))
+            .collect::<Vec<_>>()
+            .into_iter())
+    }
+
+    fn encoded_quads_for_subject(
+        &self,
+        subject: EncodedTerm,
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_triple_map_flatten(self.indexes().spog.get(&subject))
+            .map(|(p, o, g)| Ok(EncodedQuad::new(subject, p, o, g)))
+            .collect::<Vec<_>>()
+            .into_iter())
+    }
+
+    fn encoded_quads_for_subject_predicate(
+        &self,
+        subject: EncodedTerm,
+        predicate: EncodedTerm,
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_pair_map_flatten(
+            self.indexes()
+                .spog
+                .get(&subject)
+                .and_then(|pog| pog.get(&predicate)),
+        )
+        .map(|(o, g)| Ok(EncodedQuad::new(subject, predicate, o, g)))
+        .collect::<Vec<_>>()
+        .into_iter())
+    }
+
+    fn encoded_quads_for_subject_predicate_object(
+        &self,
+        subject: EncodedTerm,
+        predicate: EncodedTerm,
+        object: EncodedTerm,
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_set_flatten(
+            self.indexes()
+                .spog
+                .get(&subject)
+                .and_then(|pog| pog.get(&predicate))
+                .and_then(|og| og.get(&object)),
+        )
+        .map(|g| Ok(EncodedQuad::new(subject, predicate, object, g)))
+        .collect::<Vec<_>>()
+        .into_iter())
+    }
+
+    fn encoded_quads_for_subject_object(
+        &self,
+        subject: EncodedTerm,
+        object: EncodedTerm,
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_pair_map_flatten(
+            self.indexes()
+                .ospg
+                .get(&object)
+                .and_then(|spg| spg.get(&subject)),
+        )
+        .map(|(p, g)| Ok(EncodedQuad::new(subject, p, object, g)))
+        .collect::<Vec<_>>()
+        .into_iter())
+    }
+
+    fn encoded_quads_for_predicate(
+        &self,
+        predicate: EncodedTerm,
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(
+            option_triple_map_flatten(self.indexes().posg.get(&predicate))
+                .map(|(o, s, g)| Ok(EncodedQuad::new(s, predicate, o, g)))
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
+    }
+
+    fn encoded_quads_for_predicate_object(
+        &self,
+        predicate: EncodedTerm,
+        object: EncodedTerm,
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_pair_map_flatten(
+            self.indexes()
+                .posg
+                .get(&predicate)
+                .and_then(|osg| osg.get(&object)),
+        )
+        .map(|(s, g)| Ok(EncodedQuad::new(s, predicate, object, g)))
+        .collect::<Vec<_>>()
+        .into_iter())
+    }
+
+    fn encoded_quads_for_object(
+        &self,
+        object: EncodedTerm,
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_triple_map_flatten(self.indexes().ospg.get(&object))
+            .map(|(s, p, g)| Ok(EncodedQuad::new(s, p, object, g)))
+            .collect::<Vec<_>>()
+            .into_iter())
+    }
+
+    fn encoded_quads_for_graph(
+        &self,
+        graph_name: EncodedTerm,
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(
+            option_triple_map_flatten(self.indexes().gspo.get(&graph_name))
+                .map(|(s, p, o)| Ok(EncodedQuad::new(s, p, o, graph_name)))
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
+    }
+
+    fn encoded_quads_for_subject_graph(
+        &self,
+        subject: EncodedTerm,
+        graph_name: EncodedTerm,
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_pair_map_flatten(
+            self.indexes()
+                .gspo
+                .get(&graph_name)
+                .and_then(|spo| spo.get(&subject)),
+        )
+        .map(|(p, o)| Ok(EncodedQuad::new(subject, p, o, graph_name)))
+        .collect::<Vec<_>>()
+        .into_iter())
+    }
+
+    fn encoded_quads_for_subject_predicate_graph(
+        &self,
+        subject: EncodedTerm,
+        predicate: EncodedTerm,
+        graph_name: EncodedTerm,
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_set_flatten(
+            self.indexes()
+                .gspo
+                .get(&graph_name)
+                .and_then(|spo| spo.get(&subject))
+                .and_then(|po| po.get(&predicate)),
+        )
+        .map(|o| Ok(EncodedQuad::new(subject, predicate, o, graph_name)))
+        .collect::<Vec<_>>()
+        .into_iter())
+    }
+
+    fn encoded_quads_for_subject_object_graph(
+        &self,
+        subject: EncodedTerm,
+        object: EncodedTerm,
+        graph_name: EncodedTerm,
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_set_flatten(
+            self.indexes()
+                .gosp
+                .get(&graph_name)
+                .and_then(|osp| osp.get(&object))
+                .and_then(|sp| sp.get(&subject)),
+        )
+        .map(|p| Ok(EncodedQuad::new(subject, p, object, graph_name)))
+        .collect::<Vec<_>>()
+        .into_iter())
+    }
+
+    fn encoded_quads_for_predicate_graph(
+        &self,
+        predicate: EncodedTerm,
+        graph_name: EncodedTerm,
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_pair_map_flatten(
+            self.indexes()
+                .gpos
+                .get(&graph_name)
+                .and_then(|pos| pos.get(&predicate)),
+        )
+        .map(|(o, s)| Ok(EncodedQuad::new(s, predicate, o, graph_name)))
+        .collect::<Vec<_>>()
+        .into_iter())
+    }
+
+    fn encoded_quads_for_predicate_object_graph(
+        &self,
+        predicate: EncodedTerm,
+        object: EncodedTerm,
+        graph_name: EncodedTerm,
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_set_flatten(
+            self.indexes()
+                .gpos
+                .get(&graph_name)
+                .and_then(|pos| pos.get(&predicate))
+                .and_then(|os| os.get(&object)),
+        )
+        .map(|s| Ok(EncodedQuad::new(s, predicate, object, graph_name)))
+        .collect::<Vec<_>>()
+        .into_iter())
+    }
+
+    fn encoded_quads_for_object_graph(
+        &self,
+        object: EncodedTerm,
+        graph_name: EncodedTerm,
+    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
+        Ok(option_pair_map_flatten(
+            self.indexes()
+                .gosp
+                .get(&graph_name)
+                .and_then(|osp| osp.get(&object)),
+        )
+        .map(|(s, p)| Ok(EncodedQuad::new(s, p, object, graph_name)))
+        .collect::<Vec<_>>()
+        .into_iter())
     }
 }
 
-impl<'a> Store for &'a MemoryStore {
-    type Connection = &'a MemoryStore;
-
-    fn connection(self) -> Result<Self::Connection> {
-        Ok(self)
-    }
-}
-
-impl<'a> StrLookup for &'a MemoryStore {
+impl StrLookup for MemoryStore {
     fn get_str(&self, id: StrHash) -> Result<Option<String>> {
         //TODO: avoid copy by adding a lifetime limit to get_str
-        Ok(self.indexes()?.id2str.get(&id).cloned())
+        self.indexes().get_str(id)
+    }
+}
+
+impl StrLookup for MemoryStoreIndexes {
+    fn get_str(&self, id: StrHash) -> Result<Option<String>> {
+        //TODO: avoid copy by adding a lifetime limit to get_str
+        Ok(self.id2str.get(&id).cloned())
+    }
+}
+
+impl StrContainer for MemoryStore {
+    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
+        self.indexes_mut().insert_str(key, value)
     }
 }
 
 impl<'a> StrContainer for &'a MemoryStore {
     fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
-        self.indexes_mut()?
-            .id2str
-            .entry(key)
-            .or_insert_with(|| value.to_owned());
+        self.indexes_mut().insert_str(key, value)
+    }
+}
+
+impl StrContainer for MemoryStoreIndexes {
+    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
+        self.id2str.entry(key).or_insert_with(|| value.to_owned());
         Ok(())
     }
 }
 
-impl<'a> StoreConnection for &'a MemoryStore {
-    type Transaction = MemoryTransaction<'a>;
-    type AutoTransaction = &'a MemoryStore;
-
-    fn transaction(&self) -> MemoryTransaction<'a> {
-        MemoryTransaction {
-            store: self,
-            ops: Vec::default(),
-            strings: Vec::default(),
-        }
-    }
-
-    fn auto_transaction(&self) -> &'a MemoryStore {
-        self
-    }
-
-    fn contains(&self, quad: &EncodedQuad) -> Result<bool> {
-        Ok(self
-            .indexes()?
-            .spog
-            .get(&quad.subject)
-            .map_or(false, |pog| {
-                pog.get(&quad.predicate).map_or(false, |og| {
-                    og.get(&quad.object)
-                        .map_or(false, |g| g.contains(&quad.graph_name))
-                })
-            }))
-    }
-
-    fn quads_for_pattern<'b>(
+impl<'a> ReadableEncodedStore for MemoryStore {
+    fn encoded_quads_for_pattern<'b>(
         &'b self,
         subject: Option<EncodedTerm>,
         predicate: Option<EncodedTerm>,
@@ -149,63 +556,73 @@ impl<'a> StoreConnection for &'a MemoryStore {
                     Some(object) => match graph_name {
                         Some(graph_name) => {
                             let quad = EncodedQuad::new(subject, predicate, object, graph_name);
-                            match self.contains(&quad) {
-                                Ok(true) => Box::new(once(Ok(quad))),
-                                Ok(false) => Box::new(empty()),
-                                Err(error) => Box::new(once(Err(error))),
+                            if self.contains_encoded(&quad) {
+                                Box::new(once(Ok(quad)))
+                            } else {
+                                Box::new(empty())
                             }
                         }
-                        None => wrap_error(
-                            self.quads_for_subject_predicate_object(subject, predicate, object),
-                        ),
+                        None => wrap_error(self.encoded_quads_for_subject_predicate_object(
+                            subject, predicate, object,
+                        )),
                     },
                     None => match graph_name {
-                        Some(graph_name) => wrap_error(
-                            self.quads_for_subject_predicate_graph(subject, predicate, graph_name),
-                        ),
-                        None => wrap_error(self.quads_for_subject_predicate(subject, predicate)),
+                        Some(graph_name) => {
+                            wrap_error(self.encoded_quads_for_subject_predicate_graph(
+                                subject, predicate, graph_name,
+                            ))
+                        }
+                        None => {
+                            wrap_error(self.encoded_quads_for_subject_predicate(subject, predicate))
+                        }
                     },
                 },
                 None => match object {
                     Some(object) => match graph_name {
-                        Some(graph_name) => wrap_error(
-                            self.quads_for_subject_object_graph(subject, object, graph_name),
-                        ),
-                        None => wrap_error(self.quads_for_subject_object(subject, object)),
+                        Some(graph_name) => {
+                            wrap_error(self.encoded_quads_for_subject_object_graph(
+                                subject, object, graph_name,
+                            ))
+                        }
+                        None => wrap_error(self.encoded_quads_for_subject_object(subject, object)),
                     },
                     None => match graph_name {
                         Some(graph_name) => {
-                            wrap_error(self.quads_for_subject_graph(subject, graph_name))
+                            wrap_error(self.encoded_quads_for_subject_graph(subject, graph_name))
                         }
-                        None => wrap_error(self.quads_for_subject(subject)),
+                        None => wrap_error(self.encoded_quads_for_subject(subject)),
                     },
                 },
             },
             None => match predicate {
                 Some(predicate) => match object {
                     Some(object) => match graph_name {
-                        Some(graph_name) => wrap_error(
-                            self.quads_for_predicate_object_graph(predicate, object, graph_name),
-                        ),
-                        None => wrap_error(self.quads_for_predicate_object(predicate, object)),
+                        Some(graph_name) => {
+                            wrap_error(self.encoded_quads_for_predicate_object_graph(
+                                predicate, object, graph_name,
+                            ))
+                        }
+                        None => {
+                            wrap_error(self.encoded_quads_for_predicate_object(predicate, object))
+                        }
                     },
                     None => match graph_name {
-                        Some(graph_name) => {
-                            wrap_error(self.quads_for_predicate_graph(predicate, graph_name))
-                        }
-                        None => wrap_error(self.quads_for_predicate(predicate)),
+                        Some(graph_name) => wrap_error(
+                            self.encoded_quads_for_predicate_graph(predicate, graph_name),
+                        ),
+                        None => wrap_error(self.encoded_quads_for_predicate(predicate)),
                     },
                 },
                 None => match object {
                     Some(object) => match graph_name {
                         Some(graph_name) => {
-                            wrap_error(self.quads_for_object_graph(object, graph_name))
+                            wrap_error(self.encoded_quads_for_object_graph(object, graph_name))
                         }
-                        None => wrap_error(self.quads_for_object(object)),
+                        None => wrap_error(self.encoded_quads_for_object(object)),
                     },
                     None => match graph_name {
-                        Some(graph_name) => wrap_error(self.quads_for_graph(graph_name)),
-                        None => wrap_error(self.quads()),
+                        Some(graph_name) => wrap_error(self.encoded_quads_for_graph(graph_name)),
+                        None => wrap_error(self.encoded_quads()),
                     },
                 },
             },
@@ -213,255 +630,28 @@ impl<'a> StoreConnection for &'a MemoryStore {
     }
 }
 
-impl<'a> StoreTransaction for &'a MemoryStore {
-    fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
-        self.indexes_mut()?.insert_quad(quad);
-        Ok(())
+impl WritableEncodedStore for MemoryStore {
+    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
+        self.indexes_mut().insert_encoded(quad)
     }
 
-    fn remove(&mut self, quad: &EncodedQuad) -> Result<()> {
-        self.indexes_mut()?.remove_quad(quad);
-        Ok(())
-    }
-
-    fn commit(self) -> Result<()> {
-        Ok(())
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
+        self.indexes_mut().remove_encoded(quad)
     }
 }
 
-impl MemoryStore {
-    fn indexes(&self) -> Result<RwLockReadGuard<'_, MemoryStoreIndexes>> {
-        Ok(self.indexes.read()?)
+impl<'a> WritableEncodedStore for &'a MemoryStore {
+    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
+        self.indexes_mut().insert_encoded(quad)
     }
 
-    fn indexes_mut(&self) -> Result<RwLockWriteGuard<'_, MemoryStoreIndexes>> {
-        Ok(self.indexes.write()?)
-    }
-
-    fn quads<'a>(&'a self) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        Ok(quad_map_flatten(&self.indexes()?.gspo)
-            .map(|(g, s, p, o)| Ok(EncodedQuad::new(s, p, o, g)))
-            .collect::<Vec<_>>()
-            .into_iter())
-    }
-
-    fn quads_for_subject(
-        &self,
-        subject: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
-        Ok(
-            option_triple_map_flatten(self.indexes()?.spog.get(&subject))
-                .map(|(p, o, g)| Ok(EncodedQuad::new(subject, p, o, g)))
-                .collect::<Vec<_>>()
-                .into_iter(),
-        )
-    }
-
-    fn quads_for_subject_predicate(
-        &self,
-        subject: EncodedTerm,
-        predicate: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
-        Ok(option_pair_map_flatten(
-            self.indexes()?
-                .spog
-                .get(&subject)
-                .and_then(|pog| pog.get(&predicate)),
-        )
-        .map(|(o, g)| Ok(EncodedQuad::new(subject, predicate, o, g)))
-        .collect::<Vec<_>>()
-        .into_iter())
-    }
-
-    fn quads_for_subject_predicate_object(
-        &self,
-        subject: EncodedTerm,
-        predicate: EncodedTerm,
-        object: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
-        Ok(option_set_flatten(
-            self.indexes()?
-                .spog
-                .get(&subject)
-                .and_then(|pog| pog.get(&predicate))
-                .and_then(|og| og.get(&object)),
-        )
-        .map(|g| Ok(EncodedQuad::new(subject, predicate, object, g)))
-        .collect::<Vec<_>>()
-        .into_iter())
-    }
-
-    fn quads_for_subject_object(
-        &self,
-        subject: EncodedTerm,
-        object: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
-        Ok(option_pair_map_flatten(
-            self.indexes()?
-                .ospg
-                .get(&object)
-                .and_then(|spg| spg.get(&subject)),
-        )
-        .map(|(p, g)| Ok(EncodedQuad::new(subject, p, object, g)))
-        .collect::<Vec<_>>()
-        .into_iter())
-    }
-
-    fn quads_for_predicate(
-        &self,
-        predicate: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
-        Ok(
-            option_triple_map_flatten(self.indexes()?.posg.get(&predicate))
-                .map(|(o, s, g)| Ok(EncodedQuad::new(s, predicate, o, g)))
-                .collect::<Vec<_>>()
-                .into_iter(),
-        )
-    }
-
-    fn quads_for_predicate_object(
-        &self,
-        predicate: EncodedTerm,
-        object: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
-        Ok(option_pair_map_flatten(
-            self.indexes()?
-                .posg
-                .get(&predicate)
-                .and_then(|osg| osg.get(&object)),
-        )
-        .map(|(s, g)| Ok(EncodedQuad::new(s, predicate, object, g)))
-        .collect::<Vec<_>>()
-        .into_iter())
-    }
-
-    fn quads_for_object(
-        &self,
-        object: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
-        Ok(option_triple_map_flatten(self.indexes()?.ospg.get(&object))
-            .map(|(s, p, g)| Ok(EncodedQuad::new(s, p, object, g)))
-            .collect::<Vec<_>>()
-            .into_iter())
-    }
-
-    fn quads_for_graph(
-        &self,
-        graph_name: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
-        Ok(
-            option_triple_map_flatten(self.indexes()?.gspo.get(&graph_name))
-                .map(|(s, p, o)| Ok(EncodedQuad::new(s, p, o, graph_name)))
-                .collect::<Vec<_>>()
-                .into_iter(),
-        )
-    }
-
-    fn quads_for_subject_graph(
-        &self,
-        subject: EncodedTerm,
-        graph_name: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
-        Ok(option_pair_map_flatten(
-            self.indexes()?
-                .gspo
-                .get(&graph_name)
-                .and_then(|spo| spo.get(&subject)),
-        )
-        .map(|(p, o)| Ok(EncodedQuad::new(subject, p, o, graph_name)))
-        .collect::<Vec<_>>()
-        .into_iter())
-    }
-
-    fn quads_for_subject_predicate_graph(
-        &self,
-        subject: EncodedTerm,
-        predicate: EncodedTerm,
-        graph_name: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
-        Ok(option_set_flatten(
-            self.indexes()?
-                .gspo
-                .get(&graph_name)
-                .and_then(|spo| spo.get(&subject))
-                .and_then(|po| po.get(&predicate)),
-        )
-        .map(|o| Ok(EncodedQuad::new(subject, predicate, o, graph_name)))
-        .collect::<Vec<_>>()
-        .into_iter())
-    }
-
-    fn quads_for_subject_object_graph(
-        &self,
-        subject: EncodedTerm,
-        object: EncodedTerm,
-        graph_name: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
-        Ok(option_set_flatten(
-            self.indexes()?
-                .gosp
-                .get(&graph_name)
-                .and_then(|osp| osp.get(&object))
-                .and_then(|sp| sp.get(&subject)),
-        )
-        .map(|p| Ok(EncodedQuad::new(subject, p, object, graph_name)))
-        .collect::<Vec<_>>()
-        .into_iter())
-    }
-
-    fn quads_for_predicate_graph(
-        &self,
-        predicate: EncodedTerm,
-        graph_name: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
-        Ok(option_pair_map_flatten(
-            self.indexes()?
-                .gpos
-                .get(&graph_name)
-                .and_then(|pos| pos.get(&predicate)),
-        )
-        .map(|(o, s)| Ok(EncodedQuad::new(s, predicate, o, graph_name)))
-        .collect::<Vec<_>>()
-        .into_iter())
-    }
-
-    fn quads_for_predicate_object_graph(
-        &self,
-        predicate: EncodedTerm,
-        object: EncodedTerm,
-        graph_name: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
-        Ok(option_set_flatten(
-            self.indexes()?
-                .gpos
-                .get(&graph_name)
-                .and_then(|pos| pos.get(&predicate))
-                .and_then(|os| os.get(&object)),
-        )
-        .map(|s| Ok(EncodedQuad::new(s, predicate, object, graph_name)))
-        .collect::<Vec<_>>()
-        .into_iter())
-    }
-
-    fn quads_for_object_graph(
-        &self,
-        object: EncodedTerm,
-        graph_name: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>>> {
-        Ok(option_pair_map_flatten(
-            self.indexes()?
-                .gosp
-                .get(&graph_name)
-                .and_then(|osp| osp.get(&object)),
-        )
-        .map(|(s, p)| Ok(EncodedQuad::new(s, p, object, graph_name)))
-        .collect::<Vec<_>>()
-        .into_iter())
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
+        self.indexes_mut().remove_encoded(quad)
     }
 }
 
-impl MemoryStoreIndexes {
-    fn insert_quad(&mut self, quad: &EncodedQuad) {
+impl WritableEncodedStore for MemoryStoreIndexes {
+    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
         insert_into_quad_map(
             &mut self.gosp,
             quad.graph_name,
@@ -504,9 +694,10 @@ impl MemoryStoreIndexes {
             quad.object,
             quad.graph_name,
         );
+        Ok(())
     }
 
-    fn remove_quad(&mut self, quad: &EncodedQuad) {
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
         remove_from_quad_map(
             &mut self.gosp,
             &quad.graph_name,
@@ -549,6 +740,7 @@ impl MemoryStoreIndexes {
             &quad.object,
             &quad.graph_name,
         );
+        Ok(())
     }
 }
 
@@ -638,6 +830,7 @@ fn quad_map_flatten<'a, T: Copy>(gspo: &'a QuadMap<T>) -> impl Iterator<Item = (
     })
 }
 
+/// Allows to insert and delete quads during a transaction with the `MemoryStore`.
 pub struct MemoryTransaction<'a> {
     store: &'a MemoryStore,
     ops: Vec<TransactionOp>,
@@ -649,6 +842,91 @@ enum TransactionOp {
     Delete(EncodedQuad),
 }
 
+impl<'a> MemoryTransaction<'a> {
+    /// Loads a graph file (i.e. triples) into the store during the transaction.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::{MemoryStore, Result, GraphSyntax};
+    ///
+    /// let store = MemoryStore::default();
+    ///
+    /// // insertion
+    /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
+    /// store.transaction(|transaction| {
+    ///     store.load_graph(file.as_ref(), GraphSyntax::NTriples, None, None)
+    /// })?;
+    ///
+    /// // quad filter
+    /// let results: Result<Vec<Quad>> = store.quads_for_pattern(None, None, None, None).collect();
+    /// let ex = NamedNode::parse("http://example.com")?;
+    /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results?);
+    /// # Result::Ok(())
+    /// ```
+    pub fn load_graph(
+        &mut self,
+        reader: impl BufRead,
+        syntax: GraphSyntax,
+        to_graph_name: Option<&NamedOrBlankNode>,
+        base_iri: Option<&str>,
+    ) -> Result<()> {
+        load_graph(self, reader, syntax, to_graph_name, base_iri)
+    }
+
+    /// Loads a dataset file (i.e. quads) into the store during the transaction.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::{MemoryStore, Result, DatasetSyntax};
+    ///
+    /// let store = MemoryStore::default();
+    ///
+    /// // insertion
+    /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
+    /// store.load_dataset(file.as_ref(), DatasetSyntax::NQuads, None);
+    ///
+    /// // quad filter
+    /// let results: Result<Vec<Quad>> = store.quads_for_pattern(None, None, None, None).collect();
+    /// let ex = NamedNode::parse("http://example.com")?;
+    /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), Some(ex.into()))], results?);
+    /// # Result::Ok(())
+    /// ```
+    pub fn load_dataset(
+        &mut self,
+        reader: impl BufRead,
+        syntax: DatasetSyntax,
+        base_iri: Option<&str>,
+    ) -> Result<()> {
+        load_dataset(self, reader, syntax, base_iri)
+    }
+
+    /// Adds a quad to this store during the transaction.
+    pub fn insert(&mut self, quad: &Quad) -> Result<()> {
+        let quad = self.encode_quad(quad)?;
+        self.insert_encoded(&quad)
+    }
+
+    /// Removes a quad from this store during the transaction.
+    pub fn remove(&mut self, quad: &Quad) -> Result<()> {
+        let quad = quad.into();
+        self.remove_encoded(&quad)
+    }
+
+    fn commit(self) -> Result<()> {
+        let mut indexes = self.store.indexes_mut();
+        indexes.id2str.extend(self.strings);
+        for op in self.ops {
+            match op {
+                TransactionOp::Insert(quad) => indexes.insert_encoded(&quad)?,
+                TransactionOp::Delete(quad) => indexes.remove_encoded(&quad)?,
+            }
+        }
+        Ok(())
+    }
+}
+
 impl StrContainer for MemoryTransaction<'_> {
     fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
         self.strings.push((key, value.to_owned()));
@@ -656,26 +934,14 @@ impl StrContainer for MemoryTransaction<'_> {
     }
 }
 
-impl StoreTransaction for MemoryTransaction<'_> {
-    fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
+impl WritableEncodedStore for MemoryTransaction<'_> {
+    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
         self.ops.push(TransactionOp::Insert(*quad));
         Ok(())
     }
 
-    fn remove(&mut self, quad: &EncodedQuad) -> Result<()> {
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
         self.ops.push(TransactionOp::Delete(*quad));
-        Ok(())
-    }
-
-    fn commit(self) -> Result<()> {
-        let mut indexes = self.store.indexes_mut()?;
-        indexes.id2str.extend(self.strings);
-        for op in self.ops {
-            match op {
-                TransactionOp::Insert(quad) => indexes.insert_quad(&quad),
-                TransactionOp::Delete(quad) => indexes.remove_quad(&quad),
-            }
-        }
         Ok(())
     }
 }

@@ -148,20 +148,18 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         if test_blacklist.contains(&test.id) {
             Ok(())
         } else if test.kind == "QueryEvaluationTest" {
-            let repository = MemoryRepository::default();
+            let store = MemoryStore::default();
             if let Some(data) = &test.data {
-                load_graph_to_repository(&data, &mut repository.connection()?, None)?;
+                load_graph_to_store(&data, &store, None)?;
             }
             for graph_data in &test.graph_data {
-                load_graph_to_repository(
+                load_graph_to_store(
                     &graph_data,
-                    &mut repository.connection()?,
+                    &store,
                     Some(&NamedNode::parse(graph_data)?.into()),
                 )?;
             }
-            match repository
-                .connection()?
-                .prepare_query(&read_file_to_string(&test.query)?, QueryOptions::default().with_base_iri(&test.query).with_service_handler(StaticServiceHandler::new(&test.service_data)?))
+            match store.prepare_query(&read_file_to_string(&test.query)?, QueryOptions::default().with_base_iri(&test.query).with_service_handler(StaticServiceHandler::new(&test.service_data)?))
                 {
                     Err(error) => Err(Error::msg(format!(
                     "Failure to parse query of {} with error: {}",
@@ -188,7 +186,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
                                 expected_graph,
                                 actual_graph,
                                 Query::parse(&read_file_to_string(&test.query)?, Some(&test.query)).unwrap(),
-                                repository_to_string(&repository)
+                                store_to_string(&store)
                             )))
                             }
                         }
@@ -209,29 +207,25 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
     Ok(())
 }
 
-fn repository_to_string(repository: impl Repository) -> String {
-    repository
-        .connection()
-        .unwrap()
+fn store_to_string(store: &MemoryStore) -> String {
+    store
         .quads_for_pattern(None, None, None, None)
         .map(|q| q.unwrap().to_string() + "\n")
         .collect()
 }
 
 fn load_graph(url: &str) -> Result<SimpleGraph> {
-    let repository = MemoryRepository::default();
-    load_graph_to_repository(url, &mut repository.connection().unwrap(), None)?;
-    Ok(repository
-        .connection()
-        .unwrap()
+    let store = MemoryStore::default();
+    load_graph_to_store(url, &store, None)?;
+    Ok(store
         .quads_for_pattern(None, None, None, Some(None))
         .map(|q| q.unwrap().into_triple())
         .collect())
 }
 
-fn load_graph_to_repository(
+fn load_graph_to_store(
     url: &str,
-    connection: &mut <&MemoryRepository as Repository>::Connection,
+    store: &MemoryStore,
     to_graph_name: Option<&NamedOrBlankNode>,
 ) -> Result<()> {
     let syntax = if url.ends_with(".nt") {
@@ -246,23 +240,22 @@ fn load_graph_to_repository(
             url
         )));
     };
-    connection.load_graph(read_file(url)?, syntax, to_graph_name, Some(url))
+    store.load_graph(read_file(url)?, syntax, to_graph_name, Some(url))
 }
 
 fn load_sparql_query_result_graph(url: &str) -> Result<SimpleGraph> {
-    let repository = MemoryRepository::default();
-    let mut connection = repository.connection()?;
+    let store = MemoryStore::default();
     if url.ends_with(".srx") {
         for t in to_graph(
             QueryResult::read(read_file(url)?, QueryResultSyntax::Xml)?,
             false,
         )? {
-            connection.insert(&t.in_graph(None))?;
+            store.insert(&t.in_graph(None))?;
         }
     } else {
-        load_graph_to_repository(url, &mut connection, None)?;
+        load_graph_to_store(url, &store, None)?;
     }
-    Ok(connection
+    Ok(store
         .quads_for_pattern(None, None, None, Some(None))
         .map(|q| q.unwrap().into_triple())
         .collect())
@@ -701,7 +694,7 @@ impl<'a> Iterator for RdfListIterator<'a> {
 
 #[derive(Clone)]
 struct StaticServiceHandler {
-    services: Arc<HashMap<NamedNode, MemoryRepository>>,
+    services: Arc<HashMap<NamedNode, MemoryStore>>,
 }
 
 impl StaticServiceHandler {
@@ -712,9 +705,9 @@ impl StaticServiceHandler {
                     .iter()
                     .map(|(name, data)| {
                         let name = NamedNode::parse(name)?;
-                        let repository = MemoryRepository::default();
-                        load_graph_to_repository(&data, &mut repository.connection()?, None)?;
-                        Ok((name, repository))
+                        let store = MemoryStore::default();
+                        load_graph_to_store(&data, &store, None)?;
+                        Ok((name, store))
                     })
                     .collect::<Result<_>>()?,
             ),
@@ -732,7 +725,6 @@ impl ServiceHandler for StaticServiceHandler {
             .services
             .get(service_name)
             .ok_or_else(|| Error::msg(format!("Service {} not found", service_name)))?
-            .connection()?
             .prepare_query_from_pattern(
                 &graph_pattern,
                 QueryOptions::default().with_service_handler(self.clone()),
