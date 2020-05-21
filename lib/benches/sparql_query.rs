@@ -79,7 +79,7 @@ fn read_file_to_string(url: &str) -> Result<String> {
 }
 
 fn load_graph(url: &str) -> Result<SimpleGraph> {
-    let mut store = MemoryStore::default();
+    let store = MemoryStore::default();
     load_graph_to_store(url, &store, None)?;
     Ok(store
         .quads_for_pattern(None, None, None, Some(None))
