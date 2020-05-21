@@ -132,3 +132,10 @@ impl From<rocksdb::Error> for Error {
         Self::wrap(error)
     }
 }
+
+#[cfg(feature = "sled")]
+impl From<sled::Error> for Error {
+    fn from(error: sled::Error) -> Self {
+        Self::wrap(error)
+    }
+}

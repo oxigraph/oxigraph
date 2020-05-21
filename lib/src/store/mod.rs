@@ -4,6 +4,8 @@ mod memory;
 pub(crate) mod numeric_encoder;
 #[cfg(feature = "rocksdb")]
 mod rocksdb;
+#[cfg(feature = "sled")]
+mod sled;
 
 use crate::sparql::GraphPattern;
 pub use crate::store::memory::MemoryStore;
@@ -12,6 +14,8 @@ pub use crate::store::memory::MemoryTransaction;
 pub use crate::store::rocksdb::RocksDbStore;
 #[cfg(feature = "rocksdb")]
 pub use crate::store::rocksdb::RocksDbTransaction;
+#[cfg(feature = "sled")]
+pub use crate::store::sled::SledStore;
 
 use crate::model::*;
 use crate::store::numeric_encoder::*;

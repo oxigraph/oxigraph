@@ -2,9 +2,15 @@
 //!
 //! Its goal is to provide a compliant, safe and fast graph database.
 //!
-//! It currently provides two `Store` implementation providing [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) capability:
+//! It currently provides three `Store` implementation providing [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) capability:
 //! * `MemoryStore`: a simple in memory implementation.
 //! * `RocksDbStore`: a file system implementation based on the [RocksDB](https://rocksdb.org/) key-value store.
+//!   It requires the `"rocksdb"` feature to be activated.
+//!   It also requires the clang](https://clang.llvm.org/) compiler to be installed.
+//! * `Sled`: an other file system implementation based on the [Sled](https://sled.rs/) key-value store.
+//!   It requires the `"sled"` feature to be activated.
+//!   Sled is much faster to build than RockDB and does not require a C++ compiler.
+//!   However Sled is still in heavy developpment, less tested and data load seems much slower than RocksDB.
 //!
 //! Usage example with the `MemoryStore`:
 //!
@@ -116,6 +122,8 @@ pub use crate::store::MemoryTransaction;
 pub use crate::store::RocksDbStore;
 #[cfg(feature = "rocksdb")]
 pub use crate::store::RocksDbTransaction;
+#[cfg(feature = "sled")]
+pub use crate::store::SledStore;
 pub use crate::syntax::DatasetSyntax;
 pub use crate::syntax::FileSyntax;
 pub use crate::syntax::GraphSyntax;
