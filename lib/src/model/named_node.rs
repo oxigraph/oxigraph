@@ -58,3 +58,15 @@ impl<'a> From<&'a NamedNode> for rio::NamedNode<'a> {
         rio::NamedNode { iri: node.as_str() }
     }
 }
+
+impl PartialEq<str> for NamedNode {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
+    }
+}
+
+impl PartialEq<NamedNode> for str {
+    fn eq(&self, other: &NamedNode) -> bool {
+        self == other.as_str()
+    }
+}

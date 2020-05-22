@@ -1,4 +1,3 @@
-use crate::model::vocab::xsd;
 use crate::sparql::algebra::*;
 use crate::sparql::model::*;
 use crate::sparql::plan::PlanPropertyPath;
@@ -571,7 +570,7 @@ impl<E: Encoder> PlanBuilder<E> {
                     },
                 ),
                 Function::Custom(name) => {
-                    if *name == *xsd::BOOLEAN {
+                    if name == "http://www.w3.org/2001/XMLSchema#boolean" {
                         self.build_cast(
                             parameters,
                             PlanExpression::BooleanCast,
@@ -579,7 +578,7 @@ impl<E: Encoder> PlanBuilder<E> {
                             graph_name,
                             "boolean",
                         )?
-                    } else if *name == *xsd::DOUBLE {
+                    } else if name == "http://www.w3.org/2001/XMLSchema#double" {
                         self.build_cast(
                             parameters,
                             PlanExpression::DoubleCast,
@@ -587,7 +586,7 @@ impl<E: Encoder> PlanBuilder<E> {
                             graph_name,
                             "double",
                         )?
-                    } else if *name == *xsd::FLOAT {
+                    } else if name == "http://www.w3.org/2001/XMLSchema#float" {
                         self.build_cast(
                             parameters,
                             PlanExpression::FloatCast,
@@ -595,7 +594,7 @@ impl<E: Encoder> PlanBuilder<E> {
                             graph_name,
                             "float",
                         )?
-                    } else if *name == *xsd::DECIMAL {
+                    } else if name == "http://www.w3.org/2001/XMLSchema#decimal" {
                         self.build_cast(
                             parameters,
                             PlanExpression::DecimalCast,
@@ -603,7 +602,7 @@ impl<E: Encoder> PlanBuilder<E> {
                             graph_name,
                             "decimal",
                         )?
-                    } else if *name == *xsd::INTEGER {
+                    } else if name == "http://www.w3.org/2001/XMLSchema#integer" {
                         self.build_cast(
                             parameters,
                             PlanExpression::IntegerCast,
@@ -611,7 +610,7 @@ impl<E: Encoder> PlanBuilder<E> {
                             graph_name,
                             "integer",
                         )?
-                    } else if *name == *xsd::DATE {
+                    } else if name == "http://www.w3.org/2001/XMLSchema#date" {
                         self.build_cast(
                             parameters,
                             PlanExpression::DateCast,
@@ -619,7 +618,7 @@ impl<E: Encoder> PlanBuilder<E> {
                             graph_name,
                             "date",
                         )?
-                    } else if *name == *xsd::TIME {
+                    } else if name == "http://www.w3.org/2001/XMLSchema#time" {
                         self.build_cast(
                             parameters,
                             PlanExpression::TimeCast,
@@ -627,7 +626,7 @@ impl<E: Encoder> PlanBuilder<E> {
                             graph_name,
                             "time",
                         )?
-                    } else if *name == *xsd::DATE_TIME {
+                    } else if name == "http://www.w3.org/2001/XMLSchema#dateTime" {
                         self.build_cast(
                             parameters,
                             PlanExpression::DateTimeCast,
@@ -635,7 +634,7 @@ impl<E: Encoder> PlanBuilder<E> {
                             graph_name,
                             "dateTime",
                         )?
-                    } else if *name == *xsd::DURATION {
+                    } else if name == "http://www.w3.org/2001/XMLSchema#duration" {
                         self.build_cast(
                             parameters,
                             PlanExpression::DurationCast,
@@ -643,7 +642,7 @@ impl<E: Encoder> PlanBuilder<E> {
                             graph_name,
                             "duration",
                         )?
-                    } else if *name == *xsd::STRING {
+                    } else if name == "http://www.w3.org/2001/XMLSchema#string" {
                         self.build_cast(
                             parameters,
                             PlanExpression::StringCast,
