@@ -2,8 +2,7 @@ use crate::model::named_node::NamedNode;
 use crate::model::vocab::rdf;
 use crate::model::vocab::xsd;
 use crate::model::xsd::*;
-use crate::Result;
-use oxilangtag::LanguageTag;
+use oxilangtag::{LanguageTag, LanguageTagParseError};
 use rio_api::model as rio;
 use std::borrow::Cow;
 use std::fmt;
@@ -13,7 +12,7 @@ use std::option::Option;
 ///
 /// The default string formatter is returning a N-Triples, Turtle and SPARQL compatible representation:
 /// ```
-/// # use oxigraph::Result;
+/// # use oxilangtag::LanguageTagParseError;
 /// use oxigraph::model::Literal;
 /// use oxigraph::model::vocab::xsd;
 ///
@@ -31,7 +30,7 @@ use std::option::Option;
 ///     "\"foo\"@en",
 ///     Literal::new_language_tagged_literal("foo", "en")?.to_string()
 /// );
-/// # Result::Ok(())
+/// # Result::<(), LanguageTagParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct Literal(LiteralContent);
@@ -64,7 +63,7 @@ impl Literal {
     pub fn new_language_tagged_literal(
         value: impl Into<String>,
         language: impl Into<String>,
-    ) -> Result<Self> {
+    ) -> Result<Self, LanguageTagParseError> {
         let mut language = language.into();
         language.make_ascii_lowercase();
         Ok(Literal(LiteralContent::LanguageTaggedString {

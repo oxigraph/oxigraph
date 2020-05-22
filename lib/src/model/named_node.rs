@@ -1,5 +1,4 @@
-use crate::Result;
-use oxiri::Iri;
+use oxiri::{Iri, IriParseError};
 use rio_api::model as rio;
 use std::fmt;
 
@@ -22,7 +21,7 @@ pub struct NamedNode {
 
 impl NamedNode {
     /// Builds and validate a RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
-    pub fn parse(iri: impl Into<String>) -> Result<Self> {
+    pub fn parse(iri: impl Into<String>) -> Result<Self, IriParseError> {
         Ok(Self::new_from_iri(Iri::parse(iri.into())?))
     }
 

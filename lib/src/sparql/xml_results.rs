@@ -434,7 +434,7 @@ fn build_literal(
     match datatype {
         Some(datatype) => Ok(Literal::new_typed_literal(value, datatype)),
         None => match lang {
-            Some(lang) => Literal::new_language_tagged_literal(value, lang),
+            Some(lang) => Ok(Literal::new_language_tagged_literal(value, lang)?),
             None => Ok(Literal::new_simple_literal(value)),
         },
     }
