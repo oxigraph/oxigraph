@@ -15,7 +15,6 @@ use async_std::io::{BufRead, Read};
 use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::task::{block_on, spawn, spawn_blocking};
-use http_types::headers::HeaderName;
 use http_types::{headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode};
 use oxigraph::sparql::{PreparedQuery, QueryOptions, QueryResult, QueryResultSyntax};
 use oxigraph::{DatasetSyntax, FileSyntax, GraphSyntax, RocksDbStore};
@@ -44,7 +43,7 @@ pub async fn main() -> Result<()> {
     let store = RocksDbStore::open(args.file)?;
 
     println!("Listening for requests at http://{}", &args.bind);
-    http_server(args.bind, move |request| {
+    http_server(&args.bind, move |request| {
         handle_request(request, store.clone())
     })
     .await
@@ -54,17 +53,17 @@ async fn handle_request(request: Request, store: RocksDbStore) -> Result<Respons
     let mut response = match (request.url().path(), request.method()) {
         ("/", Method::Get) => {
             let mut response = Response::new(StatusCode::Ok);
-            response.append_header(headers::CONTENT_TYPE, "text/html")?;
+            response.append_header(headers::CONTENT_TYPE, "text/html");
             response.set_body(HTML_ROOT_PAGE);
             response
         }
         ("/", Method::Post) => {
             if let Some(content_type) = request.content_type() {
-                match if let Some(format) = GraphSyntax::from_mime_type(essence(&content_type)) {
+                match if let Some(format) = GraphSyntax::from_mime_type(content_type.essence()) {
                     spawn_blocking(move || {
                         store.load_graph(SyncAsyncBufReader::from(request), format, None, None)
                     })
-                } else if let Some(format) = DatasetSyntax::from_mime_type(essence(&content_type)) {
+                } else if let Some(format) = DatasetSyntax::from_mime_type(content_type.essence()) {
                     spawn_blocking(move || {
                         store.load_dataset(SyncAsyncBufReader::from(request), format, None)
                     })
@@ -97,7 +96,7 @@ async fn handle_request(request: Request, store: RocksDbStore) -> Result<Respons
         }
         ("/query", Method::Post) => {
             if let Some(content_type) = request.content_type() {
-                if essence(&content_type) == "application/sparql-query" {
+                if content_type.essence() == "application/sparql-query" {
                     let mut buffer = String::new();
                     let mut request = request;
                     request
@@ -106,7 +105,7 @@ async fn handle_request(request: Request, store: RocksDbStore) -> Result<Respons
                         .read_to_string(&mut buffer)
                         .await?;
                     evaluate_sparql_query(store, buffer, request).await?
-                } else if essence(&content_type) == "application/x-www-form-urlencoded" {
+                } else if content_type.essence() == "application/x-www-form-urlencoded" {
                     let mut buffer = Vec::new();
                     let mut request = request;
                     request
@@ -127,13 +126,8 @@ async fn handle_request(request: Request, store: RocksDbStore) -> Result<Respons
         }
         _ => Response::new(StatusCode::NotFound),
     };
-    response.append_header("Server", SERVER)?;
+    response.append_header(headers::SERVER, SERVER);
     Ok(response)
-}
-
-/// TODO: bad hack to overcome http_types limitations
-fn essence(mime: &Mime) -> &str {
-    mime.essence().split(';').next().unwrap_or("")
 }
 
 fn simple_response(status: StatusCode, body: impl Into<Body>) -> Response {
@@ -183,7 +177,7 @@ async fn evaluate_sparql_query(
             )?;
 
             let mut response = Response::from(results.write_graph(Vec::default(), format)?);
-            response.insert_header(headers::CONTENT_TYPE, format.media_type())?;
+            response.insert_header(headers::CONTENT_TYPE, format.media_type());
             Ok(response)
         } else {
             let format = content_negotiation(
@@ -194,7 +188,7 @@ async fn evaluate_sparql_query(
                 ],
             )?;
             let mut response = Response::from(results.write(Vec::default(), format)?);
-            response.insert_header(headers::CONTENT_TYPE, format.media_type())?;
+            response.insert_header(headers::CONTENT_TYPE, format.media_type());
             Ok(response)
         }
     })
@@ -205,15 +199,14 @@ async fn http_server<
     F: Clone + Send + Sync + 'static + Fn(Request) -> Fut,
     Fut: Send + Future<Output = Result<Response>>,
 >(
-    host: String,
+    host: &str,
     handle: F,
 ) -> Result<()> {
     async fn accept<F: Fn(Request) -> Fut, Fut: Future<Output = Result<Response>>>(
-        addr: String,
         stream: TcpStream,
         handle: F,
     ) -> Result<()> {
-        async_h1::accept(&addr, stream, |request| async {
+        async_h1::accept(stream, |request| async {
             Ok(match handle(request).await {
                 Ok(result) => result,
                 Err(error) => simple_response(error.status(), error.to_string()),
@@ -222,14 +215,13 @@ async fn http_server<
         .await
     }
 
-    let listener = TcpListener::bind(&host).await?;
+    let listener = TcpListener::bind(host).await?;
     let mut incoming = listener.incoming();
     while let Some(stream) = incoming.next().await {
-        let stream = stream?.clone(); //TODO: clone stream?
+        let stream = stream?;
         let handle = handle.clone();
-        let addr = format!("http://{}", host);
         spawn(async {
-            if let Err(err) = accept(addr, stream, handle).await {
+            if let Err(err) = accept(stream, handle).await {
                 eprintln!("{}", err);
             };
         });
@@ -239,9 +231,8 @@ async fn http_server<
 
 fn content_negotiation<F: FileSyntax>(request: Request, supported: &[&str]) -> Result<F> {
     let header = request
-        .header(&HeaderName::from_str("Accept").unwrap())
-        .and_then(|h| h.last())
-        .map(|h| h.as_str().trim())
+        .header(headers::ACCEPT)
+        .map(|h| h.last().as_str().trim())
         .unwrap_or("");
     let supported: Vec<Mime> = supported
         .iter()
@@ -255,7 +246,7 @@ fn content_negotiation<F: FileSyntax>(request: Request, supported: &[&str]) -> R
         for possible in header.split(',') {
             let possible = Mime::from_str(possible.trim())?;
             let score = if let Some(q) = possible.param("q") {
-                f32::from_str(q)?
+                f32::from_str(&q.to_string())?
             } else {
                 1.
             };
@@ -274,7 +265,7 @@ fn content_negotiation<F: FileSyntax>(request: Request, supported: &[&str]) -> R
         }
     }
 
-    F::from_mime_type(essence(result))
+    F::from_mime_type(result.essence())
         .ok_or_else(|| Error::from_str(StatusCode::InternalServerError, "Unknown mime type"))
 }
 
@@ -301,7 +292,7 @@ impl<R: BufRead + Unpin> std::io::BufRead for SyncAsyncBufReader<R> {
         unimplemented!()
     }
 
-    fn consume(&mut self, amt: usize) {
+    fn consume(&mut self, _: usize) {
         unimplemented!()
     }
 
@@ -336,9 +327,7 @@ mod tests {
     #[test]
     fn post_file() {
         let mut request = Request::new(Method::Post, Url::parse("http://localhost/").unwrap());
-        request
-            .insert_header("Content-Type", "text/turtle")
-            .unwrap();
+        request.insert_header("Content-Type", "text/turtle");
         request.set_body("<http://example.com> <http://example.com> <http://example.com> .");
         exec(request, StatusCode::NoContent)
     }
@@ -346,9 +335,7 @@ mod tests {
     #[test]
     fn post_wrong_file() {
         let mut request = Request::new(Method::Post, Url::parse("http://localhost/").unwrap());
-        request
-            .insert_header("Content-Type", "text/turtle")
-            .unwrap();
+        request.insert_header("Content-Type", "text/turtle");
         request.set_body("<http://example.com>");
         exec(request, StatusCode::BadRequest)
     }
@@ -356,7 +343,7 @@ mod tests {
     #[test]
     fn post_unsupported_file() {
         let mut request = Request::new(Method::Post, Url::parse("http://localhost/").unwrap());
-        request.insert_header("Content-Type", "text/plain").unwrap();
+        request.insert_header("Content-Type", "text/plain");
         exec(request, StatusCode::UnsupportedMediaType)
     }
 
@@ -396,9 +383,7 @@ mod tests {
     #[test]
     fn post_query() {
         let mut request = Request::new(Method::Post, Url::parse("http://localhost/query").unwrap());
-        request
-            .insert_header("Content-Type", "application/sparql-query")
-            .unwrap();
+        request.insert_header("Content-Type", "application/sparql-query");
         request.set_body("SELECT * WHERE { ?s ?p ?o }");
         exec(request, StatusCode::Ok)
     }
@@ -406,9 +391,7 @@ mod tests {
     #[test]
     fn post_bad_query() {
         let mut request = Request::new(Method::Post, Url::parse("http://localhost/query").unwrap());
-        request
-            .insert_header("Content-Type", "application/sparql-query")
-            .unwrap();
+        request.insert_header("Content-Type", "application/sparql-query");
         request.set_body("SELECT");
         exec(request, StatusCode::BadRequest)
     }
@@ -416,9 +399,7 @@ mod tests {
     #[test]
     fn post_unknown_query() {
         let mut request = Request::new(Method::Post, Url::parse("http://localhost/query").unwrap());
-        request
-            .insert_header("Content-Type", "application/sparql-todo")
-            .unwrap();
+        request.insert_header("Content-Type", "application/sparql-todo");
         request.set_body("SELECT");
         exec(request, StatusCode::UnsupportedMediaType)
     }

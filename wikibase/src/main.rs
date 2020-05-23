@@ -15,7 +15,6 @@ use async_std::future::Future;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::task::{spawn, spawn_blocking};
-use http_types::headers::HeaderName;
 use http_types::{headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode};
 use oxigraph::sparql::{PreparedQuery, QueryOptions, QueryResult, QueryResultSyntax};
 use oxigraph::{FileSyntax, GraphSyntax, RocksDbStore};
@@ -95,7 +94,7 @@ pub async fn main() -> Result<()> {
 
     println!("Listening for requests at http://{}", &args.bind);
 
-    http_server(args.bind, move |request| {
+    http_server(&args.bind, move |request| {
         handle_request(request, store.clone())
     })
     .await
@@ -113,7 +112,7 @@ async fn handle_request(request: Request, store: RocksDbStore) -> Result<Respons
         }
         ("/query", Method::Post) => {
             if let Some(content_type) = request.content_type() {
-                if essence(&content_type) == "application/sparql-query" {
+                if content_type.essence() == "application/sparql-query" {
                     let mut buffer = String::new();
                     let mut request = request;
                     request
@@ -122,7 +121,7 @@ async fn handle_request(request: Request, store: RocksDbStore) -> Result<Respons
                         .read_to_string(&mut buffer)
                         .await?;
                     evaluate_sparql_query(store, buffer, request).await?
-                } else if essence(&content_type) == "application/x-www-form-urlencoded" {
+                } else if content_type.essence() == "application/x-www-form-urlencoded" {
                     let mut buffer = Vec::new();
                     let mut request = request;
                     request
@@ -143,13 +142,8 @@ async fn handle_request(request: Request, store: RocksDbStore) -> Result<Respons
         }
         _ => Response::new(StatusCode::NotFound),
     };
-    response.append_header("Server", SERVER)?;
+    response.append_header("Server", SERVER);
     Ok(response)
-}
-
-/// TODO: bad hack to overcome http_types limitations
-fn essence(mime: &Mime) -> &str {
-    mime.essence().split(';').next().unwrap_or("")
 }
 
 fn simple_response(status: StatusCode, body: impl Into<Body>) -> Response {
@@ -199,7 +193,7 @@ async fn evaluate_sparql_query(
             )?;
 
             let mut response = Response::from(results.write_graph(Vec::default(), format)?);
-            response.insert_header(headers::CONTENT_TYPE, format.media_type())?;
+            response.insert_header(headers::CONTENT_TYPE, format.media_type());
             Ok(response)
         } else {
             let format = content_negotiation(
@@ -210,7 +204,7 @@ async fn evaluate_sparql_query(
                 ],
             )?;
             let mut response = Response::from(results.write(Vec::default(), format)?);
-            response.insert_header(headers::CONTENT_TYPE, format.media_type())?;
+            response.insert_header(headers::CONTENT_TYPE, format.media_type());
             Ok(response)
         }
     })
@@ -221,15 +215,14 @@ async fn http_server<
     F: Clone + Send + Sync + 'static + Fn(Request) -> Fut,
     Fut: Send + Future<Output = Result<Response>>,
 >(
-    host: String,
+    host: &str,
     handle: F,
 ) -> Result<()> {
     async fn accept<F: Fn(Request) -> Fut, Fut: Future<Output = Result<Response>>>(
-        addr: String,
         stream: TcpStream,
         handle: F,
     ) -> Result<()> {
-        async_h1::accept(&addr, stream, |request| async {
+        async_h1::accept(stream, |request| async {
             Ok(match handle(request).await {
                 Ok(result) => result,
                 Err(error) => simple_response(error.status(), error.to_string()),
@@ -241,11 +234,10 @@ async fn http_server<
     let listener = TcpListener::bind(&host).await?;
     let mut incoming = listener.incoming();
     while let Some(stream) = incoming.next().await {
-        let stream = stream?.clone(); //TODO: clone stream?
+        let stream = stream?;
         let handle = handle.clone();
-        let addr = format!("http://{}", host);
         spawn(async {
-            if let Err(err) = accept(addr, stream, handle).await {
+            if let Err(err) = accept(stream, handle).await {
                 eprintln!("{}", err);
             };
         });
@@ -255,9 +247,8 @@ async fn http_server<
 
 fn content_negotiation<F: FileSyntax>(request: Request, supported: &[&str]) -> Result<F> {
     let header = request
-        .header(&HeaderName::from_str("Accept").unwrap())
-        .and_then(|h| h.last())
-        .map(|h| h.as_str().trim())
+        .header(headers::ACCEPT)
+        .map(|h| h.last().as_str().trim())
         .unwrap_or("");
     let supported: Vec<Mime> = supported
         .iter()
@@ -271,7 +262,7 @@ fn content_negotiation<F: FileSyntax>(request: Request, supported: &[&str]) -> R
         for possible in header.split(',') {
             let possible = Mime::from_str(possible.trim())?;
             let score = if let Some(q) = possible.param("q") {
-                f32::from_str(q)?
+                f32::from_str(&q.to_string())?
             } else {
                 1.
             };
@@ -290,6 +281,6 @@ fn content_negotiation<F: FileSyntax>(request: Request, supported: &[&str]) -> R
         }
     }
 
-    F::from_mime_type(essence(result))
+    F::from_mime_type(result.essence())
         .ok_or_else(|| Error::from_str(StatusCode::InternalServerError, "Unknown mime type"))
 }

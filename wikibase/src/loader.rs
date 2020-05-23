@@ -1,10 +1,9 @@
 use crate::SERVER;
+use async_std::net::TcpStream;
 use async_std::prelude::*;
 use async_std::task::block_on;
 use chrono::{DateTime, Datelike, Utc};
-use http_client::h1::H1Client;
-use http_client::HttpClient;
-use http_types::{Method, Request, Result};
+use http_types::{headers, Error, Method, Request, Response, Result, StatusCode};
 use oxigraph::model::NamedNode;
 use oxigraph::{GraphSyntax, RocksDbStore};
 use serde_json::Value;
@@ -18,7 +17,6 @@ pub struct WikibaseLoader {
     store: RocksDbStore,
     api_url: Url,
     entity_data_url: Url,
-    client: H1Client,
     namespaces: Vec<u32>,
     slot: Option<String>,
     frequency: Duration,
@@ -38,7 +36,6 @@ impl WikibaseLoader {
             store,
             api_url: Url::parse(api_url)?,
             entity_data_url: Url::parse(&(pages_base_url.to_owned() + "Special:EntityData"))?,
-            client: H1Client::new(),
             namespaces: namespaces.to_vec(),
             slot: slot.map(|t| t.to_owned()),
             start: Utc::now(),
@@ -218,14 +215,47 @@ impl WikibaseLoader {
         }
         let url = url.join(&("?".to_owned() + &query_serializer.finish()))?;
         let mut request = Request::new(Method::Get, url);
-        request.append_header("user-agent", SERVER)?;
-        let response = self.client.send(request);
+        request.append_header(headers::SERVER, SERVER);
+
         block_on(async {
-            let mut response = response.await?;
+            let mut response = self.request(request).await?;
             let mut buffer = Vec::new();
             response.read_to_end(&mut buffer).await?;
             Ok(buffer)
         })
+    }
+
+    async fn request(&self, request: Request) -> Result<Response> {
+        let addr = request
+            .url()
+            .socket_addrs(|| None)?
+            .into_iter()
+            .next()
+            .ok_or_else(|| Error::from_str(StatusCode::BadRequest, "missing valid address"))?;
+
+        Ok(match request.url().scheme() {
+            "http" => {
+                let stream = TcpStream::connect(addr).await?;
+                async_h1::connect(stream, request).await
+            }
+            "https" => {
+                let stream = async_native_tls::connect(
+                    request
+                        .url()
+                        .host_str()
+                        .ok_or_else(|| Error::from_str(StatusCode::BadRequest, "missing host"))?,
+                    TcpStream::connect(addr).await?,
+                )
+                .await?;
+                async_h1::connect(stream, request).await
+            }
+            _ => {
+                return Err(Error::from_str(
+                    StatusCode::BadRequest,
+                    "missing valid address",
+                ))
+            }
+        }?)
     }
 
     fn load_entity_data(&self, uri: &str, data: impl Read) -> Result<()> {
