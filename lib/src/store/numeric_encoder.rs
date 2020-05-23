@@ -1,12 +1,14 @@
+#![allow(clippy::unreadable_literal)]
+
 use crate::model::vocab::rdf;
 use crate::model::vocab::xsd;
 use crate::model::xsd::*;
 use crate::model::*;
 use crate::Error;
 use crate::Result;
-use md5::{Digest, Md5};
 use rand::random;
 use rio_api::model as rio;
+use siphasher::sip128::{Hasher128, SipHasher24};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -23,8 +25,10 @@ pub struct StrHash {
 
 impl StrHash {
     pub fn new(value: &str) -> Self {
+        let mut hasher = SipHasher24::new();
+        hasher.write(value.as_bytes());
         Self {
-            hash: u128::from_le_bytes(Md5::new().chain(value).result().into()),
+            hash: hasher.finish128().into(),
         }
     }
 
@@ -43,33 +47,20 @@ impl StrHash {
     pub fn to_be_bytes(&self) -> [u8; 16] {
         self.hash.to_be_bytes()
     }
-
-    #[inline]
-    pub fn from_le_bytes(bytes: [u8; 16]) -> Self {
-        Self {
-            hash: u128::from_le_bytes(bytes),
-        }
-    }
-
-    #[inline]
-    pub fn to_le_bytes(&self) -> [u8; 16] {
-        // TODO: remove when changing hash
-        self.hash.to_le_bytes()
-    }
 }
 
-const EMPTY_STRING_ID: StrHash = StrHash::constant(0x7e42_f8ec_9809_80e9_04b2_008f_d98c_1dd4);
-const RDF_LANG_STRING_ID: StrHash = StrHash::constant(0x18d0_2a52_9d31_6816_3312_0bf8_c4c1_93a2);
-const XSD_STRING_ID: StrHash = StrHash::constant(0x0a61_f70e_4e33_60d3_9bef_c9b2_d18f_594e);
-const XSD_BOOLEAN_ID: StrHash = StrHash::constant(0x47f7_8f91_0b4b_158f_11dc_ff5f_9b78_be13);
-const XSD_FLOAT_ID: StrHash = StrHash::constant(0x17b8_33c5_f0ac_43f4_fafe_fc02_0b2d_adc7);
-const XSD_DOUBLE_ID: StrHash = StrHash::constant(0x2981_2bd9_5143_2783_9885_73e5_138a_8c01);
-const XSD_INTEGER_ID: StrHash = StrHash::constant(0xc6fb_689d_64f7_dd7b_dad0_36f9_d4f4_ee2a);
-const XSD_DECIMAL_ID: StrHash = StrHash::constant(0x3ca7_b56d_a746_719a_6800_081f_bb59_ea33);
-const XSD_DATE_TIME_ID: StrHash = StrHash::constant(0xc206_6749_e0e5_015e_f7ee_33b7_b28c_c010);
-const XSD_DATE_ID: StrHash = StrHash::constant(0xcaae_3cc4_f23f_4c5a_7717_dd19_e30a_84b8);
-const XSD_TIME_ID: StrHash = StrHash::constant(0x7af4_6a16_1b02_35d7_9a79_07ba_3da9_48bb);
-const XSD_DURATION_ID: StrHash = StrHash::constant(0x78ab_8431_984b_6b06_c42d_6271_b82e_487d);
+const EMPTY_STRING_ID: StrHash = StrHash::constant(0xf4f2ced447ab02427de0a38047d74950);
+const RDF_LANG_STRING_ID: StrHash = StrHash::constant(0x8fab6bc1501d6d114e5d4e0116f67a49);
+const XSD_STRING_ID: StrHash = StrHash::constant(0xe72300970ee9bf77f2df7bdb300e3d84);
+const XSD_BOOLEAN_ID: StrHash = StrHash::constant(0xfafac8b356be81954f64e70756e59e32);
+const XSD_FLOAT_ID: StrHash = StrHash::constant(0x34bd4a8ede4564c36445b76e84fa7502);
+const XSD_DOUBLE_ID: StrHash = StrHash::constant(0x3614a889da2f0c7616d96d01b2ff1a97);
+const XSD_INTEGER_ID: StrHash = StrHash::constant(0xe2b19c79f5f04dbcdc7f52f4f7869da0);
+const XSD_DECIMAL_ID: StrHash = StrHash::constant(0xb50bffedfd084528ff892173dc0d1fad);
+const XSD_DATE_TIME_ID: StrHash = StrHash::constant(0xd7496e779a321ade51e92da1a5aa6cb);
+const XSD_DATE_ID: StrHash = StrHash::constant(0x87c4351dea4b98f59a22f7b636d4031);
+const XSD_TIME_ID: StrHash = StrHash::constant(0xc7487be3f3d27d1926b27abf005a9cd2);
+const XSD_DURATION_ID: StrHash = StrHash::constant(0x226af08ea5b7e6b08ceed6030c721228);
 
 const TYPE_DEFAULT_GRAPH_ID: u8 = 0;
 const TYPE_NAMED_NODE_ID: u8 = 1;

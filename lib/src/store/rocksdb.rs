@@ -232,7 +232,7 @@ impl StrLookup for RocksDbStore {
     fn get_str(&self, id: StrHash) -> Result<Option<String>> {
         Ok(self
             .db
-            .get_cf(get_cf(&self.db, ID2STR_CF)?, &id.to_le_bytes())?
+            .get_cf(get_cf(&self.db, ID2STR_CF)?, &id.to_be_bytes())?
             .map(String::from_utf8)
             .transpose()?)
     }
@@ -634,7 +634,7 @@ struct RocksDbInnerTransaction<'a> {
 impl RocksDbInnerTransaction<'_> {
     fn insert_str(&mut self, key: StrHash, value: &str) {
         self.batch
-            .put_cf(self.handle.id2str_cf, &key.to_le_bytes(), value)
+            .put_cf(self.handle.id2str_cf, &key.to_be_bytes(), value)
     }
 
     fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
