@@ -64,7 +64,7 @@ It will create a fat binary in `target/release/oxigraph_wikibase`.
 
 To start a server that is synchronized with [test.wikidata.org](https://test.wikidata.org) you should run:
 ```bash
-./oxigraph_wikibase --mediawiki_api=https://test.wikidata.org/w/api.php --mediawiki_base_url=https://test.wikidata.org/wiki/ --namespaces=0,120 --file=test.wikidata
+./oxigraph_wikibase --mediawiki-api=https://test.wikidata.org/w/api.php --mediawiki-base-url=https://test.wikidata.org/wiki/ --namespaces=0,120 --file=test.wikidata
 ```
 
 It creates a SPARQL endpoint listening to `localhost:7878/query` that could be queried just like Blazegraph.
