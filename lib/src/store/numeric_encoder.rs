@@ -13,7 +13,6 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::io::Read;
-use std::io::Write;
 use std::mem::size_of;
 use std::str;
 
@@ -726,98 +725,79 @@ impl<R: Read> TermReader for R {
 
 pub const WRITTEN_TERM_MAX_SIZE: usize = size_of::<u8>() + 2 * size_of::<StrHash>();
 
-pub trait TermWriter {
-    fn write_term(&mut self, term: EncodedTerm) -> Result<()>;
-    fn write_spog_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
-    fn write_posg_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
-    fn write_ospg_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
-    fn write_gspo_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
-    fn write_gpos_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
-    fn write_gosp_quad(&mut self, quad: &EncodedQuad) -> Result<()>;
+pub fn write_term(sink: &mut Vec<u8>, term: EncodedTerm) {
+    sink.push(term.type_id());
+    match term {
+        EncodedTerm::DefaultGraph => {}
+        EncodedTerm::NamedNode { iri_id } => sink.extend_from_slice(&iri_id.to_be_bytes()),
+        EncodedTerm::BlankNode { id } => sink.extend_from_slice(&id.to_be_bytes()),
+        EncodedTerm::StringLiteral { value_id } => sink.extend_from_slice(&value_id.to_be_bytes()),
+        EncodedTerm::LangStringLiteral {
+            value_id,
+            language_id,
+        } => {
+            sink.extend_from_slice(&language_id.to_be_bytes());
+            sink.extend_from_slice(&value_id.to_be_bytes());
+        }
+        EncodedTerm::TypedLiteral {
+            value_id,
+            datatype_id,
+        } => {
+            sink.extend_from_slice(&datatype_id.to_be_bytes());
+            sink.extend_from_slice(&value_id.to_be_bytes());
+        }
+        EncodedTerm::BooleanLiteral(_) => {}
+        EncodedTerm::FloatLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
+        EncodedTerm::DoubleLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
+        EncodedTerm::IntegerLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
+        EncodedTerm::DecimalLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
+        EncodedTerm::DateLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
+        EncodedTerm::TimeLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
+        EncodedTerm::DateTimeLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
+        EncodedTerm::DurationLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
+    }
 }
 
-impl<W: Write> TermWriter for W {
-    fn write_term(&mut self, term: EncodedTerm) -> Result<()> {
-        self.write_all(&term.type_id().to_be_bytes())?;
-        match term {
-            EncodedTerm::DefaultGraph => {}
-            EncodedTerm::NamedNode { iri_id } => self.write_all(&iri_id.to_be_bytes())?,
-            EncodedTerm::BlankNode { id } => self.write_all(&id.to_be_bytes())?,
-            EncodedTerm::StringLiteral { value_id } => self.write_all(&value_id.to_be_bytes())?,
-            EncodedTerm::LangStringLiteral {
-                value_id,
-                language_id,
-            } => {
-                self.write_all(&language_id.to_be_bytes())?;
-                self.write_all(&value_id.to_be_bytes())?;
-            }
-            EncodedTerm::TypedLiteral {
-                value_id,
-                datatype_id,
-            } => {
-                self.write_all(&datatype_id.to_be_bytes())?;
-                self.write_all(&value_id.to_be_bytes())?;
-            }
-            EncodedTerm::BooleanLiteral(_) => {}
-            EncodedTerm::FloatLiteral(value) => self.write_all(&value.to_be_bytes())?,
-            EncodedTerm::DoubleLiteral(value) => self.write_all(&value.to_be_bytes())?,
-            EncodedTerm::IntegerLiteral(value) => self.write_all(&value.to_be_bytes())?,
-            EncodedTerm::DecimalLiteral(value) => self.write_all(&value.to_be_bytes())?,
-            EncodedTerm::DateLiteral(value) => self.write_all(&value.to_be_bytes())?,
-            EncodedTerm::TimeLiteral(value) => self.write_all(&value.to_be_bytes())?,
-            EncodedTerm::DateTimeLiteral(value) => self.write_all(&value.to_be_bytes())?,
-            EncodedTerm::DurationLiteral(value) => self.write_all(&value.to_be_bytes())?,
-        }
-        Ok(())
-    }
+pub fn write_spog_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
+    write_term(sink, quad.subject);
+    write_term(sink, quad.predicate);
+    write_term(sink, quad.object);
+    write_term(sink, quad.graph_name);
+}
 
-    fn write_spog_quad(&mut self, quad: &EncodedQuad) -> Result<()> {
-        self.write_term(quad.subject)?;
-        self.write_term(quad.predicate)?;
-        self.write_term(quad.object)?;
-        self.write_term(quad.graph_name)?;
-        Ok(())
-    }
+pub fn write_posg_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
+    write_term(sink, quad.predicate);
+    write_term(sink, quad.object);
+    write_term(sink, quad.subject);
+    write_term(sink, quad.graph_name);
+}
 
-    fn write_posg_quad(&mut self, quad: &EncodedQuad) -> Result<()> {
-        self.write_term(quad.predicate)?;
-        self.write_term(quad.object)?;
-        self.write_term(quad.subject)?;
-        self.write_term(quad.graph_name)?;
-        Ok(())
-    }
+pub fn write_ospg_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
+    write_term(sink, quad.object);
+    write_term(sink, quad.subject);
+    write_term(sink, quad.predicate);
+    write_term(sink, quad.graph_name);
+}
 
-    fn write_ospg_quad(&mut self, quad: &EncodedQuad) -> Result<()> {
-        self.write_term(quad.object)?;
-        self.write_term(quad.subject)?;
-        self.write_term(quad.predicate)?;
-        self.write_term(quad.graph_name)?;
-        Ok(())
-    }
+pub fn write_gspo_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
+    write_term(sink, quad.graph_name);
+    write_term(sink, quad.subject);
+    write_term(sink, quad.predicate);
+    write_term(sink, quad.object);
+}
 
-    fn write_gspo_quad(&mut self, quad: &EncodedQuad) -> Result<()> {
-        self.write_term(quad.graph_name)?;
-        self.write_term(quad.subject)?;
-        self.write_term(quad.predicate)?;
-        self.write_term(quad.object)?;
-        Ok(())
-    }
+pub fn write_gpos_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
+    write_term(sink, quad.graph_name);
+    write_term(sink, quad.predicate);
+    write_term(sink, quad.object);
+    write_term(sink, quad.subject);
+}
 
-    fn write_gpos_quad(&mut self, quad: &EncodedQuad) -> Result<()> {
-        self.write_term(quad.graph_name)?;
-        self.write_term(quad.predicate)?;
-        self.write_term(quad.object)?;
-        self.write_term(quad.subject)?;
-        Ok(())
-    }
-
-    fn write_gosp_quad(&mut self, quad: &EncodedQuad) -> Result<()> {
-        self.write_term(quad.graph_name)?;
-        self.write_term(quad.object)?;
-        self.write_term(quad.subject)?;
-        self.write_term(quad.predicate)?;
-        Ok(())
-    }
+pub fn write_gosp_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
+    write_term(sink, quad.graph_name);
+    write_term(sink, quad.object);
+    write_term(sink, quad.subject);
+    write_term(sink, quad.predicate);
 }
 
 pub trait StrLookup {

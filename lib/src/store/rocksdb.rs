@@ -262,57 +262,57 @@ impl ReadableEncodedStore for RocksDbStore {
                                 Err(error) => Box::new(once(Err(error))),
                             }
                         }
-                        None => wrap_error(
+                        None => Box::new(
                             handle.quads_for_subject_predicate_object(subject, predicate, object),
                         ),
                     },
                     None => match graph_name {
-                        Some(graph_name) => wrap_error(
+                        Some(graph_name) => Box::new(
                             handle
                                 .quads_for_subject_predicate_graph(subject, predicate, graph_name),
                         ),
-                        None => wrap_error(handle.quads_for_subject_predicate(subject, predicate)),
+                        None => Box::new(handle.quads_for_subject_predicate(subject, predicate)),
                     },
                 },
                 None => match object {
                     Some(object) => match graph_name {
-                        Some(graph_name) => wrap_error(
+                        Some(graph_name) => Box::new(
                             handle.quads_for_subject_object_graph(subject, object, graph_name),
                         ),
-                        None => wrap_error(handle.quads_for_subject_object(subject, object)),
+                        None => Box::new(handle.quads_for_subject_object(subject, object)),
                     },
                     None => match graph_name {
                         Some(graph_name) => {
-                            wrap_error(handle.quads_for_subject_graph(subject, graph_name))
+                            Box::new(handle.quads_for_subject_graph(subject, graph_name))
                         }
-                        None => wrap_error(handle.quads_for_subject(subject)),
+                        None => Box::new(handle.quads_for_subject(subject)),
                     },
                 },
             },
             None => match predicate {
                 Some(predicate) => match object {
                     Some(object) => match graph_name {
-                        Some(graph_name) => wrap_error(
+                        Some(graph_name) => Box::new(
                             handle.quads_for_predicate_object_graph(predicate, object, graph_name),
                         ),
-                        None => wrap_error(handle.quads_for_predicate_object(predicate, object)),
+                        None => Box::new(handle.quads_for_predicate_object(predicate, object)),
                     },
                     None => match graph_name {
                         Some(graph_name) => {
-                            wrap_error(handle.quads_for_predicate_graph(predicate, graph_name))
+                            Box::new(handle.quads_for_predicate_graph(predicate, graph_name))
                         }
-                        None => wrap_error(handle.quads_for_predicate(predicate)),
+                        None => Box::new(handle.quads_for_predicate(predicate)),
                     },
                 },
                 None => match object {
                     Some(object) => match graph_name {
                         Some(graph_name) => {
-                            wrap_error(handle.quads_for_object_graph(object, graph_name))
+                            Box::new(handle.quads_for_object_graph(object, graph_name))
                         }
-                        None => wrap_error(handle.quads_for_object(object)),
+                        None => Box::new(handle.quads_for_object(object)),
                     },
                     None => match graph_name {
-                        Some(graph_name) => wrap_error(handle.quads_for_graph(graph_name)),
+                        Some(graph_name) => Box::new(handle.quads_for_graph(graph_name)),
                         None => Box::new(handle.quads()),
                     },
                 },
@@ -344,7 +344,7 @@ impl<'a> RocksDbStoreHandle<'a> {
 
     fn contains(&self, quad: &EncodedQuad) -> Result<bool> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
-        buffer.write_spog_quad(quad)?;
+        write_spog_quad(&mut buffer, quad);
         Ok(self.db.get_pinned_cf(self.spog_cf, &buffer)?.is_some())
     }
 
@@ -355,16 +355,16 @@ impl<'a> RocksDbStoreHandle<'a> {
     fn quads_for_subject(
         &self,
         subject: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        Ok(self.spog_quads(encode_term(subject)?))
+    ) -> impl Iterator<Item = Result<EncodedQuad>> + 'a {
+        self.spog_quads(encode_term(subject))
     }
 
     fn quads_for_subject_predicate(
         &self,
         subject: EncodedTerm,
         predicate: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        Ok(self.spog_quads(encode_term_pair(subject, predicate)?))
+    ) -> impl Iterator<Item = Result<EncodedQuad>> + 'a {
+        self.spog_quads(encode_term_pair(subject, predicate))
     }
 
     fn quads_for_subject_predicate_object(
@@ -372,53 +372,53 @@ impl<'a> RocksDbStoreHandle<'a> {
         subject: EncodedTerm,
         predicate: EncodedTerm,
         object: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        Ok(self.spog_quads(encode_term_triple(subject, predicate, object)?))
+    ) -> impl Iterator<Item = Result<EncodedQuad>> + 'a {
+        self.spog_quads(encode_term_triple(subject, predicate, object))
     }
 
     fn quads_for_subject_object(
         &self,
         subject: EncodedTerm,
         object: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        Ok(self.ospg_quads(encode_term_pair(object, subject)?))
+    ) -> impl Iterator<Item = Result<EncodedQuad>> + 'a {
+        self.ospg_quads(encode_term_pair(object, subject))
     }
 
     fn quads_for_predicate(
         &self,
         predicate: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        Ok(self.posg_quads(encode_term(predicate)?))
+    ) -> impl Iterator<Item = Result<EncodedQuad>> + 'a {
+        self.posg_quads(encode_term(predicate))
     }
 
     fn quads_for_predicate_object(
         &self,
         predicate: EncodedTerm,
         object: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        Ok(self.posg_quads(encode_term_pair(predicate, object)?))
+    ) -> impl Iterator<Item = Result<EncodedQuad>> + 'a {
+        self.posg_quads(encode_term_pair(predicate, object))
     }
 
     fn quads_for_object(
         &self,
         object: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        Ok(self.ospg_quads(encode_term(object)?))
+    ) -> impl Iterator<Item = Result<EncodedQuad>> + 'a {
+        self.ospg_quads(encode_term(object))
     }
 
     fn quads_for_graph(
         &self,
         graph_name: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        Ok(self.gspo_quads(encode_term(graph_name)?))
+    ) -> impl Iterator<Item = Result<EncodedQuad>> + 'a {
+        self.gspo_quads(encode_term(graph_name))
     }
 
     fn quads_for_subject_graph(
         &self,
         subject: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        Ok(self.gspo_quads(encode_term_pair(graph_name, subject)?))
+    ) -> impl Iterator<Item = Result<EncodedQuad>> + 'a {
+        self.gspo_quads(encode_term_pair(graph_name, subject))
     }
 
     fn quads_for_subject_predicate_graph(
@@ -426,8 +426,8 @@ impl<'a> RocksDbStoreHandle<'a> {
         subject: EncodedTerm,
         predicate: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        Ok(self.gspo_quads(encode_term_triple(graph_name, subject, predicate)?))
+    ) -> impl Iterator<Item = Result<EncodedQuad>> + 'a {
+        self.gspo_quads(encode_term_triple(graph_name, subject, predicate))
     }
 
     fn quads_for_subject_object_graph(
@@ -435,16 +435,16 @@ impl<'a> RocksDbStoreHandle<'a> {
         subject: EncodedTerm,
         object: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        Ok(self.gosp_quads(encode_term_triple(graph_name, object, subject)?))
+    ) -> impl Iterator<Item = Result<EncodedQuad>> + 'a {
+        self.gosp_quads(encode_term_triple(graph_name, object, subject))
     }
 
     fn quads_for_predicate_graph(
         &self,
         predicate: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        Ok(self.gpos_quads(encode_term_pair(graph_name, predicate)?))
+    ) -> impl Iterator<Item = Result<EncodedQuad>> + 'a {
+        self.gpos_quads(encode_term_pair(graph_name, predicate))
     }
 
     fn quads_for_predicate_object_graph(
@@ -452,16 +452,16 @@ impl<'a> RocksDbStoreHandle<'a> {
         predicate: EncodedTerm,
         object: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        Ok(self.gpos_quads(encode_term_triple(graph_name, predicate, object)?))
+    ) -> impl Iterator<Item = Result<EncodedQuad>> + 'a {
+        self.gpos_quads(encode_term_triple(graph_name, predicate, object))
     }
 
     fn quads_for_object_graph(
         &self,
         object: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Result<impl Iterator<Item = Result<EncodedQuad>> + 'a> {
-        Ok(self.gosp_quads(encode_term_pair(graph_name, object)?))
+    ) -> impl Iterator<Item = Result<EncodedQuad>> + 'a {
+        self.gosp_quads(encode_term_pair(graph_name, object))
     }
 
     fn spog_quads(&self, prefix: Vec<u8>) -> impl Iterator<Item = Result<EncodedQuad>> + 'a {
@@ -638,27 +638,27 @@ impl RocksDbInnerTransaction<'_> {
     }
 
     fn insert(&mut self, quad: &EncodedQuad) -> Result<()> {
-        self.buffer.write_spog_quad(quad)?;
+        write_spog_quad(&mut self.buffer, quad);
         self.batch.put_cf(self.handle.spog_cf, &self.buffer, &[]);
         self.buffer.clear();
 
-        self.buffer.write_posg_quad(quad)?;
+        write_posg_quad(&mut self.buffer, quad);
         self.batch.put_cf(self.handle.posg_cf, &self.buffer, &[]);
         self.buffer.clear();
 
-        self.buffer.write_ospg_quad(quad)?;
+        write_ospg_quad(&mut self.buffer, quad);
         self.batch.put_cf(self.handle.ospg_cf, &self.buffer, &[]);
         self.buffer.clear();
 
-        self.buffer.write_gspo_quad(quad)?;
+        write_gspo_quad(&mut self.buffer, quad);
         self.batch.put_cf(self.handle.gspo_cf, &self.buffer, &[]);
         self.buffer.clear();
 
-        self.buffer.write_gpos_quad(quad)?;
+        write_gpos_quad(&mut self.buffer, quad);
         self.batch.put_cf(self.handle.gpos_cf, &self.buffer, &[]);
         self.buffer.clear();
 
-        self.buffer.write_gosp_quad(quad)?;
+        write_gosp_quad(&mut self.buffer, quad);
         self.batch.put_cf(self.handle.gosp_cf, &self.buffer, &[]);
         self.buffer.clear();
 
@@ -666,27 +666,27 @@ impl RocksDbInnerTransaction<'_> {
     }
 
     fn remove(&mut self, quad: &EncodedQuad) -> Result<()> {
-        self.buffer.write_spog_quad(quad)?;
+        write_spog_quad(&mut self.buffer, quad);
         self.batch.delete_cf(self.handle.spog_cf, &self.buffer);
         self.buffer.clear();
 
-        self.buffer.write_posg_quad(quad)?;
+        write_posg_quad(&mut self.buffer, quad);
         self.batch.delete_cf(self.handle.posg_cf, &self.buffer);
         self.buffer.clear();
 
-        self.buffer.write_ospg_quad(quad)?;
+        write_ospg_quad(&mut self.buffer, quad);
         self.batch.delete_cf(self.handle.ospg_cf, &self.buffer);
         self.buffer.clear();
 
-        self.buffer.write_gspo_quad(quad)?;
+        write_gspo_quad(&mut self.buffer, quad);
         self.batch.delete_cf(self.handle.gspo_cf, &self.buffer);
         self.buffer.clear();
 
-        self.buffer.write_gpos_quad(quad)?;
+        write_gpos_quad(&mut self.buffer, quad);
         self.batch.delete_cf(self.handle.gpos_cf, &self.buffer);
         self.buffer.clear();
 
-        self.buffer.write_gosp_quad(quad)?;
+        write_gosp_quad(&mut self.buffer, quad);
         self.batch.delete_cf(self.handle.gosp_cf, &self.buffer);
         self.buffer.clear();
 
@@ -704,34 +704,25 @@ fn get_cf<'a>(db: &'a DB, name: &str) -> Result<&'a ColumnFamily> {
         .ok_or_else(|| Error::msg(format!("column family {} not found", name)))
 }
 
-fn wrap_error<'a, E: 'a, I: Iterator<Item = Result<E>> + 'a>(
-    iter: Result<I>,
-) -> Box<dyn Iterator<Item = Result<E>> + 'a> {
-    match iter {
-        Ok(iter) => Box::new(iter),
-        Err(error) => Box::new(once(Err(error))),
-    }
-}
-
-fn encode_term(t: EncodedTerm) -> Result<Vec<u8>> {
+fn encode_term(t: EncodedTerm) -> Vec<u8> {
     let mut vec = Vec::with_capacity(WRITTEN_TERM_MAX_SIZE);
-    vec.write_term(t)?;
-    Ok(vec)
+    write_term(&mut vec, t);
+    vec
 }
 
-fn encode_term_pair(t1: EncodedTerm, t2: EncodedTerm) -> Result<Vec<u8>> {
+fn encode_term_pair(t1: EncodedTerm, t2: EncodedTerm) -> Vec<u8> {
     let mut vec = Vec::with_capacity(2 * WRITTEN_TERM_MAX_SIZE);
-    vec.write_term(t1)?;
-    vec.write_term(t2)?;
-    Ok(vec)
+    write_term(&mut vec, t1);
+    write_term(&mut vec, t2);
+    vec
 }
 
-fn encode_term_triple(t1: EncodedTerm, t2: EncodedTerm, t3: EncodedTerm) -> Result<Vec<u8>> {
+fn encode_term_triple(t1: EncodedTerm, t2: EncodedTerm, t3: EncodedTerm) -> Vec<u8> {
     let mut vec = Vec::with_capacity(3 * WRITTEN_TERM_MAX_SIZE);
-    vec.write_term(t1)?;
-    vec.write_term(t2)?;
-    vec.write_term(t3)?;
-    Ok(vec)
+    write_term(&mut vec, t1);
+    write_term(&mut vec, t2);
+    write_term(&mut vec, t3);
+    vec
 }
 
 struct DecodingIndexIterator<'a, F: Fn(&[u8]) -> Result<EncodedQuad>> {
