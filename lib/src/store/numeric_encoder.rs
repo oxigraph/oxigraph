@@ -12,7 +12,7 @@ use siphasher::sip128::{Hasher128, SipHasher24};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::hash::Hasher;
-use std::io::Read;
+use std::io::{Cursor, Read};
 use std::mem::size_of;
 use std::str;
 
@@ -798,6 +798,30 @@ pub fn write_gosp_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
     write_term(sink, quad.object);
     write_term(sink, quad.subject);
     write_term(sink, quad.predicate);
+}
+
+#[derive(Clone, Copy)]
+pub enum QuadEncoding {
+    SPOG,
+    POSG,
+    OSPG,
+    GSPO,
+    GPOS,
+    GOSP,
+}
+
+impl QuadEncoding {
+    pub fn decode(self, buffer: &[u8]) -> Result<EncodedQuad> {
+        let mut cursor = Cursor::new(&buffer);
+        match self {
+            QuadEncoding::SPOG => cursor.read_spog_quad(),
+            QuadEncoding::POSG => cursor.read_posg_quad(),
+            QuadEncoding::OSPG => cursor.read_ospg_quad(),
+            QuadEncoding::GSPO => cursor.read_gspo_quad(),
+            QuadEncoding::GPOS => cursor.read_gpos_quad(),
+            QuadEncoding::GOSP => cursor.read_gosp_quad(),
+        }
+    }
 }
 
 pub trait StrLookup {
