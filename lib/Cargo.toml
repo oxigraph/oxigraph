@@ -47,6 +47,7 @@ wasm-bindgen-test = "0.3"
 [[bench]]
 name = "store"
 harness = false
+required-features = ["seld", "rocksdb"]
 
 [[bench]]
 name = "sparql_query"

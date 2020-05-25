@@ -7,7 +7,7 @@
 //! * `RocksDbStore`: a file system implementation based on the [RocksDB](https://rocksdb.org/) key-value store.
 //!   It requires the `"rocksdb"` feature to be activated.
 //!   It also requires the clang](https://clang.llvm.org/) compiler to be installed.
-//! * `Sled`: an other file system implementation based on the [Sled](https://sled.rs/) key-value store.
+//! * `SledStore`: an other file system implementation based on the [Sled](https://sled.rs/) key-value store.
 //!   It requires the `"sled"` feature to be activated.
 //!   Sled is much faster to build than RockDB and does not require a C++ compiler.
 //!   However Sled is still in heavy developpment, less tested and data load seems much slower than RocksDB.

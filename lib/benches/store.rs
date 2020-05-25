@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use oxigraph::model::*;
-use oxigraph::*;
+use oxigraph::model::{NamedNode, Quad};
+use oxigraph::{MemoryStore, RocksDbStore, SledStore};
 use rand::random;
 use std::env::temp_dir;
 use std::fs::remove_dir_all;
