@@ -2,7 +2,7 @@
 ///
 /// Is implemented by `GraphSyntax` for graph files and `DatasetSyntax` for dataset files.
 pub trait FileSyntax: Sized {
-    /// Its canonical IRI.
+    /// Its canonical IRI according to [Unique URIs for file formats registry](https://www.w3.org/ns/formats/).
     fn iri(self) -> &'static str;
 
     /// Its [IANA media type](https://tools.ietf.org/html/rfc2046).

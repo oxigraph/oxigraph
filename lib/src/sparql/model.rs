@@ -24,7 +24,10 @@ impl<'a> QueryResult<'a> {
     pub fn read(reader: impl BufRead + 'a, syntax: QueryResultSyntax) -> Result<Self> {
         match syntax {
             QueryResultSyntax::Xml => read_xml_results(reader),
-            QueryResultSyntax::Json => unimplemented!(),
+            QueryResultSyntax::Json => Err(Error::msg(
+                //TODO: implement
+                "JSON SPARQL results format parsing has not been implemented yet",
+            )),
         }
     }
 
@@ -79,7 +82,10 @@ pub enum QueryResultSyntax {
 
 impl FileSyntax for QueryResultSyntax {
     fn iri(self) -> &'static str {
-        unimplemented!()
+        match self {
+            QueryResultSyntax::Xml => "http://www.w3.org/ns/formats/SPARQL_Results_XML",
+            QueryResultSyntax::Json => "http://www.w3.org/ns/formats/SPARQL_Results_JSON",
+        }
     }
 
     fn media_type(self) -> &'static str {
