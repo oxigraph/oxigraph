@@ -61,15 +61,15 @@ pub struct SledStore {
 impl SledStore {
     /// Opens a temporary `SledStore` that will be deleted after drop.
     pub fn new() -> Result<Self> {
-        Self::do_open(Config::new().temporary(true))
+        Self::do_open(&Config::new().temporary(true))
     }
 
     /// Opens a `SledStore`
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
-        Self::do_open(Config::new().path(path))
+        Self::do_open(&Config::new().path(path))
     }
 
-    fn do_open(config: Config) -> Result<Self> {
+    fn do_open(config: &Config) -> Result<Self> {
         let db = config.open()?;
         let new = Self {
             id2str: db.open_tree("id2str")?,
