@@ -1,6 +1,6 @@
+use crate::model::{BlankNode, Term};
 use crate::sparql::algebra::*;
 use crate::sparql::model::*;
-use crate::sparql::plan::PlanPropertyPath;
 use crate::sparql::plan::*;
 use crate::store::numeric_encoder::{Encoder, ENCODED_DEFAULT_GRAPH};
 use crate::Error;
@@ -276,10 +276,11 @@ impl<E: Encoder> PlanBuilder<E> {
         graph_name: PatternValue,
     ) -> Result<PlanExpression> {
         Ok(match expression {
-            Expression::Constant(t) => match t {
-                TermOrVariable::Term(t) => PlanExpression::Constant(self.encoder.encode_term(t)?),
-                TermOrVariable::Variable(v) => PlanExpression::Variable(variable_key(variables, v)),
-            },
+            Expression::NamedNode(node) => {
+                PlanExpression::Constant(self.encoder.encode_named_node(node)?)
+            }
+            Expression::Literal(l) => PlanExpression::Constant(self.encoder.encode_literal(l)?),
+            Expression::Variable(v) => PlanExpression::Variable(variable_key(variables, v)),
             Expression::Or(a, b) => PlanExpression::Or(
                 Box::new(self.build_for_expression(a, variables, graph_name)?),
                 Box::new(self.build_for_expression(b, variables, graph_name)?),
@@ -704,10 +705,14 @@ impl<E: Encoder> PlanBuilder<E> {
         variables: &mut Vec<Variable>,
     ) -> Result<PatternValue> {
         Ok(match term_or_variable {
-            TermOrVariable::Term(term) => PatternValue::Constant(self.encoder.encode_term(term)?),
             TermOrVariable::Variable(variable) => {
                 PatternValue::Variable(variable_key(variables, variable))
             }
+            TermOrVariable::Term(Term::BlankNode(bnode)) => {
+                PatternValue::Variable(variable_key(variables, &Variable::new(bnode.as_str())))
+                //TODO: very bad hack to convert bnode to variable
+            }
+            TermOrVariable::Term(term) => PatternValue::Constant(self.encoder.encode_term(term)?),
         })
     }
 
@@ -818,11 +823,8 @@ impl<E: Encoder> PlanBuilder<E> {
                         variables,
                         &mut bnodes,
                     )?,
-                    predicate: self.template_value_from_named_node_or_variable(
-                        &triple.predicate,
-                        variables,
-                        &mut bnodes,
-                    )?,
+                    predicate: self
+                        .template_value_from_named_node_or_variable(&triple.predicate, variables)?,
                     object: self.template_value_from_term_or_variable(
                         &triple.object,
                         variables,
@@ -837,18 +839,17 @@ impl<E: Encoder> PlanBuilder<E> {
         &mut self,
         term_or_variable: &TermOrVariable,
         variables: &mut Vec<Variable>,
-        bnodes: &mut Vec<Variable>,
+        bnodes: &mut Vec<BlankNode>,
     ) -> Result<TripleTemplateValue> {
         Ok(match term_or_variable {
+            TermOrVariable::Variable(variable) => {
+                TripleTemplateValue::Variable(variable_key(variables, variable))
+            }
+            TermOrVariable::Term(Term::BlankNode(bnode)) => {
+                TripleTemplateValue::BlankNode(bnode_key(bnodes, bnode))
+            }
             TermOrVariable::Term(term) => {
                 TripleTemplateValue::Constant(self.encoder.encode_term(term)?)
-            }
-            TermOrVariable::Variable(variable) => {
-                if variable.has_name() {
-                    TripleTemplateValue::Variable(variable_key(variables, variable))
-                } else {
-                    TripleTemplateValue::BlankNode(variable_key(bnodes, variable))
-                }
             }
         })
     }
@@ -857,18 +858,13 @@ impl<E: Encoder> PlanBuilder<E> {
         &mut self,
         named_node_or_variable: &NamedNodeOrVariable,
         variables: &mut Vec<Variable>,
-        bnodes: &mut Vec<Variable>,
     ) -> Result<TripleTemplateValue> {
         Ok(match named_node_or_variable {
+            NamedNodeOrVariable::Variable(variable) => {
+                TripleTemplateValue::Variable(variable_key(variables, variable))
+            }
             NamedNodeOrVariable::NamedNode(term) => {
                 TripleTemplateValue::Constant(self.encoder.encode_named_node(term)?)
-            }
-            NamedNodeOrVariable::Variable(variable) => {
-                if variable.has_name() {
-                    TripleTemplateValue::Variable(variable_key(variables, variable))
-                } else {
-                    TripleTemplateValue::BlankNode(variable_key(bnodes, variable))
-                }
             }
         })
     }
@@ -902,7 +898,7 @@ impl<E: Encoder> PlanBuilder<E> {
         }) {
             to_id
         } else {
-            to.push(Variable::default());
+            to.push(Variable::new_random());
             to.len() - 1
         }
     }
@@ -981,6 +977,16 @@ fn variable_key(variables: &mut Vec<Variable>, variable: &Variable) -> usize {
     }
 }
 
+fn bnode_key(blank_nodes: &mut Vec<BlankNode>, blank_node: &BlankNode) -> usize {
+    match slice_key(blank_nodes, blank_node) {
+        Some(key) => key,
+        None => {
+            blank_nodes.push(blank_node.clone());
+            blank_nodes.len() - 1
+        }
+    }
+}
+
 fn slice_key<T: Eq>(slice: &[T], element: &T) -> Option<usize> {
     for (i, item) in slice.iter().enumerate() {
         if item == element {
@@ -992,14 +998,16 @@ fn slice_key<T: Eq>(slice: &[T], element: &T) -> Option<usize> {
 
 fn sort_bgp(p: &[TripleOrPathPattern]) -> Vec<&TripleOrPathPattern> {
     let mut assigned_variables = BTreeSet::default();
+    let mut assigned_blank_nodes = BTreeSet::default();
     let mut new_p: Vec<_> = p.iter().collect();
 
     for i in 0..new_p.len() {
         (&mut new_p[i..]).sort_by(|p1, p2| {
-            count_pattern_binds(p2, &assigned_variables)
-                .cmp(&count_pattern_binds(p1, &assigned_variables))
+            count_pattern_binds(p2, &assigned_variables, &assigned_blank_nodes).cmp(
+                &count_pattern_binds(p1, &assigned_variables, &assigned_blank_nodes),
+            )
         });
-        add_pattern_variables(new_p[i], &mut assigned_variables);
+        add_pattern_variables(new_p[i], &mut assigned_variables, &mut assigned_blank_nodes);
     }
 
     new_p
@@ -1008,10 +1016,15 @@ fn sort_bgp(p: &[TripleOrPathPattern]) -> Vec<&TripleOrPathPattern> {
 fn count_pattern_binds(
     pattern: &TripleOrPathPattern,
     assigned_variables: &BTreeSet<&Variable>,
+    assigned_blank_nodes: &BTreeSet<&BlankNode>,
 ) -> u8 {
     let mut count = 12;
     if let TermOrVariable::Variable(v) = pattern.subject() {
         if !assigned_variables.contains(v) {
+            count -= 4;
+        }
+    } else if let TermOrVariable::Term(Term::BlankNode(bnode)) = pattern.subject() {
+        if !assigned_blank_nodes.contains(bnode) {
             count -= 4;
         }
     } else {
@@ -1032,6 +1045,10 @@ fn count_pattern_binds(
         if !assigned_variables.contains(v) {
             count -= 4;
         }
+    } else if let TermOrVariable::Term(Term::BlankNode(bnode)) = pattern.object() {
+        if !assigned_blank_nodes.contains(bnode) {
+            count -= 4;
+        }
     } else {
         count -= 1;
     }
@@ -1041,9 +1058,12 @@ fn count_pattern_binds(
 fn add_pattern_variables<'a>(
     pattern: &'a TripleOrPathPattern,
     variables: &mut BTreeSet<&'a Variable>,
+    blank_nodes: &mut BTreeSet<&'a BlankNode>,
 ) {
     if let TermOrVariable::Variable(v) = pattern.subject() {
         variables.insert(v);
+    } else if let TermOrVariable::Term(Term::BlankNode(bnode)) = pattern.subject() {
+        blank_nodes.insert(bnode);
     }
     if let TripleOrPathPattern::Triple(t) = pattern {
         if let NamedNodeOrVariable::Variable(v) = &t.predicate {
@@ -1052,5 +1072,7 @@ fn add_pattern_variables<'a>(
     }
     if let TermOrVariable::Variable(v) = pattern.object() {
         variables.insert(v);
+    } else if let TermOrVariable::Term(Term::BlankNode(bnode)) = pattern.object() {
+        blank_nodes.insert(bnode);
     }
 }

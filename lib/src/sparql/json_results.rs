@@ -23,7 +23,7 @@ pub fn write_json_results<W: Write>(results: QueryResult<'_>, mut sink: W) -> Re
                 } else {
                     sink.write_all(b",")?;
                 }
-                write_escaped_json_string(variable.name()?, &mut sink)?;
+                write_escaped_json_string(variable.as_str(), &mut sink)?;
             }
             sink.write_all(b"]},\"results\":{\"bindings\":[")?;
             let mut start_bindings = true;
@@ -44,7 +44,7 @@ pub fn write_json_results<W: Write>(results: QueryResult<'_>, mut sink: W) -> Re
                         } else {
                             sink.write_all(b",")?;
                         }
-                        write_escaped_json_string(variables[i].name()?, &mut sink)?;
+                        write_escaped_json_string(variables[i].as_str(), &mut sink)?;
                         match term {
                             Term::NamedNode(uri) => {
                                 sink.write_all(b":{\"type\":\"uri\",\"value\":")?;

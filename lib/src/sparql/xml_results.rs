@@ -44,7 +44,7 @@ pub fn write_xml_results<W: Write>(results: QueryResult<'_>, sink: W) -> Result<
             writer.write_event(Event::Start(BytesStart::borrowed_name(b"head")))?;
             for variable in &variables {
                 let mut variable_tag = BytesStart::borrowed_name(b"variable");
-                variable_tag.push_attribute(("name", variable.name()?));
+                variable_tag.push_attribute(("name", variable.as_str()));
                 writer.write_event(Event::Empty(variable_tag))?;
             }
             writer.write_event(Event::End(BytesEnd::borrowed(b"head")))?;
@@ -55,7 +55,7 @@ pub fn write_xml_results<W: Write>(results: QueryResult<'_>, sink: W) -> Result<
                 for (i, value) in result.into_iter().enumerate() {
                     if let Some(term) = value {
                         let mut binding_tag = BytesStart::borrowed_name(b"binding");
-                        binding_tag.push_attribute(("name", variables[i].name()?));
+                        binding_tag.push_attribute(("name", variables[i].as_str()));
                         writer.write_event(Event::Start(binding_tag))?;
                         match term {
                             Term::NamedNode(uri) => {

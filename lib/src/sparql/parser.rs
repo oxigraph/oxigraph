@@ -80,7 +80,7 @@ fn add_to_triple_or_path_patterns(
                 add_to_triple_or_path_patterns(object, *p, subject, patterns)
             }
             PropertyPath::SequencePath(a, b) => {
-                let middle = Variable::default();
+                let middle = BlankNode::default();
                 add_to_triple_or_path_patterns(subject, *a, middle.clone().into(), patterns);
                 add_to_triple_or_path_patterns(middle.into(), *b, object, patterns);
             }
@@ -213,7 +213,7 @@ fn build_select(
     //GROUP BY
     let aggregations = state.aggregations.pop().unwrap_or_else(BTreeMap::default);
     if group.is_none() && !aggregations.is_empty() {
-        let const_variable = Variable::default();
+        let const_variable = Variable::new_random();
         group = Some((
             vec![const_variable.clone()],
             vec![(Literal::from(1).into(), const_variable)],
@@ -310,7 +310,7 @@ impl ParserState {
             .last_mut()
             .ok_or_else(|| "Unexpected aggregate")?;
         Ok(aggregations.get(&agg).cloned().unwrap_or_else(|| {
-            let new_var = Variable::default();
+            let new_var = Variable::new_random();
             aggregations.insert(agg, new_var.clone());
             new_var
         }))
@@ -644,7 +644,7 @@ parser! {
                     algebra: build_select(Selection {
                         option: SelectionOption::Default,
                         variables: Some(p.into_iter().map(|var_or_iri| match var_or_iri {
-                            NamedNodeOrVariable::NamedNode(n) => SelectionMember::Expression(n.into(), Variable::default()),
+                            NamedNodeOrVariable::NamedNode(n) => SelectionMember::Expression(n.into(), Variable::new_random()),
                             NamedNodeOrVariable::Variable(v) => SelectionMember::Variable(v)
                         }).collect())
                     }, w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state),
@@ -690,10 +690,10 @@ parser! {
         rule GroupClause() -> (Vec<Variable>, Vec<(Expression,Variable)>) = i("GROUP") _ i("BY") _ c:GroupCondition_item()+ {
             let mut projections: Vec<(Expression,Variable)> = Vec::default();
             let clauses = c.into_iter().map(|(e, vo)| {
-                if let Expression::Constant(TermOrVariable::Variable(v)) = e {
+                if let Expression::Variable(v) = e {
                     v
                 } else {
-                    let v = vo.unwrap_or_else(Variable::default);
+                    let v = vo.unwrap_or_else(Variable::new_random);
                     projections.push((e, v.clone()));
                     v
                 }
@@ -1310,10 +1310,10 @@ parser! {
         rule PrimaryExpression() -> Expression =
             BrackettedExpression() /
             iriOrFunction() /
-            v:Var() { Expression::Constant(v.into()) } /
-            l:RDFLiteral() { Expression::Constant(l.into()) } /
-            l:NumericLiteral() { Expression::Constant(l.into()) } /
-            l:BooleanLiteral() { Expression::Constant(l.into()) } /
+            v:Var() { v.into() } /
+            l:RDFLiteral() { l.into() } /
+            l:NumericLiteral() { l.into() } /
+            l:BooleanLiteral() { l.into() } /
             BuiltInCall()
 
         //[120]
@@ -1423,7 +1423,7 @@ parser! {
         rule iriOrFunction() -> Expression = i: iri() _ a: ArgList()? {
             match a {
                 Some(a) => Expression::FunctionCall(Function::Custom(i), a),
-                None => Expression::Constant(i.into())
+                None => i.into()
             }
         }
 

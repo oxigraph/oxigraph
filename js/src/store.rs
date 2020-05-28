@@ -118,10 +118,8 @@ impl JsMemoryStore {
         let output = match results {
             QueryResult::Bindings(bindings) => {
                 let (variables, iter) = bindings.destruct();
-                let variables: Vec<JsValue> = variables
-                    .into_iter()
-                    .map(|v| v.name().unwrap().into())
-                    .collect();
+                let variables: Vec<JsValue> =
+                    variables.into_iter().map(|v| v.as_str().into()).collect();
                 let results = Array::new();
                 for values in iter {
                     let values = values.map_err(to_err)?;

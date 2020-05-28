@@ -153,55 +153,36 @@ impl<'a> BindingsIterator<'a> {
 
 /// A SPARQL query variable
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
-pub enum Variable {
-    Variable { name: String },
-    BlankNode { id: u128 },
-    Internal { id: u128 },
+pub struct Variable {
+    name: String,
 }
 
 impl Variable {
     pub fn new(name: impl Into<String>) -> Self {
-        Variable::Variable { name: name.into() }
+        Variable { name: name.into() }
     }
 
-    pub fn has_name(&self) -> bool {
-        match self {
-            Variable::Variable { .. } => true,
-            _ => false,
-        }
+    pub fn as_str(&self) -> &str {
+        &self.name
     }
 
+    #[deprecated]
     pub fn name(&self) -> Result<&str> {
-        match self {
-            Variable::Variable { name } => Ok(name),
-            _ => Err(Error::msg(format!("The variable {} has no name", self))),
-        }
+        Ok(self.as_str())
+    }
+
+    pub fn into_string(self) -> String {
+        self.name
+    }
+
+    pub(crate) fn new_random() -> Self {
+        Self::new(format!("{:x}", random::<u128>()))
     }
 }
 
 impl fmt::Display for Variable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Variable::Variable { name } => write!(f, "?{}", name),
-            Variable::BlankNode { id } => write!(f, "_:{:x}", id),
-            Variable::Internal { id } => write!(f, "?{:x}", id),
-        }
-    }
-}
-
-impl Default for Variable {
-    fn default() -> Self {
-        Variable::Internal {
-            id: random::<u128>(),
-        }
-    }
-}
-
-impl From<BlankNode> for Variable {
-    fn from(blank_node: BlankNode) -> Self {
-        Variable::BlankNode {
-            id: blank_node.id(),
-        }
+        write!(f, "?{}", self.name)
     }
 }
 
@@ -214,8 +195,8 @@ pub enum NamedNodeOrVariable {
 impl fmt::Display for NamedNodeOrVariable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            NamedNodeOrVariable::NamedNode(node) => write!(f, "{}", node),
-            NamedNodeOrVariable::Variable(var) => write!(f, "{}", var),
+            NamedNodeOrVariable::NamedNode(node) => node.fmt(f),
+            NamedNodeOrVariable::Variable(var) => var.fmt(f),
         }
     }
 }
@@ -241,8 +222,8 @@ pub enum TermOrVariable {
 impl fmt::Display for TermOrVariable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TermOrVariable::Term(term) => write!(f, "{}", term),
-            TermOrVariable::Variable(var) => write!(f, "{}", var),
+            TermOrVariable::Term(term) => term.fmt(f),
+            TermOrVariable::Variable(var) => var.fmt(f),
         }
     }
 }
@@ -255,7 +236,7 @@ impl From<NamedNode> for TermOrVariable {
 
 impl From<BlankNode> for TermOrVariable {
     fn from(node: BlankNode) -> Self {
-        TermOrVariable::Variable(node.into())
+        TermOrVariable::Term(node.into())
     }
 }
 
@@ -273,11 +254,7 @@ impl From<Variable> for TermOrVariable {
 
 impl From<Term> for TermOrVariable {
     fn from(term: Term) -> Self {
-        match term {
-            Term::NamedNode(node) => TermOrVariable::Term(node.into()),
-            Term::BlankNode(node) => TermOrVariable::Variable(node.into()),
-            Term::Literal(literal) => TermOrVariable::Term(literal.into()),
-        }
+        TermOrVariable::Term(term)
     }
 }
 

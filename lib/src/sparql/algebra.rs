@@ -244,7 +244,9 @@ impl<'a> fmt::Display for SparqlTripleOrPathPattern<'a> {
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum Expression {
-    Constant(TermOrVariable),
+    NamedNode(NamedNode),
+    Literal(Literal),
+    Variable(Variable),
     Or(Box<Expression>, Box<Expression>),
     And(Box<Expression>, Box<Expression>),
     Equal(Box<Expression>, Box<Expression>),
@@ -270,7 +272,9 @@ pub enum Expression {
 impl fmt::Display for Expression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expression::Constant(t) => write!(f, "{}", t),
+            Expression::NamedNode(node) => node.fmt(f),
+            Expression::Literal(l) => l.fmt(f),
+            Expression::Variable(var) => var.fmt(f),
             Expression::Or(a, b) => write!(f, "({} || {})", a, b),
             Expression::And(a, b) => write!(f, "({} && {})", a, b),
             Expression::Equal(a, b) => write!(f, "({} = {})", a, b),
@@ -324,19 +328,19 @@ impl fmt::Display for Expression {
 
 impl From<NamedNode> for Expression {
     fn from(p: NamedNode) -> Self {
-        Expression::Constant(p.into())
+        Expression::NamedNode(p)
     }
 }
 
 impl From<Literal> for Expression {
     fn from(p: Literal) -> Self {
-        Expression::Constant(p.into())
+        Expression::Literal(p)
     }
 }
 
 impl From<Variable> for Expression {
     fn from(v: Variable) -> Self {
-        Expression::Constant(v.into())
+        Expression::Variable(v)
     }
 }
 
@@ -345,7 +349,9 @@ struct SparqlExpression<'a>(&'a Expression);
 impl<'a> fmt::Display for SparqlExpression<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
-            Expression::Constant(t) => write!(f, "{}", t),
+            Expression::NamedNode(node) => node.fmt(f),
+            Expression::Literal(l) => l.fmt(f),
+            Expression::Variable(var) => var.fmt(f),
             Expression::Or(a, b) => write!(
                 f,
                 "({} || {})",
@@ -677,21 +683,21 @@ impl GraphPattern {
                     match pattern {
                         TripleOrPathPattern::Triple(tp) => {
                             if let TermOrVariable::Variable(ref s) = tp.subject {
-                                adds_if_has_name(vars, s);
+                                vars.insert(s);
                             }
                             if let NamedNodeOrVariable::Variable(ref p) = tp.predicate {
-                                adds_if_has_name(vars, p);
+                                vars.insert(p);
                             }
                             if let TermOrVariable::Variable(ref o) = tp.object {
-                                adds_if_has_name(vars, o);
+                                vars.insert(o);
                             }
                         }
                         TripleOrPathPattern::Path(ppp) => {
                             if let TermOrVariable::Variable(ref s) = ppp.subject {
-                                adds_if_has_name(vars, s);
+                                vars.insert(s);
                             }
                             if let TermOrVariable::Variable(ref o) = ppp.object {
-                                adds_if_has_name(vars, o);
+                                vars.insert(o);
                             }
                         }
                     }
@@ -712,17 +718,21 @@ impl GraphPattern {
             }
             GraphPattern::Graph(g, p) => {
                 if let NamedNodeOrVariable::Variable(ref g) = g {
-                    adds_if_has_name(vars, g);
+                    vars.insert(g);
                 }
                 p.add_visible_variables(vars);
             }
             GraphPattern::Extend(p, v, _) => {
+                vars.insert(v);
                 p.add_visible_variables(vars);
-                adds_if_has_name(vars, v);
             }
             GraphPattern::Minus(a, _) => a.add_visible_variables(vars),
             GraphPattern::Service(_, p, _) => p.add_visible_variables(vars),
-            GraphPattern::AggregateJoin(_, a) => vars.extend(a.iter().map(|(_, v)| v)),
+            GraphPattern::AggregateJoin(_, a) => {
+                for v in a.values() {
+                    vars.insert(v);
+                }
+            }
             GraphPattern::Data(b) => vars.extend(b.variables_iter()),
             GraphPattern::OrderBy(l, _) => l.add_visible_variables(vars),
             GraphPattern::Project(_, pv) => vars.extend(pv.iter()),
@@ -730,12 +740,6 @@ impl GraphPattern {
             GraphPattern::Reduced(l) => l.add_visible_variables(vars),
             GraphPattern::Slice(l, _, _) => l.add_visible_variables(vars),
         }
-    }
-}
-
-fn adds_if_has_name<'a>(vars: &mut BTreeSet<&'a Variable>, var: &'a Variable) {
-    if var.has_name() {
-        vars.insert(var);
     }
 }
 
