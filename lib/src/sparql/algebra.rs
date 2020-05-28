@@ -10,6 +10,87 @@ use std::fmt;
 use std::ops::Add;
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+pub enum NamedNodeOrVariable {
+    NamedNode(NamedNode),
+    Variable(Variable),
+}
+
+impl fmt::Display for NamedNodeOrVariable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            NamedNodeOrVariable::NamedNode(node) => node.fmt(f),
+            NamedNodeOrVariable::Variable(var) => var.fmt(f),
+        }
+    }
+}
+
+impl From<NamedNode> for NamedNodeOrVariable {
+    fn from(node: NamedNode) -> Self {
+        NamedNodeOrVariable::NamedNode(node)
+    }
+}
+
+impl From<Variable> for NamedNodeOrVariable {
+    fn from(var: Variable) -> Self {
+        NamedNodeOrVariable::Variable(var)
+    }
+}
+
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+pub enum TermOrVariable {
+    Term(Term),
+    Variable(Variable),
+}
+
+impl fmt::Display for TermOrVariable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TermOrVariable::Term(term) => term.fmt(f),
+            TermOrVariable::Variable(var) => var.fmt(f),
+        }
+    }
+}
+
+impl From<NamedNode> for TermOrVariable {
+    fn from(node: NamedNode) -> Self {
+        TermOrVariable::Term(node.into())
+    }
+}
+
+impl From<BlankNode> for TermOrVariable {
+    fn from(node: BlankNode) -> Self {
+        TermOrVariable::Term(node.into())
+    }
+}
+
+impl From<Literal> for TermOrVariable {
+    fn from(literal: Literal) -> Self {
+        TermOrVariable::Term(literal.into())
+    }
+}
+
+impl From<Variable> for TermOrVariable {
+    fn from(var: Variable) -> Self {
+        TermOrVariable::Variable(var)
+    }
+}
+
+impl From<Term> for TermOrVariable {
+    fn from(term: Term) -> Self {
+        TermOrVariable::Term(term)
+    }
+}
+
+impl From<NamedNodeOrVariable> for TermOrVariable {
+    fn from(element: NamedNodeOrVariable) -> Self {
+        match element {
+            NamedNodeOrVariable::NamedNode(node) => TermOrVariable::Term(node.into()),
+            NamedNodeOrVariable::Variable(var) => TermOrVariable::Variable(var),
+        }
+    }
+}
+
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct StaticBindings {
     variables: Vec<Variable>,
     values: Vec<Vec<Option<Term>>>,
