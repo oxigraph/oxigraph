@@ -1564,13 +1564,13 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
         &'b self,
         iter: EncodedTuplesIterator<'b>,
         variables: Vec<Variable>,
-    ) -> BindingsIterator<'b>
+    ) -> QuerySolutionsIterator<'b>
     where
         'a: 'b,
     {
         let eval = self;
         let tuple_size = variables.len();
-        BindingsIterator::new(
+        QuerySolutionsIterator::new(
             variables,
             Box::new(iter.map(move |values| {
                 let mut result = vec![None; tuple_size];
@@ -1584,40 +1584,25 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
         )
     }
 
-    // this is used to encode results froma BindingIterator into an EncodedTuplesIterator. This happens when SERVICE clauses are evaluated
+    // this is used to encode results from a BindingIterator into an EncodedTuplesIterator. This happens when SERVICE clauses are evaluated
     fn encode_bindings<'b>(
         &'b self,
         variables: &'b [Variable],
-        iter: BindingsIterator<'b>,
+        iter: QuerySolutionsIterator<'b>,
     ) -> EncodedTuplesIterator<'b>
     where
         'a: 'b,
     {
-        let (binding_variables, iter) = BindingsIterator::destruct(iter);
-        let mut combined_variables = variables.to_vec();
-        for v in binding_variables.clone() {
-            if !combined_variables.contains(&v) {
-                combined_variables.resize(combined_variables.len() + 1, v);
-            }
-        }
-        Box::new(iter.map(move |terms| {
+        Box::new(iter.map(move |solution| {
             let mut encoder = self.dataset.encoder();
-            let mut encoded_terms = EncodedTuple::with_capacity(combined_variables.len());
-            for (i, term_option) in terms?.into_iter().enumerate() {
-                match term_option {
-                    None => (),
-                    Some(term) => {
-                        if let Ok(encoded) = encoder.encode_term(&term) {
-                            let variable = binding_variables[i].clone();
-                            put_variable_value(
-                                &variable,
-                                &combined_variables,
-                                encoded,
-                                &mut encoded_terms,
-                            )
-                        }
-                    }
-                }
+            let mut encoded_terms = EncodedTuple::with_capacity(variables.len());
+            for (variable, term) in solution?.iter() {
+                put_variable_value(
+                    variable,
+                    variables,
+                    encoder.encode_term(term)?,
+                    &mut encoded_terms,
+                )
             }
             Ok(encoded_terms)
         }))

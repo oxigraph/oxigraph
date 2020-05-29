@@ -348,7 +348,7 @@ fn to_graph(result: QueryResult<'_>, with_order: bool) -> Result<SimpleGraph> {
             ));
             Ok(graph)
         }
-        QueryResult::Bindings(bindings) => {
+        QueryResult::Bindings(solutions) => {
             let mut graph = SimpleGraph::default();
             let result_set = BlankNode::default();
             graph.insert(Triple::new(
@@ -356,33 +356,30 @@ fn to_graph(result: QueryResult<'_>, with_order: bool) -> Result<SimpleGraph> {
                 rdf::TYPE.clone(),
                 rs::RESULT_SET.clone(),
             ));
-            let (variables, iter) = bindings.destruct();
-            for variable in &variables {
+            for variable in solutions.variables() {
                 graph.insert(Triple::new(
                     result_set,
                     rs::RESULT_VARIABLE.clone(),
                     Literal::new_simple_literal(variable.as_str()),
                 ));
             }
-            for (i, binding_values) in iter.enumerate() {
-                let binding_values = binding_values?;
-                let solution = BlankNode::default();
-                graph.insert(Triple::new(result_set, rs::SOLUTION.clone(), solution));
-                for i in 0..variables.len() {
-                    if let Some(ref value) = binding_values[i] {
-                        let binding = BlankNode::default();
-                        graph.insert(Triple::new(solution, rs::BINDING.clone(), binding));
-                        graph.insert(Triple::new(binding, rs::VALUE.clone(), value.clone()));
-                        graph.insert(Triple::new(
-                            binding,
-                            rs::VARIABLE.clone(),
-                            Literal::new_simple_literal(variables[i].as_str()),
-                        ));
-                    }
+            for (i, solution) in solutions.enumerate() {
+                let solution = solution?;
+                let solution_id = BlankNode::default();
+                graph.insert(Triple::new(result_set, rs::SOLUTION.clone(), solution_id));
+                for (variable, value) in solution.iter() {
+                    let binding = BlankNode::default();
+                    graph.insert(Triple::new(solution_id, rs::BINDING.clone(), binding));
+                    graph.insert(Triple::new(binding, rs::VALUE.clone(), value.clone()));
+                    graph.insert(Triple::new(
+                        binding,
+                        rs::VARIABLE.clone(),
+                        Literal::new_simple_literal(variable.as_str()),
+                    ));
                 }
                 if with_order {
                     graph.insert(Triple::new(
-                        solution,
+                        solution_id,
                         rs::INDEX.clone(),
                         Literal::from((i + 1) as i128),
                     ));
@@ -720,7 +717,7 @@ impl ServiceHandler for StaticServiceHandler {
         &'a self,
         service_name: &NamedNode,
         graph_pattern: &'a GraphPattern,
-    ) -> Result<BindingsIterator<'a>> {
+    ) -> Result<QuerySolutionsIterator<'a>> {
         if let QueryResult::Bindings(iterator) = self
             .services
             .get(service_name)
@@ -731,10 +728,10 @@ impl ServiceHandler for StaticServiceHandler {
             )?
             .exec()?
         {
-            //TODO: very hugly
+            //TODO: very ugly
             let (variables, iter) = iterator.destruct();
             let collected = iter.collect::<Vec<_>>();
-            Ok(BindingsIterator::new(
+            Ok(QuerySolutionsIterator::new(
                 variables,
                 Box::new(collected.into_iter()),
             ))

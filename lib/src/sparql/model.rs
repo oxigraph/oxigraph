@@ -9,11 +9,12 @@ use rio_turtle::{NTriplesFormatter, TurtleFormatter};
 use rio_xml::RdfXmlFormatter;
 use std::fmt;
 use std::io::{BufRead, Write};
+use std::rc::Rc;
 
 /// Results of a [SPARQL query](https://www.w3.org/TR/sparql11-query/)
 pub enum QueryResult<'a> {
     /// Results of a [SELECT](https://www.w3.org/TR/sparql11-query/#select) query
-    Bindings(BindingsIterator<'a>),
+    Bindings(QuerySolutionsIterator<'a>),
     /// Result of a [ASK](https://www.w3.org/TR/sparql11-query/#ask) query
     Boolean(bool),
     /// Results of a [CONSTRUCT](https://www.w3.org/TR/sparql11-query/#construct) or [DESCRIBE](https://www.w3.org/TR/sparql11-query/#describe) query
@@ -119,24 +120,55 @@ impl FileSyntax for QueryResultSyntax {
     }
 }
 
-/// An iterator over results bindings
-pub struct BindingsIterator<'a> {
-    variables: Vec<Variable>,
+/// An iterator over query result solutions
+///
+/// ```
+/// use oxigraph::{MemoryStore, Result};
+/// use oxigraph::sparql::{PreparedQuery, QueryResult, QueryOptions, Variable};
+///
+/// let store = MemoryStore::new();
+/// let prepared_query = store.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
+/// if let QueryResult::Bindings(solutions) = prepared_query.exec()? {
+///     for solution in solutions {
+///         println!("{:?}", solution?.get("s"));
+///     }
+/// }
+/// # Result::Ok(())
+/// ```
+pub struct QuerySolutionsIterator<'a> {
+    variables: Rc<Vec<Variable>>,
     iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>>> + 'a>,
 }
 
-impl<'a> BindingsIterator<'a> {
+impl<'a> QuerySolutionsIterator<'a> {
     pub fn new(
         variables: Vec<Variable>,
         iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>>> + 'a>,
     ) -> Self {
-        Self { variables, iter }
+        Self {
+            variables: Rc::new(variables),
+            iter,
+        }
     }
 
+    /// The variables used in the solutions
+    ///
+    /// ```
+    /// use oxigraph::{MemoryStore, Result};
+    /// use oxigraph::sparql::{PreparedQuery, QueryResult, QueryOptions, Variable};
+    ///
+    /// let store = MemoryStore::new();
+    /// let prepared_query = store.prepare_query("SELECT ?s ?o WHERE { ?s ?p ?o }", QueryOptions::default())?;
+    /// if let QueryResult::Bindings(solutions) = prepared_query.exec()? {
+    ///     assert_eq!(solutions.variables(), &[Variable::new("s"), Variable::new("o")]);
+    /// }
+    /// # Result::Ok(())
+    /// ```
     pub fn variables(&self) -> &[Variable] {
         &*self.variables
     }
 
+    #[deprecated(note = "Please directly use QuerySolutionsIterator as an iterator instead")]
     pub fn into_values_iter(self) -> Box<dyn Iterator<Item = Result<Vec<Option<Term>>>> + 'a> {
         self.iter
     }
@@ -147,11 +179,108 @@ impl<'a> BindingsIterator<'a> {
         Vec<Variable>,
         Box<dyn Iterator<Item = Result<Vec<Option<Term>>>> + 'a>,
     ) {
-        (self.variables, self.iter)
+        ((*self.variables).clone(), self.iter)
+    }
+}
+
+impl<'a> Iterator for QuerySolutionsIterator<'a> {
+    type Item = Result<QuerySolution>;
+
+    fn next(&mut self) -> Option<Result<QuerySolution>> {
+        Some(self.iter.next()?.map(|values| QuerySolution {
+            values,
+            variables: self.variables.clone(),
+        }))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+}
+
+/// Tuple associating variables and terms that are the result of a SPARQL query.
+///
+/// It is the equivalent of a row in SQL.
+pub struct QuerySolution {
+    values: Vec<Option<Term>>,
+    variables: Rc<Vec<Variable>>,
+}
+
+impl QuerySolution {
+    /// Returns a value for a given position in the tuple (`usize`) or a given variable name (`&str` or `Variable`)
+    ///
+    /// ```ignore
+    /// let foo = solution.get("foo"); // Get the value of the variable ?foo if it exists
+    /// let first = solution.get(1); // Get the value of the second column if it exists
+    /// ```
+    pub fn get(&self, index: impl VariableSolutionIndex) -> Option<&Term> {
+        self.values.get(index.index(self)?).and_then(|e| e.as_ref())
+    }
+
+    /// The number of variables which are bind
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+
+    /// Is this binding empty?
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
+    /// Returns an iterator over bound variables
+    pub fn iter(&self) -> impl Iterator<Item = (&Variable, &Term)> {
+        self.values
+            .iter()
+            .enumerate()
+            .filter_map(move |(i, value)| {
+                if let Some(value) = value {
+                    Some((&self.variables[i], value))
+                } else {
+                    None
+                }
+            })
+    }
+}
+
+/// A utility trait to get values for a given variable or tuple position
+pub trait VariableSolutionIndex {
+    fn index(self, solution: &QuerySolution) -> Option<usize>;
+}
+
+impl VariableSolutionIndex for usize {
+    fn index(self, _: &QuerySolution) -> Option<usize> {
+        Some(self)
+    }
+}
+
+impl VariableSolutionIndex for &str {
+    fn index(self, solution: &QuerySolution) -> Option<usize> {
+        solution.variables.iter().position(|v| v.as_str() == self)
+    }
+}
+
+impl VariableSolutionIndex for &Variable {
+    fn index(self, solution: &QuerySolution) -> Option<usize> {
+        solution.variables.iter().position(|v| v == self)
+    }
+}
+
+impl VariableSolutionIndex for Variable {
+    fn index(self, solution: &QuerySolution) -> Option<usize> {
+        (&self).index(solution)
     }
 }
 
 /// A SPARQL query variable
+///
+/// ```
+/// use oxigraph::sparql::Variable;
+///
+/// assert_eq!(
+///     "?foo",
+///     Variable::new("foo").to_string()
+/// )
+/// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct Variable {
     name: String,
@@ -166,7 +295,7 @@ impl Variable {
         &self.name
     }
 
-    #[deprecated]
+    #[deprecated(note = "Please use as_str instead")]
     pub fn name(&self) -> Result<&str> {
         Ok(self.as_str())
     }

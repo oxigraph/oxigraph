@@ -21,7 +21,10 @@ use crate::Result;
 use oxiri::Iri;
 
 pub use crate::sparql::algebra::GraphPattern;
-pub use crate::sparql::model::BindingsIterator;
+pub use crate::sparql::model::QuerySolution;
+pub use crate::sparql::model::QuerySolutionsIterator;
+#[deprecated(note = "Please directly use QuerySolutionsIterator type instead")]
+pub type BindingsIterator<'a> = QuerySolutionsIterator<'a>;
 pub use crate::sparql::model::QueryResult;
 pub use crate::sparql::model::QueryResultSyntax;
 pub use crate::sparql::model::Variable;
@@ -161,17 +164,17 @@ pub trait ServiceHandler {
         &'a self,
         service_name: &NamedNode,
         graph_pattern: &'a GraphPattern,
-    ) -> Result<BindingsIterator<'a>>;
+    ) -> Result<QuerySolutionsIterator<'a>>;
 }
 
-impl<F: for<'a> Fn(&NamedNode, &'a GraphPattern) -> Result<BindingsIterator<'a>>> ServiceHandler
-    for F
+impl<F: for<'a> Fn(&NamedNode, &'a GraphPattern) -> Result<QuerySolutionsIterator<'a>>>
+    ServiceHandler for F
 {
     fn handle<'a>(
         &'a self,
         service_name: &NamedNode,
         graph_pattern: &'a GraphPattern,
-    ) -> Result<BindingsIterator<'a>> {
+    ) -> Result<QuerySolutionsIterator<'a>> {
         self(service_name, graph_pattern)
     }
 }
@@ -179,7 +182,11 @@ impl<F: for<'a> Fn(&NamedNode, &'a GraphPattern) -> Result<BindingsIterator<'a>>
 struct EmptyServiceHandler;
 
 impl ServiceHandler for EmptyServiceHandler {
-    fn handle<'a>(&'a self, _: &NamedNode, _: &'a GraphPattern) -> Result<BindingsIterator<'a>> {
+    fn handle<'a>(
+        &'a self,
+        _: &NamedNode,
+        _: &'a GraphPattern,
+    ) -> Result<QuerySolutionsIterator<'a>> {
         Err(Error::msg("The SERVICE feature is not implemented"))
     }
 }

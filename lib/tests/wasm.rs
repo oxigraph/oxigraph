@@ -22,18 +22,17 @@ mod test {
         let prepared_query = store
             .prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())
             .unwrap();
-        let results = prepared_query.exec().unwrap();
-        if let QueryResult::Bindings(results) = results {
+        if let QueryResult::Bindings(mut solutions) = prepared_query.exec().unwrap() {
             assert_eq!(
-                results.into_values_iter().next().unwrap().unwrap()[0],
-                Some(ex.into())
+                solutions.next().unwrap().unwrap().get("s"),
+                Some(&ex.into())
             );
         }
     }
 
     #[wasm_bindgen_test]
     fn now() {
-        if let QueryResult::Bindings(results) = MemoryStore::default()
+        if let QueryResult::Bindings(solutions) = MemoryStore::default()
             .prepare_query(
                 "SELECT (YEAR(NOW()) AS ?y) WHERE {}",
                 QueryOptions::default(),
@@ -42,8 +41,7 @@ mod test {
             .exec()
             .unwrap()
         {
-            if let Some(Term::Literal(l)) = &results.into_values_iter().next().unwrap().unwrap()[0]
-            {
+            if let Some(Term::Literal(l)) = solutions.next().unwrap().unwrap().get(0) {
                 let year = i64::from_str(l.value()).unwrap();
                 assert!(2020 <= year && year <= 2100);
             }

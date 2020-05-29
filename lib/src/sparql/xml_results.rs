@@ -35,63 +35,58 @@ pub fn write_xml_results<W: Write>(results: QueryResult<'_>, sink: W) -> Result<
             writer.write_event(Event::End(BytesEnd::borrowed(b"boolean")))?;
             writer.write_event(Event::End(BytesEnd::borrowed(b"sparql")))?;
         }
-        QueryResult::Bindings(bindings) => {
-            let (variables, results) = bindings.destruct();
+        QueryResult::Bindings(solutions) => {
             writer.write_event(Event::Decl(BytesDecl::new(b"1.0", None, None)))?;
             let mut sparql_open = BytesStart::borrowed_name(b"sparql");
             sparql_open.push_attribute(("xmlns", "http://www.w3.org/2005/sparql-results#"));
             writer.write_event(Event::Start(sparql_open))?;
             writer.write_event(Event::Start(BytesStart::borrowed_name(b"head")))?;
-            for variable in &variables {
+            for variable in solutions.variables() {
                 let mut variable_tag = BytesStart::borrowed_name(b"variable");
                 variable_tag.push_attribute(("name", variable.as_str()));
                 writer.write_event(Event::Empty(variable_tag))?;
             }
             writer.write_event(Event::End(BytesEnd::borrowed(b"head")))?;
             writer.write_event(Event::Start(BytesStart::borrowed_name(b"results")))?;
-            for result in results {
-                let result = result?;
+            for solution in solutions {
+                let solution = solution?;
                 writer.write_event(Event::Start(BytesStart::borrowed_name(b"result")))?;
-                for (i, value) in result.into_iter().enumerate() {
-                    if let Some(term) = value {
-                        let mut binding_tag = BytesStart::borrowed_name(b"binding");
-                        binding_tag.push_attribute(("name", variables[i].as_str()));
-                        writer.write_event(Event::Start(binding_tag))?;
-                        match term {
-                            Term::NamedNode(uri) => {
-                                writer
-                                    .write_event(Event::Start(BytesStart::borrowed_name(b"uri")))?;
-                                writer.write_event(Event::Text(BytesText::from_plain_str(
-                                    uri.as_str(),
-                                )))?;
-                                writer.write_event(Event::End(BytesEnd::borrowed(b"uri")))?;
-                            }
-                            Term::BlankNode(bnode) => {
-                                writer.write_event(Event::Start(BytesStart::borrowed_name(
-                                    b"bnode",
-                                )))?;
-                                writer.write_event(Event::Text(BytesText::from_plain_str(
-                                    bnode.as_str(),
-                                )))?;
-                                writer.write_event(Event::End(BytesEnd::borrowed(b"bnode")))?;
-                            }
-                            Term::Literal(literal) => {
-                                let mut literal_tag = BytesStart::borrowed_name(b"literal");
-                                if let Some(language) = literal.language() {
-                                    literal_tag.push_attribute(("xml:lang", language));
-                                } else if !literal.is_plain() {
-                                    literal_tag
-                                        .push_attribute(("datatype", literal.datatype().as_str()));
-                                }
-                                writer.write_event(Event::Start(literal_tag))?;
-                                writer.write_event(Event::Text(BytesText::from_plain_str(
-                                    literal.value(),
-                                )))?;
-                                writer.write_event(Event::End(BytesEnd::borrowed(b"literal")))?;
-                            }
+                for (variable, value) in solution.iter() {
+                    let mut binding_tag = BytesStart::borrowed_name(b"binding");
+                    binding_tag.push_attribute(("name", variable.as_str()));
+                    writer.write_event(Event::Start(binding_tag))?;
+                    match value {
+                        Term::NamedNode(uri) => {
+                            writer.write_event(Event::Start(BytesStart::borrowed_name(b"uri")))?;
+                            writer.write_event(Event::Text(BytesText::from_plain_str(
+                                uri.as_str(),
+                            )))?;
+                            writer.write_event(Event::End(BytesEnd::borrowed(b"uri")))?;
                         }
-                        writer.write_event(Event::End(BytesEnd::borrowed(b"binding")))?;
+                        Term::BlankNode(bnode) => {
+                            writer
+                                .write_event(Event::Start(BytesStart::borrowed_name(b"bnode")))?;
+                            writer.write_event(Event::Text(BytesText::from_plain_str(
+                                bnode.as_str(),
+                            )))?;
+                            writer.write_event(Event::End(BytesEnd::borrowed(b"bnode")))?;
+                        }
+                        Term::Literal(literal) => {
+                            let mut literal_tag = BytesStart::borrowed_name(b"literal");
+                            if let Some(language) = literal.language() {
+                                literal_tag.push_attribute(("xml:lang", language));
+                            } else if !literal.is_plain() {
+                                literal_tag
+                                    .push_attribute(("datatype", literal.datatype().as_str()));
+                            }
+                            writer.write_event(Event::Start(literal_tag))?;
+                            writer.write_event(Event::Text(BytesText::from_plain_str(
+                                literal.value(),
+                            )))?;
+                            writer.write_event(Event::End(BytesEnd::borrowed(b"literal")))?;
+                        }
                     }
+                    writer.write_event(Event::End(BytesEnd::borrowed(b"binding")))?;
                 }
                 writer.write_event(Event::End(BytesEnd::borrowed(b"result")))?;
             }
@@ -175,7 +170,7 @@ pub fn read_xml_results<'a>(source: impl BufRead + 'a) -> Result<QueryResult<'a>
                         for (i,var) in variables.iter().enumerate() {
                             mapping.insert(var.as_bytes().to_vec(), i);
                         }
-                        return Ok(QueryResult::Bindings(BindingsIterator::new(
+                        return Ok(QueryResult::Bindings(QuerySolutionsIterator::new(
                             variables.into_iter().map(Variable::new).collect(),
                             Box::new(ResultsIterator {
                                 reader,
@@ -214,7 +209,7 @@ pub fn read_xml_results<'a>(source: impl BufRead + 'a) -> Result<QueryResult<'a>
                 },
                 State::AfterHead => {
                     if event.name() == b"results" {
-                        return Ok(QueryResult::Bindings(BindingsIterator::new(
+                        return Ok(QueryResult::Bindings(QuerySolutionsIterator::new(
                             variables.into_iter().map(Variable::new).collect(),
                             Box::new(empty()),
                         )))

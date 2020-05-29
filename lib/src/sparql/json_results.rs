@@ -13,11 +13,10 @@ pub fn write_json_results<W: Write>(results: QueryResult<'_>, mut sink: W) -> Re
             sink.write_all(if value { b"true" } else { b"false" })?;
             sink.write_all(b"}")?;
         }
-        QueryResult::Bindings(bindings) => {
-            let (variables, results) = bindings.destruct();
+        QueryResult::Bindings(solutions) => {
             sink.write_all(b"{\"head\":{\"vars\":[")?;
             let mut start_vars = true;
-            for variable in &variables {
+            for variable in solutions.variables() {
                 if start_vars {
                     start_vars = false;
                 } else {
@@ -27,7 +26,7 @@ pub fn write_json_results<W: Write>(results: QueryResult<'_>, mut sink: W) -> Re
             }
             sink.write_all(b"]},\"results\":{\"bindings\":[")?;
             let mut start_bindings = true;
-            for result in results {
+            for solution in solutions {
                 if start_bindings {
                     start_bindings = false;
                 } else {
@@ -35,42 +34,37 @@ pub fn write_json_results<W: Write>(results: QueryResult<'_>, mut sink: W) -> Re
                 }
                 sink.write_all(b"{")?;
 
-                let result = result?;
+                let solution = solution?;
                 let mut start_binding = true;
-                for (i, value) in result.into_iter().enumerate() {
-                    if let Some(term) = value {
-                        if start_binding {
-                            start_binding = false;
-                        } else {
-                            sink.write_all(b",")?;
+                for (variable, value) in solution.iter() {
+                    if start_binding {
+                        start_binding = false;
+                    } else {
+                        sink.write_all(b",")?;
+                    }
+                    write_escaped_json_string(variable.as_str(), &mut sink)?;
+                    match value {
+                        Term::NamedNode(uri) => {
+                            sink.write_all(b":{\"type\":\"uri\",\"value\":")?;
+                            write_escaped_json_string(uri.as_str(), &mut sink)?;
+                            sink.write_all(b"}")?;
                         }
-                        write_escaped_json_string(variables[i].as_str(), &mut sink)?;
-                        match term {
-                            Term::NamedNode(uri) => {
-                                sink.write_all(b":{\"type\":\"uri\",\"value\":")?;
-                                write_escaped_json_string(uri.as_str(), &mut sink)?;
-                                sink.write_all(b"}")?;
+                        Term::BlankNode(bnode) => {
+                            sink.write_all(b":{\"type\":\"bnode\",\"value\":")?;
+                            write!(sink, "{}", bnode.as_str())?;
+                            sink.write_all(b"}")?;
+                        }
+                        Term::Literal(literal) => {
+                            sink.write_all(b":{\"type\":\"literal\",\"value\":")?;
+                            write_escaped_json_string(literal.value(), &mut sink)?;
+                            if let Some(language) = literal.language() {
+                                sink.write_all(b",\"xml:lang\":")?;
+                                write_escaped_json_string(language, &mut sink)?;
+                            } else if !literal.is_plain() {
+                                sink.write_all(b",\"datatype\":")?;
+                                write_escaped_json_string(literal.datatype().as_str(), &mut sink)?;
                             }
-                            Term::BlankNode(bnode) => {
-                                sink.write_all(b":{\"type\":\"bnode\",\"value\":")?;
-                                write!(sink, "{}", bnode.as_str())?;
-                                sink.write_all(b"}")?;
-                            }
-                            Term::Literal(literal) => {
-                                sink.write_all(b":{\"type\":\"literal\",\"value\":")?;
-                                write_escaped_json_string(literal.value(), &mut sink)?;
-                                if let Some(language) = literal.language() {
-                                    sink.write_all(b",\"xml:lang\":")?;
-                                    write_escaped_json_string(language, &mut sink)?;
-                                } else if !literal.is_plain() {
-                                    sink.write_all(b",\"datatype\":")?;
-                                    write_escaped_json_string(
-                                        literal.datatype().as_str(),
-                                        &mut sink,
-                                    )?;
-                                }
-                                sink.write_all(b"}")?;
-                            }
+                            sink.write_all(b"}")?;
                         }
                     }
                 }

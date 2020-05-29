@@ -13,7 +13,6 @@ use std::fmt;
 ///     NamedNode::parse("http://example.com/foo").unwrap().to_string()
 /// )
 /// ```
-///
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct NamedNode {
     iri: String,

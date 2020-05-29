@@ -33,9 +33,8 @@
 //!
 //! // SPARQL query
 //! let prepared_query = store.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
-//! let results = prepared_query.exec()?;
-//! if let QueryResult::Bindings(results) = results {
-//!     assert_eq!(results.into_values_iter().next().unwrap()?[0], Some(ex.into()));
+//! if let QueryResult::Bindings(mut solutions) = prepared_query.exec()? {
+//!     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 //! }
 //! # Result::Ok(())
 //! ```

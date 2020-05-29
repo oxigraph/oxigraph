@@ -11,7 +11,7 @@ fn simple_service_test() {
             &'a self,
             _: &NamedNode,
             graph_pattern: &'a GraphPattern,
-        ) -> Result<BindingsIterator<'a>> {
+        ) -> Result<QuerySolutionsIterator<'a>> {
             let triples =
                 b"<http://example.com/s> <http://example.com/p> <http://example.com/o> .".as_ref();
             do_pattern(triples, graph_pattern, QueryOptions::default())
@@ -30,16 +30,16 @@ fn simple_service_test() {
     .to_string();
 
     let options = QueryOptions::default().with_service_handler(TestServiceHandler);
-    let results = do_query(b"".as_ref(), query, options).unwrap();
-    let collected = results
-        .into_values_iter()
-        .map(move |b| b.unwrap())
+    let collected = do_query(b"".as_ref(), query, options)
+        .unwrap()
+        .map(|b| {
+            b.unwrap()
+                .iter()
+                .map(|(_, v)| v.clone())
+                .collect::<Vec<_>>()
+        })
         .collect::<Vec<_>>();
-    let solution = vec![vec![
-        Some(ex(String::from("s"))),
-        Some(ex(String::from("p"))),
-        Some(ex(String::from("o"))),
-    ]];
+    let solution = vec![vec![ex("s"), ex("p"), ex("o")]];
     assert_eq!(collected, solution);
 }
 
@@ -52,7 +52,7 @@ fn two_service_test() {
             &'a self,
             named_node: &NamedNode,
             graph_pattern: &'a GraphPattern,
-        ) -> Result<BindingsIterator<'a>> {
+        ) -> Result<QuerySolutionsIterator<'a>> {
             let service1 = NamedNode::parse("http://service1.org").unwrap();
             let service2 = NamedNode::parse("http://service2.org").unwrap();
             if named_node == &service1 {
@@ -93,20 +93,18 @@ fn two_service_test() {
     .to_string();
 
     let options = QueryOptions::default().with_service_handler(TwoServiceTest);
-    let results = do_query(b"".as_ref(), query, options).unwrap();
-    let collected = results
-        .into_values_iter()
-        .map(move |b| b.unwrap())
+    let collected = do_query(b"".as_ref(), query, options)
+        .unwrap()
+        .map(|b| {
+            b.unwrap()
+                .iter()
+                .map(|(_, v)| v.clone())
+                .collect::<Vec<_>>()
+        })
         .collect::<Vec<_>>();
     let solution = vec![
-        vec![
-            Some(literal("Alice".to_string())),
-            Some(mailto("alice@example.com".to_string())),
-        ],
-        vec![
-            Some(literal("Bob".to_string())),
-            Some(mailto("bob@example.com".to_string())),
-        ],
+        vec![literal("Alice"), mailto("alice@example.com")],
+        vec![literal("Bob"), mailto("bob@example.com")],
     ];
     assert_eq!(collected, solution);
 }
@@ -120,7 +118,7 @@ fn silent_service_empty_set_test() {
             &'a self,
             _: &NamedNode,
             _: &'a GraphPattern,
-        ) -> Result<BindingsIterator<'a>> {
+        ) -> Result<QuerySolutionsIterator<'a>> {
             Err(Error::msg("This is supposed to fail"))
         }
     }
@@ -141,12 +139,7 @@ fn silent_service_empty_set_test() {
 
     let triples = b"".as_ref();
     let options = QueryOptions::default().with_service_handler(ServiceTest);
-    let results = do_query(triples, query, options).unwrap();
-    let collected = results
-        .into_values_iter()
-        .map(move |b| b.unwrap())
-        .collect::<Vec<_>>();
-    assert_eq!(collected.len(), 1);
+    assert_eq!(do_query(triples, query, options).unwrap().count(), 1);
 }
 
 #[test]
@@ -158,7 +151,7 @@ fn non_silent_service_test() {
             &'a self,
             _: &NamedNode,
             _: &'a GraphPattern,
-        ) -> Result<BindingsIterator<'a>> {
+        ) -> Result<QuerySolutionsIterator<'a>> {
             Err(Error::msg("This is supposed to fail"))
         }
     }
@@ -179,26 +172,22 @@ fn non_silent_service_test() {
 
     let triples = b"".as_ref();
     let options = QueryOptions::default().with_service_handler(ServiceTest);
-    let results = do_query(triples, query, options).unwrap();
-    let result = results.into_values_iter().next();
-    match result {
-        Some(Err(_)) => assert_eq!(true, true),
-        _ => assert_eq!(
-            true, false,
-            "This should have been an error since the service fails"
-        ),
+    let mut solutions = do_query(triples, query, options).unwrap();
+    if let Some(Err(_)) = solutions.next() {
+    } else {
+        panic!("This should have been an error since the service fails")
     }
 }
 
-fn ex(id: String) -> Term {
-    Term::NamedNode(NamedNode::parse(format!("http://example.com/{}", &id)).unwrap())
+fn ex(id: &str) -> Term {
+    Term::NamedNode(NamedNode::parse(format!("http://example.com/{}", id)).unwrap())
 }
 
-fn mailto(id: String) -> Term {
-    Term::NamedNode(NamedNode::parse(format!("mailto:{}", &id)).unwrap())
+fn mailto(id: &str) -> Term {
+    Term::NamedNode(NamedNode::parse(format!("mailto:{}", id)).unwrap())
 }
 
-fn literal(str: String) -> Term {
+fn literal(str: &str) -> Term {
     Term::Literal(Literal::new_simple_literal(str))
 }
 
@@ -214,13 +203,13 @@ fn query_store<'a>(
     store: MemoryStore,
     query: String,
     options: QueryOptions<'a>,
-) -> Result<BindingsIterator<'a>> {
+) -> Result<QuerySolutionsIterator<'a>> {
     match store.prepare_query(&query, options)?.exec()? {
         QueryResult::Bindings(iterator) => {
-            let (varaibles, iter) = iterator.destruct();
+            let (variables, iter) = iterator.destruct();
             let collected = iter.collect::<Vec<_>>();
-            Ok(BindingsIterator::new(
-                varaibles,
+            Ok(QuerySolutionsIterator::new(
+                variables,
                 Box::new(collected.into_iter()),
             ))
         }
@@ -232,7 +221,7 @@ fn pattern_store<'a>(
     store: MemoryStore,
     pattern: &'a GraphPattern,
     options: QueryOptions<'a>,
-) -> Result<BindingsIterator<'a>> {
+) -> Result<QuerySolutionsIterator<'a>> {
     match store
         .prepare_query_from_pattern(&pattern, options)?
         .exec()?
@@ -240,7 +229,7 @@ fn pattern_store<'a>(
         QueryResult::Bindings(iterator) => {
             let (varaibles, iter) = iterator.destruct();
             let collected = iter.collect::<Vec<_>>();
-            Ok(BindingsIterator::new(
+            Ok(QuerySolutionsIterator::new(
                 varaibles,
                 Box::new(collected.into_iter()),
             ))
@@ -253,7 +242,7 @@ fn do_query<'a>(
     reader: impl BufRead,
     query: String,
     options: QueryOptions<'a>,
-) -> Result<BindingsIterator<'a>> {
+) -> Result<QuerySolutionsIterator<'a>> {
     let store = make_store(reader)?;
     query_store(store, query, options)
 }
@@ -262,7 +251,7 @@ fn do_pattern<'a>(
     reader: impl BufRead,
     pattern: &'a GraphPattern,
     options: QueryOptions<'a>,
-) -> Result<BindingsIterator<'a>> {
+) -> Result<QuerySolutionsIterator<'a>> {
     let store = make_store(reader)?;
     pattern_store(store, pattern, options)
 }
