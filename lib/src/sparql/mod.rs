@@ -12,7 +12,6 @@ mod xml_results;
 use crate::model::NamedNode;
 use crate::sparql::algebra::QueryVariants;
 use crate::sparql::eval::SimpleEvaluator;
-use crate::sparql::parser::read_sparql_query;
 use crate::sparql::plan::TripleTemplate;
 use crate::sparql::plan::{DatasetView, PlanNode};
 use crate::sparql::plan_builder::PlanBuilder;
@@ -20,13 +19,14 @@ use crate::store::ReadableEncodedStore;
 use crate::Error;
 use crate::Result;
 use oxiri::Iri;
-use std::fmt;
 
 pub use crate::sparql::algebra::GraphPattern;
 pub use crate::sparql::model::BindingsIterator;
 pub use crate::sparql::model::QueryResult;
 pub use crate::sparql::model::QueryResultSyntax;
 pub use crate::sparql::model::Variable;
+pub use crate::sparql::parser::Query;
+pub use crate::sparql::parser::SparqlParseError;
 
 /// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/)
 pub trait PreparedQuery {
@@ -61,7 +61,7 @@ enum SimplePreparedQueryAction<S: ReadableEncodedStore> {
 impl<'a, S: ReadableEncodedStore + 'a> SimplePreparedQuery<S> {
     pub(crate) fn new(store: S, query: &str, options: QueryOptions<'_>) -> Result<Self> {
         let dataset = DatasetView::new(store, options.default_graph_as_union);
-        Ok(Self(match read_sparql_query(query, options.base_iri)? {
+        Ok(Self(match Query::parse(query, options.base_iri)?.0 {
             QueryVariants::Select {
                 algebra, base_iri, ..
             } => {
@@ -217,22 +217,5 @@ impl<'a> QueryOptions<'a> {
     pub fn with_service_handler(mut self, service_handler: impl ServiceHandler + 'static) -> Self {
         self.service_handler = Box::new(service_handler);
         self
-    }
-}
-
-/// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/)
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct Query(QueryVariants);
-
-impl fmt::Display for Query {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl Query {
-    /// Parses a SPARQL query
-    pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self> {
-        Ok(Query(read_sparql_query(query, base_iri)?))
     }
 }

@@ -4,13 +4,80 @@ use crate::model::*;
 use crate::sparql::algebra::*;
 use crate::sparql::model::*;
 use oxiri::{Iri, IriParseError};
+use peg::error::ParseError;
 use peg::parser;
+use peg::str::LineCol;
 use std::borrow::Cow;
-use std::char;
 use std::collections::HashMap;
 use std::collections::{BTreeMap, BTreeSet};
+use std::error::Error;
 use std::str::Chars;
 use std::str::FromStr;
+use std::{char, fmt};
+
+/// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/)
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct Query(pub(crate) QueryVariants);
+
+impl fmt::Display for Query {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Query {
+    /// Parses a SPARQL query
+    pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self, SparqlParseError> {
+        let mut state = ParserState {
+            base_iri: if let Some(base_iri) = base_iri {
+                Some(
+                    Iri::parse(base_iri.to_owned()).map_err(|e| SparqlParseError {
+                        inner: SparqlParseErrorKind::InvalidBaseIri(e),
+                    })?,
+                )
+            } else {
+                None
+            },
+            namespaces: HashMap::default(),
+            bnodes_map: BTreeMap::default(),
+            used_bnodes: BTreeSet::default(),
+            aggregations: Vec::default(),
+        };
+
+        Ok(Self(
+            parser::QueryUnit(&unescape_unicode_codepoints(query), &mut state).map_err(|e| {
+                SparqlParseError {
+                    inner: SparqlParseErrorKind::Parser(e),
+                }
+            })?,
+        ))
+    }
+}
+
+/// Error returned during SPARQL parsing.
+#[derive(Debug)]
+pub struct SparqlParseError {
+    inner: SparqlParseErrorKind,
+}
+
+#[derive(Debug)]
+enum SparqlParseErrorKind {
+    InvalidBaseIri(IriParseError),
+    Parser(ParseError<LineCol>),
+}
+
+impl fmt::Display for SparqlParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.inner {
+            SparqlParseErrorKind::InvalidBaseIri(e) => {
+                write!(f, "Invalid SPARQL base IRI provided: {}", e)
+            }
+            SparqlParseErrorKind::Parser(e) => e.fmt(f),
+        }
+    }
+}
+
+impl Error for SparqlParseError {}
 
 struct FocusedTriplePattern<F> {
     focus: F,
@@ -519,30 +586,6 @@ const UNESCAPE_PN_REPLACEMENT: StaticCharSliceMap = StaticCharSliceMap::new(
 
 pub fn unescape_pn_local(input: &str) -> Cow<'_, str> {
     unescape_characters(input, &UNESCAPE_PN_CHARACTERS, &UNESCAPE_PN_REPLACEMENT)
-}
-
-//include!(concat!(env!("OUT_DIR"), "/sparql_grammar.rs"));
-
-pub fn read_sparql_query(
-    query: &str,
-    base_iri: Option<&str>,
-) -> super::super::Result<QueryVariants> {
-    let mut state = ParserState {
-        base_iri: if let Some(base_iri) = base_iri {
-            Some(Iri::parse(base_iri.to_owned())?)
-        } else {
-            None
-        },
-        namespaces: HashMap::default(),
-        bnodes_map: BTreeMap::default(),
-        used_bnodes: BTreeSet::default(),
-        aggregations: Vec::default(),
-    };
-
-    Ok(parser::QueryUnit(
-        &unescape_unicode_codepoints(query),
-        &mut state,
-    )?)
 }
 
 parser! {

@@ -1,7 +1,6 @@
+use crate::sparql::SparqlParseError;
 use oxilangtag::LanguageTagParseError;
 use oxiri::IriParseError;
-use peg::error::ParseError;
-use peg::str::LineCol;
 use rio_turtle::TurtleError;
 use rio_xml::RdfXmlError;
 use std::error;
@@ -120,8 +119,8 @@ impl From<quick_xml::Error> for Error {
     }
 }
 
-impl From<ParseError<LineCol>> for Error {
-    fn from(error: ParseError<LineCol>) -> Self {
+impl From<SparqlParseError> for Error {
+    fn from(error: SparqlParseError) -> Self {
         Self::wrap(error)
     }
 }
