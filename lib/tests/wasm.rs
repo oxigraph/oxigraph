@@ -1,7 +1,7 @@
 #[cfg(target_arch = "wasm32")]
 mod test {
     use oxigraph::model::*;
-    use oxigraph::sparql::{PreparedQuery, QueryOptions, QueryResult};
+    use oxigraph::sparql::{QueryOptions, QueryResult};
     use oxigraph::{MemoryStore, Result};
     use std::str::FromStr;
     use wasm_bindgen_test::*;

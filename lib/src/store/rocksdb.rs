@@ -1,5 +1,7 @@
+//! Store based on the [RocksDB](https://rocksdb.org/) key-value database.
+
 use crate::model::*;
-use crate::sparql::{GraphPattern, PreparedQuery, QueryOptions, SimplePreparedQuery};
+use crate::sparql::{GraphPattern, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::store::{load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore};
 use crate::{DatasetSyntax, GraphSyntax, Result};
@@ -19,7 +21,7 @@ use std::sync::Arc;
 /// ```
 /// use oxigraph::model::*;
 /// use oxigraph::{Result, RocksDbStore};
-/// use oxigraph::sparql::{PreparedQuery, QueryOptions, QueryResult};
+/// use oxigraph::sparql::{QueryOptions, QueryResult};
 /// # use std::fs::remove_dir_all;
 ///
 /// # {
@@ -104,8 +106,12 @@ impl RocksDbStore {
         &'a self,
         query: &str,
         options: QueryOptions<'_>,
-    ) -> Result<impl PreparedQuery + 'a> {
-        SimplePreparedQuery::new((*self).clone(), query, options)
+    ) -> Result<RocksDbPreparedQuery> {
+        Ok(RocksDbPreparedQuery(SimplePreparedQuery::new(
+            (*self).clone(),
+            query,
+            options,
+        )?))
     }
 
     /// This is similar to `prepare_query`, but useful if a SPARQL query has already been parsed, which is the case when building `ServiceHandler`s for federated queries with `SERVICE` clauses. For examples, look in the tests.
@@ -113,8 +119,12 @@ impl RocksDbStore {
         &'a self,
         graph_pattern: &GraphPattern,
         options: QueryOptions<'_>,
-    ) -> Result<impl PreparedQuery + 'a> {
-        SimplePreparedQuery::new_from_pattern((*self).clone(), graph_pattern, options)
+    ) -> Result<RocksDbPreparedQuery> {
+        Ok(RocksDbPreparedQuery(SimplePreparedQuery::new_from_pattern(
+            (*self).clone(),
+            graph_pattern,
+            options,
+        )?))
     }
 
     /// Retrieves quads with a filter on each quad component
@@ -485,6 +495,16 @@ impl<'a> RocksDbStoreHandle<'a> {
     }
 }
 
+/// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/) for the `RocksDbStore`.
+pub struct RocksDbPreparedQuery(SimplePreparedQuery<RocksDbStore>);
+
+impl RocksDbPreparedQuery {
+    /// Evaluates the query and returns its results
+    pub fn exec(&self) -> Result<QueryResult<'_>> {
+        self.0.exec()
+    }
+}
+
 /// Allows to insert and delete quads during a transaction with the `RocksDbStore`.
 pub struct RocksDbTransaction<'a> {
     inner: RocksDbInnerTransaction<'a>,
@@ -558,7 +578,7 @@ impl RocksDbTransaction<'_> {
     }
 }
 
-pub struct RocksDbAutoTransaction<'a> {
+struct RocksDbAutoTransaction<'a> {
     inner: RocksDbInnerTransaction<'a>,
 }
 

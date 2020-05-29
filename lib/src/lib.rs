@@ -17,7 +17,7 @@
 //! ```
 //! use oxigraph::model::*;
 //! use oxigraph::{MemoryStore, Result};
-//! use crate::oxigraph::sparql::{PreparedQuery, QueryOptions};
+//! use crate::oxigraph::sparql::QueryOptions;
 //! use oxigraph::sparql::QueryResult;
 //!
 //! let store = MemoryStore::default();
@@ -110,17 +110,14 @@
 mod error;
 pub mod model;
 pub mod sparql;
-pub(crate) mod store;
+pub mod store;
 mod syntax;
 
 pub use error::Error;
 pub type Result<T> = ::std::result::Result<T, Error>;
 pub use crate::store::MemoryStore;
-pub use crate::store::MemoryTransaction;
 #[cfg(feature = "rocksdb")]
 pub use crate::store::RocksDbStore;
-#[cfg(feature = "rocksdb")]
-pub use crate::store::RocksDbTransaction;
 #[cfg(feature = "sled")]
 pub use crate::store::SledStore;
 pub use crate::syntax::DatasetSyntax;

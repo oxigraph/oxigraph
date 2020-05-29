@@ -553,7 +553,7 @@ impl EncodedTuple {
     }
 }
 
-pub struct DatasetView<S: ReadableEncodedStore> {
+pub(crate) struct DatasetView<S: ReadableEncodedStore> {
     store: S,
     extra: RefCell<MemoryStrStore>,
     default_graph_as_union: bool,

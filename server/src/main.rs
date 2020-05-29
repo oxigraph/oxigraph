@@ -16,7 +16,7 @@ use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::task::{block_on, spawn, spawn_blocking};
 use http_types::{headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode};
-use oxigraph::sparql::{PreparedQuery, QueryOptions, QueryResult, QueryResultSyntax};
+use oxigraph::sparql::{QueryOptions, QueryResult, QueryResultSyntax};
 use oxigraph::{DatasetSyntax, FileSyntax, GraphSyntax, RocksDbStore};
 use std::str::FromStr;
 use url::form_urlencoded;

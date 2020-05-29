@@ -31,7 +31,7 @@ const REGEX_SIZE_LIMIT: usize = 1_000_000;
 
 type EncodedTuplesIterator<'a> = Box<dyn Iterator<Item = Result<EncodedTuple>> + 'a>;
 
-pub struct SimpleEvaluator<S: ReadableEncodedStore> {
+pub(crate) struct SimpleEvaluator<S: ReadableEncodedStore> {
     dataset: DatasetView<S>,
     base_iri: Option<Iri<String>>,
     bnodes_map: Mutex<BTreeMap<StrHash, u128>>,

@@ -124,7 +124,7 @@ impl FileSyntax for QueryResultSyntax {
 ///
 /// ```
 /// use oxigraph::{MemoryStore, Result};
-/// use oxigraph::sparql::{PreparedQuery, QueryResult, QueryOptions, Variable};
+/// use oxigraph::sparql::{QueryResult, QueryOptions};
 ///
 /// let store = MemoryStore::new();
 /// let prepared_query = store.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
@@ -155,7 +155,7 @@ impl<'a> QuerySolutionsIterator<'a> {
     ///
     /// ```
     /// use oxigraph::{MemoryStore, Result};
-    /// use oxigraph::sparql::{PreparedQuery, QueryResult, QueryOptions, Variable};
+    /// use oxigraph::sparql::{QueryResult, QueryOptions, Variable};
     ///
     /// let store = MemoryStore::new();
     /// let prepared_query = store.prepare_query("SELECT ?s ?o WHERE { ?s ?p ?o }", QueryOptions::default())?;

@@ -1,5 +1,7 @@
+//! Store based on the [Sled](https://sled.rs/) key-value database.
+
 use crate::model::*;
-use crate::sparql::{GraphPattern, PreparedQuery, QueryOptions, SimplePreparedQuery};
+use crate::sparql::{GraphPattern, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::store::{load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore};
 use crate::{DatasetSyntax, GraphSyntax, Result};
@@ -19,7 +21,7 @@ use std::str;
 /// ```
 /// use oxigraph::model::*;
 /// use oxigraph::{Result, SledStore};
-/// use oxigraph::sparql::{PreparedQuery, QueryOptions, QueryResult};
+/// use oxigraph::sparql::{QueryOptions, QueryResult};
 /// # use std::fs::remove_dir_all;
 ///
 /// # {
@@ -90,8 +92,12 @@ impl SledStore {
         &'a self,
         query: &str,
         options: QueryOptions<'_>,
-    ) -> Result<impl PreparedQuery + 'a> {
-        SimplePreparedQuery::new((*self).clone(), query, options)
+    ) -> Result<SledPreparedQuery> {
+        Ok(SledPreparedQuery(SimplePreparedQuery::new(
+            (*self).clone(),
+            query,
+            options,
+        )?))
     }
 
     /// This is similar to `prepare_query`, but useful if a SPARQL query has already been parsed, which is the case when building `ServiceHandler`s for federated queries with `SERVICE` clauses. For examples, look in the tests.
@@ -99,8 +105,12 @@ impl SledStore {
         &'a self,
         graph_pattern: &GraphPattern,
         options: QueryOptions<'_>,
-    ) -> Result<impl PreparedQuery + 'a> {
-        SimplePreparedQuery::new_from_pattern((*self).clone(), graph_pattern, options)
+    ) -> Result<SledPreparedQuery> {
+        Ok(SledPreparedQuery(SimplePreparedQuery::new_from_pattern(
+            (*self).clone(),
+            graph_pattern,
+            options,
+        )?))
     }
 
     /// Retrieves quads with a filter on each quad component
@@ -475,6 +485,16 @@ impl<'a> WritableEncodedStore for &'a SledStore {
         buffer.clear();
 
         Ok(())
+    }
+}
+
+/// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/) for the `SledStore`.
+pub struct SledPreparedQuery(SimplePreparedQuery<SledStore>);
+
+impl SledPreparedQuery {
+    /// Evaluates the query and returns its results
+    pub fn exec(&self) -> Result<QueryResult<'_>> {
+        self.0.exec()
     }
 }
 

@@ -32,12 +32,12 @@ pub use crate::sparql::parser::Query;
 pub use crate::sparql::parser::SparqlParseError;
 
 /// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/)
-pub trait PreparedQuery {
-    /// Evaluates the query and returns its results
-    fn exec(&self) -> Result<QueryResult<'_>>;
-}
+#[deprecated(
+    note = "Not useful anymore. The exec method is already implemented by the different PreparedQuery structures"
+)]
+pub trait PreparedQuery {}
 
-/// An implementation of `PreparedQuery` for internal use
+/// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/)
 pub(crate) struct SimplePreparedQuery<S: ReadableEncodedStore>(SimplePreparedQueryAction<S>);
 
 enum SimplePreparedQueryAction<S: ReadableEncodedStore> {
@@ -61,7 +61,7 @@ enum SimplePreparedQueryAction<S: ReadableEncodedStore> {
     },
 }
 
-impl<'a, S: ReadableEncodedStore + 'a> SimplePreparedQuery<S> {
+impl<S: ReadableEncodedStore> SimplePreparedQuery<S> {
     pub(crate) fn new(store: S, query: &str, options: QueryOptions<'_>) -> Result<Self> {
         let dataset = DatasetView::new(store, options.default_graph_as_union);
         Ok(Self(match Query::parse(query, options.base_iri)?.0 {
@@ -132,10 +132,9 @@ impl<'a, S: ReadableEncodedStore + 'a> SimplePreparedQuery<S> {
             evaluator: SimpleEvaluator::new(dataset, base_iri, options.service_handler),
         }))
     }
-}
 
-impl<S: ReadableEncodedStore> PreparedQuery for SimplePreparedQuery<S> {
-    fn exec(&self) -> Result<QueryResult<'_>> {
+    /// Evaluates the query and returns its results
+    pub fn exec(&self) -> Result<QueryResult<'_>> {
         match &self.0 {
             SimplePreparedQueryAction::Select {
                 plan,
@@ -209,7 +208,7 @@ impl<'a> Default for QueryOptions<'a> {
 }
 
 impl<'a> QueryOptions<'a> {
-    /// Allows to set the base IRI of the query
+    /// Allows setting the base IRI of the query
     pub fn with_base_iri(mut self, base_iri: &'a str) -> Self {
         self.base_iri = Some(base_iri);
         self

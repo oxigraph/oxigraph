@@ -3,7 +3,7 @@ use crate::model::*;
 use crate::utils::to_err;
 use js_sys::{Array, Map};
 use oxigraph::model::NamedOrBlankNode;
-use oxigraph::sparql::{PreparedQuery, QueryOptions, QueryResult};
+use oxigraph::sparql::{QueryOptions, QueryResult};
 use oxigraph::{DatasetSyntax, Error, FileSyntax, GraphSyntax, MemoryStore};
 use std::convert::TryInto;
 use std::io::Cursor;

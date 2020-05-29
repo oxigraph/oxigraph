@@ -1,5 +1,7 @@
+//! In-memory store.
+
 use crate::model::*;
-use crate::sparql::{PreparedQuery, QueryOptions, SimplePreparedQuery};
+use crate::sparql::{QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::store::*;
 use crate::{DatasetSyntax, GraphSyntax, Result};
@@ -8,7 +10,7 @@ use std::hash::Hash;
 use std::io::BufRead;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-/// Memory based store.
+/// In-memory store.
 /// It encodes a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) and allows to query and update it using SPARQL.
 /// It is cheap to build using the `MemoryStore::new()` method.
 ///
@@ -16,7 +18,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 /// ```
 /// use oxigraph::model::*;
 /// use oxigraph::{MemoryStore, Result};
-/// use oxigraph::sparql::{PreparedQuery, QueryResult, QueryOptions};
+/// use oxigraph::sparql::{QueryResult, QueryOptions};
 ///
 /// let store = MemoryStore::new();
 ///
@@ -77,7 +79,7 @@ impl MemoryStore {
     /// ```
     /// use oxigraph::model::*;
     /// use oxigraph::{MemoryStore, Result};
-    /// use oxigraph::sparql::{PreparedQuery, QueryOptions, QueryResult};
+    /// use oxigraph::sparql::{QueryOptions, QueryResult};
     ///
     /// let store = MemoryStore::default();
     ///
@@ -96,8 +98,12 @@ impl MemoryStore {
         &self,
         query: &str,
         options: QueryOptions<'_>,
-    ) -> Result<impl PreparedQuery> {
-        SimplePreparedQuery::new(self.clone(), query, options)
+    ) -> Result<MemoryPreparedQuery> {
+        Ok(MemoryPreparedQuery(SimplePreparedQuery::new(
+            self.clone(),
+            query,
+            options,
+        )?))
     }
 
     /// This is similar to `prepare_query`, but useful if a SPARQL query has already been parsed, which is the case when building `ServiceHandler`s for federated queries with `SERVICE` clauses. For examples, look in the tests.
@@ -105,8 +111,12 @@ impl MemoryStore {
         &self,
         graph_pattern: &GraphPattern,
         options: QueryOptions<'_>,
-    ) -> Result<impl PreparedQuery> {
-        SimplePreparedQuery::new_from_pattern(self.clone(), graph_pattern, options)
+    ) -> Result<MemoryPreparedQuery> {
+        Ok(MemoryPreparedQuery(SimplePreparedQuery::new_from_pattern(
+            self.clone(),
+            graph_pattern,
+            options,
+        )?))
     }
 
     /// Retrieves quads with a filter on each quad component
@@ -783,6 +793,16 @@ fn quad_map_flatten<'a, T: Copy>(gspo: &'a QuadMap<T>) -> impl Iterator<Item = (
             })
         })
     })
+}
+
+/// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/) for the `MemoryStore`.
+pub struct MemoryPreparedQuery(SimplePreparedQuery<MemoryStore>);
+
+impl MemoryPreparedQuery {
+    /// Evaluates the query and returns its results
+    pub fn exec(&self) -> Result<QueryResult<'_>> {
+        self.0.exec()
+    }
 }
 
 /// Allows to insert and delete quads during a transaction with the `MemoryStore`.

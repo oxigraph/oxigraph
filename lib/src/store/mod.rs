@@ -1,19 +1,19 @@
-//! Store implementations
+//! RDF quads storage implementations.
+//!
+//! They encode a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
+//! and allow to query and update it using SPARQL.
 
-mod memory;
+pub mod memory;
 pub(crate) mod numeric_encoder;
 #[cfg(feature = "rocksdb")]
-mod rocksdb;
+pub mod rocksdb;
 #[cfg(feature = "sled")]
-mod sled;
+pub mod sled;
 
 use crate::sparql::GraphPattern;
 pub use crate::store::memory::MemoryStore;
-pub use crate::store::memory::MemoryTransaction;
 #[cfg(feature = "rocksdb")]
 pub use crate::store::rocksdb::RocksDbStore;
-#[cfg(feature = "rocksdb")]
-pub use crate::store::rocksdb::RocksDbTransaction;
 #[cfg(feature = "sled")]
 pub use crate::store::sled::SledStore;
 
@@ -27,7 +27,7 @@ use std::collections::HashMap;
 use std::io::BufRead;
 use std::iter::Iterator;
 
-pub trait ReadableEncodedStore: StrLookup + Sized {
+pub(crate) trait ReadableEncodedStore: StrLookup {
     fn encoded_quads_for_pattern<'a>(
         &'a self,
         subject: Option<EncodedTerm>,
@@ -37,7 +37,7 @@ pub trait ReadableEncodedStore: StrLookup + Sized {
     ) -> Box<dyn Iterator<Item = Result<EncodedQuad>> + 'a>;
 }
 
-pub trait WritableEncodedStore: StrContainer + Sized {
+pub(crate) trait WritableEncodedStore: StrContainer {
     fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<()>;
 
     fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<()>;
