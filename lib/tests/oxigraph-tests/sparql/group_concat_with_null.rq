@@ -1,0 +1,3 @@
+PREFIX : <http://www.example.org>
+
+SELECT (GROUP_CONCAT(?opt) AS ?g) WHERE { ?baseS a :ex OPTIONAL { ?baseS :opt ?opt } }

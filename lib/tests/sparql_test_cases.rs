@@ -10,6 +10,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::Read;
 use std::io::{BufRead, BufReader};
+use std::iter::once;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -27,6 +28,9 @@ fn sparql_w3c_syntax_testsuite() -> Result<()> {
     for test_result in manifest_10_urls
         .into_iter()
         .chain(manifest_11_urls.into_iter())
+        .chain(once(
+            "https://github.com/oxigraph/oxigraph/tests/sparql/manifest.ttl",
+        ))
         .flat_map(TestManifest::new)
     {
         let test = test_result.unwrap();
@@ -271,6 +275,11 @@ fn to_relative_path(url: &str) -> Result<String> {
         Ok(url.replace(
             "http://www.w3.org/2009/sparql/docs/tests/",
             "rdf-tests/sparql11/",
+        ))
+    } else if url.starts_with("https://github.com/oxigraph/oxigraph/tests/") {
+        Ok(url.replace(
+            "https://github.com/oxigraph/oxigraph/tests/",
+            "oxigraph-tests/",
         ))
     } else {
         Err(Error::msg(format!("Not supported url for file: {}", url)))

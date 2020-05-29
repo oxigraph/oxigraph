@@ -2596,23 +2596,18 @@ impl<'a, S: ReadableEncodedStore + 'a> GroupConcatAccumulator<'a, S> {
 impl<'a, S: ReadableEncodedStore + 'a> Accumulator for GroupConcatAccumulator<'a, S> {
     fn add(&mut self, element: Option<EncodedTerm>) {
         if let Some(concat) = self.concat.as_mut() {
-            let element = if let Some(element) = element {
-                self.eval.to_string_and_language(element)
-            } else {
-                None
-            };
-            if let Some((value, e_language)) = element {
-                if let Some(lang) = self.language {
-                    if lang != e_language {
-                        self.language = Some(None)
+            if let Some(element) = element {
+                if let Some((value, e_language)) = self.eval.to_string_and_language(element) {
+                    if let Some(lang) = self.language {
+                        if lang != e_language {
+                            self.language = Some(None)
+                        }
+                        concat.push_str(self.separator);
+                    } else {
+                        self.language = Some(e_language)
                     }
-                    concat.push_str(self.separator);
-                } else {
-                    self.language = Some(e_language)
+                    concat.push_str(&value);
                 }
-                concat.push_str(&value);
-            } else {
-                self.concat = None;
             }
         }
     }
