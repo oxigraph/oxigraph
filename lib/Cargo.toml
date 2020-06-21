@@ -5,6 +5,7 @@ authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT/Apache-2.0"
 readme = "../README.md"
 keywords = ["RDF", "N-Triples", "Turtle", "RDF/XML", "SPARQL"]
+categories = ["database-implementations"]
 repository = "https://github.com/oxigraph/oxigraph"
 description = """
 An RDF and SPARQL library in Rust
@@ -20,10 +21,10 @@ rocksdb = { version = "0.14", optional = true }
 sled = { version = "0.32", optional = true }
 quick-xml = "0.18"
 rand = "0.7"
-md-5 = "0.8"
-sha-1 = "0.8"
-sha2 = "0.8"
-digest = "0.8"
+md-5 = "0.9"
+sha-1 = "0.9"
+sha2 = "0.9"
+digest = "0.9"
 regex = "1"
 oxilangtag = "0.1"
 oxiri = "0.1"

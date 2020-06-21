@@ -1818,7 +1818,7 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
         tuple: &EncodedTuple,
     ) -> Option<EncodedTerm> {
         let input = self.to_simple_string(self.eval_expression(arg, tuple)?)?;
-        let hash = hex::encode(H::new().chain(input.as_str()).result());
+        let hash = hex::encode(H::new().chain(input.as_str()).finalize());
         self.build_string_literal(&hash)
     }
 }
