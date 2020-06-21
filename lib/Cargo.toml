@@ -18,7 +18,7 @@ sled = { version = "0.31", optional = true }
 quick-xml = "0.18"
 rand = "0.7"
 md-5 = "0.8"
-sha-1 = "0.8"
+sha-1 = "0.9"
 sha2 = "0.8"
 digest = "0.8"
 regex = "1"
