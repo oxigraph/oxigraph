@@ -159,7 +159,7 @@ impl RocksDbStore {
     /// Executes a transaction.
     ///
     /// The transaction is executed if the given closure returns `Ok`.
-    /// Nothing is done if the clusre returns `Err`.
+    /// Nothing is done if the closure returns `Err`.
     ///
     /// See `MemoryStore` for a usage example.
     pub fn transaction<'a>(
@@ -691,7 +691,7 @@ impl RocksDbInnerTransaction<'_> {
 #[allow(clippy::option_expect_used)]
 fn get_cf<'a>(db: &'a DB, name: &str) -> &'a ColumnFamily {
     db.cf_handle(name)
-        .expect("A column family that should exists in RocksDB does not exists")
+        .expect("A column family that should exist in RocksDB does not exist")
 }
 
 fn encode_term(t: EncodedTerm) -> Vec<u8> {

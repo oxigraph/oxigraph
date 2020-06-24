@@ -8,7 +8,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::option::Option;
 
-/// A RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal)
+/// An RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal)
 ///
 /// The default string formatter is returning a N-Triples, Turtle and SPARQL compatible representation:
 /// ```
@@ -43,12 +43,12 @@ enum LiteralContent {
 }
 
 impl Literal {
-    /// Builds a RDF [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal)
+    /// Builds an RDF [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal)
     pub fn new_simple_literal(value: impl Into<String>) -> Self {
         Literal(LiteralContent::String(value.into()))
     }
 
-    /// Builds a RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) with a [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri)
+    /// Builds an RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) with a [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri)
     pub fn new_typed_literal(value: impl Into<String>, datatype: impl Into<NamedNode>) -> Self {
         let value = value.into();
         let datatype = datatype.into();
@@ -59,7 +59,7 @@ impl Literal {
         })
     }
 
-    /// Builds a RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
+    /// Builds an RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
     pub fn new_language_tagged_literal(
         value: impl Into<String>,
         language: impl Into<String>,
@@ -72,7 +72,7 @@ impl Literal {
         }))
     }
 
-    /// Builds a RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
+    /// Builds an RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
     ///
     /// It is the responsibility of the caller to check that `language`
     /// is valid [BCP47](https://tools.ietf.org/html/bcp47) language tag,
@@ -122,7 +122,7 @@ impl Literal {
         }
     }
 
-    /// Checks if it could be considered as an RDF 1.0 [plain literal](https://www.w3.org/TR/rdf-concepts/#dfn-plain-literal).
+    /// Checks if this lieteral could be seen as an RDF 1.0 [plain literal](https://www.w3.org/TR/rdf-concepts/#dfn-plain-literal).
     ///
     /// It returns true if the literal is a [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
     /// or has the datatype [xsd:string](http://www.w3.org/2001/XMLSchema#string).

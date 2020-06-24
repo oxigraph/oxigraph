@@ -10,7 +10,7 @@ use std::string::FromUtf8Error;
 
 /// The Oxigraph error type.
 ///
-/// The `wrap` method allows to make this type wrap any implementation of `std::error::Error`.
+/// The `wrap` method allows us to make this type wrap any implementation of `std::error::Error`.
 /// This type also avoids heap allocations for the most common cases of Oxigraph errors.
 #[derive(Debug)]
 pub struct Error {
@@ -44,7 +44,7 @@ impl error::Error for Error {
 }
 
 impl Error {
-    /// Wraps an other error.
+    /// Wraps another error.
     pub fn wrap(error: impl error::Error + Send + Sync + 'static) -> Self {
         Self {
             inner: ErrorKind::Other(Box::new(error)),

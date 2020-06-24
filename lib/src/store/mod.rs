@@ -1,7 +1,7 @@
 //! RDF quads storage implementations.
 //!
 //! They encode a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
-//! and allow to query and update it using SPARQL.
+//! and allow querying and updating them using SPARQL.
 
 pub mod memory;
 pub(crate) mod numeric_encoder;

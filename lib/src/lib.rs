@@ -6,11 +6,11 @@
 //! * `MemoryStore`: a simple in memory implementation.
 //! * `RocksDbStore`: a file system implementation based on the [RocksDB](https://rocksdb.org/) key-value store.
 //!   It requires the `"rocksdb"` feature to be activated.
-//!   It also requires the clang](https://clang.llvm.org/) compiler to be installed.
-//! * `SledStore`: an other file system implementation based on the [Sled](https://sled.rs/) key-value store.
+//!   It also requires the [clang](https://clang.llvm.org/) compiler to be installed.
+//! * `SledStore`: another file system implementation based on the [Sled](https://sled.rs/) key-value store.
 //!   It requires the `"sled"` feature to be activated.
 //!   Sled is much faster to build than RockDB and does not require a C++ compiler.
-//!   However Sled is still in heavy developpment, less tested and data load seems much slower than RocksDB.
+//!   However, Sled is still in developpment, less tested and data load seems much slower than RocksDB.
 //!
 //! Usage example with the `MemoryStore`:
 //!
@@ -90,7 +90,6 @@
     clippy::print_stdout,
     clippy::pub_enum_variant_names,
     //TODO clippy::redundant_closure_for_method_calls,
-    clippy::replace_consts,
     clippy::result_map_unwrap_or_else,
     // clippy::shadow_reuse,
     // clippy::shadow_same,
@@ -115,11 +114,11 @@ mod syntax;
 
 pub use error::Error;
 pub type Result<T> = ::std::result::Result<T, Error>;
-pub use crate::store::MemoryStore;
+pub use crate::store::memory::MemoryStore;
 #[cfg(feature = "rocksdb")]
-pub use crate::store::RocksDbStore;
+pub use crate::store::rocksdb::RocksDbStore;
 #[cfg(feature = "sled")]
-pub use crate::store::SledStore;
+pub use crate::store::sled::SledStore;
 pub use crate::syntax::DatasetSyntax;
 pub use crate::syntax::FileSyntax;
 pub use crate::syntax::GraphSyntax;

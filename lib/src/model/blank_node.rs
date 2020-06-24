@@ -4,7 +4,7 @@ use std::fmt;
 use std::io::Write;
 use std::str;
 
-/// A RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
+/// An RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 ///
 /// This implementation enforces that the blank node id is a uniquely generated ID to easily ensure
 /// that it is not possible for two blank nodes to share an id.

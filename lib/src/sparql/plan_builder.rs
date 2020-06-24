@@ -981,7 +981,7 @@ fn bnode_key(blank_nodes: &mut Vec<BlankNode>, blank_node: &BlankNode) -> usize 
     match slice_key(blank_nodes, blank_node) {
         Some(key) => key,
         None => {
-            blank_nodes.push(blank_node.clone());
+            blank_nodes.push(*blank_node);
             blank_nodes.len() - 1
         }
     }

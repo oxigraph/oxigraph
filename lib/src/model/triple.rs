@@ -57,7 +57,7 @@ impl<'a> From<&'a NamedOrBlankNode> for rio::NamedOrBlankNode<'a> {
     }
 }
 
-/// A RDF [term](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term)
+/// An RDF [term](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term)
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) and [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum Term {
@@ -148,7 +148,7 @@ pub struct Triple {
 }
 
 impl Triple {
-    /// Builds a RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple)
+    /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple)
     pub fn new(
         subject: impl Into<NamedOrBlankNode>,
         predicate: impl Into<NamedNode>,
@@ -228,7 +228,7 @@ pub struct Quad {
 }
 
 impl Quad {
-    /// Builds a RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
+    /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
     pub fn new(
         subject: impl Into<NamedOrBlankNode>,
         predicate: impl Into<NamedNode>,

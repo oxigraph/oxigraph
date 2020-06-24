@@ -128,9 +128,9 @@ impl SimpleGraph {
         self.triples.is_empty()
     }
 
-    /// Checks if the current graph is [isomorphic](https://www.w3.org/TR/rdf11-concepts/#dfn-graph-isomorphism) with an other one
+    /// Checks if the current graph is [isomorphic](https://www.w3.org/TR/rdf11-concepts/#dfn-graph-isomorphism) with another one
     ///
-    /// Warning: This algorithm as a worst case complexity in n!
+    /// Warning: This algorithm worst case complexity is in O(n!)
     pub fn is_isomorphic(&self, other: &SimpleGraph) -> bool {
         are_graphs_isomorphic(self, other)
     }

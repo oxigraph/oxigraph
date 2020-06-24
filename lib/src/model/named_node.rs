@@ -2,7 +2,7 @@ use oxiri::{Iri, IriParseError};
 use rio_api::model as rio;
 use std::fmt;
 
-/// A RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
+/// An RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
 ///
 /// The default string formatter is returning a N-Triples, Turtle and SPARQL compatible representation:
 /// ```
@@ -19,7 +19,7 @@ pub struct NamedNode {
 }
 
 impl NamedNode {
-    /// Builds and validate a RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
+    /// Builds and validate an RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
     pub fn parse(iri: impl Into<String>) -> Result<Self, IriParseError> {
         Ok(Self::new_from_iri(Iri::parse(iri.into())?))
     }
@@ -28,7 +28,7 @@ impl NamedNode {
         Self::new_unchecked(iri.into_inner())
     }
 
-    /// Builds a RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) from a string.
+    /// Builds an RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) from a string.
     ///
     /// It is the caller's responsibility to ensure that `iri` is a valid IRI.
     ///
