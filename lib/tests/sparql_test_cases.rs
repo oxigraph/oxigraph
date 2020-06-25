@@ -152,7 +152,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
         if test_blacklist.contains(&test.id) {
             Ok(())
         } else if test.kind == "QueryEvaluationTest" {
-            let store = MemoryStore::default();
+            let store = MemoryStore::new();
             if let Some(data) = &test.data {
                 load_graph_to_store(&data, &store, None)?;
             }
@@ -176,12 +176,12 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
                     ))),
                         Ok(result) => {
                             let expected_graph =
-                                load_sparql_query_result_graph(test.result.as_ref().unwrap()).map_err(|e| Error::msg(format!("Error constructing expected graph for {}: {}", test, e)))?;
+                                load_sparql_query_result(test.result.as_ref().unwrap()).map_err(|e| Error::msg(format!("Error constructing expected graph for {}: {}", test, e)))?;
                             let with_order = expected_graph
-                                .triples_for_predicate(&rs::INDEX)
+                                .quads_for_pattern(None, Some(&rs::INDEX), None, None)
                                 .next()
                                 .is_some();
-                            let actual_graph = to_graph(result, with_order).map_err(|e| Error::msg(format!("Error constructing result graph for {}: {}", test, e)))?;
+                            let actual_graph = to_dataset(result, with_order).map_err(|e| Error::msg(format!("Error constructing result graph for {}: {}", test, e)))?;
                             if actual_graph.is_isomorphic(&expected_graph) {
                                 Ok(())
                             } else {
@@ -190,7 +190,7 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
                                 expected_graph,
                                 actual_graph,
                                 Query::parse(&read_file_to_string(&test.query)?, Some(&test.query)).unwrap(),
-                                store_to_string(&store)
+                                store
                             )))
                             }
                         }
@@ -211,20 +211,10 @@ fn sparql_w3c_query_evaluation_testsuite() -> Result<()> {
     Ok(())
 }
 
-fn store_to_string(store: &MemoryStore) -> String {
-    store
-        .quads_for_pattern(None, None, None, None)
-        .map(|q| q.unwrap().to_string() + "\n")
-        .collect()
-}
-
-fn load_graph(url: &str) -> Result<SimpleGraph> {
-    let store = MemoryStore::default();
+fn load_graph(url: &str) -> Result<MemoryStore> {
+    let store = MemoryStore::new();
     load_graph_to_store(url, &store, None)?;
-    Ok(store
-        .quads_for_pattern(None, None, None, Some(None))
-        .map(|q| q.unwrap().into_triple())
-        .collect())
+    Ok(store)
 }
 
 fn load_graph_to_store(
@@ -247,22 +237,15 @@ fn load_graph_to_store(
     store.load_graph(read_file(url)?, syntax, to_graph_name, Some(url))
 }
 
-fn load_sparql_query_result_graph(url: &str) -> Result<SimpleGraph> {
-    let store = MemoryStore::default();
+fn load_sparql_query_result(url: &str) -> Result<MemoryStore> {
     if url.ends_with(".srx") {
-        for t in to_graph(
+        to_dataset(
             QueryResult::read(read_file(url)?, QueryResultSyntax::Xml)?,
             false,
-        )? {
-            store.insert(&t.in_graph(None))?;
-        }
+        )
     } else {
-        load_graph_to_store(url, &store, None)?;
+        load_graph(url)
     }
-    Ok(store
-        .quads_for_pattern(None, None, None, Some(None))
-        .map(|q| q.unwrap().into_triple())
-        .collect())
 }
 
 fn to_relative_path(url: &str) -> Result<String> {
@@ -306,6 +289,77 @@ fn read_file_to_string(url: &str) -> Result<String> {
     Ok(string)
 }
 
+fn to_dataset(result: QueryResult<'_>, with_order: bool) -> Result<MemoryStore> {
+    match result {
+        QueryResult::Graph(graph) => graph.map(|t| t.map(|t| t.in_graph(None))).collect(),
+        QueryResult::Boolean(value) => {
+            let store = MemoryStore::new();
+            let result_set = BlankNode::default();
+            store.insert(Quad::new(
+                result_set,
+                rdf::TYPE.clone(),
+                rs::RESULT_SET.clone(),
+                None,
+            ));
+            store.insert(Quad::new(
+                result_set,
+                rs::BOOLEAN.clone(),
+                Literal::from(value),
+                None,
+            ));
+            Ok(store)
+        }
+        QueryResult::Bindings(solutions) => {
+            let store = MemoryStore::new();
+            let result_set = BlankNode::default();
+            store.insert(Quad::new(
+                result_set,
+                rdf::TYPE.clone(),
+                rs::RESULT_SET.clone(),
+                None,
+            ));
+            for variable in solutions.variables() {
+                store.insert(Quad::new(
+                    result_set,
+                    rs::RESULT_VARIABLE.clone(),
+                    Literal::new_simple_literal(variable.as_str()),
+                    None,
+                ));
+            }
+            for (i, solution) in solutions.enumerate() {
+                let solution = solution?;
+                let solution_id = BlankNode::default();
+                store.insert(Quad::new(
+                    result_set,
+                    rs::SOLUTION.clone(),
+                    solution_id,
+                    None,
+                ));
+                for (variable, value) in solution.iter() {
+                    let binding = BlankNode::default();
+                    store.insert(Quad::new(solution_id, rs::BINDING.clone(), binding, None));
+                    store.insert(Quad::new(binding, rs::VALUE.clone(), value.clone(), None));
+                    store.insert(Quad::new(
+                        binding,
+                        rs::VARIABLE.clone(),
+                        Literal::new_simple_literal(variable.as_str()),
+                        None,
+                    ));
+                }
+                if with_order {
+                    store.insert(Quad::new(
+                        solution_id,
+                        rs::INDEX.clone(),
+                        Literal::from((i + 1) as i128),
+                        None,
+                    ));
+                }
+            }
+            Ok(store)
+        }
+    }
+}
+
 mod rs {
     use lazy_static::lazy_static;
     use oxigraph::model::NamedNode;
@@ -339,76 +393,61 @@ mod rs {
     }
 }
 
-fn to_graph(result: QueryResult<'_>, with_order: bool) -> Result<SimpleGraph> {
-    match result {
-        QueryResult::Graph(graph) => graph.collect(),
-        QueryResult::Boolean(value) => {
-            let mut graph = SimpleGraph::default();
-            let result_set = BlankNode::default();
-            graph.insert(Triple::new(
-                result_set,
-                rdf::TYPE.clone(),
-                rs::RESULT_SET.clone(),
-            ));
-            graph.insert(Triple::new(
-                result_set,
-                rs::BOOLEAN.clone(),
-                Literal::from(value),
-            ));
-            Ok(graph)
-        }
-        QueryResult::Bindings(solutions) => {
-            let mut graph = SimpleGraph::default();
-            let result_set = BlankNode::default();
-            graph.insert(Triple::new(
-                result_set,
-                rdf::TYPE.clone(),
-                rs::RESULT_SET.clone(),
-            ));
-            for variable in solutions.variables() {
-                graph.insert(Triple::new(
-                    result_set,
-                    rs::RESULT_VARIABLE.clone(),
-                    Literal::new_simple_literal(variable.as_str()),
-                ));
-            }
-            for (i, solution) in solutions.enumerate() {
-                let solution = solution?;
-                let solution_id = BlankNode::default();
-                graph.insert(Triple::new(result_set, rs::SOLUTION.clone(), solution_id));
-                for (variable, value) in solution.iter() {
-                    let binding = BlankNode::default();
-                    graph.insert(Triple::new(solution_id, rs::BINDING.clone(), binding));
-                    graph.insert(Triple::new(binding, rs::VALUE.clone(), value.clone()));
-                    graph.insert(Triple::new(
-                        binding,
-                        rs::VARIABLE.clone(),
-                        Literal::new_simple_literal(variable.as_str()),
-                    ));
-                }
-                if with_order {
-                    graph.insert(Triple::new(
-                        solution_id,
-                        rs::INDEX.clone(),
-                        Literal::from((i + 1) as i128),
-                    ));
-                }
-            }
-            Ok(graph)
-        }
+mod mf {
+    use lazy_static::lazy_static;
+    use oxigraph::model::NamedNode;
+
+    lazy_static! {
+        pub static ref INCLUDE: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#include")
+                .unwrap();
+        pub static ref ENTRIES: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#entries")
+                .unwrap();
+        pub static ref NAME: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#name")
+                .unwrap();
+        pub static ref ACTION: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action")
+                .unwrap();
+        pub static ref RESULT: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#result")
+                .unwrap();
     }
 }
 
-pub struct Test {
-    pub id: NamedNode,
-    pub kind: String,
-    pub name: Option<String>,
-    pub comment: Option<String>,
-    pub query: String,
-    pub data: Option<String>,
-    pub graph_data: Vec<String>,
-    pub service_data: Vec<(String, String)>,
-    pub result: Option<String>,
+mod qt {
+    use lazy_static::lazy_static;
+    use oxigraph::model::NamedNode;
+
+    lazy_static! {
+        pub static ref QUERY: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-query#query")
+                .unwrap();
+        pub static ref DATA: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-query#data").unwrap();
+        pub static ref GRAPH_DATA: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-query#graphData")
+                .unwrap();
+        pub static ref SERVICE_DATA: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-query#serviceData")
+                .unwrap();
+        pub static ref ENDPOINT: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-query#endpoint")
+                .unwrap();
+    }
+}
+
+struct Test {
+    id: NamedNode,
+    kind: String,
+    name: Option<String>,
+    comment: Option<String>,
+    query: String,
+    data: Option<String>,
+    graph_data: Vec<String>,
+    service_data: Vec<(String, String)>,
+    result: Option<String>,
 }
 
 impl fmt::Display for Test {
@@ -434,64 +473,19 @@ impl fmt::Display for Test {
     }
 }
 
-pub struct TestManifest {
-    graph: SimpleGraph,
+struct TestManifest {
+    graph: MemoryStore,
     tests_to_do: Vec<Term>,
     manifests_to_do: Vec<String>,
 }
 
 impl TestManifest {
-    pub fn new(url: impl Into<String>) -> TestManifest {
+    fn new(url: impl Into<String>) -> TestManifest {
         Self {
-            graph: SimpleGraph::default(),
+            graph: MemoryStore::new(),
             tests_to_do: Vec::default(),
             manifests_to_do: vec![url.into()],
         }
-    }
-}
-
-pub mod mf {
-    use lazy_static::lazy_static;
-    use oxigraph::model::NamedNode;
-
-    lazy_static! {
-        pub static ref INCLUDE: NamedNode =
-            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#include")
-                .unwrap();
-        pub static ref ENTRIES: NamedNode =
-            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#entries")
-                .unwrap();
-        pub static ref NAME: NamedNode =
-            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#name")
-                .unwrap();
-        pub static ref ACTION: NamedNode =
-            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action")
-                .unwrap();
-        pub static ref RESULT: NamedNode =
-            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#result")
-                .unwrap();
-    }
-}
-
-pub mod qt {
-    use lazy_static::lazy_static;
-    use oxigraph::model::NamedNode;
-
-    lazy_static! {
-        pub static ref QUERY: NamedNode =
-            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-query#query")
-                .unwrap();
-        pub static ref DATA: NamedNode =
-            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-query#data").unwrap();
-        pub static ref GRAPH_DATA: NamedNode =
-            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-query#graphData")
-                .unwrap();
-        pub static ref SERVICE_DATA: NamedNode =
-            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-query#serviceData")
-                .unwrap();
-        pub static ref ENDPOINT: NamedNode =
-            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-query#endpoint")
-                .unwrap();
     }
 }
 
@@ -502,94 +496,98 @@ impl Iterator for TestManifest {
         match self.tests_to_do.pop() {
             Some(Term::NamedNode(test_node)) => {
                 let test_subject = NamedOrBlankNode::from(test_node.clone());
-                let kind = match self
-                    .graph
-                    .object_for_subject_predicate(&test_subject, &rdf::TYPE)
-                {
-                    Some(Term::NamedNode(c)) => match c.as_str().split('#').last() {
-                        Some(k) => k.to_string(),
-                        None => return self.next(), //We ignore the test
-                    },
-                    _ => return self.next(), //We ignore the test
-                };
-                let name = match self
-                    .graph
-                    .object_for_subject_predicate(&test_subject, &mf::NAME)
+                let kind =
+                    match object_for_subject_predicate(&self.graph, &test_subject, &rdf::TYPE) {
+                        Some(Term::NamedNode(c)) => match c.as_str().split('#').last() {
+                            Some(k) => k.to_string(),
+                            None => return self.next(), //We ignore the test
+                        },
+                        _ => return self.next(), //We ignore the test
+                    };
+                let name = match object_for_subject_predicate(&self.graph, &test_subject, &mf::NAME)
                 {
                     Some(Term::Literal(c)) => Some(c.value().to_string()),
                     _ => None,
                 };
-                let comment = match self
-                    .graph
-                    .object_for_subject_predicate(&test_subject, &rdfs::COMMENT)
-                {
+                let comment = match object_for_subject_predicate(
+                    &self.graph,
+                    &test_subject,
+                    &rdfs::COMMENT,
+                ) {
                     Some(Term::Literal(c)) => Some(c.value().to_string()),
                     _ => None,
                 };
-                let (query, data, graph_data, service_data) = match self
-                    .graph
-                    .object_for_subject_predicate(&test_subject, &*mf::ACTION)
-                {
-                    Some(Term::NamedNode(n)) => (n.as_str().to_owned(), None, vec![], vec![]),
-                    Some(Term::BlankNode(n)) => {
-                        let n = n.clone().into();
-                        let query = match self.graph.object_for_subject_predicate(&n, &qt::QUERY) {
-                            Some(Term::NamedNode(q)) => q.as_str().to_owned(),
-                            Some(_) => return Some(Err(Error::msg("invalid query"))),
-                            None => return Some(Err(Error::msg("query not found"))),
-                        };
-                        let data = match self.graph.object_for_subject_predicate(&n, &qt::DATA) {
-                            Some(Term::NamedNode(q)) => Some(q.as_str().to_owned()),
-                            _ => None,
-                        };
-                        let graph_data = self
-                            .graph
-                            .objects_for_subject_predicate(&n, &qt::GRAPH_DATA)
-                            .filter_map(|g| match g {
-                                Term::NamedNode(q) => Some(q.as_str().to_owned()),
-                                _ => None,
-                            })
-                            .collect();
-                        let service_data = self
-                            .graph
-                            .objects_for_subject_predicate(&n, &qt::SERVICE_DATA)
-                            .filter_map(|g| match g {
-                                Term::NamedNode(g) => Some(g.clone().into()),
-                                Term::BlankNode(g) => Some(g.clone().into()),
-                                _ => None,
-                            })
-                            .filter_map(|g| {
-                                if let (
-                                    Some(Term::NamedNode(endpoint)),
-                                    Some(Term::NamedNode(data)),
-                                ) = (
-                                    self.graph.object_for_subject_predicate(&g, &qt::ENDPOINT),
-                                    self.graph.object_for_subject_predicate(&g, &qt::DATA),
-                                ) {
-                                    Some((endpoint.as_str().to_owned(), data.as_str().to_owned()))
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect();
-                        (query, data, graph_data, service_data)
-                    }
-                    Some(_) => return Some(Err(Error::msg("invalid action"))),
-                    None => {
-                        return Some(Err(Error::msg(format!(
-                            "action not found for test {}",
-                            test_subject
-                        ))));
-                    }
-                };
-                let result = match self
-                    .graph
-                    .object_for_subject_predicate(&test_subject, &*mf::RESULT)
-                {
-                    Some(Term::NamedNode(n)) => Some(n.as_str().to_owned()),
-                    Some(_) => return Some(Err(Error::msg("invalid result"))),
-                    None => None,
-                };
+                let (query, data, graph_data, service_data) =
+                    match object_for_subject_predicate(&self.graph, &test_subject, &*mf::ACTION) {
+                        Some(Term::NamedNode(n)) => (n.as_str().to_owned(), None, vec![], vec![]),
+                        Some(Term::BlankNode(n)) => {
+                            let n = n.clone().into();
+                            let query =
+                                match object_for_subject_predicate(&self.graph, &n, &qt::QUERY) {
+                                    Some(Term::NamedNode(q)) => q.as_str().to_owned(),
+                                    Some(_) => return Some(Err(Error::msg("invalid query"))),
+                                    None => return Some(Err(Error::msg("query not found"))),
+                                };
+                            let data =
+                                match object_for_subject_predicate(&self.graph, &n, &qt::DATA) {
+                                    Some(Term::NamedNode(q)) => Some(q.as_str().to_owned()),
+                                    _ => None,
+                                };
+                            let graph_data =
+                                objects_for_subject_predicate(&self.graph, &n, &qt::GRAPH_DATA)
+                                    .filter_map(|g| match g {
+                                        Term::NamedNode(q) => Some(q.as_str().to_owned()),
+                                        _ => None,
+                                    })
+                                    .collect();
+                            let service_data =
+                                objects_for_subject_predicate(&self.graph, &n, &qt::SERVICE_DATA)
+                                    .filter_map(|g| match g {
+                                        Term::NamedNode(g) => Some(g.into()),
+                                        Term::BlankNode(g) => Some(g.into()),
+                                        _ => None,
+                                    })
+                                    .filter_map(|g| {
+                                        if let (
+                                            Some(Term::NamedNode(endpoint)),
+                                            Some(Term::NamedNode(data)),
+                                        ) = (
+                                            object_for_subject_predicate(
+                                                &self.graph,
+                                                &g,
+                                                &qt::ENDPOINT,
+                                            ),
+                                            object_for_subject_predicate(
+                                                &self.graph,
+                                                &g,
+                                                &qt::DATA,
+                                            ),
+                                        ) {
+                                            Some((
+                                                endpoint.as_str().to_owned(),
+                                                data.as_str().to_owned(),
+                                            ))
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .collect();
+                            (query, data, graph_data, service_data)
+                        }
+                        Some(_) => return Some(Err(Error::msg("invalid action"))),
+                        None => {
+                            return Some(Err(Error::msg(format!(
+                                "action not found for test {}",
+                                test_subject
+                            ))));
+                        }
+                    };
+                let result =
+                    match object_for_subject_predicate(&self.graph, &test_subject, &*mf::RESULT) {
+                        Some(Term::NamedNode(n)) => Some(n.as_str().to_owned()),
+                        Some(_) => return Some(Err(Error::msg("invalid result"))),
+                        None => None,
+                    };
                 Some(Ok(Test {
                     id: test_node,
                     kind,
@@ -608,16 +606,11 @@ impl Iterator for TestManifest {
                     Some(url) => {
                         let manifest =
                             NamedOrBlankNode::from(NamedNode::parse(url.clone()).unwrap());
-                        match load_graph(&url) {
-                            Ok(g) => self.graph.extend(g.into_iter()),
-                            Err(e) => return Some(Err(e)),
+                        if let Err(e) = load_graph_to_store(&url, &self.graph, None) {
+                            return Some(Err(e));
                         }
-
                         // New manifests
-                        match self
-                            .graph
-                            .object_for_subject_predicate(&manifest, &*mf::INCLUDE)
-                        {
+                        match object_for_subject_predicate(&self.graph, &manifest, &*mf::INCLUDE) {
                             Some(Term::BlankNode(list)) => {
                                 self.manifests_to_do.extend(
                                     RdfListIterator::iter(&self.graph, list.clone().into())
@@ -632,10 +625,7 @@ impl Iterator for TestManifest {
                         }
 
                         // New tests
-                        match self
-                            .graph
-                            .object_for_subject_predicate(&manifest, &*mf::ENTRIES)
-                        {
+                        match object_for_subject_predicate(&self.graph, &manifest, &*mf::ENTRIES) {
                             Some(Term::BlankNode(list)) => {
                                 self.tests_to_do.extend(RdfListIterator::iter(
                                     &self.graph,
@@ -659,13 +649,13 @@ impl Iterator for TestManifest {
     }
 }
 
-pub struct RdfListIterator<'a> {
-    graph: &'a SimpleGraph,
+struct RdfListIterator<'a> {
+    graph: &'a MemoryStore,
     current_node: Option<NamedOrBlankNode>,
 }
 
 impl<'a> RdfListIterator<'a> {
-    fn iter(graph: &'a SimpleGraph, root: NamedOrBlankNode) -> RdfListIterator<'a> {
+    fn iter(graph: &'a MemoryStore, root: NamedOrBlankNode) -> RdfListIterator<'a> {
         RdfListIterator {
             graph,
             current_node: Some(root),
@@ -679,19 +669,15 @@ impl<'a> Iterator for RdfListIterator<'a> {
     fn next(&mut self) -> Option<Term> {
         match self.current_node.clone() {
             Some(current) => {
-                let result = self
-                    .graph
-                    .object_for_subject_predicate(&current, &rdf::FIRST);
-                self.current_node = match self
-                    .graph
-                    .object_for_subject_predicate(&current, &rdf::REST)
-                {
-                    Some(Term::NamedNode(ref n)) if *n == *rdf::NIL => None,
-                    Some(Term::NamedNode(n)) => Some(n.clone().into()),
-                    Some(Term::BlankNode(n)) => Some(n.clone().into()),
-                    _ => None,
-                };
-                result.cloned()
+                let result = object_for_subject_predicate(&self.graph, &current, &rdf::FIRST);
+                self.current_node =
+                    match object_for_subject_predicate(&self.graph, &current, &rdf::REST) {
+                        Some(Term::NamedNode(ref n)) if *n == *rdf::NIL => None,
+                        Some(Term::NamedNode(n)) => Some(n.into()),
+                        Some(Term::BlankNode(n)) => Some(n.into()),
+                        _ => None,
+                    };
+                result
             }
             None => None,
         }
@@ -711,7 +697,7 @@ impl StaticServiceHandler {
                     .iter()
                     .map(|(name, data)| {
                         let name = NamedNode::parse(name)?;
-                        let store = MemoryStore::default();
+                        let store = MemoryStore::new();
                         load_graph_to_store(&data, &store, None)?;
                         Ok((name, store))
                     })
@@ -748,4 +734,22 @@ impl ServiceHandler for StaticServiceHandler {
             Err(Error::msg("Expected bindings but got another QueryResult"))
         }
     }
+}
+
+fn object_for_subject_predicate(
+    store: &MemoryStore,
+    subject: &NamedOrBlankNode,
+    predicate: &NamedNode,
+) -> Option<Term> {
+    objects_for_subject_predicate(store, subject, predicate).next()
+}
+
+fn objects_for_subject_predicate(
+    store: &MemoryStore,
+    subject: &NamedOrBlankNode,
+    predicate: &NamedNode,
+) -> impl Iterator<Item = Term> {
+    store
+        .quads_for_pattern(Some(subject), Some(predicate), None, None)
+        .map(|t| t.object_owned())
 }

@@ -192,7 +192,7 @@ fn literal(str: &str) -> Term {
 }
 
 fn make_store(reader: impl BufRead) -> Result<MemoryStore> {
-    let store = MemoryStore::default();
+    let store = MemoryStore::new();
     store
         .load_graph(reader, GraphSyntax::NTriples, None, None)
         .unwrap();

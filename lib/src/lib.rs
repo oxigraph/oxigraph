@@ -20,16 +20,16 @@
 //! use crate::oxigraph::sparql::QueryOptions;
 //! use oxigraph::sparql::QueryResult;
 //!
-//! let store = MemoryStore::default();
+//! let store = MemoryStore::new();
 //!
 //! // insertion
 //! let ex = NamedNode::parse("http://example.com")?;
 //! let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
-//! store.insert(&quad)?;
+//! store.insert(quad.clone());
 //!
 //! // quad filter
-//! let results: Result<Vec<Quad>> = store.quads_for_pattern(None, None, None, None).collect();
-//! assert_eq!(vec![quad], results?);
+//! let results: Vec<Quad> = store.quads_for_pattern(Some(&ex.clone().into()), None, None, None).collect();
+//! assert_eq!(vec![quad], results);
 //!
 //! // SPARQL query
 //! let prepared_query = store.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;

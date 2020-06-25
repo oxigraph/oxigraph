@@ -42,6 +42,26 @@ fn sparql_w3c_syntax_bench(c: &mut Criterion) {
     });
 }
 
+fn load_graph_to_store(
+    url: &str,
+    store: &MemoryStore,
+    to_graph_name: Option<&NamedOrBlankNode>,
+) -> Result<()> {
+    let syntax = if url.ends_with(".nt") {
+        GraphSyntax::NTriples
+    } else if url.ends_with(".ttl") {
+        GraphSyntax::Turtle
+    } else if url.ends_with(".rdf") {
+        GraphSyntax::RdfXml
+    } else {
+        return Err(Error::msg(format!(
+            "Serialization type not found for {}",
+            url
+        )));
+    };
+    store.load_graph(read_file(url)?, syntax, to_graph_name, Some(url))
+}
+
 fn to_relative_path(url: &str) -> Result<String> {
     if url.starts_with("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/") {
         Ok(url.replace(
@@ -78,66 +98,6 @@ fn read_file_to_string(url: &str) -> Result<String> {
     Ok(string)
 }
 
-fn load_graph(url: &str) -> Result<SimpleGraph> {
-    let store = MemoryStore::default();
-    load_graph_to_store(url, &store, None)?;
-    Ok(store
-        .quads_for_pattern(None, None, None, Some(None))
-        .map(|q| q.unwrap().into_triple())
-        .collect())
-}
-
-fn load_graph_to_store(
-    url: &str,
-    store: &MemoryStore,
-    to_graph_name: Option<&NamedOrBlankNode>,
-) -> Result<()> {
-    let syntax = if url.ends_with(".nt") {
-        GraphSyntax::NTriples
-    } else if url.ends_with(".ttl") {
-        GraphSyntax::Turtle
-    } else if url.ends_with(".rdf") {
-        GraphSyntax::RdfXml
-    } else {
-        return Err(Error::msg(format!(
-            "Serialization type not found for {}",
-            url
-        )));
-    };
-    store.load_graph(read_file(url)?, syntax, to_graph_name, Some(url))
-}
-
-mod mf {
-    use lazy_static::lazy_static;
-    use oxigraph::model::NamedNode;
-
-    lazy_static! {
-        pub static ref INCLUDE: NamedNode =
-            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#include")
-                .unwrap();
-        pub static ref ENTRIES: NamedNode =
-            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#entries")
-                .unwrap();
-        pub static ref ACTION: NamedNode =
-            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action")
-                .unwrap();
-        pub static ref RESULT: NamedNode =
-            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#result")
-                .unwrap();
-    }
-}
-
-mod qt {
-    use lazy_static::lazy_static;
-    use oxigraph::model::NamedNode;
-
-    lazy_static! {
-        pub static ref QUERY: NamedNode =
-            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-query#query")
-                .unwrap();
-    }
-}
-
 mod rs {
     use lazy_static::lazy_static;
     use oxigraph::model::NamedNode;
@@ -171,13 +131,58 @@ mod rs {
     }
 }
 
+mod mf {
+    use lazy_static::lazy_static;
+    use oxigraph::model::NamedNode;
+
+    lazy_static! {
+        pub static ref INCLUDE: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#include")
+                .unwrap();
+        pub static ref ENTRIES: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#entries")
+                .unwrap();
+        pub static ref NAME: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#name")
+                .unwrap();
+        pub static ref ACTION: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action")
+                .unwrap();
+        pub static ref RESULT: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#result")
+                .unwrap();
+    }
+}
+
+mod qt {
+    use lazy_static::lazy_static;
+    use oxigraph::model::NamedNode;
+
+    lazy_static! {
+        pub static ref QUERY: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-query#query")
+                .unwrap();
+        pub static ref DATA: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-query#data").unwrap();
+        pub static ref GRAPH_DATA: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-query#graphData")
+                .unwrap();
+        pub static ref SERVICE_DATA: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-query#serviceData")
+                .unwrap();
+        pub static ref ENDPOINT: NamedNode =
+            NamedNode::parse("http://www.w3.org/2001/sw/DataAccess/tests/test-query#endpoint")
+                .unwrap();
+    }
+}
+
 struct Test {
     kind: String,
     query: String,
 }
 
 struct TestManifest {
-    graph: SimpleGraph,
+    graph: MemoryStore,
     tests_to_do: Vec<Term>,
     manifests_to_do: Vec<String>,
 }
@@ -185,7 +190,7 @@ struct TestManifest {
 impl TestManifest {
     fn new(url: impl Into<String>) -> TestManifest {
         Self {
-            graph: SimpleGraph::default(),
+            graph: MemoryStore::new(),
             tests_to_do: Vec::default(),
             manifests_to_do: vec![url.into()],
         }
@@ -198,38 +203,34 @@ impl Iterator for TestManifest {
     fn next(&mut self) -> Option<Result<Test>> {
         match self.tests_to_do.pop() {
             Some(Term::NamedNode(test_node)) => {
-                let test_subject = NamedOrBlankNode::from(test_node);
-                let kind = match self
-                    .graph
-                    .object_for_subject_predicate(&test_subject, &rdf::TYPE)
-                {
-                    Some(Term::NamedNode(c)) => match c.as_str().split('#').last() {
-                        Some(k) => k.to_string(),
-                        None => return self.next(), //We ignore the test
-                    },
-                    _ => return self.next(), //We ignore the test
-                };
-                let query = match self
-                    .graph
-                    .object_for_subject_predicate(&test_subject, &*mf::ACTION)
-                {
-                    Some(Term::NamedNode(n)) => n.as_str().to_owned(),
-                    Some(Term::BlankNode(n)) => {
-                        let n = n.clone().into();
-                        match self.graph.object_for_subject_predicate(&n, &qt::QUERY) {
-                            Some(Term::NamedNode(q)) => q.as_str().to_owned(),
-                            Some(_) => return Some(Err(Error::msg("invalid query"))),
-                            None => return Some(Err(Error::msg("query not found"))),
+                let test_subject = NamedOrBlankNode::from(test_node.clone());
+                let kind =
+                    match object_for_subject_predicate(&self.graph, &test_subject, &rdf::TYPE) {
+                        Some(Term::NamedNode(c)) => match c.as_str().split('#').last() {
+                            Some(k) => k.to_string(),
+                            None => return self.next(), //We ignore the test
+                        },
+                        _ => return self.next(), //We ignore the test
+                    };
+                let query =
+                    match object_for_subject_predicate(&self.graph, &test_subject, &*mf::ACTION) {
+                        Some(Term::NamedNode(n)) => n.as_str().to_owned(),
+                        Some(Term::BlankNode(n)) => {
+                            let n = n.clone().into();
+                            match object_for_subject_predicate(&self.graph, &n, &qt::QUERY) {
+                                Some(Term::NamedNode(q)) => q.as_str().to_owned(),
+                                Some(_) => return Some(Err(Error::msg("invalid query"))),
+                                None => return Some(Err(Error::msg("query not found"))),
+                            }
                         }
-                    }
-                    Some(_) => return Some(Err(Error::msg("invalid action"))),
-                    None => {
-                        return Some(Err(Error::msg(format!(
-                            "action not found for test {}",
-                            test_subject
-                        ))));
-                    }
-                };
+                        Some(_) => return Some(Err(Error::msg("invalid action"))),
+                        None => {
+                            return Some(Err(Error::msg(format!(
+                                "action not found for test {}",
+                                test_subject
+                            ))));
+                        }
+                    };
                 Some(Ok(Test { kind, query }))
             }
             Some(_) => Some(Err(Error::msg("invalid test list"))),
@@ -238,16 +239,11 @@ impl Iterator for TestManifest {
                     Some(url) => {
                         let manifest =
                             NamedOrBlankNode::from(NamedNode::parse(url.clone()).unwrap());
-                        match load_graph(&url) {
-                            Ok(g) => self.graph.extend(g.into_iter()),
-                            Err(e) => return Some(Err(e)),
+                        if let Err(e) = load_graph_to_store(&url, &self.graph, None) {
+                            return Some(Err(e));
                         }
-
                         // New manifests
-                        match self
-                            .graph
-                            .object_for_subject_predicate(&manifest, &*mf::INCLUDE)
-                        {
+                        match object_for_subject_predicate(&self.graph, &manifest, &*mf::INCLUDE) {
                             Some(Term::BlankNode(list)) => {
                                 self.manifests_to_do.extend(
                                     RdfListIterator::iter(&self.graph, list.clone().into())
@@ -262,10 +258,7 @@ impl Iterator for TestManifest {
                         }
 
                         // New tests
-                        match self
-                            .graph
-                            .object_for_subject_predicate(&manifest, &*mf::ENTRIES)
-                        {
+                        match object_for_subject_predicate(&self.graph, &manifest, &*mf::ENTRIES) {
                             Some(Term::BlankNode(list)) => {
                                 self.tests_to_do.extend(RdfListIterator::iter(
                                     &self.graph,
@@ -290,12 +283,12 @@ impl Iterator for TestManifest {
 }
 
 struct RdfListIterator<'a> {
-    graph: &'a SimpleGraph,
+    graph: &'a MemoryStore,
     current_node: Option<NamedOrBlankNode>,
 }
 
 impl<'a> RdfListIterator<'a> {
-    fn iter(graph: &'a SimpleGraph, root: NamedOrBlankNode) -> RdfListIterator<'a> {
+    fn iter(graph: &'a MemoryStore, root: NamedOrBlankNode) -> RdfListIterator<'a> {
         RdfListIterator {
             graph,
             current_node: Some(root),
@@ -309,21 +302,35 @@ impl<'a> Iterator for RdfListIterator<'a> {
     fn next(&mut self) -> Option<Term> {
         match self.current_node.clone() {
             Some(current) => {
-                let result = self
-                    .graph
-                    .object_for_subject_predicate(&current, &rdf::FIRST);
-                self.current_node = match self
-                    .graph
-                    .object_for_subject_predicate(&current, &rdf::REST)
-                {
-                    Some(Term::NamedNode(ref n)) if *n == *rdf::NIL => None,
-                    Some(Term::NamedNode(n)) => Some(n.clone().into()),
-                    Some(Term::BlankNode(n)) => Some(n.clone().into()),
-                    _ => None,
-                };
-                result.cloned()
+                let result = object_for_subject_predicate(&self.graph, &current, &rdf::FIRST);
+                self.current_node =
+                    match object_for_subject_predicate(&self.graph, &current, &rdf::REST) {
+                        Some(Term::NamedNode(ref n)) if *n == *rdf::NIL => None,
+                        Some(Term::NamedNode(n)) => Some(n.into()),
+                        Some(Term::BlankNode(n)) => Some(n.into()),
+                        _ => None,
+                    };
+                result
             }
             None => None,
         }
     }
+}
+
+fn object_for_subject_predicate(
+    store: &MemoryStore,
+    subject: &NamedOrBlankNode,
+    predicate: &NamedNode,
+) -> Option<Term> {
+    objects_for_subject_predicate(store, subject, predicate).next()
+}
+
+fn objects_for_subject_predicate(
+    store: &MemoryStore,
+    subject: &NamedOrBlankNode,
+    predicate: &NamedNode,
+) -> impl Iterator<Item = Term> {
+    store
+        .quads_for_pattern(Some(subject), Some(predicate), None, None)
+        .map(|t| t.object_owned())
 }

@@ -8,7 +8,7 @@ mod test {
 
     #[wasm_bindgen_test]
     fn simple() {
-        let store = MemoryStore::default();
+        let store = MemoryStore::new();
 
         // insertion
         let ex = NamedNode::parse("http://example.com").unwrap();
@@ -33,7 +33,7 @@ mod test {
 
     #[wasm_bindgen_test]
     fn now() {
-        let store = MemoryStore::default();
+        let store = MemoryStore::new();
         let prepared_query = store
             .prepare_query(
                 "SELECT (YEAR(NOW()) AS ?y) WHERE {}",

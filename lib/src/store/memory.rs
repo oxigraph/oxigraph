@@ -5,9 +5,13 @@ use crate::sparql::{QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::store::*;
 use crate::{DatasetSyntax, GraphSyntax, Result};
-use std::collections::{HashMap, HashSet};
+use std::collections::hash_map::DefaultHasher;
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::fmt;
 use std::hash::Hash;
+use std::hash::Hasher;
 use std::io::BufRead;
+use std::iter::FromIterator;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// In-memory store.
@@ -25,11 +29,11 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 /// // insertion
 /// let ex = NamedNode::parse("http://example.com")?;
 /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
-/// store.insert(&quad)?;
+/// store.insert(quad.clone());
 ///
 /// // quad filter
-/// let results: Result<Vec<Quad>> = store.quads_for_pattern(None, None, None, None).collect();
-/// assert_eq!(vec![quad], results?);
+/// let results: Vec<Quad> = store.quads_for_pattern(Some(&ex.clone().into()), None, None, None).collect();
+/// assert_eq!(vec![quad], results);
 ///
 /// // SPARQL query
 /// let prepared_query = store.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
@@ -81,11 +85,11 @@ impl MemoryStore {
     /// use oxigraph::{MemoryStore, Result};
     /// use oxigraph::sparql::{QueryOptions, QueryResult};
     ///
-    /// let store = MemoryStore::default();
+    /// let store = MemoryStore::new();
     ///
     /// // insertions
     /// let ex = NamedNode::parse("http://example.com")?;
-    /// store.insert(&Quad::new(ex.clone(), ex.clone(), ex.clone(), None));
+    /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), None));
     ///
     /// // SPARQL query
     /// let prepared_query = store.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
@@ -126,16 +130,16 @@ impl MemoryStore {
     /// use oxigraph::model::*;
     /// use oxigraph::{MemoryStore, Result};
     ///
-    /// let store = MemoryStore::default();
+    /// let store = MemoryStore::new();
     ///
     /// // insertion
     /// let ex = NamedNode::parse("http://example.com")?;
     /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
-    /// store.insert(&quad);
+    /// store.insert(quad.clone());
     ///
     /// // quad filter
-    /// let results: Result<Vec<Quad>> = store.quads_for_pattern(None, None, None, None).collect();
-    /// assert_eq!(vec![quad], results?);
+    /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
+    /// assert_eq!(vec![quad], results);
     /// # Result::Ok(())
     /// ```
     #[allow(clippy::option_option)]
@@ -145,7 +149,7 @@ impl MemoryStore {
         predicate: Option<&NamedNode>,
         object: Option<&Term>,
         graph_name: Option<Option<&NamedOrBlankNode>>,
-    ) -> impl Iterator<Item = Result<Quad>> {
+    ) -> impl Iterator<Item = Quad> {
         let subject = subject.map(|s| s.into());
         let predicate = predicate.map(|p| p.into());
         let object = object.map(|o| o.into());
@@ -153,7 +157,9 @@ impl MemoryStore {
         let this = self.clone();
         self.encoded_quads_for_pattern_inner(subject, predicate, object, graph_name)
             .into_iter()
-            .map(move |quad| this.decode_quad(&quad))
+            .map(
+                move |quad| this.decode_quad(&quad).unwrap(), // Could not fail
+            )
     }
 
     /// Checks if this store contains a given quad
@@ -172,14 +178,15 @@ impl MemoryStore {
     /// use oxigraph::model::*;
     /// use oxigraph::{MemoryStore, Result};
     ///
-    /// let store = MemoryStore::default();
+    /// let store = MemoryStore::new();
     ///
     /// let ex = NamedNode::parse("http://example.com")?;
     /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
     ///
     /// // transaction
     /// store.transaction(|transaction| {
-    ///     transaction.insert(&quad)
+    ///     transaction.insert(quad.clone());
+    ///     Ok(())
     /// });
     ///
     /// // quad filter
@@ -206,16 +213,16 @@ impl MemoryStore {
     /// use oxigraph::model::*;
     /// use oxigraph::{MemoryStore, Result, GraphSyntax};
     ///
-    /// let store = MemoryStore::default();
+    /// let store = MemoryStore::new();
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
     /// store.load_graph(file.as_ref(), GraphSyntax::NTriples, None, None);
     ///
     /// // quad filter
-    /// let results: Result<Vec<Quad>> = store.quads_for_pattern(None, None, None, None).collect();
+    /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
     /// let ex = NamedNode::parse("http://example.com")?;
-    /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results?);
+    /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results);
     /// # Result::Ok(())
     /// ```
     pub fn load_graph(
@@ -236,16 +243,16 @@ impl MemoryStore {
     /// use oxigraph::model::*;
     /// use oxigraph::{MemoryStore, Result, DatasetSyntax};
     ///
-    /// let store = MemoryStore::default();
+    /// let store = MemoryStore::new();
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
     /// store.load_dataset(file.as_ref(), DatasetSyntax::NQuads, None);
     ///
     /// // quad filter
-    /// let results: Result<Vec<Quad>> = store.quads_for_pattern(None, None, None, None).collect();
+    /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
     /// let ex = NamedNode::parse("http://example.com")?;
-    /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), Some(ex.into()))], results?);
+    /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), Some(ex.into()))], results);
     /// # Result::Ok(())
     /// ```
     pub fn load_dataset(
@@ -259,17 +266,25 @@ impl MemoryStore {
     }
 
     /// Adds a quad to this store.
-    pub fn insert(&self, quad: &Quad) -> Result<()> {
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn insert(&self, quad: Quad) {
         let mut store = self;
-        let quad = store.encode_quad(quad)?;
-        store.insert_encoded(&quad)
+        let quad = store.encode_quad(&quad).unwrap(); // Could never fail
+        store.insert_encoded(&quad).unwrap(); // Could never fail
     }
 
     /// Removes a quad from this store.
-    pub fn remove(&self, quad: &Quad) -> Result<()> {
+    pub fn remove(&self, quad: &Quad) {
         let mut store = self;
         let quad = quad.into();
-        store.remove_encoded(&quad)
+        store.remove_encoded(&quad).unwrap(); // Could never fail
+    }
+
+    /// Returns if the current dataset is [isomorphic](https://www.w3.org/TR/rdf11-concepts/#dfn-dataset-isomorphism) with another one.
+    ///
+    /// Warning: This implementation worst-case complexity is in O(n!)
+    pub fn is_isomorphic(&self, other: &Self) -> bool {
+        are_datasets_isomorphic(self, other)
     }
 
     fn indexes(&self) -> RwLockReadGuard<'_, MemoryStoreIndexes> {
@@ -825,7 +840,7 @@ impl<'a> MemoryTransaction<'a> {
     /// use oxigraph::model::*;
     /// use oxigraph::{MemoryStore, Result, GraphSyntax};
     ///
-    /// let store = MemoryStore::default();
+    /// let store = MemoryStore::new();
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
@@ -834,9 +849,9 @@ impl<'a> MemoryTransaction<'a> {
     /// })?;
     ///
     /// // quad filter
-    /// let results: Result<Vec<Quad>> = store.quads_for_pattern(None, None, None, None).collect();
+    /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
     /// let ex = NamedNode::parse("http://example.com")?;
-    /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results?);
+    /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results);
     /// # Result::Ok(())
     /// ```
     pub fn load_graph(
@@ -856,16 +871,16 @@ impl<'a> MemoryTransaction<'a> {
     /// use oxigraph::model::*;
     /// use oxigraph::{MemoryStore, Result, DatasetSyntax};
     ///
-    /// let store = MemoryStore::default();
+    /// let store = MemoryStore::new();
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
     /// store.load_dataset(file.as_ref(), DatasetSyntax::NQuads, None);
     ///
     /// // quad filter
-    /// let results: Result<Vec<Quad>> = store.quads_for_pattern(None, None, None, None).collect();
+    /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
     /// let ex = NamedNode::parse("http://example.com")?;
-    /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), Some(ex.into()))], results?);
+    /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), Some(ex.into()))], results);
     /// # Result::Ok(())
     /// ```
     pub fn load_dataset(
@@ -878,15 +893,16 @@ impl<'a> MemoryTransaction<'a> {
     }
 
     /// Adds a quad to this store during the transaction.
-    pub fn insert(&mut self, quad: &Quad) -> Result<()> {
-        let quad = self.encode_quad(quad)?;
-        self.insert_encoded(&quad)
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn insert(&mut self, quad: Quad) {
+        let quad = self.encode_quad(&quad).unwrap(); // Could never fail
+        self.insert_encoded(&quad).unwrap(); // Could never fail
     }
 
     /// Removes a quad from this store during the transaction.
-    pub fn remove(&mut self, quad: &Quad) -> Result<()> {
+    pub fn remove(&mut self, quad: &Quad) {
         let quad = quad.into();
-        self.remove_encoded(&quad)
+        self.remove_encoded(&quad).unwrap(); // Could never fail
     }
 
     fn commit(self) -> Result<()> {
@@ -919,4 +935,286 @@ impl WritableEncodedStore for MemoryTransaction<'_> {
         self.ops.push(TransactionOp::Delete(*quad));
         Ok(())
     }
+}
+
+impl FromIterator<Quad> for MemoryStore {
+    fn from_iter<I: IntoIterator<Item = Quad>>(iter: I) -> Self {
+        let mut store = MemoryStore::new();
+        store.extend(iter);
+        store
+    }
+}
+
+impl Extend<Quad> for MemoryStore {
+    fn extend<T: IntoIterator<Item = Quad>>(&mut self, iter: T) {
+        for quad in iter {
+            self.insert(quad);
+        }
+    }
+}
+
+impl fmt::Display for MemoryStore {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for t in self.quads_for_pattern(None, None, None, None) {
+            writeln!(f, "{}", t)?;
+        }
+        Ok(())
+    }
+}
+
+// Isomorphism implementation
+
+fn split_hash_buckets(
+    bnodes_by_hash: HashMap<u64, Vec<EncodedTerm>>,
+    graph: &MemoryStore,
+    distance: usize,
+) -> HashMap<u64, Vec<EncodedTerm>> {
+    let mut new_bnodes_by_hash = HashMap::default();
+
+    for (hash, bnodes) in bnodes_by_hash {
+        if bnodes.len() == 1 {
+            new_bnodes_by_hash.insert(hash, bnodes); // Nothing to improve
+        } else {
+            for bnode in bnodes {
+                let mut starts = vec![bnode];
+                for _ in 0..distance {
+                    let mut new_starts = Vec::default();
+                    for s in starts {
+                        for q in graph.encoded_quads_for_subject(s) {
+                            if q.object.is_named_node() || q.object.is_blank_node() {
+                                new_starts.push(q.object)
+                            }
+                        }
+                        for t in graph.encoded_quads_for_object(s) {
+                            new_starts.push(t.subject);
+                        }
+                    }
+                    starts = new_starts;
+                }
+
+                // We do the hashing
+                let mut hasher = DefaultHasher::default();
+                hash.hash(&mut hasher); // We start with the previous hash
+
+                // NB: we need to sort the triples to have the same hash
+                let mut po_set = BTreeSet::default();
+                for start in &starts {
+                    for quad in graph.encoded_quads_for_subject(*start) {
+                        if !quad.object.is_blank_node() {
+                            po_set.insert(encode_term_pair(quad.predicate, quad.object));
+                        }
+                    }
+                }
+                for po in &po_set {
+                    po.hash(&mut hasher);
+                }
+
+                let mut sp_set = BTreeSet::default();
+                for start in starts {
+                    for quad in graph.encoded_quads_for_object(start) {
+                        if !quad.subject.is_blank_node() {
+                            sp_set.insert(encode_term_pair(quad.subject, quad.predicate));
+                        }
+                    }
+                }
+                for sp in &sp_set {
+                    sp.hash(&mut hasher);
+                }
+
+                new_bnodes_by_hash
+                    .entry(hasher.finish())
+                    .or_insert_with(Vec::default)
+                    .push(bnode);
+            }
+        }
+    }
+    new_bnodes_by_hash
+}
+
+fn encode_term_pair(t1: EncodedTerm, t2: EncodedTerm) -> Vec<u8> {
+    let mut vec = Vec::with_capacity(2 * WRITTEN_TERM_MAX_SIZE);
+    write_term(&mut vec, t1);
+    write_term(&mut vec, t2);
+    vec
+}
+
+fn build_and_check_containment_from_hashes<'a>(
+    a_bnodes_by_hash: &mut Vec<(u64, Vec<EncodedTerm>)>,
+    b_bnodes_by_hash: &'a HashMap<u64, Vec<EncodedTerm>>,
+    a_to_b_mapping: &mut HashMap<EncodedTerm, EncodedTerm>,
+    a: &'a HashSet<EncodedQuad>,
+    b: &'a HashSet<EncodedQuad>,
+    current_a_nodes: &[EncodedTerm],
+    current_b_nodes: &mut HashSet<EncodedTerm>,
+) -> bool {
+    if let Some((a_node, remaining_a_node)) = current_a_nodes.split_last() {
+        let b_nodes = current_b_nodes.iter().cloned().collect::<Vec<_>>();
+        for b_node in b_nodes {
+            current_b_nodes.remove(&b_node);
+            a_to_b_mapping.insert(*a_node, b_node);
+            if check_is_contained_focused(a_to_b_mapping, *a_node, a, b)
+                && build_and_check_containment_from_hashes(
+                    a_bnodes_by_hash,
+                    b_bnodes_by_hash,
+                    a_to_b_mapping,
+                    a,
+                    b,
+                    remaining_a_node,
+                    current_b_nodes,
+                )
+            {
+                return true;
+            }
+            current_b_nodes.insert(b_node);
+        }
+        a_to_b_mapping.remove(a_node);
+        false
+    } else {
+        let (hash, new_a_nodes) = match a_bnodes_by_hash.pop() {
+            Some(v) => v,
+            None => return true,
+        };
+
+        let mut new_b_nodes = b_bnodes_by_hash
+            .get(&hash)
+            .map_or(HashSet::default(), |v| v.iter().cloned().collect());
+        if new_a_nodes.len() != new_b_nodes.len() {
+            return false;
+        }
+
+        if new_a_nodes.len() > 10 {
+            eprintln!("Too big instance, aborting");
+            return true; //TODO: Very very very bad
+        }
+
+        if build_and_check_containment_from_hashes(
+            a_bnodes_by_hash,
+            b_bnodes_by_hash,
+            a_to_b_mapping,
+            a,
+            b,
+            &new_a_nodes,
+            &mut new_b_nodes,
+        ) {
+            true
+        } else {
+            a_bnodes_by_hash.push((hash, new_a_nodes));
+            false
+        }
+    }
+}
+
+fn check_is_contained_focused<'a>(
+    a_to_b_mapping: &mut HashMap<EncodedTerm, EncodedTerm>,
+    a_bnode_focus: EncodedTerm,
+    a: &'a HashSet<EncodedQuad>,
+    b: &'a HashSet<EncodedQuad>,
+) -> bool {
+    let ts_a = a
+        .iter()
+        .filter(|t| t.subject == a_bnode_focus)
+        .chain(a.iter().filter(|t| t.object == a_bnode_focus));
+    //TODO: these filters
+    for t_a in ts_a {
+        let subject = if t_a.subject.is_blank_node() {
+            if let Some(s_a) = a_to_b_mapping.get(&t_a.subject) {
+                *s_a
+            } else {
+                continue; // We skip for now
+            }
+        } else {
+            t_a.subject
+        };
+        let object = if t_a.object.is_blank_node() {
+            if let Some(o_a) = a_to_b_mapping.get(&t_a.object) {
+                *o_a
+            } else {
+                continue; // We skip for now
+            }
+        } else {
+            t_a.object
+        };
+        if !b.contains(&EncodedQuad::new(
+            subject,
+            t_a.predicate,
+            object,
+            t_a.graph_name, //TODO: support blank node graph names
+        )) {
+            //TODO
+            return false;
+        }
+    }
+
+    true
+}
+
+fn graph_blank_nodes(graph: &HashSet<EncodedQuad>) -> Vec<EncodedTerm> {
+    let mut blank_nodes: HashSet<EncodedTerm> = HashSet::default();
+    for t in graph {
+        if t.subject.is_blank_node() {
+            blank_nodes.insert(t.subject);
+        }
+        if t.object.is_blank_node() {
+            blank_nodes.insert(t.object);
+        }
+    }
+    blank_nodes.into_iter().collect()
+}
+
+fn are_datasets_isomorphic(a: &MemoryStore, b: &MemoryStore) -> bool {
+    /* TODO if a.len() != b.len() {
+        return false;
+    }*/
+
+    // We check containment of everything buts triples with blank nodes
+    let mut a_bnodes_triples = HashSet::default();
+    for t in a.encoded_quads() {
+        if t.subject.is_blank_node() || t.object.is_blank_node() {
+            a_bnodes_triples.insert(t);
+        } else if !b.contains_encoded(&t) {
+            return false; // Triple in a not in b without blank nodes
+        }
+    }
+
+    let mut b_bnodes_triples = HashSet::default();
+    for t in b.encoded_quads() {
+        if t.subject.is_blank_node() || t.object.is_blank_node() {
+            b_bnodes_triples.insert(t);
+        } else if !a.contains_encoded(&t) {
+            return false; // Triple in a not in b without blank nodes
+        }
+    }
+
+    let mut a_bnodes_by_hash = HashMap::default();
+    a_bnodes_by_hash.insert(0, graph_blank_nodes(&a_bnodes_triples));
+    let mut b_bnodes_by_hash = HashMap::default();
+    b_bnodes_by_hash.insert(0, graph_blank_nodes(&b_bnodes_triples));
+
+    for distance in 0..5 {
+        let max_size = a_bnodes_by_hash.values().map(Vec::len).max().unwrap_or(0);
+        if max_size < 2 {
+            break; // We only have small buckets
+        }
+
+        a_bnodes_by_hash = split_hash_buckets(a_bnodes_by_hash, a, distance);
+        b_bnodes_by_hash = split_hash_buckets(b_bnodes_by_hash, b, distance);
+
+        // Hashes should have the same size
+        if a_bnodes_by_hash.len() != b_bnodes_by_hash.len() {
+            return false;
+        }
+    }
+
+    let mut sorted_a_bnodes_by_hash: Vec<_> = a_bnodes_by_hash.into_iter().collect();
+    sorted_a_bnodes_by_hash.sort_by(|(_, l1), (_, l2)| l1.len().cmp(&l2.len()));
+
+    build_and_check_containment_from_hashes(
+        &mut sorted_a_bnodes_by_hash,
+        &b_bnodes_by_hash,
+        &mut HashMap::default(),
+        &a_bnodes_triples,
+        &b_bnodes_triples,
+        &[],
+        &mut HashSet::default(),
+    )
 }

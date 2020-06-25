@@ -25,7 +25,7 @@ fn memory_load_bench(c: &mut Criterion) {
             b.iter(|| {
                 let store = MemoryStore::new();
                 for quad in &quads {
-                    store.insert(quad).unwrap();
+                    store.insert(quad.clone());
                 }
             });
         });

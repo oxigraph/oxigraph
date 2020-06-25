@@ -4,7 +4,7 @@ use crate::utils::to_err;
 use js_sys::{Array, Map};
 use oxigraph::model::NamedOrBlankNode;
 use oxigraph::sparql::{QueryOptions, QueryResult};
-use oxigraph::{DatasetSyntax, Error, FileSyntax, GraphSyntax, MemoryStore};
+use oxigraph::{DatasetSyntax, FileSyntax, GraphSyntax, MemoryStore};
 use std::convert::TryInto;
 use std::io::Cursor;
 use wasm_bindgen::prelude::*;
@@ -37,15 +37,13 @@ impl JsMemoryStore {
     }
 
     pub fn add(&self, quad: &JsValue) -> Result<(), JsValue> {
-        self.store
-            .insert(&self.from_js.to_quad(quad)?.try_into()?)
-            .map_err(to_err)
+        self.store.insert(self.from_js.to_quad(quad)?.try_into()?);
+        Ok(())
     }
 
     pub fn delete(&self, quad: &JsValue) -> Result<(), JsValue> {
-        self.store
-            .remove(&self.from_js.to_quad(quad)?.try_into()?)
-            .map_err(to_err)
+        self.store.remove(&self.from_js.to_quad(quad)?.try_into()?);
+        Ok(())
     }
 
     pub fn has(&self, quad: &JsValue) -> Result<bool, JsValue> {
@@ -106,7 +104,7 @@ impl JsMemoryStore {
                     }
                     None => None,
                 }.as_ref().map(|v| v.as_ref()),
-            ).map(|v| v.map(|v| JsQuad::from(v).into())).collect::<Result<Vec<_>,Error>>().map_err(to_err)?.into_boxed_slice())
+            ).map(|v| JsQuad::from(v).into()).collect::<Vec<_>>().into_boxed_slice())
     }
 
     pub fn query(&self, query: &str) -> Result<JsValue, JsValue> {
