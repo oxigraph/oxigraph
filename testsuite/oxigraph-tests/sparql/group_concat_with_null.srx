@@ -5,7 +5,7 @@
   </head>
   <results>
     <result>
-      <binding name="opt">
+      <binding name="g">
         <literal datatype="http://www.w3.org/2001/XMLSchema#string">value</literal>
       </binding>
     </result>

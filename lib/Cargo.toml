@@ -43,7 +43,6 @@ getrandom = {version="0.1", features=["wasm-bindgen"]}
 [dev-dependencies]
 rayon = "1"
 criterion = "0.3"
-anyhow = "1"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
@@ -52,7 +51,3 @@ wasm-bindgen-test = "0.3"
 name = "store"
 harness = false
 required-features = ["sled", "rocksdb"]
-
-[[bench]]
-name = "sparql_query"
-harness = false

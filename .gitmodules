@@ -1,5 +1,5 @@
-[submodule "lib/tests/rdf-tests"]
-	path = lib/tests/rdf-tests
+[submodule "testsuite/rdf-tests"]
+	path = testsuite/rdf-tests
 	url = https://github.com/w3c/rdf-tests.git
 [submodule "bench/bsbm-tools"]
 	path = bench/bsbm-tools

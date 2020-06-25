@@ -69,3 +69,15 @@ impl PartialEq<NamedNode> for str {
         self == other.as_str()
     }
 }
+
+impl PartialEq<&str> for NamedNode {
+    fn eq(&self, other: &&str) -> bool {
+        self == *other
+    }
+}
+
+impl PartialEq<NamedNode> for &str {
+    fn eq(&self, other: &NamedNode) -> bool {
+        *self == other
+    }
+}

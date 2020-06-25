@@ -6,12 +6,12 @@ use crate::store::numeric_encoder::*;
 use crate::store::*;
 use crate::{DatasetSyntax, GraphSyntax, Result};
 use std::collections::hash_map::DefaultHasher;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::fmt;
-use std::hash::Hash;
-use std::hash::Hasher;
+use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::io::BufRead;
 use std::iter::FromIterator;
+use std::mem::size_of;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// In-memory store.
@@ -47,8 +47,10 @@ pub struct MemoryStore {
     indexes: Arc<RwLock<MemoryStoreIndexes>>,
 }
 
-type TripleMap<T> = HashMap<T, HashMap<T, HashSet<T>>>;
-type QuadMap<T> = HashMap<T, TripleMap<T>>;
+type TrivialHashMap<K, V> = HashMap<K, V, BuildHasherDefault<TrivialHasher>>;
+type TrivialHashSet<T> = HashSet<T, BuildHasherDefault<TrivialHasher>>;
+type TripleMap<T> = TrivialHashMap<T, TrivialHashMap<T, TrivialHashSet<T>>>;
+type QuadMap<T> = TrivialHashMap<T, TripleMap<T>>;
 
 #[derive(Default)]
 struct MemoryStoreIndexes {
@@ -282,9 +284,12 @@ impl MemoryStore {
 
     /// Returns if the current dataset is [isomorphic](https://www.w3.org/TR/rdf11-concepts/#dfn-dataset-isomorphism) with another one.
     ///
-    /// Warning: This implementation worst-case complexity is in O(n!)
+    /// It is implemented using the canonicalization approach presented in
+    /// [Canonical Forms for Isomorphic and Equivalent RDF Graphs: Algorithms for Leaning and Labelling Blank Nodes, Aidan Hogan, 2017](http://aidanhogan.com/docs/rdf-canonicalisation.pdf)
+    ///
+    /// Warning: This implementation worst-case complexity is in O(b!) with b the number of blank node node in the input graphs.
     pub fn is_isomorphic(&self, other: &Self) -> bool {
-        are_datasets_isomorphic(self, other)
+        iso_canonicalize(self) == iso_canonicalize(other)
     }
 
     fn indexes(&self) -> RwLockReadGuard<'_, MemoryStoreIndexes> {
@@ -768,12 +773,14 @@ fn remove_from_quad_map<T: Eq + Hash>(map1: &mut QuadMap<T>, e1: &T, e2: &T, e3:
     }
 }
 
-fn option_set_flatten<'a, T: Clone>(i: Option<&'a HashSet<T>>) -> impl Iterator<Item = T> + 'a {
+fn option_set_flatten<'a, T: Clone>(
+    i: Option<&'a TrivialHashSet<T>>,
+) -> impl Iterator<Item = T> + 'a {
     i.into_iter().flat_map(|s| s.iter().cloned())
 }
 
 fn option_pair_map_flatten<'a, T: Copy>(
-    i: Option<&'a HashMap<T, HashSet<T>>>,
+    i: Option<&'a TrivialHashMap<T, TrivialHashSet<T>>>,
 ) -> impl Iterator<Item = (T, T)> + 'a {
     i.into_iter().flat_map(|kv| {
         kv.iter().flat_map(|(k, vs)| {
@@ -937,6 +944,14 @@ impl WritableEncodedStore for MemoryTransaction<'_> {
     }
 }
 
+impl PartialEq for MemoryStore {
+    fn eq(&self, other: &Self) -> bool {
+        self.indexes().spog == other.indexes().spog
+    }
+}
+
+impl Eq for MemoryStore {}
+
 impl FromIterator<Quad> for MemoryStore {
     fn from_iter<I: IntoIterator<Item = Quad>>(iter: I) -> Self {
         let mut store = MemoryStore::new();
@@ -964,257 +979,234 @@ impl fmt::Display for MemoryStore {
 
 // Isomorphism implementation
 
-fn split_hash_buckets(
-    bnodes_by_hash: HashMap<u64, Vec<EncodedTerm>>,
-    graph: &MemoryStore,
-    distance: usize,
-) -> HashMap<u64, Vec<EncodedTerm>> {
-    let mut new_bnodes_by_hash = HashMap::default();
-
-    for (hash, bnodes) in bnodes_by_hash {
-        if bnodes.len() == 1 {
-            new_bnodes_by_hash.insert(hash, bnodes); // Nothing to improve
-        } else {
-            for bnode in bnodes {
-                let mut starts = vec![bnode];
-                for _ in 0..distance {
-                    let mut new_starts = Vec::default();
-                    for s in starts {
-                        for q in graph.encoded_quads_for_subject(s) {
-                            if q.object.is_named_node() || q.object.is_blank_node() {
-                                new_starts.push(q.object)
-                            }
-                        }
-                        for t in graph.encoded_quads_for_object(s) {
-                            new_starts.push(t.subject);
-                        }
-                    }
-                    starts = new_starts;
-                }
-
-                // We do the hashing
-                let mut hasher = DefaultHasher::default();
-                hash.hash(&mut hasher); // We start with the previous hash
-
-                // NB: we need to sort the triples to have the same hash
-                let mut po_set = BTreeSet::default();
-                for start in &starts {
-                    for quad in graph.encoded_quads_for_subject(*start) {
-                        if !quad.object.is_blank_node() {
-                            po_set.insert(encode_term_pair(quad.predicate, quad.object));
-                        }
-                    }
-                }
-                for po in &po_set {
-                    po.hash(&mut hasher);
-                }
-
-                let mut sp_set = BTreeSet::default();
-                for start in starts {
-                    for quad in graph.encoded_quads_for_object(start) {
-                        if !quad.subject.is_blank_node() {
-                            sp_set.insert(encode_term_pair(quad.subject, quad.predicate));
-                        }
-                    }
-                }
-                for sp in &sp_set {
-                    sp.hash(&mut hasher);
-                }
-
-                new_bnodes_by_hash
-                    .entry(hasher.finish())
-                    .or_insert_with(Vec::default)
-                    .push(bnode);
-            }
-        }
-    }
-    new_bnodes_by_hash
+fn iso_canonicalize(g: &MemoryStore) -> Vec<Vec<u8>> {
+    let bnodes = bnodes(g);
+    let (hash, partition) = hash_bnodes(g, bnodes.into_iter().map(|bnode| (bnode, 0)).collect());
+    distinguish(g, &hash, &partition)
 }
 
-fn encode_term_pair(t1: EncodedTerm, t2: EncodedTerm) -> Vec<u8> {
-    let mut vec = Vec::with_capacity(2 * WRITTEN_TERM_MAX_SIZE);
-    write_term(&mut vec, t1);
-    write_term(&mut vec, t2);
-    vec
-}
-
-fn build_and_check_containment_from_hashes<'a>(
-    a_bnodes_by_hash: &mut Vec<(u64, Vec<EncodedTerm>)>,
-    b_bnodes_by_hash: &'a HashMap<u64, Vec<EncodedTerm>>,
-    a_to_b_mapping: &mut HashMap<EncodedTerm, EncodedTerm>,
-    a: &'a HashSet<EncodedQuad>,
-    b: &'a HashSet<EncodedQuad>,
-    current_a_nodes: &[EncodedTerm],
-    current_b_nodes: &mut HashSet<EncodedTerm>,
-) -> bool {
-    if let Some((a_node, remaining_a_node)) = current_a_nodes.split_last() {
-        let b_nodes = current_b_nodes.iter().cloned().collect::<Vec<_>>();
-        for b_node in b_nodes {
-            current_b_nodes.remove(&b_node);
-            a_to_b_mapping.insert(*a_node, b_node);
-            if check_is_contained_focused(a_to_b_mapping, *a_node, a, b)
-                && build_and_check_containment_from_hashes(
-                    a_bnodes_by_hash,
-                    b_bnodes_by_hash,
-                    a_to_b_mapping,
-                    a,
-                    b,
-                    remaining_a_node,
-                    current_b_nodes,
-                )
-            {
-                return true;
-            }
-            current_b_nodes.insert(b_node);
-        }
-        a_to_b_mapping.remove(a_node);
-        false
-    } else {
-        let (hash, new_a_nodes) = match a_bnodes_by_hash.pop() {
-            Some(v) => v,
-            None => return true,
-        };
-
-        let mut new_b_nodes = b_bnodes_by_hash
-            .get(&hash)
-            .map_or(HashSet::default(), |v| v.iter().cloned().collect());
-        if new_a_nodes.len() != new_b_nodes.len() {
-            return false;
-        }
-
-        if new_a_nodes.len() > 10 {
-            eprintln!("Too big instance, aborting");
-            return true; //TODO: Very very very bad
-        }
-
-        if build_and_check_containment_from_hashes(
-            a_bnodes_by_hash,
-            b_bnodes_by_hash,
-            a_to_b_mapping,
-            a,
-            b,
-            &new_a_nodes,
-            &mut new_b_nodes,
-        ) {
-            true
-        } else {
-            a_bnodes_by_hash.push((hash, new_a_nodes));
-            false
-        }
-    }
-}
-
-fn check_is_contained_focused<'a>(
-    a_to_b_mapping: &mut HashMap<EncodedTerm, EncodedTerm>,
-    a_bnode_focus: EncodedTerm,
-    a: &'a HashSet<EncodedQuad>,
-    b: &'a HashSet<EncodedQuad>,
-) -> bool {
-    let ts_a = a
+fn distinguish(
+    g: &MemoryStore,
+    hash: &TrivialHashMap<u128, u64>,
+    partition: &[(u64, Vec<u128>)],
+) -> Vec<Vec<u8>> {
+    let b_prime = partition
         .iter()
-        .filter(|t| t.subject == a_bnode_focus)
-        .chain(a.iter().filter(|t| t.object == a_bnode_focus));
-    //TODO: these filters
-    for t_a in ts_a {
-        let subject = if t_a.subject.is_blank_node() {
-            if let Some(s_a) = a_to_b_mapping.get(&t_a.subject) {
-                *s_a
-            } else {
-                continue; // We skip for now
-            }
-        } else {
-            t_a.subject
-        };
-        let object = if t_a.object.is_blank_node() {
-            if let Some(o_a) = a_to_b_mapping.get(&t_a.object) {
-                *o_a
-            } else {
-                continue; // We skip for now
-            }
-        } else {
-            t_a.object
-        };
-        if !b.contains(&EncodedQuad::new(
-            subject,
-            t_a.predicate,
-            object,
-            t_a.graph_name, //TODO: support blank node graph names
-        )) {
-            //TODO
-            return false;
-        }
+        .find_map(|(_, b)| if b.len() > 1 { Some(b) } else { None });
+    if let Some(b_prime) = b_prime {
+        b_prime
+            .iter()
+            .map(|b| {
+                let mut hash_prime = hash.clone();
+                hash_prime.insert(*b, hash_tuple((hash_prime[b], 22)));
+                let (hash_prime_prime, partition_prime) = hash_bnodes(g, hash_prime);
+                distinguish(g, &hash_prime_prime, &partition_prime)
+            })
+            .fold(None, |a, b| {
+                Some(if let Some(a) = a {
+                    if a <= b {
+                        a
+                    } else {
+                        b
+                    }
+                } else {
+                    b
+                })
+            })
+            .unwrap_or_else(Vec::new)
+    } else {
+        label(g, hash)
     }
-
-    true
 }
 
-fn graph_blank_nodes(graph: &HashSet<EncodedQuad>) -> Vec<EncodedTerm> {
-    let mut blank_nodes: HashSet<EncodedTerm> = HashSet::default();
-    for t in graph {
-        if t.subject.is_blank_node() {
-            blank_nodes.insert(t.subject);
+fn hash_bnodes(
+    g: &MemoryStore,
+    mut hashes: TrivialHashMap<u128, u64>,
+) -> (TrivialHashMap<u128, u64>, Vec<(u64, Vec<u128>)>) {
+    let mut to_hash = Vec::new();
+    let mut partition: TrivialHashMap<u64, Vec<u128>> =
+        TrivialHashMap::with_hasher(BuildHasherDefault::<TrivialHasher>::default());
+    let mut partition_len = 0;
+    loop {
+        //TODO: improve termination
+        let mut new_hashes =
+            TrivialHashMap::with_hasher(BuildHasherDefault::<TrivialHasher>::default());
+        for (b, old_hash) in &hashes {
+            let bnode = EncodedTerm::BlankNode { id: *b };
+            for q in g.encoded_quads_for_subject(bnode) {
+                to_hash.push((
+                    hash_term(q.predicate, &hashes),
+                    hash_term(q.object, &hashes),
+                    hash_term(q.graph_name, &hashes),
+                    0,
+                ));
+            }
+            for q in g.encoded_quads_for_object(bnode) {
+                to_hash.push((
+                    hash_term(q.subject, &hashes),
+                    hash_term(q.predicate, &hashes),
+                    hash_term(q.graph_name, &hashes),
+                    1,
+                ));
+            }
+            for q in g.encoded_quads_for_graph(bnode) {
+                to_hash.push((
+                    hash_term(q.subject, &hashes),
+                    hash_term(q.predicate, &hashes),
+                    hash_term(q.object, &hashes),
+                    2,
+                ));
+            }
+            to_hash.sort();
+            let hash = hash_tuple((old_hash, &to_hash));
+            to_hash.clear();
+            new_hashes.insert(*b, hash);
+            partition.entry(hash).or_default().push(*b);
         }
-        if t.object.is_blank_node() {
-            blank_nodes.insert(t.object);
+        if partition.len() == partition_len {
+            let mut partition: Vec<_> = partition.into_iter().collect();
+            partition.sort_by(|(h1, b1), (h2, b2)| (b1.len(), h1).cmp(&(b2.len(), h2)));
+            return (hashes, partition);
         }
+        hashes = new_hashes;
+        partition_len = partition.len();
+        partition.clear();
     }
-    blank_nodes.into_iter().collect()
 }
 
-fn are_datasets_isomorphic(a: &MemoryStore, b: &MemoryStore) -> bool {
-    /* TODO if a.len() != b.len() {
-        return false;
-    }*/
+fn bnodes(g: &MemoryStore) -> TrivialHashSet<u128> {
+    let mut bnodes = TrivialHashSet::with_hasher(BuildHasherDefault::<TrivialHasher>::default());
+    for q in g.encoded_quads() {
+        if let EncodedTerm::BlankNode { id } = q.subject {
+            bnodes.insert(id);
+        }
+        if let EncodedTerm::BlankNode { id } = q.object {
+            bnodes.insert(id);
+        }
+        if let EncodedTerm::BlankNode { id } = q.graph_name {
+            bnodes.insert(id);
+        }
+    }
+    bnodes
+}
 
-    // We check containment of everything buts triples with blank nodes
-    let mut a_bnodes_triples = HashSet::default();
-    for t in a.encoded_quads() {
-        if t.subject.is_blank_node() || t.object.is_blank_node() {
-            a_bnodes_triples.insert(t);
-        } else if !b.contains_encoded(&t) {
-            return false; // Triple in a not in b without blank nodes
+fn label(g: &MemoryStore, hashes: &TrivialHashMap<u128, u64>) -> Vec<Vec<u8>> {
+    //TODO: better representation?
+    let mut data: Vec<_> = g
+        .encoded_quads()
+        .into_iter()
+        .map(|q| {
+            let mut buffer = Vec::with_capacity(WRITTEN_TERM_MAX_SIZE * 4);
+            write_spog_quad(
+                &mut buffer,
+                &EncodedQuad::new(
+                    map_term(q.subject, hashes),
+                    map_term(q.predicate, hashes),
+                    map_term(q.object, hashes),
+                    map_term(q.graph_name, hashes),
+                ),
+            );
+            buffer
+        })
+        .collect();
+    data.sort();
+    data
+}
+
+fn map_term(term: EncodedTerm, bnodes_hash: &TrivialHashMap<u128, u64>) -> EncodedTerm {
+    if let EncodedTerm::BlankNode { id } = term {
+        EncodedTerm::BlankNode {
+            id: (*bnodes_hash.get(&id).unwrap()).into(),
+        }
+    } else {
+        term
+    }
+}
+
+fn hash_term(term: EncodedTerm, bnodes_hash: &TrivialHashMap<u128, u64>) -> u64 {
+    if let EncodedTerm::BlankNode { id } = term {
+        *bnodes_hash.get(&id).unwrap()
+    } else {
+        hash_tuple(term)
+    }
+}
+
+fn hash_tuple(v: impl Hash) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    v.hash(&mut hasher);
+    hasher.finish()
+}
+
+#[derive(Default)]
+struct TrivialHasher {
+    value: u64,
+}
+
+#[allow(
+    arithmetic_overflow,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_truncation
+)]
+impl Hasher for TrivialHasher {
+    fn finish(&self) -> u64 {
+        self.value
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for chunk in bytes.chunks(size_of::<u64>()) {
+            let mut val = [0; size_of::<u64>()];
+            val[0..chunk.len()].copy_from_slice(chunk);
+            self.write_u64(u64::from_le_bytes(val));
         }
     }
 
-    let mut b_bnodes_triples = HashSet::default();
-    for t in b.encoded_quads() {
-        if t.subject.is_blank_node() || t.object.is_blank_node() {
-            b_bnodes_triples.insert(t);
-        } else if !a.contains_encoded(&t) {
-            return false; // Triple in a not in b without blank nodes
-        }
+    fn write_u8(&mut self, i: u8) {
+        self.write_u64(i.into());
     }
 
-    let mut a_bnodes_by_hash = HashMap::default();
-    a_bnodes_by_hash.insert(0, graph_blank_nodes(&a_bnodes_triples));
-    let mut b_bnodes_by_hash = HashMap::default();
-    b_bnodes_by_hash.insert(0, graph_blank_nodes(&b_bnodes_triples));
-
-    for distance in 0..5 {
-        let max_size = a_bnodes_by_hash.values().map(Vec::len).max().unwrap_or(0);
-        if max_size < 2 {
-            break; // We only have small buckets
-        }
-
-        a_bnodes_by_hash = split_hash_buckets(a_bnodes_by_hash, a, distance);
-        b_bnodes_by_hash = split_hash_buckets(b_bnodes_by_hash, b, distance);
-
-        // Hashes should have the same size
-        if a_bnodes_by_hash.len() != b_bnodes_by_hash.len() {
-            return false;
-        }
+    fn write_u16(&mut self, i: u16) {
+        self.write_u64(i.into());
     }
 
-    let mut sorted_a_bnodes_by_hash: Vec<_> = a_bnodes_by_hash.into_iter().collect();
-    sorted_a_bnodes_by_hash.sort_by(|(_, l1), (_, l2)| l1.len().cmp(&l2.len()));
+    fn write_u32(&mut self, i: u32) {
+        self.write_u64(i.into());
+    }
 
-    build_and_check_containment_from_hashes(
-        &mut sorted_a_bnodes_by_hash,
-        &b_bnodes_by_hash,
-        &mut HashMap::default(),
-        &a_bnodes_triples,
-        &b_bnodes_triples,
-        &[],
-        &mut HashSet::default(),
-    )
+    fn write_u64(&mut self, i: u64) {
+        self.value ^= i;
+    }
+
+    fn write_u128(&mut self, i: u128) {
+        self.write_u64(i as u64);
+        self.write_u64((i >> 64) as u64);
+    }
+
+    fn write_usize(&mut self, i: usize) {
+        self.write_u64(i as u64);
+        self.write_u64((i >> 64) as u64);
+    }
+
+    fn write_i8(&mut self, i: i8) {
+        self.write_u8(i as u8);
+    }
+
+    fn write_i16(&mut self, i: i16) {
+        self.write_u16(i as u16);
+    }
+
+    fn write_i32(&mut self, i: i32) {
+        self.write_u32(i as u32);
+    }
+
+    fn write_i64(&mut self, i: i64) {
+        self.write_u64(i as u64);
+    }
+
+    fn write_i128(&mut self, i: i128) {
+        self.write_u128(i as u128);
+    }
+
+    fn write_isize(&mut self, i: isize) {
+        self.write_usize(i as usize);
+    }
 }

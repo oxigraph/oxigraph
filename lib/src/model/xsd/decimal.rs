@@ -550,6 +550,13 @@ mod tests {
 
     #[test]
     fn format() {
+        assert_eq!(format!("{}", Decimal::from(0)), "0");
+        assert_eq!(format!("{}", Decimal::from(1)), "1");
+        assert_eq!(format!("{}", Decimal::from(10)), "10");
+        assert_eq!(format!("{}", Decimal::from(100)), "100");
+        assert_eq!(format!("{}", Decimal::from(-1)), "-1");
+        assert_eq!(format!("{}", Decimal::from(-10)), "-10");
+
         assert_eq!(format!("{:02}", Decimal::from(0)), "00");
         assert_eq!(format!("{:02}", Decimal::from(1)), "01");
         assert_eq!(format!("{:02}", Decimal::from(10)), "10");

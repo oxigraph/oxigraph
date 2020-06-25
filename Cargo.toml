@@ -1,9 +1,10 @@
 [workspace]
 members = [
+    "js",
     "lib",
     "server",
-    "wikibase",
-    "js"
+    "testsuite",
+    "wikibase"
 ]
 
 [profile.release]
