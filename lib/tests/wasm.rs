@@ -13,10 +13,10 @@ mod test {
         // insertion
         let ex = NamedNode::parse("http://example.com").unwrap();
         let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
-        store.insert(&quad).unwrap();
+        store.insert(quad.clone());
         // quad filter
-        let results: Result<Vec<Quad>> = store.quads_for_pattern(None, None, None, None).collect();
-        assert_eq!(vec![quad], results.unwrap());
+        let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
+        assert_eq!(vec![quad], results);
 
         // SPARQL query
         let prepared_query = store
