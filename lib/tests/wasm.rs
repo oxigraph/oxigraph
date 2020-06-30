@@ -23,7 +23,7 @@ mod test {
             .prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())
             .unwrap();
         let results = prepared_query.exec().unwrap();
-        if let QueryResult::Bindings(mut solutions) = results {
+        if let QueryResult::Solutions(mut solutions) = results {
             assert_eq!(
                 solutions.next().unwrap().unwrap().get("s"),
                 Some(&ex.into())
@@ -41,7 +41,7 @@ mod test {
             )
             .unwrap();
         let results = prepared_query.exec().unwrap();
-        if let QueryResult::Bindings(mut solutions) = results {
+        if let QueryResult::Solutions(mut solutions) = results {
             if let Some(Term::Literal(l)) = solutions.next().unwrap().unwrap().get(0) {
                 let year = i64::from_str(l.value()).unwrap();
                 assert!(2020 <= year && year <= 2100);

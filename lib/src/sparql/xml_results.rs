@@ -35,7 +35,7 @@ pub fn write_xml_results<W: Write>(results: QueryResult<'_>, sink: W) -> Result<
             writer.write_event(Event::End(BytesEnd::borrowed(b"boolean")))?;
             writer.write_event(Event::End(BytesEnd::borrowed(b"sparql")))?;
         }
-        QueryResult::Bindings(solutions) => {
+        QueryResult::Solutions(solutions) => {
             writer.write_event(Event::Decl(BytesDecl::new(b"1.0", None, None)))?;
             let mut sparql_open = BytesStart::borrowed_name(b"sparql");
             sparql_open.push_attribute(("xmlns", "http://www.w3.org/2005/sparql-results#"));
@@ -170,7 +170,7 @@ pub fn read_xml_results<'a>(source: impl BufRead + 'a) -> Result<QueryResult<'a>
                         for (i,var) in variables.iter().enumerate() {
                             mapping.insert(var.as_bytes().to_vec(), i);
                         }
-                        return Ok(QueryResult::Bindings(QuerySolutionsIterator::new(
+                        return Ok(QueryResult::Solutions(QuerySolutionsIterator::new(
                             variables.into_iter().map(Variable::new).collect(),
                             Box::new(ResultsIterator {
                                 reader,
@@ -209,7 +209,7 @@ pub fn read_xml_results<'a>(source: impl BufRead + 'a) -> Result<QueryResult<'a>
                 },
                 State::AfterHead => {
                     if event.name() == b"results" {
-                        return Ok(QueryResult::Bindings(QuerySolutionsIterator::new(
+                        return Ok(QueryResult::Solutions(QuerySolutionsIterator::new(
                             variables.into_iter().map(Variable::new).collect(),
                             Box::new(empty()),
                         )))

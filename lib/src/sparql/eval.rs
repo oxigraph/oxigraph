@@ -63,7 +63,7 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
         'a: 'b,
     {
         let iter = self.eval_plan(plan, EncodedTuple::with_capacity(variables.len()));
-        Ok(QueryResult::Bindings(
+        Ok(QueryResult::Solutions(
             self.decode_bindings(iter, variables.to_vec()),
         ))
     }

@@ -13,7 +13,7 @@ pub fn write_json_results<W: Write>(results: QueryResult<'_>, mut sink: W) -> Re
             sink.write_all(if value { b"true" } else { b"false" })?;
             sink.write_all(b"}")?;
         }
-        QueryResult::Bindings(solutions) => {
+        QueryResult::Solutions(solutions) => {
             sink.write_all(b"{\"head\":{\"vars\":[")?;
             let mut start_vars = true;
             for variable in solutions.variables() {

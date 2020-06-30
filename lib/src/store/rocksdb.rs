@@ -39,7 +39,7 @@ use std::sync::Arc;
 /// // SPARQL query
 /// let prepared_query = store.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
 /// let results = prepared_query.exec()?;
-/// if let QueryResult::Bindings(mut solutions) =  results {
+/// if let QueryResult::Solutions(mut solutions) =  results {
 ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 /// }
 /// #

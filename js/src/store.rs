@@ -114,7 +114,7 @@ impl JsMemoryStore {
             .map_err(to_err)?;
         let results = query.exec().map_err(to_err)?;
         let output = match results {
-            QueryResult::Bindings(solutions) => {
+            QueryResult::Solutions(solutions) => {
                 let results = Array::new();
                 for solution in solutions {
                     let solution = solution.map_err(to_err)?;

@@ -38,7 +38,7 @@ use std::str;
 ///
 /// // SPARQL query
 /// let prepared_query = store.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
-/// if let QueryResult::Bindings(mut solutions) = prepared_query.exec()? {
+/// if let QueryResult::Solutions(mut solutions) = prepared_query.exec()? {
 ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 /// }
 /// #

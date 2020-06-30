@@ -205,7 +205,7 @@ fn query_store<'a>(
     options: QueryOptions<'a>,
 ) -> Result<QuerySolutionsIterator<'a>> {
     match store.prepare_query(&query, options)?.exec()? {
-        QueryResult::Bindings(iterator) => {
+        QueryResult::Solutions(iterator) => {
             let (variables, iter) = iterator.destruct();
             let collected = iter.collect::<Vec<_>>();
             Ok(QuerySolutionsIterator::new(
@@ -226,7 +226,7 @@ fn pattern_store<'a>(
         .prepare_query_from_pattern(&pattern, options)?
         .exec()?
     {
-        QueryResult::Bindings(iterator) => {
+        QueryResult::Solutions(iterator) => {
             let (varaibles, iter) = iterator.destruct();
             let collected = iter.collect::<Vec<_>>();
             Ok(QuerySolutionsIterator::new(

@@ -14,7 +14,7 @@ use std::rc::Rc;
 /// Results of a [SPARQL query](https://www.w3.org/TR/sparql11-query/)
 pub enum QueryResult<'a> {
     /// Results of a [SELECT](https://www.w3.org/TR/sparql11-query/#select) query
-    Bindings(QuerySolutionsIterator<'a>),
+    Solutions(QuerySolutionsIterator<'a>),
     /// Result of a [ASK](https://www.w3.org/TR/sparql11-query/#ask) query
     Boolean(bool),
     /// Results of a [CONSTRUCT](https://www.w3.org/TR/sparql11-query/#construct) or [DESCRIBE](https://www.w3.org/TR/sparql11-query/#describe) query
@@ -128,7 +128,7 @@ impl FileSyntax for QueryResultSyntax {
 ///
 /// let store = MemoryStore::new();
 /// let prepared_query = store.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
-/// if let QueryResult::Bindings(solutions) = prepared_query.exec()? {
+/// if let QueryResult::Solutions(solutions) = prepared_query.exec()? {
 ///     for solution in solutions {
 ///         println!("{:?}", solution?.get("s"));
 ///     }
@@ -159,7 +159,7 @@ impl<'a> QuerySolutionsIterator<'a> {
     ///
     /// let store = MemoryStore::new();
     /// let prepared_query = store.prepare_query("SELECT ?s ?o WHERE { ?s ?p ?o }", QueryOptions::default())?;
-    /// if let QueryResult::Bindings(solutions) = prepared_query.exec()? {
+    /// if let QueryResult::Solutions(solutions) = prepared_query.exec()? {
     ///     assert_eq!(solutions.variables(), &[Variable::new("s"), Variable::new("o")]);
     /// }
     /// # Result::Ok(())

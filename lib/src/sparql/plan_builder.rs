@@ -46,7 +46,7 @@ impl<E: Encoder> PlanBuilder<E> {
                 let left = self.build_for_graph_pattern(a, variables, graph_name)?;
                 let right = self.build_for_graph_pattern(b, variables, graph_name)?;
 
-                let mut possible_problem_vars = ::new();
+                let mut possible_problem_vars = BTreeSet::new();
                 self.add_left_join_problematic_variables(&right, &mut possible_problem_vars);
 
                 //We add the extra filter if needed

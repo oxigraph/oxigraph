@@ -180,7 +180,7 @@ impl ServiceHandler for StaticServiceHandler {
         service_name: &NamedNode,
         graph_pattern: &'a GraphPattern,
     ) -> Result<QuerySolutionsIterator<'a>> {
-        if let QueryResult::Bindings(iterator) = self
+        if let QueryResult::Solutions(iterator) = self
             .services
             .get(service_name)
             .ok_or_else(|| Error::msg(format!("Service {} not found", service_name)))?
@@ -223,7 +223,7 @@ fn to_dataset(result: QueryResult<'_>, with_order: bool) -> Result<MemoryStore> 
             ));
             Ok(store)
         }
-        QueryResult::Bindings(solutions) => {
+        QueryResult::Solutions(solutions) => {
             let store = MemoryStore::new();
             let result_set = BlankNode::default();
             store.insert(Quad::new(
