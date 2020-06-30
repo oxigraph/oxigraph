@@ -142,9 +142,14 @@ impl<'a> From<&'a Term> for rio::Term<'a> {
 /// A [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple)
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Triple {
-    subject: NamedOrBlankNode,
-    predicate: NamedNode,
-    object: Term,
+    /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
+    pub subject: NamedOrBlankNode,
+
+    /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
+    pub predicate: NamedNode,
+
+    /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple
+    pub object: Term,
 }
 
 impl Triple {
@@ -161,32 +166,32 @@ impl Triple {
         }
     }
 
-    /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
+    #[deprecated(note = "Use directly the `subject` field")]
     pub const fn subject(&self) -> &NamedOrBlankNode {
         &self.subject
     }
 
-    /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
+    #[deprecated(note = "Use directly the `subject` field")]
     pub fn subject_owned(self) -> NamedOrBlankNode {
         self.subject
     }
 
-    /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
+    #[deprecated(note = "Use directly the `predicate` field")]
     pub const fn predicate(&self) -> &NamedNode {
         &self.predicate
     }
 
-    /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
+    #[deprecated(note = "Use directly the `predicate` field")]
     pub fn predicate_owned(self) -> NamedNode {
         self.predicate
     }
 
-    /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple
+    #[deprecated(note = "Use directly the `object` field")]
     pub const fn object(&self) -> &Term {
         &self.object
     }
 
-    /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple
+    #[deprecated(note = "Use directly the `object` field")]
     pub fn object_owned(self) -> Term {
         self.object
     }
@@ -204,16 +209,16 @@ impl Triple {
 
 impl fmt::Display for Triple {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {} {} .", self.subject, self.predicate, self.object)
+        rio::Triple::from(self).fmt(f)
     }
 }
 
 impl<'a> From<&'a Triple> for rio::Triple<'a> {
     fn from(node: &'a Triple) -> Self {
         rio::Triple {
-            subject: node.subject().into(),
-            predicate: node.predicate().into(),
-            object: node.object().into(),
+            subject: (&node.subject).into(),
+            predicate: (&node.predicate).into(),
+            object: (&node.object).into(),
         }
     }
 }
@@ -221,10 +226,18 @@ impl<'a> From<&'a Triple> for rio::Triple<'a> {
 /// A [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Quad {
-    subject: NamedOrBlankNode,
-    predicate: NamedNode,
-    object: Term,
-    graph_name: Option<NamedOrBlankNode>,
+    /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
+    pub subject: NamedOrBlankNode,
+
+    /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
+    pub predicate: NamedNode,
+
+    /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple
+    pub object: Term,
+
+    /// The name of the RDF [graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph) in which the triple is
+    /// or None if it is in the [default graph](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph)
+    pub graph_name: Option<NamedOrBlankNode>,
 }
 
 impl Quad {
@@ -243,52 +256,52 @@ impl Quad {
         }
     }
 
-    /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
+    #[deprecated(note = "Use directly the `subject` field")]
     pub const fn subject(&self) -> &NamedOrBlankNode {
         &self.subject
     }
 
-    /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
+    #[deprecated(note = "Use directly the `subject` field")]
     pub fn subject_owned(self) -> NamedOrBlankNode {
         self.subject
     }
 
-    /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
+    #[deprecated(note = "Use directly the `predicate` field")]
     pub const fn predicate(&self) -> &NamedNode {
         &self.predicate
     }
 
-    /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
+    #[deprecated(note = "Use directly the `predicate` field")]
     pub fn predicate_owned(self) -> NamedNode {
         self.predicate
     }
 
-    /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple
+    #[deprecated(note = "Use directly the `object` field")]
     pub const fn object(&self) -> &Term {
         &self.object
     }
 
-    /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple
+    #[deprecated(note = "Use directly the `object` field")]
     pub fn object_owned(self) -> Term {
         self.object
     }
 
-    /// The name of the RDF [graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph) in which the triple is or None if it is in the [default graph](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph)
+    #[deprecated(note = "Use directly the `graph_name` field")]
     pub const fn graph_name(&self) -> &Option<NamedOrBlankNode> {
         &self.graph_name
     }
 
-    /// The name of the RDF [graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph) in which the triple is or None if it is in the [default graph](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph)
+    #[deprecated(note = "Use directly the `graph_name` field")]
     pub fn graph_name_owned(self) -> Option<NamedOrBlankNode> {
         self.graph_name
     }
 
-    /// Returns the underlying [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple)
+    #[deprecated(note = "Use `Triple::from` instead")]
     pub fn into_triple(self) -> Triple {
         Triple::new(self.subject, self.predicate, self.object)
     }
 
-    /// Extract components from this quad
+    #[deprecated(note = "Use directly the struct fields")]
     pub fn destruct(self) -> (NamedOrBlankNode, NamedNode, Term, Option<NamedOrBlankNode>) {
         (self.subject, self.predicate, self.object, self.graph_name)
     }
@@ -296,13 +309,27 @@ impl Quad {
 
 impl fmt::Display for Quad {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.graph_name {
-            Some(ref graph_name) => write!(
-                f,
-                "{} {} {} {} .",
-                self.subject, self.predicate, self.object, graph_name
-            ),
-            None => write!(f, "{} {} {} .", self.subject, self.predicate, self.object),
+        rio::Quad::from(self).fmt(f)
+    }
+}
+
+impl<'a> From<&'a Quad> for rio::Quad<'a> {
+    fn from(node: &'a Quad) -> Self {
+        rio::Quad {
+            subject: (&node.subject).into(),
+            predicate: (&node.predicate).into(),
+            object: (&node.object).into(),
+            graph_name: node.graph_name.as_ref().map(|g| g.into()),
+        }
+    }
+}
+
+impl From<Quad> for Triple {
+    fn from(quad: Quad) -> Self {
+        Self {
+            subject: quad.subject,
+            predicate: quad.predicate,
+            object: quad.object,
         }
     }
 }

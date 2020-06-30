@@ -441,12 +441,11 @@ impl JsQuad {
 
 impl From<Quad> for JsQuad {
     fn from(quad: Quad) -> Self {
-        let (s, p, o, g) = quad.destruct();
         Self {
-            subject: s.into(),
-            predicate: p.into(),
-            object: o.into(),
-            graph: if let Some(g) = g {
+            subject: quad.subject.into(),
+            predicate: quad.predicate.into(),
+            object: quad.object.into(),
+            graph: if let Some(g) = quad.graph_name {
                 g.into()
             } else {
                 JsTerm::DefaultGraph(JsDefaultGraph {})
@@ -459,11 +458,11 @@ impl TryFrom<JsQuad> for Quad {
     type Error = JsValue;
 
     fn try_from(quad: JsQuad) -> Result<Self, JsValue> {
-        Ok(Quad::new(
-            NamedOrBlankNode::try_from(quad.subject)?,
-            NamedNode::try_from(quad.predicate)?,
-            Term::try_from(quad.object)?,
-            match quad.graph {
+        Ok(Quad {
+            subject: NamedOrBlankNode::try_from(quad.subject)?,
+            predicate: NamedNode::try_from(quad.predicate)?,
+            object: Term::try_from(quad.object)?,
+            graph_name: match quad.graph {
                 JsTerm::NamedNode(node) => Some(NamedOrBlankNode::from(NamedNode::from(node))),
                 JsTerm::BlankNode(node) => Some(NamedOrBlankNode::from(BlankNode::from(node))),
                 JsTerm::Literal(literal) => {
@@ -474,7 +473,7 @@ impl TryFrom<JsQuad> for Quad {
                 }
                 JsTerm::DefaultGraph(_) => None,
             },
-        ))
+        })
     }
 }
 

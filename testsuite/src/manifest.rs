@@ -270,5 +270,5 @@ fn objects_for_subject_predicate(
 ) -> impl Iterator<Item = Term> {
     store
         .quads_for_pattern(Some(subject), Some(predicate), None, None)
-        .map(|t| t.object_owned())
+        .map(|t| t.object)
 }

@@ -394,12 +394,12 @@ impl StaticQueryResults {
                 Some(&rs::RESULT_SET.clone().into()),
                 None,
             )
-            .map(|q| q.subject_owned())
+            .map(|q| q.subject)
             .next()
         {
             if let Some(bool) = dataset
                 .quads_for_pattern(Some(&result_set), Some(&rs::BOOLEAN), None, None)
-                .map(|q| q.object_owned())
+                .map(|q| q.object)
                 .next()
             {
                 // Boolean query
@@ -409,7 +409,7 @@ impl StaticQueryResults {
                 let mut variables: Vec<Variable> = dataset
                     .quads_for_pattern(Some(&result_set), Some(&rs::RESULT_VARIABLE), None, None)
                     .filter_map(|q| {
-                        if let Term::Literal(l) = q.object_owned() {
+                        if let Term::Literal(l) = q.object {
                             Some(Variable::new(l.value()))
                         } else {
                             None
@@ -421,12 +421,12 @@ impl StaticQueryResults {
                 let mut solutions: Vec<_> = dataset
                     .quads_for_pattern(Some(&result_set), Some(&rs::SOLUTION), None, None)
                     .filter_map(|q| {
-                        if let Term::BlankNode(solution) = q.object_owned() {
+                        if let Term::BlankNode(solution) = q.object {
                             let solution = solution.into();
                             let mut bindings = dataset
                                 .quads_for_pattern(Some(&solution), Some(&rs::BINDING), None, None)
                                 .filter_map(|q| {
-                                    if let Term::BlankNode(binding) = q.object_owned() {
+                                    if let Term::BlankNode(binding) = q.object {
                                         let binding = binding.into();
                                         if let (Some(Term::Literal(variable)), Some(value)) = (
                                             dataset
@@ -436,7 +436,7 @@ impl StaticQueryResults {
                                                     None,
                                                     None,
                                                 )
-                                                .map(|q| q.object_owned())
+                                                .map(|q| q.object)
                                                 .next(),
                                             dataset
                                                 .quads_for_pattern(
@@ -445,7 +445,7 @@ impl StaticQueryResults {
                                                     None,
                                                     None,
                                                 )
-                                                .map(|q| q.object_owned())
+                                                .map(|q| q.object)
                                                 .next(),
                                         ) {
                                             Some((Variable::new(variable.value()), value))
@@ -461,7 +461,7 @@ impl StaticQueryResults {
                             let index = dataset
                                 .quads_for_pattern(Some(&solution), Some(&rs::INDEX), None, None)
                                 .filter_map(|q| {
-                                    if let Term::Literal(l) = q.object_owned() {
+                                    if let Term::Literal(l) = q.object {
                                         u64::from_str(l.value()).ok()
                                     } else {
                                         None

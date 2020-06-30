@@ -543,11 +543,11 @@ impl EncodedQuad {
 impl From<&Quad> for EncodedQuad {
     fn from(quad: &Quad) -> Self {
         Self {
-            subject: quad.subject().into(),
-            predicate: quad.predicate().into(),
-            object: quad.object().into(),
+            subject: (&quad.subject).into(),
+            predicate: (&quad.predicate).into(),
+            object: (&quad.object).into(),
             graph_name: quad
-                .graph_name()
+                .graph_name
                 .as_ref()
                 .map_or(ENCODED_DEFAULT_GRAPH, |g| g.into()),
         }
@@ -932,10 +932,10 @@ pub trait Encoder {
 
     fn encode_quad(&mut self, quad: &Quad) -> Result<EncodedQuad> {
         Ok(EncodedQuad {
-            subject: self.encode_named_or_blank_node(quad.subject())?,
-            predicate: self.encode_named_node(quad.predicate())?,
-            object: self.encode_term(quad.object())?,
-            graph_name: match quad.graph_name() {
+            subject: self.encode_named_or_blank_node(&quad.subject)?,
+            predicate: self.encode_named_node(&quad.predicate)?,
+            object: self.encode_term(&quad.object)?,
+            graph_name: match &quad.graph_name {
                 Some(graph_name) => self.encode_named_or_blank_node(graph_name)?,
                 None => ENCODED_DEFAULT_GRAPH,
             },
@@ -948,9 +948,9 @@ pub trait Encoder {
         graph_name: EncodedTerm,
     ) -> Result<EncodedQuad> {
         Ok(EncodedQuad {
-            subject: self.encode_named_or_blank_node(triple.subject())?,
-            predicate: self.encode_named_node(triple.predicate())?,
-            object: self.encode_term(triple.object())?,
+            subject: self.encode_named_or_blank_node(&triple.subject)?,
+            predicate: self.encode_named_node(&triple.predicate)?,
+            object: self.encode_term(&triple.object)?,
             graph_name,
         })
     }

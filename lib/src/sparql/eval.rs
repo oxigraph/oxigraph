@@ -2210,11 +2210,7 @@ impl<'a, S: ReadableEncodedStore + 'a> Iterator for DescribeIterator<'a, S> {
         loop {
             if let Some(quad) = self.quads.next() {
                 return Some(match quad {
-                    Ok(quad) => self
-                        .eval
-                        .dataset
-                        .decode_quad(&quad)
-                        .map(|q| q.into_triple()),
+                    Ok(quad) => self.eval.dataset.decode_quad(&quad).map(|q| q.into()),
                     Err(error) => Err(error),
                 });
             }
