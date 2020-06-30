@@ -32,10 +32,10 @@ use std::option::Option;
 /// );
 /// # Result::<(), LanguageTagParseError>::Ok(())
 /// ```
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Literal(LiteralContent);
 
-#[derive(PartialEq, Eq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash)]
 enum LiteralContent {
     String(String),
     LanguageTaggedString { value: String, language: String },

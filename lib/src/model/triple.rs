@@ -5,7 +5,7 @@ use rio_api::model as rio;
 use std::fmt;
 
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum NamedOrBlankNode {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
@@ -59,7 +59,7 @@ impl<'a> From<&'a NamedOrBlankNode> for rio::NamedOrBlankNode<'a> {
 
 /// An RDF [term](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term)
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) and [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Term {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
@@ -140,7 +140,7 @@ impl<'a> From<&'a Term> for rio::Term<'a> {
 }
 
 /// A [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple)
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Triple {
     subject: NamedOrBlankNode,
     predicate: NamedNode,
@@ -219,7 +219,7 @@ impl<'a> From<&'a Triple> for rio::Triple<'a> {
 }
 
 /// A [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Quad {
     subject: NamedOrBlankNode,
     predicate: NamedNode,

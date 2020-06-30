@@ -4,12 +4,11 @@ use crate::model::*;
 use crate::sparql::model::*;
 use oxiri::Iri;
 use rio_api::model as rio;
-use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fmt;
 use std::ops::Add;
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum NamedNodeOrVariable {
     NamedNode(NamedNode),
     Variable(Variable),
@@ -36,7 +35,7 @@ impl From<Variable> for NamedNodeOrVariable {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum TermOrVariable {
     Term(Term),
     Variable(Variable),
@@ -90,7 +89,7 @@ impl From<NamedNodeOrVariable> for TermOrVariable {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct StaticBindings {
     variables: Vec<Variable>,
     values: Vec<Vec<Option<Term>>>,
@@ -127,7 +126,7 @@ impl Default for StaticBindings {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct TriplePattern {
     pub subject: TermOrVariable,
     pub predicate: NamedNodeOrVariable,
@@ -154,7 +153,7 @@ impl fmt::Display for TriplePattern {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum PropertyPath {
     PredicatePath(NamedNode),
     InversePath(Box<PropertyPath>),
@@ -228,7 +227,7 @@ impl From<NamedNode> for PropertyPath {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PathPattern {
     pub subject: TermOrVariable,
     pub path: PropertyPath,
@@ -269,7 +268,7 @@ impl<'a> fmt::Display for SparqlPathPattern<'a> {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum TripleOrPathPattern {
     Triple(TriplePattern),
     Path(PathPattern),
@@ -323,7 +322,7 @@ impl<'a> fmt::Display for SparqlTripleOrPathPattern<'a> {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Expression {
     NamedNode(NamedNode),
     Literal(Literal),
@@ -526,7 +525,7 @@ impl<'a> fmt::Display for SparqlExpression<'a> {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Function {
     Str,
     Lang,
@@ -637,7 +636,7 @@ impl fmt::Display for Function {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GraphPattern {
     BGP(Vec<TripleOrPathPattern>),
     Join(Box<GraphPattern>, Box<GraphPattern>),
@@ -648,7 +647,7 @@ pub enum GraphPattern {
     Extend(Box<GraphPattern>, Variable, Expression),
     Minus(Box<GraphPattern>, Box<GraphPattern>),
     Service(NamedNodeOrVariable, Box<GraphPattern>, bool),
-    AggregateJoin(GroupPattern, BTreeMap<Aggregation, Variable>),
+    AggregateJoin(GroupPattern, Vec<(Aggregation, Variable)>),
     Data(StaticBindings),
     OrderBy(Box<GraphPattern>, Vec<OrderComparator>),
     Project(Box<GraphPattern>, Vec<Variable>),
@@ -810,7 +809,7 @@ impl GraphPattern {
             GraphPattern::Minus(a, _) => a.add_visible_variables(vars),
             GraphPattern::Service(_, p, _) => p.add_visible_variables(vars),
             GraphPattern::AggregateJoin(_, a) => {
-                for v in a.values() {
+                for (_, v) in a {
                     vars.insert(v);
                 }
             }
@@ -1020,7 +1019,7 @@ impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct GroupPattern(pub Vec<Variable>, pub Box<GraphPattern>);
 
 impl fmt::Display for GroupPattern {
@@ -1049,7 +1048,7 @@ fn build_sparql_select_arguments(args: &[Variable]) -> String {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Aggregation {
     Count(Option<Box<Expression>>, bool),
     Sum(Box<Expression>, bool),
@@ -1222,7 +1221,7 @@ fn fmt_str(value: &str) -> rio::Literal<'_> {
     rio::Literal::Simple { value }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum OrderComparator {
     Asc(Expression),
     Desc(Expression),
@@ -1254,7 +1253,7 @@ impl<'a> fmt::Display for SparqlOrderComparator<'a> {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash, Default)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, Default)]
 pub struct DatasetSpec {
     pub default: Vec<NamedNode>,
     pub named: Vec<NamedNode>,

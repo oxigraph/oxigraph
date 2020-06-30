@@ -14,7 +14,7 @@ use std::str;
 /// The default string formatter is returning a N-Triples, Turtle and SPARQL compatible representation.
 /// `BlankNode::default().to_string()` should return something like `_:00112233445566778899aabbccddeeff`
 ///
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct BlankNode {
     id: u128,
     str: [u8; 32],

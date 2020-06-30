@@ -8,8 +8,7 @@ use peg::error::ParseError;
 use peg::parser;
 use peg::str::LineCol;
 use std::borrow::Cow;
-use std::collections::HashMap;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::str::Chars;
 use std::str::FromStr;
@@ -39,8 +38,8 @@ impl Query {
                 None
             },
             namespaces: HashMap::default(),
-            bnodes_map: BTreeMap::default(),
-            used_bnodes: BTreeSet::default(),
+            bnodes_map: HashMap::default(),
+            used_bnodes: HashSet::default(),
             aggregations: Vec::default(),
         };
 
@@ -197,7 +196,7 @@ impl<F, T: From<F>> From<FocusedTriplePattern<F>> for FocusedTripleOrPathPattern
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 enum PartialGraphPattern {
     Optional(GraphPattern, Option<Expression>),
     Minus(GraphPattern),
@@ -278,7 +277,7 @@ fn build_select(
     let mut p = wher;
 
     //GROUP BY
-    let aggregations = state.aggregations.pop().unwrap_or_else(BTreeMap::default);
+    let aggregations = state.aggregations.pop().unwrap_or_else(Vec::default);
     if group.is_none() && !aggregations.is_empty() {
         let const_variable = Variable::new_random();
         group = Some((
@@ -357,9 +356,9 @@ enum Either<L, R> {
 pub struct ParserState {
     base_iri: Option<Iri<String>>,
     namespaces: HashMap<String, String>,
-    bnodes_map: BTreeMap<String, BlankNode>,
-    used_bnodes: BTreeSet<String>,
-    aggregations: Vec<BTreeMap<Aggregation, Variable>>,
+    bnodes_map: HashMap<String, BlankNode>,
+    used_bnodes: HashSet<String>,
+    aggregations: Vec<Vec<(Aggregation, Variable)>>,
 }
 
 impl ParserState {
@@ -376,11 +375,15 @@ impl ParserState {
             .aggregations
             .last_mut()
             .ok_or_else(|| "Unexpected aggregate")?;
-        Ok(aggregations.get(&agg).cloned().unwrap_or_else(|| {
-            let new_var = Variable::new_random();
-            aggregations.insert(agg, new_var.clone());
-            new_var
-        }))
+        Ok(aggregations
+            .iter()
+            .find_map(|(a, v)| if a == &agg { Some(v) } else { None })
+            .cloned()
+            .unwrap_or_else(|| {
+                let new_var = Variable::new_random();
+                aggregations.push((agg, new_var.clone()));
+                new_var
+            }))
     }
 }
 
@@ -634,7 +637,7 @@ parser! {
             }
         }
         rule Selection_init() = {
-            state.aggregations.push(BTreeMap::default())
+            state.aggregations.push(Vec::default())
         }
         rule SelectClause_option() -> SelectionOption =
             i("DISTINCT") { SelectionOption::Distinct } /

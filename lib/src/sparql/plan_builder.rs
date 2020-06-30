@@ -5,7 +5,7 @@ use crate::sparql::plan::*;
 use crate::store::numeric_encoder::{Encoder, ENCODED_DEFAULT_GRAPH};
 use crate::Error;
 use crate::Result;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
 pub struct PlanBuilder<E: Encoder> {
     encoder: E,
@@ -46,7 +46,7 @@ impl<E: Encoder> PlanBuilder<E> {
                 let left = self.build_for_graph_pattern(a, variables, graph_name)?;
                 let right = self.build_for_graph_pattern(b, variables, graph_name)?;
 
-                let mut possible_problem_vars = BTreeSet::new();
+                let mut possible_problem_vars = ::new();
                 self.add_left_join_problematic_variables(&right, &mut possible_problem_vars);
 
                 //We add the extra filter if needed
@@ -997,8 +997,8 @@ fn slice_key<T: Eq>(slice: &[T], element: &T) -> Option<usize> {
 }
 
 fn sort_bgp(p: &[TripleOrPathPattern]) -> Vec<&TripleOrPathPattern> {
-    let mut assigned_variables = BTreeSet::default();
-    let mut assigned_blank_nodes = BTreeSet::default();
+    let mut assigned_variables = HashSet::default();
+    let mut assigned_blank_nodes = HashSet::default();
     let mut new_p: Vec<_> = p.iter().collect();
 
     for i in 0..new_p.len() {
@@ -1015,8 +1015,8 @@ fn sort_bgp(p: &[TripleOrPathPattern]) -> Vec<&TripleOrPathPattern> {
 
 fn count_pattern_binds(
     pattern: &TripleOrPathPattern,
-    assigned_variables: &BTreeSet<&Variable>,
-    assigned_blank_nodes: &BTreeSet<&BlankNode>,
+    assigned_variables: &HashSet<&Variable>,
+    assigned_blank_nodes: &HashSet<&BlankNode>,
 ) -> u8 {
     let mut count = 12;
     if let TermOrVariable::Variable(v) = pattern.subject() {
@@ -1057,8 +1057,8 @@ fn count_pattern_binds(
 
 fn add_pattern_variables<'a>(
     pattern: &'a TripleOrPathPattern,
-    variables: &mut BTreeSet<&'a Variable>,
-    blank_nodes: &mut BTreeSet<&'a BlankNode>,
+    variables: &mut HashSet<&'a Variable>,
+    blank_nodes: &mut HashSet<&'a BlankNode>,
 ) {
     if let TermOrVariable::Variable(v) = pattern.subject() {
         variables.insert(v);
