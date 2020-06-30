@@ -53,8 +53,8 @@ fn two_service_test() {
             named_node: &NamedNode,
             graph_pattern: &'a GraphPattern,
         ) -> Result<QuerySolutionsIterator<'a>> {
-            let service1 = NamedNode::parse("http://service1.org").unwrap();
-            let service2 = NamedNode::parse("http://service2.org").unwrap();
+            let service1 = NamedNode::new("http://service1.org").unwrap();
+            let service2 = NamedNode::new("http://service2.org").unwrap();
             if named_node == &service1 {
                 let triples = br#"
         <http://example.com/bob> <http://xmlns.com/foaf/0.1/name> "Bob" .
@@ -180,11 +180,11 @@ fn non_silent_service_test() {
 }
 
 fn ex(id: &str) -> Term {
-    Term::NamedNode(NamedNode::parse(format!("http://example.com/{}", id)).unwrap())
+    Term::NamedNode(NamedNode::new(format!("http://example.com/{}", id)).unwrap())
 }
 
 fn mailto(id: &str) -> Term {
-    Term::NamedNode(NamedNode::parse(format!("mailto:{}", id)).unwrap())
+    Term::NamedNode(NamedNode::new(format!("mailto:{}", id)).unwrap())
 }
 
 fn literal(str: &str) -> Term {

@@ -19,13 +19,12 @@ use rio_api::model as rio;
 use sha1::Sha1;
 use sha2::{Sha256, Sha384, Sha512};
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::hash::Hash;
 use std::iter::Iterator;
 use std::iter::{empty, once};
 use std::str;
-use std::sync::Mutex;
 
 const REGEX_SIZE_LIMIT: usize = 1_000_000;
 
@@ -34,7 +33,6 @@ type EncodedTuplesIterator<'a> = Box<dyn Iterator<Item = Result<EncodedTuple>> +
 pub(crate) struct SimpleEvaluator<S: ReadableEncodedStore> {
     dataset: DatasetView<S>,
     base_iri: Option<Iri<String>>,
-    bnodes_map: Mutex<BTreeMap<StrHash, u128>>,
     now: DateTime,
     service_handler: Box<dyn ServiceHandler>,
 }
@@ -47,7 +45,6 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
     ) -> Self {
         Self {
             dataset,
-            bnodes_map: Mutex::new(BTreeMap::default()),
             base_iri,
             now: DateTime::now().unwrap(),
             service_handler,
@@ -946,23 +943,12 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
                 }
             }
             PlanExpression::BNode(id) => match id {
-                Some(id) => {
-                    if let EncodedTerm::StringLiteral { value_id } =
-                        self.eval_expression(id, tuple)?
-                    {
-                        Some(EncodedTerm::BlankNode {
-                            id: *self
-                                .bnodes_map
-                                .lock()
-                                .ok()?
-                                .entry(value_id)
-                                .or_insert_with(random::<u128>),
-                        })
-                    } else {
-                        None
-                    }
-                }
-                None => Some(EncodedTerm::BlankNode {
+                Some(id) => Some(
+                    (&BlankNode::new(self.to_simple_string(self.eval_expression(id, tuple)?)?)
+                        .ok()?)
+                        .into(),
+                ),
+                None => Some(EncodedTerm::InlineBlankNode {
                     id: random::<u128>(),
                 }),
             },
@@ -1409,7 +1395,7 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
         match term {
             EncodedTerm::DefaultGraph => None,
             EncodedTerm::NamedNode { iri_id } => Some(iri_id),
-            EncodedTerm::BlankNode { .. } => None,
+            EncodedTerm::InlineBlankNode { .. } | EncodedTerm::NamedBlankNode { .. } => None,
             EncodedTerm::StringLiteral { value_id }
             | EncodedTerm::LangStringLiteral { value_id, .. }
             | EncodedTerm::TypedLiteral { value_id, .. } => Some(value_id),
@@ -1617,7 +1603,8 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
         match a {
             EncodedTerm::DefaultGraph
             | EncodedTerm::NamedNode { .. }
-            | EncodedTerm::BlankNode { .. }
+            | EncodedTerm::InlineBlankNode { .. }
+            | EncodedTerm::NamedBlankNode { .. }
             | EncodedTerm::LangStringLiteral { .. } => Some(a == b),
             EncodedTerm::StringLiteral { value_id: a } => match b {
                 EncodedTerm::StringLiteral { value_id: b } => Some(a == b),
@@ -1664,7 +1651,8 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
             EncodedTerm::TypedLiteral { .. } => match b {
                 EncodedTerm::TypedLiteral { .. } if a == b => Some(true),
                 EncodedTerm::NamedNode { .. }
-                | EncodedTerm::BlankNode { .. }
+                | EncodedTerm::InlineBlankNode { .. }
+                | EncodedTerm::NamedBlankNode { .. }
                 | EncodedTerm::LangStringLiteral { .. } => Some(false),
                 _ => None,
             },
@@ -1706,24 +1694,26 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
     fn cmp_terms(&self, a: Option<EncodedTerm>, b: Option<EncodedTerm>) -> Ordering {
         match (a, b) {
             (Some(a), Some(b)) => match a {
-                EncodedTerm::BlankNode { id: a } => {
-                    if let EncodedTerm::BlankNode { id: b } = b {
-                        a.cmp(&b)
-                    } else {
-                        Ordering::Less
+                EncodedTerm::InlineBlankNode { .. } | EncodedTerm::NamedBlankNode { .. } => {
+                    match b {
+                        EncodedTerm::InlineBlankNode { .. }
+                        | EncodedTerm::NamedBlankNode { .. } => Ordering::Equal,
+                        _ => Ordering::Less,
                     }
                 }
                 EncodedTerm::NamedNode { iri_id: a } => match b {
                     EncodedTerm::NamedNode { iri_id: b } => {
                         self.compare_str_ids(a, b).unwrap_or(Ordering::Equal)
                     }
-                    EncodedTerm::BlankNode { .. } => Ordering::Greater,
+                    EncodedTerm::InlineBlankNode { .. } | EncodedTerm::NamedBlankNode { .. } => {
+                        Ordering::Greater
+                    }
                     _ => Ordering::Less,
                 },
                 a => match b {
-                    EncodedTerm::NamedNode { .. } | EncodedTerm::BlankNode { .. } => {
-                        Ordering::Greater
-                    }
+                    EncodedTerm::NamedNode { .. }
+                    | EncodedTerm::InlineBlankNode { .. }
+                    | EncodedTerm::NamedBlankNode { .. } => Ordering::Greater,
                     b => self.partial_cmp_literals(a, b).unwrap_or(Ordering::Equal),
                 },
             },

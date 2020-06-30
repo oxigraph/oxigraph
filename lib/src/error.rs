@@ -1,6 +1,5 @@
+use crate::model::{BlankNodeIdParseError, IriParseError, LanguageTagParseError};
 use crate::sparql::SparqlParseError;
-use oxilangtag::LanguageTagParseError;
-use oxiri::IriParseError;
 use rio_turtle::TurtleError;
 use rio_xml::RdfXmlError;
 use std::error;
@@ -24,6 +23,7 @@ impl fmt::Display for Error {
             ErrorKind::Io(e) => e.fmt(f),
             ErrorKind::FromUtf8(e) => e.fmt(f),
             ErrorKind::Iri(e) => e.fmt(f),
+            ErrorKind::BlankNode(e) => e.fmt(f),
             ErrorKind::LanguageTag(e) => e.fmt(f),
             ErrorKind::Other(e) => e.fmt(f),
         }
@@ -37,6 +37,7 @@ impl error::Error for Error {
             ErrorKind::Io(e) => Some(e),
             ErrorKind::FromUtf8(e) => Some(e),
             ErrorKind::Iri(e) => Some(e),
+            ErrorKind::BlankNode(e) => Some(e),
             ErrorKind::LanguageTag(e) => Some(e),
             ErrorKind::Other(e) => Some(e.as_ref()),
         }
@@ -65,6 +66,7 @@ enum ErrorKind {
     Io(io::Error),
     FromUtf8(FromUtf8Error),
     Iri(IriParseError),
+    BlankNode(BlankNodeIdParseError),
     LanguageTag(LanguageTagParseError),
     Other(Box<dyn error::Error + Send + Sync + 'static>),
 }
@@ -89,6 +91,14 @@ impl From<IriParseError> for Error {
     fn from(error: IriParseError) -> Self {
         Self {
             inner: ErrorKind::Iri(error),
+        }
+    }
+}
+
+impl From<BlankNodeIdParseError> for Error {
+    fn from(error: BlankNodeIdParseError) -> Self {
+        Self {
+            inner: ErrorKind::BlankNode(error),
         }
     }
 }

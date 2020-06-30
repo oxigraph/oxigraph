@@ -38,8 +38,8 @@ impl Query {
                 None
             },
             namespaces: HashMap::default(),
-            bnodes_map: HashMap::default(),
             used_bnodes: HashSet::default(),
+            currently_used_bnodes: HashSet::default(),
             aggregations: Vec::default(),
         };
 
@@ -356,8 +356,8 @@ enum Either<L, R> {
 pub struct ParserState {
     base_iri: Option<Iri<String>>,
     namespaces: HashMap<String, String>,
-    bnodes_map: HashMap<String, BlankNode>,
-    used_bnodes: HashSet<String>,
+    used_bnodes: HashSet<BlankNode>,
+    currently_used_bnodes: HashSet<BlankNode>,
     aggregations: Vec<Vec<(Aggregation, Variable)>>,
 }
 
@@ -841,8 +841,8 @@ parser! {
             }
 
             // We deal with blank nodes aliases rule (TODO: partial for now)
-            state.used_bnodes.extend(state.bnodes_map.keys().cloned());
-            state.bnodes_map.clear();
+            state.used_bnodes.extend(state.currently_used_bnodes.iter().cloned());
+            state.currently_used_bnodes.clear();
 
             if let Some(filter) = filter {
                 GraphPattern::Filter(filter, Box::new(g))
@@ -1534,10 +1534,14 @@ parser! {
         //[138]
         rule BlankNode() -> BlankNode =
             b:BLANK_NODE_LABEL() {?
-                if state.used_bnodes.contains(b) {
-                    Err("Already used blank node id")
-                } else {
-                    Ok(*state.bnodes_map.entry(b.to_string()).or_insert_with(BlankNode::default))
+                match BlankNode::new(b) {
+                    Ok(node) => if state.used_bnodes.contains(&node) {
+                        Err("Already used blank node id")
+                    } else {
+                        state.currently_used_bnodes.insert(node.clone());
+                        Ok(node)
+                    },
+                    Err(_) => Err("Invalid blank node identifier")
                 }
             } /
             ANON() { BlankNode::default() }

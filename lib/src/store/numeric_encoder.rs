@@ -63,7 +63,8 @@ const XSD_DURATION_ID: StrHash = StrHash::constant(0x226af08ea5b7e6b08ceed6030c7
 
 const TYPE_DEFAULT_GRAPH_ID: u8 = 0;
 const TYPE_NAMED_NODE_ID: u8 = 1;
-const TYPE_BLANK_NODE_ID: u8 = 2;
+const TYPE_INLINE_BLANK_NODE_ID: u8 = 2;
+const TYPE_NAMED_BLANK_NODE_ID: u8 = 3;
 const TYPE_LANG_STRING_LITERAL_ID: u8 = 4;
 const TYPE_TYPED_LITERAL_ID: u8 = 5;
 const TYPE_STRING_LITERAL: u8 = 6;
@@ -122,8 +123,11 @@ pub enum EncodedTerm {
     NamedNode {
         iri_id: StrHash,
     },
-    BlankNode {
+    InlineBlankNode {
         id: u128,
+    },
+    NamedBlankNode {
+        id_id: StrHash,
     },
     StringLiteral {
         value_id: StrHash,
@@ -155,9 +159,14 @@ impl PartialEq for EncodedTerm {
                 EncodedTerm::NamedNode { iri_id: iri_id_a },
                 EncodedTerm::NamedNode { iri_id: iri_id_b },
             ) => iri_id_a == iri_id_b,
-            (EncodedTerm::BlankNode { id: id_a }, EncodedTerm::BlankNode { id: id_b }) => {
-                id_a == id_b
-            }
+            (
+                EncodedTerm::InlineBlankNode { id: id_a },
+                EncodedTerm::InlineBlankNode { id: id_b },
+            ) => id_a == id_b,
+            (
+                EncodedTerm::NamedBlankNode { id_id: id_a },
+                EncodedTerm::NamedBlankNode { id_id: id_b },
+            ) => id_a == id_b,
             (
                 EncodedTerm::StringLiteral {
                     value_id: value_id_a,
@@ -218,7 +227,8 @@ impl Hash for EncodedTerm {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
             EncodedTerm::NamedNode { iri_id } => iri_id.hash(state),
-            EncodedTerm::BlankNode { id } => id.hash(state),
+            EncodedTerm::InlineBlankNode { id } => id.hash(state),
+            EncodedTerm::NamedBlankNode { id_id } => id_id.hash(state),
             EncodedTerm::DefaultGraph => (),
             EncodedTerm::StringLiteral { value_id } => value_id.hash(state),
             EncodedTerm::LangStringLiteral {
@@ -258,7 +268,7 @@ impl EncodedTerm {
 
     pub fn is_blank_node(&self) -> bool {
         match self {
-            EncodedTerm::BlankNode { .. } => true,
+            EncodedTerm::InlineBlankNode { .. } | EncodedTerm::NamedBlankNode { .. } => true,
             _ => false,
         }
     }
@@ -305,7 +315,8 @@ impl EncodedTerm {
         match self {
             EncodedTerm::DefaultGraph { .. } => TYPE_DEFAULT_GRAPH_ID,
             EncodedTerm::NamedNode { .. } => TYPE_NAMED_NODE_ID,
-            EncodedTerm::BlankNode { .. } => TYPE_BLANK_NODE_ID,
+            EncodedTerm::InlineBlankNode { .. } => TYPE_INLINE_BLANK_NODE_ID,
+            EncodedTerm::NamedBlankNode { .. } => TYPE_NAMED_BLANK_NODE_ID,
             EncodedTerm::StringLiteral { .. } => TYPE_STRING_LITERAL,
             EncodedTerm::LangStringLiteral { .. } => TYPE_LANG_STRING_LITERAL_ID,
             EncodedTerm::TypedLiteral { .. } => TYPE_TYPED_LITERAL_ID,
@@ -410,7 +421,13 @@ impl<'a> From<rio::NamedNode<'a>> for EncodedTerm {
 
 impl From<&BlankNode> for EncodedTerm {
     fn from(node: &BlankNode) -> Self {
-        EncodedTerm::BlankNode { id: node.id() }
+        if let Some(id) = node.id() {
+            EncodedTerm::InlineBlankNode { id }
+        } else {
+            EncodedTerm::NamedBlankNode {
+                id_id: StrHash::new(node.as_str()),
+            }
+        }
     }
 }
 
@@ -560,11 +577,18 @@ impl<R: Read> TermReader for R {
                     iri_id: StrHash::from_be_bytes(buffer),
                 })
             }
-            TYPE_BLANK_NODE_ID => {
+            TYPE_INLINE_BLANK_NODE_ID => {
                 let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::BlankNode {
+                Ok(EncodedTerm::InlineBlankNode {
                     id: u128::from_be_bytes(buffer),
+                })
+            }
+            TYPE_NAMED_BLANK_NODE_ID => {
+                let mut buffer = [0; 16];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::NamedBlankNode {
+                    id_id: StrHash::from_be_bytes(buffer),
                 })
             }
             TYPE_LANG_STRING_LITERAL_ID => {
@@ -730,7 +754,8 @@ pub fn write_term(sink: &mut Vec<u8>, term: EncodedTerm) {
     match term {
         EncodedTerm::DefaultGraph => {}
         EncodedTerm::NamedNode { iri_id } => sink.extend_from_slice(&iri_id.to_be_bytes()),
-        EncodedTerm::BlankNode { id } => sink.extend_from_slice(&id.to_be_bytes()),
+        EncodedTerm::InlineBlankNode { id } => sink.extend_from_slice(&id.to_be_bytes()),
+        EncodedTerm::NamedBlankNode { id_id } => sink.extend_from_slice(&id_id.to_be_bytes()),
         EncodedTerm::StringLiteral { value_id } => sink.extend_from_slice(&value_id.to_be_bytes()),
         EncodedTerm::LangStringLiteral {
             value_id,
@@ -1009,11 +1034,11 @@ impl<S: StrContainer> Encoder for S {
         bnodes_map: &mut HashMap<String, u128>,
     ) -> Result<EncodedTerm> {
         Ok(if let Some(id) = bnodes_map.get(blank_node.id) {
-            EncodedTerm::BlankNode { id: *id }
+            EncodedTerm::InlineBlankNode { id: *id }
         } else {
             let id = random::<u128>();
             bnodes_map.insert(blank_node.id.to_owned(), id);
-            EncodedTerm::BlankNode { id }
+            EncodedTerm::InlineBlankNode { id }
         })
     }
 
@@ -1185,7 +1210,10 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::NamedNode { iri_id } => {
                 Ok(NamedNode::new_unchecked(get_required_str(self, iri_id)?).into())
             }
-            EncodedTerm::BlankNode { id } => Ok(BlankNode::new_from_unique_id(id).into()),
+            EncodedTerm::InlineBlankNode { id } => Ok(BlankNode::new_from_unique_id(id).into()),
+            EncodedTerm::NamedBlankNode { id_id } => {
+                Ok(BlankNode::new_unchecked(get_required_str(self, id_id)?).into())
+            }
             EncodedTerm::StringLiteral { value_id } => {
                 Ok(Literal::new_simple_literal(get_required_str(self, value_id)?).into())
             }

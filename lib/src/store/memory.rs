@@ -27,7 +27,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 /// let store = MemoryStore::new();
 ///
 /// // insertion
-/// let ex = NamedNode::parse("http://example.com")?;
+/// let ex = NamedNode::new("http://example.com")?;
 /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
 /// store.insert(quad.clone());
 ///
@@ -90,7 +90,7 @@ impl MemoryStore {
     /// let store = MemoryStore::new();
     ///
     /// // insertions
-    /// let ex = NamedNode::parse("http://example.com")?;
+    /// let ex = NamedNode::new("http://example.com")?;
     /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), None));
     ///
     /// // SPARQL query
@@ -135,7 +135,7 @@ impl MemoryStore {
     /// let store = MemoryStore::new();
     ///
     /// // insertion
-    /// let ex = NamedNode::parse("http://example.com")?;
+    /// let ex = NamedNode::new("http://example.com")?;
     /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
     /// store.insert(quad.clone());
     ///
@@ -182,7 +182,7 @@ impl MemoryStore {
     ///
     /// let store = MemoryStore::new();
     ///
-    /// let ex = NamedNode::parse("http://example.com")?;
+    /// let ex = NamedNode::new("http://example.com")?;
     /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
     ///
     /// // transaction
@@ -223,7 +223,7 @@ impl MemoryStore {
     ///
     /// // quad filter
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
-    /// let ex = NamedNode::parse("http://example.com")?;
+    /// let ex = NamedNode::new("http://example.com")?;
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results);
     /// # Result::Ok(())
     /// ```
@@ -253,7 +253,7 @@ impl MemoryStore {
     ///
     /// // quad filter
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
-    /// let ex = NamedNode::parse("http://example.com")?;
+    /// let ex = NamedNode::new("http://example.com")?;
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), Some(ex.into()))], results);
     /// # Result::Ok(())
     /// ```
@@ -857,7 +857,7 @@ impl<'a> MemoryTransaction<'a> {
     ///
     /// // quad filter
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
-    /// let ex = NamedNode::parse("http://example.com")?;
+    /// let ex = NamedNode::new("http://example.com")?;
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results);
     /// # Result::Ok(())
     /// ```
@@ -886,7 +886,7 @@ impl<'a> MemoryTransaction<'a> {
     ///
     /// // quad filter
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
-    /// let ex = NamedNode::parse("http://example.com")?;
+    /// let ex = NamedNode::new("http://example.com")?;
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), Some(ex.into()))], results);
     /// # Result::Ok(())
     /// ```
@@ -987,8 +987,8 @@ fn iso_canonicalize(g: &MemoryStore) -> Vec<Vec<u8>> {
 
 fn distinguish(
     g: &MemoryStore,
-    hash: &TrivialHashMap<u128, u64>,
-    partition: &[(u64, Vec<u128>)],
+    hash: &TrivialHashMap<EncodedTerm, u64>,
+    partition: &[(u64, Vec<EncodedTerm>)],
 ) -> Vec<Vec<u8>> {
     let b_prime = partition
         .iter()
@@ -1021,19 +1021,21 @@ fn distinguish(
 
 fn hash_bnodes(
     g: &MemoryStore,
-    mut hashes: TrivialHashMap<u128, u64>,
-) -> (TrivialHashMap<u128, u64>, Vec<(u64, Vec<u128>)>) {
+    mut hashes: TrivialHashMap<EncodedTerm, u64>,
+) -> (
+    TrivialHashMap<EncodedTerm, u64>,
+    Vec<(u64, Vec<EncodedTerm>)>,
+) {
     let mut to_hash = Vec::new();
-    let mut partition: TrivialHashMap<u64, Vec<u128>> =
+    let mut partition: TrivialHashMap<u64, Vec<EncodedTerm>> =
         TrivialHashMap::with_hasher(BuildHasherDefault::<TrivialHasher>::default());
     let mut partition_len = 0;
     loop {
         //TODO: improve termination
         let mut new_hashes =
             TrivialHashMap::with_hasher(BuildHasherDefault::<TrivialHasher>::default());
-        for (b, old_hash) in &hashes {
-            let bnode = EncodedTerm::BlankNode { id: *b };
-            for q in g.encoded_quads_for_subject(bnode) {
+        for (bnode, old_hash) in &hashes {
+            for q in g.encoded_quads_for_subject(*bnode) {
                 to_hash.push((
                     hash_term(q.predicate, &hashes),
                     hash_term(q.object, &hashes),
@@ -1041,7 +1043,7 @@ fn hash_bnodes(
                     0,
                 ));
             }
-            for q in g.encoded_quads_for_object(bnode) {
+            for q in g.encoded_quads_for_object(*bnode) {
                 to_hash.push((
                     hash_term(q.subject, &hashes),
                     hash_term(q.predicate, &hashes),
@@ -1049,7 +1051,7 @@ fn hash_bnodes(
                     1,
                 ));
             }
-            for q in g.encoded_quads_for_graph(bnode) {
+            for q in g.encoded_quads_for_graph(*bnode) {
                 to_hash.push((
                     hash_term(q.subject, &hashes),
                     hash_term(q.predicate, &hashes),
@@ -1060,8 +1062,8 @@ fn hash_bnodes(
             to_hash.sort();
             let hash = hash_tuple((old_hash, &to_hash));
             to_hash.clear();
-            new_hashes.insert(*b, hash);
-            partition.entry(hash).or_default().push(*b);
+            new_hashes.insert(*bnode, hash);
+            partition.entry(hash).or_default().push(*bnode);
         }
         if partition.len() == partition_len {
             let mut partition: Vec<_> = partition.into_iter().collect();
@@ -1074,23 +1076,23 @@ fn hash_bnodes(
     }
 }
 
-fn bnodes(g: &MemoryStore) -> TrivialHashSet<u128> {
+fn bnodes(g: &MemoryStore) -> TrivialHashSet<EncodedTerm> {
     let mut bnodes = TrivialHashSet::with_hasher(BuildHasherDefault::<TrivialHasher>::default());
     for q in g.encoded_quads() {
-        if let EncodedTerm::BlankNode { id } = q.subject {
-            bnodes.insert(id);
+        if q.subject.is_blank_node() {
+            bnodes.insert(q.subject);
         }
-        if let EncodedTerm::BlankNode { id } = q.object {
-            bnodes.insert(id);
+        if q.object.is_blank_node() {
+            bnodes.insert(q.object);
         }
-        if let EncodedTerm::BlankNode { id } = q.graph_name {
-            bnodes.insert(id);
+        if q.graph_name.is_blank_node() {
+            bnodes.insert(q.graph_name);
         }
     }
     bnodes
 }
 
-fn label(g: &MemoryStore, hashes: &TrivialHashMap<u128, u64>) -> Vec<Vec<u8>> {
+fn label(g: &MemoryStore, hashes: &TrivialHashMap<EncodedTerm, u64>) -> Vec<Vec<u8>> {
     //TODO: better representation?
     let mut data: Vec<_> = g
         .encoded_quads()
@@ -1113,19 +1115,19 @@ fn label(g: &MemoryStore, hashes: &TrivialHashMap<u128, u64>) -> Vec<Vec<u8>> {
     data
 }
 
-fn map_term(term: EncodedTerm, bnodes_hash: &TrivialHashMap<u128, u64>) -> EncodedTerm {
-    if let EncodedTerm::BlankNode { id } = term {
-        EncodedTerm::BlankNode {
-            id: (*bnodes_hash.get(&id).unwrap()).into(),
+fn map_term(term: EncodedTerm, bnodes_hash: &TrivialHashMap<EncodedTerm, u64>) -> EncodedTerm {
+    if term.is_blank_node() {
+        EncodedTerm::InlineBlankNode {
+            id: (*bnodes_hash.get(&term).unwrap()).into(),
         }
     } else {
         term
     }
 }
 
-fn hash_term(term: EncodedTerm, bnodes_hash: &TrivialHashMap<u128, u64>) -> u64 {
-    if let EncodedTerm::BlankNode { id } = term {
-        *bnodes_hash.get(&id).unwrap()
+fn hash_term(term: EncodedTerm, bnodes_hash: &TrivialHashMap<EncodedTerm, u64>) -> u64 {
+    if term.is_blank_node() {
+        *bnodes_hash.get(&term).unwrap()
     } else {
         hash_tuple(term)
     }

@@ -177,7 +177,6 @@ pub fn read_xml_results<'a>(source: impl BufRead + 'a) -> Result<QueryResult<'a>
                                 buffer: Vec::default(),
                                 namespace_buffer,
                                 mapping,
-                                bnodes_map: BTreeMap::default(),
                             }),
                         )));
                     } else if event.name() != b"link" && event.name() != b"results" && event.name() != b"boolean" {
@@ -250,7 +249,6 @@ struct ResultsIterator<R: BufRead> {
     buffer: Vec<u8>,
     namespace_buffer: Vec<u8>,
     mapping: BTreeMap<Vec<u8>, usize>,
-    bnodes_map: BTreeMap<Vec<u8>, BlankNode>,
 }
 
 impl<R: BufRead> Iterator for ResultsIterator<R> {
@@ -343,7 +341,7 @@ impl<R: BufRead> ResultsIterator<R> {
                                     if attr.key == b"xml:lang" {
                                         lang = Some(attr.unescape_and_decode_value(&self.reader)?);
                                     } else if attr.key == b"datatype" {
-                                        datatype = Some(NamedNode::parse(
+                                        datatype = Some(NamedNode::new(
                                             attr.unescape_and_decode_value(&self.reader)?,
                                         )?);
                                     }
@@ -363,16 +361,10 @@ impl<R: BufRead> ResultsIterator<R> {
                     let data = event.unescaped()?;
                     match state {
                         State::Uri => {
-                            term = Some(NamedNode::parse(self.reader.decode(&data)?)?.into())
+                            term = Some(NamedNode::new(self.reader.decode(&data)?)?.into())
                         }
                         State::BNode => {
-                            term = Some(
-                                self.bnodes_map
-                                    .entry(data.to_vec())
-                                    .or_insert_with(BlankNode::default)
-                                    .clone()
-                                    .into(),
-                            )
+                            term = Some(BlankNode::new(self.reader.decode(&data)?)?.into())
                         }
                         State::Literal => {
                             term = Some(

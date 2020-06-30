@@ -15,7 +15,7 @@ pub struct JsDataFactory {
 impl JsDataFactory {
     #[wasm_bindgen(js_name = namedNode)]
     pub fn named_node(&self, value: String) -> Result<JsNamedNode, JsValue> {
-        NamedNode::parse(value)
+        NamedNode::new(value)
             .map(|v| v.into())
             .map_err(|v| UriError::new(&v.to_string()).into())
     }
@@ -23,9 +23,7 @@ impl JsDataFactory {
     #[wasm_bindgen(js_name = blankNode)]
     pub fn blank_node(&self, value: Option<String>) -> Result<JsBlankNode, JsValue> {
         Ok(if let Some(value) = value {
-            BlankNode::new_from_unique_id(u128::from_str_radix(&value, 16).map_err(|_| {
-                format_err!("Oxigraph only supports BlankNode created with Oxigraph DataFactory")
-            })?)
+            BlankNode::new(value).map_err(to_err)?
         } else {
             BlankNode::default()
         }
@@ -511,26 +509,19 @@ impl FromJsConverter {
         let term_type = Reflect::get(&value, &self.term_type)?;
         if let Some(term_type) = term_type.as_string() {
             match term_type.as_str() {
-                "NamedNode" => Ok(NamedNode::parse(
+                "NamedNode" => Ok(NamedNode::new(
                     Reflect::get(&value, &self.value)?
                         .as_string()
                         .ok_or_else(|| format_err!("NamedNode should have a string value"))?,
                 )
                 .map_err(|v| UriError::new(&v.to_string()))?
                 .into()),
-                "BlankNode" => Ok(BlankNode::new_from_unique_id(
-                    u128::from_str_radix(
-                        &Reflect::get(&value, &self.value)?
-                            .as_string()
-                            .ok_or_else(|| format_err!("BlankNode should have a string value"))?,
-                        16,
-                    )
-                    .map_err(|_| {
-                        format_err!(
-                            "Oxigraph only supports BlankNode created with Oxigraph DataFactory"
-                        )
-                    })?,
+                "BlankNode" => Ok(BlankNode::new(
+                    &Reflect::get(&value, &self.value)?
+                        .as_string()
+                        .ok_or_else(|| format_err!("BlankNode should have a string value"))?,
                 )
+                .map_err(to_err)?
                 .into()),
                 "Literal" => {
                     if let JsTerm::NamedNode(datatype) =

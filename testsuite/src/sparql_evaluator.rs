@@ -79,7 +79,7 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
             load_to_store(
                 &graph_data,
                 &store,
-                Some(&NamedNode::parse(graph_data)?.into()),
+                Some(&NamedNode::new(graph_data)?.into()),
             )?;
         }
         let query_file = test
@@ -163,7 +163,7 @@ impl StaticServiceHandler {
                 services
                     .iter()
                     .map(|(name, data)| {
-                        let name = NamedNode::parse(name)?;
+                        let name = NamedNode::new(name)?;
                         let store = MemoryStore::new();
                         load_to_store(&data, &store, None)?;
                         Ok((name, store))
@@ -210,7 +210,7 @@ fn to_dataset(result: QueryResult<'_>, with_order: bool) -> Result<MemoryStore> 
             let store = MemoryStore::new();
             let result_set = BlankNode::default();
             store.insert(Quad::new(
-                result_set,
+                result_set.clone(),
                 rdf::TYPE.clone(),
                 rs::RESULT_SET.clone(),
                 None,
@@ -227,14 +227,14 @@ fn to_dataset(result: QueryResult<'_>, with_order: bool) -> Result<MemoryStore> 
             let store = MemoryStore::new();
             let result_set = BlankNode::default();
             store.insert(Quad::new(
-                result_set,
+                result_set.clone(),
                 rdf::TYPE.clone(),
                 rs::RESULT_SET.clone(),
                 None,
             ));
             for variable in solutions.variables() {
                 store.insert(Quad::new(
-                    result_set,
+                    result_set.clone(),
                     rs::RESULT_VARIABLE.clone(),
                     Literal::new_simple_literal(variable.as_str()),
                     None,
@@ -244,15 +244,25 @@ fn to_dataset(result: QueryResult<'_>, with_order: bool) -> Result<MemoryStore> 
                 let solution = solution?;
                 let solution_id = BlankNode::default();
                 store.insert(Quad::new(
-                    result_set,
+                    result_set.clone(),
                     rs::SOLUTION.clone(),
-                    solution_id,
+                    solution_id.clone(),
                     None,
                 ));
                 for (variable, value) in solution.iter() {
                     let binding = BlankNode::default();
-                    store.insert(Quad::new(solution_id, rs::BINDING.clone(), binding, None));
-                    store.insert(Quad::new(binding, rs::VALUE.clone(), value.clone(), None));
+                    store.insert(Quad::new(
+                        solution_id.clone(),
+                        rs::BINDING.clone(),
+                        binding.clone(),
+                        None,
+                    ));
+                    store.insert(Quad::new(
+                        binding.clone(),
+                        rs::VALUE.clone(),
+                        value.clone(),
+                        None,
+                    ));
                     store.insert(Quad::new(
                         binding,
                         rs::VARIABLE.clone(),

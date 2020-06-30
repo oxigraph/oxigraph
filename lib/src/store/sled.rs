@@ -28,7 +28,7 @@ use std::str;
 /// let store = SledStore::open("example.db")?;
 ///
 /// // insertion
-/// let ex = NamedNode::parse("http://example.com")?;
+/// let ex = NamedNode::new("http://example.com")?;
 /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
 /// store.insert(&quad)?;
 ///
@@ -550,7 +550,7 @@ fn store() -> Result<()> {
     use crate::*;
 
     let main_s = NamedOrBlankNode::from(BlankNode::default());
-    let main_p = NamedNode::parse("http://example.com")?;
+    let main_p = NamedNode::new("http://example.com")?;
     let main_o = Term::from(Literal::from(1));
 
     let main_quad = Quad::new(main_s.clone(), main_p.clone(), main_o.clone(), None);

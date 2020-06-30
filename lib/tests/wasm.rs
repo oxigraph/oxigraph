@@ -11,7 +11,7 @@ mod test {
         let store = MemoryStore::new();
 
         // insertion
-        let ex = NamedNode::parse("http://example.com").unwrap();
+        let ex = NamedNode::new("http://example.com").unwrap();
         let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
         store.insert(quad.clone());
         // quad filter

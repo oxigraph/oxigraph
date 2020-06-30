@@ -259,7 +259,7 @@ impl WikibaseLoader {
     }
 
     fn load_entity_data(&self, uri: &str, data: impl Read) -> Result<()> {
-        let graph_name = NamedNode::parse(uri)?.into();
+        let graph_name = NamedNode::new(uri)?.into();
         self.store.transaction(|transaction| {
             let to_remove = self
                 .store
@@ -272,7 +272,7 @@ impl WikibaseLoader {
             transaction.load_graph(
                 BufReader::new(data),
                 GraphSyntax::NTriples,
-                Some(&NamedNode::parse(uri)?.into()),
+                Some(&NamedNode::new(uri)?.into()),
                 None,
             )
         })?;

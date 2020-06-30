@@ -176,8 +176,7 @@ impl Iterator for TestManifest {
             None => {
                 match self.manifests_to_do.pop() {
                     Some(url) => {
-                        let manifest =
-                            NamedOrBlankNode::from(NamedNode::parse(url.clone()).unwrap());
+                        let manifest = NamedOrBlankNode::from(NamedNode::new(url.clone()).unwrap());
                         if let Err(error) = load_to_store(&url, &self.graph, None) {
                             return Some(Err(error));
                         }
@@ -186,11 +185,12 @@ impl Iterator for TestManifest {
                         match object_for_subject_predicate(&self.graph, &manifest, &*mf::INCLUDE) {
                             Some(Term::BlankNode(list)) => {
                                 self.manifests_to_do.extend(
-                                    RdfListIterator::iter(&self.graph, list.clone().into())
-                                        .filter_map(|m| match m {
+                                    RdfListIterator::iter(&self.graph, list.into()).filter_map(
+                                        |m| match m {
                                             Term::NamedNode(nm) => Some(nm.into_string()),
                                             _ => None,
-                                        }),
+                                        },
+                                    ),
                                 );
                             }
                             Some(_) => return Some(Err(Error::msg("invalid tests list"))),
@@ -200,10 +200,8 @@ impl Iterator for TestManifest {
                         // New tests
                         match object_for_subject_predicate(&self.graph, &manifest, &*mf::ENTRIES) {
                             Some(Term::BlankNode(list)) => {
-                                self.tests_to_do.extend(RdfListIterator::iter(
-                                    &self.graph,
-                                    list.clone().into(),
-                                ));
+                                self.tests_to_do
+                                    .extend(RdfListIterator::iter(&self.graph, list.into()));
                             }
                             Some(term) => {
                                 return Some(Err(Error::msg(format!(

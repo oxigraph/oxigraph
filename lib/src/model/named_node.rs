@@ -10,7 +10,7 @@ use std::fmt;
 ///
 /// assert_eq!(
 ///     "<http://example.com/foo>",
-///     NamedNode::parse("http://example.com/foo").unwrap().to_string()
+///     NamedNode::new("http://example.com/foo").unwrap().to_string()
 /// )
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
@@ -20,8 +20,13 @@ pub struct NamedNode {
 
 impl NamedNode {
     /// Builds and validate an RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
-    pub fn parse(iri: impl Into<String>) -> Result<Self, IriParseError> {
+    pub fn new(iri: impl Into<String>) -> Result<Self, IriParseError> {
         Ok(Self::new_from_iri(Iri::parse(iri.into())?))
+    }
+
+    #[deprecated(note = "Use the `new` method")]
+    pub fn parse(iri: impl Into<String>) -> Result<Self, IriParseError> {
+        Self::new(iri)
     }
 
     pub(crate) fn new_from_iri(iri: Iri<String>) -> Self {
