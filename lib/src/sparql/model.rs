@@ -106,10 +106,10 @@ impl FileSyntax for QueryResultSyntax {
     fn from_mime_type(media_type: &str) -> Option<Self> {
         if let Some(base_type) = media_type.split(';').next() {
             match base_type {
-                "application/xml" | "application/sparql-results+xml" => {
+                "application/sparql-results+xml" | "application/xml" | "text/xml" => {
                     Some(QueryResultSyntax::Xml)
                 }
-                "application/json" | "application/sparql-results+json" => {
+                "application/sparql-results+json" | "application/json" | "text/json" => {
                     Some(QueryResultSyntax::Json)
                 }
                 _ => None,

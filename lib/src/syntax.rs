@@ -60,9 +60,11 @@ impl FileSyntax for GraphSyntax {
     fn from_mime_type(media_type: &str) -> Option<Self> {
         if let Some(base_type) = media_type.split(';').next() {
             match base_type {
-                "application/n-triples" => Some(GraphSyntax::NTriples),
-                "text/turtle" => Some(GraphSyntax::Turtle),
-                "application/xml" | "application/rdf+xml" => Some(GraphSyntax::RdfXml),
+                "application/n-triples" | "text/plain" => Some(GraphSyntax::NTriples),
+                "text/turtle" | "application/turtle" | "application/x-turtle" => {
+                    Some(GraphSyntax::Turtle)
+                }
+                "application/rdf+xml" | "application/xml" | "text/xml" => Some(GraphSyntax::RdfXml),
                 _ => None,
             }
         } else {
@@ -105,8 +107,10 @@ impl FileSyntax for DatasetSyntax {
     fn from_mime_type(media_type: &str) -> Option<Self> {
         if let Some(base_type) = media_type.split(';').next() {
             match base_type {
-                "application/n-quads" => Some(DatasetSyntax::NQuads),
-                "application/trig" => Some(DatasetSyntax::TriG),
+                "application/n-quads" | "text/x-nquads" | "text/nquads" => {
+                    Some(DatasetSyntax::NQuads)
+                }
+                "application/trig" | "application/x-trig" => Some(DatasetSyntax::TriG),
                 _ => None,
             }
         } else {

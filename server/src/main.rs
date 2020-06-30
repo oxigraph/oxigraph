@@ -343,7 +343,7 @@ mod tests {
     #[test]
     fn post_unsupported_file() {
         let mut request = Request::new(Method::Post, Url::parse("http://localhost/").unwrap());
-        request.insert_header("Content-Type", "text/plain");
+        request.insert_header("Content-Type", "text/foo");
         exec(request, StatusCode::UnsupportedMediaType)
     }
 
