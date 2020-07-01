@@ -907,9 +907,7 @@ pub trait Encoder {
         self.encode_rio_named_node(named_node.into())
     }
 
-    fn encode_blank_node(&self, blank_node: &BlankNode) -> Result<EncodedTerm> {
-        Ok(blank_node.into())
-    }
+    fn encode_blank_node(&mut self, blank_node: &BlankNode) -> Result<EncodedTerm>;
 
     fn encode_literal(&mut self, literal: &Literal) -> Result<EncodedTerm> {
         self.encode_rio_literal(literal.into())
@@ -1026,6 +1024,17 @@ impl<S: StrContainer> Encoder for S {
         let iri_id = StrHash::new(named_node.iri);
         self.insert_str(iri_id, named_node.iri)?;
         Ok(EncodedTerm::NamedNode { iri_id })
+    }
+
+    fn encode_blank_node(&mut self, blank_node: &BlankNode) -> Result<EncodedTerm> {
+        if let Some(id) = blank_node.id() {
+            Ok(EncodedTerm::InlineBlankNode { id })
+        } else {
+            let id = blank_node.as_str();
+            let id_id = StrHash::new(id);
+            self.insert_str(id_id, id)?;
+            Ok(EncodedTerm::NamedBlankNode { id_id })
+        }
     }
 
     fn encode_rio_blank_node(
@@ -1263,15 +1272,16 @@ fn test_encoding() {
         NamedNode::new_unchecked("http://bar.com").into(),
         NamedNode::new_unchecked("http://foo.com").into(),
         BlankNode::default().into(),
-        Literal::new_simple_literal("foo").into(),
+        BlankNode::new_unchecked("foo-bnode").into(),
+        Literal::new_simple_literal("foo-literal").into(),
         Literal::from(true).into(),
         Literal::from(1.2).into(),
         Literal::from(1).into(),
-        Literal::from("foo").into(),
-        Literal::new_language_tagged_literal("foo", "fr")
+        Literal::from("foo-string").into(),
+        Literal::new_language_tagged_literal("foo-fr", "fr")
             .unwrap()
             .into(),
-        Literal::new_language_tagged_literal("foo", "FR")
+        Literal::new_language_tagged_literal("foo-FR", "FR")
             .unwrap()
             .into(),
         Literal::new_typed_literal("-1.32", xsd::DECIMAL.clone()).into(),
