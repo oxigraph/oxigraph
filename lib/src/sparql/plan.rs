@@ -310,6 +310,8 @@ pub enum PlanExpression {
     TimeCast(Box<PlanExpression>),
     DateTimeCast(Box<PlanExpression>),
     DurationCast(Box<PlanExpression>),
+    YearMonthDurationCast(Box<PlanExpression>),
+    DayTimeDurationCast(Box<PlanExpression>),
     StringCast(Box<PlanExpression>),
 }
 
@@ -367,6 +369,8 @@ impl PlanExpression {
             | PlanExpression::TimeCast(e)
             | PlanExpression::DateTimeCast(e)
             | PlanExpression::DurationCast(e)
+            | PlanExpression::YearMonthDurationCast(e)
+            | PlanExpression::DayTimeDurationCast(e)
             | PlanExpression::StringCast(e) => e.add_maybe_bound_variables(set),
             PlanExpression::Or(a, b)
             | PlanExpression::And(a, b)

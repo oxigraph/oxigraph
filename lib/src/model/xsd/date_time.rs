@@ -1,5 +1,5 @@
 use super::parser::{date_lexical_rep, date_time_lexical_rep, parse_value, time_lexical_rep};
-use super::{Decimal, Duration, XsdParseError};
+use super::{DayTimeDuration, Decimal, Duration, XsdParseError, YearMonthDuration};
 use std::cmp::{min, Ordering};
 use std::convert::{TryFrom, TryInto};
 use std::error::Error;
@@ -80,7 +80,7 @@ impl DateTime {
     }
 
     /// [fn:timezone-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-timezone-from-dateTime)
-    pub fn timezone(&self) -> Option<Duration> {
+    pub fn timezone(&self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
@@ -109,13 +109,27 @@ impl DateTime {
         self.timestamp.checked_sub(rhs.into().timestamp)
     }
 
+    /// [op:add-yearMonthDuration-to-dateTime](https://www.w3.org/TR/xpath-functions/#func-add-yearMonthDuration-to-dateTime)
+    pub fn checked_add_year_month_duration(
+        &self,
+        rhs: impl Into<YearMonthDuration>,
+    ) -> Option<Self> {
+        self.checked_add_duration(Duration::from(rhs.into()))
+    }
+
+    /// [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDuration-to-dateTime)
+    pub fn checked_add_day_time_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
+        let rhs = rhs.into();
+        Some(Self {
+            timestamp: self.timestamp.checked_add_seconds(rhs.all_seconds())?,
+        })
+    }
+
     /// [op:add-yearMonthDuration-to-dateTime](https://www.w3.org/TR/xpath-functions/#func-add-yearMonthDuration-to-dateTime) and [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDuration-to-dateTime)
     pub fn checked_add_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         let rhs = rhs.into();
-        if rhs.all_months() == 0 {
-            Some(Self {
-                timestamp: self.timestamp.checked_add_seconds(rhs.all_seconds())?,
-            })
+        if let Ok(rhs) = DayTimeDuration::try_from(rhs) {
+            self.checked_add_day_time_duration(rhs)
         } else {
             Some(Self {
                 timestamp: Timestamp::new(&date_time_plus_duration(rhs, &self.properties())?)
@@ -124,13 +138,27 @@ impl DateTime {
         }
     }
 
+    /// [op:sub-yearMonthDuration-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-sub-yearMonthDuration-from-dateTime)
+    pub fn checked_sub_year_month_duration(
+        &self,
+        rhs: impl Into<YearMonthDuration>,
+    ) -> Option<Self> {
+        self.checked_sub_duration(Duration::from(rhs.into()))
+    }
+
+    /// [op:sub-dayTimeDuration-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-sub-dayTimeDuration-from-dateTime)
+    pub fn checked_sub_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
+        let rhs = rhs.into();
+        Some(Self {
+            timestamp: self.timestamp.checked_sub_seconds(rhs.all_seconds())?,
+        })
+    }
+
     /// [op:sub-yearMonthDuration-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-sub-yearMonthDuration-from-dateTime) and [op:sub-dayTimeDuration-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-sub-dayTimeDuration-from-dateTime)
     pub fn checked_sub_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         let rhs = rhs.into();
-        if rhs.all_months() == 0 {
-            Some(Self {
-                timestamp: self.timestamp.checked_sub_seconds(rhs.all_seconds())?,
-            })
+        if let Ok(rhs) = DayTimeDuration::try_from(rhs) {
+            self.checked_sub_day_time_duration(rhs)
         } else {
             Some(Self {
                 timestamp: Timestamp::new(&date_time_plus_duration(-rhs, &self.properties())?)
@@ -239,7 +267,7 @@ impl Time {
     }
 
     /// [fn:timezone-from-time](https://www.w3.org/TR/xpath-functions/#func-timezone-from-time)
-    pub fn timezone(&self) -> Option<Duration> {
+    pub fn timezone(&self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
@@ -257,6 +285,11 @@ impl Time {
     }
 
     /// [op:add-dayTimeDuration-to-time](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDuration-to-time)
+    pub fn checked_add_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
+        self.checked_add_duration(Duration::from(rhs.into()))
+    }
+
+    /// [op:add-dayTimeDuration-to-time](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDuration-to-time)
     pub fn checked_add_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         DateTime::new(
             1972,
@@ -271,6 +304,11 @@ impl Time {
         .checked_add_duration(rhs)?
         .try_into()
         .ok()
+    }
+
+    /// [op:sub-dayTimeDuration-from-time](https://www.w3.org/TR/xpath-functions/#func-sub-dayTimeDuration-from-time)
+    pub fn checked_sub_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
+        self.checked_sub_duration(Duration::from(rhs.into()))
     }
 
     /// [op:sub-dayTimeDuration-from-time](https://www.w3.org/TR/xpath-functions/#func-sub-dayTimeDuration-from-time)
@@ -377,7 +415,7 @@ impl Date {
     }
 
     /// [fn:timezone-from-date](https://www.w3.org/TR/xpath-functions/#func-timezone-from-date)
-    pub fn timezone(&self) -> Option<Duration> {
+    pub fn timezone(&self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
@@ -394,6 +432,19 @@ impl Date {
         self.timestamp.checked_sub(rhs.into().timestamp)
     }
 
+    /// [op:add-yearMonthDuration-to-date](https://www.w3.org/TR/xpath-functions/#func-add-yearMonthDuration-to-date)
+    pub fn checked_add_year_month_duration(
+        &self,
+        rhs: impl Into<YearMonthDuration>,
+    ) -> Option<Self> {
+        self.checked_add_duration(Duration::from(rhs.into()))
+    }
+
+    /// [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDuration-to-date)
+    pub fn checked_add_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
+        self.checked_add_duration(Duration::from(rhs.into()))
+    }
+
     /// [op:add-yearMonthDuration-to-date](https://www.w3.org/TR/xpath-functions/#func-add-yearMonthDuration-to-date) and [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDuration-to-date)
     pub fn checked_add_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         DateTime::try_from(*self)
@@ -401,6 +452,19 @@ impl Date {
             .checked_add_duration(rhs)?
             .try_into()
             .ok()
+    }
+
+    /// [op:sub-yearMonthDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-sub-yearMonthDuration-from-date)
+    pub fn checked_sub_year_month_duration(
+        &self,
+        rhs: impl Into<YearMonthDuration>,
+    ) -> Option<Self> {
+        self.checked_sub_duration(Duration::from(rhs.into()))
+    }
+
+    /// [op:sub-dayTimeDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-sub-dayTimeDuration-from-date)
+    pub fn checked_sub_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
+        self.checked_sub_duration(Duration::from(rhs.into()))
     }
 
     /// [op:sub-yearMonthDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-sub-yearMonthDuration-from-date) and [op:sub-dayTimeDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-sub-dayTimeDuration-from-date)
@@ -481,9 +545,15 @@ impl From<i16> for TimezoneOffset {
     }
 }
 
+impl From<TimezoneOffset> for DayTimeDuration {
+    fn from(value: TimezoneOffset) -> Self {
+        DayTimeDuration::new(i32::from(value.offset) * 60)
+    }
+}
+
 impl From<TimezoneOffset> for Duration {
     fn from(value: TimezoneOffset) -> Self {
-        Duration::new(0, i32::from(value.offset) * 60)
+        DayTimeDuration::from(value).into()
     }
 }
 
@@ -1373,13 +1443,13 @@ mod tests {
             DateTime::from_str("1999-05-31T13:20:00-05:00")
                 .unwrap()
                 .timezone(),
-            Some(Duration::from_str("-PT5H").unwrap())
+            Some(DayTimeDuration::from_str("-PT5H").unwrap())
         );
         assert_eq!(
             DateTime::from_str("2000-06-12T13:20:00Z")
                 .unwrap()
                 .timezone(),
-            Some(Duration::from_str("PT0S").unwrap())
+            Some(DayTimeDuration::from_str("PT0S").unwrap())
         );
         assert_eq!(
             DateTime::from_str("2004-08-27T00:00:00")
@@ -1390,16 +1460,16 @@ mod tests {
 
         assert_eq!(
             Date::from_str("1999-05-31-05:00").unwrap().timezone(),
-            Some(Duration::from_str("-PT5H").unwrap())
+            Some(DayTimeDuration::from_str("-PT5H").unwrap())
         );
         assert_eq!(
             Date::from_str("2000-06-12Z").unwrap().timezone(),
-            Some(Duration::from_str("PT0S").unwrap())
+            Some(DayTimeDuration::from_str("PT0S").unwrap())
         );
 
         assert_eq!(
             Time::from_str("13:20:00-05:00").unwrap().timezone(),
-            Some(Duration::from_str("-PT5H").unwrap())
+            Some(DayTimeDuration::from_str("-PT5H").unwrap())
         );
         assert_eq!(Time::from_str("13:20:00").unwrap().timezone(), None);
     }

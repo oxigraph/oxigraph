@@ -304,6 +304,23 @@ impl From<Duration> for Literal {
     }
 }
 
+impl From<YearMonthDuration> for Literal {
+    fn from(value: YearMonthDuration) -> Self {
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::YEAR_MONTH_DURATION.clone(),
+        })
+    }
+}
+impl From<DayTimeDuration> for Literal {
+    fn from(value: DayTimeDuration) -> Self {
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::DAY_TIME_DURATION.clone(),
+        })
+    }
+}
+
 impl<'a> From<&'a Literal> for rio::Literal<'a> {
     fn from(literal: &'a Literal) -> Self {
         if literal.is_plain() {

@@ -13,6 +13,7 @@ use std::str::FromStr;
 use super::date_time::DateTimeError;
 use super::decimal::ParseDecimalError;
 use crate::model::xsd::date_time::TimezoneOffset;
+use crate::model::xsd::duration::{DayTimeDuration, YearMonthDuration};
 use nom::bytes::streaming::take_while_m_n;
 use std::error::Error;
 use std::fmt;
@@ -331,7 +332,35 @@ pub fn date_lexical_rep(input: &str) -> XsdResult<'_, Date> {
     )(input)
 }
 
-//  [46]   unsignedNoDecimalPtNumeral ::= digit+
+// [42]   yearMonthDurationLexicalRep ::= '-'? 'P' duYearMonthFrag
+pub fn year_month_duration_lexical_rep(input: &str) -> XsdResult<'_, YearMonthDuration> {
+    map(
+        tuple((opt(char('-')), preceded(char('P'), du_year_month_frag))),
+        |(sign, duration)| {
+            YearMonthDuration::new(if sign == Some('-') {
+                -duration
+            } else {
+                duration
+            })
+        },
+    )(input)
+}
+
+// [43]   dayTimeDurationLexicalRep ::= '-'? 'P' duDayTimeFrag
+pub fn day_time_duration_lexical_rep(input: &str) -> XsdResult<'_, DayTimeDuration> {
+    map(
+        tuple((opt(char('-')), preceded(char('P'), du_day_time_frag))),
+        |(sign, duration)| {
+            DayTimeDuration::new(if sign == Some('-') {
+                -duration
+            } else {
+                duration
+            })
+        },
+    )(input)
+}
+
+// [46]   unsignedNoDecimalPtNumeral ::= digit+
 fn unsigned_no_decimal_pt_numeral(input: &str) -> XsdResult<'_, i64> {
     map_res(digit1, |i| i64::from_str(i))(input)
 }

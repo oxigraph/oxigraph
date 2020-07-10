@@ -60,6 +60,8 @@ const XSD_DATE_TIME_ID: StrHash = StrHash::constant(0xd7496e779a321ade51e92da1a5
 const XSD_DATE_ID: StrHash = StrHash::constant(0x87c4351dea4b98f59a22f7b636d4031);
 const XSD_TIME_ID: StrHash = StrHash::constant(0xc7487be3f3d27d1926b27abf005a9cd2);
 const XSD_DURATION_ID: StrHash = StrHash::constant(0x226af08ea5b7e6b08ceed6030c721228);
+const XSD_YEAR_MONTH_DURATION_ID: StrHash = StrHash::constant(0xc6dacde7afc0bd2f6e178d7229948191);
+const XSD_DAY_TIME_DURATION_ID: StrHash = StrHash::constant(0xc8d6cfdf45e12c10bd711a76aae43bc6);
 
 const TYPE_DEFAULT_GRAPH_ID: u8 = 0;
 const TYPE_NAMED_NODE_ID: u8 = 1;
@@ -78,6 +80,8 @@ const TYPE_DATE_TIME_LITERAL: u8 = 13;
 const TYPE_DATE_LITERAL: u8 = 14;
 const TYPE_TIME_LITERAL: u8 = 15;
 const TYPE_DURATION_LITERAL: u8 = 16;
+const TYPE_YEAR_MONTH_DURATION_LITERAL: u8 = 17;
+const TYPE_DAY_TIME_DURATION_LITERAL: u8 = 18;
 
 pub const ENCODED_DEFAULT_GRAPH: EncodedTerm = EncodedTerm::DefaultGraph;
 pub const ENCODED_EMPTY_STRING_LITERAL: EncodedTerm = EncodedTerm::StringLiteral {
@@ -116,6 +120,12 @@ pub const ENCODED_XSD_DATE_TIME_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode
 pub const ENCODED_XSD_DURATION_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
     iri_id: XSD_DURATION_ID,
 };
+pub const ENCODED_XSD_YEAR_MONTH_DURATION_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+    iri_id: XSD_YEAR_MONTH_DURATION_ID,
+};
+pub const ENCODED_XSD_DAY_TIME_DURATION_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
+    iri_id: XSD_DAY_TIME_DURATION_ID,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub enum EncodedTerm {
@@ -149,6 +159,8 @@ pub enum EncodedTerm {
     TimeLiteral(Time),
     DateTimeLiteral(DateTime),
     DurationLiteral(Duration),
+    YearMonthDurationLiteral(YearMonthDuration),
+    DayTimeDurationLiteral(DayTimeDuration),
 }
 
 impl PartialEq for EncodedTerm {
@@ -216,6 +228,13 @@ impl PartialEq for EncodedTerm {
             (EncodedTerm::TimeLiteral(a), EncodedTerm::TimeLiteral(b)) => a == b,
             (EncodedTerm::DateTimeLiteral(a), EncodedTerm::DateTimeLiteral(b)) => a == b,
             (EncodedTerm::DurationLiteral(a), EncodedTerm::DurationLiteral(b)) => a == b,
+            (
+                EncodedTerm::YearMonthDurationLiteral(a),
+                EncodedTerm::YearMonthDurationLiteral(b),
+            ) => a == b,
+            (EncodedTerm::DayTimeDurationLiteral(a), EncodedTerm::DayTimeDurationLiteral(b)) => {
+                a == b
+            }
             (_, _) => false,
         }
     }
@@ -254,6 +273,8 @@ impl Hash for EncodedTerm {
             EncodedTerm::TimeLiteral(value) => value.hash(state),
             EncodedTerm::DateTimeLiteral(value) => value.hash(state),
             EncodedTerm::DurationLiteral(value) => value.hash(state),
+            EncodedTerm::YearMonthDurationLiteral(value) => value.hash(state),
+            EncodedTerm::DayTimeDurationLiteral(value) => value.hash(state),
         }
     }
 }
@@ -286,7 +307,9 @@ impl EncodedTerm {
             | EncodedTerm::DateLiteral(_)
             | EncodedTerm::TimeLiteral(_)
             | EncodedTerm::DateTimeLiteral(_)
-            | EncodedTerm::DurationLiteral(_) => true,
+            | EncodedTerm::DurationLiteral(_)
+            | EncodedTerm::YearMonthDurationLiteral(_)
+            | EncodedTerm::DayTimeDurationLiteral(_) => true,
             _ => false,
         }
     }
@@ -307,6 +330,12 @@ impl EncodedTerm {
             EncodedTerm::TimeLiteral(..) => Some(ENCODED_XSD_TIME_NAMED_NODE),
             EncodedTerm::DateTimeLiteral(..) => Some(ENCODED_XSD_DATE_TIME_NAMED_NODE),
             EncodedTerm::DurationLiteral(..) => Some(ENCODED_XSD_DURATION_NAMED_NODE),
+            EncodedTerm::YearMonthDurationLiteral(..) => {
+                Some(ENCODED_XSD_YEAR_MONTH_DURATION_NAMED_NODE)
+            }
+            EncodedTerm::DayTimeDurationLiteral(..) => {
+                Some(ENCODED_XSD_DAY_TIME_DURATION_NAMED_NODE)
+            }
             _ => None,
         }
     }
@@ -330,6 +359,8 @@ impl EncodedTerm {
             EncodedTerm::TimeLiteral(_) => TYPE_TIME_LITERAL,
             EncodedTerm::DateTimeLiteral(_) => TYPE_DATE_TIME_LITERAL,
             EncodedTerm::DurationLiteral(_) => TYPE_DURATION_LITERAL,
+            EncodedTerm::YearMonthDurationLiteral(_) => TYPE_YEAR_MONTH_DURATION_LITERAL,
+            EncodedTerm::DayTimeDurationLiteral(_) => TYPE_DAY_TIME_DURATION_LITERAL,
         }
     }
 }
@@ -402,6 +433,18 @@ impl From<DateTime> for EncodedTerm {
 impl From<Duration> for EncodedTerm {
     fn from(value: Duration) -> Self {
         EncodedTerm::DurationLiteral(value)
+    }
+}
+
+impl From<YearMonthDuration> for EncodedTerm {
+    fn from(value: YearMonthDuration) -> Self {
+        EncodedTerm::YearMonthDurationLiteral(value)
+    }
+}
+
+impl From<DayTimeDuration> for EncodedTerm {
+    fn from(value: DayTimeDuration) -> Self {
+        EncodedTerm::DayTimeDurationLiteral(value)
     }
 }
 
@@ -479,10 +522,12 @@ impl<'a> From<rio::Literal<'a>> for EncodedTerm {
                     | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => {
                         parse_date_time_str(value)
                     }
-                    "http://www.w3.org/2001/XMLSchema#duration"
-                    | "http://www.w3.org/2001/XMLSchema#yearMonthDuration"
-                    | "http://www.w3.org/2001/XMLSchema#dayTimeDuration" => {
-                        parse_duration_str(value)
+                    "http://www.w3.org/2001/XMLSchema#duration" => parse_duration_str(value),
+                    "http://www.w3.org/2001/XMLSchema#yearMonthDuration" => {
+                        parse_year_month_duration_str(value)
+                    }
+                    "http://www.w3.org/2001/XMLSchema#dayTimeDuration" => {
+                        parse_day_time_duration_str(value)
                     }
                     _ => None,
                 } {
@@ -664,6 +709,20 @@ impl<R: Read> TermReader for R {
                     buffer,
                 )))
             }
+            TYPE_YEAR_MONTH_DURATION_LITERAL => {
+                let mut buffer = [0; 8];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::YearMonthDurationLiteral(
+                    YearMonthDuration::from_be_bytes(buffer),
+                ))
+            }
+            TYPE_DAY_TIME_DURATION_LITERAL => {
+                let mut buffer = [0; 16];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::DayTimeDurationLiteral(
+                    DayTimeDuration::from_be_bytes(buffer),
+                ))
+            }
             _ => Err(Error::msg("the term buffer has an invalid type id")),
         }
     }
@@ -780,6 +839,10 @@ pub fn write_term(sink: &mut Vec<u8>, term: EncodedTerm) {
         EncodedTerm::TimeLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
         EncodedTerm::DateTimeLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
         EncodedTerm::DurationLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
+        EncodedTerm::YearMonthDurationLiteral(value) => {
+            sink.extend_from_slice(&value.to_be_bytes())
+        }
+        EncodedTerm::DayTimeDurationLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
     }
 }
 
@@ -870,6 +933,11 @@ pub trait StrContainer {
         self.insert_str(XSD_DATE_ID, xsd::DATE.as_str())?;
         self.insert_str(XSD_TIME_ID, xsd::TIME.as_str())?;
         self.insert_str(XSD_DURATION_ID, xsd::DURATION.as_str())?;
+        self.insert_str(
+            XSD_YEAR_MONTH_DURATION_ID,
+            xsd::YEAR_MONTH_DURATION.as_str(),
+        )?;
+        self.insert_str(XSD_DAY_TIME_DURATION_ID, xsd::DAY_TIME_DURATION.as_str())?;
         Ok(())
     }
 }
@@ -1100,10 +1168,12 @@ impl<S: StrContainer> Encoder for S {
                     | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => {
                         parse_date_time_str(value)
                     }
-                    "http://www.w3.org/2001/XMLSchema#duration"
-                    | "http://www.w3.org/2001/XMLSchema#yearMonthDuration"
-                    | "http://www.w3.org/2001/XMLSchema#dayTimeDuration" => {
-                        parse_duration_str(value)
+                    "http://www.w3.org/2001/XMLSchema#duration" => parse_duration_str(value),
+                    "http://www.w3.org/2001/XMLSchema#yearMonthDuration" => {
+                        parse_year_month_duration_str(value)
+                    }
+                    "http://www.w3.org/2001/XMLSchema#dayTimeDuration" => {
+                        parse_day_time_duration_str(value)
                     }
                     _ => None,
                 } {
@@ -1162,6 +1232,17 @@ pub fn parse_date_time_str(value: &str) -> Option<EncodedTerm> {
 
 pub fn parse_duration_str(value: &str) -> Option<EncodedTerm> {
     value.parse().map(EncodedTerm::DurationLiteral).ok()
+}
+
+pub fn parse_year_month_duration_str(value: &str) -> Option<EncodedTerm> {
+    value
+        .parse()
+        .map(EncodedTerm::YearMonthDurationLiteral)
+        .ok()
+}
+
+pub fn parse_day_time_duration_str(value: &str) -> Option<EncodedTerm> {
+    value.parse().map(EncodedTerm::DayTimeDurationLiteral).ok()
 }
 
 pub trait Decoder {
@@ -1251,6 +1332,8 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::TimeLiteral(value) => Ok(Literal::from(value).into()),
             EncodedTerm::DateTimeLiteral(value) => Ok(Literal::from(value).into()),
             EncodedTerm::DurationLiteral(value) => Ok(Literal::from(value).into()),
+            EncodedTerm::YearMonthDurationLiteral(value) => Ok(Literal::from(value).into()),
+            EncodedTerm::DayTimeDurationLiteral(value) => Ok(Literal::from(value).into()),
         }
     }
 }

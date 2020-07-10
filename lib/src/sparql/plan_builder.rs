@@ -643,6 +643,22 @@ impl<E: Encoder> PlanBuilder<E> {
                             graph_name,
                             "duration",
                         )?
+                    } else if name == "http://www.w3.org/2001/XMLSchema#yearMonthDuration" {
+                        self.build_cast(
+                            parameters,
+                            PlanExpression::YearMonthDurationCast,
+                            variables,
+                            graph_name,
+                            "yearMonthDuration",
+                        )?
+                    } else if name == "http://www.w3.org/2001/XMLSchema#dayTimeDuration" {
+                        self.build_cast(
+                            parameters,
+                            PlanExpression::DayTimeDurationCast,
+                            variables,
+                            graph_name,
+                            "dayTimeDuration",
+                        )?
                     } else if name == "http://www.w3.org/2001/XMLSchema#string" {
                         self.build_cast(
                             parameters,

@@ -829,14 +829,33 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
                 NumericBinaryOperands::Integer(v1, v2) => Some(v1.checked_add(v2)?.into()),
                 NumericBinaryOperands::Decimal(v1, v2) => Some(v1.checked_add(v2)?.into()),
                 NumericBinaryOperands::Duration(v1, v2) => Some(v1.checked_add(v2)?.into()),
+                NumericBinaryOperands::YearMonthDuration(v1, v2) => {
+                    Some(v1.checked_add(v2)?.into())
+                }
+                NumericBinaryOperands::DayTimeDuration(v1, v2) => Some(v1.checked_add(v2)?.into()),
                 NumericBinaryOperands::DateTimeDuration(v1, v2) => {
                     Some(v1.checked_add_duration(v2)?.into())
+                }
+                NumericBinaryOperands::DateTimeYearMonthDuration(v1, v2) => {
+                    Some(v1.checked_add_year_month_duration(v2)?.into())
+                }
+                NumericBinaryOperands::DateTimeDayTimeDuration(v1, v2) => {
+                    Some(v1.checked_add_day_time_duration(v2)?.into())
                 }
                 NumericBinaryOperands::DateDuration(v1, v2) => {
                     Some(v1.checked_add_duration(v2)?.into())
                 }
+                NumericBinaryOperands::DateYearMonthDuration(v1, v2) => {
+                    Some(v1.checked_add_year_month_duration(v2)?.into())
+                }
+                NumericBinaryOperands::DateDayTimeDuration(v1, v2) => {
+                    Some(v1.checked_add_day_time_duration(v2)?.into())
+                }
                 NumericBinaryOperands::TimeDuration(v1, v2) => {
                     Some(v1.checked_add_duration(v2)?.into())
+                }
+                NumericBinaryOperands::TimeDayTimeDuration(v1, v2) => {
+                    Some(v1.checked_add_day_time_duration(v2)?.into())
                 }
                 _ => None,
             },
@@ -845,15 +864,32 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
                 NumericBinaryOperands::Double(v1, v2) => (v1 - v2).into(),
                 NumericBinaryOperands::Integer(v1, v2) => v1.checked_sub(v2)?.into(),
                 NumericBinaryOperands::Decimal(v1, v2) => v1.checked_sub(v2)?.into(),
-                NumericBinaryOperands::Duration(v1, v2) => v1.checked_sub(v2)?.into(),
                 NumericBinaryOperands::DateTime(v1, v2) => v1.checked_sub(v2)?.into(),
                 NumericBinaryOperands::Date(v1, v2) => v1.checked_sub(v2)?.into(),
                 NumericBinaryOperands::Time(v1, v2) => v1.checked_sub(v2)?.into(),
+                NumericBinaryOperands::Duration(v1, v2) => v1.checked_sub(v2)?.into(),
+                NumericBinaryOperands::YearMonthDuration(v1, v2) => v1.checked_sub(v2)?.into(),
+                NumericBinaryOperands::DayTimeDuration(v1, v2) => v1.checked_sub(v2)?.into(),
                 NumericBinaryOperands::DateTimeDuration(v1, v2) => {
                     v1.checked_sub_duration(v2)?.into()
                 }
+                NumericBinaryOperands::DateTimeYearMonthDuration(v1, v2) => {
+                    v1.checked_sub_year_month_duration(v2)?.into()
+                }
+                NumericBinaryOperands::DateTimeDayTimeDuration(v1, v2) => {
+                    v1.checked_sub_day_time_duration(v2)?.into()
+                }
                 NumericBinaryOperands::DateDuration(v1, v2) => v1.checked_sub_duration(v2)?.into(),
+                NumericBinaryOperands::DateYearMonthDuration(v1, v2) => {
+                    v1.checked_sub_year_month_duration(v2)?.into()
+                }
+                NumericBinaryOperands::DateDayTimeDuration(v1, v2) => {
+                    v1.checked_sub_day_time_duration(v2)?.into()
+                }
                 NumericBinaryOperands::TimeDuration(v1, v2) => v1.checked_sub_duration(v2)?.into(),
+                NumericBinaryOperands::TimeDayTimeDuration(v1, v2) => {
+                    v1.checked_sub_day_time_duration(v2)?.into()
+                }
             }),
             PlanExpression::Mul(a, b) => match self.parse_numeric_operands(a, b, tuple)? {
                 NumericBinaryOperands::Float(v1, v2) => Some((v1 * v2).into()),
@@ -877,6 +913,8 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
                 EncodedTerm::IntegerLiteral(value) => Some(value.into()),
                 EncodedTerm::DecimalLiteral(value) => Some(value.into()),
                 EncodedTerm::DurationLiteral(value) => Some(value.into()),
+                EncodedTerm::YearMonthDurationLiteral(value) => Some(value.into()),
+                EncodedTerm::DayTimeDurationLiteral(value) => Some(value.into()),
                 _ => None,
             },
             PlanExpression::UnaryMinus(e) => match self.eval_expression(e, tuple)? {
@@ -885,6 +923,8 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
                 EncodedTerm::IntegerLiteral(value) => Some((-value).into()),
                 EncodedTerm::DecimalLiteral(value) => Some((-value).into()),
                 EncodedTerm::DurationLiteral(value) => Some((-value).into()),
+                EncodedTerm::YearMonthDurationLiteral(value) => Some((-value).into()),
+                EncodedTerm::DayTimeDurationLiteral(value) => Some((-value).into()),
                 _ => None,
             },
             PlanExpression::UnaryNot(e) => self
@@ -1368,8 +1408,30 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
             },
             PlanExpression::DurationCast(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::DurationLiteral(value) => Some(value.into()),
+                EncodedTerm::YearMonthDurationLiteral(value) => Some(Duration::from(value).into()),
+                EncodedTerm::DayTimeDurationLiteral(value) => Some(Duration::from(value).into()),
                 EncodedTerm::StringLiteral { value_id } => {
                     parse_duration_str(&*self.dataset.get_str(value_id).ok()??)
+                }
+                _ => None,
+            },
+            PlanExpression::YearMonthDurationCast(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::DurationLiteral(value) => {
+                    Some(YearMonthDuration::try_from(value).ok()?.into())
+                }
+                EncodedTerm::YearMonthDurationLiteral(value) => Some(value.into()),
+                EncodedTerm::StringLiteral { value_id } => {
+                    parse_year_month_duration_str(&*self.dataset.get_str(value_id).ok()??)
+                }
+                _ => None,
+            },
+            PlanExpression::DayTimeDurationCast(e) => match self.eval_expression(e, tuple)? {
+                EncodedTerm::DurationLiteral(value) => {
+                    Some(DayTimeDuration::try_from(value).ok()?.into())
+                }
+                EncodedTerm::DayTimeDurationLiteral(value) => Some(value.into()),
+                EncodedTerm::StringLiteral { value_id } => {
+                    parse_day_time_duration_str(&*self.dataset.get_str(value_id).ok()??)
                 }
                 _ => None,
             },
@@ -1410,6 +1472,10 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
             EncodedTerm::TimeLiteral(value) => self.build_string_id(&value.to_string()),
             EncodedTerm::DateTimeLiteral(value) => self.build_string_id(&value.to_string()),
             EncodedTerm::DurationLiteral(value) => self.build_string_id(&value.to_string()),
+            EncodedTerm::YearMonthDurationLiteral(value) => {
+                self.build_string_id(&value.to_string())
+            }
+            EncodedTerm::DayTimeDurationLiteral(value) => self.build_string_id(&value.to_string()),
         }
     }
 
@@ -1673,6 +1739,22 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
             },
             EncodedTerm::DurationLiteral(a) => match b {
                 EncodedTerm::DurationLiteral(b) => Some(a == b),
+                EncodedTerm::YearMonthDurationLiteral(b) => Some(a == b),
+                EncodedTerm::DayTimeDurationLiteral(b) => Some(a == b),
+                EncodedTerm::TypedLiteral { .. } => None,
+                _ => Some(false),
+            },
+            EncodedTerm::YearMonthDurationLiteral(a) => match b {
+                EncodedTerm::DurationLiteral(b) => Some(a == b),
+                EncodedTerm::YearMonthDurationLiteral(b) => Some(a == b),
+                EncodedTerm::DayTimeDurationLiteral(b) => Some(a == b),
+                EncodedTerm::TypedLiteral { .. } => None,
+                _ => Some(false),
+            },
+            EncodedTerm::DayTimeDurationLiteral(a) => match b {
+                EncodedTerm::DurationLiteral(b) => Some(a == b),
+                EncodedTerm::YearMonthDurationLiteral(b) => Some(a == b),
+                EncodedTerm::DayTimeDurationLiteral(b) => Some(a == b),
                 EncodedTerm::TypedLiteral { .. } => None,
                 _ => Some(false),
             },
@@ -1782,13 +1864,24 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
                     None
                 }
             }
-            EncodedTerm::DurationLiteral(a) => {
-                if let EncodedTerm::DurationLiteral(ref b) = b {
-                    a.partial_cmp(b)
-                } else {
-                    None
-                }
-            }
+            EncodedTerm::DurationLiteral(a) => match b {
+                EncodedTerm::DurationLiteral(ref b) => a.partial_cmp(b),
+                EncodedTerm::YearMonthDurationLiteral(ref b) => a.partial_cmp(b),
+                EncodedTerm::DayTimeDurationLiteral(ref b) => a.partial_cmp(b),
+                _ => None,
+            },
+            EncodedTerm::YearMonthDurationLiteral(a) => match b {
+                EncodedTerm::DurationLiteral(ref b) => a.partial_cmp(b),
+                EncodedTerm::YearMonthDurationLiteral(ref b) => a.partial_cmp(b),
+                EncodedTerm::DayTimeDurationLiteral(ref b) => a.partial_cmp(b),
+                _ => None,
+            },
+            EncodedTerm::DayTimeDurationLiteral(a) => match b {
+                EncodedTerm::DurationLiteral(ref b) => a.partial_cmp(b),
+                EncodedTerm::YearMonthDurationLiteral(ref b) => a.partial_cmp(b),
+                EncodedTerm::DayTimeDurationLiteral(ref b) => a.partial_cmp(b),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -1819,12 +1912,19 @@ enum NumericBinaryOperands {
     Integer(i64, i64),
     Decimal(Decimal, Decimal),
     Duration(Duration, Duration),
+    YearMonthDuration(YearMonthDuration, YearMonthDuration),
+    DayTimeDuration(DayTimeDuration, DayTimeDuration),
     DateTime(DateTime, DateTime),
     Time(Time, Time),
     Date(Date, Date),
     DateTimeDuration(DateTime, Duration),
-    TimeDuration(Time, Duration),
+    DateTimeYearMonthDuration(DateTime, YearMonthDuration),
+    DateTimeDayTimeDuration(DateTime, DayTimeDuration),
     DateDuration(Date, Duration),
+    DateYearMonthDuration(Date, YearMonthDuration),
+    DateDayTimeDuration(Date, DayTimeDuration),
+    TimeDuration(Time, Duration),
+    TimeDayTimeDuration(Time, DayTimeDuration),
 }
 
 impl NumericBinaryOperands {
@@ -1882,6 +1982,33 @@ impl NumericBinaryOperands {
             (EncodedTerm::DurationLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
                 Some(NumericBinaryOperands::Duration(v1, v2))
             }
+            (EncodedTerm::DurationLiteral(v1), EncodedTerm::YearMonthDurationLiteral(v2)) => {
+                Some(NumericBinaryOperands::Duration(v1, v2.into()))
+            }
+            (EncodedTerm::DurationLiteral(v1), EncodedTerm::DayTimeDurationLiteral(v2)) => {
+                Some(NumericBinaryOperands::Duration(v1, v2.into()))
+            }
+            (EncodedTerm::YearMonthDurationLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
+                Some(NumericBinaryOperands::Duration(v1.into(), v2))
+            }
+            (
+                EncodedTerm::YearMonthDurationLiteral(v1),
+                EncodedTerm::YearMonthDurationLiteral(v2),
+            ) => Some(NumericBinaryOperands::YearMonthDuration(v1, v2)),
+            (
+                EncodedTerm::YearMonthDurationLiteral(v1),
+                EncodedTerm::DayTimeDurationLiteral(v2),
+            ) => Some(NumericBinaryOperands::Duration(v1.into(), v2.into())),
+            (EncodedTerm::DayTimeDurationLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
+                Some(NumericBinaryOperands::Duration(v1.into(), v2))
+            }
+            (
+                EncodedTerm::DayTimeDurationLiteral(v1),
+                EncodedTerm::YearMonthDurationLiteral(v2),
+            ) => Some(NumericBinaryOperands::Duration(v1.into(), v2.into())),
+            (EncodedTerm::DayTimeDurationLiteral(v1), EncodedTerm::DayTimeDurationLiteral(v2)) => {
+                Some(NumericBinaryOperands::DayTimeDuration(v1, v2))
+            }
             (EncodedTerm::DateTimeLiteral(v1), EncodedTerm::DateTimeLiteral(v2)) => {
                 Some(NumericBinaryOperands::DateTime(v1, v2))
             }
@@ -1894,11 +2021,26 @@ impl NumericBinaryOperands {
             (EncodedTerm::DateTimeLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
                 Some(NumericBinaryOperands::DateTimeDuration(v1, v2))
             }
+            (EncodedTerm::DateTimeLiteral(v1), EncodedTerm::YearMonthDurationLiteral(v2)) => {
+                Some(NumericBinaryOperands::DateTimeYearMonthDuration(v1, v2))
+            }
+            (EncodedTerm::DateTimeLiteral(v1), EncodedTerm::DayTimeDurationLiteral(v2)) => {
+                Some(NumericBinaryOperands::DateTimeDayTimeDuration(v1, v2))
+            }
             (EncodedTerm::DateLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
                 Some(NumericBinaryOperands::DateDuration(v1, v2))
             }
+            (EncodedTerm::DateLiteral(v1), EncodedTerm::YearMonthDurationLiteral(v2)) => {
+                Some(NumericBinaryOperands::DateYearMonthDuration(v1, v2))
+            }
+            (EncodedTerm::DateLiteral(v1), EncodedTerm::DayTimeDurationLiteral(v2)) => {
+                Some(NumericBinaryOperands::DateDayTimeDuration(v1, v2))
+            }
             (EncodedTerm::TimeLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
                 Some(NumericBinaryOperands::TimeDuration(v1, v2))
+            }
+            (EncodedTerm::TimeLiteral(v1), EncodedTerm::DayTimeDurationLiteral(v2)) => {
+                Some(NumericBinaryOperands::TimeDayTimeDuration(v1, v2))
             }
             _ => None,
         }
