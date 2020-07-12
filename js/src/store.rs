@@ -2,7 +2,7 @@ use crate::format_err;
 use crate::model::*;
 use crate::utils::to_err;
 use js_sys::{Array, Map};
-use oxigraph::model::NamedOrBlankNode;
+use oxigraph::model::GraphName;
 use oxigraph::sparql::{QueryOptions, QueryResult};
 use oxigraph::{DatasetSyntax, FileSyntax, GraphSyntax, MemoryStore};
 use std::convert::TryInto;
@@ -63,53 +63,39 @@ impl JsMemoryStore {
         subject: &JsValue,
         predicate: &JsValue,
         object: &JsValue,
-        graph: &JsValue,
+        graph_name: &JsValue,
     ) -> Result<Box<[JsValue]>, JsValue> {
         Ok(self
             .store
             .quads_for_pattern(
-                match self.from_js.to_optional_term(subject)? {
-                    Some(JsTerm::NamedNode(node)) => Some(node.into()),
-                    Some(JsTerm::BlankNode(node)) => Some(node.into()),
-                    Some(_) => {
-                        return Err(format_err!(
-                            "The match subject parameter should be a named or a blank node",
-                        ))
-                    }
-                    None => None,
-                }.as_ref(),
-                match self.from_js.to_optional_term(predicate)? {
-                    Some(JsTerm::NamedNode(node)) => Some(node.into()),
-                    Some(_) => {
-                        return Err(format_err!(
-                            "The match predicate parameter should be a named node",
-                        ))
-                    }
-                    None => None,
-                }.as_ref(),
-                match self.from_js.to_optional_term(object)? {
-                    Some(JsTerm::NamedNode(node)) => Some(node.into()),
-                    Some(JsTerm::BlankNode(node)) => Some(node.into()),
-                    Some(JsTerm::Literal(literal)) => Some(literal.into()),
-                    Some(_) => {
-                        return Err(format_err!(
-                            "The match object parameter should be a named or a blank node or a literal",
-                        ))
-                    }
-                    None => None,
-                }.as_ref(),
-                match self.from_js.to_optional_term(graph)? {
-                    Some(JsTerm::NamedNode(node)) => Some(Some(node.into())),
-                    Some(JsTerm::BlankNode(node)) => Some(Some(node.into())),
-                    Some(JsTerm::DefaultGraph(_)) => Some(None),
-                    Some(_) => {
-                        return Err(format_err!(
-                            "The match subject parameter should be a named or a blank node or the default graph",
-                        ))
-                    }
-                    None => None,
-                }.as_ref().map(|v| v.as_ref()),
-            ).map(|v| JsQuad::from(v).into()).collect::<Vec<_>>().into_boxed_slice())
+                if let Some(subject) = self.from_js.to_optional_term(subject)? {
+                    Some(subject.try_into()?)
+                } else {
+                    None
+                }
+                .as_ref(),
+                if let Some(predicate) = self.from_js.to_optional_term(predicate)? {
+                    Some(predicate.try_into()?)
+                } else {
+                    None
+                }
+                .as_ref(),
+                if let Some(object) = self.from_js.to_optional_term(object)? {
+                    Some(object.try_into()?)
+                } else {
+                    None
+                }
+                .as_ref(),
+                if let Some(graph_name) = self.from_js.to_optional_term(graph_name)? {
+                    Some(graph_name.try_into()?)
+                } else {
+                    None
+                }
+                .as_ref(),
+            )
+            .map(|v| JsQuad::from(v).into())
+            .collect::<Vec<_>>()
+            .into_boxed_slice())
     }
 
     pub fn query(&self, query: &str) -> Result<JsValue, JsValue> {
@@ -165,17 +151,11 @@ impl JsMemoryStore {
             ));
         };
 
-        let to_graph_name: Option<NamedOrBlankNode> =
-            match self.from_js.to_optional_term(to_graph_name)? {
-                Some(JsTerm::NamedNode(node)) => Some(node.into()),
-                Some(JsTerm::BlankNode(node)) => Some(node.into()),
-                Some(JsTerm::DefaultGraph(_)) => None,
-                Some(_) => {
-                    return Err(format_err!(
-                        "If provided, the target graph name should be a NamedNode or a BlankNode"
-                    ))
-                }
-                None => None,
+        let to_graph_name =
+            if let Some(graph_name) = self.from_js.to_optional_term(to_graph_name)? {
+                Some(graph_name.try_into()?)
+            } else {
+                None
             };
 
         if let Some(graph_syntax) = GraphSyntax::from_mime_type(mime_type) {
@@ -183,7 +163,7 @@ impl JsMemoryStore {
                 .load_graph(
                     Cursor::new(data),
                     graph_syntax,
-                    to_graph_name.as_ref(),
+                    &to_graph_name.unwrap_or(GraphName::DefaultGraph),
                     base_iri.as_deref(),
                 )
                 .map_err(to_err)

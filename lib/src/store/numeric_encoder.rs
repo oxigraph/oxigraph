@@ -561,6 +561,16 @@ impl From<&Term> for EncodedTerm {
     }
 }
 
+impl From<&GraphName> for EncodedTerm {
+    fn from(node: &GraphName) -> Self {
+        match node {
+            GraphName::NamedNode(node) => node.into(),
+            GraphName::BlankNode(node) => node.into(),
+            GraphName::DefaultGraph => ENCODED_DEFAULT_GRAPH,
+        }
+    }
+}
+
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct EncodedQuad {
     pub subject: EncodedTerm,
@@ -591,10 +601,7 @@ impl From<&Quad> for EncodedQuad {
             subject: (&quad.subject).into(),
             predicate: (&quad.predicate).into(),
             object: (&quad.object).into(),
-            graph_name: quad
-                .graph_name
-                .as_ref()
-                .map_or(ENCODED_DEFAULT_GRAPH, |g| g.into()),
+            graph_name: (&quad.graph_name).into(),
         }
     }
 }
@@ -996,15 +1003,20 @@ pub trait Encoder {
         }
     }
 
+    fn encode_graph_name(&mut self, name: &GraphName) -> Result<EncodedTerm> {
+        match name {
+            GraphName::NamedNode(named_node) => self.encode_named_node(named_node),
+            GraphName::BlankNode(blank_node) => self.encode_blank_node(blank_node),
+            GraphName::DefaultGraph => Ok(ENCODED_DEFAULT_GRAPH),
+        }
+    }
+
     fn encode_quad(&mut self, quad: &Quad) -> Result<EncodedQuad> {
         Ok(EncodedQuad {
             subject: self.encode_named_or_blank_node(&quad.subject)?,
             predicate: self.encode_named_node(&quad.predicate)?,
             object: self.encode_term(&quad.object)?,
-            graph_name: match &quad.graph_name {
-                Some(graph_name) => self.encode_named_or_blank_node(graph_name)?,
-                None => ENCODED_DEFAULT_GRAPH,
-            },
+            graph_name: self.encode_graph_name(&quad.graph_name)?,
         })
     }
 

@@ -70,24 +70,21 @@ impl Term {
     pub fn is_named_node(&self) -> bool {
         match self {
             Term::NamedNode(_) => true,
-            Term::BlankNode(_) => false,
-            Term::Literal(_) => false,
+            _ => false,
         }
     }
 
     pub fn is_blank_node(&self) -> bool {
         match self {
-            Term::NamedNode(_) => false,
             Term::BlankNode(_) => true,
-            Term::Literal(_) => false,
+            _ => false,
         }
     }
 
     pub fn is_literal(&self) -> bool {
         match self {
-            Term::NamedNode(_) => false,
-            Term::BlankNode(_) => false,
             Term::Literal(_) => true,
+            _ => false,
         }
     }
 }
@@ -123,8 +120,8 @@ impl From<Literal> for Term {
 impl From<NamedOrBlankNode> for Term {
     fn from(resource: NamedOrBlankNode) -> Self {
         match resource {
-            NamedOrBlankNode::NamedNode(node) => Term::NamedNode(node),
-            NamedOrBlankNode::BlankNode(node) => Term::BlankNode(node),
+            NamedOrBlankNode::NamedNode(node) => node.into(),
+            NamedOrBlankNode::BlankNode(node) => node.into(),
         }
     }
 }
@@ -197,12 +194,12 @@ impl Triple {
     }
 
     /// Encodes that this triple is in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
-    pub fn in_graph(self, graph_name: Option<NamedOrBlankNode>) -> Quad {
+    pub fn in_graph(self, graph_name: impl Into<GraphName>) -> Quad {
         Quad {
             subject: self.subject,
             predicate: self.predicate,
             object: self.object,
-            graph_name,
+            graph_name: graph_name.into(),
         }
     }
 }
@@ -223,6 +220,99 @@ impl<'a> From<&'a Triple> for rio::Triple<'a> {
     }
 }
 
+/// A possible graph name.
+/// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub enum GraphName {
+    NamedNode(NamedNode),
+    BlankNode(BlankNode),
+    DefaultGraph,
+}
+
+impl GraphName {
+    pub fn is_named_node(&self) -> bool {
+        match self {
+            GraphName::NamedNode(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_blank_node(&self) -> bool {
+        match self {
+            GraphName::BlankNode(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_default_graph(&self) -> bool {
+        match self {
+            GraphName::DefaultGraph => true,
+            _ => false,
+        }
+    }
+}
+
+impl fmt::Display for GraphName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GraphName::NamedNode(node) => node.fmt(f),
+            GraphName::BlankNode(node) => node.fmt(f),
+            GraphName::DefaultGraph => write!(f, "DEFAULT"),
+        }
+    }
+}
+
+impl From<NamedNode> for GraphName {
+    fn from(node: NamedNode) -> Self {
+        GraphName::NamedNode(node)
+    }
+}
+
+impl From<BlankNode> for GraphName {
+    fn from(node: BlankNode) -> Self {
+        GraphName::BlankNode(node)
+    }
+}
+
+impl From<NamedOrBlankNode> for GraphName {
+    fn from(node: NamedOrBlankNode) -> Self {
+        match node {
+            NamedOrBlankNode::NamedNode(node) => node.into(),
+            NamedOrBlankNode::BlankNode(node) => node.into(),
+        }
+    }
+}
+
+impl From<Option<NamedOrBlankNode>> for GraphName {
+    fn from(name: Option<NamedOrBlankNode>) -> Self {
+        if let Some(node) = name {
+            node.into()
+        } else {
+            GraphName::DefaultGraph
+        }
+    }
+}
+
+impl From<GraphName> for Option<NamedOrBlankNode> {
+    fn from(name: GraphName) -> Self {
+        match name {
+            GraphName::NamedNode(node) => Some(node.into()),
+            GraphName::BlankNode(node) => Some(node.into()),
+            GraphName::DefaultGraph => None,
+        }
+    }
+}
+
+impl<'a> From<&'a GraphName> for Option<rio::NamedOrBlankNode<'a>> {
+    fn from(name: &'a GraphName) -> Self {
+        match name {
+            GraphName::NamedNode(node) => Some(rio::NamedNode::from(node).into()),
+            GraphName::BlankNode(node) => Some(rio::BlankNode::from(node).into()),
+            GraphName::DefaultGraph => None,
+        }
+    }
+}
+
 /// A [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Quad {
@@ -235,9 +325,8 @@ pub struct Quad {
     /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple
     pub object: Term,
 
-    /// The name of the RDF [graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph) in which the triple is
-    /// or None if it is in the [default graph](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph)
-    pub graph_name: Option<NamedOrBlankNode>,
+    /// The name of the RDF [graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph) in which the triple is.
+    pub graph_name: GraphName,
 }
 
 impl Quad {
@@ -246,7 +335,7 @@ impl Quad {
         subject: impl Into<NamedOrBlankNode>,
         predicate: impl Into<NamedNode>,
         object: impl Into<Term>,
-        graph_name: impl Into<Option<NamedOrBlankNode>>,
+        graph_name: impl Into<GraphName>,
     ) -> Self {
         Self {
             subject: subject.into(),
@@ -287,12 +376,12 @@ impl Quad {
     }
 
     #[deprecated(note = "Use directly the `graph_name` field")]
-    pub const fn graph_name(&self) -> &Option<NamedOrBlankNode> {
+    pub const fn graph_name(&self) -> &GraphName {
         &self.graph_name
     }
 
     #[deprecated(note = "Use directly the `graph_name` field")]
-    pub fn graph_name_owned(self) -> Option<NamedOrBlankNode> {
+    pub fn graph_name_owned(self) -> GraphName {
         self.graph_name
     }
 
@@ -302,7 +391,7 @@ impl Quad {
     }
 
     #[deprecated(note = "Use directly the struct fields")]
-    pub fn destruct(self) -> (NamedOrBlankNode, NamedNode, Term, Option<NamedOrBlankNode>) {
+    pub fn destruct(self) -> (NamedOrBlankNode, NamedNode, Term, GraphName) {
         (self.subject, self.predicate, self.object, self.graph_name)
     }
 }
@@ -319,7 +408,7 @@ impl<'a> From<&'a Quad> for rio::Quad<'a> {
             subject: (&node.subject).into(),
             predicate: (&node.predicate).into(),
             object: (&node.object).into(),
-            graph_name: node.graph_name.as_ref().map(|g| g.into()),
+            graph_name: (&node.graph_name).into(),
         }
     }
 }

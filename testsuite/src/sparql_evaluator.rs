@@ -73,14 +73,10 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
     {
         let store = MemoryStore::new();
         if let Some(data) = &test.data {
-            load_to_store(data, &store, None)?;
+            load_to_store(data, &store, &GraphName::DefaultGraph)?;
         }
         for graph_data in &test.graph_data {
-            load_to_store(
-                &graph_data,
-                &store,
-                Some(&NamedNode::new(graph_data)?.into()),
-            )?;
+            load_to_store(&graph_data, &store, &NamedNode::new(graph_data)?.into())?;
         }
         let query_file = test
             .query
@@ -165,7 +161,7 @@ impl StaticServiceHandler {
                     .map(|(name, data)| {
                         let name = NamedNode::new(name)?;
                         let store = MemoryStore::new();
-                        load_to_store(&data, &store, None)?;
+                        load_to_store(&data, &store, &GraphName::DefaultGraph)?;
                         Ok((name, store))
                     })
                     .collect::<Result<_>>()?,

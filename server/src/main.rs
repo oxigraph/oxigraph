@@ -16,6 +16,7 @@ use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::task::{block_on, spawn, spawn_blocking};
 use http_types::{headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode};
+use oxigraph::model::GraphName;
 use oxigraph::sparql::{QueryOptions, QueryResult, QueryResultSyntax};
 use oxigraph::{DatasetSyntax, FileSyntax, GraphSyntax, RocksDbStore};
 use std::str::FromStr;
@@ -61,7 +62,12 @@ async fn handle_request(request: Request, store: RocksDbStore) -> Result<Respons
             if let Some(content_type) = request.content_type() {
                 match if let Some(format) = GraphSyntax::from_mime_type(content_type.essence()) {
                     spawn_blocking(move || {
-                        store.load_graph(SyncAsyncBufReader::from(request), format, None, None)
+                        store.load_graph(
+                            SyncAsyncBufReader::from(request),
+                            format,
+                            &GraphName::DefaultGraph,
+                            None,
+                        )
                     })
                 } else if let Some(format) = DatasetSyntax::from_mime_type(content_type.essence()) {
                     spawn_blocking(move || {

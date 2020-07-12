@@ -47,7 +47,7 @@ fn load_graph<S: WritableEncodedStore>(
     store: &mut S,
     reader: impl BufRead,
     syntax: GraphSyntax,
-    to_graph_name: Option<&NamedOrBlankNode>,
+    to_graph_name: &GraphName,
     base_iri: Option<&str>,
 ) -> Result<()> {
     let base_iri = base_iri.unwrap_or("");
@@ -67,19 +67,15 @@ fn load_graph<S: WritableEncodedStore>(
 fn load_from_triple_parser<S: WritableEncodedStore, P: TriplesParser>(
     store: &mut S,
     mut parser: P,
-    to_graph_name: Option<&NamedOrBlankNode>,
+    to_graph_name: &GraphName,
 ) -> Result<()>
 where
     Error: From<P::Error>,
 {
     let mut bnode_map = HashMap::default();
-    let graph_name = if let Some(graph_name) = to_graph_name {
-        store.encode_named_or_blank_node(graph_name)?
-    } else {
-        EncodedTerm::DefaultGraph
-    };
+    let to_graph_name = store.encode_graph_name(to_graph_name)?;
     parser.parse_all(&mut move |t| {
-        let quad = store.encode_rio_triple_in_graph(t, graph_name, &mut bnode_map)?;
+        let quad = store.encode_rio_triple_in_graph(t, to_graph_name, &mut bnode_map)?;
         store.insert_encoded(&quad)
     })
 }

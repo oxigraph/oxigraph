@@ -1,4 +1,4 @@
-use oxigraph::model::NamedOrBlankNode;
+use oxigraph::model::GraphName;
 use oxigraph::{DatasetSyntax, Error, GraphSyntax, MemoryStore, Result};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
@@ -37,11 +37,7 @@ pub fn read_file_to_string(url: &str) -> Result<String> {
     Ok(buf)
 }
 
-pub fn load_to_store(
-    url: &str,
-    store: &MemoryStore,
-    to_graph_name: Option<&NamedOrBlankNode>,
-) -> Result<()> {
+pub fn load_to_store(url: &str, store: &MemoryStore, to_graph_name: &GraphName) -> Result<()> {
     if url.ends_with(".nt") {
         store.load_graph(
             read_file(url)?,
@@ -77,6 +73,6 @@ pub fn load_to_store(
 
 pub fn load_store(url: &str) -> Result<MemoryStore> {
     let store = MemoryStore::new();
-    load_to_store(url, &store, None)?;
+    load_to_store(url, &store, &GraphName::DefaultGraph)?;
     Ok(store)
 }

@@ -263,7 +263,7 @@ impl WikibaseLoader {
         self.store.transaction(|transaction| {
             let to_remove = self
                 .store
-                .quads_for_pattern(None, None, None, Some(Some(&graph_name)))
+                .quads_for_pattern(None, None, None, Some(&graph_name))
                 .collect::<oxigraph::Result<Vec<_>>>()?;
             for q in to_remove {
                 transaction.remove(&q)?;
@@ -272,7 +272,7 @@ impl WikibaseLoader {
             transaction.load_graph(
                 BufReader::new(data),
                 GraphSyntax::NTriples,
-                Some(&NamedNode::new(uri)?.into()),
+                &NamedNode::new(uri)?.into(),
                 None,
             )
         })?;

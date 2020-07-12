@@ -144,18 +144,17 @@ impl MemoryStore {
     /// assert_eq!(vec![quad], results);
     /// # Result::Ok(())
     /// ```
-    #[allow(clippy::option_option)]
     pub fn quads_for_pattern(
         &self,
         subject: Option<&NamedOrBlankNode>,
         predicate: Option<&NamedNode>,
         object: Option<&Term>,
-        graph_name: Option<Option<&NamedOrBlankNode>>,
+        graph_name: Option<&GraphName>,
     ) -> impl Iterator<Item = Quad> {
         let subject = subject.map(|s| s.into());
         let predicate = predicate.map(|p| p.into());
         let object = object.map(|o| o.into());
-        let graph_name = graph_name.map(|g| g.map_or(ENCODED_DEFAULT_GRAPH, |g| g.into()));
+        let graph_name = graph_name.map(|g| g.into());
         let this = self.clone();
         self.encoded_quads_for_pattern_inner(subject, predicate, object, graph_name)
             .into_iter()
@@ -237,7 +236,7 @@ impl MemoryStore {
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
-    /// store.load_graph(file.as_ref(), GraphSyntax::NTriples, None, None);
+    /// store.load_graph(file.as_ref(), GraphSyntax::NTriples, &GraphName::DefaultGraph, None);
     ///
     /// // quad filter
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
@@ -249,7 +248,7 @@ impl MemoryStore {
         &self,
         reader: impl BufRead,
         syntax: GraphSyntax,
-        to_graph_name: Option<&NamedOrBlankNode>,
+        to_graph_name: &GraphName,
         base_iri: Option<&str>,
     ) -> Result<()> {
         let mut store = self;
@@ -870,7 +869,7 @@ impl<'a> MemoryTransaction<'a> {
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
     /// store.transaction(|transaction| {
-    ///     store.load_graph(file.as_ref(), GraphSyntax::NTriples, None, None)
+    ///     store.load_graph(file.as_ref(), GraphSyntax::NTriples, &GraphName::DefaultGraph, None)
     /// })?;
     ///
     /// // quad filter
@@ -883,7 +882,7 @@ impl<'a> MemoryTransaction<'a> {
         &mut self,
         reader: impl BufRead,
         syntax: GraphSyntax,
-        to_graph_name: Option<&NamedOrBlankNode>,
+        to_graph_name: &GraphName,
         base_iri: Option<&str>,
     ) -> Result<()> {
         load_graph(self, reader, syntax, to_graph_name, base_iri)

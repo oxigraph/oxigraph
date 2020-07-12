@@ -177,7 +177,9 @@ impl Iterator for TestManifest {
                 match self.manifests_to_do.pop() {
                     Some(url) => {
                         let manifest = NamedOrBlankNode::from(NamedNode::new(url.clone()).unwrap());
-                        if let Err(error) = load_to_store(&url, &self.graph, None) {
+                        if let Err(error) =
+                            load_to_store(&url, &self.graph, &&GraphName::DefaultGraph)
+                        {
                             return Some(Err(error));
                         }
 

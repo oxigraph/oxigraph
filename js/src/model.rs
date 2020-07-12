@@ -68,7 +68,7 @@ impl JsDataFactory {
             subject: self.from_js.to_term(subject)?,
             predicate: self.from_js.to_term(predicate)?,
             object: self.from_js.to_term(object)?,
-            graph: JsTerm::DefaultGraph(JsDefaultGraph {}),
+            graph_name: JsTerm::DefaultGraph(JsDefaultGraph {}),
         })
     }
 
@@ -84,7 +84,7 @@ impl JsDataFactory {
             subject: self.from_js.to_term(subject)?,
             predicate: self.from_js.to_term(predicate)?,
             object: self.from_js.to_term(object)?,
-            graph: if graph.is_undefined() || graph.is_null() {
+            graph_name: if graph.is_undefined() || graph.is_null() {
                 JsTerm::DefaultGraph(JsDefaultGraph {})
             } else {
                 self.from_js.to_term(&graph)?
@@ -156,6 +156,12 @@ impl From<JsNamedNode> for Term {
     }
 }
 
+impl From<JsNamedNode> for GraphName {
+    fn from(node: JsNamedNode) -> Self {
+        node.inner.into()
+    }
+}
+
 #[wasm_bindgen(js_name = BlankNode)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct JsBlankNode {
@@ -204,6 +210,12 @@ impl From<JsBlankNode> for NamedOrBlankNode {
 }
 
 impl From<JsBlankNode> for Term {
+    fn from(node: JsBlankNode) -> Self {
+        node.inner.into()
+    }
+}
+
+impl From<JsBlankNode> for GraphName {
     fn from(node: JsBlankNode) -> Self {
         node.inner.into()
     }
@@ -349,6 +361,16 @@ impl From<Term> for JsTerm {
     }
 }
 
+impl From<GraphName> for JsTerm {
+    fn from(name: GraphName) -> Self {
+        match name {
+            GraphName::NamedNode(node) => node.into(),
+            GraphName::BlankNode(node) => node.into(),
+            GraphName::DefaultGraph => JsTerm::DefaultGraph(JsDefaultGraph {}),
+        }
+    }
+}
+
 impl TryFrom<JsTerm> for NamedNode {
     type Error = JsValue;
 
@@ -376,7 +398,7 @@ impl TryFrom<JsTerm> for NamedOrBlankNode {
             JsTerm::NamedNode(node) => Ok(node.into()),
             JsTerm::BlankNode(node) => Ok(node.into()),
             JsTerm::Literal(literal) => Err(format_err!(
-                "The variable {} is not a possible named or blank node term",
+                "The literal {} is not a possible named or blank node term",
                 literal.inner
             )),
             JsTerm::DefaultGraph(_) => {
@@ -401,13 +423,29 @@ impl TryFrom<JsTerm> for Term {
     }
 }
 
+impl TryFrom<JsTerm> for GraphName {
+    type Error = JsValue;
+
+    fn try_from(value: JsTerm) -> Result<Self, JsValue> {
+        match value {
+            JsTerm::NamedNode(node) => Ok(node.into()),
+            JsTerm::BlankNode(node) => Ok(node.into()),
+            JsTerm::Literal(literal) => Err(format_err!(
+                "The literal {} is not a possible graph name",
+                literal.inner
+            )),
+            JsTerm::DefaultGraph(_) => Ok(GraphName::DefaultGraph),
+        }
+    }
+}
+
 #[wasm_bindgen(js_name = Quad)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct JsQuad {
     subject: JsTerm,
     predicate: JsTerm,
     object: JsTerm,
-    graph: JsTerm,
+    graph_name: JsTerm,
 }
 
 #[wasm_bindgen(js_class = Quad)]
@@ -429,7 +467,7 @@ impl JsQuad {
 
     #[wasm_bindgen(getter = graph)]
     pub fn graph(&self) -> JsValue {
-        self.graph.clone().into()
+        self.graph_name.clone().into()
     }
 
     pub fn equals(&self, other: &JsValue) -> bool {
@@ -445,11 +483,7 @@ impl From<Quad> for JsQuad {
             subject: quad.subject.into(),
             predicate: quad.predicate.into(),
             object: quad.object.into(),
-            graph: if let Some(g) = quad.graph_name {
-                g.into()
-            } else {
-                JsTerm::DefaultGraph(JsDefaultGraph {})
-            },
+            graph_name: quad.graph_name.into(),
         }
     }
 }
@@ -462,17 +496,7 @@ impl TryFrom<JsQuad> for Quad {
             subject: NamedOrBlankNode::try_from(quad.subject)?,
             predicate: NamedNode::try_from(quad.predicate)?,
             object: Term::try_from(quad.object)?,
-            graph_name: match quad.graph {
-                JsTerm::NamedNode(node) => Some(NamedOrBlankNode::from(NamedNode::from(node))),
-                JsTerm::BlankNode(node) => Some(NamedOrBlankNode::from(BlankNode::from(node))),
-                JsTerm::Literal(literal) => {
-                    return Err(format_err!(
-                        "The variable ?{} is not a valid graph name",
-                        literal.inner
-                    ))
-                }
-                JsTerm::DefaultGraph(_) => None,
-            },
+            graph_name: GraphName::try_from(quad.graph_name)?,
         })
     }
 }
@@ -567,7 +591,7 @@ impl FromJsConverter {
             subject: self.to_term(&Reflect::get(&value, &self.subject)?)?,
             predicate: self.to_term(&Reflect::get(&value, &self.predicate)?)?,
             object: self.to_term(&Reflect::get(&value, &self.object)?)?,
-            graph: self.to_term(&Reflect::get(&value, &self.graph)?)?,
+            graph_name: self.to_term(&Reflect::get(&value, &self.graph)?)?,
         })
     }
 }

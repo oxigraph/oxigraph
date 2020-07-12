@@ -130,13 +130,12 @@ impl RocksDbStore {
     /// Retrieves quads with a filter on each quad component
     ///
     /// See `MemoryStore` for a usage example.
-    #[allow(clippy::option_option)]
     pub fn quads_for_pattern<'a>(
         &'a self,
         subject: Option<&NamedOrBlankNode>,
         predicate: Option<&NamedNode>,
         object: Option<&Term>,
-        graph_name: Option<Option<&NamedOrBlankNode>>,
+        graph_name: Option<&GraphName>,
     ) -> impl Iterator<Item = Result<Quad>> + 'a
     where
         Self: 'a,
@@ -144,7 +143,7 @@ impl RocksDbStore {
         let subject = subject.map(|s| s.into());
         let predicate = predicate.map(|p| p.into());
         let object = object.map(|o| o.into());
-        let graph_name = graph_name.map(|g| g.map_or(ENCODED_DEFAULT_GRAPH, |g| g.into()));
+        let graph_name = graph_name.map(|g| g.into());
         self.handle()
             .encoded_quads_for_pattern(subject, predicate, object, graph_name)
             .map(move |quad| self.decode_quad(&quad?))
@@ -181,7 +180,7 @@ impl RocksDbStore {
         &self,
         reader: impl BufRead,
         syntax: GraphSyntax,
-        to_graph_name: Option<&NamedOrBlankNode>,
+        to_graph_name: &GraphName,
         base_iri: Option<&str>,
     ) -> Result<()> {
         let mut transaction = self.handle().auto_transaction();
@@ -539,7 +538,7 @@ impl RocksDbTransaction<'_> {
         &mut self,
         reader: impl BufRead,
         syntax: GraphSyntax,
-        to_graph_name: Option<&NamedOrBlankNode>,
+        to_graph_name: &GraphName,
         base_iri: Option<&str>,
     ) -> Result<()> {
         load_graph(self, reader, syntax, to_graph_name, base_iri)
@@ -804,13 +803,23 @@ fn store() -> Result<()> {
         );
         assert_eq!(
             store
-                .quads_for_pattern(Some(&main_s), Some(&main_p), Some(&main_o), Some(None))
+                .quads_for_pattern(
+                    Some(&main_s),
+                    Some(&main_p),
+                    Some(&main_o),
+                    Some(&GraphName::DefaultGraph)
+                )
                 .collect::<Result<Vec<_>>>()?,
             target
         );
         assert_eq!(
             store
-                .quads_for_pattern(Some(&main_s), Some(&main_p), None, Some(None))
+                .quads_for_pattern(
+                    Some(&main_s),
+                    Some(&main_p),
+                    None,
+                    Some(&GraphName::DefaultGraph)
+                )
                 .collect::<Result<Vec<_>>>()?,
             all_o
         );
@@ -822,13 +831,18 @@ fn store() -> Result<()> {
         );
         assert_eq!(
             store
-                .quads_for_pattern(Some(&main_s), None, Some(&main_o), Some(None))
+                .quads_for_pattern(
+                    Some(&main_s),
+                    None,
+                    Some(&main_o),
+                    Some(&GraphName::DefaultGraph)
+                )
                 .collect::<Result<Vec<_>>>()?,
             target
         );
         assert_eq!(
             store
-                .quads_for_pattern(Some(&main_s), None, None, Some(None))
+                .quads_for_pattern(Some(&main_s), None, None, Some(&GraphName::DefaultGraph))
                 .collect::<Result<Vec<_>>>()?,
             all_o
         );
@@ -852,13 +866,18 @@ fn store() -> Result<()> {
         );
         assert_eq!(
             store
-                .quads_for_pattern(None, None, None, Some(None))
+                .quads_for_pattern(None, None, None, Some(&GraphName::DefaultGraph))
                 .collect::<Result<Vec<_>>>()?,
             all_o
         );
         assert_eq!(
             store
-                .quads_for_pattern(None, Some(&main_p), Some(&main_o), Some(None))
+                .quads_for_pattern(
+                    None,
+                    Some(&main_p),
+                    Some(&main_o),
+                    Some(&GraphName::DefaultGraph)
+                )
                 .collect::<Result<Vec<_>>>()?,
             target
         );
