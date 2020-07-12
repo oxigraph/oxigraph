@@ -52,6 +52,11 @@ impl JsMemoryStore {
             .contains(&self.from_js.to_quad(quad)?.try_into()?))
     }
 
+    #[wasm_bindgen(getter=size)]
+    pub fn size(&self) -> usize {
+        self.store.len()
+    }
+
     #[wasm_bindgen(js_name = match)]
     pub fn match_quads(
         &self,

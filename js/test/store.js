@@ -29,11 +29,18 @@ describe('MemoryStore', function() {
     });
   });
 
+  describe('#size()', function() {
+    it('A store with one quad should have 1 for size', function() {
+      const store = new MemoryStore([dataFactory.triple(ex, ex, ex)]);
+      assert.strictEqual(1, store.size);
+    });
+  });
+
   describe('#match_quads()', function() {
     it('blank pattern should return all quads', function() {
       const store = new MemoryStore([dataFactory.triple(ex, ex, ex)]);
       const results = store.match();
-      assert.equal(1, results.length);
+      assert.strictEqual(1, results.length);
       assert(dataFactory.triple(ex, ex, ex).equals(results[0]));
     });
   });
@@ -41,25 +48,25 @@ describe('MemoryStore', function() {
   describe('#query()', function() {
     it('ASK true', function() {
       const store = new MemoryStore([dataFactory.triple(ex, ex, ex)]);
-      assert.equal(true, store.query("ASK { ?s ?s ?s }"));
+      assert.strictEqual(true, store.query("ASK { ?s ?s ?s }"));
     });
 
     it('ASK false', function() {
       const store = new MemoryStore();
-      assert.equal(false, store.query("ASK { FILTER(false)}"));
+      assert.strictEqual(false, store.query("ASK { FILTER(false)}"));
     });
 
     it('CONSTRUCT', function() {
       const store = new MemoryStore([dataFactory.triple(ex, ex, ex)]);
       const results = store.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }");
-      assert.equal(1, results.length);
+      assert.strictEqual(1, results.length);
       assert(dataFactory.triple(ex, ex, ex).equals(results[0]));
     });
 
     it('SELECT', function() {
       const store = new MemoryStore([dataFactory.triple(ex, ex, ex)]);
       const results = store.query("SELECT ?s WHERE { ?s ?p ?o }");
-      assert.equal(1, results.length);
+      assert.strictEqual(1, results.length);
       assert(ex.equals(results[0].get("s")));
     });
   });

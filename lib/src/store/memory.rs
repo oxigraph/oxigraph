@@ -170,6 +170,24 @@ impl MemoryStore {
         self.contains_encoded(&quad)
     }
 
+    /// Returns the number of quads in the store
+    pub fn len(&self) -> usize {
+        self.indexes()
+            .spog
+            .values()
+            .map(|v| {
+                v.values()
+                    .map(|v| v.values().map(|v| v.len()).sum::<usize>())
+                    .sum::<usize>()
+            })
+            .sum()
+    }
+
+    /// Returns if the store is empty
+    pub fn is_empty(&self) -> bool {
+        self.indexes().spog.is_empty()
+    }
+
     /// Executes a transaction.
     ///
     /// The transaction is executed if the given closure returns `Ok`.
