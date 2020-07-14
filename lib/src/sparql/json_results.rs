@@ -51,7 +51,7 @@ pub fn write_json_results<W: Write>(results: QueryResult<'_>, mut sink: W) -> Re
                         }
                         Term::BlankNode(bnode) => {
                             sink.write_all(b":{\"type\":\"bnode\",\"value\":")?;
-                            write!(sink, "{}", bnode.as_str())?;
+                            write_escaped_json_string(bnode.as_str(), &mut sink)?;
                             sink.write_all(b"}")?;
                         }
                         Term::Literal(literal) => {
