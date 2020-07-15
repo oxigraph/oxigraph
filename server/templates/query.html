@@ -3,25 +3,23 @@
 <head>
     <meta charset="utf-8">
     <title>Oxigraph server</title>
-    <link rel="stylesheet" href="//tools-static.wmflabs.org/cdnjs/ajax/libs/yasqe/2.11.22/yasqe.min.css"/>
-    <link rel="stylesheet" href="//tools-static.wmflabs.org/cdnjs/ajax/libs/yasr/2.12.19/yasr.min.css"/>
+    <link href="https://unpkg.com/@triply/yasgui@4/build/yasgui.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://unpkg.com/@triply/yasgui@4/build/yasgui.min.js"></script>
 </head>
 <body>
-<div id="yasqe"></div>
-<div id="yasr"></div>
-<script src="//tools-static.wmflabs.org/cdnjs/ajax/libs/yasr/2.12.19/yasr.bundled.min.js"></script>
-<script src="//tools-static.wmflabs.org/cdnjs/ajax/libs/yasqe/2.11.22/yasqe.bundled.min.js"></script>
+<div id="yasgui"></div>
 <script>
-    var yasqe = YASQE(document.getElementById("yasqe"), {
-        sparql: {
-            showQueryButton: true,
-            endpoint: "/query"
+    new Yasgui(document.getElementById("yasgui"), {
+        requestConfig: { endpoint: window.location.protocol + '//' + window.location.host + "/query" },
+        endpointCatalogueOptions: {
+            getData: function () {
+                return [
+                    { endpoint: window.location.protocol + '//' + window.location.host + "/query" },
+                    { endpoint: window.location.protocol + '//' + window.location.host + "/update" },
+                ];
+            },
+            keys: [],
         }
     });
-    var yasr = YASR(document.getElementById("yasr"), {
-        getUsedPrefixes: yasqe.getPrefixesFromQuery,
-        useGoogleCharts: false
-    });
-    yasqe.options.sparql.callbacks.complete = yasr.setResponse;
 </script>
 </body>

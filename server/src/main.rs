@@ -22,7 +22,9 @@ use http_types::{
 };
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::{GraphName, NamedNode};
-use oxigraph::sparql::{Query, QueryOptions, QueryResults, QueryResultsFormat, ServiceHandler};
+use oxigraph::sparql::{
+    Query, QueryOptions, QueryResults, QueryResultsFormat, ServiceHandler, Update,
+};
 use oxigraph::RocksDbStore;
 use std::fmt;
 use std::io::{BufReader, Cursor};
@@ -135,7 +137,37 @@ async fn handle_request(request: Request, store: RocksDbStore) -> Result<Respons
                 } else {
                     simple_response(
                         StatusCode::UnsupportedMediaType,
-                        format!("No supported Content-Type given: {}", content_type),
+                        format!("Not supported Content-Type given: {}", content_type),
+                    )
+                }
+            } else {
+                simple_response(StatusCode::BadRequest, "No Content-Type given")
+            }
+        }
+        ("/update", Method::Post) => {
+            if let Some(content_type) = request.content_type() {
+                if content_type.essence() == "application/sparql-update" {
+                    let mut buffer = String::new();
+                    let mut request = request;
+                    request
+                        .take_body()
+                        .take(MAX_SPARQL_BODY_SIZE)
+                        .read_to_string(&mut buffer)
+                        .await?;
+                    evaluate_sparql_update(store, buffer, Vec::new(), Vec::new()).await?
+                } else if content_type.essence() == "application/x-www-form-urlencoded" {
+                    let mut buffer = Vec::new();
+                    let mut request = request;
+                    request
+                        .take_body()
+                        .take(MAX_SPARQL_BODY_SIZE)
+                        .read_to_end(&mut buffer)
+                        .await?;
+                    evaluate_urlencoded_sparql_update(store, buffer).await?
+                } else {
+                    simple_response(
+                        StatusCode::UnsupportedMediaType,
+                        format!("Not supported Content-Type given: {}", content_type),
                     )
                 }
             } else {
@@ -248,6 +280,60 @@ async fn evaluate_sparql_query(
             response.insert_header(headers::CONTENT_TYPE, format.media_type());
             Ok(response)
         }
+    })
+    .await
+}
+
+async fn evaluate_urlencoded_sparql_update(
+    store: RocksDbStore,
+    encoded: Vec<u8>,
+) -> Result<Response> {
+    let mut update = None;
+    let mut default_graph_uris = Vec::new();
+    let mut named_graph_uris = Vec::new();
+    for (k, v) in form_urlencoded::parse(&encoded) {
+        match k.as_ref() {
+            "update" => update = Some(v.into_owned()),
+            "using-graph-uri" => default_graph_uris.push(v.into_owned()),
+            "using-named-graph-uri" => named_graph_uris.push(v.into_owned()),
+            _ => {
+                return Ok(simple_response(
+                    StatusCode::BadRequest,
+                    format!("Unexpected parameter: {}", k),
+                ))
+            }
+        }
+    }
+    if let Some(update) = update {
+        evaluate_sparql_update(store, update, default_graph_uris, named_graph_uris).await
+    } else {
+        Ok(simple_response(
+            StatusCode::BadRequest,
+            "You should set the 'update' parameter",
+        ))
+    }
+}
+
+async fn evaluate_sparql_update(
+    store: RocksDbStore,
+    update: String,
+    default_graph_uris: Vec<String>,
+    named_graph_uris: Vec<String>,
+) -> Result<Response> {
+    if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
+        return Ok(simple_response(
+            StatusCode::BadRequest,
+            "using-graph-uri and using-named-graph-uri parameters are not supported yet",
+        ));
+    }
+    spawn_blocking(move || {
+        let update = Update::parse(&update, None).map_err(|e| {
+            let mut e = Error::from(e);
+            e.set_status(StatusCode::BadRequest);
+            e
+        })?;
+        store.update(update)?;
+        Ok(Response::new(StatusCode::NoContent))
     })
     .await
 }
@@ -520,6 +606,26 @@ mod tests {
         request.insert_header("Content-Type", "application/sparql-query");
         request.set_body("SELECT * WHERE { SERVICE <https://query.wikidata.org/sparql> { <https://en.wikipedia.org/wiki/Paris> ?p ?o } }");
         exec(request, StatusCode::Ok)
+    }
+
+    #[test]
+    fn post_update() {
+        let mut request =
+            Request::new(Method::Post, Url::parse("http://localhost/update").unwrap());
+        request.insert_header("Content-Type", "application/sparql-update");
+        request.set_body(
+            "INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }",
+        );
+        exec(request, StatusCode::NoContent)
+    }
+
+    #[test]
+    fn post_bad_update() {
+        let mut request =
+            Request::new(Method::Post, Url::parse("http://localhost/update").unwrap());
+        request.insert_header("Content-Type", "application/sparql-update");
+        request.set_body("INSERT");
+        exec(request, StatusCode::BadRequest)
     }
 
     fn exec(request: Request, expected_status: StatusCode) {
