@@ -18,7 +18,7 @@ all-features = true
 [dependencies]
 lazy_static = "1"
 rocksdb = { version = "0.14", optional = true }
-sled = { version = "0.32", optional = true }
+sled = { version = "0.33", optional = true }
 quick-xml = "0.18"
 rand = "0.7"
 md-5 = "0.9"
