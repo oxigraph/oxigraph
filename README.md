@@ -33,6 +33,8 @@ You need to have [a recent stable version of Rust and Cargo installed](https://w
 If it's done, executing `cargo build --release` in the root directory of this repository should compile the full server after having downloaded its dependencies.
 It will create a fat binary in `target/release/oxigraph_server`.
 
+Alternatively, you can use the [Docker image](./docker#readme).
+
 ### Usage
 
 Run `./oxigraph_server` to start the server. It listen by default on `localhost:7878`.
@@ -59,6 +61,8 @@ You need to have [a recent stable version of Rust and Cargo installed](https://w
 
 If it's done, executing `cargo build --release` in the root directory of this repository should compile the full server after having downloaded its dependencies.
 It will create a fat binary in `target/release/oxigraph_wikibase`.
+
+Alternatively, you can use the [Docker image](./docker#readme).
 
 ### Usage
 
