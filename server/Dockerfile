@@ -1,4 +1,4 @@
-FROM rust:1.44 as builder
+FROM rust:1-buster as builder
 
 RUN apt-get update && \
   apt-get install clang -y && \
