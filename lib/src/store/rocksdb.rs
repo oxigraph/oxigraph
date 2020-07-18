@@ -687,7 +687,7 @@ impl RocksDbInnerTransaction<'_> {
     }
 }
 
-#[allow(clippy::option_expect_used)]
+#[allow(clippy::expect_used)]
 fn get_cf<'a>(db: &'a DB, name: &str) -> &'a ColumnFamily {
     db.cf_handle(name)
         .expect("A column family that should exist in RocksDB does not exist")

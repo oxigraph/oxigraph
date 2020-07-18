@@ -309,12 +309,14 @@ impl MemoryStore {
         iso_canonicalize(self) == iso_canonicalize(other)
     }
 
+    #[allow(clippy::expect_used)]
     fn indexes(&self) -> RwLockReadGuard<'_, MemoryStoreIndexes> {
         self.indexes
             .read()
             .expect("the Memory store mutex has been poisoned because of a panic")
     }
 
+    #[allow(clippy::expect_used)]
     fn indexes_mut(&self) -> RwLockWriteGuard<'_, MemoryStoreIndexes> {
         self.indexes
             .write()
