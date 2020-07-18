@@ -33,8 +33,6 @@ You need to have [a recent stable version of Rust and Cargo installed](https://w
 If it's done, executing `cargo build --release` in the root directory of this repository should compile the full server after having downloaded its dependencies.
 It will create a fat binary in `target/release/oxigraph_server`.
 
-Alternatively, you can use the [Docker image](./docker#readme).
-
 ### Usage
 
 Run `./oxigraph_server` to start the server. It listen by default on `localhost:7878`.
@@ -52,8 +50,32 @@ It provides the following REST actions:
 
 Use `oxigraph_server --help` to see the possible options when starting the server.
 
+### Using a Docker image
 
-## Run the web server for Wikibase
+#### Display the help menu
+```sh
+docker run --rm oxigraph/oxigraph --help
+```
+
+#### Run the web server
+Expose the server on port `7878` of the host machine, and save data on the local `./data` folder
+```sh
+docker run --init --rm -v $PWD/data:/data -p 7878:7878 oxigraph/oxigraph -b 0.0.0.0:7878 -f /data
+```
+
+You can then access it from your machine on port `7878`:
+```sh
+# Open the GUI in a browser
+firefox http://localhost:7878
+
+# Post some data
+curl http://localhost:7878 -H 'Content-Type: application/x-turtle' -d@./data.ttl
+
+# Make a query
+curl -H 'Accept: application/sparql-results+json' 'http://localhost:7878/query?query=SELECT%20*%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D%20LIMIT%2010'
+```
+
+You could easily build your own Docker image by running `docker build -t oxigraph server -f server/Dockerfile .` from the root directory.
 
 ### Build
 
@@ -61,8 +83,6 @@ You need to have [a recent stable version of Rust and Cargo installed](https://w
 
 If it's done, executing `cargo build --release` in the root directory of this repository should compile the full server after having downloaded its dependencies.
 It will create a fat binary in `target/release/oxigraph_wikibase`.
-
-Alternatively, you can use the [Docker image](./docker#readme).
 
 ### Usage
 
@@ -79,6 +99,23 @@ The configuration parameters are:
 * `namespaces` The ids of the Wikibase namespaces to synchronize with, separated by `,`.
 * `file` Path of where Oxigraph should store its data.
 
+### Using a Docker image
+
+#### Display the help menu
+```sh
+docker run --rm oxigraph/oxigraph-wikibase --help
+```
+
+#### Run the web server
+Expose the server on port `7878` of the host machine, and save data on the local `./data` folder
+```sh
+docker run --init --rm -v $PWD/wikibase_data:/wikibase_data -p 7878:7878 oxigraph/oxigraph-wikibase -b 0.0.0.0:7878 -f /wikibase_data --mediawiki-api http://some.wikibase.instance/w/api.php --mediawiki-base-url http://some.wikibase.instance/wiki/
+```
+
+Warning: the Wikibase instance needs to be accessible from within the container.
+The clean way to do that could be to have both your wikibase and oxigraph_wikibase in the same [`docker-compose.yml`](https://docs.docker.com/compose/).
+
+You could easily build your own Docker image by running `docker build -t oxigraph-wikibase -f wikibase/Dockerfile .` from the root directory.
 
 ## License
 

@@ -1,10 +1,8 @@
 FROM rust:1-buster as builder
 
-RUN apt-get update && \
-  apt-get install clang -y && \
-  git clone https://github.com/oxigraph/oxigraph --depth 1 && \
-  cd oxigraph && \
-  cargo build --release
+RUN apt-get update && apt-get install clang -y
+COPY . /oxigraph
+RUN cd /oxigraph/server && cargo build --release
 
 FROM debian:buster-slim
 
