@@ -31,15 +31,6 @@ jobs:
       env:
         RUST_BACKTRACE: 1
 
-  wasm:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - run: rustup update
-      - run: cargo install wasm-pack
-      - run: wasm-pack test --node lib
-      - run: wasm-pack test --node js
-
   js:
     runs-on: ubuntu-latest
     steps:

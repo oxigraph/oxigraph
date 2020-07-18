@@ -71,6 +71,12 @@ describe('MemoryStore', function () {
       assert.strictEqual(1, results.length)
       assert(ex.equals(results[0].get('s')))
     })
+
+    it('SELECT with NOW()', function () {
+      const store = new MemoryStore([dataFactory.triple(ex, ex, ex)])
+      const results = store.query('SELECT (YEAR(NOW()) AS ?y) WHERE {}')
+      assert.strictEqual(1, results.length)
+    })
   })
 
   describe('#load()', function () {
