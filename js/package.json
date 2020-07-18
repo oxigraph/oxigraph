@@ -3,7 +3,7 @@
   "description": "Build a tests for Oxigraph JS",
   "private": true,
   "devDependencies": {
-    "mocha": "^5.2.0",
+    "mocha": "^8.0.1",
     "@rdfjs/data-model": "^1.1.2"
   },
   "scripts": {
