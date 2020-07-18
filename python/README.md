@@ -187,16 +187,14 @@ assert store.query('ASK { ?s ?s ?s }')
 
 The `SELECT` queries return an iterator of query solutions that could be indexed by variable name or position in the `SELECT` clause:
 ```python
-solutions = list(store.query('SELECT ?s WHERE { ?s ?p ?o }'))
-assert solutions[0][0] == s
-assert solutions[0]['s'] == s
+for solution in store.query('SELECT ?s WHERE { ?s ?p ?o }'):
+    assert solution[0] == solution['s']
 ```
 
-The `CONSTRUCT` and `DESCRIBE` queries return an iterator of query solutions that could be indexed by variable name or position in the `SELECT` clause:
+The `CONSTRUCT` and `DESCRIBE` queries return an iterator of triples:
 ```python
-solutions = list(store.query('SELECT ?s WHERE { ?s ?p ?o }'))
-assert solutions[0][0] == s
-assert solutions[0]['s'] == s
+for (s, p, o) in store.query('CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }'):
+    print(s)
 ```
 
 ### `load`

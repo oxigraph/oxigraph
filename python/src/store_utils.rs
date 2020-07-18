@@ -4,7 +4,8 @@ use oxigraph::sparql::{QueryResult, QuerySolution};
 use oxigraph::Result;
 use pyo3::exceptions::TypeError;
 use pyo3::prelude::*;
-use pyo3::{create_exception, PyIterProtocol, PyMappingProtocol, PyNativeType};
+use pyo3::{create_exception, PyIterProtocol, PyMappingProtocol, PyNativeType, PyObjectProtocol};
+use std::fmt::Write;
 use std::vec::IntoIter;
 
 create_exception!(oxigraph, ParseError, pyo3::exceptions::Exception);
@@ -75,6 +76,18 @@ pub fn query_results_to_python(
 #[pyclass(unsendable)]
 pub struct PyQuerySolution {
     inner: QuerySolution,
+}
+
+#[pyproto]
+impl PyObjectProtocol for PyQuerySolution {
+    fn __repr__(&self) -> String {
+        let mut buffer = "<QuerySolution".to_owned();
+        for (k, v) in self.inner.iter() {
+            write!(&mut buffer, " {}={}", k.as_str(), v).unwrap();
+        }
+        buffer.push('>');
+        buffer
+    }
 }
 
 #[pyproto]

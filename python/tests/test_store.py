@@ -66,8 +66,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
             [(foo, bar, baz, DefaultGraph()), (foo, bar, baz, graph)],
         )
         self.assertEqual(
-            list(store.match(None, None, None, graph)),
-            [(foo, bar, baz, graph)],
+            list(store.match(None, None, None, graph)), [(foo, bar, baz, graph)],
         )
         self.assertEqual(
             list(store.match(foo, None, None, DefaultGraph())),
