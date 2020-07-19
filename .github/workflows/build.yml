@@ -27,7 +27,7 @@ jobs:
         submodules: true
     - run: rustup update
     - run: cargo build
-    - run: cargo test --verbose --all
+    - run: cargo test --verbose --all --all-features --exclude oxigraph_python
       env:
         RUST_BACKTRACE: 1
 
@@ -50,8 +50,9 @@ jobs:
       - uses: actions/setup-python@v2
         with:
           python-version: 3.5
-      - run: python -m pip install --upgrade pip maturin
-      - run: maturin develop
+      - run: python -m venv python/tests/venv
+      - run: source python/tests/venv/bin/activate && pip install --upgrade pip maturin
+      - run: source tests/venv/bin/activate && maturin develop
         working-directory: ./python
-      - run: python -m unittest
+      - run: source venv/bin/activate && python -m unittest
         working-directory: ./python/tests

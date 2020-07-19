@@ -40,9 +40,9 @@ use std::{fmt, str};
 /// let prepared_query = store.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
 /// if let QueryResult::Solutions(mut solutions) = prepared_query.exec()? {
 ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
-/// }
+/// };
 /// #
-/// # }
+/// # };
 /// # remove_dir_all("example.db")?;
 /// # Result::Ok(())
 /// ```
