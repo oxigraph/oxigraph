@@ -17,7 +17,8 @@ The store is also able to load RDF serialized in [Turtle](https://www.w3.org/TR/
 To install the development version of Oxigraph you need first to install the build tool [Maturin](https://github.com/PyO3/maturin).
 This could be done using the usual `pip install maturin`.
 
-Then you just need to run `maturin develop` to install Oxigraph in the current Python environment.
+`maturin build release` allows build a release Oxigraph Python wheel.
+This wheel could be installed using `pip install PATH` in the current Python environment where `PATH` is the path to the built Oxigraph wheel.
 
 
 ## Example
@@ -57,7 +58,7 @@ An RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 from oxigraph import BlankNode
 
 assert BlankNode('foo').value == 'foo'
-assert str(BlankNode('foo')) == 'foo'
+assert str(BlankNode('foo')) == '_:foo'
 ```
 
 #### `Literal`
@@ -67,13 +68,13 @@ An RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
 from oxigraph import NamedNode, Literal
 
 assert Literal('foo').value == 'foo'
-assert str(NamedNode('foo')) == '"foo"'
+assert str(Literal('foo')) == '"foo"'
 
 assert Literal('foo', language='en').language == 'en'
-assert str(NamedNode('foo', language='en')) == '"foo"@en'
+assert str(Literal('foo', language='en')) == '"foo"@en'
 
-assert Literal('11', datatype=NamedNode('http://www.w3.org/2001/XMLSchema#integer')).datatype == 'http://www.w3.org/2001/XMLSchema#integer'
-assert str(Literal('11', datatype=NamedNode('http://www.w3.org/2001/XMLSchema#integer'))) == '"foo"^^<http://www.w3.org/2001/XMLSchema#integer>'
+assert Literal('11', datatype=NamedNode('http://www.w3.org/2001/XMLSchema#integer')).datatype == NamedNode('http://www.w3.org/2001/XMLSchema#integer')
+assert str(Literal('11', datatype=NamedNode('http://www.w3.org/2001/XMLSchema#integer'))) == '"11"^^<http://www.w3.org/2001/XMLSchema#integer>'
 ```
 
 #### `DefaultGraph`
@@ -197,7 +198,7 @@ for (s, p, o) in store.query('CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }'):
     print(s)
 ```
 
-### `load`
+#### `load`
 
 Loads serialized RDF triples or quad into the store.
 The method arguments are:
