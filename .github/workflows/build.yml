@@ -51,8 +51,10 @@ jobs:
         with:
           python-version: 3.5
       - run: python -m venv python/tests/venv
-      - run: source python/tests/venv/bin/activate && pip install --upgrade pip maturin
+      - run: source python/tests/venv/bin/activate && pip install --upgrade pip maturin sphinx
       - run: source tests/venv/bin/activate && maturin develop
         working-directory: ./python
       - run: source venv/bin/activate && python -m unittest
         working-directory: ./python/tests
+      - run: source venv/bin/activate && sphinx-build -M doctest . build
+        working-directory: ./python/docs

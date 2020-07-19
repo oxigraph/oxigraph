@@ -1,0 +1,8 @@
+version: 2
+python:
+  version: 3.7
+  install:
+    - method: pip
+      path: python
+sphinx:
+  configuration: python/docs/conf.py

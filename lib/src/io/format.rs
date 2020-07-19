@@ -26,7 +26,7 @@ pub enum GraphFormat {
     NTriples,
     /// [Turtle](https://www.w3.org/TR/turtle/)
     Turtle,
-    /// [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/)
+    /// [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/)
     RdfXml,
 }
 

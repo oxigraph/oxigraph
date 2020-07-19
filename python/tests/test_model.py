@@ -1,5 +1,5 @@
 import unittest
-from oxigraph import *
+from pyoxigraph import *
 
 XSD_STRING = NamedNode("http://www.w3.org/2001/XMLSchema#string")
 XSD_INTEGER = NamedNode("http://www.w3.org/2001/XMLSchema#integer")
@@ -63,6 +63,121 @@ class TestLiteral(unittest.TestCase):
         # TODO self.assertNotEqual(Literal('foo'), NamedNode('http://foo'))
         # TODO self.assertNotEqual(BlankNode('foo'), Literal('foo'))
         # TODO self.assertNotEqual(Literal('foo'), BlankNode('foo'))
+
+
+class TestTriple(unittest.TestCase):
+    def test_constructor(self):
+        t = Triple(
+            NamedNode("http://example.com/s"),
+            NamedNode("http://example.com/p"),
+            NamedNode("http://example.com/o"),
+        )
+        self.assertEqual(t.subject, NamedNode("http://example.com/s"))
+        self.assertEqual(t.predicate, NamedNode("http://example.com/p"))
+        self.assertEqual(t.object, NamedNode("http://example.com/o"))
+
+    def test_mapping(self):
+        t = Triple(
+            NamedNode("http://example.com/s"),
+            NamedNode("http://example.com/p"),
+            NamedNode("http://example.com/o"),
+        )
+        self.assertEqual(t[0], NamedNode("http://example.com/s"))
+        self.assertEqual(t[1], NamedNode("http://example.com/p"))
+        self.assertEqual(t[2], NamedNode("http://example.com/o"))
+
+    def test_destruct(self):
+        (s, p, o) = Triple(
+            NamedNode("http://example.com/s"),
+            NamedNode("http://example.com/p"),
+            NamedNode("http://example.com/o"),
+        )
+        self.assertEqual(s, NamedNode("http://example.com/s"))
+        self.assertEqual(p, NamedNode("http://example.com/p"))
+        self.assertEqual(o, NamedNode("http://example.com/o"))
+
+    def test_string(self):
+        self.assertEqual(
+            str(
+                Triple(
+                    NamedNode("http://example.com/s"),
+                    NamedNode("http://example.com/p"),
+                    NamedNode("http://example.com/o"),
+                )
+            ),
+            "<http://example.com/s> <http://example.com/p> <http://example.com/o> .",
+        )
+
+
+class TestQuad(unittest.TestCase):
+    def test_constructor(self):
+        t = Quad(
+            NamedNode("http://example.com/s"),
+            NamedNode("http://example.com/p"),
+            NamedNode("http://example.com/o"),
+            NamedNode("http://example.com/g"),
+        )
+        self.assertEqual(t.subject, NamedNode("http://example.com/s"))
+        self.assertEqual(t.predicate, NamedNode("http://example.com/p"))
+        self.assertEqual(t.object, NamedNode("http://example.com/o"))
+        self.assertEqual(t.graph_name, NamedNode("http://example.com/g"))
+        self.assertEqual(
+            t.triple,
+            Triple(
+                NamedNode("http://example.com/s"),
+                NamedNode("http://example.com/p"),
+                NamedNode("http://example.com/o"),
+            ),
+        )
+        self.assertEqual(
+            Quad(
+                NamedNode("http://example.com/s"),
+                NamedNode("http://example.com/p"),
+                NamedNode("http://example.com/o"),
+            ),
+            Quad(
+                NamedNode("http://example.com/s"),
+                NamedNode("http://example.com/p"),
+                NamedNode("http://example.com/o"),
+                DefaultGraph(),
+            ),
+        )
+
+    def test_mapping(self):
+        t = Quad(
+            NamedNode("http://example.com/s"),
+            NamedNode("http://example.com/p"),
+            NamedNode("http://example.com/o"),
+            NamedNode("http://example.com/g"),
+        )
+        self.assertEqual(t[0], NamedNode("http://example.com/s"))
+        self.assertEqual(t[1], NamedNode("http://example.com/p"))
+        self.assertEqual(t[2], NamedNode("http://example.com/o"))
+        self.assertEqual(t[3], NamedNode("http://example.com/g"))
+
+    def test_destruct(self):
+        (s, p, o, g) = Quad(
+            NamedNode("http://example.com/s"),
+            NamedNode("http://example.com/p"),
+            NamedNode("http://example.com/o"),
+            NamedNode("http://example.com/g"),
+        )
+        self.assertEqual(s, NamedNode("http://example.com/s"))
+        self.assertEqual(p, NamedNode("http://example.com/p"))
+        self.assertEqual(o, NamedNode("http://example.com/o"))
+        self.assertEqual(g, NamedNode("http://example.com/g"))
+
+    def test_string(self):
+        self.assertEqual(
+            str(
+                Triple(
+                    NamedNode("http://example.com/s"),
+                    NamedNode("http://example.com/p"),
+                    NamedNode("http://example.com/o"),
+                )
+            ),
+            "<http://example.com/s> <http://example.com/p> <http://example.com/o> .",
+        )
 
 
 if __name__ == "__main__":

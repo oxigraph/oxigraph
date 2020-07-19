@@ -3,6 +3,7 @@ Oxigraph for JavaScript
 
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
 [![npm](https://img.shields.io/npm/v/oxigraph)](https://www.npmjs.com/package/oxigraph)
+[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 This package provides a JavaScript API on top of Oxigraph compiled with WebAssembly.
 
@@ -10,7 +11,7 @@ Oxigraph is a work in progress graph database written in Rust implementing the [
 
 It is a work in progress and currently offers a simple in-memory store with [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/) capabilities.
 
-The store is also able to load RDF serialized in [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/) and [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/).
+The store is also able to load RDF serialized in [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/) and [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/).
 
 
 It is distributed using a [a NPM package](https://www.npmjs.com/package/oxigraph) that should work with nodeJS.
@@ -148,7 +149,7 @@ The available formats are:
 * [TriG](https://www.w3.org/TR/trig/): `application/trig`
 * [N-Triples](https://www.w3.org/TR/n-triples/): `application/n-triples`
 * [N-Quads](https://www.w3.org/TR/n-quads/): `application/n-quads`
-* [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/): `application/rdf+xml`
+* [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/): `application/rdf+xml`
 
 Example of loading a Turtle file into the named graph `<http://example.com/graph>` with the base IRI `http://example.com`:
 ```js

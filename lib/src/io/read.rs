@@ -17,7 +17,7 @@ use std::io::BufRead;
 /// It currently supports the following formats:
 /// * [N-Triples](https://www.w3.org/TR/n-triples/) (`GraphFormat::NTriples`)
 /// * [Turtle](https://www.w3.org/TR/turtle/) (`GraphFormat::Turtle`)
-/// * [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) (`GraphFormat::RdfXml`)
+/// * [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) (`GraphFormat::RdfXml`)
 ///
 /// ```
 /// use oxigraph::io::{GraphFormat, GraphParser};

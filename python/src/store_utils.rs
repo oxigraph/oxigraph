@@ -3,10 +3,9 @@ use oxigraph::model::*;
 use oxigraph::sparql::{
     EvaluationError, QueryResult, QuerySolution, QuerySolutionsIterator, QueryTriplesIterator,
 };
-use pyo3::exceptions::{IOError, RuntimeError, TypeError, ValueError};
+use pyo3::exceptions::{IOError, RuntimeError, SyntaxError, TypeError, ValueError};
 use pyo3::prelude::*;
 use pyo3::{PyIterProtocol, PyMappingProtocol, PyNativeType, PyObjectProtocol};
-use std::fmt::Write;
 use std::io;
 
 pub fn extract_quads_pattern(
@@ -56,7 +55,7 @@ pub fn query_results_to_python(py: Python<'_>, results: QueryResult) -> PyResult
     })
 }
 
-#[pyclass(unsendable)]
+#[pyclass(unsendable, name = QuerySolution)]
 pub struct PyQuerySolution {
     inner: QuerySolution,
 }
@@ -64,9 +63,13 @@ pub struct PyQuerySolution {
 #[pyproto]
 impl PyObjectProtocol for PyQuerySolution {
     fn __repr__(&self) -> String {
-        let mut buffer = "<QuerySolution".to_owned();
+        let mut buffer = String::new();
+        buffer.push_str("<QuerySolution");
         for (k, v) in self.inner.iter() {
-            write!(&mut buffer, " {}={}", k.as_str(), v).unwrap();
+            buffer.push(' ');
+            buffer.push_str(k.as_str());
+            buffer.push('=');
+            term_repr(v.as_ref(), &mut buffer)
         }
         buffer.push('>');
         buffer
@@ -131,20 +134,21 @@ impl PyIterProtocol for TripleResultIter {
         slf.into()
     }
 
-    fn __next__(mut slf: PyRefMut<Self>) -> PyResult<Option<(PyObject, PyObject, PyObject)>> {
+    fn __next__(mut slf: PyRefMut<Self>) -> PyResult<Option<PyTriple>> {
         Ok(slf
             .inner
             .next()
             .transpose()
             .map_err(map_evaluation_error)?
-            .map(move |t| triple_to_python(slf.py(), t)))
+            .map(|t| t.into()))
     }
 }
 
 pub fn map_io_err(error: io::Error) -> PyErr {
     match error.kind() {
-        io::ErrorKind::InvalidInput | io::ErrorKind::InvalidData => {
-            ValueError::py_err(error.to_string())
+        io::ErrorKind::InvalidInput => ValueError::py_err(error.to_string()),
+        io::ErrorKind::InvalidData | io::ErrorKind::UnexpectedEof => {
+            SyntaxError::py_err(error.to_string())
         }
         _ => IOError::py_err(error.to_string()),
     }
@@ -152,7 +156,7 @@ pub fn map_io_err(error: io::Error) -> PyErr {
 
 pub fn map_evaluation_error(error: EvaluationError) -> PyErr {
     match error {
-        EvaluationError::Parsing(error) => ValueError::py_err(error.to_string()),
+        EvaluationError::Parsing(error) => SyntaxError::py_err(error.to_string()),
         EvaluationError::Io(error) => map_io_err(error),
         EvaluationError::Query(error) => ValueError::py_err(error.to_string()),
         _ => RuntimeError::py_err(error.to_string()),

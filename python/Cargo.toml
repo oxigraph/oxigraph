@@ -1,5 +1,5 @@
 [package]
-name = "oxigraph_python"
+name = "pyoxigraph"
 version = "0.1.0"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT/Apache-2.0"
@@ -13,7 +13,8 @@ edition = "2018"
 
 [lib]
 crate-type = ["cdylib"]
-name = "oxigraph"
+name = "pyoxigraph"
+doctest = false
 
 [dependencies]
 oxigraph = {path = "../lib", features=["sled"]}
