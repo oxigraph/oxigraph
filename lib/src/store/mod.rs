@@ -38,9 +38,17 @@ pub(crate) trait ReadableEncodedStore: StrLookup {
 }
 
 pub(crate) trait WritableEncodedStore: StrContainer {
-    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<()>;
+    type Error: From<<Self as StrContainer>::Error> + std::error::Error + Into<Error>;
 
-    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<()>;
+    fn insert_encoded(
+        &mut self,
+        quad: &EncodedQuad,
+    ) -> std::result::Result<(), <Self as WritableEncodedStore>::Error>;
+
+    fn remove_encoded(
+        &mut self,
+        quad: &EncodedQuad,
+    ) -> std::result::Result<(), <Self as WritableEncodedStore>::Error>;
 }
 
 fn load_graph<S: WritableEncodedStore>(
@@ -73,10 +81,14 @@ where
     Error: From<P::Error>,
 {
     let mut bnode_map = HashMap::default();
-    let to_graph_name = store.encode_graph_name(to_graph_name)?;
+    let to_graph_name = store
+        .encode_graph_name(to_graph_name)
+        .map_err(|e| e.into())?;
     parser.parse_all(&mut move |t| {
-        let quad = store.encode_rio_triple_in_graph(t, to_graph_name, &mut bnode_map)?;
-        store.insert_encoded(&quad)
+        let quad = store
+            .encode_rio_triple_in_graph(t, to_graph_name, &mut bnode_map)
+            .map_err(|e| e.into())?;
+        store.insert_encoded(&quad).map_err(|e| e.into())
     })
 }
 
@@ -102,7 +114,9 @@ where
 {
     let mut bnode_map = HashMap::default();
     parser.parse_all(&mut move |q| {
-        let quad = store.encode_rio_quad(q, &mut bnode_map)?;
-        store.insert_encoded(&quad)
+        let quad = store
+            .encode_rio_quad(q, &mut bnode_map)
+            .map_err(|e| e.into())?;
+        store.insert_encoded(&quad).map_err(|e| e.into())
     })
 }

@@ -1,12 +1,15 @@
 //! In-memory store.
 
+use crate::error::UnwrapInfallible;
 use crate::model::*;
 use crate::sparql::{QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::store::*;
-use crate::{DatasetSyntax, GraphSyntax, Result};
+use crate::Result;
+use crate::{DatasetSyntax, GraphSyntax};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
+use std::convert::Infallible;
 use std::fmt;
 use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::io::BufRead;
@@ -75,7 +78,7 @@ impl MemoryStore {
         let mut new = Self {
             indexes: Arc::new(RwLock::default()),
         };
-        new.set_first_strings().unwrap();
+        new.set_first_strings().unwrap_infallible();
         new
     }
 
@@ -288,15 +291,15 @@ impl MemoryStore {
     #[allow(clippy::needless_pass_by_value)]
     pub fn insert(&self, quad: Quad) {
         let mut store = self;
-        let quad = store.encode_quad(&quad).unwrap(); // Could never fail
-        store.insert_encoded(&quad).unwrap(); // Could never fail
+        let quad = store.encode_quad(&quad).unwrap_infallible();
+        store.insert_encoded(&quad).unwrap_infallible();
     }
 
     /// Removes a quad from this store.
     pub fn remove(&self, quad: &Quad) {
         let mut store = self;
         let quad = quad.into();
-        store.remove_encoded(&quad).unwrap(); // Could never fail
+        store.remove_encoded(&quad).unwrap_infallible();
     }
 
     /// Returns if the current dataset is [isomorphic](https://www.w3.org/TR/rdf11-concepts/#dfn-dataset-isomorphism) with another one.
@@ -595,33 +598,43 @@ impl MemoryStore {
 }
 
 impl StrLookup for MemoryStore {
-    fn get_str(&self, id: StrHash) -> Result<Option<String>> {
+    type Error = Infallible;
+
+    fn get_str(&self, id: StrHash) -> std::result::Result<Option<String>, Infallible> {
         //TODO: avoid copy by adding a lifetime limit to get_str
         self.indexes().get_str(id)
     }
 }
 
 impl StrLookup for MemoryStoreIndexes {
-    fn get_str(&self, id: StrHash) -> Result<Option<String>> {
+    type Error = Infallible;
+
+    fn get_str(&self, id: StrHash) -> std::result::Result<Option<String>, Infallible> {
         //TODO: avoid copy by adding a lifetime limit to get_str
         Ok(self.id2str.get(&id).cloned())
     }
 }
 
 impl StrContainer for MemoryStore {
-    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
+    type Error = Infallible;
+
+    fn insert_str(&mut self, key: StrHash, value: &str) -> std::result::Result<(), Infallible> {
         self.indexes_mut().insert_str(key, value)
     }
 }
 
 impl<'a> StrContainer for &'a MemoryStore {
-    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
+    type Error = Infallible;
+
+    fn insert_str(&mut self, key: StrHash, value: &str) -> std::result::Result<(), Infallible> {
         self.indexes_mut().insert_str(key, value)
     }
 }
 
 impl StrContainer for MemoryStoreIndexes {
-    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
+    type Error = Infallible;
+
+    fn insert_str(&mut self, key: StrHash, value: &str) -> std::result::Result<(), Infallible> {
         self.id2str.entry(key).or_insert_with(|| value.to_owned());
         Ok(())
     }
@@ -644,27 +657,33 @@ impl<'a> ReadableEncodedStore for MemoryStore {
 }
 
 impl WritableEncodedStore for MemoryStore {
-    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
+    type Error = Infallible;
+
+    fn insert_encoded(&mut self, quad: &EncodedQuad) -> std::result::Result<(), Infallible> {
         self.indexes_mut().insert_encoded(quad)
     }
 
-    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> std::result::Result<(), Infallible> {
         self.indexes_mut().remove_encoded(quad)
     }
 }
 
 impl<'a> WritableEncodedStore for &'a MemoryStore {
-    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
+    type Error = Infallible;
+
+    fn insert_encoded(&mut self, quad: &EncodedQuad) -> std::result::Result<(), Infallible> {
         self.indexes_mut().insert_encoded(quad)
     }
 
-    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> std::result::Result<(), Infallible> {
         self.indexes_mut().remove_encoded(quad)
     }
 }
 
 impl WritableEncodedStore for MemoryStoreIndexes {
-    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
+    type Error = Infallible;
+
+    fn insert_encoded(&mut self, quad: &EncodedQuad) -> std::result::Result<(), Infallible> {
         insert_into_quad_map(
             &mut self.gosp,
             quad.graph_name,
@@ -710,7 +729,7 @@ impl WritableEncodedStore for MemoryStoreIndexes {
         Ok(())
     }
 
-    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> std::result::Result<(), Infallible> {
         remove_from_quad_map(
             &mut self.gosp,
             &quad.graph_name,
@@ -921,14 +940,14 @@ impl<'a> MemoryTransaction<'a> {
     /// Adds a quad to this store during the transaction.
     #[allow(clippy::needless_pass_by_value)]
     pub fn insert(&mut self, quad: Quad) {
-        let quad = self.encode_quad(&quad).unwrap(); // Could never fail
-        self.insert_encoded(&quad).unwrap(); // Could never fail
+        let quad = self.encode_quad(&quad).unwrap_infallible();
+        self.insert_encoded(&quad).unwrap_infallible();
     }
 
     /// Removes a quad from this store during the transaction.
     pub fn remove(&mut self, quad: &Quad) {
         let quad = quad.into();
-        self.remove_encoded(&quad).unwrap(); // Could never fail
+        self.remove_encoded(&quad).unwrap_infallible();
     }
 
     fn commit(self) -> Result<()> {
@@ -945,19 +964,23 @@ impl<'a> MemoryTransaction<'a> {
 }
 
 impl StrContainer for MemoryTransaction<'_> {
-    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
+    type Error = Infallible;
+
+    fn insert_str(&mut self, key: StrHash, value: &str) -> std::result::Result<(), Infallible> {
         self.strings.push((key, value.to_owned()));
         Ok(())
     }
 }
 
 impl WritableEncodedStore for MemoryTransaction<'_> {
-    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
+    type Error = Infallible;
+
+    fn insert_encoded(&mut self, quad: &EncodedQuad) -> std::result::Result<(), Infallible> {
         self.ops.push(TransactionOp::Insert(*quad));
         Ok(())
     }
 
-    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> std::result::Result<(), Infallible> {
         self.ops.push(TransactionOp::Delete(*quad));
         Ok(())
     }

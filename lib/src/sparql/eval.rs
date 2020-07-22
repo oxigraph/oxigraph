@@ -1652,7 +1652,7 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
                 put_variable_value(
                     variable,
                     variables,
-                    encoder.encode_term(term)?,
+                    encoder.encode_term(term).map_err(|e| e.into())?,
                     &mut encoded_terms,
                 )
             }

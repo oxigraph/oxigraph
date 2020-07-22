@@ -238,9 +238,9 @@ impl<E: Encoder> PlanBuilder<E> {
 
     fn build_for_path(&mut self, path: &PropertyPath) -> Result<PlanPropertyPath> {
         Ok(match path {
-            PropertyPath::PredicatePath(p) => {
-                PlanPropertyPath::PredicatePath(self.encoder.encode_named_node(p)?)
-            }
+            PropertyPath::PredicatePath(p) => PlanPropertyPath::PredicatePath(
+                self.encoder.encode_named_node(p).map_err(|e| e.into())?,
+            ),
             PropertyPath::InversePath(p) => {
                 PlanPropertyPath::InversePath(Box::new(self.build_for_path(p)?))
             }
@@ -263,7 +263,7 @@ impl<E: Encoder> PlanBuilder<E> {
             }
             PropertyPath::NegatedPropertySet(p) => PlanPropertyPath::NegatedPropertySet(
                 p.iter()
-                    .map(|p| self.encoder.encode_named_node(p))
+                    .map(|p| self.encoder.encode_named_node(p).map_err(|e| e.into()))
                     .collect::<Result<Vec<_>>>()?,
             ),
         })
@@ -276,10 +276,12 @@ impl<E: Encoder> PlanBuilder<E> {
         graph_name: PatternValue,
     ) -> Result<PlanExpression> {
         Ok(match expression {
-            Expression::NamedNode(node) => {
-                PlanExpression::Constant(self.encoder.encode_named_node(node)?)
+            Expression::NamedNode(node) => PlanExpression::Constant(
+                self.encoder.encode_named_node(node).map_err(|e| e.into())?,
+            ),
+            Expression::Literal(l) => {
+                PlanExpression::Constant(self.encoder.encode_literal(l).map_err(|e| e.into())?)
             }
-            Expression::Literal(l) => PlanExpression::Constant(self.encoder.encode_literal(l)?),
             Expression::Variable(v) => PlanExpression::Variable(variable_key(variables, v)),
             Expression::Or(a, b) => PlanExpression::Or(
                 Box::new(self.build_for_expression(a, variables, graph_name)?),
@@ -728,7 +730,9 @@ impl<E: Encoder> PlanBuilder<E> {
                 PatternValue::Variable(variable_key(variables, &Variable::new(bnode.as_str())))
                 //TODO: very bad hack to convert bnode to variable
             }
-            TermOrVariable::Term(term) => PatternValue::Constant(self.encoder.encode_term(term)?),
+            TermOrVariable::Term(term) => {
+                PatternValue::Constant(self.encoder.encode_term(term).map_err(|e| e.into())?)
+            }
         })
     }
 
@@ -738,9 +742,11 @@ impl<E: Encoder> PlanBuilder<E> {
         variables: &mut Vec<Variable>,
     ) -> Result<PatternValue> {
         Ok(match named_node_or_variable {
-            NamedNodeOrVariable::NamedNode(named_node) => {
-                PatternValue::Constant(self.encoder.encode_named_node(named_node)?)
-            }
+            NamedNodeOrVariable::NamedNode(named_node) => PatternValue::Constant(
+                self.encoder
+                    .encode_named_node(named_node)
+                    .map_err(|e| e.into())?,
+            ),
             NamedNodeOrVariable::Variable(variable) => {
                 PatternValue::Variable(variable_key(variables, variable))
             }
@@ -765,7 +771,7 @@ impl<E: Encoder> PlanBuilder<E> {
                     if let Some(term) = value {
                         result.set(
                             bindings_variables_keys[key],
-                            self.encoder.encode_term(term)?,
+                            self.encoder.encode_term(term).map_err(|e| e.into())?,
                         );
                     }
                 }
@@ -865,7 +871,7 @@ impl<E: Encoder> PlanBuilder<E> {
                 TripleTemplateValue::BlankNode(bnode_key(bnodes, bnode))
             }
             TermOrVariable::Term(term) => {
-                TripleTemplateValue::Constant(self.encoder.encode_term(term)?)
+                TripleTemplateValue::Constant(self.encoder.encode_term(term).map_err(|e| e.into())?)
             }
         })
     }
@@ -879,9 +885,9 @@ impl<E: Encoder> PlanBuilder<E> {
             NamedNodeOrVariable::Variable(variable) => {
                 TripleTemplateValue::Variable(variable_key(variables, variable))
             }
-            NamedNodeOrVariable::NamedNode(term) => {
-                TripleTemplateValue::Constant(self.encoder.encode_named_node(term)?)
-            }
+            NamedNodeOrVariable::NamedNode(term) => TripleTemplateValue::Constant(
+                self.encoder.encode_named_node(term).map_err(|e| e.into())?,
+            ),
         })
     }
 

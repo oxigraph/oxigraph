@@ -414,6 +414,8 @@ impl fmt::Display for SledStore {
 }
 
 impl StrLookup for SledStore {
+    type Error = Error;
+
     fn get_str(&self, id: StrHash) -> Result<Option<String>> {
         Ok(self
             .id2str
@@ -436,6 +438,8 @@ impl ReadableEncodedStore for SledStore {
 }
 
 impl<'a> StrContainer for &'a SledStore {
+    type Error = Error;
+
     fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
         self.id2str.insert(key.to_be_bytes(), value)?;
         Ok(())
@@ -443,6 +447,8 @@ impl<'a> StrContainer for &'a SledStore {
 }
 
 impl<'a> WritableEncodedStore for &'a SledStore {
+    type Error = Error;
+
     fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
         //TODO: atomicity
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);

@@ -260,6 +260,8 @@ impl fmt::Display for RocksDbStore {
 }
 
 impl StrLookup for RocksDbStore {
+    type Error = crate::Error;
+
     fn get_str(&self, id: StrHash) -> Result<Option<String>> {
         Ok(self
             .db
@@ -534,6 +536,8 @@ pub struct RocksDbTransaction<'a> {
 }
 
 impl StrContainer for RocksDbTransaction<'_> {
+    type Error = crate::Error;
+
     fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
         self.inner.insert_str(key, value);
         Ok(())
@@ -541,6 +545,8 @@ impl StrContainer for RocksDbTransaction<'_> {
 }
 
 impl WritableEncodedStore for RocksDbTransaction<'_> {
+    type Error = crate::Error;
+
     fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
         self.inner.insert(quad)
     }
@@ -606,6 +612,8 @@ struct RocksDbAutoTransaction<'a> {
 }
 
 impl StrContainer for RocksDbAutoTransaction<'_> {
+    type Error = crate::Error;
+
     fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
         self.inner.insert_str(key, value);
         Ok(())
@@ -613,6 +621,8 @@ impl StrContainer for RocksDbAutoTransaction<'_> {
 }
 
 impl WritableEncodedStore for RocksDbAutoTransaction<'_> {
+    type Error = crate::Error;
+
     fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
         self.inner.insert(quad)?;
         self.commit_if_big()

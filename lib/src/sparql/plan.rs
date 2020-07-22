@@ -1,3 +1,4 @@
+use crate::error::UnwrapInfallible;
 use crate::sparql::model::Variable;
 use crate::sparql::GraphPattern;
 use crate::store::numeric_encoder::{
@@ -617,8 +618,10 @@ impl<S: ReadableEncodedStore> DatasetView<S> {
 }
 
 impl<S: ReadableEncodedStore> StrLookup for DatasetView<S> {
-    fn get_str(&self, id: StrHash) -> Result<Option<String>> {
-        if let Some(value) = self.extra.borrow().get_str(id)? {
+    type Error = S::Error;
+
+    fn get_str(&self, id: StrHash) -> std::result::Result<Option<String>, Self::Error> {
+        if let Some(value) = self.extra.borrow().get_str(id).unwrap_infallible() {
             Ok(Some(value))
         } else {
             self.store.get_str(id)
@@ -632,9 +635,12 @@ struct DatasetViewStrContainer<'a, S: ReadableEncodedStore> {
 }
 
 impl<'a, S: ReadableEncodedStore> StrContainer for DatasetViewStrContainer<'a, S> {
-    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
+    type Error = S::Error;
+
+    fn insert_str(&mut self, key: StrHash, value: &str) -> std::result::Result<(), Self::Error> {
         if self.store.get_str(key)?.is_none() {
-            self.extra.insert_str(key, value)
+            self.extra.insert_str(key, value).unwrap();
+            Ok(())
         } else {
             Ok(())
         }

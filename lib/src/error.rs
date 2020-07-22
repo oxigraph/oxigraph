@@ -2,6 +2,7 @@ use crate::model::{BlankNodeIdParseError, IriParseError, LanguageTagParseError};
 use crate::sparql::SparqlParseError;
 use rio_turtle::TurtleError;
 use rio_xml::RdfXmlError;
+use std::convert::Infallible;
 use std::error;
 use std::fmt;
 use std::io;
@@ -69,6 +70,12 @@ enum ErrorKind {
     BlankNode(BlankNodeIdParseError),
     LanguageTag(LanguageTagParseError),
     Other(Box<dyn error::Error + Send + Sync + 'static>),
+}
+
+impl From<Infallible> for Error {
+    fn from(error: Infallible) -> Self {
+        match error {}
+    }
 }
 
 impl From<io::Error> for Error {
@@ -146,5 +153,23 @@ impl From<rocksdb::Error> for Error {
 impl From<sled::Error> for Error {
     fn from(error: sled::Error) -> Self {
         Self::wrap(error)
+    }
+}
+
+/// Traits that allows unwrapping only infallible results
+pub(crate) trait UnwrapInfallible {
+    type Value;
+
+    fn unwrap_infallible(self) -> Self::Value;
+}
+
+impl<T> UnwrapInfallible for Result<T, Infallible> {
+    type Value = T;
+
+    fn unwrap_infallible(self) -> T {
+        match self {
+            Ok(value) => value,
+            Err(error) => match error {},
+        }
     }
 }
