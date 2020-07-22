@@ -4,7 +4,7 @@ use crate::model::*;
 use crate::sparql::{GraphPattern, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::store::{load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore};
-use crate::{DatasetSyntax, GraphSyntax, Result};
+use crate::{DatasetSyntax, Error, GraphSyntax, Result};
 use sled::{Config, Iter, Tree};
 use std::io::BufRead;
 use std::path::Path;
@@ -556,7 +556,7 @@ impl Iterator for DecodingQuadIterator {
 
     fn next(&mut self) -> Option<Result<EncodedQuad>> {
         Some(match self.iter.next()? {
-            Ok((encoded, _)) => self.order.decode(&encoded),
+            Ok((encoded, _)) => self.order.decode(&encoded).map_err(Error::from),
             Err(error) => Err(error.into()),
         })
     }

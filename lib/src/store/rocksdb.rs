@@ -759,7 +759,7 @@ impl<'a> Iterator for DecodingIndexIterator<'a> {
     fn next(&mut self) -> Option<Result<EncodedQuad>> {
         if let Some(key) = self.iter.key() {
             if key.starts_with(&self.prefix) {
-                let result = self.encoding.decode(key);
+                let result = self.encoding.decode(key).map_err(crate::Error::from);
                 self.iter.next();
                 Some(result)
             } else {

@@ -12,7 +12,7 @@ use siphasher::sip128::{Hasher128, SipHasher24};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::hash::Hasher;
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Error as IoError, ErrorKind, Read, Result as IoResult};
 use std::mem::size_of;
 use std::str;
 
@@ -607,17 +607,17 @@ impl From<&Quad> for EncodedQuad {
 }
 
 pub trait TermReader {
-    fn read_term(&mut self) -> Result<EncodedTerm>;
-    fn read_spog_quad(&mut self) -> Result<EncodedQuad>;
-    fn read_posg_quad(&mut self) -> Result<EncodedQuad>;
-    fn read_ospg_quad(&mut self) -> Result<EncodedQuad>;
-    fn read_gspo_quad(&mut self) -> Result<EncodedQuad>;
-    fn read_gpos_quad(&mut self) -> Result<EncodedQuad>;
-    fn read_gosp_quad(&mut self) -> Result<EncodedQuad>;
+    fn read_term(&mut self) -> IoResult<EncodedTerm>;
+    fn read_spog_quad(&mut self) -> IoResult<EncodedQuad>;
+    fn read_posg_quad(&mut self) -> IoResult<EncodedQuad>;
+    fn read_ospg_quad(&mut self) -> IoResult<EncodedQuad>;
+    fn read_gspo_quad(&mut self) -> IoResult<EncodedQuad>;
+    fn read_gpos_quad(&mut self) -> IoResult<EncodedQuad>;
+    fn read_gosp_quad(&mut self) -> IoResult<EncodedQuad>;
 }
 
 impl<R: Read> TermReader for R {
-    fn read_term(&mut self) -> Result<EncodedTerm> {
+    fn read_term(&mut self) -> IoResult<EncodedTerm> {
         let mut type_buffer = [0];
         self.read_exact(&mut type_buffer)?;
         match type_buffer[0] {
@@ -730,11 +730,14 @@ impl<R: Read> TermReader for R {
                     DayTimeDuration::from_be_bytes(buffer),
                 ))
             }
-            _ => Err(Error::msg("the term buffer has an invalid type id")),
+            _ => Err(IoError::new(
+                ErrorKind::InvalidData,
+                "the term buffer has an invalid type id",
+            )),
         }
     }
 
-    fn read_spog_quad(&mut self) -> Result<EncodedQuad> {
+    fn read_spog_quad(&mut self) -> IoResult<EncodedQuad> {
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
         let object = self.read_term()?;
@@ -747,7 +750,7 @@ impl<R: Read> TermReader for R {
         })
     }
 
-    fn read_posg_quad(&mut self) -> Result<EncodedQuad> {
+    fn read_posg_quad(&mut self) -> IoResult<EncodedQuad> {
         let predicate = self.read_term()?;
         let object = self.read_term()?;
         let subject = self.read_term()?;
@@ -760,7 +763,7 @@ impl<R: Read> TermReader for R {
         })
     }
 
-    fn read_ospg_quad(&mut self) -> Result<EncodedQuad> {
+    fn read_ospg_quad(&mut self) -> IoResult<EncodedQuad> {
         let object = self.read_term()?;
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
@@ -773,7 +776,7 @@ impl<R: Read> TermReader for R {
         })
     }
 
-    fn read_gspo_quad(&mut self) -> Result<EncodedQuad> {
+    fn read_gspo_quad(&mut self) -> IoResult<EncodedQuad> {
         let graph_name = self.read_term()?;
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
@@ -786,7 +789,7 @@ impl<R: Read> TermReader for R {
         })
     }
 
-    fn read_gpos_quad(&mut self) -> Result<EncodedQuad> {
+    fn read_gpos_quad(&mut self) -> IoResult<EncodedQuad> {
         let graph_name = self.read_term()?;
         let predicate = self.read_term()?;
         let object = self.read_term()?;
@@ -799,7 +802,7 @@ impl<R: Read> TermReader for R {
         })
     }
 
-    fn read_gosp_quad(&mut self) -> Result<EncodedQuad> {
+    fn read_gosp_quad(&mut self) -> IoResult<EncodedQuad> {
         let graph_name = self.read_term()?;
         let object = self.read_term()?;
         let subject = self.read_term()?;
@@ -906,7 +909,7 @@ pub enum QuadEncoding {
 }
 
 impl QuadEncoding {
-    pub fn decode(self, buffer: &[u8]) -> Result<EncodedQuad> {
+    pub fn decode(self, buffer: &[u8]) -> IoResult<EncodedQuad> {
         let mut cursor = Cursor::new(&buffer);
         match self {
             QuadEncoding::SPOG => cursor.read_spog_quad(),
