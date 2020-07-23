@@ -53,6 +53,14 @@ impl Query {
     }
 }
 
+impl FromStr for Query {
+    type Err = SparqlParseError;
+
+    fn from_str(query: &str) -> Result<Self, SparqlParseError> {
+        Self::parse(query, None)
+    }
+}
+
 /// Error returned during SPARQL parsing.
 #[derive(Debug)]
 pub struct SparqlParseError {
