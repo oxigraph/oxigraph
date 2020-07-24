@@ -10,7 +10,6 @@ pub mod rocksdb;
 #[cfg(feature = "sled")]
 pub mod sled;
 
-use crate::sparql::GraphPattern;
 pub use crate::store::memory::MemoryStore;
 #[cfg(feature = "rocksdb")]
 pub use crate::store::rocksdb::RocksDbStore;
