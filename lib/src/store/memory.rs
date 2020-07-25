@@ -1140,15 +1140,10 @@ fn label(g: &MemoryStore, hashes: &TrivialHashMap<EncodedTerm, u64>) -> Vec<Vec<
         .into_iter()
         .map(|q| {
             let mut buffer = Vec::with_capacity(WRITTEN_TERM_MAX_SIZE * 4);
-            write_spog_quad(
-                &mut buffer,
-                &EncodedQuad::new(
-                    map_term(q.subject, hashes),
-                    map_term(q.predicate, hashes),
-                    map_term(q.object, hashes),
-                    map_term(q.graph_name, hashes),
-                ),
-            );
+            write_term(&mut buffer, map_term(q.subject, hashes));
+            write_term(&mut buffer, map_term(q.predicate, hashes));
+            write_term(&mut buffer, map_term(q.object, hashes));
+            write_term(&mut buffer, map_term(q.graph_name, hashes));
             buffer
         })
         .collect();

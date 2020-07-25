@@ -14,7 +14,7 @@ use std::convert::Infallible;
 use std::error::Error;
 use std::hash::Hash;
 use std::hash::Hasher;
-use std::io::{Cursor, Error as IoError, ErrorKind, Read, Result as IoResult};
+use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult};
 use std::mem::size_of;
 use std::str;
 
@@ -855,72 +855,6 @@ pub fn write_term(sink: &mut Vec<u8>, term: EncodedTerm) {
             sink.extend_from_slice(&value.to_be_bytes())
         }
         EncodedTerm::DayTimeDurationLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
-    }
-}
-
-pub fn write_spog_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.subject);
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.object);
-    write_term(sink, quad.graph_name);
-}
-
-pub fn write_posg_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.object);
-    write_term(sink, quad.subject);
-    write_term(sink, quad.graph_name);
-}
-
-pub fn write_ospg_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.object);
-    write_term(sink, quad.subject);
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.graph_name);
-}
-
-pub fn write_gspo_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.graph_name);
-    write_term(sink, quad.subject);
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.object);
-}
-
-pub fn write_gpos_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.graph_name);
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.object);
-    write_term(sink, quad.subject);
-}
-
-pub fn write_gosp_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.graph_name);
-    write_term(sink, quad.object);
-    write_term(sink, quad.subject);
-    write_term(sink, quad.predicate);
-}
-
-#[derive(Clone, Copy)]
-pub enum QuadEncoding {
-    SPOG,
-    POSG,
-    OSPG,
-    GSPO,
-    GPOS,
-    GOSP,
-}
-
-impl QuadEncoding {
-    pub fn decode(self, buffer: &[u8]) -> IoResult<EncodedQuad> {
-        let mut cursor = Cursor::new(&buffer);
-        match self {
-            QuadEncoding::SPOG => cursor.read_spog_quad(),
-            QuadEncoding::POSG => cursor.read_posg_quad(),
-            QuadEncoding::OSPG => cursor.read_ospg_quad(),
-            QuadEncoding::GSPO => cursor.read_gspo_quad(),
-            QuadEncoding::GPOS => cursor.read_gpos_quad(),
-            QuadEncoding::GOSP => cursor.read_gosp_quad(),
-        }
     }
 }
 

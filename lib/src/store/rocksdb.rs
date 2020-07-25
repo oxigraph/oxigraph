@@ -6,7 +6,7 @@ use crate::store::numeric_encoder::*;
 use crate::store::{load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore};
 use crate::{DatasetSyntax, GraphSyntax, Result};
 use rocksdb::*;
-use std::io::BufRead;
+use std::io::{BufRead, Cursor};
 use std::mem::take;
 use std::path::Path;
 use std::sync::Arc;
@@ -530,7 +530,7 @@ impl RocksDbPreparedQuery {
     }
 }
 
-/// Allows to insert and delete quads during a transaction with the `RocksDbStore`.
+/// Allows inserting and deleting quads during a transaction with the `RocksDbStore`.
 pub struct RocksDbTransaction<'a> {
     inner: RocksDbInnerTransaction<'a>,
 }
@@ -778,6 +778,72 @@ impl<'a> Iterator for DecodingIndexIterator<'a> {
         } else {
             None
         }
+    }
+}
+
+fn write_spog_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
+    write_term(sink, quad.subject);
+    write_term(sink, quad.predicate);
+    write_term(sink, quad.object);
+    write_term(sink, quad.graph_name);
+}
+
+fn write_posg_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
+    write_term(sink, quad.predicate);
+    write_term(sink, quad.object);
+    write_term(sink, quad.subject);
+    write_term(sink, quad.graph_name);
+}
+
+fn write_ospg_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
+    write_term(sink, quad.object);
+    write_term(sink, quad.subject);
+    write_term(sink, quad.predicate);
+    write_term(sink, quad.graph_name);
+}
+
+fn write_gspo_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
+    write_term(sink, quad.graph_name);
+    write_term(sink, quad.subject);
+    write_term(sink, quad.predicate);
+    write_term(sink, quad.object);
+}
+
+fn write_gpos_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
+    write_term(sink, quad.graph_name);
+    write_term(sink, quad.predicate);
+    write_term(sink, quad.object);
+    write_term(sink, quad.subject);
+}
+
+fn write_gosp_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
+    write_term(sink, quad.graph_name);
+    write_term(sink, quad.object);
+    write_term(sink, quad.subject);
+    write_term(sink, quad.predicate);
+}
+
+#[derive(Clone, Copy)]
+enum QuadEncoding {
+    SPOG,
+    POSG,
+    OSPG,
+    GSPO,
+    GPOS,
+    GOSP,
+}
+
+impl QuadEncoding {
+    fn decode(self, buffer: &[u8]) -> Result<EncodedQuad> {
+        let mut cursor = Cursor::new(&buffer);
+        Ok(match self {
+            QuadEncoding::SPOG => cursor.read_spog_quad(),
+            QuadEncoding::POSG => cursor.read_posg_quad(),
+            QuadEncoding::OSPG => cursor.read_ospg_quad(),
+            QuadEncoding::GSPO => cursor.read_gspo_quad(),
+            QuadEncoding::GPOS => cursor.read_gpos_quad(),
+            QuadEncoding::GOSP => cursor.read_gosp_quad(),
+        }?)
     }
 }
 
