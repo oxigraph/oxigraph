@@ -17,7 +17,7 @@ use std::io::Write;
 use std::iter::empty;
 use std::rc::Rc;
 
-pub fn write_xml_results<W: Write>(results: QueryResult, sink: W) -> Result<W> {
+pub fn write_xml_results(results: QueryResult, sink: &mut impl Write) -> Result<()> {
     let mut writer = Writer::new(sink);
     match results {
         QueryResult::Boolean(value) => {
@@ -100,7 +100,7 @@ pub fn write_xml_results<W: Write>(results: QueryResult, sink: W) -> Result<W> {
             ));
         }
     }
-    Ok(writer.into_inner())
+    Ok(())
 }
 
 pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResult> {

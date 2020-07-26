@@ -6,7 +6,7 @@ use crate::Error;
 use crate::Result;
 use std::io::Write;
 
-pub fn write_json_results<W: Write>(results: QueryResult, mut sink: W) -> Result<W> {
+pub fn write_json_results(results: QueryResult, mut sink: &mut impl Write) -> Result<()> {
     match results {
         QueryResult::Boolean(value) => {
             sink.write_all(b"{\"head\":{},\"boolean\":")?;
@@ -78,7 +78,7 @@ pub fn write_json_results<W: Write>(results: QueryResult, mut sink: W) -> Result
             ));
         }
     }
-    Ok(sink)
+    Ok(())
 }
 
 fn write_escaped_json_string(s: &str, sink: &mut impl Write) -> Result<()> {

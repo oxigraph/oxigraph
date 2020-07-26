@@ -32,38 +32,77 @@ impl QueryResult {
         }
     }
 
-    pub fn write<W: Write>(self, writer: W, syntax: QueryResultSyntax) -> Result<W> {
+    /// Writes the query results (solutions or boolean)
+    ///
+    /// This method fails if it is called on the `Graph` results
+    ///
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::{MemoryStore, Result};
+    /// use oxigraph::sparql::{QueryOptions, QueryResult, QueryResultSyntax};
+    ///
+    /// let store = MemoryStore::new();
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), None));
+    ///
+    /// let mut results = Vec::new();
+    /// store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?.write(&mut results, QueryResultSyntax::Json)?;
+    /// assert_eq!(results, "{\"head\":{\"vars\":[\"s\"]},\"results\":{\"bindings\":[{\"s\":{\"type\":\"uri\",\"value\":\"http://example.com\"}}]}}".as_bytes());
+    /// # Result::Ok(())
+    /// ```
+    pub fn write(self, writer: &mut impl Write, syntax: QueryResultSyntax) -> Result<()> {
         match syntax {
             QueryResultSyntax::Xml => write_xml_results(self, writer),
             QueryResultSyntax::Json => write_json_results(self, writer),
         }
     }
 
-    pub fn write_graph<W: Write>(self, write: W, syntax: GraphSyntax) -> Result<W> {
+    /// Writes the graph query results
+    ///
+    /// This method fails if it is called on the `Solution` or `Boolean` results
+    ///
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::{MemoryStore, Result, GraphSyntax};
+    /// use oxigraph::sparql::{QueryOptions, QueryResult, QueryResultSyntax};
+    /// use std::io::Cursor;
+    ///
+    /// let graph = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
+    ///
+    /// let store = MemoryStore::new();
+    /// store.load_graph(Cursor::new(graph), GraphSyntax::NTriples, &GraphName::DefaultGraph, None);
+    ///
+    /// let mut results = Vec::new();
+    /// store.query("CONSTRUCT WHERE { ?s ?p ?o }", QueryOptions::default())?.write_graph(&mut results, GraphSyntax::NTriples)?;
+    /// assert_eq!(results, graph);
+    /// # Result::Ok(())
+    /// ```
+    pub fn write_graph(self, write: &mut impl Write, syntax: GraphSyntax) -> Result<()> {
         if let QueryResult::Graph(triples) = self {
-            Ok(match syntax {
+            match syntax {
                 GraphSyntax::NTriples => {
                     let mut formatter = NTriplesFormatter::new(write);
                     for triple in triples {
                         formatter.format(&(&triple?).into())?;
                     }
-                    formatter.finish()
+                    formatter.finish();
                 }
                 GraphSyntax::Turtle => {
                     let mut formatter = TurtleFormatter::new(write);
                     for triple in triples {
                         formatter.format(&(&triple?).into())?;
                     }
-                    formatter.finish()?
+                    formatter.finish()?;
                 }
                 GraphSyntax::RdfXml => {
                     let mut formatter = RdfXmlFormatter::new(write)?;
                     for triple in triples {
                         formatter.format(&(&triple?).into())?;
                     }
-                    formatter.finish()?
+                    formatter.finish()?;
                 }
-            })
+            }
+            Ok(())
         } else {
             Err(Error::msg(
                 "Bindings or booleans could not be formatted as an RDF graph",

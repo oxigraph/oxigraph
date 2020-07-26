@@ -189,8 +189,9 @@ async fn evaluate_sparql_query(
                     GraphSyntax::RdfXml.media_type(),
                 ],
             )?;
-
-            let mut response = Response::from(results.write_graph(Vec::default(), format)?);
+            let mut body = Vec::default();
+            results.write_graph(&mut body, format)?;
+            let mut response = Response::from(body);
             response.insert_header(headers::CONTENT_TYPE, format.media_type());
             Ok(response)
         } else {
@@ -201,7 +202,9 @@ async fn evaluate_sparql_query(
                     QueryResultSyntax::Json.media_type(),
                 ],
             )?;
-            let mut response = Response::from(results.write(Vec::default(), format)?);
+            let mut body = Vec::default();
+            results.write(&mut body, format)?;
+            let mut response = Response::from(body);
             response.insert_header(headers::CONTENT_TYPE, format.media_type());
             Ok(response)
         }
