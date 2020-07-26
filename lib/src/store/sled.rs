@@ -127,7 +127,7 @@ impl SledStore {
         let object = object.map(|o| o.into());
         let graph_name = graph_name.map(|g| g.into());
         let this = self.clone();
-        self.encoded_quads_for_pattern_inner(subject, predicate, object, graph_name)
+        self.encoded_quads_for_pattern(subject, predicate, object, graph_name)
             .map(move |quad| this.decode_quad(&quad?))
     }
 
@@ -218,73 +218,6 @@ impl SledStore {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
         write_spog_quad(&mut buffer, quad);
         Ok(self.quads.contains_key(buffer)?)
-    }
-
-    fn encoded_quads_for_pattern_inner(
-        &self,
-        subject: Option<EncodedTerm>,
-        predicate: Option<EncodedTerm>,
-        object: Option<EncodedTerm>,
-        graph_name: Option<EncodedTerm>,
-    ) -> DecodingQuadIterator {
-        match subject {
-            Some(subject) => match predicate {
-                Some(predicate) => match object {
-                    Some(object) => match graph_name {
-                        Some(graph_name) => self.inner_quads(encode_term_quad(
-                            SPOG_PREFIX,
-                            subject,
-                            predicate,
-                            object,
-                            graph_name,
-                        )),
-                        None => self.quads_for_subject_predicate_object(subject, predicate, object),
-                    },
-                    None => match graph_name {
-                        Some(graph_name) => {
-                            self.quads_for_subject_predicate_graph(subject, predicate, graph_name)
-                        }
-                        None => self.quads_for_subject_predicate(subject, predicate),
-                    },
-                },
-                None => match object {
-                    Some(object) => match graph_name {
-                        Some(graph_name) => {
-                            self.quads_for_subject_object_graph(subject, object, graph_name)
-                        }
-                        None => self.quads_for_subject_object(subject, object),
-                    },
-                    None => match graph_name {
-                        Some(graph_name) => self.quads_for_subject_graph(subject, graph_name),
-                        None => self.quads_for_subject(subject),
-                    },
-                },
-            },
-            None => match predicate {
-                Some(predicate) => match object {
-                    Some(object) => match graph_name {
-                        Some(graph_name) => {
-                            self.quads_for_predicate_object_graph(predicate, object, graph_name)
-                        }
-                        None => self.quads_for_predicate_object(predicate, object),
-                    },
-                    None => match graph_name {
-                        Some(graph_name) => self.quads_for_predicate_graph(predicate, graph_name),
-                        None => self.quads_for_predicate(predicate),
-                    },
-                },
-                None => match object {
-                    Some(object) => match graph_name {
-                        Some(graph_name) => self.quads_for_object_graph(object, graph_name),
-                        None => self.quads_for_object(object),
-                    },
-                    None => match graph_name {
-                        Some(graph_name) => self.quads_for_graph(graph_name),
-                        None => self.quads(),
-                    },
-                },
-            },
-        }
     }
 
     fn quads(&self) -> DecodingQuadIterator {
@@ -430,14 +363,73 @@ impl StrLookup for SledStore {
 }
 
 impl ReadableEncodedStore for SledStore {
-    fn encoded_quads_for_pattern<'a>(
-        &'a self,
+    type QuadsIter = DecodingQuadIterator;
+
+    fn encoded_quads_for_pattern(
+        &self,
         subject: Option<EncodedTerm>,
         predicate: Option<EncodedTerm>,
         object: Option<EncodedTerm>,
         graph_name: Option<EncodedTerm>,
-    ) -> Box<dyn Iterator<Item = Result<EncodedQuad>> + 'a> {
-        Box::new(self.encoded_quads_for_pattern_inner(subject, predicate, object, graph_name))
+    ) -> DecodingQuadIterator {
+        match subject {
+            Some(subject) => match predicate {
+                Some(predicate) => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => self.inner_quads(encode_term_quad(
+                            SPOG_PREFIX,
+                            subject,
+                            predicate,
+                            object,
+                            graph_name,
+                        )),
+                        None => self.quads_for_subject_predicate_object(subject, predicate, object),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => {
+                            self.quads_for_subject_predicate_graph(subject, predicate, graph_name)
+                        }
+                        None => self.quads_for_subject_predicate(subject, predicate),
+                    },
+                },
+                None => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => {
+                            self.quads_for_subject_object_graph(subject, object, graph_name)
+                        }
+                        None => self.quads_for_subject_object(subject, object),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => self.quads_for_subject_graph(subject, graph_name),
+                        None => self.quads_for_subject(subject),
+                    },
+                },
+            },
+            None => match predicate {
+                Some(predicate) => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => {
+                            self.quads_for_predicate_object_graph(predicate, object, graph_name)
+                        }
+                        None => self.quads_for_predicate_object(predicate, object),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => self.quads_for_predicate_graph(predicate, graph_name),
+                        None => self.quads_for_predicate(predicate),
+                    },
+                },
+                None => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => self.quads_for_object_graph(object, graph_name),
+                        None => self.quads_for_object(object),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => self.quads_for_graph(graph_name),
+                        None => self.quads(),
+                    },
+                },
+            },
+        }
     }
 }
 
@@ -723,7 +715,7 @@ fn encode_term_quad(
     vec
 }
 
-struct DecodingQuadIterator {
+pub(crate) struct DecodingQuadIterator {
     iter: Iter,
 }
 

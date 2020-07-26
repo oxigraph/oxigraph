@@ -5,7 +5,7 @@ use crate::model::*;
 use crate::sparql::{GraphPattern, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::store::{load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore};
-use crate::{DatasetSyntax, GraphSyntax};
+use crate::{DatasetSyntax, Error, GraphSyntax};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::convert::Infallible;
@@ -15,6 +15,7 @@ use std::io::BufRead;
 use std::iter::FromIterator;
 use std::mem::size_of;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::vec::IntoIter;
 
 /// In-memory store.
 /// It encodes a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) and allows to query and update it using SPARQL.
@@ -641,18 +642,20 @@ impl StrContainer for MemoryStoreIndexes {
 }
 
 impl<'a> ReadableEncodedStore for MemoryStore {
-    fn encoded_quads_for_pattern<'b>(
-        &'b self,
+    type QuadsIter = EncodedQuadsIter;
+
+    fn encoded_quads_for_pattern(
+        &self,
         subject: Option<EncodedTerm>,
         predicate: Option<EncodedTerm>,
         object: Option<EncodedTerm>,
         graph_name: Option<EncodedTerm>,
-    ) -> Box<dyn Iterator<Item = crate::Result<EncodedQuad>> + 'b> {
-        Box::new(
-            self.encoded_quads_for_pattern_inner(subject, predicate, object, graph_name)
-                .into_iter()
-                .map(Ok),
-        )
+    ) -> EncodedQuadsIter {
+        EncodedQuadsIter {
+            iter: self
+                .encoded_quads_for_pattern_inner(subject, predicate, object, graph_name)
+                .into_iter(),
+        }
     }
 }
 
@@ -1015,6 +1018,29 @@ impl fmt::Display for MemoryStore {
             writeln!(f, "{}", t)?;
         }
         Ok(())
+    }
+}
+
+pub(crate) struct EncodedQuadsIter {
+    iter: IntoIter<EncodedQuad>,
+}
+
+impl Iterator for EncodedQuadsIter {
+    type Item = Result<EncodedQuad, Error>;
+
+    fn next(&mut self) -> Option<Result<EncodedQuad, Error>> {
+        self.iter.next().map(Ok)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+
+    fn fold<Acc, G>(self, init: Acc, mut g: G) -> Acc
+    where
+        G: FnMut(Acc, Self::Item) -> Acc,
+    {
+        self.iter.fold(init, |acc, elt| g(acc, Ok(elt)))
     }
 }
 

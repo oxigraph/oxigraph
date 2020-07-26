@@ -573,13 +573,13 @@ impl<S: ReadableEncodedStore> DatasetView<S> {
         }
     }
 
-    pub fn quads_for_pattern<'a>(
-        &'a self,
+    pub fn quads_for_pattern(
+        &self,
         subject: Option<EncodedTerm>,
         predicate: Option<EncodedTerm>,
         object: Option<EncodedTerm>,
         graph_name: Option<EncodedTerm>,
-    ) -> Box<dyn Iterator<Item = Result<EncodedQuad>> + 'a> {
+    ) -> Box<dyn Iterator<Item = Result<EncodedQuad>>> {
         if graph_name == None {
             Box::new(
                 self.store
@@ -604,8 +604,10 @@ impl<S: ReadableEncodedStore> DatasetView<S> {
                     }),
             )
         } else {
-            self.store
-                .encoded_quads_for_pattern(subject, predicate, object, graph_name)
+            Box::new(
+                self.store
+                    .encoded_quads_for_pattern(subject, predicate, object, graph_name),
+            )
         }
     }
 

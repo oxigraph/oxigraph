@@ -273,69 +273,6 @@ impl RocksDbStore {
         Ok(self.db.get_pinned_cf(self.spog_cf(), &buffer)?.is_some())
     }
 
-    fn encoded_quads_for_pattern(
-        &self,
-        subject: Option<EncodedTerm>,
-        predicate: Option<EncodedTerm>,
-        object: Option<EncodedTerm>,
-        graph_name: Option<EncodedTerm>,
-    ) -> DecodingIndexIterator {
-        match subject {
-            Some(subject) => match predicate {
-                Some(predicate) => match object {
-                    Some(object) => match graph_name {
-                        Some(graph_name) => self
-                            .spog_quads(encode_term_quad(subject, predicate, object, graph_name)),
-                        None => self.quads_for_subject_predicate_object(subject, predicate, object),
-                    },
-                    None => match graph_name {
-                        Some(graph_name) => {
-                            self.quads_for_subject_predicate_graph(subject, predicate, graph_name)
-                        }
-                        None => self.quads_for_subject_predicate(subject, predicate),
-                    },
-                },
-                None => match object {
-                    Some(object) => match graph_name {
-                        Some(graph_name) => {
-                            self.quads_for_subject_object_graph(subject, object, graph_name)
-                        }
-                        None => self.quads_for_subject_object(subject, object),
-                    },
-                    None => match graph_name {
-                        Some(graph_name) => self.quads_for_subject_graph(subject, graph_name),
-                        None => self.quads_for_subject(subject),
-                    },
-                },
-            },
-            None => match predicate {
-                Some(predicate) => match object {
-                    Some(object) => match graph_name {
-                        Some(graph_name) => {
-                            self.quads_for_predicate_object_graph(predicate, object, graph_name)
-                        }
-
-                        None => self.quads_for_predicate_object(predicate, object),
-                    },
-                    None => match graph_name {
-                        Some(graph_name) => self.quads_for_predicate_graph(predicate, graph_name),
-                        None => self.quads_for_predicate(predicate),
-                    },
-                },
-                None => match object {
-                    Some(object) => match graph_name {
-                        Some(graph_name) => self.quads_for_object_graph(object, graph_name),
-                        None => self.quads_for_object(object),
-                    },
-                    None => match graph_name {
-                        Some(graph_name) => self.quads_for_graph(graph_name),
-                        None => self.quads(),
-                    },
-                },
-            },
-        }
-    }
-
     fn quads(&self) -> DecodingIndexIterator {
         self.spog_quads(Vec::default())
     }
@@ -503,14 +440,69 @@ impl StrLookup for RocksDbStore {
 }
 
 impl ReadableEncodedStore for RocksDbStore {
-    fn encoded_quads_for_pattern<'a>(
-        &'a self,
+    type QuadsIter = DecodingIndexIterator;
+
+    fn encoded_quads_for_pattern(
+        &self,
         subject: Option<EncodedTerm>,
         predicate: Option<EncodedTerm>,
         object: Option<EncodedTerm>,
         graph_name: Option<EncodedTerm>,
-    ) -> Box<dyn Iterator<Item = Result<EncodedQuad>> + 'a> {
-        Box::new(self.encoded_quads_for_pattern(subject, predicate, object, graph_name))
+    ) -> DecodingIndexIterator {
+        match subject {
+            Some(subject) => match predicate {
+                Some(predicate) => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => self
+                            .spog_quads(encode_term_quad(subject, predicate, object, graph_name)),
+                        None => self.quads_for_subject_predicate_object(subject, predicate, object),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => {
+                            self.quads_for_subject_predicate_graph(subject, predicate, graph_name)
+                        }
+                        None => self.quads_for_subject_predicate(subject, predicate),
+                    },
+                },
+                None => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => {
+                            self.quads_for_subject_object_graph(subject, object, graph_name)
+                        }
+                        None => self.quads_for_subject_object(subject, object),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => self.quads_for_subject_graph(subject, graph_name),
+                        None => self.quads_for_subject(subject),
+                    },
+                },
+            },
+            None => match predicate {
+                Some(predicate) => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => {
+                            self.quads_for_predicate_object_graph(predicate, object, graph_name)
+                        }
+
+                        None => self.quads_for_predicate_object(predicate, object),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => self.quads_for_predicate_graph(predicate, graph_name),
+                        None => self.quads_for_predicate(predicate),
+                    },
+                },
+                None => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => self.quads_for_object_graph(object, graph_name),
+                        None => self.quads_for_object(object),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => self.quads_for_graph(graph_name),
+                        None => self.quads(),
+                    },
+                },
+            },
+        }
     }
 }
 
@@ -753,7 +745,7 @@ impl StaticDBRowIterator {
     }
 }
 
-struct DecodingIndexIterator {
+pub(crate) struct DecodingIndexIterator {
     iter: StaticDBRowIterator,
     prefix: Vec<u8>,
     encoding: QuadEncoding,

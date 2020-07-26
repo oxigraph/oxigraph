@@ -27,13 +27,15 @@ use std::io::BufRead;
 use std::iter::Iterator;
 
 pub(crate) trait ReadableEncodedStore: StrLookup {
-    fn encoded_quads_for_pattern<'a>(
-        &'a self,
+    type QuadsIter: Iterator<Item = Result<EncodedQuad>> + 'static;
+
+    fn encoded_quads_for_pattern(
+        &self,
         subject: Option<EncodedTerm>,
         predicate: Option<EncodedTerm>,
         object: Option<EncodedTerm>,
         graph_name: Option<EncodedTerm>,
-    ) -> Box<dyn Iterator<Item = Result<EncodedQuad>> + 'a>;
+    ) -> Self::QuadsIter;
 }
 
 pub(crate) trait WritableEncodedStore: StrContainer {
