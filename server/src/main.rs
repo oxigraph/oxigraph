@@ -11,15 +11,21 @@
 
 use argh::FromArgs;
 use async_std::future::Future;
-use async_std::io::{BufRead, Read};
+use async_std::io::Read;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::task::{block_on, spawn, spawn_blocking};
-use http_types::{headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode};
+use http_client::h1::H1Client;
+use http_client::HttpClient;
+use http_types::{
+    format_err, headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode, Url,
+};
 use oxigraph::io::{DatasetFormat, GraphFormat};
-use oxigraph::model::GraphName;
-use oxigraph::sparql::{Query, QueryOptions, QueryResult, QueryResultFormat};
+use oxigraph::model::{GraphName, NamedNode};
+use oxigraph::sparql::{Query, QueryOptions, QueryResult, QueryResultFormat, ServiceHandler};
 use oxigraph::RocksDbStore;
+use std::fmt;
+use std::io::BufReader;
 use std::str::FromStr;
 use url::form_urlencoded;
 
@@ -64,7 +70,7 @@ async fn handle_request(request: Request, store: RocksDbStore) -> Result<Respons
                 match if let Some(format) = GraphFormat::from_media_type(content_type.essence()) {
                     spawn_blocking(move || {
                         store.load_graph(
-                            SyncAsyncBufReader::from(request),
+                            BufReader::new(SyncAsyncReader::from(request)),
                             format,
                             &GraphName::DefaultGraph,
                             None,
@@ -73,7 +79,11 @@ async fn handle_request(request: Request, store: RocksDbStore) -> Result<Respons
                 } else if let Some(format) = DatasetFormat::from_media_type(content_type.essence())
                 {
                     spawn_blocking(move || {
-                        store.load_dataset(SyncAsyncBufReader::from(request), format, None)
+                        store.load_dataset(
+                            BufReader::new(SyncAsyncReader::from(request)),
+                            format,
+                            None,
+                        )
                     })
                 } else {
                     return Ok(simple_response(
@@ -170,7 +180,8 @@ async fn evaluate_sparql_query(
             e.set_status(StatusCode::BadRequest);
             e
         })?;
-        let results = store.query(query, QueryOptions::default())?;
+        let options = QueryOptions::default().with_service_handler(HttpService::default());
+        let results = store.query(query, options)?;
         //TODO: stream
         if let QueryResult::Graph(_) = results {
             let format = content_negotiation(
@@ -284,17 +295,17 @@ fn content_negotiation<F>(
         .ok_or_else(|| Error::from_str(StatusCode::InternalServerError, "Unknown mime type"))
 }
 
-struct SyncAsyncBufReader<R: Unpin> {
+struct SyncAsyncReader<R: Unpin> {
     inner: R,
 }
 
-impl<R: Unpin> From<R> for SyncAsyncBufReader<R> {
+impl<R: Unpin> From<R> for SyncAsyncReader<R> {
     fn from(inner: R) -> Self {
         Self { inner }
     }
 }
 
-impl<R: Read + Unpin> std::io::Read for SyncAsyncBufReader<R> {
+impl<R: Read + Unpin> std::io::Read for SyncAsyncReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         block_on(self.inner.read(buf))
     }
@@ -302,24 +313,69 @@ impl<R: Read + Unpin> std::io::Read for SyncAsyncBufReader<R> {
     //TODO: implement other methods
 }
 
-impl<R: BufRead + Unpin> std::io::BufRead for SyncAsyncBufReader<R> {
-    fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
-        unimplemented!()
-    }
+#[derive(Default)]
+struct HttpService {
+    client: H1Client,
+}
 
-    fn consume(&mut self, _: usize) {
-        unimplemented!()
-    }
+impl ServiceHandler for HttpService {
+    type Error = HttpServiceError;
 
-    fn read_until(&mut self, byte: u8, buf: &mut Vec<u8>) -> std::io::Result<usize> {
-        block_on(self.inner.read_until(byte, buf))
-    }
+    fn handle(
+        &self,
+        service_name: NamedNode,
+        query: Query,
+    ) -> std::result::Result<QueryResult, HttpServiceError> {
+        let mut request = Request::new(
+            Method::Post,
+            Url::parse(service_name.as_str()).map_err(Error::from)?,
+        );
+        request.append_header(headers::USER_AGENT, SERVER);
+        request.append_header(headers::CONTENT_TYPE, "application/sparql-query");
+        request.append_header(headers::ACCEPT, "application/sparql-results+xml");
+        request.set_body(query.to_string());
 
-    fn read_line(&mut self, buf: &mut String) -> std::io::Result<usize> {
-        block_on(self.inner.read_line(buf))
+        let response = block_on(async { self.client.send(request).await })?;
+        let syntax = if let Some(content_type) = response.content_type() {
+            QueryResultFormat::from_media_type(content_type.essence()).ok_or_else(|| {
+                format_err!(
+                    "Unexpected federated query result type from {}: {}",
+                    service_name,
+                    content_type
+                )
+            })?
+        } else {
+            QueryResultFormat::Xml
+        };
+        Ok(
+            QueryResult::read(BufReader::new(SyncAsyncReader::from(response)), syntax)
+                .map_err(Error::from)?,
+        )
     }
 }
 
+#[derive(Debug)]
+struct HttpServiceError {
+    inner: Error,
+}
+
+impl fmt::Display for HttpServiceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
+impl std::error::Error for HttpServiceError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(self.inner.as_ref())
+    }
+}
+
+impl From<Error> for HttpServiceError {
+    fn from(inner: Error) -> Self {
+        Self { inner }
+    }
+}
 #[cfg(test)]
 mod tests {
     use crate::handle_request;
@@ -419,6 +475,14 @@ mod tests {
         exec(request, StatusCode::UnsupportedMediaType)
     }
 
+    #[test]
+    fn post_federated_query() {
+        let mut request = Request::new(Method::Post, Url::parse("http://localhost/query").unwrap());
+        request.insert_header("Content-Type", "application/sparql-query");
+        request.set_body("SELECT * WHERE { SERVICE <https://query.wikidata.org/sparql> { <https://en.wikipedia.org/wiki/Paris> ?p ?o } }");
+        exec(request, StatusCode::Ok)
+    }
+
     fn exec(request: Request, expected_status: StatusCode) {
         let mut path = temp_dir();
         path.push("temp-oxigraph-server-test");
@@ -427,13 +491,11 @@ mod tests {
         path.push(&s.finish().to_string());
 
         let store = RocksDbStore::open(&path).unwrap();
-        assert_eq!(
-            match block_on(handle_request(request, store)) {
-                Ok(r) => r.status(),
-                Err(e) => e.status(),
-            },
-            expected_status
-        );
+        let (code, message) = match block_on(handle_request(request, store)) {
+            Ok(r) => (r.status(), "".to_string()),
+            Err(e) => (e.status(), e.to_string()),
+        };
+        assert_eq!(code, expected_status, "Error message: {}", message);
         remove_dir_all(&path).unwrap()
     }
 }
