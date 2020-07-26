@@ -4,7 +4,7 @@ use oxigraph::model::*;
 use oxigraph::sparql::QueryOptions;
 use oxigraph::{DatasetSyntax, FileSyntax, GraphSyntax, MemoryStore};
 use pyo3::basic::CompareOp;
-use pyo3::exceptions::{NotImplementedError, RuntimeError, ValueError};
+use pyo3::exceptions::{NotImplementedError, ValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyTuple;
 use pyo3::{PyIterProtocol, PyObjectProtocol, PySequenceProtocol};
@@ -55,14 +55,11 @@ impl PyMemoryStore {
     }
 
     fn query(&self, query: &str, py: Python<'_>) -> PyResult<PyObject> {
-        let query = self
+        let results = self
             .inner
-            .prepare_query(query, QueryOptions::default())
+            .query(query, QueryOptions::default())
             .map_err(|e| ParseError::py_err(e.to_string()))?;
-        let results = query
-            .exec()
-            .map_err(|e| RuntimeError::py_err(e.to_string()))?;
-        query_results_to_python(py, results, RuntimeError::py_err)
+        query_results_to_python(py, results)
     }
 
     #[args(data, mime_type, "*", base_iri = "\"\"", to_graph = "None")]

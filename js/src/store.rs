@@ -99,11 +99,10 @@ impl JsMemoryStore {
     }
 
     pub fn query(&self, query: &str) -> Result<JsValue, JsValue> {
-        let query = self
+        let results = self
             .store
-            .prepare_query(query, QueryOptions::default())
+            .query(query, QueryOptions::default())
             .map_err(to_err)?;
-        let results = query.exec().map_err(to_err)?;
         let output = match results {
             QueryResult::Solutions(solutions) => {
                 let results = Array::new();

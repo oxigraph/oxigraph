@@ -1,6 +1,6 @@
 use crate::error::UnwrapInfallible;
+use crate::sparql::algebra::GraphPattern;
 use crate::sparql::model::Variable;
-use crate::sparql::GraphPattern;
 use crate::store::numeric_encoder::{
     EncodedQuad, EncodedTerm, Encoder, MemoryStrStore, StrContainer, StrHash, StrLookup,
     ENCODED_DEFAULT_GRAPH,
@@ -9,6 +9,7 @@ use crate::store::ReadableEncodedStore;
 use crate::Result;
 use std::cell::{RefCell, RefMut};
 use std::collections::BTreeSet;
+use std::rc::Rc;
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum PlanNode {
@@ -18,74 +19,74 @@ pub enum PlanNode {
     },
     Service {
         service_name: PatternValue,
-        variables: Vec<Variable>,
-        child: Box<PlanNode>,
-        graph_pattern: Box<GraphPattern>,
+        variables: Rc<Vec<Variable>>,
+        child: Rc<PlanNode>,
+        graph_pattern: Rc<GraphPattern>,
         silent: bool,
     },
     QuadPatternJoin {
-        child: Box<PlanNode>,
+        child: Rc<PlanNode>,
         subject: PatternValue,
         predicate: PatternValue,
         object: PatternValue,
         graph_name: PatternValue,
     },
     PathPatternJoin {
-        child: Box<PlanNode>,
+        child: Rc<PlanNode>,
         subject: PatternValue,
-        path: PlanPropertyPath,
+        path: Rc<PlanPropertyPath>,
         object: PatternValue,
         graph_name: PatternValue,
     },
     Join {
-        left: Box<PlanNode>,
-        right: Box<PlanNode>,
+        left: Rc<PlanNode>,
+        right: Rc<PlanNode>,
     },
     AntiJoin {
-        left: Box<PlanNode>,
-        right: Box<PlanNode>,
+        left: Rc<PlanNode>,
+        right: Rc<PlanNode>,
     },
     Filter {
-        child: Box<PlanNode>,
-        expression: PlanExpression,
+        child: Rc<PlanNode>,
+        expression: Rc<PlanExpression>,
     },
     Union {
-        children: Vec<PlanNode>,
+        children: Vec<Rc<PlanNode>>,
     },
     LeftJoin {
-        left: Box<PlanNode>,
-        right: Box<PlanNode>,
-        possible_problem_vars: Vec<usize>, //Variables that should not be part of the entry of the left join
+        left: Rc<PlanNode>,
+        right: Rc<PlanNode>,
+        possible_problem_vars: Rc<Vec<usize>>, //Variables that should not be part of the entry of the left join
     },
     Extend {
-        child: Box<PlanNode>,
+        child: Rc<PlanNode>,
         position: usize,
-        expression: PlanExpression,
+        expression: Rc<PlanExpression>,
     },
     Sort {
-        child: Box<PlanNode>,
+        child: Rc<PlanNode>,
         by: Vec<Comparator>,
     },
     HashDeduplicate {
-        child: Box<PlanNode>,
+        child: Rc<PlanNode>,
     },
     Skip {
-        child: Box<PlanNode>,
+        child: Rc<PlanNode>,
         count: usize,
     },
     Limit {
-        child: Box<PlanNode>,
+        child: Rc<PlanNode>,
         count: usize,
     },
     Project {
-        child: Box<PlanNode>,
-        mapping: Vec<(usize, usize)>, // pairs of (variable key in child, variable key in output)
+        child: Rc<PlanNode>,
+        mapping: Rc<Vec<(usize, usize)>>, // pairs of (variable key in child, variable key in output)
     },
     Aggregate {
         // By definition the group by key are the range 0..key_mapping.len()
-        child: Box<PlanNode>,
-        key_mapping: Vec<(usize, usize)>, // aggregate key pairs of (variable key in child, variable key in output)
-        aggregates: Vec<(PlanAggregation, usize)>,
+        child: Rc<PlanNode>,
+        key_mapping: Rc<Vec<(usize, usize)>>, // aggregate key pairs of (variable key in child, variable key in output)
+        aggregates: Rc<Vec<(PlanAggregation, usize)>>,
     },
 }
 
@@ -153,7 +154,7 @@ impl PlanNode {
                 child.add_maybe_bound_variables(set);
             }
             PlanNode::Union { children } => {
-                for child in children {
+                for child in children.iter() {
                     child.add_maybe_bound_variables(set);
                 }
             }
@@ -191,7 +192,7 @@ impl PlanNode {
                 ..
             } => {
                 set.extend(key_mapping.iter().map(|(_, o)| o));
-                for (_, var) in aggregates {
+                for (_, var) in aggregates.iter() {
                     set.insert(*var);
                 }
             }
@@ -218,7 +219,7 @@ impl PatternValue {
 pub enum PlanExpression {
     Constant(EncodedTerm),
     Variable(usize),
-    Exists(Box<PlanNode>),
+    Exists(Rc<PlanNode>),
     Or(Box<PlanExpression>, Box<PlanExpression>),
     And(Box<PlanExpression>, Box<PlanExpression>),
     Equal(Box<PlanExpression>, Box<PlanExpression>),
@@ -447,19 +448,19 @@ pub enum PlanAggregationFunction {
     Max,
     Avg,
     Sample,
-    GroupConcat { separator: String },
+    GroupConcat { separator: Rc<String> },
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum PlanPropertyPath {
     PredicatePath(EncodedTerm),
-    InversePath(Box<PlanPropertyPath>),
-    SequencePath(Box<PlanPropertyPath>, Box<PlanPropertyPath>),
-    AlternativePath(Box<PlanPropertyPath>, Box<PlanPropertyPath>),
-    ZeroOrMorePath(Box<PlanPropertyPath>),
-    OneOrMorePath(Box<PlanPropertyPath>),
-    ZeroOrOnePath(Box<PlanPropertyPath>),
-    NegatedPropertySet(Vec<EncodedTerm>),
+    InversePath(Rc<PlanPropertyPath>),
+    SequencePath(Rc<PlanPropertyPath>, Rc<PlanPropertyPath>),
+    AlternativePath(Rc<PlanPropertyPath>, Rc<PlanPropertyPath>),
+    ZeroOrMorePath(Rc<PlanPropertyPath>),
+    OneOrMorePath(Rc<PlanPropertyPath>),
+    ZeroOrOnePath(Rc<PlanPropertyPath>),
+    NegatedPropertySet(Rc<Vec<EncodedTerm>>),
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]

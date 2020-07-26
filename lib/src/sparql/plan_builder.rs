@@ -6,6 +6,7 @@ use crate::store::numeric_encoder::{Encoder, ENCODED_DEFAULT_GRAPH};
 use crate::Error;
 use crate::Result;
 use std::collections::{BTreeSet, HashSet};
+use std::rc::Rc;
 
 pub struct PlanBuilder<E: Encoder> {
     encoder: E,
@@ -39,8 +40,8 @@ impl<E: Encoder> PlanBuilder<E> {
         Ok(match pattern {
             GraphPattern::BGP(p) => self.build_for_bgp(p, variables, graph_name)?,
             GraphPattern::Join(a, b) => PlanNode::Join {
-                left: Box::new(self.build_for_graph_pattern(a, variables, graph_name)?),
-                right: Box::new(self.build_for_graph_pattern(b, variables, graph_name)?),
+                left: Rc::new(self.build_for_graph_pattern(a, variables, graph_name)?),
+                right: Rc::new(self.build_for_graph_pattern(b, variables, graph_name)?),
             },
             GraphPattern::LeftJoin(a, b, e) => {
                 let left = self.build_for_graph_pattern(a, variables, graph_name)?;
@@ -52,22 +53,22 @@ impl<E: Encoder> PlanBuilder<E> {
                 //We add the extra filter if needed
                 let right = if let Some(e) = e {
                     PlanNode::Filter {
-                        child: Box::new(right),
-                        expression: self.build_for_expression(e, variables, graph_name)?,
+                        child: Rc::new(right),
+                        expression: Rc::new(self.build_for_expression(e, variables, graph_name)?),
                     }
                 } else {
                     right
                 };
 
                 PlanNode::LeftJoin {
-                    left: Box::new(left),
-                    right: Box::new(right),
-                    possible_problem_vars: possible_problem_vars.into_iter().collect(),
+                    left: Rc::new(left),
+                    right: Rc::new(right),
+                    possible_problem_vars: Rc::new(possible_problem_vars.into_iter().collect()),
                 }
             }
             GraphPattern::Filter(e, p) => PlanNode::Filter {
-                child: Box::new(self.build_for_graph_pattern(p, variables, graph_name)?),
-                expression: self.build_for_expression(e, variables, graph_name)?,
+                child: Rc::new(self.build_for_graph_pattern(p, variables, graph_name)?),
+                expression: Rc::new(self.build_for_expression(e, variables, graph_name)?),
             },
             GraphPattern::Union(a, b) => {
                 //We flatten the UNIONs
@@ -80,9 +81,9 @@ impl<E: Encoder> PlanBuilder<E> {
                             stack.push(a);
                             stack.push(b);
                         }
-                        Some(p) => {
-                            children.push(self.build_for_graph_pattern(p, variables, graph_name)?)
-                        }
+                        Some(p) => children.push(Rc::new(
+                            self.build_for_graph_pattern(p, variables, graph_name)?,
+                        )),
                     }
                 }
                 PlanNode::Union { children }
@@ -92,13 +93,13 @@ impl<E: Encoder> PlanBuilder<E> {
                 self.build_for_graph_pattern(p, variables, graph_name)?
             }
             GraphPattern::Extend(p, v, e) => PlanNode::Extend {
-                child: Box::new(self.build_for_graph_pattern(p, variables, graph_name)?),
+                child: Rc::new(self.build_for_graph_pattern(p, variables, graph_name)?),
                 position: variable_key(variables, v),
-                expression: self.build_for_expression(e, variables, graph_name)?,
+                expression: Rc::new(self.build_for_expression(e, variables, graph_name)?),
             },
             GraphPattern::Minus(a, b) => PlanNode::AntiJoin {
-                left: Box::new(self.build_for_graph_pattern(a, variables, graph_name)?),
-                right: Box::new(self.build_for_graph_pattern(b, variables, graph_name)?),
+                left: Rc::new(self.build_for_graph_pattern(a, variables, graph_name)?),
+                right: Rc::new(self.build_for_graph_pattern(b, variables, graph_name)?),
             },
             GraphPattern::Service(n, p, s) => {
                 // Child building should be at the begging in order for `variables` to be filled
@@ -106,9 +107,9 @@ impl<E: Encoder> PlanBuilder<E> {
                 let service_name = self.pattern_value_from_named_node_or_variable(n, variables)?;
                 PlanNode::Service {
                     service_name,
-                    variables: variables.clone(),
-                    child: Box::new(child),
-                    graph_pattern: Box::new(*p.clone()),
+                    variables: Rc::new(variables.clone()),
+                    child: Rc::new(child),
+                    graph_pattern: Rc::new(*p.clone()),
                     silent: *s,
                 }
             }
@@ -118,29 +119,32 @@ impl<E: Encoder> PlanBuilder<E> {
                     self.convert_pattern_value_id(graph_name, variables, &mut inner_variables);
 
                 PlanNode::Aggregate {
-                    child: Box::new(self.build_for_graph_pattern(
+                    child: Rc::new(self.build_for_graph_pattern(
                         p,
                         &mut inner_variables,
                         inner_graph_name,
                     )?),
-                    key_mapping: key
-                        .iter()
-                        .map(|k| {
-                            (
-                                variable_key(&mut inner_variables, k),
-                                variable_key(variables, k),
-                            )
-                        })
-                        .collect(),
-                    aggregates: aggregates
-                        .iter()
-                        .map(|(a, v)| {
-                            Ok((
-                                self.build_for_aggregate(a, &mut inner_variables, graph_name)?,
-                                variable_key(variables, v),
-                            ))
-                        })
-                        .collect::<Result<Vec<_>>>()?,
+                    key_mapping: Rc::new(
+                        key.iter()
+                            .map(|k| {
+                                (
+                                    variable_key(&mut inner_variables, k),
+                                    variable_key(variables, k),
+                                )
+                            })
+                            .collect(),
+                    ),
+                    aggregates: Rc::new(
+                        aggregates
+                            .iter()
+                            .map(|(a, v)| {
+                                Ok((
+                                    self.build_for_aggregate(a, &mut inner_variables, graph_name)?,
+                                    variable_key(variables, v),
+                                ))
+                            })
+                            .collect::<Result<Vec<_>>>()?,
+                    ),
                 }
             }
             GraphPattern::Data(bs) => PlanNode::StaticBindings {
@@ -159,7 +163,7 @@ impl<E: Encoder> PlanBuilder<E> {
                     })
                     .collect();
                 PlanNode::Sort {
-                    child: Box::new(self.build_for_graph_pattern(l, variables, graph_name)?),
+                    child: Rc::new(self.build_for_graph_pattern(l, variables, graph_name)?),
                     by: by?,
                 }
             }
@@ -168,35 +172,37 @@ impl<E: Encoder> PlanBuilder<E> {
                 let inner_graph_name =
                     self.convert_pattern_value_id(graph_name, variables, &mut inner_variables);
                 PlanNode::Project {
-                    child: Box::new(self.build_for_graph_pattern(
+                    child: Rc::new(self.build_for_graph_pattern(
                         l,
                         &mut inner_variables,
                         inner_graph_name,
                     )?),
-                    mapping: new_variables
-                        .iter()
-                        .enumerate()
-                        .map(|(new_variable, variable)| {
-                            (new_variable, variable_key(variables, variable))
-                        })
-                        .collect(),
+                    mapping: Rc::new(
+                        new_variables
+                            .iter()
+                            .enumerate()
+                            .map(|(new_variable, variable)| {
+                                (new_variable, variable_key(variables, variable))
+                            })
+                            .collect(),
+                    ),
                 }
             }
             GraphPattern::Distinct(l) => PlanNode::HashDeduplicate {
-                child: Box::new(self.build_for_graph_pattern(l, variables, graph_name)?),
+                child: Rc::new(self.build_for_graph_pattern(l, variables, graph_name)?),
             },
             GraphPattern::Reduced(l) => self.build_for_graph_pattern(l, variables, graph_name)?,
             GraphPattern::Slice(l, start, length) => {
                 let mut plan = self.build_for_graph_pattern(l, variables, graph_name)?;
                 if *start > 0 {
                     plan = PlanNode::Skip {
-                        child: Box::new(plan),
+                        child: Rc::new(plan),
                         count: *start,
                     };
                 }
                 if let Some(length) = length {
                     plan = PlanNode::Limit {
-                        child: Box::new(plan),
+                        child: Rc::new(plan),
                         count: *length,
                     };
                 }
@@ -215,7 +221,7 @@ impl<E: Encoder> PlanBuilder<E> {
         for pattern in sort_bgp(p) {
             plan = match pattern {
                 TripleOrPathPattern::Triple(pattern) => PlanNode::QuadPatternJoin {
-                    child: Box::new(plan),
+                    child: Rc::new(plan),
                     subject: self
                         .pattern_value_from_term_or_variable(&pattern.subject, variables)?,
                     predicate: self
@@ -224,10 +230,10 @@ impl<E: Encoder> PlanBuilder<E> {
                     graph_name,
                 },
                 TripleOrPathPattern::Path(pattern) => PlanNode::PathPatternJoin {
-                    child: Box::new(plan),
+                    child: Rc::new(plan),
                     subject: self
                         .pattern_value_from_term_or_variable(&pattern.subject, variables)?,
-                    path: self.build_for_path(&pattern.path)?,
+                    path: Rc::new(self.build_for_path(&pattern.path)?),
                     object: self.pattern_value_from_term_or_variable(&pattern.object, variables)?,
                     graph_name,
                 },
@@ -242,30 +248,30 @@ impl<E: Encoder> PlanBuilder<E> {
                 self.encoder.encode_named_node(p).map_err(|e| e.into())?,
             ),
             PropertyPath::InversePath(p) => {
-                PlanPropertyPath::InversePath(Box::new(self.build_for_path(p)?))
+                PlanPropertyPath::InversePath(Rc::new(self.build_for_path(p)?))
             }
             PropertyPath::AlternativePath(a, b) => PlanPropertyPath::AlternativePath(
-                Box::new(self.build_for_path(a)?),
-                Box::new(self.build_for_path(b)?),
+                Rc::new(self.build_for_path(a)?),
+                Rc::new(self.build_for_path(b)?),
             ),
             PropertyPath::SequencePath(a, b) => PlanPropertyPath::SequencePath(
-                Box::new(self.build_for_path(a)?),
-                Box::new(self.build_for_path(b)?),
+                Rc::new(self.build_for_path(a)?),
+                Rc::new(self.build_for_path(b)?),
             ),
             PropertyPath::ZeroOrMorePath(p) => {
-                PlanPropertyPath::ZeroOrMorePath(Box::new(self.build_for_path(p)?))
+                PlanPropertyPath::ZeroOrMorePath(Rc::new(self.build_for_path(p)?))
             }
             PropertyPath::OneOrMorePath(p) => {
-                PlanPropertyPath::OneOrMorePath(Box::new(self.build_for_path(p)?))
+                PlanPropertyPath::OneOrMorePath(Rc::new(self.build_for_path(p)?))
             }
             PropertyPath::ZeroOrOnePath(p) => {
-                PlanPropertyPath::ZeroOrOnePath(Box::new(self.build_for_path(p)?))
+                PlanPropertyPath::ZeroOrOnePath(Rc::new(self.build_for_path(p)?))
             }
-            PropertyPath::NegatedPropertySet(p) => PlanPropertyPath::NegatedPropertySet(
+            PropertyPath::NegatedPropertySet(p) => PlanPropertyPath::NegatedPropertySet(Rc::new(
                 p.iter()
                     .map(|p| self.encoder.encode_named_node(p).map_err(|e| e.into()))
                     .collect::<Result<Vec<_>>>()?,
-            ),
+            )),
         })
     }
 
@@ -678,7 +684,7 @@ impl<E: Encoder> PlanBuilder<E> {
                 }
             },
             Expression::Bound(v) => PlanExpression::Bound(variable_key(variables, v)),
-            Expression::Exists(n) => PlanExpression::Exists(Box::new(
+            Expression::Exists(n) => PlanExpression::Exists(Rc::new(
                 self.build_for_graph_pattern(n, variables, graph_name)?,
             )),
         })
@@ -822,7 +828,7 @@ impl<E: Encoder> PlanBuilder<E> {
             },
             Aggregation::GroupConcat(e, distinct, separator) => PlanAggregation {
                 function: PlanAggregationFunction::GroupConcat {
-                    separator: separator.clone().unwrap_or_else(|| " ".to_string()),
+                    separator: Rc::new(separator.clone().unwrap_or_else(|| " ".to_string())),
                 },
                 parameter: Some(self.build_for_expression(e, variables, graph_name)?),
                 distinct: *distinct,
@@ -936,8 +942,8 @@ impl<E: Encoder> PlanBuilder<E> {
                 self.add_left_join_problematic_variables(&*child, set);
             }
             PlanNode::Union { children } => {
-                for child in children {
-                    self.add_left_join_problematic_variables(&*child, set);
+                for child in children.iter() {
+                    self.add_left_join_problematic_variables(child, set);
                 }
             }
             PlanNode::Join { left, right, .. } => {
@@ -981,7 +987,7 @@ impl<E: Encoder> PlanBuilder<E> {
             } => {
                 set.extend(key_mapping.iter().map(|(_, o)| o));
                 //TODO: This is too harsh
-                for (_, var) in aggregates {
+                for (_, var) in aggregates.iter() {
                     set.insert(*var);
                 }
             }

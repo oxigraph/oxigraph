@@ -63,12 +63,11 @@ impl PySledStore {
     }
 
     fn query(&self, query: &str, py: Python<'_>) -> PyResult<PyObject> {
-        let query = self
+        let results = self
             .inner
-            .prepare_query(query, QueryOptions::default())
+            .query(query, QueryOptions::default())
             .map_err(|e| ParseError::py_err(e.to_string()))?;
-        let results = query.exec().map_err(|e| SledError::py_err(e.to_string()))?;
-        query_results_to_python(py, results, SledError::py_err)
+        query_results_to_python(py, results)
     }
 
     #[args(data, mime_type, "*", base_iri = "\"\"", to_graph = "None")]

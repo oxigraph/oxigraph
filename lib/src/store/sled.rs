@@ -2,7 +2,7 @@
 
 use crate::error::UnwrapInfallible;
 use crate::model::*;
-use crate::sparql::{GraphPattern, Query, QueryOptions, QueryResult, SimplePreparedQuery};
+use crate::sparql::{Query, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::store::{load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore};
 use crate::{DatasetSyntax, Error, GraphSyntax, Result};
@@ -39,8 +39,7 @@ use std::{fmt, str};
 /// assert_eq!(vec![quad], results?);
 ///
 /// // SPARQL query
-/// let prepared_query = store.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
-/// if let QueryResult::Solutions(mut solutions) = prepared_query.exec()? {
+/// if let QueryResult::Solutions(mut solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
 ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 /// };
 /// #
@@ -84,6 +83,17 @@ impl SledStore {
         Ok(new)
     }
 
+    /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/).
+    ///
+    /// See `MemoryStore` for a usage example.
+    pub fn query(
+        &self,
+        query: impl TryInto<Query, Error = impl Into<Error>>,
+        options: QueryOptions,
+    ) -> Result<QueryResult> {
+        self.prepare_query(query, options)?.exec()
+    }
+
     /// Prepares a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) and returns an object that could be used to execute it.
     ///
     /// See `MemoryStore` for a usage example.
@@ -95,19 +105,6 @@ impl SledStore {
         Ok(SledPreparedQuery(SimplePreparedQuery::new(
             (*self).clone(),
             query,
-            options,
-        )?))
-    }
-
-    /// This is similar to `prepare_query`, but useful if a SPARQL query has already been parsed, which is the case when building `ServiceHandler`s for federated queries with `SERVICE` clauses. For examples, look in the tests.
-    pub fn prepare_query_from_pattern(
-        &self,
-        graph_pattern: &GraphPattern,
-        options: QueryOptions,
-    ) -> Result<SledPreparedQuery> {
-        Ok(SledPreparedQuery(SimplePreparedQuery::new_from_pattern(
-            (*self).clone(),
-            graph_pattern,
             options,
         )?))
     }
@@ -670,7 +667,7 @@ pub struct SledPreparedQuery(SimplePreparedQuery<SledStore>);
 
 impl SledPreparedQuery {
     /// Evaluates the query and returns its results
-    pub fn exec(&self) -> Result<QueryResult<'_>> {
+    pub fn exec(&self) -> Result<QueryResult> {
         self.0.exec()
     }
 }

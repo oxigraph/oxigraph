@@ -32,8 +32,7 @@
 //! assert_eq!(vec![quad], results);
 //!
 //! // SPARQL query
-//! let prepared_query = store.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
-//! if let QueryResult::Solutions(mut solutions) = prepared_query.exec()? {
+//! if let QueryResult::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
 //!     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 //! }
 //! # Result::Ok(())

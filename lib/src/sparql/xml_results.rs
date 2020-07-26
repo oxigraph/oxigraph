@@ -15,8 +15,9 @@ use std::collections::BTreeMap;
 use std::io::BufRead;
 use std::io::Write;
 use std::iter::empty;
+use std::rc::Rc;
 
-pub fn write_xml_results<W: Write>(results: QueryResult<'_>, sink: W) -> Result<W> {
+pub fn write_xml_results<W: Write>(results: QueryResult, sink: W) -> Result<W> {
     let mut writer = Writer::new(sink);
     match results {
         QueryResult::Boolean(value) => {
@@ -102,7 +103,7 @@ pub fn write_xml_results<W: Write>(results: QueryResult<'_>, sink: W) -> Result<
     Ok(writer.into_inner())
 }
 
-pub fn read_xml_results<'a>(source: impl BufRead + 'a) -> Result<QueryResult<'a>> {
+pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResult> {
     enum State {
         Start,
         Sparql,
@@ -171,7 +172,7 @@ pub fn read_xml_results<'a>(source: impl BufRead + 'a) -> Result<QueryResult<'a>
                             mapping.insert(var.as_bytes().to_vec(), i);
                         }
                         return Ok(QueryResult::Solutions(QuerySolutionsIterator::new(
-                            variables.into_iter().map(Variable::new).collect(),
+                            Rc::new(variables.into_iter().map(Variable::new).collect()),
                             Box::new(ResultsIterator {
                                 reader,
                                 buffer: Vec::default(),
@@ -209,7 +210,7 @@ pub fn read_xml_results<'a>(source: impl BufRead + 'a) -> Result<QueryResult<'a>
                 State::AfterHead => {
                     if event.name() == b"results" {
                         return Ok(QueryResult::Solutions(QuerySolutionsIterator::new(
-                            variables.into_iter().map(Variable::new).collect(),
+                            Rc::new(variables.into_iter().map(Variable::new).collect()),
                             Box::new(empty()),
                         )))
                     } else {

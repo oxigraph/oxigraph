@@ -7,6 +7,7 @@ use rio_api::model as rio;
 use std::collections::BTreeSet;
 use std::fmt;
 use std::ops::Add;
+use std::rc::Rc;
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum NamedNodeOrVariable {
@@ -1305,25 +1306,25 @@ const EMPTY_DATASET: DatasetSpec = DatasetSpec {
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum QueryVariants {
     Select {
-        dataset: DatasetSpec,
-        algebra: GraphPattern,
-        base_iri: Option<Iri<String>>,
+        dataset: Rc<DatasetSpec>,
+        algebra: Rc<GraphPattern>,
+        base_iri: Option<Rc<Iri<String>>>,
     },
     Construct {
-        construct: Vec<TriplePattern>,
-        dataset: DatasetSpec,
-        algebra: GraphPattern,
-        base_iri: Option<Iri<String>>,
+        construct: Rc<Vec<TriplePattern>>,
+        dataset: Rc<DatasetSpec>,
+        algebra: Rc<GraphPattern>,
+        base_iri: Option<Rc<Iri<String>>>,
     },
     Describe {
-        dataset: DatasetSpec,
-        algebra: GraphPattern,
-        base_iri: Option<Iri<String>>,
+        dataset: Rc<DatasetSpec>,
+        algebra: Rc<GraphPattern>,
+        base_iri: Option<Rc<Iri<String>>>,
     },
     Ask {
-        dataset: DatasetSpec,
-        algebra: GraphPattern,
-        base_iri: Option<Iri<String>>,
+        dataset: Rc<DatasetSpec>,
+        algebra: Rc<GraphPattern>,
+        base_iri: Option<Rc<Iri<String>>>,
     },
 }
 

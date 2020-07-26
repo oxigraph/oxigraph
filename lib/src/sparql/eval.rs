@@ -1,10 +1,10 @@
 use crate::model::xsd::*;
 use crate::model::BlankNode;
 use crate::model::Triple;
-use crate::sparql::algebra::GraphPattern;
+use crate::sparql::algebra::{DatasetSpec, GraphPattern, QueryVariants};
 use crate::sparql::model::*;
 use crate::sparql::plan::*;
-use crate::sparql::ServiceHandler;
+use crate::sparql::{Query, ServiceHandler};
 use crate::store::numeric_encoder::*;
 use crate::store::ReadableEncodedStore;
 use crate::Error;
@@ -24,24 +24,36 @@ use std::convert::{TryFrom, TryInto};
 use std::hash::Hash;
 use std::iter::Iterator;
 use std::iter::{empty, once};
+use std::rc::Rc;
 use std::str;
 
 const REGEX_SIZE_LIMIT: usize = 1_000_000;
 
-type EncodedTuplesIterator<'a> = Box<dyn Iterator<Item = Result<EncodedTuple>> + 'a>;
+type EncodedTuplesIterator = Box<dyn Iterator<Item = Result<EncodedTuple>>>;
 
-pub(crate) struct SimpleEvaluator<S: ReadableEncodedStore> {
-    dataset: DatasetView<S>,
-    base_iri: Option<Iri<String>>,
+pub(crate) struct SimpleEvaluator<S: ReadableEncodedStore + 'static> {
+    dataset: Rc<DatasetView<S>>,
+    base_iri: Option<Rc<Iri<String>>>,
     now: DateTime,
-    service_handler: Box<dyn ServiceHandler>,
+    service_handler: Rc<dyn ServiceHandler>,
 }
 
-impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
+impl<S: ReadableEncodedStore + 'static> Clone for SimpleEvaluator<S> {
+    fn clone(&self) -> Self {
+        Self {
+            dataset: self.dataset.clone(),
+            base_iri: self.base_iri.clone(),
+            now: self.now,
+            service_handler: self.service_handler.clone(),
+        }
+    }
+}
+
+impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
     pub fn new(
-        dataset: DatasetView<S>,
-        base_iri: Option<Iri<String>>,
-        service_handler: Box<dyn ServiceHandler>,
+        dataset: Rc<DatasetView<S>>,
+        base_iri: Option<Rc<Iri<String>>>,
+        service_handler: Rc<dyn ServiceHandler>,
     ) -> Self {
         Self {
             dataset,
@@ -51,85 +63,66 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
         }
     }
 
-    pub fn evaluate_select_plan<'b>(
-        &'b self,
-        plan: &'b PlanNode,
-        variables: &[Variable],
-    ) -> Result<QueryResult<'b>>
-    where
-        'a: 'b,
-    {
+    pub fn evaluate_select_plan(
+        &self,
+        plan: &PlanNode,
+        variables: Rc<Vec<Variable>>,
+    ) -> Result<QueryResult> {
         let iter = self.eval_plan(plan, EncodedTuple::with_capacity(variables.len()));
         Ok(QueryResult::Solutions(
-            self.decode_bindings(iter, variables.to_vec()),
+            self.decode_bindings(iter, variables),
         ))
     }
 
-    pub fn evaluate_ask_plan<'b>(&'b self, plan: &'b PlanNode) -> Result<QueryResult<'b>>
-    where
-        'a: 'b,
-    {
-        match self
-            .eval_plan(
-                plan,
-                EncodedTuple::with_capacity(plan.maybe_bound_variables().len()),
-            )
-            .next()
-        {
+    pub fn evaluate_ask_plan(&self, plan: &PlanNode) -> Result<QueryResult> {
+        let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
+        match self.eval_plan(plan, from).next() {
             Some(Ok(_)) => Ok(QueryResult::Boolean(true)),
             Some(Err(error)) => Err(error),
             None => Ok(QueryResult::Boolean(false)),
         }
     }
 
-    pub fn evaluate_construct_plan<'b>(
-        &'b self,
-        plan: &'b PlanNode,
-        construct: &'b [TripleTemplate],
-    ) -> Result<QueryResult<'b>>
-    where
-        'a: 'b,
-    {
+    pub fn evaluate_construct_plan(
+        &self,
+        plan: &PlanNode,
+        construct: Rc<Vec<TripleTemplate>>,
+    ) -> Result<QueryResult> {
+        let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
         Ok(QueryResult::Graph(Box::new(ConstructIterator {
-            eval: self,
-            iter: self.eval_plan(
-                plan,
-                EncodedTuple::with_capacity(plan.maybe_bound_variables().len()),
-            ),
+            eval: self.clone(),
+            iter: self.eval_plan(plan, from),
             template: construct,
             buffered_results: Vec::default(),
             bnodes: Vec::default(),
         })))
     }
 
-    pub fn evaluate_describe_plan<'b>(&'b self, plan: &'b PlanNode) -> Result<QueryResult<'b>>
-    where
-        'a: 'b,
-    {
+    pub fn evaluate_describe_plan(&self, plan: &PlanNode) -> Result<QueryResult> {
+        let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
         Ok(QueryResult::Graph(Box::new(DescribeIterator {
-            eval: self,
-            iter: self.eval_plan(
-                plan,
-                EncodedTuple::with_capacity(plan.maybe_bound_variables().len()),
-            ),
+            eval: self.clone(),
+            iter: self.eval_plan(plan, from),
             quads: Box::new(empty()),
         })))
     }
 
-    fn eval_plan<'b>(&'b self, node: &'b PlanNode, from: EncodedTuple) -> EncodedTuplesIterator<'b>
-    where
-        'a: 'b,
-    {
+    fn eval_plan(&self, node: &PlanNode, from: EncodedTuple) -> EncodedTuplesIterator {
         match node {
             PlanNode::Init => Box::new(once(Ok(from))),
-            PlanNode::StaticBindings { tuples } => Box::new(tuples.iter().cloned().map(Ok)),
+            PlanNode::StaticBindings { tuples } => Box::new(tuples.clone().into_iter().map(Ok)),
             PlanNode::Service {
                 variables,
                 silent,
                 service_name,
                 graph_pattern,
                 ..
-            } => match self.evaluate_service(service_name, graph_pattern, variables, &from) {
+            } => match self.evaluate_service(
+                service_name,
+                graph_pattern.clone(),
+                variables.clone(),
+                &from,
+            ) {
                 Ok(result) => Box::new(result.flat_map(move |binding| {
                     binding
                         .map(|binding| binding.combine_with(&from))
@@ -149,127 +142,141 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
                 predicate,
                 object,
                 graph_name,
-            } => Box::new(self.eval_plan(&*child, from).flat_map_ok(move |tuple| {
-                let mut iter = self.dataset.quads_for_pattern(
-                    get_pattern_value(subject, &tuple),
-                    get_pattern_value(predicate, &tuple),
-                    get_pattern_value(object, &tuple),
-                    get_pattern_value(graph_name, &tuple),
-                );
-                if subject.is_var() && subject == predicate {
-                    iter = Box::new(iter.filter(|quad| match quad {
-                        Err(_) => true,
-                        Ok(quad) => quad.subject == quad.predicate,
-                    }))
-                }
-                if subject.is_var() && subject == object {
-                    iter = Box::new(iter.filter(|quad| match quad {
-                        Err(_) => true,
-                        Ok(quad) => quad.subject == quad.object,
-                    }))
-                }
-                if predicate.is_var() && predicate == object {
-                    iter = Box::new(iter.filter(|quad| match quad {
-                        Err(_) => true,
-                        Ok(quad) => quad.predicate == quad.object,
-                    }))
-                }
-                if graph_name.is_var() {
-                    if graph_name == subject {
+            } => {
+                let eval = self.clone();
+                let subject = *subject;
+                let predicate = *predicate;
+                let object = *object;
+                let graph_name = *graph_name;
+                Box::new(self.eval_plan(child, from).flat_map_ok(move |tuple| {
+                    let mut iter = eval.dataset.quads_for_pattern(
+                        get_pattern_value(&subject, &tuple),
+                        get_pattern_value(&predicate, &tuple),
+                        get_pattern_value(&object, &tuple),
+                        get_pattern_value(&graph_name, &tuple),
+                    );
+                    if subject.is_var() && subject == predicate {
                         iter = Box::new(iter.filter(|quad| match quad {
                             Err(_) => true,
-                            Ok(quad) => quad.graph_name == quad.subject,
+                            Ok(quad) => quad.subject == quad.predicate,
                         }))
                     }
-                    if graph_name == predicate {
+                    if subject.is_var() && subject == object {
                         iter = Box::new(iter.filter(|quad| match quad {
                             Err(_) => true,
-                            Ok(quad) => quad.graph_name == quad.predicate,
+                            Ok(quad) => quad.subject == quad.object,
                         }))
                     }
-                    if graph_name == object {
+                    if predicate.is_var() && predicate == object {
                         iter = Box::new(iter.filter(|quad| match quad {
                             Err(_) => true,
-                            Ok(quad) => quad.graph_name == quad.object,
+                            Ok(quad) => quad.predicate == quad.object,
                         }))
                     }
-                }
-                let iter: EncodedTuplesIterator<'_> = Box::new(iter.map(move |quad| {
-                    let quad = quad?;
-                    let mut new_tuple = tuple.clone();
-                    put_pattern_value(subject, quad.subject, &mut new_tuple);
-                    put_pattern_value(predicate, quad.predicate, &mut new_tuple);
-                    put_pattern_value(object, quad.object, &mut new_tuple);
-                    put_pattern_value(graph_name, quad.graph_name, &mut new_tuple);
-                    Ok(new_tuple)
-                }));
-                iter
-            })),
+                    if graph_name.is_var() {
+                        if graph_name == subject {
+                            iter = Box::new(iter.filter(|quad| match quad {
+                                Err(_) => true,
+                                Ok(quad) => quad.graph_name == quad.subject,
+                            }))
+                        }
+                        if graph_name == predicate {
+                            iter = Box::new(iter.filter(|quad| match quad {
+                                Err(_) => true,
+                                Ok(quad) => quad.graph_name == quad.predicate,
+                            }))
+                        }
+                        if graph_name == object {
+                            iter = Box::new(iter.filter(|quad| match quad {
+                                Err(_) => true,
+                                Ok(quad) => quad.graph_name == quad.object,
+                            }))
+                        }
+                    }
+                    let iter: EncodedTuplesIterator = Box::new(iter.map(move |quad| {
+                        let quad = quad?;
+                        let mut new_tuple = tuple.clone();
+                        put_pattern_value(&subject, quad.subject, &mut new_tuple);
+                        put_pattern_value(&predicate, quad.predicate, &mut new_tuple);
+                        put_pattern_value(&object, quad.object, &mut new_tuple);
+                        put_pattern_value(&graph_name, quad.graph_name, &mut new_tuple);
+                        Ok(new_tuple)
+                    }));
+                    iter
+                }))
+            }
             PlanNode::PathPatternJoin {
                 child,
                 subject,
                 path,
                 object,
                 graph_name,
-            } => Box::new(self.eval_plan(&*child, from).flat_map_ok(move |tuple| {
-                let input_subject = get_pattern_value(subject, &tuple);
-                let input_object = get_pattern_value(object, &tuple);
-                let input_graph_name =
-                    if let Some(graph_name) = get_pattern_value(graph_name, &tuple) {
-                        graph_name
-                    } else {
-                        let result: EncodedTuplesIterator<'_> = Box::new(once(Err(Error::msg(
-                            "Unknown graph name is not allowed when evaluating property path",
-                        ))));
-                        return result;
-                    };
-                match (input_subject, input_object) {
-                    (Some(input_subject), Some(input_object)) => Box::new(
-                        self.eval_path_from(path, input_subject, input_graph_name)
-                            .filter_map(move |o| match o {
-                                Ok(o) => {
-                                    if o == input_object {
-                                        Some(Ok(tuple.clone()))
-                                    } else {
-                                        None
+            } => {
+                let eval = self.clone();
+                let subject = *subject;
+                let path = path.clone();
+                let object = *object;
+                let graph_name = *graph_name;
+                Box::new(self.eval_plan(child, from).flat_map_ok(move |tuple| {
+                    let input_subject = get_pattern_value(&subject, &tuple);
+                    let input_object = get_pattern_value(&object, &tuple);
+                    let input_graph_name =
+                        if let Some(graph_name) = get_pattern_value(&graph_name, &tuple) {
+                            graph_name
+                        } else {
+                            let result: EncodedTuplesIterator = Box::new(once(Err(Error::msg(
+                                "Unknown graph name is not allowed when evaluating property path",
+                            ))));
+                            return result;
+                        };
+                    match (input_subject, input_object) {
+                        (Some(input_subject), Some(input_object)) => Box::new(
+                            eval.eval_path_from(&path, input_subject, input_graph_name)
+                                .filter_map(move |o| match o {
+                                    Ok(o) => {
+                                        if o == input_object {
+                                            Some(Ok(tuple.clone()))
+                                        } else {
+                                            None
+                                        }
                                     }
-                                }
-                                Err(error) => Some(Err(error)),
-                            }),
-                    ),
-                    (Some(input_subject), None) => Box::new(
-                        self.eval_path_from(path, input_subject, input_graph_name)
-                            .map(move |o| {
+                                    Err(error) => Some(Err(error)),
+                                }),
+                        ),
+                        (Some(input_subject), None) => Box::new(
+                            eval.eval_path_from(&path, input_subject, input_graph_name)
+                                .map(move |o| {
+                                    let mut new_tuple = tuple.clone();
+                                    put_pattern_value(&object, o?, &mut new_tuple);
+                                    Ok(new_tuple)
+                                }),
+                        ),
+                        (None, Some(input_object)) => Box::new(
+                            eval.eval_path_to(&path, input_object, input_graph_name)
+                                .map(move |s| {
+                                    let mut new_tuple = tuple.clone();
+                                    put_pattern_value(&subject, s?, &mut new_tuple);
+                                    Ok(new_tuple)
+                                }),
+                        ),
+                        (None, None) => {
+                            Box::new(eval.eval_open_path(&path, input_graph_name).map(move |so| {
                                 let mut new_tuple = tuple.clone();
-                                put_pattern_value(object, o?, &mut new_tuple);
-                                Ok(new_tuple)
-                            }),
-                    ),
-                    (None, Some(input_object)) => Box::new(
-                        self.eval_path_to(path, input_object, input_graph_name)
-                            .map(move |s| {
-                                let mut new_tuple = tuple.clone();
-                                put_pattern_value(subject, s?, &mut new_tuple);
-                                Ok(new_tuple)
-                            }),
-                    ),
-                    (None, None) => {
-                        Box::new(self.eval_open_path(path, input_graph_name).map(move |so| {
-                            let mut new_tuple = tuple.clone();
-                            so.map(move |(s, o)| {
-                                put_pattern_value(subject, s, &mut new_tuple);
-                                put_pattern_value(object, o, &mut new_tuple);
-                                new_tuple
-                            })
-                        }))
+                                so.map(move |(s, o)| {
+                                    put_pattern_value(&subject, s, &mut new_tuple);
+                                    put_pattern_value(&object, o, &mut new_tuple);
+                                    new_tuple
+                                })
+                            }))
+                        }
                     }
-                }
-            })),
+                }))
+            }
             PlanNode::Join { left, right } => {
                 //TODO: very dumb implementation
                 let mut errors = Vec::default();
                 let left_values = self
-                    .eval_plan(&*left, from.clone())
+                    .eval_plan(left, from.clone())
                     .filter_map(|result| match result {
                         Ok(result) => Some(result),
                         Err(error) => {
@@ -280,18 +287,18 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
                     .collect::<Vec<_>>();
                 Box::new(JoinIterator {
                     left: left_values,
-                    right_iter: self.eval_plan(&*right, from),
+                    right_iter: self.eval_plan(right, from),
                     buffered_results: errors,
                 })
             }
             PlanNode::AntiJoin { left, right } => {
                 //TODO: dumb implementation
                 let right: Vec<_> = self
-                    .eval_plan(&*right, from.clone())
+                    .eval_plan(right, from.clone())
                     .filter_map(|result| result.ok())
                     .collect();
                 Box::new(AntiJoinIterator {
-                    left_iter: self.eval_plan(&*left, from),
+                    left_iter: self.eval_plan(left, from),
                     right,
                 })
             }
@@ -302,28 +309,29 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
             } => {
                 if possible_problem_vars.is_empty() {
                     Box::new(LeftJoinIterator {
-                        eval: self,
-                        right_plan: &*right,
-                        left_iter: self.eval_plan(&*left, from),
+                        eval: self.clone(),
+                        right_plan: right.clone(),
+                        left_iter: self.eval_plan(left, from),
                         current_right: Box::new(empty()),
                     })
                 } else {
                     Box::new(BadLeftJoinIterator {
-                        eval: self,
-                        right_plan: &*right,
-                        left_iter: self.eval_plan(&*left, from),
+                        eval: self.clone(),
+                        right_plan: right.clone(),
+                        left_iter: self.eval_plan(left, from),
                         current_left: None,
                         current_right: Box::new(empty()),
-                        problem_vars: possible_problem_vars.as_slice(),
+                        problem_vars: possible_problem_vars.clone(),
                     })
                 }
             }
             PlanNode::Filter { child, expression } => {
-                let eval = self;
-                Box::new(self.eval_plan(&*child, from).filter(move |tuple| {
+                let eval = self.clone();
+                let expression = expression.clone();
+                Box::new(self.eval_plan(child, from).filter(move |tuple| {
                     match tuple {
                         Ok(tuple) => eval
-                            .eval_expression(expression, tuple)
+                            .eval_expression(&expression, tuple)
                             .and_then(|term| eval.to_bool(term))
                             .unwrap_or(false),
                         Err(_) => true,
@@ -331,8 +339,8 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
                 }))
             }
             PlanNode::Union { children } => Box::new(UnionIterator {
-                eval: self,
-                plans: children,
+                eval: self.clone(),
+                plans: children.clone(),
                 input: from,
                 current_iterator: Box::new(empty()),
                 current_plan: 0,
@@ -342,11 +350,13 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
                 position,
                 expression,
             } => {
-                let eval = self;
-                Box::new(self.eval_plan(&*child, from).map(move |tuple| {
+                let eval = self.clone();
+                let position = *position;
+                let expression = expression.clone();
+                Box::new(self.eval_plan(child, from).map(move |tuple| {
                     let mut tuple = tuple?;
-                    if let Some(value) = eval.eval_expression(expression, &tuple) {
-                        tuple.set(*position, value)
+                    if let Some(value) = eval.eval_expression(&expression, &tuple) {
+                        tuple.set(position, value)
                     }
                     Ok(tuple)
                 }))
@@ -354,7 +364,7 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
             PlanNode::Sort { child, by } => {
                 let mut errors = Vec::default();
                 let mut values = self
-                    .eval_plan(&*child, from)
+                    .eval_plan(child, from)
                     .filter_map(|result| match result {
                         Ok(result) => Some(result),
                         Err(error) => {
@@ -387,16 +397,15 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
                 Box::new(errors.into_iter().chain(values.into_iter().map(Ok)))
             }
             PlanNode::HashDeduplicate { child } => {
-                Box::new(hash_deduplicate(self.eval_plan(&*child, from)))
+                Box::new(hash_deduplicate(self.eval_plan(child, from)))
             }
-            PlanNode::Skip { child, count } => Box::new(self.eval_plan(&*child, from).skip(*count)),
-            PlanNode::Limit { child, count } => {
-                Box::new(self.eval_plan(&*child, from).take(*count))
-            }
+            PlanNode::Skip { child, count } => Box::new(self.eval_plan(child, from).skip(*count)),
+            PlanNode::Limit { child, count } => Box::new(self.eval_plan(child, from).take(*count)),
             PlanNode::Project { child, mapping } => {
                 //TODO: use from somewhere?
+                let mapping = mapping.clone();
                 Box::new(
-                    self.eval_plan(&*child, EncodedTuple::with_capacity(mapping.len()))
+                    self.eval_plan(child, EncodedTuple::with_capacity(mapping.len()))
                         .map(move |tuple| {
                             let tuple = tuple?;
                             let mut output_tuple = EncodedTuple::with_capacity(from.capacity());
@@ -415,6 +424,8 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
                 aggregates,
             } => {
                 let tuple_size = from.capacity(); //TODO: not nice
+                let key_mapping = key_mapping.clone();
+                let aggregates = aggregates.clone();
                 let mut errors = Vec::default();
                 let mut accumulators_for_group =
                     HashMap::<Vec<Option<EncodedTerm>>, Vec<Box<dyn Accumulator>>>::default();
@@ -481,28 +492,37 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
         }
     }
 
-    fn evaluate_service<'b>(
-        &'b self,
+    fn evaluate_service(
+        &self,
         service_name: &PatternValue,
-        graph_pattern: &'b GraphPattern,
-        variables: &'b [Variable],
+        graph_pattern: Rc<GraphPattern>,
+        variables: Rc<Vec<Variable>>,
         from: &EncodedTuple,
-    ) -> Result<EncodedTuplesIterator<'b>> {
-        let service_name = self.dataset.decode_named_node(
-            get_pattern_value(service_name, from)
-                .ok_or_else(|| Error::msg("The SERVICE name is not bound"))?,
-        )?;
-        Ok(self.encode_bindings(
-            variables,
-            self.service_handler.handle(&service_name, graph_pattern)?,
-        ))
+    ) -> Result<EncodedTuplesIterator> {
+        if let QueryResult::Solutions(iter) = self.service_handler.handle(
+            self.dataset.decode_named_node(
+                get_pattern_value(service_name, from)
+                    .ok_or_else(|| Error::msg("The SERVICE name is not bound"))?,
+            )?,
+            Query(QueryVariants::Select {
+                dataset: Rc::new(DatasetSpec::default()),
+                algebra: graph_pattern,
+                base_iri: self.base_iri.clone(),
+            }),
+        )? {
+            Ok(self.encode_bindings(variables, iter))
+        } else {
+            Err(Error::msg(
+                "The service call has not returned a set of solutions",
+            ))
+        }
     }
 
-    fn accumulator_for_aggregate<'b>(
-        &'b self,
-        function: &'b PlanAggregationFunction,
+    fn accumulator_for_aggregate(
+        &self,
+        function: &PlanAggregationFunction,
         distinct: bool,
-    ) -> Box<dyn Accumulator + 'b> {
+    ) -> Box<dyn Accumulator + 'static> {
         match function {
             PlanAggregationFunction::Count => {
                 if distinct {
@@ -518,8 +538,8 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
                     Box::new(SumAccumulator::default())
                 }
             }
-            PlanAggregationFunction::Min => Box::new(MinAccumulator::new(self)), // DISTINCT does not make sense with min
-            PlanAggregationFunction::Max => Box::new(MaxAccumulator::new(self)), // DISTINCT does not make sense with max
+            PlanAggregationFunction::Min => Box::new(MinAccumulator::new(self.clone())), // DISTINCT does not make sense with min
+            PlanAggregationFunction::Max => Box::new(MaxAccumulator::new(self.clone())), // DISTINCT does not make sense with max
             PlanAggregationFunction::Avg => {
                 if distinct {
                     Box::new(DistinctAccumulator::new(AvgAccumulator::default()))
@@ -531,24 +551,22 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
             PlanAggregationFunction::GroupConcat { separator } => {
                 if distinct {
                     Box::new(DistinctAccumulator::new(GroupConcatAccumulator::new(
-                        self, separator,
+                        self.clone(),
+                        separator.clone(),
                     )))
                 } else {
-                    Box::new(GroupConcatAccumulator::new(self, separator))
+                    Box::new(GroupConcatAccumulator::new(self.clone(), separator.clone()))
                 }
             }
         }
     }
 
-    fn eval_path_from<'b>(
-        &'b self,
-        path: &'b PlanPropertyPath,
+    fn eval_path_from(
+        &self,
+        path: &PlanPropertyPath,
         start: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Box<dyn Iterator<Item = Result<EncodedTerm>> + 'b>
-    where
-        'a: 'b,
-    {
+    ) -> Box<dyn Iterator<Item = Result<EncodedTerm>>> {
         match path {
             PlanPropertyPath::PredicatePath(p) => Box::new(
                 self.dataset
@@ -556,52 +574,62 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
                     .map(|t| Ok(t?.object)),
             ),
             PlanPropertyPath::InversePath(p) => self.eval_path_to(p, start, graph_name),
-            PlanPropertyPath::SequencePath(a, b) => Box::new(
-                self.eval_path_from(a, start, graph_name)
-                    .flat_map_ok(move |middle| self.eval_path_from(b, middle, graph_name)),
-            ),
+            PlanPropertyPath::SequencePath(a, b) => {
+                let eval = self.clone();
+                let b = b.clone();
+                Box::new(
+                    self.eval_path_from(a, start, graph_name)
+                        .flat_map_ok(move |middle| eval.eval_path_from(&b, middle, graph_name)),
+                )
+            }
             PlanPropertyPath::AlternativePath(a, b) => Box::new(
                 self.eval_path_from(a, start, graph_name)
                     .chain(self.eval_path_from(b, start, graph_name)),
             ),
             PlanPropertyPath::ZeroOrMorePath(p) => {
+                let eval = self.clone();
+                let p = p.clone();
                 Box::new(transitive_closure(Some(Ok(start)), move |e| {
-                    self.eval_path_from(p, e, graph_name)
+                    eval.eval_path_from(&p, e, graph_name)
                 }))
             }
-            PlanPropertyPath::OneOrMorePath(p) => Box::new(transitive_closure(
-                self.eval_path_from(p, start, graph_name),
-                move |e| self.eval_path_from(p, e, graph_name),
-            )),
+            PlanPropertyPath::OneOrMorePath(p) => {
+                let eval = self.clone();
+                let p = p.clone();
+                Box::new(transitive_closure(
+                    self.eval_path_from(&p, start, graph_name),
+                    move |e| eval.eval_path_from(&p, e, graph_name),
+                ))
+            }
             PlanPropertyPath::ZeroOrOnePath(p) => Box::new(hash_deduplicate(
                 once(Ok(start)).chain(self.eval_path_from(p, start, graph_name)),
             )),
-            PlanPropertyPath::NegatedPropertySet(ps) => Box::new(
-                self.dataset
-                    .quads_for_pattern(Some(start), None, None, Some(graph_name))
-                    .filter_map(move |t| match t {
-                        Ok(t) => {
-                            if ps.contains(&t.predicate) {
-                                None
-                            } else {
-                                Some(Ok(t.object))
+            PlanPropertyPath::NegatedPropertySet(ps) => {
+                let ps = ps.clone();
+                Box::new(
+                    self.dataset
+                        .quads_for_pattern(Some(start), None, None, Some(graph_name))
+                        .filter_map(move |t| match t {
+                            Ok(t) => {
+                                if ps.contains(&t.predicate) {
+                                    None
+                                } else {
+                                    Some(Ok(t.object))
+                                }
                             }
-                        }
-                        Err(e) => Some(Err(e)),
-                    }),
-            ),
+                            Err(e) => Some(Err(e)),
+                        }),
+                )
+            }
         }
     }
 
-    fn eval_path_to<'b>(
-        &'b self,
-        path: &'b PlanPropertyPath,
+    fn eval_path_to(
+        &self,
+        path: &PlanPropertyPath,
         end: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Box<dyn Iterator<Item = Result<EncodedTerm>> + 'b>
-    where
-        'a: 'b,
-    {
+    ) -> Box<dyn Iterator<Item = Result<EncodedTerm>>> {
         match path {
             PlanPropertyPath::PredicatePath(p) => Box::new(
                 self.dataset
@@ -609,51 +637,61 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
                     .map(|t| Ok(t?.subject)),
             ),
             PlanPropertyPath::InversePath(p) => self.eval_path_from(p, end, graph_name),
-            PlanPropertyPath::SequencePath(a, b) => Box::new(
-                self.eval_path_to(b, end, graph_name)
-                    .flat_map_ok(move |middle| self.eval_path_to(a, middle, graph_name)),
-            ),
+            PlanPropertyPath::SequencePath(a, b) => {
+                let eval = self.clone();
+                let a = a.clone();
+                Box::new(
+                    self.eval_path_to(b, end, graph_name)
+                        .flat_map_ok(move |middle| eval.eval_path_to(&a, middle, graph_name)),
+                )
+            }
             PlanPropertyPath::AlternativePath(a, b) => Box::new(
                 self.eval_path_to(a, end, graph_name)
                     .chain(self.eval_path_to(b, end, graph_name)),
             ),
             PlanPropertyPath::ZeroOrMorePath(p) => {
+                let eval = self.clone();
+                let p = p.clone();
                 Box::new(transitive_closure(Some(Ok(end)), move |e| {
-                    self.eval_path_to(p, e, graph_name)
+                    eval.eval_path_to(&p, e, graph_name)
                 }))
             }
-            PlanPropertyPath::OneOrMorePath(p) => Box::new(transitive_closure(
-                self.eval_path_to(p, end, graph_name),
-                move |e| self.eval_path_to(p, e, graph_name),
-            )),
+            PlanPropertyPath::OneOrMorePath(p) => {
+                let eval = self.clone();
+                let p = p.clone();
+                Box::new(transitive_closure(
+                    self.eval_path_to(&p, end, graph_name),
+                    move |e| eval.eval_path_to(&p, e, graph_name),
+                ))
+            }
             PlanPropertyPath::ZeroOrOnePath(p) => Box::new(hash_deduplicate(
                 once(Ok(end)).chain(self.eval_path_to(p, end, graph_name)),
             )),
-            PlanPropertyPath::NegatedPropertySet(ps) => Box::new(
-                self.dataset
-                    .quads_for_pattern(None, None, Some(end), Some(graph_name))
-                    .filter_map(move |t| match t {
-                        Ok(t) => {
-                            if ps.contains(&t.predicate) {
-                                None
-                            } else {
-                                Some(Ok(t.subject))
+            PlanPropertyPath::NegatedPropertySet(ps) => {
+                let ps = ps.clone();
+                Box::new(
+                    self.dataset
+                        .quads_for_pattern(None, None, Some(end), Some(graph_name))
+                        .filter_map(move |t| match t {
+                            Ok(t) => {
+                                if ps.contains(&t.predicate) {
+                                    None
+                                } else {
+                                    Some(Ok(t.subject))
+                                }
                             }
-                        }
-                        Err(e) => Some(Err(e)),
-                    }),
-            ),
+                            Err(e) => Some(Err(e)),
+                        }),
+                )
+            }
         }
     }
 
-    fn eval_open_path<'b>(
-        &'b self,
-        path: &'b PlanPropertyPath,
+    fn eval_open_path(
+        &self,
+        path: &PlanPropertyPath,
         graph_name: EncodedTerm,
-    ) -> Box<dyn Iterator<Item = Result<(EncodedTerm, EncodedTerm)>> + 'b>
-    where
-        'a: 'b,
-    {
+    ) -> Box<dyn Iterator<Item = Result<(EncodedTerm, EncodedTerm)>>> {
         match path {
             PlanPropertyPath::PredicatePath(p) => Box::new(
                 self.dataset
@@ -664,56 +702,71 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
                 self.eval_open_path(p, graph_name)
                     .map(|t| t.map(|(s, o)| (o, s))),
             ),
-            PlanPropertyPath::SequencePath(a, b) => Box::new(
-                self.eval_open_path(a, graph_name)
-                    .flat_map_ok(move |(start, middle)| {
-                        self.eval_path_from(b, middle, graph_name)
-                            .map(move |end| Ok((start, end?)))
-                    }),
-            ),
+            PlanPropertyPath::SequencePath(a, b) => {
+                let eval = self.clone();
+                let b = b.clone();
+                Box::new(
+                    self.eval_open_path(a, graph_name)
+                        .flat_map_ok(move |(start, middle)| {
+                            eval.eval_path_from(&b, middle, graph_name)
+                                .map(move |end| Ok((start, end?)))
+                        }),
+                )
+            }
             PlanPropertyPath::AlternativePath(a, b) => Box::new(
                 self.eval_open_path(a, graph_name)
                     .chain(self.eval_open_path(b, graph_name)),
             ),
-            PlanPropertyPath::ZeroOrMorePath(p) => Box::new(transitive_closure(
-                self.get_subject_or_object_identity_pairs(graph_name), //TODO: avoid to inject everything
-                move |(start, middle)| {
-                    self.eval_path_from(p, middle, graph_name)
-                        .map(move |end| Ok((start, end?)))
-                },
-            )),
-            PlanPropertyPath::OneOrMorePath(p) => Box::new(transitive_closure(
-                self.eval_open_path(p, graph_name),
-                move |(start, middle)| {
-                    self.eval_path_from(p, middle, graph_name)
-                        .map(move |end| Ok((start, end?)))
-                },
-            )),
+            PlanPropertyPath::ZeroOrMorePath(p) => {
+                let eval = self.clone();
+                let p = p.clone();
+                Box::new(transitive_closure(
+                    self.get_subject_or_object_identity_pairs(graph_name), //TODO: avoid to inject everything
+                    move |(start, middle)| {
+                        eval.eval_path_from(&p, middle, graph_name)
+                            .map(move |end| Ok((start, end?)))
+                    },
+                ))
+            }
+            PlanPropertyPath::OneOrMorePath(p) => {
+                let eval = self.clone();
+                let p = p.clone();
+                Box::new(transitive_closure(
+                    self.eval_open_path(&p, graph_name),
+                    move |(start, middle)| {
+                        eval.eval_path_from(&p, middle, graph_name)
+                            .map(move |end| Ok((start, end?)))
+                    },
+                ))
+            }
             PlanPropertyPath::ZeroOrOnePath(p) => Box::new(hash_deduplicate(
                 self.get_subject_or_object_identity_pairs(graph_name)
                     .chain(self.eval_open_path(p, graph_name)),
             )),
-            PlanPropertyPath::NegatedPropertySet(ps) => Box::new(
-                self.dataset
-                    .quads_for_pattern(None, None, None, Some(graph_name))
-                    .filter_map(move |t| match t {
-                        Ok(t) => {
-                            if ps.contains(&t.predicate) {
-                                None
-                            } else {
-                                Some(Ok((t.subject, t.object)))
+            PlanPropertyPath::NegatedPropertySet(ps) => {
+                let ps = ps.clone();
+                Box::new(
+                    self.dataset
+                        .quads_for_pattern(None, None, None, Some(graph_name))
+                        .filter_map(move |t| match t {
+                            Ok(t) => {
+                                if ps.contains(&t.predicate) {
+                                    None
+                                } else {
+                                    Some(Ok((t.subject, t.object)))
+                                }
                             }
-                        }
-                        Err(e) => Some(Err(e)),
-                    }),
-            ),
+                            Err(e) => Some(Err(e)),
+                        }),
+                )
+            }
         }
     }
 
-    fn get_subject_or_object_identity_pairs<'b>(
-        &'b self,
+    fn get_subject_or_object_identity_pairs(
+        &self,
         graph_name: EncodedTerm,
-    ) -> impl Iterator<Item = Result<(EncodedTerm, EncodedTerm)>> + 'b {
+    ) -> impl Iterator<Item = Result<(EncodedTerm, EncodedTerm)>> {
         self.dataset
             .quads_for_pattern(None, None, None, Some(graph_name))
             .flat_map_ok(|t| once(Ok(t.subject)).chain(once(Ok(t.object))))
@@ -721,8 +774,8 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
     }
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
-    fn eval_expression<'b>(
-        &'b self,
+    fn eval_expression(
+        &self,
         expression: &PlanExpression,
         tuple: &EncodedTuple,
     ) -> Option<EncodedTerm> {
@@ -1600,8 +1653,8 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
         regex_builder.build().ok()
     }
 
-    fn parse_numeric_operands<'b>(
-        &'b self,
+    fn parse_numeric_operands(
+        &self,
         e1: &PlanExpression,
         e2: &PlanExpression,
         tuple: &EncodedTuple,
@@ -1612,15 +1665,12 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
         )
     }
 
-    fn decode_bindings<'b>(
-        &'b self,
-        iter: EncodedTuplesIterator<'b>,
-        variables: Vec<Variable>,
-    ) -> QuerySolutionsIterator<'b>
-    where
-        'a: 'b,
-    {
-        let eval = self;
+    fn decode_bindings(
+        &self,
+        iter: EncodedTuplesIterator,
+        variables: Rc<Vec<Variable>>,
+    ) -> QuerySolutionsIterator {
+        let eval = self.clone();
         let tuple_size = variables.len();
         QuerySolutionsIterator::new(
             variables,
@@ -1637,21 +1687,19 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
     }
 
     // this is used to encode results from a BindingIterator into an EncodedTuplesIterator. This happens when SERVICE clauses are evaluated
-    fn encode_bindings<'b>(
-        &'b self,
-        variables: &'b [Variable],
-        iter: QuerySolutionsIterator<'b>,
-    ) -> EncodedTuplesIterator<'b>
-    where
-        'a: 'b,
-    {
+    fn encode_bindings(
+        &self,
+        variables: Rc<Vec<Variable>>,
+        iter: QuerySolutionsIterator,
+    ) -> EncodedTuplesIterator {
+        let eval = self.clone();
         Box::new(iter.map(move |solution| {
-            let mut encoder = self.dataset.encoder();
+            let mut encoder = eval.dataset.encoder();
             let mut encoded_terms = EncodedTuple::with_capacity(variables.len());
             for (variable, term) in solution?.iter() {
                 put_variable_value(
                     variable,
-                    variables,
+                    &variables,
                     encoder.encode_term(term).map_err(|e| e.into())?,
                     &mut encoded_terms,
                 )
@@ -1761,8 +1809,8 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
         }
     }
 
-    fn cmp_according_to_expression<'b>(
-        &'b self,
+    fn cmp_according_to_expression(
+        &self,
         tuple_a: &EncodedTuple,
         tuple_b: &EncodedTuple,
         expression: &PlanExpression,
@@ -1895,11 +1943,7 @@ impl<'a, S: ReadableEncodedStore + 'a> SimpleEvaluator<S> {
         )
     }
 
-    fn hash<'b, H: Digest>(
-        &'b self,
-        arg: &PlanExpression,
-        tuple: &EncodedTuple,
-    ) -> Option<EncodedTerm> {
+    fn hash<H: Digest>(&self, arg: &PlanExpression, tuple: &EncodedTuple) -> Option<EncodedTerm> {
         let input = self.to_simple_string(self.eval_expression(arg, tuple)?)?;
         let hash = hex::encode(H::new().chain(input.as_str()).finalize());
         self.build_string_literal(&hash)
@@ -2109,13 +2153,13 @@ pub fn are_compatible_and_not_disjointed(a: &EncodedTuple, b: &EncodedTuple) -> 
     found_intersection
 }
 
-struct JoinIterator<'a> {
+struct JoinIterator {
     left: Vec<EncodedTuple>,
-    right_iter: EncodedTuplesIterator<'a>,
+    right_iter: EncodedTuplesIterator,
     buffered_results: Vec<Result<EncodedTuple>>,
 }
 
-impl<'a> Iterator for JoinIterator<'a> {
+impl Iterator for JoinIterator {
     type Item = Result<EncodedTuple>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple>> {
@@ -2136,12 +2180,12 @@ impl<'a> Iterator for JoinIterator<'a> {
     }
 }
 
-struct AntiJoinIterator<'a> {
-    left_iter: EncodedTuplesIterator<'a>,
+struct AntiJoinIterator {
+    left_iter: EncodedTuplesIterator,
     right: Vec<EncodedTuple>,
 }
 
-impl<'a> Iterator for AntiJoinIterator<'a> {
+impl Iterator for AntiJoinIterator {
     type Item = Result<EncodedTuple>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple>> {
@@ -2161,14 +2205,14 @@ impl<'a> Iterator for AntiJoinIterator<'a> {
     }
 }
 
-struct LeftJoinIterator<'a, S: ReadableEncodedStore> {
-    eval: &'a SimpleEvaluator<S>,
-    right_plan: &'a PlanNode,
-    left_iter: EncodedTuplesIterator<'a>,
-    current_right: EncodedTuplesIterator<'a>,
+struct LeftJoinIterator<S: ReadableEncodedStore + 'static> {
+    eval: SimpleEvaluator<S>,
+    right_plan: Rc<PlanNode>,
+    left_iter: EncodedTuplesIterator,
+    current_right: EncodedTuplesIterator,
 }
 
-impl<'a, S: ReadableEncodedStore> Iterator for LeftJoinIterator<'a, S> {
+impl<S: ReadableEncodedStore + 'static> Iterator for LeftJoinIterator<S> {
     type Item = Result<EncodedTuple>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple>> {
@@ -2177,7 +2221,7 @@ impl<'a, S: ReadableEncodedStore> Iterator for LeftJoinIterator<'a, S> {
         }
         match self.left_iter.next()? {
             Ok(left_tuple) => {
-                self.current_right = self.eval.eval_plan(self.right_plan, left_tuple.clone());
+                self.current_right = self.eval.eval_plan(&self.right_plan, left_tuple.clone());
                 if let Some(right_tuple) = self.current_right.next() {
                     Some(right_tuple)
                 } else {
@@ -2189,16 +2233,16 @@ impl<'a, S: ReadableEncodedStore> Iterator for LeftJoinIterator<'a, S> {
     }
 }
 
-struct BadLeftJoinIterator<'a, S: ReadableEncodedStore> {
-    eval: &'a SimpleEvaluator<S>,
-    right_plan: &'a PlanNode,
-    left_iter: EncodedTuplesIterator<'a>,
+struct BadLeftJoinIterator<S: ReadableEncodedStore + 'static> {
+    eval: SimpleEvaluator<S>,
+    right_plan: Rc<PlanNode>,
+    left_iter: EncodedTuplesIterator,
     current_left: Option<EncodedTuple>,
-    current_right: EncodedTuplesIterator<'a>,
-    problem_vars: &'a [usize],
+    current_right: EncodedTuplesIterator,
+    problem_vars: Rc<Vec<usize>>,
 }
 
-impl<'a, S: ReadableEncodedStore> Iterator for BadLeftJoinIterator<'a, S> {
+impl<S: ReadableEncodedStore + 'static> Iterator for BadLeftJoinIterator<S> {
     type Item = Result<EncodedTuple>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple>> {
@@ -2208,7 +2252,7 @@ impl<'a, S: ReadableEncodedStore> Iterator for BadLeftJoinIterator<'a, S> {
                     if let Some(combined) = combine_tuples(
                         right_tuple,
                         self.current_left.as_ref().unwrap(),
-                        self.problem_vars,
+                        &self.problem_vars,
                     ) {
                         return Some(Ok(combined));
                     }
@@ -2219,13 +2263,13 @@ impl<'a, S: ReadableEncodedStore> Iterator for BadLeftJoinIterator<'a, S> {
         match self.left_iter.next()? {
             Ok(left_tuple) => {
                 let mut filtered_left = left_tuple.clone();
-                unbind_variables(&mut filtered_left, self.problem_vars);
-                self.current_right = self.eval.eval_plan(self.right_plan, filtered_left);
+                unbind_variables(&mut filtered_left, &self.problem_vars);
+                self.current_right = self.eval.eval_plan(&self.right_plan, filtered_left);
                 while let Some(right_tuple) = self.current_right.next() {
                     match right_tuple {
                         Ok(right_tuple) => {
                             if let Some(combined) =
-                                combine_tuples(right_tuple, &left_tuple, self.problem_vars)
+                                combine_tuples(right_tuple, &left_tuple, &self.problem_vars)
                             {
                                 self.current_left = Some(left_tuple);
                                 return Some(Ok(combined));
@@ -2241,15 +2285,15 @@ impl<'a, S: ReadableEncodedStore> Iterator for BadLeftJoinIterator<'a, S> {
     }
 }
 
-struct UnionIterator<'a, S: ReadableEncodedStore> {
-    eval: &'a SimpleEvaluator<S>,
-    plans: &'a [PlanNode],
+struct UnionIterator<S: ReadableEncodedStore + 'static> {
+    eval: SimpleEvaluator<S>,
+    plans: Vec<Rc<PlanNode>>,
     input: EncodedTuple,
-    current_iterator: EncodedTuplesIterator<'a>,
+    current_iterator: EncodedTuplesIterator,
     current_plan: usize,
 }
 
-impl<'a, S: ReadableEncodedStore> Iterator for UnionIterator<'a, S> {
+impl<S: ReadableEncodedStore + 'static> Iterator for UnionIterator<S> {
     type Item = Result<EncodedTuple>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple>> {
@@ -2268,15 +2312,15 @@ impl<'a, S: ReadableEncodedStore> Iterator for UnionIterator<'a, S> {
     }
 }
 
-struct ConstructIterator<'a, S: ReadableEncodedStore> {
-    eval: &'a SimpleEvaluator<S>,
-    iter: EncodedTuplesIterator<'a>,
-    template: &'a [TripleTemplate],
+struct ConstructIterator<S: ReadableEncodedStore + 'static> {
+    eval: SimpleEvaluator<S>,
+    iter: EncodedTuplesIterator,
+    template: Rc<Vec<TripleTemplate>>,
     buffered_results: Vec<Result<Triple>>,
     bnodes: Vec<BlankNode>,
 }
 
-impl<'a, S: ReadableEncodedStore + 'a> Iterator for ConstructIterator<'a, S> {
+impl<S: ReadableEncodedStore + 'static> Iterator for ConstructIterator<S> {
     type Item = Result<Triple>;
 
     fn next(&mut self) -> Option<Result<Triple>> {
@@ -2289,14 +2333,14 @@ impl<'a, S: ReadableEncodedStore + 'a> Iterator for ConstructIterator<'a, S> {
                     Ok(tuple) => tuple,
                     Err(error) => return Some(Err(error)),
                 };
-                for template in self.template {
+                for template in self.template.iter() {
                     if let (Some(subject), Some(predicate), Some(object)) = (
                         get_triple_template_value(&template.subject, &tuple, &mut self.bnodes),
                         get_triple_template_value(&template.predicate, &tuple, &mut self.bnodes),
                         get_triple_template_value(&template.object, &tuple, &mut self.bnodes),
                     ) {
                         self.buffered_results.push(decode_triple(
-                            &self.eval.dataset,
+                            &*self.eval.dataset,
                             subject,
                             predicate,
                             object,
@@ -2339,13 +2383,13 @@ fn decode_triple(
     ))
 }
 
-struct DescribeIterator<'a, S: ReadableEncodedStore> {
-    eval: &'a SimpleEvaluator<S>,
-    iter: EncodedTuplesIterator<'a>,
-    quads: Box<dyn Iterator<Item = Result<EncodedQuad>> + 'a>,
+struct DescribeIterator<S: ReadableEncodedStore + 'static> {
+    eval: SimpleEvaluator<S>,
+    iter: EncodedTuplesIterator,
+    quads: Box<dyn Iterator<Item = Result<EncodedQuad>>>,
 }
 
-impl<'a, S: ReadableEncodedStore + 'a> Iterator for DescribeIterator<'a, S> {
+impl<S: ReadableEncodedStore + 'static> Iterator for DescribeIterator<S> {
     type Item = Result<Triple>;
 
     fn next(&mut self) -> Option<Result<Triple>> {
@@ -2396,10 +2440,10 @@ impl<T1, T2, I1: Iterator<Item = T1>, I2: Iterator<Item = T2>> Iterator
     }
 }
 
-fn transitive_closure<'a, T: 'a + Copy + Eq + Hash, NI: Iterator<Item = Result<T>> + 'a>(
+fn transitive_closure<T: Copy + Eq + Hash, NI: Iterator<Item = Result<T>>>(
     start: impl IntoIterator<Item = Result<T>>,
     next: impl Fn(T) -> NI,
-) -> impl Iterator<Item = Result<T>> + 'a {
+) -> impl Iterator<Item = Result<T>> {
     //TODO: optimize
     let mut all = HashSet::<T>::default();
     let mut errors = Vec::default();
@@ -2630,18 +2674,18 @@ impl Accumulator for AvgAccumulator {
 }
 
 #[allow(clippy::option_option)]
-struct MinAccumulator<'a, S: ReadableEncodedStore> {
-    eval: &'a SimpleEvaluator<S>,
+struct MinAccumulator<S: ReadableEncodedStore + 'static> {
+    eval: SimpleEvaluator<S>,
     min: Option<Option<EncodedTerm>>,
 }
 
-impl<'a, S: ReadableEncodedStore + 'a> MinAccumulator<'a, S> {
-    fn new(eval: &'a SimpleEvaluator<S>) -> Self {
+impl<S: ReadableEncodedStore + 'static> MinAccumulator<S> {
+    fn new(eval: SimpleEvaluator<S>) -> Self {
         Self { eval, min: None }
     }
 }
 
-impl<'a, S: ReadableEncodedStore + 'a> Accumulator for MinAccumulator<'a, S> {
+impl<S: ReadableEncodedStore + 'static> Accumulator for MinAccumulator<S> {
     fn add(&mut self, element: Option<EncodedTerm>) {
         if let Some(min) = self.min {
             if self.eval.cmp_terms(element, min) == Ordering::Less {
@@ -2658,18 +2702,18 @@ impl<'a, S: ReadableEncodedStore + 'a> Accumulator for MinAccumulator<'a, S> {
 }
 
 #[allow(clippy::option_option)]
-struct MaxAccumulator<'a, S: ReadableEncodedStore> {
-    eval: &'a SimpleEvaluator<S>,
+struct MaxAccumulator<S: ReadableEncodedStore + 'static> {
+    eval: SimpleEvaluator<S>,
     max: Option<Option<EncodedTerm>>,
 }
 
-impl<'a, S: ReadableEncodedStore + 'a> MaxAccumulator<'a, S> {
-    fn new(eval: &'a SimpleEvaluator<S>) -> Self {
+impl<S: ReadableEncodedStore + 'static> MaxAccumulator<S> {
+    fn new(eval: SimpleEvaluator<S>) -> Self {
         Self { eval, max: None }
     }
 }
 
-impl<'a, S: ReadableEncodedStore + 'a> Accumulator for MaxAccumulator<'a, S> {
+impl<S: ReadableEncodedStore + 'static> Accumulator for MaxAccumulator<S> {
     fn add(&mut self, element: Option<EncodedTerm>) {
         if let Some(max) = self.max {
             if self.eval.cmp_terms(element, max) == Ordering::Greater {
@@ -2703,15 +2747,15 @@ impl Accumulator for SampleAccumulator {
 }
 
 #[allow(clippy::option_option)]
-struct GroupConcatAccumulator<'a, S: ReadableEncodedStore> {
-    eval: &'a SimpleEvaluator<S>,
+struct GroupConcatAccumulator<S: ReadableEncodedStore + 'static> {
+    eval: SimpleEvaluator<S>,
     concat: Option<String>,
     language: Option<Option<StrHash>>,
-    separator: &'a str,
+    separator: Rc<String>,
 }
 
-impl<'a, S: ReadableEncodedStore + 'a> GroupConcatAccumulator<'a, S> {
-    fn new(eval: &'a SimpleEvaluator<S>, separator: &'a str) -> Self {
+impl<S: ReadableEncodedStore + 'static> GroupConcatAccumulator<S> {
+    fn new(eval: SimpleEvaluator<S>, separator: Rc<String>) -> Self {
         Self {
             eval,
             concat: Some("".to_owned()),
@@ -2721,7 +2765,7 @@ impl<'a, S: ReadableEncodedStore + 'a> GroupConcatAccumulator<'a, S> {
     }
 }
 
-impl<'a, S: ReadableEncodedStore + 'a> Accumulator for GroupConcatAccumulator<'a, S> {
+impl<S: ReadableEncodedStore + 'static> Accumulator for GroupConcatAccumulator<S> {
     fn add(&mut self, element: Option<EncodedTerm>) {
         if let Some(concat) = self.concat.as_mut() {
             if let Some(element) = element {
@@ -2730,7 +2774,7 @@ impl<'a, S: ReadableEncodedStore + 'a> Accumulator for GroupConcatAccumulator<'a
                         if lang != e_language {
                             self.language = Some(None)
                         }
-                        concat.push_str(self.separator);
+                        concat.push_str(&self.separator);
                     } else {
                         self.language = Some(e_language)
                     }

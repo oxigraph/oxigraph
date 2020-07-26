@@ -17,7 +17,7 @@ use async_std::prelude::*;
 use async_std::task::{block_on, spawn, spawn_blocking};
 use http_types::{headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode};
 use oxigraph::model::GraphName;
-use oxigraph::sparql::{QueryOptions, QueryResult, QueryResultSyntax};
+use oxigraph::sparql::{Query, QueryOptions, QueryResult, QueryResultSyntax};
 use oxigraph::{DatasetSyntax, FileSyntax, GraphSyntax, RocksDbStore};
 use std::str::FromStr;
 use url::form_urlencoded;
@@ -163,15 +163,13 @@ async fn evaluate_sparql_query(
     request: Request,
 ) -> Result<Response> {
     spawn_blocking(move || {
+        let query = Query::parse(&query, None).map_err(|e| {
+            let mut e = Error::from(e);
+            e.set_status(StatusCode::BadRequest);
+            e
+        })?;
+        let results = store.query(query, QueryOptions::default())?;
         //TODO: stream
-        let query = store
-            .prepare_query(&query, QueryOptions::default())
-            .map_err(|e| {
-                let mut e = Error::from(e);
-                e.set_status(StatusCode::BadRequest);
-                e
-            })?;
-        let results = query.exec()?;
         if let QueryResult::Graph(_) = results {
             let format = content_negotiation(
                 request,

@@ -1,12 +1,11 @@
 use crate::model::*;
 use oxigraph::model::*;
-use oxigraph::sparql::{QueryResult, QuerySolution};
+use oxigraph::sparql::{QueryResult, QuerySolution, QuerySolutionsIterator};
 use oxigraph::Result;
-use pyo3::exceptions::TypeError;
+use pyo3::exceptions::{IOError, TypeError};
 use pyo3::prelude::*;
 use pyo3::{create_exception, PyIterProtocol, PyMappingProtocol, PyNativeType, PyObjectProtocol};
 use std::fmt::Write;
-use std::vec::IntoIter;
 
 create_exception!(oxigraph, ParseError, pyo3::exceptions::Exception);
 
@@ -49,26 +48,10 @@ pub fn extract_quads_pattern(
     ))
 }
 
-pub fn query_results_to_python(
-    py: Python<'_>,
-    results: QueryResult<'_>,
-    error: impl Fn(String) -> PyErr,
-) -> PyResult<PyObject> {
+pub fn query_results_to_python(py: Python<'_>, results: QueryResult) -> PyResult<PyObject> {
     Ok(match results {
-        QueryResult::Solutions(solutions) => QuerySolutionIter {
-            inner: solutions
-                .collect::<Result<Vec<_>>>()
-                .map_err(|e| error(e.to_string()))?
-                .into_iter(),
-        }
-        .into_py(py),
-        QueryResult::Graph(triples) => TripleResultIter {
-            inner: triples
-                .collect::<Result<Vec<_>>>()
-                .map_err(|e| error(e.to_string()))?
-                .into_iter(),
-        }
-        .into_py(py),
+        QueryResult::Solutions(inner) => QuerySolutionIter { inner }.into_py(py),
+        QueryResult::Graph(inner) => TripleResultIter { inner }.into_py(py),
         QueryResult::Boolean(b) => b.into_py(py),
     })
 }
@@ -118,7 +101,7 @@ impl PyMappingProtocol for PyQuerySolution {
 
 #[pyclass(unsendable)]
 pub struct QuerySolutionIter {
-    inner: IntoIter<QuerySolution>,
+    inner: QuerySolutionsIterator,
 }
 
 #[pyproto]
@@ -127,14 +110,19 @@ impl PyIterProtocol for QuerySolutionIter {
         slf.into()
     }
 
-    fn __next__(mut slf: PyRefMut<Self>) -> Option<PyQuerySolution> {
-        slf.inner.next().map(move |inner| PyQuerySolution { inner })
+    fn __next__(mut slf: PyRefMut<Self>) -> PyResult<Option<PyQuerySolution>> {
+        Ok(slf
+            .inner
+            .next()
+            .transpose()
+            .map_err(|e| IOError::py_err(e.to_string()))? //TODO: improve
+            .map(move |inner| PyQuerySolution { inner }))
     }
 }
 
 #[pyclass(unsendable)]
 pub struct TripleResultIter {
-    inner: IntoIter<Triple>,
+    inner: Box<dyn Iterator<Item = Result<Triple>>>,
 }
 
 #[pyproto]
@@ -143,7 +131,12 @@ impl PyIterProtocol for TripleResultIter {
         slf.into()
     }
 
-    fn __next__(mut slf: PyRefMut<Self>) -> Option<(PyObject, PyObject, PyObject)> {
-        slf.inner.next().map(move |t| triple_to_python(slf.py(), t))
+    fn __next__(mut slf: PyRefMut<Self>) -> PyResult<Option<(PyObject, PyObject, PyObject)>> {
+        Ok(slf
+            .inner
+            .next()
+            .transpose()
+            .map_err(|e| IOError::py_err(e.to_string()))? //TODO: improve
+            .map(move |t| triple_to_python(slf.py(), t)))
     }
 }

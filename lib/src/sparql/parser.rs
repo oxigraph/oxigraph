@@ -11,11 +11,23 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::error::Error;
+use std::rc::Rc;
 use std::str::Chars;
 use std::str::FromStr;
 use std::{char, fmt};
 
 /// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/)
+///
+/// ```
+/// # use oxigraph::Result;
+/// use oxigraph::sparql::Query;
+///
+/// let query_str = "SELECT ?s ?p ?o  WHERE { ?s ?p ?o . }";
+/// let query = Query::parse(query_str, None)?;
+///
+/// assert_eq!(query.to_string(), query_str);
+/// # Result::Ok(())
+/// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Query(pub(crate) QueryVariants);
 
@@ -26,15 +38,15 @@ impl fmt::Display for Query {
 }
 
 impl Query {
-    /// Parses a SPARQL query
+    /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query
     pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self, SparqlParseError> {
         let mut state = ParserState {
             base_iri: if let Some(base_iri) = base_iri {
-                Some(
-                    Iri::parse(base_iri.to_owned()).map_err(|e| SparqlParseError {
+                Some(Rc::new(Iri::parse(base_iri.to_owned()).map_err(|e| {
+                    SparqlParseError {
                         inner: SparqlParseErrorKind::InvalidBaseIri(e),
-                    })?,
-                )
+                    }
+                })?))
             } else {
                 None
             },
@@ -379,7 +391,7 @@ enum Either<L, R> {
 }
 
 pub struct ParserState {
-    base_iri: Option<Iri<String>>,
+    base_iri: Option<Rc<Iri<String>>>,
     namespaces: HashMap<String, String>,
     used_bnodes: HashSet<BlankNode>,
     currently_used_bnodes: HashSet<BlankNode>,
@@ -632,7 +644,7 @@ parser! {
 
         //[5]
         rule BaseDecl() = i("BASE") _ i:IRIREF() {
-            state.base_iri = Some(i)
+            state.base_iri = Some(Rc::new(i))
         }
 
         //[6]
@@ -643,8 +655,8 @@ parser! {
         //[7]
         rule SelectQuery() -> QueryVariants = s:SelectClause() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {  //TODO: Modifier
             QueryVariants::Select {
-                dataset: d,
-                algebra: build_select(s, w, g, h, o, l, v, state),
+                dataset: Rc::new(d),
+                algebra: Rc::new(build_select(s, w, g, h, o, l, v, state)),
                 base_iri: state.base_iri.clone()
             }
         }
@@ -679,21 +691,21 @@ parser! {
         rule ConstructQuery() -> QueryVariants =
             i("CONSTRUCT") _ c:ConstructTemplate() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
                 QueryVariants::Construct {
-                    construct: c,
-                    dataset: d,
-                    algebra: build_select(Selection::default(), w, g, h, o, l, v, state),
+                    construct: Rc::new(c),
+                    dataset: Rc::new(d),
+                    algebra: Rc::new(build_select(Selection::default(), w, g, h, o, l, v, state)),
                     base_iri: state.base_iri.clone()
                 }
             } /
             i("CONSTRUCT") _ d:DatasetClauses() _ i("WHERE") _ "{" _ c:ConstructQuery_optional_triple_template() _ "}" _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
                 QueryVariants::Construct {
-                    construct: c.clone(),
-                    dataset: d,
-                    algebra: build_select(
+                    construct: Rc::new(c.clone()),
+                    dataset: Rc::new(d),
+                    algebra: Rc::new(build_select(
                         Selection::default(),
                         GraphPattern::BGP(c.into_iter().map(TripleOrPathPattern::from).collect()),
                         g, h, o, l, v, state
-                    ),
+                    )),
                     base_iri: state.base_iri.clone()
                 }
             }
@@ -704,21 +716,21 @@ parser! {
         rule DescribeQuery() -> QueryVariants =
             i("DESCRIBE") _ "*" _ d:DatasetClauses() w:WhereClause()? _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
                 QueryVariants::Describe {
-                    dataset: d,
-                    algebra: build_select(Selection::default(), w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state),
+                    dataset: Rc::new(d),
+                    algebra: Rc::new(build_select(Selection::default(), w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state)),
                     base_iri: state.base_iri.clone()
                 }
             } /
             i("DESCRIBE") _ p:DescribeQuery_item()+ _ d:DatasetClauses() w:WhereClause()? _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
                 QueryVariants::Describe {
-                    dataset: d,
-                    algebra: build_select(Selection {
+                    dataset: Rc::new(d),
+                    algebra: Rc::new(build_select(Selection {
                         option: SelectionOption::Default,
                         variables: Some(p.into_iter().map(|var_or_iri| match var_or_iri {
                             NamedNodeOrVariable::NamedNode(n) => SelectionMember::Expression(n.into(), Variable::new_random()),
                             NamedNodeOrVariable::Variable(v) => SelectionMember::Variable(v)
                         }).collect())
-                    }, w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state),
+                    }, w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state)),
                     base_iri: state.base_iri.clone()
                 }
             }
@@ -727,8 +739,8 @@ parser! {
         //[12]
         rule AskQuery() -> QueryVariants = i("ASK") _ d:DatasetClauses() w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
             QueryVariants::Ask {
-                dataset: d,
-                algebra: build_select(Selection::default(), w, g, h, o, l, v, state),
+                dataset: Rc::new(d),
+                algebra: Rc::new(build_select(Selection::default(), w, g, h, o, l, v, state)),
                 base_iri: state.base_iri.clone()
             }
         }

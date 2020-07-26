@@ -84,15 +84,12 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
             .ok_or_else(|| Error::msg(format!("No action found for test {}", test)))?;
         let options = QueryOptions::default()
             .with_service_handler(StaticServiceHandler::new(&test.service_data)?);
-        match store.prepare_query(
-            Query::parse(&read_file_to_string(query_file)?, Some(query_file))?,
-            options,
-        ) {
+        match Query::parse(&read_file_to_string(query_file)?, Some(query_file)) {
             Err(error) => Err(Error::msg(format!(
                 "Failure to parse query of {} with error: {}",
                 test, error
             ))),
-            Ok(query) => match query.exec() {
+            Ok(query) => match store.query(query, options) {
                 Err(error) => Err(Error::msg(format!(
                     "Failure to execute query of {} with error: {}",
                     test, error
@@ -173,35 +170,18 @@ impl StaticServiceHandler {
 }
 
 impl ServiceHandler for StaticServiceHandler {
-    fn handle<'a>(
-        &'a self,
-        service_name: &NamedNode,
-        graph_pattern: &'a GraphPattern,
-    ) -> Result<QuerySolutionsIterator<'a>> {
-        if let QueryResult::Solutions(iterator) = self
-            .services
-            .get(service_name)
+    fn handle(&self, service_name: NamedNode, query: Query) -> Result<QueryResult> {
+        self.services
+            .get(&service_name)
             .ok_or_else(|| Error::msg(format!("Service {} not found", service_name)))?
-            .prepare_query_from_pattern(
-                &graph_pattern,
+            .query(
+                query,
                 QueryOptions::default().with_service_handler(self.clone()),
-            )?
-            .exec()?
-        {
-            //TODO: very ugly
-            let (variables, iter) = iterator.destruct();
-            let collected = iter.collect::<Vec<_>>();
-            Ok(QuerySolutionsIterator::new(
-                variables,
-                Box::new(collected.into_iter()),
-            ))
-        } else {
-            Err(Error::msg("Expected solutions but got another QueryResult"))
-        }
+            )
     }
 }
 
-fn to_dataset(result: QueryResult<'_>, with_order: bool) -> Result<MemoryStore> {
+fn to_dataset(result: QueryResult, with_order: bool) -> Result<MemoryStore> {
     match result {
         QueryResult::Graph(graph) => graph.map(|t| t.map(|t| t.in_graph(None))).collect(),
         QueryResult::Boolean(value) => {
@@ -377,10 +357,7 @@ impl fmt::Display for StaticQueryResults {
 }
 
 impl StaticQueryResults {
-    fn from_query_results(
-        results: QueryResult<'_>,
-        with_order: bool,
-    ) -> Result<StaticQueryResults> {
+    fn from_query_results(results: QueryResult, with_order: bool) -> Result<StaticQueryResults> {
         Ok(Self::from_dataset(to_dataset(results, with_order)?))
     }
 

@@ -12,17 +12,17 @@ use std::io::{BufRead, Write};
 use std::rc::Rc;
 
 /// Results of a [SPARQL query](https://www.w3.org/TR/sparql11-query/)
-pub enum QueryResult<'a> {
+pub enum QueryResult {
     /// Results of a [SELECT](https://www.w3.org/TR/sparql11-query/#select) query
-    Solutions(QuerySolutionsIterator<'a>),
+    Solutions(QuerySolutionsIterator),
     /// Result of a [ASK](https://www.w3.org/TR/sparql11-query/#ask) query
     Boolean(bool),
     /// Results of a [CONSTRUCT](https://www.w3.org/TR/sparql11-query/#construct) or [DESCRIBE](https://www.w3.org/TR/sparql11-query/#describe) query
-    Graph(Box<dyn Iterator<Item = Result<Triple>> + 'a>),
+    Graph(Box<dyn Iterator<Item = Result<Triple>>>),
 }
 
-impl<'a> QueryResult<'a> {
-    pub fn read(reader: impl BufRead + 'a, syntax: QueryResultSyntax) -> Result<Self> {
+impl QueryResult {
+    pub fn read(reader: impl BufRead + 'static, syntax: QueryResultSyntax) -> Result<Self> {
         match syntax {
             QueryResultSyntax::Xml => read_xml_results(reader),
             QueryResultSyntax::Json => Err(Error::msg(
@@ -127,28 +127,24 @@ impl FileSyntax for QueryResultSyntax {
 /// use oxigraph::sparql::{QueryResult, QueryOptions};
 ///
 /// let store = MemoryStore::new();
-/// let prepared_query = store.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
-/// if let QueryResult::Solutions(solutions) = prepared_query.exec()? {
+/// if let QueryResult::Solutions(solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
 ///     for solution in solutions {
 ///         println!("{:?}", solution?.get("s"));
 ///     }
 /// }
 /// # Result::Ok(())
 /// ```
-pub struct QuerySolutionsIterator<'a> {
+pub struct QuerySolutionsIterator {
     variables: Rc<Vec<Variable>>,
-    iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>>> + 'a>,
+    iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>>>>,
 }
 
-impl<'a> QuerySolutionsIterator<'a> {
+impl QuerySolutionsIterator {
     pub fn new(
-        variables: Vec<Variable>,
-        iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>>> + 'a>,
+        variables: Rc<Vec<Variable>>,
+        iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>>>>,
     ) -> Self {
-        Self {
-            variables: Rc::new(variables),
-            iter,
-        }
+        Self { variables, iter }
     }
 
     /// The variables used in the solutions
@@ -158,8 +154,7 @@ impl<'a> QuerySolutionsIterator<'a> {
     /// use oxigraph::sparql::{QueryResult, QueryOptions, Variable};
     ///
     /// let store = MemoryStore::new();
-    /// let prepared_query = store.prepare_query("SELECT ?s ?o WHERE { ?s ?p ?o }", QueryOptions::default())?;
-    /// if let QueryResult::Solutions(solutions) = prepared_query.exec()? {
+    /// if let QueryResult::Solutions(solutions) = store.query("SELECT ?s ?o WHERE { ?s ?p ?o }", QueryOptions::default())? {
     ///     assert_eq!(solutions.variables(), &[Variable::new("s"), Variable::new("o")]);
     /// }
     /// # Result::Ok(())
@@ -169,21 +164,22 @@ impl<'a> QuerySolutionsIterator<'a> {
     }
 
     #[deprecated(note = "Please directly use QuerySolutionsIterator as an iterator instead")]
-    pub fn into_values_iter(self) -> Box<dyn Iterator<Item = Result<Vec<Option<Term>>>> + 'a> {
+    pub fn into_values_iter(self) -> Box<dyn Iterator<Item = Result<Vec<Option<Term>>>>> {
         self.iter
     }
 
+    #[deprecated(note = "Please directly use QuerySolutionsIterator as an iterator instead")]
     pub fn destruct(
         self,
     ) -> (
         Vec<Variable>,
-        Box<dyn Iterator<Item = Result<Vec<Option<Term>>>> + 'a>,
+        Box<dyn Iterator<Item = Result<Vec<Option<Term>>>>>,
     ) {
         ((*self.variables).clone(), self.iter)
     }
 }
 
-impl<'a> Iterator for QuerySolutionsIterator<'a> {
+impl Iterator for QuerySolutionsIterator {
     type Item = Result<QuerySolution>;
 
     fn next(&mut self) -> Option<Result<QuerySolution>> {

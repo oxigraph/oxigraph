@@ -2,7 +2,7 @@
 
 use crate::error::UnwrapInfallible;
 use crate::model::*;
-use crate::sparql::{GraphPattern, Query, QueryOptions, QueryResult, SimplePreparedQuery};
+use crate::sparql::{Query, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::store::{load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore};
 use crate::{DatasetSyntax, Error, GraphSyntax};
@@ -39,8 +39,7 @@ use std::vec::IntoIter;
 /// assert_eq!(vec![quad], results);
 ///
 /// // SPARQL query
-/// let prepared_query = store.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
-/// if let QueryResult::Solutions(mut solutions) = prepared_query.exec()? {
+/// if let QueryResult::Solutions(mut solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
 ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 /// }
 /// # Result::Ok(())
@@ -82,7 +81,36 @@ impl MemoryStore {
         new
     }
 
+    /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/).
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::{MemoryStore, Result};
+    /// use oxigraph::sparql::{QueryOptions, QueryResult};
+    ///
+    /// let store = MemoryStore::new();
+    ///
+    /// // insertions
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), None));
+    ///
+    /// // SPARQL query
+    /// if let QueryResult::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
+    ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
+    /// }
+    /// # Result::Ok(())
+    /// ```
+    pub fn query(
+        &self,
+        query: impl TryInto<Query, Error = impl Into<Error>>,
+        options: QueryOptions,
+    ) -> crate::Result<QueryResult> {
+        self.prepare_query(query, options)?.exec()
+    }
+
     /// Prepares a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) and returns an object that could be used to execute it.
+    /// It is useful if you want to execute multiple times the same SPARQL query.
     ///
     /// Usage example:
     /// ```
@@ -111,19 +139,6 @@ impl MemoryStore {
         Ok(MemoryPreparedQuery(SimplePreparedQuery::new(
             self.clone(),
             query,
-            options,
-        )?))
-    }
-
-    /// This is similar to `prepare_query`, but useful if a SPARQL query has already been parsed, which is the case when building `ServiceHandler`s for federated queries with `SERVICE` clauses. For examples, look in the tests.
-    pub fn prepare_query_from_pattern(
-        &self,
-        graph_pattern: &GraphPattern,
-        options: QueryOptions,
-    ) -> crate::Result<MemoryPreparedQuery> {
-        Ok(MemoryPreparedQuery(SimplePreparedQuery::new_from_pattern(
-            self.clone(),
-            graph_pattern,
             options,
         )?))
     }
@@ -863,7 +878,7 @@ pub struct MemoryPreparedQuery(SimplePreparedQuery<MemoryStore>);
 
 impl MemoryPreparedQuery {
     /// Evaluates the query and returns its results
-    pub fn exec(&self) -> crate::Result<QueryResult<'_>> {
+    pub fn exec(&self) -> crate::Result<QueryResult> {
         self.0.exec()
     }
 }

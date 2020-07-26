@@ -6,7 +6,7 @@ use crate::Error;
 use crate::Result;
 use std::io::Write;
 
-pub fn write_json_results<W: Write>(results: QueryResult<'_>, mut sink: W) -> Result<W> {
+pub fn write_json_results<W: Write>(results: QueryResult, mut sink: W) -> Result<W> {
     match results {
         QueryResult::Boolean(value) => {
             sink.write_all(b"{\"head\":{},\"boolean\":")?;
