@@ -9,6 +9,7 @@ use peg::parser;
 use peg::str::LineCol;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::convert::TryFrom;
 use std::error::Error;
 use std::str::Chars;
 use std::str::FromStr;
@@ -58,6 +59,22 @@ impl FromStr for Query {
 
     fn from_str(query: &str) -> Result<Self, SparqlParseError> {
         Self::parse(query, None)
+    }
+}
+
+impl<'a> TryFrom<&'a str> for Query {
+    type Error = SparqlParseError;
+
+    fn try_from(query: &str) -> Result<Self, SparqlParseError> {
+        Self::from_str(query)
+    }
+}
+
+impl<'a> TryFrom<&'a String> for Query {
+    type Error = SparqlParseError;
+
+    fn try_from(query: &String) -> Result<Self, SparqlParseError> {
+        Self::from_str(query)
     }
 }
 

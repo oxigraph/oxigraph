@@ -2,13 +2,13 @@
 
 use crate::error::UnwrapInfallible;
 use crate::model::*;
-use crate::sparql::{GraphPattern, QueryOptions, QueryResult, SimplePreparedQuery};
+use crate::sparql::{GraphPattern, Query, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::store::{load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore};
 use crate::{DatasetSyntax, Error, GraphSyntax};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
-use std::convert::Infallible;
+use std::convert::{Infallible, TryInto};
 use std::fmt;
 use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::io::BufRead;
@@ -105,8 +105,8 @@ impl MemoryStore {
     /// ```
     pub fn prepare_query(
         &self,
-        query: &str,
-        options: QueryOptions<'_>,
+        query: impl TryInto<Query, Error = impl Into<Error>>,
+        options: QueryOptions,
     ) -> crate::Result<MemoryPreparedQuery> {
         Ok(MemoryPreparedQuery(SimplePreparedQuery::new(
             self.clone(),
@@ -119,7 +119,7 @@ impl MemoryStore {
     pub fn prepare_query_from_pattern(
         &self,
         graph_pattern: &GraphPattern,
-        options: QueryOptions<'_>,
+        options: QueryOptions,
     ) -> crate::Result<MemoryPreparedQuery> {
         Ok(MemoryPreparedQuery(SimplePreparedQuery::new_from_pattern(
             self.clone(),

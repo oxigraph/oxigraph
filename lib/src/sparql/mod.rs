@@ -18,7 +18,6 @@ use crate::sparql::plan_builder::PlanBuilder;
 use crate::store::ReadableEncodedStore;
 use crate::Error;
 use crate::Result;
-use oxiri::Iri;
 
 pub use crate::sparql::algebra::GraphPattern;
 pub use crate::sparql::model::QuerySolution;
@@ -30,6 +29,7 @@ pub use crate::sparql::model::QueryResultSyntax;
 pub use crate::sparql::model::Variable;
 pub use crate::sparql::parser::Query;
 pub use crate::sparql::parser::SparqlParseError;
+use std::convert::TryInto;
 
 /// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/)
 #[deprecated(
@@ -62,9 +62,13 @@ enum SimplePreparedQueryAction<S: ReadableEncodedStore> {
 }
 
 impl<S: ReadableEncodedStore> SimplePreparedQuery<S> {
-    pub(crate) fn new(store: S, query: &str, options: QueryOptions<'_>) -> Result<Self> {
+    pub(crate) fn new(
+        store: S,
+        query: impl TryInto<Query, Error = impl Into<Error>>,
+        options: QueryOptions,
+    ) -> Result<Self> {
         let dataset = DatasetView::new(store, options.default_graph_as_union);
-        Ok(Self(match Query::parse(query, options.base_iri)?.0 {
+        Ok(Self(match query.try_into().map_err(|e| e.into())?.0 {
             QueryVariants::Select {
                 algebra, base_iri, ..
             } => {
@@ -117,19 +121,14 @@ impl<S: ReadableEncodedStore> SimplePreparedQuery<S> {
     pub(crate) fn new_from_pattern(
         store: S,
         pattern: &GraphPattern,
-        options: QueryOptions<'_>,
+        options: QueryOptions,
     ) -> Result<Self> {
         let dataset = DatasetView::new(store, options.default_graph_as_union);
         let (plan, variables) = PlanBuilder::build(dataset.encoder(), pattern)?;
-        let base_iri = if let Some(base_iri) = options.base_iri {
-            Some(Iri::parse(base_iri.to_string())?)
-        } else {
-            None
-        };
         Ok(Self(SimplePreparedQueryAction::Select {
             plan,
             variables,
-            evaluator: SimpleEvaluator::new(dataset, base_iri, options.service_handler),
+            evaluator: SimpleEvaluator::new(dataset, None, options.service_handler),
         }))
     }
 
@@ -190,30 +189,22 @@ impl ServiceHandler for EmptyServiceHandler {
     }
 }
 
-/// Options for SPARQL query parsing and evaluation like the query base IRI
-pub struct QueryOptions<'a> {
-    pub(crate) base_iri: Option<&'a str>,
+/// Options for SPARQL query evaluation
+pub struct QueryOptions {
     pub(crate) default_graph_as_union: bool,
     pub(crate) service_handler: Box<dyn ServiceHandler>,
 }
 
-impl<'a> Default for QueryOptions<'a> {
+impl Default for QueryOptions {
     fn default() -> Self {
         Self {
-            base_iri: None,
             default_graph_as_union: false,
             service_handler: Box::new(EmptyServiceHandler),
         }
     }
 }
 
-impl<'a> QueryOptions<'a> {
-    /// Allows setting the base IRI of the query
-    pub fn with_base_iri(mut self, base_iri: &'a str) -> Self {
-        self.base_iri = Some(base_iri);
-        self
-    }
-
+impl QueryOptions {
     /// Consider the union of all graphs in the store as the default graph
     pub const fn with_default_graph_as_union(mut self) -> Self {
         self.default_graph_as_union = true;

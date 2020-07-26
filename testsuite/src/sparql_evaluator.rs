@@ -83,9 +83,11 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
             .as_deref()
             .ok_or_else(|| Error::msg(format!("No action found for test {}", test)))?;
         let options = QueryOptions::default()
-            .with_base_iri(query_file)
             .with_service_handler(StaticServiceHandler::new(&test.service_data)?);
-        match store.prepare_query(&read_file_to_string(query_file)?, options) {
+        match store.prepare_query(
+            Query::parse(&read_file_to_string(query_file)?, Some(query_file))?,
+            options,
+        ) {
             Err(error) => Err(Error::msg(format!(
                 "Failure to parse query of {} with error: {}",
                 test, error

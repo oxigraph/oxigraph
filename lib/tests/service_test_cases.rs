@@ -30,7 +30,7 @@ fn simple_service_test() {
     .to_string();
 
     let options = QueryOptions::default().with_service_handler(TestServiceHandler);
-    let collected = do_query(b"".as_ref(), query, options)
+    let collected = do_query(b"".as_ref(), &query, options)
         .unwrap()
         .map(|b| {
             b.unwrap()
@@ -93,7 +93,7 @@ fn two_service_test() {
     .to_string();
 
     let options = QueryOptions::default().with_service_handler(TwoServiceTest);
-    let collected = do_query(b"".as_ref(), query, options)
+    let collected = do_query(b"".as_ref(), &query, options)
         .unwrap()
         .map(|b| {
             b.unwrap()
@@ -139,7 +139,7 @@ fn silent_service_empty_set_test() {
 
     let triples = b"".as_ref();
     let options = QueryOptions::default().with_service_handler(ServiceTest);
-    assert_eq!(do_query(triples, query, options).unwrap().count(), 1);
+    assert_eq!(do_query(triples, &query, options).unwrap().count(), 1);
 }
 
 #[test]
@@ -172,7 +172,7 @@ fn non_silent_service_test() {
 
     let triples = b"".as_ref();
     let options = QueryOptions::default().with_service_handler(ServiceTest);
-    let mut solutions = do_query(triples, query, options).unwrap();
+    let mut solutions = do_query(triples, &query, options).unwrap();
     if let Some(Err(_)) = solutions.next() {
     } else {
         panic!("This should have been an error since the service fails")
@@ -204,12 +204,12 @@ fn make_store(reader: impl BufRead) -> Result<MemoryStore> {
     Ok(store)
 }
 
-fn query_store<'a>(
+fn query_store(
     store: MemoryStore,
-    query: String,
-    options: QueryOptions<'a>,
-) -> Result<QuerySolutionsIterator<'a>> {
-    match store.prepare_query(&query, options)?.exec()? {
+    query: &str,
+    options: QueryOptions,
+) -> Result<QuerySolutionsIterator<'_>> {
+    match store.prepare_query(query, options)?.exec()? {
         QueryResult::Solutions(iterator) => {
             let (variables, iter) = iterator.destruct();
             let collected = iter.collect::<Vec<_>>();
@@ -225,7 +225,7 @@ fn query_store<'a>(
 fn pattern_store<'a>(
     store: MemoryStore,
     pattern: &'a GraphPattern,
-    options: QueryOptions<'a>,
+    options: QueryOptions,
 ) -> Result<QuerySolutionsIterator<'a>> {
     match store
         .prepare_query_from_pattern(&pattern, options)?
@@ -243,11 +243,11 @@ fn pattern_store<'a>(
     }
 }
 
-fn do_query<'a>(
+fn do_query(
     reader: impl BufRead,
-    query: String,
-    options: QueryOptions<'a>,
-) -> Result<QuerySolutionsIterator<'a>> {
+    query: &str,
+    options: QueryOptions,
+) -> Result<QuerySolutionsIterator<'_>> {
     let store = make_store(reader)?;
     query_store(store, query, options)
 }
@@ -255,7 +255,7 @@ fn do_query<'a>(
 fn do_pattern<'a>(
     reader: impl BufRead,
     pattern: &'a GraphPattern,
-    options: QueryOptions<'a>,
+    options: QueryOptions,
 ) -> Result<QuerySolutionsIterator<'a>> {
     let store = make_store(reader)?;
     pattern_store(store, pattern, options)

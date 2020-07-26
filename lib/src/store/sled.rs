@@ -2,12 +2,12 @@
 
 use crate::error::UnwrapInfallible;
 use crate::model::*;
-use crate::sparql::{GraphPattern, QueryOptions, QueryResult, SimplePreparedQuery};
+use crate::sparql::{GraphPattern, Query, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::store::{load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore};
 use crate::{DatasetSyntax, Error, GraphSyntax, Result};
 use sled::{Batch, Config, Iter, Tree};
-use std::convert::Infallible;
+use std::convert::{Infallible, TryInto};
 use std::io::{BufRead, Cursor};
 use std::path::Path;
 use std::{fmt, str};
@@ -87,10 +87,10 @@ impl SledStore {
     /// Prepares a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) and returns an object that could be used to execute it.
     ///
     /// See `MemoryStore` for a usage example.
-    pub fn prepare_query<'a>(
-        &'a self,
-        query: &str,
-        options: QueryOptions<'_>,
+    pub fn prepare_query(
+        &self,
+        query: impl TryInto<Query, Error = impl Into<Error>>,
+        options: QueryOptions,
     ) -> Result<SledPreparedQuery> {
         Ok(SledPreparedQuery(SimplePreparedQuery::new(
             (*self).clone(),
@@ -100,10 +100,10 @@ impl SledStore {
     }
 
     /// This is similar to `prepare_query`, but useful if a SPARQL query has already been parsed, which is the case when building `ServiceHandler`s for federated queries with `SERVICE` clauses. For examples, look in the tests.
-    pub fn prepare_query_from_pattern<'a>(
-        &'a self,
+    pub fn prepare_query_from_pattern(
+        &self,
         graph_pattern: &GraphPattern,
-        options: QueryOptions<'_>,
+        options: QueryOptions,
     ) -> Result<SledPreparedQuery> {
         Ok(SledPreparedQuery(SimplePreparedQuery::new_from_pattern(
             (*self).clone(),
