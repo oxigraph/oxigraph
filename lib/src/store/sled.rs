@@ -4,11 +4,13 @@ use crate::error::UnwrapInfallible;
 use crate::model::*;
 use crate::sparql::{Query, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
-use crate::store::{load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore};
+use crate::store::{
+    dump_dataset, dump_graph, load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore,
+};
 use crate::{DatasetSyntax, Error, GraphSyntax, Result};
 use sled::{Batch, Config, Iter, Tree};
 use std::convert::{Infallible, TryInto};
-use std::io::{BufRead, Cursor};
+use std::io::{BufRead, Cursor, Write};
 use std::path::Path;
 use std::{fmt, str};
 
@@ -209,6 +211,34 @@ impl SledStore {
     pub fn remove(&self, quad: &Quad) -> Result<()> {
         let quad = quad.into();
         DirectWriter::new(self).remove_encoded(&quad)
+    }
+
+    /// Dumps a store graph into a file.
+    ///    
+    /// See `MemoryStore` for a usage example.
+    pub fn dump_graph(
+        &self,
+        writer: &mut impl Write,
+        syntax: GraphSyntax,
+        from_graph_name: &GraphName,
+    ) -> Result<()> {
+        dump_graph(
+            self.quads_for_pattern(None, None, None, Some(from_graph_name))
+                .map(|q| Ok(q?.into())),
+            writer,
+            syntax,
+        )
+    }
+
+    /// Dumps the store dataset into a file.
+    ///    
+    /// See `MemoryStore` for a usage example.
+    pub fn dump_dataset(&self, writer: &mut impl Write, syntax: DatasetSyntax) -> Result<()> {
+        dump_dataset(
+            self.quads_for_pattern(None, None, None, None),
+            writer,
+            syntax,
+        )
     }
 
     fn contains_encoded(&self, quad: &EncodedQuad) -> Result<bool> {

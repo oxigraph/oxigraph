@@ -19,11 +19,15 @@ pub use crate::store::sled::SledStore;
 use crate::model::*;
 use crate::store::numeric_encoder::*;
 use crate::{DatasetSyntax, Error, GraphSyntax, Result};
+use rio_api::formatter::{QuadsFormatter, TriplesFormatter};
 use rio_api::parser::{QuadsParser, TriplesParser};
-use rio_turtle::{NQuadsParser, NTriplesParser, TriGParser, TurtleParser};
-use rio_xml::RdfXmlParser;
+use rio_turtle::{
+    NQuadsFormatter, NQuadsParser, NTriplesFormatter, NTriplesParser, TriGFormatter, TriGParser,
+    TurtleFormatter, TurtleParser,
+};
+use rio_xml::{RdfXmlFormatter, RdfXmlParser};
 use std::collections::HashMap;
-use std::io::BufRead;
+use std::io::{BufRead, Write};
 use std::iter::Iterator;
 
 pub(crate) trait ReadableEncodedStore: StrLookup {
@@ -93,6 +97,37 @@ where
     })
 }
 
+fn dump_graph(
+    triples: impl Iterator<Item = Result<Triple>>,
+    writer: &mut impl Write,
+    syntax: GraphSyntax,
+) -> Result<()> {
+    match syntax {
+        GraphSyntax::NTriples => {
+            let mut formatter = NTriplesFormatter::new(writer);
+            for triple in triples {
+                formatter.format(&(&triple?).into())?;
+            }
+            formatter.finish();
+        }
+        GraphSyntax::Turtle => {
+            let mut formatter = TurtleFormatter::new(writer);
+            for triple in triples {
+                formatter.format(&(&triple?).into())?;
+            }
+            formatter.finish()?;
+        }
+        GraphSyntax::RdfXml => {
+            let mut formatter = RdfXmlFormatter::new(writer)?;
+            for triple in triples {
+                formatter.format(&(&triple?).into())?;
+            }
+            formatter.finish()?;
+        }
+    }
+    Ok(())
+}
+
 fn load_dataset<S: WritableEncodedStore>(
     store: &mut S,
     reader: impl BufRead,
@@ -120,4 +155,28 @@ where
             .map_err(|e| e.into())?;
         store.insert_encoded(&quad).map_err(|e| e.into())
     })
+}
+
+fn dump_dataset(
+    quads: impl Iterator<Item = Result<Quad>>,
+    writer: &mut impl Write,
+    syntax: DatasetSyntax,
+) -> Result<()> {
+    match syntax {
+        DatasetSyntax::NQuads => {
+            let mut formatter = NQuadsFormatter::new(writer);
+            for quad in quads {
+                formatter.format(&(&quad?).into())?;
+            }
+            formatter.finish();
+        }
+        DatasetSyntax::TriG => {
+            let mut formatter = TriGFormatter::new(writer);
+            for quad in quads {
+                formatter.format(&(&quad?).into())?;
+            }
+            formatter.finish()?;
+        }
+    }
+    Ok(())
 }

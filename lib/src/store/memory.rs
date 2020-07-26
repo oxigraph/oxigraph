@@ -4,14 +4,16 @@ use crate::error::UnwrapInfallible;
 use crate::model::*;
 use crate::sparql::{Query, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
-use crate::store::{load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore};
+use crate::store::{
+    dump_dataset, dump_graph, load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore,
+};
 use crate::{DatasetSyntax, Error, GraphSyntax};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::convert::{Infallible, TryInto};
 use std::fmt;
 use std::hash::{BuildHasherDefault, Hash, Hasher};
-use std::io::BufRead;
+use std::io::{BufRead, Write};
 use std::iter::FromIterator;
 use std::mem::size_of;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -255,7 +257,7 @@ impl MemoryStore {
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
-    /// store.load_graph(file.as_ref(), GraphSyntax::NTriples, &GraphName::DefaultGraph, None);
+    /// store.load_graph(file.as_ref(), GraphSyntax::NTriples, &GraphName::DefaultGraph, None)?;
     ///
     /// // quad filter
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
@@ -285,7 +287,7 @@ impl MemoryStore {
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
-    /// store.load_dataset(file.as_ref(), DatasetSyntax::NQuads, None);
+    /// store.load_dataset(file.as_ref(), DatasetSyntax::NQuads, None)?;
     ///
     /// // quad filter
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
@@ -326,6 +328,66 @@ impl MemoryStore {
     /// Warning: This implementation worst-case complexity is in O(b!) with b the number of blank node node in the input graphs.
     pub fn is_isomorphic(&self, other: &Self) -> bool {
         iso_canonicalize(self) == iso_canonicalize(other)
+    }
+
+    /// Dumps a store graph into a file.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::{MemoryStore, Result, GraphSyntax};
+    ///
+    /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
+    ///
+    /// let store = MemoryStore::new();
+    /// store.load_graph(file, GraphSyntax::NTriples, &GraphName::DefaultGraph, None)?;
+    ///
+    /// let mut buffer = Vec::new();
+    /// store.dump_graph(&mut buffer, GraphSyntax::NTriples, &GraphName::DefaultGraph)?;
+    /// assert_eq!(file, buffer.as_slice());
+    /// # Result::Ok(())
+    /// ```
+    pub fn dump_graph(
+        &self,
+        writer: &mut impl Write,
+        syntax: GraphSyntax,
+        from_graph_name: &GraphName,
+    ) -> crate::Result<()> {
+        dump_graph(
+            self.quads_for_pattern(None, None, None, Some(from_graph_name))
+                .map(|q| Ok(q.into())),
+            writer,
+            syntax,
+        )
+    }
+
+    /// Dumps the store dataset into a file.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::{MemoryStore, Result, DatasetSyntax};
+    ///
+    /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
+    ///
+    /// let store = MemoryStore::new();
+    /// store.load_dataset(file, DatasetSyntax::NQuads, None)?;
+    ///
+    /// let mut buffer = Vec::new();
+    /// store.dump_dataset(&mut buffer, DatasetSyntax::NQuads)?;
+    /// assert_eq!(file, buffer.as_slice());
+    /// # Result::Ok(())
+    /// ```
+    pub fn dump_dataset(
+        &self,
+        writer: &mut impl Write,
+        syntax: DatasetSyntax,
+    ) -> crate::Result<()> {
+        dump_dataset(
+            self.quads_for_pattern(None, None, None, None).map(Ok),
+            writer,
+            syntax,
+        )
     }
 
     #[allow(clippy::expect_used)]
