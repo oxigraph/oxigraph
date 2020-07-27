@@ -226,7 +226,7 @@ impl MemoryStore {
     /// store.transaction(|transaction| {
     ///     transaction.insert(quad.clone());
     ///     Ok(())
-    /// });
+    /// })?;
     ///
     /// // quad filter
     /// assert!(store.contains(&quad));
@@ -334,7 +334,7 @@ impl MemoryStore {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::model::*;
+    /// use oxigraph::model::GraphName;
     /// use oxigraph::{MemoryStore, Result, GraphSyntax};
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
@@ -365,7 +365,6 @@ impl MemoryStore {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::model::*;
     /// use oxigraph::{MemoryStore, Result, DatasetSyntax};
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
@@ -970,7 +969,7 @@ impl<'a> MemoryTransaction<'a> {
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
     /// store.transaction(|transaction| {
-    ///     store.load_graph(file.as_ref(), GraphSyntax::NTriples, &GraphName::DefaultGraph, None)
+    ///     transaction.load_graph(file.as_ref(), GraphSyntax::NTriples, &GraphName::DefaultGraph, None)
     /// })?;
     ///
     /// // quad filter
@@ -1000,7 +999,7 @@ impl<'a> MemoryTransaction<'a> {
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
-    /// store.load_dataset(file.as_ref(), DatasetSyntax::NQuads, None);
+    /// store.load_dataset(file.as_ref(), DatasetSyntax::NQuads, None)?;
     ///
     /// // quad filter
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();

@@ -102,6 +102,7 @@
     clippy::wildcard_dependencies,
     clippy::wrong_pub_self_convention,
 )]
+#![doc(test(attr(deny(warnings))))]
 
 mod error;
 pub mod model;

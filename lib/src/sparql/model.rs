@@ -39,7 +39,7 @@ impl QueryResult {
     /// ```
     /// use oxigraph::model::*;
     /// use oxigraph::{MemoryStore, Result};
-    /// use oxigraph::sparql::{QueryOptions, QueryResult, QueryResultSyntax};
+    /// use oxigraph::sparql::{QueryOptions, QueryResultSyntax};
     ///
     /// let store = MemoryStore::new();
     /// let ex = NamedNode::new("http://example.com")?;
@@ -64,13 +64,13 @@ impl QueryResult {
     /// ```
     /// use oxigraph::model::*;
     /// use oxigraph::{MemoryStore, Result, GraphSyntax};
-    /// use oxigraph::sparql::{QueryOptions, QueryResult, QueryResultSyntax};
+    /// use oxigraph::sparql::QueryOptions;
     /// use std::io::Cursor;
     ///
     /// let graph = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
     ///
     /// let store = MemoryStore::new();
-    /// store.load_graph(Cursor::new(graph), GraphSyntax::NTriples, &GraphName::DefaultGraph, None);
+    /// store.load_graph(Cursor::new(graph), GraphSyntax::NTriples, &GraphName::DefaultGraph, None)?;
     ///
     /// let mut results = Vec::new();
     /// store.query("CONSTRUCT WHERE { ?s ?p ?o }", QueryOptions::default())?.write_graph(&mut results, GraphSyntax::NTriples)?;
