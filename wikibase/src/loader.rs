@@ -274,8 +274,8 @@ impl WikibaseLoader {
                 GraphSyntax::NTriples,
                 &NamedNode::new(uri)?.into(),
                 None,
-            )
-        })?;
-        Ok(())
+            )?;
+            Ok(())
+        })
     }
 }

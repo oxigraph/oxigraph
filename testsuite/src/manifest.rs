@@ -1,8 +1,9 @@
 use crate::files::load_to_store;
 use crate::vocab::*;
+use anyhow::{anyhow, Result};
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
-use oxigraph::{Error, MemoryStore, Result};
+use oxigraph::MemoryStore;
 use std::fmt;
 
 pub struct Test {
@@ -145,18 +146,18 @@ impl Iterator for TestManifest {
                                     .collect();
                             (None, query, data, graph_data, service_data)
                         }
-                        Some(_) => return Some(Err(Error::msg("invalid action"))),
+                        Some(_) => return Some(Err(anyhow!("invalid action"))),
                         None => {
-                            return Some(Err(Error::msg(format!(
+                            return Some(Err(anyhow!(
                                 "action not found for test {}",
                                 test_subject
-                            ))));
+                            )));
                         }
                     };
                 let result =
                     match object_for_subject_predicate(&self.graph, &test_subject, &*mf::RESULT) {
                         Some(Term::NamedNode(n)) => Some(n.into_string()),
-                        Some(_) => return Some(Err(Error::msg("invalid result"))),
+                        Some(_) => return Some(Err(anyhow!("invalid result"))),
                         None => None,
                     };
                 Some(Ok(Test {
@@ -195,7 +196,7 @@ impl Iterator for TestManifest {
                                     ),
                                 );
                             }
-                            Some(_) => return Some(Err(Error::msg("invalid tests list"))),
+                            Some(_) => return Some(Err(anyhow!("invalid tests list"))),
                             None => (),
                         }
 
@@ -206,10 +207,7 @@ impl Iterator for TestManifest {
                                     .extend(RdfListIterator::iter(&self.graph, list.into()));
                             }
                             Some(term) => {
-                                return Some(Err(Error::msg(format!(
-                                    "Invalid tests list. Got term {}",
-                                    term
-                                ))));
+                                return Some(Err(anyhow!("Invalid tests list. Got term {}", term)));
                             }
                             None => (),
                         }

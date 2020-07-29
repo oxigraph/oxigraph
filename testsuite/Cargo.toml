@@ -12,6 +12,7 @@ edition = "2018"
 publish = false
 
 [dependencies]
+anyhow = "1"
 chrono = "0.4"
 lazy_static = "1"
 oxigraph = { path = "../lib" }

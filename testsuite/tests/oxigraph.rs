@@ -1,4 +1,4 @@
-use oxigraph::Result;
+use anyhow::Result;
 use oxigraph_testsuite::manifest::TestManifest;
 use oxigraph_testsuite::sparql_evaluator::evaluate_sparql_tests;
 

@@ -2,11 +2,12 @@ use crate::files::*;
 use crate::manifest::*;
 use crate::report::*;
 use crate::vocab::*;
+use anyhow::{anyhow, Result};
 use chrono::Utc;
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
 use oxigraph::sparql::*;
-use oxigraph::{Error, MemoryStore, Result};
+use oxigraph::{Error, MemoryStore};
 use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
@@ -36,20 +37,17 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
         let query_file = test
             .action
             .as_deref()
-            .ok_or_else(|| Error::msg(format!("No action found for test {}", test)))?;
+            .ok_or_else(|| anyhow!("No action found for test {}", test))?;
         match Query::parse(&read_file_to_string(&query_file)?, Some(&query_file)) {
-            Err(error) => Err(Error::msg(format!(
-                "Not able to parse {} with error: {}",
-                test, error
-            ))),
+            Err(error) => Err(anyhow!("Not able to parse {} with error: {}", test, error)),
             Ok(query) => match Query::parse(&query.to_string(), None) {
                 Ok(_) => Ok(()),
-                Err(error) => Err(Error::msg(format!(
+                Err(error) => Err(anyhow!(
                     "Failure to deserialize \"{}\" of {} with error: {}",
                     query.to_string(),
                     test,
                     error
-                ))),
+                )),
             },
         }
     } else if test.kind
@@ -60,12 +58,13 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
         let query_file = test
             .action
             .as_deref()
-            .ok_or_else(|| Error::msg(format!("No action found for test {}", test)))?;
+            .ok_or_else(|| anyhow!("No action found for test {}", test))?;
         match Query::parse(&read_file_to_string(query_file)?, Some(query_file)) {
-            Ok(result) => Err(Error::msg(format!(
+            Ok(result) => Err(anyhow!(
                 "Oxigraph parses even if it should not {}. The output tree is: {}",
-                test, result
-            ))),
+                test,
+                result
+            )),
             Err(_) => Ok(()),
         }
     } else if test.kind
@@ -81,26 +80,25 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
         let query_file = test
             .query
             .as_deref()
-            .ok_or_else(|| Error::msg(format!("No action found for test {}", test)))?;
+            .ok_or_else(|| anyhow!("No action found for test {}", test))?;
         let options = QueryOptions::default()
             .with_service_handler(StaticServiceHandler::new(&test.service_data)?);
         match Query::parse(&read_file_to_string(query_file)?, Some(query_file)) {
-            Err(error) => Err(Error::msg(format!(
+            Err(error) => Err(anyhow!(
                 "Failure to parse query of {} with error: {}",
-                test, error
-            ))),
+                test,
+                error
+            )),
             Ok(query) => match store.query(query, options) {
-                Err(error) => Err(Error::msg(format!(
+                Err(error) => Err(anyhow!(
                     "Failure to execute query of {} with error: {}",
-                    test, error
-                ))),
+                    test,
+                    error
+                )),
                 Ok(actual_results) => {
                     let expected_results = load_sparql_query_result(test.result.as_ref().unwrap())
                         .map_err(|e| {
-                            Error::msg(format!(
-                                "Error constructing expected graph for {}: {}",
-                                test, e
-                            ))
+                            anyhow!("Error constructing expected graph for {}: {}", test, e)
                         })?;
                     let with_order =
                         if let StaticQueryResults::Solutions { ordered, .. } = &expected_results {
@@ -114,19 +112,19 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
                     if are_query_results_isomorphic(&expected_results, &actual_results) {
                         Ok(())
                     } else {
-                        Err(Error::msg(format!("Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
+                        Err(anyhow!("Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
                                                test,
                                                actual_results,
                                                expected_results,
                                                Query::parse(&read_file_to_string(query_file)?, Some(query_file)).unwrap(),
                                                store
-                        )))
+                        ))
                     }
                 }
             },
         }
     } else {
-        Err(Error::msg(format!("Unsupported test type: {}", test.kind)))
+        Err(anyhow!("Unsupported test type: {}", test.kind))
     }
 }
 
@@ -170,7 +168,7 @@ impl StaticServiceHandler {
 }
 
 impl ServiceHandler for StaticServiceHandler {
-    fn handle(&self, service_name: NamedNode, query: Query) -> Result<QueryResult> {
+    fn handle(&self, service_name: NamedNode, query: Query) -> oxigraph::Result<QueryResult> {
         self.services
             .get(&service_name)
             .ok_or_else(|| Error::msg(format!("Service {} not found", service_name)))?
@@ -183,7 +181,9 @@ impl ServiceHandler for StaticServiceHandler {
 
 fn to_dataset(result: QueryResult, with_order: bool) -> Result<MemoryStore> {
     match result {
-        QueryResult::Graph(graph) => graph.map(|t| t.map(|t| t.in_graph(None))).collect(),
+        QueryResult::Graph(graph) => Ok(graph
+            .map(|t| t.map(|t| t.in_graph(None)))
+            .collect::<Result<_, Error>>()?),
         QueryResult::Boolean(value) => {
             let store = MemoryStore::new();
             let result_set = BlankNode::default();

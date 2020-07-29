@@ -1,6 +1,6 @@
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use oxigraph::model::NamedNode;
-use oxigraph::Result;
 
 #[derive(Debug)]
 pub struct TestResult {

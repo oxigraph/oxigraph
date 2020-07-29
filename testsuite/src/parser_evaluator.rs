@@ -1,8 +1,8 @@
 use crate::files::load_store;
 use crate::manifest::Test;
 use crate::report::TestResult;
+use anyhow::{anyhow, Result};
 use chrono::Utc;
-use oxigraph::{Error, Result};
 
 pub fn evaluate_parser_tests(
     manifest: impl Iterator<Item = Result<Test>>,
@@ -24,7 +24,7 @@ fn evaluate_parser_test(test: &Test) -> Result<()> {
     let action = test
         .action
         .as_deref()
-        .ok_or_else(|| Error::msg(format!("No action found for test {}", test)))?;
+        .ok_or_else(|| anyhow!("No action found for test {}", test))?;
     if test.kind == "http://www.w3.org/ns/rdftest#TestNTriplesPositiveSyntax"
         || test.kind == "http://www.w3.org/ns/rdftest#TestNQuadsPositiveSyntax"
         || test.kind == "http://www.w3.org/ns/rdftest#TestTurtlePositiveSyntax"
@@ -32,7 +32,7 @@ fn evaluate_parser_test(test: &Test) -> Result<()> {
     {
         match load_store(action) {
             Ok(_) => Ok(()),
-            Err(e) => Err(Error::msg(format!("Parse error: {}", e))),
+            Err(e) => Err(anyhow!(format!("Parse error: {}", e))),
         }
     } else if test.kind == "http://www.w3.org/ns/rdftest#TestNTriplesNegativeSyntax"
         || test.kind == "http://www.w3.org/ns/rdftest#TestNQuadsNegativeSyntax"
@@ -43,9 +43,7 @@ fn evaluate_parser_test(test: &Test) -> Result<()> {
         || test.kind == "http://www.w3.org/ns/rdftest#TestXMLNegativeSyntax"
     {
         match load_store(action) {
-            Ok(_) => Err(Error::msg(
-                "File parsed with an error even if it should not",
-            )),
+            Ok(_) => Err(anyhow!("File parsed with an error even if it should not",)),
             Err(_) => Ok(()),
         }
     } else if test.kind == "http://www.w3.org/ns/rdftest#TestTurtleEval"
@@ -60,21 +58,22 @@ fn evaluate_parser_test(test: &Test) -> Result<()> {
                             if expected_graph.is_isomorphic(&actual_graph) {
                                 Ok(())
                             } else {
-                                Err(Error::msg(format!(
+                                Err(anyhow!(
                                     "The two files are not isomorphic. Expected:\n{}\nActual:\n{}",
-                                    expected_graph, actual_graph
-                                )))
+                                    expected_graph,
+                                    actual_graph
+                                ))
                             }
                         }
-                        Err(e) => Err(Error::msg(format!("Parse error on file {}: {}", action, e))),
+                        Err(e) => Err(anyhow!("Parse error on file {}: {}", action, e)),
                     }
                 } else {
-                    Err(Error::msg("No tests result found".to_string()))
+                    Err(anyhow!("No tests result found"))
                 }
             }
-            Err(e) => Err(Error::msg(format!("Parse error on file {}: {}", action, e))),
+            Err(e) => Err(anyhow!("Parse error on file {}: {}", action, e)),
         }
     } else {
-        Err(Error::msg(format!("Unsupported test type: {}", test.kind)))
+        Err(anyhow!("Unsupported test type: {}", test.kind))
     }
 }

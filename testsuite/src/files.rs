@@ -1,5 +1,6 @@
+use anyhow::{anyhow, Result};
 use oxigraph::model::GraphName;
-use oxigraph::{DatasetSyntax, Error, GraphSyntax, MemoryStore, Result};
+use oxigraph::{DatasetSyntax, GraphSyntax, MemoryStore};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::path::PathBuf;
@@ -26,7 +27,7 @@ pub fn read_file(url: &str) -> Result<impl BufRead> {
             "oxigraph-tests/",
         ))
     } else {
-        Err(Error::msg(format!("Not supported url for file: {}", url)))
+        Err(anyhow!("Not supported url for file: {}", url))
     }?);
     Ok(BufReader::new(File::open(&path)?))
 }
@@ -44,31 +45,29 @@ pub fn load_to_store(url: &str, store: &MemoryStore, to_graph_name: &GraphName) 
             GraphSyntax::NTriples,
             to_graph_name,
             Some(url),
-        )
+        )?
     } else if url.ends_with(".ttl") {
         store.load_graph(
             read_file(url)?,
             GraphSyntax::Turtle,
             to_graph_name,
             Some(url),
-        )
+        )?
     } else if url.ends_with(".rdf") {
         store.load_graph(
             read_file(url)?,
             GraphSyntax::RdfXml,
             to_graph_name,
             Some(url),
-        )
+        )?
     } else if url.ends_with(".nq") {
-        store.load_dataset(read_file(url)?, DatasetSyntax::NQuads, Some(url))
+        store.load_dataset(read_file(url)?, DatasetSyntax::NQuads, Some(url))?
     } else if url.ends_with(".trig") {
-        store.load_dataset(read_file(url)?, DatasetSyntax::TriG, Some(url))
+        store.load_dataset(read_file(url)?, DatasetSyntax::TriG, Some(url))?
     } else {
-        Err(Error::msg(format!(
-            "Serialization type not found for {}",
-            url
-        )))
+        return Err(anyhow!("Serialization type not found for {}", url));
     }
+    Ok(())
 }
 
 pub fn load_store(url: &str) -> Result<MemoryStore> {
