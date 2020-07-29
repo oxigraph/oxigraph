@@ -58,7 +58,7 @@ impl PyMemoryStore {
         let results = self
             .inner
             .query(query, QueryOptions::default())
-            .map_err(|e| ParseError::py_err(e.to_string()))?;
+            .map_err(|e| ValueError::py_err(e.to_string()))?;
         query_results_to_python(py, results)
     }
 
@@ -89,7 +89,7 @@ impl PyMemoryStore {
                     &to_graph_name.unwrap_or(GraphName::DefaultGraph),
                     base_iri,
                 )
-                .map_err(|e| ParseError::py_err(e.to_string()))
+                .map_err(map_io_err)
         } else if let Some(dataset_syntax) = DatasetSyntax::from_media_type(mime_type) {
             if to_graph_name.is_some() {
                 return Err(ValueError::py_err(
@@ -98,7 +98,7 @@ impl PyMemoryStore {
             }
             self.inner
                 .load_dataset(Cursor::new(data), dataset_syntax, base_iri)
-                .map_err(|e| ParseError::py_err(e.to_string()))
+                .map_err(map_io_err)
         } else {
             Err(ValueError::py_err(format!(
                 "Not supported MIME type: {}",

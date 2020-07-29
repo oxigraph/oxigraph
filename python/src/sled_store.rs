@@ -3,7 +3,7 @@ use crate::store_utils::*;
 use oxigraph::model::*;
 use oxigraph::sparql::QueryOptions;
 use oxigraph::{DatasetSyntax, GraphSyntax, SledStore};
-use pyo3::exceptions::{IOError, ValueError};
+use pyo3::exceptions::ValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyTuple;
 use pyo3::{PyIterProtocol, PyObjectProtocol, PySequenceProtocol};
@@ -22,23 +22,19 @@ impl PySledStore {
     fn new(path: Option<&str>) -> PyResult<Self> {
         Ok(Self {
             inner: if let Some(path) = path {
-                SledStore::open(path).map_err(|e| IOError::py_err(e.to_string()))?
+                SledStore::open(path).map_err(map_io_err)?
             } else {
-                SledStore::new().map_err(|e| IOError::py_err(e.to_string()))?
+                SledStore::new().map_err(map_io_err)?
             },
         })
     }
 
     fn add(&self, quad: &PyTuple) -> PyResult<()> {
-        self.inner
-            .insert(&extract_quad(quad)?)
-            .map_err(|e| IOError::py_err(e.to_string()))
+        self.inner.insert(&extract_quad(quad)?).map_err(map_io_err)
     }
 
     fn remove(&self, quad: &PyTuple) -> PyResult<()> {
-        self.inner
-            .remove(&extract_quad(quad)?)
-            .map_err(|e| IOError::py_err(e.to_string()))
+        self.inner.remove(&extract_quad(quad)?).map_err(map_io_err)
     }
 
     fn r#match(
@@ -64,7 +60,7 @@ impl PySledStore {
         let results = self
             .inner
             .query(query, QueryOptions::default())
-            .map_err(|e| ParseError::py_err(e.to_string()))?;
+            .map_err(|e| ValueError::py_err(e.to_string()))?;
         query_results_to_python(py, results)
     }
 
@@ -95,7 +91,7 @@ impl PySledStore {
                     &to_graph_name.unwrap_or(GraphName::DefaultGraph),
                     base_iri,
                 )
-                .map_err(|e| ParseError::py_err(e.to_string()))
+                .map_err(map_io_err)
         } else if let Some(dataset_syntax) = DatasetSyntax::from_media_type(mime_type) {
             if to_graph_name.is_some() {
                 return Err(ValueError::py_err(
@@ -104,7 +100,7 @@ impl PySledStore {
             }
             self.inner
                 .load_dataset(Cursor::new(data), dataset_syntax, base_iri)
-                .map_err(|e| ParseError::py_err(e.to_string()))
+                .map_err(map_io_err)
         } else {
             Err(ValueError::py_err(format!(
                 "Not supported MIME type: {}",
@@ -134,7 +130,7 @@ impl PySequenceProtocol for PySledStore {
     fn __contains__(&self, quad: &PyTuple) -> PyResult<bool> {
         self.inner
             .contains(&extract_quad(quad)?)
-            .map_err(|e| IOError::py_err(e.to_string()))
+            .map_err(map_io_err)
     }
 }
 
@@ -163,12 +159,7 @@ impl PyIterProtocol for QuadIter {
     ) -> PyResult<Option<(PyObject, PyObject, PyObject, PyObject)>> {
         slf.inner
             .next()
-            .map(move |q| {
-                Ok(quad_to_python(
-                    slf.py(),
-                    q.map_err(|e| IOError::py_err(e.to_string()))?,
-                ))
-            })
+            .map(move |q| Ok(quad_to_python(slf.py(), q.map_err(map_io_err)?)))
             .transpose()
     }
 }

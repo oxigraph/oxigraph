@@ -169,13 +169,17 @@ impl SledStore {
     /// only a part of it may be written. Use a (memory greedy) transaction if you do not want that.
     ///
     /// See `MemoryStore` for a usage example.
+    ///
+    /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
+    /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
+    /// Errors related to data loading into the store use the other error kinds.
     pub fn load_graph(
         &self,
         reader: impl BufRead,
         syntax: GraphSyntax,
         to_graph_name: &GraphName,
         base_iri: Option<&str>,
-    ) -> Result<(), crate::Error> {
+    ) -> Result<(), io::Error> {
         load_graph(
             &mut DirectWriter::new(self),
             reader,
@@ -191,12 +195,16 @@ impl SledStore {
     /// only a part of it may be written. Use a (memory greedy) transaction if you do not want that.
     ///
     /// See `MemoryStore` for a usage example.
+    ///
+    /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
+    /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
+    /// Errors related to data loading into the store use the other error kinds.
     pub fn load_dataset(
         &self,
         reader: impl BufRead,
         syntax: DatasetSyntax,
         base_iri: Option<&str>,
-    ) -> Result<(), crate::Error> {
+    ) -> Result<(), io::Error> {
         load_dataset(&mut DirectWriter::new(self), reader, syntax, base_iri)
     }
 
@@ -658,13 +666,16 @@ impl SledTransaction<'_> {
     /// Do not use for big files.
     ///
     /// See `MemoryTransaction` for a usage example.
+    ///
+    /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
+    /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
     pub fn load_graph(
         &mut self,
         reader: impl BufRead,
         syntax: GraphSyntax,
         to_graph_name: &GraphName,
         base_iri: Option<&str>,
-    ) -> Result<(), crate::Error> {
+    ) -> Result<(), io::Error> {
         load_graph(&mut self.inner, reader, syntax, to_graph_name, base_iri)
     }
 
@@ -675,12 +686,15 @@ impl SledTransaction<'_> {
     /// Do not use for big files.
     ///
     /// See `MemoryTransaction` for a usage example.
+    ///
+    /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
+    /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
     pub fn load_dataset(
         &mut self,
         reader: impl BufRead,
         syntax: DatasetSyntax,
         base_iri: Option<&str>,
-    ) -> Result<(), crate::Error> {
+    ) -> Result<(), io::Error> {
         load_dataset(&mut self.inner, reader, syntax, base_iri)
     }
 

@@ -2,12 +2,11 @@ use crate::model::*;
 use oxigraph::model::*;
 use oxigraph::sparql::{QueryResult, QuerySolution, QuerySolutionsIterator};
 use oxigraph::Result;
-use pyo3::exceptions::{IOError, TypeError};
+use pyo3::exceptions::{IOError, TypeError, ValueError};
 use pyo3::prelude::*;
-use pyo3::{create_exception, PyIterProtocol, PyMappingProtocol, PyNativeType, PyObjectProtocol};
+use pyo3::{PyIterProtocol, PyMappingProtocol, PyNativeType, PyObjectProtocol};
 use std::fmt::Write;
-
-create_exception!(oxigraph, ParseError, pyo3::exceptions::Exception);
+use std::io;
 
 pub fn extract_quads_pattern(
     subject: &PyAny,
@@ -138,5 +137,14 @@ impl PyIterProtocol for TripleResultIter {
             .transpose()
             .map_err(|e| IOError::py_err(e.to_string()))? //TODO: improve
             .map(move |t| triple_to_python(slf.py(), t)))
+    }
+}
+
+pub fn map_io_err(error: io::Error) -> PyErr {
+    match error.kind() {
+        io::ErrorKind::InvalidInput | io::ErrorKind::InvalidData => {
+            ValueError::py_err(error.to_string())
+        }
+        _ => IOError::py_err(error.to_string()),
     }
 }

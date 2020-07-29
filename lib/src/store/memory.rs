@@ -266,13 +266,16 @@ impl MemoryStore {
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results);
     /// # oxigraph::Result::Ok(())
     /// ```
+    ///
+    /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
+    /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
     pub fn load_graph(
         &self,
         reader: impl BufRead,
         syntax: GraphSyntax,
         to_graph_name: &GraphName,
         base_iri: Option<&str>,
-    ) -> crate::Result<()> {
+    ) -> Result<(), io::Error> {
         let mut store = self;
         load_graph(&mut store, reader, syntax, to_graph_name, base_iri)
     }
@@ -296,12 +299,15 @@ impl MemoryStore {
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), Some(ex.into()))], results);
     /// # oxigraph::Result::Ok(())
     /// ```
+    ///
+    /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
+    /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
     pub fn load_dataset(
         &self,
         reader: impl BufRead,
         syntax: DatasetSyntax,
         base_iri: Option<&str>,
-    ) -> crate::Result<()> {
+    ) -> Result<(), io::Error> {
         let mut store = self;
         load_dataset(&mut store, reader, syntax, base_iri)
     }
@@ -348,6 +354,9 @@ impl MemoryStore {
     /// assert_eq!(file, buffer.as_slice());
     /// # oxigraph::Result::Ok(())
     /// ```
+    ///
+    /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
+    /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
     pub fn dump_graph(
         &self,
         writer: &mut impl Write,
@@ -378,6 +387,9 @@ impl MemoryStore {
     /// assert_eq!(file, buffer.as_slice());
     /// # oxigraph::Result::Ok(())
     /// ```
+    ///
+    /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
+    /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
     pub fn dump_dataset(
         &self,
         writer: &mut impl Write,
@@ -986,7 +998,7 @@ impl<'a> MemoryTransaction<'a> {
         syntax: GraphSyntax,
         to_graph_name: &GraphName,
         base_iri: Option<&str>,
-    ) -> crate::Result<()> {
+    ) -> Result<(), io::Error> {
         load_graph(self, reader, syntax, to_graph_name, base_iri)
     }
 
@@ -1014,7 +1026,7 @@ impl<'a> MemoryTransaction<'a> {
         reader: impl BufRead,
         syntax: DatasetSyntax,
         base_iri: Option<&str>,
-    ) -> crate::Result<()> {
+    ) -> Result<(), io::Error> {
         load_dataset(self, reader, syntax, base_iri)
     }
 
