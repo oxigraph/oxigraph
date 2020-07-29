@@ -1,22 +1,21 @@
 #![allow(clippy::unreadable_literal)]
 
-use crate::error::UnwrapInfallible;
+use crate::error::{Infallible, UnwrapInfallible};
 use crate::model::vocab::rdf;
 use crate::model::vocab::xsd;
 use crate::model::xsd::*;
 use crate::model::*;
-use crate::{Error as OxError, Result as OxResult};
 use rand::random;
 use rio_api::model as rio;
 use siphasher::sip128::{Hasher128, SipHasher24};
 use std::collections::HashMap;
-use std::convert::Infallible;
 use std::error::Error;
 use std::hash::Hash;
 use std::hash::Hasher;
-use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult};
+use std::io;
+use std::io::Read;
 use std::mem::size_of;
-use std::str;
+use std::{fmt, str};
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Copy, Clone, Hash)]
 #[repr(transparent)]
@@ -609,17 +608,17 @@ impl From<&Quad> for EncodedQuad {
 }
 
 pub trait TermReader {
-    fn read_term(&mut self) -> IoResult<EncodedTerm>;
-    fn read_spog_quad(&mut self) -> IoResult<EncodedQuad>;
-    fn read_posg_quad(&mut self) -> IoResult<EncodedQuad>;
-    fn read_ospg_quad(&mut self) -> IoResult<EncodedQuad>;
-    fn read_gspo_quad(&mut self) -> IoResult<EncodedQuad>;
-    fn read_gpos_quad(&mut self) -> IoResult<EncodedQuad>;
-    fn read_gosp_quad(&mut self) -> IoResult<EncodedQuad>;
+    fn read_term(&mut self) -> Result<EncodedTerm, io::Error>;
+    fn read_spog_quad(&mut self) -> Result<EncodedQuad, io::Error>;
+    fn read_posg_quad(&mut self) -> Result<EncodedQuad, io::Error>;
+    fn read_ospg_quad(&mut self) -> Result<EncodedQuad, io::Error>;
+    fn read_gspo_quad(&mut self) -> Result<EncodedQuad, io::Error>;
+    fn read_gpos_quad(&mut self) -> Result<EncodedQuad, io::Error>;
+    fn read_gosp_quad(&mut self) -> Result<EncodedQuad, io::Error>;
 }
 
 impl<R: Read> TermReader for R {
-    fn read_term(&mut self) -> IoResult<EncodedTerm> {
+    fn read_term(&mut self) -> Result<EncodedTerm, io::Error> {
         let mut type_buffer = [0];
         self.read_exact(&mut type_buffer)?;
         match type_buffer[0] {
@@ -732,14 +731,13 @@ impl<R: Read> TermReader for R {
                     DayTimeDuration::from_be_bytes(buffer),
                 ))
             }
-            _ => Err(IoError::new(
-                ErrorKind::InvalidData,
+            _ => Err(DecoderError::build(
                 "the term buffer has an invalid type id",
             )),
         }
     }
 
-    fn read_spog_quad(&mut self) -> IoResult<EncodedQuad> {
+    fn read_spog_quad(&mut self) -> Result<EncodedQuad, io::Error> {
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
         let object = self.read_term()?;
@@ -752,7 +750,7 @@ impl<R: Read> TermReader for R {
         })
     }
 
-    fn read_posg_quad(&mut self) -> IoResult<EncodedQuad> {
+    fn read_posg_quad(&mut self) -> Result<EncodedQuad, io::Error> {
         let predicate = self.read_term()?;
         let object = self.read_term()?;
         let subject = self.read_term()?;
@@ -765,7 +763,7 @@ impl<R: Read> TermReader for R {
         })
     }
 
-    fn read_ospg_quad(&mut self) -> IoResult<EncodedQuad> {
+    fn read_ospg_quad(&mut self) -> Result<EncodedQuad, io::Error> {
         let object = self.read_term()?;
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
@@ -778,7 +776,7 @@ impl<R: Read> TermReader for R {
         })
     }
 
-    fn read_gspo_quad(&mut self) -> IoResult<EncodedQuad> {
+    fn read_gspo_quad(&mut self) -> Result<EncodedQuad, io::Error> {
         let graph_name = self.read_term()?;
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
@@ -791,7 +789,7 @@ impl<R: Read> TermReader for R {
         })
     }
 
-    fn read_gpos_quad(&mut self) -> IoResult<EncodedQuad> {
+    fn read_gpos_quad(&mut self) -> Result<EncodedQuad, io::Error> {
         let graph_name = self.read_term()?;
         let predicate = self.read_term()?;
         let object = self.read_term()?;
@@ -804,7 +802,7 @@ impl<R: Read> TermReader for R {
         })
     }
 
-    fn read_gosp_quad(&mut self) -> IoResult<EncodedQuad> {
+    fn read_gosp_quad(&mut self) -> Result<EncodedQuad, io::Error> {
         let graph_name = self.read_term()?;
         let object = self.read_term()?;
         let subject = self.read_term()?;
@@ -858,14 +856,14 @@ pub fn write_term(sink: &mut Vec<u8>, term: EncodedTerm) {
     }
 }
 
-pub trait StrLookup {
-    type Error: Error + Into<OxError>;
+pub(crate) trait StrLookup {
+    type Error: Error + Into<io::Error>;
 
     fn get_str(&self, id: StrHash) -> Result<Option<String>, Self::Error>;
 }
 
-pub trait StrContainer {
-    type Error: Error + Into<OxError>;
+pub(crate) trait StrContainer {
+    type Error: Error + Into<io::Error>;
 
     fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Self::Error>;
 
@@ -924,8 +922,8 @@ impl StrContainer for MemoryStrStore {
     }
 }
 
-pub trait Encoder {
-    type Error: Error + Into<OxError>;
+pub(crate) trait Encoder {
+    type Error: Error + Into<io::Error>;
 
     fn encode_named_node(&mut self, named_node: &NamedNode) -> Result<EncodedTerm, Self::Error> {
         self.encode_rio_named_node(named_node.into())
@@ -1221,32 +1219,35 @@ pub fn parse_day_time_duration_str(value: &str) -> Option<EncodedTerm> {
     value.parse().map(EncodedTerm::DayTimeDurationLiteral).ok()
 }
 
-pub trait Decoder {
-    fn decode_term(&self, encoded: EncodedTerm) -> OxResult<Term>;
+pub(crate) trait Decoder {
+    fn decode_term(&self, encoded: EncodedTerm) -> Result<Term, io::Error>;
 
-    fn decode_named_or_blank_node(&self, encoded: EncodedTerm) -> OxResult<NamedOrBlankNode> {
+    fn decode_named_or_blank_node(
+        &self,
+        encoded: EncodedTerm,
+    ) -> Result<NamedOrBlankNode, io::Error> {
         match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node.into()),
             Term::BlankNode(blank_node) => Ok(blank_node.into()),
-            Term::Literal(_) => Err(OxError::msg(
+            Term::Literal(_) => Err(DecoderError::build(
                 "A literal has ben found instead of a named node",
             )),
         }
     }
 
-    fn decode_named_node(&self, encoded: EncodedTerm) -> OxResult<NamedNode> {
+    fn decode_named_node(&self, encoded: EncodedTerm) -> Result<NamedNode, io::Error> {
         match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node),
-            Term::BlankNode(_) => Err(OxError::msg(
+            Term::BlankNode(_) => Err(DecoderError::build(
                 "A blank node has been found instead of a named node",
             )),
-            Term::Literal(_) => Err(OxError::msg(
+            Term::Literal(_) => Err(DecoderError::build(
                 "A literal has ben found instead of a named node",
             )),
         }
     }
 
-    fn decode_triple(&self, encoded: &EncodedQuad) -> OxResult<Triple> {
+    fn decode_triple(&self, encoded: &EncodedQuad) -> Result<Triple, io::Error> {
         Ok(Triple::new(
             self.decode_named_or_blank_node(encoded.subject)?,
             self.decode_named_node(encoded.predicate)?,
@@ -1254,7 +1255,7 @@ pub trait Decoder {
         ))
     }
 
-    fn decode_quad(&self, encoded: &EncodedQuad) -> OxResult<Quad> {
+    fn decode_quad(&self, encoded: &EncodedQuad) -> Result<Quad, io::Error> {
         Ok(Quad::new(
             self.decode_named_or_blank_node(encoded.subject)?,
             self.decode_named_node(encoded.predicate)?,
@@ -1268,11 +1269,11 @@ pub trait Decoder {
 }
 
 impl<S: StrLookup> Decoder for S {
-    fn decode_term(&self, encoded: EncodedTerm) -> OxResult<Term> {
+    fn decode_term(&self, encoded: EncodedTerm) -> Result<Term, io::Error> {
         match encoded {
-            EncodedTerm::DefaultGraph => {
-                Err(OxError::msg("The default graph tag is not a valid term"))
-            }
+            EncodedTerm::DefaultGraph => Err(DecoderError::build(
+                "The default graph tag is not a valid term",
+            )),
             EncodedTerm::NamedNode { iri_id } => {
                 Ok(NamedNode::new_unchecked(get_required_str(self, iri_id)?).into())
             }
@@ -1314,14 +1315,33 @@ impl<S: StrLookup> Decoder for S {
     }
 }
 
-fn get_required_str(lookup: &impl StrLookup, id: StrHash) -> OxResult<String> {
+fn get_required_str(lookup: &impl StrLookup, id: StrHash) -> Result<String, io::Error> {
     lookup.get_str(id).map_err(|e| e.into())?.ok_or_else(|| {
-        OxError::msg(format!(
+        DecoderError::build(format!(
             "Not able to find the string with id {:?} in the string store",
             id
         ))
     })
 }
+
+#[derive(Debug)]
+pub struct DecoderError {
+    msg: String,
+}
+
+impl DecoderError {
+    pub fn build(msg: impl Into<String>) -> io::Error {
+        io::Error::new(io::ErrorKind::InvalidData, Self { msg: msg.into() })
+    }
+}
+
+impl fmt::Display for DecoderError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.msg)
+    }
+}
+
+impl Error for DecoderError {}
 
 #[test]
 fn test_encoding() {

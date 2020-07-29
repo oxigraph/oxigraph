@@ -15,10 +15,9 @@
 //! Usage example with the `MemoryStore`:
 //!
 //! ```
+//! use oxigraph::MemoryStore;
 //! use oxigraph::model::*;
-//! use oxigraph::{MemoryStore, Result};
-//! use crate::oxigraph::sparql::QueryOptions;
-//! use oxigraph::sparql::QueryResult;
+//! use oxigraph::sparql::{QueryOptions, QueryResult};
 //!
 //! let store = MemoryStore::new();
 //!
@@ -35,7 +34,7 @@
 //! if let QueryResult::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
 //!     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 //! }
-//! # Result::Ok(())
+//! # oxigraph::Result::Ok(())
 //! ```
 #![deny(
     future_incompatible,

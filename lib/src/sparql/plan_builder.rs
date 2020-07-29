@@ -8,7 +8,7 @@ use crate::Result;
 use std::collections::{BTreeSet, HashSet};
 use std::rc::Rc;
 
-pub struct PlanBuilder<E: Encoder> {
+pub(crate) struct PlanBuilder<E: Encoder> {
     encoder: E,
 }
 
@@ -270,7 +270,7 @@ impl<E: Encoder> PlanBuilder<E> {
             PropertyPath::NegatedPropertySet(p) => PlanPropertyPath::NegatedPropertySet(Rc::new(
                 p.iter()
                     .map(|p| self.encoder.encode_named_node(p).map_err(|e| e.into()))
-                    .collect::<Result<Vec<_>>>()?,
+                    .collect::<std::result::Result<Vec<_>, _>>()?,
             )),
         })
     }

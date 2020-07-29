@@ -1,6 +1,6 @@
 //! In-memory store.
 
-use crate::error::UnwrapInfallible;
+use crate::error::{Infallible, UnwrapInfallible};
 use crate::model::*;
 use crate::sparql::{Query, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
@@ -10,14 +10,14 @@ use crate::store::{
 use crate::{DatasetSyntax, Error, GraphSyntax};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
-use std::convert::{Infallible, TryInto};
-use std::fmt;
+use std::convert::TryInto;
 use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::io::{BufRead, Write};
 use std::iter::FromIterator;
 use std::mem::size_of;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::vec::IntoIter;
+use std::{fmt, io};
 
 /// In-memory store.
 /// It encodes a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) and allows to query and update it using SPARQL.
@@ -25,8 +25,8 @@ use std::vec::IntoIter;
 ///
 /// Usage example:
 /// ```
+/// use oxigraph::MemoryStore;
 /// use oxigraph::model::*;
-/// use oxigraph::{MemoryStore, Result};
 /// use oxigraph::sparql::{QueryResult, QueryOptions};
 ///
 /// let store = MemoryStore::new();
@@ -44,7 +44,7 @@ use std::vec::IntoIter;
 /// if let QueryResult::Solutions(mut solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
 ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 /// }
-/// # Result::Ok(())
+/// # oxigraph::Result::Ok(())
 /// ```
 #[derive(Clone)]
 pub struct MemoryStore {
@@ -87,9 +87,9 @@ impl MemoryStore {
     ///
     /// Usage example:
     /// ```
+    /// use oxigraph::MemoryStore;
     /// use oxigraph::model::*;
-    /// use oxigraph::{MemoryStore, Result};
-    /// use oxigraph::sparql::{QueryOptions, QueryResult};
+    /// use oxigraph::sparql::{QueryResult, QueryOptions};
     ///
     /// let store = MemoryStore::new();
     ///
@@ -101,7 +101,7 @@ impl MemoryStore {
     /// if let QueryResult::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
     ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
     /// }
-    /// # Result::Ok(())
+    /// # oxigraph::Result::Ok(())
     /// ```
     pub fn query(
         &self,
@@ -116,9 +116,9 @@ impl MemoryStore {
     ///
     /// Usage example:
     /// ```
+    /// use oxigraph::MemoryStore;
     /// use oxigraph::model::*;
-    /// use oxigraph::{MemoryStore, Result};
-    /// use oxigraph::sparql::{QueryOptions, QueryResult};
+    /// use oxigraph::sparql::{QueryResult, QueryOptions};
     ///
     /// let store = MemoryStore::new();
     ///
@@ -131,7 +131,7 @@ impl MemoryStore {
     /// if let QueryResult::Solutions(mut solutions) = prepared_query.exec()? {
     ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
     /// }
-    /// # Result::Ok(())
+    /// # oxigraph::Result::Ok(())
     /// ```
     pub fn prepare_query(
         &self,
@@ -149,8 +149,8 @@ impl MemoryStore {
     ///
     /// Usage example:
     /// ```
+    /// use oxigraph::MemoryStore;
     /// use oxigraph::model::*;
-    /// use oxigraph::{MemoryStore, Result};
     ///
     /// let store = MemoryStore::new();
     ///
@@ -162,7 +162,7 @@ impl MemoryStore {
     /// // quad filter
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
     /// assert_eq!(vec![quad], results);
-    /// # Result::Ok(())
+    /// # oxigraph::Result::Ok(())
     /// ```
     pub fn quads_for_pattern(
         &self,
@@ -214,8 +214,9 @@ impl MemoryStore {
     ///
     /// Usage example:
     /// ```
+    /// use oxigraph::MemoryStore;
     /// use oxigraph::model::*;
-    /// use oxigraph::{MemoryStore, Result};
+    /// use std::convert::Infallible;
     ///
     /// let store = MemoryStore::new();
     ///
@@ -225,17 +226,17 @@ impl MemoryStore {
     /// // transaction
     /// store.transaction(|transaction| {
     ///     transaction.insert(quad.clone());
-    ///     Ok(())
+    ///     Ok(()) as Result<(),Infallible>
     /// })?;
     ///
     /// // quad filter
     /// assert!(store.contains(&quad));
-    /// # Result::Ok(())
+    /// # oxigraph::Result::Ok(())
     /// ```
-    pub fn transaction<'a>(
+    pub fn transaction<'a, E>(
         &'a self,
-        f: impl FnOnce(&mut MemoryTransaction<'a>) -> crate::Result<()>,
-    ) -> crate::Result<()> {
+        f: impl FnOnce(&mut MemoryTransaction<'a>) -> Result<(), E>,
+    ) -> Result<(), E> {
         let mut transaction = MemoryTransaction {
             store: self,
             ops: Vec::new(),
@@ -250,8 +251,8 @@ impl MemoryStore {
     ///
     /// Usage example:
     /// ```
+    /// use oxigraph::{MemoryStore, GraphSyntax};
     /// use oxigraph::model::*;
-    /// use oxigraph::{MemoryStore, Result, GraphSyntax};
     ///
     /// let store = MemoryStore::new();
     ///
@@ -263,7 +264,7 @@ impl MemoryStore {
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
     /// let ex = NamedNode::new("http://example.com")?;
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results);
-    /// # Result::Ok(())
+    /// # oxigraph::Result::Ok(())
     /// ```
     pub fn load_graph(
         &self,
@@ -280,8 +281,8 @@ impl MemoryStore {
     ///
     /// Usage example:
     /// ```
+    /// use oxigraph::{MemoryStore, DatasetSyntax};
     /// use oxigraph::model::*;
-    /// use oxigraph::{MemoryStore, Result, DatasetSyntax};
     ///
     /// let store = MemoryStore::new();
     ///
@@ -293,7 +294,7 @@ impl MemoryStore {
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
     /// let ex = NamedNode::new("http://example.com")?;
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), Some(ex.into()))], results);
-    /// # Result::Ok(())
+    /// # oxigraph::Result::Ok(())
     /// ```
     pub fn load_dataset(
         &self,
@@ -334,8 +335,8 @@ impl MemoryStore {
     ///
     /// Usage example:
     /// ```
+    /// use oxigraph::{MemoryStore, GraphSyntax};
     /// use oxigraph::model::GraphName;
-    /// use oxigraph::{MemoryStore, Result, GraphSyntax};
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
     ///
@@ -345,14 +346,14 @@ impl MemoryStore {
     /// let mut buffer = Vec::new();
     /// store.dump_graph(&mut buffer, GraphSyntax::NTriples, &GraphName::DefaultGraph)?;
     /// assert_eq!(file, buffer.as_slice());
-    /// # Result::Ok(())
+    /// # oxigraph::Result::Ok(())
     /// ```
     pub fn dump_graph(
         &self,
         writer: &mut impl Write,
         syntax: GraphSyntax,
         from_graph_name: &GraphName,
-    ) -> crate::Result<()> {
+    ) -> Result<(), io::Error> {
         dump_graph(
             self.quads_for_pattern(None, None, None, Some(from_graph_name))
                 .map(|q| Ok(q.into())),
@@ -365,7 +366,7 @@ impl MemoryStore {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::{MemoryStore, Result, DatasetSyntax};
+    /// use oxigraph::{MemoryStore, DatasetSyntax};
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
     ///
@@ -375,13 +376,13 @@ impl MemoryStore {
     /// let mut buffer = Vec::new();
     /// store.dump_dataset(&mut buffer, DatasetSyntax::NQuads)?;
     /// assert_eq!(file, buffer.as_slice());
-    /// # Result::Ok(())
+    /// # oxigraph::Result::Ok(())
     /// ```
     pub fn dump_dataset(
         &self,
         writer: &mut impl Write,
         syntax: DatasetSyntax,
-    ) -> crate::Result<()> {
+    ) -> Result<(), io::Error> {
         dump_dataset(
             self.quads_for_pattern(None, None, None, None).map(Ok),
             writer,
@@ -718,6 +719,7 @@ impl StrContainer for MemoryStoreIndexes {
 }
 
 impl<'a> ReadableEncodedStore for MemoryStore {
+    type Error = Infallible;
     type QuadsIter = EncodedQuadsIter;
 
     fn encoded_quads_for_pattern(
@@ -961,8 +963,8 @@ impl<'a> MemoryTransaction<'a> {
     ///
     /// Usage example:
     /// ```
+    /// use oxigraph::{MemoryStore, GraphSyntax};
     /// use oxigraph::model::*;
-    /// use oxigraph::{MemoryStore, Result, GraphSyntax};
     ///
     /// let store = MemoryStore::new();
     ///
@@ -976,7 +978,7 @@ impl<'a> MemoryTransaction<'a> {
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
     /// let ex = NamedNode::new("http://example.com")?;
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results);
-    /// # Result::Ok(())
+    /// # oxigraph::Result::Ok(())
     /// ```
     pub fn load_graph(
         &mut self,
@@ -992,8 +994,8 @@ impl<'a> MemoryTransaction<'a> {
     ///
     /// Usage example:
     /// ```
+    /// use oxigraph::{MemoryStore, DatasetSyntax};
     /// use oxigraph::model::*;
-    /// use oxigraph::{MemoryStore, Result, DatasetSyntax};
     ///
     /// let store = MemoryStore::new();
     ///
@@ -1005,7 +1007,7 @@ impl<'a> MemoryTransaction<'a> {
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
     /// let ex = NamedNode::new("http://example.com")?;
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), Some(ex.into()))], results);
-    /// # Result::Ok(())
+    /// # oxigraph::Result::Ok(())
     /// ```
     pub fn load_dataset(
         &mut self,
@@ -1102,9 +1104,9 @@ pub(crate) struct EncodedQuadsIter {
 }
 
 impl Iterator for EncodedQuadsIter {
-    type Item = Result<EncodedQuad, Error>;
+    type Item = Result<EncodedQuad, Infallible>;
 
-    fn next(&mut self) -> Option<Result<EncodedQuad, Error>> {
+    fn next(&mut self) -> Option<Result<EncodedQuad, Infallible>> {
         self.iter.next().map(Ok)
     }
 

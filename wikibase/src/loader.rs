@@ -264,7 +264,7 @@ impl WikibaseLoader {
             let to_remove = self
                 .store
                 .quads_for_pattern(None, None, None, Some(&graph_name))
-                .collect::<oxigraph::Result<Vec<_>>>()?;
+                .collect::<std::result::Result<Vec<_>, _>>()?;
             for q in to_remove {
                 transaction.remove(&q);
             }

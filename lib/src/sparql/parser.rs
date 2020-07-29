@@ -19,14 +19,13 @@ use std::{char, fmt};
 /// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/)
 ///
 /// ```
-/// # use oxigraph::Result;
 /// use oxigraph::sparql::Query;
 ///
 /// let query_str = "SELECT ?s ?p ?o  WHERE { ?s ?p ?o . }";
 /// let query = Query::parse(query_str, None)?;
 ///
 /// assert_eq!(query.to_string(), query_str);
-/// # Result::Ok(())
+/// # oxigraph::Result::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Query(pub(crate) QueryVariants);

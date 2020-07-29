@@ -2,7 +2,6 @@ use crate::model::{BlankNodeIdParseError, IriParseError, LanguageTagParseError};
 use crate::sparql::SparqlParseError;
 use rio_turtle::TurtleError;
 use rio_xml::RdfXmlError;
-use std::convert::Infallible;
 use std::error;
 use std::fmt;
 use std::io;
@@ -78,6 +77,12 @@ impl From<Infallible> for Error {
     }
 }
 
+impl From<std::convert::Infallible> for Error {
+    fn from(error: std::convert::Infallible) -> Self {
+        match error {}
+    }
+}
+
 impl From<io::Error> for Error {
     fn from(error: io::Error) -> Self {
         Self {
@@ -142,17 +147,34 @@ impl From<SparqlParseError> for Error {
     }
 }
 
-#[cfg(feature = "rocksdb")]
-impl From<rocksdb::Error> for Error {
-    fn from(error: rocksdb::Error) -> Self {
-        Self::wrap(error)
+//TODO: convert to "!" when "never_type" is going to be stabilized
+#[allow(clippy::empty_enum)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub(crate) enum Infallible {}
+
+impl fmt::Display for Infallible {
+    fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {}
     }
 }
 
-#[cfg(feature = "sled")]
-impl From<sled::Error> for Error {
-    fn from(error: sled::Error) -> Self {
-        Self::wrap(error)
+impl std::error::Error for Infallible {}
+
+impl From<Infallible> for std::convert::Infallible {
+    fn from(error: Infallible) -> Self {
+        match error {}
+    }
+}
+
+impl From<std::convert::Infallible> for Infallible {
+    fn from(error: std::convert::Infallible) -> Self {
+        match error {}
+    }
+}
+
+impl From<Infallible> for std::io::Error {
+    fn from(error: Infallible) -> Self {
+        match error {}
     }
 }
 

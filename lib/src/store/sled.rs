@@ -1,18 +1,18 @@
 //! Store based on the [Sled](https://sled.rs/) key-value database.
 
-use crate::error::UnwrapInfallible;
+use crate::error::{Infallible, UnwrapInfallible};
 use crate::model::*;
 use crate::sparql::{Query, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::store::{
     dump_dataset, dump_graph, load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore,
 };
-use crate::{DatasetSyntax, Error, GraphSyntax, Result};
+use crate::{DatasetSyntax, GraphSyntax};
 use sled::{Batch, Config, Iter, Tree};
-use std::convert::{Infallible, TryInto};
+use std::convert::TryInto;
 use std::io::{BufRead, Cursor, Write};
 use std::path::Path;
-use std::{fmt, str};
+use std::{fmt, io, str};
 
 /// Store based on the [Sled](https://sled.rs/) key-value database.
 /// It encodes a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) and allows to query and update it using SPARQL.
@@ -23,9 +23,9 @@ use std::{fmt, str};
 ///
 /// Usage example:
 /// ```
-/// use oxigraph::model::*;
-/// use oxigraph::{Result, SledStore};
+/// use oxigraph::SledStore;
 /// use oxigraph::sparql::{QueryOptions, QueryResult};
+/// use oxigraph::model::*;
 /// # use std::fs::remove_dir_all;
 ///
 /// # {
@@ -37,7 +37,7 @@ use std::{fmt, str};
 /// store.insert(&quad)?;
 ///
 /// // quad filter
-/// let results: Result<Vec<Quad>> = store.quads_for_pattern(None, None, None, None).collect();
+/// let results: Result<Vec<Quad>,_> = store.quads_for_pattern(None, None, None, None).collect();
 /// assert_eq!(vec![quad], results?);
 ///
 /// // SPARQL query
@@ -47,7 +47,7 @@ use std::{fmt, str};
 /// #
 /// # };
 /// # remove_dir_all("example.db")?;
-/// # Result::Ok(())
+/// # oxigraph::Result::Ok(())
 /// ```
 #[derive(Clone)]
 pub struct SledStore {
@@ -66,16 +66,16 @@ const GOSP_PREFIX: u8 = 6;
 
 impl SledStore {
     /// Opens a temporary `SledStore` that will be deleted after drop.
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Result<Self, io::Error> {
         Self::do_open(&Config::new().temporary(true))
     }
 
     /// Opens a `SledStore`
-    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, io::Error> {
         Self::do_open(&Config::new().path(path))
     }
 
-    fn do_open(config: &Config) -> Result<Self> {
+    fn do_open(config: &Config) -> Result<Self, io::Error> {
         let db = config.open()?;
         let new = Self {
             id2str: db.open_tree("id2str")?,
@@ -90,9 +90,9 @@ impl SledStore {
     /// See `MemoryStore` for a usage example.
     pub fn query(
         &self,
-        query: impl TryInto<Query, Error = impl Into<Error>>,
+        query: impl TryInto<Query, Error = impl Into<crate::Error>>,
         options: QueryOptions,
-    ) -> Result<QueryResult> {
+    ) -> Result<QueryResult, crate::Error> {
         self.prepare_query(query, options)?.exec()
     }
 
@@ -101,9 +101,9 @@ impl SledStore {
     /// See `MemoryStore` for a usage example.
     pub fn prepare_query(
         &self,
-        query: impl TryInto<Query, Error = impl Into<Error>>,
+        query: impl TryInto<Query, Error = impl Into<crate::Error>>,
         options: QueryOptions,
-    ) -> Result<SledPreparedQuery> {
+    ) -> Result<SledPreparedQuery, crate::Error> {
         Ok(SledPreparedQuery(SimplePreparedQuery::new(
             (*self).clone(),
             query,
@@ -120,7 +120,7 @@ impl SledStore {
         predicate: Option<&NamedNode>,
         object: Option<&Term>,
         graph_name: Option<&GraphName>,
-    ) -> impl Iterator<Item = Result<Quad>> {
+    ) -> impl Iterator<Item = Result<Quad, io::Error>> {
         let subject = subject.map(|s| s.into());
         let predicate = predicate.map(|p| p.into());
         let object = object.map(|o| o.into());
@@ -131,7 +131,7 @@ impl SledStore {
     }
 
     /// Checks if this store contains a given quad
-    pub fn contains(&self, quad: &Quad) -> Result<bool> {
+    pub fn contains(&self, quad: &Quad) -> Result<bool, io::Error> {
         let quad = quad.into();
         self.contains_encoded(&quad)
     }
@@ -152,15 +152,15 @@ impl SledStore {
     /// Nothing is done if the closure returns `Err`.
     ///
     /// See `MemoryStore` for a usage example.
-    pub fn transaction<'a>(
+    pub fn transaction<'a, E: From<io::Error>>(
         &'a self,
-        f: impl FnOnce(&mut SledTransaction<'a>) -> Result<()>,
-    ) -> Result<()> {
+        f: impl FnOnce(&mut SledTransaction<'a>) -> Result<(), E>,
+    ) -> Result<(), E> {
         let mut transaction = SledTransaction {
             inner: BatchWriter::new(self),
         };
         f(&mut transaction)?;
-        transaction.inner.apply()
+        Ok(transaction.inner.apply()?)
     }
 
     /// Loads a graph file (i.e. triples) into the store
@@ -175,7 +175,7 @@ impl SledStore {
         syntax: GraphSyntax,
         to_graph_name: &GraphName,
         base_iri: Option<&str>,
-    ) -> Result<()> {
+    ) -> Result<(), crate::Error> {
         load_graph(
             &mut DirectWriter::new(self),
             reader,
@@ -196,19 +196,19 @@ impl SledStore {
         reader: impl BufRead,
         syntax: DatasetSyntax,
         base_iri: Option<&str>,
-    ) -> Result<()> {
+    ) -> Result<(), crate::Error> {
         load_dataset(&mut DirectWriter::new(self), reader, syntax, base_iri)
     }
 
     /// Adds a quad to this store.
-    pub fn insert(&self, quad: &Quad) -> Result<()> {
+    pub fn insert(&self, quad: &Quad) -> Result<(), io::Error> {
         let mut writer = DirectWriter::new(self);
         let quad = writer.encode_quad(quad)?;
         writer.insert_encoded(&quad)
     }
 
     /// Removes a quad from this store.
-    pub fn remove(&self, quad: &Quad) -> Result<()> {
+    pub fn remove(&self, quad: &Quad) -> Result<(), io::Error> {
         let quad = quad.into();
         DirectWriter::new(self).remove_encoded(&quad)
     }
@@ -221,7 +221,7 @@ impl SledStore {
         writer: &mut impl Write,
         syntax: GraphSyntax,
         from_graph_name: &GraphName,
-    ) -> Result<()> {
+    ) -> Result<(), io::Error> {
         dump_graph(
             self.quads_for_pattern(None, None, None, Some(from_graph_name))
                 .map(|q| Ok(q?.into())),
@@ -233,7 +233,11 @@ impl SledStore {
     /// Dumps the store dataset into a file.
     ///    
     /// See `MemoryStore` for a usage example.
-    pub fn dump_dataset(&self, writer: &mut impl Write, syntax: DatasetSyntax) -> Result<()> {
+    pub fn dump_dataset(
+        &self,
+        writer: &mut impl Write,
+        syntax: DatasetSyntax,
+    ) -> Result<(), io::Error> {
         dump_dataset(
             self.quads_for_pattern(None, None, None, None),
             writer,
@@ -241,7 +245,7 @@ impl SledStore {
         )
     }
 
-    fn contains_encoded(&self, quad: &EncodedQuad) -> Result<bool> {
+    fn contains_encoded(&self, quad: &EncodedQuad) -> Result<bool, io::Error> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
         write_spog_quad(&mut buffer, quad);
         Ok(self.quads.contains_key(buffer)?)
@@ -378,18 +382,19 @@ impl fmt::Display for SledStore {
 }
 
 impl StrLookup for SledStore {
-    type Error = Error;
+    type Error = io::Error;
 
-    fn get_str(&self, id: StrHash) -> Result<Option<String>> {
-        Ok(self
-            .id2str
+    fn get_str(&self, id: StrHash) -> Result<Option<String>, io::Error> {
+        self.id2str
             .get(id.to_be_bytes())?
             .map(|v| String::from_utf8(v.to_vec()))
-            .transpose()?)
+            .transpose()
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
     }
 }
 
 impl ReadableEncodedStore for SledStore {
+    type Error = io::Error;
     type QuadsIter = DecodingQuadIterator;
 
     fn encoded_quads_for_pattern(
@@ -475,9 +480,9 @@ impl<'a> DirectWriter<'a> {
 }
 
 impl<'a> StrContainer for DirectWriter<'a> {
-    type Error = Error;
+    type Error = io::Error;
 
-    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
+    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), io::Error> {
         self.store
             .id2str
             .insert(key.to_be_bytes().as_ref(), value)?;
@@ -486,9 +491,9 @@ impl<'a> StrContainer for DirectWriter<'a> {
 }
 
 impl<'a> WritableEncodedStore for DirectWriter<'a> {
-    type Error = Error;
+    type Error = io::Error;
 
-    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
+    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), io::Error> {
         write_spog_quad(&mut self.buffer, quad);
         self.store.quads.insert(self.buffer.as_slice(), &[])?;
         self.buffer.clear();
@@ -516,7 +521,7 @@ impl<'a> WritableEncodedStore for DirectWriter<'a> {
         Ok(())
     }
 
-    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<(), io::Error> {
         write_spog_quad(&mut self.buffer, quad);
         self.store.quads.remove(self.buffer.as_slice())?;
         self.buffer.clear();
@@ -564,7 +569,7 @@ impl<'a> BatchWriter<'a> {
 }
 
 impl<'a> BatchWriter<'a> {
-    fn apply(self) -> Result<()> {
+    fn apply(self) -> Result<(), io::Error> {
         self.store.id2str.apply_batch(self.id2str)?;
         self.store.quads.apply_batch(self.quads)?;
         Ok(())
@@ -574,7 +579,7 @@ impl<'a> BatchWriter<'a> {
 impl<'a> StrContainer for BatchWriter<'a> {
     type Error = Infallible;
 
-    fn insert_str(&mut self, key: StrHash, value: &str) -> std::result::Result<(), Infallible> {
+    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Infallible> {
         self.id2str.insert(key.to_be_bytes().as_ref(), value);
         Ok(())
     }
@@ -583,7 +588,7 @@ impl<'a> StrContainer for BatchWriter<'a> {
 impl<'a> WritableEncodedStore for BatchWriter<'a> {
     type Error = Infallible;
 
-    fn insert_encoded(&mut self, quad: &EncodedQuad) -> std::result::Result<(), Infallible> {
+    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Infallible> {
         write_spog_quad(&mut self.buffer, quad);
         self.quads.insert(self.buffer.as_slice(), &[]);
         self.buffer.clear();
@@ -611,7 +616,7 @@ impl<'a> WritableEncodedStore for BatchWriter<'a> {
         Ok(())
     }
 
-    fn remove_encoded(&mut self, quad: &EncodedQuad) -> std::result::Result<(), Infallible> {
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Infallible> {
         write_spog_quad(&mut self.buffer, quad);
         self.quads.remove(self.buffer.as_slice());
         self.buffer.clear();
@@ -659,7 +664,7 @@ impl SledTransaction<'_> {
         syntax: GraphSyntax,
         to_graph_name: &GraphName,
         base_iri: Option<&str>,
-    ) -> Result<()> {
+    ) -> Result<(), crate::Error> {
         load_graph(&mut self.inner, reader, syntax, to_graph_name, base_iri)
     }
 
@@ -675,7 +680,7 @@ impl SledTransaction<'_> {
         reader: impl BufRead,
         syntax: DatasetSyntax,
         base_iri: Option<&str>,
-    ) -> Result<()> {
+    ) -> Result<(), crate::Error> {
         load_dataset(&mut self.inner, reader, syntax, base_iri)
     }
 
@@ -697,7 +702,7 @@ pub struct SledPreparedQuery(SimplePreparedQuery<SledStore>);
 
 impl SledPreparedQuery {
     /// Evaluates the query and returns its results
-    pub fn exec(&self) -> Result<QueryResult> {
+    pub fn exec(&self) -> Result<QueryResult, crate::Error> {
         self.0.exec()
     }
 }
@@ -747,9 +752,9 @@ pub(crate) struct DecodingQuadIterator {
 }
 
 impl Iterator for DecodingQuadIterator {
-    type Item = Result<EncodedQuad>;
+    type Item = Result<EncodedQuad, io::Error>;
 
-    fn next(&mut self) -> Option<Result<EncodedQuad>> {
+    fn next(&mut self) -> Option<Result<EncodedQuad, io::Error>> {
         Some(match self.iter.next()? {
             Ok((encoded, _)) => decode_quad(&encoded),
             Err(error) => Err(error.into()),
@@ -805,7 +810,7 @@ fn write_gosp_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
     write_term(sink, quad.predicate);
 }
 
-fn decode_quad(encoded: &[u8]) -> Result<EncodedQuad> {
+fn decode_quad(encoded: &[u8]) -> Result<EncodedQuad, io::Error> {
     let mut cursor = Cursor::new(&encoded[1..]);
     match encoded[0] {
         SPOG_PREFIX => Ok(cursor.read_spog_quad()?),
@@ -814,14 +819,16 @@ fn decode_quad(encoded: &[u8]) -> Result<EncodedQuad> {
         GSPO_PREFIX => Ok(cursor.read_gspo_quad()?),
         GPOS_PREFIX => Ok(cursor.read_gpos_quad()?),
         GOSP_PREFIX => Ok(cursor.read_gosp_quad()?),
-        _ => Err(Error::msg("Invalid quad type identifier")),
+        _ => Err(DecoderError::build(format!(
+            "Invalid quad type identifier: {}",
+            encoded[0]
+        ))),
     }
 }
 
 #[test]
-fn store() -> Result<()> {
+fn store() -> Result<(), crate::Error> {
     use crate::model::*;
-    use crate::*;
 
     let main_s = NamedOrBlankNode::from(BlankNode::default());
     let main_p = NamedNode::new("http://example.com")?;
@@ -844,25 +851,25 @@ fn store() -> Result<()> {
     assert_eq!(
         store
             .quads_for_pattern(None, None, None, None)
-            .collect::<Result<Vec<_>>>()?,
+            .collect::<Result<Vec<_>, _>>()?,
         all_o
     );
     assert_eq!(
         store
             .quads_for_pattern(Some(&main_s), None, None, None)
-            .collect::<Result<Vec<_>>>()?,
+            .collect::<Result<Vec<_>, _>>()?,
         all_o
     );
     assert_eq!(
         store
             .quads_for_pattern(Some(&main_s), Some(&main_p), None, None)
-            .collect::<Result<Vec<_>>>()?,
+            .collect::<Result<Vec<_>, _>>()?,
         all_o
     );
     assert_eq!(
         store
             .quads_for_pattern(Some(&main_s), Some(&main_p), Some(&main_o), None)
-            .collect::<Result<Vec<_>>>()?,
+            .collect::<Result<Vec<_>, _>>()?,
         target
     );
     assert_eq!(
@@ -873,7 +880,7 @@ fn store() -> Result<()> {
                 Some(&main_o),
                 Some(&GraphName::DefaultGraph)
             )
-            .collect::<Result<Vec<_>>>()?,
+            .collect::<Result<Vec<_>, _>>()?,
         target
     );
     assert_eq!(
@@ -884,13 +891,13 @@ fn store() -> Result<()> {
                 None,
                 Some(&GraphName::DefaultGraph)
             )
-            .collect::<Result<Vec<_>>>()?,
+            .collect::<Result<Vec<_>, _>>()?,
         all_o
     );
     assert_eq!(
         store
             .quads_for_pattern(Some(&main_s), None, Some(&main_o), None)
-            .collect::<Result<Vec<_>>>()?,
+            .collect::<Result<Vec<_>, _>>()?,
         target
     );
     assert_eq!(
@@ -901,37 +908,37 @@ fn store() -> Result<()> {
                 Some(&main_o),
                 Some(&GraphName::DefaultGraph)
             )
-            .collect::<Result<Vec<_>>>()?,
+            .collect::<Result<Vec<_>, _>>()?,
         target
     );
     assert_eq!(
         store
             .quads_for_pattern(Some(&main_s), None, None, Some(&GraphName::DefaultGraph))
-            .collect::<Result<Vec<_>>>()?,
+            .collect::<Result<Vec<_>, _>>()?,
         all_o
     );
     assert_eq!(
         store
             .quads_for_pattern(None, Some(&main_p), None, None)
-            .collect::<Result<Vec<_>>>()?,
+            .collect::<Result<Vec<_>, _>>()?,
         all_o
     );
     assert_eq!(
         store
             .quads_for_pattern(None, Some(&main_p), Some(&main_o), None)
-            .collect::<Result<Vec<_>>>()?,
+            .collect::<Result<Vec<_>, _>>()?,
         target
     );
     assert_eq!(
         store
             .quads_for_pattern(None, None, Some(&main_o), None)
-            .collect::<Result<Vec<_>>>()?,
+            .collect::<Result<Vec<_>, _>>()?,
         target
     );
     assert_eq!(
         store
             .quads_for_pattern(None, None, None, Some(&GraphName::DefaultGraph))
-            .collect::<Result<Vec<_>>>()?,
+            .collect::<Result<Vec<_>, _>>()?,
         all_o
     );
     assert_eq!(
@@ -942,7 +949,7 @@ fn store() -> Result<()> {
                 Some(&main_o),
                 Some(&GraphName::DefaultGraph)
             )
-            .collect::<Result<Vec<_>>>()?,
+            .collect::<Result<Vec<_>, _>>()?,
         target
     );
 

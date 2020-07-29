@@ -1,15 +1,16 @@
 //! Store based on the [RocksDB](https://rocksdb.org/) key-value database.
 
-use crate::error::UnwrapInfallible;
+use crate::error::{Infallible, UnwrapInfallible};
 use crate::model::*;
 use crate::sparql::{Query, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::store::{
     dump_dataset, dump_graph, load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore,
 };
-use crate::{DatasetSyntax, GraphSyntax, Result};
+use crate::{DatasetSyntax, GraphSyntax};
 use rocksdb::*;
-use std::convert::{Infallible, TryInto};
+use std::convert::TryInto;
+use std::io;
 use std::io::{BufRead, Cursor, Write};
 use std::mem::{take, transmute};
 use std::path::Path;
@@ -23,8 +24,8 @@ use std::{fmt, str};
 ///
 /// Usage example:
 /// ```
+/// use oxigraph::RocksDbStore;
 /// use oxigraph::model::*;
-/// use oxigraph::{Result, RocksDbStore};
 /// use oxigraph::sparql::{QueryOptions, QueryResult};
 /// # use std::fs::remove_dir_all;
 ///
@@ -37,7 +38,7 @@ use std::{fmt, str};
 /// store.insert(&quad)?;
 ///
 /// // quad filter
-/// let results: Result<Vec<Quad>> = store.quads_for_pattern(None, None, None, None).collect();
+/// let results: Result<Vec<Quad>,_> = store.quads_for_pattern(None, None, None, None).collect();
 /// assert_eq!(vec![quad], results?);
 ///
 /// // SPARQL query
@@ -47,7 +48,7 @@ use std::{fmt, str};
 /// #
 /// # };
 /// # remove_dir_all("example.db")?;
-/// # Result::Ok(())
+/// # oxigraph::Result::Ok(())
 /// ```
 #[derive(Clone)]
 pub struct RocksDbStore {
@@ -72,14 +73,14 @@ const MAX_TRANSACTION_SIZE: usize = 1024;
 
 impl RocksDbStore {
     /// Opens a `RocksDbStore`
-    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, io::Error> {
         let mut options = Options::default();
         options.create_if_missing(true);
         options.create_missing_column_families(true);
         options.set_compaction_style(DBCompactionStyle::Universal);
 
         let new = Self {
-            db: Arc::new(DB::open_cf(&options, path, &COLUMN_FAMILIES)?),
+            db: Arc::new(DB::open_cf(&options, path, &COLUMN_FAMILIES).map_err(map_err)?),
         };
 
         let mut transaction = new.auto_batch_writer();
@@ -96,7 +97,7 @@ impl RocksDbStore {
         &self,
         query: impl TryInto<Query, Error = impl Into<crate::Error>>,
         options: QueryOptions,
-    ) -> Result<QueryResult> {
+    ) -> Result<QueryResult, crate::Error> {
         self.prepare_query(query, options)?.exec()
     }
 
@@ -108,7 +109,7 @@ impl RocksDbStore {
         &self,
         query: impl TryInto<Query, Error = impl Into<crate::Error>>,
         options: QueryOptions,
-    ) -> Result<RocksDbPreparedQuery> {
+    ) -> Result<RocksDbPreparedQuery, crate::Error> {
         Ok(RocksDbPreparedQuery(SimplePreparedQuery::new(
             (*self).clone(),
             query,
@@ -125,7 +126,7 @@ impl RocksDbStore {
         predicate: Option<&NamedNode>,
         object: Option<&Term>,
         graph_name: Option<&GraphName>,
-    ) -> impl Iterator<Item = Result<Quad>> {
+    ) -> impl Iterator<Item = Result<Quad, io::Error>> {
         let subject = subject.map(|s| s.into());
         let predicate = predicate.map(|p| p.into());
         let object = object.map(|o| o.into());
@@ -136,7 +137,7 @@ impl RocksDbStore {
     }
 
     /// Checks if this store contains a given quad
-    pub fn contains(&self, quad: &Quad) -> Result<bool> {
+    pub fn contains(&self, quad: &Quad) -> Result<bool, io::Error> {
         let quad = quad.into();
         self.contains_encoded(&quad)
     }
@@ -162,10 +163,10 @@ impl RocksDbStore {
     /// Nothing is done if the closure returns `Err`.
     ///
     /// See `MemoryStore` for a usage example.
-    pub fn transaction<'a>(
+    pub fn transaction<'a, E: From<io::Error>>(
         &'a self,
-        f: impl FnOnce(&mut RocksDbTransaction<'a>) -> Result<()>,
-    ) -> Result<()> {
+        f: impl FnOnce(&mut RocksDbTransaction<'a>) -> Result<(), E>,
+    ) -> Result<(), E> {
         let mut transaction = RocksDbTransaction {
             inner: BatchWriter {
                 store: self,
@@ -174,7 +175,7 @@ impl RocksDbStore {
             },
         };
         f(&mut transaction)?;
-        transaction.inner.apply()
+        Ok(transaction.inner.apply()?)
     }
 
     /// Loads a graph file (i.e. triples) into the store
@@ -189,10 +190,10 @@ impl RocksDbStore {
         syntax: GraphSyntax,
         to_graph_name: &GraphName,
         base_iri: Option<&str>,
-    ) -> Result<()> {
+    ) -> Result<(), crate::Error> {
         let mut transaction = self.auto_batch_writer();
         load_graph(&mut transaction, reader, syntax, to_graph_name, base_iri)?;
-        transaction.apply()
+        Ok(transaction.apply()?)
     }
 
     /// Loads a dataset file (i.e. quads) into the store.
@@ -206,14 +207,14 @@ impl RocksDbStore {
         reader: impl BufRead,
         syntax: DatasetSyntax,
         base_iri: Option<&str>,
-    ) -> Result<()> {
+    ) -> Result<(), crate::Error> {
         let mut transaction = self.auto_batch_writer();
         load_dataset(&mut transaction, reader, syntax, base_iri)?;
-        transaction.apply()
+        Ok(transaction.apply()?)
     }
 
     /// Adds a quad to this store.
-    pub fn insert(&self, quad: &Quad) -> Result<()> {
+    pub fn insert(&self, quad: &Quad) -> Result<(), io::Error> {
         let mut transaction = self.auto_batch_writer();
         let quad = transaction.encode_quad(quad)?;
         transaction.insert_encoded(&quad)?;
@@ -221,7 +222,7 @@ impl RocksDbStore {
     }
 
     /// Removes a quad from this store.
-    pub fn remove(&self, quad: &Quad) -> Result<()> {
+    pub fn remove(&self, quad: &Quad) -> Result<(), io::Error> {
         let mut transaction = self.auto_batch_writer();
         let quad = quad.into();
         transaction.remove_encoded(&quad)?;
@@ -236,7 +237,7 @@ impl RocksDbStore {
         writer: &mut impl Write,
         syntax: GraphSyntax,
         from_graph_name: &GraphName,
-    ) -> Result<()> {
+    ) -> Result<(), io::Error> {
         dump_graph(
             self.quads_for_pattern(None, None, None, Some(from_graph_name))
                 .map(|q| Ok(q?.into())),
@@ -248,7 +249,11 @@ impl RocksDbStore {
     /// Dumps the store dataset into a file.
     ///    
     /// See `MemoryStore` for a usage example.
-    pub fn dump_dataset(&self, writer: &mut impl Write, syntax: DatasetSyntax) -> Result<()> {
+    pub fn dump_dataset(
+        &self,
+        writer: &mut impl Write,
+        syntax: DatasetSyntax,
+    ) -> Result<(), io::Error> {
         dump_dataset(
             self.quads_for_pattern(None, None, None, None),
             writer,
@@ -294,10 +299,14 @@ impl RocksDbStore {
         }
     }
 
-    fn contains_encoded(&self, quad: &EncodedQuad) -> Result<bool> {
+    fn contains_encoded(&self, quad: &EncodedQuad) -> Result<bool, io::Error> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
         write_spog_quad(&mut buffer, quad);
-        Ok(self.db.get_pinned_cf(self.spog_cf(), &buffer)?.is_some())
+        Ok(self
+            .db
+            .get_pinned_cf(self.spog_cf(), &buffer)
+            .map_err(map_err)?
+            .is_some())
     }
 
     fn quads(&self) -> DecodingIndexIterator {
@@ -455,18 +464,20 @@ impl fmt::Display for RocksDbStore {
 }
 
 impl StrLookup for RocksDbStore {
-    type Error = crate::Error;
+    type Error = io::Error;
 
-    fn get_str(&self, id: StrHash) -> Result<Option<String>> {
-        Ok(self
-            .db
-            .get_cf(self.id2str_cf(), &id.to_be_bytes())?
+    fn get_str(&self, id: StrHash) -> Result<Option<String>, io::Error> {
+        self.db
+            .get_cf(self.id2str_cf(), &id.to_be_bytes())
+            .map_err(map_err)?
             .map(String::from_utf8)
-            .transpose()?)
+            .transpose()
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
     }
 }
 
 impl ReadableEncodedStore for RocksDbStore {
+    type Error = io::Error;
     type QuadsIter = DecodingIndexIterator;
 
     fn encoded_quads_for_pattern(
@@ -538,7 +549,7 @@ pub struct RocksDbPreparedQuery(SimplePreparedQuery<RocksDbStore>);
 
 impl RocksDbPreparedQuery {
     /// Evaluates the query and returns its results
-    pub fn exec(&self) -> Result<QueryResult> {
+    pub fn exec(&self) -> Result<QueryResult, crate::Error> {
         self.0.exec()
     }
 }
@@ -562,7 +573,7 @@ impl RocksDbTransaction<'_> {
         syntax: GraphSyntax,
         to_graph_name: &GraphName,
         base_iri: Option<&str>,
-    ) -> Result<()> {
+    ) -> Result<(), crate::Error> {
         load_graph(&mut self.inner, reader, syntax, to_graph_name, base_iri)
     }
 
@@ -578,7 +589,7 @@ impl RocksDbTransaction<'_> {
         reader: impl BufRead,
         syntax: DatasetSyntax,
         base_iri: Option<&str>,
-    ) -> Result<()> {
+    ) -> Result<(), crate::Error> {
         load_dataset(&mut self.inner, reader, syntax, base_iri)
     }
 
@@ -604,7 +615,7 @@ struct BatchWriter<'a> {
 impl StrContainer for BatchWriter<'_> {
     type Error = Infallible;
 
-    fn insert_str(&mut self, key: StrHash, value: &str) -> std::result::Result<(), Infallible> {
+    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Infallible> {
         self.batch
             .put_cf(self.store.id2str_cf(), &key.to_be_bytes(), value);
         Ok(())
@@ -614,7 +625,7 @@ impl StrContainer for BatchWriter<'_> {
 impl WritableEncodedStore for BatchWriter<'_> {
     type Error = Infallible;
 
-    fn insert_encoded(&mut self, quad: &EncodedQuad) -> std::result::Result<(), Infallible> {
+    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Infallible> {
         write_spog_quad(&mut self.buffer, quad);
         self.batch.put_cf(self.store.spog_cf(), &self.buffer, &[]);
         self.buffer.clear();
@@ -642,7 +653,7 @@ impl WritableEncodedStore for BatchWriter<'_> {
         Ok(())
     }
 
-    fn remove_encoded(&mut self, quad: &EncodedQuad) -> std::result::Result<(), Infallible> {
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Infallible> {
         write_spog_quad(&mut self.buffer, quad);
         self.batch.delete_cf(self.store.spog_cf(), &self.buffer);
         self.buffer.clear();
@@ -672,8 +683,8 @@ impl WritableEncodedStore for BatchWriter<'_> {
 }
 
 impl BatchWriter<'_> {
-    fn apply(self) -> Result<()> {
-        Ok(self.store.db.write(self.batch)?)
+    fn apply(self) -> Result<(), io::Error> {
+        self.store.db.write(self.batch).map_err(map_err)
     }
 }
 
@@ -682,35 +693,39 @@ struct AutoBatchWriter<'a> {
 }
 
 impl StrContainer for AutoBatchWriter<'_> {
-    type Error = crate::Error;
+    type Error = io::Error;
 
-    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<()> {
+    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), io::Error> {
         Ok(self.inner.insert_str(key, value)?)
     }
 }
 
 impl WritableEncodedStore for AutoBatchWriter<'_> {
-    type Error = crate::Error;
+    type Error = io::Error;
 
-    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
+    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), io::Error> {
         self.inner.insert_encoded(quad)?;
         self.apply_if_big()
     }
 
-    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<()> {
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<(), io::Error> {
         self.inner.remove_encoded(quad)?;
         self.apply_if_big()
     }
 }
 
 impl AutoBatchWriter<'_> {
-    fn apply(self) -> Result<()> {
+    fn apply(self) -> Result<(), io::Error> {
         self.inner.apply()
     }
 
-    fn apply_if_big(&mut self) -> Result<()> {
+    fn apply_if_big(&mut self) -> Result<(), io::Error> {
         if self.inner.batch.len() > MAX_TRANSACTION_SIZE {
-            self.inner.store.db.write(take(&mut self.inner.batch))?;
+            self.inner
+                .store
+                .db
+                .write(take(&mut self.inner.batch))
+                .map_err(map_err)?;
         }
         Ok(())
     }
@@ -779,12 +794,12 @@ pub(crate) struct DecodingIndexIterator {
 }
 
 impl Iterator for DecodingIndexIterator {
-    type Item = Result<EncodedQuad>;
+    type Item = Result<EncodedQuad, io::Error>;
 
-    fn next(&mut self) -> Option<Result<EncodedQuad>> {
+    fn next(&mut self) -> Option<Result<EncodedQuad, io::Error>> {
         if let Some(key) = self.iter.iter.key() {
             if key.starts_with(&self.prefix) {
-                let result = self.encoding.decode(key).map_err(crate::Error::from);
+                let result = self.encoding.decode(key);
                 self.iter.iter.next();
                 Some(result)
             } else {
@@ -849,23 +864,26 @@ enum QuadEncoding {
 }
 
 impl QuadEncoding {
-    fn decode(self, buffer: &[u8]) -> Result<EncodedQuad> {
+    fn decode(self, buffer: &[u8]) -> Result<EncodedQuad, io::Error> {
         let mut cursor = Cursor::new(&buffer);
-        Ok(match self {
+        match self {
             QuadEncoding::SPOG => cursor.read_spog_quad(),
             QuadEncoding::POSG => cursor.read_posg_quad(),
             QuadEncoding::OSPG => cursor.read_ospg_quad(),
             QuadEncoding::GSPO => cursor.read_gspo_quad(),
             QuadEncoding::GPOS => cursor.read_gpos_quad(),
             QuadEncoding::GOSP => cursor.read_gosp_quad(),
-        }?)
+        }
     }
 }
 
+fn map_err(e: Error) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, e)
+}
+
 #[test]
-fn store() -> Result<()> {
+fn store() -> Result<(), crate::Error> {
     use crate::model::*;
-    use crate::*;
     use rand::random;
     use std::env::temp_dir;
     use std::fs::remove_dir_all;
@@ -895,25 +913,25 @@ fn store() -> Result<()> {
         assert_eq!(
             store
                 .quads_for_pattern(None, None, None, None)
-                .collect::<Result<Vec<_>>>()?,
+                .collect::<Result<Vec<_>, _>>()?,
             all_o
         );
         assert_eq!(
             store
                 .quads_for_pattern(Some(&main_s), None, None, None)
-                .collect::<Result<Vec<_>>>()?,
+                .collect::<Result<Vec<_>, _>>()?,
             all_o
         );
         assert_eq!(
             store
                 .quads_for_pattern(Some(&main_s), Some(&main_p), None, None)
-                .collect::<Result<Vec<_>>>()?,
+                .collect::<Result<Vec<_>, _>>()?,
             all_o
         );
         assert_eq!(
             store
                 .quads_for_pattern(Some(&main_s), Some(&main_p), Some(&main_o), None)
-                .collect::<Result<Vec<_>>>()?,
+                .collect::<Result<Vec<_>, _>>()?,
             target
         );
         assert_eq!(
@@ -924,7 +942,7 @@ fn store() -> Result<()> {
                     Some(&main_o),
                     Some(&GraphName::DefaultGraph)
                 )
-                .collect::<Result<Vec<_>>>()?,
+                .collect::<Result<Vec<_>, _>>()?,
             target
         );
         assert_eq!(
@@ -935,13 +953,13 @@ fn store() -> Result<()> {
                     None,
                     Some(&GraphName::DefaultGraph)
                 )
-                .collect::<Result<Vec<_>>>()?,
+                .collect::<Result<Vec<_>, _>>()?,
             all_o
         );
         assert_eq!(
             store
                 .quads_for_pattern(Some(&main_s), None, Some(&main_o), None)
-                .collect::<Result<Vec<_>>>()?,
+                .collect::<Result<Vec<_>, _>>()?,
             target
         );
         assert_eq!(
@@ -952,37 +970,37 @@ fn store() -> Result<()> {
                     Some(&main_o),
                     Some(&GraphName::DefaultGraph)
                 )
-                .collect::<Result<Vec<_>>>()?,
+                .collect::<Result<Vec<_>, _>>()?,
             target
         );
         assert_eq!(
             store
                 .quads_for_pattern(Some(&main_s), None, None, Some(&GraphName::DefaultGraph))
-                .collect::<Result<Vec<_>>>()?,
+                .collect::<Result<Vec<_>, _>>()?,
             all_o
         );
         assert_eq!(
             store
                 .quads_for_pattern(None, Some(&main_p), None, None)
-                .collect::<Result<Vec<_>>>()?,
+                .collect::<Result<Vec<_>, _>>()?,
             all_o
         );
         assert_eq!(
             store
                 .quads_for_pattern(None, Some(&main_p), Some(&main_o), None)
-                .collect::<Result<Vec<_>>>()?,
+                .collect::<Result<Vec<_>, _>>()?,
             target
         );
         assert_eq!(
             store
                 .quads_for_pattern(None, None, Some(&main_o), None)
-                .collect::<Result<Vec<_>>>()?,
+                .collect::<Result<Vec<_>, _>>()?,
             target
         );
         assert_eq!(
             store
                 .quads_for_pattern(None, None, None, Some(&GraphName::DefaultGraph))
-                .collect::<Result<Vec<_>>>()?,
+                .collect::<Result<Vec<_>, _>>()?,
             all_o
         );
         assert_eq!(
@@ -993,7 +1011,7 @@ fn store() -> Result<()> {
                     Some(&main_o),
                     Some(&GraphName::DefaultGraph)
                 )
-                .collect::<Result<Vec<_>>>()?,
+                .collect::<Result<Vec<_>, _>>()?,
             target
         );
     }

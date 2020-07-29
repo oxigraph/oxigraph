@@ -9,6 +9,7 @@ use crate::store::ReadableEncodedStore;
 use crate::Result;
 use std::cell::{RefCell, RefMut};
 use std::collections::BTreeSet;
+use std::io;
 use std::rc::Rc;
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -583,32 +584,35 @@ impl<S: ReadableEncodedStore> DatasetView<S> {
     ) -> Box<dyn Iterator<Item = Result<EncodedQuad>>> {
         if graph_name == None {
             Box::new(
-                self.store
-                    .encoded_quads_for_pattern(subject, predicate, object, None)
-                    .filter(|quad| match quad {
-                        Err(_) => true,
-                        Ok(quad) => quad.graph_name != ENCODED_DEFAULT_GRAPH,
-                    }),
+                map_io_err(
+                    self.store
+                        .encoded_quads_for_pattern(subject, predicate, object, None),
+                )
+                .filter(|quad| match quad {
+                    Err(_) => true,
+                    Ok(quad) => quad.graph_name != ENCODED_DEFAULT_GRAPH,
+                }),
             )
         } else if graph_name == Some(ENCODED_DEFAULT_GRAPH) && self.default_graph_as_union {
             Box::new(
-                self.store
-                    .encoded_quads_for_pattern(subject, predicate, object, None)
-                    .map(|quad| {
-                        let quad = quad?;
-                        Ok(EncodedQuad::new(
-                            quad.subject,
-                            quad.predicate,
-                            quad.object,
-                            ENCODED_DEFAULT_GRAPH,
-                        ))
-                    }),
+                map_io_err(
+                    self.store
+                        .encoded_quads_for_pattern(subject, predicate, object, None),
+                )
+                .map(|quad| {
+                    let quad = quad?;
+                    Ok(EncodedQuad::new(
+                        quad.subject,
+                        quad.predicate,
+                        quad.object,
+                        ENCODED_DEFAULT_GRAPH,
+                    ))
+                }),
             )
         } else {
-            Box::new(
-                self.store
-                    .encoded_quads_for_pattern(subject, predicate, object, graph_name),
-            )
+            Box::new(map_io_err(self.store.encoded_quads_for_pattern(
+                subject, predicate, object, graph_name,
+            )))
         }
     }
 
@@ -620,8 +624,14 @@ impl<S: ReadableEncodedStore> DatasetView<S> {
     }
 }
 
+fn map_io_err<'a, T>(
+    iter: impl Iterator<Item = std::result::Result<T, impl Into<io::Error>>> + 'a,
+) -> impl Iterator<Item = Result<T>> + 'a {
+    iter.map(|e| e.map_err(|e| e.into().into()))
+}
+
 impl<S: ReadableEncodedStore> StrLookup for DatasetView<S> {
-    type Error = S::Error;
+    type Error = <S as StrLookup>::Error;
 
     fn get_str(&self, id: StrHash) -> std::result::Result<Option<String>, Self::Error> {
         if let Some(value) = self.extra.borrow().get_str(id).unwrap_infallible() {
@@ -638,7 +648,7 @@ struct DatasetViewStrContainer<'a, S: ReadableEncodedStore> {
 }
 
 impl<'a, S: ReadableEncodedStore> StrContainer for DatasetViewStrContainer<'a, S> {
-    type Error = S::Error;
+    type Error = <S as StrLookup>::Error;
 
     fn insert_str(&mut self, key: StrHash, value: &str) -> std::result::Result<(), Self::Error> {
         if self.store.get_str(key)?.is_none() {

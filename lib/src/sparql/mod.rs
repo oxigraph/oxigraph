@@ -146,8 +146,8 @@ impl<S: ReadableEncodedStore + 'static> SimplePreparedQuery<S> {
 /// Might be used to implement [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/)
 ///
 /// ```
-/// use oxigraph::model::*;
 /// use oxigraph::{MemoryStore, Result};
+/// use oxigraph::model::*;
 /// use oxigraph::sparql::{QueryOptions, QueryResult, ServiceHandler, Query};
 ///
 /// #[derive(Default)]

@@ -2,15 +2,13 @@ use crate::model::*;
 use crate::store_utils::*;
 use oxigraph::model::*;
 use oxigraph::sparql::QueryOptions;
-use oxigraph::{DatasetSyntax, FileSyntax, GraphSyntax, Result, SledStore};
-use pyo3::create_exception;
-use pyo3::exceptions::ValueError;
+use oxigraph::{DatasetSyntax, FileSyntax, GraphSyntax, SledStore};
+use pyo3::exceptions::{IOError, ValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyTuple;
 use pyo3::{PyIterProtocol, PyObjectProtocol, PySequenceProtocol};
+use std::io;
 use std::io::Cursor;
-
-create_exception!(oxigraph, SledError, pyo3::exceptions::RuntimeError);
 
 #[pyclass(name = SledStore)]
 #[derive(Clone)]
@@ -24,9 +22,9 @@ impl PySledStore {
     fn new(path: Option<&str>) -> PyResult<Self> {
         Ok(Self {
             inner: if let Some(path) = path {
-                SledStore::open(path).map_err(|e| SledError::py_err(e.to_string()))?
+                SledStore::open(path).map_err(|e| IOError::py_err(e.to_string()))?
             } else {
-                SledStore::new().map_err(|e| SledError::py_err(e.to_string()))?
+                SledStore::new().map_err(|e| IOError::py_err(e.to_string()))?
             },
         })
     }
@@ -34,13 +32,13 @@ impl PySledStore {
     fn add(&self, quad: &PyTuple) -> PyResult<()> {
         self.inner
             .insert(&extract_quad(quad)?)
-            .map_err(|e| SledError::py_err(e.to_string()))
+            .map_err(|e| IOError::py_err(e.to_string()))
     }
 
     fn remove(&self, quad: &PyTuple) -> PyResult<()> {
         self.inner
             .remove(&extract_quad(quad)?)
-            .map_err(|e| SledError::py_err(e.to_string()))
+            .map_err(|e| IOError::py_err(e.to_string()))
     }
 
     fn r#match(
@@ -136,7 +134,7 @@ impl PySequenceProtocol for PySledStore {
     fn __contains__(&self, quad: &PyTuple) -> PyResult<bool> {
         self.inner
             .contains(&extract_quad(quad)?)
-            .map_err(|e| SledError::py_err(e.to_string()))
+            .map_err(|e| IOError::py_err(e.to_string()))
     }
 }
 
@@ -151,7 +149,7 @@ impl PyIterProtocol for PySledStore {
 
 #[pyclass(unsendable)]
 pub struct QuadIter {
-    inner: Box<dyn Iterator<Item = Result<Quad>>>,
+    inner: Box<dyn Iterator<Item = Result<Quad, io::Error>>>,
 }
 
 #[pyproto]
@@ -168,7 +166,7 @@ impl PyIterProtocol for QuadIter {
             .map(move |q| {
                 Ok(quad_to_python(
                     slf.py(),
-                    q.map_err(|e| SledError::py_err(e.to_string()))?,
+                    q.map_err(|e| IOError::py_err(e.to_string()))?,
                 ))
             })
             .transpose()

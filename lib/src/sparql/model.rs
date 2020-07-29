@@ -37,8 +37,8 @@ impl QueryResult {
     /// This method fails if it is called on the `Graph` results
     ///
     /// ```
+    /// use oxigraph::MemoryStore;
     /// use oxigraph::model::*;
-    /// use oxigraph::{MemoryStore, Result};
     /// use oxigraph::sparql::{QueryOptions, QueryResultSyntax};
     ///
     /// let store = MemoryStore::new();
@@ -48,7 +48,7 @@ impl QueryResult {
     /// let mut results = Vec::new();
     /// store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?.write(&mut results, QueryResultSyntax::Json)?;
     /// assert_eq!(results, "{\"head\":{\"vars\":[\"s\"]},\"results\":{\"bindings\":[{\"s\":{\"type\":\"uri\",\"value\":\"http://example.com\"}}]}}".as_bytes());
-    /// # Result::Ok(())
+    /// # oxigraph::Result::Ok(())
     /// ```
     pub fn write(self, writer: &mut impl Write, syntax: QueryResultSyntax) -> Result<()> {
         match syntax {
@@ -62,9 +62,9 @@ impl QueryResult {
     /// This method fails if it is called on the `Solution` or `Boolean` results
     ///
     /// ```
-    /// use oxigraph::model::*;
-    /// use oxigraph::{MemoryStore, Result, GraphSyntax};
+    /// use oxigraph::{MemoryStore, GraphSyntax};
     /// use oxigraph::sparql::QueryOptions;
+    /// use oxigraph::model::*;
     /// use std::io::Cursor;
     ///
     /// let graph = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
@@ -75,7 +75,7 @@ impl QueryResult {
     /// let mut results = Vec::new();
     /// store.query("CONSTRUCT WHERE { ?s ?p ?o }", QueryOptions::default())?.write_graph(&mut results, GraphSyntax::NTriples)?;
     /// assert_eq!(results, graph);
-    /// # Result::Ok(())
+    /// # oxigraph::Result::Ok(())
     /// ```
     pub fn write_graph(self, write: &mut impl Write, syntax: GraphSyntax) -> Result<()> {
         if let QueryResult::Graph(triples) = self {
@@ -162,7 +162,7 @@ impl FileSyntax for QueryResultSyntax {
 /// An iterator over query result solutions
 ///
 /// ```
-/// use oxigraph::{MemoryStore, Result};
+/// use oxigraph::MemoryStore;
 /// use oxigraph::sparql::{QueryResult, QueryOptions};
 ///
 /// let store = MemoryStore::new();
@@ -171,7 +171,7 @@ impl FileSyntax for QueryResultSyntax {
 ///         println!("{:?}", solution?.get("s"));
 ///     }
 /// }
-/// # Result::Ok(())
+/// # oxigraph::Result::Ok(())
 /// ```
 pub struct QuerySolutionsIterator {
     variables: Rc<Vec<Variable>>,
@@ -189,14 +189,14 @@ impl QuerySolutionsIterator {
     /// The variables used in the solutions
     ///
     /// ```
-    /// use oxigraph::{MemoryStore, Result};
+    /// use oxigraph::MemoryStore;
     /// use oxigraph::sparql::{QueryResult, QueryOptions, Variable};
     ///
     /// let store = MemoryStore::new();
     /// if let QueryResult::Solutions(solutions) = store.query("SELECT ?s ?o WHERE { ?s ?p ?o }", QueryOptions::default())? {
     ///     assert_eq!(solutions.variables(), &[Variable::new("s"), Variable::new("o")]);
     /// }
-    /// # Result::Ok(())
+    /// # oxigraph::Result::Ok(())
     /// ```
     pub fn variables(&self) -> &[Variable] {
         &*self.variables
