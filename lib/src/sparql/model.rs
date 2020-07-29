@@ -19,7 +19,7 @@ pub enum QueryResult {
     /// Result of a [ASK](https://www.w3.org/TR/sparql11-query/#ask) query
     Boolean(bool),
     /// Results of a [CONSTRUCT](https://www.w3.org/TR/sparql11-query/#construct) or [DESCRIBE](https://www.w3.org/TR/sparql11-query/#describe) query
-    Graph(Box<dyn Iterator<Item = Result<Triple>>>),
+    Graph(QueryTriplesIterator),
 }
 
 impl QueryResult {
@@ -112,11 +112,9 @@ impl QueryResult {
     }
 }
 
-impl<E: Into<Error>, I: Iterator<Item = std::result::Result<Triple, E>> + 'static> From<I>
-    for QueryResult
-{
-    fn from(iter: I) -> Self {
-        QueryResult::Graph(Box::new(iter.map(|e| e.map_err(|e| e.into()))))
+impl From<QuerySolutionsIterator> for QueryResult {
+    fn from(value: QuerySolutionsIterator) -> Self {
+        QueryResult::Solutions(value)
     }
 }
 
@@ -362,6 +360,43 @@ impl VariableSolutionIndex for &Variable {
 impl VariableSolutionIndex for Variable {
     fn index(self, solution: &QuerySolution) -> Option<usize> {
         (&self).index(solution)
+    }
+}
+
+/// An iterator over the triples that compose a graph solution
+///
+/// ```
+/// use oxigraph::MemoryStore;
+/// use oxigraph::sparql::{QueryResult, QueryOptions};
+///
+/// let store = MemoryStore::new();
+/// if let QueryResult::Graph(triples) = store.query("CONSTRUCT WHERE { ?s ?p ?o }", QueryOptions::default())? {
+///     for triple in triples {
+///         println!("{}", triple?);
+///     }
+/// }
+/// # oxigraph::Result::Ok(())
+/// ```
+pub struct QueryTriplesIterator {
+    pub(crate) iter: Box<dyn Iterator<Item = Result<Triple>>>,
+}
+
+impl Iterator for QueryTriplesIterator {
+    type Item = Result<Triple>;
+
+    fn next(&mut self) -> Option<Result<Triple>> {
+        self.iter.next()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+
+    fn fold<Acc, G>(self, init: Acc, mut g: G) -> Acc
+    where
+        G: FnMut(Acc, Self::Item) -> Acc,
+    {
+        self.iter.fold(init, |acc, elt| g(acc, elt))
     }
 }
 

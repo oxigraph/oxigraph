@@ -89,22 +89,26 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         construct: Rc<Vec<TripleTemplate>>,
     ) -> Result<QueryResult> {
         let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
-        Ok(QueryResult::Graph(Box::new(ConstructIterator {
-            eval: self.clone(),
-            iter: self.eval_plan(plan, from),
-            template: construct,
-            buffered_results: Vec::default(),
-            bnodes: Vec::default(),
-        })))
+        Ok(QueryResult::Graph(QueryTriplesIterator {
+            iter: Box::new(ConstructIterator {
+                eval: self.clone(),
+                iter: self.eval_plan(plan, from),
+                template: construct,
+                buffered_results: Vec::default(),
+                bnodes: Vec::default(),
+            }),
+        }))
     }
 
     pub fn evaluate_describe_plan(&self, plan: &PlanNode) -> Result<QueryResult> {
         let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
-        Ok(QueryResult::Graph(Box::new(DescribeIterator {
-            eval: self.clone(),
-            iter: self.eval_plan(plan, from),
-            quads: Box::new(empty()),
-        })))
+        Ok(QueryResult::Graph(QueryTriplesIterator {
+            iter: Box::new(DescribeIterator {
+                eval: self.clone(),
+                iter: self.eval_plan(plan, from),
+                quads: Box::new(empty()),
+            }),
+        }))
     }
 
     fn eval_plan(&self, node: &PlanNode, from: EncodedTuple) -> EncodedTuplesIterator {

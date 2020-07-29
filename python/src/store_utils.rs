@@ -1,7 +1,6 @@
 use crate::model::*;
 use oxigraph::model::*;
-use oxigraph::sparql::{QueryResult, QuerySolution, QuerySolutionsIterator};
-use oxigraph::Result;
+use oxigraph::sparql::{QueryResult, QuerySolution, QuerySolutionsIterator, QueryTriplesIterator};
 use pyo3::exceptions::{IOError, TypeError, ValueError};
 use pyo3::prelude::*;
 use pyo3::{PyIterProtocol, PyMappingProtocol, PyNativeType, PyObjectProtocol};
@@ -121,7 +120,7 @@ impl PyIterProtocol for QuerySolutionIter {
 
 #[pyclass(unsendable)]
 pub struct TripleResultIter {
-    inner: Box<dyn Iterator<Item = Result<Triple>>>,
+    inner: QueryTriplesIterator,
 }
 
 #[pyproto]
