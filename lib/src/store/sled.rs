@@ -226,7 +226,7 @@ impl SledStore {
     /// See `MemoryStore` for a usage example.
     pub fn dump_graph(
         &self,
-        writer: &mut impl Write,
+        writer: impl Write,
         syntax: GraphSyntax,
         from_graph_name: &GraphName,
     ) -> Result<(), io::Error> {
@@ -241,11 +241,7 @@ impl SledStore {
     /// Dumps the store dataset into a file.
     ///    
     /// See `MemoryStore` for a usage example.
-    pub fn dump_dataset(
-        &self,
-        writer: &mut impl Write,
-        syntax: DatasetSyntax,
-    ) -> Result<(), io::Error> {
+    pub fn dump_dataset(&self, writer: impl Write, syntax: DatasetSyntax) -> Result<(), io::Error> {
         dump_dataset(
             self.quads_for_pattern(None, None, None, None),
             writer,

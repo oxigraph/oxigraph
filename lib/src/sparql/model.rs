@@ -51,7 +51,7 @@ impl QueryResult {
     /// assert_eq!(results, "{\"head\":{\"vars\":[\"s\"]},\"results\":{\"bindings\":[{\"s\":{\"type\":\"uri\",\"value\":\"http://example.com\"}}]}}".as_bytes());
     /// # oxigraph::Result::Ok(())
     /// ```
-    pub fn write(self, writer: &mut impl Write, syntax: QueryResultSyntax) -> Result<()> {
+    pub fn write(self, writer: impl Write, syntax: QueryResultSyntax) -> Result<()> {
         match syntax {
             QueryResultSyntax::Xml => write_xml_results(self, writer),
             QueryResultSyntax::Json => write_json_results(self, writer),
@@ -78,7 +78,7 @@ impl QueryResult {
     /// assert_eq!(results, graph);
     /// # oxigraph::Result::Ok(())
     /// ```
-    pub fn write_graph(self, write: &mut impl Write, syntax: GraphSyntax) -> Result<()> {
+    pub fn write_graph(self, write: impl Write, syntax: GraphSyntax) -> Result<()> {
         if let QueryResult::Graph(triples) = self {
             match syntax {
                 GraphSyntax::NTriples => {

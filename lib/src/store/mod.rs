@@ -109,7 +109,7 @@ where
 
 fn dump_graph(
     triples: impl Iterator<Item = Result<Triple, io::Error>>,
-    writer: &mut impl Write,
+    writer: impl Write,
     syntax: GraphSyntax,
 ) -> Result<(), io::Error> {
     match syntax {
@@ -179,7 +179,7 @@ where
 
 fn dump_dataset(
     quads: impl Iterator<Item = Result<Quad, io::Error>>,
-    writer: &mut impl Write,
+    writer: impl Write,
     syntax: DatasetSyntax,
 ) -> Result<(), io::Error> {
     match syntax {
