@@ -18,7 +18,7 @@ use async_std::task::{block_on, spawn, spawn_blocking};
 use http_types::{headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode};
 use oxigraph::model::GraphName;
 use oxigraph::sparql::{Query, QueryOptions, QueryResult, QueryResultSyntax};
-use oxigraph::{DatasetSyntax, FileSyntax, GraphSyntax, RocksDbStore};
+use oxigraph::{DatasetSyntax, GraphSyntax, RocksDbStore};
 use std::str::FromStr;
 use url::form_urlencoded;
 
@@ -60,7 +60,7 @@ async fn handle_request(request: Request, store: RocksDbStore) -> Result<Respons
         }
         ("/", Method::Post) => {
             if let Some(content_type) = request.content_type() {
-                match if let Some(format) = GraphSyntax::from_mime_type(content_type.essence()) {
+                match if let Some(format) = GraphSyntax::from_media_type(content_type.essence()) {
                     spawn_blocking(move || {
                         store.load_graph(
                             SyncAsyncBufReader::from(request),
@@ -69,7 +69,8 @@ async fn handle_request(request: Request, store: RocksDbStore) -> Result<Respons
                             None,
                         )
                     })
-                } else if let Some(format) = DatasetSyntax::from_mime_type(content_type.essence()) {
+                } else if let Some(format) = DatasetSyntax::from_media_type(content_type.essence())
+                {
                     spawn_blocking(move || {
                         store.load_dataset(SyncAsyncBufReader::from(request), format, None)
                     })
@@ -178,6 +179,7 @@ async fn evaluate_sparql_query(
                     GraphSyntax::Turtle.media_type(),
                     GraphSyntax::RdfXml.media_type(),
                 ],
+                GraphSyntax::from_media_type,
             )?;
             let mut body = Vec::default();
             results.write_graph(&mut body, format)?;
@@ -191,6 +193,7 @@ async fn evaluate_sparql_query(
                     QueryResultSyntax::Xml.media_type(),
                     QueryResultSyntax::Json.media_type(),
                 ],
+                QueryResultSyntax::from_media_type,
             )?;
             let mut body = Vec::default();
             results.write(&mut body, format)?;
@@ -236,7 +239,11 @@ async fn http_server<
     Ok(())
 }
 
-fn content_negotiation<F: FileSyntax>(request: Request, supported: &[&str]) -> Result<F> {
+fn content_negotiation<F>(
+    request: Request,
+    supported: &[&str],
+    parse: impl Fn(&str) -> Option<F>,
+) -> Result<F> {
     let header = request
         .header(headers::ACCEPT)
         .map(|h| h.last().as_str().trim())
@@ -272,7 +279,7 @@ fn content_negotiation<F: FileSyntax>(request: Request, supported: &[&str]) -> R
         }
     }
 
-    F::from_mime_type(result.essence())
+    parse(result.essence())
         .ok_or_else(|| Error::from_str(StatusCode::InternalServerError, "Unknown mime type"))
 }
 

@@ -1,8 +1,9 @@
+#[allow(deprecated)]
+use crate::io::{FileSyntax, GraphSyntax};
 use crate::model::*;
 use crate::sparql::json_results::write_json_results;
 use crate::sparql::xml_results::{read_xml_results, write_xml_results};
-use crate::Error;
-use crate::{FileSyntax, GraphSyntax, Result};
+use crate::{Error, Result};
 use rand::random;
 use rio_api::formatter::TriplesFormatter;
 use rio_turtle::{NTriplesFormatter, TurtleFormatter};
@@ -120,29 +121,60 @@ pub enum QueryResultSyntax {
     Json,
 }
 
-impl FileSyntax for QueryResultSyntax {
-    fn iri(self) -> &'static str {
+impl QueryResultSyntax {
+    /// The syntax canonical IRI according to the [Unique URIs for file formats registry](https://www.w3.org/ns/formats/).
+    ///
+    /// ```
+    /// use oxigraph::sparql::QueryResultSyntax;
+    ///
+    /// assert_eq!(QueryResultSyntax::Json.iri(), "http://www.w3.org/ns/formats/SPARQL_Results_JSON")
+    /// ```
+    pub fn iri(self) -> &'static str {
         match self {
             QueryResultSyntax::Xml => "http://www.w3.org/ns/formats/SPARQL_Results_XML",
             QueryResultSyntax::Json => "http://www.w3.org/ns/formats/SPARQL_Results_JSON",
         }
     }
-
-    fn media_type(self) -> &'static str {
+    /// The syntax [IANA media type](https://tools.ietf.org/html/rfc2046).
+    ///
+    /// ```
+    /// use oxigraph::sparql::QueryResultSyntax;
+    ///
+    /// assert_eq!(QueryResultSyntax::Json.media_type(), "application/sparql-results+json")
+    /// ```
+    pub fn media_type(self) -> &'static str {
         match self {
             QueryResultSyntax::Xml => "application/sparql-results+xml",
             QueryResultSyntax::Json => "application/sparql-results+json",
         }
     }
 
-    fn file_extension(self) -> &'static str {
+    /// The syntax [IANA-registered](https://tools.ietf.org/html/rfc2046) file extension.
+    ///
+    /// ```
+    /// use oxigraph::sparql::QueryResultSyntax;
+    ///
+    /// assert_eq!(QueryResultSyntax::Json.file_extension(), "srj")
+    /// ```
+    pub fn file_extension(self) -> &'static str {
         match self {
             QueryResultSyntax::Xml => "srx",
             QueryResultSyntax::Json => "srj",
         }
     }
 
-    fn from_mime_type(media_type: &str) -> Option<Self> {
+    /// Looks for a known syntax from a media type.
+    ///
+    /// It supports some media type aliases.
+    /// For example "application/xml" is going to return `QueryResultSyntax::Xml` even if it is not its canonical media type.
+    ///
+    /// Example:
+    /// ```
+    /// use oxigraph::sparql::QueryResultSyntax;
+    ///
+    /// assert_eq!(QueryResultSyntax::from_media_type("application/sparql-results+json; charset=utf-8"), Some(QueryResultSyntax::Json))
+    /// ```
+    pub fn from_media_type(media_type: &str) -> Option<Self> {
         if let Some(base_type) = media_type.split(';').next() {
             match base_type {
                 "application/sparql-results+xml" | "application/xml" | "text/xml" => {
@@ -156,6 +188,25 @@ impl FileSyntax for QueryResultSyntax {
         } else {
             None
         }
+    }
+}
+
+#[allow(deprecated)]
+impl FileSyntax for QueryResultSyntax {
+    fn iri(self) -> &'static str {
+        self.iri()
+    }
+
+    fn media_type(self) -> &'static str {
+        self.media_type()
+    }
+
+    fn file_extension(self) -> &'static str {
+        self.file_extension()
+    }
+
+    fn from_mime_type(media_type: &str) -> Option<Self> {
+        Self::from_media_type(media_type)
     }
 }
 

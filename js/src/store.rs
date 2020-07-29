@@ -4,7 +4,7 @@ use crate::utils::to_err;
 use js_sys::{Array, Map};
 use oxigraph::model::GraphName;
 use oxigraph::sparql::{QueryOptions, QueryResult};
-use oxigraph::{DatasetSyntax, FileSyntax, GraphSyntax, MemoryStore};
+use oxigraph::{DatasetSyntax, GraphSyntax, MemoryStore};
 use std::convert::TryInto;
 use std::io::Cursor;
 use wasm_bindgen::prelude::*;
@@ -157,7 +157,7 @@ impl JsMemoryStore {
                 None
             };
 
-        if let Some(graph_syntax) = GraphSyntax::from_mime_type(mime_type) {
+        if let Some(graph_syntax) = GraphSyntax::from_media_type(mime_type) {
             self.store
                 .load_graph(
                     Cursor::new(data),
@@ -166,7 +166,7 @@ impl JsMemoryStore {
                     base_iri.as_deref(),
                 )
                 .map_err(to_err)
-        } else if let Some(dataset_syntax) = DatasetSyntax::from_mime_type(mime_type) {
+        } else if let Some(dataset_syntax) = DatasetSyntax::from_media_type(mime_type) {
             if to_graph_name.is_some() {
                 return Err(format_err!(
                     "The target graph name parameter is not available for dataset formats"

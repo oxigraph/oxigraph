@@ -17,7 +17,7 @@ use async_std::prelude::*;
 use async_std::task::{spawn, spawn_blocking};
 use http_types::{headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode};
 use oxigraph::sparql::{Query, QueryOptions, QueryResult, QueryResultSyntax};
-use oxigraph::{FileSyntax, GraphSyntax, RocksDbStore};
+use oxigraph::{GraphSyntax, RocksDbStore};
 use std::str::FromStr;
 use std::time::Duration;
 use url::form_urlencoded;
@@ -188,6 +188,7 @@ async fn evaluate_sparql_query(
                     GraphSyntax::Turtle.media_type(),
                     GraphSyntax::RdfXml.media_type(),
                 ],
+                GraphSyntax::from_media_type,
             )?;
             let mut body = Vec::default();
             results.write_graph(&mut body, format)?;
@@ -201,6 +202,7 @@ async fn evaluate_sparql_query(
                     QueryResultSyntax::Xml.media_type(),
                     QueryResultSyntax::Json.media_type(),
                 ],
+                QueryResultSyntax::from_media_type,
             )?;
             let mut body = Vec::default();
             results.write(&mut body, format)?;
@@ -246,7 +248,11 @@ async fn http_server<
     Ok(())
 }
 
-fn content_negotiation<F: FileSyntax>(request: Request, supported: &[&str]) -> Result<F> {
+fn content_negotiation<F>(
+    request: Request,
+    supported: &[&str],
+    parse: impl Fn(&str) -> Option<F>,
+) -> Result<F> {
     let header = request
         .header(headers::ACCEPT)
         .map(|h| h.last().as_str().trim())
@@ -282,6 +288,6 @@ fn content_negotiation<F: FileSyntax>(request: Request, supported: &[&str]) -> R
         }
     }
 
-    F::from_mime_type(result.essence())
+    parse(result.essence())
         .ok_or_else(|| Error::from_str(StatusCode::InternalServerError, "Unknown mime type"))
 }

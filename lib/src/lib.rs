@@ -104,18 +104,22 @@
 #![doc(test(attr(deny(warnings))))]
 
 mod error;
+pub mod io;
 pub mod model;
 pub mod sparql;
 pub mod store;
-mod syntax;
 
 pub use error::Error;
 pub type Result<T> = ::std::result::Result<T, Error>;
+#[deprecated(note = "Use oxigraph::io::DatasetSyntax instead")]
+pub use crate::io::DatasetSyntax;
+#[deprecated(note = "Use oxigraph::io::FileSyntax instead")]
+#[allow(deprecated)]
+pub use crate::io::FileSyntax;
+#[deprecated(note = "Use oxigraph::io::GraphSyntax instead")]
+pub use crate::io::GraphSyntax;
 pub use crate::store::memory::MemoryStore;
 #[cfg(feature = "rocksdb")]
 pub use crate::store::rocksdb::RocksDbStore;
 #[cfg(feature = "sled")]
 pub use crate::store::sled::SledStore;
-pub use crate::syntax::DatasetSyntax;
-pub use crate::syntax::FileSyntax;
-pub use crate::syntax::GraphSyntax;

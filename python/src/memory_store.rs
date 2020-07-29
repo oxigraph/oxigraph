@@ -2,7 +2,7 @@ use crate::model::*;
 use crate::store_utils::*;
 use oxigraph::model::*;
 use oxigraph::sparql::QueryOptions;
-use oxigraph::{DatasetSyntax, FileSyntax, GraphSyntax, MemoryStore};
+use oxigraph::{DatasetSyntax, GraphSyntax, MemoryStore};
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::{NotImplementedError, ValueError};
 use pyo3::prelude::*;
@@ -81,7 +81,7 @@ impl PyMemoryStore {
             Some(base_iri)
         };
 
-        if let Some(graph_syntax) = GraphSyntax::from_mime_type(mime_type) {
+        if let Some(graph_syntax) = GraphSyntax::from_media_type(mime_type) {
             self.inner
                 .load_graph(
                     Cursor::new(data),
@@ -90,7 +90,7 @@ impl PyMemoryStore {
                     base_iri,
                 )
                 .map_err(|e| ParseError::py_err(e.to_string()))
-        } else if let Some(dataset_syntax) = DatasetSyntax::from_mime_type(mime_type) {
+        } else if let Some(dataset_syntax) = DatasetSyntax::from_media_type(mime_type) {
             if to_graph_name.is_some() {
                 return Err(ValueError::py_err(
                     "The target graph name parameter is not available for dataset formats",
