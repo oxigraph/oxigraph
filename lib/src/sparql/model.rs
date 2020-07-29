@@ -112,6 +112,14 @@ impl QueryResult {
     }
 }
 
+impl<E: Into<Error>, I: Iterator<Item = std::result::Result<Triple, E>> + 'static> From<I>
+    for QueryResult
+{
+    fn from(iter: I) -> Self {
+        QueryResult::Graph(Box::new(iter.map(|e| e.map_err(|e| e.into()))))
+    }
+}
+
 /// [SPARQL query](https://www.w3.org/TR/sparql11-query/) serialization formats
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub enum QueryResultSyntax {
