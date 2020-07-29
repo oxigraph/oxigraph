@@ -833,10 +833,10 @@ fn decode_quad(encoded: &[u8]) -> Result<EncodedQuad, io::Error> {
         GSPO_PREFIX => Ok(cursor.read_gspo_quad()?),
         GPOS_PREFIX => Ok(cursor.read_gpos_quad()?),
         GOSP_PREFIX => Ok(cursor.read_gosp_quad()?),
-        _ => Err(DecoderError::build(format!(
-            "Invalid quad type identifier: {}",
-            encoded[0]
-        ))),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Invalid quad type identifier: {}", encoded[0]),
+        )),
     }
 }
 

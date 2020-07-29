@@ -12,10 +12,9 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::hash::Hash;
 use std::hash::Hasher;
-use std::io;
 use std::io::Read;
 use std::mem::size_of;
-use std::{fmt, str};
+use std::{io, str};
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Copy, Clone, Hash)]
 #[repr(transparent)]
@@ -731,9 +730,7 @@ impl<R: Read> TermReader for R {
                     DayTimeDuration::from_be_bytes(buffer),
                 ))
             }
-            _ => Err(DecoderError::build(
-                "the term buffer has an invalid type id",
-            )),
+            _ => Err(invalid_data_error("the term buffer has an invalid type id")),
         }
     }
 
@@ -1229,7 +1226,7 @@ pub(crate) trait Decoder {
         match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node.into()),
             Term::BlankNode(blank_node) => Ok(blank_node.into()),
-            Term::Literal(_) => Err(DecoderError::build(
+            Term::Literal(_) => Err(invalid_data_error(
                 "A literal has ben found instead of a named node",
             )),
         }
@@ -1238,10 +1235,10 @@ pub(crate) trait Decoder {
     fn decode_named_node(&self, encoded: EncodedTerm) -> Result<NamedNode, io::Error> {
         match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node),
-            Term::BlankNode(_) => Err(DecoderError::build(
+            Term::BlankNode(_) => Err(invalid_data_error(
                 "A blank node has been found instead of a named node",
             )),
-            Term::Literal(_) => Err(DecoderError::build(
+            Term::Literal(_) => Err(invalid_data_error(
                 "A literal has ben found instead of a named node",
             )),
         }
@@ -1271,7 +1268,7 @@ pub(crate) trait Decoder {
 impl<S: StrLookup> Decoder for S {
     fn decode_term(&self, encoded: EncodedTerm) -> Result<Term, io::Error> {
         match encoded {
-            EncodedTerm::DefaultGraph => Err(DecoderError::build(
+            EncodedTerm::DefaultGraph => Err(invalid_data_error(
                 "The default graph tag is not a valid term",
             )),
             EncodedTerm::NamedNode { iri_id } => {
@@ -1317,31 +1314,16 @@ impl<S: StrLookup> Decoder for S {
 
 fn get_required_str(lookup: &impl StrLookup, id: StrHash) -> Result<String, io::Error> {
     lookup.get_str(id).map_err(|e| e.into())?.ok_or_else(|| {
-        DecoderError::build(format!(
+        invalid_data_error(format!(
             "Not able to find the string with id {:?} in the string store",
             id
         ))
     })
 }
 
-#[derive(Debug)]
-pub struct DecoderError {
-    msg: String,
+fn invalid_data_error(msg: impl Into<String>) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, msg.into())
 }
-
-impl DecoderError {
-    pub fn build(msg: impl Into<String>) -> io::Error {
-        io::Error::new(io::ErrorKind::InvalidData, Self { msg: msg.into() })
-    }
-}
-
-impl fmt::Display for DecoderError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.msg)
-    }
-}
-
-impl Error for DecoderError {}
 
 #[test]
 fn test_encoding() {
