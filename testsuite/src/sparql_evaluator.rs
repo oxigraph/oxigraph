@@ -7,11 +7,11 @@ use chrono::Utc;
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
 use oxigraph::sparql::*;
-use oxigraph::{Error, MemoryStore};
+use oxigraph::MemoryStore;
 use std::collections::HashMap;
-use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::{fmt, io};
 
 pub fn evaluate_sparql_tests(
     manifest: impl Iterator<Item = Result<Test>>,
@@ -168,10 +168,21 @@ impl StaticServiceHandler {
 }
 
 impl ServiceHandler for StaticServiceHandler {
-    fn handle(&self, service_name: NamedNode, query: Query) -> oxigraph::Result<QueryResult> {
+    type Error = EvaluationError;
+
+    fn handle(
+        &self,
+        service_name: NamedNode,
+        query: Query,
+    ) -> std::result::Result<QueryResult, EvaluationError> {
         self.services
             .get(&service_name)
-            .ok_or_else(|| Error::msg(format!("Service {} not found", service_name)))?
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Service {} not found", service_name),
+                )
+            })?
             .query(
                 query,
                 QueryOptions::default().with_service_handler(self.clone()),
@@ -183,7 +194,7 @@ fn to_dataset(result: QueryResult, with_order: bool) -> Result<MemoryStore> {
     match result {
         QueryResult::Graph(graph) => Ok(graph
             .map(|t| t.map(|t| t.in_graph(None)))
-            .collect::<Result<_, Error>>()?),
+            .collect::<Result<_, _>>()?),
         QueryResult::Boolean(value) => {
             let store = MemoryStore::new();
             let result_set = BlankNode::default();

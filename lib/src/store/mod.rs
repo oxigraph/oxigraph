@@ -16,6 +16,7 @@ pub use crate::store::rocksdb::RocksDbStore;
 #[cfg(feature = "sled")]
 pub use crate::store::sled::SledStore;
 
+use crate::error::{invalid_data_error, invalid_input_error};
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use crate::store::numeric_encoder::*;
@@ -90,7 +91,7 @@ where
     IoOrParseError<P::Error>: From<P::Error>,
     P::Error: Send + Sync + 'static,
 {
-    let mut parser = parser.map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    let mut parser = parser.map_err(invalid_input_error)?;
     let mut bnode_map = HashMap::default();
     let to_graph_name = store
         .encode_graph_name(to_graph_name)
@@ -163,7 +164,7 @@ where
     IoOrParseError<P::Error>: From<P::Error>,
     P::Error: Send + Sync + 'static,
 {
-    let mut parser = parser.map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    let mut parser = parser.map_err(invalid_input_error)?;
     let mut bnode_map = HashMap::default();
     let result: Result<(), IoOrParseError<_>> = parser.parse_all(&mut move |q| {
         let quad = store
@@ -228,7 +229,7 @@ impl<E: Sized + Error + Send + Sync + 'static> From<IoOrParseError<E>> for io::E
     fn from(error: IoOrParseError<E>) -> Self {
         match error {
             IoOrParseError::Io(error) => error,
-            IoOrParseError::Parse(error) => io::Error::new(io::ErrorKind::InvalidData, error),
+            IoOrParseError::Parse(error) => invalid_data_error(error),
         }
     }
 }

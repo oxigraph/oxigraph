@@ -1,9 +1,9 @@
 //! Store based on the [Sled](https://sled.rs/) key-value database.
 
-use crate::error::{Infallible, UnwrapInfallible};
+use crate::error::{invalid_data_error, Infallible, UnwrapInfallible};
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
-use crate::sparql::{Query, QueryOptions, QueryResult, SimplePreparedQuery};
+use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::store::{
     dump_dataset, dump_graph, load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore,
@@ -47,7 +47,7 @@ use std::{fmt, io, str};
 /// #
 /// # };
 /// # remove_dir_all("example.db")?;
-/// # oxigraph::Result::Ok(())
+/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Clone)]
 pub struct SledStore {
@@ -90,9 +90,9 @@ impl SledStore {
     /// See `MemoryStore` for a usage example.
     pub fn query(
         &self,
-        query: impl TryInto<Query, Error = impl Into<crate::Error>>,
+        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
         options: QueryOptions,
-    ) -> Result<QueryResult, crate::Error> {
+    ) -> Result<QueryResult, EvaluationError> {
         self.prepare_query(query, options)?.exec()
     }
 
@@ -101,9 +101,9 @@ impl SledStore {
     /// See `MemoryStore` for a usage example.
     pub fn prepare_query(
         &self,
-        query: impl TryInto<Query, Error = impl Into<crate::Error>>,
+        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
         options: QueryOptions,
-    ) -> Result<SledPreparedQuery, crate::Error> {
+    ) -> Result<SledPreparedQuery, EvaluationError> {
         Ok(SledPreparedQuery(SimplePreparedQuery::new(
             (*self).clone(),
             query,
@@ -393,7 +393,7 @@ impl StrLookup for SledStore {
             .get(id.to_be_bytes())?
             .map(|v| String::from_utf8(v.to_vec()))
             .transpose()
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+            .map_err(invalid_data_error)
     }
 }
 
@@ -712,7 +712,7 @@ pub struct SledPreparedQuery(SimplePreparedQuery<SledStore>);
 
 impl SledPreparedQuery {
     /// Evaluates the query and returns its results
-    pub fn exec(&self) -> Result<QueryResult, crate::Error> {
+    pub fn exec(&self) -> Result<QueryResult, EvaluationError> {
         self.0.exec()
     }
 }
@@ -829,19 +829,19 @@ fn decode_quad(encoded: &[u8]) -> Result<EncodedQuad, io::Error> {
         GSPO_PREFIX => Ok(cursor.read_gspo_quad()?),
         GPOS_PREFIX => Ok(cursor.read_gpos_quad()?),
         GOSP_PREFIX => Ok(cursor.read_gosp_quad()?),
-        _ => Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Invalid quad type identifier: {}", encoded[0]),
-        )),
+        _ => Err(invalid_data_error(format!(
+            "Invalid quad type identifier: {}",
+            encoded[0]
+        ))),
     }
 }
 
 #[test]
-fn store() -> Result<(), crate::Error> {
+fn store() -> Result<(), io::Error> {
     use crate::model::*;
 
     let main_s = NamedOrBlankNode::from(BlankNode::default());
-    let main_p = NamedNode::new("http://example.com")?;
+    let main_p = NamedNode::new("http://example.com").unwrap();
     let main_o = Term::from(Literal::from(1));
 
     let main_quad = Quad::new(main_s.clone(), main_p.clone(), main_o.clone(), None);

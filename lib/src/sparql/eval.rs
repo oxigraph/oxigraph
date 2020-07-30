@@ -2,13 +2,12 @@ use crate::model::xsd::*;
 use crate::model::BlankNode;
 use crate::model::Triple;
 use crate::sparql::algebra::{DatasetSpec, GraphPattern, QueryVariants};
+use crate::sparql::error::EvaluationError;
 use crate::sparql::model::*;
 use crate::sparql::plan::*;
 use crate::sparql::{Query, ServiceHandler};
 use crate::store::numeric_encoder::*;
 use crate::store::ReadableEncodedStore;
-use crate::Error;
-use crate::Result;
 use digest::Digest;
 use md5::Md5;
 use oxilangtag::LanguageTag;
@@ -29,13 +28,13 @@ use std::str;
 
 const REGEX_SIZE_LIMIT: usize = 1_000_000;
 
-type EncodedTuplesIterator = Box<dyn Iterator<Item = Result<EncodedTuple>>>;
+type EncodedTuplesIterator = Box<dyn Iterator<Item = Result<EncodedTuple, EvaluationError>>>;
 
 pub(crate) struct SimpleEvaluator<S: ReadableEncodedStore + 'static> {
     dataset: Rc<DatasetView<S>>,
     base_iri: Option<Rc<Iri<String>>>,
     now: DateTime,
-    service_handler: Rc<dyn ServiceHandler>,
+    service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
 }
 
 impl<S: ReadableEncodedStore + 'static> Clone for SimpleEvaluator<S> {
@@ -53,7 +52,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
     pub fn new(
         dataset: Rc<DatasetView<S>>,
         base_iri: Option<Rc<Iri<String>>>,
-        service_handler: Rc<dyn ServiceHandler>,
+        service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
     ) -> Self {
         Self {
             dataset,
@@ -67,14 +66,14 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         &self,
         plan: &PlanNode,
         variables: Rc<Vec<Variable>>,
-    ) -> Result<QueryResult> {
+    ) -> Result<QueryResult, EvaluationError> {
         let iter = self.eval_plan(plan, EncodedTuple::with_capacity(variables.len()));
         Ok(QueryResult::Solutions(
             self.decode_bindings(iter, variables),
         ))
     }
 
-    pub fn evaluate_ask_plan(&self, plan: &PlanNode) -> Result<QueryResult> {
+    pub fn evaluate_ask_plan(&self, plan: &PlanNode) -> Result<QueryResult, EvaluationError> {
         let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
         match self.eval_plan(plan, from).next() {
             Some(Ok(_)) => Ok(QueryResult::Boolean(true)),
@@ -87,7 +86,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         &self,
         plan: &PlanNode,
         construct: Rc<Vec<TripleTemplate>>,
-    ) -> Result<QueryResult> {
+    ) -> Result<QueryResult, EvaluationError> {
         let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
         Ok(QueryResult::Graph(QueryTriplesIterator {
             iter: Box::new(ConstructIterator {
@@ -100,7 +99,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         }))
     }
 
-    pub fn evaluate_describe_plan(&self, plan: &PlanNode) -> Result<QueryResult> {
+    pub fn evaluate_describe_plan(&self, plan: &PlanNode) -> Result<QueryResult, EvaluationError> {
         let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
         Ok(QueryResult::Graph(QueryTriplesIterator {
             iter: Box::new(DescribeIterator {
@@ -228,7 +227,8 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
                         if let Some(graph_name) = get_pattern_value(&graph_name, &tuple) {
                             graph_name
                         } else {
-                            let result: EncodedTuplesIterator = Box::new(once(Err(Error::msg(
+                            let result: EncodedTuplesIterator =
+                            Box::new(once(Err(EvaluationError::msg(
                                 "Unknown graph name is not allowed when evaluating property path",
                             ))));
                             return result;
@@ -502,11 +502,11 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         graph_pattern: Rc<GraphPattern>,
         variables: Rc<Vec<Variable>>,
         from: &EncodedTuple,
-    ) -> Result<EncodedTuplesIterator> {
+    ) -> Result<EncodedTuplesIterator, EvaluationError> {
         if let QueryResult::Solutions(iter) = self.service_handler.handle(
             self.dataset.decode_named_node(
                 get_pattern_value(service_name, from)
-                    .ok_or_else(|| Error::msg("The SERVICE name is not bound"))?,
+                    .ok_or_else(|| EvaluationError::msg("The SERVICE name is not bound"))?,
             )?,
             Query(QueryVariants::Select {
                 dataset: Rc::new(DatasetSpec::default()),
@@ -516,7 +516,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         )? {
             Ok(self.encode_bindings(variables, iter))
         } else {
-            Err(Error::msg(
+            Err(EvaluationError::msg(
                 "The service call has not returned a set of solutions",
             ))
         }
@@ -570,7 +570,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         path: &PlanPropertyPath,
         start: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Box<dyn Iterator<Item = Result<EncodedTerm>>> {
+    ) -> Box<dyn Iterator<Item = Result<EncodedTerm, EvaluationError>>> {
         match path {
             PlanPropertyPath::PredicatePath(p) => Box::new(
                 self.dataset
@@ -633,7 +633,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         path: &PlanPropertyPath,
         end: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> Box<dyn Iterator<Item = Result<EncodedTerm>>> {
+    ) -> Box<dyn Iterator<Item = Result<EncodedTerm, EvaluationError>>> {
         match path {
             PlanPropertyPath::PredicatePath(p) => Box::new(
                 self.dataset
@@ -695,7 +695,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         &self,
         path: &PlanPropertyPath,
         graph_name: EncodedTerm,
-    ) -> Box<dyn Iterator<Item = Result<(EncodedTerm, EncodedTerm)>>> {
+    ) -> Box<dyn Iterator<Item = Result<(EncodedTerm, EncodedTerm), EvaluationError>>> {
         match path {
             PlanPropertyPath::PredicatePath(p) => Box::new(
                 self.dataset
@@ -770,7 +770,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
     fn get_subject_or_object_identity_pairs(
         &self,
         graph_name: EncodedTerm,
-    ) -> impl Iterator<Item = Result<(EncodedTerm, EncodedTerm)>> {
+    ) -> impl Iterator<Item = Result<(EncodedTerm, EncodedTerm), EvaluationError>> {
         self.dataset
             .quads_for_pattern(None, None, None, Some(graph_name))
             .flat_map_ok(|t| once(Ok(t.subject)).chain(once(Ok(t.object))))
@@ -2160,13 +2160,13 @@ pub fn are_compatible_and_not_disjointed(a: &EncodedTuple, b: &EncodedTuple) -> 
 struct JoinIterator {
     left: Vec<EncodedTuple>,
     right_iter: EncodedTuplesIterator,
-    buffered_results: Vec<Result<EncodedTuple>>,
+    buffered_results: Vec<Result<EncodedTuple, EvaluationError>>,
 }
 
 impl Iterator for JoinIterator {
-    type Item = Result<EncodedTuple>;
+    type Item = Result<EncodedTuple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple>> {
+    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
         loop {
             if let Some(result) = self.buffered_results.pop() {
                 return Some(result);
@@ -2190,9 +2190,9 @@ struct AntiJoinIterator {
 }
 
 impl Iterator for AntiJoinIterator {
-    type Item = Result<EncodedTuple>;
+    type Item = Result<EncodedTuple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple>> {
+    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
         loop {
             match self.left_iter.next()? {
                 Ok(left_tuple) => {
@@ -2217,9 +2217,9 @@ struct LeftJoinIterator<S: ReadableEncodedStore + 'static> {
 }
 
 impl<S: ReadableEncodedStore + 'static> Iterator for LeftJoinIterator<S> {
-    type Item = Result<EncodedTuple>;
+    type Item = Result<EncodedTuple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple>> {
+    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
         if let Some(tuple) = self.current_right.next() {
             return Some(tuple);
         }
@@ -2247,9 +2247,9 @@ struct BadLeftJoinIterator<S: ReadableEncodedStore + 'static> {
 }
 
 impl<S: ReadableEncodedStore + 'static> Iterator for BadLeftJoinIterator<S> {
-    type Item = Result<EncodedTuple>;
+    type Item = Result<EncodedTuple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple>> {
+    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
         while let Some(right_tuple) = self.current_right.next() {
             match right_tuple {
                 Ok(right_tuple) => {
@@ -2298,9 +2298,9 @@ struct UnionIterator<S: ReadableEncodedStore + 'static> {
 }
 
 impl<S: ReadableEncodedStore + 'static> Iterator for UnionIterator<S> {
-    type Item = Result<EncodedTuple>;
+    type Item = Result<EncodedTuple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple>> {
+    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
         loop {
             if let Some(tuple) = self.current_iterator.next() {
                 return Some(tuple);
@@ -2320,14 +2320,14 @@ struct ConstructIterator<S: ReadableEncodedStore + 'static> {
     eval: SimpleEvaluator<S>,
     iter: EncodedTuplesIterator,
     template: Rc<Vec<TripleTemplate>>,
-    buffered_results: Vec<Result<Triple>>,
+    buffered_results: Vec<Result<Triple, EvaluationError>>,
     bnodes: Vec<BlankNode>,
 }
 
 impl<S: ReadableEncodedStore + 'static> Iterator for ConstructIterator<S> {
-    type Item = Result<Triple>;
+    type Item = Result<Triple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<Triple>> {
+    fn next(&mut self) -> Option<Result<Triple, EvaluationError>> {
         loop {
             if let Some(result) = self.buffered_results.pop() {
                 return Some(result);
@@ -2379,7 +2379,7 @@ fn decode_triple(
     subject: EncodedTerm,
     predicate: EncodedTerm,
     object: EncodedTerm,
-) -> Result<Triple> {
+) -> Result<Triple, EvaluationError> {
     Ok(Triple::new(
         decoder.decode_named_or_blank_node(subject)?,
         decoder.decode_named_node(predicate)?,
@@ -2390,13 +2390,13 @@ fn decode_triple(
 struct DescribeIterator<S: ReadableEncodedStore + 'static> {
     eval: SimpleEvaluator<S>,
     iter: EncodedTuplesIterator,
-    quads: Box<dyn Iterator<Item = Result<EncodedQuad>>>,
+    quads: Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>>,
 }
 
 impl<S: ReadableEncodedStore + 'static> Iterator for DescribeIterator<S> {
-    type Item = Result<Triple>;
+    type Item = Result<Triple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<Triple>> {
+    fn next(&mut self) -> Option<Result<Triple, EvaluationError>> {
         loop {
             if let Some(quad) = self.quads.next() {
                 return Some(match quad {
@@ -2449,10 +2449,10 @@ impl<T1, T2, I1: Iterator<Item = T1>, I2: Iterator<Item = T2>> Iterator
     }
 }
 
-fn transitive_closure<T: Copy + Eq + Hash, NI: Iterator<Item = Result<T>>>(
-    start: impl IntoIterator<Item = Result<T>>,
+fn transitive_closure<T: Copy + Eq + Hash, NI: Iterator<Item = Result<T, EvaluationError>>>(
+    start: impl IntoIterator<Item = Result<T, EvaluationError>>,
     next: impl Fn(T) -> NI,
-) -> impl Iterator<Item = Result<T>> {
+) -> impl Iterator<Item = Result<T, EvaluationError>> {
     //TODO: optimize
     let mut all = HashSet::<T>::default();
     let mut errors = Vec::default();
@@ -2494,8 +2494,8 @@ fn transitive_closure<T: Copy + Eq + Hash, NI: Iterator<Item = Result<T>>>(
 }
 
 fn hash_deduplicate<T: Eq + Hash + Clone>(
-    iter: impl Iterator<Item = Result<T>>,
-) -> impl Iterator<Item = Result<T>> {
+    iter: impl Iterator<Item = Result<T, EvaluationError>>,
+) -> impl Iterator<Item = Result<T, EvaluationError>> {
     let mut already_seen = HashSet::with_capacity(iter.size_hint().0);
     iter.filter(move |e| {
         if let Ok(e) = e {
@@ -2511,15 +2511,15 @@ fn hash_deduplicate<T: Eq + Hash + Clone>(
     })
 }
 
-trait ResultIterator<T>: Iterator<Item = Result<T>> + Sized {
-    fn flat_map_ok<O, F: FnMut(T) -> U, U: IntoIterator<Item = Result<O>>>(
+trait ResultIterator<T>: Iterator<Item = Result<T, EvaluationError>> + Sized {
+    fn flat_map_ok<O, F: FnMut(T) -> U, U: IntoIterator<Item = Result<O, EvaluationError>>>(
         self,
         f: F,
     ) -> FlatMapOk<T, O, Self, F, U>;
 }
 
-impl<T, I: Iterator<Item = Result<T>> + Sized> ResultIterator<T> for I {
-    fn flat_map_ok<O, F: FnMut(T) -> U, U: IntoIterator<Item = Result<O>>>(
+impl<T, I: Iterator<Item = Result<T, EvaluationError>> + Sized> ResultIterator<T> for I {
+    fn flat_map_ok<O, F: FnMut(T) -> U, U: IntoIterator<Item = Result<O, EvaluationError>>>(
         self,
         f: F,
     ) -> FlatMapOk<T, O, Self, F, U> {
@@ -2534,21 +2534,26 @@ impl<T, I: Iterator<Item = Result<T>> + Sized> ResultIterator<T> for I {
 struct FlatMapOk<
     T,
     O,
-    I: Iterator<Item = Result<T>>,
+    I: Iterator<Item = Result<T, EvaluationError>>,
     F: FnMut(T) -> U,
-    U: IntoIterator<Item = Result<O>>,
+    U: IntoIterator<Item = Result<O, EvaluationError>>,
 > {
     inner: I,
     f: F,
     current: Option<U::IntoIter>,
 }
 
-impl<T, O, I: Iterator<Item = Result<T>>, F: FnMut(T) -> U, U: IntoIterator<Item = Result<O>>>
-    Iterator for FlatMapOk<T, O, I, F, U>
+impl<
+        T,
+        O,
+        I: Iterator<Item = Result<T, EvaluationError>>,
+        F: FnMut(T) -> U,
+        U: IntoIterator<Item = Result<O, EvaluationError>>,
+    > Iterator for FlatMapOk<T, O, I, F, U>
 {
-    type Item = Result<O>;
+    type Item = Result<O, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<O>> {
+    fn next(&mut self) -> Option<Result<O, EvaluationError>> {
         loop {
             if let Some(current) = &mut self.current {
                 if let Some(next) = current.next() {

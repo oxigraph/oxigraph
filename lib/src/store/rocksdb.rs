@@ -1,9 +1,9 @@
 //! Store based on the [RocksDB](https://rocksdb.org/) key-value database.
 
-use crate::error::{Infallible, UnwrapInfallible};
+use crate::error::{invalid_data_error, Infallible, UnwrapInfallible};
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
-use crate::sparql::{Query, QueryOptions, QueryResult, SimplePreparedQuery};
+use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::store::{
     dump_dataset, dump_graph, load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore,
@@ -48,7 +48,7 @@ use std::{fmt, str};
 /// #
 /// # };
 /// # remove_dir_all("example.db")?;
-/// # oxigraph::Result::Ok(())
+/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Clone)]
 pub struct RocksDbStore {
@@ -95,9 +95,9 @@ impl RocksDbStore {
     /// See `MemoryStore` for a usage example.
     pub fn query(
         &self,
-        query: impl TryInto<Query, Error = impl Into<crate::Error>>,
+        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
         options: QueryOptions,
-    ) -> Result<QueryResult, crate::Error> {
+    ) -> Result<QueryResult, EvaluationError> {
         self.prepare_query(query, options)?.exec()
     }
 
@@ -107,9 +107,9 @@ impl RocksDbStore {
     /// See `MemoryStore` for a usage example.
     pub fn prepare_query(
         &self,
-        query: impl TryInto<Query, Error = impl Into<crate::Error>>,
+        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
         options: QueryOptions,
-    ) -> Result<RocksDbPreparedQuery, crate::Error> {
+    ) -> Result<RocksDbPreparedQuery, EvaluationError> {
         Ok(RocksDbPreparedQuery(SimplePreparedQuery::new(
             (*self).clone(),
             query,
@@ -194,7 +194,7 @@ impl RocksDbStore {
         format: GraphFormat,
         to_graph_name: &GraphName,
         base_iri: Option<&str>,
-    ) -> Result<(), crate::Error> {
+    ) -> Result<(), io::Error> {
         let mut transaction = self.auto_batch_writer();
         load_graph(&mut transaction, reader, format, to_graph_name, base_iri)?;
         Ok(transaction.apply()?)
@@ -215,7 +215,7 @@ impl RocksDbStore {
         reader: impl BufRead,
         format: DatasetFormat,
         base_iri: Option<&str>,
-    ) -> Result<(), crate::Error> {
+    ) -> Result<(), io::Error> {
         let mut transaction = self.auto_batch_writer();
         load_dataset(&mut transaction, reader, format, base_iri)?;
         Ok(transaction.apply()?)
@@ -476,7 +476,7 @@ impl StrLookup for RocksDbStore {
             .map_err(map_err)?
             .map(String::from_utf8)
             .transpose()
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+            .map_err(invalid_data_error)
     }
 }
 
@@ -553,7 +553,7 @@ pub struct RocksDbPreparedQuery(SimplePreparedQuery<RocksDbStore>);
 
 impl RocksDbPreparedQuery {
     /// Evaluates the query and returns its results
-    pub fn exec(&self) -> Result<QueryResult, crate::Error> {
+    pub fn exec(&self) -> Result<QueryResult, EvaluationError> {
         self.0.exec()
     }
 }
@@ -892,14 +892,14 @@ fn map_err(e: Error) -> io::Error {
 }
 
 #[test]
-fn store() -> Result<(), crate::Error> {
+fn store() -> Result<(), io::Error> {
     use crate::model::*;
     use rand::random;
     use std::env::temp_dir;
     use std::fs::remove_dir_all;
 
     let main_s = NamedOrBlankNode::from(BlankNode::default());
-    let main_p = NamedNode::new("http://example.com")?;
+    let main_p = NamedNode::new("http://example.com").unwrap();
     let main_o = Term::from(Literal::from(1));
 
     let main_quad = Quad::new(main_s.clone(), main_p.clone(), main_o.clone(), None);

@@ -3,12 +3,11 @@
 use crate::error::{Infallible, UnwrapInfallible};
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
-use crate::sparql::{Query, QueryOptions, QueryResult, SimplePreparedQuery};
+use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::store::{
     dump_dataset, dump_graph, load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore,
 };
-use crate::Error;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
@@ -45,7 +44,7 @@ use std::{fmt, io};
 /// if let QueryResult::Solutions(mut solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
 ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 /// }
-/// # oxigraph::Result::Ok(())
+/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Clone)]
 pub struct MemoryStore {
@@ -102,13 +101,13 @@ impl MemoryStore {
     /// if let QueryResult::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
     ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
     /// }
-    /// # oxigraph::Result::Ok(())
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn query(
         &self,
-        query: impl TryInto<Query, Error = impl Into<Error>>,
+        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
         options: QueryOptions,
-    ) -> crate::Result<QueryResult> {
+    ) -> Result<QueryResult, EvaluationError> {
         self.prepare_query(query, options)?.exec()
     }
 
@@ -132,13 +131,13 @@ impl MemoryStore {
     /// if let QueryResult::Solutions(mut solutions) = prepared_query.exec()? {
     ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
     /// }
-    /// # oxigraph::Result::Ok(())
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prepare_query(
         &self,
-        query: impl TryInto<Query, Error = impl Into<Error>>,
+        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
         options: QueryOptions,
-    ) -> crate::Result<MemoryPreparedQuery> {
+    ) -> Result<MemoryPreparedQuery, EvaluationError> {
         Ok(MemoryPreparedQuery(SimplePreparedQuery::new(
             self.clone(),
             query,
@@ -163,7 +162,7 @@ impl MemoryStore {
     /// // quad filter
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
     /// assert_eq!(vec![quad], results);
-    /// # oxigraph::Result::Ok(())
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn quads_for_pattern(
         &self,
@@ -232,7 +231,7 @@ impl MemoryStore {
     ///
     /// // quad filter
     /// assert!(store.contains(&quad));
-    /// # oxigraph::Result::Ok(())
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn transaction<'a, E>(
         &'a self,
@@ -266,7 +265,7 @@ impl MemoryStore {
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
     /// let ex = NamedNode::new("http://example.com")?;
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results);
-    /// # oxigraph::Result::Ok(())
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     ///
     /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
@@ -300,7 +299,7 @@ impl MemoryStore {
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
     /// let ex = NamedNode::new("http://example.com")?;
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), Some(ex.into()))], results);
-    /// # oxigraph::Result::Ok(())
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     ///
     /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
@@ -356,7 +355,7 @@ impl MemoryStore {
     /// let mut buffer = Vec::new();
     /// store.dump_graph(&mut buffer, GraphFormat::NTriples, &GraphName::DefaultGraph)?;
     /// assert_eq!(file, buffer.as_slice());
-    /// # oxigraph::Result::Ok(())
+    /// # std::io::Result::Ok(())
     /// ```
     ///
     /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
@@ -390,7 +389,7 @@ impl MemoryStore {
     /// let mut buffer = Vec::new();
     /// store.dump_dataset(&mut buffer, DatasetFormat::NQuads)?;
     /// assert_eq!(file, buffer.as_slice());
-    /// # oxigraph::Result::Ok(())
+    /// # std::io::Result::Ok(())
     /// ```
     ///
     /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
@@ -954,7 +953,7 @@ pub struct MemoryPreparedQuery(SimplePreparedQuery<MemoryStore>);
 
 impl MemoryPreparedQuery {
     /// Evaluates the query and returns its results
-    pub fn exec(&self) -> crate::Result<QueryResult> {
+    pub fn exec(&self) -> Result<QueryResult, EvaluationError> {
         self.0.exec()
     }
 }
@@ -992,7 +991,7 @@ impl<'a> MemoryTransaction<'a> {
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
     /// let ex = NamedNode::new("http://example.com")?;
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results);
-    /// # oxigraph::Result::Ok(())
+    /// # Result::<_, oxigraph::sparql::EvaluationError>::Ok(())
     /// ```
     pub fn load_graph(
         &mut self,
@@ -1022,7 +1021,7 @@ impl<'a> MemoryTransaction<'a> {
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
     /// let ex = NamedNode::new("http://example.com")?;
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), Some(ex.into()))], results);
-    /// # oxigraph::Result::Ok(())
+    /// # Result::<_, oxigraph::sparql::EvaluationError>::Ok(())
     /// ```
     pub fn load_dataset(
         &mut self,

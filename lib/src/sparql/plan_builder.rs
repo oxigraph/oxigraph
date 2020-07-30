@@ -1,10 +1,9 @@
 use crate::model::{BlankNode, Term};
 use crate::sparql::algebra::*;
+use crate::sparql::error::EvaluationError;
 use crate::sparql::model::*;
 use crate::sparql::plan::*;
 use crate::store::numeric_encoder::{Encoder, ENCODED_DEFAULT_GRAPH};
-use crate::Error;
-use crate::Result;
 use std::collections::{BTreeSet, HashSet};
 use std::rc::Rc;
 
@@ -13,7 +12,10 @@ pub(crate) struct PlanBuilder<E: Encoder> {
 }
 
 impl<E: Encoder> PlanBuilder<E> {
-    pub fn build(encoder: E, pattern: &GraphPattern) -> Result<(PlanNode, Vec<Variable>)> {
+    pub fn build(
+        encoder: E,
+        pattern: &GraphPattern,
+    ) -> Result<(PlanNode, Vec<Variable>), EvaluationError> {
         let mut variables = Vec::default();
         let plan = PlanBuilder { encoder }.build_for_graph_pattern(
             pattern,
@@ -27,7 +29,7 @@ impl<E: Encoder> PlanBuilder<E> {
         encoder: E,
         template: &[TriplePattern],
         mut variables: Vec<Variable>,
-    ) -> Result<Vec<TripleTemplate>> {
+    ) -> Result<Vec<TripleTemplate>, EvaluationError> {
         PlanBuilder { encoder }.build_for_graph_template(template, &mut variables)
     }
 
@@ -36,7 +38,7 @@ impl<E: Encoder> PlanBuilder<E> {
         pattern: &GraphPattern,
         variables: &mut Vec<Variable>,
         graph_name: PatternValue,
-    ) -> Result<PlanNode> {
+    ) -> Result<PlanNode, EvaluationError> {
         Ok(match pattern {
             GraphPattern::BGP(p) => self.build_for_bgp(p, variables, graph_name)?,
             GraphPattern::Join(a, b) => PlanNode::Join {
@@ -143,7 +145,7 @@ impl<E: Encoder> PlanBuilder<E> {
                                     variable_key(variables, v),
                                 ))
                             })
-                            .collect::<Result<Vec<_>>>()?,
+                            .collect::<Result<Vec<_>, EvaluationError>>()?,
                     ),
                 }
             }
@@ -151,7 +153,7 @@ impl<E: Encoder> PlanBuilder<E> {
                 tuples: self.encode_bindings(bs, variables)?,
             },
             GraphPattern::OrderBy(l, o) => {
-                let by: Result<Vec<_>> = o
+                let by: Result<Vec<_>, EvaluationError> = o
                     .iter()
                     .map(|comp| match comp {
                         OrderComparator::Asc(e) => Ok(Comparator::Asc(
@@ -216,7 +218,7 @@ impl<E: Encoder> PlanBuilder<E> {
         p: &[TripleOrPathPattern],
         variables: &mut Vec<Variable>,
         graph_name: PatternValue,
-    ) -> Result<PlanNode> {
+    ) -> Result<PlanNode, EvaluationError> {
         let mut plan = PlanNode::Init;
         for pattern in sort_bgp(p) {
             plan = match pattern {
@@ -242,7 +244,7 @@ impl<E: Encoder> PlanBuilder<E> {
         Ok(plan)
     }
 
-    fn build_for_path(&mut self, path: &PropertyPath) -> Result<PlanPropertyPath> {
+    fn build_for_path(&mut self, path: &PropertyPath) -> Result<PlanPropertyPath, EvaluationError> {
         Ok(match path {
             PropertyPath::PredicatePath(p) => PlanPropertyPath::PredicatePath(
                 self.encoder.encode_named_node(p).map_err(|e| e.into())?,
@@ -270,7 +272,7 @@ impl<E: Encoder> PlanBuilder<E> {
             PropertyPath::NegatedPropertySet(p) => PlanPropertyPath::NegatedPropertySet(Rc::new(
                 p.iter()
                     .map(|p| self.encoder.encode_named_node(p).map_err(|e| e.into()))
-                    .collect::<std::result::Result<Vec<_>, _>>()?,
+                    .collect::<Result<Vec<_>, _>>()?,
             )),
         })
     }
@@ -280,7 +282,7 @@ impl<E: Encoder> PlanBuilder<E> {
         expression: &Expression,
         variables: &mut Vec<Variable>,
         graph_name: PatternValue,
-    ) -> Result<PlanExpression> {
+    ) -> Result<PlanExpression, EvaluationError> {
         Ok(match expression {
             Expression::NamedNode(node) => PlanExpression::Constant(
                 self.encoder.encode_named_node(node).map_err(|e| e.into())?,
@@ -676,7 +678,7 @@ impl<E: Encoder> PlanBuilder<E> {
                             "string",
                         )?
                     } else {
-                        return Err(Error::msg(format!(
+                        return Err(EvaluationError::msg(format!(
                             "Not supported custom function {}",
                             expression
                         )));
@@ -697,7 +699,7 @@ impl<E: Encoder> PlanBuilder<E> {
         variables: &mut Vec<Variable>,
         graph_name: PatternValue,
         name: &'static str,
-    ) -> Result<PlanExpression> {
+    ) -> Result<PlanExpression, EvaluationError> {
         if parameters.len() == 1 {
             Ok(constructor(Box::new(self.build_for_expression(
                 &parameters[0],
@@ -705,7 +707,7 @@ impl<E: Encoder> PlanBuilder<E> {
                 graph_name,
             )?)))
         } else {
-            Err(Error::msg(format!(
+            Err(EvaluationError::msg(format!(
                 "The xsd:{} casting takes only one parameter",
                 name
             )))
@@ -717,7 +719,7 @@ impl<E: Encoder> PlanBuilder<E> {
         l: &[Expression],
         variables: &mut Vec<Variable>,
         graph_name: PatternValue,
-    ) -> Result<Vec<PlanExpression>> {
+    ) -> Result<Vec<PlanExpression>, EvaluationError> {
         l.iter()
             .map(|e| self.build_for_expression(e, variables, graph_name))
             .collect()
@@ -727,7 +729,7 @@ impl<E: Encoder> PlanBuilder<E> {
         &mut self,
         term_or_variable: &TermOrVariable,
         variables: &mut Vec<Variable>,
-    ) -> Result<PatternValue> {
+    ) -> Result<PatternValue, EvaluationError> {
         Ok(match term_or_variable {
             TermOrVariable::Variable(variable) => {
                 PatternValue::Variable(variable_key(variables, variable))
@@ -746,7 +748,7 @@ impl<E: Encoder> PlanBuilder<E> {
         &mut self,
         named_node_or_variable: &NamedNodeOrVariable,
         variables: &mut Vec<Variable>,
-    ) -> Result<PatternValue> {
+    ) -> Result<PatternValue, EvaluationError> {
         Ok(match named_node_or_variable {
             NamedNodeOrVariable::NamedNode(named_node) => PatternValue::Constant(
                 self.encoder
@@ -763,7 +765,7 @@ impl<E: Encoder> PlanBuilder<E> {
         &mut self,
         bindings: &StaticBindings,
         variables: &mut Vec<Variable>,
-    ) -> Result<Vec<EncodedTuple>> {
+    ) -> Result<Vec<EncodedTuple>, EvaluationError> {
         let bindings_variables_keys = bindings
             .variables()
             .iter()
@@ -791,7 +793,7 @@ impl<E: Encoder> PlanBuilder<E> {
         aggregate: &Aggregation,
         variables: &mut Vec<Variable>,
         graph_name: PatternValue,
-    ) -> Result<PlanAggregation> {
+    ) -> Result<PlanAggregation, EvaluationError> {
         Ok(match aggregate {
             Aggregation::Count(e, distinct) => PlanAggregation {
                 function: PlanAggregationFunction::Count,
@@ -840,7 +842,7 @@ impl<E: Encoder> PlanBuilder<E> {
         &mut self,
         template: &[TriplePattern],
         variables: &mut Vec<Variable>,
-    ) -> Result<Vec<TripleTemplate>> {
+    ) -> Result<Vec<TripleTemplate>, EvaluationError> {
         let mut bnodes = Vec::default();
         template
             .iter()
@@ -868,7 +870,7 @@ impl<E: Encoder> PlanBuilder<E> {
         term_or_variable: &TermOrVariable,
         variables: &mut Vec<Variable>,
         bnodes: &mut Vec<BlankNode>,
-    ) -> Result<TripleTemplateValue> {
+    ) -> Result<TripleTemplateValue, EvaluationError> {
         Ok(match term_or_variable {
             TermOrVariable::Variable(variable) => {
                 TripleTemplateValue::Variable(variable_key(variables, variable))
@@ -886,7 +888,7 @@ impl<E: Encoder> PlanBuilder<E> {
         &mut self,
         named_node_or_variable: &NamedNodeOrVariable,
         variables: &mut Vec<Variable>,
-    ) -> Result<TripleTemplateValue> {
+    ) -> Result<TripleTemplateValue, EvaluationError> {
         Ok(match named_node_or_variable {
             NamedNodeOrVariable::Variable(variable) => {
                 TripleTemplateValue::Variable(variable_key(variables, variable))

@@ -10,8 +10,9 @@ use std::fmt;
 ///
 /// assert_eq!(
 ///     "<http://example.com/foo>",
-///     NamedNode::new("http://example.com/foo").unwrap().to_string()
-/// )
+///     NamedNode::new("http://example.com/foo")?.to_string()
+/// );
+/// # Result::<_,oxigraph::model::IriParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct NamedNode {

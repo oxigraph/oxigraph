@@ -1,10 +1,11 @@
+use crate::error::invalid_input_error;
 use crate::io::GraphSerializer;
 #[allow(deprecated)]
 use crate::io::{FileSyntax, GraphFormat};
 use crate::model::*;
+use crate::sparql::error::EvaluationError;
 use crate::sparql::json_results::write_json_results;
 use crate::sparql::xml_results::{read_xml_results, write_xml_results};
-use crate::{Error, Result};
 use rand::random;
 use std::fmt;
 use std::io::{BufRead, Write};
@@ -21,13 +22,16 @@ pub enum QueryResult {
 }
 
 impl QueryResult {
-    pub fn read(reader: impl BufRead + 'static, format: QueryResultFormat) -> Result<Self> {
+    pub fn read(
+        reader: impl BufRead + 'static,
+        format: QueryResultFormat,
+    ) -> Result<Self, EvaluationError> {
         match format {
             QueryResultFormat::Xml => read_xml_results(reader),
-            QueryResultFormat::Json => Err(Error::msg(
-                //TODO: implement
+            QueryResultFormat::Json => Err(invalid_input_error(
                 "JSON SPARQL results format parsing has not been implemented yet",
-            )),
+            )
+            .into()), //TODO: implement
         }
     }
 
@@ -47,9 +51,13 @@ impl QueryResult {
     /// let mut results = Vec::new();
     /// store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?.write(&mut results, QueryResultFormat::Json)?;
     /// assert_eq!(results, "{\"head\":{\"vars\":[\"s\"]},\"results\":{\"bindings\":[{\"s\":{\"type\":\"uri\",\"value\":\"http://example.com\"}}]}}".as_bytes());
-    /// # oxigraph::Result::Ok(())
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn write(self, writer: impl Write, format: QueryResultFormat) -> Result<()> {
+    pub fn write(
+        self,
+        writer: impl Write,
+        format: QueryResultFormat,
+    ) -> Result<(), EvaluationError> {
         match format {
             QueryResultFormat::Xml => write_xml_results(self, writer),
             QueryResultFormat::Json => write_json_results(self, writer),
@@ -75,9 +83,13 @@ impl QueryResult {
     /// let mut results = Vec::new();
     /// store.query("CONSTRUCT WHERE { ?s ?p ?o }", QueryOptions::default())?.write_graph(&mut results, GraphFormat::NTriples)?;
     /// assert_eq!(results, graph);
-    /// # oxigraph::Result::Ok(())
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn write_graph(self, write: impl Write, format: GraphFormat) -> Result<()> {
+    pub fn write_graph(
+        self,
+        write: impl Write,
+        format: GraphFormat,
+    ) -> Result<(), EvaluationError> {
         if let QueryResult::Graph(triples) = self {
             let mut writer = GraphSerializer::from_format(format).triple_writer(write)?;
             for triple in triples {
@@ -86,9 +98,10 @@ impl QueryResult {
             writer.finish()?;
             Ok(())
         } else {
-            Err(Error::msg(
-                "Bindings or booleans could not be formatted as an RDF graph",
-            ))
+            Err(
+                invalid_input_error("Bindings or booleans could not be formatted as an RDF graph")
+                    .into(),
+            )
         }
     }
 }
@@ -212,17 +225,17 @@ impl FileSyntax for QueryResultFormat {
 ///         println!("{:?}", solution?.get("s"));
 ///     }
 /// }
-/// # oxigraph::Result::Ok(())
+/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct QuerySolutionsIterator {
     variables: Rc<Vec<Variable>>,
-    iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>>>>,
+    iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>, EvaluationError>>>,
 }
 
 impl QuerySolutionsIterator {
     pub fn new(
         variables: Rc<Vec<Variable>>,
-        iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>>>>,
+        iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>, EvaluationError>>>,
     ) -> Self {
         Self { variables, iter }
     }
@@ -237,14 +250,16 @@ impl QuerySolutionsIterator {
     /// if let QueryResult::Solutions(solutions) = store.query("SELECT ?s ?o WHERE { ?s ?p ?o }", QueryOptions::default())? {
     ///     assert_eq!(solutions.variables(), &[Variable::new("s"), Variable::new("o")]);
     /// }
-    /// # oxigraph::Result::Ok(())
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn variables(&self) -> &[Variable] {
         &*self.variables
     }
 
     #[deprecated(note = "Please directly use QuerySolutionsIterator as an iterator instead")]
-    pub fn into_values_iter(self) -> Box<dyn Iterator<Item = Result<Vec<Option<Term>>>>> {
+    pub fn into_values_iter(
+        self,
+    ) -> Box<dyn Iterator<Item = Result<Vec<Option<Term>>, EvaluationError>>> {
         self.iter
     }
 
@@ -253,16 +268,16 @@ impl QuerySolutionsIterator {
         self,
     ) -> (
         Vec<Variable>,
-        Box<dyn Iterator<Item = Result<Vec<Option<Term>>>>>,
+        Box<dyn Iterator<Item = Result<Vec<Option<Term>>, EvaluationError>>>,
     ) {
         ((*self.variables).clone(), self.iter)
     }
 }
 
 impl Iterator for QuerySolutionsIterator {
-    type Item = Result<QuerySolution>;
+    type Item = Result<QuerySolution, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<QuerySolution>> {
+    fn next(&mut self) -> Option<Result<QuerySolution, EvaluationError>> {
         Some(self.iter.next()?.map(|values| QuerySolution {
             values,
             variables: self.variables.clone(),
@@ -359,16 +374,16 @@ impl VariableSolutionIndex for Variable {
 ///         println!("{}", triple?);
 ///     }
 /// }
-/// # oxigraph::Result::Ok(())
+/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct QueryTriplesIterator {
-    pub(crate) iter: Box<dyn Iterator<Item = Result<Triple>>>,
+    pub(crate) iter: Box<dyn Iterator<Item = Result<Triple, EvaluationError>>>,
 }
 
 impl Iterator for QueryTriplesIterator {
-    type Item = Result<Triple>;
+    type Item = Result<Triple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<Triple>> {
+    fn next(&mut self) -> Option<Result<Triple, EvaluationError>> {
         self.iter.next()
     }
 
@@ -409,7 +424,7 @@ impl Variable {
     }
 
     #[deprecated(note = "Please use as_str instead")]
-    pub fn name(&self) -> Result<&str> {
+    pub fn name(&self) -> Result<&str, EvaluationError> {
         Ok(self.as_str())
     }
 

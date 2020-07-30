@@ -61,7 +61,7 @@ impl PySledStore {
         let results = self
             .inner
             .query(query, QueryOptions::default())
-            .map_err(|e| ValueError::py_err(e.to_string()))?;
+            .map_err(map_evaluation_error)?;
         query_results_to_python(py, results)
     }
 

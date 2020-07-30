@@ -12,9 +12,16 @@ use std::str;
 /// It is also possible to create a blank node from a blank node identifier using the `BlankNode::new` method.
 /// The blank node identifier must be valid according to N-Triples, Turtle and SPARQL grammars.
 ///
-/// The default string formatter is returning a N-Triples, Turtle and SPARQL compatible representation.
-/// `BlankNode::default().to_string()` should return something like `_:00112233445566778899aabbccddeeff`
+/// The default string formatter is returning a N-Triples, Turtle and SPARQL compatible representation:
+/// ```
+/// use oxigraph::model::BlankNode;
 ///
+/// assert_eq!(
+///     "_:a122",
+///     BlankNode::new("a122")?.to_string()
+/// );
+/// # Result::<_,oxigraph::model::BlankNodeIdParseError>::Ok(())
+/// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct BlankNode(BlankNodeContent);
 

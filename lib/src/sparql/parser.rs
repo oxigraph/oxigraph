@@ -4,7 +4,6 @@ use crate::model::*;
 use crate::sparql::algebra::*;
 use crate::sparql::model::*;
 use oxiri::{Iri, IriParseError};
-use peg::error::ParseError;
 use peg::parser;
 use peg::str::LineCol;
 use std::borrow::Cow;
@@ -25,7 +24,7 @@ use std::{char, fmt};
 /// let query = Query::parse(query_str, None)?;
 ///
 /// assert_eq!(query.to_string(), query_str);
-/// # oxigraph::Result::Ok(())
+/// # Result::Ok::<_, oxigraph::sparql::ParseError>(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Query(pub(crate) QueryVariants);
@@ -38,12 +37,12 @@ impl fmt::Display for Query {
 
 impl Query {
     /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query
-    pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self, SparqlParseError> {
+    pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self, ParseError> {
         let mut state = ParserState {
             base_iri: if let Some(base_iri) = base_iri {
                 Some(Rc::new(Iri::parse(base_iri.to_owned()).map_err(|e| {
-                    SparqlParseError {
-                        inner: SparqlParseErrorKind::InvalidBaseIri(e),
+                    ParseError {
+                        inner: ParseErrorKind::InvalidBaseIri(e),
                     }
                 })?))
             } else {
@@ -57,8 +56,8 @@ impl Query {
 
         Ok(Self(
             parser::QueryUnit(&unescape_unicode_codepoints(query), &mut state).map_err(|e| {
-                SparqlParseError {
-                    inner: SparqlParseErrorKind::Parser(e),
+                ParseError {
+                    inner: ParseErrorKind::Parser(e),
                 }
             })?,
         ))
@@ -66,53 +65,53 @@ impl Query {
 }
 
 impl FromStr for Query {
-    type Err = SparqlParseError;
+    type Err = ParseError;
 
-    fn from_str(query: &str) -> Result<Self, SparqlParseError> {
+    fn from_str(query: &str) -> Result<Self, ParseError> {
         Self::parse(query, None)
     }
 }
 
 impl<'a> TryFrom<&'a str> for Query {
-    type Error = SparqlParseError;
+    type Error = ParseError;
 
-    fn try_from(query: &str) -> Result<Self, SparqlParseError> {
+    fn try_from(query: &str) -> Result<Self, ParseError> {
         Self::from_str(query)
     }
 }
 
 impl<'a> TryFrom<&'a String> for Query {
-    type Error = SparqlParseError;
+    type Error = ParseError;
 
-    fn try_from(query: &String) -> Result<Self, SparqlParseError> {
+    fn try_from(query: &String) -> Result<Self, ParseError> {
         Self::from_str(query)
     }
 }
 
 /// Error returned during SPARQL parsing.
 #[derive(Debug)]
-pub struct SparqlParseError {
-    inner: SparqlParseErrorKind,
+pub struct ParseError {
+    inner: ParseErrorKind,
 }
 
 #[derive(Debug)]
-enum SparqlParseErrorKind {
+enum ParseErrorKind {
     InvalidBaseIri(IriParseError),
-    Parser(ParseError<LineCol>),
+    Parser(peg::error::ParseError<LineCol>),
 }
 
-impl fmt::Display for SparqlParseError {
+impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.inner {
-            SparqlParseErrorKind::InvalidBaseIri(e) => {
+            ParseErrorKind::InvalidBaseIri(e) => {
                 write!(f, "Invalid SPARQL base IRI provided: {}", e)
             }
-            SparqlParseErrorKind::Parser(e) => e.fmt(f),
+            ParseErrorKind::Parser(e) => e.fmt(f),
         }
     }
 }
 
-impl Error for SparqlParseError {}
+impl Error for ParseError {}
 
 struct FocusedTriplePattern<F> {
     focus: F,

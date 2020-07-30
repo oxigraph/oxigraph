@@ -34,7 +34,7 @@
 //! if let QueryResult::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
 //!     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 //! }
-//! # oxigraph::Result::Ok(())
+//! # Result::<_,Box<dyn std::error::Error>>::Ok(())
 //! ```
 #![deny(
     future_incompatible,
@@ -109,8 +109,10 @@ pub mod model;
 pub mod sparql;
 pub mod store;
 
-pub use error::Error;
-pub type Result<T> = ::std::result::Result<T, Error>;
+#[deprecated(note = "Use oxigraph::sparql::EvaluationError instead")]
+pub type Error = crate::sparql::EvaluationError;
+#[deprecated(note = "Use Result<_, oxigraph::sparql::EvaluationError> instead")]
+pub type Result<T> = ::std::result::Result<T, crate::sparql::EvaluationError>;
 #[deprecated(note = "Use oxigraph::io::DatasetFormat instead")]
 pub type DatasetSyntax = crate::io::DatasetFormat;
 #[deprecated(note = "Use oxigraph::io::FileSyntax instead")]

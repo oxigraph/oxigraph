@@ -1,12 +1,15 @@
 //! Implementation of [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/)
 
+use crate::error::invalid_input_error;
 use crate::model::*;
+use crate::sparql::error::EvaluationError;
 use crate::sparql::model::*;
-use crate::Error;
-use crate::Result;
 use std::io::Write;
 
-pub fn write_json_results(results: QueryResult, mut sink: impl Write) -> Result<()> {
+pub fn write_json_results(
+    results: QueryResult,
+    mut sink: impl Write,
+) -> Result<(), EvaluationError> {
     match results {
         QueryResult::Boolean(value) => {
             sink.write_all(b"{\"head\":{},\"boolean\":")?;
@@ -73,15 +76,16 @@ pub fn write_json_results(results: QueryResult, mut sink: impl Write) -> Result<
             sink.write_all(b"]}}")?;
         }
         QueryResult::Graph(_) => {
-            return Err(Error::msg(
+            return Err(invalid_input_error(
                 "Graphs could not be formatted to SPARQL query results XML format",
-            ));
+            )
+            .into());
         }
     }
     Ok(())
 }
 
-fn write_escaped_json_string(s: &str, mut sink: impl Write) -> Result<()> {
+fn write_escaped_json_string(s: &str, mut sink: impl Write) -> Result<(), EvaluationError> {
     sink.write_all(b"\"")?;
     for c in s.chars() {
         match c {

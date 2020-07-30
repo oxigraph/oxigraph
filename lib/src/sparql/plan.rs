@@ -1,12 +1,12 @@
 use crate::error::UnwrapInfallible;
 use crate::sparql::algebra::GraphPattern;
+use crate::sparql::error::EvaluationError;
 use crate::sparql::model::Variable;
 use crate::store::numeric_encoder::{
     EncodedQuad, EncodedTerm, Encoder, MemoryStrStore, StrContainer, StrHash, StrLookup,
     ENCODED_DEFAULT_GRAPH,
 };
 use crate::store::ReadableEncodedStore;
-use crate::Result;
 use std::cell::{RefCell, RefMut};
 use std::collections::BTreeSet;
 use std::io;
@@ -581,7 +581,7 @@ impl<S: ReadableEncodedStore> DatasetView<S> {
         predicate: Option<EncodedTerm>,
         object: Option<EncodedTerm>,
         graph_name: Option<EncodedTerm>,
-    ) -> Box<dyn Iterator<Item = Result<EncodedQuad>>> {
+    ) -> Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>> {
         if graph_name == None {
             Box::new(
                 map_io_err(
@@ -625,15 +625,15 @@ impl<S: ReadableEncodedStore> DatasetView<S> {
 }
 
 fn map_io_err<'a, T>(
-    iter: impl Iterator<Item = std::result::Result<T, impl Into<io::Error>>> + 'a,
-) -> impl Iterator<Item = Result<T>> + 'a {
+    iter: impl Iterator<Item = Result<T, impl Into<io::Error>>> + 'a,
+) -> impl Iterator<Item = Result<T, EvaluationError>> + 'a {
     iter.map(|e| e.map_err(|e| e.into().into()))
 }
 
 impl<S: ReadableEncodedStore> StrLookup for DatasetView<S> {
     type Error = <S as StrLookup>::Error;
 
-    fn get_str(&self, id: StrHash) -> std::result::Result<Option<String>, Self::Error> {
+    fn get_str(&self, id: StrHash) -> Result<Option<String>, Self::Error> {
         if let Some(value) = self.extra.borrow().get_str(id).unwrap_infallible() {
             Ok(Some(value))
         } else {
@@ -650,7 +650,7 @@ struct DatasetViewStrContainer<'a, S: ReadableEncodedStore> {
 impl<'a, S: ReadableEncodedStore> StrContainer for DatasetViewStrContainer<'a, S> {
     type Error = <S as StrLookup>::Error;
 
-    fn insert_str(&mut self, key: StrHash, value: &str) -> std::result::Result<(), Self::Error> {
+    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Self::Error> {
         if self.store.get_str(key)?.is_none() {
             self.extra.insert_str(key, value).unwrap();
             Ok(())

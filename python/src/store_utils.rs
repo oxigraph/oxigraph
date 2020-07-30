@@ -1,7 +1,9 @@
 use crate::model::*;
 use oxigraph::model::*;
-use oxigraph::sparql::{QueryResult, QuerySolution, QuerySolutionsIterator, QueryTriplesIterator};
-use pyo3::exceptions::{IOError, TypeError, ValueError};
+use oxigraph::sparql::{
+    EvaluationError, QueryResult, QuerySolution, QuerySolutionsIterator, QueryTriplesIterator,
+};
+use pyo3::exceptions::{IOError, RuntimeError, TypeError, ValueError};
 use pyo3::prelude::*;
 use pyo3::{PyIterProtocol, PyMappingProtocol, PyNativeType, PyObjectProtocol};
 use std::fmt::Write;
@@ -113,7 +115,7 @@ impl PyIterProtocol for QuerySolutionIter {
             .inner
             .next()
             .transpose()
-            .map_err(|e| IOError::py_err(e.to_string()))? //TODO: improve
+            .map_err(map_evaluation_error)?
             .map(move |inner| PyQuerySolution { inner }))
     }
 }
@@ -134,7 +136,7 @@ impl PyIterProtocol for TripleResultIter {
             .inner
             .next()
             .transpose()
-            .map_err(|e| IOError::py_err(e.to_string()))? //TODO: improve
+            .map_err(map_evaluation_error)?
             .map(move |t| triple_to_python(slf.py(), t)))
     }
 }
@@ -145,5 +147,14 @@ pub fn map_io_err(error: io::Error) -> PyErr {
             ValueError::py_err(error.to_string())
         }
         _ => IOError::py_err(error.to_string()),
+    }
+}
+
+pub fn map_evaluation_error(error: EvaluationError) -> PyErr {
+    match error {
+        EvaluationError::Parsing(error) => ValueError::py_err(error.to_string()),
+        EvaluationError::Io(error) => map_io_err(error),
+        EvaluationError::Query(error) => ValueError::py_err(error.to_string()),
+        _ => RuntimeError::py_err(error.to_string()),
     }
 }

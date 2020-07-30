@@ -1,6 +1,6 @@
 #![allow(clippy::unreadable_literal)]
 
-use crate::error::{Infallible, UnwrapInfallible};
+use crate::error::{invalid_data_error, Infallible, UnwrapInfallible};
 use crate::model::vocab::rdf;
 use crate::model::vocab::xsd;
 use crate::model::xsd::*;
@@ -1319,10 +1319,6 @@ fn get_required_str(lookup: &impl StrLookup, id: StrHash) -> Result<String, io::
             id
         ))
     })
-}
-
-fn invalid_data_error(msg: impl Into<String>) -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidData, msg.into())
 }
 
 #[test]
