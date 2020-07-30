@@ -139,7 +139,7 @@ fn dump_graph(
 }
 
 fn map_xml_err(e: RdfXmlError) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, e)
+    io::Error::new(io::ErrorKind::Other, e) // TODO: drop
 }
 
 fn load_dataset<S: WritableEncodedStore>(

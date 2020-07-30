@@ -1,3 +1,5 @@
+//! Utilities to read RDF graphs and datasets
+
 use super::GraphSyntax;
 use crate::model::*;
 use crate::DatasetSyntax;
@@ -7,9 +9,9 @@ use rio_api::parser::{QuadsParser, TriplesParser};
 use rio_turtle::{NQuadsParser, NTriplesParser, TriGParser, TurtleParser};
 use rio_xml::RdfXmlParser;
 use std::collections::HashMap;
+use std::error::Error;
 use std::io;
 use std::io::BufRead;
-use std::iter::once;
 
 /// A reader for RDF graph serialization formats.
 ///
@@ -25,7 +27,7 @@ use std::iter::once;
 /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
 ///
 /// let parser = GraphParser::from_syntax(GraphSyntax::NTriples);
-/// let triples = parser.read(Cursor::new(file)).collect::<Result<Vec<_>,_>>()?;
+/// let triples = parser.read_triples(Cursor::new(file))?.collect::<Result<Vec<_>,_>>()?;
 ///
 ///assert_eq!(triples.len(), 1);
 ///assert_eq!(triples[0].subject.to_string(), "<http://example.com/s>");
@@ -53,7 +55,7 @@ impl GraphParser {
     /// let file = "</s> </p> </o> .";
     ///
     /// let parser = GraphParser::from_syntax(GraphSyntax::Turtle).with_base_iri("http://example.com")?;
-    /// let triples = parser.read(Cursor::new(file)).collect::<Result<Vec<_>,_>>()?;
+    /// let triples = parser.read_triples(Cursor::new(file))?.collect::<Result<Vec<_>,_>>()?;
     ///
     ///assert_eq!(triples.len(), 1);
     ///assert_eq!(triples[0].subject.to_string(), "<http://example.com/s>");
@@ -65,47 +67,98 @@ impl GraphParser {
     }
 
     /// Executes the parsing itself
-    pub fn read<'a>(
-        &self,
-        reader: impl BufRead + 'a,
-    ) -> impl Iterator<Item = Result<Triple, io::Error>> + 'a {
-        match self.parse(reader) {
-            Ok(iter) => iter,
-            Err(error) => Box::new(once(Err(error))),
-        }
-    }
-
-    fn parse<'a>(
-        &self,
-        reader: impl BufRead + 'a,
-    ) -> Result<Box<dyn Iterator<Item = Result<Triple, io::Error>> + 'a>, io::Error> {
-        Ok(match self.syntax {
-            GraphSyntax::NTriples => {
-                Box::new(self.parse_from_triple_parser(NTriplesParser::new(reader))?)
-            }
-            GraphSyntax::Turtle => {
-                Box::new(self.parse_from_triple_parser(TurtleParser::new(reader, &self.base_iri))?)
-            }
-            GraphSyntax::RdfXml => {
-                Box::new(self.parse_from_triple_parser(RdfXmlParser::new(reader, &self.base_iri))?)
-            }
+    pub fn read_triples<R: BufRead>(&self, reader: R) -> Result<TripleReader<R>, io::Error> {
+        //TODO: drop the error when possible
+        Ok(TripleReader {
+            mapper: RioMapper::default(),
+            parser: match self.syntax {
+                GraphSyntax::NTriples => {
+                    TripleReaderKind::NTriples(NTriplesParser::new(reader).map_err(invalid_input)?)
+                }
+                GraphSyntax::Turtle => TripleReaderKind::Turtle(
+                    TurtleParser::new(reader, &self.base_iri).map_err(invalid_input)?,
+                ),
+                GraphSyntax::RdfXml => TripleReaderKind::RdfXml(
+                    RdfXmlParser::new(reader, &self.base_iri).map_err(invalid_input)?,
+                ),
+            },
+            buffer: Vec::new(),
         })
     }
+}
 
-    fn parse_from_triple_parser<P: TriplesParser>(
-        &self,
-        parser: Result<P, P::Error>,
-    ) -> Result<impl Iterator<Item = Result<Triple, io::Error>>, io::Error>
-    where
-        P::Error: Send + Sync + 'static,
-    {
-        let parser = parser.map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-        let mut mapper = RioMapper::default();
-        Ok(parser
-            .into_iter(move |t| Ok(mapper.triple(&t)))
-            .map(|e: Result<_, P::Error>| {
-                e.map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
-            }))
+/// Allows reading triples.
+/// Could be built using a `GraphParser`.
+///
+/// ```
+/// use oxigraph::io::{GraphSyntax, GraphParser};
+/// use std::io::Cursor;
+///
+/// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
+///
+/// let parser = GraphParser::from_syntax(GraphSyntax::NTriples);
+/// let triples = parser.read_triples(Cursor::new(file))?.collect::<Result<Vec<_>,_>>()?;
+///
+///assert_eq!(triples.len(), 1);
+///assert_eq!(triples[0].subject.to_string(), "<http://example.com/s>");
+/// # std::io::Result::Ok(())
+/// ```
+#[must_use]
+pub struct TripleReader<R: BufRead> {
+    mapper: RioMapper,
+    parser: TripleReaderKind<R>,
+    buffer: Vec<Triple>,
+}
+
+enum TripleReaderKind<R: BufRead> {
+    NTriples(NTriplesParser<R>),
+    Turtle(TurtleParser<R>),
+    RdfXml(RdfXmlParser<R>),
+}
+
+impl<R: BufRead> Iterator for TripleReader<R> {
+    type Item = Result<Triple, io::Error>;
+
+    fn next(&mut self) -> Option<Result<Triple, io::Error>> {
+        loop {
+            if let Some(r) = self.buffer.pop() {
+                return Some(Ok(r));
+            }
+
+            if let Err(error) = match &mut self.parser {
+                TripleReaderKind::NTriples(parser) => {
+                    Self::read(parser, &mut self.buffer, &mut self.mapper, invalid_data)
+                }
+                TripleReaderKind::Turtle(parser) => {
+                    Self::read(parser, &mut self.buffer, &mut self.mapper, invalid_data)
+                }
+                TripleReaderKind::RdfXml(parser) => {
+                    Self::read(parser, &mut self.buffer, &mut self.mapper, invalid_data)
+                }
+            }? {
+                return Some(Err(error));
+            }
+        }
+    }
+}
+
+impl<R: BufRead> TripleReader<R> {
+    fn read<P: TriplesParser>(
+        parser: &mut P,
+        buffer: &mut Vec<Triple>,
+        mapper: &mut RioMapper,
+        error: impl Fn(P::Error) -> io::Error,
+    ) -> Option<Result<(), io::Error>> {
+        if parser.is_end() {
+            None
+        } else if let Err(e) = parser.parse_step(&mut |t| {
+            buffer.push(mapper.triple(&t));
+            Ok(())
+        }) {
+            Some(Err(error(e)))
+        } else {
+            Some(Ok(()))
+        }
     }
 }
 
@@ -122,7 +175,7 @@ impl GraphParser {
 /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .";
 ///
 /// let parser = DatasetParser::from_syntax(DatasetSyntax::NQuads);
-/// let quads = parser.read(Cursor::new(file)).collect::<Result<Vec<_>,_>>()?;
+/// let quads = parser.read_quads(Cursor::new(file))?.collect::<Result<Vec<_>,_>>()?;
 ///
 ///assert_eq!(quads.len(), 1);
 ///assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
@@ -150,7 +203,7 @@ impl DatasetParser {
     /// let file = "<g> { </s> </p> </o> }";
     ///
     /// let parser = DatasetParser::from_syntax(DatasetSyntax::TriG).with_base_iri("http://example.com")?;
-    /// let triples = parser.read(Cursor::new(file)).collect::<Result<Vec<_>,_>>()?;
+    /// let triples = parser.read_quads(Cursor::new(file))?.collect::<Result<Vec<_>,_>>()?;
     ///
     ///assert_eq!(triples.len(), 1);
     ///assert_eq!(triples[0].subject.to_string(), "<http://example.com/s>");
@@ -162,44 +215,91 @@ impl DatasetParser {
     }
 
     /// Executes the parsing itself
-    pub fn read<'a>(
-        &self,
-        reader: impl BufRead + 'a,
-    ) -> impl Iterator<Item = Result<Quad, io::Error>> + 'a {
-        match self.parse(reader) {
-            Ok(iter) => iter,
-            Err(error) => Box::new(once(Err(error))),
-        }
-    }
-
-    fn parse<'a>(
-        &self,
-        reader: impl BufRead + 'a,
-    ) -> Result<Box<dyn Iterator<Item = Result<Quad, io::Error>> + 'a>, io::Error> {
-        Ok(match self.syntax {
-            DatasetSyntax::NQuads => {
-                Box::new(self.parse_from_quad_parser(NQuadsParser::new(reader))?)
-            }
-            DatasetSyntax::TriG => {
-                Box::new(self.parse_from_quad_parser(TriGParser::new(reader, &self.base_iri))?)
-            }
+    pub fn read_quads<R: BufRead>(&self, reader: R) -> Result<QuadReader<R>, io::Error> {
+        //TODO: drop the error when possible
+        Ok(QuadReader {
+            mapper: RioMapper::default(),
+            parser: match self.syntax {
+                DatasetSyntax::NQuads => {
+                    QuadReaderKind::NQuads(NQuadsParser::new(reader).map_err(invalid_input)?)
+                }
+                DatasetSyntax::TriG => QuadReaderKind::TriG(
+                    TriGParser::new(reader, &self.base_iri).map_err(invalid_input)?,
+                ),
+            },
+            buffer: Vec::new(),
         })
     }
+}
 
-    fn parse_from_quad_parser<P: QuadsParser>(
-        &self,
-        parser: Result<P, P::Error>,
-    ) -> Result<impl Iterator<Item = Result<Quad, io::Error>>, io::Error>
-    where
-        P::Error: Send + Sync + 'static,
-    {
-        let parser = parser.map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-        let mut mapper = RioMapper::default();
-        Ok(parser
-            .into_iter(move |q| Ok(mapper.quad(&q)))
-            .map(|e: Result<_, P::Error>| {
-                e.map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
-            }))
+/// Allows reading quads.
+/// Could be built using a `DatasetParser`.
+///
+/// ```
+/// use oxigraph::io::{DatasetSyntax, DatasetParser};
+/// use std::io::Cursor;
+///
+/// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .";
+///
+/// let parser = DatasetParser::from_syntax(DatasetSyntax::NQuads);
+/// let quads = parser.read_quads(Cursor::new(file))?.collect::<Result<Vec<_>,_>>()?;
+///
+///assert_eq!(quads.len(), 1);
+///assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
+/// # std::io::Result::Ok(())
+/// ```
+#[must_use]
+pub struct QuadReader<R: BufRead> {
+    mapper: RioMapper,
+    parser: QuadReaderKind<R>,
+    buffer: Vec<Quad>,
+}
+
+enum QuadReaderKind<R: BufRead> {
+    NQuads(NQuadsParser<R>),
+    TriG(TriGParser<R>),
+}
+
+impl<R: BufRead> Iterator for QuadReader<R> {
+    type Item = Result<Quad, io::Error>;
+
+    fn next(&mut self) -> Option<Result<Quad, io::Error>> {
+        loop {
+            if let Some(r) = self.buffer.pop() {
+                return Some(Ok(r));
+            }
+
+            if let Err(error) = match &mut self.parser {
+                QuadReaderKind::NQuads(parser) => {
+                    Self::read(parser, &mut self.buffer, &mut self.mapper, invalid_data)
+                }
+                QuadReaderKind::TriG(parser) => {
+                    Self::read(parser, &mut self.buffer, &mut self.mapper, invalid_data)
+                }
+            }? {
+                return Some(Err(error));
+            }
+        }
+    }
+}
+
+impl<R: BufRead> QuadReader<R> {
+    fn read<P: QuadsParser>(
+        parser: &mut P,
+        buffer: &mut Vec<Quad>,
+        mapper: &mut RioMapper,
+        error: impl Fn(P::Error) -> io::Error,
+    ) -> Option<Result<(), io::Error>> {
+        if parser.is_end() {
+            None
+        } else if let Err(e) = parser.parse_step(&mut |t| {
+            buffer.push(mapper.quad(&t));
+            Ok(())
+        }) {
+            Some(Err(error(e)))
+        } else {
+            Some(Ok(()))
+        }
     }
 }
 
@@ -271,4 +371,12 @@ impl<'a> RioMapper {
             graph_name: self.graph_name(quad.graph_name),
         }
     }
+}
+
+fn invalid_input(error: impl Error + Send + Sync + 'static) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidInput, error)
+}
+
+fn invalid_data(error: impl Error + Send + Sync + 'static) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, error) //TODO: drop
 }

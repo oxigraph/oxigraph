@@ -1,3 +1,4 @@
+use crate::io::GraphSerializer;
 #[allow(deprecated)]
 use crate::io::{FileSyntax, GraphSyntax};
 use crate::model::*;
@@ -5,9 +6,6 @@ use crate::sparql::json_results::write_json_results;
 use crate::sparql::xml_results::{read_xml_results, write_xml_results};
 use crate::{Error, Result};
 use rand::random;
-use rio_api::formatter::TriplesFormatter;
-use rio_turtle::{NTriplesFormatter, TurtleFormatter};
-use rio_xml::RdfXmlFormatter;
 use std::fmt;
 use std::io::{BufRead, Write};
 use std::rc::Rc;
@@ -80,29 +78,11 @@ impl QueryResult {
     /// ```
     pub fn write_graph(self, write: impl Write, syntax: GraphSyntax) -> Result<()> {
         if let QueryResult::Graph(triples) = self {
-            match syntax {
-                GraphSyntax::NTriples => {
-                    let mut formatter = NTriplesFormatter::new(write);
-                    for triple in triples {
-                        formatter.format(&(&triple?).into())?;
-                    }
-                    formatter.finish();
-                }
-                GraphSyntax::Turtle => {
-                    let mut formatter = TurtleFormatter::new(write);
-                    for triple in triples {
-                        formatter.format(&(&triple?).into())?;
-                    }
-                    formatter.finish()?;
-                }
-                GraphSyntax::RdfXml => {
-                    let mut formatter = RdfXmlFormatter::new(write)?;
-                    for triple in triples {
-                        formatter.format(&(&triple?).into())?;
-                    }
-                    formatter.finish()?;
-                }
+            let mut writer = GraphSerializer::from_syntax(syntax).triple_writer(write)?;
+            for triple in triples {
+                writer.write(&triple?)?;
             }
+            writer.finish()?;
             Ok(())
         } else {
             Err(Error::msg(
