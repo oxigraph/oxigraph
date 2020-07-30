@@ -99,7 +99,10 @@ impl From<QuerySolutionsIterator> for QueryResult {
 }
 
 /// [SPARQL query](https://www.w3.org/TR/sparql11-query/) serialization formats
+///
+/// This enumeration is non exhaustive. New syntaxes like CSV will be added in the future.
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+#[non_exhaustive]
 pub enum QueryResultSyntax {
     /// [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/)
     Xml,

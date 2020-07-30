@@ -17,7 +17,10 @@ pub trait FileSyntax: Sized {
 }
 
 /// [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-graph) serialization formats.
+///
+/// This enumeration is non exhaustive. New syntaxes like JSON-LD will be added in the future.
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+#[non_exhaustive]
 pub enum GraphSyntax {
     /// [N-Triples](https://www.w3.org/TR/n-triples/)
     NTriples,
@@ -119,7 +122,10 @@ impl FileSyntax for GraphSyntax {
 }
 
 /// [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) serialization formats.
+///
+/// This enumeration is non exhaustive. New syntaxes like JSON-LD will be added in the future.
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+#[non_exhaustive]
 pub enum DatasetSyntax {
     /// [N-Quads](https://www.w3.org/TR/n-quads/)
     NQuads,
