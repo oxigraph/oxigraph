@@ -16,9 +16,9 @@ pub use crate::store::rocksdb::RocksDbStore;
 #[cfg(feature = "sled")]
 pub use crate::store::sled::SledStore;
 
+use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use crate::store::numeric_encoder::*;
-use crate::{DatasetSyntax, GraphSyntax};
 use rio_api::formatter::{QuadsFormatter, TriplesFormatter};
 use rio_api::parser::{QuadsParser, TriplesParser};
 use rio_turtle::{
@@ -63,19 +63,19 @@ pub(crate) trait WritableEncodedStore: StrContainer {
 fn load_graph<S: WritableEncodedStore>(
     store: &mut S,
     reader: impl BufRead,
-    syntax: GraphSyntax,
+    format: GraphFormat,
     to_graph_name: &GraphName,
     base_iri: Option<&str>,
 ) -> Result<(), io::Error> {
     let base_iri = base_iri.unwrap_or("");
-    match syntax {
-        GraphSyntax::NTriples => {
+    match format {
+        GraphFormat::NTriples => {
             load_from_triple_parser(store, NTriplesParser::new(reader), to_graph_name)
         }
-        GraphSyntax::Turtle => {
+        GraphFormat::Turtle => {
             load_from_triple_parser(store, TurtleParser::new(reader, base_iri), to_graph_name)
         }
-        GraphSyntax::RdfXml => {
+        GraphFormat::RdfXml => {
             load_from_triple_parser(store, RdfXmlParser::new(reader, base_iri), to_graph_name)
         }
     }
@@ -110,24 +110,24 @@ where
 fn dump_graph(
     triples: impl Iterator<Item = Result<Triple, io::Error>>,
     writer: impl Write,
-    syntax: GraphSyntax,
+    format: GraphFormat,
 ) -> Result<(), io::Error> {
-    match syntax {
-        GraphSyntax::NTriples => {
+    match format {
+        GraphFormat::NTriples => {
             let mut formatter = NTriplesFormatter::new(writer);
             for triple in triples {
                 formatter.format(&(&triple?).into())?;
             }
             formatter.finish();
         }
-        GraphSyntax::Turtle => {
+        GraphFormat::Turtle => {
             let mut formatter = TurtleFormatter::new(writer);
             for triple in triples {
                 formatter.format(&(&triple?).into())?;
             }
             formatter.finish()?;
         }
-        GraphSyntax::RdfXml => {
+        GraphFormat::RdfXml => {
             let mut formatter = RdfXmlFormatter::new(writer).map_err(map_xml_err)?;
             for triple in triples {
                 formatter.format(&(&triple?).into()).map_err(map_xml_err)?;
@@ -145,13 +145,13 @@ fn map_xml_err(e: RdfXmlError) -> io::Error {
 fn load_dataset<S: WritableEncodedStore>(
     store: &mut S,
     reader: impl BufRead,
-    syntax: DatasetSyntax,
+    format: DatasetFormat,
     base_iri: Option<&str>,
 ) -> Result<(), io::Error> {
     let base_iri = base_iri.unwrap_or("");
-    match syntax {
-        DatasetSyntax::NQuads => load_from_quad_parser(store, NQuadsParser::new(reader)),
-        DatasetSyntax::TriG => load_from_quad_parser(store, TriGParser::new(reader, base_iri)),
+    match format {
+        DatasetFormat::NQuads => load_from_quad_parser(store, NQuadsParser::new(reader)),
+        DatasetFormat::TriG => load_from_quad_parser(store, TriGParser::new(reader, base_iri)),
     }
 }
 
@@ -180,17 +180,17 @@ where
 fn dump_dataset(
     quads: impl Iterator<Item = Result<Quad, io::Error>>,
     writer: impl Write,
-    syntax: DatasetSyntax,
+    format: DatasetFormat,
 ) -> Result<(), io::Error> {
-    match syntax {
-        DatasetSyntax::NQuads => {
+    match format {
+        DatasetFormat::NQuads => {
             let mut formatter = NQuadsFormatter::new(writer);
             for quad in quads {
                 formatter.format(&(&quad?).into())?;
             }
             formatter.finish();
         }
-        DatasetSyntax::TriG => {
+        DatasetFormat::TriG => {
             let mut formatter = TriGFormatter::new(writer);
             for quad in quads {
                 formatter.format(&(&quad?).into())?;

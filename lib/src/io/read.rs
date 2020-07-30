@@ -1,8 +1,7 @@
 //! Utilities to read RDF graphs and datasets
 
-use super::GraphSyntax;
+use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
-use crate::DatasetSyntax;
 use oxiri::{Iri, IriParseError};
 use rio_api::model as rio;
 use rio_api::parser::{QuadsParser, TriplesParser};
@@ -16,17 +15,17 @@ use std::io::BufRead;
 /// A reader for RDF graph serialization formats.
 ///
 /// It currently supports the following formats:
-/// * [N-Triples](https://www.w3.org/TR/n-triples/) (`GraphSyntax::NTriples`)
-/// * [Turtle](https://www.w3.org/TR/turtle/) (`GraphSyntax::Turtle`)
-/// * [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) (`GraphSyntax::RdfXml`)
+/// * [N-Triples](https://www.w3.org/TR/n-triples/) (`GraphFormat::NTriples`)
+/// * [Turtle](https://www.w3.org/TR/turtle/) (`GraphFormat::Turtle`)
+/// * [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) (`GraphFormat::RdfXml`)
 ///
 /// ```
-/// use oxigraph::io::{GraphSyntax, GraphParser};
+/// use oxigraph::io::{GraphFormat, GraphParser};
 /// use std::io::Cursor;
 ///
 /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
 ///
-/// let parser = GraphParser::from_syntax(GraphSyntax::NTriples);
+/// let parser = GraphParser::from_format(GraphFormat::NTriples);
 /// let triples = parser.read_triples(Cursor::new(file))?.collect::<Result<Vec<_>,_>>()?;
 ///
 ///assert_eq!(triples.len(), 1);
@@ -34,14 +33,14 @@ use std::io::BufRead;
 /// # std::io::Result::Ok(())
 /// ```
 pub struct GraphParser {
-    syntax: GraphSyntax,
+    format: GraphFormat,
     base_iri: String,
 }
 
 impl GraphParser {
-    pub fn from_syntax(syntax: GraphSyntax) -> Self {
+    pub fn from_format(format: GraphFormat) -> Self {
         Self {
-            syntax,
+            format,
             base_iri: String::new(),
         }
     }
@@ -49,12 +48,12 @@ impl GraphParser {
     /// Provides an IRI that could be used to resolve the file relative IRIs
     ///
     /// ```
-    /// use oxigraph::io::{GraphSyntax, GraphParser};
+    /// use oxigraph::io::{GraphFormat, GraphParser};
     /// use std::io::Cursor;
     ///
     /// let file = "</s> </p> </o> .";
     ///
-    /// let parser = GraphParser::from_syntax(GraphSyntax::Turtle).with_base_iri("http://example.com")?;
+    /// let parser = GraphParser::from_format(GraphFormat::Turtle).with_base_iri("http://example.com")?;
     /// let triples = parser.read_triples(Cursor::new(file))?.collect::<Result<Vec<_>,_>>()?;
     ///
     ///assert_eq!(triples.len(), 1);
@@ -71,14 +70,14 @@ impl GraphParser {
         //TODO: drop the error when possible
         Ok(TripleReader {
             mapper: RioMapper::default(),
-            parser: match self.syntax {
-                GraphSyntax::NTriples => {
+            parser: match self.format {
+                GraphFormat::NTriples => {
                     TripleReaderKind::NTriples(NTriplesParser::new(reader).map_err(invalid_input)?)
                 }
-                GraphSyntax::Turtle => TripleReaderKind::Turtle(
+                GraphFormat::Turtle => TripleReaderKind::Turtle(
                     TurtleParser::new(reader, &self.base_iri).map_err(invalid_input)?,
                 ),
-                GraphSyntax::RdfXml => TripleReaderKind::RdfXml(
+                GraphFormat::RdfXml => TripleReaderKind::RdfXml(
                     RdfXmlParser::new(reader, &self.base_iri).map_err(invalid_input)?,
                 ),
             },
@@ -91,12 +90,12 @@ impl GraphParser {
 /// Could be built using a `GraphParser`.
 ///
 /// ```
-/// use oxigraph::io::{GraphSyntax, GraphParser};
+/// use oxigraph::io::{GraphFormat, GraphParser};
 /// use std::io::Cursor;
 ///
 /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
 ///
-/// let parser = GraphParser::from_syntax(GraphSyntax::NTriples);
+/// let parser = GraphParser::from_format(GraphFormat::NTriples);
 /// let triples = parser.read_triples(Cursor::new(file))?.collect::<Result<Vec<_>,_>>()?;
 ///
 ///assert_eq!(triples.len(), 1);
@@ -165,16 +164,16 @@ impl<R: BufRead> TripleReader<R> {
 /// A reader for RDF dataset serialization formats.
 ///
 /// It currently supports the following formats:
-/// * [N-Quads](https://www.w3.org/TR/n-quads/) (`DatasetSyntax::NQuads`)
-/// * [TriG](https://www.w3.org/TR/trig/) (`DatasetSyntax::TriG`)
+/// * [N-Quads](https://www.w3.org/TR/n-quads/) (`DatasetFormat::NQuads`)
+/// * [TriG](https://www.w3.org/TR/trig/) (`DatasetFormat::TriG`)
 ///
 /// ```
-/// use oxigraph::io::{DatasetSyntax, DatasetParser};
+/// use oxigraph::io::{DatasetFormat, DatasetParser};
 /// use std::io::Cursor;
 ///
 /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .";
 ///
-/// let parser = DatasetParser::from_syntax(DatasetSyntax::NQuads);
+/// let parser = DatasetParser::from_format(DatasetFormat::NQuads);
 /// let quads = parser.read_quads(Cursor::new(file))?.collect::<Result<Vec<_>,_>>()?;
 ///
 ///assert_eq!(quads.len(), 1);
@@ -182,14 +181,14 @@ impl<R: BufRead> TripleReader<R> {
 /// # std::io::Result::Ok(())
 /// ```
 pub struct DatasetParser {
-    syntax: DatasetSyntax,
+    format: DatasetFormat,
     base_iri: String,
 }
 
 impl DatasetParser {
-    pub fn from_syntax(syntax: DatasetSyntax) -> Self {
+    pub fn from_format(format: DatasetFormat) -> Self {
         Self {
-            syntax,
+            format,
             base_iri: String::new(),
         }
     }
@@ -197,12 +196,12 @@ impl DatasetParser {
     /// Provides an IRI that could be used to resolve the file relative IRIs
     ///
     /// ```
-    /// use oxigraph::io::{DatasetSyntax, DatasetParser};
+    /// use oxigraph::io::{DatasetFormat, DatasetParser};
     /// use std::io::Cursor;
     ///
     /// let file = "<g> { </s> </p> </o> }";
     ///
-    /// let parser = DatasetParser::from_syntax(DatasetSyntax::TriG).with_base_iri("http://example.com")?;
+    /// let parser = DatasetParser::from_format(DatasetFormat::TriG).with_base_iri("http://example.com")?;
     /// let triples = parser.read_quads(Cursor::new(file))?.collect::<Result<Vec<_>,_>>()?;
     ///
     ///assert_eq!(triples.len(), 1);
@@ -219,11 +218,11 @@ impl DatasetParser {
         //TODO: drop the error when possible
         Ok(QuadReader {
             mapper: RioMapper::default(),
-            parser: match self.syntax {
-                DatasetSyntax::NQuads => {
+            parser: match self.format {
+                DatasetFormat::NQuads => {
                     QuadReaderKind::NQuads(NQuadsParser::new(reader).map_err(invalid_input)?)
                 }
-                DatasetSyntax::TriG => QuadReaderKind::TriG(
+                DatasetFormat::TriG => QuadReaderKind::TriG(
                     TriGParser::new(reader, &self.base_iri).map_err(invalid_input)?,
                 ),
             },
@@ -236,12 +235,12 @@ impl DatasetParser {
 /// Could be built using a `DatasetParser`.
 ///
 /// ```
-/// use oxigraph::io::{DatasetSyntax, DatasetParser};
+/// use oxigraph::io::{DatasetFormat, DatasetParser};
 /// use std::io::Cursor;
 ///
 /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .";
 ///
-/// let parser = DatasetParser::from_syntax(DatasetSyntax::NQuads);
+/// let parser = DatasetParser::from_format(DatasetFormat::NQuads);
 /// let quads = parser.read_quads(Cursor::new(file))?.collect::<Result<Vec<_>,_>>()?;
 ///
 ///assert_eq!(quads.len(), 1);

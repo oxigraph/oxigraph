@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
+use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::GraphName;
-use oxigraph::{DatasetSyntax, GraphSyntax, MemoryStore};
+use oxigraph::MemoryStore;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::path::PathBuf;
@@ -42,28 +43,28 @@ pub fn load_to_store(url: &str, store: &MemoryStore, to_graph_name: &GraphName) 
     if url.ends_with(".nt") {
         store.load_graph(
             read_file(url)?,
-            GraphSyntax::NTriples,
+            GraphFormat::NTriples,
             to_graph_name,
             Some(url),
         )?
     } else if url.ends_with(".ttl") {
         store.load_graph(
             read_file(url)?,
-            GraphSyntax::Turtle,
+            GraphFormat::Turtle,
             to_graph_name,
             Some(url),
         )?
     } else if url.ends_with(".rdf") {
         store.load_graph(
             read_file(url)?,
-            GraphSyntax::RdfXml,
+            GraphFormat::RdfXml,
             to_graph_name,
             Some(url),
         )?
     } else if url.ends_with(".nq") {
-        store.load_dataset(read_file(url)?, DatasetSyntax::NQuads, Some(url))?
+        store.load_dataset(read_file(url)?, DatasetFormat::NQuads, Some(url))?
     } else if url.ends_with(".trig") {
-        store.load_dataset(read_file(url)?, DatasetSyntax::TriG, Some(url))?
+        store.load_dataset(read_file(url)?, DatasetFormat::TriG, Some(url))?
     } else {
         return Err(anyhow!("Serialization type not found for {}", url));
     }

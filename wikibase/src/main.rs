@@ -16,8 +16,9 @@ use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::task::{spawn, spawn_blocking};
 use http_types::{headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode};
-use oxigraph::sparql::{Query, QueryOptions, QueryResult, QueryResultSyntax};
-use oxigraph::{GraphSyntax, RocksDbStore};
+use oxigraph::io::GraphFormat;
+use oxigraph::sparql::{Query, QueryOptions, QueryResult, QueryResultFormat};
+use oxigraph::RocksDbStore;
 use std::str::FromStr;
 use std::time::Duration;
 use url::form_urlencoded;
@@ -184,11 +185,11 @@ async fn evaluate_sparql_query(
             let format = content_negotiation(
                 request,
                 &[
-                    GraphSyntax::NTriples.media_type(),
-                    GraphSyntax::Turtle.media_type(),
-                    GraphSyntax::RdfXml.media_type(),
+                    GraphFormat::NTriples.media_type(),
+                    GraphFormat::Turtle.media_type(),
+                    GraphFormat::RdfXml.media_type(),
                 ],
-                GraphSyntax::from_media_type,
+                GraphFormat::from_media_type,
             )?;
             let mut body = Vec::default();
             results.write_graph(&mut body, format)?;
@@ -199,10 +200,10 @@ async fn evaluate_sparql_query(
             let format = content_negotiation(
                 request,
                 &[
-                    QueryResultSyntax::Xml.media_type(),
-                    QueryResultSyntax::Json.media_type(),
+                    QueryResultFormat::Xml.media_type(),
+                    QueryResultFormat::Json.media_type(),
                 ],
-                QueryResultSyntax::from_media_type,
+                QueryResultFormat::from_media_type,
             )?;
             let mut body = Vec::default();
             results.write(&mut body, format)?;

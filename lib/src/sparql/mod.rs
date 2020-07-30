@@ -25,7 +25,9 @@ pub use crate::sparql::model::QueryTriplesIterator;
 #[deprecated(note = "Please directly use QuerySolutionsIterator type instead")]
 pub type BindingsIterator<'a> = QuerySolutionsIterator;
 pub use crate::sparql::model::QueryResult;
-pub use crate::sparql::model::QueryResultSyntax;
+pub use crate::sparql::model::QueryResultFormat;
+#[deprecated(note = "Use QueryResultFormat instead")]
+pub type QueryResultSyntax = QueryResultFormat;
 pub use crate::sparql::model::Variable;
 pub use crate::sparql::parser::Query;
 pub use crate::sparql::parser::SparqlParseError;

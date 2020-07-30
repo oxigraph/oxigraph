@@ -131,12 +131,12 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
 fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
     if url.ends_with(".srx") {
         StaticQueryResults::from_query_results(
-            QueryResult::read(read_file(url)?, QueryResultSyntax::Xml)?,
+            QueryResult::read(read_file(url)?, QueryResultFormat::Xml)?,
             false,
         )
     } else if url.ends_with(".srj") {
         StaticQueryResults::from_query_results(
-            QueryResult::read(read_file(url)?, QueryResultSyntax::Json)?,
+            QueryResult::read(read_file(url)?, QueryResultFormat::Json)?,
             false,
         )
     } else {

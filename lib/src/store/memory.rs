@@ -1,13 +1,14 @@
 //! In-memory store.
 
 use crate::error::{Infallible, UnwrapInfallible};
+use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use crate::sparql::{Query, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::store::{
     dump_dataset, dump_graph, load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore,
 };
-use crate::{DatasetSyntax, Error, GraphSyntax};
+use crate::Error;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
@@ -251,14 +252,15 @@ impl MemoryStore {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::{MemoryStore, GraphSyntax};
+    /// use oxigraph::MemoryStore;
+    /// use oxigraph::io::GraphFormat;
     /// use oxigraph::model::*;
     ///
     /// let store = MemoryStore::new();
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
-    /// store.load_graph(file.as_ref(), GraphSyntax::NTriples, &GraphName::DefaultGraph, None)?;
+    /// store.load_graph(file.as_ref(), GraphFormat::NTriples, &GraphName::DefaultGraph, None)?;
     ///
     /// // quad filter
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
@@ -272,26 +274,27 @@ impl MemoryStore {
     pub fn load_graph(
         &self,
         reader: impl BufRead,
-        syntax: GraphSyntax,
+        format: GraphFormat,
         to_graph_name: &GraphName,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
         let mut store = self;
-        load_graph(&mut store, reader, syntax, to_graph_name, base_iri)
+        load_graph(&mut store, reader, format, to_graph_name, base_iri)
     }
 
     /// Loads a dataset file (i.e. quads) into the store.
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::{MemoryStore, DatasetSyntax};
+    /// use oxigraph::MemoryStore;
+    /// use oxigraph::io::DatasetFormat;
     /// use oxigraph::model::*;
     ///
     /// let store = MemoryStore::new();
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
-    /// store.load_dataset(file.as_ref(), DatasetSyntax::NQuads, None)?;
+    /// store.load_dataset(file.as_ref(), DatasetFormat::NQuads, None)?;
     ///
     /// // quad filter
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
@@ -305,11 +308,11 @@ impl MemoryStore {
     pub fn load_dataset(
         &self,
         reader: impl BufRead,
-        syntax: DatasetSyntax,
+        format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
         let mut store = self;
-        load_dataset(&mut store, reader, syntax, base_iri)
+        load_dataset(&mut store, reader, format, base_iri)
     }
 
     /// Adds a quad to this store.
@@ -341,16 +344,17 @@ impl MemoryStore {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::{MemoryStore, GraphSyntax};
+    /// use oxigraph::{MemoryStore};
+    /// use oxigraph::io::GraphFormat;
     /// use oxigraph::model::GraphName;
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
     ///
     /// let store = MemoryStore::new();
-    /// store.load_graph(file, GraphSyntax::NTriples, &GraphName::DefaultGraph, None)?;
+    /// store.load_graph(file, GraphFormat::NTriples, &GraphName::DefaultGraph, None)?;
     ///
     /// let mut buffer = Vec::new();
-    /// store.dump_graph(&mut buffer, GraphSyntax::NTriples, &GraphName::DefaultGraph)?;
+    /// store.dump_graph(&mut buffer, GraphFormat::NTriples, &GraphName::DefaultGraph)?;
     /// assert_eq!(file, buffer.as_slice());
     /// # oxigraph::Result::Ok(())
     /// ```
@@ -360,14 +364,14 @@ impl MemoryStore {
     pub fn dump_graph(
         &self,
         writer: impl Write,
-        syntax: GraphSyntax,
+        format: GraphFormat,
         from_graph_name: &GraphName,
     ) -> Result<(), io::Error> {
         dump_graph(
             self.quads_for_pattern(None, None, None, Some(from_graph_name))
                 .map(|q| Ok(q.into())),
             writer,
-            syntax,
+            format,
         )
     }
 
@@ -375,26 +379,27 @@ impl MemoryStore {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::{MemoryStore, DatasetSyntax};
+    /// use oxigraph::MemoryStore;
+    /// use oxigraph::io::DatasetFormat;
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
     ///
     /// let store = MemoryStore::new();
-    /// store.load_dataset(file, DatasetSyntax::NQuads, None)?;
+    /// store.load_dataset(file, DatasetFormat::NQuads, None)?;
     ///
     /// let mut buffer = Vec::new();
-    /// store.dump_dataset(&mut buffer, DatasetSyntax::NQuads)?;
+    /// store.dump_dataset(&mut buffer, DatasetFormat::NQuads)?;
     /// assert_eq!(file, buffer.as_slice());
     /// # oxigraph::Result::Ok(())
     /// ```
     ///
     /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
     /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
-    pub fn dump_dataset(&self, writer: impl Write, syntax: DatasetSyntax) -> Result<(), io::Error> {
+    pub fn dump_dataset(&self, writer: impl Write, format: DatasetFormat) -> Result<(), io::Error> {
         dump_dataset(
             self.quads_for_pattern(None, None, None, None).map(Ok),
             writer,
-            syntax,
+            format,
         )
     }
 
@@ -971,7 +976,8 @@ impl<'a> MemoryTransaction<'a> {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::{MemoryStore, GraphSyntax};
+    /// use oxigraph::MemoryStore;
+    /// use oxigraph::io::GraphFormat;
     /// use oxigraph::model::*;
     ///
     /// let store = MemoryStore::new();
@@ -979,7 +985,7 @@ impl<'a> MemoryTransaction<'a> {
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
     /// store.transaction(|transaction| {
-    ///     transaction.load_graph(file.as_ref(), GraphSyntax::NTriples, &GraphName::DefaultGraph, None)
+    ///     transaction.load_graph(file.as_ref(), GraphFormat::NTriples, &GraphName::DefaultGraph, None)
     /// })?;
     ///
     /// // quad filter
@@ -991,25 +997,26 @@ impl<'a> MemoryTransaction<'a> {
     pub fn load_graph(
         &mut self,
         reader: impl BufRead,
-        syntax: GraphSyntax,
+        format: GraphFormat,
         to_graph_name: &GraphName,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
-        load_graph(self, reader, syntax, to_graph_name, base_iri)
+        load_graph(self, reader, format, to_graph_name, base_iri)
     }
 
     /// Loads a dataset file (i.e. quads) into the store during the transaction.
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::{MemoryStore, DatasetSyntax};
+    /// use oxigraph::MemoryStore;
+    /// use oxigraph::io::DatasetFormat;
     /// use oxigraph::model::*;
     ///
     /// let store = MemoryStore::new();
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
-    /// store.load_dataset(file.as_ref(), DatasetSyntax::NQuads, None)?;
+    /// store.load_dataset(file.as_ref(), DatasetFormat::NQuads, None)?;
     ///
     /// // quad filter
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
@@ -1020,10 +1027,10 @@ impl<'a> MemoryTransaction<'a> {
     pub fn load_dataset(
         &mut self,
         reader: impl BufRead,
-        syntax: DatasetSyntax,
+        format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
-        load_dataset(self, reader, syntax, base_iri)
+        load_dataset(self, reader, format, base_iri)
     }
 
     /// Adds a quad to this store during the transaction.

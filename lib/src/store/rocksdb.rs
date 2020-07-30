@@ -1,13 +1,13 @@
 //! Store based on the [RocksDB](https://rocksdb.org/) key-value database.
 
 use crate::error::{Infallible, UnwrapInfallible};
+use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use crate::sparql::{Query, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::store::{
     dump_dataset, dump_graph, load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore,
 };
-use crate::{DatasetSyntax, GraphSyntax};
 use rocksdb::*;
 use std::convert::TryInto;
 use std::io;
@@ -191,12 +191,12 @@ impl RocksDbStore {
     pub fn load_graph(
         &self,
         reader: impl BufRead,
-        syntax: GraphSyntax,
+        format: GraphFormat,
         to_graph_name: &GraphName,
         base_iri: Option<&str>,
     ) -> Result<(), crate::Error> {
         let mut transaction = self.auto_batch_writer();
-        load_graph(&mut transaction, reader, syntax, to_graph_name, base_iri)?;
+        load_graph(&mut transaction, reader, format, to_graph_name, base_iri)?;
         Ok(transaction.apply()?)
     }
 
@@ -213,11 +213,11 @@ impl RocksDbStore {
     pub fn load_dataset(
         &self,
         reader: impl BufRead,
-        syntax: DatasetSyntax,
+        format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> Result<(), crate::Error> {
         let mut transaction = self.auto_batch_writer();
-        load_dataset(&mut transaction, reader, syntax, base_iri)?;
+        load_dataset(&mut transaction, reader, format, base_iri)?;
         Ok(transaction.apply()?)
     }
 
@@ -243,21 +243,21 @@ impl RocksDbStore {
     pub fn dump_graph(
         &self,
         writer: impl Write,
-        syntax: GraphSyntax,
+        format: GraphFormat,
         from_graph_name: &GraphName,
     ) -> Result<(), io::Error> {
         dump_graph(
             self.quads_for_pattern(None, None, None, Some(from_graph_name))
                 .map(|q| Ok(q?.into())),
             writer,
-            syntax,
+            format,
         )
     }
 
     /// Dumps the store dataset into a file.
     ///    
     /// See `MemoryStore` for a usage example.
-    pub fn dump_dataset(&self, writer: impl Write, syntax: DatasetSyntax) -> Result<(), io::Error> {
+    pub fn dump_dataset(&self, writer: impl Write, syntax: DatasetFormat) -> Result<(), io::Error> {
         dump_dataset(
             self.quads_for_pattern(None, None, None, None),
             writer,
@@ -577,7 +577,7 @@ impl RocksDbTransaction<'_> {
     pub fn load_graph(
         &mut self,
         reader: impl BufRead,
-        syntax: GraphSyntax,
+        syntax: GraphFormat,
         to_graph_name: &GraphName,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
@@ -597,10 +597,10 @@ impl RocksDbTransaction<'_> {
     pub fn load_dataset(
         &mut self,
         reader: impl BufRead,
-        syntax: DatasetSyntax,
+        format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
-        load_dataset(&mut self.inner, reader, syntax, base_iri)
+        load_dataset(&mut self.inner, reader, format, base_iri)
     }
 
     /// Adds a quad to this store during the transaction.

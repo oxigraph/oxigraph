@@ -2,9 +2,10 @@ use crate::format_err;
 use crate::model::*;
 use crate::utils::to_err;
 use js_sys::{Array, Map};
+use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::GraphName;
 use oxigraph::sparql::{QueryOptions, QueryResult};
-use oxigraph::{DatasetSyntax, GraphSyntax, MemoryStore};
+use oxigraph::MemoryStore;
 use std::convert::TryInto;
 use std::io::Cursor;
 use wasm_bindgen::prelude::*;
@@ -157,23 +158,23 @@ impl JsMemoryStore {
                 None
             };
 
-        if let Some(graph_syntax) = GraphSyntax::from_media_type(mime_type) {
+        if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
             self.store
                 .load_graph(
                     Cursor::new(data),
-                    graph_syntax,
+                    graph_format,
                     &to_graph_name.unwrap_or(GraphName::DefaultGraph),
                     base_iri.as_deref(),
                 )
                 .map_err(to_err)
-        } else if let Some(dataset_syntax) = DatasetSyntax::from_media_type(mime_type) {
+        } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
             if to_graph_name.is_some() {
                 return Err(format_err!(
                     "The target graph name parameter is not available for dataset formats"
                 ));
             }
             self.store
-                .load_dataset(Cursor::new(data), dataset_syntax, base_iri.as_deref())
+                .load_dataset(Cursor::new(data), dataset_format, base_iri.as_deref())
                 .map_err(to_err)
         } else {
             Err(format_err!("Not supported MIME type: {}", mime_type))

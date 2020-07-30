@@ -16,9 +16,10 @@ use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::task::{block_on, spawn, spawn_blocking};
 use http_types::{headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode};
+use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::GraphName;
-use oxigraph::sparql::{Query, QueryOptions, QueryResult, QueryResultSyntax};
-use oxigraph::{DatasetSyntax, GraphSyntax, RocksDbStore};
+use oxigraph::sparql::{Query, QueryOptions, QueryResult, QueryResultFormat};
+use oxigraph::RocksDbStore;
 use std::str::FromStr;
 use url::form_urlencoded;
 
@@ -60,7 +61,7 @@ async fn handle_request(request: Request, store: RocksDbStore) -> Result<Respons
         }
         ("/", Method::Post) => {
             if let Some(content_type) = request.content_type() {
-                match if let Some(format) = GraphSyntax::from_media_type(content_type.essence()) {
+                match if let Some(format) = GraphFormat::from_media_type(content_type.essence()) {
                     spawn_blocking(move || {
                         store.load_graph(
                             SyncAsyncBufReader::from(request),
@@ -69,7 +70,7 @@ async fn handle_request(request: Request, store: RocksDbStore) -> Result<Respons
                             None,
                         )
                     })
-                } else if let Some(format) = DatasetSyntax::from_media_type(content_type.essence())
+                } else if let Some(format) = DatasetFormat::from_media_type(content_type.essence())
                 {
                     spawn_blocking(move || {
                         store.load_dataset(SyncAsyncBufReader::from(request), format, None)
@@ -175,11 +176,11 @@ async fn evaluate_sparql_query(
             let format = content_negotiation(
                 request,
                 &[
-                    GraphSyntax::NTriples.media_type(),
-                    GraphSyntax::Turtle.media_type(),
-                    GraphSyntax::RdfXml.media_type(),
+                    GraphFormat::NTriples.media_type(),
+                    GraphFormat::Turtle.media_type(),
+                    GraphFormat::RdfXml.media_type(),
                 ],
-                GraphSyntax::from_media_type,
+                GraphFormat::from_media_type,
             )?;
             let mut body = Vec::default();
             results.write_graph(&mut body, format)?;
@@ -190,10 +191,10 @@ async fn evaluate_sparql_query(
             let format = content_negotiation(
                 request,
                 &[
-                    QueryResultSyntax::Xml.media_type(),
-                    QueryResultSyntax::Json.media_type(),
+                    QueryResultFormat::Xml.media_type(),
+                    QueryResultFormat::Json.media_type(),
                 ],
-                QueryResultSyntax::from_media_type,
+                QueryResultFormat::from_media_type,
             )?;
             let mut body = Vec::default();
             results.write(&mut body, format)?;

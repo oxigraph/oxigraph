@@ -1,13 +1,13 @@
 //! Store based on the [Sled](https://sled.rs/) key-value database.
 
 use crate::error::{Infallible, UnwrapInfallible};
+use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use crate::sparql::{Query, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::*;
 use crate::store::{
     dump_dataset, dump_graph, load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore,
 };
-use crate::{DatasetSyntax, GraphSyntax};
 use sled::{Batch, Config, Iter, Tree};
 use std::convert::TryInto;
 use std::io::{BufRead, Cursor, Write};
@@ -176,14 +176,14 @@ impl SledStore {
     pub fn load_graph(
         &self,
         reader: impl BufRead,
-        syntax: GraphSyntax,
+        format: GraphFormat,
         to_graph_name: &GraphName,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
         load_graph(
             &mut DirectWriter::new(self),
             reader,
-            syntax,
+            format,
             to_graph_name,
             base_iri,
         )
@@ -202,10 +202,10 @@ impl SledStore {
     pub fn load_dataset(
         &self,
         reader: impl BufRead,
-        syntax: DatasetSyntax,
+        format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
-        load_dataset(&mut DirectWriter::new(self), reader, syntax, base_iri)
+        load_dataset(&mut DirectWriter::new(self), reader, format, base_iri)
     }
 
     /// Adds a quad to this store.
@@ -227,25 +227,25 @@ impl SledStore {
     pub fn dump_graph(
         &self,
         writer: impl Write,
-        syntax: GraphSyntax,
+        format: GraphFormat,
         from_graph_name: &GraphName,
     ) -> Result<(), io::Error> {
         dump_graph(
             self.quads_for_pattern(None, None, None, Some(from_graph_name))
                 .map(|q| Ok(q?.into())),
             writer,
-            syntax,
+            format,
         )
     }
 
     /// Dumps the store dataset into a file.
     ///    
     /// See `MemoryStore` for a usage example.
-    pub fn dump_dataset(&self, writer: impl Write, syntax: DatasetSyntax) -> Result<(), io::Error> {
+    pub fn dump_dataset(&self, writer: impl Write, format: DatasetFormat) -> Result<(), io::Error> {
         dump_dataset(
             self.quads_for_pattern(None, None, None, None),
             writer,
-            syntax,
+            format,
         )
     }
 
@@ -668,11 +668,11 @@ impl SledTransaction<'_> {
     pub fn load_graph(
         &mut self,
         reader: impl BufRead,
-        syntax: GraphSyntax,
+        format: GraphFormat,
         to_graph_name: &GraphName,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
-        load_graph(&mut self.inner, reader, syntax, to_graph_name, base_iri)
+        load_graph(&mut self.inner, reader, format, to_graph_name, base_iri)
     }
 
     /// Loads a dataset file (i.e. quads) into the store. into the store during the transaction.
@@ -688,10 +688,10 @@ impl SledTransaction<'_> {
     pub fn load_dataset(
         &mut self,
         reader: impl BufRead,
-        syntax: DatasetSyntax,
+        format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
-        load_dataset(&mut self.inner, reader, syntax, base_iri)
+        load_dataset(&mut self.inner, reader, format, base_iri)
     }
 
     /// Adds a quad to this store during the transaction.

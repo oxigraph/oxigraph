@@ -4,8 +4,9 @@ use async_std::prelude::*;
 use async_std::task::block_on;
 use chrono::{DateTime, Datelike, Utc};
 use http_types::{headers, Error, Method, Request, Response, Result, StatusCode};
+use oxigraph::io::GraphFormat;
 use oxigraph::model::NamedNode;
-use oxigraph::{GraphSyntax, RocksDbStore};
+use oxigraph::RocksDbStore;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::io::{BufReader, Cursor, Read};
@@ -271,7 +272,7 @@ impl WikibaseLoader {
 
             transaction.load_graph(
                 BufReader::new(data),
-                GraphSyntax::NTriples,
+                GraphFormat::NTriples,
                 &NamedNode::new(uri)?.into(),
                 None,
             )?;

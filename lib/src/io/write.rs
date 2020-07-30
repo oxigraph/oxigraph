@@ -1,8 +1,7 @@
 //! Utilities to write RDF graphs and datasets
 
-use super::GraphSyntax;
+use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
-use crate::DatasetSyntax;
 use rio_api::formatter::{QuadsFormatter, TriplesFormatter};
 use rio_turtle::{NQuadsFormatter, NTriplesFormatter, TriGFormatter, TurtleFormatter};
 use rio_xml::{RdfXmlError, RdfXmlFormatter};
@@ -12,16 +11,16 @@ use std::io::Write;
 /// A serializer for RDF graph serialization formats.
 ///
 /// It currently supports the following formats:
-/// * [N-Triples](https://www.w3.org/TR/n-triples/) (`GraphSyntax::NTriples`)
-/// * [Turtle](https://www.w3.org/TR/turtle/) (`GraphSyntax::Turtle`)
-/// * [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) (`GraphSyntax::RdfXml`)
+/// * [N-Triples](https://www.w3.org/TR/n-triples/) (`GraphFormat::NTriples`)
+/// * [Turtle](https://www.w3.org/TR/turtle/) (`GraphFormat::Turtle`)
+/// * [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) (`GraphFormat::RdfXml`)
 ///
 /// ```
-/// use oxigraph::io::{GraphSyntax, GraphSerializer};
+/// use oxigraph::io::{GraphFormat, GraphSerializer};
 /// use oxigraph::model::*;
 ///
 /// let mut buffer = Vec::new();
-/// let mut writer = GraphSerializer::from_syntax(GraphSyntax::NTriples).triple_writer(&mut buffer)?;
+/// let mut writer = GraphSerializer::from_format(GraphFormat::NTriples).triple_writer(&mut buffer)?;
 /// writer.write(&Triple {
 ///    subject: NamedNode::new("http://example.com/s")?.into(),
 ///    predicate: NamedNode::new("http://example.com/p")?,
@@ -34,21 +33,21 @@ use std::io::Write;
 /// ```
 #[allow(missing_copy_implementations)]
 pub struct GraphSerializer {
-    syntax: GraphSyntax,
+    format: GraphFormat,
 }
 
 impl GraphSerializer {
-    pub fn from_syntax(syntax: GraphSyntax) -> Self {
-        Self { syntax }
+    pub fn from_format(format: GraphFormat) -> Self {
+        Self { format }
     }
 
     /// Returns a `TripleWriter` allowing writing triples into the given `Write` implementation
     pub fn triple_writer<W: Write>(&self, writer: W) -> Result<TripleWriter<W>, io::Error> {
         Ok(TripleWriter {
-            formatter: match self.syntax {
-                GraphSyntax::NTriples => TripleWriterKind::NTriples(NTriplesFormatter::new(writer)),
-                GraphSyntax::Turtle => TripleWriterKind::Turtle(TurtleFormatter::new(writer)),
-                GraphSyntax::RdfXml => {
+            formatter: match self.format {
+                GraphFormat::NTriples => TripleWriterKind::NTriples(NTriplesFormatter::new(writer)),
+                GraphFormat::Turtle => TripleWriterKind::Turtle(TurtleFormatter::new(writer)),
+                GraphFormat::RdfXml => {
                     TripleWriterKind::RdfXml(RdfXmlFormatter::new(writer).map_err(map_xml_err)?)
                 }
             },
@@ -62,11 +61,11 @@ impl GraphSerializer {
 /// Warning: Do not forget to run the `finish` method to properly write the last bytes of the file.
 ///
 /// ```
-/// use oxigraph::io::{GraphSyntax, GraphSerializer};
+/// use oxigraph::io::{GraphFormat, GraphSerializer};
 /// use oxigraph::model::*;
 ///
 /// let mut buffer = Vec::new();
-/// let mut writer = GraphSerializer::from_syntax(GraphSyntax::NTriples).triple_writer(&mut buffer)?;
+/// let mut writer = GraphSerializer::from_format(GraphFormat::NTriples).triple_writer(&mut buffer)?;
 /// writer.write(&Triple {
 ///    subject: NamedNode::new("http://example.com/s")?.into(),
 ///    predicate: NamedNode::new("http://example.com/p")?,
@@ -114,15 +113,15 @@ impl<W: Write> TripleWriter<W> {
 /// A serializer for RDF graph serialization formats.
 ///
 /// It currently supports the following formats:
-/// * [N-Quads](https://www.w3.org/TR/n-quads/) (`DatasetSyntax::NQuads`)
-/// * [TriG](https://www.w3.org/TR/trig/) (`DatasetSyntax::TriG`)
+/// * [N-Quads](https://www.w3.org/TR/n-quads/) (`DatasetFormat::NQuads`)
+/// * [TriG](https://www.w3.org/TR/trig/) (`DatasetFormat::TriG`)
 ///
 /// ```
-/// use oxigraph::io::{DatasetSyntax, DatasetSerializer};
+/// use oxigraph::io::{DatasetFormat, DatasetSerializer};
 /// use oxigraph::model::*;
 ///
 /// let mut buffer = Vec::new();
-/// let mut writer = DatasetSerializer::from_syntax(DatasetSyntax::NQuads).quad_writer(&mut buffer)?;
+/// let mut writer = DatasetSerializer::from_format(DatasetFormat::NQuads).quad_writer(&mut buffer)?;
 /// writer.write(&Quad {
 ///    subject: NamedNode::new("http://example.com/s")?.into(),
 ///    predicate: NamedNode::new("http://example.com/p")?,
@@ -136,20 +135,20 @@ impl<W: Write> TripleWriter<W> {
 /// ```
 #[allow(missing_copy_implementations)]
 pub struct DatasetSerializer {
-    syntax: DatasetSyntax,
+    format: DatasetFormat,
 }
 
 impl DatasetSerializer {
-    pub fn from_syntax(syntax: DatasetSyntax) -> Self {
-        Self { syntax }
+    pub fn from_format(format: DatasetFormat) -> Self {
+        Self { format }
     }
 
     /// Returns a `QuadWriter` allowing writing triples into the given `Write` implementation
     pub fn quad_writer<W: Write>(&self, writer: W) -> Result<QuadWriter<W>, io::Error> {
         Ok(QuadWriter {
-            formatter: match self.syntax {
-                DatasetSyntax::NQuads => QuadWriterKind::NQuads(NQuadsFormatter::new(writer)),
-                DatasetSyntax::TriG => QuadWriterKind::TriG(TriGFormatter::new(writer)),
+            formatter: match self.format {
+                DatasetFormat::NQuads => QuadWriterKind::NQuads(NQuadsFormatter::new(writer)),
+                DatasetFormat::TriG => QuadWriterKind::TriG(TriGFormatter::new(writer)),
             },
         })
     }
@@ -161,11 +160,11 @@ impl DatasetSerializer {
 /// Warning: Do not forget to run the `finish` method to properly write the last bytes of the file.
 ///
 /// ```
-/// use oxigraph::io::{DatasetSyntax, DatasetSerializer};
+/// use oxigraph::io::{DatasetFormat, DatasetSerializer};
 /// use oxigraph::model::*;
 ///
 /// let mut buffer = Vec::new();
-/// let mut writer = DatasetSerializer::from_syntax(DatasetSyntax::NQuads).quad_writer(&mut buffer)?;
+/// let mut writer = DatasetSerializer::from_format(DatasetFormat::NQuads).quad_writer(&mut buffer)?;
 /// writer.write(&Quad {
 ///    subject: NamedNode::new("http://example.com/s")?.into(),
 ///    predicate: NamedNode::new("http://example.com/p")?,
