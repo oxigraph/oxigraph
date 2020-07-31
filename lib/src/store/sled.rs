@@ -125,7 +125,7 @@ impl SledStore {
         let graph_name = graph_name.map(|g| g.into());
         let this = self.clone();
         self.encoded_quads_for_pattern(subject, predicate, object, graph_name)
-            .map(move |quad| this.decode_quad(&quad?))
+            .map(move |quad| Ok(this.decode_quad(&quad?)?))
     }
 
     /// Checks if this store contains a given quad

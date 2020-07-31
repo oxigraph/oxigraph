@@ -1,5 +1,6 @@
 use crate::error::Infallible;
 use crate::sparql::ParseError;
+use crate::store::numeric_encoder::DecoderError;
 use std::error;
 use std::fmt;
 use std::io;
@@ -105,5 +106,11 @@ impl From<ParseError> for EvaluationError {
 impl From<io::Error> for EvaluationError {
     fn from(error: io::Error) -> Self {
         Self::Io(error)
+    }
+}
+
+impl<E: Into<io::Error>> From<DecoderError<E>> for EvaluationError {
+    fn from(error: DecoderError<E>) -> Self {
+        io::Error::from(error).into()
     }
 }

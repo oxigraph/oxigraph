@@ -127,7 +127,7 @@ impl RocksDbStore {
         let graph_name = graph_name.map(|g| g.into());
         let store = self.clone();
         self.encoded_quads_for_pattern(subject, predicate, object, graph_name)
-            .map(move |quad| store.decode_quad(&quad?))
+            .map(move |quad| Ok(store.decode_quad(&quad?)?))
     }
 
     /// Checks if this store contains a given quad
