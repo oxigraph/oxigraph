@@ -1,17 +1,12 @@
+use std::convert::Infallible;
 use std::error::Error;
-use std::{fmt, io};
+use std::io;
 
-//TODO: convert to "!" when "never_type" is going to be stabilized
-#[allow(clippy::empty_enum)]
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub(crate) enum Infallible {}
+/// Traits that allows unwrapping only infallible results
+pub(crate) trait UnwrapInfallible {
+    type Value;
 
-impl Error for Infallible {}
-
-impl fmt::Display for Infallible {
-    fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {}
-    }
+    fn unwrap_infallible(self) -> Self::Value;
 }
 
 impl<T> UnwrapInfallible for Result<T, Infallible> {
@@ -22,31 +17,6 @@ impl<T> UnwrapInfallible for Result<T, Infallible> {
             Ok(value) => value,
             Err(error) => match error {},
         }
-    }
-}
-
-/// Traits that allows unwrapping only infallible results
-pub(crate) trait UnwrapInfallible {
-    type Value;
-
-    fn unwrap_infallible(self) -> Self::Value;
-}
-
-impl From<std::convert::Infallible> for Infallible {
-    fn from(error: std::convert::Infallible) -> Self {
-        match error {}
-    }
-}
-
-impl From<Infallible> for std::io::Error {
-    fn from(error: Infallible) -> Self {
-        match error {}
-    }
-}
-
-impl From<Infallible> for std::convert::Infallible {
-    fn from(error: Infallible) -> Self {
-        match error {}
     }
 }
 

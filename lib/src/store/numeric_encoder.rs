@@ -1,12 +1,14 @@
 #![allow(clippy::unreadable_literal)]
 
-use crate::error::{invalid_data_error, Infallible};
+use crate::error::invalid_data_error;
 use crate::model::xsd::*;
 use crate::model::*;
+use crate::sparql::EvaluationError;
 use rand::random;
 use rio_api::model as rio;
 use siphasher::sip128::{Hasher128, SipHasher24};
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::error::Error;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -763,7 +765,7 @@ pub fn write_term(sink: &mut Vec<u8>, term: EncodedTerm) {
 }
 
 pub(crate) trait WithStoreError {
-    type Error: Error + Into<io::Error> + 'static;
+    type Error: Error + Into<EvaluationError> + 'static;
 }
 
 pub(crate) trait StrLookup: WithStoreError {

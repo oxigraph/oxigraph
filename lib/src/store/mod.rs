@@ -28,7 +28,7 @@ use rio_turtle::{
 };
 use rio_xml::{RdfXmlError, RdfXmlFormatter, RdfXmlParser};
 use std::collections::HashMap;
-use std::error::Error;
+use std::convert::Infallible;
 use std::io;
 use std::io::{BufRead, Write};
 use std::iter::Iterator;
@@ -57,7 +57,7 @@ fn load_graph<S: WritableEncodedStore>(
     format: GraphFormat,
     to_graph_name: &GraphName,
     base_iri: Option<&str>,
-) -> Result<(), io::Error> {
+) -> Result<(), StoreOrParseError<S::Error, io::Error>> {
     let base_iri = base_iri.unwrap_or("");
     match format {
         GraphFormat::NTriples => {
@@ -76,26 +76,30 @@ fn load_from_triple_parser<S: WritableEncodedStore, P: TriplesParser>(
     store: &mut S,
     parser: Result<P, P::Error>,
     to_graph_name: &GraphName,
-) -> Result<(), io::Error>
+) -> Result<(), StoreOrParseError<S::Error, io::Error>>
 where
-    IoOrParseError<P::Error>: From<P::Error>,
+    StoreOrParseError<S::Error, P::Error>: From<P::Error>,
     P::Error: Send + Sync + 'static,
 {
     let mut parser = parser.map_err(invalid_input_error)?;
     let mut bnode_map = HashMap::default();
     let to_graph_name = store
         .encode_graph_name(to_graph_name)
-        .map_err(|e| e.into())?;
-    let result: Result<(), IoOrParseError<_>> = parser.parse_all(&mut move |t| {
-        let quad = store
-            .encode_rio_triple_in_graph(t, to_graph_name, &mut bnode_map)
-            .map_err(|e| IoOrParseError::Io(e.into()))?;
-        store
-            .insert_encoded(&quad)
-            .map_err(|e| IoOrParseError::Io(e.into()))?;
-        Ok(())
-    });
-    Ok(result?)
+        .map_err(StoreOrParseError::Store)?;
+    parser
+        .parse_all(&mut move |t| {
+            let quad = store
+                .encode_rio_triple_in_graph(t, to_graph_name, &mut bnode_map)
+                .map_err(StoreOrParseError::Store)?;
+            store
+                .insert_encoded(&quad)
+                .map_err(StoreOrParseError::Store)?;
+            Ok(())
+        })
+        .map_err(|e| match e {
+            StoreOrParseError::Store(e) => StoreOrParseError::Store(e),
+            StoreOrParseError::Parse(e) => StoreOrParseError::Parse(invalid_data_error(e)),
+        })
 }
 
 fn dump_graph(
@@ -138,7 +142,7 @@ fn load_dataset<S: WritableEncodedStore>(
     reader: impl BufRead,
     format: DatasetFormat,
     base_iri: Option<&str>,
-) -> Result<(), io::Error> {
+) -> Result<(), StoreOrParseError<S::Error, io::Error>> {
     let base_iri = base_iri.unwrap_or("");
     match format {
         DatasetFormat::NQuads => load_from_quad_parser(store, NQuadsParser::new(reader)),
@@ -149,23 +153,27 @@ fn load_dataset<S: WritableEncodedStore>(
 fn load_from_quad_parser<S: WritableEncodedStore, P: QuadsParser>(
     store: &mut S,
     parser: Result<P, P::Error>,
-) -> Result<(), io::Error>
+) -> Result<(), StoreOrParseError<S::Error, io::Error>>
 where
-    IoOrParseError<P::Error>: From<P::Error>,
+    StoreOrParseError<S::Error, P::Error>: From<P::Error>,
     P::Error: Send + Sync + 'static,
 {
     let mut parser = parser.map_err(invalid_input_error)?;
     let mut bnode_map = HashMap::default();
-    let result: Result<(), IoOrParseError<_>> = parser.parse_all(&mut move |q| {
-        let quad = store
-            .encode_rio_quad(q, &mut bnode_map)
-            .map_err(|e| IoOrParseError::Io(e.into()))?;
-        store
-            .insert_encoded(&quad)
-            .map_err(|e| IoOrParseError::Io(e.into()))?;
-        Ok(())
-    });
-    Ok(result?)
+    parser
+        .parse_all(&mut move |q| {
+            let quad = store
+                .encode_rio_quad(q, &mut bnode_map)
+                .map_err(StoreOrParseError::Store)?;
+            store
+                .insert_encoded(&quad)
+                .map_err(StoreOrParseError::Store)?;
+            Ok(())
+        })
+        .map_err(|e| match e {
+            StoreOrParseError::Store(e) => StoreOrParseError::Store(e),
+            StoreOrParseError::Parse(e) => StoreOrParseError::Parse(invalid_data_error(e)),
+        })
 }
 
 fn dump_dataset(
@@ -192,34 +200,42 @@ fn dump_dataset(
     Ok(())
 }
 
-enum IoOrParseError<E: Sized> {
-    Io(io::Error),
-    Parse(E),
+enum StoreOrParseError<S, P> {
+    Store(S),
+    Parse(P),
 }
 
-impl<E: Sized> From<io::Error> for IoOrParseError<E> {
-    fn from(error: io::Error) -> Self {
-        Self::Io(error)
-    }
-}
-
-impl From<TurtleError> for IoOrParseError<TurtleError> {
+impl<S> From<TurtleError> for StoreOrParseError<S, TurtleError> {
     fn from(error: TurtleError) -> Self {
         Self::Parse(error)
     }
 }
 
-impl From<RdfXmlError> for IoOrParseError<RdfXmlError> {
+impl<S> From<RdfXmlError> for StoreOrParseError<S, RdfXmlError> {
     fn from(error: RdfXmlError) -> Self {
         Self::Parse(error)
     }
 }
 
-impl<E: Sized + Error + Send + Sync + 'static> From<IoOrParseError<E>> for io::Error {
-    fn from(error: IoOrParseError<E>) -> Self {
+impl<S> From<io::Error> for StoreOrParseError<S, io::Error> {
+    fn from(error: io::Error) -> Self {
+        Self::Parse(error)
+    }
+}
+
+impl<P: Into<io::Error>> From<StoreOrParseError<io::Error, P>> for io::Error {
+    fn from(error: StoreOrParseError<io::Error, P>) -> Self {
         match error {
-            IoOrParseError::Io(error) => error,
-            IoOrParseError::Parse(error) => invalid_data_error(error),
+            StoreOrParseError::Store(error) => error,
+            StoreOrParseError::Parse(error) => error.into(),
+        }
+    }
+}
+impl<P: Into<io::Error>> From<StoreOrParseError<Infallible, P>> for io::Error {
+    fn from(error: StoreOrParseError<Infallible, P>) -> Self {
+        match error {
+            StoreOrParseError::Store(error) => match error {},
+            StoreOrParseError::Parse(error) => error.into(),
         }
     }
 }

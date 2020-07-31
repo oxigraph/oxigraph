@@ -9,7 +9,6 @@ use crate::store::numeric_encoder::{
 use crate::store::ReadableEncodedStore;
 use std::cell::{RefCell, RefMut};
 use std::collections::BTreeSet;
-use std::io;
 use std::rc::Rc;
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -584,7 +583,7 @@ impl<S: ReadableEncodedStore> DatasetView<S> {
     ) -> Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>> {
         if graph_name == None {
             Box::new(
-                map_io_err(
+                map_iter_err(
                     self.store
                         .encoded_quads_for_pattern(subject, predicate, object, None),
                 )
@@ -595,7 +594,7 @@ impl<S: ReadableEncodedStore> DatasetView<S> {
             )
         } else if graph_name == Some(EncodedTerm::DefaultGraph) && self.default_graph_as_union {
             Box::new(
-                map_io_err(
+                map_iter_err(
                     self.store
                         .encoded_quads_for_pattern(subject, predicate, object, None),
                 )
@@ -610,7 +609,7 @@ impl<S: ReadableEncodedStore> DatasetView<S> {
                 }),
             )
         } else {
-            Box::new(map_io_err(self.store.encoded_quads_for_pattern(
+            Box::new(map_iter_err(self.store.encoded_quads_for_pattern(
                 subject, predicate, object, graph_name,
             )))
         }
@@ -624,10 +623,10 @@ impl<S: ReadableEncodedStore> DatasetView<S> {
     }
 }
 
-fn map_io_err<'a, T>(
-    iter: impl Iterator<Item = Result<T, impl Into<io::Error>>> + 'a,
+fn map_iter_err<'a, T>(
+    iter: impl Iterator<Item = Result<T, impl Into<EvaluationError>>> + 'a,
 ) -> impl Iterator<Item = Result<T, EvaluationError>> + 'a {
-    iter.map(|e| e.map_err(|e| e.into().into()))
+    iter.map(|e| e.map_err(|e| e.into()))
 }
 
 impl<S: ReadableEncodedStore> WithStoreError for DatasetView<S> {

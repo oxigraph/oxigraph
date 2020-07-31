@@ -1,6 +1,6 @@
 //! In-memory store.
 
-use crate::error::{Infallible, UnwrapInfallible};
+use crate::error::UnwrapInfallible;
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResult, SimplePreparedQuery};
@@ -10,7 +10,7 @@ use crate::store::{
 };
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
-use std::convert::TryInto;
+use std::convert::{Infallible, TryInto};
 use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::io::{BufRead, Write};
 use std::iter::FromIterator;
@@ -276,7 +276,8 @@ impl MemoryStore {
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
         let mut store = self;
-        load_graph(&mut store, reader, format, to_graph_name, base_iri)
+        load_graph(&mut store, reader, format, to_graph_name, base_iri)?;
+        Ok(())
     }
 
     /// Loads a dataset file (i.e. quads) into the store.
@@ -309,7 +310,8 @@ impl MemoryStore {
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
         let mut store = self;
-        load_dataset(&mut store, reader, format, base_iri)
+        load_dataset(&mut store, reader, format, base_iri)?;
+        Ok(())
     }
 
     /// Adds a quad to this store.
@@ -977,7 +979,8 @@ impl<'a> MemoryTransaction<'a> {
         to_graph_name: &GraphName,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
-        load_graph(self, reader, format, to_graph_name, base_iri)
+        load_graph(self, reader, format, to_graph_name, base_iri)?;
+        Ok(())
     }
 
     /// Loads a dataset file (i.e. quads) into the store during the transaction.
@@ -1006,7 +1009,8 @@ impl<'a> MemoryTransaction<'a> {
         format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
-        load_dataset(self, reader, format, base_iri)
+        load_dataset(self, reader, format, base_iri)?;
+        Ok(())
     }
 
     /// Adds a quad to this store during the transaction.

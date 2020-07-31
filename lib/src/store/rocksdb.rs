@@ -1,6 +1,6 @@
 //! Store based on the [RocksDB](https://rocksdb.org/) key-value database.
 
-use crate::error::{invalid_data_error, Infallible, UnwrapInfallible};
+use crate::error::{invalid_data_error, UnwrapInfallible};
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResult, SimplePreparedQuery};
@@ -9,7 +9,7 @@ use crate::store::{
     dump_dataset, dump_graph, load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore,
 };
 use rocksdb::*;
-use std::convert::TryInto;
+use std::convert::{Infallible, TryInto};
 use std::io;
 use std::io::{BufRead, Cursor, Write};
 use std::mem::{take, transmute};
@@ -576,7 +576,8 @@ impl RocksDbTransaction<'_> {
         to_graph_name: &GraphName,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
-        load_graph(&mut self.inner, reader, syntax, to_graph_name, base_iri)
+        load_graph(&mut self.inner, reader, syntax, to_graph_name, base_iri)?;
+        Ok(())
     }
 
     /// Loads a dataset file (i.e. quads) into the store. into the store during the transaction.
@@ -595,7 +596,8 @@ impl RocksDbTransaction<'_> {
         format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
-        load_dataset(&mut self.inner, reader, format, base_iri)
+        load_dataset(&mut self.inner, reader, format, base_iri)?;
+        Ok(())
     }
 
     /// Adds a quad to this store during the transaction.
@@ -703,18 +705,19 @@ impl WithStoreError for AutoBatchWriter<'_> {
 
 impl StrContainer for AutoBatchWriter<'_> {
     fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), io::Error> {
-        Ok(self.inner.insert_str(key, value)?)
+        self.inner.insert_str(key, value).unwrap_infallible();
+        Ok(())
     }
 }
 
 impl WritableEncodedStore for AutoBatchWriter<'_> {
     fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), io::Error> {
-        self.inner.insert_encoded(quad)?;
+        self.inner.insert_encoded(quad).unwrap_infallible();
         self.apply_if_big()
     }
 
     fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<(), io::Error> {
-        self.inner.remove_encoded(quad)?;
+        self.inner.remove_encoded(quad).unwrap_infallible();
         self.apply_if_big()
     }
 }

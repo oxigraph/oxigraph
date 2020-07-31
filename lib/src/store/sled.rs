@@ -1,6 +1,6 @@
 //! Store based on the [Sled](https://sled.rs/) key-value database.
 
-use crate::error::{invalid_data_error, Infallible, UnwrapInfallible};
+use crate::error::{invalid_data_error, UnwrapInfallible};
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResult, SimplePreparedQuery};
@@ -9,7 +9,7 @@ use crate::store::{
     dump_dataset, dump_graph, load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore,
 };
 use sled::{Batch, Config, Iter, Tree};
-use std::convert::TryInto;
+use std::convert::{Infallible, TryInto};
 use std::io::{BufRead, Cursor, Write};
 use std::path::Path;
 use std::{fmt, io, str};
@@ -184,7 +184,8 @@ impl SledStore {
             format,
             to_graph_name,
             base_iri,
-        )
+        )?;
+        Ok(())
     }
 
     /// Loads a dataset file (i.e. quads) into the store.
@@ -203,7 +204,8 @@ impl SledStore {
         format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
-        load_dataset(&mut DirectWriter::new(self), reader, format, base_iri)
+        load_dataset(&mut DirectWriter::new(self), reader, format, base_iri)?;
+        Ok(())
     }
 
     /// Adds a quad to this store.
@@ -671,7 +673,8 @@ impl SledTransaction<'_> {
         to_graph_name: &GraphName,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
-        load_graph(&mut self.inner, reader, format, to_graph_name, base_iri)
+        load_graph(&mut self.inner, reader, format, to_graph_name, base_iri)?;
+        Ok(())
     }
 
     /// Loads a dataset file (i.e. quads) into the store. into the store during the transaction.
@@ -690,7 +693,8 @@ impl SledTransaction<'_> {
         format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
-        load_dataset(&mut self.inner, reader, format, base_iri)
+        load_dataset(&mut self.inner, reader, format, base_iri)?;
+        Ok(())
     }
 
     /// Adds a quad to this store during the transaction.

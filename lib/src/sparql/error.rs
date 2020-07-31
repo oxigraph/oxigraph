@@ -1,6 +1,7 @@
-use crate::error::Infallible;
+use crate::error::invalid_data_error;
 use crate::sparql::ParseError;
 use crate::store::numeric_encoder::DecoderError;
+use std::convert::Infallible;
 use std::error;
 use std::fmt;
 use std::io;
@@ -91,12 +92,6 @@ impl From<Infallible> for EvaluationError {
     }
 }
 
-impl From<std::convert::Infallible> for EvaluationError {
-    fn from(error: std::convert::Infallible) -> Self {
-        match error {}
-    }
-}
-
 impl From<ParseError> for EvaluationError {
     fn from(error: ParseError) -> Self {
         Self::Parsing(error)
@@ -109,8 +104,11 @@ impl From<io::Error> for EvaluationError {
     }
 }
 
-impl<E: Into<io::Error>> From<DecoderError<E>> for EvaluationError {
+impl<E: Into<EvaluationError>> From<DecoderError<E>> for EvaluationError {
     fn from(error: DecoderError<E>) -> Self {
-        io::Error::from(error).into()
+        match error {
+            DecoderError::Store(error) => error.into(),
+            DecoderError::Decoder { msg } => invalid_data_error(msg).into(),
+        }
     }
 }
