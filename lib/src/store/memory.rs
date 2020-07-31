@@ -697,14 +697,13 @@ impl<'a> WithStoreError for &'a MemoryStore {
 
 impl StrLookup for MemoryStore {
     fn get_str(&self, id: StrHash) -> Result<Option<String>, Infallible> {
-        //TODO: avoid copy by adding a lifetime limit to get_str
         self.indexes().get_str(id)
     }
 }
 
 impl<'a> StrContainer for &'a MemoryStore {
-    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Infallible> {
-        self.indexes_mut().insert_str(key, value)
+    fn insert_str(&mut self, value: &str) -> Result<StrHash, Infallible> {
+        self.indexes_mut().insert_str(value)
     }
 }
 
@@ -748,9 +747,10 @@ impl StrLookup for MemoryStoreIndexes {
 }
 
 impl StrContainer for MemoryStoreIndexes {
-    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Infallible> {
+    fn insert_str(&mut self, value: &str) -> Result<StrHash, Infallible> {
+        let key = StrHash::new(value);
         self.id2str.entry(key).or_insert_with(|| value.to_owned());
-        Ok(())
+        Ok(key)
     }
 }
 
@@ -1043,9 +1043,10 @@ impl WithStoreError for MemoryTransaction<'_> {
 }
 
 impl StrContainer for MemoryTransaction<'_> {
-    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Infallible> {
+    fn insert_str(&mut self, value: &str) -> Result<StrHash, Infallible> {
+        let key = StrHash::new(value);
         self.strings.push((key, value.to_owned()));
-        Ok(())
+        Ok(key)
     }
 }
 

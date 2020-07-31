@@ -773,7 +773,7 @@ pub(crate) trait StrLookup: WithStoreError {
 }
 
 pub(crate) trait StrContainer: WithStoreError {
-    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Self::Error>;
+    fn insert_str(&mut self, value: &str) -> Result<StrHash, Self::Error>;
 }
 
 pub struct MemoryStrStore {
@@ -800,9 +800,10 @@ impl StrLookup for MemoryStrStore {
 }
 
 impl StrContainer for MemoryStrStore {
-    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Infallible> {
+    fn insert_str(&mut self, value: &str) -> Result<StrHash, Infallible> {
+        let key = StrHash::new(value);
         self.id2str.entry(key).or_insert_with(|| value.to_owned());
-        Ok(())
+        Ok(key)
     }
 }
 
@@ -940,19 +941,18 @@ impl<S: StrContainer> Encoder for S {
         &mut self,
         named_node: rio::NamedNode<'_>,
     ) -> Result<EncodedTerm, Self::Error> {
-        let iri_id = StrHash::new(named_node.iri);
-        self.insert_str(iri_id, named_node.iri)?;
-        Ok(EncodedTerm::NamedNode { iri_id })
+        Ok(EncodedTerm::NamedNode {
+            iri_id: self.insert_str(named_node.iri)?,
+        })
     }
 
     fn encode_blank_node(&mut self, blank_node: &BlankNode) -> Result<EncodedTerm, Self::Error> {
         if let Some(id) = blank_node.id() {
             Ok(EncodedTerm::InlineBlankNode { id })
         } else {
-            let id = blank_node.as_str();
-            let id_id = StrHash::new(id);
-            self.insert_str(id_id, id)?;
-            Ok(EncodedTerm::NamedBlankNode { id_id })
+            Ok(EncodedTerm::NamedBlankNode {
+                id_id: self.insert_str(blank_node.as_str())?,
+            })
         }
     }
 
@@ -975,29 +975,21 @@ impl<S: StrContainer> Encoder for S {
         literal: rio::Literal<'_>,
     ) -> Result<EncodedTerm, Self::Error> {
         Ok(match literal {
-            rio::Literal::Simple { value } => {
-                let value_id = StrHash::new(value);
-                self.insert_str(value_id, value)?;
-                EncodedTerm::StringLiteral { value_id }
-            }
+            rio::Literal::Simple { value } => EncodedTerm::StringLiteral {
+                value_id: self.insert_str(value)?,
+            },
             rio::Literal::LanguageTaggedString { value, language } => {
-                let value_id = StrHash::new(value);
-                self.insert_str(value_id, value)?;
-                let language_id = StrHash::new(language);
-                self.insert_str(language_id, language)?;
                 EncodedTerm::LangStringLiteral {
-                    value_id,
-                    language_id,
+                    value_id: self.insert_str(value)?,
+                    language_id: self.insert_str(language)?,
                 }
             }
             rio::Literal::Typed { value, datatype } => {
                 match match datatype.iri {
                     "http://www.w3.org/2001/XMLSchema#boolean" => parse_boolean_str(value),
-                    "http://www.w3.org/2001/XMLSchema#string" => {
-                        let value_id = StrHash::new(value);
-                        self.insert_str(value_id, value)?;
-                        Some(EncodedTerm::StringLiteral { value_id })
-                    }
+                    "http://www.w3.org/2001/XMLSchema#string" => Some(EncodedTerm::StringLiteral {
+                        value_id: self.insert_str(value)?,
+                    }),
                     "http://www.w3.org/2001/XMLSchema#float" => parse_float_str(value),
                     "http://www.w3.org/2001/XMLSchema#double" => parse_double_str(value),
                     "http://www.w3.org/2001/XMLSchema#integer"
@@ -1032,16 +1024,10 @@ impl<S: StrContainer> Encoder for S {
                     _ => None,
                 } {
                     Some(v) => v,
-                    None => {
-                        let value_id = StrHash::new(value);
-                        self.insert_str(value_id, value)?;
-                        let datatype_id = StrHash::new(datatype.iri);
-                        self.insert_str(datatype_id, datatype.iri)?;
-                        EncodedTerm::TypedLiteral {
-                            value_id,
-                            datatype_id,
-                        }
-                    }
+                    None => EncodedTerm::TypedLiteral {
+                        value_id: self.insert_str(value)?,
+                        datatype_id: self.insert_str(datatype.iri)?,
+                    },
                 }
             }
         })

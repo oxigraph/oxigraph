@@ -1605,9 +1605,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
     }
 
     fn build_string_id(&self, value: &str) -> Option<StrHash> {
-        let value_id = StrHash::new(value);
-        self.dataset.encoder().insert_str(value_id, value).ok()?;
-        Some(value_id)
+        self.dataset.encoder().insert_str(value).ok()
     }
 
     fn build_language_id(&self, value: EncodedTerm) -> Option<StrHash> {

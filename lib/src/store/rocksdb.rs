@@ -624,10 +624,11 @@ impl WithStoreError for BatchWriter<'_> {
 }
 
 impl StrContainer for BatchWriter<'_> {
-    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Infallible> {
+    fn insert_str(&mut self, value: &str) -> Result<StrHash, Infallible> {
+        let key = StrHash::new(value);
         self.batch
             .put_cf(self.store.id2str_cf(), &key.to_be_bytes(), value);
-        Ok(())
+        Ok(key)
     }
 }
 
@@ -704,9 +705,8 @@ impl WithStoreError for AutoBatchWriter<'_> {
 }
 
 impl StrContainer for AutoBatchWriter<'_> {
-    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), io::Error> {
-        self.inner.insert_str(key, value).unwrap_infallible();
-        Ok(())
+    fn insert_str(&mut self, value: &str) -> Result<StrHash, io::Error> {
+        Ok(self.inner.insert_str(value).unwrap_infallible())
     }
 }
 

@@ -652,12 +652,12 @@ impl<'a, S: ReadableEncodedStore> WithStoreError for DatasetViewStrContainer<'a,
 }
 
 impl<'a, S: ReadableEncodedStore> StrContainer for DatasetViewStrContainer<'a, S> {
-    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Self::Error> {
+    fn insert_str(&mut self, value: &str) -> Result<StrHash, Self::Error> {
+        let key = StrHash::new(value);
         if self.store.get_str(key)?.is_none() {
-            self.extra.insert_str(key, value).unwrap();
-            Ok(())
+            Ok(self.extra.insert_str(value).unwrap_infallible())
         } else {
-            Ok(())
+            Ok(key)
         }
     }
 }

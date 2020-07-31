@@ -496,9 +496,10 @@ impl<'a> WithStoreError for &'a SledStore {
 }
 
 impl<'a> StrContainer for &'a SledStore {
-    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), io::Error> {
+    fn insert_str(&mut self, value: &str) -> Result<StrHash, io::Error> {
+        let key = StrHash::new(value);
         self.id2str.insert(key.to_be_bytes().as_ref(), value)?;
-        Ok(())
+        Ok(key)
     }
 }
 
@@ -634,13 +635,10 @@ impl<'a> WithStoreError for &'a SledTransaction<'a> {
 }
 
 impl<'a> StrContainer for &'a SledTransaction<'a> {
-    fn insert_str(
-        &mut self,
-        key: StrHash,
-        value: &str,
-    ) -> Result<(), SledUnabortableTransactionError> {
+    fn insert_str(&mut self, value: &str) -> Result<StrHash, SledUnabortableTransactionError> {
+        let key = StrHash::new(value);
         self.id2str.insert(key.to_be_bytes().as_ref(), value)?;
-        Ok(())
+        Ok(key)
     }
 }
 
