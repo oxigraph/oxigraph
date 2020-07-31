@@ -4,7 +4,7 @@ use crate::sparql::error::EvaluationError;
 use crate::sparql::model::Variable;
 use crate::store::numeric_encoder::{
     EncodedQuad, EncodedTerm, Encoder, MemoryStrStore, StrContainer, StrHash, StrLookup,
-    WithStoreError, ENCODED_DEFAULT_GRAPH,
+    WithStoreError,
 };
 use crate::store::ReadableEncodedStore;
 use std::cell::{RefCell, RefMut};
@@ -590,10 +590,10 @@ impl<S: ReadableEncodedStore> DatasetView<S> {
                 )
                 .filter(|quad| match quad {
                     Err(_) => true,
-                    Ok(quad) => quad.graph_name != ENCODED_DEFAULT_GRAPH,
+                    Ok(quad) => quad.graph_name != EncodedTerm::DefaultGraph,
                 }),
             )
-        } else if graph_name == Some(ENCODED_DEFAULT_GRAPH) && self.default_graph_as_union {
+        } else if graph_name == Some(EncodedTerm::DefaultGraph) && self.default_graph_as_union {
             Box::new(
                 map_io_err(
                     self.store
@@ -605,7 +605,7 @@ impl<S: ReadableEncodedStore> DatasetView<S> {
                         quad.subject,
                         quad.predicate,
                         quad.object,
-                        ENCODED_DEFAULT_GRAPH,
+                        EncodedTerm::DefaultGraph,
                     ))
                 }),
             )

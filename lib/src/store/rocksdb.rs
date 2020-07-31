@@ -79,15 +79,9 @@ impl RocksDbStore {
         options.create_missing_column_families(true);
         options.set_compaction_style(DBCompactionStyle::Universal);
 
-        let new = Self {
+        Ok(Self {
             db: Arc::new(DB::open_cf(&options, path, &COLUMN_FAMILIES).map_err(map_err)?),
-        };
-
-        let mut transaction = new.auto_batch_writer();
-        transaction.set_first_strings()?;
-        transaction.apply()?;
-
-        Ok(new)
+        })
     }
 
     /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/).

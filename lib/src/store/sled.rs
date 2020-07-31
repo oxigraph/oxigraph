@@ -77,12 +77,10 @@ impl SledStore {
 
     fn do_open(config: &Config) -> Result<Self, io::Error> {
         let db = config.open()?;
-        let new = Self {
+        Ok(Self {
             id2str: db.open_tree("id2str")?,
             quads: db.open_tree("quads")?,
-        };
-        DirectWriter::new(&new).set_first_strings()?;
-        Ok(new)
+        })
     }
 
     /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/).

@@ -76,11 +76,9 @@ impl Default for MemoryStore {
 impl MemoryStore {
     /// Constructs a new `MemoryStore`
     pub fn new() -> Self {
-        let new = Self {
+        Self {
             indexes: Arc::new(RwLock::default()),
-        };
-        (&new).set_first_strings().unwrap_infallible();
-        new
+        }
     }
 
     /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/).
@@ -968,7 +966,7 @@ impl<'a> MemoryTransaction<'a> {
     ///
     /// // quad filter
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
-    /// let ex = NamedNode::new("http://example.com")?;
+    /// let ex = NamedNode::new("http://example.com").unwrap();
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results);
     /// # Result::<_, oxigraph::sparql::EvaluationError>::Ok(())
     /// ```
@@ -998,7 +996,7 @@ impl<'a> MemoryTransaction<'a> {
     ///
     /// // quad filter
     /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
-    /// let ex = NamedNode::new("http://example.com")?;
+    /// let ex = NamedNode::new("http://example.com").unwrap();
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), Some(ex.into()))], results);
     /// # Result::<_, oxigraph::sparql::EvaluationError>::Ok(())
     /// ```

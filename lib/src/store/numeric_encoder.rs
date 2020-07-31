@@ -1,8 +1,6 @@
 #![allow(clippy::unreadable_literal)]
 
-use crate::error::{invalid_data_error, Infallible, UnwrapInfallible};
-use crate::model::vocab::rdf;
-use crate::model::vocab::xsd;
+use crate::error::{invalid_data_error, Infallible};
 use crate::model::xsd::*;
 use crate::model::*;
 use rand::random;
@@ -31,10 +29,6 @@ impl StrHash {
         }
     }
 
-    const fn constant(hash: u128) -> Self {
-        Self { hash }
-    }
-
     #[inline]
     pub fn from_be_bytes(bytes: [u8; 16]) -> Self {
         Self {
@@ -47,21 +41,6 @@ impl StrHash {
         self.hash.to_be_bytes()
     }
 }
-
-const EMPTY_STRING_ID: StrHash = StrHash::constant(0xf4f2ced447ab02427de0a38047d74950);
-const RDF_LANG_STRING_ID: StrHash = StrHash::constant(0x8fab6bc1501d6d114e5d4e0116f67a49);
-const XSD_STRING_ID: StrHash = StrHash::constant(0xe72300970ee9bf77f2df7bdb300e3d84);
-const XSD_BOOLEAN_ID: StrHash = StrHash::constant(0xfafac8b356be81954f64e70756e59e32);
-const XSD_FLOAT_ID: StrHash = StrHash::constant(0x34bd4a8ede4564c36445b76e84fa7502);
-const XSD_DOUBLE_ID: StrHash = StrHash::constant(0x3614a889da2f0c7616d96d01b2ff1a97);
-const XSD_INTEGER_ID: StrHash = StrHash::constant(0xe2b19c79f5f04dbcdc7f52f4f7869da0);
-const XSD_DECIMAL_ID: StrHash = StrHash::constant(0xb50bffedfd084528ff892173dc0d1fad);
-const XSD_DATE_TIME_ID: StrHash = StrHash::constant(0xd7496e779a321ade51e92da1a5aa6cb);
-const XSD_DATE_ID: StrHash = StrHash::constant(0x87c4351dea4b98f59a22f7b636d4031);
-const XSD_TIME_ID: StrHash = StrHash::constant(0xc7487be3f3d27d1926b27abf005a9cd2);
-const XSD_DURATION_ID: StrHash = StrHash::constant(0x226af08ea5b7e6b08ceed6030c721228);
-const XSD_YEAR_MONTH_DURATION_ID: StrHash = StrHash::constant(0xc6dacde7afc0bd2f6e178d7229948191);
-const XSD_DAY_TIME_DURATION_ID: StrHash = StrHash::constant(0xc8d6cfdf45e12c10bd711a76aae43bc6);
 
 const TYPE_DEFAULT_GRAPH_ID: u8 = 0;
 const TYPE_NAMED_NODE_ID: u8 = 1;
@@ -82,50 +61,6 @@ const TYPE_TIME_LITERAL: u8 = 15;
 const TYPE_DURATION_LITERAL: u8 = 16;
 const TYPE_YEAR_MONTH_DURATION_LITERAL: u8 = 17;
 const TYPE_DAY_TIME_DURATION_LITERAL: u8 = 18;
-
-pub const ENCODED_DEFAULT_GRAPH: EncodedTerm = EncodedTerm::DefaultGraph;
-pub const ENCODED_EMPTY_STRING_LITERAL: EncodedTerm = EncodedTerm::StringLiteral {
-    value_id: EMPTY_STRING_ID,
-};
-pub const ENCODED_RDF_LANG_STRING_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
-    iri_id: RDF_LANG_STRING_ID,
-};
-pub const ENCODED_XSD_STRING_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
-    iri_id: XSD_STRING_ID,
-};
-pub const ENCODED_XSD_BOOLEAN_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
-    iri_id: XSD_BOOLEAN_ID,
-};
-pub const ENCODED_XSD_FLOAT_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
-    iri_id: XSD_FLOAT_ID,
-};
-pub const ENCODED_XSD_DOUBLE_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
-    iri_id: XSD_DOUBLE_ID,
-};
-pub const ENCODED_XSD_INTEGER_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
-    iri_id: XSD_INTEGER_ID,
-};
-pub const ENCODED_XSD_DECIMAL_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
-    iri_id: XSD_DECIMAL_ID,
-};
-pub const ENCODED_XSD_DATE_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
-    iri_id: XSD_DATE_ID,
-};
-pub const ENCODED_XSD_TIME_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
-    iri_id: XSD_TIME_ID,
-};
-pub const ENCODED_XSD_DATE_TIME_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
-    iri_id: XSD_DATE_TIME_ID,
-};
-pub const ENCODED_XSD_DURATION_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
-    iri_id: XSD_DURATION_ID,
-};
-pub const ENCODED_XSD_YEAR_MONTH_DURATION_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
-    iri_id: XSD_YEAR_MONTH_DURATION_ID,
-};
-pub const ENCODED_XSD_DAY_TIME_DURATION_NAMED_NODE: EncodedTerm = EncodedTerm::NamedNode {
-    iri_id: XSD_DAY_TIME_DURATION_ID,
-};
 
 #[derive(Debug, Clone, Copy)]
 pub enum EncodedTerm {
@@ -311,32 +246,6 @@ impl EncodedTerm {
             | EncodedTerm::YearMonthDurationLiteral(_)
             | EncodedTerm::DayTimeDurationLiteral(_) => true,
             _ => false,
-        }
-    }
-
-    pub fn datatype(&self) -> Option<Self> {
-        match self {
-            EncodedTerm::StringLiteral { .. } => Some(ENCODED_XSD_STRING_NAMED_NODE),
-            EncodedTerm::LangStringLiteral { .. } => Some(ENCODED_RDF_LANG_STRING_NAMED_NODE),
-            EncodedTerm::TypedLiteral { datatype_id, .. } => Some(EncodedTerm::NamedNode {
-                iri_id: *datatype_id,
-            }),
-            EncodedTerm::BooleanLiteral(..) => Some(ENCODED_XSD_BOOLEAN_NAMED_NODE),
-            EncodedTerm::FloatLiteral(..) => Some(ENCODED_XSD_FLOAT_NAMED_NODE),
-            EncodedTerm::DoubleLiteral(..) => Some(ENCODED_XSD_DOUBLE_NAMED_NODE),
-            EncodedTerm::IntegerLiteral(..) => Some(ENCODED_XSD_INTEGER_NAMED_NODE),
-            EncodedTerm::DecimalLiteral(..) => Some(ENCODED_XSD_DECIMAL_NAMED_NODE),
-            EncodedTerm::DateLiteral(..) => Some(ENCODED_XSD_DATE_NAMED_NODE),
-            EncodedTerm::TimeLiteral(..) => Some(ENCODED_XSD_TIME_NAMED_NODE),
-            EncodedTerm::DateTimeLiteral(..) => Some(ENCODED_XSD_DATE_TIME_NAMED_NODE),
-            EncodedTerm::DurationLiteral(..) => Some(ENCODED_XSD_DURATION_NAMED_NODE),
-            EncodedTerm::YearMonthDurationLiteral(..) => {
-                Some(ENCODED_XSD_YEAR_MONTH_DURATION_NAMED_NODE)
-            }
-            EncodedTerm::DayTimeDurationLiteral(..) => {
-                Some(ENCODED_XSD_DAY_TIME_DURATION_NAMED_NODE)
-            }
-            _ => None,
         }
     }
 
@@ -566,7 +475,7 @@ impl From<&GraphName> for EncodedTerm {
         match node {
             GraphName::NamedNode(node) => node.into(),
             GraphName::BlankNode(node) => node.into(),
-            GraphName::DefaultGraph => ENCODED_DEFAULT_GRAPH,
+            GraphName::DefaultGraph => EncodedTerm::DefaultGraph,
         }
     }
 }
@@ -863,28 +772,6 @@ pub(crate) trait StrLookup: WithStoreError {
 
 pub(crate) trait StrContainer: WithStoreError {
     fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Self::Error>;
-
-    /// Should be called when the bytes store is created
-    fn set_first_strings(&mut self) -> Result<(), Self::Error> {
-        self.insert_str(EMPTY_STRING_ID, "")?;
-        self.insert_str(RDF_LANG_STRING_ID, rdf::LANG_STRING.as_str())?;
-        self.insert_str(XSD_STRING_ID, xsd::STRING.as_str())?;
-        self.insert_str(XSD_BOOLEAN_ID, xsd::BOOLEAN.as_str())?;
-        self.insert_str(XSD_FLOAT_ID, xsd::FLOAT.as_str())?;
-        self.insert_str(XSD_DOUBLE_ID, xsd::DOUBLE.as_str())?;
-        self.insert_str(XSD_INTEGER_ID, xsd::INTEGER.as_str())?;
-        self.insert_str(XSD_DECIMAL_ID, xsd::DECIMAL.as_str())?;
-        self.insert_str(XSD_DATE_TIME_ID, xsd::DATE_TIME.as_str())?;
-        self.insert_str(XSD_DATE_ID, xsd::DATE.as_str())?;
-        self.insert_str(XSD_TIME_ID, xsd::TIME.as_str())?;
-        self.insert_str(XSD_DURATION_ID, xsd::DURATION.as_str())?;
-        self.insert_str(
-            XSD_YEAR_MONTH_DURATION_ID,
-            xsd::YEAR_MONTH_DURATION.as_str(),
-        )?;
-        self.insert_str(XSD_DAY_TIME_DURATION_ID, xsd::DAY_TIME_DURATION.as_str())?;
-        Ok(())
-    }
 }
 
 pub struct MemoryStrStore {
@@ -893,11 +780,9 @@ pub struct MemoryStrStore {
 
 impl Default for MemoryStrStore {
     fn default() -> Self {
-        let mut new = Self {
+        Self {
             id2str: HashMap::default(),
-        };
-        new.set_first_strings().unwrap_infallible();
-        new
+        }
     }
 }
 
@@ -952,7 +837,7 @@ pub(crate) trait Encoder: WithStoreError {
         match name {
             GraphName::NamedNode(named_node) => self.encode_named_node(named_node),
             GraphName::BlankNode(blank_node) => self.encode_blank_node(blank_node),
-            GraphName::DefaultGraph => Ok(ENCODED_DEFAULT_GRAPH),
+            GraphName::DefaultGraph => Ok(EncodedTerm::DefaultGraph),
         }
     }
 
@@ -1028,7 +913,7 @@ pub(crate) trait Encoder: WithStoreError {
             object: self.encode_rio_term(quad.object, bnodes_map)?,
             graph_name: match quad.graph_name {
                 Some(graph_name) => self.encode_rio_named_or_blank_node(graph_name, bnodes_map)?,
-                None => ENCODED_DEFAULT_GRAPH,
+                None => EncodedTerm::DefaultGraph,
             },
         })
     }
@@ -1319,6 +1204,8 @@ fn get_required_str(lookup: &impl StrLookup, id: StrHash) -> Result<String, io::
 
 #[test]
 fn test_encoding() {
+    use crate::model::vocab::xsd;
+
     let mut store = MemoryStrStore::default();
     let terms: Vec<Term> = vec![
         NamedNode::new_unchecked("http://foo.com").into(),
@@ -1349,13 +1236,4 @@ fn test_encoding() {
         assert_eq!(term, store.decode_term(encoded).unwrap());
         assert_eq!(encoded, EncodedTerm::from(&term));
     }
-}
-
-#[test]
-fn test_str_hash() {
-    assert_eq!(StrHash::new(""), EMPTY_STRING_ID);
-    assert_eq!(
-        StrHash::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"),
-        RDF_LANG_STRING_ID
-    );
 }

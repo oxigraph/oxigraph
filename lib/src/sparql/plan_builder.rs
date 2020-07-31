@@ -3,7 +3,7 @@ use crate::sparql::algebra::*;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::model::*;
 use crate::sparql::plan::*;
-use crate::store::numeric_encoder::{Encoder, ENCODED_DEFAULT_GRAPH};
+use crate::store::numeric_encoder::{EncodedTerm, Encoder};
 use std::collections::{BTreeSet, HashSet};
 use std::rc::Rc;
 
@@ -20,7 +20,7 @@ impl<E: Encoder> PlanBuilder<E> {
         let plan = PlanBuilder { encoder }.build_for_graph_pattern(
             pattern,
             &mut variables,
-            PatternValue::Constant(ENCODED_DEFAULT_GRAPH),
+            PatternValue::Constant(EncodedTerm::DefaultGraph),
         )?;
         Ok((plan, variables))
     }

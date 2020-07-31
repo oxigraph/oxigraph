@@ -996,7 +996,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
                         value_id: language_id,
                     })
                 }
-                e if e.is_literal() => Some(ENCODED_EMPTY_STRING_LITERAL),
+                e if e.is_literal() => self.build_string_literal(""),
                 _ => None,
             },
             PlanExpression::LangMatches(language_tag, language_range) => {
@@ -1023,7 +1023,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
                     .into(),
                 )
             }
-            PlanExpression::Datatype(e) => self.eval_expression(e, tuple)?.datatype(),
+            PlanExpression::Datatype(e) => self.datatype(self.eval_expression(e, tuple)?),
             PlanExpression::Bound(v) => Some(tuple.contains(*v).into()),
             PlanExpression::IRI(e) => {
                 let iri_id = match self.eval_expression(e, tuple)? {
@@ -1225,7 +1225,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
                 if let Some(position) = (&arg1).find(arg2.as_str()) {
                     self.build_plain_literal(&arg1[..position], language)
                 } else {
-                    Some(ENCODED_EMPTY_STRING_LITERAL)
+                    self.build_string_literal("")
                 }
             }
             PlanExpression::StrAfter(arg1, arg2) => {
@@ -1236,7 +1236,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
                 if let Some(position) = (&arg1).find(arg2.as_str()) {
                     self.build_plain_literal(&arg1[position + arg2.len()..], language)
                 } else {
-                    Some(ENCODED_EMPTY_STRING_LITERAL)
+                    self.build_string_literal("")
                 }
             }
             PlanExpression::Year(e) => match self.eval_expression(e, tuple)? {
@@ -1285,12 +1285,12 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
                     EncodedTerm::DateTimeLiteral(date_time) => date_time.timezone_offset(),
                     _ => return None,
                 };
-                Some(match timezone_offset {
+                match timezone_offset {
                     Some(timezone_offset) => {
-                        self.build_string_literal(&timezone_offset.to_string())?
+                        self.build_string_literal(&timezone_offset.to_string())
                     }
-                    None => ENCODED_EMPTY_STRING_LITERAL,
-                })
+                    None => self.build_string_literal(""),
+                }
             }
             PlanExpression::Now => Some(self.now.into()),
             PlanExpression::UUID => {
@@ -1501,7 +1501,9 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
     fn to_bool(&self, term: EncodedTerm) -> Option<bool> {
         match term {
             EncodedTerm::BooleanLiteral(value) => Some(value),
-            EncodedTerm::StringLiteral { .. } => Some(term != ENCODED_EMPTY_STRING_LITERAL),
+            EncodedTerm::StringLiteral { value_id } => {
+                Some(!self.dataset.get_str(value_id).ok()??.is_empty())
+            }
             EncodedTerm::FloatLiteral(value) => Some(value != 0_f32),
             EncodedTerm::DoubleLiteral(value) => Some(value != 0_f64),
             EncodedTerm::IntegerLiteral(value) => Some(value != 0),
@@ -1951,6 +1953,58 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         let input = self.to_simple_string(self.eval_expression(arg, tuple)?)?;
         let hash = hex::encode(H::new().chain(input.as_str()).finalize());
         self.build_string_literal(&hash)
+    }
+
+    fn datatype(&self, value: EncodedTerm) -> Option<EncodedTerm> {
+        //TODO: optimize?
+        match value {
+            EncodedTerm::NamedNode { .. }
+            | EncodedTerm::NamedBlankNode { .. }
+            | EncodedTerm::InlineBlankNode { .. }
+            | EncodedTerm::DefaultGraph => None,
+            EncodedTerm::StringLiteral { .. } => {
+                self.build_named_node("http://www.w3.org/2001/XMLSchema#string")
+            }
+            EncodedTerm::LangStringLiteral { .. } => {
+                self.build_named_node("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")
+            }
+            EncodedTerm::TypedLiteral { datatype_id, .. } => Some(EncodedTerm::NamedNode {
+                iri_id: datatype_id,
+            }),
+            EncodedTerm::BooleanLiteral(..) => {
+                self.build_named_node("http://www.w3.org/2001/XMLSchema#boolean")
+            }
+            EncodedTerm::FloatLiteral(..) => {
+                self.build_named_node("http://www.w3.org/2001/XMLSchema#float")
+            }
+            EncodedTerm::DoubleLiteral(..) => {
+                self.build_named_node("http://www.w3.org/2001/XMLSchema#double")
+            }
+            EncodedTerm::IntegerLiteral(..) => {
+                self.build_named_node("http://www.w3.org/2001/XMLSchema#integer")
+            }
+            EncodedTerm::DecimalLiteral(..) => {
+                self.build_named_node("http://www.w3.org/2001/XMLSchema#decimal")
+            }
+            EncodedTerm::DateLiteral(..) => {
+                self.build_named_node("http://www.w3.org/2001/XMLSchema#date")
+            }
+            EncodedTerm::TimeLiteral(..) => {
+                self.build_named_node("http://www.w3.org/2001/XMLSchema#time")
+            }
+            EncodedTerm::DateTimeLiteral(..) => {
+                self.build_named_node("http://www.w3.org/2001/XMLSchema#dateTime")
+            }
+            EncodedTerm::DurationLiteral(..) => {
+                self.build_named_node("http://www.w3.org/2001/XMLSchema#duration")
+            }
+            EncodedTerm::YearMonthDurationLiteral(..) => {
+                self.build_named_node("http://www.w3.org/2001/XMLSchema#yearMonthDuration")
+            }
+            EncodedTerm::DayTimeDurationLiteral(..) => {
+                self.build_named_node("http://www.w3.org/2001/XMLSchema#dayTimeDuration")
+            }
+        }
     }
 }
 
