@@ -1,7 +1,7 @@
 //! In-memory store.
 
-use crate::error::UnwrapInfallible;
-use crate::io::{DatasetFormat, GraphFormat};
+use crate::error::{invalid_input_error, UnwrapInfallible};
+use crate::io::{DatasetFormat, DatasetParser, GraphFormat, GraphParser};
 use crate::model::*;
 use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::{
@@ -240,17 +240,26 @@ impl MemoryStore {
     /// assert!(store.contains(&quad));
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn transaction<'a, E>(
-        &'a self,
-        f: impl FnOnce(&mut MemoryTransaction<'a>) -> Result<(), E>,
+    pub fn transaction<E>(
+        &self,
+        f: impl FnOnce(&mut MemoryTransaction) -> Result<(), E>,
     ) -> Result<(), E> {
-        let mut transaction = MemoryTransaction {
-            store: self,
-            ops: Vec::new(),
-            strings: TrivialHashMap::default(),
-        };
+        let mut transaction = MemoryTransaction { ops: Vec::new() };
         f(&mut transaction)?;
-        transaction.commit();
+
+        let mut indexes = self.indexes_mut();
+        for op in transaction.ops {
+            match op {
+                TransactionOp::Insert(quad) => {
+                    let quad = indexes.encode_quad(&quad).unwrap_infallible();
+                    indexes.insert_encoded(&quad).unwrap_infallible()
+                }
+                TransactionOp::Delete(quad) => {
+                    let quad = indexes.encode_quad(&quad).unwrap_infallible();
+                    indexes.remove_encoded(&quad).unwrap_infallible()
+                }
+            }
+        }
         Ok(())
     }
 
@@ -959,18 +968,16 @@ impl MemoryPreparedQuery {
 }
 
 /// Allows to insert and delete quads during a transaction with the `MemoryStore`.
-pub struct MemoryTransaction<'a> {
-    store: &'a MemoryStore,
+pub struct MemoryTransaction {
     ops: Vec<TransactionOp>,
-    strings: TrivialHashMap<StrHash, String>,
 }
 
 enum TransactionOp {
-    Insert(EncodedQuad),
-    Delete(EncodedQuad),
+    Insert(Quad),
+    Delete(Quad),
 }
 
-impl<'a> MemoryTransaction<'a> {
+impl MemoryTransaction {
     /// Loads a graph file (i.e. triples) into the store during the transaction.
     ///
     /// Usage example:
@@ -1000,7 +1007,17 @@ impl<'a> MemoryTransaction<'a> {
         to_graph_name: &GraphName,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
-        load_graph(self, reader, format, to_graph_name, base_iri)?;
+        let mut parser = GraphParser::from_format(format);
+        if let Some(base_iri) = base_iri {
+            parser = parser
+                .with_base_iri(base_iri)
+                .map_err(invalid_input_error)?;
+        }
+        for triple in parser.read_triples(reader)? {
+            self.ops.push(TransactionOp::Insert(
+                triple?.in_graph(to_graph_name.clone()),
+            ));
+        }
         Ok(())
     }
 
@@ -1030,77 +1047,27 @@ impl<'a> MemoryTransaction<'a> {
         format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
-        load_dataset(self, reader, format, base_iri)?;
+        let mut parser = DatasetParser::from_format(format);
+        if let Some(base_iri) = base_iri {
+            parser = parser
+                .with_base_iri(base_iri)
+                .map_err(invalid_input_error)?;
+        }
+        for quad in parser.read_quads(reader)? {
+            self.ops.push(TransactionOp::Insert(quad?));
+        }
         Ok(())
     }
 
     /// Adds a quad to this store during the transaction.
     #[allow(clippy::needless_pass_by_value)]
     pub fn insert(&mut self, quad: Quad) {
-        let quad = self.encode_quad(&quad).unwrap_infallible();
-        self.insert_encoded(&quad).unwrap_infallible();
+        self.ops.push(TransactionOp::Insert(quad))
     }
 
     /// Removes a quad from this store during the transaction.
-    pub fn remove(&mut self, quad: &Quad) {
-        if let Some(quad) = self.get_encoded_quad(quad).unwrap_infallible() {
-            self.remove_encoded(&quad).unwrap_infallible();
-        }
-    }
-
-    fn commit(self) {
-        let mut indexes = self.store.indexes_mut();
-        indexes.id2str.extend(self.strings);
-        for op in self.ops {
-            match op {
-                TransactionOp::Insert(quad) => indexes.insert_encoded(&quad).unwrap_infallible(),
-                TransactionOp::Delete(quad) => indexes.remove_encoded(&quad).unwrap_infallible(),
-            }
-        }
-    }
-}
-
-impl StrLookup for MemoryTransaction<'_> {
-    fn get_str(&self, id: StrHash) -> Result<Option<String>, Infallible> {
-        if let Some(str) = self.strings.get(&id) {
-            Ok(Some(str.clone()))
-        } else {
-            self.store.get_str(id)
-        }
-    }
-
-    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, Infallible> {
-        let id = StrHash::new(value);
-        if self.strings.contains_key(&id) {
-            Ok(Some(id))
-        } else {
-            self.store.get_str_id(value)
-        }
-    }
-}
-
-impl WithStoreError for MemoryTransaction<'_> {
-    type Error = Infallible;
-    type StrId = StrHash;
-}
-
-impl StrContainer for MemoryTransaction<'_> {
-    fn insert_str(&mut self, value: &str) -> Result<StrHash, Infallible> {
-        let key = StrHash::new(value);
-        self.strings.insert(key, value.to_owned());
-        Ok(key)
-    }
-}
-
-impl WritableEncodedStore for MemoryTransaction<'_> {
-    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Infallible> {
-        self.ops.push(TransactionOp::Insert(*quad));
-        Ok(())
-    }
-
-    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Infallible> {
-        self.ops.push(TransactionOp::Delete(*quad));
-        Ok(())
+    pub fn remove(&mut self, quad: Quad) {
+        self.ops.push(TransactionOp::Delete(quad))
     }
 }
 
