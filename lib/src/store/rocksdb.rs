@@ -467,9 +467,11 @@ impl fmt::Display for RocksDbStore {
     }
 }
 
-impl StrLookup for RocksDbStore {
+impl WithStoreError for RocksDbStore {
     type Error = io::Error;
+}
 
+impl StrLookup for RocksDbStore {
     fn get_str(&self, id: StrHash) -> Result<Option<String>, io::Error> {
         self.db
             .get_cf(self.id2str_cf(), &id.to_be_bytes())
@@ -481,7 +483,6 @@ impl StrLookup for RocksDbStore {
 }
 
 impl ReadableEncodedStore for RocksDbStore {
-    type Error = io::Error;
     type QuadsIter = DecodingIndexIterator;
 
     fn encoded_quads_for_pattern(
@@ -622,9 +623,11 @@ struct BatchWriter<'a> {
     buffer: Vec<u8>,
 }
 
-impl StrContainer for BatchWriter<'_> {
+impl WithStoreError for BatchWriter<'_> {
     type Error = Infallible;
+}
 
+impl StrContainer for BatchWriter<'_> {
     fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Infallible> {
         self.batch
             .put_cf(self.store.id2str_cf(), &key.to_be_bytes(), value);
@@ -633,8 +636,6 @@ impl StrContainer for BatchWriter<'_> {
 }
 
 impl WritableEncodedStore for BatchWriter<'_> {
-    type Error = Infallible;
-
     fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Infallible> {
         write_spog_quad(&mut self.buffer, quad);
         self.batch.put_cf(self.store.spog_cf(), &self.buffer, &[]);
@@ -702,17 +703,17 @@ struct AutoBatchWriter<'a> {
     inner: BatchWriter<'a>,
 }
 
-impl StrContainer for AutoBatchWriter<'_> {
+impl WithStoreError for AutoBatchWriter<'_> {
     type Error = io::Error;
+}
 
+impl StrContainer for AutoBatchWriter<'_> {
     fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), io::Error> {
         Ok(self.inner.insert_str(key, value)?)
     }
 }
 
 impl WritableEncodedStore for AutoBatchWriter<'_> {
-    type Error = io::Error;
-
     fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), io::Error> {
         self.inner.insert_encoded(quad)?;
         self.apply_if_big()

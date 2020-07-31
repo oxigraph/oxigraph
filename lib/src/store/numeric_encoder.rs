@@ -853,15 +853,15 @@ pub fn write_term(sink: &mut Vec<u8>, term: EncodedTerm) {
     }
 }
 
-pub(crate) trait StrLookup {
-    type Error: Error + Into<io::Error>;
+pub(crate) trait WithStoreError {
+    type Error: Error + Into<io::Error> + 'static;
+}
 
+pub(crate) trait StrLookup: WithStoreError {
     fn get_str(&self, id: StrHash) -> Result<Option<String>, Self::Error>;
 }
 
-pub(crate) trait StrContainer {
-    type Error: Error + Into<io::Error>;
-
+pub(crate) trait StrContainer: WithStoreError {
     fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Self::Error>;
 
     /// Should be called when the bytes store is created
@@ -901,9 +901,11 @@ impl Default for MemoryStrStore {
     }
 }
 
-impl StrLookup for MemoryStrStore {
+impl WithStoreError for MemoryStrStore {
     type Error = Infallible;
+}
 
+impl StrLookup for MemoryStrStore {
     fn get_str(&self, id: StrHash) -> Result<Option<String>, Infallible> {
         //TODO: avoid copy by adding a lifetime limit to get_str
         Ok(self.id2str.get(&id).cloned())
@@ -911,17 +913,13 @@ impl StrLookup for MemoryStrStore {
 }
 
 impl StrContainer for MemoryStrStore {
-    type Error = Infallible;
-
     fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Infallible> {
         self.id2str.entry(key).or_insert_with(|| value.to_owned());
         Ok(())
     }
 }
 
-pub(crate) trait Encoder {
-    type Error: Error + Into<io::Error>;
-
+pub(crate) trait Encoder: WithStoreError {
     fn encode_named_node(&mut self, named_node: &NamedNode) -> Result<EncodedTerm, Self::Error> {
         self.encode_rio_named_node(named_node.into())
     }
@@ -1051,8 +1049,6 @@ pub(crate) trait Encoder {
 }
 
 impl<S: StrContainer> Encoder for S {
-    type Error = S::Error;
-
     fn encode_rio_named_node(
         &mut self,
         named_node: rio::NamedNode<'_>,

@@ -76,10 +76,10 @@ impl Default for MemoryStore {
 impl MemoryStore {
     /// Constructs a new `MemoryStore`
     pub fn new() -> Self {
-        let mut new = Self {
+        let new = Self {
             indexes: Arc::new(RwLock::default()),
         };
-        new.set_first_strings().unwrap_infallible();
+        (&new).set_first_strings().unwrap_infallible();
         new
     }
 
@@ -687,51 +687,28 @@ impl MemoryStore {
     }
 }
 
-impl StrLookup for MemoryStore {
+impl WithStoreError for MemoryStore {
     type Error = Infallible;
+}
 
+impl<'a> WithStoreError for &'a MemoryStore {
+    type Error = Infallible;
+}
+
+impl StrLookup for MemoryStore {
     fn get_str(&self, id: StrHash) -> Result<Option<String>, Infallible> {
         //TODO: avoid copy by adding a lifetime limit to get_str
         self.indexes().get_str(id)
     }
 }
 
-impl StrLookup for MemoryStoreIndexes {
-    type Error = Infallible;
-
-    fn get_str(&self, id: StrHash) -> Result<Option<String>, Infallible> {
-        //TODO: avoid copy by adding a lifetime limit to get_str
-        Ok(self.id2str.get(&id).cloned())
-    }
-}
-
-impl StrContainer for MemoryStore {
-    type Error = Infallible;
-
-    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Infallible> {
-        self.indexes_mut().insert_str(key, value)
-    }
-}
-
 impl<'a> StrContainer for &'a MemoryStore {
-    type Error = Infallible;
-
     fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Infallible> {
         self.indexes_mut().insert_str(key, value)
-    }
-}
-
-impl StrContainer for MemoryStoreIndexes {
-    type Error = Infallible;
-
-    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Infallible> {
-        self.id2str.entry(key).or_insert_with(|| value.to_owned());
-        Ok(())
     }
 }
 
 impl<'a> ReadableEncodedStore for MemoryStore {
-    type Error = Infallible;
     type QuadsIter = EncodedQuadsIter;
 
     fn encoded_quads_for_pattern(
@@ -749,9 +726,7 @@ impl<'a> ReadableEncodedStore for MemoryStore {
     }
 }
 
-impl WritableEncodedStore for MemoryStore {
-    type Error = Infallible;
-
+impl<'a> WritableEncodedStore for &'a MemoryStore {
     fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Infallible> {
         self.indexes_mut().insert_encoded(quad)
     }
@@ -761,21 +736,25 @@ impl WritableEncodedStore for MemoryStore {
     }
 }
 
-impl<'a> WritableEncodedStore for &'a MemoryStore {
+impl WithStoreError for MemoryStoreIndexes {
     type Error = Infallible;
+}
 
-    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Infallible> {
-        self.indexes_mut().insert_encoded(quad)
+impl StrLookup for MemoryStoreIndexes {
+    fn get_str(&self, id: StrHash) -> Result<Option<String>, Infallible> {
+        //TODO: avoid copy by adding a lifetime limit to get_str
+        Ok(self.id2str.get(&id).cloned())
     }
+}
 
-    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Infallible> {
-        self.indexes_mut().remove_encoded(quad)
+impl StrContainer for MemoryStoreIndexes {
+    fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Infallible> {
+        self.id2str.entry(key).or_insert_with(|| value.to_owned());
+        Ok(())
     }
 }
 
 impl WritableEncodedStore for MemoryStoreIndexes {
-    type Error = Infallible;
-
     fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Infallible> {
         insert_into_quad_map(
             &mut self.gosp,
@@ -1057,9 +1036,11 @@ impl<'a> MemoryTransaction<'a> {
     }
 }
 
-impl StrContainer for MemoryTransaction<'_> {
+impl WithStoreError for MemoryTransaction<'_> {
     type Error = Infallible;
+}
 
+impl StrContainer for MemoryTransaction<'_> {
     fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Infallible> {
         self.strings.push((key, value.to_owned()));
         Ok(())
@@ -1067,8 +1048,6 @@ impl StrContainer for MemoryTransaction<'_> {
 }
 
 impl WritableEncodedStore for MemoryTransaction<'_> {
-    type Error = Infallible;
-
     fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Infallible> {
         self.ops.push(TransactionOp::Insert(*quad));
         Ok(())

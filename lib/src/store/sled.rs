@@ -385,9 +385,11 @@ impl fmt::Display for SledStore {
     }
 }
 
-impl StrLookup for SledStore {
+impl WithStoreError for SledStore {
     type Error = io::Error;
+}
 
+impl StrLookup for SledStore {
     fn get_str(&self, id: StrHash) -> Result<Option<String>, io::Error> {
         self.id2str
             .get(id.to_be_bytes())?
@@ -398,7 +400,6 @@ impl StrLookup for SledStore {
 }
 
 impl ReadableEncodedStore for SledStore {
-    type Error = io::Error;
     type QuadsIter = DecodingQuadIterator;
 
     fn encoded_quads_for_pattern(
@@ -483,9 +484,11 @@ impl<'a> DirectWriter<'a> {
     }
 }
 
-impl<'a> StrContainer for DirectWriter<'a> {
+impl WithStoreError for DirectWriter<'_> {
     type Error = io::Error;
+}
 
+impl<'a> StrContainer for DirectWriter<'a> {
     fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), io::Error> {
         self.store
             .id2str
@@ -495,8 +498,6 @@ impl<'a> StrContainer for DirectWriter<'a> {
 }
 
 impl<'a> WritableEncodedStore for DirectWriter<'a> {
-    type Error = io::Error;
-
     fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), io::Error> {
         write_spog_quad(&mut self.buffer, quad);
         self.store.quads.insert(self.buffer.as_slice(), &[])?;
@@ -580,9 +581,11 @@ impl<'a> BatchWriter<'a> {
     }
 }
 
-impl<'a> StrContainer for BatchWriter<'a> {
+impl WithStoreError for BatchWriter<'_> {
     type Error = Infallible;
+}
 
+impl<'a> StrContainer for BatchWriter<'a> {
     fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Infallible> {
         self.id2str.insert(key.to_be_bytes().as_ref(), value);
         Ok(())
@@ -590,8 +593,6 @@ impl<'a> StrContainer for BatchWriter<'a> {
 }
 
 impl<'a> WritableEncodedStore for BatchWriter<'a> {
-    type Error = Infallible;
-
     fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Infallible> {
         write_spog_quad(&mut self.buffer, quad);
         self.quads.insert(self.buffer.as_slice(), &[]);

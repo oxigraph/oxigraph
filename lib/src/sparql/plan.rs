@@ -4,7 +4,7 @@ use crate::sparql::error::EvaluationError;
 use crate::sparql::model::Variable;
 use crate::store::numeric_encoder::{
     EncodedQuad, EncodedTerm, Encoder, MemoryStrStore, StrContainer, StrHash, StrLookup,
-    ENCODED_DEFAULT_GRAPH,
+    WithStoreError, ENCODED_DEFAULT_GRAPH,
 };
 use crate::store::ReadableEncodedStore;
 use std::cell::{RefCell, RefMut};
@@ -630,9 +630,10 @@ fn map_io_err<'a, T>(
     iter.map(|e| e.map_err(|e| e.into().into()))
 }
 
+impl<S: ReadableEncodedStore> WithStoreError for DatasetView<S> {
+    type Error = S::Error;
+}
 impl<S: ReadableEncodedStore> StrLookup for DatasetView<S> {
-    type Error = <S as StrLookup>::Error;
-
     fn get_str(&self, id: StrHash) -> Result<Option<String>, Self::Error> {
         if let Some(value) = self.extra.borrow().get_str(id).unwrap_infallible() {
             Ok(Some(value))
@@ -647,9 +648,11 @@ struct DatasetViewStrContainer<'a, S: ReadableEncodedStore> {
     extra: RefMut<'a, MemoryStrStore>,
 }
 
-impl<'a, S: ReadableEncodedStore> StrContainer for DatasetViewStrContainer<'a, S> {
-    type Error = <S as StrLookup>::Error;
+impl<'a, S: ReadableEncodedStore> WithStoreError for DatasetViewStrContainer<'a, S> {
+    type Error = S::Error;
+}
 
+impl<'a, S: ReadableEncodedStore> StrContainer for DatasetViewStrContainer<'a, S> {
     fn insert_str(&mut self, key: StrHash, value: &str) -> Result<(), Self::Error> {
         if self.store.get_str(key)?.is_none() {
             self.extra.insert_str(key, value).unwrap();

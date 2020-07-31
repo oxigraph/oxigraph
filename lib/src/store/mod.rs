@@ -34,9 +34,7 @@ use std::io::{BufRead, Write};
 use std::iter::Iterator;
 
 pub(crate) trait ReadableEncodedStore: StrLookup {
-    type Error: From<<Self as StrLookup>::Error> + Error + Into<io::Error> + 'static;
-    type QuadsIter: Iterator<Item = Result<EncodedQuad, <Self as ReadableEncodedStore>::Error>>
-        + 'static;
+    type QuadsIter: Iterator<Item = Result<EncodedQuad, Self::Error>> + 'static;
 
     fn encoded_quads_for_pattern(
         &self,
@@ -48,17 +46,9 @@ pub(crate) trait ReadableEncodedStore: StrLookup {
 }
 
 pub(crate) trait WritableEncodedStore: StrContainer {
-    type Error: From<<Self as StrContainer>::Error> + Error + Into<io::Error>;
+    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Self::Error>;
 
-    fn insert_encoded(
-        &mut self,
-        quad: &EncodedQuad,
-    ) -> Result<(), <Self as WritableEncodedStore>::Error>;
-
-    fn remove_encoded(
-        &mut self,
-        quad: &EncodedQuad,
-    ) -> Result<(), <Self as WritableEncodedStore>::Error>;
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Self::Error>;
 }
 
 fn load_graph<S: WritableEncodedStore>(
