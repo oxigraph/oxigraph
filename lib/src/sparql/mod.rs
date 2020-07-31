@@ -1,6 +1,7 @@
 //! [SPARQL](https://www.w3.org/TR/sparql11-overview/) implementation.
 
 mod algebra;
+mod dataset;
 mod error;
 mod eval;
 mod json_results;
@@ -16,8 +17,7 @@ use crate::sparql::eval::SimpleEvaluator;
 pub use crate::sparql::model::QuerySolution;
 pub use crate::sparql::model::QuerySolutionsIterator;
 pub use crate::sparql::model::QueryTriplesIterator;
-use crate::sparql::plan::TripleTemplate;
-use crate::sparql::plan::{DatasetView, PlanNode};
+use crate::sparql::plan::{PlanNode, TripleTemplate};
 use crate::sparql::plan_builder::PlanBuilder;
 use crate::store::ReadableEncodedStore;
 use std::convert::TryInto;
@@ -28,10 +28,12 @@ pub use crate::sparql::model::QueryResult;
 pub use crate::sparql::model::QueryResultFormat;
 #[deprecated(note = "Use QueryResultFormat instead")]
 pub type QueryResultSyntax = QueryResultFormat;
+use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::EvaluationError;
 pub use crate::sparql::model::Variable;
 pub use crate::sparql::parser::ParseError;
 pub use crate::sparql::parser::Query;
+use crate::store::numeric_encoder::WithStoreError;
 use std::error::Error;
 
 /// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/)
@@ -48,22 +50,22 @@ pub(crate) struct SimplePreparedQuery<S: ReadableEncodedStore + 'static>(
 #[derive(Clone)]
 enum SimplePreparedQueryAction<S: ReadableEncodedStore + 'static> {
     Select {
-        plan: Rc<PlanNode>,
+        plan: Rc<PlanNode<<DatasetView<S> as WithStoreError>::StrId>>,
         variables: Rc<Vec<Variable>>,
-        evaluator: SimpleEvaluator<S>,
+        evaluator: SimpleEvaluator<DatasetView<S>>,
     },
     Ask {
-        plan: Rc<PlanNode>,
-        evaluator: SimpleEvaluator<S>,
+        plan: Rc<PlanNode<<DatasetView<S> as WithStoreError>::StrId>>,
+        evaluator: SimpleEvaluator<DatasetView<S>>,
     },
     Construct {
-        plan: Rc<PlanNode>,
-        construct: Rc<Vec<TripleTemplate>>,
-        evaluator: SimpleEvaluator<S>,
+        plan: Rc<PlanNode<<DatasetView<S> as WithStoreError>::StrId>>,
+        construct: Rc<Vec<TripleTemplate<<DatasetView<S> as WithStoreError>::StrId>>>,
+        evaluator: SimpleEvaluator<DatasetView<S>>,
     },
     Describe {
-        plan: Rc<PlanNode>,
-        evaluator: SimpleEvaluator<S>,
+        plan: Rc<PlanNode<<DatasetView<S> as WithStoreError>::StrId>>,
+        evaluator: SimpleEvaluator<DatasetView<S>>,
     },
 }
 
@@ -78,7 +80,7 @@ impl<S: ReadableEncodedStore + 'static> SimplePreparedQuery<S> {
             QueryVariants::Select {
                 algebra, base_iri, ..
             } => {
-                let (plan, variables) = PlanBuilder::build(dataset.encoder(), &algebra)?;
+                let (plan, variables) = PlanBuilder::build(dataset.as_ref(), &algebra)?;
                 SimplePreparedQueryAction::Select {
                     plan: Rc::new(plan),
                     variables: Rc::new(variables),
@@ -88,7 +90,7 @@ impl<S: ReadableEncodedStore + 'static> SimplePreparedQuery<S> {
             QueryVariants::Ask {
                 algebra, base_iri, ..
             } => {
-                let (plan, _) = PlanBuilder::build(dataset.encoder(), &algebra)?;
+                let (plan, _) = PlanBuilder::build(dataset.as_ref(), &algebra)?;
                 SimplePreparedQueryAction::Ask {
                     plan: Rc::new(plan),
                     evaluator: SimpleEvaluator::new(dataset, base_iri, options.service_handler),
@@ -100,11 +102,11 @@ impl<S: ReadableEncodedStore + 'static> SimplePreparedQuery<S> {
                 base_iri,
                 ..
             } => {
-                let (plan, variables) = PlanBuilder::build(dataset.encoder(), &algebra)?;
+                let (plan, variables) = PlanBuilder::build(dataset.as_ref(), &algebra)?;
                 SimplePreparedQueryAction::Construct {
                     plan: Rc::new(plan),
                     construct: Rc::new(PlanBuilder::build_graph_template(
-                        dataset.encoder(),
+                        dataset.as_ref(),
                         &construct,
                         variables,
                     )?),
@@ -114,7 +116,7 @@ impl<S: ReadableEncodedStore + 'static> SimplePreparedQuery<S> {
             QueryVariants::Describe {
                 algebra, base_iri, ..
             } => {
-                let (plan, _) = PlanBuilder::build(dataset.encoder(), &algebra)?;
+                let (plan, _) = PlanBuilder::build(dataset.as_ref(), &algebra)?;
                 SimplePreparedQueryAction::Describe {
                     plan: Rc::new(plan),
                     evaluator: SimpleEvaluator::new(dataset, base_iri, options.service_handler),

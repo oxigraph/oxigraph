@@ -1,17 +1,23 @@
 //! Store based on the [RocksDB](https://rocksdb.org/) key-value database.
 
-use crate::error::{invalid_data_error, UnwrapInfallible};
+use crate::error::invalid_data_error;
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResult, SimplePreparedQuery};
-use crate::store::numeric_encoder::*;
+use crate::store::numeric_encoder::{
+    write_term, Decoder, ReadEncoder, StrContainer, StrHash, StrLookup, TermReader, WithStoreError,
+    WriteEncoder, WRITTEN_TERM_MAX_SIZE,
+};
 use crate::store::{
-    dump_dataset, dump_graph, load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore,
+    dump_dataset, dump_graph, get_encoded_quad_pattern, load_dataset, load_graph,
+    ReadableEncodedStore, WritableEncodedStore,
 };
 use rocksdb::*;
-use std::convert::{Infallible, TryInto};
+use std::collections::HashMap;
+use std::convert::TryInto;
 use std::io;
 use std::io::{BufRead, Cursor, Write};
+use std::iter::{once, Once};
 use std::mem::{take, transmute};
 use std::path::Path;
 use std::sync::Arc;
@@ -54,6 +60,9 @@ use std::{fmt, str};
 pub struct RocksDbStore {
     db: Arc<DB>,
 }
+
+type EncodedTerm = crate::store::numeric_encoder::EncodedTerm<StrHash>;
+type EncodedQuad = crate::store::numeric_encoder::EncodedQuad<StrHash>;
 
 const ID2STR_CF: &str = "id2str";
 const SPOG_CF: &str = "spog";
@@ -121,19 +130,23 @@ impl RocksDbStore {
         object: Option<&Term>,
         graph_name: Option<&GraphName>,
     ) -> impl Iterator<Item = Result<Quad, io::Error>> {
-        let subject = subject.map(|s| s.into());
-        let predicate = predicate.map(|p| p.into());
-        let object = object.map(|o| o.into());
-        let graph_name = graph_name.map(|g| g.into());
-        let store = self.clone();
-        self.encoded_quads_for_pattern(subject, predicate, object, graph_name)
-            .map(move |quad| Ok(store.decode_quad(&quad?)?))
+        match get_encoded_quad_pattern(self, subject, predicate, object, graph_name) {
+            Ok(Some((subject, predicate, object, graph_name))) => QuadsIter::Quads {
+                iter: self.encoded_quads_for_pattern(subject, predicate, object, graph_name),
+                store: self.clone(),
+            },
+            Ok(None) => QuadsIter::Empty,
+            Err(error) => QuadsIter::Error(once(error)),
+        }
     }
 
     /// Checks if this store contains a given quad
     pub fn contains(&self, quad: &Quad) -> Result<bool, io::Error> {
-        let quad = quad.into();
-        self.contains_encoded(&quad)
+        if let Some(quad) = self.get_encoded_quad(quad)? {
+            self.contains_encoded(&quad)
+        } else {
+            Ok(false)
+        }
     }
 
     /// Returns the number of quads in the store
@@ -162,14 +175,13 @@ impl RocksDbStore {
         f: impl FnOnce(&mut RocksDbTransaction<'a>) -> Result<(), E>,
     ) -> Result<(), E> {
         let mut transaction = RocksDbTransaction {
-            inner: BatchWriter {
-                store: self,
-                batch: WriteBatch::default(),
-                buffer: Vec::default(),
-            },
+            store: self,
+            batch: WriteBatch::default(),
+            buffer: Vec::new(),
+            new_strings: HashMap::new(),
         };
         f(&mut transaction)?;
-        Ok(transaction.inner.apply()?)
+        Ok(transaction.apply()?)
     }
 
     /// Loads a graph file (i.e. triples) into the store
@@ -225,10 +237,13 @@ impl RocksDbStore {
 
     /// Removes a quad from this store.
     pub fn remove(&self, quad: &Quad) -> Result<(), io::Error> {
-        let mut transaction = self.auto_batch_writer();
-        let quad = quad.into();
-        transaction.remove_encoded(&quad)?;
-        transaction.apply()
+        if let Some(quad) = self.get_encoded_quad(quad)? {
+            let mut transaction = self.auto_batch_writer();
+            transaction.remove_encoded(&quad)?;
+            transaction.apply()
+        } else {
+            Ok(())
+        }
     }
 
     /// Dumps a store graph into a file.
@@ -289,11 +304,9 @@ impl RocksDbStore {
 
     fn auto_batch_writer(&self) -> AutoBatchWriter<'_> {
         AutoBatchWriter {
-            inner: BatchWriter {
-                store: self,
-                batch: WriteBatch::default(),
-                buffer: Vec::default(),
-            },
+            store: self,
+            batch: WriteBatch::default(),
+            buffer: Vec::default(),
         }
     }
 
@@ -463,6 +476,7 @@ impl fmt::Display for RocksDbStore {
 
 impl WithStoreError for RocksDbStore {
     type Error = io::Error;
+    type StrId = StrHash;
 }
 
 impl StrLookup for RocksDbStore {
@@ -473,6 +487,22 @@ impl StrLookup for RocksDbStore {
             .map(String::from_utf8)
             .transpose()
             .map_err(invalid_data_error)
+    }
+
+    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, io::Error> {
+        let id = StrHash::new(value);
+        Ok(
+            if self
+                .db
+                .get_cf(self.id2str_cf(), &id.to_be_bytes())
+                .map_err(map_err)?
+                .is_some()
+            {
+                Some(id)
+            } else {
+                None
+            },
+        )
     }
 }
 
@@ -553,9 +583,106 @@ impl RocksDbPreparedQuery {
     }
 }
 
+struct AutoBatchWriter<'a> {
+    store: &'a RocksDbStore,
+    batch: WriteBatch,
+    buffer: Vec<u8>,
+}
+
+impl AutoBatchWriter<'_> {
+    fn apply(self) -> Result<(), io::Error> {
+        self.store.db.write(self.batch).map_err(map_err)
+    }
+
+    fn apply_if_big(&mut self) -> Result<(), io::Error> {
+        if self.batch.len() > MAX_TRANSACTION_SIZE {
+            self.store
+                .db
+                .write(take(&mut self.batch))
+                .map_err(map_err)?;
+        }
+        Ok(())
+    }
+}
+
+impl WithStoreError for AutoBatchWriter<'_> {
+    type Error = io::Error;
+    type StrId = StrHash;
+}
+
+impl StrContainer for AutoBatchWriter<'_> {
+    fn insert_str(&mut self, value: &str) -> Result<StrHash, io::Error> {
+        let key = StrHash::new(value);
+        self.batch
+            .put_cf(self.store.id2str_cf(), &key.to_be_bytes(), value);
+        Ok(key)
+    }
+}
+
+impl WritableEncodedStore for AutoBatchWriter<'_> {
+    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), io::Error> {
+        write_spog_quad(&mut self.buffer, quad);
+        self.batch.put_cf(self.store.spog_cf(), &self.buffer, &[]);
+        self.buffer.clear();
+
+        write_posg_quad(&mut self.buffer, quad);
+        self.batch.put_cf(self.store.posg_cf(), &self.buffer, &[]);
+        self.buffer.clear();
+
+        write_ospg_quad(&mut self.buffer, quad);
+        self.batch.put_cf(self.store.ospg_cf(), &self.buffer, &[]);
+        self.buffer.clear();
+
+        write_gspo_quad(&mut self.buffer, quad);
+        self.batch.put_cf(self.store.gspo_cf(), &self.buffer, &[]);
+        self.buffer.clear();
+
+        write_gpos_quad(&mut self.buffer, quad);
+        self.batch.put_cf(self.store.gpos_cf(), &self.buffer, &[]);
+        self.buffer.clear();
+
+        write_gosp_quad(&mut self.buffer, quad);
+        self.batch.put_cf(self.store.gosp_cf(), &self.buffer, &[]);
+        self.buffer.clear();
+
+        self.apply_if_big()
+    }
+
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<(), io::Error> {
+        write_spog_quad(&mut self.buffer, quad);
+        self.batch.delete_cf(self.store.spog_cf(), &self.buffer);
+        self.buffer.clear();
+
+        write_posg_quad(&mut self.buffer, quad);
+        self.batch.delete_cf(self.store.posg_cf(), &self.buffer);
+        self.buffer.clear();
+
+        write_ospg_quad(&mut self.buffer, quad);
+        self.batch.delete_cf(self.store.ospg_cf(), &self.buffer);
+        self.buffer.clear();
+
+        write_gspo_quad(&mut self.buffer, quad);
+        self.batch.delete_cf(self.store.gspo_cf(), &self.buffer);
+        self.buffer.clear();
+
+        write_gpos_quad(&mut self.buffer, quad);
+        self.batch.delete_cf(self.store.gpos_cf(), &self.buffer);
+        self.buffer.clear();
+
+        write_gosp_quad(&mut self.buffer, quad);
+        self.batch.delete_cf(self.store.gosp_cf(), &self.buffer);
+        self.buffer.clear();
+
+        self.apply_if_big()
+    }
+}
+
 /// Allows inserting and deleting quads during a transaction with the `RocksDbStore`.
 pub struct RocksDbTransaction<'a> {
-    inner: BatchWriter<'a>,
+    store: &'a RocksDbStore,
+    batch: WriteBatch,
+    buffer: Vec<u8>,
+    new_strings: HashMap<StrHash, String>,
 }
 
 impl RocksDbTransaction<'_> {
@@ -576,7 +703,7 @@ impl RocksDbTransaction<'_> {
         to_graph_name: &GraphName,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
-        load_graph(&mut self.inner, reader, syntax, to_graph_name, base_iri)?;
+        load_graph(self, reader, syntax, to_graph_name, base_iri)?;
         Ok(())
     }
 
@@ -596,44 +723,76 @@ impl RocksDbTransaction<'_> {
         format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
-        load_dataset(&mut self.inner, reader, format, base_iri)?;
+        load_dataset(self, reader, format, base_iri)?;
         Ok(())
     }
 
     /// Adds a quad to this store during the transaction.
-    pub fn insert(&mut self, quad: &Quad) {
-        let quad = self.inner.encode_quad(quad).unwrap_infallible();
-        self.inner.insert_encoded(&quad).unwrap_infallible()
+    pub fn insert(&mut self, quad: &Quad) -> Result<(), io::Error> {
+        let quad = self.encode_quad(quad)?;
+        self.insert_encoded(&quad)
     }
 
     /// Removes a quad from this store during the transaction.
-    pub fn remove(&mut self, quad: &Quad) {
-        let quad = quad.into();
-        self.inner.remove_encoded(&quad).unwrap_infallible()
+    pub fn remove(&mut self, quad: &Quad) -> Result<(), io::Error> {
+        // Works because all strings could be encoded
+        if let Some(quad) = self.get_encoded_quad(quad).unwrap() {
+            self.remove_encoded(&quad)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn apply(self) -> Result<(), io::Error> {
+        self.store.db.write(self.batch).map_err(map_err)
     }
 }
 
-struct BatchWriter<'a> {
-    store: &'a RocksDbStore,
-    batch: WriteBatch,
-    buffer: Vec<u8>,
+impl WithStoreError for RocksDbTransaction<'_> {
+    type Error = io::Error;
+    type StrId = StrHash;
 }
 
-impl WithStoreError for BatchWriter<'_> {
-    type Error = Infallible;
+impl StrLookup for RocksDbTransaction<'_> {
+    fn get_str(&self, id: StrHash) -> Result<Option<String>, io::Error> {
+        if let Some(str) = self.new_strings.get(&id) {
+            Ok(Some(str.clone()))
+        } else {
+            self.store.get_str(id)
+        }
+    }
+
+    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, io::Error> {
+        let id = StrHash::new(value);
+        Ok(
+            if self.new_strings.contains_key(&id)
+                || self
+                    .store
+                    .db
+                    .get_cf(self.store.id2str_cf(), &id.to_be_bytes())
+                    .map_err(map_err)?
+                    .is_some()
+            {
+                Some(id)
+            } else {
+                None
+            },
+        )
+    }
 }
 
-impl StrContainer for BatchWriter<'_> {
-    fn insert_str(&mut self, value: &str) -> Result<StrHash, Infallible> {
+impl StrContainer for RocksDbTransaction<'_> {
+    fn insert_str(&mut self, value: &str) -> Result<StrHash, io::Error> {
         let key = StrHash::new(value);
         self.batch
             .put_cf(self.store.id2str_cf(), &key.to_be_bytes(), value);
+        self.new_strings.insert(key, value.to_owned());
         Ok(key)
     }
 }
 
-impl WritableEncodedStore for BatchWriter<'_> {
-    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Infallible> {
+impl WritableEncodedStore for RocksDbTransaction<'_> {
+    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), io::Error> {
         write_spog_quad(&mut self.buffer, quad);
         self.batch.put_cf(self.store.spog_cf(), &self.buffer, &[]);
         self.buffer.clear();
@@ -661,7 +820,7 @@ impl WritableEncodedStore for BatchWriter<'_> {
         Ok(())
     }
 
-    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Infallible> {
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<(), io::Error> {
         write_spog_quad(&mut self.buffer, quad);
         self.batch.delete_cf(self.store.spog_cf(), &self.buffer);
         self.buffer.clear();
@@ -686,55 +845,6 @@ impl WritableEncodedStore for BatchWriter<'_> {
         self.batch.delete_cf(self.store.gosp_cf(), &self.buffer);
         self.buffer.clear();
 
-        Ok(())
-    }
-}
-
-impl BatchWriter<'_> {
-    fn apply(self) -> Result<(), io::Error> {
-        self.store.db.write(self.batch).map_err(map_err)
-    }
-}
-
-struct AutoBatchWriter<'a> {
-    inner: BatchWriter<'a>,
-}
-
-impl WithStoreError for AutoBatchWriter<'_> {
-    type Error = io::Error;
-}
-
-impl StrContainer for AutoBatchWriter<'_> {
-    fn insert_str(&mut self, value: &str) -> Result<StrHash, io::Error> {
-        Ok(self.inner.insert_str(value).unwrap_infallible())
-    }
-}
-
-impl WritableEncodedStore for AutoBatchWriter<'_> {
-    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), io::Error> {
-        self.inner.insert_encoded(quad).unwrap_infallible();
-        self.apply_if_big()
-    }
-
-    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<(), io::Error> {
-        self.inner.remove_encoded(quad).unwrap_infallible();
-        self.apply_if_big()
-    }
-}
-
-impl AutoBatchWriter<'_> {
-    fn apply(self) -> Result<(), io::Error> {
-        self.inner.apply()
-    }
-
-    fn apply_if_big(&mut self) -> Result<(), io::Error> {
-        if self.inner.batch.len() > MAX_TRANSACTION_SIZE {
-            self.inner
-                .store
-                .db
-                .write(take(&mut self.inner.batch))
-                .map_err(map_err)?;
-        }
         Ok(())
     }
 }
@@ -887,6 +997,30 @@ impl QuadEncoding {
 
 fn map_err(e: Error) -> io::Error {
     io::Error::new(io::ErrorKind::Other, e)
+}
+
+enum QuadsIter {
+    Quads {
+        iter: DecodingIndexIterator,
+        store: RocksDbStore,
+    },
+    Error(Once<io::Error>),
+    Empty,
+}
+
+impl Iterator for QuadsIter {
+    type Item = Result<Quad, io::Error>;
+
+    fn next(&mut self) -> Option<Result<Quad, io::Error>> {
+        match self {
+            Self::Quads { iter, store } => Some(match iter.next()? {
+                Ok(quad) => store.decode_quad(&quad).map_err(|e| e.into()),
+                Err(error) => Err(error),
+            }),
+            Self::Error(iter) => iter.next().map(Err),
+            Self::Empty => None,
+        }
+    }
 }
 
 #[test]

@@ -1,96 +1,89 @@
-use crate::error::UnwrapInfallible;
 use crate::sparql::algebra::GraphPattern;
-use crate::sparql::error::EvaluationError;
 use crate::sparql::model::Variable;
-use crate::store::numeric_encoder::{
-    EncodedQuad, EncodedTerm, Encoder, MemoryStrStore, StrContainer, StrHash, StrLookup,
-    WithStoreError,
-};
-use crate::store::ReadableEncodedStore;
-use std::cell::{RefCell, RefMut};
+use crate::store::numeric_encoder::{EncodedTerm, StrId};
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum PlanNode {
+pub enum PlanNode<I: StrId> {
     Init,
     StaticBindings {
-        tuples: Vec<EncodedTuple>,
+        tuples: Vec<EncodedTuple<I>>,
     },
     Service {
-        service_name: PatternValue,
+        service_name: PatternValue<I>,
         variables: Rc<Vec<Variable>>,
-        child: Rc<PlanNode>,
+        child: Rc<PlanNode<I>>,
         graph_pattern: Rc<GraphPattern>,
         silent: bool,
     },
     QuadPatternJoin {
-        child: Rc<PlanNode>,
-        subject: PatternValue,
-        predicate: PatternValue,
-        object: PatternValue,
-        graph_name: PatternValue,
+        child: Rc<PlanNode<I>>,
+        subject: PatternValue<I>,
+        predicate: PatternValue<I>,
+        object: PatternValue<I>,
+        graph_name: PatternValue<I>,
     },
     PathPatternJoin {
-        child: Rc<PlanNode>,
-        subject: PatternValue,
-        path: Rc<PlanPropertyPath>,
-        object: PatternValue,
-        graph_name: PatternValue,
+        child: Rc<PlanNode<I>>,
+        subject: PatternValue<I>,
+        path: Rc<PlanPropertyPath<I>>,
+        object: PatternValue<I>,
+        graph_name: PatternValue<I>,
     },
     Join {
-        left: Rc<PlanNode>,
-        right: Rc<PlanNode>,
+        left: Rc<PlanNode<I>>,
+        right: Rc<PlanNode<I>>,
     },
     AntiJoin {
-        left: Rc<PlanNode>,
-        right: Rc<PlanNode>,
+        left: Rc<PlanNode<I>>,
+        right: Rc<PlanNode<I>>,
     },
     Filter {
-        child: Rc<PlanNode>,
-        expression: Rc<PlanExpression>,
+        child: Rc<PlanNode<I>>,
+        expression: Rc<PlanExpression<I>>,
     },
     Union {
-        children: Vec<Rc<PlanNode>>,
+        children: Vec<Rc<PlanNode<I>>>,
     },
     LeftJoin {
-        left: Rc<PlanNode>,
-        right: Rc<PlanNode>,
+        left: Rc<PlanNode<I>>,
+        right: Rc<PlanNode<I>>,
         possible_problem_vars: Rc<Vec<usize>>, //Variables that should not be part of the entry of the left join
     },
     Extend {
-        child: Rc<PlanNode>,
+        child: Rc<PlanNode<I>>,
         position: usize,
-        expression: Rc<PlanExpression>,
+        expression: Rc<PlanExpression<I>>,
     },
     Sort {
-        child: Rc<PlanNode>,
-        by: Vec<Comparator>,
+        child: Rc<PlanNode<I>>,
+        by: Vec<Comparator<I>>,
     },
     HashDeduplicate {
-        child: Rc<PlanNode>,
+        child: Rc<PlanNode<I>>,
     },
     Skip {
-        child: Rc<PlanNode>,
+        child: Rc<PlanNode<I>>,
         count: usize,
     },
     Limit {
-        child: Rc<PlanNode>,
+        child: Rc<PlanNode<I>>,
         count: usize,
     },
     Project {
-        child: Rc<PlanNode>,
+        child: Rc<PlanNode<I>>,
         mapping: Rc<Vec<(usize, usize)>>, // pairs of (variable key in child, variable key in output)
     },
     Aggregate {
         // By definition the group by key are the range 0..key_mapping.len()
-        child: Rc<PlanNode>,
+        child: Rc<PlanNode<I>>,
         key_mapping: Rc<Vec<(usize, usize)>>, // aggregate key pairs of (variable key in child, variable key in output)
-        aggregates: Rc<Vec<(PlanAggregation, usize)>>,
+        aggregates: Rc<Vec<(PlanAggregation<I>, usize)>>,
     },
 }
 
-impl PlanNode {
+impl<I: StrId> PlanNode<I> {
     /// Returns variables that might be bound in the result set
     pub fn maybe_bound_variables(&self) -> BTreeSet<usize> {
         let mut set = BTreeSet::default();
@@ -201,12 +194,12 @@ impl PlanNode {
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
-pub enum PatternValue {
-    Constant(EncodedTerm),
+pub enum PatternValue<I: StrId> {
+    Constant(EncodedTerm<I>),
     Variable(usize),
 }
 
-impl PatternValue {
+impl<I: StrId> PatternValue<I> {
     pub fn is_var(&self) -> bool {
         match self {
             PatternValue::Constant(_) => false,
@@ -216,108 +209,108 @@ impl PatternValue {
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum PlanExpression {
-    Constant(EncodedTerm),
+pub enum PlanExpression<I: StrId> {
+    Constant(EncodedTerm<I>),
     Variable(usize),
-    Exists(Rc<PlanNode>),
-    Or(Box<PlanExpression>, Box<PlanExpression>),
-    And(Box<PlanExpression>, Box<PlanExpression>),
-    Equal(Box<PlanExpression>, Box<PlanExpression>),
-    NotEqual(Box<PlanExpression>, Box<PlanExpression>),
-    Greater(Box<PlanExpression>, Box<PlanExpression>),
-    GreaterOrEq(Box<PlanExpression>, Box<PlanExpression>),
-    Lower(Box<PlanExpression>, Box<PlanExpression>),
-    LowerOrEq(Box<PlanExpression>, Box<PlanExpression>),
-    In(Box<PlanExpression>, Vec<PlanExpression>),
-    Add(Box<PlanExpression>, Box<PlanExpression>),
-    Sub(Box<PlanExpression>, Box<PlanExpression>),
-    Mul(Box<PlanExpression>, Box<PlanExpression>),
-    Div(Box<PlanExpression>, Box<PlanExpression>),
-    UnaryPlus(Box<PlanExpression>),
-    UnaryMinus(Box<PlanExpression>),
-    UnaryNot(Box<PlanExpression>),
-    Str(Box<PlanExpression>),
-    Lang(Box<PlanExpression>),
-    LangMatches(Box<PlanExpression>, Box<PlanExpression>),
-    Datatype(Box<PlanExpression>),
+    Exists(Rc<PlanNode<I>>),
+    Or(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    And(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    Equal(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    NotEqual(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    Greater(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    GreaterOrEq(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    Lower(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    LowerOrEq(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    In(Box<PlanExpression<I>>, Vec<PlanExpression<I>>),
+    Add(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    Sub(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    Mul(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    Div(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    UnaryPlus(Box<PlanExpression<I>>),
+    UnaryMinus(Box<PlanExpression<I>>),
+    UnaryNot(Box<PlanExpression<I>>),
+    Str(Box<PlanExpression<I>>),
+    Lang(Box<PlanExpression<I>>),
+    LangMatches(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    Datatype(Box<PlanExpression<I>>),
     Bound(usize),
-    IRI(Box<PlanExpression>),
-    BNode(Option<Box<PlanExpression>>),
+    IRI(Box<PlanExpression<I>>),
+    BNode(Option<Box<PlanExpression<I>>>),
     Rand,
-    Abs(Box<PlanExpression>),
-    Ceil(Box<PlanExpression>),
-    Floor(Box<PlanExpression>),
-    Round(Box<PlanExpression>),
-    Concat(Vec<PlanExpression>),
+    Abs(Box<PlanExpression<I>>),
+    Ceil(Box<PlanExpression<I>>),
+    Floor(Box<PlanExpression<I>>),
+    Round(Box<PlanExpression<I>>),
+    Concat(Vec<PlanExpression<I>>),
     SubStr(
-        Box<PlanExpression>,
-        Box<PlanExpression>,
-        Option<Box<PlanExpression>>,
+        Box<PlanExpression<I>>,
+        Box<PlanExpression<I>>,
+        Option<Box<PlanExpression<I>>>,
     ),
-    StrLen(Box<PlanExpression>),
+    StrLen(Box<PlanExpression<I>>),
     Replace(
-        Box<PlanExpression>,
-        Box<PlanExpression>,
-        Box<PlanExpression>,
-        Option<Box<PlanExpression>>,
+        Box<PlanExpression<I>>,
+        Box<PlanExpression<I>>,
+        Box<PlanExpression<I>>,
+        Option<Box<PlanExpression<I>>>,
     ),
-    UCase(Box<PlanExpression>),
-    LCase(Box<PlanExpression>),
-    EncodeForURI(Box<PlanExpression>),
-    Contains(Box<PlanExpression>, Box<PlanExpression>),
-    StrStarts(Box<PlanExpression>, Box<PlanExpression>),
-    StrEnds(Box<PlanExpression>, Box<PlanExpression>),
-    StrBefore(Box<PlanExpression>, Box<PlanExpression>),
-    StrAfter(Box<PlanExpression>, Box<PlanExpression>),
-    Year(Box<PlanExpression>),
-    Month(Box<PlanExpression>),
-    Day(Box<PlanExpression>),
-    Hours(Box<PlanExpression>),
-    Minutes(Box<PlanExpression>),
-    Seconds(Box<PlanExpression>),
-    Timezone(Box<PlanExpression>),
-    Tz(Box<PlanExpression>),
+    UCase(Box<PlanExpression<I>>),
+    LCase(Box<PlanExpression<I>>),
+    EncodeForURI(Box<PlanExpression<I>>),
+    Contains(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    StrStarts(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    StrEnds(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    StrBefore(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    StrAfter(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    Year(Box<PlanExpression<I>>),
+    Month(Box<PlanExpression<I>>),
+    Day(Box<PlanExpression<I>>),
+    Hours(Box<PlanExpression<I>>),
+    Minutes(Box<PlanExpression<I>>),
+    Seconds(Box<PlanExpression<I>>),
+    Timezone(Box<PlanExpression<I>>),
+    Tz(Box<PlanExpression<I>>),
     Now,
     UUID,
     StrUUID,
-    MD5(Box<PlanExpression>),
-    SHA1(Box<PlanExpression>),
-    SHA256(Box<PlanExpression>),
-    SHA384(Box<PlanExpression>),
-    SHA512(Box<PlanExpression>),
-    Coalesce(Vec<PlanExpression>),
+    MD5(Box<PlanExpression<I>>),
+    SHA1(Box<PlanExpression<I>>),
+    SHA256(Box<PlanExpression<I>>),
+    SHA384(Box<PlanExpression<I>>),
+    SHA512(Box<PlanExpression<I>>),
+    Coalesce(Vec<PlanExpression<I>>),
     If(
-        Box<PlanExpression>,
-        Box<PlanExpression>,
-        Box<PlanExpression>,
+        Box<PlanExpression<I>>,
+        Box<PlanExpression<I>>,
+        Box<PlanExpression<I>>,
     ),
-    StrLang(Box<PlanExpression>, Box<PlanExpression>),
-    StrDT(Box<PlanExpression>, Box<PlanExpression>),
-    SameTerm(Box<PlanExpression>, Box<PlanExpression>),
-    IsIRI(Box<PlanExpression>),
-    IsBlank(Box<PlanExpression>),
-    IsLiteral(Box<PlanExpression>),
-    IsNumeric(Box<PlanExpression>),
+    StrLang(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    StrDT(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    SameTerm(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    IsIRI(Box<PlanExpression<I>>),
+    IsBlank(Box<PlanExpression<I>>),
+    IsLiteral(Box<PlanExpression<I>>),
+    IsNumeric(Box<PlanExpression<I>>),
     Regex(
-        Box<PlanExpression>,
-        Box<PlanExpression>,
-        Option<Box<PlanExpression>>,
+        Box<PlanExpression<I>>,
+        Box<PlanExpression<I>>,
+        Option<Box<PlanExpression<I>>>,
     ),
-    BooleanCast(Box<PlanExpression>),
-    DoubleCast(Box<PlanExpression>),
-    FloatCast(Box<PlanExpression>),
-    DecimalCast(Box<PlanExpression>),
-    IntegerCast(Box<PlanExpression>),
-    DateCast(Box<PlanExpression>),
-    TimeCast(Box<PlanExpression>),
-    DateTimeCast(Box<PlanExpression>),
-    DurationCast(Box<PlanExpression>),
-    YearMonthDurationCast(Box<PlanExpression>),
-    DayTimeDurationCast(Box<PlanExpression>),
-    StringCast(Box<PlanExpression>),
+    BooleanCast(Box<PlanExpression<I>>),
+    DoubleCast(Box<PlanExpression<I>>),
+    FloatCast(Box<PlanExpression<I>>),
+    DecimalCast(Box<PlanExpression<I>>),
+    IntegerCast(Box<PlanExpression<I>>),
+    DateCast(Box<PlanExpression<I>>),
+    TimeCast(Box<PlanExpression<I>>),
+    DateTimeCast(Box<PlanExpression<I>>),
+    DurationCast(Box<PlanExpression<I>>),
+    YearMonthDurationCast(Box<PlanExpression<I>>),
+    DayTimeDurationCast(Box<PlanExpression<I>>),
+    StringCast(Box<PlanExpression<I>>),
 }
 
-impl PlanExpression {
+impl<I: StrId> PlanExpression<I> {
     pub fn add_maybe_bound_variables(&self, set: &mut BTreeSet<usize>) {
         match self {
             PlanExpression::Variable(v) | PlanExpression::Bound(v) => {
@@ -434,9 +427,9 @@ impl PlanExpression {
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct PlanAggregation {
+pub struct PlanAggregation<I: StrId> {
     pub function: PlanAggregationFunction,
-    pub parameter: Option<PlanExpression>,
+    pub parameter: Option<PlanExpression<I>>,
     pub distinct: bool,
 }
 
@@ -452,43 +445,43 @@ pub enum PlanAggregationFunction {
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum PlanPropertyPath {
-    PredicatePath(EncodedTerm),
-    InversePath(Rc<PlanPropertyPath>),
-    SequencePath(Rc<PlanPropertyPath>, Rc<PlanPropertyPath>),
-    AlternativePath(Rc<PlanPropertyPath>, Rc<PlanPropertyPath>),
-    ZeroOrMorePath(Rc<PlanPropertyPath>),
-    OneOrMorePath(Rc<PlanPropertyPath>),
-    ZeroOrOnePath(Rc<PlanPropertyPath>),
-    NegatedPropertySet(Rc<Vec<EncodedTerm>>),
+pub enum PlanPropertyPath<I: StrId> {
+    PredicatePath(EncodedTerm<I>),
+    InversePath(Rc<PlanPropertyPath<I>>),
+    SequencePath(Rc<PlanPropertyPath<I>>, Rc<PlanPropertyPath<I>>),
+    AlternativePath(Rc<PlanPropertyPath<I>>, Rc<PlanPropertyPath<I>>),
+    ZeroOrMorePath(Rc<PlanPropertyPath<I>>),
+    OneOrMorePath(Rc<PlanPropertyPath<I>>),
+    ZeroOrOnePath(Rc<PlanPropertyPath<I>>),
+    NegatedPropertySet(Rc<Vec<EncodedTerm<I>>>),
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum Comparator {
-    Asc(PlanExpression),
-    Desc(PlanExpression),
+pub enum Comparator<I: StrId> {
+    Asc(PlanExpression<I>),
+    Desc(PlanExpression<I>),
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
-pub struct TripleTemplate {
-    pub subject: TripleTemplateValue,
-    pub predicate: TripleTemplateValue,
-    pub object: TripleTemplateValue,
+pub struct TripleTemplate<I: StrId> {
+    pub subject: TripleTemplateValue<I>,
+    pub predicate: TripleTemplateValue<I>,
+    pub object: TripleTemplateValue<I>,
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
-pub enum TripleTemplateValue {
-    Constant(EncodedTerm),
+pub enum TripleTemplateValue<I: StrId> {
+    Constant(EncodedTerm<I>),
     BlankNode(usize),
     Variable(usize),
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct EncodedTuple {
-    inner: Vec<Option<EncodedTerm>>,
+pub struct EncodedTuple<I: StrId> {
+    inner: Vec<Option<EncodedTerm<I>>>,
 }
 
-impl EncodedTuple {
+impl<I: StrId> EncodedTuple<I> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             inner: Vec::with_capacity(capacity),
@@ -503,15 +496,15 @@ impl EncodedTuple {
         self.inner.get(index).map_or(false, Option::is_some)
     }
 
-    pub fn get(&self, index: usize) -> Option<EncodedTerm> {
+    pub fn get(&self, index: usize) -> Option<EncodedTerm<I>> {
         self.inner.get(index).cloned().unwrap_or(None)
     }
 
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = Option<EncodedTerm>> + 'a {
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = Option<EncodedTerm<I>>> + 'a {
         self.inner.iter().cloned()
     }
 
-    pub fn set(&mut self, index: usize, value: EncodedTerm) {
+    pub fn set(&mut self, index: usize, value: EncodedTerm<I>) {
         if self.inner.len() <= index {
             self.inner.resize(index + 1, None);
         }
@@ -524,7 +517,7 @@ impl EncodedTuple {
         }
     }
 
-    pub fn combine_with(&self, other: &EncodedTuple) -> Option<Self> {
+    pub fn combine_with(&self, other: &EncodedTuple<I>) -> Option<Self> {
         if self.inner.len() < other.inner.len() {
             let mut result = other.inner.to_owned();
             for (key, self_value) in self.inner.iter().enumerate() {
@@ -555,109 +548,6 @@ impl EncodedTuple {
                 }
             }
             Some(EncodedTuple { inner: result })
-        }
-    }
-}
-
-pub(crate) struct DatasetView<S: ReadableEncodedStore> {
-    store: S,
-    extra: RefCell<MemoryStrStore>,
-    default_graph_as_union: bool,
-}
-
-impl<S: ReadableEncodedStore> DatasetView<S> {
-    pub fn new(store: S, default_graph_as_union: bool) -> Self {
-        Self {
-            store,
-            extra: RefCell::new(MemoryStrStore::default()),
-            default_graph_as_union,
-        }
-    }
-
-    pub fn quads_for_pattern(
-        &self,
-        subject: Option<EncodedTerm>,
-        predicate: Option<EncodedTerm>,
-        object: Option<EncodedTerm>,
-        graph_name: Option<EncodedTerm>,
-    ) -> Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>> {
-        if graph_name == None {
-            Box::new(
-                map_iter_err(
-                    self.store
-                        .encoded_quads_for_pattern(subject, predicate, object, None),
-                )
-                .filter(|quad| match quad {
-                    Err(_) => true,
-                    Ok(quad) => quad.graph_name != EncodedTerm::DefaultGraph,
-                }),
-            )
-        } else if graph_name == Some(EncodedTerm::DefaultGraph) && self.default_graph_as_union {
-            Box::new(
-                map_iter_err(
-                    self.store
-                        .encoded_quads_for_pattern(subject, predicate, object, None),
-                )
-                .map(|quad| {
-                    let quad = quad?;
-                    Ok(EncodedQuad::new(
-                        quad.subject,
-                        quad.predicate,
-                        quad.object,
-                        EncodedTerm::DefaultGraph,
-                    ))
-                }),
-            )
-        } else {
-            Box::new(map_iter_err(self.store.encoded_quads_for_pattern(
-                subject, predicate, object, graph_name,
-            )))
-        }
-    }
-
-    pub fn encoder<'a>(&'a self) -> impl Encoder + StrContainer + 'a {
-        DatasetViewStrContainer {
-            store: &self.store,
-            extra: self.extra.borrow_mut(),
-        }
-    }
-}
-
-fn map_iter_err<'a, T>(
-    iter: impl Iterator<Item = Result<T, impl Into<EvaluationError>>> + 'a,
-) -> impl Iterator<Item = Result<T, EvaluationError>> + 'a {
-    iter.map(|e| e.map_err(|e| e.into()))
-}
-
-impl<S: ReadableEncodedStore> WithStoreError for DatasetView<S> {
-    type Error = S::Error;
-}
-impl<S: ReadableEncodedStore> StrLookup for DatasetView<S> {
-    fn get_str(&self, id: StrHash) -> Result<Option<String>, Self::Error> {
-        if let Some(value) = self.extra.borrow().get_str(id).unwrap_infallible() {
-            Ok(Some(value))
-        } else {
-            self.store.get_str(id)
-        }
-    }
-}
-
-struct DatasetViewStrContainer<'a, S: ReadableEncodedStore> {
-    store: &'a S,
-    extra: RefMut<'a, MemoryStrStore>,
-}
-
-impl<'a, S: ReadableEncodedStore> WithStoreError for DatasetViewStrContainer<'a, S> {
-    type Error = S::Error;
-}
-
-impl<'a, S: ReadableEncodedStore> StrContainer for DatasetViewStrContainer<'a, S> {
-    fn insert_str(&mut self, value: &str) -> Result<StrHash, Self::Error> {
-        let key = StrHash::new(value);
-        if self.store.get_str(key)?.is_none() {
-            Ok(self.extra.insert_str(value).unwrap_infallible())
-        } else {
-            Ok(key)
         }
     }
 }

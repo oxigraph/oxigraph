@@ -28,16 +28,16 @@ use std::str;
 
 const REGEX_SIZE_LIMIT: usize = 1_000_000;
 
-type EncodedTuplesIterator = Box<dyn Iterator<Item = Result<EncodedTuple, EvaluationError>>>;
+type EncodedTuplesIterator<I> = Box<dyn Iterator<Item = Result<EncodedTuple<I>, EvaluationError>>>;
 
-pub(crate) struct SimpleEvaluator<S: ReadableEncodedStore + 'static> {
-    dataset: Rc<DatasetView<S>>,
+pub(crate) struct SimpleEvaluator<S> {
+    dataset: Rc<S>,
     base_iri: Option<Rc<Iri<String>>>,
     now: DateTime,
     service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
 }
 
-impl<S: ReadableEncodedStore + 'static> Clone for SimpleEvaluator<S> {
+impl<S> Clone for SimpleEvaluator<S> {
     fn clone(&self) -> Self {
         Self {
             dataset: self.dataset.clone(),
@@ -48,9 +48,12 @@ impl<S: ReadableEncodedStore + 'static> Clone for SimpleEvaluator<S> {
     }
 }
 
-impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
+impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> SimpleEvaluator<S>
+where
+    for<'a> &'a S: StrContainer<StrId = S::StrId>,
+{
     pub fn new(
-        dataset: Rc<DatasetView<S>>,
+        dataset: Rc<S>,
         base_iri: Option<Rc<Iri<String>>>,
         service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
     ) -> Self {
@@ -64,7 +67,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
 
     pub fn evaluate_select_plan(
         &self,
-        plan: &PlanNode,
+        plan: &PlanNode<S::StrId>,
         variables: Rc<Vec<Variable>>,
     ) -> Result<QueryResult, EvaluationError> {
         let iter = self.eval_plan(plan, EncodedTuple::with_capacity(variables.len()));
@@ -73,7 +76,10 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         ))
     }
 
-    pub fn evaluate_ask_plan(&self, plan: &PlanNode) -> Result<QueryResult, EvaluationError> {
+    pub fn evaluate_ask_plan(
+        &self,
+        plan: &PlanNode<S::StrId>,
+    ) -> Result<QueryResult, EvaluationError> {
         let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
         match self.eval_plan(plan, from).next() {
             Some(Ok(_)) => Ok(QueryResult::Boolean(true)),
@@ -84,8 +90,8 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
 
     pub fn evaluate_construct_plan(
         &self,
-        plan: &PlanNode,
-        construct: Rc<Vec<TripleTemplate>>,
+        plan: &PlanNode<S::StrId>,
+        construct: Rc<Vec<TripleTemplate<S::StrId>>>,
     ) -> Result<QueryResult, EvaluationError> {
         let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
         Ok(QueryResult::Graph(QueryTriplesIterator {
@@ -99,7 +105,10 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         }))
     }
 
-    pub fn evaluate_describe_plan(&self, plan: &PlanNode) -> Result<QueryResult, EvaluationError> {
+    pub fn evaluate_describe_plan(
+        &self,
+        plan: &PlanNode<S::StrId>,
+    ) -> Result<QueryResult, EvaluationError> {
         let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
         Ok(QueryResult::Graph(QueryTriplesIterator {
             iter: Box::new(DescribeIterator {
@@ -110,7 +119,11 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         }))
     }
 
-    fn eval_plan(&self, node: &PlanNode, from: EncodedTuple) -> EncodedTuplesIterator {
+    fn eval_plan(
+        &self,
+        node: &PlanNode<S::StrId>,
+        from: EncodedTuple<S::StrId>,
+    ) -> EncodedTuplesIterator<S::StrId> {
         match node {
             PlanNode::Init => Box::new(once(Ok(from))),
             PlanNode::StaticBindings { tuples } => Box::new(tuples.clone().into_iter().map(Ok)),
@@ -152,12 +165,13 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
                 let object = *object;
                 let graph_name = *graph_name;
                 Box::new(self.eval_plan(child, from).flat_map_ok(move |tuple| {
-                    let mut iter = eval.dataset.quads_for_pattern(
-                        get_pattern_value(&subject, &tuple),
-                        get_pattern_value(&predicate, &tuple),
-                        get_pattern_value(&object, &tuple),
-                        get_pattern_value(&graph_name, &tuple),
-                    );
+                    let mut iter: Box<dyn Iterator<Item = _>> =
+                        Box::new(eval.dataset.encoded_quads_for_pattern(
+                            get_pattern_value(&subject, &tuple),
+                            get_pattern_value(&predicate, &tuple),
+                            get_pattern_value(&object, &tuple),
+                            get_pattern_value(&graph_name, &tuple),
+                        ));
                     if subject.is_var() && subject == predicate {
                         iter = Box::new(iter.filter(|quad| match quad {
                             Err(_) => true,
@@ -196,7 +210,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
                             }))
                         }
                     }
-                    let iter: EncodedTuplesIterator = Box::new(iter.map(move |quad| {
+                    let iter: EncodedTuplesIterator<_> = Box::new(iter.map(move |quad| {
                         let quad = quad?;
                         let mut new_tuple = tuple.clone();
                         put_pattern_value(&subject, quad.subject, &mut new_tuple);
@@ -227,7 +241,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
                         if let Some(graph_name) = get_pattern_value(&graph_name, &tuple) {
                             graph_name
                         } else {
-                            let result: EncodedTuplesIterator =
+                            let result: EncodedTuplesIterator<_> =
                             Box::new(once(Err(EvaluationError::msg(
                                 "Unknown graph name is not allowed when evaluating property path",
                             ))));
@@ -431,8 +445,10 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
                 let key_mapping = key_mapping.clone();
                 let aggregates = aggregates.clone();
                 let mut errors = Vec::default();
-                let mut accumulators_for_group =
-                    HashMap::<Vec<Option<EncodedTerm>>, Vec<Box<dyn Accumulator>>>::default();
+                let mut accumulators_for_group = HashMap::<
+                    Vec<Option<EncodedTerm<S::StrId>>>,
+                    Vec<Box<dyn Accumulator<S::StrId>>>,
+                >::default();
                 self.eval_plan(child, from)
                     .filter_map(|result| match result {
                         Ok(result) => Some(result),
@@ -498,11 +514,11 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
 
     fn evaluate_service(
         &self,
-        service_name: &PatternValue,
+        service_name: &PatternValue<S::StrId>,
         graph_pattern: Rc<GraphPattern>,
         variables: Rc<Vec<Variable>>,
-        from: &EncodedTuple,
-    ) -> Result<EncodedTuplesIterator, EvaluationError> {
+        from: &EncodedTuple<S::StrId>,
+    ) -> Result<EncodedTuplesIterator<S::StrId>, EvaluationError> {
         if let QueryResult::Solutions(iter) = self.service_handler.handle(
             self.dataset.decode_named_node(
                 get_pattern_value(service_name, from)
@@ -526,7 +542,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         &self,
         function: &PlanAggregationFunction,
         distinct: bool,
-    ) -> Box<dyn Accumulator + 'static> {
+    ) -> Box<dyn Accumulator<S::StrId> + 'static> {
         match function {
             PlanAggregationFunction::Count => {
                 if distinct {
@@ -567,14 +583,14 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
 
     fn eval_path_from(
         &self,
-        path: &PlanPropertyPath,
-        start: EncodedTerm,
-        graph_name: EncodedTerm,
-    ) -> Box<dyn Iterator<Item = Result<EncodedTerm, EvaluationError>>> {
+        path: &PlanPropertyPath<S::StrId>,
+        start: EncodedTerm<S::StrId>,
+        graph_name: EncodedTerm<S::StrId>,
+    ) -> Box<dyn Iterator<Item = Result<EncodedTerm<S::StrId>, EvaluationError>>> {
         match path {
             PlanPropertyPath::PredicatePath(p) => Box::new(
                 self.dataset
-                    .quads_for_pattern(Some(start), Some(*p), None, Some(graph_name))
+                    .encoded_quads_for_pattern(Some(start), Some(*p), None, Some(graph_name))
                     .map(|t| Ok(t?.object)),
             ),
             PlanPropertyPath::InversePath(p) => self.eval_path_to(p, start, graph_name),
@@ -612,7 +628,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
                 let ps = ps.clone();
                 Box::new(
                     self.dataset
-                        .quads_for_pattern(Some(start), None, None, Some(graph_name))
+                        .encoded_quads_for_pattern(Some(start), None, None, Some(graph_name))
                         .filter_map(move |t| match t {
                             Ok(t) => {
                                 if ps.contains(&t.predicate) {
@@ -630,14 +646,14 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
 
     fn eval_path_to(
         &self,
-        path: &PlanPropertyPath,
-        end: EncodedTerm,
-        graph_name: EncodedTerm,
-    ) -> Box<dyn Iterator<Item = Result<EncodedTerm, EvaluationError>>> {
+        path: &PlanPropertyPath<S::StrId>,
+        end: EncodedTerm<S::StrId>,
+        graph_name: EncodedTerm<S::StrId>,
+    ) -> Box<dyn Iterator<Item = Result<EncodedTerm<S::StrId>, EvaluationError>>> {
         match path {
             PlanPropertyPath::PredicatePath(p) => Box::new(
                 self.dataset
-                    .quads_for_pattern(None, Some(*p), Some(end), Some(graph_name))
+                    .encoded_quads_for_pattern(None, Some(*p), Some(end), Some(graph_name))
                     .map(|t| Ok(t?.subject)),
             ),
             PlanPropertyPath::InversePath(p) => self.eval_path_from(p, end, graph_name),
@@ -675,7 +691,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
                 let ps = ps.clone();
                 Box::new(
                     self.dataset
-                        .quads_for_pattern(None, None, Some(end), Some(graph_name))
+                        .encoded_quads_for_pattern(None, None, Some(end), Some(graph_name))
                         .filter_map(move |t| match t {
                             Ok(t) => {
                                 if ps.contains(&t.predicate) {
@@ -693,13 +709,17 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
 
     fn eval_open_path(
         &self,
-        path: &PlanPropertyPath,
-        graph_name: EncodedTerm,
-    ) -> Box<dyn Iterator<Item = Result<(EncodedTerm, EncodedTerm), EvaluationError>>> {
+        path: &PlanPropertyPath<S::StrId>,
+        graph_name: EncodedTerm<S::StrId>,
+    ) -> Box<
+        dyn Iterator<
+            Item = Result<(EncodedTerm<S::StrId>, EncodedTerm<S::StrId>), EvaluationError>,
+        >,
+    > {
         match path {
             PlanPropertyPath::PredicatePath(p) => Box::new(
                 self.dataset
-                    .quads_for_pattern(None, Some(*p), None, Some(graph_name))
+                    .encoded_quads_for_pattern(None, Some(*p), None, Some(graph_name))
                     .map(|t| t.map(|t| (t.subject, t.object))),
             ),
             PlanPropertyPath::InversePath(p) => Box::new(
@@ -751,7 +771,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
                 let ps = ps.clone();
                 Box::new(
                     self.dataset
-                        .quads_for_pattern(None, None, None, Some(graph_name))
+                        .encoded_quads_for_pattern(None, None, None, Some(graph_name))
                         .filter_map(move |t| match t {
                             Ok(t) => {
                                 if ps.contains(&t.predicate) {
@@ -769,10 +789,11 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
 
     fn get_subject_or_object_identity_pairs(
         &self,
-        graph_name: EncodedTerm,
-    ) -> impl Iterator<Item = Result<(EncodedTerm, EncodedTerm), EvaluationError>> {
+        graph_name: EncodedTerm<S::StrId>,
+    ) -> impl Iterator<Item = Result<(EncodedTerm<S::StrId>, EncodedTerm<S::StrId>), EvaluationError>>
+    {
         self.dataset
-            .quads_for_pattern(None, None, None, Some(graph_name))
+            .encoded_quads_for_pattern(None, None, None, Some(graph_name))
             .flat_map_ok(|t| once(Ok(t.subject)).chain(once(Ok(t.object))))
             .map(|e| e.map(|e| (e, e)))
     }
@@ -780,9 +801,9 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
     #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
     fn eval_expression(
         &self,
-        expression: &PlanExpression,
-        tuple: &EncodedTuple,
-    ) -> Option<EncodedTerm> {
+        expression: &PlanExpression<S::StrId>,
+        tuple: &EncodedTuple<S::StrId>,
+    ) -> Option<EncodedTerm<S::StrId>> {
         match expression {
             PlanExpression::Constant(t) => Some(*t),
             PlanExpression::Variable(v) => tuple.get(*v),
@@ -1040,11 +1061,12 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
                 }
             }
             PlanExpression::BNode(id) => match id {
-                Some(id) => Some(
-                    (&BlankNode::new(self.to_simple_string(self.eval_expression(id, tuple)?)?)
-                        .ok()?)
-                        .into(),
-                ),
+                Some(id) => {
+                    let bnode =
+                        BlankNode::new(self.to_simple_string(self.eval_expression(id, tuple)?)?)
+                            .ok()?;
+                    Some(self.dataset.as_ref().encode_blank_node(&bnode).ok()?)
+                }
                 None => Some(EncodedTerm::InlineBlankNode {
                     id: random::<u128>(),
                 }),
@@ -1340,8 +1362,8 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
                 } else {
                     None
                 }?;
-                self.dataset
-                    .encoder()
+                let mut encoder = self.dataset.as_ref();
+                encoder
                     .encode_rio_literal(rio::Literal::Typed {
                         value: &value,
                         datatype: rio::NamedNode { iri: &datatype },
@@ -1498,7 +1520,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         }
     }
 
-    fn to_bool(&self, term: EncodedTerm) -> Option<bool> {
+    fn to_bool(&self, term: EncodedTerm<S::StrId>) -> Option<bool> {
         match term {
             EncodedTerm::BooleanLiteral(value) => Some(value),
             EncodedTerm::StringLiteral { value_id } => {
@@ -1512,7 +1534,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         }
     }
 
-    fn to_string_id(&self, term: EncodedTerm) -> Option<StrHash> {
+    fn to_string_id(&self, term: EncodedTerm<S::StrId>) -> Option<S::StrId> {
         match term {
             EncodedTerm::DefaultGraph => None,
             EncodedTerm::NamedNode { iri_id } => Some(iri_id),
@@ -1538,7 +1560,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         }
     }
 
-    fn to_simple_string(&self, term: EncodedTerm) -> Option<String> {
+    fn to_simple_string(&self, term: EncodedTerm<S::StrId>) -> Option<String> {
         if let EncodedTerm::StringLiteral { value_id } = term {
             self.dataset.get_str(value_id).ok()?
         } else {
@@ -1546,7 +1568,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         }
     }
 
-    fn to_simple_string_id(&self, term: EncodedTerm) -> Option<StrHash> {
+    fn to_simple_string_id(&self, term: EncodedTerm<S::StrId>) -> Option<S::StrId> {
         if let EncodedTerm::StringLiteral { value_id } = term {
             Some(value_id)
         } else {
@@ -1554,7 +1576,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         }
     }
 
-    fn to_string(&self, term: EncodedTerm) -> Option<String> {
+    fn to_string(&self, term: EncodedTerm<S::StrId>) -> Option<String> {
         match term {
             EncodedTerm::StringLiteral { value_id }
             | EncodedTerm::LangStringLiteral { value_id, .. } => {
@@ -1564,7 +1586,10 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         }
     }
 
-    fn to_string_and_language(&self, term: EncodedTerm) -> Option<(String, Option<StrHash>)> {
+    fn to_string_and_language(
+        &self,
+        term: EncodedTerm<S::StrId>,
+    ) -> Option<(String, Option<S::StrId>)> {
         match term {
             EncodedTerm::StringLiteral { value_id } => {
                 Some((self.dataset.get_str(value_id).ok()??, None))
@@ -1577,26 +1602,34 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         }
     }
 
-    fn build_named_node(&self, iri: &str) -> Option<EncodedTerm> {
+    fn build_named_node(&self, iri: &str) -> Option<EncodedTerm<S::StrId>> {
         Some(EncodedTerm::NamedNode {
             iri_id: self.build_string_id(iri)?,
         })
     }
 
-    fn build_string_literal(&self, value: &str) -> Option<EncodedTerm> {
+    fn build_string_literal(&self, value: &str) -> Option<EncodedTerm<S::StrId>> {
         Some(EncodedTerm::StringLiteral {
             value_id: self.build_string_id(value)?,
         })
     }
 
-    fn build_lang_string_literal(&self, value: &str, language_id: StrHash) -> Option<EncodedTerm> {
+    fn build_lang_string_literal(
+        &self,
+        value: &str,
+        language_id: S::StrId,
+    ) -> Option<EncodedTerm<S::StrId>> {
         Some(EncodedTerm::LangStringLiteral {
             value_id: self.build_string_id(value)?,
             language_id,
         })
     }
 
-    fn build_plain_literal(&self, value: &str, language: Option<StrHash>) -> Option<EncodedTerm> {
+    fn build_plain_literal(
+        &self,
+        value: &str,
+        language: Option<S::StrId>,
+    ) -> Option<EncodedTerm<S::StrId>> {
         if let Some(language_id) = language {
             self.build_lang_string_literal(value, language_id)
         } else {
@@ -1604,11 +1637,11 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         }
     }
 
-    fn build_string_id(&self, value: &str) -> Option<StrHash> {
-        self.dataset.encoder().insert_str(value).ok()
+    fn build_string_id(&self, value: &str) -> Option<S::StrId> {
+        self.dataset.as_ref().encode_str(value).ok()
     }
 
-    fn build_language_id(&self, value: EncodedTerm) -> Option<StrHash> {
+    fn build_language_id(&self, value: EncodedTerm<S::StrId>) -> Option<S::StrId> {
         let mut language = self.to_simple_string(value)?;
         language.make_ascii_lowercase();
         self.build_string_id(LanguageTag::parse(language).ok()?.as_str())
@@ -1616,9 +1649,9 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
 
     fn to_argument_compatible_strings(
         &self,
-        arg1: EncodedTerm,
-        arg2: EncodedTerm,
-    ) -> Option<(String, String, Option<StrHash>)> {
+        arg1: EncodedTerm<S::StrId>,
+        arg2: EncodedTerm<S::StrId>,
+    ) -> Option<(String, String, Option<S::StrId>)> {
         let (value1, language1) = self.to_string_and_language(arg1)?;
         let (value2, language2) = self.to_string_and_language(arg2)?;
         if language2.is_none() || language1 == language2 {
@@ -1628,7 +1661,11 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         }
     }
 
-    fn compile_pattern(&self, pattern: EncodedTerm, flags: Option<EncodedTerm>) -> Option<Regex> {
+    fn compile_pattern(
+        &self,
+        pattern: EncodedTerm<S::StrId>,
+        flags: Option<EncodedTerm<S::StrId>>,
+    ) -> Option<Regex> {
         // TODO Avoid to compile the regex each time
         let pattern = self.to_simple_string(pattern)?;
         let mut regex_builder = RegexBuilder::new(&pattern);
@@ -1659,9 +1696,9 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
 
     fn parse_numeric_operands(
         &self,
-        e1: &PlanExpression,
-        e2: &PlanExpression,
-        tuple: &EncodedTuple,
+        e1: &PlanExpression<S::StrId>,
+        e2: &PlanExpression<S::StrId>,
+        tuple: &EncodedTuple<S::StrId>,
     ) -> Option<NumericBinaryOperands> {
         NumericBinaryOperands::new(
             self.eval_expression(e1, tuple)?,
@@ -1671,7 +1708,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
 
     fn decode_bindings(
         &self,
-        iter: EncodedTuplesIterator,
+        iter: EncodedTuplesIterator<S::StrId>,
         variables: Rc<Vec<Variable>>,
     ) -> QuerySolutionsIterator {
         let eval = self.clone();
@@ -1695,10 +1732,10 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         &self,
         variables: Rc<Vec<Variable>>,
         iter: QuerySolutionsIterator,
-    ) -> EncodedTuplesIterator {
+    ) -> EncodedTuplesIterator<S::StrId> {
         let eval = self.clone();
         Box::new(iter.map(move |solution| {
-            let mut encoder = eval.dataset.encoder();
+            let mut encoder = eval.dataset.as_ref();
             let mut encoded_terms = EncodedTuple::with_capacity(variables.len());
             for (variable, term) in solution?.iter() {
                 put_variable_value(
@@ -1717,7 +1754,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         clippy::cast_possible_truncation,
         clippy::cast_precision_loss
     )]
-    fn equals(&self, a: EncodedTerm, b: EncodedTerm) -> Option<bool> {
+    fn equals(&self, a: EncodedTerm<S::StrId>, b: EncodedTerm<S::StrId>) -> Option<bool> {
         match a {
             EncodedTerm::DefaultGraph
             | EncodedTerm::NamedNode { .. }
@@ -1815,9 +1852,9 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
 
     fn cmp_according_to_expression(
         &self,
-        tuple_a: &EncodedTuple,
-        tuple_b: &EncodedTuple,
-        expression: &PlanExpression,
+        tuple_a: &EncodedTuple<S::StrId>,
+        tuple_b: &EncodedTuple<S::StrId>,
+        expression: &PlanExpression<S::StrId>,
     ) -> Ordering {
         self.cmp_terms(
             self.eval_expression(expression, tuple_a),
@@ -1825,7 +1862,11 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         )
     }
 
-    fn cmp_terms(&self, a: Option<EncodedTerm>, b: Option<EncodedTerm>) -> Ordering {
+    fn cmp_terms(
+        &self,
+        a: Option<EncodedTerm<S::StrId>>,
+        b: Option<EncodedTerm<S::StrId>>,
+    ) -> Ordering {
         match (a, b) {
             (Some(a), Some(b)) => match a {
                 EncodedTerm::InlineBlankNode { .. } | EncodedTerm::NamedBlankNode { .. } => {
@@ -1858,7 +1899,11 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
     }
 
     #[allow(clippy::cast_precision_loss)]
-    fn partial_cmp_literals(&self, a: EncodedTerm, b: EncodedTerm) -> Option<Ordering> {
+    fn partial_cmp_literals(
+        &self,
+        a: EncodedTerm<S::StrId>,
+        b: EncodedTerm<S::StrId>,
+    ) -> Option<Ordering> {
         match a {
             EncodedTerm::StringLiteral { value_id: a } => {
                 if let EncodedTerm::StringLiteral { value_id: b } = b {
@@ -1938,7 +1983,7 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         }
     }
 
-    fn compare_str_ids(&self, a: StrHash, b: StrHash) -> Option<Ordering> {
+    fn compare_str_ids(&self, a: S::StrId, b: S::StrId) -> Option<Ordering> {
         Some(
             self.dataset
                 .get_str(a)
@@ -1947,13 +1992,17 @@ impl<S: ReadableEncodedStore + 'static> SimpleEvaluator<S> {
         )
     }
 
-    fn hash<H: Digest>(&self, arg: &PlanExpression, tuple: &EncodedTuple) -> Option<EncodedTerm> {
+    fn hash<H: Digest>(
+        &self,
+        arg: &PlanExpression<S::StrId>,
+        tuple: &EncodedTuple<S::StrId>,
+    ) -> Option<EncodedTerm<S::StrId>> {
         let input = self.to_simple_string(self.eval_expression(arg, tuple)?)?;
         let hash = hex::encode(H::new().chain(input.as_str()).finalize());
         self.build_string_literal(&hash)
     }
 
-    fn datatype(&self, value: EncodedTerm) -> Option<EncodedTerm> {
+    fn datatype(&self, value: EncodedTerm<S::StrId>) -> Option<EncodedTerm<S::StrId>> {
         //TODO: optimize?
         match value {
             EncodedTerm::NamedNode { .. }
@@ -2029,7 +2078,7 @@ enum NumericBinaryOperands {
 
 impl NumericBinaryOperands {
     #[allow(clippy::cast_precision_loss)]
-    fn new(a: EncodedTerm, b: EncodedTerm) -> Option<Self> {
+    fn new<I: StrId>(a: EncodedTerm<I>, b: EncodedTerm<I>) -> Option<Self> {
         match (a, b) {
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
                 Some(NumericBinaryOperands::Float(v1, v2))
@@ -2147,25 +2196,32 @@ impl NumericBinaryOperands {
     }
 }
 
-fn get_pattern_value(selector: &PatternValue, tuple: &EncodedTuple) -> Option<EncodedTerm> {
+fn get_pattern_value<I: StrId>(
+    selector: &PatternValue<I>,
+    tuple: &EncodedTuple<I>,
+) -> Option<EncodedTerm<I>> {
     match selector {
         PatternValue::Constant(term) => Some(*term),
         PatternValue::Variable(v) => tuple.get(*v),
     }
 }
 
-fn put_pattern_value(selector: &PatternValue, value: EncodedTerm, tuple: &mut EncodedTuple) {
+fn put_pattern_value<I: StrId>(
+    selector: &PatternValue<I>,
+    value: EncodedTerm<I>,
+    tuple: &mut EncodedTuple<I>,
+) {
     match selector {
         PatternValue::Constant(_) => (),
         PatternValue::Variable(v) => tuple.set(*v, value),
     }
 }
 
-fn put_variable_value(
+fn put_variable_value<I: StrId>(
     selector: &Variable,
     variables: &[Variable],
-    value: EncodedTerm,
-    tuple: &mut EncodedTuple,
+    value: EncodedTerm<I>,
+    tuple: &mut EncodedTuple<I>,
 ) {
     for (i, v) in variables.iter().enumerate() {
         if selector == v {
@@ -2175,13 +2231,17 @@ fn put_variable_value(
     }
 }
 
-fn unbind_variables(binding: &mut EncodedTuple, variables: &[usize]) {
+fn unbind_variables<I: StrId>(binding: &mut EncodedTuple<I>, variables: &[usize]) {
     for var in variables {
         binding.unset(*var)
     }
 }
 
-fn combine_tuples(mut a: EncodedTuple, b: &EncodedTuple, vars: &[usize]) -> Option<EncodedTuple> {
+fn combine_tuples<I: StrId>(
+    mut a: EncodedTuple<I>,
+    b: &EncodedTuple<I>,
+    vars: &[usize],
+) -> Option<EncodedTuple<I>> {
     for var in vars {
         if let Some(b_value) = b.get(*var) {
             if let Some(a_value) = a.get(*var) {
@@ -2196,7 +2256,10 @@ fn combine_tuples(mut a: EncodedTuple, b: &EncodedTuple, vars: &[usize]) -> Opti
     Some(a)
 }
 
-pub fn are_compatible_and_not_disjointed(a: &EncodedTuple, b: &EncodedTuple) -> bool {
+pub fn are_compatible_and_not_disjointed<I: StrId>(
+    a: &EncodedTuple<I>,
+    b: &EncodedTuple<I>,
+) -> bool {
     let mut found_intersection = false;
     for (a_value, b_value) in a.iter().zip(b.iter()) {
         if let (Some(a_value), Some(b_value)) = (a_value, b_value) {
@@ -2209,16 +2272,16 @@ pub fn are_compatible_and_not_disjointed(a: &EncodedTuple, b: &EncodedTuple) -> 
     found_intersection
 }
 
-struct JoinIterator {
-    left: Vec<EncodedTuple>,
-    right_iter: EncodedTuplesIterator,
-    buffered_results: Vec<Result<EncodedTuple, EvaluationError>>,
+struct JoinIterator<I: StrId> {
+    left: Vec<EncodedTuple<I>>,
+    right_iter: EncodedTuplesIterator<I>,
+    buffered_results: Vec<Result<EncodedTuple<I>, EvaluationError>>,
 }
 
-impl Iterator for JoinIterator {
-    type Item = Result<EncodedTuple, EvaluationError>;
+impl<I: StrId> Iterator for JoinIterator<I> {
+    type Item = Result<EncodedTuple<I>, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
+    fn next(&mut self) -> Option<Result<EncodedTuple<I>, EvaluationError>> {
         loop {
             if let Some(result) = self.buffered_results.pop() {
                 return Some(result);
@@ -2236,15 +2299,15 @@ impl Iterator for JoinIterator {
     }
 }
 
-struct AntiJoinIterator {
-    left_iter: EncodedTuplesIterator,
-    right: Vec<EncodedTuple>,
+struct AntiJoinIterator<I: StrId> {
+    left_iter: EncodedTuplesIterator<I>,
+    right: Vec<EncodedTuple<I>>,
 }
 
-impl Iterator for AntiJoinIterator {
-    type Item = Result<EncodedTuple, EvaluationError>;
+impl<I: StrId> Iterator for AntiJoinIterator<I> {
+    type Item = Result<EncodedTuple<I>, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
+    fn next(&mut self) -> Option<Result<EncodedTuple<I>, EvaluationError>> {
         loop {
             match self.left_iter.next()? {
                 Ok(left_tuple) => {
@@ -2263,15 +2326,18 @@ impl Iterator for AntiJoinIterator {
 
 struct LeftJoinIterator<S: ReadableEncodedStore + 'static> {
     eval: SimpleEvaluator<S>,
-    right_plan: Rc<PlanNode>,
-    left_iter: EncodedTuplesIterator,
-    current_right: EncodedTuplesIterator,
+    right_plan: Rc<PlanNode<S::StrId>>,
+    left_iter: EncodedTuplesIterator<S::StrId>,
+    current_right: EncodedTuplesIterator<S::StrId>,
 }
 
-impl<S: ReadableEncodedStore + 'static> Iterator for LeftJoinIterator<S> {
-    type Item = Result<EncodedTuple, EvaluationError>;
+impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Iterator for LeftJoinIterator<S>
+where
+    for<'a> &'a S: StrContainer<StrId = S::StrId>,
+{
+    type Item = Result<EncodedTuple<S::StrId>, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
+    fn next(&mut self) -> Option<Result<EncodedTuple<S::StrId>, EvaluationError>> {
         if let Some(tuple) = self.current_right.next() {
             return Some(tuple);
         }
@@ -2291,17 +2357,20 @@ impl<S: ReadableEncodedStore + 'static> Iterator for LeftJoinIterator<S> {
 
 struct BadLeftJoinIterator<S: ReadableEncodedStore + 'static> {
     eval: SimpleEvaluator<S>,
-    right_plan: Rc<PlanNode>,
-    left_iter: EncodedTuplesIterator,
-    current_left: Option<EncodedTuple>,
-    current_right: EncodedTuplesIterator,
+    right_plan: Rc<PlanNode<S::StrId>>,
+    left_iter: EncodedTuplesIterator<S::StrId>,
+    current_left: Option<EncodedTuple<S::StrId>>,
+    current_right: EncodedTuplesIterator<S::StrId>,
     problem_vars: Rc<Vec<usize>>,
 }
 
-impl<S: ReadableEncodedStore + 'static> Iterator for BadLeftJoinIterator<S> {
-    type Item = Result<EncodedTuple, EvaluationError>;
+impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Iterator for BadLeftJoinIterator<S>
+where
+    for<'a> &'a S: StrContainer<StrId = S::StrId>,
+{
+    type Item = Result<EncodedTuple<S::StrId>, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
+    fn next(&mut self) -> Option<Result<EncodedTuple<S::StrId>, EvaluationError>> {
         while let Some(right_tuple) = self.current_right.next() {
             match right_tuple {
                 Ok(right_tuple) => {
@@ -2343,16 +2412,19 @@ impl<S: ReadableEncodedStore + 'static> Iterator for BadLeftJoinIterator<S> {
 
 struct UnionIterator<S: ReadableEncodedStore + 'static> {
     eval: SimpleEvaluator<S>,
-    plans: Vec<Rc<PlanNode>>,
-    input: EncodedTuple,
-    current_iterator: EncodedTuplesIterator,
+    plans: Vec<Rc<PlanNode<S::StrId>>>,
+    input: EncodedTuple<S::StrId>,
+    current_iterator: EncodedTuplesIterator<S::StrId>,
     current_plan: usize,
 }
 
-impl<S: ReadableEncodedStore + 'static> Iterator for UnionIterator<S> {
-    type Item = Result<EncodedTuple, EvaluationError>;
+impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Iterator for UnionIterator<S>
+where
+    for<'a> &'a S: StrContainer<StrId = S::StrId>,
+{
+    type Item = Result<EncodedTuple<S::StrId>, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
+    fn next(&mut self) -> Option<Result<EncodedTuple<S::StrId>, EvaluationError>> {
         loop {
             if let Some(tuple) = self.current_iterator.next() {
                 return Some(tuple);
@@ -2370,13 +2442,13 @@ impl<S: ReadableEncodedStore + 'static> Iterator for UnionIterator<S> {
 
 struct ConstructIterator<S: ReadableEncodedStore + 'static> {
     eval: SimpleEvaluator<S>,
-    iter: EncodedTuplesIterator,
-    template: Rc<Vec<TripleTemplate>>,
+    iter: EncodedTuplesIterator<S::StrId>,
+    template: Rc<Vec<TripleTemplate<S::StrId>>>,
     buffered_results: Vec<Result<Triple, EvaluationError>>,
-    bnodes: Vec<BlankNode>,
+    bnodes: Vec<EncodedTerm<S::StrId>>,
 }
 
-impl<S: ReadableEncodedStore + 'static> Iterator for ConstructIterator<S> {
+impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Iterator for ConstructIterator<S> {
     type Item = Result<Triple, EvaluationError>;
 
     fn next(&mut self) -> Option<Result<Triple, EvaluationError>> {
@@ -2409,28 +2481,32 @@ impl<S: ReadableEncodedStore + 'static> Iterator for ConstructIterator<S> {
     }
 }
 
-fn get_triple_template_value(
-    selector: &TripleTemplateValue,
-    tuple: &EncodedTuple,
-    bnodes: &mut Vec<BlankNode>,
-) -> Option<EncodedTerm> {
+fn get_triple_template_value<I: StrId>(
+    selector: &TripleTemplateValue<I>,
+    tuple: &EncodedTuple<I>,
+    bnodes: &mut Vec<EncodedTerm<I>>,
+) -> Option<EncodedTerm<I>> {
     match selector {
         TripleTemplateValue::Constant(term) => Some(*term),
         TripleTemplateValue::Variable(v) => tuple.get(*v),
         TripleTemplateValue::BlankNode(id) => {
             if *id >= bnodes.len() {
-                bnodes.resize_with(*id, BlankNode::default)
+                bnodes.resize_with(*id, new_bnode)
             }
-            Some((&bnodes[*id]).into())
+            Some(bnodes[*id])
         }
     }
 }
 
-fn decode_triple(
-    decoder: &impl Decoder,
-    subject: EncodedTerm,
-    predicate: EncodedTerm,
-    object: EncodedTerm,
+fn new_bnode<I: StrId>() -> EncodedTerm<I> {
+    EncodedTerm::InlineBlankNode { id: random() }
+}
+
+fn decode_triple<D: Decoder>(
+    decoder: &D,
+    subject: EncodedTerm<D::StrId>,
+    predicate: EncodedTerm<D::StrId>,
+    object: EncodedTerm<D::StrId>,
 ) -> Result<Triple, EvaluationError> {
     Ok(Triple::new(
         decoder.decode_named_or_blank_node(subject)?,
@@ -2441,11 +2517,11 @@ fn decode_triple(
 
 struct DescribeIterator<S: ReadableEncodedStore + 'static> {
     eval: SimpleEvaluator<S>,
-    iter: EncodedTuplesIterator,
-    quads: Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>>,
+    iter: EncodedTuplesIterator<S::StrId>,
+    quads: Box<dyn Iterator<Item = Result<EncodedQuad<S::StrId>, EvaluationError>>>,
 }
 
-impl<S: ReadableEncodedStore + 'static> Iterator for DescribeIterator<S> {
+impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Iterator for DescribeIterator<S> {
     type Item = Result<Triple, EvaluationError>;
 
     fn next(&mut self) -> Option<Result<Triple, EvaluationError>> {
@@ -2467,10 +2543,12 @@ impl<S: ReadableEncodedStore + 'static> Iterator for DescribeIterator<S> {
             };
             for subject in tuple.iter() {
                 if let Some(subject) = subject {
-                    self.quads =
-                        self.eval
-                            .dataset
-                            .quads_for_pattern(Some(subject), None, None, None);
+                    self.quads = Box::new(self.eval.dataset.encoded_quads_for_pattern(
+                        Some(subject),
+                        None,
+                        None,
+                        None,
+                    ));
                 }
             }
         }
@@ -2621,19 +2699,19 @@ impl<
     }
 }
 
-trait Accumulator {
-    fn add(&mut self, element: Option<EncodedTerm>);
+trait Accumulator<I: StrId> {
+    fn add(&mut self, element: Option<EncodedTerm<I>>);
 
-    fn state(&self) -> Option<EncodedTerm>;
+    fn state(&self) -> Option<EncodedTerm<I>>;
 }
 
 #[derive(Default, Debug)]
-struct DistinctAccumulator<T: Accumulator> {
-    seen: HashSet<Option<EncodedTerm>>,
+struct DistinctAccumulator<I: StrId, T: Accumulator<I>> {
+    seen: HashSet<Option<EncodedTerm<I>>>,
     inner: T,
 }
 
-impl<T: Accumulator> DistinctAccumulator<T> {
+impl<I: StrId, T: Accumulator<I>> DistinctAccumulator<I, T> {
     fn new(inner: T) -> Self {
         Self {
             seen: HashSet::default(),
@@ -2642,14 +2720,14 @@ impl<T: Accumulator> DistinctAccumulator<T> {
     }
 }
 
-impl<T: Accumulator> Accumulator for DistinctAccumulator<T> {
-    fn add(&mut self, element: Option<EncodedTerm>) {
+impl<I: StrId, T: Accumulator<I>> Accumulator<I> for DistinctAccumulator<I, T> {
+    fn add(&mut self, element: Option<EncodedTerm<I>>) {
         if self.seen.insert(element) {
             self.inner.add(element)
         }
     }
 
-    fn state(&self) -> Option<EncodedTerm> {
+    fn state(&self) -> Option<EncodedTerm<I>> {
         self.inner.state()
     }
 }
@@ -2659,22 +2737,22 @@ struct CountAccumulator {
     count: i64,
 }
 
-impl Accumulator for CountAccumulator {
-    fn add(&mut self, _element: Option<EncodedTerm>) {
+impl<I: StrId> Accumulator<I> for CountAccumulator {
+    fn add(&mut self, _element: Option<EncodedTerm<I>>) {
         self.count += 1;
     }
 
-    fn state(&self) -> Option<EncodedTerm> {
+    fn state(&self) -> Option<EncodedTerm<I>> {
         Some(self.count.into())
     }
 }
 
 #[derive(Debug)]
-struct SumAccumulator {
-    sum: Option<EncodedTerm>,
+struct SumAccumulator<I: StrId> {
+    sum: Option<EncodedTerm<I>>,
 }
 
-impl Default for SumAccumulator {
+impl<I: StrId> Default for SumAccumulator<I> {
     fn default() -> Self {
         Self {
             sum: Some(0.into()),
@@ -2682,8 +2760,8 @@ impl Default for SumAccumulator {
     }
 }
 
-impl Accumulator for SumAccumulator {
-    fn add(&mut self, element: Option<EncodedTerm>) {
+impl<I: StrId> Accumulator<I> for SumAccumulator<I> {
+    fn add(&mut self, element: Option<EncodedTerm<I>>) {
         if let Some(sum) = self.sum {
             if let Some(operands) = element.and_then(|e| NumericBinaryOperands::new(sum, e)) {
                 //TODO: unify with addition?
@@ -2701,24 +2779,33 @@ impl Accumulator for SumAccumulator {
         }
     }
 
-    fn state(&self) -> Option<EncodedTerm> {
+    fn state(&self) -> Option<EncodedTerm<I>> {
         self.sum
     }
 }
 
-#[derive(Debug, Default)]
-struct AvgAccumulator {
-    sum: SumAccumulator,
+#[derive(Debug)]
+struct AvgAccumulator<I: StrId> {
+    sum: SumAccumulator<I>,
     count: CountAccumulator,
 }
 
-impl Accumulator for AvgAccumulator {
-    fn add(&mut self, element: Option<EncodedTerm>) {
+impl<I: StrId> Default for AvgAccumulator<I> {
+    fn default() -> Self {
+        Self {
+            sum: SumAccumulator::default(),
+            count: CountAccumulator::default(),
+        }
+    }
+}
+
+impl<I: StrId> Accumulator<I> for AvgAccumulator<I> {
+    fn add(&mut self, element: Option<EncodedTerm<I>>) {
         self.sum.add(element);
         self.count.add(element);
     }
 
-    fn state(&self) -> Option<EncodedTerm> {
+    fn state(&self) -> Option<EncodedTerm<I>> {
         let sum = self.sum.state()?;
         let count = self.count.state()?;
         if count == EncodedTerm::from(0) {
@@ -2742,7 +2829,7 @@ impl Accumulator for AvgAccumulator {
 #[allow(clippy::option_option)]
 struct MinAccumulator<S: ReadableEncodedStore + 'static> {
     eval: SimpleEvaluator<S>,
-    min: Option<Option<EncodedTerm>>,
+    min: Option<Option<EncodedTerm<S::StrId>>>,
 }
 
 impl<S: ReadableEncodedStore + 'static> MinAccumulator<S> {
@@ -2751,8 +2838,12 @@ impl<S: ReadableEncodedStore + 'static> MinAccumulator<S> {
     }
 }
 
-impl<S: ReadableEncodedStore + 'static> Accumulator for MinAccumulator<S> {
-    fn add(&mut self, element: Option<EncodedTerm>) {
+impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Accumulator<S::StrId>
+    for MinAccumulator<S>
+where
+    for<'a> &'a S: StrContainer<StrId = S::StrId>,
+{
+    fn add(&mut self, element: Option<EncodedTerm<S::StrId>>) {
         if let Some(min) = self.min {
             if self.eval.cmp_terms(element, min) == Ordering::Less {
                 self.min = Some(element)
@@ -2762,7 +2853,7 @@ impl<S: ReadableEncodedStore + 'static> Accumulator for MinAccumulator<S> {
         }
     }
 
-    fn state(&self) -> Option<EncodedTerm> {
+    fn state(&self) -> Option<EncodedTerm<S::StrId>> {
         self.min.and_then(|v| v)
     }
 }
@@ -2770,7 +2861,7 @@ impl<S: ReadableEncodedStore + 'static> Accumulator for MinAccumulator<S> {
 #[allow(clippy::option_option)]
 struct MaxAccumulator<S: ReadableEncodedStore + 'static> {
     eval: SimpleEvaluator<S>,
-    max: Option<Option<EncodedTerm>>,
+    max: Option<Option<EncodedTerm<S::StrId>>>,
 }
 
 impl<S: ReadableEncodedStore + 'static> MaxAccumulator<S> {
@@ -2779,8 +2870,12 @@ impl<S: ReadableEncodedStore + 'static> MaxAccumulator<S> {
     }
 }
 
-impl<S: ReadableEncodedStore + 'static> Accumulator for MaxAccumulator<S> {
-    fn add(&mut self, element: Option<EncodedTerm>) {
+impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Accumulator<S::StrId>
+    for MaxAccumulator<S>
+where
+    for<'a> &'a S: StrContainer<StrId = S::StrId>,
+{
+    fn add(&mut self, element: Option<EncodedTerm<S::StrId>>) {
         if let Some(max) = self.max {
             if self.eval.cmp_terms(element, max) == Ordering::Greater {
                 self.max = Some(element)
@@ -2790,24 +2885,30 @@ impl<S: ReadableEncodedStore + 'static> Accumulator for MaxAccumulator<S> {
         }
     }
 
-    fn state(&self) -> Option<EncodedTerm> {
+    fn state(&self) -> Option<EncodedTerm<S::StrId>> {
         self.max.and_then(|v| v)
     }
 }
 
-#[derive(Default, Debug)]
-struct SampleAccumulator {
-    value: Option<EncodedTerm>,
+#[derive(Debug)]
+struct SampleAccumulator<I: StrId> {
+    value: Option<EncodedTerm<I>>,
 }
 
-impl Accumulator for SampleAccumulator {
-    fn add(&mut self, element: Option<EncodedTerm>) {
+impl<I: StrId> Default for SampleAccumulator<I> {
+    fn default() -> Self {
+        Self { value: None }
+    }
+}
+
+impl<I: StrId> Accumulator<I> for SampleAccumulator<I> {
+    fn add(&mut self, element: Option<EncodedTerm<I>>) {
         if element.is_some() {
             self.value = element
         }
     }
 
-    fn state(&self) -> Option<EncodedTerm> {
+    fn state(&self) -> Option<EncodedTerm<I>> {
         self.value
     }
 }
@@ -2816,7 +2917,7 @@ impl Accumulator for SampleAccumulator {
 struct GroupConcatAccumulator<S: ReadableEncodedStore + 'static> {
     eval: SimpleEvaluator<S>,
     concat: Option<String>,
-    language: Option<Option<StrHash>>,
+    language: Option<Option<S::StrId>>,
     separator: Rc<String>,
 }
 
@@ -2831,8 +2932,12 @@ impl<S: ReadableEncodedStore + 'static> GroupConcatAccumulator<S> {
     }
 }
 
-impl<S: ReadableEncodedStore + 'static> Accumulator for GroupConcatAccumulator<S> {
-    fn add(&mut self, element: Option<EncodedTerm>) {
+impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Accumulator<S::StrId>
+    for GroupConcatAccumulator<S>
+where
+    for<'a> &'a S: StrContainer<StrId = S::StrId>,
+{
+    fn add(&mut self, element: Option<EncodedTerm<S::StrId>>) {
         if let Some(concat) = self.concat.as_mut() {
             if let Some(element) = element {
                 if let Some((value, e_language)) = self.eval.to_string_and_language(element) {
@@ -2850,7 +2955,7 @@ impl<S: ReadableEncodedStore + 'static> Accumulator for GroupConcatAccumulator<S
         }
     }
 
-    fn state(&self) -> Option<EncodedTerm> {
+    fn state(&self) -> Option<EncodedTerm<S::StrId>> {
         self.concat.as_ref().and_then(|result| {
             self.eval
                 .build_plain_literal(result, self.language.and_then(|v| v))

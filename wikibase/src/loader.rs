@@ -267,7 +267,7 @@ impl WikibaseLoader {
                 .quads_for_pattern(None, None, None, Some(&graph_name))
                 .collect::<std::result::Result<Vec<_>, _>>()?;
             for q in to_remove {
-                transaction.remove(&q);
+                transaction.remove(&q)?;
             }
 
             transaction.load_graph(

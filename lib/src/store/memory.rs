@@ -4,9 +4,13 @@ use crate::error::UnwrapInfallible;
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResult, SimplePreparedQuery};
-use crate::store::numeric_encoder::*;
+use crate::store::numeric_encoder::{
+    write_term, Decoder, ReadEncoder, StrContainer, StrHash, StrLookup, WithStoreError,
+    WriteEncoder, WRITTEN_TERM_MAX_SIZE,
+};
 use crate::store::{
-    dump_dataset, dump_graph, load_dataset, load_graph, ReadableEncodedStore, WritableEncodedStore,
+    dump_dataset, dump_graph, get_encoded_quad_pattern, load_dataset, load_graph,
+    ReadableEncodedStore, WritableEncodedStore,
 };
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
@@ -55,6 +59,8 @@ type TrivialHashMap<K, V> = HashMap<K, V, BuildHasherDefault<TrivialHasher>>;
 type TrivialHashSet<T> = HashSet<T, BuildHasherDefault<TrivialHasher>>;
 type TripleMap<T> = TrivialHashMap<T, TrivialHashMap<T, TrivialHashSet<T>>>;
 type QuadMap<T> = TrivialHashMap<T, TripleMap<T>>;
+type EncodedTerm = crate::store::numeric_encoder::EncodedTerm<StrHash>;
+type EncodedQuad = crate::store::numeric_encoder::EncodedQuad<StrHash>;
 
 #[derive(Default)]
 struct MemoryStoreIndexes {
@@ -169,22 +175,25 @@ impl MemoryStore {
         object: Option<&Term>,
         graph_name: Option<&GraphName>,
     ) -> impl Iterator<Item = Quad> {
-        let subject = subject.map(|s| s.into());
-        let predicate = predicate.map(|p| p.into());
-        let object = object.map(|o| o.into());
-        let graph_name = graph_name.map(|g| g.into());
+        let quads = if let Some((subject, predicate, object, graph_name)) =
+            get_encoded_quad_pattern(self, subject, predicate, object, graph_name)
+                .unwrap_infallible()
+        {
+            self.encoded_quads_for_pattern_inner(subject, predicate, object, graph_name)
+        } else {
+            Vec::new()
+        };
         let this = self.clone();
-        self.encoded_quads_for_pattern_inner(subject, predicate, object, graph_name)
-            .into_iter()
-            .map(
-                move |quad| this.decode_quad(&quad).unwrap(), // Could not fail
-            )
+        quads.into_iter().map(
+            move |quad| this.decode_quad(&quad).unwrap(), // Could not fail
+        )
     }
 
     /// Checks if this store contains a given quad
     pub fn contains(&self, quad: &Quad) -> bool {
-        let quad = quad.into();
-        self.contains_encoded(&quad)
+        self.get_encoded_quad(quad)
+            .unwrap_infallible()
+            .map_or(false, |q| self.contains_encoded(&q))
     }
 
     /// Returns the number of quads in the store
@@ -238,7 +247,7 @@ impl MemoryStore {
         let mut transaction = MemoryTransaction {
             store: self,
             ops: Vec::new(),
-            strings: Vec::new(),
+            strings: TrivialHashMap::default(),
         };
         f(&mut transaction)?;
         transaction.commit();
@@ -317,16 +326,17 @@ impl MemoryStore {
     /// Adds a quad to this store.
     #[allow(clippy::needless_pass_by_value)]
     pub fn insert(&self, quad: Quad) {
-        let mut store = self;
-        let quad = store.encode_quad(&quad).unwrap_infallible();
-        store.insert_encoded(&quad).unwrap_infallible();
+        let mut indexes = self.indexes_mut();
+        let quad = indexes.encode_quad(&quad).unwrap_infallible();
+        indexes.insert_encoded(&quad).unwrap_infallible();
     }
 
     /// Removes a quad from this store.
     pub fn remove(&self, quad: &Quad) {
-        let mut store = self;
-        let quad = quad.into();
-        store.remove_encoded(&quad).unwrap_infallible();
+        let mut indexes = self.indexes_mut();
+        if let Some(quad) = indexes.get_encoded_quad(quad).unwrap_infallible() {
+            indexes.remove_encoded(&quad).unwrap_infallible();
+        }
     }
 
     /// Returns if the current dataset is [isomorphic](https://www.w3.org/TR/rdf11-concepts/#dfn-dataset-isomorphism) with another one.
@@ -689,15 +699,16 @@ impl MemoryStore {
 
 impl WithStoreError for MemoryStore {
     type Error = Infallible;
-}
-
-impl<'a> WithStoreError for &'a MemoryStore {
-    type Error = Infallible;
+    type StrId = StrHash;
 }
 
 impl StrLookup for MemoryStore {
     fn get_str(&self, id: StrHash) -> Result<Option<String>, Infallible> {
         self.indexes().get_str(id)
+    }
+
+    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, Infallible> {
+        self.indexes().get_str_id(value)
     }
 }
 
@@ -737,12 +748,22 @@ impl<'a> WritableEncodedStore for &'a MemoryStore {
 
 impl WithStoreError for MemoryStoreIndexes {
     type Error = Infallible;
+    type StrId = StrHash;
 }
 
 impl StrLookup for MemoryStoreIndexes {
     fn get_str(&self, id: StrHash) -> Result<Option<String>, Infallible> {
         //TODO: avoid copy by adding a lifetime limit to get_str
         Ok(self.id2str.get(&id).cloned())
+    }
+
+    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, Infallible> {
+        let id = StrHash::new(value);
+        Ok(if self.id2str.contains_key(&id) {
+            Some(id)
+        } else {
+            None
+        })
     }
 }
 
@@ -941,7 +962,7 @@ impl MemoryPreparedQuery {
 pub struct MemoryTransaction<'a> {
     store: &'a MemoryStore,
     ops: Vec<TransactionOp>,
-    strings: Vec<(StrHash, String)>,
+    strings: TrivialHashMap<StrHash, String>,
 }
 
 enum TransactionOp {
@@ -1022,8 +1043,9 @@ impl<'a> MemoryTransaction<'a> {
 
     /// Removes a quad from this store during the transaction.
     pub fn remove(&mut self, quad: &Quad) {
-        let quad = quad.into();
-        self.remove_encoded(&quad).unwrap_infallible();
+        if let Some(quad) = self.get_encoded_quad(quad).unwrap_infallible() {
+            self.remove_encoded(&quad).unwrap_infallible();
+        }
     }
 
     fn commit(self) {
@@ -1038,14 +1060,34 @@ impl<'a> MemoryTransaction<'a> {
     }
 }
 
+impl StrLookup for MemoryTransaction<'_> {
+    fn get_str(&self, id: StrHash) -> Result<Option<String>, Infallible> {
+        if let Some(str) = self.strings.get(&id) {
+            Ok(Some(str.clone()))
+        } else {
+            self.store.get_str(id)
+        }
+    }
+
+    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, Infallible> {
+        let id = StrHash::new(value);
+        if self.strings.contains_key(&id) {
+            Ok(Some(id))
+        } else {
+            self.store.get_str_id(value)
+        }
+    }
+}
+
 impl WithStoreError for MemoryTransaction<'_> {
     type Error = Infallible;
+    type StrId = StrHash;
 }
 
 impl StrContainer for MemoryTransaction<'_> {
     fn insert_str(&mut self, value: &str) -> Result<StrHash, Infallible> {
         let key = StrHash::new(value);
-        self.strings.push((key, value.to_owned()));
+        self.strings.insert(key, value.to_owned());
         Ok(key)
     }
 }

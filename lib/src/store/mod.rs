@@ -34,21 +34,21 @@ use std::io::{BufRead, Write};
 use std::iter::Iterator;
 
 pub(crate) trait ReadableEncodedStore: StrLookup {
-    type QuadsIter: Iterator<Item = Result<EncodedQuad, Self::Error>> + 'static;
+    type QuadsIter: Iterator<Item = Result<EncodedQuad<Self::StrId>, Self::Error>> + 'static;
 
     fn encoded_quads_for_pattern(
         &self,
-        subject: Option<EncodedTerm>,
-        predicate: Option<EncodedTerm>,
-        object: Option<EncodedTerm>,
-        graph_name: Option<EncodedTerm>,
+        subject: Option<EncodedTerm<Self::StrId>>,
+        predicate: Option<EncodedTerm<Self::StrId>>,
+        object: Option<EncodedTerm<Self::StrId>>,
+        graph_name: Option<EncodedTerm<Self::StrId>>,
     ) -> Self::QuadsIter;
 }
 
 pub(crate) trait WritableEncodedStore: StrContainer {
-    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Self::Error>;
+    fn insert_encoded(&mut self, quad: &EncodedQuad<Self::StrId>) -> Result<(), Self::Error>;
 
-    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Self::Error>;
+    fn remove_encoded(&mut self, quad: &EncodedQuad<Self::StrId>) -> Result<(), Self::Error>;
 }
 
 fn load_graph<S: WritableEncodedStore>(
@@ -237,5 +237,63 @@ impl<P: Into<io::Error>> From<StoreOrParseError<Infallible, P>> for io::Error {
             StoreOrParseError::Store(error) => match error {},
             StoreOrParseError::Parse(error) => error.into(),
         }
+    }
+}
+
+type QuadPattern<I> = (
+    Option<EncodedTerm<I>>,
+    Option<EncodedTerm<I>>,
+    Option<EncodedTerm<I>>,
+    Option<EncodedTerm<I>>,
+);
+
+fn get_encoded_quad_pattern<E: ReadEncoder>(
+    encoder: &E,
+    subject: Option<&NamedOrBlankNode>,
+    predicate: Option<&NamedNode>,
+    object: Option<&Term>,
+    graph_name: Option<&GraphName>,
+) -> Result<Option<QuadPattern<E::StrId>>, E::Error> {
+    Ok(Some((
+        if let Some(subject) = transpose(
+            subject
+                .map(|t| encoder.get_encoded_named_or_blank_node(t))
+                .transpose()?,
+        ) {
+            subject
+        } else {
+            return Ok(None);
+        },
+        if let Some(predicate) = transpose(
+            predicate
+                .map(|t| encoder.get_encoded_named_node(t))
+                .transpose()?,
+        ) {
+            predicate
+        } else {
+            return Ok(None);
+        },
+        if let Some(object) = transpose(object.map(|t| encoder.get_encoded_term(t)).transpose()?) {
+            object
+        } else {
+            return Ok(None);
+        },
+        if let Some(graph_name) = transpose(
+            graph_name
+                .map(|t| encoder.get_encoded_graph_name(t))
+                .transpose()?,
+        ) {
+            graph_name
+        } else {
+            return Ok(None);
+        },
+    )))
+}
+
+fn transpose<T>(o: Option<Option<T>>) -> Option<Option<T>> {
+    match o {
+        Some(Some(v)) => Some(Some(v)),
+        Some(None) => None,
+        None => Some(None),
     }
 }

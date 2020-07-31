@@ -4,10 +4,13 @@ use crate::error::invalid_data_error;
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResult, SimplePreparedQuery};
-use crate::store::numeric_encoder::*;
+use crate::store::numeric_encoder::{
+    write_term, Decoder, ReadEncoder, StrContainer, StrHash, StrLookup, TermReader, WithStoreError,
+    WriteEncoder, WRITTEN_TERM_MAX_SIZE,
+};
 use crate::store::{
-    dump_dataset, dump_graph, load_dataset, load_graph, ReadableEncodedStore, StoreOrParseError,
-    WritableEncodedStore,
+    dump_dataset, dump_graph, get_encoded_quad_pattern, load_dataset, load_graph,
+    ReadableEncodedStore, StoreOrParseError, WritableEncodedStore,
 };
 use sled::transaction::{
     ConflictableTransactionError, TransactionError, Transactional, TransactionalTree,
@@ -17,6 +20,7 @@ use sled::{Config, Iter, Tree};
 use std::convert::TryInto;
 use std::error::Error;
 use std::io::{BufRead, Cursor, Write};
+use std::iter::{once, Once};
 use std::path::Path;
 use std::{fmt, io, str};
 
@@ -67,6 +71,8 @@ const OSPG_PREFIX: u8 = 3;
 const GSPO_PREFIX: u8 = 4;
 const GPOS_PREFIX: u8 = 5;
 const GOSP_PREFIX: u8 = 6;
+type EncodedTerm = crate::store::numeric_encoder::EncodedTerm<StrHash>;
+type EncodedQuad = crate::store::numeric_encoder::EncodedQuad<StrHash>;
 
 //TODO: indexes for the default graph and indexes for the named graphs (no more Optional and space saving)
 
@@ -125,19 +131,23 @@ impl SledStore {
         object: Option<&Term>,
         graph_name: Option<&GraphName>,
     ) -> impl Iterator<Item = Result<Quad, io::Error>> {
-        let subject = subject.map(|s| s.into());
-        let predicate = predicate.map(|p| p.into());
-        let object = object.map(|o| o.into());
-        let graph_name = graph_name.map(|g| g.into());
-        let this = self.clone();
-        self.encoded_quads_for_pattern(subject, predicate, object, graph_name)
-            .map(move |quad| Ok(this.decode_quad(&quad?)?))
+        match get_encoded_quad_pattern(self, subject, predicate, object, graph_name) {
+            Ok(Some((subject, predicate, object, graph_name))) => QuadsIter::Quads {
+                iter: self.encoded_quads_for_pattern(subject, predicate, object, graph_name),
+                store: self.clone(),
+            },
+            Ok(None) => QuadsIter::Empty,
+            Err(error) => QuadsIter::Error(once(error)),
+        }
     }
 
     /// Checks if this store contains a given quad
     pub fn contains(&self, quad: &Quad) -> Result<bool, io::Error> {
-        let quad = quad.into();
-        self.contains_encoded(&quad)
+        if let Some(quad) = self.get_encoded_quad(quad)? {
+            self.contains_encoded(&quad)
+        } else {
+            Ok(false)
+        }
     }
 
     /// Returns the number of quads in the store
@@ -237,9 +247,12 @@ impl SledStore {
 
     /// Removes a quad from this store.
     pub fn remove(&self, quad: &Quad) -> Result<(), io::Error> {
-        let mut this = self;
-        let quad = quad.into();
-        this.remove_encoded(&quad)
+        if let Some(quad) = self.get_encoded_quad(quad)? {
+            let mut this = self;
+            this.remove_encoded(&quad)
+        } else {
+            Ok(())
+        }
     }
 
     /// Dumps a store graph into a file.
@@ -408,6 +421,7 @@ impl fmt::Display for SledStore {
 
 impl WithStoreError for SledStore {
     type Error = io::Error;
+    type StrId = StrHash;
 }
 
 impl StrLookup for SledStore {
@@ -417,6 +431,15 @@ impl StrLookup for SledStore {
             .map(|v| String::from_utf8(v.to_vec()))
             .transpose()
             .map_err(invalid_data_error)
+    }
+
+    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, io::Error> {
+        let id = StrHash::new(value);
+        Ok(if self.id2str.contains_key(&id.to_be_bytes())? {
+            Some(id)
+        } else {
+            None
+        })
     }
 }
 
@@ -489,10 +512,6 @@ impl ReadableEncodedStore for SledStore {
             },
         }
     }
-}
-
-impl<'a> WithStoreError for &'a SledStore {
-    type Error = io::Error;
 }
 
 impl<'a> StrContainer for &'a SledStore {
@@ -625,13 +644,36 @@ impl SledTransaction<'_> {
     /// Removes a quad from this store during the transaction.
     pub fn remove(&self, quad: &Quad) -> Result<(), SledUnabortableTransactionError> {
         let mut this = self;
-        let quad = quad.into();
-        this.remove_encoded(&quad)
+        if let Some(quad) = this.get_encoded_quad(quad)? {
+            this.remove_encoded(&quad)
+        } else {
+            Ok(())
+        }
     }
 }
 
 impl<'a> WithStoreError for &'a SledTransaction<'a> {
     type Error = SledUnabortableTransactionError;
+    type StrId = StrHash;
+}
+
+impl<'a> StrLookup for &'a SledTransaction<'a> {
+    fn get_str(&self, id: StrHash) -> Result<Option<String>, SledUnabortableTransactionError> {
+        self.id2str
+            .get(id.to_be_bytes())?
+            .map(|v| String::from_utf8(v.to_vec()))
+            .transpose()
+            .map_err(|e| SledUnabortableTransactionError::Storage(invalid_data_error(e)))
+    }
+
+    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, SledUnabortableTransactionError> {
+        let id = StrHash::new(value);
+        Ok(if self.id2str.get(&id.to_be_bytes())?.is_some() {
+            Some(id)
+        } else {
+            None
+        })
+    }
 }
 
 impl<'a> StrContainer for &'a SledTransaction<'a> {
@@ -981,6 +1023,30 @@ fn decode_quad(encoded: &[u8]) -> Result<EncodedQuad, io::Error> {
             "Invalid quad type identifier: {}",
             encoded[0]
         ))),
+    }
+}
+
+enum QuadsIter {
+    Quads {
+        iter: DecodingQuadIterator,
+        store: SledStore,
+    },
+    Error(Once<io::Error>),
+    Empty,
+}
+
+impl Iterator for QuadsIter {
+    type Item = Result<Quad, io::Error>;
+
+    fn next(&mut self) -> Option<Result<Quad, io::Error>> {
+        match self {
+            Self::Quads { iter, store } => Some(match iter.next()? {
+                Ok(quad) => store.decode_quad(&quad).map_err(|e| e.into()),
+                Err(error) => Err(error),
+            }),
+            Self::Error(iter) => iter.next().map(Err),
+            Self::Empty => None,
+        }
     }
 }
 
