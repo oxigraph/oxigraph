@@ -19,6 +19,9 @@ pub enum EvaluationError {
     Io(io::Error),
     /// An error returned during the query evaluation itself
     Query(QueryError),
+    /// A conflict during a transaction
+    #[doc(hidden)]
+    Conflict,
 }
 
 #[derive(Debug)]
@@ -38,6 +41,7 @@ impl fmt::Display for EvaluationError {
             Self::Parsing(error) => error.fmt(f),
             Self::Io(error) => error.fmt(f),
             Self::Query(error) => error.fmt(f),
+            Self::Conflict => write!(f, "Transaction conflict"),
         }
     }
 }
@@ -57,6 +61,7 @@ impl error::Error for EvaluationError {
             Self::Parsing(e) => Some(e),
             Self::Io(e) => Some(e),
             Self::Query(e) => Some(e),
+            _ => None,
         }
     }
 }
