@@ -25,7 +25,7 @@ use oxigraph::model::{GraphName, NamedNode};
 use oxigraph::sparql::{Query, QueryOptions, QueryResult, QueryResultFormat, ServiceHandler};
 use oxigraph::RocksDbStore;
 use std::fmt;
-use std::io::BufReader;
+use std::io::{BufReader, Cursor};
 use std::str::FromStr;
 use url::form_urlencoded;
 
@@ -335,8 +335,14 @@ impl ServiceHandler for HttpService {
         request.append_header(headers::ACCEPT, "application/sparql-results+xml");
         request.set_body(query.to_string());
 
-        let response = block_on(async { self.client.send(request).await })?;
-        let syntax = if let Some(content_type) = response.content_type() {
+        //TODO: response streaming
+        let response: Result<(Option<Mime>, Vec<u8>)> = block_on(async {
+            let mut response = self.client.send(request).await?;
+            Ok((response.content_type(), response.body_bytes().await?))
+        });
+        let (content_type, data) = response?;
+
+        let syntax = if let Some(content_type) = content_type {
             QueryResultFormat::from_media_type(content_type.essence()).ok_or_else(|| {
                 format_err!(
                     "Unexpected federated query result type from {}: {}",
@@ -347,10 +353,7 @@ impl ServiceHandler for HttpService {
         } else {
             QueryResultFormat::Xml
         };
-        Ok(
-            QueryResult::read(BufReader::new(SyncAsyncReader::from(response)), syntax)
-                .map_err(Error::from)?,
-        )
+        Ok(QueryResult::read(Cursor::new(data), syntax).map_err(Error::from)?)
     }
 }
 
