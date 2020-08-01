@@ -1,15 +1,15 @@
 use crate::sparql::EvaluationError;
 use crate::store::numeric_encoder::{
-    EncodedQuad, EncodedTerm, MemoryStrStore, StrContainer, StrHash, StrId, StrLookup,
-    WithStoreError,
+    EncodedQuad, EncodedTerm, StrContainer, StrId, StrLookup, WithStoreError,
 };
 use crate::store::ReadableEncodedStore;
+use lasso::{Rodeo, Spur};
 use std::cell::RefCell;
 use std::iter::empty;
 
 pub(crate) struct DatasetView<S: ReadableEncodedStore> {
     store: S,
-    extra: RefCell<MemoryStrStore>,
+    extra: RefCell<Rodeo>,
     default_graph_as_union: bool,
 }
 
@@ -17,7 +17,7 @@ impl<S: ReadableEncodedStore> DatasetView<S> {
     pub fn new(store: S, default_graph_as_union: bool) -> Self {
         Self {
             store,
-            extra: RefCell::new(MemoryStrStore::default()),
+            extra: RefCell::new(Rodeo::default()),
             default_graph_as_union,
         }
     }
@@ -32,12 +32,14 @@ impl<S: ReadableEncodedStore> StrLookup for DatasetView<S> {
     fn get_str(&self, id: DatasetStrId<S::StrId>) -> Result<Option<String>, EvaluationError> {
         match id {
             DatasetStrId::Store(id) => self.store.get_str(id).map_err(|e| e.into()),
-            DatasetStrId::Temporary(id) => Ok(self.extra.borrow().get_str(id)?),
+            DatasetStrId::Temporary(id) => {
+                Ok(self.extra.borrow().try_resolve(&id).map(|e| e.to_owned()))
+            }
         }
     }
 
     fn get_str_id(&self, value: &str) -> Result<Option<DatasetStrId<S::StrId>>, EvaluationError> {
-        if let Some(id) = self.extra.borrow().get_str_id(value)? {
+        if let Some(id) = self.extra.borrow().get(value) {
             Ok(Some(DatasetStrId::Temporary(id)))
         } else {
             Ok(self
@@ -158,7 +160,7 @@ impl<'a, S: ReadableEncodedStore> StrContainer for &'a DatasetView<S> {
             Ok(DatasetStrId::Store(id))
         } else {
             Ok(DatasetStrId::Temporary(
-                self.extra.borrow_mut().insert_str(value)?,
+                self.extra.borrow_mut().get_or_intern(value),
             ))
         }
     }
@@ -167,7 +169,7 @@ impl<'a, S: ReadableEncodedStore> StrContainer for &'a DatasetView<S> {
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
 pub enum DatasetStrId<I: StrId> {
     Store(I),
-    Temporary(StrHash),
+    Temporary(Spur),
 }
 
 impl<I: StrId> StrId for DatasetStrId<I> {}
