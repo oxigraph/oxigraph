@@ -50,7 +50,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
         store.add((foo, bar, baz, DefaultGraph()))
         store.add((foo, bar, baz, graph))
         self.assertEqual(
-            list(store), [(foo, bar, baz, DefaultGraph()), (foo, bar, baz, graph)]
+            set(store), {(foo, bar, baz, DefaultGraph()), (foo, bar, baz, graph)}
         )
 
     def test_match(self):
@@ -58,19 +58,19 @@ class TestAbstractStore(unittest.TestCase, ABC):
         store.add((foo, bar, baz, DefaultGraph()))
         store.add((foo, bar, baz, graph))
         self.assertEqual(
-            list(store.match(None, None, None)),
-            [(foo, bar, baz, DefaultGraph()), (foo, bar, baz, graph)],
+            set(store.match(None, None, None)),
+            {(foo, bar, baz, DefaultGraph()), (foo, bar, baz, graph)},
         )
         self.assertEqual(
-            list(store.match(foo, None, None)),
-            [(foo, bar, baz, DefaultGraph()), (foo, bar, baz, graph)],
+            set(store.match(foo, None, None)),
+            {(foo, bar, baz, DefaultGraph()), (foo, bar, baz, graph)},
         )
         self.assertEqual(
-            list(store.match(None, None, None, graph)), [(foo, bar, baz, graph)],
+            set(store.match(None, None, None, graph)), {(foo, bar, baz, graph)},
         )
         self.assertEqual(
-            list(store.match(foo, None, None, DefaultGraph())),
-            [(foo, bar, baz, DefaultGraph())],
+            set(store.match(foo, None, None, DefaultGraph())),
+            {(foo, bar, baz, DefaultGraph())},
         )
 
     def test_ask_query(self):
@@ -83,8 +83,8 @@ class TestAbstractStore(unittest.TestCase, ABC):
         store = self.store()
         store.add((foo, bar, baz))
         self.assertEqual(
-            list(store.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")),
-            [(foo, bar, baz)],
+            set(store.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")),
+            {(foo, bar, baz)},
         )
 
     def test_select_query(self):
@@ -101,7 +101,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
             "<http://foo> <http://bar> <http://baz> .",
             mime_type="application/n-triples",
         )
-        self.assertEqual(list(store), [(foo, bar, baz, DefaultGraph())])
+        self.assertEqual(set(store), {(foo, bar, baz, DefaultGraph())})
 
     def test_load_ntriples_to_named_graph(self):
         store = self.store()
@@ -110,7 +110,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
             mime_type="application/n-triples",
             to_graph=graph,
         )
-        self.assertEqual(list(store), [(foo, bar, baz, graph)])
+        self.assertEqual(set(store), {(foo, bar, baz, graph)})
 
     def test_load_turtle_with_base_iri(self):
         store = self.store()
@@ -119,7 +119,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
             mime_type="text/turtle",
             base_iri="http://baz",
         )
-        self.assertEqual(list(store), [(foo, bar, baz, DefaultGraph())])
+        self.assertEqual(set(store), {(foo, bar, baz, DefaultGraph())})
 
     def test_load_nquads(self):
         store = self.store()
@@ -127,7 +127,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
             "<http://foo> <http://bar> <http://baz> <http://graph>.",
             mime_type="application/n-quads",
         )
-        self.assertEqual(list(store), [(foo, bar, baz, graph)])
+        self.assertEqual(set(store), {(foo, bar, baz, graph)})
 
     def test_load_trig_with_base_iri(self):
         store = self.store()
@@ -136,7 +136,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
             mime_type="application/trig",
             base_iri="http://baz",
         )
-        self.assertEqual(list(store), [(foo, bar, baz, graph)])
+        self.assertEqual(set(store), {(foo, bar, baz, graph)})
 
 
 class TestMemoryStore(TestAbstractStore):
