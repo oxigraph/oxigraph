@@ -45,13 +45,13 @@ pub(crate) trait ReadableEncodedStore: StrLookup {
     ) -> Self::QuadsIter;
 }
 
-pub(crate) trait WritableEncodedStore: StrContainer {
+pub(crate) trait WritableEncodedStore: WithStoreError {
     fn insert_encoded(&mut self, quad: &EncodedQuad<Self::StrId>) -> Result<(), Self::Error>;
 
     fn remove_encoded(&mut self, quad: &EncodedQuad<Self::StrId>) -> Result<(), Self::Error>;
 }
 
-fn load_graph<S: WritableEncodedStore>(
+fn load_graph<S: WritableEncodedStore + StrContainer>(
     store: &mut S,
     reader: impl BufRead,
     format: GraphFormat,
@@ -72,7 +72,7 @@ fn load_graph<S: WritableEncodedStore>(
     }
 }
 
-fn load_from_triple_parser<S: WritableEncodedStore, P: TriplesParser>(
+fn load_from_triple_parser<S: WritableEncodedStore + StrContainer, P: TriplesParser>(
     store: &mut S,
     parser: Result<P, P::Error>,
     to_graph_name: &GraphName,
@@ -137,7 +137,7 @@ fn map_xml_err(e: RdfXmlError) -> io::Error {
     io::Error::new(io::ErrorKind::Other, e) // TODO: drop
 }
 
-fn load_dataset<S: WritableEncodedStore>(
+fn load_dataset<S: WritableEncodedStore + StrContainer>(
     store: &mut S,
     reader: impl BufRead,
     format: DatasetFormat,
@@ -150,7 +150,7 @@ fn load_dataset<S: WritableEncodedStore>(
     }
 }
 
-fn load_from_quad_parser<S: WritableEncodedStore, P: QuadsParser>(
+fn load_from_quad_parser<S: WritableEncodedStore + StrContainer, P: QuadsParser>(
     store: &mut S,
     parser: Result<P, P::Error>,
 ) -> Result<(), StoreOrParseError<S::Error, io::Error>>

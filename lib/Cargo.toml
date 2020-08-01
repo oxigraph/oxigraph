@@ -35,7 +35,7 @@ hex = "0.4"
 nom = "5"
 peg = "0.6"
 siphasher = "0.3"
-lasso = "0.3"
+lasso = {version="0.3", features=["multi-threaded"]}
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"

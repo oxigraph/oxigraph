@@ -5,20 +5,19 @@ use crate::io::{DatasetFormat, DatasetParser, GraphFormat, GraphParser};
 use crate::model::*;
 use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::{
-    write_term, Decoder, ReadEncoder, StrContainer, StrHash, StrLookup, WithStoreError,
-    WriteEncoder, WRITTEN_TERM_MAX_SIZE,
+    Decoder, ReadEncoder, StrContainer, StrId, StrLookup, WithStoreError, WriteEncoder,
 };
 use crate::store::{
     dump_dataset, dump_graph, get_encoded_quad_pattern, load_dataset, load_graph,
     ReadableEncodedStore, WritableEncodedStore,
 };
+use lasso::{LargeSpur, ThreadedRodeo};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::convert::{Infallible, TryInto};
-use std::hash::{BuildHasherDefault, Hash, Hasher};
+use std::hash::{Hash, Hasher};
 use std::io::{BufRead, Write};
 use std::iter::FromIterator;
-use std::mem::size_of;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::vec::IntoIter;
 use std::{fmt, io};
@@ -53,14 +52,13 @@ use std::{fmt, io};
 #[derive(Clone)]
 pub struct MemoryStore {
     indexes: Arc<RwLock<MemoryStoreIndexes>>,
+    strings: Arc<ThreadedRodeo<LargeSpur>>,
 }
 
-type TrivialHashMap<K, V> = HashMap<K, V, BuildHasherDefault<TrivialHasher>>;
-type TrivialHashSet<T> = HashSet<T, BuildHasherDefault<TrivialHasher>>;
-type TripleMap<T> = TrivialHashMap<T, TrivialHashMap<T, TrivialHashSet<T>>>;
-type QuadMap<T> = TrivialHashMap<T, TripleMap<T>>;
-type EncodedTerm = crate::store::numeric_encoder::EncodedTerm<StrHash>;
-type EncodedQuad = crate::store::numeric_encoder::EncodedQuad<StrHash>;
+type TripleMap<T> = HashMap<T, HashMap<T, HashSet<T>>>;
+type QuadMap<T> = HashMap<T, TripleMap<T>>;
+type EncodedTerm = crate::store::numeric_encoder::EncodedTerm<LargeSpur>;
+type EncodedQuad = crate::store::numeric_encoder::EncodedQuad<LargeSpur>;
 
 #[derive(Default)]
 struct MemoryStoreIndexes {
@@ -70,7 +68,6 @@ struct MemoryStoreIndexes {
     gspo: QuadMap<EncodedTerm>,
     gpos: QuadMap<EncodedTerm>,
     gosp: QuadMap<EncodedTerm>,
-    id2str: HashMap<StrHash, String>,
 }
 
 impl Default for MemoryStore {
@@ -84,6 +81,7 @@ impl MemoryStore {
     pub fn new() -> Self {
         Self {
             indexes: Arc::new(RwLock::default()),
+            strings: Arc::new(ThreadedRodeo::new()),
         }
     }
 
@@ -247,15 +245,16 @@ impl MemoryStore {
         let mut transaction = MemoryTransaction { ops: Vec::new() };
         f(&mut transaction)?;
 
+        let mut this = self;
         let mut indexes = self.indexes_mut();
         for op in transaction.ops {
             match op {
                 TransactionOp::Insert(quad) => {
-                    let quad = indexes.encode_quad(&quad).unwrap_infallible();
+                    let quad = this.encode_quad(&quad).unwrap_infallible();
                     indexes.insert_encoded(&quad).unwrap_infallible()
                 }
                 TransactionOp::Delete(quad) => {
-                    let quad = indexes.encode_quad(&quad).unwrap_infallible();
+                    let quad = this.encode_quad(&quad).unwrap_infallible();
                     indexes.remove_encoded(&quad).unwrap_infallible()
                 }
             }
@@ -335,16 +334,16 @@ impl MemoryStore {
     /// Adds a quad to this store.
     #[allow(clippy::needless_pass_by_value)]
     pub fn insert(&self, quad: Quad) {
-        let mut indexes = self.indexes_mut();
-        let quad = indexes.encode_quad(&quad).unwrap_infallible();
-        indexes.insert_encoded(&quad).unwrap_infallible();
+        let mut this = self;
+        let quad = this.encode_quad(&quad).unwrap_infallible();
+        this.insert_encoded(&quad).unwrap_infallible();
     }
 
     /// Removes a quad from this store.
     pub fn remove(&self, quad: &Quad) {
-        let mut indexes = self.indexes_mut();
-        if let Some(quad) = indexes.get_encoded_quad(quad).unwrap_infallible() {
-            indexes.remove_encoded(&quad).unwrap_infallible();
+        if let Some(quad) = self.get_encoded_quad(quad).unwrap_infallible() {
+            let mut this = self;
+            this.remove_encoded(&quad).unwrap_infallible();
         }
     }
 
@@ -708,22 +707,23 @@ impl MemoryStore {
 
 impl WithStoreError for MemoryStore {
     type Error = Infallible;
-    type StrId = StrHash;
+    type StrId = LargeSpur;
 }
 
 impl StrLookup for MemoryStore {
-    fn get_str(&self, id: StrHash) -> Result<Option<String>, Infallible> {
-        self.indexes().get_str(id)
+    fn get_str(&self, id: LargeSpur) -> Result<Option<String>, Infallible> {
+        //TODO: avoid copy by adding a lifetime limit to get_str
+        Ok(self.strings.try_resolve(&id).map(|e| e.to_owned()))
     }
 
-    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, Infallible> {
-        self.indexes().get_str_id(value)
+    fn get_str_id(&self, value: &str) -> Result<Option<LargeSpur>, Infallible> {
+        Ok(self.strings.get(value))
     }
 }
 
 impl<'a> StrContainer for &'a MemoryStore {
-    fn insert_str(&mut self, value: &str) -> Result<StrHash, Infallible> {
-        self.indexes_mut().insert_str(value)
+    fn insert_str(&mut self, value: &str) -> Result<LargeSpur, Infallible> {
+        Ok(self.strings.get_or_intern(value))
     }
 }
 
@@ -757,33 +757,8 @@ impl<'a> WritableEncodedStore for &'a MemoryStore {
 
 impl WithStoreError for MemoryStoreIndexes {
     type Error = Infallible;
-    type StrId = StrHash;
+    type StrId = LargeSpur;
 }
-
-impl StrLookup for MemoryStoreIndexes {
-    fn get_str(&self, id: StrHash) -> Result<Option<String>, Infallible> {
-        //TODO: avoid copy by adding a lifetime limit to get_str
-        Ok(self.id2str.get(&id).cloned())
-    }
-
-    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, Infallible> {
-        let id = StrHash::new(value);
-        Ok(if self.id2str.contains_key(&id) {
-            Some(id)
-        } else {
-            None
-        })
-    }
-}
-
-impl StrContainer for MemoryStoreIndexes {
-    fn insert_str(&mut self, value: &str) -> Result<StrHash, Infallible> {
-        let key = StrHash::new(value);
-        self.id2str.entry(key).or_insert_with(|| value.to_owned());
-        Ok(key)
-    }
-}
-
 impl WritableEncodedStore for MemoryStoreIndexes {
     fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Infallible> {
         insert_into_quad_map(
@@ -913,14 +888,12 @@ fn remove_from_quad_map<T: Eq + Hash>(map1: &mut QuadMap<T>, e1: &T, e2: &T, e3:
     }
 }
 
-fn option_set_flatten<'a, T: Clone>(
-    i: Option<&'a TrivialHashSet<T>>,
-) -> impl Iterator<Item = T> + 'a {
+fn option_set_flatten<'a, T: Clone>(i: Option<&'a HashSet<T>>) -> impl Iterator<Item = T> + 'a {
     i.into_iter().flat_map(|s| s.iter().cloned())
 }
 
 fn option_pair_map_flatten<'a, T: Copy>(
-    i: Option<&'a TrivialHashMap<T, TrivialHashSet<T>>>,
+    i: Option<&'a HashMap<T, HashSet<T>>>,
 ) -> impl Iterator<Item = (T, T)> + 'a {
     i.into_iter().flat_map(|kv| {
         kv.iter().flat_map(|(k, vs)| {
@@ -1127,9 +1100,11 @@ impl Iterator for EncodedQuadsIter {
     }
 }
 
+impl StrId for LargeSpur {}
+
 // Isomorphism implementation
 
-fn iso_canonicalize(g: &MemoryStore) -> Vec<Vec<u8>> {
+fn iso_canonicalize(g: &MemoryStore) -> Vec<String> {
     let bnodes = bnodes(g);
     let (hash, partition) = hash_bnodes(g, bnodes.into_iter().map(|bnode| (bnode, 0)).collect());
     distinguish(g, &hash, &partition)
@@ -1137,9 +1112,9 @@ fn iso_canonicalize(g: &MemoryStore) -> Vec<Vec<u8>> {
 
 fn distinguish(
     g: &MemoryStore,
-    hash: &TrivialHashMap<EncodedTerm, u64>,
+    hash: &HashMap<EncodedTerm, u64>,
     partition: &[(u64, Vec<EncodedTerm>)],
-) -> Vec<Vec<u8>> {
+) -> Vec<String> {
     let b_prime = partition
         .iter()
         .find_map(|(_, b)| if b.len() > 1 { Some(b) } else { None });
@@ -1171,41 +1146,36 @@ fn distinguish(
 
 fn hash_bnodes(
     g: &MemoryStore,
-    mut hashes: TrivialHashMap<EncodedTerm, u64>,
-) -> (
-    TrivialHashMap<EncodedTerm, u64>,
-    Vec<(u64, Vec<EncodedTerm>)>,
-) {
+    mut hashes: HashMap<EncodedTerm, u64>,
+) -> (HashMap<EncodedTerm, u64>, Vec<(u64, Vec<EncodedTerm>)>) {
     let mut to_hash = Vec::new();
-    let mut partition: TrivialHashMap<u64, Vec<EncodedTerm>> =
-        TrivialHashMap::with_hasher(BuildHasherDefault::<TrivialHasher>::default());
+    let mut partition: HashMap<u64, Vec<EncodedTerm>> = HashMap::new();
     let mut partition_len = 0;
     loop {
         //TODO: improve termination
-        let mut new_hashes =
-            TrivialHashMap::with_hasher(BuildHasherDefault::<TrivialHasher>::default());
+        let mut new_hashes = HashMap::new();
         for (bnode, old_hash) in &hashes {
             for q in g.encoded_quads_for_subject(*bnode) {
                 to_hash.push((
-                    hash_term(q.predicate, &hashes),
-                    hash_term(q.object, &hashes),
-                    hash_term(q.graph_name, &hashes),
+                    hash_term(q.predicate, &hashes, g),
+                    hash_term(q.object, &hashes, g),
+                    hash_term(q.graph_name, &hashes, g),
                     0,
                 ));
             }
             for q in g.encoded_quads_for_object(*bnode) {
                 to_hash.push((
-                    hash_term(q.subject, &hashes),
-                    hash_term(q.predicate, &hashes),
-                    hash_term(q.graph_name, &hashes),
+                    hash_term(q.subject, &hashes, g),
+                    hash_term(q.predicate, &hashes, g),
+                    hash_term(q.graph_name, &hashes, g),
                     1,
                 ));
             }
             for q in g.encoded_quads_for_graph(*bnode) {
                 to_hash.push((
-                    hash_term(q.subject, &hashes),
-                    hash_term(q.predicate, &hashes),
-                    hash_term(q.object, &hashes),
+                    hash_term(q.subject, &hashes, g),
+                    hash_term(q.predicate, &hashes, g),
+                    hash_term(q.object, &hashes, g),
                     2,
                 ));
             }
@@ -1226,8 +1196,8 @@ fn hash_bnodes(
     }
 }
 
-fn bnodes(g: &MemoryStore) -> TrivialHashSet<EncodedTerm> {
-    let mut bnodes = TrivialHashSet::with_hasher(BuildHasherDefault::<TrivialHasher>::default());
+fn bnodes(g: &MemoryStore) -> HashSet<EncodedTerm> {
+    let mut bnodes = HashSet::new();
     for q in g.encoded_quads() {
         if q.subject.is_blank_node() {
             bnodes.insert(q.subject);
@@ -1242,25 +1212,27 @@ fn bnodes(g: &MemoryStore) -> TrivialHashSet<EncodedTerm> {
     bnodes
 }
 
-fn label(g: &MemoryStore, hashes: &TrivialHashMap<EncodedTerm, u64>) -> Vec<Vec<u8>> {
+fn label(g: &MemoryStore, hashes: &HashMap<EncodedTerm, u64>) -> Vec<String> {
     //TODO: better representation?
     let mut data: Vec<_> = g
         .encoded_quads()
         .into_iter()
         .map(|q| {
-            let mut buffer = Vec::with_capacity(WRITTEN_TERM_MAX_SIZE * 4);
-            write_term(&mut buffer, map_term(q.subject, hashes));
-            write_term(&mut buffer, map_term(q.predicate, hashes));
-            write_term(&mut buffer, map_term(q.object, hashes));
-            write_term(&mut buffer, map_term(q.graph_name, hashes));
-            buffer
+            g.decode_quad(&EncodedQuad {
+                subject: map_term(q.subject, hashes),
+                predicate: map_term(q.predicate, hashes),
+                object: map_term(q.object, hashes),
+                graph_name: map_term(q.graph_name, hashes),
+            })
+            .unwrap()
+            .to_string()
         })
         .collect();
     data.sort();
     data
 }
 
-fn map_term(term: EncodedTerm, bnodes_hash: &TrivialHashMap<EncodedTerm, u64>) -> EncodedTerm {
+fn map_term(term: EncodedTerm, bnodes_hash: &HashMap<EncodedTerm, u64>) -> EncodedTerm {
     if term.is_blank_node() {
         EncodedTerm::InlineBlankNode {
             id: (*bnodes_hash.get(&term).unwrap()).into(),
@@ -1270,11 +1242,13 @@ fn map_term(term: EncodedTerm, bnodes_hash: &TrivialHashMap<EncodedTerm, u64>) -
     }
 }
 
-fn hash_term(term: EncodedTerm, bnodes_hash: &TrivialHashMap<EncodedTerm, u64>) -> u64 {
+fn hash_term(term: EncodedTerm, bnodes_hash: &HashMap<EncodedTerm, u64>, g: &MemoryStore) -> u64 {
     if term.is_blank_node() {
         *bnodes_hash.get(&term).unwrap()
-    } else {
+    } else if let Ok(term) = g.decode_term(term) {
         hash_tuple(term)
+    } else {
+        0
     }
 }
 
@@ -1282,78 +1256,4 @@ fn hash_tuple(v: impl Hash) -> u64 {
     let mut hasher = DefaultHasher::new();
     v.hash(&mut hasher);
     hasher.finish()
-}
-
-#[derive(Default)]
-struct TrivialHasher {
-    value: u64,
-}
-
-#[allow(
-    arithmetic_overflow,
-    clippy::cast_sign_loss,
-    clippy::cast_possible_truncation
-)]
-impl Hasher for TrivialHasher {
-    fn finish(&self) -> u64 {
-        self.value
-    }
-
-    fn write(&mut self, bytes: &[u8]) {
-        for chunk in bytes.chunks(size_of::<u64>()) {
-            let mut val = [0; size_of::<u64>()];
-            val[0..chunk.len()].copy_from_slice(chunk);
-            self.write_u64(u64::from_le_bytes(val));
-        }
-    }
-
-    fn write_u8(&mut self, i: u8) {
-        self.write_u64(i.into());
-    }
-
-    fn write_u16(&mut self, i: u16) {
-        self.write_u64(i.into());
-    }
-
-    fn write_u32(&mut self, i: u32) {
-        self.write_u64(i.into());
-    }
-
-    fn write_u64(&mut self, i: u64) {
-        self.value ^= i;
-    }
-
-    fn write_u128(&mut self, i: u128) {
-        self.write_u64(i as u64);
-        self.write_u64((i >> 64) as u64);
-    }
-
-    fn write_usize(&mut self, i: usize) {
-        self.write_u64(i as u64);
-        self.write_u64((i >> 64) as u64);
-    }
-
-    fn write_i8(&mut self, i: i8) {
-        self.write_u8(i as u8);
-    }
-
-    fn write_i16(&mut self, i: i16) {
-        self.write_u16(i as u16);
-    }
-
-    fn write_i32(&mut self, i: i32) {
-        self.write_u32(i as u32);
-    }
-
-    fn write_i64(&mut self, i: i64) {
-        self.write_u64(i as u64);
-    }
-
-    fn write_i128(&mut self, i: i128) {
-        self.write_u128(i as u128);
-    }
-
-    fn write_isize(&mut self, i: isize) {
-        self.write_usize(i as usize);
-    }
 }
