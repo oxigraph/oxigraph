@@ -341,3 +341,16 @@ impl<'a> From<&'a Literal> for rio::Literal<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_simple_literal_equality() {
+        assert_eq!(
+            Literal::new_simple_literal("foo"),
+            Literal::new_typed_literal("foo", xsd::STRING.clone())
+        )
+    }
+}
