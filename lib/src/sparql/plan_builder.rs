@@ -992,17 +992,20 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
 
     fn build_named_node(
         &mut self,
-        term: &NamedNode,
+        node: &NamedNode,
     ) -> Result<EncodedTerm<E::StrId>, EvaluationError> {
-        Ok(self.encoder.encode_named_node(term)?)
+        Ok(self.encoder.encode_named_node(node.as_ref())?)
     }
 
-    fn build_literal(&mut self, term: &Literal) -> Result<EncodedTerm<E::StrId>, EvaluationError> {
-        Ok(self.encoder.encode_literal(term)?)
+    fn build_literal(
+        &mut self,
+        literal: &Literal,
+    ) -> Result<EncodedTerm<E::StrId>, EvaluationError> {
+        Ok(self.encoder.encode_literal(literal.as_ref())?)
     }
 
     fn build_term(&mut self, term: &Term) -> Result<EncodedTerm<E::StrId>, EvaluationError> {
-        Ok(self.encoder.encode_term(term)?)
+        Ok(self.encoder.encode_term(term.as_ref())?)
     }
 }
 

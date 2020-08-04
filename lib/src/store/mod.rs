@@ -17,16 +17,12 @@ pub use crate::store::rocksdb::RocksDbStore;
 pub use crate::store::sled::SledStore;
 
 use crate::error::{invalid_data_error, invalid_input_error};
-use crate::io::{DatasetFormat, GraphFormat};
+use crate::io::{DatasetFormat, DatasetSerializer, GraphFormat, GraphSerializer};
 use crate::model::*;
 use crate::store::numeric_encoder::*;
-use rio_api::formatter::{QuadsFormatter, TriplesFormatter};
 use rio_api::parser::{QuadsParser, TriplesParser};
-use rio_turtle::{
-    NQuadsFormatter, NQuadsParser, NTriplesFormatter, NTriplesParser, TriGFormatter, TriGParser,
-    TurtleError, TurtleFormatter, TurtleParser,
-};
-use rio_xml::{RdfXmlError, RdfXmlFormatter, RdfXmlParser};
+use rio_turtle::{NQuadsParser, NTriplesParser, TriGParser, TurtleError, TurtleParser};
+use rio_xml::{RdfXmlError, RdfXmlParser};
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::io;
@@ -55,7 +51,7 @@ fn load_graph<S: WritableEncodedStore + StrContainer>(
     store: &mut S,
     reader: impl BufRead,
     format: GraphFormat,
-    to_graph_name: &GraphName,
+    to_graph_name: GraphNameRef<'_>,
     base_iri: Option<&str>,
 ) -> Result<(), StoreOrParseError<S::Error, io::Error>> {
     let base_iri = base_iri.unwrap_or("");
@@ -75,7 +71,7 @@ fn load_graph<S: WritableEncodedStore + StrContainer>(
 fn load_from_triple_parser<S: WritableEncodedStore + StrContainer, P: TriplesParser>(
     store: &mut S,
     parser: Result<P, P::Error>,
-    to_graph_name: &GraphName,
+    to_graph_name: GraphNameRef<'_>,
 ) -> Result<(), StoreOrParseError<S::Error, io::Error>>
 where
     StoreOrParseError<S::Error, P::Error>: From<P::Error>,
@@ -107,34 +103,11 @@ fn dump_graph(
     writer: impl Write,
     format: GraphFormat,
 ) -> Result<(), io::Error> {
-    match format {
-        GraphFormat::NTriples => {
-            let mut formatter = NTriplesFormatter::new(writer);
-            for triple in triples {
-                formatter.format(&(&triple?).into())?;
-            }
-            formatter.finish();
-        }
-        GraphFormat::Turtle => {
-            let mut formatter = TurtleFormatter::new(writer);
-            for triple in triples {
-                formatter.format(&(&triple?).into())?;
-            }
-            formatter.finish()?;
-        }
-        GraphFormat::RdfXml => {
-            let mut formatter = RdfXmlFormatter::new(writer).map_err(map_xml_err)?;
-            for triple in triples {
-                formatter.format(&(&triple?).into()).map_err(map_xml_err)?;
-            }
-            formatter.finish().map_err(map_xml_err)?;
-        }
+    let mut writer = GraphSerializer::from_format(format).triple_writer(writer)?;
+    for triple in triples {
+        writer.write(&triple?)?;
     }
-    Ok(())
-}
-
-fn map_xml_err(e: RdfXmlError) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, e) // TODO: drop
+    writer.finish()
 }
 
 fn load_dataset<S: WritableEncodedStore + StrContainer>(
@@ -181,23 +154,11 @@ fn dump_dataset(
     writer: impl Write,
     format: DatasetFormat,
 ) -> Result<(), io::Error> {
-    match format {
-        DatasetFormat::NQuads => {
-            let mut formatter = NQuadsFormatter::new(writer);
-            for quad in quads {
-                formatter.format(&(&quad?).into())?;
-            }
-            formatter.finish();
-        }
-        DatasetFormat::TriG => {
-            let mut formatter = TriGFormatter::new(writer);
-            for quad in quads {
-                formatter.format(&(&quad?).into())?;
-            }
-            formatter.finish()?;
-        }
+    let mut writer = DatasetSerializer::from_format(format).quad_writer(writer)?;
+    for quad in quads {
+        writer.write(&quad?)?;
     }
-    Ok(())
+    writer.finish()
 }
 
 enum StoreOrParseError<S, P> {
@@ -249,10 +210,10 @@ type QuadPattern<I> = (
 
 fn get_encoded_quad_pattern<E: ReadEncoder>(
     encoder: &E,
-    subject: Option<&NamedOrBlankNode>,
-    predicate: Option<&NamedNode>,
-    object: Option<&Term>,
-    graph_name: Option<&GraphName>,
+    subject: Option<NamedOrBlankNodeRef<'_>>,
+    predicate: Option<NamedNodeRef<'_>>,
+    object: Option<TermRef<'_>>,
+    graph_name: Option<GraphNameRef<'_>>,
 ) -> Result<Option<QuadPattern<E::StrId>>, E::Error> {
     Ok(Some((
         if let Some(subject) = transpose(

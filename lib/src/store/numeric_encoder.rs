@@ -787,7 +787,7 @@ impl StrContainer for MemoryStrStore {
 pub(crate) trait ReadEncoder: WithStoreError {
     fn get_encoded_named_node(
         &self,
-        named_node: &NamedNode,
+        named_node: NamedNodeRef<'_>,
     ) -> Result<Option<EncodedTerm<Self::StrId>>, Self::Error> {
         Ok(Some(EncodedTerm::NamedNode {
             iri_id: if let Some(iri_id) = self.get_encoded_str(named_node.as_str())? {
@@ -800,7 +800,7 @@ pub(crate) trait ReadEncoder: WithStoreError {
 
     fn get_encoded_blank_node(
         &self,
-        blank_node: &BlankNode,
+        blank_node: BlankNodeRef<'_>,
     ) -> Result<Option<EncodedTerm<Self::StrId>>, Self::Error> {
         Ok(Some(if let Some(id) = blank_node.id() {
             EncodedTerm::InlineBlankNode { id }
@@ -817,7 +817,7 @@ pub(crate) trait ReadEncoder: WithStoreError {
 
     fn get_encoded_literal(
         &self,
-        literal: &Literal,
+        literal: LiteralRef<'_>,
     ) -> Result<Option<EncodedTerm<Self::StrId>>, Self::Error> {
         Ok(Some(
             match match literal.datatype().as_str() {
@@ -905,57 +905,57 @@ pub(crate) trait ReadEncoder: WithStoreError {
 
     fn get_encoded_named_or_blank_node(
         &self,
-        term: &NamedOrBlankNode,
+        term: NamedOrBlankNodeRef<'_>,
     ) -> Result<Option<EncodedTerm<Self::StrId>>, Self::Error> {
         match term {
-            NamedOrBlankNode::NamedNode(named_node) => self.get_encoded_named_node(named_node),
-            NamedOrBlankNode::BlankNode(blank_node) => self.get_encoded_blank_node(blank_node),
+            NamedOrBlankNodeRef::NamedNode(named_node) => self.get_encoded_named_node(named_node),
+            NamedOrBlankNodeRef::BlankNode(blank_node) => self.get_encoded_blank_node(blank_node),
         }
     }
 
     fn get_encoded_term(
         &self,
-        term: &Term,
+        term: TermRef<'_>,
     ) -> Result<Option<EncodedTerm<Self::StrId>>, Self::Error> {
         match term {
-            Term::NamedNode(named_node) => self.get_encoded_named_node(named_node),
-            Term::BlankNode(blank_node) => self.get_encoded_blank_node(blank_node),
-            Term::Literal(literal) => self.get_encoded_literal(literal),
+            TermRef::NamedNode(named_node) => self.get_encoded_named_node(named_node),
+            TermRef::BlankNode(blank_node) => self.get_encoded_blank_node(blank_node),
+            TermRef::Literal(literal) => self.get_encoded_literal(literal),
         }
     }
 
     fn get_encoded_graph_name(
         &self,
-        name: &GraphName,
+        name: GraphNameRef<'_>,
     ) -> Result<Option<EncodedTerm<Self::StrId>>, Self::Error> {
         match name {
-            GraphName::NamedNode(named_node) => self.get_encoded_named_node(named_node),
-            GraphName::BlankNode(blank_node) => self.get_encoded_blank_node(blank_node),
-            GraphName::DefaultGraph => Ok(Some(EncodedTerm::DefaultGraph)),
+            GraphNameRef::NamedNode(named_node) => self.get_encoded_named_node(named_node),
+            GraphNameRef::BlankNode(blank_node) => self.get_encoded_blank_node(blank_node),
+            GraphNameRef::DefaultGraph => Ok(Some(EncodedTerm::DefaultGraph)),
         }
     }
 
     fn get_encoded_quad(
         &self,
-        quad: &Quad,
+        quad: QuadRef<'_>,
     ) -> Result<Option<EncodedQuad<Self::StrId>>, Self::Error> {
         Ok(Some(EncodedQuad {
-            subject: if let Some(subject) = self.get_encoded_named_or_blank_node(&quad.subject)? {
+            subject: if let Some(subject) = self.get_encoded_named_or_blank_node(quad.subject)? {
                 subject
             } else {
                 return Ok(None);
             },
-            predicate: if let Some(predicate) = self.get_encoded_named_node(&quad.predicate)? {
+            predicate: if let Some(predicate) = self.get_encoded_named_node(quad.predicate)? {
                 predicate
             } else {
                 return Ok(None);
             },
-            object: if let Some(object) = self.get_encoded_term(&quad.object)? {
+            object: if let Some(object) = self.get_encoded_term(quad.object)? {
                 object
             } else {
                 return Ok(None);
             },
-            graph_name: if let Some(graph_name) = self.get_encoded_graph_name(&quad.graph_name)? {
+            graph_name: if let Some(graph_name) = self.get_encoded_graph_name(quad.graph_name)? {
                 graph_name
             } else {
                 return Ok(None);
@@ -976,14 +976,14 @@ impl<S: StrLookup> ReadEncoder for S {
 pub(crate) trait WriteEncoder: WithStoreError {
     fn encode_named_node(
         &mut self,
-        named_node: &NamedNode,
+        named_node: NamedNodeRef<'_>,
     ) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
         self.encode_rio_named_node(named_node.into())
     }
 
     fn encode_blank_node(
         &mut self,
-        blank_node: &BlankNode,
+        blank_node: BlankNodeRef<'_>,
     ) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
         if let Some(id) = blank_node.id() {
             Ok(EncodedTerm::InlineBlankNode { id })
@@ -996,58 +996,58 @@ pub(crate) trait WriteEncoder: WithStoreError {
 
     fn encode_literal(
         &mut self,
-        literal: &Literal,
+        literal: LiteralRef<'_>,
     ) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
         self.encode_rio_literal(literal.into())
     }
 
     fn encode_named_or_blank_node(
         &mut self,
-        term: &NamedOrBlankNode,
+        term: NamedOrBlankNodeRef<'_>,
     ) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
         match term {
-            NamedOrBlankNode::NamedNode(named_node) => self.encode_named_node(named_node),
-            NamedOrBlankNode::BlankNode(blank_node) => self.encode_blank_node(blank_node),
+            NamedOrBlankNodeRef::NamedNode(named_node) => self.encode_named_node(named_node),
+            NamedOrBlankNodeRef::BlankNode(blank_node) => self.encode_blank_node(blank_node),
         }
     }
 
-    fn encode_term(&mut self, term: &Term) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
+    fn encode_term(&mut self, term: TermRef<'_>) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
         match term {
-            Term::NamedNode(named_node) => self.encode_named_node(named_node),
-            Term::BlankNode(blank_node) => self.encode_blank_node(blank_node),
-            Term::Literal(literal) => self.encode_literal(literal),
+            TermRef::NamedNode(named_node) => self.encode_named_node(named_node),
+            TermRef::BlankNode(blank_node) => self.encode_blank_node(blank_node),
+            TermRef::Literal(literal) => self.encode_literal(literal),
         }
     }
 
     fn encode_graph_name(
         &mut self,
-        name: &GraphName,
+        name: GraphNameRef<'_>,
     ) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
         match name {
-            GraphName::NamedNode(named_node) => self.encode_named_node(named_node),
-            GraphName::BlankNode(blank_node) => self.encode_blank_node(blank_node),
-            GraphName::DefaultGraph => Ok(EncodedTerm::DefaultGraph),
+            GraphNameRef::NamedNode(named_node) => self.encode_named_node(named_node),
+            GraphNameRef::BlankNode(blank_node) => self.encode_blank_node(blank_node),
+            GraphNameRef::DefaultGraph => Ok(EncodedTerm::DefaultGraph),
         }
     }
 
-    fn encode_quad(&mut self, quad: &Quad) -> Result<EncodedQuad<Self::StrId>, Self::Error> {
+    fn encode_quad(&mut self, quad: QuadRef<'_>) -> Result<EncodedQuad<Self::StrId>, Self::Error> {
         Ok(EncodedQuad {
-            subject: self.encode_named_or_blank_node(&quad.subject)?,
-            predicate: self.encode_named_node(&quad.predicate)?,
-            object: self.encode_term(&quad.object)?,
-            graph_name: self.encode_graph_name(&quad.graph_name)?,
+            subject: self.encode_named_or_blank_node(quad.subject)?,
+            predicate: self.encode_named_node(quad.predicate)?,
+            object: self.encode_term(quad.object)?,
+            graph_name: self.encode_graph_name(quad.graph_name)?,
         })
     }
 
     fn encode_triple_in_graph(
         &mut self,
-        triple: &Triple,
+        triple: TripleRef<'_>,
         graph_name: EncodedTerm<Self::StrId>,
     ) -> Result<EncodedQuad<Self::StrId>, Self::Error> {
         Ok(EncodedQuad {
-            subject: self.encode_named_or_blank_node(&triple.subject)?,
-            predicate: self.encode_named_node(&triple.predicate)?,
-            object: self.encode_term(&triple.object)?,
+            subject: self.encode_named_or_blank_node(triple.subject)?,
+            predicate: self.encode_named_node(triple.predicate)?,
+            object: self.encode_term(triple.object)?,
             graph_name,
         })
     }
@@ -1433,16 +1433,19 @@ fn test_encoding() {
         Literal::new_language_tagged_literal("foo-FR", "FR")
             .unwrap()
             .into(),
-        Literal::new_typed_literal("-1.32", xsd::DECIMAL.clone()).into(),
-        Literal::new_typed_literal("2020-01-01T01:01:01Z", xsd::DATE_TIME.clone()).into(),
-        Literal::new_typed_literal("2020-01-01", xsd::DATE.clone()).into(),
-        Literal::new_typed_literal("01:01:01Z", xsd::TIME.clone()).into(),
-        Literal::new_typed_literal("PT1S", xsd::DURATION.clone()).into(),
+        Literal::new_typed_literal("-1.32", xsd::DECIMAL).into(),
+        Literal::new_typed_literal("2020-01-01T01:01:01Z", xsd::DATE_TIME).into(),
+        Literal::new_typed_literal("2020-01-01", xsd::DATE).into(),
+        Literal::new_typed_literal("01:01:01Z", xsd::TIME).into(),
+        Literal::new_typed_literal("PT1S", xsd::DURATION).into(),
         Literal::new_typed_literal("-foo", NamedNode::new_unchecked("http://foo.com")).into(),
     ];
     for term in terms {
-        let encoded = store.encode_term(&term).unwrap();
-        assert_eq!(Some(encoded), store.get_encoded_term(&term).unwrap());
+        let encoded = store.encode_term(term.as_ref()).unwrap();
+        assert_eq!(
+            Some(encoded),
+            store.get_encoded_term(term.as_ref()).unwrap()
+        );
         assert_eq!(term, store.decode_term(encoded).unwrap());
     }
 }

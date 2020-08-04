@@ -16,7 +16,6 @@ edition = "2018"
 all-features = true
 
 [dependencies]
-lazy_static = "1"
 rocksdb = { version = "0.14", optional = true }
 sled = { version = "0.34", optional = true }
 quick-xml = "0.18"

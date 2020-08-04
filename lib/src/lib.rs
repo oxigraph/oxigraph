@@ -27,7 +27,7 @@
 //! store.insert(quad.clone());
 //!
 //! // quad filter
-//! let results: Vec<Quad> = store.quads_for_pattern(Some(&ex.clone().into()), None, None, None).collect();
+//! let results: Vec<Quad> = store.quads_for_pattern(Some(ex.as_ref().into()), None, None, None).collect();
 //! assert_eq!(vec![quad], results);
 //!
 //! // SPARQL query

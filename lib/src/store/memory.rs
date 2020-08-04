@@ -40,7 +40,7 @@ use std::{fmt, io};
 /// store.insert(quad.clone());
 ///
 /// // quad filter
-/// let results: Vec<Quad> = store.quads_for_pattern(Some(&ex.clone().into()), None, None, None).collect();
+/// let results: Vec<Quad> = store.quads_for_pattern(Some(ex.as_ref().into()), None, None, None).collect();
 /// assert_eq!(vec![quad], results);
 ///
 /// // SPARQL query
@@ -168,10 +168,10 @@ impl MemoryStore {
     /// ```
     pub fn quads_for_pattern(
         &self,
-        subject: Option<&NamedOrBlankNode>,
-        predicate: Option<&NamedNode>,
-        object: Option<&Term>,
-        graph_name: Option<&GraphName>,
+        subject: Option<NamedOrBlankNodeRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+        graph_name: Option<GraphNameRef<'_>>,
     ) -> impl Iterator<Item = Quad> {
         let quads = if let Some((subject, predicate, object, graph_name)) =
             get_encoded_quad_pattern(self, subject, predicate, object, graph_name)
@@ -188,8 +188,8 @@ impl MemoryStore {
     }
 
     /// Checks if this store contains a given quad
-    pub fn contains(&self, quad: &Quad) -> bool {
-        self.get_encoded_quad(quad)
+    pub fn contains<'a>(&self, quad: impl Into<QuadRef<'a>>) -> bool {
+        self.get_encoded_quad(quad.into())
             .unwrap_infallible()
             .map_or(false, |q| self.contains_encoded(&q))
     }
@@ -250,11 +250,11 @@ impl MemoryStore {
         for op in transaction.ops {
             match op {
                 TransactionOp::Insert(quad) => {
-                    let quad = this.encode_quad(&quad).unwrap_infallible();
+                    let quad = this.encode_quad(quad.as_ref()).unwrap_infallible();
                     indexes.insert_encoded(&quad).unwrap_infallible()
                 }
                 TransactionOp::Delete(quad) => {
-                    let quad = this.encode_quad(&quad).unwrap_infallible();
+                    let quad = this.encode_quad(quad.as_ref()).unwrap_infallible();
                     indexes.remove_encoded(&quad).unwrap_infallible()
                 }
             }
@@ -285,15 +285,15 @@ impl MemoryStore {
     ///
     /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
     /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
-    pub fn load_graph(
+    pub fn load_graph<'a>(
         &self,
         reader: impl BufRead,
         format: GraphFormat,
-        to_graph_name: &GraphName,
+        to_graph_name: impl Into<GraphNameRef<'a>>,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
         let mut store = self;
-        load_graph(&mut store, reader, format, to_graph_name, base_iri)?;
+        load_graph(&mut store, reader, format, to_graph_name.into(), base_iri)?;
         Ok(())
     }
 
@@ -335,13 +335,13 @@ impl MemoryStore {
     #[allow(clippy::needless_pass_by_value)]
     pub fn insert(&self, quad: Quad) {
         let mut this = self;
-        let quad = this.encode_quad(&quad).unwrap_infallible();
+        let quad = this.encode_quad(quad.as_ref()).unwrap_infallible();
         this.insert_encoded(&quad).unwrap_infallible();
     }
 
     /// Removes a quad from this store.
-    pub fn remove(&self, quad: &Quad) {
-        if let Some(quad) = self.get_encoded_quad(quad).unwrap_infallible() {
+    pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) {
+        if let Some(quad) = self.get_encoded_quad(quad.into()).unwrap_infallible() {
             let mut this = self;
             this.remove_encoded(&quad).unwrap_infallible();
         }
@@ -378,14 +378,14 @@ impl MemoryStore {
     ///
     /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
     /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
-    pub fn dump_graph(
+    pub fn dump_graph<'a>(
         &self,
         writer: impl Write,
         format: GraphFormat,
-        from_graph_name: &GraphName,
+        from_graph_name: impl Into<GraphNameRef<'a>>,
     ) -> Result<(), io::Error> {
         dump_graph(
-            self.quads_for_pattern(None, None, None, Some(from_graph_name))
+            self.quads_for_pattern(None, None, None, Some(from_graph_name.into()))
                 .map(|q| Ok(q.into())),
             writer,
             format,
@@ -973,13 +973,14 @@ impl MemoryTransaction {
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results);
     /// # Result::<_, oxigraph::sparql::EvaluationError>::Ok(())
     /// ```
-    pub fn load_graph(
+    pub fn load_graph<'a>(
         &mut self,
         reader: impl BufRead,
         format: GraphFormat,
-        to_graph_name: &GraphName,
+        to_graph_name: impl Into<GraphNameRef<'a>>,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
+        let to_graph_name = to_graph_name.into();
         let mut parser = GraphParser::from_format(format);
         if let Some(base_iri) = base_iri {
             parser = parser
@@ -987,9 +988,8 @@ impl MemoryTransaction {
                 .map_err(invalid_input_error)?;
         }
         for triple in parser.read_triples(reader)? {
-            self.ops.push(TransactionOp::Insert(
-                triple?.in_graph(to_graph_name.clone()),
-            ));
+            self.ops
+                .push(TransactionOp::Insert(triple?.in_graph(to_graph_name)));
         }
         Ok(())
     }

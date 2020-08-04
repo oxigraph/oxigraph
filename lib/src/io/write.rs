@@ -88,7 +88,8 @@ enum TripleWriterKind<W: Write> {
 }
 
 impl<W: Write> TripleWriter<W> {
-    pub fn write(&mut self, triple: &Triple) -> Result<(), io::Error> {
+    pub fn write<'a>(&mut self, triple: impl Into<TripleRef<'a>>) -> Result<(), io::Error> {
+        let triple = triple.into();
         match &mut self.formatter {
             TripleWriterKind::NTriples(formatter) => formatter.format(&triple.into())?,
             TripleWriterKind::Turtle(formatter) => formatter.format(&triple.into())?,
@@ -187,10 +188,11 @@ enum QuadWriterKind<W: Write> {
 }
 
 impl<W: Write> QuadWriter<W> {
-    pub fn write(&mut self, triple: &Quad) -> Result<(), io::Error> {
+    pub fn write<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> Result<(), io::Error> {
+        let quad = quad.into();
         match &mut self.formatter {
-            QuadWriterKind::NQuads(formatter) => formatter.format(&triple.into())?,
-            QuadWriterKind::TriG(formatter) => formatter.format(&triple.into())?,
+            QuadWriterKind::NQuads(formatter) => formatter.format(&quad.into())?,
+            QuadWriterKind::TriG(formatter) => formatter.format(&quad.into())?,
         }
         Ok(())
     }

@@ -5,7 +5,7 @@ use std::fmt;
 use std::io::Write;
 use std::str;
 
-/// An RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
+/// An owned RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 ///
 /// The common way to create a new blank node is to use the `BlankNode::default` trait method.
 ///
@@ -28,7 +28,7 @@ pub struct BlankNode(BlankNodeContent);
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 enum BlankNodeContent {
     Named(String),
-    Anonymous { id: u128, str: [u8; 32] },
+    Anonymous { id: u128, str: IdStr },
 }
 
 impl BlankNode {
@@ -52,13 +52,8 @@ impl BlankNode {
     /// Except if you really know what you do, you should use [`new`](#method.new).
     pub fn new_unchecked(id: impl Into<String>) -> Self {
         let id = id.into();
-        if let Ok(numerical_id) = u128::from_str_radix(&id, 16) {
-            let result = Self::new_from_unique_id(numerical_id);
-            if result.as_str() == id {
-                result
-            } else {
-                Self(BlankNodeContent::Named(id))
-            }
+        if let Some(numerical_id) = to_integer_id(&id) {
+            Self::new_from_unique_id(numerical_id)
         } else {
             Self(BlankNodeContent::Named(id))
         }
@@ -69,19 +64,17 @@ impl BlankNode {
     /// In most cases, it is much more convenient to create a blank node using `BlankNode::default()`.
     pub fn new_from_unique_id(id: impl Into<u128>) -> Self {
         let id = id.into();
-        let mut str = [0; 32];
-        write!(&mut str[..], "{:x}", id).unwrap();
-        Self(BlankNodeContent::Anonymous { id, str })
+        Self(BlankNodeContent::Anonymous {
+            id,
+            str: IdStr::new(id),
+        })
     }
 
     /// Returns the underlying ID of this blank node
     pub fn as_str(&self) -> &str {
         match &self.0 {
             BlankNodeContent::Named(id) => id,
-            BlankNodeContent::Anonymous { str, .. } => {
-                let len = str.iter().position(|x| x == &0).unwrap_or(32);
-                str::from_utf8(&str[..len]).unwrap()
-            }
+            BlankNodeContent::Anonymous { str, .. } => str.as_str(),
         }
     }
 
@@ -89,25 +82,24 @@ impl BlankNode {
     pub fn into_string(self) -> String {
         match self.0 {
             BlankNodeContent::Named(id) => id,
-            BlankNodeContent::Anonymous { str, .. } => {
-                let len = str.iter().position(|x| x == &0).unwrap_or(32);
-                str::from_utf8(&str[..len]).unwrap().to_owned()
-            }
+            BlankNodeContent::Anonymous { str, .. } => str.as_str().to_owned(),
         }
     }
 
-    /// Returns the internal numerical ID of this blank node, if it exists
-    pub(crate) fn id(&self) -> Option<u128> {
-        match self.0 {
-            BlankNodeContent::Named(_) => None,
-            BlankNodeContent::Anonymous { id, .. } => Some(id),
-        }
+    pub fn as_ref(&self) -> BlankNodeRef<'_> {
+        BlankNodeRef(match &self.0 {
+            BlankNodeContent::Named(id) => BlankNodeRefContent::Named(id.as_str()),
+            BlankNodeContent::Anonymous { id, str } => BlankNodeRefContent::Anonymous {
+                id: *id,
+                str: str.as_str(),
+            },
+        })
     }
 }
 
 impl fmt::Display for BlankNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        rio::BlankNode::from(self).fmt(f)
+        self.as_ref().fmt(f)
     }
 }
 
@@ -118,9 +110,137 @@ impl Default for BlankNode {
     }
 }
 
-impl<'a> From<&'a BlankNode> for rio::BlankNode<'a> {
+/// A borrowed RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
+///
+/// The common way to create a new blank node is to use the `BlankNode::default` trait method.
+///
+/// It is also possible to create a blank node from a blank node identifier using the `BlankNodeRef::new` method.
+/// The blank node identifier must be valid according to N-Triples, Turtle and SPARQL grammars.
+///
+/// The default string formatter is returning a N-Triples, Turtle and SPARQL compatible representation:
+/// ```
+/// use oxigraph::model::BlankNodeRef;
+///
+/// assert_eq!(
+///     "_:a122",
+///     BlankNodeRef::new("a122")?.to_string()
+/// );
+/// # Result::<_,oxigraph::model::BlankNodeIdParseError>::Ok(())
+/// ```
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+pub struct BlankNodeRef<'a>(BlankNodeRefContent<'a>);
+
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
+enum BlankNodeRefContent<'a> {
+    Named(&'a str),
+    Anonymous { id: u128, str: &'a str },
+}
+
+impl<'a> BlankNodeRef<'a> {
+    /// Creates a blank node from a unique identifier.
+    ///
+    /// The blank node identifier must be valid according to N-Triples, Turtle and SPARQL grammars.
+    ///
+    /// In most cases, it is much more convenient to create a blank node using `BlankNode::default()`.
+    /// `BlankNode::default()` creates a random ID that could be easily inlined by Oxigraph stores.
+    pub fn new(id: &'a str) -> Result<Self, BlankNodeIdParseError> {
+        validate_blank_node_identifier(id)?;
+        Ok(Self::new_unchecked(id))
+    }
+
+    /// Creates a blank node from a unique identifier without validation.
+    ///
+    /// It is the caller's responsibility to ensure that `id` is a valid blank node identifier
+    /// according to N-Triples, Turtle and SPARQL grammars.
+    ///
+    /// Except if you really know what you do, you should use [`new`](#method.new).
+    pub fn new_unchecked(id: &'a str) -> Self {
+        if let Some(numerical_id) = to_integer_id(id) {
+            Self(BlankNodeRefContent::Anonymous {
+                id: numerical_id,
+                str: id,
+            })
+        } else {
+            Self(BlankNodeRefContent::Named(id))
+        }
+    }
+
+    /// Returns the underlying ID of this blank node
+    pub fn as_str(self) -> &'a str {
+        match self.0 {
+            BlankNodeRefContent::Named(id) => id,
+            BlankNodeRefContent::Anonymous { str, .. } => str,
+        }
+    }
+
+    /// Returns the internal numerical ID of this blank node, if it exists
+    pub(crate) fn id(&self) -> Option<u128> {
+        match self.0 {
+            BlankNodeRefContent::Named(_) => None,
+            BlankNodeRefContent::Anonymous { id, .. } => Some(id),
+        }
+    }
+
+    pub fn into_owned(self) -> BlankNode {
+        BlankNode(match self.0 {
+            BlankNodeRefContent::Named(id) => BlankNodeContent::Named(id.to_owned()),
+            BlankNodeRefContent::Anonymous { id, .. } => BlankNodeContent::Anonymous {
+                id,
+                str: IdStr::new(id),
+            },
+        })
+    }
+}
+
+impl fmt::Display for BlankNodeRef<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        rio::BlankNode::from(*self).fmt(f)
+    }
+}
+
+impl<'a> From<&'a BlankNode> for BlankNodeRef<'a> {
     fn from(node: &'a BlankNode) -> Self {
+        node.as_ref()
+    }
+}
+
+impl<'a> From<BlankNodeRef<'a>> for BlankNode {
+    fn from(node: BlankNodeRef<'a>) -> Self {
+        node.into_owned()
+    }
+}
+
+impl<'a> From<BlankNodeRef<'a>> for rio::BlankNode<'a> {
+    fn from(node: BlankNodeRef<'a>) -> Self {
         rio::BlankNode { id: node.as_str() }
+    }
+}
+
+impl PartialEq<BlankNode> for BlankNodeRef<'_> {
+    fn eq(&self, other: &BlankNode) -> bool {
+        *self == other.as_ref()
+    }
+}
+
+impl PartialEq<BlankNodeRef<'_>> for BlankNode {
+    fn eq(&self, other: &BlankNodeRef<'_>) -> bool {
+        self.as_ref() == *other
+    }
+}
+
+#[derive(PartialEq, Eq, Debug, Clone, Hash)]
+struct IdStr([u8; 32]);
+
+impl IdStr {
+    fn new(id: u128) -> Self {
+        let mut str = [0; 32];
+        write!(&mut str[..], "{:x}", id).unwrap();
+        Self(str)
+    }
+
+    fn as_str(&self) -> &str {
+        let len = self.0.iter().position(|x| x == &0).unwrap_or(32);
+        str::from_utf8(&self.0[..len]).unwrap()
     }
 }
 
@@ -183,6 +303,25 @@ fn validate_blank_node_identifier(id: &str) -> Result<(), BlankNodeIdParseError>
     }
 }
 
+fn to_integer_id(id: &str) -> Option<u128> {
+    let digits = id.as_bytes();
+    let mut value: u128 = 0;
+    if let None | Some(b'0') = digits.first() {
+        return None; // No empty string or leading zeros
+    }
+    for digit in digits {
+        value = value.checked_mul(16)?.checked_add(
+            match *digit {
+                b'0'..=b'9' => digit - b'0',
+                b'a'..=b'f' => digit - b'a' + 10,
+                _ => return None,
+            }
+            .into(),
+        )?;
+    }
+    Some(value)
+}
+
 /// An error raised during `BlankNode` validation.
 #[allow(missing_copy_implementations)]
 #[derive(Debug)]
@@ -232,6 +371,18 @@ mod test {
         assert_ne!(
             BlankNode::new("100A").unwrap(),
             BlankNode::new_from_unique_id(0x100a_u128)
+        );
+    }
+
+    #[test]
+    fn test_equals() {
+        assert_eq!(
+            BlankNode::new("100a").unwrap(),
+            BlankNodeRef::new("100a").unwrap()
+        );
+        assert_eq!(
+            BlankNode::new("zzz").unwrap(),
+            BlankNodeRef::new("zzz").unwrap()
         );
     }
 }

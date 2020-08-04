@@ -3,10 +3,10 @@ use crate::model::*;
 use crate::utils::to_err;
 use js_sys::{Array, Map};
 use oxigraph::io::{DatasetFormat, GraphFormat};
-use oxigraph::model::GraphName;
+use oxigraph::model::*;
 use oxigraph::sparql::{QueryOptions, QueryResult};
 use oxigraph::MemoryStore;
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::io::Cursor;
 use wasm_bindgen::prelude::*;
 
@@ -74,25 +74,29 @@ impl JsMemoryStore {
                 } else {
                     None
                 }
-                .as_ref(),
+                .as_ref()
+                .map(|t: &NamedOrBlankNode| t.into()),
                 if let Some(predicate) = self.from_js.to_optional_term(predicate)? {
-                    Some(predicate.try_into()?)
+                    Some(NamedNode::try_from(predicate)?)
                 } else {
                     None
                 }
-                .as_ref(),
+                .as_ref()
+                .map(|t: &NamedNode| t.into()),
                 if let Some(object) = self.from_js.to_optional_term(object)? {
                     Some(object.try_into()?)
                 } else {
                     None
                 }
-                .as_ref(),
+                .as_ref()
+                .map(|t: &Term| t.into()),
                 if let Some(graph_name) = self.from_js.to_optional_term(graph_name)? {
                     Some(graph_name.try_into()?)
                 } else {
                     None
                 }
-                .as_ref(),
+                .as_ref()
+                .map(|t: &GraphName| t.into()),
             )
             .map(|v| JsQuad::from(v).into())
             .collect::<Vec<_>>()

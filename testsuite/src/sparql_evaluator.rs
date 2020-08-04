@@ -200,13 +200,13 @@ fn to_dataset(result: QueryResult, with_order: bool) -> Result<MemoryStore> {
             let result_set = BlankNode::default();
             store.insert(Quad::new(
                 result_set.clone(),
-                rdf::TYPE.clone(),
-                rs::RESULT_SET.clone(),
+                rdf::TYPE,
+                rs::RESULT_SET,
                 None,
             ));
             store.insert(Quad::new(
                 result_set,
-                rs::BOOLEAN.clone(),
+                rs::BOOLEAN,
                 Literal::from(value),
                 None,
             ));
@@ -217,14 +217,14 @@ fn to_dataset(result: QueryResult, with_order: bool) -> Result<MemoryStore> {
             let result_set = BlankNode::default();
             store.insert(Quad::new(
                 result_set.clone(),
-                rdf::TYPE.clone(),
-                rs::RESULT_SET.clone(),
+                rdf::TYPE,
+                rs::RESULT_SET,
                 None,
             ));
             for variable in solutions.variables() {
                 store.insert(Quad::new(
                     result_set.clone(),
-                    rs::RESULT_VARIABLE.clone(),
+                    rs::RESULT_VARIABLE,
                     Literal::new_simple_literal(variable.as_str()),
                     None,
                 ));
@@ -234,7 +234,7 @@ fn to_dataset(result: QueryResult, with_order: bool) -> Result<MemoryStore> {
                 let solution_id = BlankNode::default();
                 store.insert(Quad::new(
                     result_set.clone(),
-                    rs::SOLUTION.clone(),
+                    rs::SOLUTION,
                     solution_id.clone(),
                     None,
                 ));
@@ -242,19 +242,14 @@ fn to_dataset(result: QueryResult, with_order: bool) -> Result<MemoryStore> {
                     let binding = BlankNode::default();
                     store.insert(Quad::new(
                         solution_id.clone(),
-                        rs::BINDING.clone(),
+                        rs::BINDING,
                         binding.clone(),
                         None,
                     ));
-                    store.insert(Quad::new(
-                        binding.clone(),
-                        rs::VALUE.clone(),
-                        value.clone(),
-                        None,
-                    ));
+                    store.insert(Quad::new(binding.clone(), rs::VALUE, value.clone(), None));
                     store.insert(Quad::new(
                         binding,
-                        rs::VARIABLE.clone(),
+                        rs::VARIABLE,
                         Literal::new_simple_literal(variable.as_str()),
                         None,
                     ));
@@ -262,7 +257,7 @@ fn to_dataset(result: QueryResult, with_order: bool) -> Result<MemoryStore> {
                 if with_order {
                     store.insert(Quad::new(
                         solution_id,
-                        rs::INDEX.clone(),
+                        rs::INDEX,
                         Literal::from((i + 1) as i128),
                         None,
                     ));
@@ -374,92 +369,75 @@ impl StaticQueryResults {
 
     fn from_dataset(dataset: MemoryStore) -> StaticQueryResults {
         if let Some(result_set) = dataset
-            .quads_for_pattern(
-                None,
-                Some(&rdf::TYPE),
-                Some(&rs::RESULT_SET.clone().into()),
-                None,
-            )
+            .quads_for_pattern(None, Some(rdf::TYPE), Some(rs::RESULT_SET.into()), None)
             .map(|q| q.subject)
             .next()
         {
-            if let Some(bool) = dataset
-                .quads_for_pattern(Some(&result_set), Some(&rs::BOOLEAN), None, None)
-                .map(|q| q.object)
-                .next()
-            {
+            if let Some(bool) = object_for_subject_predicate(&dataset, &result_set, rs::BOOLEAN) {
                 // Boolean query
                 StaticQueryResults::Boolean(bool == Literal::from(true).into())
             } else {
                 // Regular query
-                let mut variables: Vec<Variable> = dataset
-                    .quads_for_pattern(Some(&result_set), Some(&rs::RESULT_VARIABLE), None, None)
-                    .filter_map(|q| {
-                        if let Term::Literal(l) = q.object {
-                            Some(Variable::new(l.value()))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
+                let mut variables: Vec<Variable> =
+                    objects_for_subject_predicate(&dataset, &result_set, rs::RESULT_VARIABLE)
+                        .filter_map(|object| {
+                            if let Term::Literal(l) = object {
+                                Some(Variable::new(l.value()))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
                 variables.sort();
 
-                let mut solutions: Vec<_> = dataset
-                    .quads_for_pattern(Some(&result_set), Some(&rs::SOLUTION), None, None)
-                    .filter_map(|q| {
-                        if let Term::BlankNode(solution) = q.object {
-                            let solution = solution.into();
-                            let mut bindings = dataset
-                                .quads_for_pattern(Some(&solution), Some(&rs::BINDING), None, None)
-                                .filter_map(|q| {
-                                    if let Term::BlankNode(binding) = q.object {
-                                        let binding = binding.into();
-                                        if let (Some(Term::Literal(variable)), Some(value)) = (
-                                            dataset
-                                                .quads_for_pattern(
-                                                    Some(&binding),
-                                                    Some(&rs::VARIABLE),
-                                                    None,
-                                                    None,
-                                                )
-                                                .map(|q| q.object)
-                                                .next(),
-                                            dataset
-                                                .quads_for_pattern(
-                                                    Some(&binding),
-                                                    Some(&rs::VALUE),
-                                                    None,
-                                                    None,
-                                                )
-                                                .map(|q| q.object)
-                                                .next(),
-                                        ) {
-                                            Some((Variable::new(variable.value()), value))
-                                        } else {
-                                            None
-                                        }
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .collect::<Vec<_>>();
-                            bindings.sort_by(|(a, _), (b, _)| a.cmp(&b));
-                            let index = dataset
-                                .quads_for_pattern(Some(&solution), Some(&rs::INDEX), None, None)
-                                .filter_map(|q| {
-                                    if let Term::Literal(l) = q.object {
-                                        u64::from_str(l.value()).ok()
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .next();
-                            Some((bindings, index))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
+                let mut solutions: Vec<_> =
+                    objects_for_subject_predicate(&dataset, &result_set, rs::SOLUTION)
+                        .filter_map(|object| {
+                            if let Term::BlankNode(solution) = object {
+                                let mut bindings =
+                                    objects_for_subject_predicate(&dataset, &solution, rs::BINDING)
+                                        .filter_map(|object| {
+                                            if let Term::BlankNode(binding) = object {
+                                                if let (
+                                                    Some(Term::Literal(variable)),
+                                                    Some(value),
+                                                ) = (
+                                                    object_for_subject_predicate(
+                                                        &dataset,
+                                                        &binding,
+                                                        rs::VARIABLE,
+                                                    ),
+                                                    object_for_subject_predicate(
+                                                        &dataset,
+                                                        &binding,
+                                                        rs::VALUE,
+                                                    ),
+                                                ) {
+                                                    Some((Variable::new(variable.value()), value))
+                                                } else {
+                                                    None
+                                                }
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                        .collect::<Vec<_>>();
+                                bindings.sort_by(|(a, _), (b, _)| a.cmp(&b));
+                                let index =
+                                    object_for_subject_predicate(&dataset, &solution, rs::INDEX)
+                                        .and_then(|object| {
+                                            if let Term::Literal(l) = object {
+                                                u64::from_str(l.value()).ok()
+                                            } else {
+                                                None
+                                            }
+                                        });
+                                Some((bindings, index))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
                 solutions.sort_by(|(_, index_a), (_, index_b)| index_a.cmp(index_b));
 
                 let ordered = solutions.iter().all(|(_, index)| index.is_some());
@@ -477,4 +455,22 @@ impl StaticQueryResults {
             StaticQueryResults::Graph(dataset)
         }
     }
+}
+
+fn object_for_subject_predicate<'a>(
+    store: &MemoryStore,
+    subject: impl Into<NamedOrBlankNodeRef<'a>>,
+    predicate: impl Into<NamedNodeRef<'a>>,
+) -> Option<Term> {
+    objects_for_subject_predicate(store, subject, predicate).next()
+}
+
+fn objects_for_subject_predicate<'a>(
+    store: &MemoryStore,
+    subject: impl Into<NamedOrBlankNodeRef<'a>>,
+    predicate: impl Into<NamedNodeRef<'a>>,
+) -> impl Iterator<Item = Term> {
+    store
+        .quads_for_pattern(Some(subject.into()), Some(predicate.into()), None, None)
+        .map(|t| t.object)
 }

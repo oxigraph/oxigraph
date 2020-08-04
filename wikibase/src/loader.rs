@@ -6,7 +6,7 @@ use http_client::h1::H1Client;
 use http_client::HttpClient;
 use http_types::{headers, Method, Request, Result};
 use oxigraph::io::GraphFormat;
-use oxigraph::model::NamedNode;
+use oxigraph::model::NamedNodeRef;
 use oxigraph::RocksDbStore;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -230,11 +230,11 @@ impl WikibaseLoader {
     }
 
     fn load_entity_data(&self, uri: &str, data: impl Read) -> Result<()> {
-        let graph_name = NamedNode::new(uri)?.into();
+        let graph_name = NamedNodeRef::new(uri)?.into();
         self.store.transaction(|transaction| {
             let to_remove = self
                 .store
-                .quads_for_pattern(None, None, None, Some(&graph_name))
+                .quads_for_pattern(None, None, None, Some(graph_name))
                 .collect::<std::result::Result<Vec<_>, _>>()?;
             for q in to_remove {
                 transaction.remove(&q)?;
@@ -243,7 +243,7 @@ impl WikibaseLoader {
             transaction.load_graph(
                 BufReader::new(data),
                 GraphFormat::NTriples,
-                &NamedNode::new(uri)?.into(),
+                NamedNodeRef::new(uri)?,
                 None,
             )?;
             Ok(())

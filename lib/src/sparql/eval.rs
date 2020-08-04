@@ -1065,7 +1065,12 @@ where
                     let bnode =
                         BlankNode::new(self.to_simple_string(self.eval_expression(id, tuple)?)?)
                             .ok()?;
-                    Some(self.dataset.as_ref().encode_blank_node(&bnode).ok()?)
+                    Some(
+                        self.dataset
+                            .as_ref()
+                            .encode_blank_node(bnode.as_ref())
+                            .ok()?,
+                    )
                 }
                 None => Some(EncodedTerm::InlineBlankNode {
                     id: random::<u128>(),
@@ -1741,7 +1746,7 @@ where
                 put_variable_value(
                     variable,
                     &variables,
-                    encoder.encode_term(term).map_err(|e| e.into())?,
+                    encoder.encode_term(term.as_ref()).map_err(|e| e.into())?,
                     &mut encoded_terms,
                 )
             }

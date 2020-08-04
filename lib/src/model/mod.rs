@@ -9,9 +9,12 @@ mod triple;
 pub mod vocab;
 pub(crate) mod xsd;
 
-pub use crate::model::blank_node::{BlankNode, BlankNodeIdParseError};
-pub use crate::model::literal::Literal;
-pub use crate::model::named_node::NamedNode;
-pub use crate::model::triple::{GraphName, NamedOrBlankNode, Quad, Term, Triple};
+pub use crate::model::blank_node::{BlankNode, BlankNodeIdParseError, BlankNodeRef};
+pub use crate::model::literal::{Literal, LiteralRef};
+pub use crate::model::named_node::{NamedNode, NamedNodeRef};
+pub use crate::model::triple::{
+    GraphName, GraphNameRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad, QuadRef, Term, TermRef,
+    Triple, TripleRef,
+};
 pub use oxilangtag::LanguageTagParseError;
 pub use oxiri::IriParseError;

@@ -1052,7 +1052,7 @@ parser! {
         }
 
         //[78]
-        rule Verb() -> NamedNodeOrVariable = VarOrIri() / "a" { rdf::TYPE.clone().into() }
+        rule Verb() -> NamedNodeOrVariable = VarOrIri() / "a" { rdf::TYPE.into() }
 
         //[79]
         rule ObjectList() -> FocusedTriplePattern<Vec<TermOrVariable>> = o:ObjectList_item() **<1,> ("," _) {
@@ -1172,7 +1172,7 @@ parser! {
         //[94]
         rule PathPrimary() -> PropertyPath =
             v:iri() { v.into() } /
-            "a" { rdf::TYPE.clone().into() } /
+            "a" { NamedNode::from(rdf::TYPE).into() } /
             "!" _ p:PathNegatedPropertySet() { p } /
             "(" _ p:Path() _ ")" { p }
 
@@ -1209,9 +1209,9 @@ parser! {
         //[96]
         rule PathOneInPropertySet() -> Either<NamedNode,NamedNode> =
             "^" _ v:iri() { Either::Right(v) } /
-            "^" _ "a" { Either::Right(rdf::TYPE.clone()) } /
+            "^" _ "a" { Either::Right(rdf::TYPE.into()) } /
             v:iri() { Either::Left(v) } /
-            "a" { Either::Left(rdf::TYPE.clone()) }
+            "a" { Either::Left(rdf::TYPE.into()) }
 
         //[98]
         rule TriplesNode() -> FocusedTriplePattern<TermOrVariable> = Collection() / BlankNodePropertyList()
@@ -1252,11 +1252,11 @@ parser! {
         //[102]
         rule Collection() -> FocusedTriplePattern<TermOrVariable> = "(" _ o:Collection_item()+ ")" {
             let mut patterns: Vec<TriplePattern> = Vec::default();
-            let mut current_list_node = TermOrVariable::from(rdf::NIL.clone());
+            let mut current_list_node = TermOrVariable::from(rdf::NIL);
             for objWithPatterns in o.into_iter().rev() {
                 let new_blank_node = TermOrVariable::from(BlankNode::default());
-                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::FIRST.clone(), objWithPatterns.focus.clone()));
-                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::REST.clone(), current_list_node));
+                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::FIRST, objWithPatterns.focus.clone()));
+                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::REST, current_list_node));
                 current_list_node = new_blank_node;
                 patterns.extend_from_slice(&objWithPatterns.patterns);
             }
@@ -1270,11 +1270,11 @@ parser! {
         //[103]
         rule CollectionPath() -> FocusedTripleOrPathPattern<TermOrVariable> = "(" _ o:CollectionPath_item()+ _ ")" {
             let mut patterns: Vec<TripleOrPathPattern> = Vec::default();
-            let mut current_list_node = TermOrVariable::from(rdf::NIL.clone());
+            let mut current_list_node = TermOrVariable::from(rdf::NIL);
             for objWithPatterns in o.into_iter().rev() {
                 let new_blank_node = TermOrVariable::from(BlankNode::default());
-                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::FIRST.clone(), objWithPatterns.focus.clone()).into());
-                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::REST.clone(), current_list_node).into());
+                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::FIRST, objWithPatterns.focus.clone()).into());
+                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::REST, current_list_node).into());
                 current_list_node = new_blank_node;
                 patterns.extend_from_slice(&objWithPatterns.patterns);
             }
@@ -1315,7 +1315,7 @@ parser! {
             l:NumericLiteral() { l.into() } /
             l:BooleanLiteral() { l.into() } /
             b:BlankNode() { b.into() } /
-            NIL() { rdf::NIL.clone().into() }
+            NIL() { rdf::NIL.into() }
 
         //[110]
         rule Expression() -> Expression = e:ConditionalOrExpression() {e}
@@ -1523,8 +1523,8 @@ parser! {
                 Ok(value) => Ok(value.into()),
                 Err(_) => Err("Invalid xsd:double()")
             } } /
-            d:$(DECIMAL()) { Literal::new_typed_literal(d, xsd::DECIMAL.clone()) } /
-            i:$(INTEGER()) { Literal::new_typed_literal(i, xsd::INTEGER.clone()) }
+            d:$(DECIMAL()) { Literal::new_typed_literal(d, xsd::DECIMAL) } /
+            i:$(INTEGER()) { Literal::new_typed_literal(i, xsd::INTEGER) }
 
         //[132]
         rule NumericLiteralPositive() -> Literal =
@@ -1532,8 +1532,8 @@ parser! {
                 Ok(value) => Ok(value.into()),
                 Err(_) => Err("Invalid xsd:double()")
             } } /
-            d:$(DECIMAL_POSITIVE()) { Literal::new_typed_literal(d, xsd::DECIMAL.clone()) } /
-            i:$(INTEGER_POSITIVE()) { Literal::new_typed_literal(i, xsd::INTEGER.clone()) }
+            d:$(DECIMAL_POSITIVE()) { Literal::new_typed_literal(d, xsd::DECIMAL) } /
+            i:$(INTEGER_POSITIVE()) { Literal::new_typed_literal(i, xsd::INTEGER) }
 
 
         //[133]
@@ -1542,8 +1542,8 @@ parser! {
                 Ok(value) => Ok(value.into()),
                 Err(_) => Err("Invalid xsd:double()")
             } } /
-            d:$(DECIMAL_NEGATIVE()) { Literal::new_typed_literal(d, xsd::DECIMAL.clone()) } /
-            i:$(INTEGER_NEGATIVE()) { Literal::new_typed_literal(i, xsd::INTEGER.clone()) }
+            d:$(DECIMAL_NEGATIVE()) { Literal::new_typed_literal(d, xsd::DECIMAL) } /
+            i:$(INTEGER_NEGATIVE()) { Literal::new_typed_literal(i, xsd::INTEGER) }
 
         //[134]
         rule BooleanLiteral() -> Literal =

@@ -30,6 +30,12 @@ impl From<NamedNode> for NamedNodeOrVariable {
     }
 }
 
+impl From<NamedNodeRef<'_>> for NamedNodeOrVariable {
+    fn from(node: NamedNodeRef<'_>) -> Self {
+        NamedNodeOrVariable::NamedNode(node.into())
+    }
+}
+
 impl From<Variable> for NamedNodeOrVariable {
     fn from(var: Variable) -> Self {
         NamedNodeOrVariable::Variable(var)
@@ -53,6 +59,12 @@ impl fmt::Display for TermOrVariable {
 
 impl From<NamedNode> for TermOrVariable {
     fn from(node: NamedNode) -> Self {
+        TermOrVariable::Term(node.into())
+    }
+}
+
+impl From<NamedNodeRef<'_>> for TermOrVariable {
+    fn from(node: NamedNodeRef<'_>) -> Self {
         TermOrVariable::Term(node.into())
     }
 }

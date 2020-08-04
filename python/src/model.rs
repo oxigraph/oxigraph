@@ -214,7 +214,7 @@ impl PyLiteral {
 
     #[getter]
     fn datatype(&self) -> PyNamedNode {
-        self.inner.datatype().clone().into()
+        self.inner.datatype().into_owned().into()
     }
 }
 

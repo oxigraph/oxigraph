@@ -126,10 +126,10 @@ impl SledStore {
     /// See `MemoryStore` for a usage example.
     pub fn quads_for_pattern(
         &self,
-        subject: Option<&NamedOrBlankNode>,
-        predicate: Option<&NamedNode>,
-        object: Option<&Term>,
-        graph_name: Option<&GraphName>,
+        subject: Option<NamedOrBlankNodeRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+        graph_name: Option<GraphNameRef<'_>>,
     ) -> impl Iterator<Item = Result<Quad, io::Error>> {
         match get_encoded_quad_pattern(self, subject, predicate, object, graph_name) {
             Ok(Some((subject, predicate, object, graph_name))) => QuadsIter::Quads {
@@ -142,8 +142,8 @@ impl SledStore {
     }
 
     /// Checks if this store contains a given quad
-    pub fn contains(&self, quad: &Quad) -> Result<bool, io::Error> {
-        if let Some(quad) = self.get_encoded_quad(quad)? {
+    pub fn contains<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, io::Error> {
+        if let Some(quad) = self.get_encoded_quad(quad.into())? {
             self.contains_encoded(&quad)
         } else {
             Ok(false)
@@ -205,15 +205,15 @@ impl SledStore {
     /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
     /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
     /// Errors related to data loading into the store use the other error kinds.
-    pub fn load_graph(
+    pub fn load_graph<'a>(
         &self,
         reader: impl BufRead,
         format: GraphFormat,
-        to_graph_name: &GraphName,
+        to_graph_name: impl Into<GraphNameRef<'a>>,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
         let mut this = self;
-        load_graph(&mut this, reader, format, to_graph_name, base_iri)?;
+        load_graph(&mut this, reader, format, to_graph_name.into(), base_iri)?;
         Ok(())
     }
 
@@ -239,15 +239,15 @@ impl SledStore {
     }
 
     /// Adds a quad to this store.
-    pub fn insert(&self, quad: &Quad) -> Result<(), io::Error> {
+    pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<(), io::Error> {
         let mut this = self;
-        let quad = this.encode_quad(quad)?;
+        let quad = this.encode_quad(quad.into())?;
         this.insert_encoded(&quad)
     }
 
     /// Removes a quad from this store.
-    pub fn remove(&self, quad: &Quad) -> Result<(), io::Error> {
-        if let Some(quad) = self.get_encoded_quad(quad)? {
+    pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<(), io::Error> {
+        if let Some(quad) = self.get_encoded_quad(quad.into())? {
             let mut this = self;
             this.remove_encoded(&quad)
         } else {
@@ -258,14 +258,14 @@ impl SledStore {
     /// Dumps a store graph into a file.
     ///    
     /// See `MemoryStore` for a usage example.
-    pub fn dump_graph(
+    pub fn dump_graph<'a>(
         &self,
         writer: impl Write,
         format: GraphFormat,
-        from_graph_name: &GraphName,
+        from_graph_name: impl Into<GraphNameRef<'a>>,
     ) -> Result<(), io::Error> {
         dump_graph(
-            self.quads_for_pattern(None, None, None, Some(from_graph_name))
+            self.quads_for_pattern(None, None, None, Some(from_graph_name.into()))
                 .map(|q| Ok(q?.into())),
             writer,
             format,
@@ -601,15 +601,15 @@ impl SledTransaction<'_> {
     ///
     /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
     /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
-    pub fn load_graph(
+    pub fn load_graph<'a>(
         &self,
         reader: impl BufRead,
         format: GraphFormat,
-        to_graph_name: &GraphName,
+        to_graph_name: impl Into<GraphNameRef<'a>>,
         base_iri: Option<&str>,
     ) -> Result<(), SledUnabortableTransactionError> {
         let mut this = self;
-        load_graph(&mut this, reader, format, to_graph_name, base_iri)?;
+        load_graph(&mut this, reader, format, to_graph_name.into(), base_iri)?;
         Ok(())
     }
 
@@ -635,16 +635,22 @@ impl SledTransaction<'_> {
     }
 
     /// Adds a quad to this store during the transaction.
-    pub fn insert(&self, quad: &Quad) -> Result<(), SledUnabortableTransactionError> {
+    pub fn insert<'a>(
+        &self,
+        quad: impl Into<QuadRef<'a>>,
+    ) -> Result<(), SledUnabortableTransactionError> {
         let mut this = self;
-        let quad = this.encode_quad(quad)?;
+        let quad = this.encode_quad(quad.into())?;
         this.insert_encoded(&quad)
     }
 
     /// Removes a quad from this store during the transaction.
-    pub fn remove(&self, quad: &Quad) -> Result<(), SledUnabortableTransactionError> {
+    pub fn remove<'a>(
+        &self,
+        quad: impl Into<QuadRef<'a>>,
+    ) -> Result<(), SledUnabortableTransactionError> {
         let mut this = self;
-        if let Some(quad) = this.get_encoded_quad(quad)? {
+        if let Some(quad) = this.get_encoded_quad(quad.into())? {
             this.remove_encoded(&quad)
         } else {
             Ok(())
@@ -1080,29 +1086,23 @@ fn store() -> Result<(), io::Error> {
     );
     assert_eq!(
         store
-            .quads_for_pattern(Some(&main_s), None, None, None)
+            .quads_for_pattern(Some(main_s.as_ref()), None, None, None)
             .collect::<Result<Vec<_>, _>>()?,
         all_o
     );
     assert_eq!(
         store
-            .quads_for_pattern(Some(&main_s), Some(&main_p), None, None)
+            .quads_for_pattern(Some(main_s.as_ref()), Some(main_p.as_ref()), None, None)
             .collect::<Result<Vec<_>, _>>()?,
         all_o
-    );
-    assert_eq!(
-        store
-            .quads_for_pattern(Some(&main_s), Some(&main_p), Some(&main_o), None)
-            .collect::<Result<Vec<_>, _>>()?,
-        target
     );
     assert_eq!(
         store
             .quads_for_pattern(
-                Some(&main_s),
-                Some(&main_p),
-                Some(&main_o),
-                Some(&GraphName::DefaultGraph)
+                Some(main_s.as_ref()),
+                Some(main_p.as_ref()),
+                Some(main_o.as_ref()),
+                None
             )
             .collect::<Result<Vec<_>, _>>()?,
         target
@@ -1110,58 +1110,74 @@ fn store() -> Result<(), io::Error> {
     assert_eq!(
         store
             .quads_for_pattern(
-                Some(&main_s),
-                Some(&main_p),
-                None,
-                Some(&GraphName::DefaultGraph)
-            )
-            .collect::<Result<Vec<_>, _>>()?,
-        all_o
-    );
-    assert_eq!(
-        store
-            .quads_for_pattern(Some(&main_s), None, Some(&main_o), None)
-            .collect::<Result<Vec<_>, _>>()?,
-        target
-    );
-    assert_eq!(
-        store
-            .quads_for_pattern(
-                Some(&main_s),
-                None,
-                Some(&main_o),
-                Some(&GraphName::DefaultGraph)
+                Some(main_s.as_ref()),
+                Some(main_p.as_ref()),
+                Some(main_o.as_ref()),
+                Some(GraphNameRef::DefaultGraph)
             )
             .collect::<Result<Vec<_>, _>>()?,
         target
     );
     assert_eq!(
         store
-            .quads_for_pattern(Some(&main_s), None, None, Some(&GraphName::DefaultGraph))
+            .quads_for_pattern(
+                Some(main_s.as_ref()),
+                Some(main_p.as_ref()),
+                None,
+                Some(GraphNameRef::DefaultGraph)
+            )
             .collect::<Result<Vec<_>, _>>()?,
         all_o
     );
     assert_eq!(
         store
-            .quads_for_pattern(None, Some(&main_p), None, None)
+            .quads_for_pattern(Some(main_s.as_ref()), None, Some(main_o.as_ref()), None)
+            .collect::<Result<Vec<_>, _>>()?,
+        target
+    );
+    assert_eq!(
+        store
+            .quads_for_pattern(
+                Some(main_s.as_ref()),
+                None,
+                Some(main_o.as_ref()),
+                Some(GraphNameRef::DefaultGraph)
+            )
+            .collect::<Result<Vec<_>, _>>()?,
+        target
+    );
+    assert_eq!(
+        store
+            .quads_for_pattern(
+                Some(main_s.as_ref()),
+                None,
+                None,
+                Some(GraphNameRef::DefaultGraph)
+            )
             .collect::<Result<Vec<_>, _>>()?,
         all_o
     );
     assert_eq!(
         store
-            .quads_for_pattern(None, Some(&main_p), Some(&main_o), None)
+            .quads_for_pattern(None, Some(main_p.as_ref()), None, None)
+            .collect::<Result<Vec<_>, _>>()?,
+        all_o
+    );
+    assert_eq!(
+        store
+            .quads_for_pattern(None, Some(main_p.as_ref()), Some(main_o.as_ref()), None)
             .collect::<Result<Vec<_>, _>>()?,
         target
     );
     assert_eq!(
         store
-            .quads_for_pattern(None, None, Some(&main_o), None)
+            .quads_for_pattern(None, None, Some(main_o.as_ref()), None)
             .collect::<Result<Vec<_>, _>>()?,
         target
     );
     assert_eq!(
         store
-            .quads_for_pattern(None, None, None, Some(&GraphName::DefaultGraph))
+            .quads_for_pattern(None, None, None, Some(GraphNameRef::DefaultGraph))
             .collect::<Result<Vec<_>, _>>()?,
         all_o
     );
@@ -1169,9 +1185,9 @@ fn store() -> Result<(), io::Error> {
         store
             .quads_for_pattern(
                 None,
-                Some(&main_p),
-                Some(&main_o),
-                Some(&GraphName::DefaultGraph)
+                Some(main_p.as_ref()),
+                Some(main_o.as_ref()),
+                Some(GraphNameRef::DefaultGraph)
             )
             .collect::<Result<Vec<_>, _>>()?,
         target

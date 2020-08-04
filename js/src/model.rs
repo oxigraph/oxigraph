@@ -246,7 +246,7 @@ impl JsLiteral {
 
     #[wasm_bindgen(getter)]
     pub fn datatype(&self) -> JsNamedNode {
-        self.inner.datatype().clone().into()
+        self.inner.datatype().into_owned().into()
     }
 
     pub fn equals(&self, other: &JsValue) -> bool {

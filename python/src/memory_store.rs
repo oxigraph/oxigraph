@@ -47,10 +47,10 @@ impl PyMemoryStore {
             extract_quads_pattern(subject, predicate, object, graph_name)?;
         Ok(QuadIter {
             inner: Box::new(self.inner.quads_for_pattern(
-                subject.as_ref(),
-                predicate.as_ref(),
-                object.as_ref(),
-                graph_name.as_ref(),
+                subject.as_ref().map(|t| t.into()),
+                predicate.as_ref().map(|t| t.into()),
+                object.as_ref().map(|t| t.into()),
+                graph_name.as_ref().map(|t| t.into()),
             )),
         })
     }
