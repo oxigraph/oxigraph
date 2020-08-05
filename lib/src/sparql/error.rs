@@ -6,10 +6,7 @@ use std::error;
 use std::fmt;
 use std::io;
 
-/// SPARQL evaluation error.
-///
-/// The `wrap` method allows us to make this type wrap any implementation of `std::error::Error`.
-/// This type also avoids heap allocations for the most common cases of evaluation errors.
+/// A SPARQL evaluation error.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum EvaluationError {

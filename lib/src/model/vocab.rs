@@ -1,4 +1,4 @@
-//! Provides ready to use `NamedNode`s for basic RDF vocabularies
+//! Provides ready to use [`NamedNodeRef`s](struct.NamedNodeRef.html) for basic RDF vocabularies
 
 pub mod rdf {
     //! [RDF 1.1](https://www.w3.org/TR/rdf11-concepts/) vocabulary
@@ -109,7 +109,7 @@ pub mod rdfs {
 }
 
 pub mod xsd {
-    //! `NamedNode`s for [RDF compatible XSD datatypes](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-compatible-xsd-types)
+    //! [RDF compatible XSD datatypes](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-compatible-xsd-types)
     use crate::model::named_node::NamedNodeRef;
 
     /// true, false

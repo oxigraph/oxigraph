@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::io;
 use std::io::BufRead;
 
-/// A reader for RDF graph serialization formats.
+/// Parsers for RDF graph serialization formats.
 ///
 /// It currently supports the following formats:
 /// * [N-Triples](https://www.w3.org/TR/n-triples/) (`GraphFormat::NTriples`)
@@ -87,7 +87,7 @@ impl GraphParser {
 }
 
 /// Allows reading triples.
-/// Could be built using a `GraphParser`.
+/// Could be built using a [`GraphParser`](struct.GraphParser.html).
 ///
 /// ```
 /// use oxigraph::io::{GraphFormat, GraphParser};
@@ -170,7 +170,7 @@ impl<R: BufRead> TripleReader<R> {
     }
 }
 
-/// A reader for RDF dataset serialization formats.
+/// A parser for RDF dataset serialization formats.
 ///
 /// It currently supports the following formats:
 /// * [N-Quads](https://www.w3.org/TR/n-quads/) (`DatasetFormat::NQuads`)
@@ -241,7 +241,7 @@ impl DatasetParser {
 }
 
 /// Allows reading quads.
-/// Could be built using a `DatasetParser`.
+/// Could be built using a [`DatasetParser`](struct.DatasetParser.html).
 ///
 /// ```
 /// use oxigraph::io::{DatasetFormat, DatasetParser};

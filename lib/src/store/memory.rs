@@ -24,7 +24,7 @@ use std::{fmt, io};
 
 /// In-memory store.
 /// It encodes a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) and allows to query and update it using SPARQL.
-/// It is cheap to build using the `MemoryStore::new()` method.
+/// It is cheap to build using the [`MemoryStore::new()`](#method.new) method.
 ///
 /// Usage example:
 /// ```
@@ -77,7 +77,7 @@ impl Default for MemoryStore {
 }
 
 impl MemoryStore {
-    /// Constructs a new `MemoryStore`
+    /// Constructs a new [`MemoryStore`]()
     pub fn new() -> Self {
         Self {
             indexes: Arc::new(RwLock::default()),
@@ -212,10 +212,10 @@ impl MemoryStore {
         self.indexes().spog.is_empty()
     }
 
-    /// Executes a transaction.
+    /// Executes an ACID transaction.
     ///
     /// The transaction is executed if the given closure returns `Ok`.
-    /// Nothing is done if the clusre returns `Err`.
+    /// The transaction if rollbacked if the closure returns `Err`.
     ///
     /// Usage example:
     /// ```
@@ -283,8 +283,12 @@ impl MemoryStore {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     ///
-    /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
-    /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
+    /// Warning: This functions saves the triples during the parsing.
+    /// If the parsing fails in the middle of the file, the triples read before stay in the store.
+    /// Use a (memory greedy) [transaction](#method.transaction) if you do not want that.
+    ///
+    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) error kind.
     pub fn load_graph<'a>(
         &self,
         reader: impl BufRead,
@@ -318,8 +322,12 @@ impl MemoryStore {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     ///
-    /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
-    /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
+    /// Warning: This functions saves the quads during the parsing.
+    /// If the parsing fails in the middle of the file, the quads read before stay in the store.
+    /// Use a (memory greedy) [transaction](#method.transaction) if you do not want that.
+    ///
+    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) error kind.
     pub fn load_dataset(
         &self,
         reader: impl BufRead,
@@ -376,8 +384,8 @@ impl MemoryStore {
     /// # std::io::Result::Ok(())
     /// ```
     ///
-    /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
-    /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
+    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) error kind.
     pub fn dump_graph<'a>(
         &self,
         writer: impl Write,
@@ -410,8 +418,8 @@ impl MemoryStore {
     /// # std::io::Result::Ok(())
     /// ```
     ///
-    /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
-    /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
+    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) error kind.
     pub fn dump_dataset(&self, writer: impl Write, format: DatasetFormat) -> Result<(), io::Error> {
         dump_dataset(
             self.quads_for_pattern(None, None, None, None).map(Ok),
@@ -930,7 +938,7 @@ fn quad_map_flatten<'a, T: Copy>(gspo: &'a QuadMap<T>) -> impl Iterator<Item = (
     })
 }
 
-/// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/) for the `MemoryStore`.
+/// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/) for the [`MemoryStore`](struct.MemoryStore.html).
 pub struct MemoryPreparedQuery(SimplePreparedQuery<MemoryStore>);
 
 impl MemoryPreparedQuery {
@@ -940,7 +948,7 @@ impl MemoryPreparedQuery {
     }
 }
 
-/// Allows to insert and delete quads during a transaction with the `MemoryStore`.
+/// Allows to insert and delete quads during an ACID transaction with the [`MemoryStore`](struct.MemoryStore.html).
 pub struct MemoryTransaction {
     ops: Vec<TransactionOp>,
 }
@@ -973,6 +981,10 @@ impl MemoryTransaction {
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results);
     /// # Result::<_, oxigraph::sparql::EvaluationError>::Ok(())
     /// ```
+    ///
+    /// If the file parsing fails in the middle of the file, the triples read before are still
+    /// considered by the transaction. Rollback the transaction by making the transaction closure
+    /// return an error if you don't want that.
     pub fn load_graph<'a>(
         &mut self,
         reader: impl BufRead,
@@ -1014,6 +1026,10 @@ impl MemoryTransaction {
     /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), Some(ex.into()))], results);
     /// # Result::<_, oxigraph::sparql::EvaluationError>::Ok(())
     /// ```
+    ///
+    /// If the file parsing fails in the middle of the file, the quads read before are still
+    /// considered by the transaction. Rollback the transaction by making the transaction closure
+    /// return an error if you don't want that.
     pub fn load_dataset(
         &mut self,
         reader: impl BufRead,

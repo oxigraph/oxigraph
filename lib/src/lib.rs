@@ -2,17 +2,19 @@
 //!
 //! Its goal is to provide a compliant, safe and fast graph database.
 //!
-//! It currently provides three `Store` implementation providing [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) capability:
-//! * `MemoryStore`: a simple in memory implementation.
-//! * `RocksDbStore`: a file system implementation based on the [RocksDB](https://rocksdb.org/) key-value store.
+//! It currently provides three store implementations providing [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) capability:
+//! * [`MemoryStore`](store/memory/struct.MemoryStore.html): a simple in memory implementation.
+//! * [`RocksDbStore`](store/rocksdb/struct.RocksDbStore.html): a file system implementation based on the [RocksDB](https://rocksdb.org/) key-value store.
 //!   It requires the `"rocksdb"` feature to be activated.
-//!   It also requires the [clang](https://clang.llvm.org/) compiler to be installed.
-//! * `SledStore`: another file system implementation based on the [Sled](https://sled.rs/) key-value store.
+//!   The `"rocksdb"` requires the [clang](https://clang.llvm.org/) compiler to be installed.
+//! * [`SledStore`](store/sled/struct.SledStore.html): another file system implementation based on the [Sled](https://sled.rs/) key-value store.
 //!   It requires the `"sled"` feature to be activated.
 //!   Sled is much faster to build than RockDB and does not require a C++ compiler.
 //!   However, Sled is still in developpment, less tested and data load seems much slower than RocksDB.
 //!
-//! Usage example with the `MemoryStore`:
+//! It also provides a set of utility functions for reading, writing and processing RDF files.
+//!
+//! Usage example with the [`MemoryStore`](store/memory/struct.MemoryStore.html):
 //!
 //! ```
 //! use oxigraph::MemoryStore;
@@ -46,6 +48,8 @@
     unsafe_code,
     unused_qualifications
 )]
+#![doc(html_favicon_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/master/logo.svg")]
+#![doc(html_logo_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/master/logo.svg")]
 #![warn(
     clippy::unimplemented,
     clippy::cast_lossless,

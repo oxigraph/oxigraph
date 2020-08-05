@@ -7,19 +7,22 @@ Oxigraph
 Oxigraph is a work in progress graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
 
 There is no released version yet.
+The storage format is not stable yet and may be brocken at any time.
 
-Its goal is to provide a compliant, safe and fast graph database based on the [RocksDB](https://rocksdb.org/) key-value store.
+Its goal is to provide a compliant, safe and fast graph database based on the [RocksDB](https://rocksdb.org/) and [Sled](https://sled.rs/) key-value stores.
 It is written in Rust.
+It also provides a set of utility functions for reading, writing and processing RDF files.
 
 It is split into multiple parts:
 * The `lib` directory contains the database written as a Rust library.
 * The `python` directory contains bindings to use Oxigraph in Python. See [its README](https://github.com/oxigraph/oxigraph/blob/master/python/README.md) for the Python bindings documentation.
 * The `js` directory contains bindings to use Oxigraph in JavaScript with the help of WebAssembly. See [its README](https://github.com/oxigraph/oxigraph/blob/master/js/README.md) for the JS bindings documentation.
-* The `server` directory contains a stand-alone binary of a web server implementing the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/).
+* The `server` directory contains a stand-alone binary of a web server implementing the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/). It uses the [RocksDB](https://rocksdb.org/) key-value store.
 * The `wikibase` directory contains a stand-alone binary of a web server able to synchronize with a [Wikibase instance](https://wikiba.se/).
 
 Are currently implemented:
 * [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/) except `FROM` and `FROM NAMED`.
+* [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/).
 * [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/) and [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) RDF serialization formats for both data ingestion and retrieval using the [Rio library](https://github.com/oxigraph/rio).
 * [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/) and [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/).
 

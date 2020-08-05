@@ -298,7 +298,7 @@ pub struct QuerySolution {
 }
 
 impl QuerySolution {
-    /// Returns a value for a given position in the tuple (`usize`) or a given variable name (`&str` or `Variable`)
+    /// Returns a value for a given position in the tuple ([`usize`](https://doc.rust-lang.org/std/primitive.usize.html)) or a given variable name ([`&str`](https://doc.rust-lang.org/std/primitive.str.html) or [`Variable`](struct.Variable.html))
     ///
     /// ```ignore
     /// let foo = solution.get("foo"); // Get the value of the variable ?foo if it exists

@@ -322,7 +322,7 @@ fn to_integer_id(id: &str) -> Option<u128> {
     Some(value)
 }
 
-/// An error raised during `BlankNode` validation.
+/// An error raised during [`BlankNode`](struct.BlankNode.html) IDs validation.
 #[allow(missing_copy_implementations)]
 #[derive(Debug)]
 pub struct BlankNodeIdParseError {}

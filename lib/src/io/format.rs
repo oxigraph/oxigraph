@@ -1,6 +1,6 @@
 /// A file serialization format.
 ///
-/// Is implemented by `GraphFormat` for graph files and `DatasetFormat` for dataset files.
+/// Is implemented by [`GraphFormat`](../enum.GraphFormat.html) for graph files and [`DatasetFormat`](../enum.DatasetFormat.html) for dataset files.
 #[deprecated(note = "Use directly the methods on the implementing types")]
 pub trait FileSyntax: Sized {
     /// Its canonical IRI according to the [Unique URIs for file formats registry](https://www.w3.org/ns/formats/).

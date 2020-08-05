@@ -29,7 +29,7 @@ use std::{fmt, io, str};
 ///
 /// To use it, the `"sled"` feature needs to be activated.
 ///
-/// Warning: quad insertions and deletions are not (yet) atomic.
+/// Warning: Sled is not stable yet and might break its storage format.
 ///
 /// Usage example:
 /// ```
@@ -77,12 +77,12 @@ type EncodedQuad = crate::store::numeric_encoder::EncodedQuad<StrHash>;
 //TODO: indexes for the default graph and indexes for the named graphs (no more Optional and space saving)
 
 impl SledStore {
-    /// Opens a temporary `SledStore` that will be deleted after drop.
+    /// Creates a temporary [`SledStore`]() that will be deleted after drop.
     pub fn new() -> Result<Self, io::Error> {
         Self::do_open(&Config::new().temporary(true))
     }
 
-    /// Opens a `SledStore`
+    /// Opens a [`SledStore`]() and creates it if it does not exist yet.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, io::Error> {
         Self::do_open(&Config::new().path(path))
     }
@@ -97,7 +97,7 @@ impl SledStore {
 
     /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/).
     ///
-    /// See `MemoryStore` for a usage example.
+    /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.query) for a usage example.
     pub fn query(
         &self,
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
@@ -108,7 +108,7 @@ impl SledStore {
 
     /// Prepares a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) and returns an object that could be used to execute it.
     ///
-    /// See `MemoryStore` for a usage example.
+    /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.prepare_query) for a usage example.
     pub fn prepare_query(
         &self,
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
@@ -123,7 +123,7 @@ impl SledStore {
 
     /// Retrieves quads with a filter on each quad component
     ///
-    /// See `MemoryStore` for a usage example.
+    /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.quads_for_pattern) for a usage example.
     pub fn quads_for_pattern(
         &self,
         subject: Option<NamedOrBlankNodeRef<'_>>,
@@ -160,10 +160,10 @@ impl SledStore {
         self.quads.is_empty()
     }
 
-    /// Executes a transaction.
+    /// Executes an ACID transaction.
     ///
     /// The transaction is executed if the given closure returns `Ok`.
-    /// Nothing is done if the closure returns `Err`.
+    /// The transaction is rollbacked if the closure returns `Err`.
     ///
     /// Usage example:
     /// ```
@@ -197,13 +197,16 @@ impl SledStore {
 
     /// Loads a graph file (i.e. triples) into the store
     ///
-    /// Warning: This functions saves the triples in batch. If the parsing fails in the middle of the file,
-    /// only a part of it may be written. Use a (memory greedy) transaction if you do not want that.
+    /// Warning: This functions saves the triples in a not atomic way. If the parsing fails in the middle of the file,
+    /// only a part of it may be written to the store.
+    /// Also, this method is optimized for performances and is not atomic.
+    /// It might leave the store in a bad state if a crash happens during a triple insertion.
+    /// Use a (memory greedy) [transaction](#method.transaction) if you do not want that.
     ///
-    /// See `MemoryStore` for a usage example.
+    /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.load_graph) for a usage example.
     ///
-    /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
-    /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
+    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) error kind.
     /// Errors related to data loading into the store use the other error kinds.
     pub fn load_graph<'a>(
         &self,
@@ -219,13 +222,16 @@ impl SledStore {
 
     /// Loads a dataset file (i.e. quads) into the store.
     ///
-    /// Warning: This functions saves the quads in batch. If the parsing fails in the middle of the file,
-    /// only a part of it may be written. Use a (memory greedy) transaction if you do not want that.
+    /// Warning: This functions saves the triples in a not atomic way. If the parsing fails in the middle of the file,
+    /// only a part of it may be written to the store.
+    /// Also, this method is optimized for performances and is not atomic.
+    /// It might leave the store in a bad state if a crash happens during a quad insertion.
+    /// Use a (memory greedy) [transaction](#method.transaction) if you do not want that.
     ///
-    /// See `MemoryStore` for a usage example.
+    /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.load_dataset) for a usage example.
     ///
-    /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
-    /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
+    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) error kind.
     /// Errors related to data loading into the store use the other error kinds.
     pub fn load_dataset(
         &self,
@@ -239,6 +245,10 @@ impl SledStore {
     }
 
     /// Adds a quad to this store.
+    ///
+    /// This method is optimized for performances and is not atomic.
+    /// It might leave the store in a bad state if a crash happens during the insertion.
+    /// Use a (memory greedy) [transaction](#method.transaction) if you do not want that.
     pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<(), io::Error> {
         let mut this = self;
         let quad = this.encode_quad(quad.into())?;
@@ -246,6 +256,10 @@ impl SledStore {
     }
 
     /// Removes a quad from this store.
+    ///
+    /// This method is optimized for performances and is not atomic.
+    /// It might leave the store in a bad state if a crash happens during the removal.
+    /// Use a (memory greedy) [transaction](#method.transaction) if you do not want that.
     pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<(), io::Error> {
         if let Some(quad) = self.get_encoded_quad(quad.into())? {
             let mut this = self;
@@ -257,7 +271,7 @@ impl SledStore {
 
     /// Dumps a store graph into a file.
     ///    
-    /// See `MemoryStore` for a usage example.
+    /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.dump_graph) for a usage example.
     pub fn dump_graph<'a>(
         &self,
         writer: impl Write,
@@ -274,7 +288,7 @@ impl SledStore {
 
     /// Dumps the store dataset into a file.
     ///    
-    /// See `MemoryStore` for a usage example.
+    /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.dump_dataset) for a usage example.
     pub fn dump_dataset(&self, writer: impl Write, format: DatasetFormat) -> Result<(), io::Error> {
         dump_dataset(
             self.quads_for_pattern(None, None, None, None),
@@ -584,7 +598,7 @@ impl<'a> WritableEncodedStore for &'a SledStore {
     }
 }
 
-/// Allows inserting and deleting quads during a transaction with the `SeldStore`.
+/// Allows inserting and deleting quads during an ACID transaction with the [`SledStore`](struct.SledStore.html).
 pub struct SledTransaction<'a> {
     quads: &'a TransactionalTree,
     id2str: &'a TransactionalTree,
@@ -597,10 +611,14 @@ impl SledTransaction<'_> {
     /// the full file content might be temporarily stored in main memory.
     /// Do not use for big files.
     ///
-    /// See `MemoryTransaction` for a usage example.
+    /// See [`MemoryTransaction`](../memory/struct.MemoryTransaction.html#method.load_graph) for a usage example.
     ///
-    /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
-    /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
+    /// If the file parsing fails in the middle of the file, the triples read before are still
+    /// considered by the transaction. Rollback the transaction by making the transaction closure
+    /// return an error if you don't want that.
+    ///
+    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) error kind.
     pub fn load_graph<'a>(
         &self,
         reader: impl BufRead,
@@ -619,10 +637,14 @@ impl SledTransaction<'_> {
     /// the full file content might be temporarily stored in main memory.
     /// Do not use for big files.
     ///
-    /// See `MemoryTransaction` for a usage example.
+    /// See [`MemoryTransaction`](../memory/struct.MemoryTransaction.html#method.load_dataset) for a usage example.
     ///
-    /// Errors related to parameter validation like the base IRI use the `INVALID_INPUT` error kind.
-    /// Errors related to a bad syntax in the loaded file use the `INVALID_DATA` error kind.
+    /// If the file parsing fails in the middle of the file, the quads read before are still
+    /// considered by the transaction. Rollback the transaction by making the transaction closure
+    /// return an error if you don't want that.
+    ///
+    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) error kind.
     pub fn load_dataset(
         &self,
         reader: impl BufRead,
@@ -903,7 +925,7 @@ impl<T> From<SledConflictableTransactionError<T>> for ConflictableTransactionErr
     }
 }
 
-/// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/) for the `SledStore`.
+/// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/) for the [`SledStore`](struct.SledStore.html).
 pub struct SledPreparedQuery(SimplePreparedQuery<SledStore>);
 
 impl SledPreparedQuery {

@@ -169,7 +169,7 @@ impl QueryOptions {
         self
     }
 
-    /// Use a given `ServiceHandler` to execute SPARQL SERVICE calls
+    /// Use a given [`ServiceHandler`](trait.ServiceHandler.html) to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls.
     pub fn with_service_handler(mut self, service_handler: impl ServiceHandler + 'static) -> Self {
         self.service_handler = Rc::new(ErrorConversionServiceHandler {
             handler: service_handler,
@@ -178,9 +178,10 @@ impl QueryOptions {
     }
 }
 
-/// Handler for SPARQL SERVICEs.
+/// Handler for [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE.
 ///
-/// Might be used to implement [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/)
+/// Should be given to [`QueryOptions`](struct.QueryOptions.html#method.with_service_handler)
+/// before evaluating a SPARQL query that uses SERVICE calls.
 ///
 /// ```
 /// use oxigraph::MemoryStore;
