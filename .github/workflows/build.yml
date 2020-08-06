@@ -27,7 +27,7 @@ jobs:
         submodules: true
     - run: rustup update
     - run: cargo build
-    - run: cargo test --verbose --all --all-features --exclude oxigraph_python
+    - run: cargo test --verbose --all --all-features --exclude pyoxigraph
       env:
         RUST_BACKTRACE: 1
 
@@ -50,11 +50,11 @@ jobs:
       - uses: actions/setup-python@v2
         with:
           python-version: 3.5
-      - run: python -m venv python/tests/venv
-      - run: source python/tests/venv/bin/activate && pip install --upgrade pip maturin sphinx
-      - run: source tests/venv/bin/activate && maturin develop
+      - run: python -m venv python/venv
+      - run: source python/venv/bin/activate && pip install --upgrade pip maturin sphinx
+      - run: source venv/bin/activate && maturin develop
         working-directory: ./python
-      - run: source venv/bin/activate && python -m unittest
+      - run: source ../venv/bin/activate && python -m unittest
         working-directory: ./python/tests
-      - run: source venv/bin/activate && sphinx-build -M doctest . build
+      - run: source ../venv/bin/activate && sphinx-build -M doctest . build
         working-directory: ./python/docs
