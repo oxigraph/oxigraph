@@ -75,11 +75,17 @@ impl<S: ReadableEncodedStore + 'static> SimplePreparedQuery<S> {
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
         options: QueryOptions,
     ) -> Result<Self, EvaluationError> {
-        let dataset = Rc::new(DatasetView::new(store, options.default_graph_as_union));
         Ok(Self(match query.try_into().map_err(|e| e.into())?.0 {
             QueryVariants::Select {
-                algebra, base_iri, ..
+                algebra,
+                base_iri,
+                dataset,
             } => {
+                let dataset = Rc::new(DatasetView::new(
+                    store,
+                    options.default_graph_as_union,
+                    &dataset,
+                )?);
                 let (plan, variables) = PlanBuilder::build(dataset.as_ref(), &algebra)?;
                 SimplePreparedQueryAction::Select {
                     plan: Rc::new(plan),
@@ -88,8 +94,15 @@ impl<S: ReadableEncodedStore + 'static> SimplePreparedQuery<S> {
                 }
             }
             QueryVariants::Ask {
-                algebra, base_iri, ..
+                algebra,
+                base_iri,
+                dataset,
             } => {
+                let dataset = Rc::new(DatasetView::new(
+                    store,
+                    options.default_graph_as_union,
+                    &dataset,
+                )?);
                 let (plan, _) = PlanBuilder::build(dataset.as_ref(), &algebra)?;
                 SimplePreparedQueryAction::Ask {
                     plan: Rc::new(plan),
@@ -100,8 +113,13 @@ impl<S: ReadableEncodedStore + 'static> SimplePreparedQuery<S> {
                 construct,
                 algebra,
                 base_iri,
-                ..
+                dataset,
             } => {
+                let dataset = Rc::new(DatasetView::new(
+                    store,
+                    options.default_graph_as_union,
+                    &dataset,
+                )?);
                 let (plan, variables) = PlanBuilder::build(dataset.as_ref(), &algebra)?;
                 SimplePreparedQueryAction::Construct {
                     plan: Rc::new(plan),
@@ -114,8 +132,15 @@ impl<S: ReadableEncodedStore + 'static> SimplePreparedQuery<S> {
                 }
             }
             QueryVariants::Describe {
-                algebra, base_iri, ..
+                algebra,
+                base_iri,
+                dataset,
             } => {
+                let dataset = Rc::new(DatasetView::new(
+                    store,
+                    options.default_graph_as_union,
+                    &dataset,
+                )?);
                 let (plan, _) = PlanBuilder::build(dataset.as_ref(), &algebra)?;
                 SimplePreparedQueryAction::Describe {
                     plan: Rc::new(plan),
@@ -221,7 +246,7 @@ impl QueryOptions {
 pub trait ServiceHandler {
     type Error: Error + Send + Sync + 'static;
 
-    /// Evaluates a `Query` against a given service identified by a `NamedNode`.
+    /// Evaluates a [`Query`](struct.Query.html) against a given service identified by a [`NamedNode`](../model/struct.NamedNode.html).
     fn handle(&self, service_name: NamedNode, query: Query) -> Result<QueryResult, Self::Error>;
 }
 

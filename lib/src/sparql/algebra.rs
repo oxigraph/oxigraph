@@ -1286,6 +1286,10 @@ impl DatasetSpec {
             named: vec![graph],
         }
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.default.is_empty() && self.named.is_empty()
+    }
 }
 
 impl Add for DatasetSpec {

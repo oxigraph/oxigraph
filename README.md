@@ -21,7 +21,7 @@ It is split into multiple parts:
 * The `wikibase` directory contains a stand-alone binary of a web server able to synchronize with a [Wikibase instance](https://wikiba.se/).
 
 Are currently implemented:
-* [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/) except `FROM` and `FROM NAMED`.
+* [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/).
 * [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/).
 * [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/) and [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) RDF serialization formats for both data ingestion and retrieval using the [Rio library](https://github.com/oxigraph/rio).
 * [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/) and [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/).
