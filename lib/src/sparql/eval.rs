@@ -1057,13 +1057,7 @@ where
                 if e.is_named_node() {
                     Some(e)
                 } else {
-                    let iri = match e {
-                        EncodedTerm::SmallStringLiteral(value) => Some(value.into()),
-                        EncodedTerm::BigStringLiteral { value_id } => {
-                            self.dataset.get_str(value_id).ok()?
-                        }
-                        _ => None,
-                    }?;
+                    let iri = self.to_simple_string(e)?;
                     self.build_named_node(
                         &if let Some(base_iri) = &self.base_iri {
                             base_iri.resolve(&iri)
@@ -1470,7 +1464,6 @@ where
                 EncodedTerm::BooleanLiteral(value) => {
                     Some(if value { 1_f32 } else { 0_f32 }.into())
                 }
-
                 EncodedTerm::SmallStringLiteral(value) => parse_float_str(&value),
                 EncodedTerm::BigStringLiteral { value_id } => {
                     parse_float_str(&*self.dataset.get_str(value_id).ok()??)
@@ -1916,7 +1909,7 @@ where
             },
             EncodedTerm::BooleanLiteral(a) => match b {
                 EncodedTerm::BooleanLiteral(b) => Some(a == b),
-                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
             },
             EncodedTerm::FloatLiteral(a) => match b {
@@ -1924,7 +1917,7 @@ where
                 EncodedTerm::DoubleLiteral(b) => Some(f64::from(a) == b),
                 EncodedTerm::IntegerLiteral(b) => Some(a == b as f32),
                 EncodedTerm::DecimalLiteral(b) => Some(a == b.to_f32()),
-                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
             },
             EncodedTerm::DoubleLiteral(a) => match b {
@@ -1932,7 +1925,7 @@ where
                 EncodedTerm::DoubleLiteral(b) => Some(a == b),
                 EncodedTerm::IntegerLiteral(b) => Some(a == (b as f64)),
                 EncodedTerm::DecimalLiteral(b) => Some(a == b.to_f64()),
-                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
             },
             EncodedTerm::IntegerLiteral(a) => match b {
@@ -1940,7 +1933,7 @@ where
                 EncodedTerm::DoubleLiteral(b) => Some((a as f64) == b),
                 EncodedTerm::IntegerLiteral(b) => Some(a == b),
                 EncodedTerm::DecimalLiteral(b) => Some(Decimal::from(a) == b),
-                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
             },
             EncodedTerm::DecimalLiteral(a) => match b {
@@ -1948,68 +1941,68 @@ where
                 EncodedTerm::DoubleLiteral(b) => Some(a.to_f64() == b),
                 EncodedTerm::IntegerLiteral(b) => Some(a == Decimal::from(b)),
                 EncodedTerm::DecimalLiteral(b) => Some(a == b),
-                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
             },
             EncodedTerm::DateTimeLiteral(a) => match b {
                 EncodedTerm::DateTimeLiteral(b) => Some(a == b),
-                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
             },
             EncodedTerm::TimeLiteral(a) => match b {
                 EncodedTerm::TimeLiteral(b) => Some(a == b),
-                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
             },
             EncodedTerm::DateLiteral(a) => match b {
                 EncodedTerm::DateLiteral(b) => Some(a == b),
-                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
             },
             EncodedTerm::GYearMonthLiteral(a) => match b {
                 EncodedTerm::GYearMonthLiteral(b) => Some(a == b),
-                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
             },
             EncodedTerm::GYearLiteral(a) => match b {
                 EncodedTerm::GYearLiteral(b) => Some(a == b),
-                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
             },
             EncodedTerm::GMonthDayLiteral(a) => match b {
                 EncodedTerm::GMonthDayLiteral(b) => Some(a == b),
-                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
             },
             EncodedTerm::GDayLiteral(a) => match b {
                 EncodedTerm::GDayLiteral(b) => Some(a == b),
-                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
             },
             EncodedTerm::GMonthLiteral(a) => match b {
                 EncodedTerm::GMonthLiteral(b) => Some(a == b),
-                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
             },
             EncodedTerm::DurationLiteral(a) => match b {
                 EncodedTerm::DurationLiteral(b) => Some(a == b),
                 EncodedTerm::YearMonthDurationLiteral(b) => Some(a == b),
                 EncodedTerm::DayTimeDurationLiteral(b) => Some(a == b),
-                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
             },
             EncodedTerm::YearMonthDurationLiteral(a) => match b {
                 EncodedTerm::DurationLiteral(b) => Some(a == b),
                 EncodedTerm::YearMonthDurationLiteral(b) => Some(a == b),
                 EncodedTerm::DayTimeDurationLiteral(b) => Some(a == b),
-                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
             },
             EncodedTerm::DayTimeDurationLiteral(a) => match b {
                 EncodedTerm::DurationLiteral(b) => Some(a == b),
                 EncodedTerm::YearMonthDurationLiteral(b) => Some(a == b),
                 EncodedTerm::DayTimeDurationLiteral(b) => Some(a == b),
-                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
             },
         }
@@ -2034,28 +2027,19 @@ where
     ) -> Ordering {
         match (a, b) {
             (Some(a), Some(b)) => match a {
-                EncodedTerm::NumericalBlankNode { .. }
-                | EncodedTerm::SmallBlankNode { .. }
-                | EncodedTerm::BigBlankNode { .. } => match b {
-                    EncodedTerm::NumericalBlankNode { .. }
-                    | EncodedTerm::SmallBlankNode { .. }
-                    | EncodedTerm::BigBlankNode { .. } => Ordering::Equal,
+                _ if a.is_blank_node() => match b {
+                    _ if b.is_blank_node() => Ordering::Equal,
                     _ => Ordering::Less,
                 },
                 EncodedTerm::NamedNode { iri_id: a } => match b {
                     EncodedTerm::NamedNode { iri_id: b } => {
                         self.compare_str_ids(a, b).unwrap_or(Ordering::Equal)
                     }
-                    EncodedTerm::NumericalBlankNode { .. }
-                    | EncodedTerm::SmallBlankNode { .. }
-                    | EncodedTerm::BigBlankNode { .. } => Ordering::Greater,
+                    _ if b.is_blank_node() => Ordering::Greater,
                     _ => Ordering::Less,
                 },
                 a => match b {
-                    EncodedTerm::NamedNode { .. }
-                    | EncodedTerm::NumericalBlankNode { .. }
-                    | EncodedTerm::SmallBlankNode { .. }
-                    | EncodedTerm::BigBlankNode { .. } => Ordering::Greater,
+                    _ if b.is_named_node() || b.is_blank_node() => Ordering::Greater,
                     b => self.partial_cmp_literals(a, b).unwrap_or(Ordering::Equal),
                 },
             },

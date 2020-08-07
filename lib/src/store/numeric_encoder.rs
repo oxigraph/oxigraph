@@ -301,6 +301,13 @@ impl<I: StrId> EncodedTerm<I> {
         }
     }
 
+    pub fn is_unknown_typed_literal(&self) -> bool {
+        match self {
+            Self::SmallTypedLiteral { .. } | Self::BigTypedLiteral { .. } => true,
+            _ => false,
+        }
+    }
+
     pub fn is_default_graph(&self) -> bool {
         *self == EncodedTerm::DefaultGraph
     }
