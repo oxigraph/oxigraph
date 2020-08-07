@@ -1,5 +1,9 @@
 use super::parser::{date_lexical_rep, date_time_lexical_rep, parse_value, time_lexical_rep};
 use super::{DayTimeDuration, Decimal, Duration, XsdParseError, YearMonthDuration};
+use crate::model::xsd::parser::{
+    g_day_lexical_rep, g_month_day_lexical_rep, g_month_lexical_rep, g_year_lexical_rep,
+    g_year_month_lexical_rep,
+};
 use std::cmp::{min, Ordering};
 use std::convert::{TryFrom, TryInto};
 use std::error::Error;
@@ -166,6 +170,10 @@ impl DateTime {
             })
         }
     }
+
+    pub fn is_identical_with(&self, other: &Self) -> bool {
+        self.timestamp.is_identical_with(&other.timestamp)
+    }
 }
 
 /// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
@@ -327,6 +335,10 @@ impl Time {
         .try_into()
         .ok()
     }
+
+    pub fn is_identical_with(&self, other: &Self) -> bool {
+        self.timestamp.is_identical_with(&other.timestamp)
+    }
 }
 
 /// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
@@ -475,6 +487,10 @@ impl Date {
             .try_into()
             .ok()
     }
+
+    pub fn is_identical_with(&self, other: &Self) -> bool {
+        self.timestamp.is_identical_with(&other.timestamp)
+    }
 }
 
 /// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
@@ -506,6 +522,499 @@ impl fmt::Display for Date {
             write!(f, "-")?;
         }
         write!(f, "{:04}-{:02}-{:02}", year.abs(), self.month(), self.day())?;
+        if let Some(timezone_offset) = self.timezone_offset() {
+            write!(f, "{}", timezone_offset)?;
+        }
+        Ok(())
+    }
+}
+
+/// [XML Schema `gYearMonth` datatype](https://www.w3.org/TR/xmlschema11-2/#gYearMonth) implementation.
+#[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
+pub struct GYearMonth {
+    timestamp: Timestamp,
+}
+
+impl GYearMonth {
+    pub(super) fn new(
+        year: i64,
+        month: u8,
+        timezone_offset: Option<TimezoneOffset>,
+    ) -> Result<Self, DateTimeError> {
+        Ok(Self {
+            timestamp: Timestamp::new(&DateTimeSevenPropertyModel {
+                year: Some(year),
+                month: Some(month),
+                day: None,
+                hour: None,
+                minute: None,
+                second: None,
+                timezone_offset,
+            })?,
+        })
+    }
+
+    pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
+        Self {
+            timestamp: Timestamp::from_be_bytes(bytes),
+        }
+    }
+
+    pub fn year(&self) -> i64 {
+        self.timestamp.year()
+    }
+
+    pub fn month(&self) -> u8 {
+        self.timestamp.month()
+    }
+
+    pub fn timezone(&self) -> Option<DayTimeDuration> {
+        Some(self.timezone_offset()?.into())
+    }
+
+    pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
+        self.timestamp.timezone_offset()
+    }
+
+    pub fn to_be_bytes(&self) -> [u8; 18] {
+        self.timestamp.to_be_bytes()
+    }
+
+    pub fn is_identical_with(&self, other: &Self) -> bool {
+        self.timestamp.is_identical_with(&other.timestamp)
+    }
+}
+
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+impl TryFrom<DateTime> for GYearMonth {
+    type Error = DateTimeError;
+
+    fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
+        GYearMonth::new(
+            date_time.year(),
+            date_time.month(),
+            date_time.timezone_offset(),
+        )
+    }
+}
+
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+impl TryFrom<Date> for GYearMonth {
+    type Error = DateTimeError;
+
+    fn try_from(date: Date) -> Result<Self, DateTimeError> {
+        GYearMonth::new(date.year(), date.month(), date.timezone_offset())
+    }
+}
+
+impl FromStr for GYearMonth {
+    type Err = XsdParseError;
+
+    fn from_str(input: &str) -> Result<Self, XsdParseError> {
+        parse_value(g_year_month_lexical_rep, input)
+    }
+}
+
+impl fmt::Display for GYearMonth {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let year = self.year();
+        if year < 0 {
+            write!(f, "-")?;
+        }
+        write!(f, "{:04}-{:02}", year.abs(), self.month())?;
+        if let Some(timezone_offset) = self.timezone_offset() {
+            write!(f, "{}", timezone_offset)?;
+        }
+        Ok(())
+    }
+}
+
+/// [XML Schema `gYear` datatype](https://www.w3.org/TR/xmlschema11-2/#gYear) implementation.
+#[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
+pub struct GYear {
+    timestamp: Timestamp,
+}
+
+impl GYear {
+    pub(super) fn new(
+        year: i64,
+        timezone_offset: Option<TimezoneOffset>,
+    ) -> Result<Self, DateTimeError> {
+        Ok(Self {
+            timestamp: Timestamp::new(&DateTimeSevenPropertyModel {
+                year: Some(year),
+                month: None,
+                day: None,
+                hour: None,
+                minute: None,
+                second: None,
+                timezone_offset,
+            })?,
+        })
+    }
+
+    pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
+        Self {
+            timestamp: Timestamp::from_be_bytes(bytes),
+        }
+    }
+
+    pub fn year(&self) -> i64 {
+        self.timestamp.year()
+    }
+
+    pub fn timezone(&self) -> Option<DayTimeDuration> {
+        Some(self.timezone_offset()?.into())
+    }
+
+    pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
+        self.timestamp.timezone_offset()
+    }
+
+    pub fn to_be_bytes(&self) -> [u8; 18] {
+        self.timestamp.to_be_bytes()
+    }
+
+    pub fn is_identical_with(&self, other: &Self) -> bool {
+        self.timestamp.is_identical_with(&other.timestamp)
+    }
+}
+
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+impl TryFrom<DateTime> for GYear {
+    type Error = DateTimeError;
+
+    fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
+        GYear::new(date_time.year(), date_time.timezone_offset())
+    }
+}
+
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+impl TryFrom<Date> for GYear {
+    type Error = DateTimeError;
+
+    fn try_from(date: Date) -> Result<Self, DateTimeError> {
+        GYear::new(date.year(), date.timezone_offset())
+    }
+}
+
+impl TryFrom<GYearMonth> for GYear {
+    type Error = DateTimeError;
+
+    fn try_from(year_month: GYearMonth) -> Result<Self, DateTimeError> {
+        GYear::new(year_month.year(), year_month.timezone_offset())
+    }
+}
+
+impl FromStr for GYear {
+    type Err = XsdParseError;
+
+    fn from_str(input: &str) -> Result<Self, XsdParseError> {
+        parse_value(g_year_lexical_rep, input)
+    }
+}
+
+impl fmt::Display for GYear {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let year = self.year();
+        if year < 0 {
+            write!(f, "-")?;
+        }
+        write!(f, "{:04}", year.abs())?;
+        if let Some(timezone_offset) = self.timezone_offset() {
+            write!(f, "{}", timezone_offset)?;
+        }
+        Ok(())
+    }
+}
+
+/// [XML Schema `gMonthDay` datatype](https://www.w3.org/TR/xmlschema11-2/#gMonthDay) implementation.
+#[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
+pub struct GMonthDay {
+    timestamp: Timestamp,
+}
+
+impl GMonthDay {
+    pub(super) fn new(
+        month: u8,
+        day: u8,
+        timezone_offset: Option<TimezoneOffset>,
+    ) -> Result<Self, DateTimeError> {
+        Ok(Self {
+            timestamp: Timestamp::new(&DateTimeSevenPropertyModel {
+                year: None,
+                month: Some(month),
+                day: Some(day),
+                hour: None,
+                minute: None,
+                second: None,
+                timezone_offset,
+            })?,
+        })
+    }
+
+    pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
+        Self {
+            timestamp: Timestamp::from_be_bytes(bytes),
+        }
+    }
+
+    pub fn month(&self) -> u8 {
+        self.timestamp.month()
+    }
+
+    pub fn day(&self) -> u8 {
+        self.timestamp.day()
+    }
+
+    pub fn timezone(&self) -> Option<DayTimeDuration> {
+        Some(self.timezone_offset()?.into())
+    }
+
+    pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
+        self.timestamp.timezone_offset()
+    }
+
+    pub fn to_be_bytes(&self) -> [u8; 18] {
+        self.timestamp.to_be_bytes()
+    }
+
+    pub fn is_identical_with(&self, other: &Self) -> bool {
+        self.timestamp.is_identical_with(&other.timestamp)
+    }
+}
+
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+impl TryFrom<DateTime> for GMonthDay {
+    type Error = DateTimeError;
+
+    fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
+        GMonthDay::new(
+            date_time.month(),
+            date_time.day(),
+            date_time.timezone_offset(),
+        )
+    }
+}
+
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+impl TryFrom<Date> for GMonthDay {
+    type Error = DateTimeError;
+
+    fn try_from(date: Date) -> Result<Self, DateTimeError> {
+        GMonthDay::new(date.month(), date.day(), date.timezone_offset())
+    }
+}
+
+impl FromStr for GMonthDay {
+    type Err = XsdParseError;
+
+    fn from_str(input: &str) -> Result<Self, XsdParseError> {
+        parse_value(g_month_day_lexical_rep, input)
+    }
+}
+
+impl fmt::Display for GMonthDay {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "--{:02}-{:02}", self.month(), self.day())?;
+        if let Some(timezone_offset) = self.timezone_offset() {
+            write!(f, "{}", timezone_offset)?;
+        }
+        Ok(())
+    }
+}
+
+/// [XML Schema `gMonth` datatype](https://www.w3.org/TR/xmlschema11-2/#gMonth) implementation.
+#[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
+pub struct GMonth {
+    timestamp: Timestamp,
+}
+
+impl GMonth {
+    pub(super) fn new(
+        month: u8,
+        timezone_offset: Option<TimezoneOffset>,
+    ) -> Result<Self, DateTimeError> {
+        Ok(Self {
+            timestamp: Timestamp::new(&DateTimeSevenPropertyModel {
+                year: None,
+                month: Some(month),
+                day: None,
+                hour: None,
+                minute: None,
+                second: None,
+                timezone_offset,
+            })?,
+        })
+    }
+
+    pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
+        Self {
+            timestamp: Timestamp::from_be_bytes(bytes),
+        }
+    }
+
+    pub fn month(&self) -> u8 {
+        self.timestamp.month()
+    }
+
+    pub fn timezone(&self) -> Option<DayTimeDuration> {
+        Some(self.timezone_offset()?.into())
+    }
+
+    pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
+        self.timestamp.timezone_offset()
+    }
+
+    pub fn to_be_bytes(&self) -> [u8; 18] {
+        self.timestamp.to_be_bytes()
+    }
+
+    pub fn is_identical_with(&self, other: &Self) -> bool {
+        self.timestamp.is_identical_with(&other.timestamp)
+    }
+}
+
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+impl TryFrom<DateTime> for GMonth {
+    type Error = DateTimeError;
+
+    fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
+        GMonth::new(date_time.month(), date_time.timezone_offset())
+    }
+}
+
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+impl TryFrom<Date> for GMonth {
+    type Error = DateTimeError;
+
+    fn try_from(date: Date) -> Result<Self, DateTimeError> {
+        GMonth::new(date.month(), date.timezone_offset())
+    }
+}
+
+impl TryFrom<GYearMonth> for GMonth {
+    type Error = DateTimeError;
+
+    fn try_from(year_month: GYearMonth) -> Result<Self, DateTimeError> {
+        GMonth::new(year_month.month(), year_month.timezone_offset())
+    }
+}
+
+impl TryFrom<GMonthDay> for GMonth {
+    type Error = DateTimeError;
+
+    fn try_from(month_day: GMonthDay) -> Result<Self, DateTimeError> {
+        GMonth::new(month_day.month(), month_day.timezone_offset())
+    }
+}
+
+impl FromStr for GMonth {
+    type Err = XsdParseError;
+
+    fn from_str(input: &str) -> Result<Self, XsdParseError> {
+        parse_value(g_month_lexical_rep, input)
+    }
+}
+
+impl fmt::Display for GMonth {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "--{:02}", self.month())?;
+        if let Some(timezone_offset) = self.timezone_offset() {
+            write!(f, "{}", timezone_offset)?;
+        }
+        Ok(())
+    }
+}
+
+/// [XML Schema `date` datatype](https://www.w3.org/TR/xmlschema11-2/#date) implementation.
+#[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
+pub struct GDay {
+    timestamp: Timestamp,
+}
+
+impl GDay {
+    pub(super) fn new(
+        day: u8,
+        timezone_offset: Option<TimezoneOffset>,
+    ) -> Result<Self, DateTimeError> {
+        Ok(Self {
+            timestamp: Timestamp::new(&DateTimeSevenPropertyModel {
+                year: None,
+                month: None,
+                day: Some(day),
+                hour: None,
+                minute: None,
+                second: None,
+                timezone_offset,
+            })?,
+        })
+    }
+
+    pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
+        Self {
+            timestamp: Timestamp::from_be_bytes(bytes),
+        }
+    }
+
+    pub fn day(&self) -> u8 {
+        self.timestamp.day()
+    }
+
+    pub fn timezone(&self) -> Option<DayTimeDuration> {
+        Some(self.timezone_offset()?.into())
+    }
+
+    pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
+        self.timestamp.timezone_offset()
+    }
+
+    pub fn to_be_bytes(&self) -> [u8; 18] {
+        self.timestamp.to_be_bytes()
+    }
+
+    pub fn is_identical_with(&self, other: &Self) -> bool {
+        self.timestamp.is_identical_with(&other.timestamp)
+    }
+}
+
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+impl TryFrom<DateTime> for GDay {
+    type Error = DateTimeError;
+
+    fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
+        GDay::new(date_time.day(), date_time.timezone_offset())
+    }
+}
+
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+impl TryFrom<Date> for GDay {
+    type Error = DateTimeError;
+
+    fn try_from(date: Date) -> Result<Self, DateTimeError> {
+        GDay::new(date.day(), date.timezone_offset())
+    }
+}
+
+impl TryFrom<GMonthDay> for GDay {
+    type Error = DateTimeError;
+
+    fn try_from(month_day: GMonthDay) -> Result<Self, DateTimeError> {
+        GDay::new(month_day.day(), month_day.timezone_offset())
+    }
+}
+
+impl FromStr for GDay {
+    type Err = XsdParseError;
+
+    fn from_str(input: &str) -> Result<Self, XsdParseError> {
+        parse_value(g_day_lexical_rep, input)
+    }
+}
+
+impl fmt::Display for GDay {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "---{:02}", self.day())?;
         if let Some(timezone_offset) = self.timezone_offset() {
             write!(f, "{}", timezone_offset)?;
         }
@@ -825,6 +1334,10 @@ impl Timestamp {
             None => [u8::MAX; 2],
         });
         bytes
+    }
+
+    pub fn is_identical_with(&self, other: &Self) -> bool {
+        self.value == other.value && self.timezone_offset == other.timezone_offset
     }
 }
 
@@ -1178,12 +1691,12 @@ mod tests {
             "1899-03-01T00:00:00"
         );
 
-        /*TODO assert_eq!(
+        assert_eq!(
             DateTime::from_str("-1000000000-01-01T00:00:00")
                 .unwrap()
                 .to_string(),
             "-1000000000-01-01T00:00:00"
-        );*/
+        );
         assert_eq!(
             DateTime::from_str("-2001-12-31T23:59:59")
                 .unwrap()
@@ -1213,6 +1726,27 @@ mod tests {
                 .unwrap()
                 .to_string(),
             "-1899-12-31T23:59:59"
+        );
+
+        assert_eq!(
+            GYearMonth::from_str("-1899-12+01:00").unwrap().to_string(),
+            "-1899-12+01:00"
+        );
+        assert_eq!(
+            GYear::from_str("-1899+01:00").unwrap().to_string(),
+            "-1899+01:00"
+        );
+        assert_eq!(
+            GMonthDay::from_str("--01-01+01:00").unwrap().to_string(),
+            "--01-01+01:00"
+        );
+        assert_eq!(
+            GDay::from_str("---01+01:00").unwrap().to_string(),
+            "---01+01:00"
+        );
+        assert_eq!(
+            GMonth::from_str("--01+01:00").unwrap().to_string(),
+            "--01+01:00"
         );
     }
 
@@ -1306,6 +1840,18 @@ mod tests {
             !(Time::from_str("08:00:00+09:00").unwrap()
                 > Time::from_str("17:00:00-06:00").unwrap())
         );
+
+        assert!(
+            GMonthDay::from_str("--12-12+13:00").unwrap()
+                < GMonthDay::from_str("--12-12+11:00").unwrap()
+        );
+        assert!(GDay::from_str("---15").unwrap() < GDay::from_str("---16").unwrap());
+        assert!(GDay::from_str("---15-13:00").unwrap() > GDay::from_str("---16+13:00").unwrap());
+        assert!(GDay::from_str("---15-11:00").unwrap() == GDay::from_str("---16+13:00").unwrap());
+        assert!(GDay::from_str("---15-13:00")
+            .unwrap()
+            .partial_cmp(&GDay::from_str("---16").unwrap())
+            .is_none());
     }
 
     #[test]

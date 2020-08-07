@@ -1,3 +1,4 @@
+use crate::model::vocab::{rdf, xsd};
 use crate::model::xsd::*;
 use crate::model::Triple;
 use crate::model::{BlankNode, LiteralRef, NamedNodeRef};
@@ -1281,49 +1282,66 @@ where
                 }
             }
             PlanExpression::Year(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::DateLiteral(date) => Some(date.year().into()),
                 EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.year().into()),
+                EncodedTerm::DateLiteral(date) => Some(date.year().into()),
+                EncodedTerm::GYearMonthLiteral(year_month) => Some(year_month.year().into()),
+                EncodedTerm::GYearLiteral(year) => Some(year.year().into()),
                 _ => None,
             },
             PlanExpression::Month(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::DateLiteral(date) => Some(date.year().into()),
                 EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.month().into()),
+                EncodedTerm::DateLiteral(date) => Some(date.year().into()),
+                EncodedTerm::GYearMonthLiteral(year_month) => Some(year_month.month().into()),
+                EncodedTerm::GMonthDayLiteral(month_day) => Some(month_day.month().into()),
+                EncodedTerm::GMonthLiteral(month) => Some(month.month().into()),
                 _ => None,
             },
             PlanExpression::Day(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::DateLiteral(date) => Some(date.year().into()),
                 EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.day().into()),
+                EncodedTerm::DateLiteral(date) => Some(date.year().into()),
+                EncodedTerm::GMonthDayLiteral(month_day) => Some(month_day.day().into()),
+                EncodedTerm::GDayLiteral(day) => Some(day.day().into()),
                 _ => None,
             },
             PlanExpression::Hours(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::TimeLiteral(time) => Some(time.hour().into()),
                 EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.hour().into()),
+                EncodedTerm::TimeLiteral(time) => Some(time.hour().into()),
                 _ => None,
             },
             PlanExpression::Minutes(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::TimeLiteral(time) => Some(time.minute().into()),
                 EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.minute().into()),
+                EncodedTerm::TimeLiteral(time) => Some(time.minute().into()),
                 _ => None,
             },
             PlanExpression::Seconds(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::TimeLiteral(time) => Some(time.second().into()),
                 EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.second().into()),
+                EncodedTerm::TimeLiteral(time) => Some(time.second().into()),
                 _ => None,
             },
             PlanExpression::Timezone(e) => Some(
                 match self.eval_expression(e, tuple)? {
-                    EncodedTerm::DateLiteral(date) => date.timezone(),
-                    EncodedTerm::TimeLiteral(time) => time.timezone(),
                     EncodedTerm::DateTimeLiteral(date_time) => date_time.timezone(),
+                    EncodedTerm::TimeLiteral(time) => time.timezone(),
+                    EncodedTerm::DateLiteral(date) => date.timezone(),
+                    EncodedTerm::GYearMonthLiteral(year_month) => year_month.timezone(),
+                    EncodedTerm::GYearLiteral(year) => year.timezone(),
+                    EncodedTerm::GMonthDayLiteral(month_day) => month_day.timezone(),
+                    EncodedTerm::GDayLiteral(day) => day.timezone(),
+                    EncodedTerm::GMonthLiteral(month) => month.timezone(),
                     _ => None,
                 }?
                 .into(),
             ),
             PlanExpression::Tz(e) => {
                 let timezone_offset = match self.eval_expression(e, tuple)? {
-                    EncodedTerm::DateLiteral(date) => date.timezone_offset(),
-                    EncodedTerm::TimeLiteral(time) => time.timezone_offset(),
                     EncodedTerm::DateTimeLiteral(date_time) => date_time.timezone_offset(),
+                    EncodedTerm::TimeLiteral(time) => time.timezone_offset(),
+                    EncodedTerm::DateLiteral(date) => date.timezone_offset(),
+                    EncodedTerm::GYearMonthLiteral(year_month) => year_month.timezone_offset(),
+                    EncodedTerm::GYearLiteral(year) => year.timezone_offset(),
+                    EncodedTerm::GMonthDayLiteral(month_day) => month_day.timezone_offset(),
+                    EncodedTerm::GDayLiteral(day) => day.timezone_offset(),
+                    EncodedTerm::GMonthLiteral(month) => month.timezone_offset(),
                     _ => return None,
                 };
                 match timezone_offset {
@@ -1589,9 +1607,14 @@ where
             EncodedTerm::DoubleLiteral(value) => self.build_string_id(&value.to_string()),
             EncodedTerm::IntegerLiteral(value) => self.build_string_id(&value.to_string()),
             EncodedTerm::DecimalLiteral(value) => self.build_string_id(&value.to_string()),
-            EncodedTerm::DateLiteral(value) => self.build_string_id(&value.to_string()),
-            EncodedTerm::TimeLiteral(value) => self.build_string_id(&value.to_string()),
             EncodedTerm::DateTimeLiteral(value) => self.build_string_id(&value.to_string()),
+            EncodedTerm::TimeLiteral(value) => self.build_string_id(&value.to_string()),
+            EncodedTerm::DateLiteral(value) => self.build_string_id(&value.to_string()),
+            EncodedTerm::GYearMonthLiteral(value) => self.build_string_id(&value.to_string()),
+            EncodedTerm::GYearLiteral(value) => self.build_string_id(&value.to_string()),
+            EncodedTerm::GMonthDayLiteral(value) => self.build_string_id(&value.to_string()),
+            EncodedTerm::GDayLiteral(value) => self.build_string_id(&value.to_string()),
+            EncodedTerm::GMonthLiteral(value) => self.build_string_id(&value.to_string()),
             EncodedTerm::DurationLiteral(value) => self.build_string_id(&value.to_string()),
             EncodedTerm::YearMonthDurationLiteral(value) => {
                 self.build_string_id(&value.to_string())
@@ -1928,8 +1951,8 @@ where
                 EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
                 _ => Some(false),
             },
-            EncodedTerm::DateLiteral(a) => match b {
-                EncodedTerm::DateLiteral(b) => Some(a == b),
+            EncodedTerm::DateTimeLiteral(a) => match b {
+                EncodedTerm::DateTimeLiteral(b) => Some(a == b),
                 EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
                 _ => Some(false),
             },
@@ -1938,8 +1961,33 @@ where
                 EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
                 _ => Some(false),
             },
-            EncodedTerm::DateTimeLiteral(a) => match b {
-                EncodedTerm::DateTimeLiteral(b) => Some(a == b),
+            EncodedTerm::DateLiteral(a) => match b {
+                EncodedTerm::DateLiteral(b) => Some(a == b),
+                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ => Some(false),
+            },
+            EncodedTerm::GYearMonthLiteral(a) => match b {
+                EncodedTerm::GYearMonthLiteral(b) => Some(a == b),
+                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ => Some(false),
+            },
+            EncodedTerm::GYearLiteral(a) => match b {
+                EncodedTerm::GYearLiteral(b) => Some(a == b),
+                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ => Some(false),
+            },
+            EncodedTerm::GMonthDayLiteral(a) => match b {
+                EncodedTerm::GMonthDayLiteral(b) => Some(a == b),
+                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ => Some(false),
+            },
+            EncodedTerm::GDayLiteral(a) => match b {
+                EncodedTerm::GDayLiteral(b) => Some(a == b),
+                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ => Some(false),
+            },
+            EncodedTerm::GMonthLiteral(a) => match b {
+                EncodedTerm::GMonthLiteral(b) => Some(a == b),
                 EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
                 _ => Some(false),
             },
@@ -2062,8 +2110,8 @@ where
                 EncodedTerm::DecimalLiteral(ref b) => a.partial_cmp(b),
                 _ => None,
             },
-            EncodedTerm::DateLiteral(a) => {
-                if let EncodedTerm::DateLiteral(ref b) = b {
+            EncodedTerm::DateTimeLiteral(a) => {
+                if let EncodedTerm::DateTimeLiteral(ref b) = b {
                     a.partial_cmp(b)
                 } else {
                     None
@@ -2076,8 +2124,43 @@ where
                     None
                 }
             }
-            EncodedTerm::DateTimeLiteral(a) => {
-                if let EncodedTerm::DateTimeLiteral(ref b) = b {
+            EncodedTerm::DateLiteral(a) => {
+                if let EncodedTerm::DateLiteral(ref b) = b {
+                    a.partial_cmp(b)
+                } else {
+                    None
+                }
+            }
+            EncodedTerm::GYearMonthLiteral(a) => {
+                if let EncodedTerm::GYearMonthLiteral(ref b) = b {
+                    a.partial_cmp(b)
+                } else {
+                    None
+                }
+            }
+            EncodedTerm::GYearLiteral(a) => {
+                if let EncodedTerm::GYearLiteral(ref b) = b {
+                    a.partial_cmp(b)
+                } else {
+                    None
+                }
+            }
+            EncodedTerm::GMonthDayLiteral(a) => {
+                if let EncodedTerm::GMonthDayLiteral(ref b) = b {
+                    a.partial_cmp(b)
+                } else {
+                    None
+                }
+            }
+            EncodedTerm::GDayLiteral(a) => {
+                if let EncodedTerm::GDayLiteral(ref b) = b {
+                    a.partial_cmp(b)
+                } else {
+                    None
+                }
+            }
+            EncodedTerm::GMonthLiteral(a) => {
+                if let EncodedTerm::GMonthLiteral(ref b) = b {
                     a.partial_cmp(b)
                 } else {
                     None
@@ -2141,50 +2224,37 @@ where
             | EncodedTerm::NumericalBlankNode { .. }
             | EncodedTerm::DefaultGraph => None,
             EncodedTerm::SmallStringLiteral(_) | EncodedTerm::BigStringLiteral { .. } => {
-                self.build_named_node("http://www.w3.org/2001/XMLSchema#string")
+                self.build_named_node(xsd::STRING.as_str())
             }
             EncodedTerm::SmallSmallLangStringLiteral { .. }
             | EncodedTerm::SmallBigLangStringLiteral { .. }
             | EncodedTerm::BigSmallLangStringLiteral { .. }
             | EncodedTerm::BigBigLangStringLiteral { .. } => {
-                self.build_named_node("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")
+                self.build_named_node(rdf::LANG_STRING.as_str())
             }
             EncodedTerm::SmallTypedLiteral { datatype_id, .. }
             | EncodedTerm::BigTypedLiteral { datatype_id, .. } => Some(EncodedTerm::NamedNode {
                 iri_id: datatype_id,
             }),
-            EncodedTerm::BooleanLiteral(..) => {
-                self.build_named_node("http://www.w3.org/2001/XMLSchema#boolean")
-            }
-            EncodedTerm::FloatLiteral(..) => {
-                self.build_named_node("http://www.w3.org/2001/XMLSchema#float")
-            }
-            EncodedTerm::DoubleLiteral(..) => {
-                self.build_named_node("http://www.w3.org/2001/XMLSchema#double")
-            }
-            EncodedTerm::IntegerLiteral(..) => {
-                self.build_named_node("http://www.w3.org/2001/XMLSchema#integer")
-            }
-            EncodedTerm::DecimalLiteral(..) => {
-                self.build_named_node("http://www.w3.org/2001/XMLSchema#decimal")
-            }
-            EncodedTerm::DateLiteral(..) => {
-                self.build_named_node("http://www.w3.org/2001/XMLSchema#date")
-            }
-            EncodedTerm::TimeLiteral(..) => {
-                self.build_named_node("http://www.w3.org/2001/XMLSchema#time")
-            }
-            EncodedTerm::DateTimeLiteral(..) => {
-                self.build_named_node("http://www.w3.org/2001/XMLSchema#dateTime")
-            }
-            EncodedTerm::DurationLiteral(..) => {
-                self.build_named_node("http://www.w3.org/2001/XMLSchema#duration")
-            }
+            EncodedTerm::BooleanLiteral(..) => self.build_named_node(xsd::BOOLEAN.as_str()),
+            EncodedTerm::FloatLiteral(..) => self.build_named_node(xsd::FLOAT.as_str()),
+            EncodedTerm::DoubleLiteral(..) => self.build_named_node(xsd::DOUBLE.as_str()),
+            EncodedTerm::IntegerLiteral(..) => self.build_named_node(xsd::INTEGER.as_str()),
+            EncodedTerm::DecimalLiteral(..) => self.build_named_node(xsd::DECIMAL.as_str()),
+            EncodedTerm::DateTimeLiteral(..) => self.build_named_node(xsd::DATE_TIME.as_str()),
+            EncodedTerm::TimeLiteral(..) => self.build_named_node(xsd::TIME.as_str()),
+            EncodedTerm::DateLiteral(..) => self.build_named_node(xsd::DATE.as_str()),
+            EncodedTerm::GYearMonthLiteral(..) => self.build_named_node(xsd::G_YEAR_MONTH.as_str()),
+            EncodedTerm::GYearLiteral(..) => self.build_named_node(xsd::G_YEAR.as_str()),
+            EncodedTerm::GMonthDayLiteral(..) => self.build_named_node(xsd::G_MONTH_DAY.as_str()),
+            EncodedTerm::GDayLiteral(..) => self.build_named_node(xsd::G_DAY.as_str()),
+            EncodedTerm::GMonthLiteral(..) => self.build_named_node(xsd::G_MONTH.as_str()),
+            EncodedTerm::DurationLiteral(..) => self.build_named_node(xsd::DURATION.as_str()),
             EncodedTerm::YearMonthDurationLiteral(..) => {
-                self.build_named_node("http://www.w3.org/2001/XMLSchema#yearMonthDuration")
+                self.build_named_node(xsd::YEAR_MONTH_DURATION.as_str())
             }
             EncodedTerm::DayTimeDurationLiteral(..) => {
-                self.build_named_node("http://www.w3.org/2001/XMLSchema#dayTimeDuration")
+                self.build_named_node(xsd::DAY_TIME_DURATION.as_str())
             }
         }
     }

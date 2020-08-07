@@ -12,7 +12,7 @@ use std::str::FromStr;
 
 use super::date_time::DateTimeError;
 use super::decimal::ParseDecimalError;
-use crate::model::xsd::date_time::TimezoneOffset;
+use crate::model::xsd::date_time::{GDay, GMonth, GMonthDay, GYear, GYearMonth, TimezoneOffset};
 use crate::model::xsd::duration::{DayTimeDuration, YearMonthDuration};
 use nom::bytes::streaming::take_while_m_n;
 use std::error::Error;
@@ -329,6 +329,59 @@ pub fn date_lexical_rep(input: &str) -> XsdResult<'_, Date> {
             opt(timezone_frag),
         )),
         |(year, _, month, _, day, timezone)| Date::new(year, month, day, timezone),
+    )(input)
+}
+
+// [19]   gYearMonthLexicalRep ::= yearFrag '-' monthFrag timezoneFrag?
+pub fn g_year_month_lexical_rep(input: &str) -> XsdResult<'_, GYearMonth> {
+    map_res(
+        tuple((year_frag, char('-'), month_frag, opt(timezone_frag))),
+        |(year, _, month, timezone)| GYearMonth::new(year, month, timezone),
+    )(input)
+}
+
+// [20]   gYearLexicalRep ::= yearFrag timezoneFrag?
+pub fn g_year_lexical_rep(input: &str) -> XsdResult<'_, GYear> {
+    map_res(
+        tuple((year_frag, opt(timezone_frag))),
+        |(year, timezone)| GYear::new(year, timezone),
+    )(input)
+}
+
+// [21]   gMonthDayLexicalRep ::= '--' monthFrag '-' dayFrag timezoneFrag?   Constraint:  Day-of-month Representations
+pub fn g_month_day_lexical_rep(input: &str) -> XsdResult<'_, GMonthDay> {
+    map_res(
+        tuple((
+            char('-'),
+            char('-'),
+            month_frag,
+            char('-'),
+            day_frag,
+            opt(timezone_frag),
+        )),
+        |(_, _, month, _, day, timezone)| GMonthDay::new(month, day, timezone),
+    )(input)
+}
+
+// [22]   gDayLexicalRep ::= '---' dayFrag timezoneFrag?
+pub fn g_day_lexical_rep(input: &str) -> XsdResult<'_, GDay> {
+    map_res(
+        tuple((
+            char('-'),
+            char('-'),
+            char('-'),
+            day_frag,
+            opt(timezone_frag),
+        )),
+        |(_, _, _, day, timezone)| GDay::new(day, timezone),
+    )(input)
+}
+
+// [23]   gMonthLexicalRep ::= '--' monthFrag timezoneFrag?
+pub fn g_month_lexical_rep(input: &str) -> XsdResult<'_, GMonth> {
+    map_res(
+        tuple((char('-'), char('-'), month_frag, opt(timezone_frag))),
+        |(_, _, month, timezone)| GMonth::new(month, timezone),
     )(input)
 }
 

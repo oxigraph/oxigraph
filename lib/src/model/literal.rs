@@ -268,11 +268,11 @@ impl From<Decimal> for Literal {
     }
 }
 
-impl From<Date> for Literal {
-    fn from(value: Date) -> Self {
+impl From<DateTime> for Literal {
+    fn from(value: DateTime) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
-            datatype: xsd::DATE.into(),
+            datatype: xsd::DATE_TIME.into(),
         })
     }
 }
@@ -286,11 +286,56 @@ impl From<Time> for Literal {
     }
 }
 
-impl From<DateTime> for Literal {
-    fn from(value: DateTime) -> Self {
+impl From<Date> for Literal {
+    fn from(value: Date) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
-            datatype: xsd::DATE_TIME.into(),
+            datatype: xsd::DATE.into(),
+        })
+    }
+}
+
+impl From<GYearMonth> for Literal {
+    fn from(value: GYearMonth) -> Self {
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::G_YEAR_MONTH.into(),
+        })
+    }
+}
+
+impl From<GYear> for Literal {
+    fn from(value: GYear) -> Self {
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::G_YEAR.into(),
+        })
+    }
+}
+
+impl From<GMonthDay> for Literal {
+    fn from(value: GMonthDay) -> Self {
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::G_MONTH_DAY.into(),
+        })
+    }
+}
+
+impl From<GMonth> for Literal {
+    fn from(value: GMonth) -> Self {
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::G_MONTH.into(),
+        })
+    }
+}
+
+impl From<GDay> for Literal {
+    fn from(value: GDay) -> Self {
+        Literal(LiteralContent::TypedLiteral {
+            value: value.to_string(),
+            datatype: xsd::G_DAY.into(),
         })
     }
 }
@@ -312,6 +357,7 @@ impl From<YearMonthDuration> for Literal {
         })
     }
 }
+
 impl From<DayTimeDuration> for Literal {
     fn from(value: DayTimeDuration) -> Self {
         Literal(LiteralContent::TypedLiteral {

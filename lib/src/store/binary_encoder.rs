@@ -39,11 +39,16 @@ const TYPE_DOUBLE_LITERAL: u8 = 31;
 const TYPE_INTEGER_LITERAL: u8 = 32;
 const TYPE_DECIMAL_LITERAL: u8 = 33;
 const TYPE_DATE_TIME_LITERAL: u8 = 34;
-const TYPE_DATE_LITERAL: u8 = 35;
-const TYPE_TIME_LITERAL: u8 = 36;
-const TYPE_DURATION_LITERAL: u8 = 37;
-const TYPE_YEAR_MONTH_DURATION_LITERAL: u8 = 38;
-const TYPE_DAY_TIME_DURATION_LITERAL: u8 = 39;
+const TYPE_TIME_LITERAL: u8 = 35;
+const TYPE_DATE_LITERAL: u8 = 36;
+const TYPE_G_YEAR_MONTH_LITERAL: u8 = 37;
+const TYPE_G_YEAR_LITERAL: u8 = 38;
+const TYPE_G_MONTH_DAY_LITERAL: u8 = 39;
+const TYPE_G_DAY_LITERAL: u8 = 40;
+const TYPE_G_MONTH_LITERAL: u8 = 41;
+const TYPE_DURATION_LITERAL: u8 = 42;
+const TYPE_YEAR_MONTH_DURATION_LITERAL: u8 = 43;
+const TYPE_DAY_TIME_DURATION_LITERAL: u8 = 44;
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
 #[repr(transparent)]
@@ -354,22 +359,51 @@ impl<R: Read> TermReader for R {
                 self.read_exact(&mut buffer)?;
                 Ok(EncodedTerm::DecimalLiteral(Decimal::from_be_bytes(buffer)))
             }
-            TYPE_DATE_LITERAL => {
-                let mut buffer = [0; 18];
-                self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::DateLiteral(Date::from_be_bytes(buffer)))
-            }
-            TYPE_TIME_LITERAL => {
-                let mut buffer = [0; 18];
-                self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::TimeLiteral(Time::from_be_bytes(buffer)))
-            }
             TYPE_DATE_TIME_LITERAL => {
                 let mut buffer = [0; 18];
                 self.read_exact(&mut buffer)?;
                 Ok(EncodedTerm::DateTimeLiteral(DateTime::from_be_bytes(
                     buffer,
                 )))
+            }
+            TYPE_TIME_LITERAL => {
+                let mut buffer = [0; 18];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::TimeLiteral(Time::from_be_bytes(buffer)))
+            }
+            TYPE_DATE_LITERAL => {
+                let mut buffer = [0; 18];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::DateLiteral(Date::from_be_bytes(buffer)))
+            }
+            TYPE_G_YEAR_MONTH_LITERAL => {
+                let mut buffer = [0; 18];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::GYearMonthLiteral(GYearMonth::from_be_bytes(
+                    buffer,
+                )))
+            }
+            TYPE_G_YEAR_LITERAL => {
+                let mut buffer = [0; 18];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::GYearLiteral(GYear::from_be_bytes(buffer)))
+            }
+            TYPE_G_MONTH_DAY_LITERAL => {
+                let mut buffer = [0; 18];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::GMonthDayLiteral(GMonthDay::from_be_bytes(
+                    buffer,
+                )))
+            }
+            TYPE_G_DAY_LITERAL => {
+                let mut buffer = [0; 18];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::GDayLiteral(GDay::from_be_bytes(buffer)))
+            }
+            TYPE_G_MONTH_LITERAL => {
+                let mut buffer = [0; 18];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::GMonthLiteral(GMonth::from_be_bytes(buffer)))
             }
             TYPE_DURATION_LITERAL => {
                 let mut buffer = [0; 24];
@@ -573,20 +607,40 @@ pub fn write_term(sink: &mut Vec<u8>, term: EncodedTerm) {
             sink.push(TYPE_DECIMAL_LITERAL);
             sink.extend_from_slice(&value.to_be_bytes())
         }
-        EncodedTerm::DateLiteral(value) => {
-            sink.push(TYPE_DATE_LITERAL);
+        EncodedTerm::DateTimeLiteral(value) => {
+            sink.push(TYPE_DATE_TIME_LITERAL);
             sink.extend_from_slice(&value.to_be_bytes())
         }
         EncodedTerm::TimeLiteral(value) => {
             sink.push(TYPE_TIME_LITERAL);
             sink.extend_from_slice(&value.to_be_bytes())
         }
-        EncodedTerm::DateTimeLiteral(value) => {
-            sink.push(TYPE_DATE_TIME_LITERAL);
-            sink.extend_from_slice(&value.to_be_bytes())
-        }
         EncodedTerm::DurationLiteral(value) => {
             sink.push(TYPE_DURATION_LITERAL);
+            sink.extend_from_slice(&value.to_be_bytes())
+        }
+        EncodedTerm::DateLiteral(value) => {
+            sink.push(TYPE_DATE_LITERAL);
+            sink.extend_from_slice(&value.to_be_bytes())
+        }
+        EncodedTerm::GYearMonthLiteral(value) => {
+            sink.push(TYPE_G_YEAR_MONTH_LITERAL);
+            sink.extend_from_slice(&value.to_be_bytes())
+        }
+        EncodedTerm::GYearLiteral(value) => {
+            sink.push(TYPE_G_YEAR_LITERAL);
+            sink.extend_from_slice(&value.to_be_bytes())
+        }
+        EncodedTerm::GMonthDayLiteral(value) => {
+            sink.push(TYPE_G_MONTH_DAY_LITERAL);
+            sink.extend_from_slice(&value.to_be_bytes())
+        }
+        EncodedTerm::GDayLiteral(value) => {
+            sink.push(TYPE_G_DAY_LITERAL);
+            sink.extend_from_slice(&value.to_be_bytes())
+        }
+        EncodedTerm::GMonthLiteral(value) => {
+            sink.push(TYPE_G_MONTH_LITERAL);
             sink.extend_from_slice(&value.to_be_bytes())
         }
         EncodedTerm::YearMonthDurationLiteral(value) => {
@@ -686,7 +740,14 @@ mod test {
             Literal::new_typed_literal("2020-01-01T01:01:01Z", xsd::DATE_TIME).into(),
             Literal::new_typed_literal("2020-01-01", xsd::DATE).into(),
             Literal::new_typed_literal("01:01:01Z", xsd::TIME).into(),
+            Literal::new_typed_literal("2020-01", xsd::G_YEAR_MONTH).into(),
+            Literal::new_typed_literal("2020", xsd::G_YEAR).into(),
+            Literal::new_typed_literal("--01-01", xsd::G_MONTH_DAY).into(),
+            Literal::new_typed_literal("--01", xsd::G_MONTH).into(),
+            Literal::new_typed_literal("---01", xsd::G_DAY).into(),
             Literal::new_typed_literal("PT1S", xsd::DURATION).into(),
+            Literal::new_typed_literal("PT1S", xsd::DAY_TIME_DURATION).into(),
+            Literal::new_typed_literal("P1Y", xsd::YEAR_MONTH_DURATION).into(),
             Literal::new_typed_literal("-foo", NamedNode::new_unchecked("http://foo.com")).into(),
             Literal::new_typed_literal(
                 "-foo-thisisaverybigtypedliteralwiththefoodatatype",

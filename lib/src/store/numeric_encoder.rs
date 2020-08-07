@@ -63,9 +63,14 @@ pub enum EncodedTerm<I: StrId> {
     DoubleLiteral(f64),
     IntegerLiteral(i64),
     DecimalLiteral(Decimal),
-    DateLiteral(Date),
-    TimeLiteral(Time),
     DateTimeLiteral(DateTime),
+    TimeLiteral(Time),
+    DateLiteral(Date),
+    GYearMonthLiteral(GYearMonth),
+    GYearLiteral(GYear),
+    GMonthDayLiteral(GMonthDay),
+    GDayLiteral(GDay),
+    GMonthLiteral(GMonth),
     DurationLiteral(Duration),
     YearMonthDurationLiteral(YearMonthDuration),
     DayTimeDurationLiteral(DayTimeDuration),
@@ -171,9 +176,14 @@ impl<I: StrId> PartialEq for EncodedTerm<I> {
             }
             (Self::IntegerLiteral(a), Self::IntegerLiteral(b)) => a == b,
             (Self::DecimalLiteral(a), Self::DecimalLiteral(b)) => a == b,
-            (Self::DateLiteral(a), Self::DateLiteral(b)) => a == b,
-            (Self::TimeLiteral(a), Self::TimeLiteral(b)) => a == b,
-            (Self::DateTimeLiteral(a), Self::DateTimeLiteral(b)) => a == b,
+            (Self::DateTimeLiteral(a), Self::DateTimeLiteral(b)) => a.is_identical_with(b),
+            (Self::TimeLiteral(a), Self::TimeLiteral(b)) => a.is_identical_with(b),
+            (Self::DateLiteral(a), Self::DateLiteral(b)) => a.is_identical_with(b),
+            (Self::GYearMonthLiteral(a), Self::GYearMonthLiteral(b)) => a.is_identical_with(b),
+            (Self::GYearLiteral(a), Self::GYearLiteral(b)) => a.is_identical_with(b),
+            (Self::GMonthDayLiteral(a), Self::GMonthDayLiteral(b)) => a.is_identical_with(b),
+            (Self::GMonthLiteral(a), Self::GMonthLiteral(b)) => a.is_identical_with(b),
+            (Self::GDayLiteral(a), Self::GDayLiteral(b)) => a.is_identical_with(b),
             (Self::DurationLiteral(a), Self::DurationLiteral(b)) => a == b,
             (Self::YearMonthDurationLiteral(a), Self::YearMonthDurationLiteral(b)) => a == b,
             (Self::DayTimeDurationLiteral(a), Self::DayTimeDurationLiteral(b)) => a == b,
@@ -229,9 +239,14 @@ impl<I: StrId> Hash for EncodedTerm<I> {
             Self::DoubleLiteral(value) => state.write(&value.to_ne_bytes()),
             Self::IntegerLiteral(value) => value.hash(state),
             Self::DecimalLiteral(value) => value.hash(state),
-            Self::DateLiteral(value) => value.hash(state),
-            Self::TimeLiteral(value) => value.hash(state),
             Self::DateTimeLiteral(value) => value.hash(state),
+            Self::TimeLiteral(value) => value.hash(state),
+            Self::DateLiteral(value) => value.hash(state),
+            Self::GYearMonthLiteral(value) => value.hash(state),
+            Self::GYearLiteral(value) => value.hash(state),
+            Self::GMonthDayLiteral(value) => value.hash(state),
+            Self::GDayLiteral(value) => value.hash(state),
+            Self::GMonthLiteral(value) => value.hash(state),
             Self::DurationLiteral(value) => value.hash(state),
             Self::YearMonthDurationLiteral(value) => value.hash(state),
             Self::DayTimeDurationLiteral(value) => value.hash(state),
@@ -271,9 +286,14 @@ impl<I: StrId> EncodedTerm<I> {
             | Self::DoubleLiteral(_)
             | Self::IntegerLiteral(_)
             | Self::DecimalLiteral(_)
-            | Self::DateLiteral(_)
-            | Self::TimeLiteral(_)
             | Self::DateTimeLiteral(_)
+            | Self::TimeLiteral(_)
+            | Self::DateLiteral(_)
+            | Self::GYearMonthLiteral(_)
+            | Self::GYearLiteral(_)
+            | Self::GMonthDayLiteral(_)
+            | Self::GDayLiteral(_)
+            | Self::GMonthLiteral(_)
             | Self::DurationLiteral(_)
             | Self::YearMonthDurationLiteral(_)
             | Self::DayTimeDurationLiteral(_) => true,
@@ -338,9 +358,14 @@ impl<I: StrId> EncodedTerm<I> {
             Self::DoubleLiteral(value) => EncodedTerm::DoubleLiteral(value),
             Self::IntegerLiteral(value) => EncodedTerm::IntegerLiteral(value),
             Self::DecimalLiteral(value) => EncodedTerm::DecimalLiteral(value),
+            Self::DateTimeLiteral(value) => EncodedTerm::DateTimeLiteral(value),
             Self::DateLiteral(value) => EncodedTerm::DateLiteral(value),
             Self::TimeLiteral(value) => EncodedTerm::TimeLiteral(value),
-            Self::DateTimeLiteral(value) => EncodedTerm::DateTimeLiteral(value),
+            Self::GYearMonthLiteral(value) => EncodedTerm::GYearMonthLiteral(value),
+            Self::GYearLiteral(value) => EncodedTerm::GYearLiteral(value),
+            Self::GMonthDayLiteral(value) => EncodedTerm::GMonthDayLiteral(value),
+            Self::GDayLiteral(value) => EncodedTerm::GDayLiteral(value),
+            Self::GMonthLiteral(value) => EncodedTerm::GMonthLiteral(value),
             Self::DurationLiteral(value) => EncodedTerm::DurationLiteral(value),
             Self::YearMonthDurationLiteral(value) => EncodedTerm::YearMonthDurationLiteral(value),
             Self::DayTimeDurationLiteral(value) => EncodedTerm::DayTimeDurationLiteral(value),
@@ -400,9 +425,14 @@ impl<I: StrId> EncodedTerm<I> {
             Self::DoubleLiteral(value) => EncodedTerm::DoubleLiteral(value),
             Self::IntegerLiteral(value) => EncodedTerm::IntegerLiteral(value),
             Self::DecimalLiteral(value) => EncodedTerm::DecimalLiteral(value),
+            Self::DateTimeLiteral(value) => EncodedTerm::DateTimeLiteral(value),
             Self::DateLiteral(value) => EncodedTerm::DateLiteral(value),
             Self::TimeLiteral(value) => EncodedTerm::TimeLiteral(value),
-            Self::DateTimeLiteral(value) => EncodedTerm::DateTimeLiteral(value),
+            Self::GYearMonthLiteral(value) => EncodedTerm::GYearMonthLiteral(value),
+            Self::GYearLiteral(value) => EncodedTerm::GYearLiteral(value),
+            Self::GMonthDayLiteral(value) => EncodedTerm::GMonthDayLiteral(value),
+            Self::GDayLiteral(value) => EncodedTerm::GDayLiteral(value),
+            Self::GMonthLiteral(value) => EncodedTerm::GMonthLiteral(value),
             Self::DurationLiteral(value) => EncodedTerm::DurationLiteral(value),
             Self::YearMonthDurationLiteral(value) => EncodedTerm::YearMonthDurationLiteral(value),
             Self::DayTimeDurationLiteral(value) => EncodedTerm::DayTimeDurationLiteral(value),
@@ -457,9 +487,9 @@ impl<I: StrId> From<Decimal> for EncodedTerm<I> {
     }
 }
 
-impl<I: StrId> From<Date> for EncodedTerm<I> {
-    fn from(value: Date) -> Self {
-        Self::DateLiteral(value)
+impl<I: StrId> From<DateTime> for EncodedTerm<I> {
+    fn from(value: DateTime) -> Self {
+        Self::DateTimeLiteral(value)
     }
 }
 
@@ -469,9 +499,9 @@ impl<I: StrId> From<Time> for EncodedTerm<I> {
     }
 }
 
-impl<I: StrId> From<DateTime> for EncodedTerm<I> {
-    fn from(value: DateTime) -> Self {
-        Self::DateTimeLiteral(value)
+impl<I: StrId> From<Date> for EncodedTerm<I> {
+    fn from(value: Date) -> Self {
+        Self::DateLiteral(value)
     }
 }
 
@@ -660,10 +690,15 @@ pub(crate) trait ReadEncoder: WithStoreError {
                 | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
                 | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => parse_integer_str(value),
                 "http://www.w3.org/2001/XMLSchema#decimal" => parse_decimal_str(value),
-                "http://www.w3.org/2001/XMLSchema#date" => parse_date_str(value),
-                "http://www.w3.org/2001/XMLSchema#time" => parse_time_str(value),
                 "http://www.w3.org/2001/XMLSchema#dateTime"
                 | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => parse_date_time_str(value),
+                "http://www.w3.org/2001/XMLSchema#time" => parse_time_str(value),
+                "http://www.w3.org/2001/XMLSchema#date" => parse_date_str(value),
+                "http://www.w3.org/2001/XMLSchema#gYearMonth" => parse_g_year_month_str(value),
+                "http://www.w3.org/2001/XMLSchema#gYear" => parse_g_year_str(value),
+                "http://www.w3.org/2001/XMLSchema#gMonthDay" => parse_g_month_day_str(value),
+                "http://www.w3.org/2001/XMLSchema#gDay" => parse_g_day_str(value),
+                "http://www.w3.org/2001/XMLSchema#gMonth" => parse_g_month_str(value),
                 "http://www.w3.org/2001/XMLSchema#duration" => parse_duration_str(value),
                 "http://www.w3.org/2001/XMLSchema#yearMonthDuration" => {
                     parse_year_month_duration_str(value)
@@ -949,12 +984,17 @@ pub(crate) trait WriteEncoder: WithStoreError {
                         parse_integer_str(value)
                     }
                     "http://www.w3.org/2001/XMLSchema#decimal" => parse_decimal_str(value),
-                    "http://www.w3.org/2001/XMLSchema#date" => parse_date_str(value),
-                    "http://www.w3.org/2001/XMLSchema#time" => parse_time_str(value),
                     "http://www.w3.org/2001/XMLSchema#dateTime"
                     | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => {
                         parse_date_time_str(value)
                     }
+                    "http://www.w3.org/2001/XMLSchema#time" => parse_time_str(value),
+                    "http://www.w3.org/2001/XMLSchema#date" => parse_date_str(value),
+                    "http://www.w3.org/2001/XMLSchema#gYearMonth" => parse_g_year_month_str(value),
+                    "http://www.w3.org/2001/XMLSchema#gYear" => parse_g_year_str(value),
+                    "http://www.w3.org/2001/XMLSchema#gMonthDay" => parse_g_month_day_str(value),
+                    "http://www.w3.org/2001/XMLSchema#gDay" => parse_g_day_str(value),
+                    "http://www.w3.org/2001/XMLSchema#gMonth" => parse_g_month_str(value),
                     "http://www.w3.org/2001/XMLSchema#duration" => parse_duration_str(value),
                     "http://www.w3.org/2001/XMLSchema#yearMonthDuration" => {
                         parse_year_month_duration_str(value)
@@ -1071,16 +1111,36 @@ pub fn parse_decimal_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
     value.parse().map(EncodedTerm::DecimalLiteral).ok()
 }
 
-pub fn parse_date_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
-    value.parse().map(EncodedTerm::DateLiteral).ok()
+pub fn parse_date_time_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+    value.parse().map(EncodedTerm::DateTimeLiteral).ok()
 }
 
 pub fn parse_time_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
     value.parse().map(EncodedTerm::TimeLiteral).ok()
 }
 
-pub fn parse_date_time_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
-    value.parse().map(EncodedTerm::DateTimeLiteral).ok()
+pub fn parse_date_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+    value.parse().map(EncodedTerm::DateLiteral).ok()
+}
+
+pub fn parse_g_year_month_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+    value.parse().map(EncodedTerm::GYearMonthLiteral).ok()
+}
+
+pub fn parse_g_year_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+    value.parse().map(EncodedTerm::GYearLiteral).ok()
+}
+
+pub fn parse_g_month_day_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+    value.parse().map(EncodedTerm::GMonthDayLiteral).ok()
+}
+
+pub fn parse_g_day_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+    value.parse().map(EncodedTerm::GDayLiteral).ok()
+}
+
+pub fn parse_g_month_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+    value.parse().map(EncodedTerm::GMonthLiteral).ok()
 }
 
 pub fn parse_duration_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
@@ -1225,9 +1285,14 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::DoubleLiteral(value) => Ok(Literal::from(value).into()),
             EncodedTerm::IntegerLiteral(value) => Ok(Literal::from(value).into()),
             EncodedTerm::DecimalLiteral(value) => Ok(Literal::from(value).into()),
+            EncodedTerm::DateTimeLiteral(value) => Ok(Literal::from(value).into()),
             EncodedTerm::DateLiteral(value) => Ok(Literal::from(value).into()),
             EncodedTerm::TimeLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::DateTimeLiteral(value) => Ok(Literal::from(value).into()),
+            EncodedTerm::GYearMonthLiteral(value) => Ok(Literal::from(value).into()),
+            EncodedTerm::GYearLiteral(value) => Ok(Literal::from(value).into()),
+            EncodedTerm::GMonthDayLiteral(value) => Ok(Literal::from(value).into()),
+            EncodedTerm::GDayLiteral(value) => Ok(Literal::from(value).into()),
+            EncodedTerm::GMonthLiteral(value) => Ok(Literal::from(value).into()),
             EncodedTerm::DurationLiteral(value) => Ok(Literal::from(value).into()),
             EncodedTerm::YearMonthDurationLiteral(value) => Ok(Literal::from(value).into()),
             EncodedTerm::DayTimeDurationLiteral(value) => Ok(Literal::from(value).into()),
