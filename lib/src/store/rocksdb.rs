@@ -10,7 +10,7 @@ use crate::store::numeric_encoder::{
 };
 use crate::store::{
     dump_dataset, dump_graph, get_encoded_quad_pattern, load_dataset, load_graph,
-    ReadableEncodedStore, WritableEncodedStore,
+    ReadableEncodedStore, WritableEncodedStore, LATEST_STORAGE_VERSION,
 };
 use rocksdb::*;
 use std::collections::HashMap;
@@ -89,9 +89,34 @@ impl RocksDbStore {
         options.create_missing_column_families(true);
         options.set_compaction_style(DBCompactionStyle::Universal);
 
-        Ok(Self {
+        let this = Self {
             db: Arc::new(DB::open_cf(&options, path, &COLUMN_FAMILIES).map_err(map_err)?),
-        })
+        };
+
+        let version = this.ensure_version()?;
+        if version != LATEST_STORAGE_VERSION {
+            return Err(invalid_data_error(format!(
+                "The RocksDB database is still using the encoding version {}, please upgrade it",
+                version
+            )));
+        }
+
+        Ok(this)
+    }
+
+    fn ensure_version(&self) -> Result<u64, io::Error> {
+        Ok(
+            if let Some(version) = self.db.get("oxversion").map_err(map_err)? {
+                let mut buffer = [0; 8];
+                buffer.copy_from_slice(&version);
+                u64::from_be_bytes(buffer)
+            } else {
+                self.db
+                    .put("oxversion", &LATEST_STORAGE_VERSION.to_be_bytes())
+                    .map_err(map_err)?;
+                LATEST_STORAGE_VERSION
+            },
+        )
     }
 
     /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/).

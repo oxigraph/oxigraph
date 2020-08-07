@@ -10,13 +10,13 @@ use crate::store::numeric_encoder::{
 };
 use crate::store::{
     dump_dataset, dump_graph, get_encoded_quad_pattern, load_dataset, load_graph,
-    ReadableEncodedStore, StoreOrParseError, WritableEncodedStore,
+    ReadableEncodedStore, StoreOrParseError, WritableEncodedStore, LATEST_STORAGE_VERSION,
 };
 use sled::transaction::{
     ConflictableTransactionError, TransactionError, Transactional, TransactionalTree,
     UnabortableTransactionError,
 };
-use sled::{Config, Iter, Tree};
+use sled::{Config, Db, Iter, Tree};
 use std::convert::TryInto;
 use std::error::Error;
 use std::io::{BufRead, Write};
@@ -61,6 +61,7 @@ use std::{fmt, io, str};
 /// ```
 #[derive(Clone)]
 pub struct SledStore {
+    default: Db,
     id2str: Tree,
     spog: Tree,
     posg: Tree,
@@ -91,7 +92,8 @@ impl SledStore {
 
     fn do_open(config: &Config) -> Result<Self, io::Error> {
         let db = config.open()?;
-        Ok(Self {
+        let this = Self {
+            default: db.clone(),
             id2str: db.open_tree("id2str")?,
             spog: db.open_tree("spog")?,
             posg: db.open_tree("posg")?,
@@ -102,6 +104,28 @@ impl SledStore {
             dspo: db.open_tree("dspo")?,
             dpos: db.open_tree("dpos")?,
             dosp: db.open_tree("dosp")?,
+        };
+
+        let version = this.ensure_version()?;
+        if version != LATEST_STORAGE_VERSION {
+            return Err(invalid_data_error(format!(
+                "The Sled database is still using the encoding version {}, please upgrade it",
+                version
+            )));
+        }
+
+        Ok(this)
+    }
+
+    fn ensure_version(&self) -> Result<u64, io::Error> {
+        Ok(if let Some(version) = self.default.get("oxversion")? {
+            let mut buffer = [0; 8];
+            buffer.copy_from_slice(&version);
+            u64::from_be_bytes(buffer)
+        } else {
+            self.default
+                .insert("oxversion", &LATEST_STORAGE_VERSION.to_be_bytes())?;
+            LATEST_STORAGE_VERSION
         })
     }
 
