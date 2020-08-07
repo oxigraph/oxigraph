@@ -480,12 +480,120 @@ impl<I: StrId> EncodedQuad<I> {
 
 pub trait TermReader {
     fn read_term(&mut self) -> Result<EncodedTerm<StrHash>, io::Error>;
-    fn read_spog_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error>;
-    fn read_posg_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error>;
-    fn read_ospg_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error>;
-    fn read_gspo_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error>;
-    fn read_gpos_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error>;
-    fn read_gosp_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error>;
+
+    fn read_spog_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
+        let subject = self.read_term()?;
+        let predicate = self.read_term()?;
+        let object = self.read_term()?;
+        let graph_name = self.read_term()?;
+        Ok(EncodedQuad {
+            subject,
+            predicate,
+            object,
+            graph_name,
+        })
+    }
+
+    fn read_posg_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
+        let predicate = self.read_term()?;
+        let object = self.read_term()?;
+        let subject = self.read_term()?;
+        let graph_name = self.read_term()?;
+        Ok(EncodedQuad {
+            subject,
+            predicate,
+            object,
+            graph_name,
+        })
+    }
+
+    fn read_ospg_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
+        let object = self.read_term()?;
+        let subject = self.read_term()?;
+        let predicate = self.read_term()?;
+        let graph_name = self.read_term()?;
+        Ok(EncodedQuad {
+            subject,
+            predicate,
+            object,
+            graph_name,
+        })
+    }
+
+    fn read_gspo_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
+        let graph_name = self.read_term()?;
+        let subject = self.read_term()?;
+        let predicate = self.read_term()?;
+        let object = self.read_term()?;
+        Ok(EncodedQuad {
+            subject,
+            predicate,
+            object,
+            graph_name,
+        })
+    }
+
+    fn read_gpos_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
+        let graph_name = self.read_term()?;
+        let predicate = self.read_term()?;
+        let object = self.read_term()?;
+        let subject = self.read_term()?;
+        Ok(EncodedQuad {
+            subject,
+            predicate,
+            object,
+            graph_name,
+        })
+    }
+
+    fn read_gosp_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
+        let graph_name = self.read_term()?;
+        let object = self.read_term()?;
+        let subject = self.read_term()?;
+        let predicate = self.read_term()?;
+        Ok(EncodedQuad {
+            subject,
+            predicate,
+            object,
+            graph_name,
+        })
+    }
+
+    fn read_dspo_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
+        let subject = self.read_term()?;
+        let predicate = self.read_term()?;
+        let object = self.read_term()?;
+        Ok(EncodedQuad {
+            subject,
+            predicate,
+            object,
+            graph_name: EncodedTerm::DefaultGraph,
+        })
+    }
+
+    fn read_dpos_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
+        let predicate = self.read_term()?;
+        let object = self.read_term()?;
+        let subject = self.read_term()?;
+        Ok(EncodedQuad {
+            subject,
+            predicate,
+            object,
+            graph_name: EncodedTerm::DefaultGraph,
+        })
+    }
+
+    fn read_dosp_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
+        let object = self.read_term()?;
+        let subject = self.read_term()?;
+        let predicate = self.read_term()?;
+        Ok(EncodedQuad {
+            subject,
+            predicate,
+            object,
+            graph_name: EncodedTerm::DefaultGraph,
+        })
+    }
 }
 
 impl<R: Read> TermReader for R {
@@ -604,84 +712,6 @@ impl<R: Read> TermReader for R {
             }
             _ => Err(invalid_data_error("the term buffer has an invalid type id")),
         }
-    }
-
-    fn read_spog_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
-        let subject = self.read_term()?;
-        let predicate = self.read_term()?;
-        let object = self.read_term()?;
-        let graph_name = self.read_term()?;
-        Ok(EncodedQuad {
-            subject,
-            predicate,
-            object,
-            graph_name,
-        })
-    }
-
-    fn read_posg_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
-        let predicate = self.read_term()?;
-        let object = self.read_term()?;
-        let subject = self.read_term()?;
-        let graph_name = self.read_term()?;
-        Ok(EncodedQuad {
-            subject,
-            predicate,
-            object,
-            graph_name,
-        })
-    }
-
-    fn read_ospg_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
-        let object = self.read_term()?;
-        let subject = self.read_term()?;
-        let predicate = self.read_term()?;
-        let graph_name = self.read_term()?;
-        Ok(EncodedQuad {
-            subject,
-            predicate,
-            object,
-            graph_name,
-        })
-    }
-
-    fn read_gspo_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
-        let graph_name = self.read_term()?;
-        let subject = self.read_term()?;
-        let predicate = self.read_term()?;
-        let object = self.read_term()?;
-        Ok(EncodedQuad {
-            subject,
-            predicate,
-            object,
-            graph_name,
-        })
-    }
-
-    fn read_gpos_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
-        let graph_name = self.read_term()?;
-        let predicate = self.read_term()?;
-        let object = self.read_term()?;
-        let subject = self.read_term()?;
-        Ok(EncodedQuad {
-            subject,
-            predicate,
-            object,
-            graph_name,
-        })
-    }
-
-    fn read_gosp_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
-        let graph_name = self.read_term()?;
-        let object = self.read_term()?;
-        let subject = self.read_term()?;
-        let predicate = self.read_term()?;
-        Ok(EncodedQuad {
-            subject,
-            predicate,
-            object,
-            graph_name,
-        })
     }
 }
 
