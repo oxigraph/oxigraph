@@ -4,9 +4,9 @@ use crate::error::invalid_data_error;
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResult, SimplePreparedQuery};
+use crate::store::binary_encoder::*;
 use crate::store::numeric_encoder::{
-    write_term, Decoder, ReadEncoder, StrContainer, StrHash, StrLookup, TermReader, WithStoreError,
-    WriteEncoder, WRITTEN_TERM_MAX_SIZE,
+    Decoder, ReadEncoder, StrContainer, StrLookup, WithStoreError, WriteEncoder,
 };
 use crate::store::{
     dump_dataset, dump_graph, get_encoded_quad_pattern, load_dataset, load_graph,
@@ -16,7 +16,7 @@ use rocksdb::*;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::io;
-use std::io::{BufRead, Cursor, Write};
+use std::io::{BufRead, Write};
 use std::iter::{once, Once};
 use std::mem::{take, transmute};
 use std::path::Path;
@@ -1045,36 +1045,6 @@ fn get_cf<'a>(db: &'a DB, name: &str) -> &'a ColumnFamily {
         .expect("A column family that should exist in RocksDB does not exist")
 }
 
-fn encode_term(t: EncodedTerm) -> Vec<u8> {
-    let mut vec = Vec::with_capacity(WRITTEN_TERM_MAX_SIZE);
-    write_term(&mut vec, t);
-    vec
-}
-
-fn encode_term_pair(t1: EncodedTerm, t2: EncodedTerm) -> Vec<u8> {
-    let mut vec = Vec::with_capacity(2 * WRITTEN_TERM_MAX_SIZE);
-    write_term(&mut vec, t1);
-    write_term(&mut vec, t2);
-    vec
-}
-
-fn encode_term_triple(t1: EncodedTerm, t2: EncodedTerm, t3: EncodedTerm) -> Vec<u8> {
-    let mut vec = Vec::with_capacity(3 * WRITTEN_TERM_MAX_SIZE);
-    write_term(&mut vec, t1);
-    write_term(&mut vec, t2);
-    write_term(&mut vec, t3);
-    vec
-}
-
-fn encode_term_quad(t1: EncodedTerm, t2: EncodedTerm, t3: EncodedTerm, t4: EncodedTerm) -> Vec<u8> {
-    let mut vec = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
-    write_term(&mut vec, t1);
-    write_term(&mut vec, t2);
-    write_term(&mut vec, t3);
-    write_term(&mut vec, t4);
-    vec
-}
-
 struct StaticDBRowIterator {
     iter: DBRawIterator<'static>,
     _db: Arc<DB>, // needed to ensure that DB still lives while iter is used
@@ -1162,96 +1132,6 @@ impl Iterator for DecodingIndexIterator {
     }
 }
 
-fn write_spog_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.subject);
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.object);
-    write_term(sink, quad.graph_name);
-}
-
-fn write_posg_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.object);
-    write_term(sink, quad.subject);
-    write_term(sink, quad.graph_name);
-}
-
-fn write_ospg_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.object);
-    write_term(sink, quad.subject);
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.graph_name);
-}
-
-fn write_gspo_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.graph_name);
-    write_term(sink, quad.subject);
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.object);
-}
-
-fn write_gpos_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.graph_name);
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.object);
-    write_term(sink, quad.subject);
-}
-
-fn write_gosp_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.graph_name);
-    write_term(sink, quad.object);
-    write_term(sink, quad.subject);
-    write_term(sink, quad.predicate);
-}
-
-fn write_spo_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.subject);
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.object);
-}
-
-fn write_pos_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.object);
-    write_term(sink, quad.subject);
-}
-
-fn write_osp_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.object);
-    write_term(sink, quad.subject);
-    write_term(sink, quad.predicate);
-}
-
-#[derive(Clone, Copy)]
-enum QuadEncoding {
-    SPOG,
-    POSG,
-    OSPG,
-    GSPO,
-    GPOS,
-    GOSP,
-    DSPO,
-    DPOS,
-    DOSP,
-}
-
-impl QuadEncoding {
-    fn decode(self, buffer: &[u8]) -> Result<EncodedQuad, io::Error> {
-        let mut cursor = Cursor::new(&buffer);
-        match self {
-            QuadEncoding::SPOG => cursor.read_spog_quad(),
-            QuadEncoding::POSG => cursor.read_posg_quad(),
-            QuadEncoding::OSPG => cursor.read_ospg_quad(),
-            QuadEncoding::GSPO => cursor.read_gspo_quad(),
-            QuadEncoding::GPOS => cursor.read_gpos_quad(),
-            QuadEncoding::GOSP => cursor.read_gosp_quad(),
-            QuadEncoding::DSPO => cursor.read_dspo_quad(),
-            QuadEncoding::DPOS => cursor.read_dpos_quad(),
-            QuadEncoding::DOSP => cursor.read_dosp_quad(),
-        }
-    }
-}
-
 fn map_err(e: Error) -> io::Error {
     io::Error::new(io::ErrorKind::Other, e)
 }
@@ -1330,6 +1210,7 @@ fn store() -> Result<(), io::Error> {
             store.insert(t)?;
         }
 
+        assert_eq!(store.len(), 4);
         assert_eq!(
             store
                 .quads_for_pattern(None, None, None, None)
@@ -1464,7 +1345,7 @@ fn store() -> Result<(), io::Error> {
                     Some(GraphNameRef::DefaultGraph)
                 )
                 .collect::<Result<Vec<_>, _>>()?,
-            vec![default_quad.clone()]
+            vec![default_quad]
         );
         assert_eq!(
             store
@@ -1475,7 +1356,7 @@ fn store() -> Result<(), io::Error> {
                     Some(main_g.as_ref())
                 )
                 .collect::<Result<Vec<_>, _>>()?,
-            vec![named_quad.clone()]
+            vec![named_quad]
         );
     }
 

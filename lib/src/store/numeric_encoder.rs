@@ -4,96 +4,18 @@ use crate::error::invalid_data_error;
 use crate::model::xsd::*;
 use crate::model::*;
 use crate::sparql::EvaluationError;
+use lasso::{Rodeo, Spur};
 use rand::random;
 use rio_api::model as rio;
-use siphasher::sip128::{Hasher128, SipHasher24};
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::error::Error;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::hash::Hasher;
-use std::io::Read;
-use std::mem::size_of;
 use std::{fmt, io, str};
 
 pub trait StrId: Eq + Debug + Copy + Hash {}
-
-pub trait SerializableStrId: StrId {
-    fn len() -> usize;
-
-    fn from_be_bytes(bytes: &[u8]) -> Self;
-
-    fn push_be_bytes(&self, buffer: &mut Vec<u8>);
-}
-
-#[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
-#[repr(transparent)]
-pub struct StrHash {
-    hash: u128,
-}
-
-impl StrHash {
-    pub fn new(value: &str) -> Self {
-        let mut hasher = SipHasher24::new();
-        hasher.write(value.as_bytes());
-        Self {
-            hash: hasher.finish128().into(),
-        }
-    }
-
-    #[inline]
-    pub fn from_be_bytes(bytes: [u8; 16]) -> Self {
-        Self {
-            hash: u128::from_be_bytes(bytes),
-        }
-    }
-
-    #[inline]
-    pub fn to_be_bytes(&self) -> [u8; 16] {
-        self.hash.to_be_bytes()
-    }
-}
-
-impl StrId for StrHash {}
-
-impl SerializableStrId for StrHash {
-    fn len() -> usize {
-        16
-    }
-
-    fn from_be_bytes(bytes: &[u8]) -> Self {
-        let mut hash = [0; 16];
-        hash.copy_from_slice(bytes);
-        Self {
-            hash: u128::from_be_bytes(hash),
-        }
-    }
-
-    fn push_be_bytes(&self, buffer: &mut Vec<u8>) {
-        buffer.extend_from_slice(&self.to_be_bytes())
-    }
-}
-
-const TYPE_DEFAULT_GRAPH_ID: u8 = 0;
-const TYPE_NAMED_NODE_ID: u8 = 1;
-const TYPE_INLINE_BLANK_NODE_ID: u8 = 2;
-const TYPE_NAMED_BLANK_NODE_ID: u8 = 3;
-const TYPE_LANG_STRING_LITERAL_ID: u8 = 4;
-const TYPE_TYPED_LITERAL_ID: u8 = 5;
-const TYPE_STRING_LITERAL: u8 = 6;
-const TYPE_BOOLEAN_LITERAL_TRUE: u8 = 7;
-const TYPE_BOOLEAN_LITERAL_FALSE: u8 = 8;
-const TYPE_FLOAT_LITERAL: u8 = 9;
-const TYPE_DOUBLE_LITERAL: u8 = 10;
-const TYPE_INTEGER_LITERAL: u8 = 11;
-const TYPE_DECIMAL_LITERAL: u8 = 12;
-const TYPE_DATE_TIME_LITERAL: u8 = 13;
-const TYPE_DATE_LITERAL: u8 = 14;
-const TYPE_TIME_LITERAL: u8 = 15;
-const TYPE_DURATION_LITERAL: u8 = 16;
-const TYPE_YEAR_MONTH_DURATION_LITERAL: u8 = 17;
-const TYPE_DAY_TIME_DURATION_LITERAL: u8 = 18;
 
 #[derive(Debug, Clone, Copy)]
 pub enum EncodedTerm<I: StrId> {
@@ -262,30 +184,6 @@ impl<I: StrId> EncodedTerm<I> {
 
     pub fn is_default_graph(&self) -> bool {
         *self == EncodedTerm::DefaultGraph
-    }
-
-    fn type_id(&self) -> u8 {
-        match self {
-            Self::DefaultGraph { .. } => TYPE_DEFAULT_GRAPH_ID,
-            Self::NamedNode { .. } => TYPE_NAMED_NODE_ID,
-            Self::InlineBlankNode { .. } => TYPE_INLINE_BLANK_NODE_ID,
-            Self::NamedBlankNode { .. } => TYPE_NAMED_BLANK_NODE_ID,
-            Self::StringLiteral { .. } => TYPE_STRING_LITERAL,
-            Self::LangStringLiteral { .. } => TYPE_LANG_STRING_LITERAL_ID,
-            Self::TypedLiteral { .. } => TYPE_TYPED_LITERAL_ID,
-            Self::BooleanLiteral(true) => TYPE_BOOLEAN_LITERAL_TRUE,
-            Self::BooleanLiteral(false) => TYPE_BOOLEAN_LITERAL_FALSE,
-            Self::FloatLiteral(_) => TYPE_FLOAT_LITERAL,
-            Self::DoubleLiteral(_) => TYPE_DOUBLE_LITERAL,
-            Self::IntegerLiteral(_) => TYPE_INTEGER_LITERAL,
-            Self::DecimalLiteral(_) => TYPE_DECIMAL_LITERAL,
-            Self::DateLiteral(_) => TYPE_DATE_LITERAL,
-            Self::TimeLiteral(_) => TYPE_TIME_LITERAL,
-            Self::DateTimeLiteral(_) => TYPE_DATE_TIME_LITERAL,
-            Self::DurationLiteral(_) => TYPE_DURATION_LITERAL,
-            Self::YearMonthDurationLiteral(_) => TYPE_YEAR_MONTH_DURATION_LITERAL,
-            Self::DayTimeDurationLiteral(_) => TYPE_DAY_TIME_DURATION_LITERAL,
-        }
     }
 
     pub fn map_id<J: StrId>(self, mapping: impl Fn(I) -> J) -> EncodedTerm<J> {
@@ -478,283 +376,6 @@ impl<I: StrId> EncodedQuad<I> {
     }
 }
 
-pub trait TermReader {
-    fn read_term(&mut self) -> Result<EncodedTerm<StrHash>, io::Error>;
-
-    fn read_spog_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
-        let subject = self.read_term()?;
-        let predicate = self.read_term()?;
-        let object = self.read_term()?;
-        let graph_name = self.read_term()?;
-        Ok(EncodedQuad {
-            subject,
-            predicate,
-            object,
-            graph_name,
-        })
-    }
-
-    fn read_posg_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
-        let predicate = self.read_term()?;
-        let object = self.read_term()?;
-        let subject = self.read_term()?;
-        let graph_name = self.read_term()?;
-        Ok(EncodedQuad {
-            subject,
-            predicate,
-            object,
-            graph_name,
-        })
-    }
-
-    fn read_ospg_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
-        let object = self.read_term()?;
-        let subject = self.read_term()?;
-        let predicate = self.read_term()?;
-        let graph_name = self.read_term()?;
-        Ok(EncodedQuad {
-            subject,
-            predicate,
-            object,
-            graph_name,
-        })
-    }
-
-    fn read_gspo_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
-        let graph_name = self.read_term()?;
-        let subject = self.read_term()?;
-        let predicate = self.read_term()?;
-        let object = self.read_term()?;
-        Ok(EncodedQuad {
-            subject,
-            predicate,
-            object,
-            graph_name,
-        })
-    }
-
-    fn read_gpos_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
-        let graph_name = self.read_term()?;
-        let predicate = self.read_term()?;
-        let object = self.read_term()?;
-        let subject = self.read_term()?;
-        Ok(EncodedQuad {
-            subject,
-            predicate,
-            object,
-            graph_name,
-        })
-    }
-
-    fn read_gosp_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
-        let graph_name = self.read_term()?;
-        let object = self.read_term()?;
-        let subject = self.read_term()?;
-        let predicate = self.read_term()?;
-        Ok(EncodedQuad {
-            subject,
-            predicate,
-            object,
-            graph_name,
-        })
-    }
-
-    fn read_dspo_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
-        let subject = self.read_term()?;
-        let predicate = self.read_term()?;
-        let object = self.read_term()?;
-        Ok(EncodedQuad {
-            subject,
-            predicate,
-            object,
-            graph_name: EncodedTerm::DefaultGraph,
-        })
-    }
-
-    fn read_dpos_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
-        let predicate = self.read_term()?;
-        let object = self.read_term()?;
-        let subject = self.read_term()?;
-        Ok(EncodedQuad {
-            subject,
-            predicate,
-            object,
-            graph_name: EncodedTerm::DefaultGraph,
-        })
-    }
-
-    fn read_dosp_quad(&mut self) -> Result<EncodedQuad<StrHash>, io::Error> {
-        let object = self.read_term()?;
-        let subject = self.read_term()?;
-        let predicate = self.read_term()?;
-        Ok(EncodedQuad {
-            subject,
-            predicate,
-            object,
-            graph_name: EncodedTerm::DefaultGraph,
-        })
-    }
-}
-
-impl<R: Read> TermReader for R {
-    fn read_term(&mut self) -> Result<EncodedTerm<StrHash>, io::Error> {
-        let mut type_buffer = [0];
-        self.read_exact(&mut type_buffer)?;
-        match type_buffer[0] {
-            TYPE_DEFAULT_GRAPH_ID => Ok(EncodedTerm::DefaultGraph),
-            TYPE_NAMED_NODE_ID => {
-                let mut buffer = [0; 16];
-                self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::NamedNode {
-                    iri_id: StrHash::from_be_bytes(buffer),
-                })
-            }
-            TYPE_INLINE_BLANK_NODE_ID => {
-                let mut buffer = [0; 16];
-                self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::InlineBlankNode {
-                    id: u128::from_be_bytes(buffer),
-                })
-            }
-            TYPE_NAMED_BLANK_NODE_ID => {
-                let mut buffer = [0; 16];
-                self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::NamedBlankNode {
-                    id_id: StrHash::from_be_bytes(buffer),
-                })
-            }
-            TYPE_LANG_STRING_LITERAL_ID => {
-                let mut language_buffer = [0; 16];
-                self.read_exact(&mut language_buffer)?;
-                let mut value_buffer = [0; 16];
-                self.read_exact(&mut value_buffer)?;
-                Ok(EncodedTerm::LangStringLiteral {
-                    language_id: StrHash::from_be_bytes(language_buffer),
-                    value_id: StrHash::from_be_bytes(value_buffer),
-                })
-            }
-            TYPE_TYPED_LITERAL_ID => {
-                let mut datatype_buffer = [0; 16];
-                self.read_exact(&mut datatype_buffer)?;
-                let mut value_buffer = [0; 16];
-                self.read_exact(&mut value_buffer)?;
-                Ok(EncodedTerm::TypedLiteral {
-                    datatype_id: StrHash::from_be_bytes(datatype_buffer),
-                    value_id: StrHash::from_be_bytes(value_buffer),
-                })
-            }
-            TYPE_STRING_LITERAL => {
-                let mut buffer = [0; 16];
-                self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::StringLiteral {
-                    value_id: StrHash::from_be_bytes(buffer),
-                })
-            }
-            TYPE_BOOLEAN_LITERAL_TRUE => Ok(EncodedTerm::BooleanLiteral(true)),
-            TYPE_BOOLEAN_LITERAL_FALSE => Ok(EncodedTerm::BooleanLiteral(false)),
-            TYPE_FLOAT_LITERAL => {
-                let mut buffer = [0; 4];
-                self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::FloatLiteral(f32::from_be_bytes(buffer)))
-            }
-            TYPE_DOUBLE_LITERAL => {
-                let mut buffer = [0; 8];
-                self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::DoubleLiteral(f64::from_be_bytes(buffer)))
-            }
-            TYPE_INTEGER_LITERAL => {
-                let mut buffer = [0; 8];
-                self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::IntegerLiteral(i64::from_be_bytes(buffer)))
-            }
-            TYPE_DECIMAL_LITERAL => {
-                let mut buffer = [0; 16];
-                self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::DecimalLiteral(Decimal::from_be_bytes(buffer)))
-            }
-            TYPE_DATE_LITERAL => {
-                let mut buffer = [0; 18];
-                self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::DateLiteral(Date::from_be_bytes(buffer)))
-            }
-            TYPE_TIME_LITERAL => {
-                let mut buffer = [0; 18];
-                self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::TimeLiteral(Time::from_be_bytes(buffer)))
-            }
-            TYPE_DATE_TIME_LITERAL => {
-                let mut buffer = [0; 18];
-                self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::DateTimeLiteral(DateTime::from_be_bytes(
-                    buffer,
-                )))
-            }
-            TYPE_DURATION_LITERAL => {
-                let mut buffer = [0; 24];
-                self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::DurationLiteral(Duration::from_be_bytes(
-                    buffer,
-                )))
-            }
-            TYPE_YEAR_MONTH_DURATION_LITERAL => {
-                let mut buffer = [0; 8];
-                self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::YearMonthDurationLiteral(
-                    YearMonthDuration::from_be_bytes(buffer),
-                ))
-            }
-            TYPE_DAY_TIME_DURATION_LITERAL => {
-                let mut buffer = [0; 16];
-                self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::DayTimeDurationLiteral(
-                    DayTimeDuration::from_be_bytes(buffer),
-                ))
-            }
-            _ => Err(invalid_data_error("the term buffer has an invalid type id")),
-        }
-    }
-}
-
-pub const WRITTEN_TERM_MAX_SIZE: usize = size_of::<u8>() + 2 * size_of::<StrHash>();
-
-pub fn write_term<I: SerializableStrId>(sink: &mut Vec<u8>, term: EncodedTerm<I>) {
-    sink.push(term.type_id());
-    match term {
-        EncodedTerm::DefaultGraph => {}
-        EncodedTerm::NamedNode { iri_id } => iri_id.push_be_bytes(sink),
-        EncodedTerm::InlineBlankNode { id } => sink.extend_from_slice(&id.to_be_bytes()),
-        EncodedTerm::NamedBlankNode { id_id } => id_id.push_be_bytes(sink),
-        EncodedTerm::StringLiteral { value_id } => value_id.push_be_bytes(sink),
-        EncodedTerm::LangStringLiteral {
-            value_id,
-            language_id,
-        } => {
-            value_id.push_be_bytes(sink);
-            language_id.push_be_bytes(sink);
-        }
-        EncodedTerm::TypedLiteral {
-            value_id,
-            datatype_id,
-        } => {
-            value_id.push_be_bytes(sink);
-            datatype_id.push_be_bytes(sink);
-        }
-        EncodedTerm::BooleanLiteral(_) => {}
-        EncodedTerm::FloatLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
-        EncodedTerm::DoubleLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
-        EncodedTerm::IntegerLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
-        EncodedTerm::DecimalLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
-        EncodedTerm::DateLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
-        EncodedTerm::TimeLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
-        EncodedTerm::DateTimeLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
-        EncodedTerm::DurationLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
-        EncodedTerm::YearMonthDurationLiteral(value) => {
-            sink.extend_from_slice(&value.to_be_bytes())
-        }
-        EncodedTerm::DayTimeDurationLiteral(value) => sink.extend_from_slice(&value.to_be_bytes()),
-    }
-}
-
 pub(crate) trait WithStoreError {
     //TODO: rename
     type Error: Error + Into<EvaluationError> + 'static;
@@ -776,44 +397,32 @@ pub(crate) trait StrContainer: WithStoreError {
     fn insert_str(&mut self, value: &str) -> Result<Self::StrId, Self::Error>;
 }
 
+#[derive(Default)]
 pub struct MemoryStrStore {
-    id2str: HashMap<StrHash, String>,
+    inner: Rodeo,
 }
 
-impl Default for MemoryStrStore {
-    fn default() -> Self {
-        Self {
-            id2str: HashMap::default(),
-        }
-    }
-}
+impl StrId for Spur {}
 
 impl WithStoreError for MemoryStrStore {
     type Error = Infallible;
-    type StrId = StrHash;
+    type StrId = Spur;
 }
 
 impl StrLookup for MemoryStrStore {
-    fn get_str(&self, id: StrHash) -> Result<Option<String>, Infallible> {
+    fn get_str(&self, id: Spur) -> Result<Option<String>, Infallible> {
         //TODO: avoid copy by adding a lifetime limit to get_str
-        Ok(self.id2str.get(&id).cloned())
+        Ok(self.inner.try_resolve(&id).map(|e| e.to_owned()))
     }
 
-    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, Infallible> {
-        let id = StrHash::new(value);
-        Ok(if self.id2str.contains_key(&id) {
-            Some(id)
-        } else {
-            None
-        })
+    fn get_str_id(&self, value: &str) -> Result<Option<Spur>, Infallible> {
+        Ok(self.inner.get(value))
     }
 }
 
 impl StrContainer for MemoryStrStore {
-    fn insert_str(&mut self, value: &str) -> Result<StrHash, Infallible> {
-        let key = StrHash::new(value);
-        self.id2str.entry(key).or_insert_with(|| value.to_owned());
-        Ok(key)
+    fn insert_str(&mut self, value: &str) -> Result<Spur, Infallible> {
+        Ok(self.inner.get_or_intern(value))
     }
 }
 

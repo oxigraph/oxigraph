@@ -4,9 +4,9 @@ use crate::error::invalid_data_error;
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResult, SimplePreparedQuery};
+use crate::store::binary_encoder::*;
 use crate::store::numeric_encoder::{
-    write_term, Decoder, ReadEncoder, StrContainer, StrHash, StrLookup, TermReader, WithStoreError,
-    WriteEncoder, WRITTEN_TERM_MAX_SIZE,
+    Decoder, ReadEncoder, StrContainer, StrLookup, WithStoreError, WriteEncoder,
 };
 use crate::store::{
     dump_dataset, dump_graph, get_encoded_quad_pattern, load_dataset, load_graph,
@@ -19,7 +19,7 @@ use sled::transaction::{
 use sled::{Config, Iter, Tree};
 use std::convert::TryInto;
 use std::error::Error;
-use std::io::{BufRead, Cursor, Write};
+use std::io::{BufRead, Write};
 use std::iter::{once, Once};
 use std::path::Path;
 use std::{fmt, io, str};
@@ -62,15 +62,17 @@ use std::{fmt, io, str};
 #[derive(Clone)]
 pub struct SledStore {
     id2str: Tree,
-    quads: Tree,
+    spog: Tree,
+    posg: Tree,
+    ospg: Tree,
+    gspo: Tree,
+    gpos: Tree,
+    gosp: Tree,
+    dspo: Tree,
+    dpos: Tree,
+    dosp: Tree,
 }
 
-const SPOG_PREFIX: u8 = 1;
-const POSG_PREFIX: u8 = 2;
-const OSPG_PREFIX: u8 = 3;
-const GSPO_PREFIX: u8 = 4;
-const GPOS_PREFIX: u8 = 5;
-const GOSP_PREFIX: u8 = 6;
 type EncodedTerm = crate::store::numeric_encoder::EncodedTerm<StrHash>;
 type EncodedQuad = crate::store::numeric_encoder::EncodedQuad<StrHash>;
 
@@ -91,7 +93,15 @@ impl SledStore {
         let db = config.open()?;
         Ok(Self {
             id2str: db.open_tree("id2str")?,
-            quads: db.open_tree("quads")?,
+            spog: db.open_tree("spog")?,
+            posg: db.open_tree("posg")?,
+            ospg: db.open_tree("ospg")?,
+            gspo: db.open_tree("gspo")?,
+            gpos: db.open_tree("gpos")?,
+            gosp: db.open_tree("gosp")?,
+            dspo: db.open_tree("dspo")?,
+            dpos: db.open_tree("dpos")?,
+            dosp: db.open_tree("dosp")?,
         })
     }
 
@@ -154,12 +164,12 @@ impl SledStore {
     ///
     /// Warning: this function executes a full scan
     pub fn len(&self) -> usize {
-        self.quads.len() / 6
+        self.gspo.len() + self.dspo.len()
     }
 
     /// Returns if the store is empty
     pub fn is_empty(&self) -> bool {
-        self.quads.is_empty()
+        self.gspo.is_empty() && self.dspo.is_empty()
     }
 
     /// Executes an ACID transaction.
@@ -193,8 +203,34 @@ impl SledStore {
         &self,
         f: impl Fn(SledTransaction<'_>) -> Result<T, SledConflictableTransactionError<E>>,
     ) -> Result<T, SledTransactionError<E>> {
-        Ok((&self.id2str, &self.quads)
-            .transaction(move |(id2str, quads)| Ok(f(SledTransaction { id2str, quads })?))?)
+        Ok((
+            &self.id2str,
+            &self.spog,
+            &self.posg,
+            &self.ospg,
+            &self.gspo,
+            &self.gpos,
+            &self.gosp,
+            &self.dspo,
+            &self.dpos,
+            &self.dosp,
+        )
+            .transaction(
+                move |(id2str, spog, posg, ospg, gspo, gpos, gosp, dspo, dpos, dosp)| {
+                    Ok(f(SledTransaction {
+                        id2str,
+                        spog,
+                        posg,
+                        ospg,
+                        gspo,
+                        gpos,
+                        gosp,
+                        dspo,
+                        dpos,
+                        dosp,
+                    })?)
+                },
+            )?)
     }
 
     /// Loads a graph file (i.e. triples) into the store
@@ -301,24 +337,37 @@ impl SledStore {
 
     fn contains_encoded(&self, quad: &EncodedQuad) -> Result<bool, io::Error> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
-        write_spog_quad(&mut buffer, quad);
-        Ok(self.quads.contains_key(buffer)?)
+        if quad.graph_name.is_default_graph() {
+            write_spo_quad(&mut buffer, quad);
+            Ok(self.dspo.contains_key(buffer)?)
+        } else {
+            write_gspo_quad(&mut buffer, quad);
+            Ok(self.gspo.contains_key(buffer)?)
+        }
+    }
+    fn quads(&self) -> DecodingQuadsIterator {
+        DecodingQuadsIterator::pair(
+            self.dspo_quads(Vec::default()),
+            self.gspo_quads(Vec::default()),
+        )
     }
 
-    fn quads(&self) -> DecodingQuadIterator {
-        self.inner_quads(&[SPOG_PREFIX])
-    }
-
-    fn quads_for_subject(&self, subject: EncodedTerm) -> DecodingQuadIterator {
-        self.inner_quads(encode_term(SPOG_PREFIX, subject))
+    fn quads_for_subject(&self, subject: EncodedTerm) -> DecodingQuadsIterator {
+        DecodingQuadsIterator::pair(
+            self.dspo_quads(encode_term(subject)),
+            self.spog_quads(encode_term(subject)),
+        )
     }
 
     fn quads_for_subject_predicate(
         &self,
         subject: EncodedTerm,
         predicate: EncodedTerm,
-    ) -> DecodingQuadIterator {
-        self.inner_quads(encode_term_pair(SPOG_PREFIX, subject, predicate))
+    ) -> DecodingQuadsIterator {
+        DecodingQuadsIterator::pair(
+            self.dspo_quads(encode_term_pair(subject, predicate)),
+            self.spog_quads(encode_term_pair(subject, predicate)),
+        )
     }
 
     fn quads_for_subject_predicate_object(
@@ -326,44 +375,67 @@ impl SledStore {
         subject: EncodedTerm,
         predicate: EncodedTerm,
         object: EncodedTerm,
-    ) -> DecodingQuadIterator {
-        self.inner_quads(encode_term_triple(SPOG_PREFIX, subject, predicate, object))
+    ) -> DecodingQuadsIterator {
+        DecodingQuadsIterator::pair(
+            self.dspo_quads(encode_term_triple(subject, predicate, object)),
+            self.spog_quads(encode_term_triple(subject, predicate, object)),
+        )
     }
 
     fn quads_for_subject_object(
         &self,
         subject: EncodedTerm,
         object: EncodedTerm,
-    ) -> DecodingQuadIterator {
-        self.inner_quads(encode_term_pair(OSPG_PREFIX, object, subject))
+    ) -> DecodingQuadsIterator {
+        DecodingQuadsIterator::pair(
+            self.dosp_quads(encode_term_pair(object, subject)),
+            self.ospg_quads(encode_term_pair(object, subject)),
+        )
     }
 
-    fn quads_for_predicate(&self, predicate: EncodedTerm) -> DecodingQuadIterator {
-        self.inner_quads(encode_term(POSG_PREFIX, predicate))
+    fn quads_for_predicate(&self, predicate: EncodedTerm) -> DecodingQuadsIterator {
+        DecodingQuadsIterator::pair(
+            self.dpos_quads(encode_term(predicate)),
+            self.posg_quads(encode_term(predicate)),
+        )
     }
 
     fn quads_for_predicate_object(
         &self,
         predicate: EncodedTerm,
         object: EncodedTerm,
-    ) -> DecodingQuadIterator {
-        self.inner_quads(encode_term_pair(POSG_PREFIX, predicate, object))
+    ) -> DecodingQuadsIterator {
+        DecodingQuadsIterator::pair(
+            self.dpos_quads(encode_term_pair(predicate, object)),
+            self.posg_quads(encode_term_pair(predicate, object)),
+        )
     }
 
-    fn quads_for_object(&self, object: EncodedTerm) -> DecodingQuadIterator {
-        self.inner_quads(encode_term(OSPG_PREFIX, object))
+    fn quads_for_object(&self, object: EncodedTerm) -> DecodingQuadsIterator {
+        DecodingQuadsIterator::pair(
+            self.dosp_quads(encode_term(object)),
+            self.ospg_quads(encode_term(object)),
+        )
     }
 
-    fn quads_for_graph(&self, graph_name: EncodedTerm) -> DecodingQuadIterator {
-        self.inner_quads(encode_term(GSPO_PREFIX, graph_name))
+    fn quads_for_graph(&self, graph_name: EncodedTerm) -> DecodingQuadsIterator {
+        DecodingQuadsIterator::new(if graph_name.is_default_graph() {
+            self.dspo_quads(Vec::default())
+        } else {
+            self.gspo_quads(encode_term(graph_name))
+        })
     }
 
     fn quads_for_subject_graph(
         &self,
         subject: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> DecodingQuadIterator {
-        self.inner_quads(encode_term_pair(GSPO_PREFIX, graph_name, subject))
+    ) -> DecodingQuadsIterator {
+        DecodingQuadsIterator::new(if graph_name.is_default_graph() {
+            self.dspo_quads(encode_term(subject))
+        } else {
+            self.gspo_quads(encode_term_pair(graph_name, subject))
+        })
     }
 
     fn quads_for_subject_predicate_graph(
@@ -371,13 +443,26 @@ impl SledStore {
         subject: EncodedTerm,
         predicate: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> DecodingQuadIterator {
-        self.inner_quads(encode_term_triple(
-            GSPO_PREFIX,
-            graph_name,
-            subject,
-            predicate,
-        ))
+    ) -> DecodingQuadsIterator {
+        DecodingQuadsIterator::new(if graph_name.is_default_graph() {
+            self.dspo_quads(encode_term_pair(subject, predicate))
+        } else {
+            self.gspo_quads(encode_term_triple(graph_name, subject, predicate))
+        })
+    }
+
+    fn quads_for_subject_predicate_object_graph(
+        &self,
+        subject: EncodedTerm,
+        predicate: EncodedTerm,
+        object: EncodedTerm,
+        graph_name: EncodedTerm,
+    ) -> DecodingQuadsIterator {
+        DecodingQuadsIterator::new(if graph_name.is_default_graph() {
+            self.dspo_quads(encode_term_triple(subject, predicate, object))
+        } else {
+            self.gspo_quads(encode_term_quad(graph_name, subject, predicate, object))
+        })
     }
 
     fn quads_for_subject_object_graph(
@@ -385,16 +470,24 @@ impl SledStore {
         subject: EncodedTerm,
         object: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> DecodingQuadIterator {
-        self.inner_quads(encode_term_triple(GOSP_PREFIX, graph_name, object, subject))
+    ) -> DecodingQuadsIterator {
+        DecodingQuadsIterator::new(if graph_name.is_default_graph() {
+            self.dosp_quads(encode_term_pair(object, subject))
+        } else {
+            self.gosp_quads(encode_term_triple(graph_name, object, subject))
+        })
     }
 
     fn quads_for_predicate_graph(
         &self,
         predicate: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> DecodingQuadIterator {
-        self.inner_quads(encode_term_pair(GPOS_PREFIX, graph_name, predicate))
+    ) -> DecodingQuadsIterator {
+        DecodingQuadsIterator::new(if graph_name.is_default_graph() {
+            self.dpos_quads(encode_term(predicate))
+        } else {
+            self.gpos_quads(encode_term_pair(graph_name, predicate))
+        })
     }
 
     fn quads_for_predicate_object_graph(
@@ -402,26 +495,71 @@ impl SledStore {
         predicate: EncodedTerm,
         object: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> DecodingQuadIterator {
-        self.inner_quads(encode_term_triple(
-            GPOS_PREFIX,
-            graph_name,
-            predicate,
-            object,
-        ))
+    ) -> DecodingQuadsIterator {
+        DecodingQuadsIterator::new(if graph_name.is_default_graph() {
+            self.dpos_quads(encode_term_pair(predicate, object))
+        } else {
+            self.gpos_quads(encode_term_triple(graph_name, predicate, object))
+        })
     }
 
     fn quads_for_object_graph(
         &self,
         object: EncodedTerm,
         graph_name: EncodedTerm,
-    ) -> DecodingQuadIterator {
-        self.inner_quads(encode_term_pair(GPOS_PREFIX, graph_name, object))
+    ) -> DecodingQuadsIterator {
+        DecodingQuadsIterator::new(if graph_name.is_default_graph() {
+            self.dosp_quads(encode_term(object))
+        } else {
+            self.gosp_quads(encode_term_pair(graph_name, object))
+        })
     }
 
-    fn inner_quads(&self, prefix: impl AsRef<[u8]>) -> DecodingQuadIterator {
+    fn spog_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
+        self.inner_quads(&self.spog, prefix, QuadEncoding::SPOG)
+    }
+
+    fn posg_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
+        self.inner_quads(&self.posg, prefix, QuadEncoding::POSG)
+    }
+
+    fn ospg_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
+        self.inner_quads(&self.ospg, prefix, QuadEncoding::OSPG)
+    }
+
+    fn gspo_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
+        self.inner_quads(&self.gspo, prefix, QuadEncoding::GSPO)
+    }
+
+    fn gpos_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
+        self.inner_quads(&self.gpos, prefix, QuadEncoding::GPOS)
+    }
+
+    fn gosp_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
+        self.inner_quads(&self.gosp, prefix, QuadEncoding::GOSP)
+    }
+
+    fn dspo_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
+        self.inner_quads(&self.dspo, prefix, QuadEncoding::DSPO)
+    }
+
+    fn dpos_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
+        self.inner_quads(&self.dpos, prefix, QuadEncoding::DPOS)
+    }
+
+    fn dosp_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
+        self.inner_quads(&self.dosp, prefix, QuadEncoding::DOSP)
+    }
+
+    fn inner_quads(
+        &self,
+        tree: &Tree,
+        prefix: impl AsRef<[u8]>,
+        encoding: QuadEncoding,
+    ) -> DecodingQuadIterator {
         DecodingQuadIterator {
-            iter: self.quads.scan_prefix(prefix),
+            iter: tree.scan_prefix(prefix),
+            encoding,
         }
     }
 }
@@ -460,7 +598,7 @@ impl StrLookup for SledStore {
 }
 
 impl ReadableEncodedStore for SledStore {
-    type QuadsIter = DecodingQuadIterator;
+    type QuadsIter = DecodingQuadsIterator;
 
     fn encoded_quads_for_pattern(
         &self,
@@ -468,18 +606,14 @@ impl ReadableEncodedStore for SledStore {
         predicate: Option<EncodedTerm>,
         object: Option<EncodedTerm>,
         graph_name: Option<EncodedTerm>,
-    ) -> DecodingQuadIterator {
+    ) -> DecodingQuadsIterator {
         match subject {
             Some(subject) => match predicate {
                 Some(predicate) => match object {
                     Some(object) => match graph_name {
-                        Some(graph_name) => self.inner_quads(encode_term_quad(
-                            SPOG_PREFIX,
-                            subject,
-                            predicate,
-                            object,
-                            graph_name,
-                        )),
+                        Some(graph_name) => self.quads_for_subject_predicate_object_graph(
+                            subject, predicate, object, graph_name,
+                        ),
                         None => self.quads_for_subject_predicate_object(subject, predicate, object),
                     },
                     None => match graph_name {
@@ -542,29 +676,43 @@ impl<'a> WritableEncodedStore for &'a SledStore {
     fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), io::Error> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
 
-        write_spog_quad(&mut buffer, quad);
-        self.quads.insert(buffer.as_slice(), &[])?;
-        buffer.clear();
+        if quad.graph_name.is_default_graph() {
+            write_spo_quad(&mut buffer, quad);
+            self.dspo.insert(buffer.as_slice(), &[])?;
+            buffer.clear();
 
-        write_posg_quad(&mut buffer, quad);
-        self.quads.insert(buffer.as_slice(), &[])?;
-        buffer.clear();
+            write_pos_quad(&mut buffer, quad);
+            self.dpos.insert(buffer.as_slice(), &[])?;
+            buffer.clear();
 
-        write_ospg_quad(&mut buffer, quad);
-        self.quads.insert(buffer.as_slice(), &[])?;
-        buffer.clear();
+            write_osp_quad(&mut buffer, quad);
+            self.dosp.insert(buffer.as_slice(), &[])?;
+            buffer.clear();
+        } else {
+            write_spog_quad(&mut buffer, quad);
+            self.spog.insert(buffer.as_slice(), &[])?;
+            buffer.clear();
 
-        write_gspo_quad(&mut buffer, quad);
-        self.quads.insert(buffer.as_slice(), &[])?;
-        buffer.clear();
+            write_posg_quad(&mut buffer, quad);
+            self.posg.insert(buffer.as_slice(), &[])?;
+            buffer.clear();
 
-        write_gpos_quad(&mut buffer, quad);
-        self.quads.insert(buffer.as_slice(), &[])?;
-        buffer.clear();
+            write_ospg_quad(&mut buffer, quad);
+            self.ospg.insert(buffer.as_slice(), &[])?;
+            buffer.clear();
 
-        write_gosp_quad(&mut buffer, quad);
-        self.quads.insert(buffer.as_slice(), &[])?;
-        buffer.clear();
+            write_gspo_quad(&mut buffer, quad);
+            self.gspo.insert(buffer.as_slice(), &[])?;
+            buffer.clear();
+
+            write_gpos_quad(&mut buffer, quad);
+            self.gpos.insert(buffer.as_slice(), &[])?;
+            buffer.clear();
+
+            write_gosp_quad(&mut buffer, quad);
+            self.gosp.insert(buffer.as_slice(), &[])?;
+            buffer.clear();
+        }
 
         Ok(())
     }
@@ -572,29 +720,43 @@ impl<'a> WritableEncodedStore for &'a SledStore {
     fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<(), io::Error> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
 
-        write_spog_quad(&mut buffer, quad);
-        self.quads.remove(buffer.as_slice())?;
-        buffer.clear();
+        if quad.graph_name.is_default_graph() {
+            write_spo_quad(&mut buffer, quad);
+            self.dspo.remove(buffer.as_slice())?;
+            buffer.clear();
 
-        write_posg_quad(&mut buffer, quad);
-        self.quads.remove(buffer.as_slice())?;
-        buffer.clear();
+            write_pos_quad(&mut buffer, quad);
+            self.dpos.remove(buffer.as_slice())?;
+            buffer.clear();
 
-        write_ospg_quad(&mut buffer, quad);
-        self.quads.remove(buffer.as_slice())?;
-        buffer.clear();
+            write_osp_quad(&mut buffer, quad);
+            self.dosp.remove(buffer.as_slice())?;
+            buffer.clear();
+        } else {
+            write_spog_quad(&mut buffer, quad);
+            self.spog.remove(buffer.as_slice())?;
+            buffer.clear();
 
-        write_gspo_quad(&mut buffer, quad);
-        self.quads.remove(buffer.as_slice())?;
-        buffer.clear();
+            write_posg_quad(&mut buffer, quad);
+            self.posg.remove(buffer.as_slice())?;
+            buffer.clear();
 
-        write_gpos_quad(&mut buffer, quad);
-        self.quads.remove(buffer.as_slice())?;
-        buffer.clear();
+            write_ospg_quad(&mut buffer, quad);
+            self.ospg.remove(buffer.as_slice())?;
+            buffer.clear();
 
-        write_gosp_quad(&mut buffer, quad);
-        self.quads.remove(buffer.as_slice())?;
-        buffer.clear();
+            write_gspo_quad(&mut buffer, quad);
+            self.gspo.remove(buffer.as_slice())?;
+            buffer.clear();
+
+            write_gpos_quad(&mut buffer, quad);
+            self.gpos.remove(buffer.as_slice())?;
+            buffer.clear();
+
+            write_gosp_quad(&mut buffer, quad);
+            self.gosp.remove(buffer.as_slice())?;
+            buffer.clear();
+        }
 
         Ok(())
     }
@@ -602,8 +764,16 @@ impl<'a> WritableEncodedStore for &'a SledStore {
 
 /// Allows inserting and deleting quads during an ACID transaction with the [`SledStore`](struct.SledStore.html).
 pub struct SledTransaction<'a> {
-    quads: &'a TransactionalTree,
     id2str: &'a TransactionalTree,
+    spog: &'a TransactionalTree,
+    posg: &'a TransactionalTree,
+    ospg: &'a TransactionalTree,
+    gspo: &'a TransactionalTree,
+    gpos: &'a TransactionalTree,
+    gosp: &'a TransactionalTree,
+    dspo: &'a TransactionalTree,
+    dpos: &'a TransactionalTree,
+    dosp: &'a TransactionalTree,
 }
 
 impl SledTransaction<'_> {
@@ -721,29 +891,43 @@ impl<'a> WritableEncodedStore for &'a SledTransaction<'a> {
     ) -> Result<(), SledUnabortableTransactionError> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
 
-        write_spog_quad(&mut buffer, quad);
-        self.quads.insert(buffer.as_slice(), &[])?;
-        buffer.clear();
+        if quad.graph_name.is_default_graph() {
+            write_spo_quad(&mut buffer, quad);
+            self.dspo.insert(buffer.as_slice(), &[])?;
+            buffer.clear();
 
-        write_posg_quad(&mut buffer, quad);
-        self.quads.insert(buffer.as_slice(), &[])?;
-        buffer.clear();
+            write_pos_quad(&mut buffer, quad);
+            self.dpos.insert(buffer.as_slice(), &[])?;
+            buffer.clear();
 
-        write_ospg_quad(&mut buffer, quad);
-        self.quads.insert(buffer.as_slice(), &[])?;
-        buffer.clear();
+            write_osp_quad(&mut buffer, quad);
+            self.dosp.insert(buffer.as_slice(), &[])?;
+            buffer.clear();
+        } else {
+            write_spog_quad(&mut buffer, quad);
+            self.spog.insert(buffer.as_slice(), &[])?;
+            buffer.clear();
 
-        write_gspo_quad(&mut buffer, quad);
-        self.quads.insert(buffer.as_slice(), &[])?;
-        buffer.clear();
+            write_posg_quad(&mut buffer, quad);
+            self.posg.insert(buffer.as_slice(), &[])?;
+            buffer.clear();
 
-        write_gpos_quad(&mut buffer, quad);
-        self.quads.insert(buffer.as_slice(), &[])?;
-        buffer.clear();
+            write_ospg_quad(&mut buffer, quad);
+            self.ospg.insert(buffer.as_slice(), &[])?;
+            buffer.clear();
 
-        write_gosp_quad(&mut buffer, quad);
-        self.quads.insert(buffer.as_slice(), &[])?;
-        buffer.clear();
+            write_gspo_quad(&mut buffer, quad);
+            self.gspo.insert(buffer.as_slice(), &[])?;
+            buffer.clear();
+
+            write_gpos_quad(&mut buffer, quad);
+            self.gpos.insert(buffer.as_slice(), &[])?;
+            buffer.clear();
+
+            write_gosp_quad(&mut buffer, quad);
+            self.gosp.insert(buffer.as_slice(), &[])?;
+            buffer.clear();
+        }
 
         Ok(())
     }
@@ -754,29 +938,43 @@ impl<'a> WritableEncodedStore for &'a SledTransaction<'a> {
     ) -> Result<(), SledUnabortableTransactionError> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
 
-        write_spog_quad(&mut buffer, quad);
-        self.quads.remove(buffer.as_slice())?;
-        buffer.clear();
+        if quad.graph_name.is_default_graph() {
+            write_spo_quad(&mut buffer, quad);
+            self.dspo.remove(buffer.as_slice())?;
+            buffer.clear();
 
-        write_posg_quad(&mut buffer, quad);
-        self.quads.remove(buffer.as_slice())?;
-        buffer.clear();
+            write_pos_quad(&mut buffer, quad);
+            self.dpos.remove(buffer.as_slice())?;
+            buffer.clear();
 
-        write_ospg_quad(&mut buffer, quad);
-        self.quads.remove(buffer.as_slice())?;
-        buffer.clear();
+            write_osp_quad(&mut buffer, quad);
+            self.dosp.remove(buffer.as_slice())?;
+            buffer.clear();
+        } else {
+            write_spog_quad(&mut buffer, quad);
+            self.spog.remove(buffer.as_slice())?;
+            buffer.clear();
 
-        write_gspo_quad(&mut buffer, quad);
-        self.quads.remove(buffer.as_slice())?;
-        buffer.clear();
+            write_posg_quad(&mut buffer, quad);
+            self.posg.remove(buffer.as_slice())?;
+            buffer.clear();
 
-        write_gpos_quad(&mut buffer, quad);
-        self.quads.remove(buffer.as_slice())?;
-        buffer.clear();
+            write_ospg_quad(&mut buffer, quad);
+            self.ospg.remove(buffer.as_slice())?;
+            buffer.clear();
 
-        write_gosp_quad(&mut buffer, quad);
-        self.quads.remove(buffer.as_slice())?;
-        buffer.clear();
+            write_gspo_quad(&mut buffer, quad);
+            self.gspo.remove(buffer.as_slice())?;
+            buffer.clear();
+
+            write_gpos_quad(&mut buffer, quad);
+            self.gpos.remove(buffer.as_slice())?;
+            buffer.clear();
+
+            write_gosp_quad(&mut buffer, quad);
+            self.gosp.remove(buffer.as_slice())?;
+            buffer.clear();
+        }
 
         Ok(())
     }
@@ -937,48 +1135,44 @@ impl SledPreparedQuery {
     }
 }
 
-fn encode_term(prefix: u8, t: EncodedTerm) -> Vec<u8> {
-    let mut vec = Vec::with_capacity(WRITTEN_TERM_MAX_SIZE + 1);
-    vec.push(prefix);
-    write_term(&mut vec, t);
-    vec
+pub(crate) struct DecodingQuadsIterator {
+    first: DecodingQuadIterator,
+    second: Option<DecodingQuadIterator>,
 }
 
-fn encode_term_pair(prefix: u8, t1: EncodedTerm, t2: EncodedTerm) -> Vec<u8> {
-    let mut vec = Vec::with_capacity(2 * WRITTEN_TERM_MAX_SIZE + 1);
-    vec.push(prefix);
-    write_term(&mut vec, t1);
-    write_term(&mut vec, t2);
-    vec
+impl DecodingQuadsIterator {
+    fn new(first: DecodingQuadIterator) -> Self {
+        Self {
+            first,
+            second: None,
+        }
+    }
+
+    fn pair(first: DecodingQuadIterator, second: DecodingQuadIterator) -> Self {
+        Self {
+            first,
+            second: Some(second),
+        }
+    }
 }
 
-fn encode_term_triple(prefix: u8, t1: EncodedTerm, t2: EncodedTerm, t3: EncodedTerm) -> Vec<u8> {
-    let mut vec = Vec::with_capacity(3 * WRITTEN_TERM_MAX_SIZE + 1);
-    vec.push(prefix);
-    write_term(&mut vec, t1);
-    write_term(&mut vec, t2);
-    write_term(&mut vec, t3);
-    vec
-}
+impl Iterator for DecodingQuadsIterator {
+    type Item = Result<EncodedQuad, io::Error>;
 
-fn encode_term_quad(
-    prefix: u8,
-    t1: EncodedTerm,
-    t2: EncodedTerm,
-    t3: EncodedTerm,
-    t4: EncodedTerm,
-) -> Vec<u8> {
-    let mut vec = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
-    vec.push(prefix);
-    write_term(&mut vec, t1);
-    write_term(&mut vec, t2);
-    write_term(&mut vec, t3);
-    write_term(&mut vec, t4);
-    vec
+    fn next(&mut self) -> Option<Result<EncodedQuad, io::Error>> {
+        if let Some(result) = self.first.next() {
+            Some(result)
+        } else if let Some(second) = self.second.as_mut() {
+            second.next()
+        } else {
+            None
+        }
+    }
 }
 
 pub(crate) struct DecodingQuadIterator {
     iter: Iter,
+    encoding: QuadEncoding,
 }
 
 impl Iterator for DecodingQuadIterator {
@@ -986,79 +1180,15 @@ impl Iterator for DecodingQuadIterator {
 
     fn next(&mut self) -> Option<Result<EncodedQuad, io::Error>> {
         Some(match self.iter.next()? {
-            Ok((encoded, _)) => decode_quad(&encoded),
+            Ok((encoded, _)) => self.encoding.decode(&encoded),
             Err(error) => Err(error.into()),
         })
     }
 }
 
-fn write_spog_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    sink.push(SPOG_PREFIX);
-    write_term(sink, quad.subject);
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.object);
-    write_term(sink, quad.graph_name);
-}
-
-fn write_posg_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    sink.push(POSG_PREFIX);
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.object);
-    write_term(sink, quad.subject);
-    write_term(sink, quad.graph_name);
-}
-
-fn write_ospg_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    sink.push(OSPG_PREFIX);
-    write_term(sink, quad.object);
-    write_term(sink, quad.subject);
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.graph_name);
-}
-
-fn write_gspo_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    sink.push(GSPO_PREFIX);
-    write_term(sink, quad.graph_name);
-    write_term(sink, quad.subject);
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.object);
-}
-
-fn write_gpos_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    sink.push(GPOS_PREFIX);
-    write_term(sink, quad.graph_name);
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.object);
-    write_term(sink, quad.subject);
-}
-
-fn write_gosp_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    sink.push(GOSP_PREFIX);
-    write_term(sink, quad.graph_name);
-    write_term(sink, quad.object);
-    write_term(sink, quad.subject);
-    write_term(sink, quad.predicate);
-}
-
-fn decode_quad(encoded: &[u8]) -> Result<EncodedQuad, io::Error> {
-    let mut cursor = Cursor::new(&encoded[1..]);
-    match encoded[0] {
-        SPOG_PREFIX => Ok(cursor.read_spog_quad()?),
-        POSG_PREFIX => Ok(cursor.read_posg_quad()?),
-        OSPG_PREFIX => Ok(cursor.read_ospg_quad()?),
-        GSPO_PREFIX => Ok(cursor.read_gspo_quad()?),
-        GPOS_PREFIX => Ok(cursor.read_gpos_quad()?),
-        GOSP_PREFIX => Ok(cursor.read_gosp_quad()?),
-        _ => Err(invalid_data_error(format!(
-            "Invalid quad type identifier: {}",
-            encoded[0]
-        ))),
-    }
-}
-
 enum QuadsIter {
     Quads {
-        iter: DecodingQuadIterator,
+        iter: DecodingQuadsIterator,
         store: SledStore,
     },
     Error(Once<io::Error>),
@@ -1087,38 +1217,60 @@ fn store() -> Result<(), io::Error> {
     let main_s = NamedOrBlankNode::from(BlankNode::default());
     let main_p = NamedNode::new("http://example.com").unwrap();
     let main_o = Term::from(Literal::from(1));
+    let main_g = GraphName::from(BlankNode::default());
 
-    let main_quad = Quad::new(main_s.clone(), main_p.clone(), main_o.clone(), None);
-    let all_o = vec![
+    let default_quad = Quad::new(main_s.clone(), main_p.clone(), main_o.clone(), None);
+    let named_quad = Quad::new(
+        main_s.clone(),
+        main_p.clone(),
+        main_o.clone(),
+        main_g.clone(),
+    );
+    let default_quads = vec![
         Quad::new(main_s.clone(), main_p.clone(), Literal::from(0), None),
-        Quad::new(main_s.clone(), main_p.clone(), main_o.clone(), None),
-        Quad::new(main_s.clone(), main_p.clone(), Literal::from(2), None),
+        default_quad.clone(),
+        Quad::new(
+            main_s.clone(),
+            main_p.clone(),
+            Literal::from(200000000),
+            None,
+        ),
+    ];
+    let all_quads = vec![
+        Quad::new(main_s.clone(), main_p.clone(), Literal::from(0), None),
+        default_quad.clone(),
+        Quad::new(
+            main_s.clone(),
+            main_p.clone(),
+            Literal::from(200000000),
+            None,
+        ),
+        named_quad.clone(),
     ];
 
     let store = SledStore::new()?;
-    store.insert(&main_quad)?;
-    for t in &all_o {
+    for t in &all_quads {
         store.insert(t)?;
     }
 
-    let target = vec![main_quad];
+    assert_eq!(store.len(), 4);
     assert_eq!(
         store
             .quads_for_pattern(None, None, None, None)
             .collect::<Result<Vec<_>, _>>()?,
-        all_o
+        all_quads
     );
     assert_eq!(
         store
             .quads_for_pattern(Some(main_s.as_ref()), None, None, None)
             .collect::<Result<Vec<_>, _>>()?,
-        all_o
+        all_quads
     );
     assert_eq!(
         store
             .quads_for_pattern(Some(main_s.as_ref()), Some(main_p.as_ref()), None, None)
             .collect::<Result<Vec<_>, _>>()?,
-        all_o
+        all_quads
     );
     assert_eq!(
         store
@@ -1129,7 +1281,7 @@ fn store() -> Result<(), io::Error> {
                 None
             )
             .collect::<Result<Vec<_>, _>>()?,
-        target
+        vec![default_quad.clone(), named_quad.clone()]
     );
     assert_eq!(
         store
@@ -1140,7 +1292,18 @@ fn store() -> Result<(), io::Error> {
                 Some(GraphNameRef::DefaultGraph)
             )
             .collect::<Result<Vec<_>, _>>()?,
-        target
+        vec![default_quad.clone()]
+    );
+    assert_eq!(
+        store
+            .quads_for_pattern(
+                Some(main_s.as_ref()),
+                Some(main_p.as_ref()),
+                Some(main_o.as_ref()),
+                Some(main_g.as_ref())
+            )
+            .collect::<Result<Vec<_>, _>>()?,
+        vec![named_quad.clone()]
     );
     assert_eq!(
         store
@@ -1151,13 +1314,13 @@ fn store() -> Result<(), io::Error> {
                 Some(GraphNameRef::DefaultGraph)
             )
             .collect::<Result<Vec<_>, _>>()?,
-        all_o
+        default_quads
     );
     assert_eq!(
         store
             .quads_for_pattern(Some(main_s.as_ref()), None, Some(main_o.as_ref()), None)
             .collect::<Result<Vec<_>, _>>()?,
-        target
+        vec![default_quad.clone(), named_quad.clone()]
     );
     assert_eq!(
         store
@@ -1168,7 +1331,18 @@ fn store() -> Result<(), io::Error> {
                 Some(GraphNameRef::DefaultGraph)
             )
             .collect::<Result<Vec<_>, _>>()?,
-        target
+        vec![default_quad.clone()]
+    );
+    assert_eq!(
+        store
+            .quads_for_pattern(
+                Some(main_s.as_ref()),
+                None,
+                Some(main_o.as_ref()),
+                Some(main_g.as_ref())
+            )
+            .collect::<Result<Vec<_>, _>>()?,
+        vec![named_quad.clone()]
     );
     assert_eq!(
         store
@@ -1179,31 +1353,31 @@ fn store() -> Result<(), io::Error> {
                 Some(GraphNameRef::DefaultGraph)
             )
             .collect::<Result<Vec<_>, _>>()?,
-        all_o
+        default_quads
     );
     assert_eq!(
         store
             .quads_for_pattern(None, Some(main_p.as_ref()), None, None)
             .collect::<Result<Vec<_>, _>>()?,
-        all_o
+        all_quads
     );
     assert_eq!(
         store
             .quads_for_pattern(None, Some(main_p.as_ref()), Some(main_o.as_ref()), None)
             .collect::<Result<Vec<_>, _>>()?,
-        target
+        vec![default_quad.clone(), named_quad.clone()]
     );
     assert_eq!(
         store
             .quads_for_pattern(None, None, Some(main_o.as_ref()), None)
             .collect::<Result<Vec<_>, _>>()?,
-        target
+        vec![default_quad.clone(), named_quad.clone()]
     );
     assert_eq!(
         store
             .quads_for_pattern(None, None, None, Some(GraphNameRef::DefaultGraph))
             .collect::<Result<Vec<_>, _>>()?,
-        all_o
+        default_quads
     );
     assert_eq!(
         store
@@ -1214,7 +1388,18 @@ fn store() -> Result<(), io::Error> {
                 Some(GraphNameRef::DefaultGraph)
             )
             .collect::<Result<Vec<_>, _>>()?,
-        target
+        vec![default_quad]
+    );
+    assert_eq!(
+        store
+            .quads_for_pattern(
+                None,
+                Some(main_p.as_ref()),
+                Some(main_o.as_ref()),
+                Some(main_g.as_ref())
+            )
+            .collect::<Result<Vec<_>, _>>()?,
+        vec![named_quad]
     );
 
     Ok(())

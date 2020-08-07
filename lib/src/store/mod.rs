@@ -3,6 +3,8 @@
 //! They encode a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
 //! and allow querying and updating them using SPARQL.
 
+#[cfg(any(feature = "rocksdb", feature = "sled"))]
+mod binary_encoder;
 pub mod memory;
 pub(crate) mod numeric_encoder;
 #[cfg(feature = "rocksdb")]
