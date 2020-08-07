@@ -68,6 +68,9 @@ struct MemoryStoreIndexes {
     gspo: QuadMap<EncodedTerm>,
     gpos: QuadMap<EncodedTerm>,
     gosp: QuadMap<EncodedTerm>,
+    default_spo: TripleMap<EncodedTerm>,
+    default_pos: TripleMap<EncodedTerm>,
+    default_osp: TripleMap<EncodedTerm>,
 }
 
 impl Default for MemoryStore {
@@ -198,7 +201,13 @@ impl MemoryStore {
     ///
     /// Warning: this function executes a full scan
     pub fn len(&self) -> usize {
-        self.indexes()
+        let indexes = self.indexes();
+        let default: usize = indexes
+            .default_spo
+            .values()
+            .map(|v| v.values().map(|v| v.len()).sum::<usize>())
+            .sum();
+        let named: usize = indexes
             .spog
             .values()
             .map(|v| {
@@ -206,12 +215,14 @@ impl MemoryStore {
                     .map(|v| v.values().map(|v| v.len()).sum::<usize>())
                     .sum::<usize>()
             })
-            .sum()
+            .sum();
+        default + named
     }
 
     /// Returns if the store is empty
     pub fn is_empty(&self) -> bool {
-        self.indexes().spog.is_empty()
+        let indexes = self.indexes();
+        indexes.default_spo.is_empty() && indexes.spog.is_empty()
     }
 
     /// Executes an ACID transaction.
@@ -445,12 +456,20 @@ impl MemoryStore {
     }
 
     fn contains_encoded(&self, quad: &EncodedQuad) -> bool {
-        self.indexes().spog.get(&quad.subject).map_or(false, |pog| {
-            pog.get(&quad.predicate).map_or(false, |og| {
-                og.get(&quad.object)
-                    .map_or(false, |g| g.contains(&quad.graph_name))
+        let indexes = self.indexes();
+        if quad.graph_name.is_default_graph() {
+            indexes.default_spo.get(&quad.subject).map_or(false, |po| {
+                po.get(&quad.predicate)
+                    .map_or(false, |o| o.contains(&quad.object))
             })
-        })
+        } else {
+            indexes.spog.get(&quad.subject).map_or(false, |pog| {
+                pog.get(&quad.predicate).map_or(false, |og| {
+                    og.get(&quad.object)
+                        .map_or(false, |g| g.contains(&quad.graph_name))
+                })
+            })
+        }
     }
 
     fn encoded_quads_for_pattern_inner(
@@ -527,15 +546,21 @@ impl MemoryStore {
     }
 
     fn encoded_quads(&self) -> Vec<EncodedQuad> {
-        quad_map_flatten(&self.indexes().gspo)
-            .map(|(g, s, p, o)| EncodedQuad::new(s, p, o, g))
-            .collect()
+        let indexes = self.indexes();
+        let default = triple_map_flatten(&indexes.default_spo)
+            .map(|(s, p, o)| EncodedQuad::new(s, p, o, EncodedTerm::DefaultGraph));
+        let named =
+            quad_map_flatten(&indexes.gspo).map(|(g, s, p, o)| EncodedQuad::new(s, p, o, g));
+        default.chain(named).collect()
     }
 
     fn encoded_quads_for_subject(&self, subject: EncodedTerm) -> Vec<EncodedQuad> {
-        option_triple_map_flatten(self.indexes().spog.get(&subject))
-            .map(|(p, o, g)| EncodedQuad::new(subject, p, o, g))
-            .collect()
+        let indexes = self.indexes();
+        let default = option_pair_map_flatten(indexes.default_spo.get(&subject))
+            .map(|(p, o)| EncodedQuad::new(subject, p, o, EncodedTerm::DefaultGraph));
+        let named = option_triple_map_flatten(indexes.spog.get(&subject))
+            .map(|(p, o, g)| EncodedQuad::new(subject, p, o, g));
+        default.chain(named).collect()
     }
 
     fn encoded_quads_for_subject_predicate(
@@ -543,14 +568,22 @@ impl MemoryStore {
         subject: EncodedTerm,
         predicate: EncodedTerm,
     ) -> Vec<EncodedQuad> {
-        option_pair_map_flatten(
-            self.indexes()
+        let indexes = self.indexes();
+        let default = option_set_flatten(
+            indexes
+                .default_spo
+                .get(&subject)
+                .and_then(|po| po.get(&predicate)),
+        )
+        .map(|o| EncodedQuad::new(subject, predicate, o, EncodedTerm::DefaultGraph));
+        let named = option_pair_map_flatten(
+            indexes
                 .spog
                 .get(&subject)
                 .and_then(|pog| pog.get(&predicate)),
         )
-        .map(|(o, g)| EncodedQuad::new(subject, predicate, o, g))
-        .collect()
+        .map(|(o, g)| EncodedQuad::new(subject, predicate, o, g));
+        default.chain(named).collect()
     }
 
     fn encoded_quads_for_subject_predicate_object(
@@ -559,15 +592,23 @@ impl MemoryStore {
         predicate: EncodedTerm,
         object: EncodedTerm,
     ) -> Vec<EncodedQuad> {
-        option_set_flatten(
-            self.indexes()
+        let indexes = self.indexes();
+        let default = indexes
+            .default_spo
+            .get(&subject)
+            .and_then(|po| po.get(&predicate))
+            .and_then(|o| o.get(&object))
+            .map(|_| EncodedQuad::new(subject, predicate, object, EncodedTerm::DefaultGraph))
+            .into_iter();
+        let named = option_set_flatten(
+            indexes
                 .spog
                 .get(&subject)
                 .and_then(|pog| pog.get(&predicate))
                 .and_then(|og| og.get(&object)),
         )
-        .map(|g| EncodedQuad::new(subject, predicate, object, g))
-        .collect()
+        .map(|g| EncodedQuad::new(subject, predicate, object, g));
+        default.chain(named).collect()
     }
 
     fn encoded_quads_for_subject_object(
@@ -575,20 +616,27 @@ impl MemoryStore {
         subject: EncodedTerm,
         object: EncodedTerm,
     ) -> Vec<EncodedQuad> {
-        option_pair_map_flatten(
-            self.indexes()
-                .ospg
+        let indexes = self.indexes();
+        let default = option_set_flatten(
+            indexes
+                .default_osp
                 .get(&object)
-                .and_then(|spg| spg.get(&subject)),
+                .and_then(|sp| sp.get(&subject)),
         )
-        .map(|(p, g)| EncodedQuad::new(subject, p, object, g))
-        .collect()
+        .map(|p| EncodedQuad::new(subject, p, object, EncodedTerm::DefaultGraph));
+        let named =
+            option_pair_map_flatten(indexes.ospg.get(&object).and_then(|spg| spg.get(&subject)))
+                .map(|(p, g)| EncodedQuad::new(subject, p, object, g));
+        default.chain(named).collect()
     }
 
     fn encoded_quads_for_predicate(&self, predicate: EncodedTerm) -> Vec<EncodedQuad> {
-        option_triple_map_flatten(self.indexes().posg.get(&predicate))
-            .map(|(o, s, g)| EncodedQuad::new(s, predicate, o, g))
-            .collect()
+        let indexes = self.indexes();
+        let default = option_pair_map_flatten(indexes.default_pos.get(&predicate))
+            .map(|(o, s)| EncodedQuad::new(s, predicate, o, EncodedTerm::DefaultGraph));
+        let named = option_triple_map_flatten(indexes.posg.get(&predicate))
+            .map(|(o, s, g)| EncodedQuad::new(s, predicate, o, g));
+        default.chain(named).collect()
     }
 
     fn encoded_quads_for_predicate_object(
@@ -596,26 +644,42 @@ impl MemoryStore {
         predicate: EncodedTerm,
         object: EncodedTerm,
     ) -> Vec<EncodedQuad> {
-        option_pair_map_flatten(
-            self.indexes()
+        let indexes = self.indexes();
+        let default = option_set_flatten(
+            indexes
+                .default_pos
+                .get(&predicate)
+                .and_then(|os| os.get(&object)),
+        )
+        .map(|s| EncodedQuad::new(s, predicate, object, EncodedTerm::DefaultGraph));
+        let named = option_pair_map_flatten(
+            indexes
                 .posg
                 .get(&predicate)
                 .and_then(|osg| osg.get(&object)),
         )
-        .map(|(s, g)| EncodedQuad::new(s, predicate, object, g))
-        .collect()
+        .map(|(s, g)| EncodedQuad::new(s, predicate, object, g));
+        default.chain(named).collect()
     }
 
     fn encoded_quads_for_object(&self, object: EncodedTerm) -> Vec<EncodedQuad> {
-        option_triple_map_flatten(self.indexes().ospg.get(&object))
-            .map(|(s, p, g)| EncodedQuad::new(s, p, object, g))
-            .collect()
+        let indexes = self.indexes();
+        let default = option_pair_map_flatten(indexes.default_osp.get(&object))
+            .map(|(s, p)| EncodedQuad::new(s, p, object, EncodedTerm::DefaultGraph));
+        let named = option_triple_map_flatten(indexes.ospg.get(&object))
+            .map(|(s, p, g)| EncodedQuad::new(s, p, object, g));
+        default.chain(named).collect()
     }
 
     fn encoded_quads_for_graph(&self, graph_name: EncodedTerm) -> Vec<EncodedQuad> {
-        option_triple_map_flatten(self.indexes().gspo.get(&graph_name))
-            .map(|(s, p, o)| EncodedQuad::new(s, p, o, graph_name))
-            .collect()
+        let indexes = self.indexes();
+        option_triple_map_flatten(if graph_name.is_default_graph() {
+            Some(&indexes.default_spo)
+        } else {
+            indexes.gspo.get(&graph_name)
+        })
+        .map(|(s, p, o)| EncodedQuad::new(s, p, o, graph_name))
+        .collect()
     }
 
     fn encoded_quads_for_subject_graph(
@@ -623,12 +687,15 @@ impl MemoryStore {
         subject: EncodedTerm,
         graph_name: EncodedTerm,
     ) -> Vec<EncodedQuad> {
-        option_pair_map_flatten(
-            self.indexes()
+        let indexes = self.indexes();
+        option_pair_map_flatten(if graph_name.is_default_graph() {
+            indexes.default_spo.get(&subject)
+        } else {
+            indexes
                 .gspo
                 .get(&graph_name)
-                .and_then(|spo| spo.get(&subject)),
-        )
+                .and_then(|spo| spo.get(&subject))
+        })
         .map(|(p, o)| EncodedQuad::new(subject, p, o, graph_name))
         .collect()
     }
@@ -639,12 +706,17 @@ impl MemoryStore {
         predicate: EncodedTerm,
         graph_name: EncodedTerm,
     ) -> Vec<EncodedQuad> {
+        let indexes = self.indexes();
         option_set_flatten(
-            self.indexes()
-                .gspo
-                .get(&graph_name)
-                .and_then(|spo| spo.get(&subject))
-                .and_then(|po| po.get(&predicate)),
+            if graph_name.is_default_graph() {
+                indexes.default_spo.get(&subject)
+            } else {
+                indexes
+                    .gspo
+                    .get(&graph_name)
+                    .and_then(|spo| spo.get(&subject))
+            }
+            .and_then(|po| po.get(&predicate)),
         )
         .map(|o| EncodedQuad::new(subject, predicate, o, graph_name))
         .collect()
@@ -656,12 +728,17 @@ impl MemoryStore {
         object: EncodedTerm,
         graph_name: EncodedTerm,
     ) -> Vec<EncodedQuad> {
+        let indexes = self.indexes();
         option_set_flatten(
-            self.indexes()
-                .gosp
-                .get(&graph_name)
-                .and_then(|osp| osp.get(&object))
-                .and_then(|sp| sp.get(&subject)),
+            if graph_name.is_default_graph() {
+                indexes.default_osp.get(&object)
+            } else {
+                indexes
+                    .gosp
+                    .get(&graph_name)
+                    .and_then(|osp| osp.get(&object))
+            }
+            .and_then(|sp| sp.get(&subject)),
         )
         .map(|p| EncodedQuad::new(subject, p, object, graph_name))
         .collect()
@@ -672,12 +749,15 @@ impl MemoryStore {
         predicate: EncodedTerm,
         graph_name: EncodedTerm,
     ) -> Vec<EncodedQuad> {
-        option_pair_map_flatten(
-            self.indexes()
+        let indexes = self.indexes();
+        option_pair_map_flatten(if graph_name.is_default_graph() {
+            indexes.default_pos.get(&predicate)
+        } else {
+            indexes
                 .gpos
                 .get(&graph_name)
-                .and_then(|pos| pos.get(&predicate)),
-        )
+                .and_then(|pos| pos.get(&predicate))
+        })
         .map(|(o, s)| EncodedQuad::new(s, predicate, o, graph_name))
         .collect()
     }
@@ -688,12 +768,17 @@ impl MemoryStore {
         object: EncodedTerm,
         graph_name: EncodedTerm,
     ) -> Vec<EncodedQuad> {
+        let indexes = self.indexes();
         option_set_flatten(
-            self.indexes()
-                .gpos
-                .get(&graph_name)
-                .and_then(|pos| pos.get(&predicate))
-                .and_then(|os| os.get(&object)),
+            if graph_name.is_default_graph() {
+                indexes.default_pos.get(&predicate)
+            } else {
+                indexes
+                    .gpos
+                    .get(&graph_name)
+                    .and_then(|pos| pos.get(&predicate))
+            }
+            .and_then(|os| os.get(&object)),
         )
         .map(|s| EncodedQuad::new(s, predicate, object, graph_name))
         .collect()
@@ -704,12 +789,15 @@ impl MemoryStore {
         object: EncodedTerm,
         graph_name: EncodedTerm,
     ) -> Vec<EncodedQuad> {
-        option_pair_map_flatten(
-            self.indexes()
+        let indexes = self.indexes();
+        option_pair_map_flatten(if graph_name.is_default_graph() {
+            indexes.default_osp.get(&object)
+        } else {
+            indexes
                 .gosp
                 .get(&graph_name)
-                .and_then(|osp| osp.get(&object)),
-        )
+                .and_then(|osp| osp.get(&object))
+        })
         .map(|(s, p)| EncodedQuad::new(s, p, object, graph_name))
         .collect()
     }
@@ -771,130 +859,174 @@ impl WithStoreError for MemoryStoreIndexes {
 }
 impl WritableEncodedStore for MemoryStoreIndexes {
     fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Infallible> {
-        insert_into_quad_map(
-            &mut self.gosp,
-            quad.graph_name,
-            quad.object,
-            quad.subject,
-            quad.predicate,
-        );
-        insert_into_quad_map(
-            &mut self.gpos,
-            quad.graph_name,
-            quad.predicate,
-            quad.object,
-            quad.subject,
-        );
-        insert_into_quad_map(
-            &mut self.gspo,
-            quad.graph_name,
-            quad.subject,
-            quad.predicate,
-            quad.object,
-        );
-        insert_into_quad_map(
-            &mut self.ospg,
-            quad.object,
-            quad.subject,
-            quad.predicate,
-            quad.graph_name,
-        );
-        insert_into_quad_map(
-            &mut self.posg,
-            quad.predicate,
-            quad.object,
-            quad.subject,
-            quad.graph_name,
-        );
-        insert_into_quad_map(
-            &mut self.spog,
-            quad.subject,
-            quad.predicate,
-            quad.object,
-            quad.graph_name,
-        );
+        if quad.graph_name.is_default_graph() {
+            insert_into_triple_map(
+                &mut self.default_spo,
+                quad.subject,
+                quad.predicate,
+                quad.object,
+            );
+            insert_into_triple_map(
+                &mut self.default_pos,
+                quad.predicate,
+                quad.object,
+                quad.subject,
+            );
+            insert_into_triple_map(
+                &mut self.default_osp,
+                quad.object,
+                quad.subject,
+                quad.predicate,
+            );
+        } else {
+            insert_into_quad_map(
+                &mut self.gspo,
+                quad.graph_name,
+                quad.subject,
+                quad.predicate,
+                quad.object,
+            );
+            insert_into_quad_map(
+                &mut self.gpos,
+                quad.graph_name,
+                quad.predicate,
+                quad.object,
+                quad.subject,
+            );
+            insert_into_quad_map(
+                &mut self.gosp,
+                quad.graph_name,
+                quad.object,
+                quad.subject,
+                quad.predicate,
+            );
+            insert_into_quad_map(
+                &mut self.spog,
+                quad.subject,
+                quad.predicate,
+                quad.object,
+                quad.graph_name,
+            );
+            insert_into_quad_map(
+                &mut self.posg,
+                quad.predicate,
+                quad.object,
+                quad.subject,
+                quad.graph_name,
+            );
+            insert_into_quad_map(
+                &mut self.ospg,
+                quad.object,
+                quad.subject,
+                quad.predicate,
+                quad.graph_name,
+            );
+        }
         Ok(())
     }
 
     fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Infallible> {
-        remove_from_quad_map(
-            &mut self.gosp,
-            &quad.graph_name,
-            &quad.object,
-            &quad.subject,
-            &quad.predicate,
-        );
-        remove_from_quad_map(
-            &mut self.gpos,
-            &quad.graph_name,
-            &quad.predicate,
-            &quad.object,
-            &quad.subject,
-        );
-        remove_from_quad_map(
-            &mut self.gspo,
-            &quad.graph_name,
-            &quad.subject,
-            &quad.predicate,
-            &quad.object,
-        );
-        remove_from_quad_map(
-            &mut self.ospg,
-            &quad.object,
-            &quad.subject,
-            &quad.predicate,
-            &quad.graph_name,
-        );
-        remove_from_quad_map(
-            &mut self.posg,
-            &quad.predicate,
-            &quad.object,
-            &quad.subject,
-            &quad.graph_name,
-        );
-        remove_from_quad_map(
-            &mut self.spog,
-            &quad.subject,
-            &quad.predicate,
-            &quad.object,
-            &quad.graph_name,
-        );
+        if quad.graph_name.is_default_graph() {
+            remove_from_triple_map(
+                &mut self.default_spo,
+                &quad.subject,
+                &quad.predicate,
+                &quad.object,
+            );
+            remove_from_triple_map(
+                &mut self.default_pos,
+                &quad.predicate,
+                &quad.object,
+                &quad.subject,
+            );
+            remove_from_triple_map(
+                &mut self.default_osp,
+                &quad.object,
+                &quad.subject,
+                &quad.predicate,
+            );
+        } else {
+            remove_from_quad_map(
+                &mut self.gspo,
+                &quad.graph_name,
+                &quad.subject,
+                &quad.predicate,
+                &quad.object,
+            );
+            remove_from_quad_map(
+                &mut self.gpos,
+                &quad.graph_name,
+                &quad.predicate,
+                &quad.object,
+                &quad.subject,
+            );
+            remove_from_quad_map(
+                &mut self.gosp,
+                &quad.graph_name,
+                &quad.object,
+                &quad.subject,
+                &quad.predicate,
+            );
+            remove_from_quad_map(
+                &mut self.spog,
+                &quad.subject,
+                &quad.predicate,
+                &quad.object,
+                &quad.graph_name,
+            );
+            remove_from_quad_map(
+                &mut self.posg,
+                &quad.predicate,
+                &quad.object,
+                &quad.subject,
+                &quad.graph_name,
+            );
+            remove_from_quad_map(
+                &mut self.ospg,
+                &quad.object,
+                &quad.subject,
+                &quad.predicate,
+                &quad.graph_name,
+            );
+        }
         Ok(())
     }
 }
 
-fn insert_into_quad_map<T: Eq + Hash>(map: &mut QuadMap<T>, e1: T, e2: T, e3: T, e4: T) {
-    map.entry(e1)
-        .or_default()
-        .entry(e2)
-        .or_default()
-        .entry(e3)
-        .or_default()
-        .insert(e4);
+fn insert_into_triple_map<T: Eq + Hash>(map: &mut TripleMap<T>, e1: T, e2: T, e3: T) {
+    map.entry(e1).or_default().entry(e2).or_default().insert(e3);
 }
 
-fn remove_from_quad_map<T: Eq + Hash>(map1: &mut QuadMap<T>, e1: &T, e2: &T, e3: &T, e4: &T) {
+fn insert_into_quad_map<T: Eq + Hash>(map: &mut QuadMap<T>, e1: T, e2: T, e3: T, e4: T) {
+    insert_into_triple_map(map.entry(e1).or_default(), e2, e3, e4);
+}
+
+fn remove_from_triple_map<T: Eq + Hash>(map1: &mut TripleMap<T>, e1: &T, e2: &T, e3: &T) {
     let mut map2empty = false;
     if let Some(map2) = map1.get_mut(e1) {
-        let mut map3empty = false;
-        if let Some(map3) = map2.get_mut(e2) {
-            let mut set4empty = false;
-            if let Some(set4) = map3.get_mut(e3) {
-                set4.remove(e4);
-                set4empty = set4.is_empty();
-            }
-            if set4empty {
-                map3.remove(e3);
-            }
-            map3empty = map3.is_empty();
+        let mut set3empty = false;
+        if let Some(set3) = map2.get_mut(e2) {
+            set3.remove(e3);
+            set3empty = set3.is_empty();
         }
-        if map3empty {
+        if set3empty {
             map2.remove(e2);
         }
         map2empty = map2.is_empty();
     }
     if map2empty {
         map1.remove(e1);
+    }
+}
+
+fn remove_from_quad_map<T: Eq + Hash>(quad_map: &mut QuadMap<T>, e1: &T, e2: &T, e3: &T, e4: &T) {
+    let mut triple_map_empty = false;
+    if let Some(triple_map) = quad_map.get_mut(e1) {
+        remove_from_triple_map(triple_map, e2, e3, e4);
+        triple_map_empty = triple_map.is_empty();
+    }
+    if triple_map_empty {
+        quad_map.remove(e1);
     }
 }
 
@@ -909,6 +1041,16 @@ fn option_pair_map_flatten<'a, T: Copy>(
         kv.iter().flat_map(|(k, vs)| {
             let k = *k;
             vs.iter().map(move |v| (k, *v))
+        })
+    })
+}
+
+fn triple_map_flatten<'a, T: Copy>(spo: &'a TripleMap<T>) -> impl Iterator<Item = (T, T, T)> + 'a {
+    spo.iter().flat_map(|(s, po)| {
+        let s = *s;
+        po.iter().flat_map(move |(p, os)| {
+            let p = *p;
+            os.iter().map(move |o| (s, p, *o))
         })
     })
 }

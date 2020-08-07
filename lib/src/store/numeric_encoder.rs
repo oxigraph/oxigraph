@@ -260,6 +260,10 @@ impl<I: StrId> EncodedTerm<I> {
         }
     }
 
+    pub fn is_default_graph(&self) -> bool {
+        *self == EncodedTerm::DefaultGraph
+    }
+
     fn type_id(&self) -> u8 {
         match self {
             Self::DefaultGraph { .. } => TYPE_DEFAULT_GRAPH_ID,
