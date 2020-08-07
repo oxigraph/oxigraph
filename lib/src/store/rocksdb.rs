@@ -150,6 +150,8 @@ impl RocksDbStore {
     }
 
     /// Returns the number of quads in the store
+    ///
+    /// Warning: this function executes a full scan
     pub fn len(&self) -> usize {
         self.db
             .full_iterator_cf(self.spog_cf(), IteratorMode::Start)

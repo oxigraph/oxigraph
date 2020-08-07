@@ -151,6 +151,8 @@ impl SledStore {
     }
 
     /// Returns the number of quads in the store
+    ///
+    /// Warning: this function executes a full scan
     pub fn len(&self) -> usize {
         self.quads.len() / 6
     }
