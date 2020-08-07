@@ -1,12 +1,13 @@
 use crate::model::xsd::*;
-use crate::model::BlankNode;
 use crate::model::Triple;
+use crate::model::{BlankNode, LiteralRef, NamedNodeRef};
 use crate::sparql::algebra::{DatasetSpec, GraphPattern, QueryVariants};
 use crate::sparql::error::EvaluationError;
 use crate::sparql::model::*;
 use crate::sparql::plan::*;
 use crate::sparql::{Query, ServiceHandler};
 use crate::store::numeric_encoder::*;
+use crate::store::small_string::SmallString;
 use crate::store::ReadableEncodedStore;
 use digest::Digest;
 use md5::Md5;
@@ -14,7 +15,6 @@ use oxilangtag::LanguageTag;
 use oxiri::Iri;
 use rand::random;
 use regex::{Regex, RegexBuilder};
-use rio_api::model as rio;
 use sha1::Sha1;
 use sha2::{Sha256, Sha384, Sha512};
 use std::cmp::Ordering;
@@ -1008,14 +1008,19 @@ where
             PlanExpression::UnaryNot(e) => self
                 .to_bool(self.eval_expression(e, tuple)?)
                 .map(|v| (!v).into()),
-            PlanExpression::Str(e) => Some(EncodedTerm::StringLiteral {
-                value_id: self.to_string_id(self.eval_expression(e, tuple)?)?,
-            }),
+            PlanExpression::Str(e) => {
+                Some(self.build_string_literal_from_id(
+                    self.to_string_id(self.eval_expression(e, tuple)?)?,
+                ))
+            }
             PlanExpression::Lang(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::LangStringLiteral { language_id, .. } => {
-                    Some(EncodedTerm::StringLiteral {
-                        value_id: language_id,
-                    })
+                EncodedTerm::SmallSmallLangStringLiteral { language, .. }
+                | EncodedTerm::BigSmallLangStringLiteral { language, .. } => {
+                    Some(self.build_string_literal_from_id(language.into()))
+                }
+                EncodedTerm::SmallBigLangStringLiteral { language_id, .. }
+                | EncodedTerm::BigBigLangStringLiteral { language_id, .. } => {
+                    Some(self.build_string_literal_from_id(language_id.into()))
                 }
                 e if e.is_literal() => self.build_string_literal(""),
                 _ => None,
@@ -1047,17 +1052,26 @@ where
             PlanExpression::Datatype(e) => self.datatype(self.eval_expression(e, tuple)?),
             PlanExpression::Bound(v) => Some(tuple.contains(*v).into()),
             PlanExpression::IRI(e) => {
-                let iri_id = match self.eval_expression(e, tuple)? {
-                    EncodedTerm::NamedNode { iri_id } => Some(iri_id),
-                    EncodedTerm::StringLiteral { value_id } => Some(value_id),
-                    _ => None,
-                }?;
-                let iri = self.dataset.get_str(iri_id).ok()??;
-                if let Some(base_iri) = &self.base_iri {
-                    self.build_named_node(&base_iri.resolve(&iri).ok()?.into_inner())
+                let e = self.eval_expression(e, tuple)?;
+                if e.is_named_node() {
+                    Some(e)
                 } else {
-                    Iri::parse(iri).ok()?;
-                    Some(EncodedTerm::NamedNode { iri_id })
+                    let iri = match e {
+                        EncodedTerm::SmallStringLiteral(value) => Some(value.into()),
+                        EncodedTerm::BigStringLiteral { value_id } => {
+                            self.dataset.get_str(value_id).ok()?
+                        }
+                        _ => None,
+                    }?;
+                    self.build_named_node(
+                        &if let Some(base_iri) = &self.base_iri {
+                            base_iri.resolve(&iri)
+                        } else {
+                            Iri::parse(iri)
+                        }
+                        .ok()?
+                        .into_inner(),
+                    )
                 }
             }
             PlanExpression::BNode(id) => match id {
@@ -1072,7 +1086,7 @@ where
                             .ok()?,
                     )
                 }
-                None => Some(EncodedTerm::InlineBlankNode {
+                None => Some(EncodedTerm::NumericalBlankNode {
                     id: random::<u128>(),
                 }),
             },
@@ -1352,11 +1366,10 @@ where
                 }
             }
             PlanExpression::StrLang(lexical_form, lang_tag) => {
-                Some(EncodedTerm::LangStringLiteral {
-                    value_id: self
-                        .to_simple_string_id(self.eval_expression(lexical_form, tuple)?)?,
-                    language_id: self.build_language_id(self.eval_expression(lang_tag, tuple)?)?,
-                })
+                Some(self.build_lang_string_literal_from_id(
+                    self.to_simple_string_id(self.eval_expression(lexical_form, tuple)?)?,
+                    self.build_language_id(self.eval_expression(lang_tag, tuple)?)?,
+                ))
             }
             PlanExpression::StrDT(lexical_form, datatype) => {
                 let value = self.to_simple_string(self.eval_expression(lexical_form, tuple)?)?;
@@ -1369,10 +1382,10 @@ where
                 }?;
                 let mut encoder = self.dataset.as_ref();
                 encoder
-                    .encode_rio_literal(rio::Literal::Typed {
-                        value: &value,
-                        datatype: rio::NamedNode { iri: &datatype },
-                    })
+                    .encode_literal(LiteralRef::new_typed_literal(
+                        &value,
+                        NamedNodeRef::new_unchecked(&datatype),
+                    ))
                     .ok()
             }
             PlanExpression::SameTerm(a, b) => {
@@ -1411,7 +1424,8 @@ where
             }
             PlanExpression::BooleanCast(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::BooleanLiteral(value) => Some(value.into()),
-                EncodedTerm::StringLiteral { value_id } => {
+                EncodedTerm::SmallStringLiteral(value) => parse_boolean_str(&value),
+                EncodedTerm::BigStringLiteral { value_id } => {
                     parse_boolean_str(&*self.dataset.get_str(value_id).ok()??)
                 }
                 _ => None,
@@ -1424,7 +1438,8 @@ where
                 EncodedTerm::BooleanLiteral(value) => {
                     Some(if value { 1_f64 } else { 0_f64 }.into())
                 }
-                EncodedTerm::StringLiteral { value_id } => {
+                EncodedTerm::SmallStringLiteral(value) => parse_double_str(&value),
+                EncodedTerm::BigStringLiteral { value_id } => {
                     parse_double_str(&*self.dataset.get_str(value_id).ok()??)
                 }
                 _ => None,
@@ -1437,7 +1452,9 @@ where
                 EncodedTerm::BooleanLiteral(value) => {
                     Some(if value { 1_f32 } else { 0_f32 }.into())
                 }
-                EncodedTerm::StringLiteral { value_id } => {
+
+                EncodedTerm::SmallStringLiteral(value) => parse_float_str(&value),
+                EncodedTerm::BigStringLiteral { value_id } => {
                     parse_float_str(&*self.dataset.get_str(value_id).ok()??)
                 }
                 _ => None,
@@ -1448,7 +1465,8 @@ where
                 EncodedTerm::IntegerLiteral(value) => Some(value.into()),
                 EncodedTerm::DecimalLiteral(value) => Some(i64::try_from(value).ok()?.into()),
                 EncodedTerm::BooleanLiteral(value) => Some(if value { 1 } else { 0 }.into()),
-                EncodedTerm::StringLiteral { value_id } => {
+                EncodedTerm::SmallStringLiteral(value) => parse_integer_str(&value),
+                EncodedTerm::BigStringLiteral { value_id } => {
                     parse_integer_str(&*self.dataset.get_str(value_id).ok()??)
                 }
                 _ => None,
@@ -1461,7 +1479,8 @@ where
                 EncodedTerm::BooleanLiteral(value) => {
                     Some(Decimal::from(if value { 1 } else { 0 }).into())
                 }
-                EncodedTerm::StringLiteral { value_id } => {
+                EncodedTerm::SmallStringLiteral(value) => parse_decimal_str(&value),
+                EncodedTerm::BigStringLiteral { value_id } => {
                     parse_decimal_str(&*self.dataset.get_str(value_id).ok()??)
                 }
                 _ => None,
@@ -1469,7 +1488,8 @@ where
             PlanExpression::DateCast(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::DateLiteral(value) => Some(value.into()),
                 EncodedTerm::DateTimeLiteral(value) => Some(Date::try_from(value).ok()?.into()),
-                EncodedTerm::StringLiteral { value_id } => {
+                EncodedTerm::SmallStringLiteral(value) => parse_date_str(&value),
+                EncodedTerm::BigStringLiteral { value_id } => {
                     parse_date_str(&*self.dataset.get_str(value_id).ok()??)
                 }
                 _ => None,
@@ -1477,7 +1497,8 @@ where
             PlanExpression::TimeCast(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::TimeLiteral(value) => Some(value.into()),
                 EncodedTerm::DateTimeLiteral(value) => Some(Time::try_from(value).ok()?.into()),
-                EncodedTerm::StringLiteral { value_id } => {
+                EncodedTerm::SmallStringLiteral(value) => parse_time_str(&value),
+                EncodedTerm::BigStringLiteral { value_id } => {
                     parse_time_str(&*self.dataset.get_str(value_id).ok()??)
                 }
                 _ => None,
@@ -1485,7 +1506,8 @@ where
             PlanExpression::DateTimeCast(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::DateTimeLiteral(value) => Some(value.into()),
                 EncodedTerm::DateLiteral(value) => Some(DateTime::try_from(value).ok()?.into()),
-                EncodedTerm::StringLiteral { value_id } => {
+                EncodedTerm::SmallStringLiteral(value) => parse_date_time_str(&value),
+                EncodedTerm::BigStringLiteral { value_id } => {
                     parse_date_time_str(&*self.dataset.get_str(value_id).ok()??)
                 }
                 _ => None,
@@ -1494,7 +1516,8 @@ where
                 EncodedTerm::DurationLiteral(value) => Some(value.into()),
                 EncodedTerm::YearMonthDurationLiteral(value) => Some(Duration::from(value).into()),
                 EncodedTerm::DayTimeDurationLiteral(value) => Some(Duration::from(value).into()),
-                EncodedTerm::StringLiteral { value_id } => {
+                EncodedTerm::SmallStringLiteral(value) => parse_duration_str(&value),
+                EncodedTerm::BigStringLiteral { value_id } => {
                     parse_duration_str(&*self.dataset.get_str(value_id).ok()??)
                 }
                 _ => None,
@@ -1504,7 +1527,8 @@ where
                     Some(YearMonthDuration::try_from(value).ok()?.into())
                 }
                 EncodedTerm::YearMonthDurationLiteral(value) => Some(value.into()),
-                EncodedTerm::StringLiteral { value_id } => {
+                EncodedTerm::SmallStringLiteral(value) => parse_year_month_duration_str(&value),
+                EncodedTerm::BigStringLiteral { value_id } => {
                     parse_year_month_duration_str(&*self.dataset.get_str(value_id).ok()??)
                 }
                 _ => None,
@@ -1514,21 +1538,25 @@ where
                     Some(DayTimeDuration::try_from(value).ok()?.into())
                 }
                 EncodedTerm::DayTimeDurationLiteral(value) => Some(value.into()),
-                EncodedTerm::StringLiteral { value_id } => {
+                EncodedTerm::SmallStringLiteral(value) => parse_day_time_duration_str(&value),
+                EncodedTerm::BigStringLiteral { value_id } => {
                     parse_day_time_duration_str(&*self.dataset.get_str(value_id).ok()??)
                 }
                 _ => None,
             },
-            PlanExpression::StringCast(e) => Some(EncodedTerm::StringLiteral {
-                value_id: self.to_string_id(self.eval_expression(e, tuple)?)?,
-            }),
+            PlanExpression::StringCast(e) => {
+                Some(self.build_string_literal_from_id(
+                    self.to_string_id(self.eval_expression(e, tuple)?)?,
+                ))
+            }
         }
     }
 
     fn to_bool(&self, term: EncodedTerm<S::StrId>) -> Option<bool> {
         match term {
             EncodedTerm::BooleanLiteral(value) => Some(value),
-            EncodedTerm::StringLiteral { value_id } => {
+            EncodedTerm::SmallStringLiteral(value) => Some(!value.is_empty()),
+            EncodedTerm::BigStringLiteral { value_id } => {
                 Some(!self.dataset.get_str(value_id).ok()??.is_empty())
             }
             EncodedTerm::FloatLiteral(value) => Some(value != 0_f32),
@@ -1539,14 +1567,21 @@ where
         }
     }
 
-    fn to_string_id(&self, term: EncodedTerm<S::StrId>) -> Option<S::StrId> {
+    fn to_string_id(&self, term: EncodedTerm<S::StrId>) -> Option<SmallStringOrId<S::StrId>> {
         match term {
             EncodedTerm::DefaultGraph => None,
-            EncodedTerm::NamedNode { iri_id } => Some(iri_id),
-            EncodedTerm::InlineBlankNode { .. } | EncodedTerm::NamedBlankNode { .. } => None,
-            EncodedTerm::StringLiteral { value_id }
-            | EncodedTerm::LangStringLiteral { value_id, .. }
-            | EncodedTerm::TypedLiteral { value_id, .. } => Some(value_id),
+            EncodedTerm::NamedNode { iri_id } => Some(iri_id.into()),
+            EncodedTerm::NumericalBlankNode { .. }
+            | EncodedTerm::SmallBlankNode { .. }
+            | EncodedTerm::BigBlankNode { .. } => None,
+            EncodedTerm::SmallStringLiteral(value)
+            | EncodedTerm::SmallSmallLangStringLiteral { value, .. }
+            | EncodedTerm::SmallBigLangStringLiteral { value, .. }
+            | EncodedTerm::SmallTypedLiteral { value, .. } => Some(value.into()),
+            EncodedTerm::BigStringLiteral { value_id }
+            | EncodedTerm::BigSmallLangStringLiteral { value_id, .. }
+            | EncodedTerm::BigBigLangStringLiteral { value_id, .. }
+            | EncodedTerm::BigTypedLiteral { value_id, .. } => Some(value_id.into()),
             EncodedTerm::BooleanLiteral(value) => {
                 self.build_string_id(if value { "true" } else { "false" })
             }
@@ -1566,25 +1601,32 @@ where
     }
 
     fn to_simple_string(&self, term: EncodedTerm<S::StrId>) -> Option<String> {
-        if let EncodedTerm::StringLiteral { value_id } = term {
-            self.dataset.get_str(value_id).ok()?
-        } else {
-            None
+        match term {
+            EncodedTerm::SmallStringLiteral(value) => Some(value.into()),
+            EncodedTerm::BigStringLiteral { value_id } => self.dataset.get_str(value_id).ok()?,
+            _ => None,
         }
     }
 
-    fn to_simple_string_id(&self, term: EncodedTerm<S::StrId>) -> Option<S::StrId> {
-        if let EncodedTerm::StringLiteral { value_id } = term {
-            Some(value_id)
-        } else {
-            None
+    fn to_simple_string_id(
+        &self,
+        term: EncodedTerm<S::StrId>,
+    ) -> Option<SmallStringOrId<S::StrId>> {
+        match term {
+            EncodedTerm::SmallStringLiteral(value) => Some(value.into()),
+            EncodedTerm::BigStringLiteral { value_id } => Some(value_id.into()),
+            _ => None,
         }
     }
 
     fn to_string(&self, term: EncodedTerm<S::StrId>) -> Option<String> {
         match term {
-            EncodedTerm::StringLiteral { value_id }
-            | EncodedTerm::LangStringLiteral { value_id, .. } => {
+            EncodedTerm::SmallStringLiteral(value)
+            | EncodedTerm::SmallSmallLangStringLiteral { value, .. }
+            | EncodedTerm::SmallBigLangStringLiteral { value, .. } => Some(value.into()),
+            EncodedTerm::BigStringLiteral { value_id }
+            | EncodedTerm::BigSmallLangStringLiteral { value_id, .. }
+            | EncodedTerm::BigBigLangStringLiteral { value_id, .. } => {
                 self.dataset.get_str(value_id).ok()?
             }
             _ => None,
@@ -1594,46 +1636,85 @@ where
     fn to_string_and_language(
         &self,
         term: EncodedTerm<S::StrId>,
-    ) -> Option<(String, Option<S::StrId>)> {
+    ) -> Option<(String, Option<SmallStringOrId<S::StrId>>)> {
         match term {
-            EncodedTerm::StringLiteral { value_id } => {
+            EncodedTerm::SmallStringLiteral(value) => Some((value.into(), None)),
+            EncodedTerm::BigStringLiteral { value_id } => {
                 Some((self.dataset.get_str(value_id).ok()??, None))
             }
-            EncodedTerm::LangStringLiteral {
+            EncodedTerm::SmallSmallLangStringLiteral { value, language } => {
+                Some((value.into(), Some(language.into())))
+            }
+            EncodedTerm::SmallBigLangStringLiteral { value, language_id } => {
+                Some((value.into(), Some(language_id.into())))
+            }
+            EncodedTerm::BigSmallLangStringLiteral { value_id, language } => {
+                Some((self.dataset.get_str(value_id).ok()??, Some(language.into())))
+            }
+            EncodedTerm::BigBigLangStringLiteral {
                 value_id,
                 language_id,
-            } => Some((self.dataset.get_str(value_id).ok()??, Some(language_id))),
+            } => Some((
+                self.dataset.get_str(value_id).ok()??,
+                Some(language_id.into()),
+            )),
             _ => None,
         }
     }
 
     fn build_named_node(&self, iri: &str) -> Option<EncodedTerm<S::StrId>> {
         Some(EncodedTerm::NamedNode {
-            iri_id: self.build_string_id(iri)?,
+            iri_id: self.dataset.as_ref().encode_str(iri).ok()?,
         })
     }
 
     fn build_string_literal(&self, value: &str) -> Option<EncodedTerm<S::StrId>> {
-        Some(EncodedTerm::StringLiteral {
-            value_id: self.build_string_id(value)?,
-        })
+        Some(self.build_string_literal_from_id(self.build_string_id(value)?))
+    }
+
+    fn build_string_literal_from_id(&self, id: SmallStringOrId<S::StrId>) -> EncodedTerm<S::StrId> {
+        match id {
+            SmallStringOrId::Small(value) => EncodedTerm::SmallStringLiteral(value),
+            SmallStringOrId::Big(value_id) => EncodedTerm::BigStringLiteral { value_id },
+        }
     }
 
     fn build_lang_string_literal(
         &self,
         value: &str,
-        language_id: S::StrId,
+        language_id: SmallStringOrId<S::StrId>,
     ) -> Option<EncodedTerm<S::StrId>> {
-        Some(EncodedTerm::LangStringLiteral {
-            value_id: self.build_string_id(value)?,
-            language_id,
-        })
+        Some(self.build_lang_string_literal_from_id(self.build_string_id(value)?, language_id))
+    }
+
+    fn build_lang_string_literal_from_id(
+        &self,
+        value_id: SmallStringOrId<S::StrId>,
+        language_id: SmallStringOrId<S::StrId>,
+    ) -> EncodedTerm<S::StrId> {
+        match (value_id, language_id) {
+            (SmallStringOrId::Small(value), SmallStringOrId::Small(language)) => {
+                EncodedTerm::SmallSmallLangStringLiteral { value, language }
+            }
+            (SmallStringOrId::Small(value), SmallStringOrId::Big(language_id)) => {
+                EncodedTerm::SmallBigLangStringLiteral { value, language_id }
+            }
+            (SmallStringOrId::Big(value_id), SmallStringOrId::Small(language)) => {
+                EncodedTerm::BigSmallLangStringLiteral { value_id, language }
+            }
+            (SmallStringOrId::Big(value_id), SmallStringOrId::Big(language_id)) => {
+                EncodedTerm::BigBigLangStringLiteral {
+                    value_id,
+                    language_id,
+                }
+            }
+        }
     }
 
     fn build_plain_literal(
         &self,
         value: &str,
-        language: Option<S::StrId>,
+        language: Option<SmallStringOrId<S::StrId>>,
     ) -> Option<EncodedTerm<S::StrId>> {
         if let Some(language_id) = language {
             self.build_lang_string_literal(value, language_id)
@@ -1642,11 +1723,15 @@ where
         }
     }
 
-    fn build_string_id(&self, value: &str) -> Option<S::StrId> {
-        self.dataset.as_ref().encode_str(value).ok()
+    fn build_string_id(&self, value: &str) -> Option<SmallStringOrId<S::StrId>> {
+        Some(if let Ok(value) = SmallString::try_from(value) {
+            value.into()
+        } else {
+            self.dataset.as_ref().encode_str(value).ok()?.into()
+        })
     }
 
-    fn build_language_id(&self, value: EncodedTerm<S::StrId>) -> Option<S::StrId> {
+    fn build_language_id(&self, value: EncodedTerm<S::StrId>) -> Option<SmallStringOrId<S::StrId>> {
         let mut language = self.to_simple_string(value)?;
         language.make_ascii_lowercase();
         self.build_string_id(LanguageTag::parse(language).ok()?.as_str())
@@ -1656,7 +1741,7 @@ where
         &self,
         arg1: EncodedTerm<S::StrId>,
         arg2: EncodedTerm<S::StrId>,
-    ) -> Option<(String, String, Option<S::StrId>)> {
+    ) -> Option<(String, String, Option<SmallStringOrId<S::StrId>>)> {
         let (value1, language1) = self.to_string_and_language(arg1)?;
         let (value2, language2) = self.to_string_and_language(arg2)?;
         if language2.is_none() || language1 == language2 {
@@ -1763,17 +1848,52 @@ where
         match a {
             EncodedTerm::DefaultGraph
             | EncodedTerm::NamedNode { .. }
-            | EncodedTerm::InlineBlankNode { .. }
-            | EncodedTerm::NamedBlankNode { .. }
-            | EncodedTerm::LangStringLiteral { .. } => Some(a == b),
-            EncodedTerm::StringLiteral { value_id: a } => match b {
-                EncodedTerm::StringLiteral { value_id: b } => Some(a == b),
-                EncodedTerm::TypedLiteral { .. } => None,
+            | EncodedTerm::NumericalBlankNode { .. }
+            | EncodedTerm::SmallBlankNode { .. }
+            | EncodedTerm::BigBlankNode { .. }
+            | EncodedTerm::SmallSmallLangStringLiteral { .. }
+            | EncodedTerm::SmallBigLangStringLiteral { .. }
+            | EncodedTerm::BigSmallLangStringLiteral { .. }
+            | EncodedTerm::BigBigLangStringLiteral { .. } => Some(a == b),
+            EncodedTerm::SmallStringLiteral(a) => match b {
+                EncodedTerm::SmallStringLiteral(b) => Some(a == b),
+                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
                 _ => Some(false),
+            },
+            EncodedTerm::BigStringLiteral { value_id: a } => match b {
+                EncodedTerm::BigStringLiteral { value_id: b } => Some(a == b),
+                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+                _ => Some(false),
+            },
+            EncodedTerm::SmallTypedLiteral { .. } => match b {
+                EncodedTerm::SmallTypedLiteral { .. } if a == b => Some(true),
+                EncodedTerm::NamedNode { .. }
+                | EncodedTerm::NumericalBlankNode { .. }
+                | EncodedTerm::SmallBlankNode { .. }
+                | EncodedTerm::BigBlankNode { .. }
+                | EncodedTerm::SmallSmallLangStringLiteral { .. }
+                | EncodedTerm::SmallBigLangStringLiteral { .. }
+                | EncodedTerm::BigSmallLangStringLiteral { .. }
+                | EncodedTerm::BigBigLangStringLiteral { .. }
+                | EncodedTerm::BigTypedLiteral { .. } => Some(false),
+                _ => None,
+            },
+            EncodedTerm::BigTypedLiteral { .. } => match b {
+                EncodedTerm::BigTypedLiteral { .. } if a == b => Some(true),
+                EncodedTerm::NamedNode { .. }
+                | EncodedTerm::NumericalBlankNode { .. }
+                | EncodedTerm::SmallBlankNode { .. }
+                | EncodedTerm::BigBlankNode { .. }
+                | EncodedTerm::SmallSmallLangStringLiteral { .. }
+                | EncodedTerm::SmallBigLangStringLiteral { .. }
+                | EncodedTerm::BigSmallLangStringLiteral { .. }
+                | EncodedTerm::BigBigLangStringLiteral { .. }
+                | EncodedTerm::SmallTypedLiteral { .. } => Some(false),
+                _ => None,
             },
             EncodedTerm::BooleanLiteral(a) => match b {
                 EncodedTerm::BooleanLiteral(b) => Some(a == b),
-                EncodedTerm::TypedLiteral { .. } => None,
+                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
                 _ => Some(false),
             },
             EncodedTerm::FloatLiteral(a) => match b {
@@ -1781,7 +1901,7 @@ where
                 EncodedTerm::DoubleLiteral(b) => Some(f64::from(a) == b),
                 EncodedTerm::IntegerLiteral(b) => Some(a == b as f32),
                 EncodedTerm::DecimalLiteral(b) => Some(a == b.to_f32()),
-                EncodedTerm::TypedLiteral { .. } => None,
+                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
                 _ => Some(false),
             },
             EncodedTerm::DoubleLiteral(a) => match b {
@@ -1789,7 +1909,7 @@ where
                 EncodedTerm::DoubleLiteral(b) => Some(a == b),
                 EncodedTerm::IntegerLiteral(b) => Some(a == (b as f64)),
                 EncodedTerm::DecimalLiteral(b) => Some(a == b.to_f64()),
-                EncodedTerm::TypedLiteral { .. } => None,
+                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
                 _ => Some(false),
             },
             EncodedTerm::IntegerLiteral(a) => match b {
@@ -1797,7 +1917,7 @@ where
                 EncodedTerm::DoubleLiteral(b) => Some((a as f64) == b),
                 EncodedTerm::IntegerLiteral(b) => Some(a == b),
                 EncodedTerm::DecimalLiteral(b) => Some(Decimal::from(a) == b),
-                EncodedTerm::TypedLiteral { .. } => None,
+                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
                 _ => Some(false),
             },
             EncodedTerm::DecimalLiteral(a) => match b {
@@ -1805,51 +1925,43 @@ where
                 EncodedTerm::DoubleLiteral(b) => Some(a.to_f64() == b),
                 EncodedTerm::IntegerLiteral(b) => Some(a == Decimal::from(b)),
                 EncodedTerm::DecimalLiteral(b) => Some(a == b),
-                EncodedTerm::TypedLiteral { .. } => None,
+                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
                 _ => Some(false),
-            },
-            EncodedTerm::TypedLiteral { .. } => match b {
-                EncodedTerm::TypedLiteral { .. } if a == b => Some(true),
-                EncodedTerm::NamedNode { .. }
-                | EncodedTerm::InlineBlankNode { .. }
-                | EncodedTerm::NamedBlankNode { .. }
-                | EncodedTerm::LangStringLiteral { .. } => Some(false),
-                _ => None,
             },
             EncodedTerm::DateLiteral(a) => match b {
                 EncodedTerm::DateLiteral(b) => Some(a == b),
-                EncodedTerm::TypedLiteral { .. } => None,
+                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
                 _ => Some(false),
             },
             EncodedTerm::TimeLiteral(a) => match b {
                 EncodedTerm::TimeLiteral(b) => Some(a == b),
-                EncodedTerm::TypedLiteral { .. } => None,
+                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
                 _ => Some(false),
             },
             EncodedTerm::DateTimeLiteral(a) => match b {
                 EncodedTerm::DateTimeLiteral(b) => Some(a == b),
-                EncodedTerm::TypedLiteral { .. } => None,
+                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
                 _ => Some(false),
             },
             EncodedTerm::DurationLiteral(a) => match b {
                 EncodedTerm::DurationLiteral(b) => Some(a == b),
                 EncodedTerm::YearMonthDurationLiteral(b) => Some(a == b),
                 EncodedTerm::DayTimeDurationLiteral(b) => Some(a == b),
-                EncodedTerm::TypedLiteral { .. } => None,
+                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
                 _ => Some(false),
             },
             EncodedTerm::YearMonthDurationLiteral(a) => match b {
                 EncodedTerm::DurationLiteral(b) => Some(a == b),
                 EncodedTerm::YearMonthDurationLiteral(b) => Some(a == b),
                 EncodedTerm::DayTimeDurationLiteral(b) => Some(a == b),
-                EncodedTerm::TypedLiteral { .. } => None,
+                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
                 _ => Some(false),
             },
             EncodedTerm::DayTimeDurationLiteral(a) => match b {
                 EncodedTerm::DurationLiteral(b) => Some(a == b),
                 EncodedTerm::YearMonthDurationLiteral(b) => Some(a == b),
                 EncodedTerm::DayTimeDurationLiteral(b) => Some(a == b),
-                EncodedTerm::TypedLiteral { .. } => None,
+                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
                 _ => Some(false),
             },
         }
@@ -1874,26 +1986,28 @@ where
     ) -> Ordering {
         match (a, b) {
             (Some(a), Some(b)) => match a {
-                EncodedTerm::InlineBlankNode { .. } | EncodedTerm::NamedBlankNode { .. } => {
-                    match b {
-                        EncodedTerm::InlineBlankNode { .. }
-                        | EncodedTerm::NamedBlankNode { .. } => Ordering::Equal,
-                        _ => Ordering::Less,
-                    }
-                }
+                EncodedTerm::NumericalBlankNode { .. }
+                | EncodedTerm::SmallBlankNode { .. }
+                | EncodedTerm::BigBlankNode { .. } => match b {
+                    EncodedTerm::NumericalBlankNode { .. }
+                    | EncodedTerm::SmallBlankNode { .. }
+                    | EncodedTerm::BigBlankNode { .. } => Ordering::Equal,
+                    _ => Ordering::Less,
+                },
                 EncodedTerm::NamedNode { iri_id: a } => match b {
                     EncodedTerm::NamedNode { iri_id: b } => {
                         self.compare_str_ids(a, b).unwrap_or(Ordering::Equal)
                     }
-                    EncodedTerm::InlineBlankNode { .. } | EncodedTerm::NamedBlankNode { .. } => {
-                        Ordering::Greater
-                    }
+                    EncodedTerm::NumericalBlankNode { .. }
+                    | EncodedTerm::SmallBlankNode { .. }
+                    | EncodedTerm::BigBlankNode { .. } => Ordering::Greater,
                     _ => Ordering::Less,
                 },
                 a => match b {
                     EncodedTerm::NamedNode { .. }
-                    | EncodedTerm::InlineBlankNode { .. }
-                    | EncodedTerm::NamedBlankNode { .. } => Ordering::Greater,
+                    | EncodedTerm::NumericalBlankNode { .. }
+                    | EncodedTerm::SmallBlankNode { .. }
+                    | EncodedTerm::BigBlankNode { .. } => Ordering::Greater,
                     b => self.partial_cmp_literals(a, b).unwrap_or(Ordering::Equal),
                 },
             },
@@ -1910,13 +2024,16 @@ where
         b: EncodedTerm<S::StrId>,
     ) -> Option<Ordering> {
         match a {
-            EncodedTerm::StringLiteral { value_id: a } => {
-                if let EncodedTerm::StringLiteral { value_id: b } = b {
-                    self.compare_str_ids(a, b)
-                } else {
-                    None
-                }
-            }
+            EncodedTerm::SmallStringLiteral(a) => match b {
+                EncodedTerm::SmallStringLiteral(b) => a.partial_cmp(&b),
+                EncodedTerm::BigStringLiteral { value_id: b } => self.compare_str_str_id(&a, b),
+                _ => None,
+            },
+            EncodedTerm::BigStringLiteral { value_id: a } => match b {
+                EncodedTerm::SmallStringLiteral(b) => self.compare_str_id_str(a, &b),
+                EncodedTerm::BigStringLiteral { value_id: b } => self.compare_str_ids(a, b),
+                _ => None,
+            },
             EncodedTerm::FloatLiteral(a) => match b {
                 EncodedTerm::FloatLiteral(ref b) => a.partial_cmp(b),
                 EncodedTerm::DoubleLiteral(ref b) => f64::from(a).partial_cmp(b),
@@ -1997,6 +2114,14 @@ where
         )
     }
 
+    fn compare_str_id_str(&self, a: S::StrId, b: &str) -> Option<Ordering> {
+        Some(self.dataset.get_str(a).ok()??.as_str().cmp(b))
+    }
+
+    fn compare_str_str_id(&self, a: &str, b: S::StrId) -> Option<Ordering> {
+        Some(a.cmp(self.dataset.get_str(b).ok()??.as_str()))
+    }
+
     fn hash<H: Digest>(
         &self,
         arg: &PlanExpression<S::StrId>,
@@ -2011,16 +2136,21 @@ where
         //TODO: optimize?
         match value {
             EncodedTerm::NamedNode { .. }
-            | EncodedTerm::NamedBlankNode { .. }
-            | EncodedTerm::InlineBlankNode { .. }
+            | EncodedTerm::SmallBlankNode { .. }
+            | EncodedTerm::BigBlankNode { .. }
+            | EncodedTerm::NumericalBlankNode { .. }
             | EncodedTerm::DefaultGraph => None,
-            EncodedTerm::StringLiteral { .. } => {
+            EncodedTerm::SmallStringLiteral(_) | EncodedTerm::BigStringLiteral { .. } => {
                 self.build_named_node("http://www.w3.org/2001/XMLSchema#string")
             }
-            EncodedTerm::LangStringLiteral { .. } => {
+            EncodedTerm::SmallSmallLangStringLiteral { .. }
+            | EncodedTerm::SmallBigLangStringLiteral { .. }
+            | EncodedTerm::BigSmallLangStringLiteral { .. }
+            | EncodedTerm::BigBigLangStringLiteral { .. } => {
                 self.build_named_node("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")
             }
-            EncodedTerm::TypedLiteral { datatype_id, .. } => Some(EncodedTerm::NamedNode {
+            EncodedTerm::SmallTypedLiteral { datatype_id, .. }
+            | EncodedTerm::BigTypedLiteral { datatype_id, .. } => Some(EncodedTerm::NamedNode {
                 iri_id: datatype_id,
             }),
             EncodedTerm::BooleanLiteral(..) => {
@@ -2504,7 +2634,7 @@ fn get_triple_template_value<I: StrId>(
 }
 
 fn new_bnode<I: StrId>() -> EncodedTerm<I> {
-    EncodedTerm::InlineBlankNode { id: random() }
+    EncodedTerm::NumericalBlankNode { id: random() }
 }
 
 fn decode_triple<D: Decoder>(
@@ -2922,7 +3052,7 @@ impl<I: StrId> Accumulator<I> for SampleAccumulator<I> {
 struct GroupConcatAccumulator<S: ReadableEncodedStore + 'static> {
     eval: SimpleEvaluator<S>,
     concat: Option<String>,
-    language: Option<Option<S::StrId>>,
+    language: Option<Option<SmallStringOrId<S::StrId>>>,
     separator: Rc<String>,
 }
 
@@ -2998,6 +3128,24 @@ fn write_hexa_bytes(bytes: &[u8], buffer: &mut String) {
         } else {
             b'a' + (low - 10)
         }));
+    }
+}
+
+#[derive(Eq, PartialEq, Clone, Copy)]
+enum SmallStringOrId<I: StrId> {
+    Small(SmallString),
+    Big(I),
+}
+
+impl<I: StrId> From<SmallString> for SmallStringOrId<I> {
+    fn from(value: SmallString) -> Self {
+        Self::Small(value)
+    }
+}
+
+impl<I: StrId> From<I> for SmallStringOrId<I> {
+    fn from(value: I) -> Self {
+        Self::Big(value)
     }
 }
 

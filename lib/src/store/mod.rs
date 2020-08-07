@@ -11,6 +11,7 @@ pub(crate) mod numeric_encoder;
 pub mod rocksdb;
 #[cfg(feature = "sled")]
 pub mod sled;
+pub(crate) mod small_string;
 
 pub use crate::store::memory::MemoryStore;
 #[cfg(feature = "rocksdb")]

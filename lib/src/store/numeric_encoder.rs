@@ -4,11 +4,11 @@ use crate::error::invalid_data_error;
 use crate::model::xsd::*;
 use crate::model::*;
 use crate::sparql::EvaluationError;
-use lasso::{Rodeo, Spur};
+use crate::store::small_string::SmallString;
 use rand::random;
 use rio_api::model as rio;
 use std::collections::HashMap;
-use std::convert::Infallible;
+use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -20,12 +20,44 @@ pub trait StrId: Eq + Debug + Copy + Hash {}
 #[derive(Debug, Clone, Copy)]
 pub enum EncodedTerm<I: StrId> {
     DefaultGraph,
-    NamedNode { iri_id: I },
-    InlineBlankNode { id: u128 },
-    NamedBlankNode { id_id: I },
-    StringLiteral { value_id: I },
-    LangStringLiteral { value_id: I, language_id: I },
-    TypedLiteral { value_id: I, datatype_id: I },
+    NamedNode {
+        iri_id: I,
+    },
+    NumericalBlankNode {
+        id: u128,
+    },
+    SmallBlankNode(SmallString),
+    BigBlankNode {
+        id_id: I,
+    },
+    SmallStringLiteral(SmallString),
+    BigStringLiteral {
+        value_id: I,
+    },
+    SmallSmallLangStringLiteral {
+        value: SmallString,
+        language: SmallString,
+    },
+    SmallBigLangStringLiteral {
+        value: SmallString,
+        language_id: I,
+    },
+    BigSmallLangStringLiteral {
+        value_id: I,
+        language: SmallString,
+    },
+    BigBigLangStringLiteral {
+        value_id: I,
+        language_id: I,
+    },
+    SmallTypedLiteral {
+        value: SmallString,
+        datatype_id: I,
+    },
+    BigTypedLiteral {
+        value_id: I,
+        datatype_id: I,
+    },
     BooleanLiteral(bool),
     FloatLiteral(f32),
     DoubleLiteral(f64),
@@ -46,36 +78,78 @@ impl<I: StrId> PartialEq for EncodedTerm<I> {
             (Self::NamedNode { iri_id: iri_id_a }, Self::NamedNode { iri_id: iri_id_b }) => {
                 iri_id_a == iri_id_b
             }
-            (Self::InlineBlankNode { id: id_a }, Self::InlineBlankNode { id: id_b }) => {
+            (Self::NumericalBlankNode { id: id_a }, Self::NumericalBlankNode { id: id_b }) => {
                 id_a == id_b
             }
-            (Self::NamedBlankNode { id_id: id_a }, Self::NamedBlankNode { id_id: id_b }) => {
+            (Self::SmallBlankNode(id_a), Self::SmallBlankNode(id_b)) => id_a == id_b,
+            (Self::BigBlankNode { id_id: id_a }, Self::BigBlankNode { id_id: id_b }) => {
                 id_a == id_b
             }
+            (Self::SmallStringLiteral(a), Self::SmallStringLiteral(b)) => a == b,
             (
-                Self::StringLiteral {
+                Self::BigStringLiteral {
                     value_id: value_id_a,
                 },
-                Self::StringLiteral {
+                Self::BigStringLiteral {
                     value_id: value_id_b,
                 },
             ) => value_id_a == value_id_b,
             (
-                Self::LangStringLiteral {
+                Self::SmallSmallLangStringLiteral {
+                    value: value_a,
+                    language: language_a,
+                },
+                Self::SmallSmallLangStringLiteral {
+                    value: value_b,
+                    language: language_b,
+                },
+            ) => value_a == value_b && language_a == language_b,
+            (
+                Self::SmallBigLangStringLiteral {
+                    value: value_a,
+                    language_id: language_id_a,
+                },
+                Self::SmallBigLangStringLiteral {
+                    value: value_b,
+                    language_id: language_id_b,
+                },
+            ) => value_a == value_b && language_id_a == language_id_b,
+            (
+                Self::BigSmallLangStringLiteral {
+                    value_id: value_id_a,
+                    language: language_a,
+                },
+                Self::BigSmallLangStringLiteral {
+                    value_id: value_id_b,
+                    language: language_b,
+                },
+            ) => value_id_a == value_id_b && language_a == language_b,
+            (
+                Self::BigBigLangStringLiteral {
                     value_id: value_id_a,
                     language_id: language_id_a,
                 },
-                Self::LangStringLiteral {
+                Self::BigBigLangStringLiteral {
                     value_id: value_id_b,
                     language_id: language_id_b,
                 },
             ) => value_id_a == value_id_b && language_id_a == language_id_b,
             (
-                Self::TypedLiteral {
+                Self::SmallTypedLiteral {
+                    value: value_a,
+                    datatype_id: datatype_id_a,
+                },
+                Self::SmallTypedLiteral {
+                    value: value_b,
+                    datatype_id: datatype_id_b,
+                },
+            ) => value_a == value_b && datatype_id_a == datatype_id_b,
+            (
+                Self::BigTypedLiteral {
                     value_id: value_id_a,
                     datatype_id: datatype_id_a,
                 },
-                Self::TypedLiteral {
+                Self::BigTypedLiteral {
                     value_id: value_id_b,
                     datatype_id: datatype_id_b,
                 },
@@ -114,18 +188,36 @@ impl<I: StrId> Hash for EncodedTerm<I> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
             Self::NamedNode { iri_id } => iri_id.hash(state),
-            Self::InlineBlankNode { id } => id.hash(state),
-            Self::NamedBlankNode { id_id } => id_id.hash(state),
+            Self::NumericalBlankNode { id } => id.hash(state),
+            Self::SmallBlankNode(id) => id.hash(state),
+            Self::BigBlankNode { id_id } => id_id.hash(state),
             Self::DefaultGraph => (),
-            Self::StringLiteral { value_id } => value_id.hash(state),
-            Self::LangStringLiteral {
+            Self::SmallStringLiteral(value) => value.hash(state),
+            Self::BigStringLiteral { value_id } => value_id.hash(state),
+            Self::SmallSmallLangStringLiteral { value, language } => {
+                value.hash(state);
+                language.hash(state);
+            }
+            Self::SmallBigLangStringLiteral { value, language_id } => {
+                value.hash(state);
+                language_id.hash(state);
+            }
+            Self::BigSmallLangStringLiteral { value_id, language } => {
+                value_id.hash(state);
+                language.hash(state);
+            }
+            Self::BigBigLangStringLiteral {
                 value_id,
                 language_id,
             } => {
                 value_id.hash(state);
                 language_id.hash(state);
             }
-            Self::TypedLiteral {
+            Self::SmallTypedLiteral { value, datatype_id } => {
+                value.hash(state);
+                datatype_id.hash(state);
+            }
+            Self::BigTypedLiteral {
                 value_id,
                 datatype_id,
             } => {
@@ -157,16 +249,23 @@ impl<I: StrId> EncodedTerm<I> {
 
     pub fn is_blank_node(&self) -> bool {
         match self {
-            Self::InlineBlankNode { .. } | Self::NamedBlankNode { .. } => true,
+            Self::NumericalBlankNode { .. }
+            | Self::SmallBlankNode { .. }
+            | Self::BigBlankNode { .. } => true,
             _ => false,
         }
     }
 
     pub fn is_literal(&self) -> bool {
         match self {
-            Self::StringLiteral { .. }
-            | Self::LangStringLiteral { .. }
-            | Self::TypedLiteral { .. }
+            Self::SmallStringLiteral { .. }
+            | Self::BigStringLiteral { .. }
+            | Self::SmallSmallLangStringLiteral { .. }
+            | Self::SmallBigLangStringLiteral { .. }
+            | Self::BigSmallLangStringLiteral { .. }
+            | Self::BigBigLangStringLiteral { .. }
+            | Self::SmallTypedLiteral { .. }
+            | Self::BigTypedLiteral { .. }
             | Self::BooleanLiteral(_)
             | Self::FloatLiteral(_)
             | Self::DoubleLiteral(_)
@@ -192,24 +291,45 @@ impl<I: StrId> EncodedTerm<I> {
             Self::NamedNode { iri_id } => EncodedTerm::NamedNode {
                 iri_id: mapping(iri_id),
             },
-            Self::InlineBlankNode { id } => EncodedTerm::InlineBlankNode { id },
-            Self::NamedBlankNode { id_id } => EncodedTerm::NamedBlankNode {
+            Self::NumericalBlankNode { id } => EncodedTerm::NumericalBlankNode { id },
+            Self::SmallBlankNode(id) => EncodedTerm::SmallBlankNode(id),
+            Self::BigBlankNode { id_id } => EncodedTerm::BigBlankNode {
                 id_id: mapping(id_id),
             },
-            Self::StringLiteral { value_id } => EncodedTerm::StringLiteral {
+            Self::SmallStringLiteral(value) => EncodedTerm::SmallStringLiteral(value),
+            Self::BigStringLiteral { value_id } => EncodedTerm::BigStringLiteral {
                 value_id: mapping(value_id),
             },
-            Self::LangStringLiteral {
+            Self::SmallSmallLangStringLiteral { value, language } => {
+                EncodedTerm::SmallSmallLangStringLiteral { value, language }
+            }
+            Self::SmallBigLangStringLiteral { value, language_id } => {
+                EncodedTerm::SmallBigLangStringLiteral {
+                    value,
+                    language_id: mapping(language_id),
+                }
+            }
+            Self::BigSmallLangStringLiteral { value_id, language } => {
+                EncodedTerm::BigSmallLangStringLiteral {
+                    value_id: mapping(value_id),
+                    language,
+                }
+            }
+            Self::BigBigLangStringLiteral {
                 value_id,
                 language_id,
-            } => EncodedTerm::LangStringLiteral {
+            } => EncodedTerm::BigBigLangStringLiteral {
                 value_id: mapping(value_id),
                 language_id: mapping(language_id),
             },
-            Self::TypedLiteral {
+            Self::SmallTypedLiteral { value, datatype_id } => EncodedTerm::SmallTypedLiteral {
+                value,
+                datatype_id: mapping(datatype_id),
+            },
+            Self::BigTypedLiteral {
                 value_id,
                 datatype_id,
-            } => EncodedTerm::TypedLiteral {
+            } => EncodedTerm::BigTypedLiteral {
                 value_id: mapping(value_id),
                 datatype_id: mapping(datatype_id),
             },
@@ -233,24 +353,45 @@ impl<I: StrId> EncodedTerm<I> {
             Self::NamedNode { iri_id } => EncodedTerm::NamedNode {
                 iri_id: mapping(iri_id)?,
             },
-            Self::InlineBlankNode { id } => EncodedTerm::InlineBlankNode { id },
-            Self::NamedBlankNode { id_id } => EncodedTerm::NamedBlankNode {
+            Self::NumericalBlankNode { id } => EncodedTerm::NumericalBlankNode { id },
+            Self::SmallBlankNode(id) => EncodedTerm::SmallBlankNode(id),
+            Self::BigBlankNode { id_id } => EncodedTerm::BigBlankNode {
                 id_id: mapping(id_id)?,
             },
-            Self::StringLiteral { value_id } => EncodedTerm::StringLiteral {
+            Self::SmallStringLiteral(value) => EncodedTerm::SmallStringLiteral(value),
+            Self::BigStringLiteral { value_id } => EncodedTerm::BigStringLiteral {
                 value_id: mapping(value_id)?,
             },
-            Self::LangStringLiteral {
+            Self::SmallSmallLangStringLiteral { value, language } => {
+                EncodedTerm::SmallSmallLangStringLiteral { value, language }
+            }
+            Self::SmallBigLangStringLiteral { value, language_id } => {
+                EncodedTerm::SmallBigLangStringLiteral {
+                    value,
+                    language_id: mapping(language_id)?,
+                }
+            }
+            Self::BigSmallLangStringLiteral { value_id, language } => {
+                EncodedTerm::BigSmallLangStringLiteral {
+                    value_id: mapping(value_id)?,
+                    language,
+                }
+            }
+            Self::BigBigLangStringLiteral {
                 value_id,
                 language_id,
-            } => EncodedTerm::LangStringLiteral {
+            } => EncodedTerm::BigBigLangStringLiteral {
                 value_id: mapping(value_id)?,
                 language_id: mapping(language_id)?,
             },
-            Self::TypedLiteral {
+            Self::SmallTypedLiteral { value, datatype_id } => EncodedTerm::SmallTypedLiteral {
+                value,
+                datatype_id: mapping(datatype_id)?,
+            },
+            Self::BigTypedLiteral {
                 value_id,
                 datatype_id,
-            } => EncodedTerm::TypedLiteral {
+            } => EncodedTerm::BigTypedLiteral {
                 value_id: mapping(value_id)?,
                 datatype_id: mapping(datatype_id)?,
             },
@@ -397,35 +538,6 @@ pub(crate) trait StrContainer: WithStoreError {
     fn insert_str(&mut self, value: &str) -> Result<Self::StrId, Self::Error>;
 }
 
-#[derive(Default)]
-pub struct MemoryStrStore {
-    inner: Rodeo,
-}
-
-impl StrId for Spur {}
-
-impl WithStoreError for MemoryStrStore {
-    type Error = Infallible;
-    type StrId = Spur;
-}
-
-impl StrLookup for MemoryStrStore {
-    fn get_str(&self, id: Spur) -> Result<Option<String>, Infallible> {
-        //TODO: avoid copy by adding a lifetime limit to get_str
-        Ok(self.inner.try_resolve(&id).map(|e| e.to_owned()))
-    }
-
-    fn get_str_id(&self, value: &str) -> Result<Option<Spur>, Infallible> {
-        Ok(self.inner.get(value))
-    }
-}
-
-impl StrContainer for MemoryStrStore {
-    fn insert_str(&mut self, value: &str) -> Result<Spur, Infallible> {
-        Ok(self.inner.get_or_intern(value))
-    }
-}
-
 /// Tries to encode a term based on the existing strings (does not insert anything)
 pub(crate) trait ReadEncoder: WithStoreError {
     fn get_encoded_named_node(
@@ -446,14 +558,19 @@ pub(crate) trait ReadEncoder: WithStoreError {
         blank_node: BlankNodeRef<'_>,
     ) -> Result<Option<EncodedTerm<Self::StrId>>, Self::Error> {
         Ok(Some(if let Some(id) = blank_node.id() {
-            EncodedTerm::InlineBlankNode { id }
+            EncodedTerm::NumericalBlankNode { id }
         } else {
-            EncodedTerm::NamedBlankNode {
-                id_id: if let Some(id_id) = self.get_encoded_str(blank_node.as_str())? {
-                    id_id
-                } else {
-                    return Ok(None);
-                },
+            let id = blank_node.as_str();
+            if let Ok(id) = id.try_into() {
+                EncodedTerm::SmallBlankNode(id)
+            } else {
+                EncodedTerm::BigBlankNode {
+                    id_id: if let Some(id_id) = self.get_encoded_str(id)? {
+                        id_id
+                    } else {
+                        return Ok(None);
+                    },
+                }
             }
         }))
     }
@@ -462,40 +579,73 @@ pub(crate) trait ReadEncoder: WithStoreError {
         &self,
         literal: LiteralRef<'_>,
     ) -> Result<Option<EncodedTerm<Self::StrId>>, Self::Error> {
+        let value = literal.value();
+        let datatype = literal.datatype().as_str();
         Ok(Some(
-            match match literal.datatype().as_str() {
+            match match datatype {
                 "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" => {
                     if let Some(language) = literal.language() {
-                        Some(EncodedTerm::LangStringLiteral {
-                            value_id: if let Some(value_id) =
-                                self.get_encoded_str(literal.value())?
-                            {
-                                value_id
+                        if let Ok(value) = SmallString::try_from(value) {
+                            if let Ok(language) = SmallString::try_from(language) {
+                                Some(EncodedTerm::SmallSmallLangStringLiteral { value, language })
                             } else {
-                                return Ok(None);
-                            },
-                            language_id: if let Some(language_id) =
-                                self.get_encoded_str(language)?
-                            {
-                                language_id
-                            } else {
-                                return Ok(None);
-                            },
-                        })
+                                Some(EncodedTerm::SmallBigLangStringLiteral {
+                                    value,
+                                    language_id: if let Some(language_id) =
+                                        self.get_encoded_str(language)?
+                                    {
+                                        language_id
+                                    } else {
+                                        return Ok(None);
+                                    },
+                                })
+                            }
+                        } else if let Ok(language) = SmallString::try_from(language) {
+                            Some(EncodedTerm::BigSmallLangStringLiteral {
+                                value_id: if let Some(value_id) = self.get_encoded_str(value)? {
+                                    value_id
+                                } else {
+                                    return Ok(None);
+                                },
+                                language,
+                            })
+                        } else {
+                            Some(EncodedTerm::BigBigLangStringLiteral {
+                                value_id: if let Some(value_id) = self.get_encoded_str(value)? {
+                                    value_id
+                                } else {
+                                    return Ok(None);
+                                },
+                                language_id: if let Some(language_id) =
+                                    self.get_encoded_str(language)?
+                                {
+                                    language_id
+                                } else {
+                                    return Ok(None);
+                                },
+                            })
+                        }
                     } else {
                         None
                     }
                 }
-                "http://www.w3.org/2001/XMLSchema#boolean" => parse_boolean_str(literal.value()),
-                "http://www.w3.org/2001/XMLSchema#string" => Some(EncodedTerm::StringLiteral {
-                    value_id: if let Some(value_id) = self.get_encoded_str(literal.value())? {
-                        value_id
+                "http://www.w3.org/2001/XMLSchema#boolean" => parse_boolean_str(value),
+                "http://www.w3.org/2001/XMLSchema#string" => {
+                    let value = value;
+                    Some(if let Ok(value) = SmallString::try_from(value) {
+                        EncodedTerm::SmallStringLiteral(value)
                     } else {
-                        return Ok(None);
-                    },
-                }),
-                "http://www.w3.org/2001/XMLSchema#float" => parse_float_str(literal.value()),
-                "http://www.w3.org/2001/XMLSchema#double" => parse_double_str(literal.value()),
+                        EncodedTerm::BigStringLiteral {
+                            value_id: if let Some(value_id) = self.get_encoded_str(value)? {
+                                value_id
+                            } else {
+                                return Ok(None);
+                            },
+                        }
+                    })
+                }
+                "http://www.w3.org/2001/XMLSchema#float" => parse_float_str(value),
+                "http://www.w3.org/2001/XMLSchema#double" => parse_double_str(value),
                 "http://www.w3.org/2001/XMLSchema#integer"
                 | "http://www.w3.org/2001/XMLSchema#byte"
                 | "http://www.w3.org/2001/XMLSchema#short"
@@ -508,40 +658,51 @@ pub(crate) trait ReadEncoder: WithStoreError {
                 | "http://www.w3.org/2001/XMLSchema#positiveInteger"
                 | "http://www.w3.org/2001/XMLSchema#negativeInteger"
                 | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
-                | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => {
-                    parse_integer_str(literal.value())
-                }
-                "http://www.w3.org/2001/XMLSchema#decimal" => parse_decimal_str(literal.value()),
-                "http://www.w3.org/2001/XMLSchema#date" => parse_date_str(literal.value()),
-                "http://www.w3.org/2001/XMLSchema#time" => parse_time_str(literal.value()),
+                | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => parse_integer_str(value),
+                "http://www.w3.org/2001/XMLSchema#decimal" => parse_decimal_str(value),
+                "http://www.w3.org/2001/XMLSchema#date" => parse_date_str(value),
+                "http://www.w3.org/2001/XMLSchema#time" => parse_time_str(value),
                 "http://www.w3.org/2001/XMLSchema#dateTime"
-                | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => {
-                    parse_date_time_str(literal.value())
-                }
-                "http://www.w3.org/2001/XMLSchema#duration" => parse_duration_str(literal.value()),
+                | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => parse_date_time_str(value),
+                "http://www.w3.org/2001/XMLSchema#duration" => parse_duration_str(value),
                 "http://www.w3.org/2001/XMLSchema#yearMonthDuration" => {
-                    parse_year_month_duration_str(literal.value())
+                    parse_year_month_duration_str(value)
                 }
                 "http://www.w3.org/2001/XMLSchema#dayTimeDuration" => {
-                    parse_day_time_duration_str(literal.value())
+                    parse_day_time_duration_str(value)
                 }
                 _ => None,
             } {
                 Some(term) => term,
-                None => EncodedTerm::TypedLiteral {
-                    value_id: if let Some(value_id) = self.get_encoded_str(literal.value())? {
-                        value_id
+                None => {
+                    if let Ok(value) = SmallString::try_from(value) {
+                        EncodedTerm::SmallTypedLiteral {
+                            value,
+                            datatype_id: if let Some(datatype_id) =
+                                self.get_encoded_str(datatype)?
+                            {
+                                datatype_id
+                            } else {
+                                return Ok(None);
+                            },
+                        }
                     } else {
-                        return Ok(None);
-                    },
-                    datatype_id: if let Some(datatype_id) =
-                        self.get_encoded_str(literal.datatype().as_str())?
-                    {
-                        datatype_id
-                    } else {
-                        return Ok(None);
-                    },
-                },
+                        EncodedTerm::BigTypedLiteral {
+                            value_id: if let Some(value_id) = self.get_encoded_str(value)? {
+                                value_id
+                            } else {
+                                return Ok(None);
+                            },
+                            datatype_id: if let Some(datatype_id) =
+                                self.get_encoded_str(datatype)?
+                            {
+                                datatype_id
+                            } else {
+                                return Ok(None);
+                            },
+                        }
+                    }
+                }
             },
         ))
     }
@@ -628,13 +789,18 @@ pub(crate) trait WriteEncoder: WithStoreError {
         &mut self,
         blank_node: BlankNodeRef<'_>,
     ) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
-        if let Some(id) = blank_node.id() {
-            Ok(EncodedTerm::InlineBlankNode { id })
+        Ok(if let Some(id) = blank_node.id() {
+            EncodedTerm::NumericalBlankNode { id }
         } else {
-            Ok(EncodedTerm::NamedBlankNode {
-                id_id: self.encode_str(blank_node.as_str())?,
-            })
-        }
+            let id = blank_node.as_str();
+            if let Ok(id) = id.try_into() {
+                EncodedTerm::SmallBlankNode(id)
+            } else {
+                EncodedTerm::BigBlankNode {
+                    id_id: self.encode_str(id)?,
+                }
+            }
+        })
     }
 
     fn encode_literal(
@@ -710,11 +876,11 @@ pub(crate) trait WriteEncoder: WithStoreError {
         bnodes_map: &mut HashMap<String, u128>,
     ) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
         Ok(if let Some(id) = bnodes_map.get(blank_node.id) {
-            EncodedTerm::InlineBlankNode { id: *id }
+            EncodedTerm::NumericalBlankNode { id: *id }
         } else {
             let id = random::<u128>();
             bnodes_map.insert(blank_node.id.to_owned(), id);
-            EncodedTerm::InlineBlankNode { id }
+            EncodedTerm::NumericalBlankNode { id }
         })
     }
     fn encode_rio_literal(
@@ -722,21 +888,49 @@ pub(crate) trait WriteEncoder: WithStoreError {
         literal: rio::Literal<'_>,
     ) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
         Ok(match literal {
-            rio::Literal::Simple { value } => EncodedTerm::StringLiteral {
-                value_id: self.encode_str(value)?,
-            },
+            rio::Literal::Simple { value } => {
+                if let Ok(value) = SmallString::try_from(value) {
+                    EncodedTerm::SmallStringLiteral(value)
+                } else {
+                    EncodedTerm::BigStringLiteral {
+                        value_id: self.encode_str(value)?,
+                    }
+                }
+            }
             rio::Literal::LanguageTaggedString { value, language } => {
-                EncodedTerm::LangStringLiteral {
-                    value_id: self.encode_str(value)?,
-                    language_id: self.encode_str(language)?,
+                if let Ok(value) = SmallString::try_from(value) {
+                    if let Ok(language) = SmallString::try_from(language) {
+                        EncodedTerm::SmallSmallLangStringLiteral { value, language }
+                    } else {
+                        EncodedTerm::SmallBigLangStringLiteral {
+                            value,
+                            language_id: self.encode_str(language)?,
+                        }
+                    }
+                } else if let Ok(language) = SmallString::try_from(language) {
+                    EncodedTerm::BigSmallLangStringLiteral {
+                        value_id: self.encode_str(value)?,
+                        language,
+                    }
+                } else {
+                    EncodedTerm::BigBigLangStringLiteral {
+                        value_id: self.encode_str(value)?,
+                        language_id: self.encode_str(language)?,
+                    }
                 }
             }
             rio::Literal::Typed { value, datatype } => {
                 match match datatype.iri {
                     "http://www.w3.org/2001/XMLSchema#boolean" => parse_boolean_str(value),
-                    "http://www.w3.org/2001/XMLSchema#string" => Some(EncodedTerm::StringLiteral {
-                        value_id: self.encode_str(value)?,
-                    }),
+                    "http://www.w3.org/2001/XMLSchema#string" => {
+                        Some(if let Ok(value) = SmallString::try_from(value) {
+                            EncodedTerm::SmallStringLiteral(value)
+                        } else {
+                            EncodedTerm::BigStringLiteral {
+                                value_id: self.encode_str(value)?,
+                            }
+                        })
+                    }
                     "http://www.w3.org/2001/XMLSchema#float" => parse_float_str(value),
                     "http://www.w3.org/2001/XMLSchema#double" => parse_double_str(value),
                     "http://www.w3.org/2001/XMLSchema#integer"
@@ -771,10 +965,19 @@ pub(crate) trait WriteEncoder: WithStoreError {
                     _ => None,
                 } {
                     Some(v) => v,
-                    None => EncodedTerm::TypedLiteral {
-                        value_id: self.encode_str(value)?,
-                        datatype_id: self.encode_str(datatype.iri)?,
-                    },
+                    None => {
+                        if let Ok(value) = SmallString::try_from(value) {
+                            EncodedTerm::SmallTypedLiteral {
+                                value,
+                                datatype_id: self.encode_str(datatype.iri)?,
+                            }
+                        } else {
+                            EncodedTerm::BigTypedLiteral {
+                                value_id: self.encode_str(value)?,
+                                datatype_id: self.encode_str(datatype.iri)?,
+                            }
+                        }
+                    }
                 }
             }
         })
@@ -968,14 +1171,33 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::NamedNode { iri_id } => {
                 Ok(NamedNode::new_unchecked(get_required_str(self, iri_id)?).into())
             }
-            EncodedTerm::InlineBlankNode { id } => Ok(BlankNode::new_from_unique_id(id).into()),
-            EncodedTerm::NamedBlankNode { id_id } => {
+            EncodedTerm::NumericalBlankNode { id } => Ok(BlankNode::new_from_unique_id(id).into()),
+            EncodedTerm::SmallBlankNode(id) => Ok(BlankNode::new_unchecked(id.as_str()).into()),
+            EncodedTerm::BigBlankNode { id_id } => {
                 Ok(BlankNode::new_unchecked(get_required_str(self, id_id)?).into())
             }
-            EncodedTerm::StringLiteral { value_id } => {
+            EncodedTerm::SmallStringLiteral(value) => Ok(Literal::new_simple_literal(value).into()),
+            EncodedTerm::BigStringLiteral { value_id } => {
                 Ok(Literal::new_simple_literal(get_required_str(self, value_id)?).into())
             }
-            EncodedTerm::LangStringLiteral {
+            EncodedTerm::SmallSmallLangStringLiteral { value, language } => {
+                Ok(Literal::new_language_tagged_literal_unchecked(value, language).into())
+            }
+            EncodedTerm::SmallBigLangStringLiteral { value, language_id } => {
+                Ok(Literal::new_language_tagged_literal_unchecked(
+                    value,
+                    get_required_str(self, language_id)?,
+                )
+                .into())
+            }
+            EncodedTerm::BigSmallLangStringLiteral { value_id, language } => {
+                Ok(Literal::new_language_tagged_literal_unchecked(
+                    get_required_str(self, value_id)?,
+                    language,
+                )
+                .into())
+            }
+            EncodedTerm::BigBigLangStringLiteral {
                 value_id,
                 language_id,
             } => Ok(Literal::new_language_tagged_literal_unchecked(
@@ -983,7 +1205,14 @@ impl<S: StrLookup> Decoder for S {
                 get_required_str(self, language_id)?,
             )
             .into()),
-            EncodedTerm::TypedLiteral {
+            EncodedTerm::SmallTypedLiteral { value, datatype_id } => {
+                Ok(Literal::new_typed_literal(
+                    value,
+                    NamedNode::new_unchecked(get_required_str(self, datatype_id)?),
+                )
+                .into())
+            }
+            EncodedTerm::BigTypedLiteral {
                 value_id,
                 datatype_id,
             } => Ok(Literal::new_typed_literal(
@@ -1051,44 +1280,5 @@ impl<E: Into<io::Error>> From<DecoderError<E>> for io::Error {
             DecoderError::Store(e) => e.into(),
             DecoderError::Decoder { msg } => invalid_data_error(msg),
         }
-    }
-}
-
-#[test]
-fn test_encoding() {
-    use crate::model::vocab::xsd;
-
-    let mut store = MemoryStrStore::default();
-    let terms: Vec<Term> = vec![
-        NamedNode::new_unchecked("http://foo.com").into(),
-        NamedNode::new_unchecked("http://bar.com").into(),
-        NamedNode::new_unchecked("http://foo.com").into(),
-        BlankNode::default().into(),
-        BlankNode::new_unchecked("foo-bnode").into(),
-        Literal::new_simple_literal("foo-literal").into(),
-        Literal::from(true).into(),
-        Literal::from(1.2).into(),
-        Literal::from(1).into(),
-        Literal::from("foo-string").into(),
-        Literal::new_language_tagged_literal("foo-fr", "fr")
-            .unwrap()
-            .into(),
-        Literal::new_language_tagged_literal("foo-FR", "FR")
-            .unwrap()
-            .into(),
-        Literal::new_typed_literal("-1.32", xsd::DECIMAL).into(),
-        Literal::new_typed_literal("2020-01-01T01:01:01Z", xsd::DATE_TIME).into(),
-        Literal::new_typed_literal("2020-01-01", xsd::DATE).into(),
-        Literal::new_typed_literal("01:01:01Z", xsd::TIME).into(),
-        Literal::new_typed_literal("PT1S", xsd::DURATION).into(),
-        Literal::new_typed_literal("-foo", NamedNode::new_unchecked("http://foo.com")).into(),
-    ];
-    for term in terms {
-        let encoded = store.encode_term(term.as_ref()).unwrap();
-        assert_eq!(
-            Some(encoded),
-            store.get_encoded_term(term.as_ref()).unwrap()
-        );
-        assert_eq!(term, store.decode_term(encoded).unwrap());
     }
 }

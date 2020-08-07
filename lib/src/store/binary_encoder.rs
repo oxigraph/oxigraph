@@ -1,6 +1,7 @@
 use crate::error::invalid_data_error;
 use crate::model::xsd::*;
 use crate::store::numeric_encoder::StrId;
+use crate::store::small_string::SmallString;
 use siphasher::sip128::{Hasher128, SipHasher24};
 use std::hash::Hasher;
 use std::io;
@@ -11,33 +12,38 @@ type EncodedTerm = crate::store::numeric_encoder::EncodedTerm<StrHash>;
 type EncodedQuad = crate::store::numeric_encoder::EncodedQuad<StrHash>;
 
 pub const WRITTEN_TERM_MAX_SIZE: usize = size_of::<u8>() + 2 * size_of::<StrHash>();
-const TYPE_DEFAULT_GRAPH_ID: u8 = 0;
+
+// Encoded term type blocks
+// 1-7: usual named nodes (except prefixes c.f. later)
+// 8-15: blank nodes
+// 16-47: literals
+// 48-64: future use
+// 64-127: default named node prefixes
+// 128-255: custom named node prefixes
 const TYPE_NAMED_NODE_ID: u8 = 1;
-const TYPE_INLINE_BLANK_NODE_ID: u8 = 2;
-const TYPE_NAMED_BLANK_NODE_ID: u8 = 3;
-const TYPE_LANG_STRING_LITERAL_ID: u8 = 4;
-const TYPE_TYPED_LITERAL_ID: u8 = 5;
-const TYPE_STRING_LITERAL: u8 = 6;
-const TYPE_BOOLEAN_LITERAL_TRUE: u8 = 7;
-const TYPE_BOOLEAN_LITERAL_FALSE: u8 = 8;
-const TYPE_FLOAT_LITERAL: u8 = 9;
-const TYPE_DOUBLE_LITERAL: u8 = 10;
-const TYPE_INTEGER_LITERAL: u8 = 11;
-const TYPE_DECIMAL_LITERAL: u8 = 12;
-const TYPE_DATE_TIME_LITERAL: u8 = 13;
-const TYPE_DATE_LITERAL: u8 = 14;
-const TYPE_TIME_LITERAL: u8 = 15;
-const TYPE_DURATION_LITERAL: u8 = 16;
-const TYPE_YEAR_MONTH_DURATION_LITERAL: u8 = 17;
-const TYPE_DAY_TIME_DURATION_LITERAL: u8 = 18;
-
-pub trait SerializableStrId: StrId {
-    fn len() -> usize;
-
-    fn from_be_bytes(bytes: &[u8]) -> Self;
-
-    fn push_be_bytes(&self, buffer: &mut Vec<u8>);
-}
+const TYPE_NUMERICAL_BLANK_NODE_ID: u8 = 8;
+const TYPE_SMALL_BLANK_NODE_ID: u8 = 9;
+const TYPE_BIG_BLANK_NODE_ID: u8 = 10;
+const TYPE_SMALL_STRING_LITERAL: u8 = 16;
+const TYPE_BIG_STRING_LITERAL: u8 = 17;
+const TYPE_SMALL_SMALL_LANG_STRING_LITERAL: u8 = 20;
+const TYPE_SMALL_BIG_LANG_STRING_LITERAL: u8 = 21;
+const TYPE_BIG_SMALL_LANG_STRING_LITERAL: u8 = 22;
+const TYPE_BIG_BIG_LANG_STRING_LITERAL: u8 = 23;
+const TYPE_SMALL_TYPED_LITERAL: u8 = 24;
+const TYPE_BIG_TYPED_LITERAL: u8 = 25;
+const TYPE_BOOLEAN_LITERAL_TRUE: u8 = 28;
+const TYPE_BOOLEAN_LITERAL_FALSE: u8 = 29;
+const TYPE_FLOAT_LITERAL: u8 = 30;
+const TYPE_DOUBLE_LITERAL: u8 = 31;
+const TYPE_INTEGER_LITERAL: u8 = 32;
+const TYPE_DECIMAL_LITERAL: u8 = 33;
+const TYPE_DATE_TIME_LITERAL: u8 = 34;
+const TYPE_DATE_LITERAL: u8 = 35;
+const TYPE_TIME_LITERAL: u8 = 36;
+const TYPE_DURATION_LITERAL: u8 = 37;
+const TYPE_YEAR_MONTH_DURATION_LITERAL: u8 = 38;
+const TYPE_DAY_TIME_DURATION_LITERAL: u8 = 39;
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
 #[repr(transparent)]
@@ -68,24 +74,6 @@ impl StrHash {
 }
 
 impl StrId for StrHash {}
-
-impl SerializableStrId for StrHash {
-    fn len() -> usize {
-        16
-    }
-
-    fn from_be_bytes(bytes: &[u8]) -> Self {
-        let mut hash = [0; 16];
-        hash.copy_from_slice(bytes);
-        Self {
-            hash: u128::from_be_bytes(hash),
-        }
-    }
-
-    fn push_be_bytes(&self, buffer: &mut Vec<u8>) {
-        buffer.extend_from_slice(&self.to_be_bytes())
-    }
-}
 
 #[derive(Clone, Copy)]
 pub enum QuadEncoding {
@@ -240,7 +228,6 @@ impl<R: Read> TermReader for R {
         let mut type_buffer = [0];
         self.read_exact(&mut type_buffer)?;
         match type_buffer[0] {
-            TYPE_DEFAULT_GRAPH_ID => Ok(EncodedTerm::DefaultGraph),
             TYPE_NAMED_NODE_ID => {
                 let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
@@ -248,44 +235,100 @@ impl<R: Read> TermReader for R {
                     iri_id: StrHash::from_be_bytes(buffer),
                 })
             }
-            TYPE_INLINE_BLANK_NODE_ID => {
+            TYPE_NUMERICAL_BLANK_NODE_ID => {
                 let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::InlineBlankNode {
+                Ok(EncodedTerm::NumericalBlankNode {
                     id: u128::from_be_bytes(buffer),
                 })
             }
-            TYPE_NAMED_BLANK_NODE_ID => {
+            TYPE_SMALL_BLANK_NODE_ID => {
                 let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::NamedBlankNode {
+                Ok(EncodedTerm::SmallBlankNode(
+                    SmallString::from_be_bytes(buffer).map_err(invalid_data_error)?,
+                ))
+            }
+            TYPE_BIG_BLANK_NODE_ID => {
+                let mut buffer = [0; 16];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::BigBlankNode {
                     id_id: StrHash::from_be_bytes(buffer),
                 })
             }
-            TYPE_LANG_STRING_LITERAL_ID => {
+            TYPE_SMALL_SMALL_LANG_STRING_LITERAL => {
                 let mut language_buffer = [0; 16];
                 self.read_exact(&mut language_buffer)?;
                 let mut value_buffer = [0; 16];
                 self.read_exact(&mut value_buffer)?;
-                Ok(EncodedTerm::LangStringLiteral {
-                    language_id: StrHash::from_be_bytes(language_buffer),
-                    value_id: StrHash::from_be_bytes(value_buffer),
+                Ok(EncodedTerm::SmallSmallLangStringLiteral {
+                    value: SmallString::from_be_bytes(value_buffer).map_err(invalid_data_error)?,
+                    language: SmallString::from_be_bytes(language_buffer)
+                        .map_err(invalid_data_error)?,
                 })
             }
-            TYPE_TYPED_LITERAL_ID => {
+            TYPE_SMALL_BIG_LANG_STRING_LITERAL => {
+                let mut language_buffer = [0; 16];
+                self.read_exact(&mut language_buffer)?;
+                let mut value_buffer = [0; 16];
+                self.read_exact(&mut value_buffer)?;
+                Ok(EncodedTerm::SmallBigLangStringLiteral {
+                    value: SmallString::from_be_bytes(value_buffer).map_err(invalid_data_error)?,
+                    language_id: StrHash::from_be_bytes(language_buffer),
+                })
+            }
+            TYPE_BIG_SMALL_LANG_STRING_LITERAL => {
+                let mut language_buffer = [0; 16];
+                self.read_exact(&mut language_buffer)?;
+                let mut value_buffer = [0; 16];
+                self.read_exact(&mut value_buffer)?;
+                Ok(EncodedTerm::BigSmallLangStringLiteral {
+                    value_id: StrHash::from_be_bytes(value_buffer),
+                    language: SmallString::from_be_bytes(language_buffer)
+                        .map_err(invalid_data_error)?,
+                })
+            }
+            TYPE_BIG_BIG_LANG_STRING_LITERAL => {
+                let mut language_buffer = [0; 16];
+                self.read_exact(&mut language_buffer)?;
+                let mut value_buffer = [0; 16];
+                self.read_exact(&mut value_buffer)?;
+                Ok(EncodedTerm::BigBigLangStringLiteral {
+                    value_id: StrHash::from_be_bytes(value_buffer),
+                    language_id: StrHash::from_be_bytes(language_buffer),
+                })
+            }
+            TYPE_SMALL_TYPED_LITERAL => {
                 let mut datatype_buffer = [0; 16];
                 self.read_exact(&mut datatype_buffer)?;
                 let mut value_buffer = [0; 16];
                 self.read_exact(&mut value_buffer)?;
-                Ok(EncodedTerm::TypedLiteral {
+                Ok(EncodedTerm::SmallTypedLiteral {
+                    datatype_id: StrHash::from_be_bytes(datatype_buffer),
+                    value: SmallString::from_be_bytes(value_buffer).map_err(invalid_data_error)?,
+                })
+            }
+            TYPE_BIG_TYPED_LITERAL => {
+                let mut datatype_buffer = [0; 16];
+                self.read_exact(&mut datatype_buffer)?;
+                let mut value_buffer = [0; 16];
+                self.read_exact(&mut value_buffer)?;
+                Ok(EncodedTerm::BigTypedLiteral {
                     datatype_id: StrHash::from_be_bytes(datatype_buffer),
                     value_id: StrHash::from_be_bytes(value_buffer),
                 })
             }
-            TYPE_STRING_LITERAL => {
+            TYPE_SMALL_STRING_LITERAL => {
                 let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::StringLiteral {
+                Ok(EncodedTerm::SmallStringLiteral(
+                    SmallString::from_be_bytes(buffer).map_err(invalid_data_error)?,
+                ))
+            }
+            TYPE_BIG_STRING_LITERAL => {
+                let mut buffer = [0; 16];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::BigStringLiteral {
                     value_id: StrHash::from_be_bytes(buffer),
                 })
             }
@@ -451,38 +494,66 @@ pub fn encode_term_quad(
 
 pub fn write_term(sink: &mut Vec<u8>, term: EncodedTerm) {
     match term {
-        EncodedTerm::DefaultGraph => sink.push(TYPE_DEFAULT_GRAPH_ID),
+        EncodedTerm::DefaultGraph => (),
         EncodedTerm::NamedNode { iri_id } => {
             sink.push(TYPE_NAMED_NODE_ID);
-            iri_id.push_be_bytes(sink)
+            sink.extend_from_slice(&iri_id.to_be_bytes());
         }
-        EncodedTerm::InlineBlankNode { id } => {
-            sink.push(TYPE_INLINE_BLANK_NODE_ID);
+        EncodedTerm::NumericalBlankNode { id } => {
+            sink.push(TYPE_NUMERICAL_BLANK_NODE_ID);
             sink.extend_from_slice(&id.to_be_bytes())
         }
-        EncodedTerm::NamedBlankNode { id_id } => {
-            sink.push(TYPE_NAMED_BLANK_NODE_ID);
-            id_id.push_be_bytes(sink)
+        EncodedTerm::SmallBlankNode(id) => {
+            sink.push(TYPE_SMALL_BLANK_NODE_ID);
+            sink.extend_from_slice(&id.to_be_bytes())
         }
-        EncodedTerm::StringLiteral { value_id } => {
-            sink.push(TYPE_STRING_LITERAL);
-            value_id.push_be_bytes(sink)
+        EncodedTerm::BigBlankNode { id_id } => {
+            sink.push(TYPE_BIG_BLANK_NODE_ID);
+            sink.extend_from_slice(&id_id.to_be_bytes());
         }
-        EncodedTerm::LangStringLiteral {
+        EncodedTerm::SmallStringLiteral(value) => {
+            sink.push(TYPE_SMALL_STRING_LITERAL);
+            sink.extend_from_slice(&value.to_be_bytes())
+        }
+        EncodedTerm::BigStringLiteral { value_id } => {
+            sink.push(TYPE_BIG_STRING_LITERAL);
+            sink.extend_from_slice(&value_id.to_be_bytes());
+        }
+        EncodedTerm::SmallSmallLangStringLiteral { value, language } => {
+            sink.push(TYPE_SMALL_SMALL_LANG_STRING_LITERAL);
+            sink.extend_from_slice(&language.to_be_bytes());
+            sink.extend_from_slice(&value.to_be_bytes());
+        }
+        EncodedTerm::SmallBigLangStringLiteral { value, language_id } => {
+            sink.push(TYPE_SMALL_BIG_LANG_STRING_LITERAL);
+            sink.extend_from_slice(&language_id.to_be_bytes());
+            sink.extend_from_slice(&value.to_be_bytes());
+        }
+        EncodedTerm::BigSmallLangStringLiteral { value_id, language } => {
+            sink.push(TYPE_BIG_SMALL_LANG_STRING_LITERAL);
+            sink.extend_from_slice(&language.to_be_bytes());
+            sink.extend_from_slice(&value_id.to_be_bytes());
+        }
+        EncodedTerm::BigBigLangStringLiteral {
             value_id,
             language_id,
         } => {
-            sink.push(TYPE_LANG_STRING_LITERAL_ID);
-            value_id.push_be_bytes(sink);
-            language_id.push_be_bytes(sink);
+            sink.push(TYPE_BIG_BIG_LANG_STRING_LITERAL);
+            sink.extend_from_slice(&language_id.to_be_bytes());
+            sink.extend_from_slice(&value_id.to_be_bytes());
         }
-        EncodedTerm::TypedLiteral {
+        EncodedTerm::SmallTypedLiteral { value, datatype_id } => {
+            sink.push(TYPE_SMALL_TYPED_LITERAL);
+            sink.extend_from_slice(&datatype_id.to_be_bytes());
+            sink.extend_from_slice(&value.to_be_bytes());
+        }
+        EncodedTerm::BigTypedLiteral {
             value_id,
             datatype_id,
         } => {
-            sink.push(TYPE_TYPED_LITERAL_ID);
-            value_id.push_be_bytes(sink);
-            datatype_id.push_be_bytes(sink);
+            sink.push(TYPE_BIG_TYPED_LITERAL);
+            sink.extend_from_slice(&datatype_id.to_be_bytes());
+            sink.extend_from_slice(&value_id.to_be_bytes());
         }
         EncodedTerm::BooleanLiteral(true) => sink.push(TYPE_BOOLEAN_LITERAL_TRUE),
         EncodedTerm::BooleanLiteral(false) => sink.push(TYPE_BOOLEAN_LITERAL_FALSE),
@@ -525,6 +596,115 @@ pub fn write_term(sink: &mut Vec<u8>, term: EncodedTerm) {
         EncodedTerm::DayTimeDurationLiteral(value) => {
             sink.push(TYPE_DAY_TIME_DURATION_LITERAL);
             sink.extend_from_slice(&value.to_be_bytes())
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::store::numeric_encoder::*;
+    use std::collections::HashMap;
+    use std::convert::Infallible;
+
+    struct MemoryStrStore {
+        id2str: HashMap<StrHash, String>,
+    }
+
+    impl Default for MemoryStrStore {
+        fn default() -> Self {
+            Self {
+                id2str: HashMap::default(),
+            }
+        }
+    }
+
+    impl WithStoreError for MemoryStrStore {
+        type Error = Infallible;
+        type StrId = StrHash;
+    }
+
+    impl StrLookup for MemoryStrStore {
+        fn get_str(&self, id: StrHash) -> Result<Option<String>, Infallible> {
+            Ok(self.id2str.get(&id).cloned())
+        }
+
+        fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, Infallible> {
+            let id = StrHash::new(value);
+            Ok(if self.id2str.contains_key(&id) {
+                Some(id)
+            } else {
+                None
+            })
+        }
+    }
+
+    impl StrContainer for MemoryStrStore {
+        fn insert_str(&mut self, value: &str) -> Result<StrHash, Infallible> {
+            let key = StrHash::new(value);
+            self.id2str.entry(key).or_insert_with(|| value.to_owned());
+            Ok(key)
+        }
+    }
+
+    #[test]
+    fn test_encoding() {
+        use crate::model::vocab::xsd;
+        use crate::model::*;
+
+        let mut store = MemoryStrStore::default();
+        let terms: Vec<Term> = vec![
+            NamedNode::new_unchecked("http://foo.com").into(),
+            NamedNode::new_unchecked("http://bar.com").into(),
+            NamedNode::new_unchecked("http://foo.com").into(),
+            BlankNode::default().into(),
+            BlankNode::new_unchecked("bnode").into(),
+            BlankNode::new_unchecked("foo-bnode-thisisaverylargeblanknode").into(),
+            Literal::new_simple_literal("literal").into(),
+            BlankNode::new_unchecked("foo-literal-thisisaverylargestringliteral").into(),
+            Literal::from(true).into(),
+            Literal::from(1.2).into(),
+            Literal::from(1).into(),
+            Literal::from("foo-string").into(),
+            Literal::new_language_tagged_literal_unchecked("foo-fr", "fr").into(),
+            Literal::new_language_tagged_literal_unchecked(
+                "foo-fr-literal-thisisaverylargelanguagetaggedstringliteral",
+                "fr",
+            )
+            .into(),
+            Literal::new_language_tagged_literal_unchecked(
+                "foo-big",
+                "fr-FR-Latn-x-foo-bar-baz-bat-aaaa-bbbb-cccc",
+            )
+            .into(),
+            Literal::new_language_tagged_literal_unchecked(
+                "foo-big-literal-thisisaverylargelanguagetaggedstringliteral",
+                "fr-FR-Latn-x-foo-bar-baz-bat-aaaa-bbbb-cccc",
+            )
+            .into(),
+            Literal::new_typed_literal("-1.32", xsd::DECIMAL).into(),
+            Literal::new_typed_literal("2020-01-01T01:01:01Z", xsd::DATE_TIME).into(),
+            Literal::new_typed_literal("2020-01-01", xsd::DATE).into(),
+            Literal::new_typed_literal("01:01:01Z", xsd::TIME).into(),
+            Literal::new_typed_literal("PT1S", xsd::DURATION).into(),
+            Literal::new_typed_literal("-foo", NamedNode::new_unchecked("http://foo.com")).into(),
+            Literal::new_typed_literal(
+                "-foo-thisisaverybigtypedliteralwiththefoodatatype",
+                NamedNode::new_unchecked("http://foo.com"),
+            )
+            .into(),
+        ];
+        for term in terms {
+            let encoded = store.encode_term(term.as_ref()).unwrap();
+            assert_eq!(
+                Some(encoded),
+                store.get_encoded_term(term.as_ref()).unwrap()
+            );
+            assert_eq!(term, store.decode_term(encoded).unwrap());
+
+            let mut buffer = Vec::new();
+            write_term(&mut buffer, encoded);
+            assert_eq!(encoded, Cursor::new(&buffer).read_term().unwrap());
         }
     }
 }

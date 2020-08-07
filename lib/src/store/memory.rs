@@ -1394,7 +1394,7 @@ fn label(g: &MemoryStore, hashes: &HashMap<EncodedTerm, u64>) -> Vec<String> {
 
 fn map_term(term: EncodedTerm, bnodes_hash: &HashMap<EncodedTerm, u64>) -> EncodedTerm {
     if term.is_blank_node() {
-        EncodedTerm::InlineBlankNode {
+        EncodedTerm::NumericalBlankNode {
             id: (*bnodes_hash.get(&term).unwrap()).into(),
         }
     } else {
