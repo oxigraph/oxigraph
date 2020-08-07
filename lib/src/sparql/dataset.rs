@@ -1,7 +1,7 @@
 use crate::sparql::algebra::DatasetSpec;
 use crate::sparql::EvaluationError;
 use crate::store::numeric_encoder::{
-    EncodedQuad, EncodedTerm, ReadEncoder, StrContainer, StrId, StrLookup, WithStoreError,
+    EncodedQuad, EncodedTerm, ReadEncoder, StrContainer, StrEncodingAware, StrId, StrLookup,
 };
 use crate::store::ReadableEncodedStore;
 use lasso::{Rodeo, Spur};
@@ -48,7 +48,7 @@ impl<S: ReadableEncodedStore> DatasetView<S> {
     }
 }
 
-impl<S: ReadableEncodedStore> WithStoreError for DatasetView<S> {
+impl<S: ReadableEncodedStore> StrEncodingAware for DatasetView<S> {
     type Error = EvaluationError;
     type StrId = DatasetStrId<S::StrId>;
 }

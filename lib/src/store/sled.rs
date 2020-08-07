@@ -6,7 +6,7 @@ use crate::model::*;
 use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::binary_encoder::*;
 use crate::store::numeric_encoder::{
-    Decoder, ReadEncoder, StrContainer, StrLookup, WithStoreError, WriteEncoder,
+    Decoder, ReadEncoder, StrContainer, StrEncodingAware, StrLookup, WriteEncoder,
 };
 use crate::store::{
     dump_dataset, dump_graph, get_encoded_quad_pattern, load_dataset, load_graph,
@@ -597,7 +597,7 @@ impl fmt::Display for SledStore {
     }
 }
 
-impl WithStoreError for SledStore {
+impl StrEncodingAware for SledStore {
     type Error = io::Error;
     type StrId = StrHash;
 }
@@ -876,7 +876,7 @@ impl SledTransaction<'_> {
     }
 }
 
-impl<'a> WithStoreError for &'a SledTransaction<'a> {
+impl<'a> StrEncodingAware for &'a SledTransaction<'a> {
     type Error = SledUnabortableTransactionError;
     type StrId = StrHash;
 }

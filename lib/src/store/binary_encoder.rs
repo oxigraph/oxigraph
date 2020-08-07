@@ -673,7 +673,7 @@ mod test {
         }
     }
 
-    impl WithStoreError for MemoryStrStore {
+    impl StrEncodingAware for MemoryStrStore {
         type Error = Infallible;
         type StrId = StrHash;
     }

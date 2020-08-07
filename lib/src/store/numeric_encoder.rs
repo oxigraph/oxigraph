@@ -554,29 +554,29 @@ impl<I: StrId> EncodedQuad<I> {
     }
 }
 
-pub(crate) trait WithStoreError {
+pub(crate) trait StrEncodingAware {
     //TODO: rename
     type Error: Error + Into<EvaluationError> + 'static;
     type StrId: StrId + 'static;
 }
 
-impl<'a, T: WithStoreError> WithStoreError for &'a T {
+impl<'a, T: StrEncodingAware> StrEncodingAware for &'a T {
     type Error = T::Error;
     type StrId = T::StrId;
 }
 
-pub(crate) trait StrLookup: WithStoreError {
+pub(crate) trait StrLookup: StrEncodingAware {
     fn get_str(&self, id: Self::StrId) -> Result<Option<String>, Self::Error>;
 
     fn get_str_id(&self, value: &str) -> Result<Option<Self::StrId>, Self::Error>;
 }
 
-pub(crate) trait StrContainer: WithStoreError {
+pub(crate) trait StrContainer: StrEncodingAware {
     fn insert_str(&mut self, value: &str) -> Result<Self::StrId, Self::Error>;
 }
 
 /// Tries to encode a term based on the existing strings (does not insert anything)
-pub(crate) trait ReadEncoder: WithStoreError {
+pub(crate) trait ReadEncoder: StrEncodingAware {
     fn get_encoded_named_node(
         &self,
         named_node: NamedNodeRef<'_>,
@@ -819,7 +819,7 @@ impl<S: StrLookup> ReadEncoder for S {
 }
 
 /// Encodes a term and insert strings if needed
-pub(crate) trait WriteEncoder: WithStoreError {
+pub(crate) trait WriteEncoder: StrEncodingAware {
     fn encode_named_node(
         &mut self,
         named_node: NamedNodeRef<'_>,

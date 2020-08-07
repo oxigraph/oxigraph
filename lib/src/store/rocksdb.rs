@@ -6,7 +6,7 @@ use crate::model::*;
 use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::binary_encoder::*;
 use crate::store::numeric_encoder::{
-    Decoder, ReadEncoder, StrContainer, StrLookup, WithStoreError, WriteEncoder,
+    Decoder, ReadEncoder, StrContainer, StrEncodingAware, StrLookup, WriteEncoder,
 };
 use crate::store::{
     dump_dataset, dump_graph, get_encoded_quad_pattern, load_dataset, load_graph,
@@ -624,7 +624,7 @@ impl fmt::Display for RocksDbStore {
     }
 }
 
-impl WithStoreError for RocksDbStore {
+impl StrEncodingAware for RocksDbStore {
     type Error = io::Error;
     type StrId = StrHash;
 }
@@ -756,7 +756,7 @@ impl AutoBatchWriter<'_> {
     }
 }
 
-impl WithStoreError for AutoBatchWriter<'_> {
+impl StrEncodingAware for AutoBatchWriter<'_> {
     type Error = io::Error;
     type StrId = StrHash;
 }
@@ -935,7 +935,7 @@ impl RocksDbTransaction<'_> {
     }
 }
 
-impl WithStoreError for RocksDbTransaction<'_> {
+impl StrEncodingAware for RocksDbTransaction<'_> {
     type Error = io::Error;
     type StrId = StrHash;
 }

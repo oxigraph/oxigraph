@@ -46,7 +46,7 @@ pub(crate) trait ReadableEncodedStore: StrLookup {
     ) -> Self::QuadsIter;
 }
 
-pub(crate) trait WritableEncodedStore: WithStoreError {
+pub(crate) trait WritableEncodedStore: StrEncodingAware {
     fn insert_encoded(&mut self, quad: &EncodedQuad<Self::StrId>) -> Result<(), Self::Error>;
 
     fn remove_encoded(&mut self, quad: &EncodedQuad<Self::StrId>) -> Result<(), Self::Error>;

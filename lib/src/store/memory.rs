@@ -5,7 +5,7 @@ use crate::io::{DatasetFormat, DatasetParser, GraphFormat, GraphParser};
 use crate::model::*;
 use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResult, SimplePreparedQuery};
 use crate::store::numeric_encoder::{
-    Decoder, ReadEncoder, StrContainer, StrId, StrLookup, WithStoreError, WriteEncoder,
+    Decoder, ReadEncoder, StrContainer, StrEncodingAware, StrId, StrLookup, WriteEncoder,
 };
 use crate::store::{
     dump_dataset, dump_graph, get_encoded_quad_pattern, load_dataset, load_graph,
@@ -803,7 +803,7 @@ impl MemoryStore {
     }
 }
 
-impl WithStoreError for MemoryStore {
+impl StrEncodingAware for MemoryStore {
     type Error = Infallible;
     type StrId = LargeSpur;
 }
@@ -853,7 +853,7 @@ impl<'a> WritableEncodedStore for &'a MemoryStore {
     }
 }
 
-impl WithStoreError for MemoryStoreIndexes {
+impl StrEncodingAware for MemoryStoreIndexes {
     type Error = Infallible;
     type StrId = LargeSpur;
 }

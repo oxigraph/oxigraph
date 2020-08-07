@@ -33,7 +33,7 @@ pub use crate::sparql::error::EvaluationError;
 pub use crate::sparql::model::Variable;
 pub use crate::sparql::parser::ParseError;
 pub use crate::sparql::parser::Query;
-use crate::store::numeric_encoder::WithStoreError;
+use crate::store::numeric_encoder::StrEncodingAware;
 use std::error::Error;
 
 /// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/)
@@ -50,21 +50,21 @@ pub(crate) struct SimplePreparedQuery<S: ReadableEncodedStore + 'static>(
 #[derive(Clone)]
 enum SimplePreparedQueryAction<S: ReadableEncodedStore + 'static> {
     Select {
-        plan: Rc<PlanNode<<DatasetView<S> as WithStoreError>::StrId>>,
+        plan: Rc<PlanNode<<DatasetView<S> as StrEncodingAware>::StrId>>,
         variables: Rc<Vec<Variable>>,
         evaluator: SimpleEvaluator<DatasetView<S>>,
     },
     Ask {
-        plan: Rc<PlanNode<<DatasetView<S> as WithStoreError>::StrId>>,
+        plan: Rc<PlanNode<<DatasetView<S> as StrEncodingAware>::StrId>>,
         evaluator: SimpleEvaluator<DatasetView<S>>,
     },
     Construct {
-        plan: Rc<PlanNode<<DatasetView<S> as WithStoreError>::StrId>>,
-        construct: Rc<Vec<TripleTemplate<<DatasetView<S> as WithStoreError>::StrId>>>,
+        plan: Rc<PlanNode<<DatasetView<S> as StrEncodingAware>::StrId>>,
+        construct: Rc<Vec<TripleTemplate<<DatasetView<S> as StrEncodingAware>::StrId>>>,
         evaluator: SimpleEvaluator<DatasetView<S>>,
     },
     Describe {
-        plan: Rc<PlanNode<<DatasetView<S> as WithStoreError>::StrId>>,
+        plan: Rc<PlanNode<<DatasetView<S> as StrEncodingAware>::StrId>>,
         evaluator: SimpleEvaluator<DatasetView<S>>,
     },
 }
