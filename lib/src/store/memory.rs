@@ -1111,7 +1111,7 @@ impl MemoryTransaction {
     ///
     /// // we inspect the store content
     /// let ex = NamedNodeRef::new("http://example.com").unwrap();
-    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone())));
+    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), None)));
     /// # Result::<_, oxigraph::sparql::EvaluationError>::Ok(())
     /// ```
     ///
