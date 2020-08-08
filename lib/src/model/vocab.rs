@@ -112,6 +112,12 @@ pub mod xsd {
     //! [RDF compatible XSD datatypes](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-compatible-xsd-types)
     use crate::model::named_node::NamedNodeRef;
 
+    /// Absolute or relative URIs and IRIs
+    pub const ANY_URI: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#anyURI");
+    /// Base64-encoded binary data
+    pub const BASE_64_BINARY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#base64Binary");
     /// true, false
     pub const BOOLEAN: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#boolean");
@@ -157,24 +163,42 @@ pub mod xsd {
     /// Gregorian calendar year and month
     pub const G_YEAR_MONTH: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#gYearMonth");
+    /// Hex-encoded binary data
+    pub const HEX_BINARY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#hexBinary");
     /// -2147483648…+2147483647 (32 bit)
     pub const INT: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#int");
     /// Arbitrary-size integer numbers
     pub const INTEGER: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#integer");
+    /// Language tags per [BCP47](http://tools.ietf.org/html/bcp47)
+    pub const LANGUAGE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#language");
     /// -9223372036854775808…+9223372036854775807 (64 bit)
     pub const LONG: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#long");
+    /// XML Names
+    pub const NAME: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#Name");
+    /// XML NCName
+    pub const NC_NAME: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#NCName");
     /// Integer numbers <0
     pub const NEGATIVE_INTEGER: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#negativeInteger");
+    /// XML NMTOKENs
+    pub const NMTOKEN: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#NMTOKEN");
     /// Integer numbers ≥0
     pub const NON_NEGATIVE_INTEGER: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#nonNegativeInteger");
     /// Integer numbers ≤0
     pub const NON_POSITIVE_INTEGER: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#nonPositiveInteger");
+    /// Whitespace-normalized strings
+    pub const NORMALIZED_STRING: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#normalizedString");
     /// Integer numbers >0
     pub const POSITIVE_INTEGER: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#positiveInteger");
@@ -187,6 +211,9 @@ pub mod xsd {
     /// Character strings (but not all Unicode character strings)
     pub const STRING: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#string");
+    /// Tokenized strings
+    pub const TOKEN: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#token");
     /// 0…255 (8 bit)
     pub const UNSIGNED_BYTE: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#unsignedByte");
