@@ -33,8 +33,6 @@ use std::io;
 use std::io::{BufRead, Write};
 use std::iter::Iterator;
 
-const LATEST_STORAGE_VERSION: u64 = 0;
-
 pub(crate) trait ReadableEncodedStore: StrLookup {
     type QuadsIter: Iterator<Item = Result<EncodedQuad<Self::StrId>, Self::Error>> + 'static;
 

@@ -10,7 +10,7 @@ use std::error::Error;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
-use std::time::{SystemTime, SystemTimeError};
+use std::time::SystemTimeError;
 
 /// [XML Schema `dateTime` datatype](https://www.w3.org/TR/xmlschema11-2/#dateTime) implementation.
 #[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
@@ -1351,6 +1351,8 @@ fn since_unix_epoch() -> Result<Duration, DateTimeError> {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn since_unix_epoch() -> Result<Duration, DateTimeError> {
+    use std::time::SystemTime;
+
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)?
         .try_into()

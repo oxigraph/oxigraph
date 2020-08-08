@@ -10,7 +10,7 @@ use crate::store::numeric_encoder::{
 };
 use crate::store::{
     dump_dataset, dump_graph, get_encoded_quad_pattern, load_dataset, load_graph,
-    ReadableEncodedStore, WritableEncodedStore, LATEST_STORAGE_VERSION,
+    ReadableEncodedStore, WritableEncodedStore,
 };
 use rocksdb::*;
 use std::collections::HashMap;
