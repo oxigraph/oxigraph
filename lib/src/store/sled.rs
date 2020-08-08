@@ -1040,6 +1040,15 @@ impl<T> From<TransactionError<T>> for SledTransactionError<T> {
     }
 }
 
+impl<T: Into<io::Error>> From<SledTransactionError<T>> for io::Error {
+    fn from(e: SledTransactionError<T>) -> Self {
+        match e {
+            SledTransactionError::Abort(e) => e.into(),
+            SledTransactionError::Storage(e) => e,
+        }
+    }
+}
+
 /// An error returned from the transaction methods.
 /// Should be returned as it is
 #[derive(Debug)]

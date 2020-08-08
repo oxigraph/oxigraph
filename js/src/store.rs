@@ -38,7 +38,8 @@ impl JsMemoryStore {
     }
 
     pub fn add(&self, quad: &JsValue) -> Result<(), JsValue> {
-        self.store.insert(self.from_js.to_quad(quad)?.try_into()?);
+        self.store
+            .insert(Quad::try_from(self.from_js.to_quad(quad)?)?);
         Ok(())
     }
 

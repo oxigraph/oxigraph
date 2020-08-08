@@ -354,9 +354,9 @@ impl MemoryStore {
 
     /// Adds a quad to this store.
     #[allow(clippy::needless_pass_by_value)]
-    pub fn insert(&self, quad: Quad) {
+    pub fn insert(&self, quad: impl Into<Quad>) {
         let mut this = self;
-        let quad = this.encode_quad(quad.as_ref()).unwrap_infallible();
+        let quad = this.encode_quad(quad.into().as_ref()).unwrap_infallible();
         this.insert_encoded(&quad).unwrap_infallible();
     }
 
