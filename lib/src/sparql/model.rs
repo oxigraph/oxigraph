@@ -107,6 +107,7 @@ impl QueryResult {
 }
 
 impl From<QuerySolutionsIterator> for QueryResult {
+    #[inline]
     fn from(value: QuerySolutionsIterator) -> Self {
         QueryResult::Solutions(value)
     }
@@ -132,6 +133,7 @@ impl QueryResultFormat {
     ///
     /// assert_eq!(QueryResultFormat::Json.iri(), "http://www.w3.org/ns/formats/SPARQL_Results_JSON")
     /// ```
+    #[inline]
     pub fn iri(self) -> &'static str {
         match self {
             QueryResultFormat::Xml => "http://www.w3.org/ns/formats/SPARQL_Results_XML",
@@ -145,6 +147,7 @@ impl QueryResultFormat {
     ///
     /// assert_eq!(QueryResultFormat::Json.media_type(), "application/sparql-results+json")
     /// ```
+    #[inline]
     pub fn media_type(self) -> &'static str {
         match self {
             QueryResultFormat::Xml => "application/sparql-results+xml",
@@ -159,6 +162,7 @@ impl QueryResultFormat {
     ///
     /// assert_eq!(QueryResultFormat::Json.file_extension(), "srj")
     /// ```
+    #[inline]
     pub fn file_extension(self) -> &'static str {
         match self {
             QueryResultFormat::Xml => "srx",
@@ -252,6 +256,7 @@ impl QuerySolutionsIterator {
     /// }
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[inline]
     pub fn variables(&self) -> &[Variable] {
         &*self.variables
     }
@@ -277,6 +282,7 @@ impl QuerySolutionsIterator {
 impl Iterator for QuerySolutionsIterator {
     type Item = Result<QuerySolution, EvaluationError>;
 
+    #[inline]
     fn next(&mut self) -> Option<Result<QuerySolution, EvaluationError>> {
         Some(self.iter.next()?.map(|values| QuerySolution {
             values,
@@ -284,6 +290,7 @@ impl Iterator for QuerySolutionsIterator {
         }))
     }
 
+    #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.iter.size_hint()
     }
@@ -304,21 +311,25 @@ impl QuerySolution {
     /// let foo = solution.get("foo"); // Get the value of the variable ?foo if it exists
     /// let first = solution.get(1); // Get the value of the second column if it exists
     /// ```
+    #[inline]
     pub fn get(&self, index: impl VariableSolutionIndex) -> Option<&Term> {
         self.values.get(index.index(self)?).and_then(|e| e.as_ref())
     }
 
     /// The number of variables which are bind
+    #[inline]
     pub fn len(&self) -> usize {
         self.values.len()
     }
 
     /// Is this binding empty?
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
     }
 
     /// Returns an iterator over bound variables
+    #[inline]
     pub fn iter(&self) -> impl Iterator<Item = (&Variable, &Term)> {
         self.values
             .iter()
@@ -339,24 +350,28 @@ pub trait VariableSolutionIndex {
 }
 
 impl VariableSolutionIndex for usize {
+    #[inline]
     fn index(self, _: &QuerySolution) -> Option<usize> {
         Some(self)
     }
 }
 
 impl VariableSolutionIndex for &str {
+    #[inline]
     fn index(self, solution: &QuerySolution) -> Option<usize> {
         solution.variables.iter().position(|v| v.as_str() == self)
     }
 }
 
 impl VariableSolutionIndex for &Variable {
+    #[inline]
     fn index(self, solution: &QuerySolution) -> Option<usize> {
         solution.variables.iter().position(|v| v == self)
     }
 }
 
 impl VariableSolutionIndex for Variable {
+    #[inline]
     fn index(self, solution: &QuerySolution) -> Option<usize> {
         (&self).index(solution)
     }
@@ -383,14 +398,17 @@ pub struct QueryTriplesIterator {
 impl Iterator for QueryTriplesIterator {
     type Item = Result<Triple, EvaluationError>;
 
+    #[inline]
     fn next(&mut self) -> Option<Result<Triple, EvaluationError>> {
         self.iter.next()
     }
 
+    #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.iter.size_hint()
     }
 
+    #[inline]
     fn fold<Acc, G>(self, init: Acc, mut g: G) -> Acc
     where
         G: FnMut(Acc, Self::Item) -> Acc,
@@ -415,10 +433,12 @@ pub struct Variable {
 }
 
 impl Variable {
+    #[inline]
     pub fn new(name: impl Into<String>) -> Self {
         Variable { name: name.into() }
     }
 
+    #[inline]
     pub fn as_str(&self) -> &str {
         &self.name
     }
@@ -428,16 +448,19 @@ impl Variable {
         Ok(self.as_str())
     }
 
+    #[inline]
     pub fn into_string(self) -> String {
         self.name
     }
 
+    #[inline]
     pub(crate) fn new_random() -> Self {
         Self::new(format!("{:x}", random::<u128>()))
     }
 }
 
 impl fmt::Display for Variable {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "?{}", self.name)
     }

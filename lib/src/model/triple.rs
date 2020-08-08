@@ -13,14 +13,17 @@ pub enum NamedOrBlankNode {
 }
 
 impl NamedOrBlankNode {
+    #[inline]
     pub fn is_named_node(&self) -> bool {
         self.as_ref().is_named_node()
     }
 
+    #[inline]
     pub fn is_blank_node(&self) -> bool {
         self.as_ref().is_blank_node()
     }
 
+    #[inline]
     pub fn as_ref(&self) -> NamedOrBlankNodeRef<'_> {
         match self {
             Self::NamedNode(node) => NamedOrBlankNodeRef::NamedNode(node.as_ref()),
@@ -30,30 +33,35 @@ impl NamedOrBlankNode {
 }
 
 impl fmt::Display for NamedOrBlankNode {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
     }
 }
 
 impl From<NamedNode> for NamedOrBlankNode {
+    #[inline]
     fn from(node: NamedNode) -> Self {
         Self::NamedNode(node)
     }
 }
 
 impl From<NamedNodeRef<'_>> for NamedOrBlankNode {
+    #[inline]
     fn from(node: NamedNodeRef<'_>) -> Self {
         node.into_owned().into()
     }
 }
 
 impl From<BlankNode> for NamedOrBlankNode {
+    #[inline]
     fn from(node: BlankNode) -> Self {
         Self::BlankNode(node)
     }
 }
 
 impl From<BlankNodeRef<'_>> for NamedOrBlankNode {
+    #[inline]
     fn from(node: BlankNodeRef<'_>) -> Self {
         node.into_owned().into()
     }
@@ -67,6 +75,7 @@ pub enum NamedOrBlankNodeRef<'a> {
 }
 
 impl<'a> NamedOrBlankNodeRef<'a> {
+    #[inline]
     pub fn is_named_node(&self) -> bool {
         match self {
             Self::NamedNode(_) => true,
@@ -74,6 +83,7 @@ impl<'a> NamedOrBlankNodeRef<'a> {
         }
     }
 
+    #[inline]
     pub fn is_blank_node(&self) -> bool {
         match self {
             Self::NamedNode(_) => false,
@@ -81,6 +91,7 @@ impl<'a> NamedOrBlankNodeRef<'a> {
         }
     }
 
+    #[inline]
     pub fn into_owned(self) -> NamedOrBlankNode {
         match self {
             Self::NamedNode(node) => NamedOrBlankNode::NamedNode(node.into_owned()),
@@ -90,6 +101,7 @@ impl<'a> NamedOrBlankNodeRef<'a> {
 }
 
 impl fmt::Display for NamedOrBlankNodeRef<'_> {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NamedNode(node) => node.fmt(f),
@@ -99,42 +111,49 @@ impl fmt::Display for NamedOrBlankNodeRef<'_> {
 }
 
 impl<'a> From<NamedNodeRef<'a>> for NamedOrBlankNodeRef<'a> {
+    #[inline]
     fn from(node: NamedNodeRef<'a>) -> Self {
         Self::NamedNode(node)
     }
 }
 
 impl<'a> From<&'a NamedNode> for NamedOrBlankNodeRef<'a> {
+    #[inline]
     fn from(node: &'a NamedNode) -> Self {
         node.as_ref().into()
     }
 }
 
 impl<'a> From<BlankNodeRef<'a>> for NamedOrBlankNodeRef<'a> {
+    #[inline]
     fn from(node: BlankNodeRef<'a>) -> Self {
         Self::BlankNode(node)
     }
 }
 
 impl<'a> From<&'a BlankNode> for NamedOrBlankNodeRef<'a> {
+    #[inline]
     fn from(node: &'a BlankNode) -> Self {
         node.as_ref().into()
     }
 }
 
 impl<'a> From<&'a NamedOrBlankNode> for NamedOrBlankNodeRef<'a> {
+    #[inline]
     fn from(node: &'a NamedOrBlankNode) -> Self {
         node.as_ref()
     }
 }
 
 impl<'a> From<NamedOrBlankNodeRef<'a>> for NamedOrBlankNode {
+    #[inline]
     fn from(node: NamedOrBlankNodeRef<'a>) -> Self {
         node.into_owned()
     }
 }
 
 impl<'a> From<NamedOrBlankNodeRef<'a>> for rio::NamedOrBlankNode<'a> {
+    #[inline]
     fn from(node: NamedOrBlankNodeRef<'a>) -> Self {
         match node {
             NamedOrBlankNodeRef::NamedNode(node) => rio::NamedNode::from(node).into(),
@@ -153,18 +172,22 @@ pub enum Term {
 }
 
 impl Term {
+    #[inline]
     pub fn is_named_node(&self) -> bool {
         self.as_ref().is_named_node()
     }
 
+    #[inline]
     pub fn is_blank_node(&self) -> bool {
         self.as_ref().is_blank_node()
     }
 
+    #[inline]
     pub fn is_literal(&self) -> bool {
         self.as_ref().is_literal()
     }
 
+    #[inline]
     pub fn as_ref(&self) -> TermRef<'_> {
         match self {
             Self::NamedNode(node) => TermRef::NamedNode(node.as_ref()),
@@ -175,48 +198,56 @@ impl Term {
 }
 
 impl fmt::Display for Term {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
     }
 }
 
 impl From<NamedNode> for Term {
+    #[inline]
     fn from(node: NamedNode) -> Self {
         Self::NamedNode(node)
     }
 }
 
 impl From<NamedNodeRef<'_>> for Term {
+    #[inline]
     fn from(node: NamedNodeRef<'_>) -> Self {
         node.into_owned().into()
     }
 }
 
 impl From<BlankNode> for Term {
+    #[inline]
     fn from(node: BlankNode) -> Self {
         Self::BlankNode(node)
     }
 }
 
 impl From<BlankNodeRef<'_>> for Term {
+    #[inline]
     fn from(node: BlankNodeRef<'_>) -> Self {
         node.into_owned().into()
     }
 }
 
 impl From<Literal> for Term {
+    #[inline]
     fn from(literal: Literal) -> Self {
         Self::Literal(literal)
     }
 }
 
 impl From<LiteralRef<'_>> for Term {
+    #[inline]
     fn from(literal: LiteralRef<'_>) -> Self {
         literal.into_owned().into()
     }
 }
 
 impl From<NamedOrBlankNode> for Term {
+    #[inline]
     fn from(node: NamedOrBlankNode) -> Self {
         match node {
             NamedOrBlankNode::NamedNode(node) => node.into(),
@@ -226,6 +257,7 @@ impl From<NamedOrBlankNode> for Term {
 }
 
 impl From<NamedOrBlankNodeRef<'_>> for Term {
+    #[inline]
     fn from(node: NamedOrBlankNodeRef<'_>) -> Self {
         node.into_owned().into()
     }
@@ -241,6 +273,7 @@ pub enum TermRef<'a> {
 }
 
 impl<'a> TermRef<'a> {
+    #[inline]
     pub fn is_named_node(&self) -> bool {
         match self {
             Self::NamedNode(_) => true,
@@ -248,6 +281,7 @@ impl<'a> TermRef<'a> {
         }
     }
 
+    #[inline]
     pub fn is_blank_node(&self) -> bool {
         match self {
             Self::BlankNode(_) => true,
@@ -255,6 +289,7 @@ impl<'a> TermRef<'a> {
         }
     }
 
+    #[inline]
     pub fn is_literal(&self) -> bool {
         match self {
             Self::Literal(_) => true,
@@ -262,6 +297,7 @@ impl<'a> TermRef<'a> {
         }
     }
 
+    #[inline]
     pub fn into_owned(self) -> Term {
         match self {
             Self::NamedNode(node) => Term::NamedNode(node.into_owned()),
@@ -272,6 +308,7 @@ impl<'a> TermRef<'a> {
 }
 
 impl fmt::Display for TermRef<'_> {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NamedNode(node) => node.fmt(f),
@@ -282,42 +319,49 @@ impl fmt::Display for TermRef<'_> {
 }
 
 impl<'a> From<NamedNodeRef<'a>> for TermRef<'a> {
+    #[inline]
     fn from(node: NamedNodeRef<'a>) -> Self {
         Self::NamedNode(node)
     }
 }
 
 impl<'a> From<&'a NamedNode> for TermRef<'a> {
+    #[inline]
     fn from(node: &'a NamedNode) -> Self {
         node.as_ref().into()
     }
 }
 
 impl<'a> From<BlankNodeRef<'a>> for TermRef<'a> {
+    #[inline]
     fn from(node: BlankNodeRef<'a>) -> Self {
         Self::BlankNode(node)
     }
 }
 
 impl<'a> From<&'a BlankNode> for TermRef<'a> {
+    #[inline]
     fn from(node: &'a BlankNode) -> Self {
         node.as_ref().into()
     }
 }
 
 impl<'a> From<LiteralRef<'a>> for TermRef<'a> {
+    #[inline]
     fn from(literal: LiteralRef<'a>) -> Self {
         Self::Literal(literal)
     }
 }
 
 impl<'a> From<&'a Literal> for TermRef<'a> {
+    #[inline]
     fn from(literal: &'a Literal) -> Self {
         literal.as_ref().into()
     }
 }
 
 impl<'a> From<NamedOrBlankNodeRef<'a>> for TermRef<'a> {
+    #[inline]
     fn from(node: NamedOrBlankNodeRef<'a>) -> Self {
         match node {
             NamedOrBlankNodeRef::NamedNode(node) => node.into(),
@@ -327,24 +371,28 @@ impl<'a> From<NamedOrBlankNodeRef<'a>> for TermRef<'a> {
 }
 
 impl<'a> From<&'a NamedOrBlankNode> for TermRef<'a> {
+    #[inline]
     fn from(node: &'a NamedOrBlankNode) -> Self {
         node.as_ref().into()
     }
 }
 
 impl<'a> From<&'a Term> for TermRef<'a> {
+    #[inline]
     fn from(node: &'a Term) -> Self {
         node.as_ref()
     }
 }
 
 impl<'a> From<TermRef<'a>> for Term {
+    #[inline]
     fn from(node: TermRef<'a>) -> Self {
         node.into_owned()
     }
 }
 
 impl<'a> From<TermRef<'a>> for rio::Term<'a> {
+    #[inline]
     fn from(node: TermRef<'a>) -> Self {
         match node {
             TermRef::NamedNode(node) => rio::NamedNode::from(node).into(),
@@ -369,6 +417,7 @@ pub struct Triple {
 
 impl Triple {
     /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple)
+    #[inline]
     pub fn new(
         subject: impl Into<NamedOrBlankNode>,
         predicate: impl Into<NamedNode>,
@@ -412,6 +461,7 @@ impl Triple {
     }
 
     /// Encodes that this triple is in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
+    #[inline]
     pub fn in_graph(self, graph_name: impl Into<GraphName>) -> Quad {
         Quad {
             subject: self.subject,
@@ -421,6 +471,7 @@ impl Triple {
         }
     }
 
+    #[inline]
     pub fn as_ref(&self) -> TripleRef<'_> {
         TripleRef {
             subject: self.subject.as_ref(),
@@ -431,6 +482,7 @@ impl Triple {
 }
 
 impl fmt::Display for Triple {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
     }
@@ -451,6 +503,7 @@ pub struct TripleRef<'a> {
 
 impl<'a> TripleRef<'a> {
     /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple)
+    #[inline]
     pub fn new(
         subject: impl Into<NamedOrBlankNodeRef<'a>>,
         predicate: impl Into<NamedNodeRef<'a>>,
@@ -464,6 +517,7 @@ impl<'a> TripleRef<'a> {
     }
 
     /// Encodes that this triple is in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
+    #[inline]
     pub fn in_graph(self, graph_name: impl Into<GraphNameRef<'a>>) -> QuadRef<'a> {
         QuadRef {
             subject: self.subject,
@@ -473,6 +527,7 @@ impl<'a> TripleRef<'a> {
         }
     }
 
+    #[inline]
     pub fn into_owned(self) -> Triple {
         Triple {
             subject: self.subject.into_owned(),
@@ -483,24 +538,28 @@ impl<'a> TripleRef<'a> {
 }
 
 impl fmt::Display for TripleRef<'_> {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         rio::Triple::from(*self).fmt(f)
     }
 }
 
 impl<'a> From<&'a Triple> for TripleRef<'a> {
+    #[inline]
     fn from(triple: &'a Triple) -> Self {
         triple.as_ref()
     }
 }
 
 impl<'a> From<TripleRef<'a>> for Triple {
+    #[inline]
     fn from(triple: TripleRef<'a>) -> Self {
         triple.into_owned()
     }
 }
 
 impl<'a> From<TripleRef<'a>> for rio::Triple<'a> {
+    #[inline]
     fn from(triple: TripleRef<'a>) -> Self {
         rio::Triple {
             subject: triple.subject.into(),
@@ -520,18 +579,22 @@ pub enum GraphName {
 }
 
 impl GraphName {
+    #[inline]
     pub fn is_named_node(&self) -> bool {
         self.as_ref().is_named_node()
     }
 
+    #[inline]
     pub fn is_blank_node(&self) -> bool {
         self.as_ref().is_blank_node()
     }
 
+    #[inline]
     pub fn is_default_graph(&self) -> bool {
         self.as_ref().is_default_graph()
     }
 
+    #[inline]
     pub fn as_ref(&self) -> GraphNameRef<'_> {
         match self {
             Self::NamedNode(node) => GraphNameRef::NamedNode(node.as_ref()),
@@ -542,36 +605,42 @@ impl GraphName {
 }
 
 impl fmt::Display for GraphName {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
     }
 }
 
 impl From<NamedNode> for GraphName {
+    #[inline]
     fn from(node: NamedNode) -> Self {
         GraphName::NamedNode(node)
     }
 }
 
 impl From<NamedNodeRef<'_>> for GraphName {
+    #[inline]
     fn from(node: NamedNodeRef<'_>) -> Self {
         node.into_owned().into()
     }
 }
 
 impl From<BlankNode> for GraphName {
+    #[inline]
     fn from(node: BlankNode) -> Self {
         GraphName::BlankNode(node)
     }
 }
 
 impl From<BlankNodeRef<'_>> for GraphName {
+    #[inline]
     fn from(node: BlankNodeRef<'_>) -> Self {
         node.into_owned().into()
     }
 }
 
 impl From<NamedOrBlankNode> for GraphName {
+    #[inline]
     fn from(node: NamedOrBlankNode) -> Self {
         match node {
             NamedOrBlankNode::NamedNode(node) => node.into(),
@@ -581,12 +650,14 @@ impl From<NamedOrBlankNode> for GraphName {
 }
 
 impl From<NamedOrBlankNodeRef<'_>> for GraphName {
+    #[inline]
     fn from(node: NamedOrBlankNodeRef<'_>) -> Self {
         node.into_owned().into()
     }
 }
 
 impl From<Option<NamedOrBlankNode>> for GraphName {
+    #[inline]
     fn from(name: Option<NamedOrBlankNode>) -> Self {
         if let Some(node) = name {
             node.into()
@@ -597,6 +668,7 @@ impl From<Option<NamedOrBlankNode>> for GraphName {
 }
 
 impl From<GraphName> for Option<NamedOrBlankNode> {
+    #[inline]
     fn from(name: GraphName) -> Self {
         match name {
             GraphName::NamedNode(node) => Some(node.into()),
@@ -616,6 +688,7 @@ pub enum GraphNameRef<'a> {
 }
 
 impl<'a> GraphNameRef<'a> {
+    #[inline]
     pub fn is_named_node(&self) -> bool {
         match self {
             GraphNameRef::NamedNode(_) => true,
@@ -623,6 +696,7 @@ impl<'a> GraphNameRef<'a> {
         }
     }
 
+    #[inline]
     pub fn is_blank_node(&self) -> bool {
         match self {
             GraphNameRef::BlankNode(_) => true,
@@ -630,6 +704,7 @@ impl<'a> GraphNameRef<'a> {
         }
     }
 
+    #[inline]
     pub fn is_default_graph(&self) -> bool {
         match self {
             GraphNameRef::DefaultGraph => true,
@@ -637,6 +712,7 @@ impl<'a> GraphNameRef<'a> {
         }
     }
 
+    #[inline]
     pub fn into_owned(self) -> GraphName {
         match self {
             Self::NamedNode(node) => GraphName::NamedNode(node.into_owned()),
@@ -647,6 +723,7 @@ impl<'a> GraphNameRef<'a> {
 }
 
 impl fmt::Display for GraphNameRef<'_> {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NamedNode(node) => node.fmt(f),
@@ -657,30 +734,35 @@ impl fmt::Display for GraphNameRef<'_> {
 }
 
 impl<'a> From<NamedNodeRef<'a>> for GraphNameRef<'a> {
+    #[inline]
     fn from(node: NamedNodeRef<'a>) -> Self {
         Self::NamedNode(node)
     }
 }
 
 impl<'a> From<&'a NamedNode> for GraphNameRef<'a> {
+    #[inline]
     fn from(node: &'a NamedNode) -> Self {
         node.as_ref().into()
     }
 }
 
 impl<'a> From<BlankNodeRef<'a>> for GraphNameRef<'a> {
+    #[inline]
     fn from(node: BlankNodeRef<'a>) -> Self {
         Self::BlankNode(node)
     }
 }
 
 impl<'a> From<&'a BlankNode> for GraphNameRef<'a> {
+    #[inline]
     fn from(node: &'a BlankNode) -> Self {
         node.as_ref().into()
     }
 }
 
 impl<'a> From<NamedOrBlankNodeRef<'a>> for GraphNameRef<'a> {
+    #[inline]
     fn from(node: NamedOrBlankNodeRef<'a>) -> Self {
         match node {
             NamedOrBlankNodeRef::NamedNode(node) => node.into(),
@@ -690,24 +772,28 @@ impl<'a> From<NamedOrBlankNodeRef<'a>> for GraphNameRef<'a> {
 }
 
 impl<'a> From<&'a NamedOrBlankNode> for GraphNameRef<'a> {
+    #[inline]
     fn from(node: &'a NamedOrBlankNode) -> Self {
         node.as_ref().into()
     }
 }
 
 impl<'a> From<&'a GraphName> for GraphNameRef<'a> {
+    #[inline]
     fn from(node: &'a GraphName) -> Self {
         node.as_ref()
     }
 }
 
 impl<'a> From<GraphNameRef<'a>> for GraphName {
+    #[inline]
     fn from(node: GraphNameRef<'a>) -> Self {
         node.into_owned()
     }
 }
 
 impl<'a> From<Option<NamedOrBlankNodeRef<'a>>> for GraphNameRef<'a> {
+    #[inline]
     fn from(name: Option<NamedOrBlankNodeRef<'a>>) -> Self {
         if let Some(node) = name {
             node.into()
@@ -718,6 +804,7 @@ impl<'a> From<Option<NamedOrBlankNodeRef<'a>>> for GraphNameRef<'a> {
 }
 
 impl<'a> From<GraphNameRef<'a>> for Option<NamedOrBlankNodeRef<'a>> {
+    #[inline]
     fn from(name: GraphNameRef<'a>) -> Self {
         match name {
             GraphNameRef::NamedNode(node) => Some(node.into()),
@@ -728,6 +815,7 @@ impl<'a> From<GraphNameRef<'a>> for Option<NamedOrBlankNodeRef<'a>> {
 }
 
 impl<'a> From<GraphNameRef<'a>> for Option<rio::NamedOrBlankNode<'a>> {
+    #[inline]
     fn from(name: GraphNameRef<'a>) -> Self {
         match name {
             GraphNameRef::NamedNode(node) => Some(rio::NamedNode::from(node).into()),
@@ -755,6 +843,7 @@ pub struct Quad {
 
 impl Quad {
     /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
+    #[inline]
     pub fn new(
         subject: impl Into<NamedOrBlankNode>,
         predicate: impl Into<NamedNode>,
@@ -810,6 +899,7 @@ impl Quad {
     }
 
     #[deprecated(note = "Use `Triple::from` instead")]
+    #[inline]
     pub fn into_triple(self) -> Triple {
         Triple::new(self.subject, self.predicate, self.object)
     }
@@ -819,6 +909,7 @@ impl Quad {
         (self.subject, self.predicate, self.object, self.graph_name)
     }
 
+    #[inline]
     pub fn as_ref(&self) -> QuadRef<'_> {
         QuadRef {
             subject: self.subject.as_ref(),
@@ -830,12 +921,14 @@ impl Quad {
 }
 
 impl fmt::Display for Quad {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
     }
 }
 
 impl From<Quad> for Triple {
+    #[inline]
     fn from(quad: Quad) -> Self {
         Self {
             subject: quad.subject,
@@ -863,6 +956,7 @@ pub struct QuadRef<'a> {
 
 impl<'a> QuadRef<'a> {
     /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
+    #[inline]
     pub fn new(
         subject: impl Into<NamedOrBlankNodeRef<'a>>,
         predicate: impl Into<NamedNodeRef<'a>>,
@@ -877,6 +971,7 @@ impl<'a> QuadRef<'a> {
         }
     }
 
+    #[inline]
     pub fn into_owned(self) -> Quad {
         Quad {
             subject: self.subject.into_owned(),
@@ -888,12 +983,14 @@ impl<'a> QuadRef<'a> {
 }
 
 impl fmt::Display for QuadRef<'_> {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         rio::Quad::from(*self).fmt(f)
     }
 }
 
 impl<'a> From<QuadRef<'a>> for TripleRef<'a> {
+    #[inline]
     fn from(quad: QuadRef<'a>) -> Self {
         Self {
             subject: quad.subject,
@@ -904,18 +1001,21 @@ impl<'a> From<QuadRef<'a>> for TripleRef<'a> {
 }
 
 impl<'a> From<&'a Quad> for QuadRef<'a> {
+    #[inline]
     fn from(quad: &'a Quad) -> Self {
         quad.as_ref()
     }
 }
 
 impl<'a> From<QuadRef<'a>> for Quad {
+    #[inline]
     fn from(quad: QuadRef<'a>) -> Self {
         quad.into_owned()
     }
 }
 
 impl<'a> From<QuadRef<'a>> for rio::Quad<'a> {
+    #[inline]
     fn from(quad: QuadRef<'a>) -> Self {
         rio::Quad {
             subject: quad.subject.into(),

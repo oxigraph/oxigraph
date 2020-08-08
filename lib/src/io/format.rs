@@ -38,6 +38,7 @@ impl GraphFormat {
     ///
     /// assert_eq!(GraphFormat::NTriples.iri(), "http://www.w3.org/ns/formats/N-Triples")
     /// ```
+    #[inline]
     pub fn iri(self) -> &'static str {
         match self {
             GraphFormat::NTriples => "http://www.w3.org/ns/formats/N-Triples",
@@ -53,6 +54,7 @@ impl GraphFormat {
     ///
     /// assert_eq!(GraphFormat::NTriples.media_type(), "application/n-triples")
     /// ```
+    #[inline]
     pub fn media_type(self) -> &'static str {
         match self {
             GraphFormat::NTriples => "application/n-triples",
@@ -68,6 +70,7 @@ impl GraphFormat {
     ///
     /// assert_eq!(GraphFormat::NTriples.file_extension(), "nt")
     /// ```
+    #[inline]
     pub fn file_extension(self) -> &'static str {
         match self {
             GraphFormat::NTriples => "nt",
@@ -141,6 +144,7 @@ impl DatasetFormat {
     ///
     /// assert_eq!(DatasetFormat::NQuads.iri(), "http://www.w3.org/ns/formats/N-Quads")
     /// ```
+    #[inline]
     pub fn iri(self) -> &'static str {
         match self {
             DatasetFormat::NQuads => "http://www.w3.org/ns/formats/N-Quads",
@@ -155,6 +159,7 @@ impl DatasetFormat {
     ///
     /// assert_eq!(DatasetFormat::NQuads.media_type(), "application/n-quads")
     /// ```
+    #[inline]
     pub fn media_type(self) -> &'static str {
         match self {
             DatasetFormat::NQuads => "application/n-quads",
@@ -169,6 +174,7 @@ impl DatasetFormat {
     ///
     /// assert_eq!(DatasetFormat::NQuads.file_extension(), "nq")
     /// ```
+    #[inline]
     pub fn file_extension(self) -> &'static str {
         match self {
             DatasetFormat::NQuads => "nq",

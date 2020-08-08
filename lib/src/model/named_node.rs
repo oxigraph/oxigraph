@@ -30,6 +30,7 @@ impl NamedNode {
         Self::new(iri)
     }
 
+    #[inline]
     pub(crate) fn new_from_iri(iri: Iri<String>) -> Self {
         Self::new_unchecked(iri.into_inner())
     }
@@ -39,48 +40,57 @@ impl NamedNode {
     /// It is the caller's responsibility to ensure that `iri` is a valid IRI.
     ///
     /// Except if you really know what you do, you should use [`parse`](#method.parse).
+    #[inline]
     pub fn new_unchecked(iri: impl Into<String>) -> Self {
         Self { iri: iri.into() }
     }
 
+    #[inline]
     pub fn as_str(&self) -> &str {
         self.iri.as_str()
     }
 
+    #[inline]
     pub fn into_string(self) -> String {
         self.iri
     }
 
+    #[inline]
     pub fn as_ref(&self) -> NamedNodeRef<'_> {
         NamedNodeRef::new_unchecked(&self.iri)
     }
 }
 
 impl fmt::Display for NamedNode {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
     }
 }
 
 impl PartialEq<str> for NamedNode {
+    #[inline]
     fn eq(&self, other: &str) -> bool {
         self.as_str() == other
     }
 }
 
 impl PartialEq<NamedNode> for str {
+    #[inline]
     fn eq(&self, other: &NamedNode) -> bool {
         self == other.as_str()
     }
 }
 
 impl PartialEq<&str> for NamedNode {
+    #[inline]
     fn eq(&self, other: &&str) -> bool {
         self == *other
     }
 }
 
 impl PartialEq<NamedNode> for &str {
+    #[inline]
     fn eq(&self, other: &NamedNode) -> bool {
         *self == other
     }
@@ -109,6 +119,7 @@ impl<'a> NamedNodeRef<'a> {
         Ok(Self::new_from_iri(Iri::parse(iri)?))
     }
 
+    #[inline]
     pub(crate) fn new_from_iri(iri: Iri<&'a str>) -> Self {
         Self::new_unchecked(iri.into_inner())
     }
@@ -118,26 +129,31 @@ impl<'a> NamedNodeRef<'a> {
     /// It is the caller's responsibility to ensure that `iri` is a valid IRI.
     ///
     /// Except if you really know what you do, you should use [`parse`](#method.parse).
+    #[inline]
     pub const fn new_unchecked(iri: &'a str) -> Self {
         Self { iri }
     }
 
+    #[inline]
     pub const fn as_str(self) -> &'a str {
         self.iri
     }
 
+    #[inline]
     pub fn into_owned(self) -> NamedNode {
         NamedNode::new_unchecked(self.iri)
     }
 }
 
 impl fmt::Display for NamedNodeRef<'_> {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         rio::NamedNode::from(*self).fmt(f)
     }
 }
 
 impl From<NamedNodeRef<'_>> for NamedNode {
+    #[inline]
     fn from(node: NamedNodeRef<'_>) -> Self {
         node.into_owned()
     }
@@ -150,42 +166,49 @@ impl<'a> From<&'a NamedNode> for NamedNodeRef<'a> {
 }
 
 impl<'a> From<NamedNodeRef<'a>> for rio::NamedNode<'a> {
+    #[inline]
     fn from(node: NamedNodeRef<'a>) -> Self {
         rio::NamedNode { iri: node.as_str() }
     }
 }
 
 impl PartialEq<NamedNode> for NamedNodeRef<'_> {
+    #[inline]
     fn eq(&self, other: &NamedNode) -> bool {
         self.as_str() == other.as_str()
     }
 }
 
 impl PartialEq<NamedNodeRef<'_>> for NamedNode {
+    #[inline]
     fn eq(&self, other: &NamedNodeRef<'_>) -> bool {
         self.as_str() == other.as_str()
     }
 }
 
 impl PartialEq<str> for NamedNodeRef<'_> {
+    #[inline]
     fn eq(&self, other: &str) -> bool {
         self.as_str() == other
     }
 }
 
 impl PartialEq<NamedNodeRef<'_>> for str {
+    #[inline]
     fn eq(&self, other: &NamedNodeRef<'_>) -> bool {
         self == other.as_str()
     }
 }
 
 impl PartialEq<&str> for NamedNodeRef<'_> {
+    #[inline]
     fn eq(&self, other: &&str) -> bool {
         self == *other
     }
 }
 
 impl PartialEq<NamedNodeRef<'_>> for &str {
+    #[inline]
     fn eq(&self, other: &NamedNodeRef<'_>) -> bool {
         *self == other
     }

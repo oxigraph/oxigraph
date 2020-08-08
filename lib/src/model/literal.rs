@@ -45,11 +45,13 @@ enum LiteralContent {
 
 impl Literal {
     /// Builds an RDF [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal)
+    #[inline]
     pub fn new_simple_literal(value: impl Into<String>) -> Self {
         Literal(LiteralContent::String(value.into()))
     }
 
     /// Builds an RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) with a [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri)
+    #[inline]
     pub fn new_typed_literal(value: impl Into<String>, datatype: impl Into<NamedNode>) -> Self {
         let value = value.into();
         let datatype = datatype.into();
@@ -61,6 +63,7 @@ impl Literal {
     }
 
     /// Builds an RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
+    #[inline]
     pub fn new_language_tagged_literal(
         value: impl Into<String>,
         language: impl Into<String>,
@@ -81,6 +84,7 @@ impl Literal {
     ///
     /// Except if you really know what you do,
     /// you should use [`new_language_tagged_literal`](#method.new_language_tagged_literal).
+    #[inline]
     pub fn new_language_tagged_literal_unchecked(
         value: impl Into<String>,
         language: impl Into<String>,
@@ -92,6 +96,7 @@ impl Literal {
     }
 
     /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form)
+    #[inline]
     pub fn value(&self) -> &str {
         self.as_ref().value()
     }
@@ -100,6 +105,7 @@ impl Literal {
     ///
     /// Language tags are defined by the [BCP47](https://tools.ietf.org/html/bcp47).
     /// They are normalized to lowercase by this implementation.
+    #[inline]
     pub fn language(&self) -> Option<&str> {
         self.as_ref().language()
     }
@@ -108,6 +114,7 @@ impl Literal {
     ///
     /// The datatype of [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string) is always [rdf:langString](http://www.w3.org/1999/02/22-rdf-syntax-ns#langString).
     /// The datatype of [simple literals](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal) is [xsd:string](http://www.w3.org/2001/XMLSchema#string).
+    #[inline]
     pub fn datatype(&self) -> NamedNodeRef<'_> {
         self.as_ref().datatype()
     }
@@ -116,10 +123,12 @@ impl Literal {
     ///
     /// It returns true if the literal is a [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
     /// or has the datatype [xsd:string](http://www.w3.org/2001/XMLSchema#string).
+    #[inline]
     pub fn is_plain(&self) -> bool {
         self.as_ref().is_plain()
     }
 
+    #[inline]
     pub fn as_ref(&self) -> LiteralRef<'_> {
         LiteralRef(match &self.0 {
             LiteralContent::String(value) => LiteralRefContent::String(value),
@@ -134,6 +143,7 @@ impl Literal {
     }
 
     /// Extract components from this literal
+    #[inline]
     pub fn destruct(self) -> (String, Option<NamedNode>, Option<String>) {
         match self.0 {
             LiteralContent::String(s) => (s, None, None),
@@ -146,30 +156,35 @@ impl Literal {
 }
 
 impl fmt::Display for Literal {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
     }
 }
 
 impl<'a> From<&'a str> for Literal {
+    #[inline]
     fn from(value: &'a str) -> Self {
         Literal(LiteralContent::String(value.into()))
     }
 }
 
 impl From<String> for Literal {
+    #[inline]
     fn from(value: String) -> Self {
         Literal(LiteralContent::String(value))
     }
 }
 
 impl<'a> From<Cow<'a, str>> for Literal {
+    #[inline]
     fn from(value: Cow<'a, str>) -> Self {
         Literal(LiteralContent::String(value.into()))
     }
 }
 
 impl From<bool> for Literal {
+    #[inline]
     fn from(value: bool) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -179,6 +194,7 @@ impl From<bool> for Literal {
 }
 
 impl From<i128> for Literal {
+    #[inline]
     fn from(value: i128) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -188,6 +204,7 @@ impl From<i128> for Literal {
 }
 
 impl From<i64> for Literal {
+    #[inline]
     fn from(value: i64) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -197,6 +214,7 @@ impl From<i64> for Literal {
 }
 
 impl From<i32> for Literal {
+    #[inline]
     fn from(value: i32) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -206,6 +224,7 @@ impl From<i32> for Literal {
 }
 
 impl From<i16> for Literal {
+    #[inline]
     fn from(value: i16) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -215,6 +234,7 @@ impl From<i16> for Literal {
 }
 
 impl From<u64> for Literal {
+    #[inline]
     fn from(value: u64) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -224,6 +244,7 @@ impl From<u64> for Literal {
 }
 
 impl From<u32> for Literal {
+    #[inline]
     fn from(value: u32) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -233,6 +254,7 @@ impl From<u32> for Literal {
 }
 
 impl From<u16> for Literal {
+    #[inline]
     fn from(value: u16) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -242,6 +264,7 @@ impl From<u16> for Literal {
 }
 
 impl From<f32> for Literal {
+    #[inline]
     fn from(value: f32) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -251,6 +274,7 @@ impl From<f32> for Literal {
 }
 
 impl From<f64> for Literal {
+    #[inline]
     fn from(value: f64) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -260,6 +284,7 @@ impl From<f64> for Literal {
 }
 
 impl From<Decimal> for Literal {
+    #[inline]
     fn from(value: Decimal) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -269,6 +294,7 @@ impl From<Decimal> for Literal {
 }
 
 impl From<DateTime> for Literal {
+    #[inline]
     fn from(value: DateTime) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -278,6 +304,7 @@ impl From<DateTime> for Literal {
 }
 
 impl From<Time> for Literal {
+    #[inline]
     fn from(value: Time) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -287,6 +314,7 @@ impl From<Time> for Literal {
 }
 
 impl From<Date> for Literal {
+    #[inline]
     fn from(value: Date) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -296,6 +324,7 @@ impl From<Date> for Literal {
 }
 
 impl From<GYearMonth> for Literal {
+    #[inline]
     fn from(value: GYearMonth) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -305,6 +334,7 @@ impl From<GYearMonth> for Literal {
 }
 
 impl From<GYear> for Literal {
+    #[inline]
     fn from(value: GYear) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -314,6 +344,7 @@ impl From<GYear> for Literal {
 }
 
 impl From<GMonthDay> for Literal {
+    #[inline]
     fn from(value: GMonthDay) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -323,6 +354,7 @@ impl From<GMonthDay> for Literal {
 }
 
 impl From<GMonth> for Literal {
+    #[inline]
     fn from(value: GMonth) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -332,6 +364,7 @@ impl From<GMonth> for Literal {
 }
 
 impl From<GDay> for Literal {
+    #[inline]
     fn from(value: GDay) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -341,6 +374,7 @@ impl From<GDay> for Literal {
 }
 
 impl From<Duration> for Literal {
+    #[inline]
     fn from(value: Duration) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -350,6 +384,7 @@ impl From<Duration> for Literal {
 }
 
 impl From<YearMonthDuration> for Literal {
+    #[inline]
     fn from(value: YearMonthDuration) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -359,6 +394,7 @@ impl From<YearMonthDuration> for Literal {
 }
 
 impl From<DayTimeDuration> for Literal {
+    #[inline]
     fn from(value: DayTimeDuration) -> Self {
         Literal(LiteralContent::TypedLiteral {
             value: value.to_string(),
@@ -404,11 +440,13 @@ enum LiteralRefContent<'a> {
 
 impl<'a> LiteralRef<'a> {
     /// Builds an RDF [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal)
+    #[inline]
     pub fn new_simple_literal(value: &'a str) -> Self {
         LiteralRef(LiteralRefContent::String(value))
     }
 
     /// Builds an RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) with a [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri)
+    #[inline]
     pub fn new_typed_literal(value: &'a str, datatype: impl Into<NamedNodeRef<'a>>) -> Self {
         let datatype = datatype.into();
         LiteralRef(if datatype == xsd::STRING {
@@ -426,11 +464,13 @@ impl<'a> LiteralRef<'a> {
     ///
     /// Except if you really know what you do,
     /// you should use [`new_language_tagged_literal`](#method.new_language_tagged_literal).
+    #[inline]
     pub fn new_language_tagged_literal_unchecked(value: &'a str, language: &'a str) -> Self {
         LiteralRef(LiteralRefContent::LanguageTaggedString { value, language })
     }
 
     /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form)
+    #[inline]
     pub fn value(self) -> &'a str {
         match self.0 {
             LiteralRefContent::String(value)
@@ -443,6 +483,7 @@ impl<'a> LiteralRef<'a> {
     ///
     /// Language tags are defined by the [BCP47](https://tools.ietf.org/html/bcp47).
     /// They are normalized to lowercase by this implementation.
+    #[inline]
     pub fn language(self) -> Option<&'a str> {
         match self.0 {
             LiteralRefContent::LanguageTaggedString { language, .. } => Some(language),
@@ -454,6 +495,7 @@ impl<'a> LiteralRef<'a> {
     ///
     /// The datatype of [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string) is always [rdf:langString](http://www.w3.org/1999/02/22-rdf-syntax-ns#langString).
     /// The datatype of [simple literals](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal) is [xsd:string](http://www.w3.org/2001/XMLSchema#string).
+    #[inline]
     pub fn datatype(self) -> NamedNodeRef<'a> {
         match self.0 {
             LiteralRefContent::String(_) => xsd::STRING,
@@ -466,6 +508,7 @@ impl<'a> LiteralRef<'a> {
     ///
     /// It returns true if the literal is a [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
     /// or has the datatype [xsd:string](http://www.w3.org/2001/XMLSchema#string).
+    #[inline]
     pub fn is_plain(self) -> bool {
         match self.0 {
             LiteralRefContent::String(_) | LiteralRefContent::LanguageTaggedString { .. } => true,
@@ -473,6 +516,7 @@ impl<'a> LiteralRef<'a> {
         }
     }
 
+    #[inline]
     pub fn into_owned(self) -> Literal {
         Literal(match self.0 {
             LiteralRefContent::String(value) => LiteralContent::String(value.to_owned()),
@@ -490,6 +534,7 @@ impl<'a> LiteralRef<'a> {
     }
 
     /// Extract components from this literal
+    #[inline]
     pub fn destruct(self) -> (&'a str, Option<NamedNodeRef<'a>>, Option<&'a str>) {
         match self.0 {
             LiteralRefContent::String(s) => (s, None, None),
@@ -502,24 +547,28 @@ impl<'a> LiteralRef<'a> {
 }
 
 impl fmt::Display for LiteralRef<'_> {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         rio::Literal::from(*self).fmt(f)
     }
 }
 
 impl<'a> From<&'a Literal> for LiteralRef<'a> {
+    #[inline]
     fn from(node: &'a Literal) -> Self {
         node.as_ref()
     }
 }
 
 impl<'a> From<LiteralRef<'a>> for Literal {
+    #[inline]
     fn from(node: LiteralRef<'a>) -> Self {
         node.into_owned()
     }
 }
 
 impl<'a> From<LiteralRef<'a>> for rio::Literal<'a> {
+    #[inline]
     fn from(literal: LiteralRef<'a>) -> Self {
         match literal.0 {
             LiteralRefContent::String(value) => rio::Literal::Simple { value },
@@ -535,18 +584,21 @@ impl<'a> From<LiteralRef<'a>> for rio::Literal<'a> {
 }
 
 impl<'a> From<&'a str> for LiteralRef<'a> {
+    #[inline]
     fn from(value: &'a str) -> Self {
         LiteralRef(LiteralRefContent::String(value))
     }
 }
 
 impl PartialEq<Literal> for LiteralRef<'_> {
+    #[inline]
     fn eq(&self, other: &Literal) -> bool {
         *self == other.as_ref()
     }
 }
 
 impl PartialEq<LiteralRef<'_>> for Literal {
+    #[inline]
     fn eq(&self, other: &LiteralRef<'_>) -> bool {
         self.as_ref() == *other
     }

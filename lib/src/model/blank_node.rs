@@ -71,6 +71,7 @@ impl BlankNode {
     }
 
     /// Returns the underlying ID of this blank node
+    #[inline]
     pub fn as_str(&self) -> &str {
         match &self.0 {
             BlankNodeContent::Named(id) => id,
@@ -79,6 +80,7 @@ impl BlankNode {
     }
 
     /// Returns the underlying ID of this blank node
+    #[inline]
     pub fn into_string(self) -> String {
         match self.0 {
             BlankNodeContent::Named(id) => id,
@@ -86,6 +88,7 @@ impl BlankNode {
         }
     }
 
+    #[inline]
     pub fn as_ref(&self) -> BlankNodeRef<'_> {
         BlankNodeRef(match &self.0 {
             BlankNodeContent::Named(id) => BlankNodeRefContent::Named(id.as_str()),
@@ -98,6 +101,7 @@ impl BlankNode {
 }
 
 impl fmt::Display for BlankNode {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
     }
@@ -105,6 +109,7 @@ impl fmt::Display for BlankNode {
 
 impl Default for BlankNode {
     /// Builds a new RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a unique id
+    #[inline]
     fn default() -> Self {
         Self::new_from_unique_id(random::<u128>())
     }
@@ -166,6 +171,7 @@ impl<'a> BlankNodeRef<'a> {
     }
 
     /// Returns the underlying ID of this blank node
+    #[inline]
     pub fn as_str(self) -> &'a str {
         match self.0 {
             BlankNodeRefContent::Named(id) => id,
@@ -174,6 +180,7 @@ impl<'a> BlankNodeRef<'a> {
     }
 
     /// Returns the internal numerical ID of this blank node, if it exists
+    #[inline]
     pub(crate) fn id(&self) -> Option<u128> {
         match self.0 {
             BlankNodeRefContent::Named(_) => None,
@@ -181,6 +188,7 @@ impl<'a> BlankNodeRef<'a> {
         }
     }
 
+    #[inline]
     pub fn into_owned(self) -> BlankNode {
         BlankNode(match self.0 {
             BlankNodeRefContent::Named(id) => BlankNodeContent::Named(id.to_owned()),
@@ -193,36 +201,42 @@ impl<'a> BlankNodeRef<'a> {
 }
 
 impl fmt::Display for BlankNodeRef<'_> {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         rio::BlankNode::from(*self).fmt(f)
     }
 }
 
 impl<'a> From<&'a BlankNode> for BlankNodeRef<'a> {
+    #[inline]
     fn from(node: &'a BlankNode) -> Self {
         node.as_ref()
     }
 }
 
 impl<'a> From<BlankNodeRef<'a>> for BlankNode {
+    #[inline]
     fn from(node: BlankNodeRef<'a>) -> Self {
         node.into_owned()
     }
 }
 
 impl<'a> From<BlankNodeRef<'a>> for rio::BlankNode<'a> {
+    #[inline]
     fn from(node: BlankNodeRef<'a>) -> Self {
         rio::BlankNode { id: node.as_str() }
     }
 }
 
 impl PartialEq<BlankNode> for BlankNodeRef<'_> {
+    #[inline]
     fn eq(&self, other: &BlankNode) -> bool {
         *self == other.as_ref()
     }
 }
 
 impl PartialEq<BlankNodeRef<'_>> for BlankNode {
+    #[inline]
     fn eq(&self, other: &BlankNodeRef<'_>) -> bool {
         self.as_ref() == *other
     }
@@ -328,6 +342,7 @@ fn to_integer_id(id: &str) -> Option<u128> {
 pub struct BlankNodeIdParseError {}
 
 impl fmt::Display for BlankNodeIdParseError {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "The blank node identifier is invalid")
     }

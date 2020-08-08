@@ -48,7 +48,7 @@ impl PyMemoryStore {
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
     #[text_signature = "($self, quad)"]
     fn add(&self, quad: PyQuad) {
-        self.inner.insert(quad.into());
+        self.inner.insert(quad);
     }
 
     /// Removes a quad from the store
