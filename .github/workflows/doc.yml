@@ -26,7 +26,8 @@ jobs:
         with:
           repository: oxigraph/oxigraph.github.io
           path: website
-      - run: mkdir -p ./website/pyoxigraph/latest && cp -r ./python/docs/build/html/* ./website/pyoxigraph/latest/
+          token: ${{ secrets.FULL_ACCESS_TOKEN }}
+      - run: rm -rf ./website/pyoxigraph/latest && mkdir -p ./website/pyoxigraph/latest && cp -r ./python/docs/build/html/* ./website/pyoxigraph/latest/
       - run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
