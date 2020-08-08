@@ -3,7 +3,7 @@
 use crate::error::invalid_data_error;
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
-use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResult, SimplePreparedQuery};
+use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResults, SimplePreparedQuery};
 use crate::store::binary_encoder::*;
 use crate::store::numeric_encoder::{
     Decoder, ReadEncoder, StrContainer, StrEncodingAware, StrLookup, WriteEncoder,
@@ -24,7 +24,7 @@ use std::sync::Arc;
 use std::{fmt, str};
 
 /// Store based on the [RocksDB](https://rocksdb.org/) key-value database.
-/// It encodes a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) and allows to query and update it using SPARQL.
+/// It encodes a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) and allows to query it using SPARQL.
 ///
 /// To use it, the `"rocksdb"` feature needs to be activated.
 ///
@@ -32,7 +32,7 @@ use std::{fmt, str};
 /// ```
 /// use oxigraph::RocksDbStore;
 /// use oxigraph::model::*;
-/// use oxigraph::sparql::{QueryOptions, QueryResult};
+/// use oxigraph::sparql::{QueryOptions, QueryResults};
 /// # use std::fs::remove_dir_all;
 ///
 /// # {
@@ -48,7 +48,7 @@ use std::{fmt, str};
 /// assert_eq!(vec![quad], results?);
 ///
 /// // SPARQL query
-/// if let QueryResult::Solutions(mut solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
+/// if let QueryResults::Solutions(mut solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
 ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 /// }
 /// #
@@ -126,7 +126,7 @@ impl RocksDbStore {
         &self,
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
         options: QueryOptions,
-    ) -> Result<QueryResult, EvaluationError> {
+    ) -> Result<QueryResults, EvaluationError> {
         self.prepare_query(query, options)?.exec()
     }
 
@@ -314,7 +314,7 @@ impl RocksDbStore {
         )
     }
 
-    /// Dumps the store dataset into a file.
+    /// Dumps the store into a file.
     ///    
     /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.dump_dataset) for a usage example.
     pub fn dump_dataset(&self, writer: impl Write, syntax: DatasetFormat) -> Result<(), io::Error> {
@@ -729,7 +729,7 @@ pub struct RocksDbPreparedQuery(SimplePreparedQuery<RocksDbStore>);
 
 impl RocksDbPreparedQuery {
     /// Evaluates the query and returns its results
-    pub fn exec(&self) -> Result<QueryResult, EvaluationError> {
+    pub fn exec(&self) -> Result<QueryResults, EvaluationError> {
         self.0.exec()
     }
 }

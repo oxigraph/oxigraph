@@ -12,7 +12,7 @@ use pyo3::{PyIterProtocol, PyObjectProtocol, PySequenceProtocol};
 use std::io::BufReader;
 
 /// In-memory store.
-/// It encodes a `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_ and allows to query and update it using SPARQL.
+/// It encodes a `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_ and allows to query it using SPARQL.
 ///
 ///
 /// The :py:func:`str` function provides a serialization of the store data compatible with NTriples, Turtle and SPARQL:

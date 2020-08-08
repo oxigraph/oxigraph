@@ -14,7 +14,7 @@ use std::io::BufReader;
 /// Store based on the `Sled <https://sled.rs/>`_ key-value database.
 ///
 /// In-memory store.
-/// It encodes a `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_ and allows to query and update it using SPARQL.
+/// It encodes a `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_ and allows to query it using SPARQL.
 ///
 /// :param path: the path of the directory in which Sled should read and write its data. If the directoty does not exist, it is created. If no directory is provided a temporary one is created and removed when the Python garbage collector removes the store.
 /// :type path: str or None

@@ -11,9 +11,9 @@ use std::io::Write;
 /// A serializer for RDF graph serialization formats.
 ///
 /// It currently supports the following formats:
-/// * [N-Triples](https://www.w3.org/TR/n-triples/) (`GraphFormat::NTriples`)
-/// * [Turtle](https://www.w3.org/TR/turtle/) (`GraphFormat::Turtle`)
-/// * [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) (`GraphFormat::RdfXml`)
+/// * [N-Triples](https://www.w3.org/TR/n-triples/) ([`GraphFormat::NTriples`](../enum.GraphFormat.html#variant.NTriples))
+/// * [Turtle](https://www.w3.org/TR/turtle/) ([`GraphFormat::Turtle`](../enum.GraphFormat.html#variant.Turtle))
+/// * [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) ([`GraphFormat::RdfXml`](../enum.GraphFormat.html#variant.RdfXml))
 ///
 /// ```
 /// use oxigraph::io::{GraphFormat, GraphSerializer};
@@ -37,11 +37,12 @@ pub struct GraphSerializer {
 }
 
 impl GraphSerializer {
+    /// Builds a serializer for the given format
     pub fn from_format(format: GraphFormat) -> Self {
         Self { format }
     }
 
-    /// Returns a `TripleWriter` allowing writing triples into the given `Write` implementation
+    /// Returns a `TripleWriter` allowing writing triples into the given [`Write`](https://doc.rust-lang.org/std/io/trait.Write.html) implementation
     pub fn triple_writer<W: Write>(&self, writer: W) -> Result<TripleWriter<W>, io::Error> {
         Ok(TripleWriter {
             formatter: match self.format {
@@ -54,9 +55,9 @@ impl GraphSerializer {
 }
 
 /// Allows writing triples.
-/// Could be built using a `GraphSerializer`.
+/// Could be built using a [`GraphSerializer`](struct.GraphSerializer.html).
 ///
-/// Warning: Do not forget to run the `finish` method to properly write the last bytes of the file.
+/// Warning: Do not forget to run the [`finish`](#method.finish) method to properly write the last bytes of the file.
 ///
 /// ```
 /// use oxigraph::io::{GraphFormat, GraphSerializer};
@@ -86,6 +87,7 @@ enum TripleWriterKind<W: Write> {
 }
 
 impl<W: Write> TripleWriter<W> {
+    /// Writes a triple
     pub fn write<'a>(&mut self, triple: impl Into<TripleRef<'a>>) -> Result<(), io::Error> {
         let triple = triple.into();
         match &mut self.formatter {
@@ -110,8 +112,8 @@ impl<W: Write> TripleWriter<W> {
 /// A serializer for RDF graph serialization formats.
 ///
 /// It currently supports the following formats:
-/// * [N-Quads](https://www.w3.org/TR/n-quads/) (`DatasetFormat::NQuads`)
-/// * [TriG](https://www.w3.org/TR/trig/) (`DatasetFormat::TriG`)
+/// * [N-Quads](https://www.w3.org/TR/n-quads/) ([`DatasetFormat::NQuads`](../enum.DatasetFormat.html#variant.NQuads))
+/// * [TriG](https://www.w3.org/TR/trig/) ([`DatasetFormat::TriG`](../enum.DatasetFormat.html#variant.TriG))
 ///
 /// ```
 /// use oxigraph::io::{DatasetFormat, DatasetSerializer};
@@ -136,11 +138,12 @@ pub struct DatasetSerializer {
 }
 
 impl DatasetSerializer {
+    /// Builds a serializer for the given format
     pub fn from_format(format: DatasetFormat) -> Self {
         Self { format }
     }
 
-    /// Returns a `QuadWriter` allowing writing triples into the given `Write` implementation
+    /// Returns a `QuadWriter` allowing writing triples into the given [`Write`](https://doc.rust-lang.org/std/io/trait.Write.html) implementation
     pub fn quad_writer<W: Write>(&self, writer: W) -> Result<QuadWriter<W>, io::Error> {
         Ok(QuadWriter {
             formatter: match self.format {
@@ -152,9 +155,9 @@ impl DatasetSerializer {
 }
 
 /// Allows writing triples.
-/// Could be built using a `DatasetSerializer`.
+/// Could be built using a [`DatasetSerializer`](struct.DatasetSerializer.html).
 ///
-/// Warning: Do not forget to run the `finish` method to properly write the last bytes of the file.
+/// Warning: Do not forget to run the [`finish`](#method.finish) method to properly write the last bytes of the file.
 ///
 /// ```
 /// use oxigraph::io::{DatasetFormat, DatasetSerializer};
@@ -184,6 +187,7 @@ enum QuadWriterKind<W: Write> {
 }
 
 impl<W: Write> QuadWriter<W> {
+    /// Writes a quad
     pub fn write<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> Result<(), io::Error> {
         let quad = quad.into();
         match &mut self.formatter {

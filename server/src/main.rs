@@ -22,7 +22,7 @@ use http_types::{
 };
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::{GraphName, NamedNode};
-use oxigraph::sparql::{Query, QueryOptions, QueryResult, QueryResultFormat, ServiceHandler};
+use oxigraph::sparql::{Query, QueryOptions, QueryResults, QueryResultsFormat, ServiceHandler};
 use oxigraph::RocksDbStore;
 use std::fmt;
 use std::io::{BufReader, Cursor};
@@ -183,7 +183,7 @@ async fn evaluate_sparql_query(
         let options = QueryOptions::default().with_service_handler(HttpService::default());
         let results = store.query(query, options)?;
         //TODO: stream
-        if let QueryResult::Graph(_) = results {
+        if let QueryResults::Graph(_) = results {
             let format = content_negotiation(
                 request,
                 &[
@@ -202,10 +202,10 @@ async fn evaluate_sparql_query(
             let format = content_negotiation(
                 request,
                 &[
-                    QueryResultFormat::Xml.media_type(),
-                    QueryResultFormat::Json.media_type(),
+                    QueryResultsFormat::Xml.media_type(),
+                    QueryResultsFormat::Json.media_type(),
                 ],
-                QueryResultFormat::from_media_type,
+                QueryResultsFormat::from_media_type,
             )?;
             let mut body = Vec::default();
             results.write(&mut body, format)?;
@@ -325,7 +325,7 @@ impl ServiceHandler for HttpService {
         &self,
         service_name: NamedNode,
         query: Query,
-    ) -> std::result::Result<QueryResult, HttpServiceError> {
+    ) -> std::result::Result<QueryResults, HttpServiceError> {
         let mut request = Request::new(
             Method::Post,
             Url::parse(service_name.as_str()).map_err(Error::from)?,
@@ -343,7 +343,7 @@ impl ServiceHandler for HttpService {
         let (content_type, data) = response?;
 
         let syntax = if let Some(content_type) = content_type {
-            QueryResultFormat::from_media_type(content_type.essence()).ok_or_else(|| {
+            QueryResultsFormat::from_media_type(content_type.essence()).ok_or_else(|| {
                 format_err!(
                     "Unexpected federated query result type from {}: {}",
                     service_name,
@@ -351,9 +351,9 @@ impl ServiceHandler for HttpService {
                 )
             })?
         } else {
-            QueryResultFormat::Xml
+            QueryResultsFormat::Xml
         };
-        Ok(QueryResult::read(Cursor::new(data), syntax).map_err(Error::from)?)
+        Ok(QueryResults::read(Cursor::new(data), syntax).map_err(Error::from)?)
     }
 }
 

@@ -12,19 +12,20 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 use quick_xml::Writer;
 use std::collections::BTreeMap;
+use std::io;
 use std::io::BufRead;
 use std::io::Write;
 use std::iter::empty;
 use std::rc::Rc;
 
-pub fn write_xml_results(results: QueryResult, sink: impl Write) -> Result<(), EvaluationError> {
+pub fn write_xml_results(results: QueryResults, sink: impl Write) -> Result<(), EvaluationError> {
     match results {
-        QueryResult::Boolean(value) => {
+        QueryResults::Boolean(value) => {
             write_boolean(value, sink).map_err(map_xml_error)?;
             Ok(())
         }
-        QueryResult::Solutions(solutions) => write_solutions(solutions, sink),
-        QueryResult::Graph(_) => Err(invalid_input_error(
+        QueryResults::Solutions(solutions) => write_solutions(solutions, sink),
+        QueryResults::Graph(_) => Err(invalid_input_error(
             "Graphs could not be formatted to SPARQL query results XML format",
         )
         .into()),
@@ -50,10 +51,7 @@ fn write_boolean(value: bool, sink: impl Write) -> Result<(), quick_xml::Error> 
     Ok(())
 }
 
-fn write_solutions(
-    solutions: QuerySolutionsIterator,
-    sink: impl Write,
-) -> Result<(), EvaluationError> {
+fn write_solutions(solutions: QuerySolutionIter, sink: impl Write) -> Result<(), EvaluationError> {
     let mut writer = Writer::new(sink);
     writer
         .write_event(Event::Decl(BytesDecl::new(b"1.0", None, None)))
@@ -148,7 +146,7 @@ fn write_solutions(
     Ok(())
 }
 
-pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResult, EvaluationError> {
+pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResults, io::Error> {
     enum State {
         Start,
         Sparql,
@@ -176,8 +174,7 @@ pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResult, E
                     return Err(invalid_data_error(format!(
                         "Unexpected namespace found in RDF/XML query result: {}",
                         reader.decode(ns).map_err(map_xml_error)?
-                    ))
-                    .into());
+                    )));
                 }
             }
             event
@@ -188,14 +185,14 @@ pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResult, E
                     if event.name() == b"sparql" {
                         state = State::Sparql;
                     } else {
-                        return Err(invalid_data_error(format!("Expecting <sparql> tag, found {}", reader.decode(event.name()).map_err(map_xml_error)?)).into());
+                        return Err(invalid_data_error(format!("Expecting <sparql> tag, found {}", reader.decode(event.name()).map_err(map_xml_error)?)));
                     }
                 }
                 State::Sparql => {
                     if event.name() == b"head" {
                         state = State::Head;
                     } else {
-                        return Err(invalid_data_error(format!("Expecting <head> tag, found {}", reader.decode(event.name()).map_err(map_xml_error)?)).into());
+                        return Err(invalid_data_error(format!("Expecting <head> tag, found {}", reader.decode(event.name()).map_err(map_xml_error)?)));
                     }
                 }
                 State::Head => {
@@ -208,7 +205,7 @@ pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResult, E
                     } else if event.name() == b"link" {
                         // no op
                     } else {
-                        return Err(invalid_data_error(format!("Expecting <variable> or <link> tag, found {}", reader.decode(event.name()).map_err(map_xml_error)?)).into());
+                        return Err(invalid_data_error(format!("Expecting <variable> or <link> tag, found {}", reader.decode(event.name()).map_err(map_xml_error)?)));
                     }
                 }
                 State::AfterHead => {
@@ -219,7 +216,7 @@ pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResult, E
                         for (i,var) in variables.iter().enumerate() {
                             mapping.insert(var.as_bytes().to_vec(), i);
                         }
-                        return Ok(QueryResult::Solutions(QuerySolutionsIterator::new(
+                        return Ok(QueryResults::Solutions(QuerySolutionIter::new(
                             Rc::new(variables.into_iter().map(Variable::new).collect()),
                             Box::new(ResultsIterator {
                                 reader,
@@ -229,17 +226,17 @@ pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResult, E
                             }),
                         )));
                     } else if event.name() != b"link" && event.name() != b"results" && event.name() != b"boolean" {
-                        return Err(invalid_data_error(format!("Expecting sparql tag, found {}", reader.decode(event.name()).map_err(map_xml_error)?)).into());
+                        return Err(invalid_data_error(format!("Expecting sparql tag, found {}", reader.decode(event.name()).map_err(map_xml_error)?)));
                     }
                 }
-                State::Boolean => return Err(invalid_data_error(format!("Unexpected tag inside of <boolean> tag: {}", reader.decode(event.name()).map_err(map_xml_error)?)).into())
+                State::Boolean => return Err(invalid_data_error(format!("Unexpected tag inside of <boolean> tag: {}", reader.decode(event.name()).map_err(map_xml_error)?)))
             },
             Event::Empty(event) => match state {
                 State::Sparql => {
                     if event.name() == b"head" {
                         state = State::AfterHead;
                     } else {
-                        return Err(invalid_data_error(format!("Expecting <head> tag, found {}", reader.decode(event.name()).map_err(map_xml_error)?)).into());
+                        return Err(invalid_data_error(format!("Expecting <head> tag, found {}", reader.decode(event.name()).map_err(map_xml_error)?)));
                     }
                 }
                 State::Head => {
@@ -252,42 +249,42 @@ pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResult, E
                     } else if event.name() == b"link" {
                         // no op
                     } else {
-                        return Err(invalid_data_error(format!("Expecting <variable> or <link> tag, found {}", reader.decode(event.name()).map_err(map_xml_error)?)).into());
+                        return Err(invalid_data_error(format!("Expecting <variable> or <link> tag, found {}", reader.decode(event.name()).map_err(map_xml_error)?)));
                     }
                 },
                 State::AfterHead => {
                     if event.name() == b"results" {
-                        return Ok(QueryResult::Solutions(QuerySolutionsIterator::new(
+                        return Ok(QueryResults::Solutions(QuerySolutionIter::new(
                             Rc::new(variables.into_iter().map(Variable::new).collect()),
                             Box::new(empty()),
                         )))
                     } else {
-                        return Err(invalid_data_error(format!("Unexpected autoclosing tag <{}>", reader.decode(event.name()).map_err(map_xml_error)?)).into())
+                        return Err(invalid_data_error(format!("Unexpected autoclosing tag <{}>", reader.decode(event.name()).map_err(map_xml_error)?)))
                     }
                 }
-                _ => return Err(invalid_data_error(format!("Unexpected autoclosing tag <{}>", reader.decode(event.name()).map_err(map_xml_error)?)).into())
+                _ => return Err(invalid_data_error(format!("Unexpected autoclosing tag <{}>", reader.decode(event.name()).map_err(map_xml_error)?)))
             },
             Event::Text(event) => {
                 let value = event.unescaped().map_err(map_xml_error)?;
                 return match state {
                     State::Boolean => {
                         return if value.as_ref() == b"true" {
-                            Ok(QueryResult::Boolean(true))
+                            Ok(QueryResults::Boolean(true))
                         } else if value.as_ref() == b"false" {
-                            Ok(QueryResult::Boolean(false))
+                            Ok(QueryResults::Boolean(false))
                         } else {
-                            Err(invalid_data_error(format!("Unexpected boolean value. Found {}", reader.decode(&value).map_err(map_xml_error)?)).into())
+                            Err(invalid_data_error(format!("Unexpected boolean value. Found {}", reader.decode(&value).map_err(map_xml_error)?)))
                         };
                     }
-                    _ => Err(invalid_data_error(format!("Unexpected textual value found: {}", reader.decode(&value).map_err(map_xml_error)?)).into())
+                    _ => Err(invalid_data_error(format!("Unexpected textual value found: {}", reader.decode(&value).map_err(map_xml_error)?)))
                 };
             },
             Event::End(_) => if let State::Head = state {
                 state = State::AfterHead;
             } else {
-                return Err(invalid_data_error("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag").into());
+                return Err(invalid_data_error("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag"));
             },
-            Event::Eof => return Err(invalid_data_error("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag").into()),
+            Event::Eof => return Err(invalid_data_error("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag")),
             _ => (),
         }
     }
@@ -521,10 +518,10 @@ fn build_literal(
     }
 }
 
-fn map_xml_error(error: quick_xml::Error) -> EvaluationError {
+fn map_xml_error(error: quick_xml::Error) -> io::Error {
     match error {
         quick_xml::Error::Io(error) => error,
+        quick_xml::Error::UnexpectedEof(_) => io::Error::new(io::ErrorKind::UnexpectedEof, error),
         _ => invalid_data_error(error),
     }
-    .into()
 }

@@ -1,4 +1,6 @@
 //! [SPARQL](https://www.w3.org/TR/sparql11-overview/) implementation.
+//!
+//! SPARQL evaluation is done from a store. See [`MemoryStore`](../store/memory/struct.MemoryStore.html#method.query) for an example.
 
 mod algebra;
 mod dataset;
@@ -16,11 +18,11 @@ use crate::sparql::algebra::QueryVariants;
 use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::EvaluationError;
 use crate::sparql::eval::SimpleEvaluator;
-pub use crate::sparql::model::QueryResult;
-pub use crate::sparql::model::QueryResultFormat;
+pub use crate::sparql::model::QueryResults;
+pub use crate::sparql::model::QueryResultsFormat;
 pub use crate::sparql::model::QuerySolution;
-pub use crate::sparql::model::QuerySolutionsIterator;
-pub use crate::sparql::model::QueryTriplesIterator;
+pub use crate::sparql::model::QuerySolutionIter;
+pub use crate::sparql::model::QueryTripleIter;
 pub use crate::sparql::model::Variable;
 pub use crate::sparql::parser::ParseError;
 pub use crate::sparql::parser::Query;
@@ -141,7 +143,7 @@ impl<S: ReadableEncodedStore + 'static> SimplePreparedQuery<S> {
     }
 
     /// Evaluates the query and returns its results
-    pub fn exec(&self) -> Result<QueryResult, EvaluationError> {
+    pub fn exec(&self) -> Result<QueryResults, EvaluationError> {
         match &self.0 {
             SimplePreparedQueryAction::Select {
                 plan,
@@ -201,7 +203,7 @@ impl QueryOptions {
 /// ```
 /// use oxigraph::MemoryStore;
 /// use oxigraph::model::*;
-/// use oxigraph::sparql::{QueryOptions, QueryResult, ServiceHandler, Query, EvaluationError};
+/// use oxigraph::sparql::{QueryOptions, QueryResults, ServiceHandler, Query, EvaluationError};
 ///
 /// #[derive(Default)]
 /// struct TestServiceHandler {
@@ -211,7 +213,7 @@ impl QueryOptions {
 /// impl ServiceHandler for TestServiceHandler {
 ///     type Error = EvaluationError;
 ///
-///     fn handle(&self,service_name: NamedNode, query: Query) -> Result<QueryResult,EvaluationError> {
+///     fn handle(&self,service_name: NamedNode, query: Query) -> Result<QueryResults,EvaluationError> {
 ///         if service_name == "http://example.com/service" {
 ///             self.store.query(query, QueryOptions::default())
 ///         } else {
@@ -225,7 +227,7 @@ impl QueryOptions {
 /// let ex = NamedNode::new("http://example.com")?;
 /// service.store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), None));
 ///
-/// if let QueryResult::Solutions(mut solutions) = store.query(
+/// if let QueryResults::Solutions(mut solutions) = store.query(
 ///     "SELECT ?s WHERE { SERVICE <http://example.com/service> { ?s ?p ?o } }",
 ///     QueryOptions::default().with_service_handler(service)
 /// )? {
@@ -237,7 +239,7 @@ pub trait ServiceHandler {
     type Error: Error + Send + Sync + 'static;
 
     /// Evaluates a [`Query`](struct.Query.html) against a given service identified by a [`NamedNode`](../model/struct.NamedNode.html).
-    fn handle(&self, service_name: NamedNode, query: Query) -> Result<QueryResult, Self::Error>;
+    fn handle(&self, service_name: NamedNode, query: Query) -> Result<QueryResults, Self::Error>;
 }
 
 struct EmptyServiceHandler;
@@ -245,7 +247,7 @@ struct EmptyServiceHandler;
 impl ServiceHandler for EmptyServiceHandler {
     type Error = EvaluationError;
 
-    fn handle(&self, _: NamedNode, _: Query) -> Result<QueryResult, EvaluationError> {
+    fn handle(&self, _: NamedNode, _: Query) -> Result<QueryResults, EvaluationError> {
         Err(EvaluationError::msg(
             "The SERVICE feature is not implemented",
         ))
@@ -263,7 +265,7 @@ impl<S: ServiceHandler> ServiceHandler for ErrorConversionServiceHandler<S> {
         &self,
         service_name: NamedNode,
         query: Query,
-    ) -> Result<QueryResult, EvaluationError> {
+    ) -> Result<QueryResults, EvaluationError> {
         self.handler
             .handle(service_name, query)
             .map_err(EvaluationError::wrap)

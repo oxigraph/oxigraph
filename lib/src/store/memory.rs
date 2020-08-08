@@ -3,7 +3,7 @@
 use crate::error::{invalid_input_error, UnwrapInfallible};
 use crate::io::{DatasetFormat, DatasetParser, GraphFormat, GraphParser};
 use crate::model::*;
-use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResult, SimplePreparedQuery};
+use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResults, SimplePreparedQuery};
 use crate::store::numeric_encoder::{
     Decoder, ReadEncoder, StrContainer, StrEncodingAware, StrId, StrLookup, WriteEncoder,
 };
@@ -23,14 +23,14 @@ use std::vec::IntoIter;
 use std::{fmt, io};
 
 /// In-memory store.
-/// It encodes a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) and allows to query and update it using SPARQL.
+/// It encodes a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) and allows to query it using SPARQL.
 /// It is cheap to build using the [`MemoryStore::new()`](#method.new) method.
 ///
 /// Usage example:
 /// ```
 /// use oxigraph::MemoryStore;
 /// use oxigraph::model::*;
-/// use oxigraph::sparql::{QueryResult, QueryOptions};
+/// use oxigraph::sparql::{QueryResults, QueryOptions};
 ///
 /// let store = MemoryStore::new();
 ///
@@ -44,7 +44,7 @@ use std::{fmt, io};
 /// assert_eq!(vec![quad], results);
 ///
 /// // SPARQL query
-/// if let QueryResult::Solutions(mut solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
+/// if let QueryResults::Solutions(mut solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
 ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 /// }
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -94,7 +94,7 @@ impl MemoryStore {
     /// ```
     /// use oxigraph::MemoryStore;
     /// use oxigraph::model::*;
-    /// use oxigraph::sparql::{QueryResult, QueryOptions};
+    /// use oxigraph::sparql::{QueryResults, QueryOptions};
     ///
     /// let store = MemoryStore::new();
     ///
@@ -103,7 +103,7 @@ impl MemoryStore {
     /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), None));
     ///
     /// // SPARQL query
-    /// if let QueryResult::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
+    /// if let QueryResults::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
     ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
     /// }
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -112,7 +112,7 @@ impl MemoryStore {
         &self,
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
         options: QueryOptions,
-    ) -> Result<QueryResult, EvaluationError> {
+    ) -> Result<QueryResults, EvaluationError> {
         self.prepare_query(query, options)?.exec()
     }
 
@@ -123,7 +123,7 @@ impl MemoryStore {
     /// ```
     /// use oxigraph::MemoryStore;
     /// use oxigraph::model::*;
-    /// use oxigraph::sparql::{QueryResult, QueryOptions};
+    /// use oxigraph::sparql::{QueryResults, QueryOptions};
     ///
     /// let store = MemoryStore::new();
     ///
@@ -133,7 +133,7 @@ impl MemoryStore {
     ///
     /// // SPARQL query
     /// let prepared_query = store.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
-    /// if let QueryResult::Solutions(mut solutions) = prepared_query.exec()? {
+    /// if let QueryResults::Solutions(mut solutions) = prepared_query.exec()? {
     ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
     /// }
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -164,8 +164,8 @@ impl MemoryStore {
     /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
     /// store.insert(quad.clone());
     ///
-    /// // quad filter
-    /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
+    /// // quad filter by object
+    /// let results: Vec<Quad> = store.quads_for_pattern(None, None, Some((&ex).into()), None).collect();
     /// assert_eq!(vec![quad], results);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -241,13 +241,11 @@ impl MemoryStore {
     /// let ex = NamedNode::new("http://example.com")?;
     /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
     ///
-    /// // transaction
     /// store.transaction(|transaction| {
     ///     transaction.insert(quad.clone());
     ///     Ok(()) as Result<(),Infallible>
     /// })?;
     ///
-    /// // quad filter
     /// assert!(store.contains(&quad));
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -289,10 +287,9 @@ impl MemoryStore {
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
     /// store.load_graph(file.as_ref(), GraphFormat::NTriples, &GraphName::DefaultGraph, None)?;
     ///
-    /// // quad filter
-    /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
-    /// let ex = NamedNode::new("http://example.com")?;
-    /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results);
+    /// // we inspect the store contents
+    /// let ex = NamedNodeRef::new("http://example.com").unwrap();
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, None)));
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     ///
@@ -328,10 +325,9 @@ impl MemoryStore {
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
     /// store.load_dataset(file.as_ref(), DatasetFormat::NQuads, None)?;
     ///
-    /// // quad filter
-    /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
-    /// let ex = NamedNode::new("http://example.com")?;
-    /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), Some(ex.into()))], results);
+    /// // we inspect the store contents
+    /// let ex = NamedNodeRef::new("http://example.com").unwrap();
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex)));
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     ///
@@ -396,9 +392,6 @@ impl MemoryStore {
     /// assert_eq!(file, buffer.as_slice());
     /// # std::io::Result::Ok(())
     /// ```
-    ///
-    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) or [`UnexpectedEof`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.UnexpectedEof) error kinds.
     pub fn dump_graph<'a>(
         &self,
         writer: impl Write,
@@ -413,7 +406,7 @@ impl MemoryStore {
         )
     }
 
-    /// Dumps the store dataset into a file.
+    /// Dumps the store into a file.
     ///
     /// Usage example:
     /// ```
@@ -430,9 +423,6 @@ impl MemoryStore {
     /// assert_eq!(file, buffer.as_slice());
     /// # std::io::Result::Ok(())
     /// ```
-    ///
-    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) or [`UnexpectedEof`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.UnexpectedEof) error kinds.
     pub fn dump_dataset(&self, writer: impl Write, format: DatasetFormat) -> Result<(), io::Error> {
         dump_dataset(
             self.quads_for_pattern(None, None, None, None).map(Ok),
@@ -1087,7 +1077,7 @@ pub struct MemoryPreparedQuery(SimplePreparedQuery<MemoryStore>);
 
 impl MemoryPreparedQuery {
     /// Evaluates the query and returns its results
-    pub fn exec(&self) -> Result<QueryResult, EvaluationError> {
+    pub fn exec(&self) -> Result<QueryResults, EvaluationError> {
         self.0.exec()
     }
 }
@@ -1119,16 +1109,18 @@ impl MemoryTransaction {
     ///     transaction.load_graph(file.as_ref(), GraphFormat::NTriples, &GraphName::DefaultGraph, None)
     /// })?;
     ///
-    /// // quad filter
-    /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
-    /// let ex = NamedNode::new("http://example.com").unwrap();
-    /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), None)], results);
+    /// // we inspect the store content
+    /// let ex = NamedNodeRef::new("http://example.com").unwrap();
+    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone())));
     /// # Result::<_, oxigraph::sparql::EvaluationError>::Ok(())
     /// ```
     ///
     /// If the file parsing fails in the middle of the file, the triples read before are still
     /// considered by the transaction. Rollback the transaction by making the transaction closure
     /// return an error if you don't want that.
+    ///
+    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) or [`UnexpectedEof`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.UnexpectedEof) error kinds.
     pub fn load_graph<'a>(
         &mut self,
         reader: impl BufRead,
@@ -1164,16 +1156,18 @@ impl MemoryTransaction {
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
     /// store.load_dataset(file.as_ref(), DatasetFormat::NQuads, None)?;
     ///
-    /// // quad filter
-    /// let results: Vec<Quad> = store.quads_for_pattern(None, None, None, None).collect();
-    /// let ex = NamedNode::new("http://example.com").unwrap();
-    /// assert_eq!(vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), Some(ex.into()))], results);
+    /// // we inspect the store content
+    /// let ex = NamedNodeRef::new("http://example.com").unwrap();
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex)));
     /// # Result::<_, oxigraph::sparql::EvaluationError>::Ok(())
     /// ```
     ///
     /// If the file parsing fails in the middle of the file, the quads read before are still
     /// considered by the transaction. Rollback the transaction by making the transaction closure
     /// return an error if you don't want that.
+    ///
+    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) or [`UnexpectedEof`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.UnexpectedEof) error kinds.
     pub fn load_dataset(
         &mut self,
         reader: impl BufRead,

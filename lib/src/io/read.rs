@@ -14,9 +14,9 @@ use std::io::BufRead;
 /// Parsers for RDF graph serialization formats.
 ///
 /// It currently supports the following formats:
-/// * [N-Triples](https://www.w3.org/TR/n-triples/) (`GraphFormat::NTriples`)
-/// * [Turtle](https://www.w3.org/TR/turtle/) (`GraphFormat::Turtle`)
-/// * [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) (`GraphFormat::RdfXml`)
+/// * [N-Triples](https://www.w3.org/TR/n-triples/) ([`GraphFormat::NTriples`](../enum.GraphFormat.html#variant.NTriples))
+/// * [Turtle](https://www.w3.org/TR/turtle/) ([`GraphFormat::Turtle`](../enum.GraphFormat.html#variant.Turtle))
+/// * [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) ([`GraphFormat::RdfXml`](../enum.GraphFormat.html#variant.RdfXml))
 ///
 /// ```
 /// use oxigraph::io::{GraphFormat, GraphParser};
@@ -37,6 +37,7 @@ pub struct GraphParser {
 }
 
 impl GraphParser {
+    /// Builds a parser for the given format
     pub fn from_format(format: GraphFormat) -> Self {
         Self {
             format,
@@ -64,7 +65,7 @@ impl GraphParser {
         Ok(self)
     }
 
-    /// Executes the parsing itself
+    /// Executes the parsing itself on a [`BufRead`](https://doc.rust-lang.org/std/io/trait.BufRead.html) implementation and returns an iterator of triples
     pub fn read_triples<R: BufRead>(&self, reader: R) -> Result<TripleReader<R>, io::Error> {
         Ok(TripleReader {
             mapper: RioMapper::default(),
@@ -82,7 +83,7 @@ impl GraphParser {
     }
 }
 
-/// Allows reading triples.
+/// An iterator yielding read triples.
 /// Could be built using a [`GraphParser`](struct.GraphParser.html).
 ///
 /// ```
@@ -162,8 +163,8 @@ impl<R: BufRead> TripleReader<R> {
 /// A parser for RDF dataset serialization formats.
 ///
 /// It currently supports the following formats:
-/// * [N-Quads](https://www.w3.org/TR/n-quads/) (`DatasetFormat::NQuads`)
-/// * [TriG](https://www.w3.org/TR/trig/) (`DatasetFormat::TriG`)
+/// * [N-Quads](https://www.w3.org/TR/n-quads/) ([`DatasetFormat::NQuads`](../enum.DatasetFormat.html#variant.NQuads))
+/// * [TriG](https://www.w3.org/TR/trig/) ([`DatasetFormat::TriG`](../enum.DatasetFormat.html#variant.TriG))
 ///
 /// ```
 /// use oxigraph::io::{DatasetFormat, DatasetParser};
@@ -184,6 +185,7 @@ pub struct DatasetParser {
 }
 
 impl DatasetParser {
+    /// Builds a parser for the given format
     pub fn from_format(format: DatasetFormat) -> Self {
         Self {
             format,
@@ -211,7 +213,7 @@ impl DatasetParser {
         Ok(self)
     }
 
-    /// Executes the parsing itself
+    /// Executes the parsing itself on a [`BufRead`](https://doc.rust-lang.org/std/io/trait.BufRead.html) implementation and returns an iterator of quads
     pub fn read_quads<R: BufRead>(&self, reader: R) -> Result<QuadReader<R>, io::Error> {
         Ok(QuadReader {
             mapper: RioMapper::default(),
@@ -226,7 +228,7 @@ impl DatasetParser {
     }
 }
 
-/// Allows reading quads.
+/// An iterator yielding read quads.
 /// Could be built using a [`DatasetParser`](struct.DatasetParser.html).
 ///
 /// ```

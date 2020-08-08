@@ -7,16 +7,16 @@ use crate::sparql::model::*;
 use std::io::Write;
 
 pub fn write_json_results(
-    results: QueryResult,
+    results: QueryResults,
     mut sink: impl Write,
 ) -> Result<(), EvaluationError> {
     match results {
-        QueryResult::Boolean(value) => {
+        QueryResults::Boolean(value) => {
             sink.write_all(b"{\"head\":{},\"boolean\":")?;
             sink.write_all(if value { b"true" } else { b"false" })?;
             sink.write_all(b"}")?;
         }
-        QueryResult::Solutions(solutions) => {
+        QueryResults::Solutions(solutions) => {
             sink.write_all(b"{\"head\":{\"vars\":[")?;
             let mut start_vars = true;
             for variable in solutions.variables() {
@@ -75,7 +75,7 @@ pub fn write_json_results(
             }
             sink.write_all(b"]}}")?;
         }
-        QueryResult::Graph(_) => {
+        QueryResults::Graph(_) => {
             return Err(invalid_input_error(
                 "Graphs could not be formatted to SPARQL query results XML format",
             )

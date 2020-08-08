@@ -82,8 +82,7 @@ impl Literal {
     /// is valid [BCP47](https://tools.ietf.org/html/bcp47) language tag,
     /// and is lowercase.
     ///
-    /// Except if you really know what you do,
-    /// you should use [`new_language_tagged_literal`](#method.new_language_tagged_literal).
+    /// [`new_language_tagged_literal`](#method.new_language_tagged_literal) is a safe version of this constructor and should be used for untrusted data.
     #[inline]
     pub fn new_language_tagged_literal_unchecked(
         value: impl Into<String>,
@@ -462,8 +461,7 @@ impl<'a> LiteralRef<'a> {
     /// is valid [BCP47](https://tools.ietf.org/html/bcp47) language tag,
     /// and is lowercase.
     ///
-    /// Except if you really know what you do,
-    /// you should use [`new_language_tagged_literal`](#method.new_language_tagged_literal).
+    /// [`new_language_tagged_literal`](#method.new_language_tagged_literal) is a safe version of this constructor and should be used for untrusted data.
     #[inline]
     pub fn new_language_tagged_literal_unchecked(value: &'a str, language: &'a str) -> Self {
         LiteralRef(LiteralRefContent::LanguageTaggedString { value, language })

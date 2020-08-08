@@ -1,7 +1,7 @@
 use crate::model::*;
 use oxigraph::model::*;
 use oxigraph::sparql::{
-    EvaluationError, QueryResult, QuerySolution, QuerySolutionsIterator, QueryTriplesIterator,
+    EvaluationError, QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter,
 };
 use pyo3::exceptions::{IOError, RuntimeError, SyntaxError, TypeError, ValueError};
 use pyo3::prelude::*;
@@ -47,11 +47,11 @@ pub fn extract_quads_pattern(
     ))
 }
 
-pub fn query_results_to_python(py: Python<'_>, results: QueryResult) -> PyResult<PyObject> {
+pub fn query_results_to_python(py: Python<'_>, results: QueryResults) -> PyResult<PyObject> {
     Ok(match results {
-        QueryResult::Solutions(inner) => QuerySolutionIter { inner }.into_py(py),
-        QueryResult::Graph(inner) => TripleResultIter { inner }.into_py(py),
-        QueryResult::Boolean(b) => b.into_py(py),
+        QueryResults::Solutions(inner) => PyQuerySolutionIter { inner }.into_py(py),
+        QueryResults::Graph(inner) => PyQueryTripleIter { inner }.into_py(py),
+        QueryResults::Boolean(b) => b.into_py(py),
     })
 }
 
@@ -102,13 +102,13 @@ impl PyMappingProtocol for PyQuerySolution {
     }
 }
 
-#[pyclass(unsendable)]
-pub struct QuerySolutionIter {
-    inner: QuerySolutionsIterator,
+#[pyclass(unsendable, name = QuerySolutionIter)]
+pub struct PyQuerySolutionIter {
+    inner: QuerySolutionIter,
 }
 
 #[pyproto]
-impl PyIterProtocol for QuerySolutionIter {
+impl PyIterProtocol for PyQuerySolutionIter {
     fn __iter__(slf: PyRefMut<Self>) -> Py<Self> {
         slf.into()
     }
@@ -123,13 +123,13 @@ impl PyIterProtocol for QuerySolutionIter {
     }
 }
 
-#[pyclass(unsendable)]
-pub struct TripleResultIter {
-    inner: QueryTriplesIterator,
+#[pyclass(unsendable, name = QueryTripleIter)]
+pub struct PyQueryTripleIter {
+    inner: QueryTripleIter,
 }
 
 #[pyproto]
-impl PyIterProtocol for TripleResultIter {
+impl PyIterProtocol for PyQueryTripleIter {
     fn __iter__(slf: PyRefMut<Self>) -> Py<Self> {
         slf.into()
     }

@@ -1,7 +1,4 @@
-//! RDF quads storage implementations.
-//!
-//! They encode a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
-//! and allow querying and updating them using SPARQL.
+//! RDF [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) storage implementations.
 
 #[cfg(any(feature = "rocksdb", feature = "sled"))]
 mod binary_encoder;

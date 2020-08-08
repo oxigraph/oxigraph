@@ -7,9 +7,9 @@ use std::str;
 
 /// An owned RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 ///
-/// The common way to create a new blank node is to use the `BlankNode::default` trait method.
+/// The common way to create a new blank node is to use the [`BlankNode::default`](#impl-Default) function.
 ///
-/// It is also possible to create a blank node from a blank node identifier using the `BlankNode::new` method.
+/// It is also possible to create a blank node from a blank node identifier using the [`BlankNode::new`](#method.new) function.
 /// The blank node identifier must be valid according to N-Triples, Turtle and SPARQL grammars.
 ///
 /// The default string formatter is returning a N-Triples, Turtle and SPARQL compatible representation:
@@ -36,8 +36,8 @@ impl BlankNode {
     ///
     /// The blank node identifier must be valid according to N-Triples, Turtle and SPARQL grammars.
     ///
-    /// In most cases, it is much more convenient to create a blank node using `BlankNode::default()`.
-    /// `BlankNode::default()` creates a random ID that could be easily inlined by Oxigraph stores.
+    /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default()`](#impl-Default)
+    ///that creates a random ID that could be easily inlined by Oxigraph stores.
     pub fn new(id: impl Into<String>) -> Result<Self, BlankNodeIdParseError> {
         let id = id.into();
         validate_blank_node_identifier(&id)?;
@@ -49,7 +49,7 @@ impl BlankNode {
     /// It is the caller's responsibility to ensure that `id` is a valid blank node identifier
     /// according to N-Triples, Turtle and SPARQL grammars.
     ///
-    /// Except if you really know what you do, you should use [`new`](#method.new).
+    /// [`new`](#method.new) is a safe version of this constructor and should be used for untrusted data.
     pub fn new_unchecked(id: impl Into<String>) -> Self {
         let id = id.into();
         if let Some(numerical_id) = to_integer_id(&id) {
@@ -61,7 +61,7 @@ impl BlankNode {
 
     /// Creates a blank node from a unique numerical id
     ///
-    /// In most cases, it is much more convenient to create a blank node using `BlankNode::default()`.
+    /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default()`](#impl-Default).
     pub fn new_from_unique_id(id: impl Into<u128>) -> Self {
         let id = id.into();
         Self(BlankNodeContent::Anonymous {
@@ -117,9 +117,9 @@ impl Default for BlankNode {
 
 /// A borrowed RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 ///
-/// The common way to create a new blank node is to use the `BlankNode::default` trait method.
+/// The common way to create a new blank node is to use the [`BlankNode::default`](#impl-Default) trait method.
 ///
-/// It is also possible to create a blank node from a blank node identifier using the `BlankNodeRef::new` method.
+/// It is also possible to create a blank node from a blank node identifier using the [`BlankNodeRef::new`](#method.new) function.
 /// The blank node identifier must be valid according to N-Triples, Turtle and SPARQL grammars.
 ///
 /// The default string formatter is returning a N-Triples, Turtle and SPARQL compatible representation:
@@ -146,8 +146,8 @@ impl<'a> BlankNodeRef<'a> {
     ///
     /// The blank node identifier must be valid according to N-Triples, Turtle and SPARQL grammars.
     ///
-    /// In most cases, it is much more convenient to create a blank node using `BlankNode::default()`.
-    /// `BlankNode::default()` creates a random ID that could be easily inlined by Oxigraph stores.
+    /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default()`](#impl-Default)
+    /// that creates a random ID that could be easily inlined by Oxigraph stores.
     pub fn new(id: &'a str) -> Result<Self, BlankNodeIdParseError> {
         validate_blank_node_identifier(id)?;
         Ok(Self::new_unchecked(id))
@@ -158,7 +158,7 @@ impl<'a> BlankNodeRef<'a> {
     /// It is the caller's responsibility to ensure that `id` is a valid blank node identifier
     /// according to N-Triples, Turtle and SPARQL grammars.
     ///
-    /// Except if you really know what you do, you should use [`new`](#method.new).
+    /// [`new`](#method.new) is a safe version of this constructor and should be used for untrusted data.
     pub fn new_unchecked(id: &'a str) -> Self {
         if let Some(numerical_id) = to_integer_id(id) {
             Self(BlankNodeRefContent::Anonymous {

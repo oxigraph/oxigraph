@@ -7,9 +7,9 @@ Oxigraph for JavaScript
 
 This package provides a JavaScript API on top of Oxigraph compiled with WebAssembly.
 
-Oxigraph is a work in progress graph database written in Rust implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
+Oxigraph is a graph database written in Rust implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
 
-It is a work in progress and currently offers a simple in-memory store with [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/) capabilities.
+Oxigraph or JavaScript is a work in progress and currently offers a simple in-memory store with [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/) capabilities.
 
 The store is also able to load RDF serialized in [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/) and [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/).
 
@@ -163,4 +163,4 @@ The Oxigraph bindings are written in Rust using [the Rust WASM toolkit](https://
 
 The [The Rust Wasm Book](https://rustwasm.github.io/docs/book/) is a great tutorial to get started.
 
-To build the JavaScript bindings, just run `wasm-pack build`, to run the tests of the JS bindings written in JS just do a usual `npm test`.
+To build the JavaScript bindings, run `wasm-pack build`, to run the tests of the JS bindings written in JS run `npm test`.

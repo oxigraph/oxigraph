@@ -4,7 +4,7 @@ use crate::utils::to_err;
 use js_sys::{Array, Map};
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::*;
-use oxigraph::sparql::{QueryOptions, QueryResult};
+use oxigraph::sparql::{QueryOptions, QueryResults};
 use oxigraph::MemoryStore;
 use std::convert::{TryFrom, TryInto};
 use std::io::Cursor;
@@ -110,7 +110,7 @@ impl JsMemoryStore {
             .query(query, QueryOptions::default())
             .map_err(to_err)?;
         let output = match results {
-            QueryResult::Solutions(solutions) => {
+            QueryResults::Solutions(solutions) => {
                 let results = Array::new();
                 for solution in solutions {
                     let solution = solution.map_err(to_err)?;
@@ -125,14 +125,14 @@ impl JsMemoryStore {
                 }
                 results.into()
             }
-            QueryResult::Graph(quads) => {
+            QueryResults::Graph(quads) => {
                 let results = Array::new();
                 for quad in quads {
                     results.push(&JsQuad::from(quad.map_err(to_err)?.in_graph(None)).into());
                 }
                 results.into()
             }
-            QueryResult::Boolean(b) => b.into(),
+            QueryResults::Boolean(b) => b.into(),
         };
         Ok(output)
     }

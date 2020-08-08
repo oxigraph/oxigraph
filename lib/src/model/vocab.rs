@@ -1,7 +1,7 @@
 //! Provides ready to use [`NamedNodeRef`s](struct.NamedNodeRef.html) for basic RDF vocabularies
 
 pub mod rdf {
-    //! [RDF 1.1](https://www.w3.org/TR/rdf11-concepts/) vocabulary
+    //! [RDF](https://www.w3.org/TR/rdf11-concepts/) vocabulary
     use crate::model::named_node::NamedNodeRef;
 
     /// The class of containers of alternatives.

@@ -1,4 +1,4 @@
-//! Oxigraph is a work in progress graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
+//! Oxigraph is a graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
 //!
 //! Its goal is to provide a compliant, safe and fast graph database.
 //!
@@ -19,7 +19,7 @@
 //! ```
 //! use oxigraph::MemoryStore;
 //! use oxigraph::model::*;
-//! use oxigraph::sparql::{QueryOptions, QueryResult};
+//! use oxigraph::sparql::{QueryOptions, QueryResults};
 //!
 //! let store = MemoryStore::new();
 //!
@@ -33,7 +33,7 @@
 //! assert_eq!(vec![quad], results);
 //!
 //! // SPARQL query
-//! if let QueryResult::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
+//! if let QueryResults::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
 //!     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 //! }
 //! # Result::<_,Box<dyn std::error::Error>>::Ok(())

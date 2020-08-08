@@ -6,31 +6,31 @@ use crate::sparql::error::EvaluationError;
 use crate::sparql::json_results::write_json_results;
 use crate::sparql::xml_results::{read_xml_results, write_xml_results};
 use rand::random;
-use std::fmt;
 use std::io::{BufRead, Write};
 use std::rc::Rc;
+use std::{fmt, io};
 
 /// Results of a [SPARQL query](https://www.w3.org/TR/sparql11-query/)
-pub enum QueryResult {
+pub enum QueryResults {
     /// Results of a [SELECT](https://www.w3.org/TR/sparql11-query/#select) query
-    Solutions(QuerySolutionsIterator),
+    Solutions(QuerySolutionIter),
     /// Result of a [ASK](https://www.w3.org/TR/sparql11-query/#ask) query
     Boolean(bool),
     /// Results of a [CONSTRUCT](https://www.w3.org/TR/sparql11-query/#construct) or [DESCRIBE](https://www.w3.org/TR/sparql11-query/#describe) query
-    Graph(QueryTriplesIterator),
+    Graph(QueryTripleIter),
 }
 
-impl QueryResult {
+impl QueryResults {
+    /// Reads a SPARQL query results serialization
     pub fn read(
         reader: impl BufRead + 'static,
-        format: QueryResultFormat,
-    ) -> Result<Self, EvaluationError> {
+        format: QueryResultsFormat,
+    ) -> Result<Self, io::Error> {
         match format {
-            QueryResultFormat::Xml => read_xml_results(reader),
-            QueryResultFormat::Json => Err(invalid_input_error(
+            QueryResultsFormat::Xml => read_xml_results(reader),
+            QueryResultsFormat::Json => Err(invalid_input_error(
                 "JSON SPARQL results format parsing has not been implemented yet",
-            )
-            .into()), //TODO: implement
+            )), //TODO: implement
         }
     }
 
@@ -41,25 +41,25 @@ impl QueryResult {
     /// ```
     /// use oxigraph::MemoryStore;
     /// use oxigraph::model::*;
-    /// use oxigraph::sparql::{QueryOptions, QueryResultFormat};
+    /// use oxigraph::sparql::{QueryOptions, QueryResultsFormat};
     ///
     /// let store = MemoryStore::new();
     /// let ex = NamedNode::new("http://example.com")?;
     /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), None));
     ///
     /// let mut results = Vec::new();
-    /// store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?.write(&mut results, QueryResultFormat::Json)?;
+    /// store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?.write(&mut results, QueryResultsFormat::Json)?;
     /// assert_eq!(results, "{\"head\":{\"vars\":[\"s\"]},\"results\":{\"bindings\":[{\"s\":{\"type\":\"uri\",\"value\":\"http://example.com\"}}]}}".as_bytes());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn write(
         self,
         writer: impl Write,
-        format: QueryResultFormat,
+        format: QueryResultsFormat,
     ) -> Result<(), EvaluationError> {
         match format {
-            QueryResultFormat::Xml => write_xml_results(self, writer),
-            QueryResultFormat::Json => write_json_results(self, writer),
+            QueryResultsFormat::Xml => write_xml_results(self, writer),
+            QueryResultsFormat::Json => write_json_results(self, writer),
         }
     }
 
@@ -89,7 +89,7 @@ impl QueryResult {
         write: impl Write,
         format: GraphFormat,
     ) -> Result<(), EvaluationError> {
-        if let QueryResult::Graph(triples) = self {
+        if let QueryResults::Graph(triples) = self {
             let mut writer = GraphSerializer::from_format(format).triple_writer(write)?;
             for triple in triples {
                 writer.write(&triple?)?;
@@ -105,89 +105,89 @@ impl QueryResult {
     }
 }
 
-impl From<QuerySolutionsIterator> for QueryResult {
+impl From<QuerySolutionIter> for QueryResults {
     #[inline]
-    fn from(value: QuerySolutionsIterator) -> Self {
-        QueryResult::Solutions(value)
+    fn from(value: QuerySolutionIter) -> Self {
+        QueryResults::Solutions(value)
     }
 }
 
-/// [SPARQL query](https://www.w3.org/TR/sparql11-query/) serialization formats
+/// [SPARQL query](https://www.w3.org/TR/sparql11-query/) results serialization formats
 ///
 /// This enumeration is non exhaustive. New formats like CSV will be added in the future.
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 #[non_exhaustive]
-pub enum QueryResultFormat {
+pub enum QueryResultsFormat {
     /// [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/)
     Xml,
     /// [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/)
     Json,
 }
 
-impl QueryResultFormat {
+impl QueryResultsFormat {
     /// The format canonical IRI according to the [Unique URIs for file formats registry](https://www.w3.org/ns/formats/).
     ///
     /// ```
-    /// use oxigraph::sparql::QueryResultFormat;
+    /// use oxigraph::sparql::QueryResultsFormat;
     ///
-    /// assert_eq!(QueryResultFormat::Json.iri(), "http://www.w3.org/ns/formats/SPARQL_Results_JSON")
+    /// assert_eq!(QueryResultsFormat::Json.iri(), "http://www.w3.org/ns/formats/SPARQL_Results_JSON")
     /// ```
     #[inline]
     pub fn iri(self) -> &'static str {
         match self {
-            QueryResultFormat::Xml => "http://www.w3.org/ns/formats/SPARQL_Results_XML",
-            QueryResultFormat::Json => "http://www.w3.org/ns/formats/SPARQL_Results_JSON",
+            QueryResultsFormat::Xml => "http://www.w3.org/ns/formats/SPARQL_Results_XML",
+            QueryResultsFormat::Json => "http://www.w3.org/ns/formats/SPARQL_Results_JSON",
         }
     }
     /// The format [IANA media type](https://tools.ietf.org/html/rfc2046).
     ///
     /// ```
-    /// use oxigraph::sparql::QueryResultFormat;
+    /// use oxigraph::sparql::QueryResultsFormat;
     ///
-    /// assert_eq!(QueryResultFormat::Json.media_type(), "application/sparql-results+json")
+    /// assert_eq!(QueryResultsFormat::Json.media_type(), "application/sparql-results+json")
     /// ```
     #[inline]
     pub fn media_type(self) -> &'static str {
         match self {
-            QueryResultFormat::Xml => "application/sparql-results+xml",
-            QueryResultFormat::Json => "application/sparql-results+json",
+            QueryResultsFormat::Xml => "application/sparql-results+xml",
+            QueryResultsFormat::Json => "application/sparql-results+json",
         }
     }
 
     /// The format [IANA-registered](https://tools.ietf.org/html/rfc2046) file extension.
     ///
     /// ```
-    /// use oxigraph::sparql::QueryResultFormat;
+    /// use oxigraph::sparql::QueryResultsFormat;
     ///
-    /// assert_eq!(QueryResultFormat::Json.file_extension(), "srj")
+    /// assert_eq!(QueryResultsFormat::Json.file_extension(), "srj")
     /// ```
     #[inline]
     pub fn file_extension(self) -> &'static str {
         match self {
-            QueryResultFormat::Xml => "srx",
-            QueryResultFormat::Json => "srj",
+            QueryResultsFormat::Xml => "srx",
+            QueryResultsFormat::Json => "srj",
         }
     }
 
     /// Looks for a known format from a media type.
     ///
     /// It supports some media type aliases.
-    /// For example "application/xml" is going to return `QueryResultFormat::Xml` even if it is not its canonical media type.
+    /// For example "application/xml" is going to return `Xml` even if it is not its canonical media type.
     ///
     /// Example:
     /// ```
-    /// use oxigraph::sparql::QueryResultFormat;
+    /// use oxigraph::sparql::QueryResultsFormat;
     ///
-    /// assert_eq!(QueryResultFormat::from_media_type("application/sparql-results+json; charset=utf-8"), Some(QueryResultFormat::Json))
+    /// assert_eq!(QueryResultsFormat::from_media_type("application/sparql-results+json; charset=utf-8"), Some(QueryResultsFormat::Json))
     /// ```
     pub fn from_media_type(media_type: &str) -> Option<Self> {
         if let Some(base_type) = media_type.split(';').next() {
             match base_type {
                 "application/sparql-results+xml" | "application/xml" | "text/xml" => {
-                    Some(QueryResultFormat::Xml)
+                    Some(QueryResultsFormat::Xml)
                 }
                 "application/sparql-results+json" | "application/json" | "text/json" => {
-                    Some(QueryResultFormat::Json)
+                    Some(QueryResultsFormat::Json)
                 }
                 _ => None,
             }
@@ -197,26 +197,26 @@ impl QueryResultFormat {
     }
 }
 
-/// An iterator over query result solutions
+/// An iterator over [`QuerySolution`s](struct.QuerySolution.html)
 ///
 /// ```
 /// use oxigraph::MemoryStore;
-/// use oxigraph::sparql::{QueryResult, QueryOptions};
+/// use oxigraph::sparql::{QueryResults, QueryOptions};
 ///
 /// let store = MemoryStore::new();
-/// if let QueryResult::Solutions(solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
+/// if let QueryResults::Solutions(solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
 ///     for solution in solutions {
 ///         println!("{:?}", solution?.get("s"));
 ///     }
 /// }
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-pub struct QuerySolutionsIterator {
+pub struct QuerySolutionIter {
     variables: Rc<Vec<Variable>>,
     iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>, EvaluationError>>>,
 }
 
-impl QuerySolutionsIterator {
+impl QuerySolutionIter {
     pub fn new(
         variables: Rc<Vec<Variable>>,
         iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>, EvaluationError>>>,
@@ -228,10 +228,10 @@ impl QuerySolutionsIterator {
     ///
     /// ```
     /// use oxigraph::MemoryStore;
-    /// use oxigraph::sparql::{QueryResult, QueryOptions, Variable};
+    /// use oxigraph::sparql::{QueryResults, QueryOptions, Variable};
     ///
     /// let store = MemoryStore::new();
-    /// if let QueryResult::Solutions(solutions) = store.query("SELECT ?s ?o WHERE { ?s ?p ?o }", QueryOptions::default())? {
+    /// if let QueryResults::Solutions(solutions) = store.query("SELECT ?s ?o WHERE { ?s ?p ?o }", QueryOptions::default())? {
     ///     assert_eq!(solutions.variables(), &[Variable::new("s"), Variable::new("o")]);
     /// }
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -242,7 +242,7 @@ impl QuerySolutionsIterator {
     }
 }
 
-impl Iterator for QuerySolutionsIterator {
+impl Iterator for QuerySolutionIter {
     type Item = Result<QuerySolution, EvaluationError>;
 
     #[inline]
@@ -344,21 +344,21 @@ impl VariableSolutionIndex for Variable {
 ///
 /// ```
 /// use oxigraph::MemoryStore;
-/// use oxigraph::sparql::{QueryResult, QueryOptions};
+/// use oxigraph::sparql::{QueryResults, QueryOptions};
 ///
 /// let store = MemoryStore::new();
-/// if let QueryResult::Graph(triples) = store.query("CONSTRUCT WHERE { ?s ?p ?o }", QueryOptions::default())? {
+/// if let QueryResults::Graph(triples) = store.query("CONSTRUCT WHERE { ?s ?p ?o }", QueryOptions::default())? {
 ///     for triple in triples {
 ///         println!("{}", triple?);
 ///     }
 /// }
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-pub struct QueryTriplesIterator {
+pub struct QueryTripleIter {
     pub(crate) iter: Box<dyn Iterator<Item = Result<Triple, EvaluationError>>>,
 }
 
-impl Iterator for QueryTriplesIterator {
+impl Iterator for QueryTripleIter {
     type Item = Result<Triple, EvaluationError>;
 
     #[inline]

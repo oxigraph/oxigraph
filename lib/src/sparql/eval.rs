@@ -70,9 +70,9 @@ where
         &self,
         plan: &PlanNode<S::StrId>,
         variables: Rc<Vec<Variable>>,
-    ) -> Result<QueryResult, EvaluationError> {
+    ) -> Result<QueryResults, EvaluationError> {
         let iter = self.eval_plan(plan, EncodedTuple::with_capacity(variables.len()));
-        Ok(QueryResult::Solutions(
+        Ok(QueryResults::Solutions(
             self.decode_bindings(iter, variables),
         ))
     }
@@ -80,12 +80,12 @@ where
     pub fn evaluate_ask_plan(
         &self,
         plan: &PlanNode<S::StrId>,
-    ) -> Result<QueryResult, EvaluationError> {
+    ) -> Result<QueryResults, EvaluationError> {
         let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
         match self.eval_plan(plan, from).next() {
-            Some(Ok(_)) => Ok(QueryResult::Boolean(true)),
+            Some(Ok(_)) => Ok(QueryResults::Boolean(true)),
             Some(Err(error)) => Err(error),
-            None => Ok(QueryResult::Boolean(false)),
+            None => Ok(QueryResults::Boolean(false)),
         }
     }
 
@@ -93,9 +93,9 @@ where
         &self,
         plan: &PlanNode<S::StrId>,
         construct: Rc<Vec<TripleTemplate<S::StrId>>>,
-    ) -> Result<QueryResult, EvaluationError> {
+    ) -> Result<QueryResults, EvaluationError> {
         let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
-        Ok(QueryResult::Graph(QueryTriplesIterator {
+        Ok(QueryResults::Graph(QueryTripleIter {
             iter: Box::new(ConstructIterator {
                 eval: self.clone(),
                 iter: self.eval_plan(plan, from),
@@ -109,9 +109,9 @@ where
     pub fn evaluate_describe_plan(
         &self,
         plan: &PlanNode<S::StrId>,
-    ) -> Result<QueryResult, EvaluationError> {
+    ) -> Result<QueryResults, EvaluationError> {
         let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
-        Ok(QueryResult::Graph(QueryTriplesIterator {
+        Ok(QueryResults::Graph(QueryTripleIter {
             iter: Box::new(DescribeIterator {
                 eval: self.clone(),
                 iter: self.eval_plan(plan, from),
@@ -520,7 +520,7 @@ where
         variables: Rc<Vec<Variable>>,
         from: &EncodedTuple<S::StrId>,
     ) -> Result<EncodedTuplesIterator<S::StrId>, EvaluationError> {
-        if let QueryResult::Solutions(iter) = self.service_handler.handle(
+        if let QueryResults::Solutions(iter) = self.service_handler.handle(
             self.dataset.decode_named_node(
                 get_pattern_value(service_name, from)
                     .ok_or_else(|| EvaluationError::msg("The SERVICE name is not bound"))?,
@@ -1816,10 +1816,10 @@ where
         &self,
         iter: EncodedTuplesIterator<S::StrId>,
         variables: Rc<Vec<Variable>>,
-    ) -> QuerySolutionsIterator {
+    ) -> QuerySolutionIter {
         let eval = self.clone();
         let tuple_size = variables.len();
-        QuerySolutionsIterator::new(
+        QuerySolutionIter::new(
             variables,
             Box::new(iter.map(move |values| {
                 let mut result = vec![None; tuple_size];
@@ -1837,7 +1837,7 @@ where
     fn encode_bindings(
         &self,
         variables: Rc<Vec<Variable>>,
-        iter: QuerySolutionsIterator,
+        iter: QuerySolutionIter,
     ) -> EncodedTuplesIterator<S::StrId> {
         let eval = self.clone();
         Box::new(iter.map(move |solution| {

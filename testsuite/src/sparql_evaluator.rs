@@ -131,12 +131,12 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
 fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
     if url.ends_with(".srx") {
         StaticQueryResults::from_query_results(
-            QueryResult::read(read_file(url)?, QueryResultFormat::Xml)?,
+            QueryResults::read(read_file(url)?, QueryResultsFormat::Xml)?,
             false,
         )
     } else if url.ends_with(".srj") {
         StaticQueryResults::from_query_results(
-            QueryResult::read(read_file(url)?, QueryResultFormat::Json)?,
+            QueryResults::read(read_file(url)?, QueryResultsFormat::Json)?,
             false,
         )
     } else {
@@ -174,7 +174,7 @@ impl ServiceHandler for StaticServiceHandler {
         &self,
         service_name: NamedNode,
         query: Query,
-    ) -> std::result::Result<QueryResult, EvaluationError> {
+    ) -> std::result::Result<QueryResults, EvaluationError> {
         self.services
             .get(&service_name)
             .ok_or_else(|| {
@@ -190,12 +190,12 @@ impl ServiceHandler for StaticServiceHandler {
     }
 }
 
-fn to_dataset(result: QueryResult, with_order: bool) -> Result<MemoryStore> {
+fn to_dataset(result: QueryResults, with_order: bool) -> Result<MemoryStore> {
     match result {
-        QueryResult::Graph(graph) => Ok(graph
+        QueryResults::Graph(graph) => Ok(graph
             .map(|t| t.map(|t| t.in_graph(None)))
             .collect::<Result<_, _>>()?),
-        QueryResult::Boolean(value) => {
+        QueryResults::Boolean(value) => {
             let store = MemoryStore::new();
             let result_set = BlankNode::default();
             store.insert(Quad::new(
@@ -212,7 +212,7 @@ fn to_dataset(result: QueryResult, with_order: bool) -> Result<MemoryStore> {
             ));
             Ok(store)
         }
-        QueryResult::Solutions(solutions) => {
+        QueryResults::Solutions(solutions) => {
             let store = MemoryStore::new();
             let result_set = BlankNode::default();
             store.insert(Quad::new(
@@ -363,7 +363,7 @@ impl fmt::Display for StaticQueryResults {
 }
 
 impl StaticQueryResults {
-    fn from_query_results(results: QueryResult, with_order: bool) -> Result<StaticQueryResults> {
+    fn from_query_results(results: QueryResults, with_order: bool) -> Result<StaticQueryResults> {
         Ok(Self::from_dataset(to_dataset(results, with_order)?))
     }
 
