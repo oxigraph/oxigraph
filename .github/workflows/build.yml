@@ -58,3 +58,17 @@ jobs:
         working-directory: ./python/tests
       - run: source ../venv/bin/activate && sphinx-build -M doctest . build
         working-directory: ./python/docs
+      - run: source ../venv/bin/activate && sphinx-build -M html . build
+        working-directory: ./python/docs
+      - uses: actions/checkout@v2
+        with:
+          repository: oxigraph/oxigraph.github.io
+          path: website
+      - run: cp -r ./python/docs/build/html website/pyoxigraph/latest/
+      - run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add .
+          git commit -m "Updates pyoxigraph documentation"
+          git push
+        working-directory: ./website
