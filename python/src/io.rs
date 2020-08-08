@@ -104,8 +104,6 @@ pub fn parse(
 /// :type output: io.RawIOBase or io.BufferedIOBase
 /// :param mime_type: the MIME type of the RDF serialization
 /// :type mime_type: str
-/// :return: the serialized RDF
-/// :rtype: bytes
 /// :raises ValueError: if the MIME type is not supported
 /// :raises TypeError: if a triple is given during a quad format serialization or reverse
 ///

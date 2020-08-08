@@ -1,7 +1,7 @@
 [package]
 name = "pyoxigraph"
 version = "0.1.0-rc.1"
-authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+authors = ["Tpt"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
 keywords = ["RDF", "SPARQL", "graph-database", "database"]
@@ -34,3 +34,8 @@ classifier = [
     "Programming Language :: Rust",
     "Topic :: Database :: Database Engines/Servers"
 ]
+project-url = [
+    "Documentation, https://oxigraph.org/pyoxigraph/",
+    "Source, https://github.com/oxigraph/oxigraph/tree/master/python"
+]
+requires-python = ">=3.5"

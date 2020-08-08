@@ -1,5 +1,5 @@
-Oxigraph Python (``pyoxigraph`` |release|)
-==========================================
+pyoxigraph |release|
+====================
 
 .. image:: https://img.shields.io/pypi/v/pyoxigraph
     :alt: PyPI
@@ -12,30 +12,31 @@ Oxigraph Python (``pyoxigraph`` |release|)
     :alt: PyPI - License
 
 
-Oxigraph is a graph database implementing the `SPARQL <https://www.w3.org/TR/sparql11-overview/>`_ standard.
+Pyoxigraph is a graph database library implementing the `SPARQL <https://www.w3.org/TR/sparql11-overview/>`_ standard.
+
+It is built on top of `Oxigraph <https://github.com/oxigraph/oxigraph>`_ using `PyO3 <https://pyo3.rs/>`_ to provides a Python API.
 
 It offers two stores with `SPARQL 1.1 Query <https://www.w3.org/TR/sparql11-query/>`_ capabilities.
 One of the store is in-memory, and the other one is disk based.
 
-It also provides a set of utility functions for reading, writing and processing RDF files.
-
-The stores are also able to load and dump RDF data serialized in
+It also provides a set of utility functions for reading, writing and processing RDF files in
 `Turtle <https://www.w3.org/TR/turtle/>`_,
 `TriG <https://www.w3.org/TR/trig/>`_,
 `N-Triples <https://www.w3.org/TR/n-triples/>`_,
 `N-Quads <https://www.w3.org/TR/n-quads/>`_ and
 `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
 
-Oxigraph Python is distributed on Pypi using the `pyoxigraph <https://pypi.org/project/pyoxigraph/>`_ package.
-It can be installed using the usual ``pip install pyoxigraph``.
+pyoxigraph is `distributed on Pypi <https://pypi.org/project/pyoxigraph/>`_.
 
-Oxigraph source code is on `GitHub <https://github.com/oxigraph/oxigraph/tree/master/python>`_.
+Oxigraph and pyoxigraph source code are on `GitHub <https://github.com/oxigraph/oxigraph/tree/master/python>`_.
 
 
 Installation
 """"""""""""
 
-Just run the usual ``pip install pyoxigraph``.
+Pyoxigraph is distributed on `Pypi <https://pypi.org/project/pyoxigraph/>`_.
+
+To install it, run the usual ``pip install pyoxigraph``
 
 
 Example

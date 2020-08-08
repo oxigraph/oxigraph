@@ -3,6 +3,7 @@ Oxigraph
 
 [![Latest Version](https://img.shields.io/crates/v/oxigraph.svg)](https://crates.io/crates/oxigraph) 
 [![Released API docs](https://docs.rs/oxigraph/badge.svg)](https://docs.rs/oxigraph)
+[![PyPI](https://img.shields.io/pypi/v/pyoxigraph)](https://pypi.org/project/pyoxigraph/)
 [![npm](https://img.shields.io/npm/v/oxigraph)](https://www.npmjs.com/package/oxigraph)
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
 [![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
@@ -19,13 +20,15 @@ It is split into multiple parts:
 * The `lib` directory contains the database written as a Rust library.
 [![Latest Version](https://img.shields.io/crates/v/oxigraph.svg)](https://crates.io/crates/oxigraph) 
 [![Released API docs](https://docs.rs/oxigraph/badge.svg)](https://docs.rs/oxigraph)
-* The `python` directory contains bindings to use Oxigraph in Python. See [its README](https://github.com/oxigraph/oxigraph/blob/master/python/README.md) for the Python bindings documentation.
+* The `python` directory contains Pyoxigraph. Pyoxigrapg allows to use Oxigraph in Python. See the [Pyoxigraph website](https://oxigraph.org/pyoxigraph/) for Pyoxigraph documentation. [![PyPI](https://img.shields.io/pypi/v/pyoxigraph)](https://pypi.org/project/pyoxigraph/)
 * The `js` directory contains bindings to use Oxigraph in JavaScript with the help of WebAssembly. See [its README](https://github.com/oxigraph/oxigraph/blob/master/js/README.md) for the JS bindings documentation.
 [![npm](https://img.shields.io/npm/v/oxigraph)](https://www.npmjs.com/package/oxigraph)
 * The `server` directory contains a stand-alone binary of a web server implementing the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/). It uses the [RocksDB](https://rocksdb.org/) key-value store.
 [![Latest Version](https://img.shields.io/crates/v/oxigraph_server.svg)](https://crates.io/crates/oxigraph_server) 
+[![Docker Image Version (latest semver)](https://img.shields.io/docker/v/oxigraph/oxigraph?sort=semver)](https://hub.docker.com/repository/docker/oxigraph/oxigraph)
 * The `wikibase` directory contains a stand-alone binary of a web server able to synchronize with a [Wikibase instance](https://wikiba.se/).
-[![Latest Version](https://img.shields.io/crates/v/oxigraph_wikibase.svg)](https://crates.io/crates/oxigraph_wikibase) 
+[![Latest Version](https://img.shields.io/crates/v/oxigraph_wikibase.svg)](https://crates.io/crates/oxigraph_wikibase)  
+[![Docker Image Version (latest semver)](https://img.shields.io/docker/v/oxigraph/oxigraph-wikibase?sort=semver)](https://hub.docker.com/repository/docker/oxigraph/oxigraph-wikibase)
 
 Oxigraph implements the following specifications:
 * [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/).

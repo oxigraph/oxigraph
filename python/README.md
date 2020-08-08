@@ -1,5 +1,5 @@
-Oxigraph for Python (`pyoxigraph`)
-==================================
+Pyoxigraph (Oxigraph for Python)
+================================
 
 [![PyPI](https://img.shields.io/pypi/v/pyoxigraph)](https://pypi.org/project/pyoxigraph/)
 ![PyPI - Implementation](https://img.shields.io/pypi/implementation/pyoxigraph)
@@ -7,44 +7,43 @@ Oxigraph for Python (`pyoxigraph`)
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
 [![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
-Pyoxigraph is a Python library on top of Oxigraph.
-
-Oxigraph is a graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
-
-It offers two stores with [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/) capabilities.
+Pyoxigraph is a graph database library implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
+It is a Python library written on top of [Oxigraph](https://github.com/oxigraph/oxigraph).
+ 
+Pyoxigraph offers two stores with [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/) capabilities.
 One of the store is in-memory, and the other one is disk based.
 
-It also provides a set of utility functions for reading, writing and processing RDF files.
-
-The stores are also able to load and dump RDF data serialized in
+It also provides a set of utility functions for reading, writing and processing RDF files in
 [Turtle](https://www.w3.org/TR/turtle/), 
 [TriG](https://www.w3.org/TR/trig/), 
 [N-Triples](https://www.w3.org/TR/n-triples/),
 [N-Quads](https://www.w3.org/TR/n-quads/) and
 [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/).
 
-It is distributed on Pypi using the [`pyoxigraph` package](https://pypi.org/project/pyoxigraph/).
+Pyoxigraph is distributed [on Pypi](https://pypi.org/project/pyoxigraph/).
 Run `pip install pyoxigraph` to install it.
+
+Pyoxigraph documentation is [available on Oxigraph website](https://oxigraph.org/pyoxigraph/).
 
 
 ## Build the development version
 
-To build and install the lastest version of pyoxigraph you need to clone this git repository
+To build and install the development version of pyoxigraph you need to clone this git repository
 and to run `pip install .` in the `python` directory (the one this README is in).
 
 
 ## How to contribute
 
-The Oxigraph bindings are written in Rust using [PyO3](https://github.com/PyO3/pyo3).
+Pyoxigraph is written in Rust using [PyO3](https://github.com/PyO3/pyo3).
 
-They are build using [Maturin](https://github.com/PyO3/maturin).
+Pyoxigraph is build using [Maturin](https://github.com/PyO3/maturin).
 Maturin could be installed using the usual `pip install maturin`.
-To install development version of Oxigraph just run `maturin develop`.
+To install a development version of Oxigraph just run `maturin develop`.
 
 The Python bindings tests are written in Python.
 To run them use the usual `python -m unittest` in the `tests` directory.
 
-To release a new version of `pyoxigraph` run:
+To release a new version of Pyoxigraph run:
 ```bash
 docker run --rm -v $(pwd):/io konstin2/maturin publish
 ```
