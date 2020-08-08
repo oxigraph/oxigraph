@@ -1,21 +1,3 @@
-/// A file serialization format.
-///
-/// Is implemented by [`GraphFormat`](../enum.GraphFormat.html) for graph files and [`DatasetFormat`](../enum.DatasetFormat.html) for dataset files.
-#[deprecated(note = "Use directly the methods on the implementing types")]
-pub trait FileSyntax: Sized {
-    /// Its canonical IRI according to the [Unique URIs for file formats registry](https://www.w3.org/ns/formats/).
-    fn iri(self) -> &'static str;
-
-    /// Its [IANA media type](https://tools.ietf.org/html/rfc2046).
-    fn media_type(self) -> &'static str;
-
-    /// Its [IANA-registered](https://tools.ietf.org/html/rfc2046) file extension.
-    fn file_extension(self) -> &'static str;
-
-    /// Looks for a known format from a media type.
-    fn from_mime_type(media_type: &str) -> Option<Self>;
-}
-
 /// [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-graph) serialization formats.
 ///
 /// This enumeration is non exhaustive. New formats like JSON-LD will be added in the future.
@@ -105,25 +87,6 @@ impl GraphFormat {
     }
 }
 
-#[allow(deprecated)]
-impl FileSyntax for GraphFormat {
-    fn iri(self) -> &'static str {
-        self.iri()
-    }
-
-    fn media_type(self) -> &'static str {
-        self.media_type()
-    }
-
-    fn file_extension(self) -> &'static str {
-        self.file_extension()
-    }
-
-    fn from_mime_type(media_type: &str) -> Option<Self> {
-        Self::from_media_type(media_type)
-    }
-}
-
 /// [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) serialization formats.
 ///
 /// This enumeration is non exhaustive. New formats like JSON-LD will be added in the future.
@@ -203,24 +166,5 @@ impl DatasetFormat {
         } else {
             None
         }
-    }
-}
-
-#[allow(deprecated)]
-impl FileSyntax for DatasetFormat {
-    fn iri(self) -> &'static str {
-        self.iri()
-    }
-
-    fn media_type(self) -> &'static str {
-        self.media_type()
-    }
-
-    fn file_extension(self) -> &'static str {
-        self.file_extension()
-    }
-
-    fn from_mime_type(media_type: &str) -> Option<Self> {
-        Self::from_media_type(media_type)
     }
 }

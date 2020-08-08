@@ -430,36 +430,6 @@ impl Triple {
         }
     }
 
-    #[deprecated(note = "Use directly the `subject` field")]
-    pub const fn subject(&self) -> &NamedOrBlankNode {
-        &self.subject
-    }
-
-    #[deprecated(note = "Use directly the `subject` field")]
-    pub fn subject_owned(self) -> NamedOrBlankNode {
-        self.subject
-    }
-
-    #[deprecated(note = "Use directly the `predicate` field")]
-    pub const fn predicate(&self) -> &NamedNode {
-        &self.predicate
-    }
-
-    #[deprecated(note = "Use directly the `predicate` field")]
-    pub fn predicate_owned(self) -> NamedNode {
-        self.predicate
-    }
-
-    #[deprecated(note = "Use directly the `object` field")]
-    pub const fn object(&self) -> &Term {
-        &self.object
-    }
-
-    #[deprecated(note = "Use directly the `object` field")]
-    pub fn object_owned(self) -> Term {
-        self.object
-    }
-
     /// Encodes that this triple is in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
     #[inline]
     pub fn in_graph(self, graph_name: impl Into<GraphName>) -> Quad {
@@ -856,57 +826,6 @@ impl Quad {
             object: object.into(),
             graph_name: graph_name.into(),
         }
-    }
-
-    #[deprecated(note = "Use directly the `subject` field")]
-    pub const fn subject(&self) -> &NamedOrBlankNode {
-        &self.subject
-    }
-
-    #[deprecated(note = "Use directly the `subject` field")]
-    pub fn subject_owned(self) -> NamedOrBlankNode {
-        self.subject
-    }
-
-    #[deprecated(note = "Use directly the `predicate` field")]
-    pub const fn predicate(&self) -> &NamedNode {
-        &self.predicate
-    }
-
-    #[deprecated(note = "Use directly the `predicate` field")]
-    pub fn predicate_owned(self) -> NamedNode {
-        self.predicate
-    }
-
-    #[deprecated(note = "Use directly the `object` field")]
-    pub const fn object(&self) -> &Term {
-        &self.object
-    }
-
-    #[deprecated(note = "Use directly the `object` field")]
-    pub fn object_owned(self) -> Term {
-        self.object
-    }
-
-    #[deprecated(note = "Use directly the `graph_name` field")]
-    pub const fn graph_name(&self) -> &GraphName {
-        &self.graph_name
-    }
-
-    #[deprecated(note = "Use directly the `graph_name` field")]
-    pub fn graph_name_owned(self) -> GraphName {
-        self.graph_name
-    }
-
-    #[deprecated(note = "Use `Triple::from` instead")]
-    #[inline]
-    pub fn into_triple(self) -> Triple {
-        Triple::new(self.subject, self.predicate, self.object)
-    }
-
-    #[deprecated(note = "Use directly the struct fields")]
-    pub fn destruct(self) -> (NamedOrBlankNode, NamedNode, Term, GraphName) {
-        (self.subject, self.predicate, self.object, self.graph_name)
     }
 
     #[inline]

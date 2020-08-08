@@ -13,34 +13,24 @@ mod xml_results;
 
 use crate::model::NamedNode;
 use crate::sparql::algebra::QueryVariants;
+use crate::sparql::dataset::DatasetView;
+pub use crate::sparql::error::EvaluationError;
 use crate::sparql::eval::SimpleEvaluator;
+pub use crate::sparql::model::QueryResult;
+pub use crate::sparql::model::QueryResultFormat;
 pub use crate::sparql::model::QuerySolution;
 pub use crate::sparql::model::QuerySolutionsIterator;
 pub use crate::sparql::model::QueryTriplesIterator;
-use crate::sparql::plan::{PlanNode, TripleTemplate};
-use crate::sparql::plan_builder::PlanBuilder;
-use crate::store::ReadableEncodedStore;
-use std::convert::TryInto;
-use std::rc::Rc;
-#[deprecated(note = "Please directly use QuerySolutionsIterator type instead")]
-pub type BindingsIterator<'a> = QuerySolutionsIterator;
-pub use crate::sparql::model::QueryResult;
-pub use crate::sparql::model::QueryResultFormat;
-#[deprecated(note = "Use QueryResultFormat instead")]
-pub type QueryResultSyntax = QueryResultFormat;
-use crate::sparql::dataset::DatasetView;
-pub use crate::sparql::error::EvaluationError;
 pub use crate::sparql::model::Variable;
 pub use crate::sparql::parser::ParseError;
 pub use crate::sparql::parser::Query;
+use crate::sparql::plan::{PlanNode, TripleTemplate};
+use crate::sparql::plan_builder::PlanBuilder;
 use crate::store::numeric_encoder::StrEncodingAware;
+use crate::store::ReadableEncodedStore;
+use std::convert::TryInto;
 use std::error::Error;
-
-/// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/)
-#[deprecated(
-    note = "Not useful anymore. The exec method is already implemented by the different PreparedQuery structures"
-)]
-pub trait PreparedQuery {}
+use std::rc::Rc;
 
 /// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/)
 pub(crate) struct SimplePreparedQuery<S: ReadableEncodedStore + 'static>(

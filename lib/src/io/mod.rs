@@ -5,8 +5,6 @@ pub mod read;
 pub mod write;
 
 pub use self::format::DatasetFormat;
-#[allow(deprecated)]
-pub use self::format::FileSyntax;
 pub use self::format::GraphFormat;
 pub use self::read::DatasetParser;
 pub use self::read::GraphParser;

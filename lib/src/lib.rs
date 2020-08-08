@@ -113,17 +113,6 @@ pub mod model;
 pub mod sparql;
 pub mod store;
 
-#[deprecated(note = "Use oxigraph::sparql::EvaluationError instead")]
-pub type Error = crate::sparql::EvaluationError;
-#[deprecated(note = "Use Result<_, oxigraph::sparql::EvaluationError> instead")]
-pub type Result<T> = ::std::result::Result<T, crate::sparql::EvaluationError>;
-#[deprecated(note = "Use oxigraph::io::DatasetFormat instead")]
-pub type DatasetSyntax = crate::io::DatasetFormat;
-#[deprecated(note = "Use oxigraph::io::FileSyntax instead")]
-#[allow(deprecated)]
-pub use crate::io::FileSyntax;
-#[deprecated(note = "Use oxigraph::io::GraphFormat instead")]
-pub type GraphSyntax = crate::io::GraphFormat;
 pub use crate::store::memory::MemoryStore;
 #[cfg(feature = "rocksdb")]
 pub use crate::store::rocksdb::RocksDbStore;

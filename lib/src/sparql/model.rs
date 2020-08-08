@@ -1,7 +1,6 @@
 use crate::error::invalid_input_error;
+use crate::io::GraphFormat;
 use crate::io::GraphSerializer;
-#[allow(deprecated)]
-use crate::io::{FileSyntax, GraphFormat};
 use crate::model::*;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::json_results::write_json_results;
@@ -198,25 +197,6 @@ impl QueryResultFormat {
     }
 }
 
-#[allow(deprecated)]
-impl FileSyntax for QueryResultFormat {
-    fn iri(self) -> &'static str {
-        self.iri()
-    }
-
-    fn media_type(self) -> &'static str {
-        self.media_type()
-    }
-
-    fn file_extension(self) -> &'static str {
-        self.file_extension()
-    }
-
-    fn from_mime_type(media_type: &str) -> Option<Self> {
-        Self::from_media_type(media_type)
-    }
-}
-
 /// An iterator over query result solutions
 ///
 /// ```
@@ -259,23 +239,6 @@ impl QuerySolutionsIterator {
     #[inline]
     pub fn variables(&self) -> &[Variable] {
         &*self.variables
-    }
-
-    #[deprecated(note = "Please directly use QuerySolutionsIterator as an iterator instead")]
-    pub fn into_values_iter(
-        self,
-    ) -> Box<dyn Iterator<Item = Result<Vec<Option<Term>>, EvaluationError>>> {
-        self.iter
-    }
-
-    #[deprecated(note = "Please directly use QuerySolutionsIterator as an iterator instead")]
-    pub fn destruct(
-        self,
-    ) -> (
-        Vec<Variable>,
-        Box<dyn Iterator<Item = Result<Vec<Option<Term>>, EvaluationError>>>,
-    ) {
-        ((*self.variables).clone(), self.iter)
     }
 }
 
@@ -441,11 +404,6 @@ impl Variable {
     #[inline]
     pub fn as_str(&self) -> &str {
         &self.name
-    }
-
-    #[deprecated(note = "Please use as_str instead")]
-    pub fn name(&self) -> Result<&str, EvaluationError> {
-        Ok(self.as_str())
     }
 
     #[inline]

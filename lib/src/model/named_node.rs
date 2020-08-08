@@ -25,11 +25,6 @@ impl NamedNode {
         Ok(Self::new_from_iri(Iri::parse(iri.into())?))
     }
 
-    #[deprecated(note = "Use the `new` method")]
-    pub fn parse(iri: impl Into<String>) -> Result<Self, IriParseError> {
-        Self::new(iri)
-    }
-
     #[inline]
     pub(crate) fn new_from_iri(iri: Iri<String>) -> Self {
         Self::new_unchecked(iri.into_inner())
