@@ -1231,9 +1231,15 @@ fn store() -> Result<(), io::Error> {
 
     {
         let store = RocksDbStore::open(&repo_path)?;
-        for t in &all_quads {
+        for t in &default_quads {
             store.insert(t)?;
         }
+
+        store.transaction(|t| {
+            t.remove(&default_quad)?;
+            t.insert(&named_quad)?;
+            t.insert(&default_quad)
+        })?;
 
         assert_eq!(store.len(), 4);
         assert_eq!(
