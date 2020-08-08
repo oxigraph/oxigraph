@@ -1,6 +1,5 @@
 //! Utilities to read RDF graphs and datasets
 
-use crate::error::invalid_data_error;
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use oxiri::{Iri, IriParseError};
@@ -34,14 +33,14 @@ use std::io::BufRead;
 /// ```
 pub struct GraphParser {
     format: GraphFormat,
-    base_iri: String,
+    base_iri: Option<Iri<String>>,
 }
 
 impl GraphParser {
     pub fn from_format(format: GraphFormat) -> Self {
         Self {
             format,
-            base_iri: String::new(),
+            base_iri: None,
         }
     }
 
@@ -61,25 +60,22 @@ impl GraphParser {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
-        self.base_iri = Iri::parse(base_iri.into())?.into_inner();
+        self.base_iri = Some(Iri::parse(base_iri.into())?);
         Ok(self)
     }
 
     /// Executes the parsing itself
     pub fn read_triples<R: BufRead>(&self, reader: R) -> Result<TripleReader<R>, io::Error> {
-        //TODO: drop the error when possible
         Ok(TripleReader {
             mapper: RioMapper::default(),
             parser: match self.format {
-                GraphFormat::NTriples => TripleReaderKind::NTriples(
-                    NTriplesParser::new(reader).map_err(invalid_data_error)?,
-                ),
-                GraphFormat::Turtle => TripleReaderKind::Turtle(
-                    TurtleParser::new(reader, &self.base_iri).map_err(invalid_data_error)?,
-                ),
-                GraphFormat::RdfXml => TripleReaderKind::RdfXml(
-                    RdfXmlParser::new(reader, &self.base_iri).map_err(invalid_data_error)?,
-                ),
+                GraphFormat::NTriples => TripleReaderKind::NTriples(NTriplesParser::new(reader)),
+                GraphFormat::Turtle => {
+                    TripleReaderKind::Turtle(TurtleParser::new(reader, self.base_iri.clone()))
+                }
+                GraphFormat::RdfXml => {
+                    TripleReaderKind::RdfXml(RdfXmlParser::new(reader, self.base_iri.clone()))
+                }
             },
             buffer: Vec::new(),
         })
@@ -125,24 +121,15 @@ impl<R: BufRead> Iterator for TripleReader<R> {
             }
 
             if let Err(error) = match &mut self.parser {
-                TripleReaderKind::NTriples(parser) => Self::read(
-                    parser,
-                    &mut self.buffer,
-                    &mut self.mapper,
-                    invalid_data_error,
-                ),
-                TripleReaderKind::Turtle(parser) => Self::read(
-                    parser,
-                    &mut self.buffer,
-                    &mut self.mapper,
-                    invalid_data_error,
-                ),
-                TripleReaderKind::RdfXml(parser) => Self::read(
-                    parser,
-                    &mut self.buffer,
-                    &mut self.mapper,
-                    invalid_data_error,
-                ),
+                TripleReaderKind::NTriples(parser) => {
+                    Self::read(parser, &mut self.buffer, &mut self.mapper)
+                }
+                TripleReaderKind::Turtle(parser) => {
+                    Self::read(parser, &mut self.buffer, &mut self.mapper)
+                }
+                TripleReaderKind::RdfXml(parser) => {
+                    Self::read(parser, &mut self.buffer, &mut self.mapper)
+                }
             }? {
                 return Some(Err(error));
             }
@@ -155,15 +142,17 @@ impl<R: BufRead> TripleReader<R> {
         parser: &mut P,
         buffer: &mut Vec<Triple>,
         mapper: &mut RioMapper,
-        error: impl Fn(P::Error) -> io::Error,
-    ) -> Option<Result<(), io::Error>> {
+    ) -> Option<Result<(), io::Error>>
+    where
+        io::Error: From<P::Error>,
+    {
         if parser.is_end() {
             None
         } else if let Err(e) = parser.parse_step(&mut |t| {
             buffer.push(mapper.triple(&t));
             Ok(())
         }) {
-            Some(Err(error(e)))
+            Some(Err(e))
         } else {
             Some(Ok(()))
         }
@@ -191,14 +180,14 @@ impl<R: BufRead> TripleReader<R> {
 /// ```
 pub struct DatasetParser {
     format: DatasetFormat,
-    base_iri: String,
+    base_iri: Option<Iri<String>>,
 }
 
 impl DatasetParser {
     pub fn from_format(format: DatasetFormat) -> Self {
         Self {
             format,
-            base_iri: String::new(),
+            base_iri: None,
         }
     }
 
@@ -218,22 +207,19 @@ impl DatasetParser {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
-        self.base_iri = Iri::parse(base_iri.into())?.into_inner();
+        self.base_iri = Some(Iri::parse(base_iri.into())?);
         Ok(self)
     }
 
     /// Executes the parsing itself
     pub fn read_quads<R: BufRead>(&self, reader: R) -> Result<QuadReader<R>, io::Error> {
-        //TODO: drop the error when possible
         Ok(QuadReader {
             mapper: RioMapper::default(),
             parser: match self.format {
-                DatasetFormat::NQuads => {
-                    QuadReaderKind::NQuads(NQuadsParser::new(reader).map_err(invalid_data_error)?)
+                DatasetFormat::NQuads => QuadReaderKind::NQuads(NQuadsParser::new(reader)),
+                DatasetFormat::TriG => {
+                    QuadReaderKind::TriG(TriGParser::new(reader, self.base_iri.clone()))
                 }
-                DatasetFormat::TriG => QuadReaderKind::TriG(
-                    TriGParser::new(reader, &self.base_iri).map_err(invalid_data_error)?,
-                ),
             },
             buffer: Vec::new(),
         })
@@ -278,18 +264,12 @@ impl<R: BufRead> Iterator for QuadReader<R> {
             }
 
             if let Err(error) = match &mut self.parser {
-                QuadReaderKind::NQuads(parser) => Self::read(
-                    parser,
-                    &mut self.buffer,
-                    &mut self.mapper,
-                    invalid_data_error,
-                ),
-                QuadReaderKind::TriG(parser) => Self::read(
-                    parser,
-                    &mut self.buffer,
-                    &mut self.mapper,
-                    invalid_data_error,
-                ),
+                QuadReaderKind::NQuads(parser) => {
+                    Self::read(parser, &mut self.buffer, &mut self.mapper)
+                }
+                QuadReaderKind::TriG(parser) => {
+                    Self::read(parser, &mut self.buffer, &mut self.mapper)
+                }
             }? {
                 return Some(Err(error));
             }
@@ -302,15 +282,17 @@ impl<R: BufRead> QuadReader<R> {
         parser: &mut P,
         buffer: &mut Vec<Quad>,
         mapper: &mut RioMapper,
-        error: impl Fn(P::Error) -> io::Error,
-    ) -> Option<Result<(), io::Error>> {
+    ) -> Option<Result<(), io::Error>>
+    where
+        io::Error: From<P::Error>,
+    {
         if parser.is_end() {
             None
         } else if let Err(e) = parser.parse_step(&mut |t| {
             buffer.push(mapper.quad(&t));
             Ok(())
         }) {
-            Some(Err(error(e)))
+            Some(Err(e))
         } else {
             Some(Ok(()))
         }

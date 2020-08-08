@@ -4,7 +4,7 @@ use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use rio_api::formatter::{QuadsFormatter, TriplesFormatter};
 use rio_turtle::{NQuadsFormatter, NTriplesFormatter, TriGFormatter, TurtleFormatter};
-use rio_xml::{RdfXmlError, RdfXmlFormatter};
+use rio_xml::RdfXmlFormatter;
 use std::io;
 use std::io::Write;
 
@@ -47,9 +47,7 @@ impl GraphSerializer {
             formatter: match self.format {
                 GraphFormat::NTriples => TripleWriterKind::NTriples(NTriplesFormatter::new(writer)),
                 GraphFormat::Turtle => TripleWriterKind::Turtle(TurtleFormatter::new(writer)),
-                GraphFormat::RdfXml => {
-                    TripleWriterKind::RdfXml(RdfXmlFormatter::new(writer).map_err(map_xml_err)?)
-                }
+                GraphFormat::RdfXml => TripleWriterKind::RdfXml(RdfXmlFormatter::new(writer)?),
             },
         })
     }
@@ -93,9 +91,7 @@ impl<W: Write> TripleWriter<W> {
         match &mut self.formatter {
             TripleWriterKind::NTriples(formatter) => formatter.format(&triple.into())?,
             TripleWriterKind::Turtle(formatter) => formatter.format(&triple.into())?,
-            TripleWriterKind::RdfXml(formatter) => {
-                formatter.format(&triple.into()).map_err(map_xml_err)?
-            }
+            TripleWriterKind::RdfXml(formatter) => formatter.format(&triple.into())?,
         }
         Ok(())
     }
@@ -105,7 +101,7 @@ impl<W: Write> TripleWriter<W> {
         match self.formatter {
             TripleWriterKind::NTriples(formatter) => formatter.finish(),
             TripleWriterKind::Turtle(formatter) => formatter.finish()?,
-            TripleWriterKind::RdfXml(formatter) => formatter.finish().map_err(map_xml_err)?,
+            TripleWriterKind::RdfXml(formatter) => formatter.finish()?,
         };
         Ok(())
     }
@@ -205,8 +201,4 @@ impl<W: Write> QuadWriter<W> {
         };
         Ok(())
     }
-}
-
-fn map_xml_err(e: RdfXmlError) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, e) //TODO: drop
 }

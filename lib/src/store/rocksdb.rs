@@ -235,7 +235,7 @@ impl RocksDbStore {
     /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.load_graph) for a usage example.
     ///
     /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) or [`UnexpectedEof`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.UnexpectedEof) error kinds.
     /// Errors related to data loading into the store use the other error kinds.
     pub fn load_graph<'a>(
         &self,
@@ -263,7 +263,7 @@ impl RocksDbStore {
     /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.load_dataset) for a usage example.
     ///
     /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) or [`UnexpectedEof`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.UnexpectedEof) error kinds.
     /// Errors related to data loading into the store use the other error kinds.
     pub fn load_dataset(
         &self,
@@ -878,7 +878,7 @@ impl RocksDbTransaction<'_> {
     /// return an error if you don't want that.
     ///
     /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) or [`UnexpectedEof`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.UnexpectedEof) error kinds.
     pub fn load_graph<'a>(
         &mut self,
         reader: impl BufRead,
@@ -903,7 +903,7 @@ impl RocksDbTransaction<'_> {
     /// return an error if you don't want that.
     ///
     /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) or [`UnexpectedEof`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.UnexpectedEof) error kinds.
     pub fn load_dataset(
         &mut self,
         reader: impl BufRead,

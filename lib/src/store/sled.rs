@@ -268,7 +268,7 @@ impl SledStore {
     /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.load_graph) for a usage example.
     ///
     /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) or [`UnexpectedEof`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.UnexpectedEof) error kinds.
     /// Errors related to data loading into the store use the other error kinds.
     pub fn load_graph<'a>(
         &self,
@@ -293,7 +293,7 @@ impl SledStore {
     /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.load_dataset) for a usage example.
     ///
     /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) or [`UnexpectedEof`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.UnexpectedEof) error kinds.
     /// Errors related to data loading into the store use the other error kinds.
     pub fn load_dataset(
         &self,
@@ -814,7 +814,7 @@ impl SledTransaction<'_> {
     /// return an error if you don't want that.
     ///
     /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) or [`UnexpectedEof`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.UnexpectedEof) error kinds.
     pub fn load_graph<'a>(
         &self,
         reader: impl BufRead,
@@ -840,7 +840,7 @@ impl SledTransaction<'_> {
     /// return an error if you don't want that.
     ///
     /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) or [`UnexpectedEof`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.UnexpectedEof) error kinds.
     pub fn load_dataset(
         &self,
         reader: impl BufRead,
@@ -1077,10 +1077,8 @@ impl From<SledUnabortableTransactionError> for EvaluationError {
     }
 }
 
-impl From<StoreOrParseError<SledUnabortableTransactionError, io::Error>>
-    for SledUnabortableTransactionError
-{
-    fn from(e: StoreOrParseError<SledUnabortableTransactionError, io::Error>) -> Self {
+impl From<StoreOrParseError<SledUnabortableTransactionError>> for SledUnabortableTransactionError {
+    fn from(e: StoreOrParseError<SledUnabortableTransactionError>) -> Self {
         match e {
             StoreOrParseError::Store(e) => e,
             StoreOrParseError::Parse(e) => Self::Storage(e),
