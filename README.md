@@ -76,10 +76,12 @@ firefox http://localhost:7878
 curl http://localhost:7878 -H 'Content-Type: application/x-turtle' -d@./data.ttl
 
 # Make a query
-curl -H 'Accept: application/sparql-results+json' 'http://localhost:7878/query?query=SELECT%20*%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D%20LIMIT%2010'
+curl -X POST -H 'Accept: application/sparql-results+json' -H 'Content-Type: application/sparql-query' --data 'SELECT * WHERE { ?s ?p ?o } LIMIT 10' http://localhost:7878/query
 ```
 
 You could easily build your own Docker image by running `docker build -t oxigraph server -f server/Dockerfile .` from the root directory.
+
+## Run the Wikibase server
 
 ### Build
 
@@ -92,7 +94,7 @@ It will create a fat binary in `target/release/oxigraph_wikibase`.
 
 To start a server that is synchronized with [test.wikidata.org](https://test.wikidata.org) you should run:
 ```bash
-./oxigraph_wikibase --mediawiki-api=https://test.wikidata.org/w/api.php --mediawiki-base-url=https://test.wikidata.org/wiki/ --namespaces=0,120 --file=test.wikidata
+./oxigraph_wikibase --mediawiki-api https://test.wikidata.org/w/api.php --mediawiki-base-url https://test.wikidata.org/wiki/ --namespaces 0,120 --file test.wikidata
 ```
 
 It creates a SPARQL endpoint listening to `localhost:7878/query` that could be queried just like Blazegraph.
@@ -103,6 +105,12 @@ The configuration parameters are:
 * `namespaces` The ids of the Wikibase namespaces to synchronize with, separated by `,`.
 * `file` Path of where Oxigraph should store its data.
 
+
+You can then access it from your machine on port `7878`. No GUI is provided.
+```sh
+# Make a query
+curl -X POST -H 'Accept: application/sparql-results+json' -H 'Content-Type: application/sparql-query' --data 'SELECT * WHERE { ?s ?p ?o } LIMIT 10' http://localhost:7878/query
+```
 ### Using a Docker image
 
 #### Display the help menu

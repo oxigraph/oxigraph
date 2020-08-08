@@ -379,6 +379,7 @@ impl From<Error> for HttpServiceError {
         Self { inner }
     }
 }
+
 #[cfg(test)]
 mod tests {
     use crate::handle_request;
