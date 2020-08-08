@@ -15,7 +15,7 @@ use std::io::BufReader;
 /// It encodes a `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_ and allows to query it using SPARQL.
 ///
 ///
-/// The :py:func:`str` function provides a serialization of the store data compatible with NTriples, Turtle and SPARQL:
+/// The :py:func:`str` function provides a serialization of the store in NQuads:
 ///
 /// >>> store = MemoryStore()
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))

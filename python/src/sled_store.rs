@@ -16,13 +16,13 @@ use std::io::BufReader;
 /// In-memory store.
 /// It encodes a `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_ and allows to query it using SPARQL.
 ///
-/// :param path: the path of the directory in which Sled should read and write its data. If the directoty does not exist, it is created. If no directory is provided a temporary one is created and removed when the Python garbage collector removes the store.
+/// :param path: the path of the directory in which Sled should read and write its data. If the directory does not exist, it is created. If no directory is provided a temporary one is created and removed when the Python garbage collector removes the store.
 /// :type path: str or None
 /// :raises IOError: if the target directory contains invalid data or could not be accessed
 ///
 /// Warning: Sled is not stable yet and might break its storage format.
 ///
-/// The :py:func:`str` function provides a serialization of the store data compatible with NTriples, Turtle and SPARQL:
+/// The :py:func:`str` function provides a serialization of the store in NQuads:
 ///
 /// >>> store = SledStore()
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
