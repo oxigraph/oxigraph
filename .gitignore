@@ -1,4 +1,4 @@
-target/
+**/target
 **/*.rs.bk
 Cargo.lock
 .idea
@@ -6,3 +6,4 @@ Cargo.lock
 js/node_modules
 lib/tests/rockdb_bc_data
 lib/tests/sled_bc_data
+venv

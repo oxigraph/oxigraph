@@ -1,10 +1,13 @@
 Oxigraph for Python (`pyoxigraph`)
 ==================================
 
+[![PyPI](https://img.shields.io/pypi/v/pyoxigraph)](https://pypi.org/project/pyoxigraph/)
+![PyPI - Implementation](https://img.shields.io/pypi/implementation/pyoxigraph)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pyoxigraph)
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
 [![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
-This Python package provides a Python API on top of Oxigraph named `pyoxigraph`.
+Pyoxigraph is a Python library on top of Oxigraph.
 
 Oxigraph is a graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
 
@@ -20,13 +23,14 @@ The stores are also able to load and dump RDF data serialized in
 [N-Quads](https://www.w3.org/TR/n-quads/) and
 [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/).
 
-## Install
+It is distributed on Pypi using the [`pyoxigraph` package](https://pypi.org/project/pyoxigraph/).
+Run `pip install pyoxigraph` to install it.
 
-To install the development version of Oxigraph you need first to install the build tool [Maturin](https://github.com/PyO3/maturin).
-This could be done using the usual `pip install maturin`.
 
-`maturin build release` allows build a release Oxigraph Python wheel.
-This wheel could be installed using `pip install PATH` in the current Python environment where `PATH` is the path to the built Oxigraph wheel.
+## Build the development version
+
+To build and install the lastest version of pyoxigraph you need to clone this git repository
+and to run `pip install .` in the `python` directory (the one this README is in).
 
 
 ## How to contribute
@@ -39,3 +43,8 @@ To install development version of Oxigraph just run `maturin develop`.
 
 The Python bindings tests are written in Python.
 To run them use the usual `python -m unittest` in the `tests` directory.
+
+To release a new version of `pyoxigraph` run:
+```bash
+docker run --rm -v $(pwd):/io konstin2/maturin publish
+```

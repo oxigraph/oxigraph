@@ -1,14 +1,14 @@
 [package]
 name = "oxigraph"
-version = "0.1.0"
+version = "0.1.0-rc.1"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT/Apache-2.0"
 readme = "../README.md"
-keywords = ["RDF", "N-Triples", "Turtle", "RDF/XML", "SPARQL"]
+keywords = ["RDF", "SPARQL", "graph-database", "database"]
 categories = ["database-implementations"]
 repository = "https://github.com/oxigraph/oxigraph"
 description = """
-An RDF and SPARQL library in Rust
+a SPARQL database and RDF toolkit
 """
 edition = "2018"
 

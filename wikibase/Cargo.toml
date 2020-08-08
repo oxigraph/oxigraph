@@ -1,6 +1,6 @@
 [package]
 name = "oxigraph_wikibase"
-version = "0.1.0"
+version = "0.1.0-rc.1"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT/Apache-2.0"
 readme = "../README.md"
@@ -17,6 +17,6 @@ async-h1 = "2"
 chrono = "0.4"
 http-client = { version = "4", features = ["h1_client"] }
 http-types = "2"
-oxigraph = { path = "../lib", features = ["rocksdb"] }
+oxigraph = { version = "0.1.0-rc.1", features = ["rocksdb"] }
 serde_json = "1"
 url = "2"

@@ -1,6 +1,6 @@
 {
   "name": "oxigraph_tests",
-  "description": "Build a tests for Oxigraph JS",
+  "description": "Oxigraph JS build and tests",
   "private": true,
   "devDependencies": {
     "mocha": "^8.0.1",

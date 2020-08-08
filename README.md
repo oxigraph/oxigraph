@@ -1,23 +1,31 @@
 Oxigraph
 ========
 
+[![Latest Version](https://img.shields.io/crates/v/oxigraph.svg)](https://crates.io/crates/oxigraph) 
+[![Released API docs](https://docs.rs/oxigraph/badge.svg)](https://docs.rs/oxigraph)
+[![npm](https://img.shields.io/npm/v/oxigraph)](https://www.npmjs.com/package/oxigraph)
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
 [![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 Oxigraph is a graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
 
-There is no released version yet.
-
 Its goal is to provide a compliant, safe and fast graph database based on the [RocksDB](https://rocksdb.org/) and [Sled](https://sled.rs/) key-value stores.
 It is written in Rust.
 It also provides a set of utility functions for reading, writing and processing RDF files.
 
+Oxigraph is in heavy development and SPARQL query evaluation has not been optimized yet.
+
 It is split into multiple parts:
 * The `lib` directory contains the database written as a Rust library.
+[![Latest Version](https://img.shields.io/crates/v/oxigraph.svg)](https://crates.io/crates/oxigraph) 
+[![Released API docs](https://docs.rs/oxigraph/badge.svg)](https://docs.rs/oxigraph)
 * The `python` directory contains bindings to use Oxigraph in Python. See [its README](https://github.com/oxigraph/oxigraph/blob/master/python/README.md) for the Python bindings documentation.
 * The `js` directory contains bindings to use Oxigraph in JavaScript with the help of WebAssembly. See [its README](https://github.com/oxigraph/oxigraph/blob/master/js/README.md) for the JS bindings documentation.
+[![npm](https://img.shields.io/npm/v/oxigraph)](https://www.npmjs.com/package/oxigraph)
 * The `server` directory contains a stand-alone binary of a web server implementing the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/). It uses the [RocksDB](https://rocksdb.org/) key-value store.
+[![Latest Version](https://img.shields.io/crates/v/oxigraph_server.svg)](https://crates.io/crates/oxigraph_server) 
 * The `wikibase` directory contains a stand-alone binary of a web server able to synchronize with a [Wikibase instance](https://wikiba.se/).
+[![Latest Version](https://img.shields.io/crates/v/oxigraph_wikibase.svg)](https://crates.io/crates/oxigraph_wikibase) 
 
 Oxigraph implements the following specifications:
 * [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/).
@@ -29,16 +37,19 @@ A preliminary benchmark [is provided](bench/README.md).
 
 ## Run the web server
 
-### Build
+### Installation
 
 You need to have [a recent stable version of Rust and Cargo installed](https://www.rust-lang.org/tools/install). You also need [clang](https://clang.llvm.org/) to build RocksDB.
 
-If it's done, executing `cargo build --release` in the root directory of this repository should compile the full server after having downloaded its dependencies.
+To download, build and install the latest released version run `cargo install oxigraph_server`.
+There is no need to clone this git repository.
+
+To compile the server from source, clone this git repository, and execute `cargo build --release` in the `server` directory to compile the full server after having downloaded its dependencies.
 It will create a fat binary in `target/release/oxigraph_server`.
 
 ### Usage
 
-Run `./oxigraph_server` to start the server. It listen by default on `localhost:7878`.
+Run `oxigraph_server` to start the server. It listens by default on `localhost:7878`.
 
 The server provides an HTML UI with a form to execute SPARQL requests.
 
@@ -82,11 +93,14 @@ You could easily build your own Docker image by running `docker build -t oxigrap
 
 ## Run the Wikibase server
 
-### Build
+### Installation
 
-You need to have [a recent stable version of Rust and Cargo installed](https://www.rust-lang.org/tools/install).
+You need to have [a recent stable version of Rust and Cargo installed](https://www.rust-lang.org/tools/install). You also need [clang](https://clang.llvm.org/) to build RocksDB.
 
-If it's done, executing `cargo build --release` in the root directory of this repository should compile the full server after having downloaded its dependencies.
+To download, build and install the latest released version run `cargo install oxigraph_wikibase`.
+There is no need to clone this git repository.
+
+To compile the server from source, clone this git repository, and execute `cargo build --release` in the `wikibase` directory to compile the full server after having downloaded its dependencies.
 It will create a fat binary in `target/release/oxigraph_wikibase`.
 
 ### Usage

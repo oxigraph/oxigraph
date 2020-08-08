@@ -1,8 +1,8 @@
 Oxigraph for JavaScript
 =======================
 
-[![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
 [![npm](https://img.shields.io/npm/v/oxigraph)](https://www.npmjs.com/package/oxigraph)
+[![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
 [![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 This package provides a JavaScript API on top of Oxigraph compiled with WebAssembly.
@@ -163,4 +163,9 @@ The Oxigraph bindings are written in Rust using [the Rust WASM toolkit](https://
 
 The [The Rust Wasm Book](https://rustwasm.github.io/docs/book/) is a great tutorial to get started.
 
-To build the JavaScript bindings, run `wasm-pack build`, to run the tests of the JS bindings written in JS run `npm test`.
+To run the tests of the JS bindings written in JS run `npm test`.
+
+To publish a new version on npm run:
+```bash
+npm run build && npm run release
+```

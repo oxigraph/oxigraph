@@ -1,13 +1,13 @@
 [package]
 name = "pyoxigraph"
-version = "0.1.0"
+version = "0.1.0-rc.1"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
-keywords = ["RDF", "N-Triples", "Turtle", "RDF/XML", "SPARQL"]
+keywords = ["RDF", "SPARQL", "graph-database", "database"]
 repository = "https://github.com/oxigraph/oxigraph/tree/master/python"
 description = """
-Python bindings of Oxigraph
+Python bindings of Oxigraph, a SPARQL database and RDF toolkit
 """
 edition = "2018"
 
@@ -17,16 +17,20 @@ name = "pyoxigraph"
 doctest = false
 
 [dependencies]
-oxigraph = {path = "../lib", features=["sled"]}
-pyo3 = {version="0.11", features = ["extension-module"]}
+oxigraph = {version = "0.1.0-rc.1", features = ["sled"]}
+pyo3 = {version = "0.11", features = ["extension-module"]}
 
 [package.metadata.maturin]
 classifier = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.5",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
     "Programming Language :: Rust",
     "Topic :: Database :: Database Engines/Servers"
 ]
