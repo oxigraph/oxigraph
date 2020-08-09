@@ -17,7 +17,7 @@ use std::io::BufReader;
 /// It encodes a `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_ and allows to query it using SPARQL.
 ///
 /// :param path: the path of the directory in which Sled should read and write its data. If the directory does not exist, it is created. If no directory is provided a temporary one is created and removed when the Python garbage collector removes the store.
-/// :type path: str or None
+/// :type path: str or None, optional
 /// :raises IOError: if the target directory contains invalid data or could not be accessed
 ///
 /// Warning: Sled is not stable yet and might break its storage format.
@@ -124,11 +124,11 @@ impl PySledStore {
     /// :param query: the query to execute
     /// :type query: str
     /// :param use_default_graph_as_union: optional, if the SPARQL query should look for triples in all the dataset graphs by default (i.e. without `GRAPH` operations). Disabled by default.
-    /// :type use_default_graph_as_union: bool
+    /// :type use_default_graph_as_union: bool, optional
     /// :param default_graph_uris: optional, list of the named graph URIs that should be used as the query default graph. By default the store default graph is used.
-    /// :type default_graph_uris: list(NamedNode),None
+    /// :type default_graph_uris: list(NamedNode) or None, optional
     /// :param named_graph_uris: optional, list of the named graph URIs that could be used in SPARQL `GRAPH` clause. By default all the store default graphs are available.
-    /// :type named_graph_uris: list(NamedNode),None
+    /// :type named_graph_uris: list(NamedNode) or None, optional
     /// :return: a :py:class:`bool` for ``ASK`` queries, an iterator of :py:class:`Triple` for ``CONSTRUCT`` and ``DESCRIBE`` queries and an iterator of :py:class:`QuerySolution` for ``SELECT`` queries.
     /// :rtype: QuerySolutions or QueryTriples or bool
     /// :raises SyntaxError: if the provided query is invalid
@@ -202,9 +202,9 @@ impl PySledStore {
     /// :param mime_type: the MIME type of the RDF serialization
     /// :type mime_type: str
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done
-    /// :type base_iri: str or None
+    /// :type base_iri: str or None, optional
     /// :param to_graph: if it is a file composed of triples, the graph in which store the triples. By default, the default graph is used.
-    /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None
+    /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :raises ValueError: if the MIME type is not supported or the `to_graph` parameter is given with a quad file.
     /// :raises SyntaxError: if the provided data is invalid
     /// :raises IOError: if an I/O error happens during a quad insertion
@@ -274,7 +274,7 @@ impl PySledStore {
     /// :param mime_type: the MIME type of the RDF serialization
     /// :type mime_type: str
     /// :param from_graph: if a triple based format is requested, the store graph from which dump the triples. By default, the default graph is used.
-    /// :type from_graph: NamedNode or BlankNode or DefaultGraph or None
+    /// :type from_graph: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :raises ValueError: if the MIME type is not supported or the `from_graph` parameter is given with a quad syntax.
     /// :raises IOError: if an I/O error happens during a quad lookup
     ///

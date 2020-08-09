@@ -514,7 +514,7 @@ impl PyIterProtocol for PyTriple {
 /// :param object: the quad object
 /// :type object: NamedNode or BlankNode or Literal
 /// :param graph: the quad graph name. If not present, the default graph is assumed.
-/// :type object: NamedNode or BlankNode or DefaultGraph or None
+/// :type graph: NamedNode or BlankNode or DefaultGraph or None, optional
 ///
 /// The :py:func:`str` function provides a serialization compatible with NTriples, Turtle and SPARQL:
 ///

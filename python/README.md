@@ -23,9 +23,9 @@ It also provides a set of utility functions for reading, writing and processing 
 Pyoxigraph is distributed [on Pypi](https://pypi.org/project/pyoxigraph/).
 Run `pip install pyoxigraph` to install it.
 
-There exists also a small library providing [rdflib](https://rdflib.readthedocs.io) store using pyoxigraph: [oxrdflib](https://github.com/oxigraph/oxrdflib).
+There exists also a small library providing [rdflib](https://rdflib.readthedocs.io) stores using pyoxigraph: [oxrdflib](https://github.com/oxigraph/oxrdflib).
 
-Pyoxigraph documentation is [available on Oxigraph website](https://oxigraph.org/pyoxigraph/).
+Pyoxigraph documentation is [available on the Oxigraph website](https://oxigraph.org/pyoxigraph/).
 
 ## Build the development version
 
@@ -37,12 +37,12 @@ and to run `pip install .` in the `python` directory (the one this README is in)
 
 Pyoxigraph is written in Rust using [PyO3](https://github.com/PyO3/pyo3).
 
-Pyoxigraph is build using [Maturin](https://github.com/PyO3/maturin).
-Maturin could be installed using the usual `pip install maturin`.
-To install a development version of Oxigraph just run `maturin develop`.
+Pyoxigraph is built using [Maturin](https://github.com/PyO3/maturin).
+Maturin could be installed using the `pip install maturin`.
+To install a development version of Oxigraph just run `maturin develop` in this README directory.
 
 The Python bindings tests are written in Python.
-To run them use the usual `python -m unittest` in the `tests` directory.
+To run them use `python -m unittest` in the `tests` directory.
 
 To release a new version of Pyoxigraph run:
 ```bash

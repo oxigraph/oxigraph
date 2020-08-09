@@ -36,7 +36,7 @@ pub fn add_to_module(module: &PyModule) -> PyResult<()> {
 /// :param mime_type: the MIME type of the RDF serialization
 /// :type mime_type: str
 /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done
-/// :type base_iri: str or None
+/// :type base_iri: str or None, optional
 /// :return: an iterator of RDF triples or quads depending on the format
 /// :rtype: iter(Triple) or iter(Quad)
 /// :raises ValueError: if the MIME type is not supported
@@ -99,7 +99,7 @@ pub fn parse(
 /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
 ///
 /// :param input: the RDF triples and quads to serialize
-/// :type input: iterable(Triple) or iterable(Quad)
+/// :type input: iter(Triple) or iter(Quad)
 /// :param output: The binary I/O object to write to. For example, it could be a file opened in binary mode with ``open('my_file.ttl', 'wb')``.
 /// :type output: io.RawIOBase or io.BufferedIOBase
 /// :param mime_type: the MIME type of the RDF serialization

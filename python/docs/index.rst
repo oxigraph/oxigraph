@@ -12,9 +12,9 @@ pyoxigraph |release|
     :alt: PyPI - License
 
 
-Pyoxigraph is a graph database library implementing the `SPARQL <https://www.w3.org/TR/sparql11-overview/>`_ standard.
+Pyoxigraph is a Python graph database library implementing the `SPARQL <https://www.w3.org/TR/sparql11-overview/>`_ standard.
 
-It is built on top of `Oxigraph <https://github.com/oxigraph/oxigraph>`_ using `PyO3 <https://pyo3.rs/>`_ to provides a Python API.
+It is built on top of `Oxigraph <https://github.com/oxigraph/oxigraph>`_ using `PyO3 <https://pyo3.rs/>`_.
 
 It offers two stores with `SPARQL 1.1 Query <https://www.w3.org/TR/sparql11-query/>`_ capabilities.
 One of the store is in-memory, and the other one is disk based.
@@ -28,7 +28,7 @@ It also provides a set of utility functions for reading, writing and processing 
 
 Pyoxigraph is `distributed on Pypi <https://pypi.org/project/pyoxigraph/>`_.
 
-There exists also a small library providing `rdflib <https://rdflib.readthedocs.io>`_ store using pyoxigraph: `oxrdflib <https://github.com/oxigraph/oxrdflib>`_.
+There exists also a small library providing `rdflib <https://rdflib.readthedocs.io>`_ stores using pyoxigraph: `oxrdflib <https://github.com/oxigraph/oxrdflib>`_.
 
 Oxigraph and pyoxigraph source code are on `GitHub <https://github.com/oxigraph/oxigraph/tree/master/python>`_.
 
@@ -52,8 +52,8 @@ Insert the triple ``<http://example/> <http://schema.org/name> "example"`` and p
 
     store = MemoryStore()
     ex = NamedNode('http://example/')
-    schemaName = NamedNode('http://schema.org/name')
-    store.add((ex, schemaName, Literal('example')))
+    schema_name = NamedNode('http://schema.org/name')
+    store.add(Quad(ex, schema_name, Literal('example')))
     for binding in store.query('SELECT ?name WHERE { <http://example/> <http://schema.org/name> ?name }'):
         print(binding['name'].value)
 

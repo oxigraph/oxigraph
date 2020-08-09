@@ -206,16 +206,16 @@ impl QueryOptions {
         self
     }
 
-    /// Adds a named graph to the set of graphs considered by the SPARQL query as the queried dataset default graph
-    /// Overrides the `FROM` and `FROM NAMED` elements of the evaluated query
+    /// Adds a named graph to the set of graphs considered by the SPARQL query as the queried dataset default graph.
+    /// It overrides the `FROM` and `FROM NAMED` elements of the evaluated query.
     #[inline]
     pub fn with_default_graph(mut self, default_graph_name: impl Into<NamedNode>) -> Self {
         self.dataset.default.push(default_graph_name.into());
         self
     }
 
-    /// Adds a named graph to the set of graphs considered by the SPARQL query as the queried dataset named graphs
-    /// Overrides the `FROM` and `FROM NAMED` elements of the evaluated query
+    /// Adds a named graph to the set of graphs considered by the SPARQL query as the queried dataset named graphs.
+    /// It overrides the `FROM` and `FROM NAMED` elements of the evaluated query.
     #[inline]
     pub fn with_named_graph(mut self, named_graph_name: impl Into<NamedNode>) -> Self {
         self.dataset.named.push(named_graph_name.into());
