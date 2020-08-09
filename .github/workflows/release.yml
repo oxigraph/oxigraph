@@ -25,3 +25,35 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
           repository: oxigraph/oxigraph-wikibase
           tag_with_ref: true
+  publish_python_doc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: rustup update
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+      - run: python -m venv python/venv
+      - run: source python/venv/bin/activate && pip install --upgrade pip maturin sphinx
+      - run: source venv/bin/activate && maturin develop
+        working-directory: ./python
+      - run: source ../venv/bin/activate && sphinx-build -M doctest . build
+        working-directory: ./python/docs
+      - run: source ../venv/bin/activate && sphinx-build -M html . build
+        working-directory: ./python/docs
+      - uses: actions/checkout@v2
+        with:
+          repository: oxigraph/oxigraph.github.io
+          path: website
+          token: ${{ secrets.FULL_ACCESS_TOKEN }}
+      - run: echo ::set-env name=RELEASE_VERSION::$(echo ${GITHUB_REF:10})
+      - run: |
+          rm -rf ./website/pyoxigraph/stable && mkdir -p ./website/pyoxigraph/stable && cp -r ./python/docs/build/html/* ./website/pyoxigraph/stable/
+          mkdir -p ./website/pyoxigraph/$RELEASE_VERSION && cp -r ./python/docs/build/html/* ./website/pyoxigraph/$RELEASE_VERSION/
+      - run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add .
+          git diff-index --quiet HEAD || git commit -m "Updates pyoxigraph documentation"
+          git push
+        working-directory: ./website
