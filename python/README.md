@@ -23,8 +23,9 @@ It also provides a set of utility functions for reading, writing and processing 
 Pyoxigraph is distributed [on Pypi](https://pypi.org/project/pyoxigraph/).
 Run `pip install pyoxigraph` to install it.
 
-Pyoxigraph documentation is [available on Oxigraph website](https://oxigraph.org/pyoxigraph/).
+There exists also a small library providing [rdflib](https://rdflib.readthedocs.io) store using pyoxigraph: [oxrdflib](https://github.com/oxigraph/oxrdflib).
 
+Pyoxigraph documentation is [available on Oxigraph website](https://oxigraph.org/pyoxigraph/).
 
 ## Build the development version
 

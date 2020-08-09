@@ -26,7 +26,9 @@ It also provides a set of utility functions for reading, writing and processing 
 `N-Quads <https://www.w3.org/TR/n-quads/>`_ and
 `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
 
-pyoxigraph is `distributed on Pypi <https://pypi.org/project/pyoxigraph/>`_.
+Pyoxigraph is `distributed on Pypi <https://pypi.org/project/pyoxigraph/>`_.
+
+There exists also a small library providing `rdflib <https://rdflib.readthedocs.io>`_ store using pyoxigraph: `oxrdflib <https://github.com/oxigraph/oxrdflib>`_.
 
 Oxigraph and pyoxigraph source code are on `GitHub <https://github.com/oxigraph/oxigraph/tree/master/python>`_.
 
