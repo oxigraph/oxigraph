@@ -15,7 +15,7 @@ It has been executed on a PrevailPro P3000 with 32GB of RAM.
 ### Explore
 The [explore use case](http://wifo5-03.informatik.uni-mannheim.de/bizer/berlinsparqlbenchmark/spec/ExploreUseCase/index.html) is composed of 11 queries that do simple data retrieval.
 
-Query 6 existed in previous versions of the benchmark as is now removed.
+Query 6 existed in previous versions of the benchmark but is now removed.
 
 ![explore use case results](bsbm.explore.svg)
 
