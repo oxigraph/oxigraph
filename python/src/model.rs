@@ -1,4 +1,5 @@
 use oxigraph::model::*;
+use oxigraph::sparql::Variable;
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::{IndexError, NotImplementedError, TypeError, ValueError};
 use pyo3::prelude::*;
@@ -693,6 +694,77 @@ impl PyIterProtocol for PyQuad {
             ]
             .into_iter(),
         }
+    }
+}
+
+/// A SPARQL query variable
+///
+/// :param value: the variable name as a string
+/// :type value: str
+///
+/// The :py:func:`str` function provides a serialization compatible with SPARQL:
+///
+/// >>> str(Variable('foo'))
+/// '?foo'
+#[pyclass(name = Variable)]
+#[text_signature = "(value)"]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct PyVariable {
+    inner: Variable,
+}
+
+impl From<Variable> for PyVariable {
+    fn from(inner: Variable) -> Self {
+        Self { inner }
+    }
+}
+
+impl From<PyVariable> for Variable {
+    fn from(variable: PyVariable) -> Self {
+        variable.inner
+    }
+}
+
+impl<'a> From<&'a PyVariable> for &'a Variable {
+    fn from(variable: &'a PyVariable) -> Self {
+        &variable.inner
+    }
+}
+
+#[pymethods]
+impl PyVariable {
+    #[new]
+    fn new(value: String) -> Self {
+        Variable::new(value).into()
+    }
+
+    /// :return: the variable name
+    /// :rtype: str
+    ///
+    /// >>> Variable("foo").value
+    /// 'foo'
+    #[getter]
+    fn value(&self) -> &str {
+        self.inner.as_str()
+    }
+}
+
+#[pyproto]
+impl PyObjectProtocol for PyVariable {
+    fn __str__(&self) -> String {
+        self.inner.to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<Variable value={}>", self.inner.as_str())
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash(&self.inner)
+    }
+
+    fn __richcmp__(&self, other: &PyCell<Self>, op: CompareOp) -> PyResult<bool> {
+        eq_compare(self, &other.borrow(), op)
     }
 }
 

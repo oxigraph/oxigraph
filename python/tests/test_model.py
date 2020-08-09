@@ -180,5 +180,17 @@ class TestQuad(unittest.TestCase):
         )
 
 
+class TestVariable(unittest.TestCase):
+    def test_constructor(self):
+        self.assertEqual(Variable("foo").value, "foo")
+
+    def test_string(self):
+        self.assertEqual(str(Variable("foo")), "?foo")
+
+    def test_equal(self):
+        self.assertEqual(Variable("foo"), Variable("foo"))
+        self.assertNotEqual(Variable("foo"), Variable("bar"))
+
+
 if __name__ == "__main__":
     unittest.main()

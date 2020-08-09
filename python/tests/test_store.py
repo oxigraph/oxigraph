@@ -68,7 +68,8 @@ class TestAbstractStore(unittest.TestCase, ABC):
             {Quad(foo, bar, baz, DefaultGraph()), Quad(foo, bar, baz, graph)},
         )
         self.assertEqual(
-            set(store.quads_for_pattern(None, None, None, graph)), {Quad(foo, bar, baz, graph)},
+            set(store.quads_for_pattern(None, None, None, graph)),
+            {Quad(foo, bar, baz, graph)},
         )
         self.assertEqual(
             set(store.quads_for_pattern(foo, None, None, DefaultGraph())),
@@ -84,32 +85,51 @@ class TestAbstractStore(unittest.TestCase, ABC):
     def test_construct_query(self):
         store = self.store()
         store.add(Quad(foo, bar, baz))
+        results = store.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
+        self.assertIsInstance(results, QueryTriples)
         self.assertEqual(
-            set(store.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")),
-            {Triple(foo, bar, baz)},
+            set(results), {Triple(foo, bar, baz)},
         )
 
     def test_select_query(self):
         store = self.store()
         store.add(Quad(foo, bar, baz))
-        results = list(store.query("SELECT ?s WHERE { ?s ?p ?o }"))
-        self.assertEqual(len(results), 1)
-        self.assertEqual(results[0][0], foo)
-        self.assertEqual(results[0]["s"], foo)
+        solutions = store.query("SELECT ?s WHERE { ?s ?p ?o }")
+        self.assertIsInstance(solutions, QuerySolutions)
+        self.assertEqual(solutions.variables, [Variable("s")])
+        solution = next(solutions)
+        self.assertIsInstance(solution, QuerySolution)
+        self.assertEqual(solution[0], foo)
+        self.assertEqual(solution["s"], foo)
+        self.assertEqual(solution[Variable("s")], foo)
 
     def test_select_query_union_default_graph(self):
         store = self.store()
         store.add(Quad(foo, bar, baz, graph))
         self.assertEqual(len(list(store.query("SELECT ?s WHERE { ?s ?p ?o }"))), 0)
-        self.assertEqual(len(list(store.query("SELECT ?s WHERE { ?s ?p ?o }", use_default_graph_as_union=True))), 1)
-        self.assertEqual(len(list(store.query("SELECT ?s WHERE { ?s ?p ?o }", use_default_graph_as_union=True, named_graph_uris=[graph]))), 1)
+        results = store.query(
+            "SELECT ?s WHERE { ?s ?p ?o }", use_default_graph_as_union=True
+        )
+        self.assertEqual(len(list(results)), 1)
+        results = store.query(
+            "SELECT ?s WHERE { ?s ?p ?o }",
+            use_default_graph_as_union=True,
+            named_graph_uris=[graph],
+        )
+        self.assertEqual(len(list(results)), 1)
 
     def test_select_query_with_default_graph(self):
         store = self.store()
         store.add(Quad(foo, bar, baz, graph))
         self.assertEqual(len(list(store.query("SELECT ?s WHERE { ?s ?p ?o }"))), 0)
-        self.assertEqual(len(list(store.query("SELECT ?s WHERE { ?s ?p ?o }", default_graph_uris=[graph]))), 1)
-        self.assertEqual(len(list(store.query("SELECT ?s WHERE { GRAPH ?g { ?s ?p ?o } }", named_graph_uris=[graph]))), 1)
+        results = store.query(
+            "SELECT ?s WHERE { ?s ?p ?o }", default_graph_uris=[graph]
+        )
+        self.assertEqual(len(list(results)), 1)
+        results = store.query(
+            "SELECT ?s WHERE { GRAPH ?g { ?s ?p ?o } }", named_graph_uris=[graph],
+        )
+        self.assertEqual(len(list(results)), 1)
 
     def test_load_ntriples_to_default_graph(self):
         store = self.store()
@@ -160,8 +180,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
         output = BytesIO()
         store.dump(output, "application/n-triples", from_graph=graph)
         self.assertEqual(
-            output.getvalue(),
-            b"<http://foo> <http://bar> <http://baz> .\n",
+            output.getvalue(), b"<http://foo> <http://bar> <http://baz> .\n",
         )
 
     def test_dump_nquads(self):

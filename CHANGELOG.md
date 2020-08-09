@@ -4,6 +4,7 @@
 - `QueryOptions` now allows settings the query dataset graph URIs (the SPARQL protocol `default-graph-uri` and `named-graph-uri` parameters).
 - `pyoxigraph` store `query` methods allows to provide the dataset graph URIs. It also provides an option to use all graph names as the default graph.
 - "default graph as union option" now works with FROM NAMED.
+- `pyoxigraph` now exposes and documents `Variable`, `QuerySolution`, `QuerySolutions` and `QueryTriples`
 
 ## [0.1.0-rc.1] - 2020-08-01
 

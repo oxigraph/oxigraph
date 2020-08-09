@@ -1,5 +1,6 @@
 use crate::io::PyFileLike;
 use crate::model::*;
+use crate::sparql::*;
 use crate::store_utils::*;
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::*;
@@ -113,8 +114,8 @@ impl PyMemoryStore {
     /// :type default_graph_uris: list(NamedNode),None
     /// :param named_graph_uris: optional, list of the named graph URIs that could be used in SPARQL `GRAPH` clause. By default all the store default graphs are available.
     /// :type named_graph_uris: list(NamedNode),None
-    /// :return: a :py:class:`bool` for ``ASK`` queries, an iterator of :py:class:`Triple` for ``CONSTRUCT`` and ``DESCRIBE`` queries and an iterator of solution bindings for ``SELECT`` queries.
-    /// :rtype: iter(QuerySolution) or iter(Triple) or bool
+    /// :return: a :py:class:`bool` for ``ASK`` queries, an iterator of :py:class:`Triple` for ``CONSTRUCT`` and ``DESCRIBE`` queries and an iterator of :py:class:`QuerySolution` for ``SELECT`` queries.
+    /// :rtype: QuerySolutions or QueryTriples or bool
     /// :raises SyntaxError: if the provided query is invalid
     ///
     /// ``SELECT`` query:

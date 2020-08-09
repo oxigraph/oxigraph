@@ -66,3 +66,4 @@ Table of contents
    io
    store/memory
    store/sled
+   sparql
