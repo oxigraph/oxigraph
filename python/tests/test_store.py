@@ -102,6 +102,14 @@ class TestAbstractStore(unittest.TestCase, ABC):
         store.add(Quad(foo, bar, baz, graph))
         self.assertEqual(len(list(store.query("SELECT ?s WHERE { ?s ?p ?o }"))), 0)
         self.assertEqual(len(list(store.query("SELECT ?s WHERE { ?s ?p ?o }", use_default_graph_as_union=True))), 1)
+        self.assertEqual(len(list(store.query("SELECT ?s WHERE { ?s ?p ?o }", use_default_graph_as_union=True, named_graph_uris=[graph]))), 1)
+
+    def test_select_query_with_default_graph(self):
+        store = self.store()
+        store.add(Quad(foo, bar, baz, graph))
+        self.assertEqual(len(list(store.query("SELECT ?s WHERE { ?s ?p ?o }"))), 0)
+        self.assertEqual(len(list(store.query("SELECT ?s WHERE { ?s ?p ?o }", default_graph_uris=[graph]))), 1)
+        self.assertEqual(len(list(store.query("SELECT ?s WHERE { GRAPH ?g { ?s ?p ?o } }", named_graph_uris=[graph]))), 1)
 
     def test_load_ntriples_to_default_graph(self):
         store = self.store()

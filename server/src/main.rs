@@ -122,7 +122,7 @@ async fn handle_request(request: Request, store: RocksDbStore) -> Result<Respons
                         .take(MAX_SPARQL_BODY_SIZE)
                         .read_to_string(&mut buffer)
                         .await?;
-                    evaluate_sparql_query(store, buffer, request).await?
+                    evaluate_sparql_query(store, buffer, Vec::new(), Vec::new(), request).await?
                 } else if content_type.essence() == "application/x-www-form-urlencoded" {
                     let mut buffer = Vec::new();
                     let mut request = request;
@@ -159,8 +159,24 @@ async fn evaluate_urlencoded_sparql_query(
     encoded: Vec<u8>,
     request: Request,
 ) -> Result<Response> {
-    if let Some((_, query)) = form_urlencoded::parse(&encoded).find(|(k, _)| k == "query") {
-        evaluate_sparql_query(store, query.to_string(), request).await
+    let mut query = None;
+    let mut default_graph_uris = Vec::new();
+    let mut named_graph_uris = Vec::new();
+    for (k, v) in form_urlencoded::parse(&encoded) {
+        match k.as_ref() {
+            "query" => query = Some(v.into_owned()),
+            "default-graph-uri" => default_graph_uris.push(v.into_owned()),
+            "named-graph-uri" => named_graph_uris.push(v.into_owned()),
+            _ => {
+                return Ok(simple_response(
+                    StatusCode::BadRequest,
+                    format!("Unexpected parameter: {}", k),
+                ))
+            }
+        }
+    }
+    if let Some(query) = query {
+        evaluate_sparql_query(store, query, default_graph_uris, named_graph_uris, request).await
     } else {
         Ok(simple_response(
             StatusCode::BadRequest,
@@ -172,6 +188,8 @@ async fn evaluate_urlencoded_sparql_query(
 async fn evaluate_sparql_query(
     store: RocksDbStore,
     query: String,
+    default_graph_uris: Vec<String>,
+    named_graph_uris: Vec<String>,
     request: Request,
 ) -> Result<Response> {
     spawn_blocking(move || {
@@ -180,7 +198,24 @@ async fn evaluate_sparql_query(
             e.set_status(StatusCode::BadRequest);
             e
         })?;
-        let options = QueryOptions::default().with_service_handler(HttpService::default());
+
+        let mut options = QueryOptions::default().with_service_handler(HttpService::default());
+        for default_graph_uri in default_graph_uris {
+            options =
+                options.with_default_graph(NamedNode::new(default_graph_uri).map_err(|e| {
+                    let mut e = Error::from(e);
+                    e.set_status(StatusCode::BadRequest);
+                    e
+                })?)
+        }
+        for named_graph_uri in named_graph_uris {
+            options = options.with_named_graph(NamedNode::new(named_graph_uri).map_err(|e| {
+                let mut e = Error::from(e);
+                e.set_status(StatusCode::BadRequest);
+                e
+            })?)
+        }
+
         let results = store.query(query, options)?;
         //TODO: stream
         if let QueryResults::Graph(_) = results {

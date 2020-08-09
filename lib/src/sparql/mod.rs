@@ -14,7 +14,7 @@ mod plan_builder;
 mod xml_results;
 
 use crate::model::NamedNode;
-use crate::sparql::algebra::QueryVariants;
+use crate::sparql::algebra::{DatasetSpec, QueryVariants};
 use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::EvaluationError;
 use crate::sparql::eval::SimpleEvaluator;
@@ -76,7 +76,11 @@ impl<S: ReadableEncodedStore + 'static> SimplePreparedQuery<S> {
                 let dataset = Rc::new(DatasetView::new(
                     store,
                     options.default_graph_as_union,
-                    &dataset,
+                    if options.dataset.is_empty() {
+                        &dataset
+                    } else {
+                        &options.dataset
+                    },
                 )?);
                 let (plan, variables) = PlanBuilder::build(dataset.as_ref(), &algebra)?;
                 SimplePreparedQueryAction::Select {
@@ -93,7 +97,11 @@ impl<S: ReadableEncodedStore + 'static> SimplePreparedQuery<S> {
                 let dataset = Rc::new(DatasetView::new(
                     store,
                     options.default_graph_as_union,
-                    &dataset,
+                    if options.dataset.is_empty() {
+                        &dataset
+                    } else {
+                        &options.dataset
+                    },
                 )?);
                 let (plan, _) = PlanBuilder::build(dataset.as_ref(), &algebra)?;
                 SimplePreparedQueryAction::Ask {
@@ -110,7 +118,11 @@ impl<S: ReadableEncodedStore + 'static> SimplePreparedQuery<S> {
                 let dataset = Rc::new(DatasetView::new(
                     store,
                     options.default_graph_as_union,
-                    &dataset,
+                    if options.dataset.is_empty() {
+                        &dataset
+                    } else {
+                        &options.dataset
+                    },
                 )?);
                 let (plan, variables) = PlanBuilder::build(dataset.as_ref(), &algebra)?;
                 SimplePreparedQueryAction::Construct {
@@ -131,7 +143,11 @@ impl<S: ReadableEncodedStore + 'static> SimplePreparedQuery<S> {
                 let dataset = Rc::new(DatasetView::new(
                     store,
                     options.default_graph_as_union,
-                    &dataset,
+                    if options.dataset.is_empty() {
+                        &dataset
+                    } else {
+                        &options.dataset
+                    },
                 )?);
                 let (plan, _) = PlanBuilder::build(dataset.as_ref(), &algebra)?;
                 SimplePreparedQueryAction::Describe {
@@ -167,13 +183,16 @@ impl<S: ReadableEncodedStore + 'static> SimplePreparedQuery<S> {
 #[derive(Clone)]
 pub struct QueryOptions {
     pub(crate) default_graph_as_union: bool,
+    pub(crate) dataset: DatasetSpec,
     pub(crate) service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
 }
 
 impl Default for QueryOptions {
+    #[inline]
     fn default() -> Self {
         Self {
             default_graph_as_union: false,
+            dataset: DatasetSpec::default(),
             service_handler: Rc::new(EmptyServiceHandler),
         }
     }
@@ -181,12 +200,30 @@ impl Default for QueryOptions {
 
 impl QueryOptions {
     /// Consider the union of all graphs in the store as the default graph
-    pub const fn with_default_graph_as_union(mut self) -> Self {
+    #[inline]
+    pub fn with_default_graph_as_union(mut self) -> Self {
         self.default_graph_as_union = true;
         self
     }
 
+    /// Adds a named graph to the set of graphs considered by the SPARQL query as the queried dataset default graph
+    /// Overrides the `FROM` and `FROM NAMED` elements of the evaluated query
+    #[inline]
+    pub fn with_default_graph(mut self, default_graph_name: impl Into<NamedNode>) -> Self {
+        self.dataset.default.push(default_graph_name.into());
+        self
+    }
+
+    /// Adds a named graph to the set of graphs considered by the SPARQL query as the queried dataset named graphs
+    /// Overrides the `FROM` and `FROM NAMED` elements of the evaluated query
+    #[inline]
+    pub fn with_named_graph(mut self, named_graph_name: impl Into<NamedNode>) -> Self {
+        self.dataset.named.push(named_graph_name.into());
+        self
+    }
+
     /// Use a given [`ServiceHandler`](trait.ServiceHandler.html) to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls.
+    #[inline]
     pub fn with_service_handler(mut self, service_handler: impl ServiceHandler + 'static) -> Self {
         self.service_handler = Rc::new(ErrorConversionServiceHandler {
             handler: service_handler,

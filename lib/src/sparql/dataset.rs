@@ -94,7 +94,7 @@ impl<S: ReadableEncodedStore> ReadableEncodedStore for DatasetView<S> {
             if let Some(dataset) = &self.dataset {
                 if let Some(graph_name) = graph_name {
                     if graph_name == EncodedTerm::DefaultGraph {
-                        let iters = dataset
+                        let mut iters = dataset
                             .default
                             .iter()
                             .map(|graph_name| {
@@ -106,6 +106,16 @@ impl<S: ReadableEncodedStore> ReadableEncodedStore for DatasetView<S> {
                                 )
                             })
                             .collect::<Vec<_>>();
+                        if self.default_graph_as_union {
+                            iters.extend(dataset.named.iter().map(|graph_name| {
+                                self.store.encoded_quads_for_pattern(
+                                    subject,
+                                    predicate,
+                                    object,
+                                    Some(*graph_name),
+                                )
+                            }));
+                        }
                         Box::new(map_iter(iters.into_iter().flatten()).map(|quad| {
                             let quad = quad?;
                             Ok(EncodedQuad::new(

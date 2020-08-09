@@ -1,7 +1,7 @@
 use crate::model::*;
 use oxigraph::model::*;
 use oxigraph::sparql::{
-    EvaluationError, QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter,
+    EvaluationError, QueryOptions, QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter,
 };
 use pyo3::exceptions::{IOError, RuntimeError, SyntaxError, TypeError, ValueError};
 use pyo3::prelude::*;
@@ -45,6 +45,38 @@ pub fn extract_quads_pattern(
             None
         },
     ))
+}
+
+pub fn build_query_options(
+    use_default_graph_as_union: bool,
+    default_graph_uris: Option<Vec<PyNamedNode>>,
+    named_graph_uris: Option<Vec<PyNamedNode>>,
+) -> PyResult<QueryOptions> {
+    let mut options = QueryOptions::default();
+    if use_default_graph_as_union {
+        options = options.with_default_graph_as_union();
+    }
+    if let Some(default_graph_uris) = default_graph_uris {
+        if default_graph_uris.is_empty() {
+            return Err(ValueError::py_err(
+                "The list of the default graph URIs could not be empty",
+            ));
+        }
+        for default_graph_uri in default_graph_uris {
+            options = options.with_default_graph(default_graph_uri);
+        }
+    }
+    if let Some(named_graph_uris) = named_graph_uris {
+        if named_graph_uris.is_empty() {
+            return Err(ValueError::py_err(
+                "The list of the named graph URIs could not be empty",
+            ));
+        }
+        for named_graph_uri in named_graph_uris {
+            options = options.with_named_graph(named_graph_uri);
+        }
+    }
+    Ok(options)
 }
 
 pub fn query_results_to_python(py: Python<'_>, results: QueryResults) -> PyResult<PyObject> {
