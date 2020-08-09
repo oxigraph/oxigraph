@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-DATASET_SIZE=100000
+DATASET_SIZE=10000
 cd bsbm-tools
 ./generate -fc -pc ${DATASET_SIZE} -s nt -fn "explore-${DATASET_SIZE}"
 cp ../virtuoso-opensource/database/virtuoso.ini.sample virtuoso.ini
