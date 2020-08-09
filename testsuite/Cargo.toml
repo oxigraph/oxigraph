@@ -1,6 +1,6 @@
 [package]
 name = "oxigraph_testsuite"
-version = "0.1.0-rc.1"
+version = "0.1.0"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT/Apache-2.0"
 readme = "../README.md"
@@ -14,7 +14,7 @@ publish = false
 [dependencies]
 anyhow = "1"
 chrono = "0.4"
-oxigraph = { version = "0.1.0-rc.1" }
+oxigraph = { version = "0.1.0", path="../lib" }
 
 [dev-dependencies]
 criterion = "0.3"

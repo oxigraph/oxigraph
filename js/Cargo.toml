@@ -1,6 +1,6 @@
 [package]
 name = "oxigraph_js"
-version = "0.1.0-rc.1"
+version = "0.1.0"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
@@ -17,7 +17,7 @@ name = "oxigraph"
 wasm-opt = false
 
 [dependencies]
-oxigraph = {version = "0.1.0-rc.1"}
+oxigraph = { version = "0.1", path="../lib" }
 wasm-bindgen = "0.2"
 js-sys = "0.3"
 console_error_panic_hook = "0.1"
