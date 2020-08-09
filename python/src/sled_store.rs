@@ -123,6 +123,8 @@ impl PySledStore {
     ///
     /// :param query: the query to execute
     /// :type query: str
+    /// :param use_default_graph_as_union: if the SPARQL query should look for triples in all the dataset graphs by default (i.e. without `GRAPH` operations). Disabled by default.
+    /// :type use_default_graph_as_union: bool
     /// :return: a :py:class:`bool` for ``ASK`` queries, an iterator of :py:class:`Triple` for ``CONSTRUCT`` and ``DESCRIBE`` queries and an iterator of solution bindings for ``SELECT`` queries.
     /// :rtype: iter(QuerySolution) or iter(Triple) or bool
     /// :raises SyntaxError: if the provided query is invalid
@@ -148,11 +150,21 @@ impl PySledStore {
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
     /// >>> store.query('ASK { ?s ?p ?o }')
     /// True
-    #[text_signature = "($self, query)"]
-    fn query(&self, query: &str, py: Python<'_>) -> PyResult<PyObject> {
+    #[text_signature = "($self, query, *, use_default_graph_as_union)"]
+    #[args(query, "*", use_default_graph_as_union = "false")]
+    fn query(
+        &self,
+        query: &str,
+        use_default_graph_as_union: bool,
+        py: Python<'_>,
+    ) -> PyResult<PyObject> {
         let results = py.allow_threads(move || {
+            let mut options = QueryOptions::default();
+            if use_default_graph_as_union {
+                options = options.with_default_graph_as_union();
+            }
             self.inner
-                .query(query, QueryOptions::default())
+                .query(query, options)
                 .map_err(map_evaluation_error)
         })?;
         query_results_to_python(py, results)

@@ -41,10 +41,10 @@ class TestAbstractStore(unittest.TestCase, ABC):
         store.add(Quad(foo, bar, baz))
         store.add(Quad(foo, bar, baz, DefaultGraph()))
         store.add(Quad(foo, bar, baz, graph))
-        self.assertTrue(Quad(foo, bar, baz) in store)
-        self.assertTrue(Quad(foo, bar, baz, DefaultGraph()) in store)
-        self.assertTrue(Quad(foo, bar, baz, graph) in store)
-        self.assertTrue(Quad(foo, bar, baz, foo) not in store)
+        self.assertIn(Quad(foo, bar, baz), store)
+        self.assertIn(Quad(foo, bar, baz, DefaultGraph()), store)
+        self.assertIn(Quad(foo, bar, baz, graph), store)
+        self.assertNotIn(Quad(foo, bar, baz, foo), store)
 
     def test_iter(self):
         store = self.store()
@@ -96,6 +96,12 @@ class TestAbstractStore(unittest.TestCase, ABC):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0][0], foo)
         self.assertEqual(results[0]["s"], foo)
+
+    def test_select_query_union_default_graph(self):
+        store = self.store()
+        store.add(Quad(foo, bar, baz, graph))
+        self.assertEqual(len(list(store.query("SELECT ?s WHERE { ?s ?p ?o }"))), 0)
+        self.assertEqual(len(list(store.query("SELECT ?s WHERE { ?s ?p ?o }", use_default_graph_as_union=True))), 1)
 
     def test_load_ntriples_to_default_graph(self):
         store = self.store()

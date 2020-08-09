@@ -32,7 +32,8 @@ classifier = [
     "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Rust",
-    "Topic :: Database :: Database Engines/Servers"
+    "Topic :: Database :: Database Engines/Servers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 project-url = [
     "Documentation, https://oxigraph.org/pyoxigraph/",
