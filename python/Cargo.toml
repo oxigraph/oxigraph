@@ -6,9 +6,7 @@ license = "MIT/Apache-2.0"
 readme = "README.md"
 keywords = ["RDF", "SPARQL", "graph-database", "database"]
 repository = "https://github.com/oxigraph/oxigraph/tree/master/python"
-description = """
-Python bindings of Oxigraph, a SPARQL database and RDF toolkit
-"""
+description = "Python bindings of Oxigraph, a SPARQL database and RDF toolkit"
 edition = "2018"
 
 [lib]
@@ -37,6 +35,7 @@ classifier = [
 ]
 project-url = [
     "Documentation, https://oxigraph.org/pyoxigraph/",
-    "Source, https://github.com/oxigraph/oxigraph/tree/master/python"
+    "Source, https://github.com/oxigraph/oxigraph/tree/master/python",
+    "Tracker, https://github.com/oxigraph/oxrdflib/issues",
 ]
 requires-python = ">=3.5"

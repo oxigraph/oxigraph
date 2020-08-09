@@ -46,5 +46,5 @@ To run them use `python -m unittest` in the `tests` directory.
 
 To release a new version of Pyoxigraph run:
 ```bash
-docker run --rm -v $(pwd):/io konstin2/maturin publish
+docker run --rm -v $(pwd):/io konstin2/maturin build --release && python -m twine upload target/wheels/*
 ```
