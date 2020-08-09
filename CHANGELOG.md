@@ -1,4 +1,4 @@
-## Master
+## [0.1.0] - 2020-08-09
 
 ### Added
 - `QueryOptions` now allows settings the query dataset graph URIs (the SPARQL protocol `default-graph-uri` and `named-graph-uri` parameters).
@@ -6,7 +6,7 @@
 - "default graph as union option" now works with FROM NAMED.
 - `pyoxigraph` now exposes and documents `Variable`, `QuerySolution`, `QuerySolutions` and `QueryTriples`
 
-## [0.1.0-rc.1] - 2020-08-01
+## [0.1.0-rc.1] - 2020-08-08
 
 ### Added
 - `oxigraph` Rust library with SPARQL 1.1 query support and memory, Sled and RocksDB stores.
