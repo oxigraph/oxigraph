@@ -164,8 +164,3 @@ The Oxigraph bindings are written in Rust using [the Rust WASM toolkit](https://
 The [The Rust Wasm Book](https://rustwasm.github.io/docs/book/) is a great tutorial to get started.
 
 To run the tests of the JS bindings written in JS run `npm test`.
-
-To publish a new version on npm run:
-```bash
-npm run build && npm run release
-```

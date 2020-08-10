@@ -1,7 +1,9 @@
 name: release
+
 on:
   release:
     types: [published]
+
 jobs:
   push_server_to_docker_registry:
     runs-on: ubuntu-latest
@@ -14,6 +16,8 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
           repository: oxigraph/oxigraph
           tag_with_ref: true
+          tags: latest
+          add_git_labels: true
   push_wikibase_to_docker_registry:
     runs-on: ubuntu-latest
     steps:
@@ -25,6 +29,49 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
           repository: oxigraph/oxigraph-wikibase
           tag_with_ref: true
+          tags: latest
+          add_git_labels: true
+  publish_crates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: rustup update
+      - run: cargo login $CRATES_IO_TOKEN
+        env:
+          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+      - run: cargo publish
+        working-directory: ./lib
+      - run: cargo publish
+        working-directory: ./server
+      - run: cargo publish
+        working-directory: ./wikibase
+  publish_pypi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: docker run --rm -v $(pwd):/io konstin2/maturin build --release
+        working-directory: ./python
+      - uses: pypa/gh-action-pypi-publish@v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_PASSWORD }}
+        working-directory: ./python
+  publish_npm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v1
+        with:
+          node-version: '12'
+        working-directory: ./js
+      - run: npm install
+        working-directory: ./js
+      - run: npm run build
+        working-directory: ./js
+      - run: npm run release
+        working-directory: ./js
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
   publish_python_doc:
     runs-on: ubuntu-latest
     steps:
