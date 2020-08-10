@@ -29,8 +29,8 @@ class TestBlankNode(unittest.TestCase):
     def test_equal(self):
         self.assertEqual(BlankNode("foo"), BlankNode("foo"))
         self.assertNotEqual(BlankNode("foo"), BlankNode("bar"))
-        # TODO self.assertNotEqual(BlankNode('foo'), NamedNode('http://foo'))
-        # TODO self.assertNotEqual(NamedNode('http://foo'), BlankNode('foo'))
+        self.assertNotEqual(BlankNode('foo'), NamedNode('http://foo'))
+        self.assertNotEqual(NamedNode('http://foo'), BlankNode('foo'))
 
 
 class TestLiteral(unittest.TestCase):
@@ -59,10 +59,10 @@ class TestLiteral(unittest.TestCase):
             Literal("foo", language="en", datatype=RDF_LANG_STRING),
             Literal("foo", language="en"),
         )
-        # TODO self.assertNotEqual(NamedNode('http://foo'), Literal('foo'))
-        # TODO self.assertNotEqual(Literal('foo'), NamedNode('http://foo'))
-        # TODO self.assertNotEqual(BlankNode('foo'), Literal('foo'))
-        # TODO self.assertNotEqual(Literal('foo'), BlankNode('foo'))
+        self.assertNotEqual(NamedNode('http://foo'), Literal('foo'))
+        self.assertNotEqual(Literal('foo'), NamedNode('http://foo'))
+        self.assertNotEqual(BlankNode('foo'), Literal('foo'))
+        self.assertNotEqual(Literal('foo'), BlankNode('foo'))
 
 
 class TestTriple(unittest.TestCase):

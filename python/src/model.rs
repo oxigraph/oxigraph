@@ -3,8 +3,9 @@ use oxigraph::sparql::Variable;
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::{IndexError, NotImplementedError, TypeError, ValueError};
 use pyo3::prelude::*;
-use pyo3::{PyIterProtocol, PyMappingProtocol, PyObjectProtocol};
+use pyo3::{PyIterProtocol, PyMappingProtocol, PyObjectProtocol, PyTypeInfo};
 use std::collections::hash_map::DefaultHasher;
+use std::convert::TryFrom;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::vec::IntoIter;
@@ -92,8 +93,19 @@ impl PyObjectProtocol for PyNamedNode {
         hash(&self.inner)
     }
 
-    fn __richcmp__(&self, other: &PyCell<Self>, op: CompareOp) -> bool {
-        eq_ord_compare(self, &other.borrow(), op)
+    fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
+        if let Ok(other) = other.downcast::<PyCell<PyNamedNode>>() {
+            Ok(eq_ord_compare(self, &other.borrow(), op))
+        } else if PyBlankNode::is_instance(other)
+            || PyLiteral::is_instance(other)
+            || PyDefaultGraph::is_instance(other)
+        {
+            eq_compare_other_type(op)
+        } else {
+            Err(TypeError::py_err(
+                "NamedNode could only be compared with RDF terms",
+            ))
+        }
     }
 }
 
@@ -182,8 +194,19 @@ impl PyObjectProtocol for PyBlankNode {
         hash(&self.inner)
     }
 
-    fn __richcmp__(&self, other: &PyCell<Self>, op: CompareOp) -> PyResult<bool> {
-        eq_compare(self, &other.borrow(), op)
+    fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
+        if let Ok(other) = other.downcast::<PyCell<PyBlankNode>>() {
+            eq_compare(self, &other.borrow(), op)
+        } else if PyNamedNode::is_instance(other)
+            || PyLiteral::is_instance(other)
+            || PyDefaultGraph::is_instance(other)
+        {
+            eq_compare_other_type(op)
+        } else {
+            Err(TypeError::py_err(
+                "BlankNode could only be compared with RDF terms",
+            ))
+        }
     }
 }
 
@@ -310,8 +333,19 @@ impl PyObjectProtocol for PyLiteral {
         hash(&self.inner)
     }
 
-    fn __richcmp__(&self, other: &PyCell<Self>, op: CompareOp) -> PyResult<bool> {
-        eq_compare(self, &other.borrow(), op)
+    fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
+        if let Ok(other) = other.downcast::<PyCell<PyLiteral>>() {
+            eq_compare(self, &other.borrow(), op)
+        } else if PyNamedNode::is_instance(other)
+            || PyBlankNode::is_instance(other)
+            || PyDefaultGraph::is_instance(other)
+        {
+            eq_compare_other_type(op)
+        } else {
+            Err(TypeError::py_err(
+                "Literal could only be compared with RDF terms",
+            ))
+        }
     }
 }
 
@@ -353,8 +387,19 @@ impl PyObjectProtocol for PyDefaultGraph {
         0
     }
 
-    fn __richcmp__(&self, other: &PyCell<Self>, op: CompareOp) -> PyResult<bool> {
-        eq_compare(self, &other.borrow(), op)
+    fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
+        if let Ok(other) = other.downcast::<PyCell<PyDefaultGraph>>() {
+            eq_compare(self, &other.borrow(), op)
+        } else if PyNamedNode::is_instance(other)
+            || PyBlankNode::is_instance(other)
+            || PyLiteral::is_instance(other)
+        {
+            eq_compare_other_type(op)
+        } else {
+            Err(TypeError::py_err(
+                "DefaultGraph could only be compared with RDF terms",
+            ))
+        }
     }
 }
 
@@ -403,11 +448,11 @@ impl<'a> From<&'a PyTriple> for TripleRef<'a> {
 #[pymethods]
 impl PyTriple {
     #[new]
-    fn new(subject: &PyAny, predicate: &PyAny, object: &PyAny) -> PyResult<Self> {
+    fn new(subject: &PyAny, predicate: PyNamedNode, object: &PyAny) -> PyResult<Self> {
         Ok(Triple::new(
-            extract_named_or_blank_node(subject)?,
-            extract_named_node(predicate)?,
-            extract_term(object)?,
+            &PyNamedOrBlankNodeRef::try_from(subject)?,
+            predicate,
+            &PyTermRef::try_from(object)?,
         )
         .into())
     }
@@ -557,18 +602,18 @@ impl PyQuad {
     #[new]
     fn new(
         subject: &PyAny,
-        predicate: &PyAny,
+        predicate: PyNamedNode,
         object: &PyAny,
         graph_name: Option<&PyAny>,
     ) -> PyResult<Self> {
         Ok(Quad::new(
-            extract_named_or_blank_node(subject)?,
-            extract_named_node(predicate)?,
-            extract_term(object)?,
-            if let Some(graph_name) = graph_name {
-                extract_graph_name(graph_name)?
+            &PyNamedOrBlankNodeRef::try_from(subject)?,
+            predicate,
+            &PyTermRef::try_from(object)?,
+            &if let Some(graph_name) = graph_name {
+                PyGraphNameRef::try_from(graph_name)?
             } else {
-                GraphName::DefaultGraph
+                PyGraphNameRef::DefaultGraph
             },
         )
         .into())
@@ -768,27 +813,63 @@ impl PyObjectProtocol for PyVariable {
     }
 }
 
-pub fn extract_named_node(py: &PyAny) -> PyResult<NamedNode> {
-    if let Ok(node) = py.downcast::<PyCell<PyNamedNode>>() {
-        Ok(node.borrow().clone().into())
-    } else {
-        Err(TypeError::py_err(format!(
-            "{} is not an RDF named node",
-            py.get_type().name(),
-        )))
+pub struct PyNamedNodeRef<'a>(PyRef<'a, PyNamedNode>);
+
+impl<'a> From<&'a PyNamedNodeRef<'a>> for NamedNodeRef<'a> {
+    fn from(value: &'a PyNamedNodeRef<'a>) -> Self {
+        value.0.inner.as_ref()
     }
 }
 
-pub fn extract_named_or_blank_node(py: &PyAny) -> PyResult<NamedOrBlankNode> {
-    if let Ok(node) = py.downcast::<PyCell<PyNamedNode>>() {
-        Ok(node.borrow().clone().into())
-    } else if let Ok(node) = py.downcast::<PyCell<PyBlankNode>>() {
-        Ok(node.borrow().clone().into())
-    } else {
-        Err(TypeError::py_err(format!(
-            "{} is not an RDF named or blank node",
-            py.get_type().name(),
-        )))
+impl<'a> TryFrom<&'a PyAny> for PyNamedNodeRef<'a> {
+    type Error = PyErr;
+
+    fn try_from(value: &'a PyAny) -> PyResult<Self> {
+        if let Ok(node) = value.downcast::<PyCell<PyNamedNode>>() {
+            Ok(Self(node.borrow()))
+        } else {
+            Err(TypeError::py_err(format!(
+                "{} is not an RDF named node",
+                value.get_type().name(),
+            )))
+        }
+    }
+}
+
+pub enum PyNamedOrBlankNodeRef<'a> {
+    NamedNode(PyRef<'a, PyNamedNode>),
+    BlankNode(PyRef<'a, PyBlankNode>),
+}
+
+impl<'a> From<&'a PyNamedOrBlankNodeRef<'a>> for NamedOrBlankNodeRef<'a> {
+    fn from(value: &'a PyNamedOrBlankNodeRef<'a>) -> Self {
+        match value {
+            PyNamedOrBlankNodeRef::NamedNode(value) => value.inner.as_ref().into(),
+            PyNamedOrBlankNodeRef::BlankNode(value) => value.inner.as_ref().into(),
+        }
+    }
+}
+
+impl<'a> From<&'a PyNamedOrBlankNodeRef<'a>> for NamedOrBlankNode {
+    fn from(value: &'a PyNamedOrBlankNodeRef<'a>) -> Self {
+        NamedOrBlankNodeRef::from(value).into()
+    }
+}
+
+impl<'a> TryFrom<&'a PyAny> for PyNamedOrBlankNodeRef<'a> {
+    type Error = PyErr;
+
+    fn try_from(value: &'a PyAny) -> PyResult<Self> {
+        if let Ok(node) = value.downcast::<PyCell<PyNamedNode>>() {
+            Ok(Self::NamedNode(node.borrow()))
+        } else if let Ok(node) = value.downcast::<PyCell<PyBlankNode>>() {
+            Ok(Self::BlankNode(node.borrow()))
+        } else {
+            Err(TypeError::py_err(format!(
+                "{} is not an RDF named or blank node",
+                value.get_type().name(),
+            )))
+        }
     }
 }
 
@@ -799,18 +880,44 @@ pub fn named_or_blank_node_to_python(py: Python<'_>, node: NamedOrBlankNode) -> 
     }
 }
 
-pub fn extract_term(py: &PyAny) -> PyResult<Term> {
-    if let Ok(node) = py.downcast::<PyCell<PyNamedNode>>() {
-        Ok(node.borrow().clone().into())
-    } else if let Ok(node) = py.downcast::<PyCell<PyBlankNode>>() {
-        Ok(node.borrow().clone().into())
-    } else if let Ok(literal) = py.downcast::<PyCell<PyLiteral>>() {
-        Ok(literal.borrow().clone().into())
-    } else {
-        Err(TypeError::py_err(format!(
-            "{} is not an RDF named or blank node",
-            py.get_type().name(),
-        )))
+pub enum PyTermRef<'a> {
+    NamedNode(PyRef<'a, PyNamedNode>),
+    BlankNode(PyRef<'a, PyBlankNode>),
+    Literal(PyRef<'a, PyLiteral>),
+}
+
+impl<'a> From<&'a PyTermRef<'a>> for TermRef<'a> {
+    fn from(value: &'a PyTermRef<'a>) -> Self {
+        match value {
+            PyTermRef::NamedNode(value) => value.inner.as_ref().into(),
+            PyTermRef::BlankNode(value) => value.inner.as_ref().into(),
+            PyTermRef::Literal(value) => value.inner.as_ref().into(),
+        }
+    }
+}
+
+impl<'a> From<&'a PyTermRef<'a>> for Term {
+    fn from(value: &'a PyTermRef<'a>) -> Self {
+        TermRef::from(value).into()
+    }
+}
+
+impl<'a> TryFrom<&'a PyAny> for PyTermRef<'a> {
+    type Error = PyErr;
+
+    fn try_from(value: &'a PyAny) -> PyResult<Self> {
+        if let Ok(node) = value.downcast::<PyCell<PyNamedNode>>() {
+            Ok(Self::NamedNode(node.borrow()))
+        } else if let Ok(node) = value.downcast::<PyCell<PyBlankNode>>() {
+            Ok(Self::BlankNode(node.borrow()))
+        } else if let Ok(node) = value.downcast::<PyCell<PyLiteral>>() {
+            Ok(Self::Literal(node.borrow()))
+        } else {
+            Err(TypeError::py_err(format!(
+                "{} is not an RDF term",
+                value.get_type().name(),
+            )))
+        }
     }
 }
 
@@ -822,18 +929,44 @@ pub fn term_to_python(py: Python<'_>, term: Term) -> PyObject {
     }
 }
 
-pub fn extract_graph_name(py: &PyAny) -> PyResult<GraphName> {
-    if let Ok(node) = py.downcast::<PyCell<PyNamedNode>>() {
-        Ok(node.borrow().clone().into())
-    } else if let Ok(node) = py.downcast::<PyCell<PyBlankNode>>() {
-        Ok(node.borrow().clone().into())
-    } else if let Ok(node) = py.downcast::<PyCell<PyDefaultGraph>>() {
-        Ok(node.borrow().clone().into())
-    } else {
-        Err(TypeError::py_err(format!(
-            "{} is not a valid RDF graph name",
-            py.get_type().name(),
-        )))
+pub enum PyGraphNameRef<'a> {
+    NamedNode(PyRef<'a, PyNamedNode>),
+    BlankNode(PyRef<'a, PyBlankNode>),
+    DefaultGraph,
+}
+
+impl<'a> From<&'a PyGraphNameRef<'a>> for GraphNameRef<'a> {
+    fn from(value: &'a PyGraphNameRef<'a>) -> Self {
+        match value {
+            PyGraphNameRef::NamedNode(value) => value.inner.as_ref().into(),
+            PyGraphNameRef::BlankNode(value) => value.inner.as_ref().into(),
+            PyGraphNameRef::DefaultGraph => Self::DefaultGraph,
+        }
+    }
+}
+
+impl<'a> From<&'a PyGraphNameRef<'a>> for GraphName {
+    fn from(value: &'a PyGraphNameRef<'a>) -> Self {
+        GraphNameRef::from(value).into()
+    }
+}
+
+impl<'a> TryFrom<&'a PyAny> for PyGraphNameRef<'a> {
+    type Error = PyErr;
+
+    fn try_from(value: &'a PyAny) -> PyResult<Self> {
+        if let Ok(node) = value.downcast::<PyCell<PyNamedNode>>() {
+            Ok(Self::NamedNode(node.borrow()))
+        } else if let Ok(node) = value.downcast::<PyCell<PyBlankNode>>() {
+            Ok(Self::BlankNode(node.borrow()))
+        } else if value.downcast::<PyCell<PyDefaultGraph>>().is_ok() {
+            Ok(Self::DefaultGraph)
+        } else {
+            Err(TypeError::py_err(format!(
+                "{} is not an RDF graph name",
+                value.get_type().name(),
+            )))
+        }
     }
 }
 
@@ -849,6 +982,14 @@ fn eq_compare<T: Eq>(a: &T, b: &T, op: CompareOp) -> PyResult<bool> {
     match op {
         CompareOp::Eq => Ok(a == b),
         CompareOp::Ne => Ok(a != b),
+        _ => Err(NotImplementedError::py_err("Ordering is not implemented")),
+    }
+}
+
+fn eq_compare_other_type(op: CompareOp) -> PyResult<bool> {
+    match op {
+        CompareOp::Eq => Ok(false),
+        CompareOp::Ne => Ok(true),
         _ => Err(NotImplementedError::py_err("Ordering is not implemented")),
     }
 }

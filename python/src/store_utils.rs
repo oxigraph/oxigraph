@@ -1,41 +1,41 @@
 use crate::model::*;
-use oxigraph::model::*;
 use pyo3::exceptions::{IOError, SyntaxError, ValueError};
-use pyo3::prelude::*;
+use pyo3::{PyAny, PyErr, PyResult};
+use std::convert::TryInto;
 use std::io;
 
-pub fn extract_quads_pattern(
-    subject: &PyAny,
-    predicate: &PyAny,
-    object: &PyAny,
-    graph_name: Option<&PyAny>,
+pub fn extract_quads_pattern<'a>(
+    subject: &'a PyAny,
+    predicate: &'a PyAny,
+    object: &'a PyAny,
+    graph_name: Option<&'a PyAny>,
 ) -> PyResult<(
-    Option<NamedOrBlankNode>,
-    Option<NamedNode>,
-    Option<Term>,
-    Option<GraphName>,
+    Option<PyNamedOrBlankNodeRef<'a>>,
+    Option<PyNamedNodeRef<'a>>,
+    Option<PyTermRef<'a>>,
+    Option<PyGraphNameRef<'a>>,
 )> {
     Ok((
         if subject.is_none() {
             None
         } else {
-            Some(extract_named_or_blank_node(subject)?)
+            Some(subject.try_into()?)
         },
         if predicate.is_none() {
             None
         } else {
-            Some(extract_named_node(predicate)?)
+            Some(predicate.try_into()?)
         },
         if object.is_none() {
             None
         } else {
-            Some(extract_term(object)?)
+            Some(object.try_into()?)
         },
         if let Some(graph_name) = graph_name {
             if graph_name.is_none() {
                 None
             } else {
-                Some(extract_graph_name(graph_name)?)
+                Some(graph_name.try_into()?)
             }
         } else {
             None

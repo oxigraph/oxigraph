@@ -2,8 +2,12 @@ use crate::model::*;
 use crate::store_utils::*;
 use oxigraph::sparql::*;
 use pyo3::exceptions::{RuntimeError, SyntaxError, TypeError, ValueError};
-use pyo3::prelude::*;
+use pyo3::prelude::{
+    pyclass, pymethods, pyproto, FromPyObject, IntoPy, Py, PyAny, PyCell, PyErr, PyObject,
+    PyRefMut, PyResult, Python,
+};
 use pyo3::{PyIterProtocol, PyMappingProtocol, PyNativeType, PyObjectProtocol};
+use std::convert::TryFrom;
 
 pub fn build_query_options(
     use_default_graph_as_union: bool,
@@ -36,10 +40,10 @@ pub fn build_query_options(
                 ));
             }
             for default_graph in default_graphs {
-                options = options.with_default_graph(extract_graph_name(default_graph?)?);
+                options = options.with_default_graph(&PyGraphNameRef::try_from(default_graph?)?);
             }
-        } else if let Ok(default_graph) = extract_graph_name(default_graph) {
-            options = options.with_default_graph(default_graph);
+        } else if let Ok(default_graph) = PyGraphNameRef::try_from(default_graph) {
+            options = options.with_default_graph(&default_graph);
         } else {
             return Err(ValueError::py_err(
                 format!("The query() method default_graph argument should be a NamedNode, a BlankNode, the DefaultGraph or a not empty list of them. {} found", default_graph.get_type()
@@ -54,7 +58,7 @@ pub fn build_query_options(
             ));
         }
         for named_graph in named_graphs.iter()? {
-            options = options.with_named_graph(extract_named_or_blank_node(named_graph?)?);
+            options = options.with_named_graph(&PyNamedOrBlankNodeRef::try_from(named_graph?)?);
         }
     }
 

@@ -3,11 +3,13 @@ use crate::model::*;
 use crate::sparql::*;
 use crate::store_utils::*;
 use oxigraph::io::{DatasetFormat, GraphFormat};
-use oxigraph::model::*;
 use oxigraph::store::sled::*;
 use pyo3::exceptions::ValueError;
-use pyo3::prelude::*;
+use pyo3::prelude::{
+    pyclass, pymethods, pyproto, Py, PyAny, PyObject, PyRef, PyRefMut, PyResult, Python, ToPyObject,
+};
 use pyo3::{PyIterProtocol, PyObjectProtocol, PySequenceProtocol};
+use std::convert::TryFrom;
 use std::io::BufReader;
 
 /// Store based on the `Sled <https://sled.rs/>`_ key-value database.
@@ -110,10 +112,10 @@ impl PySledStore {
             extract_quads_pattern(subject, predicate, object, graph_name)?;
         Ok(QuadIter {
             inner: self.inner.quads_for_pattern(
-                subject.as_ref().map(|t| t.into()),
-                predicate.as_ref().map(|t| t.into()),
-                object.as_ref().map(|t| t.into()),
-                graph_name.as_ref().map(|t| t.into()),
+                subject.as_ref().map(|p| p.into()),
+                predicate.as_ref().map(|p| p.into()),
+                object.as_ref().map(|p| p.into()),
+                graph_name.as_ref().map(|p| p.into()),
             ),
         })
     }
@@ -270,7 +272,7 @@ impl PySledStore {
         py: Python<'_>,
     ) -> PyResult<()> {
         let to_graph_name = if let Some(graph_name) = to_graph {
-            Some(extract_graph_name(graph_name)?)
+            Some(PyGraphNameRef::try_from(graph_name)?)
         } else {
             None
         };
@@ -280,7 +282,7 @@ impl PySledStore {
                 .load_graph(
                     input,
                     graph_format,
-                    &to_graph_name.unwrap_or(GraphName::DefaultGraph),
+                    &to_graph_name.unwrap_or(PyGraphNameRef::DefaultGraph),
                     base_iri,
                 )
                 .map_err(map_io_err)
@@ -340,7 +342,7 @@ impl PySledStore {
         py: Python<'_>,
     ) -> PyResult<()> {
         let from_graph_name = if let Some(graph_name) = from_graph {
-            Some(extract_graph_name(graph_name)?)
+            Some(PyGraphNameRef::try_from(graph_name)?)
         } else {
             None
         };
@@ -350,7 +352,7 @@ impl PySledStore {
                 .dump_graph(
                     output,
                     graph_format,
-                    &from_graph_name.unwrap_or(GraphName::DefaultGraph),
+                    &from_graph_name.unwrap_or(PyGraphNameRef::DefaultGraph),
                 )
                 .map_err(map_io_err)
         } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
