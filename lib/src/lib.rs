@@ -6,13 +6,13 @@
 //! * [`MemoryStore`](store/memory/struct.MemoryStore.html): a simple in memory implementation.
 //! * [`RocksDbStore`](store/rocksdb/struct.RocksDbStore.html): a file system implementation based on the [RocksDB](https://rocksdb.org/) key-value store.
 //!   It requires the `"rocksdb"` feature to be activated.
-//!   The `"rocksdb"` requires the [clang](https://clang.llvm.org/) compiler to be installed.
+//!   The [clang](https://clang.llvm.org/) compiler needs to be installed to compile RocksDB.
 //! * [`SledStore`](store/sled/struct.SledStore.html): another file system implementation based on the [Sled](https://sled.rs/) key-value store.
 //!   It requires the `"sled"` feature to be activated.
 //!   Sled is much faster to build than RockDB and does not require a C++ compiler.
 //!   However, Sled is still in developpment, less tested and data load seems much slower than RocksDB.
 //!
-//! It also provides a set of utility functions for reading, writing and processing RDF files.
+//! Oxigraph also provides a set of utility functions for reading, writing and processing RDF files.
 //!
 //! Usage example with the [`MemoryStore`](store/memory/struct.MemoryStore.html):
 //!
