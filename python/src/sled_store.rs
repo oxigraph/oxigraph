@@ -123,11 +123,15 @@ impl PySledStore {
     ///
     /// :param query: the query to execute
     /// :type query: str
-    /// :param use_default_graph_as_union: optional, if the SPARQL query should look for triples in all the dataset graphs by default (i.e. without `GRAPH` operations). Disabled by default.
+    /// :param use_default_graph_as_union: if the SPARQL query should look for triples in all the dataset graphs by default (i.e. without `GRAPH` operations). Disabled by default.
     /// :type use_default_graph_as_union: bool, optional
-    /// :param default_graph_uris: optional, list of the named graph URIs that should be used as the query default graph. By default the store default graph is used.
+    /// :param default_graph: list of the graphs that should be used as the query default graph. By default, the store default graph is used.
+    /// :type default_graph: NamedNode or BlankNode or DefaultGraph or list(NamedNode or BlankNode or DefaultGraph) or None, optional
+    /// :param named_graphs: list of the named graphs that could be used in SPARQL `GRAPH` clause. By default, all the store named graphs are available.
+    /// :type named_graphs: list(NamedNode or BlankNode) or None, optional
+    /// :param default_graph_uris: deprecated, use ``default_graph`` instead
     /// :type default_graph_uris: list(NamedNode) or None, optional
-    /// :param named_graph_uris: optional, list of the named graph URIs that could be used in SPARQL `GRAPH` clause. By default all the store default graphs are available.
+    /// :param named_graph_uris: deprecated, use ``named_graphs`` instead
     /// :type named_graph_uris: list(NamedNode) or None, optional
     /// :return: a :py:class:`bool` for ``ASK`` queries, an iterator of :py:class:`Triple` for ``CONSTRUCT`` and ``DESCRIBE`` queries and an iterator of :py:class:`QuerySolution` for ``SELECT`` queries.
     /// :rtype: QuerySolutions or QueryTriples or bool
@@ -154,32 +158,37 @@ impl PySledStore {
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
     /// >>> store.query('ASK { ?s ?p ?o }')
     /// True
-    #[text_signature = "($self, query, *, use_default_graph_as_union, default_graph_uris, named_graph_uris)"]
+    #[text_signature = "($self, query, *, use_default_graph_as_union, default_graph_uris, named_graph_uris, default_graph, named_graphs)"]
     #[args(
         query,
         "*",
         use_default_graph_as_union = "false",
         default_graph_uris = "None",
-        named_graph_uris = "None"
+        named_graph_uris = "None",
+        default_graph = "None",
+        named_graphs = "None"
     )]
     fn query(
         &self,
         query: &str,
         use_default_graph_as_union: bool,
-        default_graph_uris: Option<Vec<PyNamedNode>>,
-        named_graph_uris: Option<Vec<PyNamedNode>>,
+        default_graph_uris: Option<&PyAny>,
+        named_graph_uris: Option<&PyAny>,
+        default_graph: Option<&PyAny>,
+        named_graphs: Option<&PyAny>,
         py: Python<'_>,
     ) -> PyResult<PyObject> {
-        let results = py.allow_threads(move || {
-            let options = build_query_options(
-                use_default_graph_as_union,
-                default_graph_uris,
-                named_graph_uris,
-            )?;
-            self.inner
-                .query(query, options)
-                .map_err(map_evaluation_error)
-        })?;
+        let options = build_query_options(
+            use_default_graph_as_union,
+            default_graph_uris,
+            named_graph_uris,
+            default_graph,
+            named_graphs,
+        )?;
+        let results = self
+            .inner
+            .query(query, options)
+            .map_err(map_evaluation_error)?;
         query_results_to_python(py, results)
     }
 

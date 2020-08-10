@@ -7,33 +7,57 @@ use pyo3::{PyIterProtocol, PyMappingProtocol, PyNativeType, PyObjectProtocol};
 
 pub fn build_query_options(
     use_default_graph_as_union: bool,
-    default_graph_uris: Option<Vec<PyNamedNode>>,
-    named_graph_uris: Option<Vec<PyNamedNode>>,
+    default_graph_uris: Option<&PyAny>,
+    named_graph_uris: Option<&PyAny>,
+    default_graph: Option<&PyAny>,
+    named_graphs: Option<&PyAny>,
 ) -> PyResult<QueryOptions> {
+    if default_graph_uris.is_some() && default_graph.is_some() {
+        return Err(ValueError::py_err(
+            "The query() method default_graph and default_graph_uris parameters cannot be set at the same time",
+        ));
+    }
+    if named_graph_uris.is_some() && named_graphs.is_some() {
+        return Err(ValueError::py_err(
+            "The query() method named_graphs and named_graph_uris parameters cannot be set at the same time",
+        ));
+    }
+
     let mut options = QueryOptions::default();
     if use_default_graph_as_union {
         options = options.with_default_graph_as_union();
     }
-    if let Some(default_graph_uris) = default_graph_uris {
-        if default_graph_uris.is_empty() {
+
+    if let Some(default_graph) = default_graph.or(default_graph_uris) {
+        if let Ok(default_graphs) = default_graph.iter() {
+            if default_graph.is_empty()? {
+                return Err(ValueError::py_err(
+                    "The query() method default_graph argument cannot be empty list",
+                ));
+            }
+            for default_graph in default_graphs {
+                options = options.with_default_graph(extract_graph_name(default_graph?)?);
+            }
+        } else if let Ok(default_graph) = extract_graph_name(default_graph) {
+            options = options.with_default_graph(default_graph);
+        } else {
             return Err(ValueError::py_err(
-                "The list of the default graph URIs could not be empty",
-            ));
-        }
-        for default_graph_uri in default_graph_uris {
-            options = options.with_default_graph(default_graph_uri);
+                format!("The query() method default_graph argument should be a NamedNode, a BlankNode, the DefaultGraph or a not empty list of them. {} found", default_graph.get_type()
+            )));
         }
     }
-    if let Some(named_graph_uris) = named_graph_uris {
-        if named_graph_uris.is_empty() {
+
+    if let Some(named_graphs) = named_graphs.or(named_graph_uris) {
+        if named_graphs.is_empty()? {
             return Err(ValueError::py_err(
-                "The list of the named graph URIs could not be empty",
+                "The query() method nammed_graphs argument cannot be empty",
             ));
         }
-        for named_graph_uri in named_graph_uris {
-            options = options.with_named_graph(named_graph_uri);
+        for named_graph in named_graphs.iter()? {
+            options = options.with_named_graph(extract_named_or_blank_node(named_graph?)?);
         }
     }
+
     Ok(options)
 }
 

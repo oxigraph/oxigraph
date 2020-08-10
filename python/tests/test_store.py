@@ -114,22 +114,37 @@ class TestAbstractStore(unittest.TestCase, ABC):
         results = store.query(
             "SELECT ?s WHERE { ?s ?p ?o }",
             use_default_graph_as_union=True,
-            named_graph_uris=[graph],
+            named_graphs=[graph],
         )
         self.assertEqual(len(list(results)), 1)
 
     def test_select_query_with_default_graph(self):
         store = self.store()
+        graph_bnode = BlankNode("g")
         store.add(Quad(foo, bar, baz, graph))
-        self.assertEqual(len(list(store.query("SELECT ?s WHERE { ?s ?p ?o }"))), 0)
-        results = store.query(
-            "SELECT ?s WHERE { ?s ?p ?o }", default_graph_uris=[graph]
-        )
+        store.add(Quad(foo, bar, foo))
+        store.add(Quad(foo, bar, bar, graph_bnode))
+        self.assertEqual(len(list(store.query("SELECT ?s WHERE { ?s ?p ?o }"))), 1)
+        results = store.query("SELECT ?s WHERE { ?s ?p ?o }", default_graph=graph)
         self.assertEqual(len(list(results)), 1)
         results = store.query(
-            "SELECT ?s WHERE { GRAPH ?g { ?s ?p ?o } }", named_graph_uris=[graph],
+            "SELECT ?s WHERE { ?s ?p ?o }",
+            default_graph=[DefaultGraph(), graph, graph_bnode],
         )
-        self.assertEqual(len(list(results)), 1)
+        self.assertEqual(len(list(results)), 3)
+
+    def test_select_query_with_named_graph(self):
+        store = self.store()
+        graph_bnode = BlankNode("g")
+        store.add(Quad(foo, bar, baz, graph))
+        store.add(Quad(foo, bar, foo))
+        store.add(Quad(foo, bar, bar, graph_bnode))
+        store.add(Quad(foo, bar, bar, foo))
+        results = store.query(
+            "SELECT ?s WHERE { GRAPH ?g { ?s ?p ?o } }",
+            named_graphs=[graph, graph_bnode],
+        )
+        self.assertEqual(len(list(results)), 2)
 
     def test_load_ntriples_to_default_graph(self):
         store = self.store()
