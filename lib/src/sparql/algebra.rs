@@ -162,7 +162,45 @@ impl TriplePattern {
 
 impl fmt::Display for TriplePattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {} {}", self.subject, self.predicate, self.object)
+        write!(f, "{} {} {} .", self.subject, self.predicate, self.object)
+    }
+}
+
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct QuadPattern {
+    pub subject: TermOrVariable,
+    pub predicate: NamedNodeOrVariable,
+    pub object: TermOrVariable,
+    pub graph_name: Option<NamedNodeOrVariable>,
+}
+
+impl QuadPattern {
+    pub fn new(
+        subject: impl Into<TermOrVariable>,
+        predicate: impl Into<NamedNodeOrVariable>,
+        object: impl Into<TermOrVariable>,
+        graph_name: Option<NamedNodeOrVariable>,
+    ) -> Self {
+        Self {
+            subject: subject.into(),
+            predicate: predicate.into(),
+            object: object.into(),
+            graph_name,
+        }
+    }
+}
+
+impl fmt::Display for QuadPattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(graph_name) = &self.graph_name {
+            write!(
+                f,
+                "GRAPH {} {{ {} {} {} }}",
+                graph_name, self.subject, self.predicate, self.object
+            )
+        } else {
+            write!(f, "{} {} {} .", self.subject, self.predicate, self.object)
+        }
     }
 }
 
@@ -273,7 +311,7 @@ impl<'a> fmt::Display for SparqlPathPattern<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{} {} {}",
+            "{} {} {} .",
             self.0.subject,
             SparqlPropertyPath(&self.0.path),
             self.0.object
@@ -678,7 +716,7 @@ impl fmt::Display for GraphPattern {
                 p.iter()
                     .map(|v| v.to_string())
                     .collect::<Vec<String>>()
-                    .join(" . ")
+                    .join(" ")
             ),
             GraphPattern::Join(a, b) => write!(f, "Join({}, {})", a, b),
             GraphPattern::LeftJoin(a, b, e) => {
@@ -843,7 +881,7 @@ impl<'a> fmt::Display for SparqlGraphPattern<'a> {
         match self.0 {
             GraphPattern::BGP(p) => {
                 for pattern in p {
-                    write!(f, "{} .", SparqlTripleOrPathPattern(pattern))?
+                    write!(f, "{}", SparqlTripleOrPathPattern(pattern))?
                 }
                 Ok(())
             }
@@ -1353,7 +1391,7 @@ impl fmt::Display for QueryVariants {
                 base_iri,
             } => {
                 if let Some(base_iri) = base_iri {
-                    writeln!(f, "BASE <{}>", base_iri)?;
+                    writeln!(f, "BASE <{}>\n", base_iri)?;
                 }
                 write!(f, "{}", SparqlGraphRootPattern { algebra, dataset })
             }
@@ -1364,16 +1402,15 @@ impl fmt::Display for QueryVariants {
                 base_iri,
             } => {
                 if let Some(base_iri) = base_iri {
-                    writeln!(f, "BASE <{}>", base_iri)?;
+                    writeln!(f, "BASE <{}>\n", base_iri)?;
+                }
+                write!(f, "CONSTRUCT {{ ")?;
+                for triple in construct.iter() {
+                    write!(f, "{} ", triple)?;
                 }
                 write!(
                     f,
-                    "CONSTRUCT {{ {} }} {} WHERE {{ {} }}",
-                    construct
-                        .iter()
-                        .map(|t| t.to_string())
-                        .collect::<Vec<String>>()
-                        .join(" . "),
+                    "}} {} WHERE {{ {} }}",
                     dataset,
                     SparqlGraphRootPattern {
                         algebra,
@@ -1387,7 +1424,7 @@ impl fmt::Display for QueryVariants {
                 base_iri,
             } => {
                 if let Some(base_iri) = base_iri {
-                    writeln!(f, "BASE <{}>", base_iri.as_str())?;
+                    writeln!(f, "BASE <{}>\n", base_iri.as_str())?;
                 }
                 write!(
                     f,
@@ -1405,7 +1442,7 @@ impl fmt::Display for QueryVariants {
                 base_iri,
             } => {
                 if let Some(base_iri) = base_iri {
-                    writeln!(f, "BASE <{}>", base_iri)?;
+                    writeln!(f, "BASE <{}>\n", base_iri)?;
                 }
                 write!(
                     f,
@@ -1417,6 +1454,203 @@ impl fmt::Display for QueryVariants {
                     }
                 )
             }
+        }
+    }
+}
+
+/// The [graph update operations](https://www.w3.org/TR/sparql11-update/#formalModelGraphUpdate)
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub enum GraphUpdateOperation {
+    /// [insert data](https://www.w3.org/TR/sparql11-update/#def_insertdataoperation)
+    OpInsertData { data: Vec<QuadPattern> },
+    /// [delete data](https://www.w3.org/TR/sparql11-update/#def_deletedataoperation)
+    OpDeleteData { data: Vec<QuadPattern> },
+    /// [delete insert](https://www.w3.org/TR/sparql11-update/#def_deleteinsertoperation)
+    OpDeleteInsert {
+        with: Option<NamedNode>,
+        delete: Option<Vec<QuadPattern>>,
+        insert: Option<Vec<QuadPattern>>,
+        using: Rc<DatasetSpec>,
+        algebra: Rc<GraphPattern>,
+    },
+    /// [load](https://www.w3.org/TR/sparql11-update/#def_loadoperation)
+    OpLoad {
+        silent: bool,
+        from: NamedNode,
+        to: Option<NamedNode>,
+    },
+    /// [clear](https://www.w3.org/TR/sparql11-update/#def_clearoperation)
+    OpClear { silent: bool, graph: GraphTarget },
+    /// [create](https://www.w3.org/TR/sparql11-update/#def_createoperation)
+    OpCreate { silent: bool, graph: NamedNode },
+    /// [drop](https://www.w3.org/TR/sparql11-update/#def_dropoperation)
+    OpDrop { silent: bool, graph: GraphTarget },
+}
+
+impl fmt::Display for GraphUpdateOperation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GraphUpdateOperation::OpInsertData { data } => {
+                writeln!(f, "INSERT DATA {{")?;
+                for quad in data {
+                    writeln!(f, "\t{}", quad)?;
+                }
+                write!(f, "}}")
+            }
+            GraphUpdateOperation::OpDeleteData { data } => {
+                writeln!(f, "DELETE DATA {{")?;
+                for quad in data {
+                    writeln!(f, "\t{}", quad)?;
+                }
+                write!(f, "}}")
+            }
+            GraphUpdateOperation::OpDeleteInsert {
+                with,
+                delete,
+                insert,
+                using,
+                algebra,
+            } => {
+                if let Some(with) = with {
+                    writeln!(f, "WITH {}", with)?;
+                }
+                if let Some(delete) = delete {
+                    writeln!(f, "DELETE {{")?;
+                    for quad in delete {
+                        writeln!(f, "\t{}", quad)?;
+                    }
+                    writeln!(f, "}}")?;
+                }
+                if let Some(insert) = insert {
+                    writeln!(f, "INSERT {{")?;
+                    for quad in insert {
+                        writeln!(f, "\t{}", quad)?;
+                    }
+                    writeln!(f, "}}")?;
+                }
+                for g in &using.default {
+                    writeln!(f, "USING {}", g)?;
+                }
+                for g in &using.named {
+                    writeln!(f, "USING NAMED {}", g)?;
+                }
+                write!(
+                    f,
+                    "WHERE {{ {} }}",
+                    SparqlGraphRootPattern {
+                        algebra,
+                        dataset: &DatasetSpec::default()
+                    }
+                )
+            }
+            GraphUpdateOperation::OpLoad { silent, from, to } => {
+                write!(f, "LOAD ")?;
+                if *silent {
+                    write!(f, "SILENT ")?;
+                }
+                write!(f, "{}", from)?;
+                if let Some(to) = to {
+                    write!(f, " INTO GRAPH {}", to)?;
+                }
+                Ok(())
+            }
+            GraphUpdateOperation::OpClear { silent, graph } => {
+                write!(f, "CLEAR ")?;
+                if *silent {
+                    write!(f, "SILENT ")?;
+                }
+                write!(f, "{}", graph)
+            }
+            GraphUpdateOperation::OpCreate { silent, graph } => {
+                write!(f, "CREATE ")?;
+                if *silent {
+                    write!(f, "SILENT ")?;
+                }
+                write!(f, "GRAPH {}", graph)
+            }
+            GraphUpdateOperation::OpDrop { silent, graph } => {
+                write!(f, "DROP ")?;
+                if *silent {
+                    write!(f, "SILENT ")?;
+                }
+                write!(f, "{}", graph)
+            }
+        }
+    }
+}
+
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub enum GraphTarget {
+    NamedNode(NamedNode),
+    DefaultGraph,
+    NamedGraphs,
+    AllGraphs,
+}
+
+impl fmt::Display for GraphTarget {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NamedNode(node) => write!(f, "GRAPH {}", node),
+            Self::DefaultGraph => write!(f, "DEFAULT"),
+            Self::NamedGraphs => write!(f, "NAMED"),
+            Self::AllGraphs => write!(f, "ALL"),
+        }
+    }
+}
+
+impl From<NamedNode> for GraphTarget {
+    fn from(node: NamedNode) -> Self {
+        Self::NamedNode(node)
+    }
+}
+
+impl From<NamedNodeRef<'_>> for GraphTarget {
+    fn from(node: NamedNodeRef<'_>) -> Self {
+        Self::NamedNode(node.into())
+    }
+}
+
+impl From<NamedOrDefaultGraphTarget> for GraphTarget {
+    fn from(graph: NamedOrDefaultGraphTarget) -> Self {
+        match graph {
+            NamedOrDefaultGraphTarget::NamedNode(node) => Self::NamedNode(node),
+            NamedOrDefaultGraphTarget::DefaultGraph => Self::DefaultGraph,
+        }
+    }
+}
+
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub enum NamedOrDefaultGraphTarget {
+    NamedNode(NamedNode),
+    DefaultGraph,
+}
+
+impl fmt::Display for NamedOrDefaultGraphTarget {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NamedNode(node) => write!(f, "GRAPH {}", node),
+            Self::DefaultGraph => write!(f, "DEFAULT"),
+        }
+    }
+}
+
+impl From<NamedNode> for NamedOrDefaultGraphTarget {
+    fn from(node: NamedNode) -> Self {
+        Self::NamedNode(node)
+    }
+}
+
+impl From<NamedNodeRef<'_>> for NamedOrDefaultGraphTarget {
+    fn from(node: NamedNodeRef<'_>) -> Self {
+        Self::NamedNode(node.into())
+    }
+}
+
+impl From<NamedOrDefaultGraphTarget> for Option<NamedNodeOrVariable> {
+    fn from(graph: NamedOrDefaultGraphTarget) -> Self {
+        match graph {
+            NamedOrDefaultGraphTarget::NamedNode(node) => Some(node.into()),
+            NamedOrDefaultGraphTarget::DefaultGraph => None,
         }
     }
 }

@@ -123,6 +123,40 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
                 }
             },
         }
+    } else if test.kind
+        == "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#PositiveUpdateSyntaxTest11"
+    {
+        let update_file = test
+            .action
+            .as_deref()
+            .ok_or_else(|| anyhow!("No action found for test {}", test))?;
+        match Update::parse(&read_file_to_string(&update_file)?, Some(&update_file)) {
+            Err(error) => Err(anyhow!("Not able to parse {} with error: {}", test, error)),
+            Ok(update) => match Update::parse(&update.to_string(), None) {
+                Ok(_) => Ok(()),
+                Err(error) => Err(anyhow!(
+                    "Failure to deserialize \"{}\" of {} with error: {}",
+                    update.to_string(),
+                    test,
+                    error
+                )),
+            },
+        }
+    } else if test.kind
+        == "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#NegativeUpdateSyntaxTest11"
+    {
+        let update_file = test
+            .action
+            .as_deref()
+            .ok_or_else(|| anyhow!("No action found for test {}", test))?;
+        match Query::parse(&read_file_to_string(update_file)?, Some(update_file)) {
+            Ok(result) => Err(anyhow!(
+                "Oxigraph parses even if it should not {}. The output tree is: {}",
+                test,
+                result
+            )),
+            Err(_) => Ok(()),
+        }
     } else {
         Err(anyhow!("Unsupported test type: {}", test.kind))
     }

@@ -88,6 +88,82 @@ impl<'a> TryFrom<&'a String> for Query {
     }
 }
 
+/// A parsed [SPARQL update](https://www.w3.org/TR/sparql11-update/)
+///
+/// ```
+/// use oxigraph::sparql::Update;
+///
+/// let update_str = "CLEAR ALL ;";
+/// let update = Update::parse(update_str, None)?;
+///
+/// assert_eq!(update.to_string().trim(), update_str);
+/// # Result::Ok::<_, oxigraph::sparql::ParseError>(())
+/// ```
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct Update(pub(crate) Vec<GraphUpdateOperation>);
+
+impl fmt::Display for Update {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for update in &self.0 {
+            writeln!(f, "{} ;", update)?;
+        }
+        Ok(())
+    }
+}
+
+impl Update {
+    /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query
+    pub fn parse(update: &str, base_iri: Option<&str>) -> Result<Self, ParseError> {
+        let mut state = ParserState {
+            base_iri: if let Some(base_iri) = base_iri {
+                Some(Rc::new(Iri::parse(base_iri.to_owned()).map_err(|e| {
+                    ParseError {
+                        inner: ParseErrorKind::InvalidBaseIri(e),
+                    }
+                })?))
+            } else {
+                None
+            },
+            namespaces: HashMap::default(),
+            used_bnodes: HashSet::default(),
+            currently_used_bnodes: HashSet::default(),
+            aggregations: Vec::default(),
+        };
+
+        Ok(Self(
+            parser::UpdateInit(&unescape_unicode_codepoints(update), &mut state).map_err(|e| {
+                ParseError {
+                    inner: ParseErrorKind::Parser(e),
+                }
+            })?,
+        ))
+    }
+}
+
+impl FromStr for Update {
+    type Err = ParseError;
+
+    fn from_str(update: &str) -> Result<Self, ParseError> {
+        Self::parse(update, None)
+    }
+}
+
+impl<'a> TryFrom<&'a str> for Update {
+    type Error = ParseError;
+
+    fn try_from(update: &str) -> Result<Self, ParseError> {
+        Self::from_str(update)
+    }
+}
+
+impl<'a> TryFrom<&'a String> for Update {
+    type Error = ParseError;
+
+    fn try_from(update: &String) -> Result<Self, ParseError> {
+        Self::from_str(update)
+    }
+}
+
 /// Error returned during SPARQL parsing.
 #[derive(Debug)]
 pub struct ParseError {
@@ -259,6 +335,10 @@ fn new_join(l: GraphPattern, r: GraphPattern) -> GraphPattern {
             pl.extend_from_slice(&pr);
             GraphPattern::BGP(pl)
         }
+        (GraphPattern::Graph(g1, l), GraphPattern::Graph(g2, r)) if g1 == g2 => {
+            // We merge identical graphs
+            GraphPattern::Graph(g1, Box::new(new_join(*l, *r)))
+        }
         (l, r) => GraphPattern::Join(Box::new(l), Box::new(r)),
     }
 }
@@ -381,6 +461,35 @@ fn build_select(
         m = GraphPattern::Slice(Box::new(m), offset, limit)
     }
     m
+}
+
+fn copy_graph(
+    from: NamedOrDefaultGraphTarget,
+    to: impl Into<Option<NamedNodeOrVariable>>,
+) -> GraphUpdateOperation {
+    let bgp = GraphPattern::BGP(vec![TriplePattern::new(
+        Variable::new("s"),
+        Variable::new("p"),
+        Variable::new("o"),
+    )
+    .into()]);
+    GraphUpdateOperation::OpDeleteInsert {
+        with: None,
+        delete: None,
+        insert: Some(vec![QuadPattern::new(
+            Variable::new("s"),
+            Variable::new("p"),
+            Variable::new("o"),
+            to.into(),
+        )]),
+        using: Rc::new(DatasetSpec::default()),
+        algebra: Rc::new(match &from {
+            NamedOrDefaultGraphTarget::NamedNode(from) => {
+                GraphPattern::Graph(from.clone().into(), Box::new(bgp))
+            }
+            NamedOrDefaultGraphTarget::DefaultGraph => bgp,
+        }),
+    }
 }
 
 enum Either<L, R> {
@@ -637,6 +746,9 @@ parser! {
             q
         }
 
+        //[3]
+        pub rule UpdateInit() -> Vec<GraphUpdateOperation> = Update()
+
         //[4]
         rule Prologue() = (BaseDecl() _ / PrefixDecl() _)* {}
 
@@ -749,6 +861,7 @@ parser! {
             d.into_iter().fold(DatasetSpec::default(), |mut a, b| a + b)
         }
         rule DatasetClauses_item() -> DatasetSpec = d:DatasetClause() _ { d }
+
         //[14]
         rule DefaultGraphClause() -> DatasetSpec = s:SourceSelector() {
             DatasetSpec::new_with_default(s)
@@ -829,6 +942,154 @@ parser! {
         rule ValuesClause() -> Option<GraphPattern> =
             i("VALUES") _ p:DataBlock() { Some(p) } /
             { None }
+
+
+        //[29]
+        rule Update() -> Vec<GraphUpdateOperation> = _ Prologue() _ u:(Update1() ** (_ ";" _))  _ ( ";" _)? { u.into_iter().flatten().collect() }
+
+        //[30]
+        rule Update1() -> Vec<GraphUpdateOperation> = Load() / Clear() / Drop() / Add() / Move() / Copy() / Create() / InsertData() / DeleteData() / DeleteWhere() / Modify()
+        rule Update1_silent() -> bool = i("SILENT") { true } / { false }
+
+        //[31]
+        rule Load() -> Vec<GraphUpdateOperation> = i("LOAD") _ silent:Update1_silent() _ from:iri() _ to:Load_to()? {
+            vec![GraphUpdateOperation::OpLoad { silent, from, to }]
+        }
+        rule Load_to() -> NamedNode = i("INTO") _ g: GraphRef() { g }
+
+        //[32]
+        rule Clear() -> Vec<GraphUpdateOperation> = i("CLEAR") _ silent:Update1_silent() _ graph:GraphRefAll() {
+            vec![GraphUpdateOperation::OpClear { silent, graph }]
+        }
+
+        //[33]
+        rule Drop() -> Vec<GraphUpdateOperation> = i("DROP") _ silent:Update1_silent() _ graph:GraphRefAll() {
+            vec![GraphUpdateOperation::OpDrop { silent, graph }]
+        }
+
+        //[34]
+        rule Create() -> Vec<GraphUpdateOperation> = i("CREATE") _ silent:Update1_silent() _ graph:GraphRef() {
+            vec![GraphUpdateOperation::OpCreate { silent, graph }]
+        }
+
+        //[35]
+        rule Add() -> Vec<GraphUpdateOperation> = i("ADD") _ silent:Update1_silent() _ from:GraphOrDefault() _ i("TO") _ to:GraphOrDefault() {
+            // Rewriting defined by https://www.w3.org/TR/sparql11-update/#add
+            let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new("s"), Variable::new("p"), Variable::new("o")).into()]);
+            vec![copy_graph(from, to)]
+        }
+
+        //[36]
+        rule Move() -> Vec<GraphUpdateOperation> = i("MOVE") _ silent:Update1_silent() _ from:GraphOrDefault() _ i("TO") _ to:GraphOrDefault() {
+            // Rewriting defined by https://www.w3.org/TR/sparql11-update/#move
+            let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new("s"), Variable::new("p"), Variable::new("o")).into()]);
+            vec![GraphUpdateOperation::OpDrop { silent, graph: to.clone().into() }, copy_graph(from.clone(), to), GraphUpdateOperation::OpDrop { silent, graph: from.into() }]
+        }
+
+        //[37]
+        rule Copy() -> Vec<GraphUpdateOperation> = i("COPY") _ silent:Update1_silent() _ from:GraphOrDefault() _ i("TO") _ to:GraphOrDefault() {
+            // Rewriting defined by https://www.w3.org/TR/sparql11-update/#copy
+            let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new("s"), Variable::new("p"), Variable::new("o")).into()]);
+            vec![GraphUpdateOperation::OpDrop { silent, graph: to.clone().into() }, copy_graph(from, to)]
+        }
+
+        //[38]
+        rule InsertData() -> Vec<GraphUpdateOperation> = i("INSERT") _ i("DATA") _ data:QuadData() {
+            vec![GraphUpdateOperation::OpInsertData { data }]
+        }
+
+        //[39]
+        rule DeleteData() -> Vec<GraphUpdateOperation> = i("DELETE") _ i("DATA") _ data:QuadData() {
+            vec![GraphUpdateOperation::OpDeleteData { data }]
+        }
+
+        //[40]
+        rule DeleteWhere() -> Vec<GraphUpdateOperation> = i("DELETE") _ i("WHERE") _ d:QuadData() {
+            let algebra = d.iter().map(|q| {
+                let bgp = GraphPattern::BGP(vec![TriplePattern::new(q.subject.clone(), q.predicate.clone(), q.object.clone()).into()]);
+                if let Some(graph_name) = &q.graph_name {
+                    GraphPattern::Graph(graph_name.clone(), Box::new(bgp))
+                } else {
+                    bgp
+                }
+            }).fold(GraphPattern::BGP(Vec::new()), new_join);
+            vec![GraphUpdateOperation::OpDeleteInsert {
+                with: None,
+                delete: Some(d),
+                insert: None,
+                using: Rc::new(DatasetSpec::default()),
+                algebra: Rc::new(algebra)
+            }]
+        }
+
+        //[41]
+        rule Modify() -> Vec<GraphUpdateOperation> = with:Modify_with() _ c:Modify_clauses() _ using:(UsingClause() ** (_)) _ i("WHERE") _ algebra:GroupGraphPattern() {
+            let (delete, insert) = c;
+            vec![GraphUpdateOperation::OpDeleteInsert {
+                with,
+                delete,
+                insert,
+                using: Rc::new(using.into_iter().fold(DatasetSpec::default(), |mut a, b| a + b)),
+                algebra: Rc::new(algebra)
+            }]
+        }
+        rule Modify_with() -> Option<NamedNode> = i("WITH") _ i:iri() _ {
+            Some(i)
+        } / { None }
+        rule Modify_clauses() -> (Option<Vec<QuadPattern>>, Option<Vec<QuadPattern>>) = d:DeleteClause() _ i:InsertClause()? {
+            (Some(d), i)
+        } / i:InsertClause() {
+            (None, Some(i))
+        }
+
+        //[42]
+        rule DeleteClause() -> Vec<QuadPattern> = i("DELETE") _ q:QuadPattern() { q }
+
+        //[43]
+        rule InsertClause() -> Vec<QuadPattern> = i("INSERT") _ q:QuadPattern() { q }
+
+        //[44]
+        rule UsingClause() -> DatasetSpec = i("USING") _ d:(UsingClause_default() / UsingClause_named()) { d }
+        rule UsingClause_default() -> DatasetSpec = i:iri() {
+            DatasetSpec::new_with_default(i)
+        }
+        rule UsingClause_named() -> DatasetSpec = i("NAMED") _ i:iri() {
+            DatasetSpec::new_with_named(i)
+        }
+
+        //[45]
+        rule GraphOrDefault() -> NamedOrDefaultGraphTarget = i("GRAPH") _ g:iri() {
+            NamedOrDefaultGraphTarget::NamedNode(g)
+        } / i("DEFAULT") { NamedOrDefaultGraphTarget::DefaultGraph }
+
+        //[46]
+        rule GraphRef() -> NamedNode = i("GRAPH") _ g:iri() { g }
+
+        //[47]
+        rule GraphRefAll() -> GraphTarget  = i: GraphRef() { i.into() }
+            / i("DEFAULT") { GraphTarget::DefaultGraph }
+            / i("NAMED") { GraphTarget::NamedGraphs }
+            / i("ALL") { GraphTarget::AllGraphs }
+
+        //[48]
+        rule QuadPattern() -> Vec<QuadPattern> = "{" _ q:Quads() _ "}" { q }
+
+        //[49]
+        rule QuadData() -> Vec<QuadPattern> = "{" _ q:Quads() _ "}" { q }
+
+        //[50]
+        rule Quads() -> Vec<QuadPattern> = q:(Quads_TriplesTemplate() / Quads_QuadsNotTriples()) ** (_) {
+            q.into_iter().flatten().collect()
+        }
+        rule Quads_TriplesTemplate() -> Vec<QuadPattern> = t:TriplesTemplate() {
+            t.into_iter().map(|t| QuadPattern::new(t.subject, t.predicate, t.object, None)).collect()
+        } //TODO: return iter?
+        rule Quads_QuadsNotTriples() -> Vec<QuadPattern> = q:QuadsNotTriples() _ "."? { q }
+
+        //[51]
+        rule QuadsNotTriples() -> Vec<QuadPattern> = i("GRAPH") _ g:VarOrIri() _ "{" _ t:TriplesTemplate()? _ "}" {
+            t.unwrap_or_else(Vec::new).into_iter().map(|t| QuadPattern::new(t.subject, t.predicate, t.object, Some(g.clone()))).collect()
+        }
 
         //[52]
         rule TriplesTemplate() -> Vec<TriplePattern> =  h:TriplesSameSubject() _ t:TriplesTemplate_tail()? {
