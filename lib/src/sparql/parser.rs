@@ -742,7 +742,7 @@ parser! {
         pub rule QueryUnit() -> QueryVariants = Query()
 
         //[2]
-        rule Query() -> QueryVariants = _ Prologue() _ q:(SelectQuery() / ConstructQuery() / DescribeQuery() / AskQuery()) _ { //TODO: ValuesClause
+        rule Query() -> QueryVariants = _ Prologue() _ q:(SelectQuery() / ConstructQuery() / DescribeQuery() / AskQuery()) _ {
             q
         }
 
@@ -763,7 +763,7 @@ parser! {
         }
 
         //[7]
-        rule SelectQuery() -> QueryVariants = s:SelectClause() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {  //TODO: Modifier
+        rule SelectQuery() -> QueryVariants = s:SelectClause() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
             QueryVariants::Select {
                 dataset: Rc::new(d),
                 algebra: Rc::new(build_select(s, w, g, h, o, l, v, state)),
@@ -772,7 +772,7 @@ parser! {
         }
 
         //[8]
-        rule SubSelect() -> GraphPattern = s:SelectClause() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() { //TODO: Modifiers
+        rule SubSelect() -> GraphPattern = s:SelectClause() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
             build_select(s, w, g, h, o, l, v, state)
         }
 
@@ -1250,7 +1250,7 @@ parser! {
         }
 
         //[71]
-        rule ArgList() -> Vec<Expression> = //TODO: support DISTINCT
+        rule ArgList() -> Vec<Expression> =
             "(" _ i("DISTINCT")? _ e:ArgList_item() **<1,> ("," _) _ ")" { e } /
             NIL() { Vec::new() }
         rule ArgList_item() -> Expression = e:Expression() _ { e }
