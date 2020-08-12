@@ -1462,58 +1462,53 @@ impl fmt::Display for QueryVariants {
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GraphUpdateOperation {
     /// [insert data](https://www.w3.org/TR/sparql11-update/#def_insertdataoperation)
-    OpInsertData { data: Vec<QuadPattern> },
+    InsertData { data: Vec<QuadPattern> },
     /// [delete data](https://www.w3.org/TR/sparql11-update/#def_deletedataoperation)
-    OpDeleteData { data: Vec<QuadPattern> },
+    DeleteData { data: Vec<QuadPattern> },
     /// [delete insert](https://www.w3.org/TR/sparql11-update/#def_deleteinsertoperation)
-    OpDeleteInsert {
-        with: Option<NamedNode>,
+    DeleteInsert {
         delete: Option<Vec<QuadPattern>>,
         insert: Option<Vec<QuadPattern>>,
         using: Rc<DatasetSpec>,
         algebra: Rc<GraphPattern>,
     },
     /// [load](https://www.w3.org/TR/sparql11-update/#def_loadoperation)
-    OpLoad {
+    Load {
         silent: bool,
         from: NamedNode,
         to: Option<NamedNode>,
     },
     /// [clear](https://www.w3.org/TR/sparql11-update/#def_clearoperation)
-    OpClear { silent: bool, graph: GraphTarget },
+    Clear { silent: bool, graph: GraphTarget },
     /// [create](https://www.w3.org/TR/sparql11-update/#def_createoperation)
-    OpCreate { silent: bool, graph: NamedNode },
+    Create { silent: bool, graph: NamedNode },
     /// [drop](https://www.w3.org/TR/sparql11-update/#def_dropoperation)
-    OpDrop { silent: bool, graph: GraphTarget },
+    Drop { silent: bool, graph: GraphTarget },
 }
 
 impl fmt::Display for GraphUpdateOperation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GraphUpdateOperation::OpInsertData { data } => {
+            GraphUpdateOperation::InsertData { data } => {
                 writeln!(f, "INSERT DATA {{")?;
                 for quad in data {
                     writeln!(f, "\t{}", quad)?;
                 }
                 write!(f, "}}")
             }
-            GraphUpdateOperation::OpDeleteData { data } => {
+            GraphUpdateOperation::DeleteData { data } => {
                 writeln!(f, "DELETE DATA {{")?;
                 for quad in data {
                     writeln!(f, "\t{}", quad)?;
                 }
                 write!(f, "}}")
             }
-            GraphUpdateOperation::OpDeleteInsert {
-                with,
+            GraphUpdateOperation::DeleteInsert {
                 delete,
                 insert,
                 using,
                 algebra,
             } => {
-                if let Some(with) = with {
-                    writeln!(f, "WITH {}", with)?;
-                }
                 if let Some(delete) = delete {
                     writeln!(f, "DELETE {{")?;
                     for quad in delete {
@@ -1543,7 +1538,7 @@ impl fmt::Display for GraphUpdateOperation {
                     }
                 )
             }
-            GraphUpdateOperation::OpLoad { silent, from, to } => {
+            GraphUpdateOperation::Load { silent, from, to } => {
                 write!(f, "LOAD ")?;
                 if *silent {
                     write!(f, "SILENT ")?;
@@ -1554,21 +1549,21 @@ impl fmt::Display for GraphUpdateOperation {
                 }
                 Ok(())
             }
-            GraphUpdateOperation::OpClear { silent, graph } => {
+            GraphUpdateOperation::Clear { silent, graph } => {
                 write!(f, "CLEAR ")?;
                 if *silent {
                     write!(f, "SILENT ")?;
                 }
                 write!(f, "{}", graph)
             }
-            GraphUpdateOperation::OpCreate { silent, graph } => {
+            GraphUpdateOperation::Create { silent, graph } => {
                 write!(f, "CREATE ")?;
                 if *silent {
                     write!(f, "SILENT ")?;
                 }
                 write!(f, "GRAPH {}", graph)
             }
-            GraphUpdateOperation::OpDrop { silent, graph } => {
+            GraphUpdateOperation::Drop { silent, graph } => {
                 write!(f, "DROP ")?;
                 if *silent {
                     write!(f, "SILENT ")?;

@@ -473,8 +473,7 @@ fn copy_graph(
         Variable::new("o"),
     )
     .into()]);
-    GraphUpdateOperation::OpDeleteInsert {
-        with: None,
+    GraphUpdateOperation::DeleteInsert {
         delete: None,
         insert: Some(vec![QuadPattern::new(
             Variable::new("s"),
@@ -953,23 +952,23 @@ parser! {
 
         //[31]
         rule Load() -> Vec<GraphUpdateOperation> = i("LOAD") _ silent:Update1_silent() _ from:iri() _ to:Load_to()? {
-            vec![GraphUpdateOperation::OpLoad { silent, from, to }]
+            vec![GraphUpdateOperation::Load { silent, from, to }]
         }
         rule Load_to() -> NamedNode = i("INTO") _ g: GraphRef() { g }
 
         //[32]
         rule Clear() -> Vec<GraphUpdateOperation> = i("CLEAR") _ silent:Update1_silent() _ graph:GraphRefAll() {
-            vec![GraphUpdateOperation::OpClear { silent, graph }]
+            vec![GraphUpdateOperation::Clear { silent, graph }]
         }
 
         //[33]
         rule Drop() -> Vec<GraphUpdateOperation> = i("DROP") _ silent:Update1_silent() _ graph:GraphRefAll() {
-            vec![GraphUpdateOperation::OpDrop { silent, graph }]
+            vec![GraphUpdateOperation::Drop { silent, graph }]
         }
 
         //[34]
         rule Create() -> Vec<GraphUpdateOperation> = i("CREATE") _ silent:Update1_silent() _ graph:GraphRef() {
-            vec![GraphUpdateOperation::OpCreate { silent, graph }]
+            vec![GraphUpdateOperation::Create { silent, graph }]
         }
 
         //[35]
@@ -983,24 +982,24 @@ parser! {
         rule Move() -> Vec<GraphUpdateOperation> = i("MOVE") _ silent:Update1_silent() _ from:GraphOrDefault() _ i("TO") _ to:GraphOrDefault() {
             // Rewriting defined by https://www.w3.org/TR/sparql11-update/#move
             let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new("s"), Variable::new("p"), Variable::new("o")).into()]);
-            vec![GraphUpdateOperation::OpDrop { silent, graph: to.clone().into() }, copy_graph(from.clone(), to), GraphUpdateOperation::OpDrop { silent, graph: from.into() }]
+            vec![GraphUpdateOperation::Drop { silent, graph: to.clone().into() }, copy_graph(from.clone(), to), GraphUpdateOperation::Drop { silent, graph: from.into() }]
         }
 
         //[37]
         rule Copy() -> Vec<GraphUpdateOperation> = i("COPY") _ silent:Update1_silent() _ from:GraphOrDefault() _ i("TO") _ to:GraphOrDefault() {
             // Rewriting defined by https://www.w3.org/TR/sparql11-update/#copy
             let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new("s"), Variable::new("p"), Variable::new("o")).into()]);
-            vec![GraphUpdateOperation::OpDrop { silent, graph: to.clone().into() }, copy_graph(from, to)]
+            vec![GraphUpdateOperation::Drop { silent, graph: to.clone().into() }, copy_graph(from, to)]
         }
 
         //[38]
         rule InsertData() -> Vec<GraphUpdateOperation> = i("INSERT") _ i("DATA") _ data:QuadData() {
-            vec![GraphUpdateOperation::OpInsertData { data }]
+            vec![GraphUpdateOperation::InsertData { data }]
         }
 
         //[39]
         rule DeleteData() -> Vec<GraphUpdateOperation> = i("DELETE") _ i("DATA") _ data:QuadData() {
-            vec![GraphUpdateOperation::OpDeleteData { data }]
+            vec![GraphUpdateOperation::DeleteData { data }]
         }
 
         //[40]
@@ -1013,8 +1012,7 @@ parser! {
                     bgp
                 }
             }).fold(GraphPattern::BGP(Vec::new()), new_join);
-            vec![GraphUpdateOperation::OpDeleteInsert {
-                with: None,
+            vec![GraphUpdateOperation::DeleteInsert {
                 delete: Some(d),
                 insert: None,
                 using: Rc::new(DatasetSpec::default()),
@@ -1024,9 +1022,25 @@ parser! {
 
         //[41]
         rule Modify() -> Vec<GraphUpdateOperation> = with:Modify_with() _ c:Modify_clauses() _ using:(UsingClause() ** (_)) _ i("WHERE") _ algebra:GroupGraphPattern() {
-            let (delete, insert) = c;
-            vec![GraphUpdateOperation::OpDeleteInsert {
-                with,
+            let (mut delete, mut insert) = c;
+            let mut algebra = algebra;
+
+            if let Some(with) = with {
+                // We inject WITH everywhere
+                delete = delete.map(|quads| quads.into_iter().map(|q| if q.graph_name.is_none() {
+                    QuadPattern::new(q.subject, q.predicate, q.object, Some(with.clone().into()))
+                } else {
+                    q
+                }).collect());
+                insert = insert.map(|quads| quads.into_iter().map(|q| if q.graph_name.is_none() {
+                    QuadPattern::new(q.subject, q.predicate, q.object, Some(with.clone().into()))
+                } else {
+                    q
+                }).collect());
+                algebra = GraphPattern::Graph(with.into(), Box::new(algebra));
+            }
+
+            vec![GraphUpdateOperation::DeleteInsert {
                 delete,
                 insert,
                 using: Rc::new(using.into_iter().fold(DatasetSpec::default(), |mut a, b| a + b)),
