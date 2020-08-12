@@ -551,3 +551,12 @@ impl<I: StrId> EncodedTuple<I> {
         }
     }
 }
+
+impl<I: StrId> IntoIterator for EncodedTuple<I> {
+    type Item = Option<EncodedTerm<I>>;
+    type IntoIter = std::vec::IntoIter<Option<EncodedTerm<I>>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner.into_iter()
+    }
+}

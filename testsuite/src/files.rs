@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use oxigraph::io::{DatasetFormat, GraphFormat};
-use oxigraph::model::GraphName;
+use oxigraph::model::{GraphName, GraphNameRef};
 use oxigraph::MemoryStore;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
@@ -39,7 +39,11 @@ pub fn read_file_to_string(url: &str) -> Result<String> {
     Ok(buf)
 }
 
-pub fn load_to_store(url: &str, store: &MemoryStore, to_graph_name: &GraphName) -> Result<()> {
+pub fn load_to_store<'a>(
+    url: &str,
+    store: &MemoryStore,
+    to_graph_name: impl Into<GraphNameRef<'a>>,
+) -> Result<()> {
     if url.ends_with(".nt") {
         store.load_graph(
             read_file(url)?,

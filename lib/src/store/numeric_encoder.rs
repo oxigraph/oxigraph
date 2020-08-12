@@ -379,8 +379,11 @@ impl<I: StrId> EncodedTerm<I> {
         }
     }
 
-    pub fn try_map_id<J: StrId>(self, mapping: impl Fn(I) -> Option<J>) -> Option<EncodedTerm<J>> {
-        Some(match self {
+    pub fn try_map_id<J: StrId, E>(
+        self,
+        mut mapping: impl FnMut(I) -> Result<J, E>,
+    ) -> Result<EncodedTerm<J>, E> {
+        Ok(match self {
             Self::DefaultGraph { .. } => EncodedTerm::DefaultGraph,
             Self::NamedNode { iri_id } => EncodedTerm::NamedNode {
                 iri_id: mapping(iri_id)?,

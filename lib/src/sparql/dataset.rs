@@ -235,10 +235,10 @@ fn try_map_quad_pattern<I: StrId>(
     graph_name: Option<EncodedTerm<DatasetStrId<I>>>,
 ) -> Option<QuadPattern<I>> {
     Some((
-        transpose(subject.map(|t| t.try_map_id(unwrap_store_id)))?,
-        transpose(predicate.map(|t| t.try_map_id(unwrap_store_id)))?,
-        transpose(object.map(|t| t.try_map_id(unwrap_store_id)))?,
-        transpose(graph_name.map(|t| t.try_map_id(unwrap_store_id)))?,
+        transpose(subject.map(|t| t.try_map_id(unwrap_store_id).ok()))?,
+        transpose(predicate.map(|t| t.try_map_id(unwrap_store_id).ok()))?,
+        transpose(object.map(|t| t.try_map_id(unwrap_store_id).ok()))?,
+        transpose(graph_name.map(|t| t.try_map_id(unwrap_store_id).ok()))?,
     ))
 }
 
@@ -250,10 +250,10 @@ fn transpose<T>(o: Option<Option<T>>) -> Option<Option<T>> {
     }
 }
 
-fn unwrap_store_id<I: StrId>(id: DatasetStrId<I>) -> Option<I> {
+fn unwrap_store_id<I: StrId>(id: DatasetStrId<I>) -> Result<I, ()> {
     match id {
-        DatasetStrId::Store(id) => Some(id),
-        DatasetStrId::Temporary(_) => None,
+        DatasetStrId::Store(id) => Ok(id),
+        DatasetStrId::Temporary(_) => Err(()),
     }
 }
 

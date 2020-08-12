@@ -11,6 +11,7 @@ mod model;
 mod parser;
 mod plan;
 mod plan_builder;
+mod update;
 mod xml_results;
 
 use crate::model::{GraphName, NamedNode, NamedOrBlankNode};
@@ -28,8 +29,9 @@ pub use crate::sparql::parser::ParseError;
 pub use crate::sparql::parser::{Query, Update};
 use crate::sparql::plan::{PlanNode, TripleTemplate};
 use crate::sparql::plan_builder::PlanBuilder;
-use crate::store::numeric_encoder::StrEncodingAware;
-use crate::store::ReadableEncodedStore;
+use crate::sparql::update::SimpleUpdateEvaluator;
+use crate::store::numeric_encoder::{StrContainer, StrEncodingAware};
+use crate::store::{ReadableEncodedStore, WritableEncodedStore};
 use std::convert::TryInto;
 use std::error::Error;
 use std::rc::Rc;
@@ -301,4 +303,21 @@ impl<S: ServiceHandler> ServiceHandler for ErrorConversionServiceHandler<S> {
             .handle(service_name, query)
             .map_err(EvaluationError::wrap)
     }
+}
+
+pub(crate) fn evaluate_update<
+    R: ReadableEncodedStore + Clone + 'static,
+    W: StrContainer<StrId = R::StrId> + WritableEncodedStore<StrId = R::StrId>,
+>(
+    read: R,
+    write: &mut W,
+    update: &Update,
+) -> Result<(), EvaluationError> {
+    SimpleUpdateEvaluator::new(
+        read,
+        write,
+        update.base_iri.clone(),
+        Rc::new(EmptyServiceHandler),
+    )
+    .eval_all(&update.operations)
 }

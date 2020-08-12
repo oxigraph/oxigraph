@@ -100,11 +100,17 @@ impl<'a> TryFrom<&'a String> for Query {
 /// # Result::Ok::<_, oxigraph::sparql::ParseError>(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct Update(pub(crate) Vec<GraphUpdateOperation>);
+pub struct Update {
+    pub(crate) base_iri: Option<Rc<Iri<String>>>,
+    pub(crate) operations: Vec<GraphUpdateOperation>,
+}
 
 impl fmt::Display for Update {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for update in &self.0 {
+        if let Some(base_iri) = &self.base_iri {
+            writeln!(f, "BASE <{}>", base_iri)?;
+        }
+        for update in &self.operations {
             writeln!(f, "{} ;", update)?;
         }
         Ok(())
@@ -130,13 +136,14 @@ impl Update {
             aggregations: Vec::default(),
         };
 
-        Ok(Self(
-            parser::UpdateInit(&unescape_unicode_codepoints(update), &mut state).map_err(|e| {
-                ParseError {
-                    inner: ParseErrorKind::Parser(e),
-                }
-            })?,
-        ))
+        let operations = parser::UpdateInit(&unescape_unicode_codepoints(update), &mut state)
+            .map_err(|e| ParseError {
+                inner: ParseErrorKind::Parser(e),
+            })?;
+        Ok(Self {
+            operations,
+            base_iri: state.base_iri,
+        })
     }
 }
 
@@ -474,20 +481,20 @@ fn copy_graph(
     )
     .into()]);
     GraphUpdateOperation::DeleteInsert {
-        delete: None,
-        insert: Some(vec![QuadPattern::new(
+        delete: Vec::new(),
+        insert: vec![QuadPattern::new(
             Variable::new("s"),
             Variable::new("p"),
             Variable::new("o"),
             to.into(),
-        )]),
-        using: Rc::new(DatasetSpec::default()),
-        algebra: Rc::new(match &from {
+        )],
+        using: DatasetSpec::default(),
+        algebra: match from {
             NamedOrDefaultGraphTarget::NamedNode(from) => {
-                GraphPattern::Graph(from.clone().into(), Box::new(bgp))
+                GraphPattern::Graph(from.into(), Box::new(bgp))
             }
             NamedOrDefaultGraphTarget::DefaultGraph => bgp,
-        }),
+        },
     }
 }
 
@@ -1013,38 +1020,40 @@ parser! {
                 }
             }).fold(GraphPattern::BGP(Vec::new()), new_join);
             vec![GraphUpdateOperation::DeleteInsert {
-                delete: Some(d),
-                insert: None,
-                using: Rc::new(DatasetSpec::default()),
-                algebra: Rc::new(algebra)
+                delete: d,
+                insert: Vec::new(),
+                using: DatasetSpec::default(),
+                algebra
             }]
         }
 
         //[41]
         rule Modify() -> Vec<GraphUpdateOperation> = with:Modify_with() _ c:Modify_clauses() _ using:(UsingClause() ** (_)) _ i("WHERE") _ algebra:GroupGraphPattern() {
-            let (mut delete, mut insert) = c;
+            let (delete, insert) = c;
+            let mut delete = delete.unwrap_or_else(Vec::new);
+            let mut insert = insert.unwrap_or_else(Vec::new);
             let mut algebra = algebra;
 
             if let Some(with) = with {
                 // We inject WITH everywhere
-                delete = delete.map(|quads| quads.into_iter().map(|q| if q.graph_name.is_none() {
+                delete = delete.into_iter().map(|q| if q.graph_name.is_none() {
                     QuadPattern::new(q.subject, q.predicate, q.object, Some(with.clone().into()))
                 } else {
                     q
-                }).collect());
-                insert = insert.map(|quads| quads.into_iter().map(|q| if q.graph_name.is_none() {
+                }).collect();
+                insert = insert.into_iter().map(|q| if q.graph_name.is_none() {
                     QuadPattern::new(q.subject, q.predicate, q.object, Some(with.clone().into()))
                 } else {
                     q
-                }).collect());
+                }).collect();
                 algebra = GraphPattern::Graph(with.into(), Box::new(algebra));
             }
 
             vec![GraphUpdateOperation::DeleteInsert {
                 delete,
                 insert,
-                using: Rc::new(using.into_iter().fold(DatasetSpec::default(), |mut a, b| a + b)),
-                algebra: Rc::new(algebra)
+                using: using.into_iter().fold(DatasetSpec::default(), |mut a, b| a + b),
+                algebra
             }]
         }
         rule Modify_with() -> Option<NamedNode> = i("WITH") _ i:iri() _ {

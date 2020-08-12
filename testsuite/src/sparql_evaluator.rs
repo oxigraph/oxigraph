@@ -1,6 +1,6 @@
 use crate::files::*;
 use crate::manifest::*;
-use crate::report::*;
+use crate::report::{store_diff, TestResult};
 use crate::vocab::*;
 use anyhow::{anyhow, Result};
 use chrono::Utc;
@@ -72,10 +72,10 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
     {
         let store = MemoryStore::new();
         if let Some(data) = &test.data {
-            load_to_store(data, &store, &GraphName::DefaultGraph)?;
+            load_to_store(data, &store, GraphNameRef::DefaultGraph)?;
         }
-        for graph_data in &test.graph_data {
-            load_to_store(&graph_data, &store, &NamedNode::new(graph_data)?.into())?;
+        for (name, value) in &test.graph_data {
+            load_to_store(value, &store, name)?;
         }
         let query_file = test
             .query
@@ -156,6 +156,56 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
                 result
             )),
             Err(_) => Ok(()),
+        }
+    } else if test.kind
+        == "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#UpdateEvaluationTest"
+    {
+        let store = MemoryStore::new();
+        if let Some(data) = &test.data {
+            load_to_store(data, &store, &GraphName::DefaultGraph)?;
+        }
+        for (name, value) in &test.graph_data {
+            load_to_store(value, &store, name)?;
+        }
+
+        let result_store = MemoryStore::new();
+        if let Some(data) = &test.result {
+            load_to_store(data, &result_store, &GraphName::DefaultGraph)?;
+        }
+        for (name, value) in &test.result_graph_data {
+            load_to_store(value, &result_store, name)?;
+        }
+
+        let update_file = test
+            .update
+            .as_deref()
+            .ok_or_else(|| anyhow!("No action found for test {}", test))?;
+        match Update::parse(&read_file_to_string(update_file)?, Some(update_file)) {
+            Err(error) => Err(anyhow!(
+                "Failure to parse update of {} with error: {}",
+                test,
+                error
+            )),
+            Ok(update) => match store.update(update) {
+                Err(error) => Err(anyhow!(
+                    "Failure to execute update of {} with error: {}",
+                    test,
+                    error
+                )),
+                Ok(()) => {
+                    if store.is_isomorphic(&result_store) {
+                        Ok(())
+                    } else {
+                        Err(anyhow!(
+                            "Failure on {}.\nDiff:\n{}\nParsed update:\n{}\n",
+                            test,
+                            store_diff(&result_store, &store),
+                            Update::parse(&read_file_to_string(update_file)?, Some(update_file))
+                                .unwrap(),
+                        ))
+                    }
+                }
+            },
         }
     } else {
         Err(anyhow!("Unsupported test type: {}", test.kind))

@@ -1391,7 +1391,7 @@ impl fmt::Display for QueryVariants {
                 base_iri,
             } => {
                 if let Some(base_iri) = base_iri {
-                    writeln!(f, "BASE <{}>\n", base_iri)?;
+                    writeln!(f, "BASE <{}>", base_iri)?;
                 }
                 write!(f, "{}", SparqlGraphRootPattern { algebra, dataset })
             }
@@ -1402,7 +1402,7 @@ impl fmt::Display for QueryVariants {
                 base_iri,
             } => {
                 if let Some(base_iri) = base_iri {
-                    writeln!(f, "BASE <{}>\n", base_iri)?;
+                    writeln!(f, "BASE <{}>", base_iri)?;
                 }
                 write!(f, "CONSTRUCT {{ ")?;
                 for triple in construct.iter() {
@@ -1424,7 +1424,7 @@ impl fmt::Display for QueryVariants {
                 base_iri,
             } => {
                 if let Some(base_iri) = base_iri {
-                    writeln!(f, "BASE <{}>\n", base_iri.as_str())?;
+                    writeln!(f, "BASE <{}>", base_iri.as_str())?;
                 }
                 write!(
                     f,
@@ -1442,7 +1442,7 @@ impl fmt::Display for QueryVariants {
                 base_iri,
             } => {
                 if let Some(base_iri) = base_iri {
-                    writeln!(f, "BASE <{}>\n", base_iri)?;
+                    writeln!(f, "BASE <{}>", base_iri)?;
                 }
                 write!(
                     f,
@@ -1467,10 +1467,10 @@ pub enum GraphUpdateOperation {
     DeleteData { data: Vec<QuadPattern> },
     /// [delete insert](https://www.w3.org/TR/sparql11-update/#def_deleteinsertoperation)
     DeleteInsert {
-        delete: Option<Vec<QuadPattern>>,
-        insert: Option<Vec<QuadPattern>>,
-        using: Rc<DatasetSpec>,
-        algebra: Rc<GraphPattern>,
+        delete: Vec<QuadPattern>,
+        insert: Vec<QuadPattern>,
+        using: DatasetSpec,
+        algebra: GraphPattern,
     },
     /// [load](https://www.w3.org/TR/sparql11-update/#def_loadoperation)
     Load {
@@ -1509,14 +1509,14 @@ impl fmt::Display for GraphUpdateOperation {
                 using,
                 algebra,
             } => {
-                if let Some(delete) = delete {
+                if !delete.is_empty() {
                     writeln!(f, "DELETE {{")?;
                     for quad in delete {
                         writeln!(f, "\t{}", quad)?;
                     }
                     writeln!(f, "}}")?;
                 }
-                if let Some(insert) = insert {
+                if !insert.is_empty() {
                     writeln!(f, "INSERT {{")?;
                     for quad in insert {
                         writeln!(f, "\t{}", quad)?;

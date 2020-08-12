@@ -13,10 +13,12 @@ pub struct Test {
     pub comment: Option<String>,
     pub action: Option<String>,
     pub query: Option<String>,
+    pub update: Option<String>,
     pub data: Option<String>,
-    pub graph_data: Vec<String>,
+    pub graph_data: Vec<(NamedNode, String)>,
     pub service_data: Vec<(String, String)>,
     pub result: Option<String>,
+    pub result_graph_data: Vec<(NamedNode, String)>,
 }
 
 impl fmt::Display for Test {
@@ -37,7 +39,7 @@ impl fmt::Display for Test {
         for data in &self.data {
             write!(f, " with data {}", data)?;
         }
-        for data in &self.graph_data {
+        for (_, data) in &self.graph_data {
             write!(f, " and graph data {}", data)?;
         }
         for result in &self.result {
@@ -85,10 +87,10 @@ impl Iterator for TestManifest {
                         Some(Term::Literal(c)) => Some(c.value().to_string()),
                         _ => None,
                     };
-                let (action, query, data, graph_data, service_data) =
+                let (action, query, update, data, graph_data, service_data) =
                     match object_for_subject_predicate(&self.graph, &test_node, mf::ACTION) {
                         Some(Term::NamedNode(n)) => {
-                            (Some(n.into_string()), None, None, vec![], vec![])
+                            (Some(n.into_string()), None, None, None, vec![], vec![])
                         }
                         Some(Term::BlankNode(n)) => {
                             let query =
@@ -96,15 +98,52 @@ impl Iterator for TestManifest {
                                     Some(Term::NamedNode(q)) => Some(q.into_string()),
                                     _ => None,
                                 };
+                            let update =
+                                match object_for_subject_predicate(&self.graph, &n, ut::REQUEST) {
+                                    Some(Term::NamedNode(q)) => Some(q.into_string()),
+                                    _ => None,
+                                };
                             let data = match object_for_subject_predicate(&self.graph, &n, qt::DATA)
+                                .or_else(|| object_for_subject_predicate(&self.graph, &n, ut::DATA))
                             {
                                 Some(Term::NamedNode(q)) => Some(q.into_string()),
                                 _ => None,
                             };
                             let graph_data =
                                 objects_for_subject_predicate(&self.graph, &n, qt::GRAPH_DATA)
+                                    .chain(objects_for_subject_predicate(
+                                        &self.graph,
+                                        &n,
+                                        ut::GRAPH_DATA,
+                                    ))
                                     .filter_map(|g| match g {
-                                        Term::NamedNode(q) => Some(q.into_string()),
+                                        Term::NamedNode(q) => Some((q.clone(), q.into_string())),
+                                        Term::BlankNode(node) => {
+                                            if let Some(Term::NamedNode(graph)) =
+                                                object_for_subject_predicate(
+                                                    &self.graph,
+                                                    &node,
+                                                    ut::GRAPH,
+                                                )
+                                            {
+                                                if let Some(Term::Literal(name)) =
+                                                    object_for_subject_predicate(
+                                                        &self.graph,
+                                                        &node,
+                                                        rdfs::LABEL,
+                                                    )
+                                                {
+                                                    Some((
+                                                        NamedNode::new(name.value()).unwrap(),
+                                                        graph.into_string(),
+                                                    ))
+                                                } else {
+                                                    Some((graph.clone(), graph.into_string()))
+                                                }
+                                            } else {
+                                                None
+                                            }
+                                        }
                                         _ => None,
                                     })
                                     .collect();
@@ -133,19 +172,60 @@ impl Iterator for TestManifest {
                                         }
                                     })
                                     .collect();
-                            (None, query, data, graph_data, service_data)
+                            (None, query, update, data, graph_data, service_data)
                         }
                         Some(_) => return Some(Err(anyhow!("invalid action"))),
                         None => {
                             return Some(Err(anyhow!("action not found for test {}", test_node)));
                         }
                     };
-                let result = match object_for_subject_predicate(&self.graph, &test_node, mf::RESULT)
-                {
-                    Some(Term::NamedNode(n)) => Some(n.into_string()),
-                    Some(_) => return Some(Err(anyhow!("invalid result"))),
-                    None => None,
-                };
+                let (result, result_graph_data) =
+                    match object_for_subject_predicate(&self.graph, &test_node, mf::RESULT) {
+                        Some(Term::NamedNode(n)) => (Some(n.into_string()), Vec::new()),
+                        Some(Term::BlankNode(n)) => (
+                            if let Some(Term::NamedNode(result)) =
+                                object_for_subject_predicate(&self.graph, &n, ut::DATA)
+                            {
+                                Some(result.into_string())
+                            } else {
+                                None
+                            },
+                            objects_for_subject_predicate(&self.graph, &n, ut::GRAPH_DATA)
+                                .filter_map(|g| match g {
+                                    Term::NamedNode(q) => Some((q.clone(), q.into_string())),
+                                    Term::BlankNode(node) => {
+                                        if let Some(Term::NamedNode(graph)) =
+                                            object_for_subject_predicate(
+                                                &self.graph,
+                                                &node,
+                                                ut::GRAPH,
+                                            )
+                                        {
+                                            if let Some(Term::Literal(name)) =
+                                                object_for_subject_predicate(
+                                                    &self.graph,
+                                                    &node,
+                                                    rdfs::LABEL,
+                                                )
+                                            {
+                                                Some((
+                                                    NamedNode::new(name.value()).unwrap(),
+                                                    graph.into_string(),
+                                                ))
+                                            } else {
+                                                Some((graph.clone(), graph.into_string()))
+                                            }
+                                        } else {
+                                            None
+                                        }
+                                    }
+                                    _ => None,
+                                })
+                                .collect(),
+                        ),
+                        Some(_) => return Some(Err(anyhow!("invalid result"))),
+                        None => (None, Vec::new()),
+                    };
                 Some(Ok(Test {
                     id: test_node,
                     kind,
@@ -153,10 +233,12 @@ impl Iterator for TestManifest {
                     comment,
                     action,
                     query,
+                    update,
                     data,
                     graph_data,
                     service_data,
                     result,
+                    result_graph_data,
                 }))
             }
             Some(_) => self.next(),
@@ -166,7 +248,7 @@ impl Iterator for TestManifest {
                         let manifest =
                             NamedOrBlankNodeRef::from(NamedNodeRef::new(url.as_str()).unwrap());
                         if let Err(error) =
-                            load_to_store(&url, &self.graph, &&GraphName::DefaultGraph)
+                            load_to_store(&url, &self.graph, GraphNameRef::DefaultGraph)
                         {
                             return Some(Err(error));
                         }

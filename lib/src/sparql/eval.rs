@@ -120,7 +120,7 @@ where
         }))
     }
 
-    fn eval_plan(
+    pub fn eval_plan(
         &self,
         node: &PlanNode<S::StrId>,
         from: EncodedTuple<S::StrId>,

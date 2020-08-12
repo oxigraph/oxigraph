@@ -3,7 +3,10 @@
 use crate::error::invalid_data_error;
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
-use crate::sparql::{EvaluationError, Query, QueryOptions, QueryResults, SimplePreparedQuery};
+use crate::sparql::{
+    evaluate_update, EvaluationError, Query, QueryOptions, QueryResults, SimplePreparedQuery,
+    Update,
+};
 use crate::store::binary_encoder::*;
 use crate::store::numeric_encoder::{
     Decoder, ReadEncoder, StrContainer, StrEncodingAware, StrLookup, WriteEncoder,
@@ -201,6 +204,24 @@ impl SledStore {
     /// Returns if the store is empty
     pub fn is_empty(&self) -> bool {
         self.gspo.is_empty() && self.dspo.is_empty()
+    }
+
+    /// Executes a [SPARQL 1.1 update](https://www.w3.org/TR/sparql11-update/).
+    ///
+    /// The [`LOAD` operation](https://www.w3.org/TR/sparql11-update/#load) is not supported yet.
+    /// The store does not track the existence of empty named graphs.
+    /// This method has no ACID guarantees.
+    ///
+    /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.update) for a usage example.
+    pub fn update(
+        &self,
+        update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
+    ) -> Result<(), EvaluationError> {
+        evaluate_update(
+            self.clone(),
+            &mut &*self,
+            &update.try_into().map_err(|e| e.into())?,
+        )
     }
 
     /// Executes an ACID transaction.

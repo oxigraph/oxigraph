@@ -124,7 +124,11 @@ fn sparql11_federation_w3c_evaluation_testsuite() -> Result<()> {
 #[test]
 fn sparql11_update_w3c_evaluation_testsuite() -> Result<()> {
     run_testsuite(
-        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest.ttl",
-        vec![],
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/manifest-sparql11-update.ttl",
+        vec![
+            // LOAD is not implemented yet
+            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/update-silent/manifest#load-into-silent",
+            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/update-silent/manifest#load-silent"
+        ]
     )
 }

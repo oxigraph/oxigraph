@@ -1,6 +1,6 @@
 use crate::files::load_store;
 use crate::manifest::Test;
-use crate::report::TestResult;
+use crate::report::{store_diff, TestResult};
 use anyhow::{anyhow, Result};
 use chrono::Utc;
 
@@ -59,9 +59,8 @@ fn evaluate_parser_test(test: &Test) -> Result<()> {
                                 Ok(())
                             } else {
                                 Err(anyhow!(
-                                    "The two files are not isomorphic. Expected:\n{}\nActual:\n{}",
-                                    expected_graph,
-                                    actual_graph
+                                    "The two files are not isomorphic. Diff:\n{}",
+                                    store_diff(&expected_graph, &actual_graph)
                                 ))
                             }
                         }

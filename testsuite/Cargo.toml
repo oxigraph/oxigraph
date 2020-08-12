@@ -15,6 +15,7 @@ publish = false
 anyhow = "1"
 chrono = "0.4"
 oxigraph = { version = "0.1", path="../lib" }
+text-diff = "0.4"
 
 [dev-dependencies]
 criterion = "0.3"

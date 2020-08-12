@@ -1,0 +1,403 @@
+use crate::sparql::algebra::{
+    DatasetSpec, GraphPattern, GraphTarget, GraphUpdateOperation, NamedNodeOrVariable, QuadPattern,
+    TermOrVariable,
+};
+use crate::sparql::dataset::{DatasetStrId, DatasetView};
+use crate::sparql::eval::SimpleEvaluator;
+use crate::sparql::plan::EncodedTuple;
+use crate::sparql::plan_builder::PlanBuilder;
+use crate::sparql::{EvaluationError, ServiceHandler, Variable};
+use crate::store::numeric_encoder::{
+    EncodedQuad, EncodedTerm, ReadEncoder, StrContainer, StrLookup, WriteEncoder,
+};
+use crate::store::{ReadableEncodedStore, WritableEncodedStore};
+use oxiri::Iri;
+use std::rc::Rc;
+
+pub(crate) struct SimpleUpdateEvaluator<'a, R, W> {
+    read: R,
+    write: &'a mut W,
+    base_iri: Option<Rc<Iri<String>>>,
+    service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
+}
+
+impl<
+        'a,
+        R: ReadableEncodedStore + Clone + 'static,
+        W: StrContainer<StrId = R::StrId> + WritableEncodedStore<StrId = R::StrId> + 'a,
+    > SimpleUpdateEvaluator<'a, R, W>
+{
+    pub fn new(
+        read: R,
+        write: &'a mut W,
+        base_iri: Option<Rc<Iri<String>>>,
+        service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
+    ) -> Self {
+        Self {
+            read,
+            write,
+            base_iri,
+            service_handler,
+        }
+    }
+
+    pub fn eval_all(&mut self, updates: &[GraphUpdateOperation]) -> Result<(), EvaluationError> {
+        for update in updates {
+            self.eval(update)?;
+        }
+        Ok(())
+    }
+
+    fn eval(&mut self, update: &GraphUpdateOperation) -> Result<(), EvaluationError> {
+        match update {
+            GraphUpdateOperation::InsertData { data } => self.eval_insert_data(data),
+            GraphUpdateOperation::DeleteData { data } => self.eval_delete_data(data),
+            GraphUpdateOperation::DeleteInsert {
+                delete,
+                insert,
+                using,
+                algebra,
+            } => self.eval_delete_insert(delete, insert, using, algebra),
+            GraphUpdateOperation::Load { .. } => Err(EvaluationError::msg(
+                "SPARQL UPDATE LOAD operation is not implemented yet",
+            )),
+            GraphUpdateOperation::Clear { graph, .. } => self.eval_clear(graph),
+            GraphUpdateOperation::Create { .. } => Ok(()),
+            GraphUpdateOperation::Drop { graph, .. } => self.eval_clear(graph),
+        }
+    }
+
+    fn eval_insert_data(&mut self, data: &[QuadPattern]) -> Result<(), EvaluationError> {
+        for quad in data {
+            if let Some(quad) = self.encode_quad_for_insertion(quad, &[], &[])? {
+                self.write.insert_encoded(&quad).map_err(to_eval_error)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn eval_delete_data(&mut self, data: &[QuadPattern]) -> Result<(), EvaluationError> {
+        for quad in data {
+            if let Some(quad) = self.encode_quad_for_deletion(quad, &[], &[])? {
+                self.write.remove_encoded(&quad).map_err(to_eval_error)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn eval_delete_insert(
+        &mut self,
+        delete: &[QuadPattern],
+        insert: &[QuadPattern],
+        using: &DatasetSpec,
+        algebra: &GraphPattern,
+    ) -> Result<(), EvaluationError> {
+        let dataset = Rc::new(DatasetView::new(self.read.clone(), false, &[], &[], using)?);
+        let (plan, variables) = PlanBuilder::build(dataset.as_ref(), algebra)?;
+        let evaluator = SimpleEvaluator::<DatasetView<R>>::new(
+            dataset.clone(),
+            self.base_iri.clone(),
+            self.service_handler.clone(),
+        );
+        for tuple in evaluator.eval_plan(&plan, EncodedTuple::with_capacity(variables.len())) {
+            // We map the tuple to only get store strings
+            let tuple = tuple?
+                .into_iter()
+                .map(|t| {
+                    Ok(if let Some(t) = t {
+                        Some(
+                            t.try_map_id(|id| {
+                                if let DatasetStrId::Store(s) = id {
+                                    Ok(s)
+                                } else {
+                                    self.write
+                                        .insert_str(
+                                            &dataset
+                                                .get_str(id)
+                                                .map_err(to_eval_error)?
+                                                .ok_or_else(|| {
+                                                    EvaluationError::msg(
+                                                        "String not stored in the string store",
+                                                    )
+                                                })
+                                                .map_err(to_eval_error)?,
+                                        )
+                                        .map_err(to_eval_error)
+                                }
+                            })
+                            .map_err(to_eval_error)?,
+                        )
+                    } else {
+                        None
+                    })
+                })
+                .collect::<Result<Vec<_>, EvaluationError>>()?;
+
+            for quad in delete {
+                if let Some(quad) = self.encode_quad_for_deletion(quad, &variables, &tuple)? {
+                    self.write.remove_encoded(&quad).map_err(to_eval_error)?;
+                }
+            }
+            for quad in insert {
+                if let Some(quad) = self.encode_quad_for_insertion(quad, &variables, &tuple)? {
+                    self.write.insert_encoded(&quad).map_err(to_eval_error)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn eval_clear(&mut self, graph: &GraphTarget) -> Result<(), EvaluationError> {
+        match graph {
+            GraphTarget::NamedNode(graph) => {
+                if let Some(graph) = self
+                    .read
+                    .get_encoded_named_node(graph.into())
+                    .map_err(to_eval_error)?
+                {
+                    for quad in self
+                        .read
+                        .encoded_quads_for_pattern(None, None, None, Some(graph))
+                    {
+                        self.write
+                            .remove_encoded(&quad.map_err(to_eval_error)?)
+                            .map_err(to_eval_error)?;
+                    }
+                } else {
+                    //we do not track created graph so it's fine
+                }
+            }
+            GraphTarget::DefaultGraph => {
+                for quad in self.read.encoded_quads_for_pattern(
+                    None,
+                    None,
+                    None,
+                    Some(EncodedTerm::DefaultGraph),
+                ) {
+                    self.write
+                        .remove_encoded(&quad.map_err(to_eval_error)?)
+                        .map_err(to_eval_error)?;
+                }
+            }
+            GraphTarget::NamedGraphs => {
+                for quad in self.read.encoded_quads_for_pattern(None, None, None, None) {
+                    let quad = quad.map_err(to_eval_error)?;
+                    if !quad.graph_name.is_default_graph() {
+                        self.write.remove_encoded(&quad).map_err(to_eval_error)?;
+                    }
+                }
+            }
+            GraphTarget::AllGraphs => {
+                for quad in self.read.encoded_quads_for_pattern(None, None, None, None) {
+                    self.write
+                        .remove_encoded(&quad.map_err(to_eval_error)?)
+                        .map_err(to_eval_error)?;
+                }
+            }
+        };
+        Ok(())
+    }
+
+    fn encode_quad_for_insertion(
+        &mut self,
+        quad: &QuadPattern,
+        variables: &[Variable],
+        values: &[Option<EncodedTerm<R::StrId>>],
+    ) -> Result<Option<EncodedQuad<R::StrId>>, EvaluationError> {
+        Ok(Some(EncodedQuad {
+            subject: if let Some(subject) =
+                self.encode_term_for_insertion(&quad.subject, variables, values, |t| {
+                    t.is_named_node() || t.is_blank_node()
+                })? {
+                subject
+            } else {
+                return Ok(None);
+            },
+            predicate: if let Some(predicate) =
+                self.encode_named_node_for_insertion(&quad.predicate, variables, values)?
+            {
+                predicate
+            } else {
+                return Ok(None);
+            },
+            object: if let Some(object) =
+                self.encode_term_for_insertion(&quad.object, variables, values, |t| {
+                    !t.is_default_graph()
+                })? {
+                object
+            } else {
+                return Ok(None);
+            },
+            graph_name: if let Some(graph_name) = &quad.graph_name {
+                if let Some(graph_name) =
+                    self.encode_named_node_for_insertion(graph_name, variables, values)?
+                {
+                    graph_name
+                } else {
+                    return Ok(None);
+                }
+            } else {
+                EncodedTerm::DefaultGraph
+            },
+        }))
+    }
+
+    fn encode_term_for_insertion(
+        &mut self,
+        term: &TermOrVariable,
+        variables: &[Variable],
+        values: &[Option<EncodedTerm<R::StrId>>],
+        validate: impl FnOnce(&EncodedTerm<R::StrId>) -> bool,
+    ) -> Result<Option<EncodedTerm<R::StrId>>, EvaluationError> {
+        Ok(match term {
+            TermOrVariable::Term(term) => {
+                Some(self.write.encode_term(term.into()).map_err(to_eval_error)?)
+            }
+            TermOrVariable::Variable(v) => {
+                if let Some(Some(term)) = variables
+                    .iter()
+                    .position(|v2| v == v2)
+                    .and_then(|i| values.get(i))
+                {
+                    if validate(term) {
+                        Some(*term)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+        })
+    }
+
+    fn encode_named_node_for_insertion(
+        &mut self,
+        term: &NamedNodeOrVariable,
+        variables: &[Variable],
+        values: &[Option<EncodedTerm<R::StrId>>],
+    ) -> Result<Option<EncodedTerm<R::StrId>>, EvaluationError> {
+        Ok(match term {
+            NamedNodeOrVariable::NamedNode(term) => Some(
+                self.write
+                    .encode_named_node(term.into())
+                    .map_err(to_eval_error)?,
+            ),
+            NamedNodeOrVariable::Variable(v) => {
+                if let Some(Some(term)) = variables
+                    .iter()
+                    .position(|v2| v == v2)
+                    .and_then(|i| values.get(i))
+                {
+                    if term.is_named_node() {
+                        Some(*term)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+        })
+    }
+
+    fn encode_quad_for_deletion(
+        &self,
+        quad: &QuadPattern,
+        variables: &[Variable],
+        values: &[Option<EncodedTerm<R::StrId>>],
+    ) -> Result<Option<EncodedQuad<R::StrId>>, EvaluationError> {
+        Ok(Some(EncodedQuad {
+            subject: if let Some(subject) =
+                self.encode_term_for_deletion(&quad.subject, variables, values)?
+            {
+                subject
+            } else {
+                return Ok(None);
+            },
+            predicate: if let Some(predicate) =
+                self.encode_named_node_for_deletion(&quad.predicate, variables, values)?
+            {
+                predicate
+            } else {
+                return Ok(None);
+            },
+            object: if let Some(object) =
+                self.encode_term_for_deletion(&quad.object, variables, values)?
+            {
+                object
+            } else {
+                return Ok(None);
+            },
+            graph_name: if let Some(graph_name) = &quad.graph_name {
+                if let Some(graph_name) =
+                    self.encode_named_node_for_deletion(graph_name, variables, values)?
+                {
+                    graph_name
+                } else {
+                    return Ok(None);
+                }
+            } else {
+                EncodedTerm::DefaultGraph
+            },
+        }))
+    }
+
+    fn encode_term_for_deletion(
+        &self,
+        term: &TermOrVariable,
+        variables: &[Variable],
+        values: &[Option<EncodedTerm<R::StrId>>],
+    ) -> Result<Option<EncodedTerm<R::StrId>>, EvaluationError> {
+        Ok(match term {
+            TermOrVariable::Term(term) => self
+                .read
+                .get_encoded_term(term.into())
+                .map_err(to_eval_error)?,
+            TermOrVariable::Variable(v) => {
+                if let Some(Some(term)) = variables
+                    .iter()
+                    .position(|v2| v == v2)
+                    .and_then(|i| values.get(i))
+                {
+                    Some(*term)
+                } else {
+                    None
+                }
+            }
+        })
+    }
+
+    fn encode_named_node_for_deletion(
+        &self,
+        term: &NamedNodeOrVariable,
+        variables: &[Variable],
+        values: &[Option<EncodedTerm<R::StrId>>],
+    ) -> Result<Option<EncodedTerm<R::StrId>>, EvaluationError> {
+        Ok(match term {
+            NamedNodeOrVariable::NamedNode(term) => self
+                .read
+                .get_encoded_named_node(term.into())
+                .map_err(to_eval_error)?,
+            NamedNodeOrVariable::Variable(v) => {
+                if let Some(Some(term)) = variables
+                    .iter()
+                    .position(|v2| v == v2)
+                    .and_then(|i| values.get(i))
+                {
+                    if term.is_named_node() {
+                        Some(*term)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+        })
+    }
+}
+
+fn to_eval_error(e: impl Into<EvaluationError>) -> EvaluationError {
+    e.into()
+}
