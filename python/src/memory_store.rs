@@ -4,7 +4,7 @@ use crate::sparql::*;
 use crate::store_utils::*;
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::*;
-use oxigraph::MemoryStore;
+use oxigraph::store::memory::*;
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::{NotImplementedError, ValueError};
 use pyo3::prelude::*;
@@ -95,12 +95,12 @@ impl PyMemoryStore {
         let (subject, predicate, object, graph_name) =
             extract_quads_pattern(subject, predicate, object, graph_name)?;
         Ok(QuadIter {
-            inner: Box::new(self.inner.quads_for_pattern(
+            inner: self.inner.quads_for_pattern(
                 subject.as_ref().map(|t| t.into()),
                 predicate.as_ref().map(|t| t.into()),
                 object.as_ref().map(|t| t.into()),
                 graph_name.as_ref().map(|t| t.into()),
-            )),
+            ),
         })
     }
 
@@ -351,14 +351,14 @@ impl<'p> PySequenceProtocol<'p> for PyMemoryStore {
 impl PyIterProtocol for PyMemoryStore {
     fn __iter__(slf: PyRef<Self>) -> QuadIter {
         QuadIter {
-            inner: Box::new(slf.inner.quads_for_pattern(None, None, None, None)),
+            inner: slf.inner.iter(),
         }
     }
 }
 
 #[pyclass(unsendable)]
 pub struct QuadIter {
-    inner: Box<dyn Iterator<Item = Quad>>,
+    inner: MemoryQuadIter,
 }
 
 #[pyproto]

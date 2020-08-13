@@ -4,11 +4,10 @@ use crate::sparql::*;
 use crate::store_utils::*;
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::*;
-use oxigraph::SledStore;
+use oxigraph::store::sled::*;
 use pyo3::exceptions::ValueError;
 use pyo3::prelude::*;
 use pyo3::{PyIterProtocol, PyObjectProtocol, PySequenceProtocol};
-use std::io;
 use std::io::BufReader;
 
 /// Store based on the `Sled <https://sled.rs/>`_ key-value database.
@@ -110,12 +109,12 @@ impl PySledStore {
         let (subject, predicate, object, graph_name) =
             extract_quads_pattern(subject, predicate, object, graph_name)?;
         Ok(QuadIter {
-            inner: Box::new(self.inner.quads_for_pattern(
+            inner: self.inner.quads_for_pattern(
                 subject.as_ref().map(|t| t.into()),
                 predicate.as_ref().map(|t| t.into()),
                 object.as_ref().map(|t| t.into()),
                 graph_name.as_ref().map(|t| t.into()),
-            )),
+            ),
         })
     }
 
@@ -360,14 +359,14 @@ impl PySequenceProtocol for PySledStore {
 impl PyIterProtocol for PySledStore {
     fn __iter__(slf: PyRef<Self>) -> QuadIter {
         QuadIter {
-            inner: Box::new(slf.inner.quads_for_pattern(None, None, None, None)),
+            inner: slf.inner.iter(),
         }
     }
 }
 
 #[pyclass(unsendable)]
 pub struct QuadIter {
-    inner: Box<dyn Iterator<Item = Result<Quad, io::Error>>>,
+    inner: SledQuadIter,
 }
 
 #[pyproto]

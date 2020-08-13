@@ -164,15 +164,22 @@ impl SledStore {
         predicate: Option<NamedNodeRef<'_>>,
         object: Option<TermRef<'_>>,
         graph_name: Option<GraphNameRef<'_>>,
-    ) -> impl Iterator<Item = Result<Quad, io::Error>> {
-        match get_encoded_quad_pattern(self, subject, predicate, object, graph_name) {
-            Ok(Some((subject, predicate, object, graph_name))) => QuadsIter::Quads {
-                iter: self.encoded_quads_for_pattern(subject, predicate, object, graph_name),
-                store: self.clone(),
+    ) -> SledQuadIter {
+        SledQuadIter {
+            inner: match get_encoded_quad_pattern(self, subject, predicate, object, graph_name) {
+                Ok(Some((subject, predicate, object, graph_name))) => QuadIterInner::Quads {
+                    iter: self.encoded_quads_for_pattern(subject, predicate, object, graph_name),
+                    store: self.clone(),
+                },
+                Ok(None) => QuadIterInner::Empty,
+                Err(error) => QuadIterInner::Error(once(error)),
             },
-            Ok(None) => QuadsIter::Empty,
-            Err(error) => QuadsIter::Error(once(error)),
         }
+    }
+
+    /// Returns all the quads contained in the store
+    pub fn iter(&self) -> SledQuadIter {
+        self.quads_for_pattern(None, None, None, None)
     }
 
     /// Checks if this store contains a given quad
@@ -352,11 +359,7 @@ impl SledStore {
     ///    
     /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.dump_dataset) for a usage example.
     pub fn dump_dataset(&self, writer: impl Write, format: DatasetFormat) -> Result<(), io::Error> {
-        dump_dataset(
-            self.quads_for_pattern(None, None, None, None),
-            writer,
-            format,
-        )
+        dump_dataset(self.iter(), writer, format)
     }
 
     fn contains_encoded(&self, quad: &EncodedQuad) -> Result<bool, io::Error> {
@@ -590,7 +593,7 @@ impl SledStore {
 
 impl fmt::Display for SledStore {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for t in self.quads_for_pattern(None, None, None, None) {
+        for t in self.iter() {
             writeln!(f, "{}", t.map_err(|_| fmt::Error)?)?;
         }
         Ok(())
@@ -1217,7 +1220,12 @@ impl Iterator for DecodingQuadIterator {
     }
 }
 
-enum QuadsIter {
+/// An iterator returning the quads contained in a [`SledStore`](struct.SledStore.html).
+pub struct SledQuadIter {
+    inner: QuadIterInner,
+}
+
+enum QuadIterInner {
     Quads {
         iter: DecodingQuadsIterator,
         store: SledStore,
@@ -1226,17 +1234,17 @@ enum QuadsIter {
     Empty,
 }
 
-impl Iterator for QuadsIter {
+impl Iterator for SledQuadIter {
     type Item = Result<Quad, io::Error>;
 
     fn next(&mut self) -> Option<Result<Quad, io::Error>> {
-        match self {
-            Self::Quads { iter, store } => Some(match iter.next()? {
+        match &mut self.inner {
+            QuadIterInner::Quads { iter, store } => Some(match iter.next()? {
                 Ok(quad) => store.decode_quad(&quad).map_err(|e| e.into()),
                 Err(error) => Err(error),
             }),
-            Self::Error(iter) => iter.next().map(Err),
-            Self::Empty => None,
+            QuadIterInner::Error(iter) => iter.next().map(Err),
+            QuadIterInner::Empty => None,
         }
     }
 }
@@ -1293,12 +1301,7 @@ fn store() -> Result<(), io::Error> {
     result?;
 
     assert_eq!(store.len(), 4);
-    assert_eq!(
-        store
-            .quads_for_pattern(None, None, None, None)
-            .collect::<Result<Vec<_>, _>>()?,
-        all_quads
-    );
+    assert_eq!(store.iter().collect::<Result<Vec<_>, _>>()?, all_quads);
     assert_eq!(
         store
             .quads_for_pattern(Some(main_s.as_ref()), None, None, None)

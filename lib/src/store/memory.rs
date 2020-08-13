@@ -175,7 +175,7 @@ impl MemoryStore {
         predicate: Option<NamedNodeRef<'_>>,
         object: Option<TermRef<'_>>,
         graph_name: Option<GraphNameRef<'_>>,
-    ) -> impl Iterator<Item = Quad> {
+    ) -> MemoryQuadIter {
         let quads = if let Some((subject, predicate, object, graph_name)) =
             get_encoded_quad_pattern(self, subject, predicate, object, graph_name)
                 .unwrap_infallible()
@@ -184,10 +184,18 @@ impl MemoryStore {
         } else {
             Vec::new()
         };
-        let this = self.clone();
-        quads.into_iter().map(
-            move |quad| this.decode_quad(&quad).unwrap(), // Could not fail
-        )
+        MemoryQuadIter {
+            iter: quads.into_iter(),
+            store: self.clone(),
+        }
+    }
+
+    /// Returns all the quads contained in the store
+    pub fn iter(&self) -> MemoryQuadIter {
+        MemoryQuadIter {
+            iter: self.encoded_quads().into_iter(),
+            store: self.clone(),
+        }
     }
 
     /// Checks if this store contains a given quad
@@ -424,11 +432,7 @@ impl MemoryStore {
     /// # std::io::Result::Ok(())
     /// ```
     pub fn dump_dataset(&self, writer: impl Write, format: DatasetFormat) -> Result<(), io::Error> {
-        dump_dataset(
-            self.quads_for_pattern(None, None, None, None).map(Ok),
-            writer,
-            format,
-        )
+        dump_dataset(self.iter().map(Ok), writer, format)
     }
 
     #[allow(clippy::expect_used)]
@@ -1222,9 +1226,27 @@ impl Extend<Quad> for MemoryStore {
     }
 }
 
+impl IntoIterator for MemoryStore {
+    type Item = Quad;
+    type IntoIter = MemoryQuadIter;
+
+    fn into_iter(self) -> MemoryQuadIter {
+        self.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a MemoryStore {
+    type Item = Quad;
+    type IntoIter = MemoryQuadIter;
+
+    fn into_iter(self) -> MemoryQuadIter {
+        self.iter()
+    }
+}
+
 impl fmt::Display for MemoryStore {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for t in self.quads_for_pattern(None, None, None, None) {
+        for t in self {
             writeln!(f, "{}", t)?;
         }
         Ok(())
@@ -1251,6 +1273,24 @@ impl Iterator for EncodedQuadsIter {
         G: FnMut(Acc, Self::Item) -> Acc,
     {
         self.iter.fold(init, |acc, elt| g(acc, Ok(elt)))
+    }
+}
+
+/// An iterator returning the quads contained in a [`MemoryStore`](struct.MemoryStore.html).
+pub struct MemoryQuadIter {
+    iter: IntoIter<EncodedQuad>,
+    store: MemoryStore,
+}
+
+impl Iterator for MemoryQuadIter {
+    type Item = Quad;
+
+    fn next(&mut self) -> Option<Quad> {
+        Some(self.store.decode_quad(&self.iter.next()?).unwrap())
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
     }
 }
 
