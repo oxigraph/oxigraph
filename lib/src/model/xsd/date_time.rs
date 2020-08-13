@@ -1813,6 +1813,51 @@ mod tests {
             Time::from_str("23:00:00-03:00").unwrap(),
             Time::from_str("02:00:00Z").unwrap()
         );
+
+        assert_ne!(
+            GYearMonth::from_str("1986-02").unwrap(),
+            GYearMonth::from_str("1986-03").unwrap()
+        );
+        assert_ne!(
+            GYearMonth::from_str("1978-03").unwrap(),
+            GYearMonth::from_str("1978-03Z").unwrap()
+        );
+
+        assert_ne!(
+            GYear::from_str("2005-12:00").unwrap(),
+            GYear::from_str("2005+12:00").unwrap()
+        );
+        assert_ne!(
+            GYear::from_str("1976-05:00").unwrap(),
+            GYear::from_str("1976").unwrap()
+        );
+
+        assert_eq!(
+            GMonthDay::from_str("--12-25-14:00").unwrap(),
+            GMonthDay::from_str("--12-26+10:00").unwrap()
+        );
+        assert_ne!(
+            GMonthDay::from_str("--12-25").unwrap(),
+            GMonthDay::from_str("--12-26Z").unwrap()
+        );
+
+        assert_ne!(
+            GMonth::from_str("--12-14:00").unwrap(),
+            GMonth::from_str("--12+10:00").unwrap()
+        );
+        assert_ne!(
+            GMonth::from_str("--12").unwrap(),
+            GMonth::from_str("--12Z").unwrap()
+        );
+
+        assert_ne!(
+            GDay::from_str("---25-14:00").unwrap(),
+            GDay::from_str("---25+10:00").unwrap()
+        );
+        assert_ne!(
+            GDay::from_str("---12").unwrap(),
+            GDay::from_str("---12Z").unwrap()
+        );
     }
 
     #[test]

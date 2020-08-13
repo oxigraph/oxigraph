@@ -1,6 +1,6 @@
 use super::*;
 use nom::branch::alt;
-use nom::bytes::complete::{tag, take_while};
+use nom::bytes::complete::{tag, take_while, take_while_m_n};
 use nom::character::complete::{char, digit0, digit1};
 use nom::combinator::{map, opt, recognize};
 use nom::error::{ErrorKind, ParseError};
@@ -14,7 +14,6 @@ use super::date_time::DateTimeError;
 use super::decimal::ParseDecimalError;
 use crate::model::xsd::date_time::{GDay, GMonth, GMonthDay, GYear, GYearMonth, TimezoneOffset};
 use crate::model::xsd::duration::{DayTimeDuration, YearMonthDuration};
-use nom::bytes::streaming::take_while_m_n;
 use std::error::Error;
 use std::fmt;
 use std::num::ParseIntError;
