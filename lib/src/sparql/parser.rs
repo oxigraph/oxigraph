@@ -981,22 +981,34 @@ parser! {
         //[35]
         rule Add() -> Vec<GraphUpdateOperation> = i("ADD") _ silent:Update1_silent() _ from:GraphOrDefault() _ i("TO") _ to:GraphOrDefault() {
             // Rewriting defined by https://www.w3.org/TR/sparql11-update/#add
-            let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new("s"), Variable::new("p"), Variable::new("o")).into()]);
-            vec![copy_graph(from, to)]
+            if from == to {
+                Vec::new() // identity case
+            } else {
+                let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new("s"), Variable::new("p"), Variable::new("o")).into()]);
+                vec![copy_graph(from, to)]
+            }
         }
 
         //[36]
         rule Move() -> Vec<GraphUpdateOperation> = i("MOVE") _ silent:Update1_silent() _ from:GraphOrDefault() _ i("TO") _ to:GraphOrDefault() {
             // Rewriting defined by https://www.w3.org/TR/sparql11-update/#move
-            let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new("s"), Variable::new("p"), Variable::new("o")).into()]);
-            vec![GraphUpdateOperation::Drop { silent, graph: to.clone().into() }, copy_graph(from.clone(), to), GraphUpdateOperation::Drop { silent, graph: from.into() }]
+            if from == to {
+                Vec::new() // identity case
+            } else {
+                let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new("s"), Variable::new("p"), Variable::new("o")).into()]);
+                vec![GraphUpdateOperation::Drop { silent, graph: to.clone().into() }, copy_graph(from.clone(), to), GraphUpdateOperation::Drop { silent, graph: from.into() }]
+            }
         }
 
         //[37]
         rule Copy() -> Vec<GraphUpdateOperation> = i("COPY") _ silent:Update1_silent() _ from:GraphOrDefault() _ i("TO") _ to:GraphOrDefault() {
             // Rewriting defined by https://www.w3.org/TR/sparql11-update/#copy
-            let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new("s"), Variable::new("p"), Variable::new("o")).into()]);
-            vec![GraphUpdateOperation::Drop { silent, graph: to.clone().into() }, copy_graph(from, to)]
+            if from == to {
+                Vec::new() // identity case
+            } else {
+                let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new("s"), Variable::new("p"), Variable::new("o")).into()]);
+                vec![GraphUpdateOperation::Drop { silent, graph: to.clone().into() }, copy_graph(from, to)]
+            }
         }
 
         //[38]
@@ -1028,7 +1040,7 @@ parser! {
         }
 
         //[41]
-        rule Modify() -> Vec<GraphUpdateOperation> = with:Modify_with() _ c:Modify_clauses() _ using:(UsingClause() ** (_)) _ i("WHERE") _ algebra:GroupGraphPattern() {
+        rule Modify() -> Vec<GraphUpdateOperation> = with:Modify_with()? _ c:Modify_clauses() _ using:(UsingClause() ** (_)) _ i("WHERE") _ algebra:GroupGraphPattern() {
             let (delete, insert) = c;
             let mut delete = delete.unwrap_or_else(Vec::new);
             let mut insert = insert.unwrap_or_else(Vec::new);
@@ -1056,9 +1068,7 @@ parser! {
                 algebra
             }]
         }
-        rule Modify_with() -> Option<NamedNode> = i("WITH") _ i:iri() _ {
-            Some(i)
-        } / { None }
+        rule Modify_with() -> NamedNode = i("WITH") _ i:iri() _ { i }
         rule Modify_clauses() -> (Option<Vec<QuadPattern>>, Option<Vec<QuadPattern>>) = d:DeleteClause() _ i:InsertClause()? {
             (Some(d), i)
         } / i:InsertClause() {
@@ -1081,9 +1091,11 @@ parser! {
         }
 
         //[45]
-        rule GraphOrDefault() -> NamedOrDefaultGraphTarget = i("GRAPH") _ g:iri() {
+        rule GraphOrDefault() -> NamedOrDefaultGraphTarget = i("DEFAULT") {
+            NamedOrDefaultGraphTarget::DefaultGraph
+        } / (i("GRAPH") _)? g:iri() {
             NamedOrDefaultGraphTarget::NamedNode(g)
-        } / i("DEFAULT") { NamedOrDefaultGraphTarget::DefaultGraph }
+        }
 
         //[46]
         rule GraphRef() -> NamedNode = i("GRAPH") _ g:iri() { g }
