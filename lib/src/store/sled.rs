@@ -1010,7 +1010,7 @@ impl<'a> WritableEncodedStore for &'a SledTransaction<'a> {
 /// Error returned by a Sled transaction
 #[derive(Debug)]
 pub enum SledTransactionError<T> {
-    /// An failure returned by the API user that have aborted the transaction
+    /// A failure returned by the API user that have aborted the transaction
     Abort(T),
     /// A storage related error
     Storage(io::Error),

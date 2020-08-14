@@ -11,7 +11,7 @@ use std::option::Option;
 
 /// An owned RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal)
 ///
-/// The default string formatter is returning a N-Triples, Turtle and SPARQL compatible representation:
+/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
 /// ```
 /// # use oxilangtag::LanguageTagParseError;
 /// use oxigraph::model::Literal;
@@ -404,7 +404,7 @@ impl From<DayTimeDuration> for Literal {
 
 /// A borrowed RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal)
 ///
-/// The default string formatter is returning a N-Triples, Turtle and SPARQL compatible representation:
+/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
 /// ```
 /// # use oxilangtag::LanguageTagParseError;
 /// use oxigraph::model::LiteralRef;

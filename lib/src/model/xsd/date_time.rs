@@ -1894,7 +1894,10 @@ mod tests {
         );
         assert!(GDay::from_str("---15").unwrap() < GDay::from_str("---16").unwrap());
         assert!(GDay::from_str("---15-13:00").unwrap() > GDay::from_str("---16+13:00").unwrap());
-        assert!(GDay::from_str("---15-11:00").unwrap() == GDay::from_str("---16+13:00").unwrap());
+        assert_eq!(
+            GDay::from_str("---15-11:00").unwrap(),
+            GDay::from_str("---16+13:00").unwrap()
+        );
         assert!(GDay::from_str("---15-13:00")
             .unwrap()
             .partial_cmp(&GDay::from_str("---16").unwrap())

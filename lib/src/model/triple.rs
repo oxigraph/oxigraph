@@ -540,7 +540,7 @@ impl<'a> From<TripleRef<'a>> for rio::Triple<'a> {
 }
 
 /// A possible owned graph name.
-/// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
+/// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GraphName {
     NamedNode(NamedNode),
@@ -649,7 +649,7 @@ impl From<GraphName> for Option<NamedOrBlankNode> {
 }
 
 /// A possible borrowed graph name.
-/// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
+/// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub enum GraphNameRef<'a> {
     NamedNode(NamedNodeRef<'a>),

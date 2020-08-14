@@ -1080,7 +1080,7 @@ struct StaticDBRowIterator {
 
 impl StaticDBRowIterator {
     /// Creates a static iterator from a non static one by keeping a ARC reference to the database
-    /// Caller must unsure that the iterator belongs to the same database
+    /// Caller must ensure that the iterator belongs to the same database
     ///
     /// This unsafe method is required to get static iterators and ease the usage of the library
     /// and make streaming Python bindings possible

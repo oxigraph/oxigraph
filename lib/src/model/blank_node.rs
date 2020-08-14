@@ -12,7 +12,7 @@ use std::str;
 /// It is also possible to create a blank node from a blank node identifier using the [`BlankNode::new`](#method.new) function.
 /// The blank node identifier must be valid according to N-Triples, Turtle and SPARQL grammars.
 ///
-/// The default string formatter is returning a N-Triples, Turtle and SPARQL compatible representation:
+/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
 /// ```
 /// use oxigraph::model::BlankNode;
 ///
@@ -122,7 +122,7 @@ impl Default for BlankNode {
 /// It is also possible to create a blank node from a blank node identifier using the [`BlankNodeRef::new`](#method.new) function.
 /// The blank node identifier must be valid according to N-Triples, Turtle and SPARQL grammars.
 ///
-/// The default string formatter is returning a N-Triples, Turtle and SPARQL compatible representation:
+/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
 /// ```
 /// use oxigraph::model::BlankNodeRef;
 ///

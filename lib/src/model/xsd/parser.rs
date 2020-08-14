@@ -54,7 +54,7 @@ impl fmt::Display for XsdParseError {
             XsdParseErrorKind::TooMuchData { count } => {
                 write!(f, "Too long XML Schema value: {} extra chars", count)
             }
-            XsdParseErrorKind::Overflow => write!(f, "Computation overflow or undeflow"),
+            XsdParseErrorKind::Overflow => write!(f, "Computation overflow or underflow"),
             XsdParseErrorKind::ParseInt(error) => {
                 write!(f, "Error while parsing integer: {}", error)
             }

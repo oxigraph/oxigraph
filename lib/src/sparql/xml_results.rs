@@ -253,13 +253,13 @@ pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResults, 
                     }
                 },
                 State::AfterHead => {
-                    if event.name() == b"results" {
-                        return Ok(QueryResults::Solutions(QuerySolutionIter::new(
+                    return if event.name() == b"results" {
+                        Ok(QueryResults::Solutions(QuerySolutionIter::new(
                             Rc::new(variables.into_iter().map(Variable::new).collect()),
                             Box::new(empty()),
                         )))
                     } else {
-                        return Err(invalid_data_error(format!("Unexpected autoclosing tag <{}>", reader.decode(event.name()).map_err(map_xml_error)?)))
+                        Err(invalid_data_error(format!("Unexpected autoclosing tag <{}>", reader.decode(event.name()).map_err(map_xml_error)?)))
                     }
                 }
                 _ => return Err(invalid_data_error(format!("Unexpected autoclosing tag <{}>", reader.decode(event.name()).map_err(map_xml_error)?)))

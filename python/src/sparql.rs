@@ -50,7 +50,7 @@ pub fn build_query_options(
     if let Some(named_graphs) = named_graphs.or(named_graph_uris) {
         if named_graphs.is_empty()? {
             return Err(ValueError::py_err(
-                "The query() method nammed_graphs argument cannot be empty",
+                "The query() method named_graphs argument cannot be empty",
             ));
         }
         for named_graph in named_graphs.iter()? {

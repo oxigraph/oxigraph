@@ -4,7 +4,7 @@ use std::fmt;
 
 /// An owned RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
 ///
-/// The default string formatter is returning a N-Triples, Turtle and SPARQL compatible representation:
+/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
 /// ```
 /// use oxigraph::model::NamedNode;
 ///
@@ -93,7 +93,7 @@ impl PartialEq<NamedNode> for &str {
 
 /// A borrowed RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
 ///
-/// The default string formatter is returning a N-Triples, Turtle and SPARQL compatible representation:
+/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
 /// ```
 /// use oxigraph::model::NamedNodeRef;
 ///

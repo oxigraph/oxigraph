@@ -377,7 +377,7 @@ impl MemoryStore {
     /// It is implemented using the canonicalization approach presented in
     /// [Canonical Forms for Isomorphic and Equivalent RDF Graphs: Algorithms for Leaning and Labelling Blank Nodes, Aidan Hogan, 2017](http://aidanhogan.com/docs/rdf-canonicalisation.pdf)
     ///
-    /// Warning: This implementation worst-case complexity is in O(b!) with b the number of blank node node in the input graphs.
+    /// Warning: This implementation worst-case complexity is in O(b!) with b the number of blank nodes in the input graphs.
     pub fn is_isomorphic(&self, other: &Self) -> bool {
         iso_canonicalize(self) == iso_canonicalize(other)
     }
@@ -1086,7 +1086,7 @@ impl MemoryPreparedQuery {
     }
 }
 
-/// Allows to insert and delete quads during an ACID transaction with the [`MemoryStore`](struct.MemoryStore.html).
+/// Allows inserting and deleting quads during an ACID transaction with the [`MemoryStore`](struct.MemoryStore.html).
 pub struct MemoryTransaction {
     ops: Vec<TransactionOp>,
 }

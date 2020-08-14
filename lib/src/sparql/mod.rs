@@ -1,6 +1,6 @@
 //! [SPARQL](https://www.w3.org/TR/sparql11-overview/) implementation.
 //!
-//! SPARQL evaluation is done from a store. See [`MemoryStore`](../store/memory/struct.MemoryStore.html#method.query) for an example.
+//! Stores execute SPARQL. See [`MemoryStore`](../store/memory/struct.MemoryStore.html#method.query) for an example.
 
 mod algebra;
 mod dataset;
