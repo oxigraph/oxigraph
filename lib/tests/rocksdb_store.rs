@@ -1,3 +1,5 @@
+#![cfg(features = "rocksdb")]
+
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
 use oxigraph::RocksDbStore;
