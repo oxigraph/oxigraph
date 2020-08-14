@@ -2,7 +2,7 @@
 name = "pyoxigraph"
 version = "0.1.1"
 authors = ["Tpt"]
-license = "MIT/Apache-2.0"
+license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["RDF", "SPARQL", "graph-database", "database"]
 repository = "https://github.com/oxigraph/oxigraph/tree/master/python"
