@@ -1,3 +1,5 @@
+#![cfg(features = "sled")]
+
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;

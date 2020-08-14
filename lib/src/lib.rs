@@ -118,3 +118,13 @@ pub use crate::store::memory::MemoryStore;
 pub use crate::store::rocksdb::RocksDbStore;
 #[cfg(feature = "sled")]
 pub use crate::store::sled::SledStore;
+
+#[cfg(feature = "sophia")]
+/// Provides implementation of [Sophia] traits for Oxigraph types,
+/// if the `sophia` feature is enabled.
+///
+/// [Sophia]: https://docs.rs/sophia/latest/sophia/
+mod sophia {
+    mod model;
+    mod store;
+}
