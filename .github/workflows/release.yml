@@ -55,7 +55,7 @@ jobs:
         with:
           user: __token__
           password: ${{ secrets.PYPI_PASSWORD }}
-        working-directory: ./python
+          packages_dir: ./python/dist
   publish_npm:
     runs-on: ubuntu-latest
     steps:
@@ -63,7 +63,6 @@ jobs:
       - uses: actions/setup-node@v1
         with:
           node-version: '12'
-        working-directory: ./js
       - run: npm install
         working-directory: ./js
       - run: npm run build
