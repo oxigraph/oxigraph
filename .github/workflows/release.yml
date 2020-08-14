@@ -31,7 +31,7 @@ jobs:
           tag_with_ref: true
           tags: latest
           add_git_labels: true
-  publish_crates:
+  publish_lib_crate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -41,21 +41,39 @@ jobs:
           CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
       - run: cargo publish
         working-directory: ./lib
+  publish_server_crate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: rustup update
+      - run: cargo login $CRATES_IO_TOKEN
+        env:
+          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
       - run: cargo publish
         working-directory: ./server
+  publish_wikibase_crate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: rustup update
+      - run: cargo login $CRATES_IO_TOKEN
+        env:
+          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
       - run: cargo publish
         working-directory: ./wikibase
   publish_pypi:
     runs-on: ubuntu-latest
+    needs: publish_lib_crate
     steps:
       - uses: actions/checkout@v2
+      - run: sed -i 's/path="..\/lib", //g' python/Cargo.toml
       - run: docker run --rm -v $(pwd):/io konstin2/maturin build --release
         working-directory: ./python
-      - uses: pypa/gh-action-pypi-publish@v1
+      - uses: pypa/gh-action-pypi-publish@v1.3.1
         with:
           user: __token__
           password: ${{ secrets.PYPI_PASSWORD }}
-          packages_dir: ./python/dist
+          packages_dir: ./python/target/wheels
   publish_npm:
     runs-on: ubuntu-latest
     steps:
@@ -63,6 +81,8 @@ jobs:
       - uses: actions/setup-node@v1
         with:
           node-version: '12'
+      - run: rustup update
+      - run: cargo install wasm-pack
       - run: npm install
         working-directory: ./js
       - run: npm run build
