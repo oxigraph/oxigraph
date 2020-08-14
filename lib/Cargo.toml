@@ -15,6 +15,10 @@ edition = "2018"
 [package.metadata.docs.rs]
 all-features = true
 
+[features]
+default = []
+sophia = ["sophia_api"]
+
 [dependencies]
 rocksdb = { version = "0.14", optional = true }
 sled = { version = "0.34", optional = true }
@@ -35,6 +39,7 @@ nom = "5"
 peg = "0.6"
 siphasher = "0.3"
 lasso = {version="0.3", features=["multi-threaded"]}
+sophia_api = { version = "0.6.2", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"
@@ -43,6 +48,7 @@ getrandom = {version="0.1", features=["wasm-bindgen"]}
 [dev-dependencies]
 rayon = "1"
 criterion = "0.3"
+sophia_api = { version = "0.6.2", features = ["test_macro"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
