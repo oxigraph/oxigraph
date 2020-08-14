@@ -5,6 +5,8 @@
 mod blank_node;
 mod literal;
 mod named_node;
+#[cfg(feature = "sophia")]
+mod sophia;
 mod triple;
 pub mod vocab;
 pub(crate) mod xsd;

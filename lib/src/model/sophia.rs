@@ -393,16 +393,16 @@ impl<'a> From<TripleRef<'a>> for [TermRef<'a>; 3] {
     }
 }
 
-/// Error raised when trying to conpy a [Sophia]
+/// Error raised when trying to copy a [Sophia](https://docs.rs/sophia/)
 /// term as an incompatible Oxigraph term
 /// (e.g. a literal into `NamedNode`).
-///
-/// [Sophia]: https://docs.rs/sophia/latest/sophia/
 #[derive(Clone, Copy, Debug)]
 pub struct SophiaToOxigraphConversionError;
+
 impl fmt::Display for SophiaToOxigraphConversionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
+
 impl std::error::Error for SophiaToOxigraphConversionError {}

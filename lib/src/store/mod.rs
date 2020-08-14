@@ -9,6 +9,8 @@ pub mod rocksdb;
 #[cfg(feature = "sled")]
 pub mod sled;
 pub(crate) mod small_string;
+#[cfg(feature = "sophia")]
+mod sophia;
 
 pub use crate::store::memory::MemoryStore;
 #[cfg(feature = "rocksdb")]

@@ -22,23 +22,20 @@ type StreamedSophiaQuad<'a> = StreamedQuad<'a, ByValue<SophiaQuad>>;
 /// + the query must be a SELECT query with a single selected variable
 /// + it must not produce NULL results
 macro_rules! sparql_to_hashset {
-    ($store: ident, $err_map: ident, $sparql: expr) => {
-        //sparql_result_as_term_set($store, $sparql).map_err($err_map)
-        {
-            (|| -> Result<HashSet<Term>, EvaluationError> {
-                let q = $store.prepare_query($sparql, QueryOptions::default())?;
-                let r = q.exec()?;
-                if let QueryResults::Solutions(solutions) = r {
-                    solutions
-                        .map(|r| r.map(|v| v.get(0).unwrap().clone()))
-                        .collect()
-                } else {
-                    unreachable!()
-                }
-            })()
-            .map_err($err_map)
-        }
-    };
+    ($store: ident, $err_map: ident, $sparql: expr) => {{
+        (|| -> Result<HashSet<Term>, EvaluationError> {
+            if let QueryResults::Solutions(solutions) =
+                $store.query($sparql, QueryOptions::default())?
+            {
+                solutions
+                    .map(|r| r.map(|v| v.get(0).unwrap().clone()))
+                    .collect()
+            } else {
+                unreachable!()
+            }
+        })()
+        .map_err($err_map)
+    }};
 }
 
 macro_rules! impl_dataset {
@@ -418,7 +415,7 @@ macro_rules! impl_dataset {
     };
 }
 
-mod mem {
+mod memory {
     use super::*;
 
     impl_dataset!(
