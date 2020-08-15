@@ -1,3 +1,4 @@
+use crate::model::{BlankNode, Term};
 use crate::sparql::algebra::{
     DatasetSpec, GraphPattern, GraphTarget, GraphUpdateOperation, NamedNodeOrVariable, QuadPattern,
     TermOrVariable,
@@ -12,6 +13,7 @@ use crate::store::numeric_encoder::{
 };
 use crate::store::{ReadableEncodedStore, WritableEncodedStore};
 use oxiri::Iri;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 pub(crate) struct SimpleUpdateEvaluator<'a, R, W> {
@@ -68,8 +70,9 @@ impl<
     }
 
     fn eval_insert_data(&mut self, data: &[QuadPattern]) -> Result<(), EvaluationError> {
+        let mut bnodes = HashMap::new();
         for quad in data {
-            if let Some(quad) = self.encode_quad_for_insertion(quad, &[], &[])? {
+            if let Some(quad) = self.encode_quad_for_insertion(quad, &[], &[], &mut bnodes)? {
                 self.write.insert_encoded(&quad).map_err(to_eval_error)?;
             }
         }
@@ -99,6 +102,7 @@ impl<
             self.base_iri.clone(),
             self.service_handler.clone(),
         );
+        let mut bnodes = HashMap::new();
         for tuple in evaluator.eval_plan(&plan, EncodedTuple::with_capacity(variables.len())) {
             // We map the tuple to only get store strings
             let tuple = tuple?
@@ -139,10 +143,13 @@ impl<
                 }
             }
             for quad in insert {
-                if let Some(quad) = self.encode_quad_for_insertion(quad, &variables, &tuple)? {
+                if let Some(quad) =
+                    self.encode_quad_for_insertion(quad, &variables, &tuple, &mut bnodes)?
+                {
                     self.write.insert_encoded(&quad).map_err(to_eval_error)?;
                 }
             }
+            bnodes.clear();
         }
         Ok(())
     }
@@ -203,10 +210,11 @@ impl<
         quad: &QuadPattern,
         variables: &[Variable],
         values: &[Option<EncodedTerm<R::StrId>>],
+        bnodes: &mut HashMap<BlankNode, BlankNode>,
     ) -> Result<Option<EncodedQuad<R::StrId>>, EvaluationError> {
         Ok(Some(EncodedQuad {
             subject: if let Some(subject) =
-                self.encode_term_for_insertion(&quad.subject, variables, values, |t| {
+                self.encode_term_for_insertion(&quad.subject, variables, values, bnodes, |t| {
                     t.is_named_node() || t.is_blank_node()
                 })? {
                 subject
@@ -221,7 +229,7 @@ impl<
                 return Ok(None);
             },
             object: if let Some(object) =
-                self.encode_term_for_insertion(&quad.object, variables, values, |t| {
+                self.encode_term_for_insertion(&quad.object, variables, values, bnodes, |t| {
                     !t.is_default_graph()
                 })? {
                 object
@@ -247,12 +255,19 @@ impl<
         term: &TermOrVariable,
         variables: &[Variable],
         values: &[Option<EncodedTerm<R::StrId>>],
+        bnodes: &mut HashMap<BlankNode, BlankNode>,
         validate: impl FnOnce(&EncodedTerm<R::StrId>) -> bool,
     ) -> Result<Option<EncodedTerm<R::StrId>>, EvaluationError> {
         Ok(match term {
-            TermOrVariable::Term(term) => {
-                Some(self.write.encode_term(term.into()).map_err(to_eval_error)?)
-            }
+            TermOrVariable::Term(term) => Some(
+                self.write
+                    .encode_term(if let Term::BlankNode(bnode) = term {
+                        bnodes.entry(bnode.clone()).or_default().as_ref().into()
+                    } else {
+                        term.as_ref()
+                    })
+                    .map_err(to_eval_error)?,
+            ),
             TermOrVariable::Variable(v) => {
                 if let Some(Some(term)) = variables
                     .iter()
@@ -349,12 +364,19 @@ impl<
         variables: &[Variable],
         values: &[Option<EncodedTerm<R::StrId>>],
     ) -> Result<Option<EncodedTerm<R::StrId>>, EvaluationError> {
-        Ok(match term {
-            TermOrVariable::Term(term) => self
-                .read
-                .get_encoded_term(term.into())
-                .map_err(to_eval_error)?,
-            TermOrVariable::Variable(v) => {
+        match term {
+            TermOrVariable::Term(term) => {
+                if term.is_blank_node() {
+                    Err(EvaluationError::msg(
+                        "Blank node are not allowed in deletion patterns",
+                    ))
+                } else {
+                    self.read
+                        .get_encoded_term(term.into())
+                        .map_err(to_eval_error)
+                }
+            }
+            TermOrVariable::Variable(v) => Ok(
                 if let Some(Some(term)) = variables
                     .iter()
                     .position(|v2| v == v2)
@@ -363,9 +385,9 @@ impl<
                     Some(*term)
                 } else {
                     None
-                }
-            }
-        })
+                },
+            ),
+        }
     }
 
     fn encode_named_node_for_deletion(

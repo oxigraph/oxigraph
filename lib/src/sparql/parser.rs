@@ -1040,7 +1040,7 @@ parser! {
         }
 
         //[41]
-        rule Modify() -> Vec<GraphUpdateOperation> = with:Modify_with()? _ c:Modify_clauses() _ using:(UsingClause() ** (_)) _ i("WHERE") _ algebra:GroupGraphPattern() {
+        rule Modify() -> Vec<GraphUpdateOperation> = with:Modify_with()? _ Modify_clear() c:Modify_clauses() _ using:(UsingClause() ** (_)) _ i("WHERE") _ algebra:GroupGraphPattern() {
             let (delete, insert) = c;
             let mut delete = delete.unwrap_or_else(Vec::new);
             let mut insert = insert.unwrap_or_else(Vec::new);
@@ -1073,6 +1073,10 @@ parser! {
             (Some(d), i)
         } / i:InsertClause() {
             (None, Some(i))
+        }
+        rule Modify_clear() -> () = {
+            state.used_bnodes.clear();
+            state.currently_used_bnodes.clear();
         }
 
         //[42]
