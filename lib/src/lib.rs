@@ -2,7 +2,7 @@
 //!
 //! Its goal is to provide a compliant, safe and fast graph database.
 //!
-//! It currently provides three store implementations providing [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) capability:
+//! It currently provides three store implementations providing [SPARQL](https://www.w3.org/TR/sparql11-overview/) capability:
 //! * [`MemoryStore`](store/memory/struct.MemoryStore.html): a simple in memory implementation.
 //! * [`RocksDbStore`](store/rocksdb/struct.RocksDbStore.html): a file system implementation based on the [RocksDB](https://rocksdb.org/) key-value store.
 //!   It requires the `"rocksdb"` feature to be activated.

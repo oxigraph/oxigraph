@@ -16,7 +16,7 @@ Pyoxigraph is a Python graph database library implementing the `SPARQL <https://
 
 It is built on top of `Oxigraph <https://github.com/oxigraph/oxigraph>`_ using `PyO3 <https://pyo3.rs/>`_.
 
-It offers two stores with `SPARQL 1.1 Query <https://www.w3.org/TR/sparql11-query/>`_ capabilities.
+It offers two stores with `SPARQL 1.1 <https://www.w3.org/TR/sparql11-overview/>`_ capabilities.
 One of the store is in-memory, and the other one is disk based.
 
 It also provides a set of utility functions for reading, writing and processing RDF files in

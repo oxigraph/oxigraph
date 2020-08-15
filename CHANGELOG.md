@@ -1,3 +1,9 @@
+## Master
+
+### Added
+- [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/) support for Rust, Python and JavaScript.
+
+
 ## [0.1.1] - 2020-08-14
 
 ### Added
@@ -10,6 +16,7 @@
 - `pyoxigraph` `query` methods now takes two new parameters, `default_graph` and `named_graphs`. `default_graph_uris` and `named_graph_uris` parameters are deprecated.
 - Fixes a bug in `xsd:gYear` parsing.
 
+
 ## [0.1.0] - 2020-08-09
 
 ### Added
@@ -17,6 +24,7 @@
 - `pyoxigraph` store `query` methods allows to provide the dataset graph URIs. It also provides an option to use all graph names as the default graph.
 - "default graph as union option" now works with FROM NAMED.
 - `pyoxigraph` now exposes and documents `Variable`, `QuerySolution`, `QuerySolutions` and `QueryTriples`
+
 
 ## [0.1.0-rc.1] - 2020-08-08
 
