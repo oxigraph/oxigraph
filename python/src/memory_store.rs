@@ -176,6 +176,43 @@ impl PyMemoryStore {
         query_results_to_python(py, results)
     }
 
+    /// Executes a `SPARQL 1.1 update <https://www.w3.org/TR/sparql11-update/>`_.
+    ///
+    /// :param update: the update to execute
+    /// :type update: str
+    /// :raises SyntaxError: if the provided update is invalid
+    ///
+    /// The `LOAD operation <https://www.w3.org/TR/sparql11-update/#load>`_ is not supported yet.
+    /// The store does not track the existence of empty named graphs.
+    /// This method has no ACID guarantees.
+    ///
+    /// ``INSERT DATA`` update:
+    ///
+    /// >>> store = MemoryStore()
+    /// >>> store.update('INSERT DATA { <http://example.com> <http://example.com/p> "1" }')
+    /// >>> list(store)
+    /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<DefaultGraph>>]
+    ///
+    /// ``DELETE DATA`` update:
+    ///
+    /// >>> store = MemoryStore()
+    /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
+    /// >>> store.update('DELETE DATA { <http://example.com> <http://example.com/p> "1" }')
+    /// >>> list(store)
+    /// []
+    ///
+    /// ``DELETE`` update:
+    ///
+    /// >>> store = MemoryStore()
+    /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
+    /// >>> store.update('DELETE WHERE { <http://example.com> ?p ?o }')
+    /// >>> list(store)
+    /// []
+    #[text_signature = "($self, update)"]
+    fn update(&self, update: &str) -> PyResult<()> {
+        self.inner.update(update).map_err(map_evaluation_error)
+    }
+
     /// Loads an RDF serialization into the store
     ///
     /// It currently supports the following formats:

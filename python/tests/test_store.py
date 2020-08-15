@@ -146,6 +146,23 @@ class TestAbstractStore(unittest.TestCase, ABC):
         )
         self.assertEqual(len(list(results)), 2)
 
+    def test_update_insert_data(self):
+        store = self.store()
+        store.update('INSERT DATA { <http://foo> <http://foo> <http://foo> }')
+        self.assertEqual(len(store), 1)
+
+    def test_update_delete_data(self):
+        store = self.store()
+        store.add(Quad(foo, foo, foo))
+        store.update('DELETE DATA { <http://foo> <http://foo> <http://foo> }')
+        self.assertEqual(len(store), 0)
+
+    def test_update_delete_where(self):
+        store = self.store()
+        store.add(Quad(foo, foo, foo))
+        store.update('DELETE WHERE { ?v ?v ?v }')
+        self.assertEqual(len(store), 0)
+
     def test_load_ntriples_to_default_graph(self):
         store = self.store()
         store.load(
