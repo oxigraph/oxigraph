@@ -137,6 +137,10 @@ impl JsMemoryStore {
         Ok(output)
     }
 
+    pub fn update(&self, update: &str) -> Result<(), JsValue> {
+        self.store.update(update).map_err(to_err)
+    }
+
     pub fn load(
         &self,
         data: &str,
@@ -184,5 +188,37 @@ impl JsMemoryStore {
         } else {
             Err(format_err!("Not supported MIME type: {}", mime_type))
         }
+    }
+
+    pub fn dump(&self, mime_type: &str, from_graph_name: &JsValue) -> Result<String, JsValue> {
+        let from_graph_name =
+            if let Some(graph_name) = self.from_js.to_optional_term(from_graph_name)? {
+                Some(graph_name.try_into()?)
+            } else {
+                None
+            };
+
+        let mut buffer = Vec::new();
+        if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
+            self.store
+                .dump_graph(
+                    &mut buffer,
+                    graph_format,
+                    &from_graph_name.unwrap_or(GraphName::DefaultGraph),
+                )
+                .map_err(to_err)?;
+        } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
+            if from_graph_name.is_some() {
+                return Err(format_err!(
+                    "The target graph name parameter is not available for dataset formats"
+                ));
+            }
+            self.store
+                .dump_dataset(&mut buffer, dataset_format)
+                .map_err(to_err)?;
+        } else {
+            return Err(format_err!("Not supported MIME type: {}", mime_type));
+        }
+        String::from_utf8(buffer).map_err(to_err)
     }
 }

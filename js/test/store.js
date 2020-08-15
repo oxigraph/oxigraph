@@ -79,6 +79,26 @@ describe('MemoryStore', function () {
     })
   })
 
+  describe('#update()', function () {
+    it('INSERT DATA', function () {
+      const store = new MemoryStore()
+      store.update('INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }')
+      assert.strictEqual(1, store.size)
+    })
+
+    it('DELETE DATA', function () {
+      const store = new MemoryStore([dataFactory.triple(ex, ex, ex)])
+      store.update('DELETE DATA { <http://example.com> <http://example.com> <http://example.com> }')
+      assert.strictEqual(0, store.size)
+    })
+
+    it('DELETE WHERE', function () {
+      const store = new MemoryStore([dataFactory.triple(ex, ex, ex)])
+      store.update('DELETE WHERE { ?v ?v ?v }')
+      assert.strictEqual(0, store.size)
+    })
+  })
+
   describe('#load()', function () {
     it('load NTriples in the default graph', function () {
       const store = new MemoryStore()
@@ -108,6 +128,23 @@ describe('MemoryStore', function () {
       const store = new MemoryStore()
       store.load('GRAPH <> { <http://example.com> <http://example.com> <> }', 'application/trig', 'http://example.com')
       assert(store.has(dataFactory.quad(ex, ex, ex, ex)))
+    })
+  })
+
+  describe('#dump()', function () {
+    it('dump dataset content', function () {
+      const store = new MemoryStore([dataFactory.quad(ex, ex, ex, ex)])
+      assert.strictEqual('<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n', store.dump('application/n-quads'))
+    })
+
+    it('dump named graph content', function () {
+      const store = new MemoryStore([dataFactory.quad(ex, ex, ex, ex)])
+      assert.strictEqual('<http://example.com> <http://example.com> <http://example.com> .\n', store.dump('application/n-triples', ex))
+    })
+
+    it('dump default graph content', function () {
+      const store = new MemoryStore([dataFactory.quad(ex, ex, ex, ex)])
+      assert.strictEqual('', store.dump('application/n-triples'))
     })
   })
 })
