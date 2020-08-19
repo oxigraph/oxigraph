@@ -33,6 +33,7 @@ use url::form_urlencoded;
 
 const MAX_SPARQL_BODY_SIZE: u64 = 1_048_576;
 const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
+const LOGO: &str = include_str!("../../logo.svg");
 const SERVER: &str = concat!("Oxigraph/", env!("CARGO_PKG_VERSION"));
 
 #[derive(FromArgs)]
@@ -65,6 +66,12 @@ async fn handle_request(request: Request, store: RocksDbStore) -> Result<Respons
             let mut response = Response::new(StatusCode::Ok);
             response.append_header(headers::CONTENT_TYPE, "text/html");
             response.set_body(HTML_ROOT_PAGE);
+            response
+        }
+        ("/logo.svg", Method::Get) => {
+            let mut response = Response::new(StatusCode::Ok);
+            response.append_header(headers::CONTENT_TYPE, "image/svg+xml");
+            response.set_body(LOGO);
             response
         }
         ("/", Method::Post) => {
