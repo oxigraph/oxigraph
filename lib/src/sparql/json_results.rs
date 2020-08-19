@@ -15,6 +15,7 @@ pub fn write_json_results(
             sink.write_all(b"{\"head\":{},\"boolean\":")?;
             sink.write_all(if value { b"true" } else { b"false" })?;
             sink.write_all(b"}")?;
+            Ok(())
         }
         QueryResults::Solutions(solutions) => {
             sink.write_all(b"{\"head\":{\"vars\":[")?;
@@ -74,15 +75,13 @@ pub fn write_json_results(
                 sink.write_all(b"}")?;
             }
             sink.write_all(b"]}}")?;
+            Ok(())
         }
-        QueryResults::Graph(_) => {
-            return Err(invalid_input_error(
-                "Graphs could not be formatted to SPARQL query results XML format",
-            )
-            .into());
-        }
+        QueryResults::Graph(_) => Err(invalid_input_error(
+            "Graphs could not be formatted to SPARQL query results XML format",
+        )
+        .into()),
     }
-    Ok(())
 }
 
 fn write_escaped_json_string(s: &str, mut sink: impl Write) -> Result<(), EvaluationError> {

@@ -2,6 +2,7 @@ use crate::error::invalid_input_error;
 use crate::io::GraphFormat;
 use crate::io::GraphSerializer;
 use crate::model::*;
+use crate::sparql::csv_results::{write_csv_results, write_tsv_results};
 use crate::sparql::error::EvaluationError;
 use crate::sparql::json_results::write_json_results;
 use crate::sparql::xml_results::{read_xml_results, write_xml_results};
@@ -31,6 +32,9 @@ impl QueryResults {
             QueryResultsFormat::Json => Err(invalid_input_error(
                 "JSON SPARQL results format parsing has not been implemented yet",
             )), //TODO: implement
+            QueryResultsFormat::Csv | QueryResultsFormat::Tsv => Err(invalid_input_error(
+                "CSV and TSV SPARQL results format parsing is not implemented",
+            )),
         }
     }
 
@@ -60,6 +64,8 @@ impl QueryResults {
         match format {
             QueryResultsFormat::Xml => write_xml_results(self, writer),
             QueryResultsFormat::Json => write_json_results(self, writer),
+            QueryResultsFormat::Csv => write_csv_results(self, writer),
+            QueryResultsFormat::Tsv => write_tsv_results(self, writer),
         }
     }
 
@@ -113,8 +119,6 @@ impl From<QuerySolutionIter> for QueryResults {
 }
 
 /// [SPARQL query](https://www.w3.org/TR/sparql11-query/) results serialization formats
-///
-/// This enumeration is non exhaustive. New formats like CSV will be added in the future.
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 #[non_exhaustive]
 pub enum QueryResultsFormat {
@@ -122,6 +126,10 @@ pub enum QueryResultsFormat {
     Xml,
     /// [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/)
     Json,
+    /// [SPARQL Query Results CSV Format](https://www.w3.org/TR/sparql11-results-csv-tsv/)
+    Csv,
+    /// [SPARQL Query Results TSV Format](https://www.w3.org/TR/sparql11-results-csv-tsv/)
+    Tsv,
 }
 
 impl QueryResultsFormat {
@@ -137,6 +145,8 @@ impl QueryResultsFormat {
         match self {
             QueryResultsFormat::Xml => "http://www.w3.org/ns/formats/SPARQL_Results_XML",
             QueryResultsFormat::Json => "http://www.w3.org/ns/formats/SPARQL_Results_JSON",
+            QueryResultsFormat::Csv => "http://www.w3.org/ns/formats/SPARQL_Results_CSV",
+            QueryResultsFormat::Tsv => "http://www.w3.org/ns/formats/SPARQL_Results_TSV",
         }
     }
     /// The format [IANA media type](https://tools.ietf.org/html/rfc2046).
@@ -151,6 +161,8 @@ impl QueryResultsFormat {
         match self {
             QueryResultsFormat::Xml => "application/sparql-results+xml",
             QueryResultsFormat::Json => "application/sparql-results+json",
+            QueryResultsFormat::Csv => "text/csv; charset=utf-8",
+            QueryResultsFormat::Tsv => "text/tab-separated-values; charset=utf-8",
         }
     }
 
@@ -166,6 +178,8 @@ impl QueryResultsFormat {
         match self {
             QueryResultsFormat::Xml => "srx",
             QueryResultsFormat::Json => "srj",
+            QueryResultsFormat::Csv => "csv",
+            QueryResultsFormat::Tsv => "tsv",
         }
     }
 
@@ -189,6 +203,8 @@ impl QueryResultsFormat {
                 "application/sparql-results+json" | "application/json" | "text/json" => {
                     Some(QueryResultsFormat::Json)
                 }
+                "text/csv" => Some(QueryResultsFormat::Csv),
+                "text/tab-separated-values" | "text/tsv" => Some(QueryResultsFormat::Tsv),
                 _ => None,
             }
         } else {
@@ -279,7 +295,7 @@ impl QuerySolution {
         self.values.get(index.index(self)?).and_then(|e| e.as_ref())
     }
 
-    /// The number of variables which are bind
+    /// The number of variables which could be bound
     #[inline]
     pub fn len(&self) -> usize {
         self.values.len()

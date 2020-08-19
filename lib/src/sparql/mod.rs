@@ -3,6 +3,7 @@
 //! Stores execute SPARQL. See [`MemoryStore`](../store/memory/struct.MemoryStore.html#method.query) for an example.
 
 mod algebra;
+mod csv_results;
 mod dataset;
 mod error;
 mod eval;

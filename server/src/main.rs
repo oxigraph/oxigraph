@@ -278,6 +278,8 @@ async fn evaluate_sparql_query(
                 &[
                     QueryResultsFormat::Xml.media_type(),
                     QueryResultsFormat::Json.media_type(),
+                    QueryResultsFormat::Csv.media_type(),
+                    QueryResultsFormat::Tsv.media_type(),
                 ],
                 QueryResultsFormat::from_media_type,
             )?;
