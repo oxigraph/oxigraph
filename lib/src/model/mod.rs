@@ -5,6 +5,7 @@
 mod blank_node;
 mod literal;
 mod named_node;
+mod parser;
 #[cfg(feature = "sophia")]
 mod sophia;
 mod triple;
@@ -14,6 +15,7 @@ pub(crate) mod xsd;
 pub use crate::model::blank_node::{BlankNode, BlankNodeIdParseError, BlankNodeRef};
 pub use crate::model::literal::{Literal, LiteralRef};
 pub use crate::model::named_node::{NamedNode, NamedNodeRef};
+pub use crate::model::parser::TermParseError;
 pub use crate::model::triple::{
     GraphName, GraphNameRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad, QuadRef, Term, TermRef,
     Triple, TripleRef,

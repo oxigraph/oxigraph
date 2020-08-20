@@ -1,9 +1,12 @@
 //! Implementation of [SPARQL 1.1 Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql11-results-csv-tsv/)
 
+use crate::error::invalid_data_error;
 use crate::model::{vocab::xsd, *};
 use crate::sparql::error::EvaluationError;
 use crate::sparql::model::*;
-use std::io::{self, Write};
+use std::io::{self, BufRead, Write};
+use std::rc::Rc;
+use std::str::FromStr;
 
 pub fn write_csv_results(
     results: QueryResults,
@@ -161,6 +164,63 @@ fn write_tsv_term<'a>(term: impl Into<TermRef<'a>>, mut sink: impl Write) -> io:
             }
             _ => sink.write_all(literal.to_string().as_bytes()),
         },
+    }
+}
+
+pub fn read_tsv_results(mut source: impl BufRead + 'static) -> Result<QueryResults, io::Error> {
+    let mut buffer = String::new();
+
+    // We read the header
+    source.read_line(&mut buffer)?;
+    if buffer.trim().eq_ignore_ascii_case("true") {
+        return Ok(QueryResults::Boolean(true));
+    }
+    if buffer.trim().eq_ignore_ascii_case("false") {
+        return Ok(QueryResults::Boolean(false));
+    }
+    let variables = buffer
+        .split('\t')
+        .map(|v| Variable::from_str(v.trim()).map_err(invalid_data_error))
+        .collect::<Result<Vec<_>, io::Error>>()?;
+
+    Ok(QueryResults::Solutions(QuerySolutionIter::new(
+        Rc::new(variables),
+        Box::new(TsvResultsIterator { buffer, source }),
+    )))
+}
+
+struct TsvResultsIterator<R: BufRead> {
+    source: R,
+    buffer: String,
+}
+
+impl<R: BufRead> Iterator for TsvResultsIterator<R> {
+    type Item = Result<Vec<Option<Term>>, EvaluationError>;
+
+    fn next(&mut self) -> Option<Result<Vec<Option<Term>>, EvaluationError>> {
+        self.read_next().transpose()
+    }
+}
+
+impl<R: BufRead> TsvResultsIterator<R> {
+    fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, EvaluationError> {
+        self.buffer.clear();
+        if self.source.read_line(&mut self.buffer)? == 0 {
+            return Ok(None);
+        }
+        Ok(Some(
+            self.buffer
+                .split('\t')
+                .map(|v| {
+                    let v = v.trim();
+                    if v.is_empty() {
+                        Ok(None)
+                    } else {
+                        Ok(Some(Term::from_str(v).map_err(invalid_data_error)?))
+                    }
+                })
+                .collect::<Result<Vec<_>, EvaluationError>>()?,
+        ))
     }
 }
 

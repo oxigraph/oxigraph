@@ -2,7 +2,7 @@ use crate::error::invalid_input_error;
 use crate::io::GraphFormat;
 use crate::io::GraphSerializer;
 use crate::model::*;
-use crate::sparql::csv_results::{write_csv_results, write_tsv_results};
+use crate::sparql::csv_results::{read_tsv_results, write_csv_results, write_tsv_results};
 use crate::sparql::error::EvaluationError;
 use crate::sparql::json_results::write_json_results;
 use crate::sparql::xml_results::{read_xml_results, write_xml_results};
@@ -33,9 +33,10 @@ impl QueryResults {
             QueryResultsFormat::Json => Err(invalid_input_error(
                 "JSON SPARQL results format parsing has not been implemented yet",
             )), //TODO: implement
-            QueryResultsFormat::Csv | QueryResultsFormat::Tsv => Err(invalid_input_error(
+            QueryResultsFormat::Csv => Err(invalid_input_error(
                 "CSV and TSV SPARQL results format parsing is not implemented",
             )),
+            QueryResultsFormat::Tsv => read_tsv_results(reader),
         }
     }
 

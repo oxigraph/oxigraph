@@ -223,6 +223,11 @@ fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
             QueryResults::read(read_file(url)?, QueryResultsFormat::Json)?,
             false,
         )
+    } else if url.ends_with(".tsv") {
+        StaticQueryResults::from_query_results(
+            QueryResults::read(read_file(url)?, QueryResultsFormat::Tsv)?,
+            false,
+        )
     } else {
         Ok(StaticQueryResults::from_dataset(load_store(url)?))
     }
