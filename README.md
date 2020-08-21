@@ -10,9 +10,9 @@ Oxigraph
 
 Oxigraph is a graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
 
-Its goal is to provide a compliant, safe and fast graph database based on the [RocksDB](https://rocksdb.org/) and [Sled](https://sled.rs/) key-value stores.
+Its goal is to provide a compliant, safe, and fast graph database based on the [RocksDB](https://rocksdb.org/) and [Sled](https://sled.rs/) key-value stores.
 It is written in Rust.
-It also provides a set of utility functions for reading, writing and processing RDF files.
+It also provides a set of utility functions for reading, writing, and processing RDF files.
 
 Oxigraph is in heavy development and SPARQL query evaluation has not been optimized yet.
 
@@ -20,7 +20,7 @@ It is split into multiple parts:
 * The `lib` directory contains the database written as a Rust library.
 [![Latest Version](https://img.shields.io/crates/v/oxigraph.svg)](https://crates.io/crates/oxigraph) 
 [![Released API docs](https://docs.rs/oxigraph/badge.svg)](https://docs.rs/oxigraph)
-* The `python` directory contains Pyoxigraph. Pyoxigrapg allows to use Oxigraph in Python. See the [Pyoxigraph website](https://oxigraph.org/pyoxigraph/) for Pyoxigraph documentation. [![PyPI](https://img.shields.io/pypi/v/pyoxigraph)](https://pypi.org/project/pyoxigraph/)
+* The `python` directory contains Pyoxigraph. Pyoxigraph allows using Oxigraph in Python. See the [Pyoxigraph website](https://oxigraph.org/pyoxigraph/) for Pyoxigraph documentation. [![PyPI](https://img.shields.io/pypi/v/pyoxigraph)](https://pypi.org/project/pyoxigraph/)
 * The `js` directory contains bindings to use Oxigraph in JavaScript with the help of WebAssembly. See [its README](https://github.com/oxigraph/oxigraph/blob/master/js/README.md) for the JS bindings documentation.
 [![npm](https://img.shields.io/npm/v/oxigraph)](https://www.npmjs.com/package/oxigraph)
 * The `server` directory contains a stand-alone binary of a web server implementing the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/). It uses the [RocksDB](https://rocksdb.org/) key-value store.
@@ -37,7 +37,7 @@ Oxigraph implements the following specifications:
 
 A preliminary benchmark [is provided](bench/README.md).
 
-## Run the web server
+## Run the Web server
 
 ### Installation
 
@@ -62,7 +62,7 @@ It provides the following REST actions:
 * `/query` allows to evaluate SPARQL queries against the server repository following the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/#query-operation).
   For example `curl -X POST -H 'Content-Type:application/sparql-query' --data 'SELECT * WHERE { ?s ?p ?o } LIMIT 10' http://localhost:7878/query`.
   This action supports content negotiation and could return [Turtle](https://www.w3.org/TR/turtle/), [N-Triples](https://www.w3.org/TR/n-triples/), [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/), [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/) and [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/).
-* `/update` allows to evaluate SPARQL updates against the server repository following the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/#update-operation).
+* `/update` allows to execute SPARQL updates against the server repository following the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/#update-operation).
   For example `curl -X POST -H 'Content-Type: application/sparql-update' --data 'DELETE WHERE { <http://example.com/s> ?p ?o }' http://localhost:7878/update`.
 
 Use `oxigraph_server --help` to see the possible options when starting the server.
@@ -74,7 +74,7 @@ Use `oxigraph_server --help` to see the possible options when starting the serve
 docker run --rm oxigraph/oxigraph --help
 ```
 
-#### Run the web server
+#### Run the Web server
 Expose the server on port `7878` of the host machine, and save data on the local `./data` folder
 ```sh
 docker run --init --rm -v $PWD/data:/data -p 7878:7878 oxigraph/oxigraph -b 0.0.0.0:7878 -f /data
@@ -137,7 +137,7 @@ curl -X POST -H 'Accept: application/sparql-results+json' -H 'Content-Type: appl
 docker run --rm oxigraph/oxigraph-wikibase --help
 ```
 
-#### Run the web server
+#### Run the Web server
 Expose the server on port `7878` of the host machine, and save data on the local `./data` folder
 ```sh
 docker run --init --rm -v $PWD/wikibase_data:/wikibase_data -p 7878:7878 oxigraph/oxigraph-wikibase -b 0.0.0.0:7878 -f /wikibase_data --mediawiki-api http://some.wikibase.instance/w/api.php --mediawiki-base-url http://some.wikibase.instance/wiki/
