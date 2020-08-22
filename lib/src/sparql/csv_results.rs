@@ -1,6 +1,5 @@
 //! Implementation of [SPARQL 1.1 Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql11-results-csv-tsv/)
 
-use crate::error::invalid_input_error;
 use crate::model::{vocab::xsd, *};
 use crate::sparql::error::EvaluationError;
 use crate::sparql::model::*;
@@ -11,10 +10,9 @@ pub fn write_csv_results(
     mut sink: impl Write,
 ) -> Result<(), EvaluationError> {
     match results {
-        QueryResults::Boolean(_) => Err(invalid_input_error(
-            "boolean could not be formatted to SPARQL query results CSV format",
-        )
-        .into()),
+        QueryResults::Boolean(value) => {
+            sink.write_all(if value { b"true" } else { b"false" })?;
+        }
         QueryResults::Solutions(solutions) => {
             let mut start_vars = true;
             for variable in solutions.variables() {
@@ -37,31 +35,39 @@ pub fn write_csv_results(
                         sink.write_all(b",")?;
                     }
                     if let Some(value) = value {
-                        match value {
-                            Term::NamedNode(uri) => {
-                                sink.write_all(uri.as_str().as_bytes())?;
-                            }
-                            Term::BlankNode(bnode) => {
-                                sink.write_all(b"_:")?;
-                                sink.write_all(bnode.as_str().as_bytes())?;
-                            }
-                            Term::Literal(literal) => {
-                                write_escaped_csv_string(literal.value(), &mut sink)?;
-                            }
-                        }
+                        write_csv_term(value, &mut sink)?;
                     }
                 }
             }
-            Ok(())
         }
-        QueryResults::Graph(_) => Err(invalid_input_error(
-            "Graphs could not be formatted to SPARQL query results CSV format",
-        )
-        .into()),
+        QueryResults::Graph(g) => {
+            sink.write_all(b"subject,predicate,object")?;
+            for t in g {
+                let t = t?;
+                sink.write_all(b"\r\n")?;
+                write_csv_term(&t.subject, &mut sink)?;
+                sink.write_all(b",")?;
+                write_csv_term(&t.predicate, &mut sink)?;
+                sink.write_all(b",")?;
+                write_csv_term(&t.object, &mut sink)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn write_csv_term<'a>(term: impl Into<TermRef<'a>>, mut sink: impl Write) -> io::Result<()> {
+    match term.into() {
+        TermRef::NamedNode(uri) => sink.write_all(uri.as_str().as_bytes()),
+        TermRef::BlankNode(bnode) => {
+            sink.write_all(b"_:")?;
+            sink.write_all(bnode.as_str().as_bytes())
+        }
+        TermRef::Literal(literal) => write_escaped_csv_string(literal.value(), &mut sink),
     }
 }
 
-fn write_escaped_csv_string(s: &str, mut sink: impl Write) -> Result<(), io::Error> {
+fn write_escaped_csv_string(s: &str, mut sink: impl Write) -> io::Result<()> {
     if s.bytes().any(|c| match c {
         b'"' | b',' | b'\n' | b'\r' => true,
         _ => false,
@@ -85,10 +91,9 @@ pub fn write_tsv_results(
     mut sink: impl Write,
 ) -> Result<(), EvaluationError> {
     match results {
-        QueryResults::Boolean(_) => Err(invalid_input_error(
-            "boolean could not be formatted to SPARQL query results TSV format",
-        )
-        .into()),
+        QueryResults::Boolean(value) => {
+            sink.write_all(if value { b"true" } else { b"false" })?;
+        }
         QueryResults::Solutions(solutions) => {
             let mut start_vars = true;
             for variable in solutions.variables() {
@@ -112,41 +117,50 @@ pub fn write_tsv_results(
                         sink.write_all(b"\t")?;
                     }
                     if let Some(value) = value {
-                        //TODO: full Turtle serialization
-                        sink.write_all(
-                            match value {
-                                Term::NamedNode(node) => node.to_string(),
-                                Term::BlankNode(node) => node.to_string(),
-                                Term::Literal(literal) => match literal.datatype() {
-                                    xsd::BOOLEAN => match literal.value() {
-                                        "true" | "1" => "true".to_owned(),
-                                        "false" | "0" => "false".to_owned(),
-                                        _ => literal.to_string(),
-                                    },
-                                    xsd::INTEGER => {
-                                        if literal.value().bytes().all(|c| match c {
-                                            b'0'..=b'9' => true,
-                                            _ => false,
-                                        }) {
-                                            literal.value().to_owned()
-                                        } else {
-                                            literal.to_string()
-                                        }
-                                    }
-                                    _ => literal.to_string(),
-                                },
-                            }
-                            .as_bytes(),
-                        )?;
+                        write_tsv_term(value, &mut sink)?;
                     }
                 }
             }
-            Ok(())
         }
-        QueryResults::Graph(_) => Err(invalid_input_error(
-            "Graphs could not be formatted to SPARQL query results TSV format",
-        )
-        .into()),
+        QueryResults::Graph(g) => {
+            sink.write_all(b"subject\tpredicate\tobject")?;
+            for t in g {
+                let t = t?;
+                sink.write_all(b"\n")?;
+                write_tsv_term(&t.subject, &mut sink)?;
+                sink.write_all(b"\t")?;
+                write_tsv_term(&t.predicate, &mut sink)?;
+                sink.write_all(b"\t")?;
+                write_tsv_term(&t.object, &mut sink)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn write_tsv_term<'a>(term: impl Into<TermRef<'a>>, mut sink: impl Write) -> io::Result<()> {
+    //TODO: full Turtle serialization
+    match term.into() {
+        TermRef::NamedNode(node) => write!(sink, "<{}>", node.as_str()),
+        TermRef::BlankNode(node) => write!(sink, "_:{}", node.as_str()),
+        TermRef::Literal(literal) => match literal.datatype() {
+            xsd::BOOLEAN => match literal.value() {
+                "true" | "1" => sink.write_all(b"true"),
+                "false" | "0" => sink.write_all(b"false"),
+                _ => sink.write_all(literal.to_string().as_bytes()),
+            },
+            xsd::INTEGER => {
+                if literal.value().bytes().all(|c| match c {
+                    b'0'..=b'9' => true,
+                    _ => false,
+                }) {
+                    sink.write_all(literal.value().as_bytes())
+                } else {
+                    sink.write_all(literal.to_string().as_bytes())
+                }
+            }
+            _ => sink.write_all(literal.to_string().as_bytes()),
+        },
     }
 }
 
