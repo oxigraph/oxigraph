@@ -26,18 +26,17 @@ pub fn write_csv_results(
                 sink.write_all(variable.as_str().as_bytes())?;
             }
 
-            let size = solutions.variables().len();
             for solution in solutions {
                 let solution = solution?;
                 sink.write_all(b"\r\n")?;
                 let mut start_binding = true;
-                for i in 0..size {
+                for value in solution.values() {
                     if start_binding {
                         start_binding = false;
                     } else {
                         sink.write_all(b",")?;
                     }
-                    if let Some(value) = solution.get(i) {
+                    if let Some(value) = value {
                         match value {
                             Term::NamedNode(uri) => {
                                 sink.write_all(uri.as_str().as_bytes())?;
@@ -102,18 +101,17 @@ pub fn write_tsv_results(
                 sink.write_all(variable.as_str().as_bytes())?;
             }
 
-            let size = solutions.variables().len();
             for solution in solutions {
                 let solution = solution?;
                 sink.write_all(b"\n")?;
                 let mut start_binding = true;
-                for i in 0..size {
+                for value in solution.values() {
                     if start_binding {
                         start_binding = false;
                     } else {
                         sink.write_all(b"\t")?;
                     }
-                    if let Some(value) = solution.get(i) {
+                    if let Some(value) = value {
                         //TODO: full Turtle serialization
                         sink.write_all(
                             match value {

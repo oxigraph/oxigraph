@@ -321,6 +321,12 @@ impl QuerySolution {
                 }
             })
     }
+
+    /// Returns an iterator over all values, bound or not
+    #[inline]
+    pub fn values(&self) -> impl Iterator<Item = Option<&Term>> {
+        self.values.iter().map(|v| v.as_ref())
+    }
 }
 
 /// A utility trait to get values for a given variable or tuple position

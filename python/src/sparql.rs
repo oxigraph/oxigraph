@@ -1,13 +1,15 @@
 use crate::model::*;
 use crate::store_utils::*;
+use oxigraph::model::Term;
 use oxigraph::sparql::*;
 use pyo3::exceptions::{RuntimeError, SyntaxError, TypeError, ValueError};
 use pyo3::prelude::{
-    pyclass, pymethods, pyproto, FromPyObject, IntoPy, Py, PyAny, PyCell, PyErr, PyObject,
+    pyclass, pymethods, pyproto, FromPyObject, IntoPy, Py, PyAny, PyCell, PyErr, PyObject, PyRef,
     PyRefMut, PyResult, Python,
 };
 use pyo3::{PyIterProtocol, PyMappingProtocol, PyNativeType, PyObjectProtocol};
 use std::convert::TryFrom;
+use std::vec::IntoIter;
 
 pub fn build_query_options(
     use_default_graph_as_union: bool,
@@ -78,6 +80,7 @@ pub fn query_results_to_python(py: Python<'_>, results: QueryResults) -> PyResul
 /// It is the equivalent of a row in SQL.
 ///
 /// It could be indexes by variable name (:py:class:`Variable` or :py:class:`str`) or position in the tuple (:py:class:`int`).
+/// Unpacking also works.
 ///
 /// >>> store = SledStore()
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
@@ -87,6 +90,9 @@ pub fn query_results_to_python(py: Python<'_>, results: QueryResults) -> PyResul
 /// >>> solution['s']
 /// <NamedNode value=http://example.com>
 /// >>> solution[0]
+/// <NamedNode value=http://example.com>
+/// >>> s, p, o = solution
+/// >>> s
 /// <NamedNode value=http://example.com>
 #[pyclass(unsendable, name = QuerySolution)]
 pub struct PyQuerySolution {
@@ -138,6 +144,38 @@ impl PyMappingProtocol for PyQuerySolution {
                 input.get_type().name(),
             )))
         }
+    }
+}
+
+#[pyproto]
+impl PyIterProtocol for PyQuerySolution {
+    fn __iter__(slf: PyRef<Self>) -> SolutionValueIter {
+        SolutionValueIter {
+            inner: slf
+                .inner
+                .values()
+                .map(|v| v.cloned())
+                .collect::<Vec<_>>()
+                .into_iter(),
+        }
+    }
+}
+
+#[pyclass(unsendable)]
+pub struct SolutionValueIter {
+    inner: IntoIter<Option<Term>>,
+}
+
+#[pyproto]
+impl PyIterProtocol for SolutionValueIter {
+    fn __iter__(slf: PyRefMut<Self>) -> Py<Self> {
+        slf.into()
+    }
+
+    fn __next__(mut slf: PyRefMut<Self>) -> Option<Option<PyObject>> {
+        slf.inner
+            .next()
+            .map(|v| v.map(|v| term_to_python(slf.py(), v)))
     }
 }
 

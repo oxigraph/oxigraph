@@ -102,6 +102,8 @@ class TestAbstractStore(unittest.TestCase, ABC):
         self.assertEqual(solution[0], foo)
         self.assertEqual(solution["s"], foo)
         self.assertEqual(solution[Variable("s")], foo)
+        s, = solution
+        self.assertEqual(s, foo)
 
     def test_select_query_union_default_graph(self):
         store = self.store()
