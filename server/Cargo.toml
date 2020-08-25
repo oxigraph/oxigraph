@@ -14,7 +14,6 @@ edition = "2018"
 argh = "0.1"
 async-std = { version = "1", features = ["attributes"] }
 async-h1 = "2"
-http-client = { version = "4", features = ["h1_client"] }
 http-types = "2"
-oxigraph = { version = "0.1", path="../lib", features = ["rocksdb"] }
+oxigraph = { version = "0.1", path="../lib", features = ["rocksdb", "http_client"] }
 url = "2"

@@ -50,7 +50,7 @@ pub(crate) trait WritableEncodedStore: StrEncodingAware {
     fn remove_encoded(&mut self, quad: &EncodedQuad<Self::StrId>) -> Result<(), Self::Error>;
 }
 
-fn load_graph<S: WritableEncodedStore + StrContainer>(
+pub(crate) fn load_graph<S: WritableEncodedStore + StrContainer>(
     store: &mut S,
     reader: impl BufRead,
     format: GraphFormat,
@@ -158,7 +158,7 @@ fn dump_dataset(
     writer.finish()
 }
 
-enum StoreOrParseError<S> {
+pub(crate) enum StoreOrParseError<S> {
     Store(S),
     Parse(io::Error),
 }

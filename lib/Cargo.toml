@@ -18,6 +18,7 @@ all-features = true
 [features]
 default = []
 sophia = ["sophia_api"]
+http_client = ["httparse", "native-tls"]
 
 [dependencies]
 rocksdb = { version = "0.15", optional = true }
@@ -40,6 +41,9 @@ peg = "0.6"
 siphasher = "0.3"
 lasso = {version="0.3", features=["multi-threaded"]}
 sophia_api = { version = "0.6.2", optional = true }
+http = "0.2"
+httparse = { version = "1", optional = true }
+native-tls = { version = "0.2", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"

@@ -1,19 +1,26 @@
-use crate::model::{BlankNode, Term};
+use crate::error::{invalid_data_error, invalid_input_error};
+use crate::io::GraphFormat;
+use crate::model::{BlankNode, GraphNameRef, NamedNode, Term};
 use crate::sparql::algebra::{
     DatasetSpec, GraphPattern, GraphTarget, GraphUpdateOperation, NamedNodeOrVariable, QuadPattern,
     TermOrVariable,
 };
 use crate::sparql::dataset::{DatasetStrId, DatasetView};
 use crate::sparql::eval::SimpleEvaluator;
+use crate::sparql::http::Client;
 use crate::sparql::plan::EncodedTuple;
 use crate::sparql::plan_builder::PlanBuilder;
-use crate::sparql::{EvaluationError, ServiceHandler, Variable};
+use crate::sparql::service::ServiceHandler;
+use crate::sparql::{EvaluationError, Variable};
 use crate::store::numeric_encoder::{
     EncodedQuad, EncodedTerm, ReadEncoder, StrContainer, StrLookup, WriteEncoder,
 };
-use crate::store::{ReadableEncodedStore, WritableEncodedStore};
+use crate::store::{load_graph, ReadableEncodedStore, StoreOrParseError, WritableEncodedStore};
+use http::header::{ACCEPT, CONTENT_TYPE, USER_AGENT};
+use http::{Method, Request, StatusCode};
 use oxiri::Iri;
 use std::collections::HashMap;
+use std::io;
 use std::rc::Rc;
 
 pub(crate) struct SimpleUpdateEvaluator<'a, R, W> {
@@ -21,6 +28,7 @@ pub(crate) struct SimpleUpdateEvaluator<'a, R, W> {
     write: &'a mut W,
     base_iri: Option<Rc<Iri<String>>>,
     service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
+    client: Client,
 }
 
 impl<
@@ -28,6 +36,8 @@ impl<
         R: ReadableEncodedStore + Clone + 'static,
         W: StrContainer<StrId = R::StrId> + WritableEncodedStore<StrId = R::StrId> + 'a,
     > SimpleUpdateEvaluator<'a, R, W>
+where
+    io::Error: From<StoreOrParseError<W::Error>>,
 {
     pub fn new(
         read: R,
@@ -40,6 +50,7 @@ impl<
             write,
             base_iri,
             service_handler,
+            client: Client::new(),
         }
     }
 
@@ -60,9 +71,17 @@ impl<
                 using,
                 algebra,
             } => self.eval_delete_insert(delete, insert, using, algebra),
-            GraphUpdateOperation::Load { .. } => Err(EvaluationError::msg(
-                "SPARQL UPDATE LOAD operation is not implemented yet",
-            )),
+            GraphUpdateOperation::Load { silent, from, to } => {
+                if let Err(error) = self.eval_load(from, to) {
+                    if *silent {
+                        Ok(())
+                    } else {
+                        Err(error)
+                    }
+                } else {
+                    Ok(())
+                }
+            }
             GraphUpdateOperation::Clear { graph, .. } => self.eval_clear(graph),
             GraphUpdateOperation::Create { .. } => Ok(()),
             GraphUpdateOperation::Drop { graph, .. } => self.eval_clear(graph),
@@ -151,6 +170,59 @@ impl<
             }
             bnodes.clear();
         }
+        Ok(())
+    }
+
+    fn eval_load(
+        &mut self,
+        from: &NamedNode,
+        to: &Option<NamedNode>,
+    ) -> Result<(), EvaluationError> {
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri(from.as_str())
+            .header(
+                ACCEPT,
+                "application/n-triples, text/turtle, application/rdf+xml",
+            )
+            .header(USER_AGENT, concat!("Oxigraph/", env!("CARGO_PKG_VERSION")))
+            .body(None)
+            .map_err(invalid_input_error)?;
+        let response = self.client.request(&request)?;
+        if response.status() != StatusCode::OK {
+            return Err(EvaluationError::msg(format!(
+                "HTTP error code {} returned when fetching {}",
+                response.status(),
+                from
+            )));
+        }
+        let content_type = response
+            .headers()
+            .get(CONTENT_TYPE)
+            .ok_or_else(|| {
+                EvaluationError::msg(format!("No Content-Type header returned by {}", from))
+            })?
+            .to_str()
+            .map_err(invalid_data_error)?;
+        let format = GraphFormat::from_media_type(content_type).ok_or_else(|| {
+            EvaluationError::msg(format!(
+                "Unsupported Content-Type returned by {}: {}",
+                from, content_type
+            ))
+        })?;
+        let to_graph_name = if let Some(graph_name) = to {
+            graph_name.as_ref().into()
+        } else {
+            GraphNameRef::DefaultGraph
+        };
+        load_graph(
+            self.write,
+            response.into_body(),
+            format,
+            to_graph_name,
+            Some(from.as_str()),
+        )
+        .map_err(io::Error::from)?;
         Ok(())
     }
 

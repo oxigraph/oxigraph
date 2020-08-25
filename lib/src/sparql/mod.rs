@@ -7,15 +7,17 @@ mod csv_results;
 mod dataset;
 mod error;
 mod eval;
+mod http;
 mod json_results;
 mod model;
 mod parser;
 mod plan;
 mod plan_builder;
+mod service;
 mod update;
 mod xml_results;
 
-use crate::model::{GraphName, NamedNode, NamedOrBlankNode};
+use crate::model::{GraphName, NamedOrBlankNode};
 use crate::sparql::algebra::QueryVariants;
 use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::EvaluationError;
@@ -30,11 +32,15 @@ pub use crate::sparql::parser::ParseError;
 pub use crate::sparql::parser::{Query, Update};
 use crate::sparql::plan::{PlanNode, TripleTemplate};
 use crate::sparql::plan_builder::PlanBuilder;
+pub use crate::sparql::service::ServiceHandler;
+use crate::sparql::service::{
+    EmptyServiceHandler, ErrorConversionServiceHandler, SimpleServiceHandler,
+};
 use crate::sparql::update::SimpleUpdateEvaluator;
 use crate::store::numeric_encoder::{StrContainer, StrEncodingAware};
-use crate::store::{ReadableEncodedStore, WritableEncodedStore};
+use crate::store::{ReadableEncodedStore, StoreOrParseError, WritableEncodedStore};
 use std::convert::TryInto;
-use std::error::Error;
+use std::io;
 use std::rc::Rc;
 
 /// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/)
@@ -219,90 +225,21 @@ impl QueryOptions {
         self
     }
 
+    /// Use a simple HTTP 1.1 client built into Oxigraph to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls.
+    ///
+    /// Requires the `"http_client"` optional feature.
+    #[inline]
+    #[cfg(feature = "http_client")]
+    pub fn with_simple_service_handler(mut self) -> Self {
+        self.service_handler = Rc::new(SimpleServiceHandler::new());
+        self
+    }
+
     /// Use a given [`ServiceHandler`](trait.ServiceHandler.html) to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls.
     #[inline]
     pub fn with_service_handler(mut self, service_handler: impl ServiceHandler + 'static) -> Self {
-        self.service_handler = Rc::new(ErrorConversionServiceHandler {
-            handler: service_handler,
-        });
+        self.service_handler = Rc::new(ErrorConversionServiceHandler::wrap(service_handler));
         self
-    }
-}
-
-/// Handler for [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE.
-///
-/// Should be given to [`QueryOptions`](struct.QueryOptions.html#method.with_service_handler)
-/// before evaluating a SPARQL query that uses SERVICE calls.
-///
-/// ```
-/// use oxigraph::MemoryStore;
-/// use oxigraph::model::*;
-/// use oxigraph::sparql::{QueryOptions, QueryResults, ServiceHandler, Query, EvaluationError};
-///
-/// #[derive(Default)]
-/// struct TestServiceHandler {
-///     store: MemoryStore
-/// }
-///
-/// impl ServiceHandler for TestServiceHandler {
-///     type Error = EvaluationError;
-///
-///     fn handle(&self,service_name: NamedNode, query: Query) -> Result<QueryResults,EvaluationError> {
-///         if service_name == "http://example.com/service" {
-///             self.store.query(query, QueryOptions::default())
-///         } else {
-///             panic!()
-///         }
-///     }
-/// }
-///
-/// let store = MemoryStore::new();
-/// let service = TestServiceHandler::default();
-/// let ex = NamedNode::new("http://example.com")?;
-/// service.store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), None));
-///
-/// if let QueryResults::Solutions(mut solutions) = store.query(
-///     "SELECT ?s WHERE { SERVICE <http://example.com/service> { ?s ?p ?o } }",
-///     QueryOptions::default().with_service_handler(service)
-/// )? {
-///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
-/// }
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
-/// ```
-pub trait ServiceHandler {
-    type Error: Error + Send + Sync + 'static;
-
-    /// Evaluates a [`Query`](struct.Query.html) against a given service identified by a [`NamedNode`](../model/struct.NamedNode.html).
-    fn handle(&self, service_name: NamedNode, query: Query) -> Result<QueryResults, Self::Error>;
-}
-
-struct EmptyServiceHandler;
-
-impl ServiceHandler for EmptyServiceHandler {
-    type Error = EvaluationError;
-
-    fn handle(&self, _: NamedNode, _: Query) -> Result<QueryResults, EvaluationError> {
-        Err(EvaluationError::msg(
-            "The SERVICE feature is not implemented",
-        ))
-    }
-}
-
-struct ErrorConversionServiceHandler<S: ServiceHandler> {
-    handler: S,
-}
-
-impl<S: ServiceHandler> ServiceHandler for ErrorConversionServiceHandler<S> {
-    type Error = EvaluationError;
-
-    fn handle(
-        &self,
-        service_name: NamedNode,
-        query: Query,
-    ) -> Result<QueryResults, EvaluationError> {
-        self.handler
-            .handle(service_name, query)
-            .map_err(EvaluationError::wrap)
     }
 }
 
@@ -313,7 +250,10 @@ pub(crate) fn evaluate_update<
     read: R,
     write: &mut W,
     update: &Update,
-) -> Result<(), EvaluationError> {
+) -> Result<(), EvaluationError>
+where
+    io::Error: From<StoreOrParseError<W::Error>>,
+{
     SimpleUpdateEvaluator::new(
         read,
         write,

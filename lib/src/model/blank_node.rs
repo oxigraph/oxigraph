@@ -351,7 +351,7 @@ impl fmt::Display for BlankNodeIdParseError {
 impl Error for BlankNodeIdParseError {}
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
 
     #[test]

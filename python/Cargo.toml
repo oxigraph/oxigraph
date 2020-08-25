@@ -15,7 +15,7 @@ name = "pyoxigraph"
 doctest = false
 
 [dependencies]
-oxigraph = {version = "0.1.1", path="../lib", features = ["sled"]}
+oxigraph = {version = "0.1.1", path="../lib", features = ["sled", "http_client"]}
 pyo3 = {version = "0.11", features = ["extension-module"]}
 
 [package.metadata.maturin]

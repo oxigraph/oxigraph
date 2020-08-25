@@ -656,7 +656,7 @@ pub fn write_term(sink: &mut Vec<u8>, term: EncodedTerm) {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     use crate::store::numeric_encoder::*;
     use std::collections::HashMap;

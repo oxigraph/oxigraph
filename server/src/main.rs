@@ -15,19 +15,12 @@ use async_std::io::Read;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::task::{block_on, spawn, spawn_blocking};
-use http_client::h1::H1Client;
-use http_client::HttpClient;
-use http_types::{
-    format_err, headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode, Url,
-};
+use http_types::{headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode};
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::{GraphName, NamedNode};
-use oxigraph::sparql::{
-    Query, QueryOptions, QueryResults, QueryResultsFormat, ServiceHandler, Update,
-};
+use oxigraph::sparql::{Query, QueryOptions, QueryResults, QueryResultsFormat, Update};
 use oxigraph::RocksDbStore;
-use std::fmt;
-use std::io::{BufReader, Cursor};
+use std::io::BufReader;
 use std::str::FromStr;
 use url::form_urlencoded;
 
@@ -238,7 +231,7 @@ async fn evaluate_sparql_query(
             e
         })?;
 
-        let mut options = QueryOptions::default().with_service_handler(HttpService::default());
+        let mut options = QueryOptions::default().with_simple_service_handler();
         for default_graph_uri in default_graph_uris {
             options =
                 options.with_default_graph(NamedNode::new(default_graph_uri).map_err(|e| {
@@ -441,73 +434,6 @@ impl<R: Read + Unpin> std::io::Read for SyncAsyncReader<R> {
     }
 
     //TODO: implement other methods
-}
-
-#[derive(Default)]
-struct HttpService {
-    client: H1Client,
-}
-
-impl ServiceHandler for HttpService {
-    type Error = HttpServiceError;
-
-    fn handle(
-        &self,
-        service_name: NamedNode,
-        query: Query,
-    ) -> std::result::Result<QueryResults, HttpServiceError> {
-        let mut request = Request::new(
-            Method::Post,
-            Url::parse(service_name.as_str()).map_err(Error::from)?,
-        );
-        request.append_header(headers::USER_AGENT, SERVER);
-        request.append_header(headers::CONTENT_TYPE, "application/sparql-query");
-        request.append_header(headers::ACCEPT, "application/sparql-results+xml");
-        request.set_body(query.to_string());
-
-        //TODO: response streaming
-        let response: Result<(Option<Mime>, Vec<u8>)> = block_on(async {
-            let mut response = self.client.send(request).await?;
-            Ok((response.content_type(), response.body_bytes().await?))
-        });
-        let (content_type, data) = response?;
-
-        let syntax = if let Some(content_type) = content_type {
-            QueryResultsFormat::from_media_type(content_type.essence()).ok_or_else(|| {
-                format_err!(
-                    "Unexpected federated query result type from {}: {}",
-                    service_name,
-                    content_type
-                )
-            })?
-        } else {
-            QueryResultsFormat::Xml
-        };
-        Ok(QueryResults::read(Cursor::new(data), syntax).map_err(Error::from)?)
-    }
-}
-
-#[derive(Debug)]
-struct HttpServiceError {
-    inner: Error,
-}
-
-impl fmt::Display for HttpServiceError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.inner.fmt(f)
-    }
-}
-
-impl std::error::Error for HttpServiceError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(self.inner.as_ref())
-    }
-}
-
-impl From<Error> for HttpServiceError {
-    fn from(inner: Error) -> Self {
-        Self { inner }
-    }
 }
 
 #[cfg(test)]

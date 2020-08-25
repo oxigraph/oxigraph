@@ -165,6 +165,11 @@ class TestAbstractStore(unittest.TestCase, ABC):
         store.update('DELETE WHERE { ?v ?v ?v }')
         self.assertEqual(len(store), 0)
 
+    def test_update_load(self):
+        store = self.store()
+        store.update('LOAD <http://www.w3.org/1999/02/22-rdf-syntax-ns>')
+        self.assertGreater(len(store), 100)
+
     def test_load_ntriples_to_default_graph(self):
         store = self.store()
         store.load(

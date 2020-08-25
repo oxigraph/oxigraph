@@ -603,7 +603,7 @@ impl PartialEq<LiteralRef<'_>> for Literal {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
 
     #[test]

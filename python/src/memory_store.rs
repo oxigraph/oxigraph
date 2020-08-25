@@ -185,7 +185,6 @@ impl PyMemoryStore {
     /// :type update: str
     /// :raises SyntaxError: if the provided update is invalid
     ///
-    /// The `LOAD operation <https://www.w3.org/TR/sparql11-update/#load>`_ is not supported yet.
     /// The store does not track the existence of empty named graphs.
     /// This method has no ACID guarantees.
     ///

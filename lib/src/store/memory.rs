@@ -238,7 +238,6 @@ impl MemoryStore {
 
     /// Executes a [SPARQL 1.1 update](https://www.w3.org/TR/sparql11-update/).
     ///
-    /// The [`LOAD` operation](https://www.w3.org/TR/sparql11-update/#load) is not supported yet.
     /// The store does not track the existence of empty named graphs.
     /// This method has no ACID guarantees.
     ///
