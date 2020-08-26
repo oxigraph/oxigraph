@@ -1285,7 +1285,7 @@ where
             },
             PlanExpression::Month(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.month().into()),
-                EncodedTerm::DateLiteral(date) => Some(date.year().into()),
+                EncodedTerm::DateLiteral(date) => Some(date.month().into()),
                 EncodedTerm::GYearMonthLiteral(year_month) => Some(year_month.month().into()),
                 EncodedTerm::GMonthDayLiteral(month_day) => Some(month_day.month().into()),
                 EncodedTerm::GMonthLiteral(month) => Some(month.month().into()),
@@ -1293,7 +1293,7 @@ where
             },
             PlanExpression::Day(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.day().into()),
-                EncodedTerm::DateLiteral(date) => Some(date.year().into()),
+                EncodedTerm::DateLiteral(date) => Some(date.day().into()),
                 EncodedTerm::GMonthDayLiteral(month_day) => Some(month_day.day().into()),
                 EncodedTerm::GDayLiteral(day) => Some(day.day().into()),
                 _ => None,

@@ -142,7 +142,7 @@ impl DateTime {
         }
     }
 
-    /// [op:sub-yearMonthDuration-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-sub-yearMonthDuration-from-dateTime)
+    /// [op:subtract-yearMonthDuration-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-subtract-yearMonthDuration-from-dateTime)
     pub fn checked_sub_year_month_duration(
         &self,
         rhs: impl Into<YearMonthDuration>,
@@ -150,7 +150,7 @@ impl DateTime {
         self.checked_sub_duration(Duration::from(rhs.into()))
     }
 
-    /// [op:sub-dayTimeDuration-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-sub-dayTimeDuration-from-dateTime)
+    /// [op:subtract-dayTimeDuration-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDuration-from-dateTime)
     pub fn checked_sub_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
@@ -158,7 +158,7 @@ impl DateTime {
         })
     }
 
-    /// [op:sub-yearMonthDuration-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-sub-yearMonthDuration-from-dateTime) and [op:sub-dayTimeDuration-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-sub-dayTimeDuration-from-dateTime)
+    /// [op:subtract-yearMonthDuration-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-subtract-yearMonthDuration-from-dateTime) and [op:subtract-dayTimeDuration-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDuration-from-dateTime)
     pub fn checked_sub_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         let rhs = rhs.into();
         if let Ok(rhs) = DayTimeDuration::try_from(rhs) {
@@ -314,12 +314,12 @@ impl Time {
         .ok()
     }
 
-    /// [op:sub-dayTimeDuration-from-time](https://www.w3.org/TR/xpath-functions/#func-sub-dayTimeDuration-from-time)
+    /// [op:subtract-dayTimeDuration-from-time](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDuration-from-time)
     pub fn checked_sub_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         self.checked_sub_duration(Duration::from(rhs.into()))
     }
 
-    /// [op:sub-dayTimeDuration-from-time](https://www.w3.org/TR/xpath-functions/#func-sub-dayTimeDuration-from-time)
+    /// [op:subtract-dayTimeDuration-from-time](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDuration-from-time)
     pub fn checked_sub_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         DateTime::new(
             1972,
@@ -466,7 +466,7 @@ impl Date {
             .ok()
     }
 
-    /// [op:sub-yearMonthDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-sub-yearMonthDuration-from-date)
+    /// [op:subtract-yearMonthDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-subtract-yearMonthDuration-from-date)
     pub fn checked_sub_year_month_duration(
         &self,
         rhs: impl Into<YearMonthDuration>,
@@ -474,12 +474,12 @@ impl Date {
         self.checked_sub_duration(Duration::from(rhs.into()))
     }
 
-    /// [op:sub-dayTimeDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-sub-dayTimeDuration-from-date)
+    /// [op:subtract-dayTimeDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDuration-from-date)
     pub fn checked_sub_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         self.checked_sub_duration(Duration::from(rhs.into()))
     }
 
-    /// [op:sub-yearMonthDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-sub-yearMonthDuration-from-date) and [op:sub-dayTimeDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-sub-dayTimeDuration-from-date)
+    /// [op:subtract-yearMonthDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-subtract-yearMonthDuration-from-date) and [op:subtract-dayTimeDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDuration-from-date)
     pub fn checked_sub_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         DateTime::try_from(*self)
             .ok()?

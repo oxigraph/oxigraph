@@ -3,6 +3,8 @@
 ### Added
 - [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/) support for Rust, Python and JavaScript.
 
+## Changed
+- Fixes evaluation of `MONTH()` and `DAY()` functions on the `xsd:date` values.
 
 ## [0.1.1] - 2020-08-14
 

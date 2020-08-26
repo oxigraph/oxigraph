@@ -114,8 +114,8 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
                     } else {
                         Err(anyhow!("Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
                                                test,
-                                               actual_results,
                                                expected_results,
+                                               actual_results,
                                                Query::parse(&read_file_to_string(query_file)?, Some(query_file)).unwrap(),
                                                store
                         ))
