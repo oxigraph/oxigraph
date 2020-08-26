@@ -33,9 +33,7 @@ pub use crate::sparql::parser::{Query, Update};
 use crate::sparql::plan::{PlanNode, TripleTemplate};
 use crate::sparql::plan_builder::PlanBuilder;
 pub use crate::sparql::service::ServiceHandler;
-use crate::sparql::service::{
-    EmptyServiceHandler, ErrorConversionServiceHandler, SimpleServiceHandler,
-};
+use crate::sparql::service::{EmptyServiceHandler, ErrorConversionServiceHandler};
 use crate::sparql::update::SimpleUpdateEvaluator;
 use crate::store::numeric_encoder::{StrContainer, StrEncodingAware};
 use crate::store::{ReadableEncodedStore, StoreOrParseError, WritableEncodedStore};
@@ -231,7 +229,7 @@ impl QueryOptions {
     #[inline]
     #[cfg(feature = "http_client")]
     pub fn with_simple_service_handler(mut self) -> Self {
-        self.service_handler = Rc::new(SimpleServiceHandler::new());
+        self.service_handler = Rc::new(service::SimpleServiceHandler::new());
         self
     }
 

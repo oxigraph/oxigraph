@@ -97,6 +97,7 @@ pub struct SimpleServiceHandler {
 }
 
 impl SimpleServiceHandler {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             client: Client::new(),
