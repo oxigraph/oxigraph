@@ -475,17 +475,17 @@ fn copy_graph(
     to: impl Into<Option<NamedNodeOrVariable>>,
 ) -> GraphUpdateOperation {
     let bgp = GraphPattern::BGP(vec![TriplePattern::new(
-        Variable::new("s"),
-        Variable::new("p"),
-        Variable::new("o"),
+        Variable::new_unchecked("s"),
+        Variable::new_unchecked("p"),
+        Variable::new_unchecked("o"),
     )
     .into()]);
     GraphUpdateOperation::DeleteInsert {
         delete: Vec::new(),
         insert: vec![QuadPattern::new(
-            Variable::new("s"),
-            Variable::new("p"),
-            Variable::new("o"),
+            Variable::new_unchecked("s"),
+            Variable::new_unchecked("p"),
+            Variable::new_unchecked("o"),
             to.into(),
         )],
         using: DatasetSpec::default(),
@@ -984,7 +984,7 @@ parser! {
             if from == to {
                 Vec::new() // identity case
             } else {
-                let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new("s"), Variable::new("p"), Variable::new("o")).into()]);
+                let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new_unchecked("s"), Variable::new_unchecked("p"), Variable::new_unchecked("o")).into()]);
                 vec![copy_graph(from, to)]
             }
         }
@@ -995,7 +995,7 @@ parser! {
             if from == to {
                 Vec::new() // identity case
             } else {
-                let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new("s"), Variable::new("p"), Variable::new("o")).into()]);
+                let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new_unchecked("s"), Variable::new_unchecked("p"), Variable::new_unchecked("o")).into()]);
                 vec![GraphUpdateOperation::Drop { silent, graph: to.clone().into() }, copy_graph(from.clone(), to), GraphUpdateOperation::Drop { silent, graph: from.into() }]
             }
         }
@@ -1006,7 +1006,7 @@ parser! {
             if from == to {
                 Vec::new() // identity case
             } else {
-                let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new("s"), Variable::new("p"), Variable::new("o")).into()]);
+                let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new_unchecked("s"), Variable::new_unchecked("p"), Variable::new_unchecked("o")).into()]);
                 vec![GraphUpdateOperation::Drop { silent, graph: to.clone().into() }, copy_graph(from, to)]
             }
         }
@@ -1606,7 +1606,7 @@ parser! {
             i:iri() { i.into() }
 
         //[108]
-        rule Var() -> Variable = v:(VAR1() / VAR2()) { Variable::new(v) }
+        rule Var() -> Variable = v:(VAR1() / VAR2()) { Variable::new_unchecked(v) }
 
         //[109]
         rule GraphTerm() -> Term =

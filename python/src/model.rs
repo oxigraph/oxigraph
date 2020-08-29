@@ -113,6 +113,7 @@ impl PyObjectProtocol for PyNamedNode {
 ///
 /// :param value: the `blank node ID <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node-identifier>`_ (if not present, a random blank node ID is automatically generated).
 /// :type value: str, optional
+/// :raises ValueError: if the blank node ID is invalid according to NTriples, Turtle and SPARQL grammars.
 ///
 /// The :py:func:`str` function provides a serialization compatible with NTriples, Turtle and SPARQL:
 ///
@@ -746,6 +747,7 @@ impl PyIterProtocol for PyQuad {
 ///
 /// :param value: the variable name as a string
 /// :type value: str
+/// :raises ValueError: if the variable name is invalid according to the SPARQL grammar.
 ///
 /// The :py:func:`str` function provides a serialization compatible with SPARQL:
 ///
@@ -779,8 +781,10 @@ impl<'a> From<&'a PyVariable> for &'a Variable {
 #[pymethods]
 impl PyVariable {
     #[new]
-    fn new(value: String) -> Self {
-        Variable::new(value).into()
+    fn new(value: String) -> PyResult<Self> {
+        Ok(Variable::new(value)
+            .map_err(|e| ValueError::py_err(e.to_string()))?
+            .into())
     }
 
     /// :return: the variable name

@@ -172,7 +172,10 @@ mod tests {
 
     fn build_example() -> QueryResults {
         QuerySolutionIter::new(
-            Rc::new(vec![Variable::new("x"), Variable::new("literal")]),
+            Rc::new(vec![
+                Variable::new_unchecked("x"),
+                Variable::new_unchecked("literal"),
+            ]),
             Box::new(
                 vec![
                     Ok(vec![

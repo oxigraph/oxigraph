@@ -7,6 +7,7 @@ use crate::sparql::error::EvaluationError;
 use crate::sparql::json_results::write_json_results;
 use crate::sparql::xml_results::{read_xml_results, write_xml_results};
 use rand::random;
+use std::error::Error;
 use std::io::{BufRead, Write};
 use std::rc::Rc;
 use std::{fmt, io};
@@ -248,7 +249,7 @@ impl QuerySolutionIter {
     ///
     /// let store = MemoryStore::new();
     /// if let QueryResults::Solutions(solutions) = store.query("SELECT ?s ?o WHERE { ?s ?p ?o }", QueryOptions::default())? {
-    ///     assert_eq!(solutions.variables(), &[Variable::new("s"), Variable::new("o")]);
+    ///     assert_eq!(solutions.variables(), &[Variable::new("s")?, Variable::new("o")?]);
     /// }
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -409,8 +410,9 @@ impl Iterator for QueryTripleIter {
 ///
 /// assert_eq!(
 ///     "?foo",
-///     Variable::new("foo").to_string()
-/// )
+///     Variable::new("foo")?.to_string()
+/// );
+/// # Result::<_,oxigraph::sparql::VariableNameParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct Variable {
@@ -418,8 +420,23 @@ pub struct Variable {
 }
 
 impl Variable {
+    /// Creates a variable name from a unique identifier.
+    ///
+    /// The variable identifier must be valid according to the SPARQL grammar.
+    pub fn new(name: impl Into<String>) -> Result<Self, VariableNameParseError> {
+        let name = name.into();
+        validate_variable_identifier(&name)?;
+        Ok(Self::new_unchecked(name))
+    }
+
+    /// Creates a variable name from a unique identifier without validation.
+    ///
+    /// It is the caller's responsibility to ensure that `id` is a valid blank node identifier
+    /// according to the SPARQL grammar.
+    ///
+    /// [`new`](#method.new) is a safe version of this constructor and should be used for untrusted data.
     #[inline]
-    pub fn new(name: impl Into<String>) -> Self {
+    pub fn new_unchecked(name: impl Into<String>) -> Self {
         Variable { name: name.into() }
     }
 
@@ -435,7 +452,7 @@ impl Variable {
 
     #[inline]
     pub(crate) fn new_random() -> Self {
-        Self::new(format!("{:x}", random::<u128>()))
+        Self::new_unchecked(format!("{:x}", random::<u128>()))
     }
 }
 
@@ -445,3 +462,67 @@ impl fmt::Display for Variable {
         write!(f, "?{}", self.name)
     }
 }
+
+fn validate_variable_identifier(id: &str) -> Result<(), VariableNameParseError> {
+    let mut chars = id.chars();
+    let front = chars.next().ok_or(VariableNameParseError {})?;
+    match front {
+        '0'..='9'
+        | '_'
+        | ':'
+        | 'A'..='Z'
+        | 'a'..='z'
+        | '\u{00C0}'..='\u{00D6}'
+        | '\u{00D8}'..='\u{00F6}'
+        | '\u{00F8}'..='\u{02FF}'
+        | '\u{0370}'..='\u{037D}'
+        | '\u{037F}'..='\u{1FFF}'
+        | '\u{200C}'..='\u{200D}'
+        | '\u{2070}'..='\u{218F}'
+        | '\u{2C00}'..='\u{2FEF}'
+        | '\u{3001}'..='\u{D7FF}'
+        | '\u{F900}'..='\u{FDCF}'
+        | '\u{FDF0}'..='\u{FFFD}'
+        | '\u{10000}'..='\u{EFFFF}' => (),
+        _ => return Err(VariableNameParseError {}),
+    }
+    for c in chars {
+        match c {
+            '0'..='9'
+            | '\u{00B7}'
+            | '\u{00300}'..='\u{036F}'
+            | '\u{203F}'..='\u{2040}'
+            | '_'
+            | 'A'..='Z'
+            | 'a'..='z'
+            | '\u{00C0}'..='\u{00D6}'
+            | '\u{00D8}'..='\u{00F6}'
+            | '\u{00F8}'..='\u{02FF}'
+            | '\u{0370}'..='\u{037D}'
+            | '\u{037F}'..='\u{1FFF}'
+            | '\u{200C}'..='\u{200D}'
+            | '\u{2070}'..='\u{218F}'
+            | '\u{2C00}'..='\u{2FEF}'
+            | '\u{3001}'..='\u{D7FF}'
+            | '\u{F900}'..='\u{FDCF}'
+            | '\u{FDF0}'..='\u{FFFD}'
+            | '\u{10000}'..='\u{EFFFF}' => (),
+            _ => return Err(VariableNameParseError {}),
+        }
+    }
+    Ok(())
+}
+
+/// An error raised during [`Variable`](struct.Variable.html) name validation.
+#[allow(missing_copy_implementations)]
+#[derive(Debug)]
+pub struct VariableNameParseError {}
+
+impl fmt::Display for VariableNameParseError {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "The variable name is invalid")
+    }
+}
+
+impl Error for VariableNameParseError {}

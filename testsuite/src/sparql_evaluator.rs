@@ -466,7 +466,7 @@ impl StaticQueryResults {
                     objects_for_subject_predicate(&dataset, &result_set, rs::RESULT_VARIABLE)
                         .filter_map(|object| {
                             if let Term::Literal(l) = object {
-                                Some(Variable::new(l.value()))
+                                Some(Variable::new_unchecked(l.value()))
                             } else {
                                 None
                             }
@@ -497,7 +497,10 @@ impl StaticQueryResults {
                                                         rs::VALUE,
                                                     ),
                                                 ) {
-                                                    Some((Variable::new(variable.value()), value))
+                                                    Some((
+                                                        Variable::new_unchecked(variable.value()),
+                                                        value,
+                                                    ))
                                                 } else {
                                                     None
                                                 }

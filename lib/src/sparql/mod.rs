@@ -27,7 +27,7 @@ pub use crate::sparql::model::QueryResultsFormat;
 pub use crate::sparql::model::QuerySolution;
 pub use crate::sparql::model::QuerySolutionIter;
 pub use crate::sparql::model::QueryTripleIter;
-pub use crate::sparql::model::Variable;
+pub use crate::sparql::model::{Variable, VariableNameParseError};
 pub use crate::sparql::parser::ParseError;
 pub use crate::sparql::parser::{Query, Update};
 use crate::sparql::plan::{PlanNode, TripleTemplate};

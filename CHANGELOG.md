@@ -5,6 +5,7 @@
 
 ## Changed
 - Fixes evaluation of `MONTH()` and `DAY()` functions on the `xsd:date` values.
+- `Variable::new` now validates the variable name.
 
 ## [0.1.1] - 2020-08-14
 

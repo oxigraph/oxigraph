@@ -217,7 +217,7 @@ pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResults, 
                             mapping.insert(var.as_bytes().to_vec(), i);
                         }
                         return Ok(QueryResults::Solutions(QuerySolutionIter::new(
-                            Rc::new(variables.into_iter().map(Variable::new).collect()),
+                            Rc::new(variables.into_iter().map(Variable::new).collect::<Result<Vec<_>,_>>().map_err(invalid_data_error)?),
                             Box::new(ResultsIterator {
                                 reader,
                                 buffer: Vec::default(),
@@ -255,7 +255,7 @@ pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResults, 
                 State::AfterHead => {
                     return if event.name() == b"results" {
                         Ok(QueryResults::Solutions(QuerySolutionIter::new(
-                            Rc::new(variables.into_iter().map(Variable::new).collect()),
+                            Rc::new(variables.into_iter().map(Variable::new).collect::<Result<Vec<_>,_>>().map_err(invalid_data_error)?),
                             Box::new(empty()),
                         )))
                     } else {

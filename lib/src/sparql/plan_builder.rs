@@ -734,7 +734,10 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                 PatternValue::Variable(variable_key(variables, variable))
             }
             TermOrVariable::Term(Term::BlankNode(bnode)) => {
-                PatternValue::Variable(variable_key(variables, &Variable::new(bnode.as_str())))
+                PatternValue::Variable(variable_key(
+                    variables,
+                    &Variable::new_unchecked(bnode.as_str()),
+                ))
                 //TODO: very bad hack to convert bnode to variable
             }
             TermOrVariable::Term(term) => PatternValue::Constant(self.build_term(term)?),
