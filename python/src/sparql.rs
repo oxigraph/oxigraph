@@ -13,28 +13,15 @@ use std::vec::IntoIter;
 
 pub fn build_query_options(
     use_default_graph_as_union: bool,
-    default_graph_uris: Option<&PyAny>,
-    named_graph_uris: Option<&PyAny>,
     default_graph: Option<&PyAny>,
     named_graphs: Option<&PyAny>,
 ) -> PyResult<QueryOptions> {
-    if default_graph_uris.is_some() && default_graph.is_some() {
-        return Err(ValueError::py_err(
-            "The query() method default_graph and default_graph_uris parameters cannot be set at the same time",
-        ));
-    }
-    if named_graph_uris.is_some() && named_graphs.is_some() {
-        return Err(ValueError::py_err(
-            "The query() method named_graphs and named_graph_uris parameters cannot be set at the same time",
-        ));
-    }
-
     let mut options = QueryOptions::default();
     if use_default_graph_as_union {
         options = options.with_default_graph_as_union();
     }
 
-    if let Some(default_graph) = default_graph.or(default_graph_uris) {
+    if let Some(default_graph) = default_graph {
         if let Ok(default_graphs) = default_graph.iter() {
             if default_graph.is_empty()? {
                 return Err(ValueError::py_err(
@@ -53,7 +40,7 @@ pub fn build_query_options(
         }
     }
 
-    if let Some(named_graphs) = named_graphs.or(named_graph_uris) {
+    if let Some(named_graphs) = named_graphs {
         if named_graphs.is_empty()? {
             return Err(ValueError::py_err(
                 "The query() method named_graphs argument cannot be empty",

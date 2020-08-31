@@ -258,7 +258,7 @@ impl FromStr for Variable {
     /// assert_eq!(Variable::from_str("$foo").unwrap(), Variable::new("foo").unwrap())
     /// ```
     fn from_str(s: &str) -> Result<Self, TermParseError> {
-        if !s.starts_with("?") && !s.starts_with('$') {
+        if !s.starts_with('?') && !s.starts_with('$') {
             return Err(TermParseError::msg(
                 "Variable serialization should start with ? or $",
             ));

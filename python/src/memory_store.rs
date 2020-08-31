@@ -117,10 +117,6 @@ impl PyMemoryStore {
     /// :type default_graph: NamedNode or BlankNode or DefaultGraph or list(NamedNode or BlankNode or DefaultGraph) or None, optional
     /// :param named_graphs: list of the named graphs that could be used in SPARQL `GRAPH` clause. By default, all the store named graphs are available.
     /// :type named_graphs: list(NamedNode or BlankNode) or None, optional
-    /// :param default_graph_uris: deprecated, use ``default_graph`` instead
-    /// :type default_graph_uris: list(NamedNode) or None, optional
-    /// :param named_graph_uris: deprecated, use ``named_graphs`` instead
-    /// :type named_graph_uris: list(NamedNode) or None, optional
     /// :return: a :py:class:`bool` for ``ASK`` queries, an iterator of :py:class:`Triple` for ``CONSTRUCT`` and ``DESCRIBE`` queries and an iterator of :py:class:`QuerySolution` for ``SELECT`` queries.
     /// :rtype: QuerySolutions or QueryTriples or bool
     /// :raises SyntaxError: if the provided query is invalid
@@ -145,13 +141,11 @@ impl PyMemoryStore {
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
     /// >>> store.query('ASK { ?s ?p ?o }')
     /// True
-    #[text_signature = "($self, query, *, use_default_graph_as_union, default_graph_uris, named_graph_uris, default_graph, named_graphs)"]
+    #[text_signature = "($self, query, *, use_default_graph_as_union, default_graph, named_graphs)"]
     #[args(
         query,
         "*",
         use_default_graph_as_union = "false",
-        default_graph_uris = "None",
-        named_graph_uris = "None",
         default_graph = "None",
         named_graphs = "None"
     )]
@@ -159,19 +153,11 @@ impl PyMemoryStore {
         &self,
         query: &str,
         use_default_graph_as_union: bool,
-        default_graph_uris: Option<&PyAny>,
-        named_graph_uris: Option<&PyAny>,
         default_graph: Option<&PyAny>,
         named_graphs: Option<&PyAny>,
         py: Python<'_>,
     ) -> PyResult<PyObject> {
-        let options = build_query_options(
-            use_default_graph_as_union,
-            default_graph_uris,
-            named_graph_uris,
-            default_graph,
-            named_graphs,
-        )?;
+        let options = build_query_options(use_default_graph_as_union, default_graph, named_graphs)?;
         let results = self
             .inner
             .query(query, options)
