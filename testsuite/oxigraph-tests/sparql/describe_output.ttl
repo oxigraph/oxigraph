@@ -1,0 +1,6 @@
+PREFIX schema: <http://schema.org/>
+
+<http://example.com/test> a schema:Person ;
+    schema:name "test"@en ;
+    schema:parent <http://example.com/test2> ;
+    schema:child [] .

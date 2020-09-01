@@ -1,0 +1,1 @@
+DESCRIBE ?s WHERE { ?s <http://schema.org/name> "test"@en }

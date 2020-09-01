@@ -2731,16 +2731,20 @@ impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Iterator for De
                 Ok(tuple) => tuple,
                 Err(error) => return Some(Err(error)),
             };
-            for subject in tuple.iter() {
-                if let Some(subject) = subject {
-                    self.quads = Box::new(self.eval.dataset.encoded_quads_for_pattern(
+            let eval = self.eval.clone();
+            self.quads = Box::new(tuple.into_iter().flatten().flat_map(move |subject| {
+                eval.dataset
+                    .encoded_quads_for_pattern(
                         Some(subject),
                         None,
                         None,
-                        None,
-                    ));
-                }
-            }
+                        Some(EncodedTerm::DefaultGraph),
+                    )
+                    .chain(
+                        eval.dataset
+                            .encoded_quads_for_pattern(Some(subject), None, None, None),
+                    )
+            }));
         }
     }
 }
