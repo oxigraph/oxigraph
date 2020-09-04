@@ -1036,21 +1036,6 @@ parser! {
             let mut insert = insert.unwrap_or_else(Vec::new);
             let mut pattern = pattern;
 
-            if let Some(with) = with {
-                // We inject WITH everywhere
-                delete = delete.into_iter().map(|q| if q.graph_name.is_none() {
-                    QuadPattern::new(q.subject, q.predicate, q.object, Some(with.clone().into()))
-                } else {
-                    q
-                }).collect();
-                insert = insert.into_iter().map(|q| if q.graph_name.is_none() {
-                    QuadPattern::new(q.subject, q.predicate, q.object, Some(with.clone().into()))
-                } else {
-                    q
-                }).collect();
-                pattern = GraphPattern::Graph { graph_name: with.into(), inner: Box::new(pattern) };
-            }
-
             let mut using = QueryDataset::default();
             if !u.is_empty() {
                 let mut using_default = Vec::new();
@@ -1065,6 +1050,23 @@ parser! {
                 }
                 using.set_default_graph(using_default);
                 using.set_available_named_graphs(using_named);
+            }
+
+            if let Some(with) = with {
+                // We inject WITH everywhere
+                delete = delete.into_iter().map(|q| if q.graph_name.is_none() {
+                    QuadPattern::new(q.subject, q.predicate, q.object, Some(with.clone().into()))
+                } else {
+                    q
+                }).collect();
+                insert = insert.into_iter().map(|q| if q.graph_name.is_none() {
+                    QuadPattern::new(q.subject, q.predicate, q.object, Some(with.clone().into()))
+                } else {
+                    q
+                }).collect();
+                if using.is_default_dataset() {
+                    using.set_default_graph(vec![with.into()]);
+                }
             }
 
             vec![GraphUpdateOperation::DeleteInsert {

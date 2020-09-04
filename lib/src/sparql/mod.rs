@@ -144,6 +144,42 @@ impl QueryOptions {
     }
 }
 
+/// Options for SPARQL update evaluation
+#[derive(Clone)]
+pub struct UpdateOptions {
+    query_options: QueryOptions,
+}
+
+impl UpdateOptions {
+    /// The options related to the querying part of the updates
+    #[inline]
+    pub fn query_options(&self) -> &QueryOptions {
+        &self.query_options
+    }
+
+    /// The options related to the querying part of the updates
+    #[inline]
+    pub fn query_options_mut(&mut self) -> &mut QueryOptions {
+        &mut self.query_options
+    }
+}
+
+impl Default for UpdateOptions {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            query_options: QueryOptions::default(),
+        }
+    }
+}
+
+impl From<QueryOptions> for UpdateOptions {
+    #[inline]
+    fn from(query_options: QueryOptions) -> Self {
+        Self { query_options }
+    }
+}
+
 pub(crate) fn evaluate_update<
     R: ReadableEncodedStore + Clone + 'static,
     W: StrContainer<StrId = R::StrId> + WritableEncodedStore<StrId = R::StrId>,
@@ -151,15 +187,11 @@ pub(crate) fn evaluate_update<
     read: R,
     write: &mut W,
     update: Update,
+    options: UpdateOptions,
 ) -> Result<(), EvaluationError>
 where
     io::Error: From<StoreOrParseError<W::Error>>,
 {
-    SimpleUpdateEvaluator::new(
-        read,
-        write,
-        update.base_iri.map(Rc::new),
-        Rc::new(EmptyServiceHandler),
-    )
-    .eval_all(&update.operations)
+    SimpleUpdateEvaluator::new(read, write, update.base_iri.map(Rc::new), options)
+        .eval_all(&update.operations)
 }

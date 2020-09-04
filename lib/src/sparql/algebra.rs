@@ -215,7 +215,7 @@ impl<'a> TryFrom<&'a String> for Query {
 pub struct Update {
     /// The update base IRI
     pub base_iri: Option<Iri<String>>,
-    /// The update operations
+    /// The [update operations](https://www.w3.org/TR/sparql11-update/#formalModelGraphUpdate)
     pub operations: Vec<GraphUpdateOperation>,
 }
 

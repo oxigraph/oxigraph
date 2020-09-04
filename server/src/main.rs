@@ -18,15 +18,15 @@ use async_std::task::{block_on, spawn};
 use http_types::{headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode};
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::{GraphName, NamedNode, NamedOrBlankNode};
+use oxigraph::sparql::algebra::GraphUpdateOperation;
 use oxigraph::sparql::{Query, QueryResults, QueryResultsFormat, Update};
-use std::io::BufReader;
-use std::str::FromStr;
-use url::form_urlencoded;
-
 #[cfg(feature = "rocksdb")]
 use oxigraph::RocksDbStore as Store;
 #[cfg(all(feature = "sled", not(feature = "rocksdb")))]
 use oxigraph::SledStore as Store;
+use std::io::BufReader;
+use std::str::FromStr;
+use url::form_urlencoded;
 
 const MAX_SPARQL_BODY_SIZE: u64 = 1_048_576;
 const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
@@ -304,17 +304,36 @@ async fn evaluate_sparql_update(
     default_graph_uris: Vec<String>,
     named_graph_uris: Vec<String>,
 ) -> Result<Response> {
-    if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
-        return Ok(simple_response(
-            StatusCode::BadRequest,
-            "using-graph-uri and using-named-graph-uri parameters are not supported yet",
-        ));
-    }
-    let update = Update::parse(&update, None).map_err(|e| {
+    let mut update = Update::parse(&update, None).map_err(|e| {
         let mut e = Error::from(e);
         e.set_status(StatusCode::BadRequest);
         e
     })?;
+    let default_graph_uris = default_graph_uris
+        .into_iter()
+        .map(|e| Ok(NamedNode::new(e)?.into()))
+        .collect::<Result<Vec<GraphName>>>()
+        .map_err(bad_request)?;
+    let named_graph_uris = named_graph_uris
+        .into_iter()
+        .map(|e| Ok(NamedNode::new(e)?.into()))
+        .collect::<Result<Vec<NamedOrBlankNode>>>()
+        .map_err(bad_request)?;
+    if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
+        for operation in &mut update.operations {
+            if let GraphUpdateOperation::DeleteInsert { using, .. } = operation {
+                if !using.is_default_dataset() {
+                    let result = Ok(simple_response(
+                        StatusCode::BadRequest,
+                        "using-graph-uri and using-named-graph-uri must not be used with a SPARQL UPDATE containing USING",
+                    ));
+                    return result;
+                }
+                using.set_default_graph(default_graph_uris.clone());
+                using.set_available_named_graphs(named_graph_uris.clone());
+            }
+        }
+    }
     store.update(update)?;
     Ok(Response::new(StatusCode::NoContent))
 }

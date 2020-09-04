@@ -10,8 +10,7 @@ use crate::sparql::eval::SimpleEvaluator;
 use crate::sparql::http::Client;
 use crate::sparql::plan::EncodedTuple;
 use crate::sparql::plan_builder::PlanBuilder;
-use crate::sparql::service::ServiceHandler;
-use crate::sparql::{EvaluationError, Variable};
+use crate::sparql::{EvaluationError, UpdateOptions, Variable};
 use crate::store::numeric_encoder::{
     EncodedQuad, EncodedTerm, ReadEncoder, StrContainer, StrLookup, WriteEncoder,
 };
@@ -27,7 +26,7 @@ pub(crate) struct SimpleUpdateEvaluator<'a, R, W> {
     read: R,
     write: &'a mut W,
     base_iri: Option<Rc<Iri<String>>>,
-    service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
+    options: UpdateOptions,
     client: Client,
 }
 
@@ -43,13 +42,13 @@ where
         read: R,
         write: &'a mut W,
         base_iri: Option<Rc<Iri<String>>>,
-        service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
+        options: UpdateOptions,
     ) -> Self {
         Self {
             read,
             write,
             base_iri,
-            service_handler,
+            options,
             client: Client::new(),
         }
     }
@@ -119,7 +118,7 @@ where
         let evaluator = SimpleEvaluator::<DatasetView<R>>::new(
             dataset.clone(),
             self.base_iri.clone(),
-            self.service_handler.clone(),
+            self.options.query_options.service_handler.clone(),
         );
         let mut bnodes = HashMap::new();
         for tuple in evaluator.eval_plan(&plan, EncodedTuple::with_capacity(variables.len())) {

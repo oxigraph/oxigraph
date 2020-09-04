@@ -5,6 +5,7 @@ use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use crate::sparql::{
     evaluate_query, evaluate_update, EvaluationError, Query, QueryOptions, QueryResults, Update,
+    UpdateOptions,
 };
 use crate::store::binary_encoder::*;
 use crate::store::numeric_encoder::{
@@ -208,10 +209,20 @@ impl SledStore {
         &self,
         update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
     ) -> Result<(), EvaluationError> {
+        self.update_opt(update, UpdateOptions::default())
+    }
+
+    /// Executes a [SPARQL 1.1 update](https://www.w3.org/TR/sparql11-update/) with some options.
+    pub fn update_opt(
+        &self,
+        update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
+        options: UpdateOptions,
+    ) -> Result<(), EvaluationError> {
         evaluate_update(
             self.clone(),
             &mut &*self,
             update.try_into().map_err(|e| e.into())?,
+            options,
         )
     }
 
