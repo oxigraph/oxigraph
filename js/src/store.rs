@@ -41,21 +41,21 @@ impl JsStore {
 
     pub fn add(&self, quad: &JsValue) -> Result<(), JsValue> {
         self.store
-            .insert(&self.from_js.to_quad(quad)?.try_into()?)
+            .insert(&self.from_js.to_quad(quad)?.into())
             .map_err(to_err)?;
         Ok(())
     }
 
     pub fn delete(&self, quad: &JsValue) -> Result<(), JsValue> {
         self.store
-            .remove(&self.from_js.to_quad(quad)?.try_into()?)
+            .remove(&self.from_js.to_quad(quad)?)
             .map_err(to_err)?;
         Ok(())
     }
 
     pub fn has(&self, quad: &JsValue) -> Result<bool, JsValue> {
         self.store
-            .contains(&self.from_js.to_quad(quad)?.try_into()?)
+            .contains(&self.from_js.to_quad(quad)?)
             .map_err(to_err)
     }
 

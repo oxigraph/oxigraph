@@ -44,7 +44,7 @@ for (binding of store.query("SELECT ?name WHERE { <http://example/> <http://sche
 Oxigraph currently provides a simple JS API.
 It is centered around the `MemoryStore` class.
 
-The `NamedNode`, `BlankNode`, `Literal`, `DefaultGraph`, `Quad` and `DataFactory` types
+The `NamedNode`, `BlankNode`, `Literal`, `DefaultGraph`, `Variable`, `Quad` and `DataFactory` types
 are following the [RDF/JS datamodel specification](https://rdf.js.org/data-model-spec/).
 
 To import `MemoryStore` using Node:

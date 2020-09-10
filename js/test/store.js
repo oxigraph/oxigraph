@@ -5,22 +5,27 @@ const assert = require('assert')
 const dataFactory = require('@rdfjs/data-model')
 
 const ex = dataFactory.namedNode('http://example.com')
+const triple = dataFactory.triple(
+  dataFactory.blankNode('s'),
+  dataFactory.namedNode('http://example.com/p'),
+  dataFactory.literal('o')
+)
 
 describe('Store', function () {
   describe('#add()', function () {
     it('an added quad should be in the store', function () {
       const store = new Store()
-      store.add(dataFactory.triple(ex, ex, ex))
-      assert(store.has(dataFactory.triple(ex, ex, ex)))
+      store.add(dataFactory.triple(ex, ex, triple))
+      assert(store.has(dataFactory.triple(ex, ex, triple)))
     })
   })
 
   describe('#delete()', function () {
     it('an removed quad should not be in the store anymore', function () {
-      const store = new Store([dataFactory.triple(ex, ex, ex)])
-      assert(store.has(dataFactory.triple(ex, ex, ex)))
-      store.delete(dataFactory.triple(ex, ex, ex))
-      assert(!store.has(dataFactory.triple(ex, ex, ex)))
+      const store = new Store([dataFactory.triple(triple, ex, ex)])
+      assert(store.has(dataFactory.triple(triple, ex, ex)))
+      store.delete(dataFactory.triple(triple, ex, ex))
+      assert(!store.has(dataFactory.triple(triple, ex, ex)))
     })
   })
 

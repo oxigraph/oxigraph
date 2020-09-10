@@ -2,7 +2,9 @@ use crate::format_err;
 use crate::utils::to_err;
 use js_sys::{Reflect, UriError};
 use oxigraph::model::*;
+use oxigraph::sparql::Variable;
 use std::convert::TryFrom;
+use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(js_name = DataFactory)]
@@ -57,6 +59,11 @@ impl JsDataFactory {
         JsDefaultGraph {}
     }
 
+    #[wasm_bindgen(js_name = variable)]
+    pub fn variable(&self, value: String) -> Result<JsVariable, JsValue> {
+        Ok(Variable::new(value).map_err(to_err)?.into())
+    }
+
     #[wasm_bindgen(js_name = triple)]
     pub fn triple(
         &self,
@@ -64,12 +71,7 @@ impl JsDataFactory {
         predicate: &JsValue,
         object: &JsValue,
     ) -> Result<JsQuad, JsValue> {
-        Ok(JsQuad {
-            subject: self.from_js.to_term(subject)?,
-            predicate: self.from_js.to_term(predicate)?,
-            object: self.from_js.to_term(object)?,
-            graph_name: JsTerm::DefaultGraph(JsDefaultGraph {}),
-        })
+        self.quad(subject, predicate, object, &JsValue::UNDEFINED)
     }
 
     #[wasm_bindgen(js_name = quad)]
@@ -80,26 +82,28 @@ impl JsDataFactory {
         object: &JsValue,
         graph: &JsValue,
     ) -> Result<JsQuad, JsValue> {
-        Ok(JsQuad {
-            subject: self.from_js.to_term(subject)?,
-            predicate: self.from_js.to_term(predicate)?,
-            object: self.from_js.to_term(object)?,
-            graph_name: if graph.is_undefined() || graph.is_null() {
-                JsTerm::DefaultGraph(JsDefaultGraph {})
-            } else {
-                self.from_js.to_term(graph)?
-            },
-        })
+        Ok(self
+            .from_js
+            .to_quad_from_parts(subject, predicate, object, graph)?
+            .into())
     }
 
     #[wasm_bindgen(js_name = fromTerm)]
     pub fn convert_term(&self, original: &JsValue) -> Result<JsValue, JsValue> {
-        Ok(self.from_js.to_term(original)?.into())
+        Ok(if original.is_null() {
+            JsValue::NULL
+        } else {
+            self.from_js.to_term(original)?.into()
+        })
     }
 
     #[wasm_bindgen(js_name = fromQuad)]
-    pub fn convert_quad(&self, original: &JsValue) -> Result<JsQuad, JsValue> {
-        self.from_js.to_quad(original)
+    pub fn convert_quad(&self, original: &JsValue) -> Result<JsValue, JsValue> {
+        Ok(if original.is_null() {
+            JsValue::NULL
+        } else {
+            JsQuad::from(self.from_js.to_quad(original)?).into()
+        })
     }
 }
 
@@ -316,12 +320,128 @@ impl JsDefaultGraph {
     }
 }
 
+#[wasm_bindgen(js_name = Variable)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct JsVariable {
+    inner: Variable,
+}
+
+#[wasm_bindgen(js_class = Variable)]
+impl JsVariable {
+    #[wasm_bindgen(getter = termType)]
+    pub fn term_type(&self) -> String {
+        "Variable".to_owned()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn value(&self) -> String {
+        self.inner.as_str().to_owned()
+    }
+
+    pub fn equals(&self, other: &JsValue) -> bool {
+        if let Ok(Some(JsTerm::Variable(other))) =
+            FromJsConverter::default().to_optional_term(&other)
+        {
+            self == &other
+        } else {
+            false
+        }
+    }
+}
+
+impl From<Variable> for JsVariable {
+    fn from(inner: Variable) -> Self {
+        Self { inner }
+    }
+}
+
+impl From<JsVariable> for Variable {
+    fn from(node: JsVariable) -> Self {
+        node.inner
+    }
+}
+
+#[wasm_bindgen(js_name = Quad)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct JsQuad {
+    inner: Quad,
+}
+
+#[wasm_bindgen(js_class = Quad)]
+impl JsQuad {
+    #[wasm_bindgen(getter = termType)]
+    pub fn term_type(&self) -> String {
+        "Quad".to_owned()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn value(&self) -> String {
+        "".to_owned()
+    }
+
+    #[wasm_bindgen(getter = subject)]
+    pub fn subject(&self) -> JsValue {
+        JsTerm::from(self.inner.subject.clone()).into()
+    }
+
+    #[wasm_bindgen(getter = predicate)]
+    pub fn predicate(&self) -> JsValue {
+        JsTerm::from(self.inner.predicate.clone()).into()
+    }
+
+    #[wasm_bindgen(getter = object)]
+    pub fn object(&self) -> JsValue {
+        JsTerm::from(self.inner.object.clone()).into()
+    }
+
+    #[wasm_bindgen(getter = graph)]
+    pub fn graph(&self) -> JsValue {
+        JsTerm::from(self.inner.graph_name.clone()).into()
+    }
+
+    pub fn equals(&self, other: &JsValue) -> bool {
+        if let Ok(Some(JsTerm::Quad(other))) = FromJsConverter::default().to_optional_term(&other) {
+            self == &other
+        } else {
+            false
+        }
+    }
+}
+
+impl From<Triple> for JsQuad {
+    fn from(inner: Triple) -> Self {
+        Self {
+            inner: inner.in_graph(GraphName::DefaultGraph),
+        }
+    }
+}
+
+impl From<Quad> for JsQuad {
+    fn from(inner: Quad) -> Self {
+        Self { inner }
+    }
+}
+
+impl From<JsQuad> for Quad {
+    fn from(quad: JsQuad) -> Self {
+        quad.inner
+    }
+}
+
+impl From<JsQuad> for Triple {
+    fn from(quad: JsQuad) -> Self {
+        quad.inner.into()
+    }
+}
+
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum JsTerm {
     NamedNode(JsNamedNode),
     BlankNode(JsBlankNode),
     Literal(JsLiteral),
     DefaultGraph(JsDefaultGraph),
+    Variable(JsVariable),
+    Quad(JsQuad),
 }
 
 impl From<JsTerm> for JsValue {
@@ -331,6 +451,8 @@ impl From<JsTerm> for JsValue {
             JsTerm::BlankNode(v) => v.into(),
             JsTerm::Literal(v) => v.into(),
             JsTerm::DefaultGraph(v) => v.into(),
+            JsTerm::Variable(v) => v.into(),
+            JsTerm::Quad(v) => v.into(),
         }
     }
 }
@@ -367,7 +489,7 @@ impl From<Subject> for JsTerm {
         match node {
             Subject::NamedNode(node) => node.into(),
             Subject::BlankNode(node) => node.into(),
-            Subject::Triple(_) => unimplemented!(),
+            Subject::Triple(node) => node.into(),
         }
     }
 }
@@ -378,7 +500,7 @@ impl From<Term> for JsTerm {
             Term::NamedNode(node) => node.into(),
             Term::BlankNode(node) => node.into(),
             Term::Literal(literal) => literal.into(),
-            Term::Triple(_) => unimplemented!(),
+            Term::Triple(node) => node.into(),
         }
     }
 }
@@ -390,6 +512,30 @@ impl From<GraphName> for JsTerm {
             GraphName::BlankNode(node) => node.into(),
             GraphName::DefaultGraph => JsTerm::DefaultGraph(JsDefaultGraph {}),
         }
+    }
+}
+
+impl From<Variable> for JsTerm {
+    fn from(variable: Variable) -> Self {
+        JsTerm::Variable(variable.into())
+    }
+}
+
+impl From<Triple> for JsTerm {
+    fn from(triple: Triple) -> Self {
+        JsTerm::Quad(triple.into())
+    }
+}
+
+impl From<Arc<Triple>> for JsTerm {
+    fn from(triple: Arc<Triple>) -> Self {
+        triple.as_ref().clone().into()
+    }
+}
+
+impl From<Quad> for JsTerm {
+    fn from(quad: Quad) -> Self {
+        JsTerm::Quad(quad.into())
     }
 }
 
@@ -408,6 +554,11 @@ impl TryFrom<JsTerm> for NamedNode {
                 literal.inner
             )),
             JsTerm::DefaultGraph(_) => Err(format_err!("The default graph is not a named node")),
+            JsTerm::Variable(variable) => Err(format_err!(
+                "The variable {} is not a named node",
+                variable.inner
+            )),
+            JsTerm::Quad(quad) => Err(format_err!("The quad {} is not a named node", quad.inner)),
         }
     }
 }
@@ -423,9 +574,17 @@ impl TryFrom<JsTerm> for NamedOrBlankNode {
                 "The literal {} is not a possible named or blank node term",
                 literal.inner
             )),
-            JsTerm::DefaultGraph(_) => {
-                Err(format_err!("The default graph is not a possible RDF term"))
-            }
+            JsTerm::DefaultGraph(_) => Err(format_err!(
+                "The default graph is not a possible named or blank node term"
+            )),
+            JsTerm::Variable(variable) => Err(format_err!(
+                "The variable {} is not a possible named or blank node term",
+                variable.inner
+            )),
+            JsTerm::Quad(quad) => Err(format_err!(
+                "The quad {} is not a possible named or blank node term",
+                quad.inner
+            )),
         }
     }
 }
@@ -438,12 +597,17 @@ impl TryFrom<JsTerm> for Subject {
             JsTerm::NamedNode(node) => Ok(node.into()),
             JsTerm::BlankNode(node) => Ok(node.into()),
             JsTerm::Literal(literal) => Err(format_err!(
-                "The literal {} is not a possible named or blank node term",
+                "The literal {} is not a possible RDF subject",
                 literal.inner
             )),
-            JsTerm::DefaultGraph(_) => {
-                Err(format_err!("The default graph is not a possible RDF term"))
-            }
+            JsTerm::DefaultGraph(_) => Err(format_err!(
+                "The default graph is not a possible RDF subject"
+            )),
+            JsTerm::Variable(variable) => Err(format_err!(
+                "The variable {} is not a possible RDF subject",
+                variable.inner
+            )),
+            JsTerm::Quad(quad) => Ok(Triple::from(quad).into()),
         }
     }
 }
@@ -459,6 +623,11 @@ impl TryFrom<JsTerm> for Term {
             JsTerm::DefaultGraph(_) => {
                 Err(format_err!("The default graph is not a possible RDF term"))
             }
+            JsTerm::Variable(variable) => Err(format_err!(
+                "The variable {} is not a possible RDF term",
+                variable.inner
+            )),
+            JsTerm::Quad(quad) => Ok(Triple::from(quad).into()),
         }
     }
 }
@@ -475,69 +644,15 @@ impl TryFrom<JsTerm> for GraphName {
                 literal.inner
             )),
             JsTerm::DefaultGraph(_) => Ok(GraphName::DefaultGraph),
+            JsTerm::Variable(variable) => Err(format_err!(
+                "The variable {} is not a possible RDF term",
+                variable.inner
+            )),
+            JsTerm::Quad(quad) => Err(format_err!(
+                "The quad {} is not a possible RDF term",
+                quad.inner
+            )),
         }
-    }
-}
-
-#[wasm_bindgen(js_name = Quad)]
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct JsQuad {
-    subject: JsTerm,
-    predicate: JsTerm,
-    object: JsTerm,
-    graph_name: JsTerm,
-}
-
-#[wasm_bindgen(js_class = Quad)]
-impl JsQuad {
-    #[wasm_bindgen(getter = subject)]
-    pub fn subject(&self) -> JsValue {
-        self.subject.clone().into()
-    }
-
-    #[wasm_bindgen(getter = predicate)]
-    pub fn predicate(&self) -> JsValue {
-        self.predicate.clone().into()
-    }
-
-    #[wasm_bindgen(getter = object)]
-    pub fn object(&self) -> JsValue {
-        self.object.clone().into()
-    }
-
-    #[wasm_bindgen(getter = graph)]
-    pub fn graph(&self) -> JsValue {
-        self.graph_name.clone().into()
-    }
-
-    pub fn equals(&self, other: &JsValue) -> bool {
-        FromJsConverter::default()
-            .to_quad(other)
-            .map_or(false, |other| self == &other)
-    }
-}
-
-impl From<Quad> for JsQuad {
-    fn from(quad: Quad) -> Self {
-        Self {
-            subject: quad.subject.into(),
-            predicate: quad.predicate.into(),
-            object: quad.object.into(),
-            graph_name: quad.graph_name.into(),
-        }
-    }
-}
-
-impl TryFrom<JsQuad> for Quad {
-    type Error = JsValue;
-
-    fn try_from(quad: JsQuad) -> Result<Self, JsValue> {
-        Ok(Quad {
-            subject: Subject::try_from(quad.subject)?,
-            predicate: NamedNode::try_from(quad.predicate)?,
-            object: Term::try_from(quad.object)?,
-            graph_name: GraphName::try_from(quad.graph_name)?,
-        })
     }
 }
 
@@ -608,10 +723,30 @@ impl FromJsConverter {
                     }
                 }
                 "DefaultGraph" => Ok(JsTerm::DefaultGraph(JsDefaultGraph {})),
+                "Variable" => Ok(Variable::new(
+                    &Reflect::get(&value, &self.value)?
+                        .as_string()
+                        .ok_or_else(|| format_err!("Variable should have a string value"))?,
+                )
+                .map_err(to_err)?
+                .into()),
+                "Quad" => Ok(self.to_quad(value)?.into()),
                 _ => Err(format_err!(
                     "The termType {} is not supported by Oxigraph",
                     term_type
                 )),
+            }
+        } else if term_type.is_undefined() {
+            // It's a quad without the proper type
+            if Reflect::has(value, &self.subject)?
+                && Reflect::has(value, &self.predicate)?
+                && Reflect::has(value, &self.object)?
+            {
+                Ok(self.to_quad(value)?.into())
+            } else {
+                Err(format_err!(
+                    "RDF term objects should have a termType attribute"
+                ))
             }
         } else {
             Err(format_err!("The object termType field should be a string"))
@@ -626,12 +761,31 @@ impl FromJsConverter {
         }
     }
 
-    pub fn to_quad(&self, value: &JsValue) -> Result<JsQuad, JsValue> {
-        Ok(JsQuad {
-            subject: self.to_term(&Reflect::get(value, &self.subject)?)?,
-            predicate: self.to_term(&Reflect::get(value, &self.predicate)?)?,
-            object: self.to_term(&Reflect::get(value, &self.object)?)?,
-            graph_name: self.to_term(&Reflect::get(value, &self.graph)?)?,
+    pub fn to_quad(&self, value: &JsValue) -> Result<Quad, JsValue> {
+        self.to_quad_from_parts(
+            &Reflect::get(&value, &self.subject)?,
+            &Reflect::get(&value, &self.predicate)?,
+            &Reflect::get(&value, &self.object)?,
+            &Reflect::get(&value, &self.graph)?,
+        )
+    }
+
+    pub fn to_quad_from_parts(
+        &self,
+        subject: &JsValue,
+        predicate: &JsValue,
+        object: &JsValue,
+        graph_name: &JsValue,
+    ) -> Result<Quad, JsValue> {
+        Ok(Quad {
+            subject: Subject::try_from(self.to_term(subject)?)?,
+            predicate: NamedNode::try_from(self.to_term(predicate)?)?,
+            object: Term::try_from(self.to_term(object)?)?,
+            graph_name: if graph_name.is_undefined() {
+                GraphName::DefaultGraph
+            } else {
+                GraphName::try_from(self.to_term(&graph_name)?)?
+            },
         })
     }
 }
