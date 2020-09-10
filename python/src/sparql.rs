@@ -2,13 +2,12 @@ use crate::model::*;
 use crate::store_utils::*;
 use oxigraph::model::Term;
 use oxigraph::sparql::*;
-use pyo3::exceptions::{RuntimeError, SyntaxError, TypeError, ValueError};
+use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyTypeError, PyValueError};
 use pyo3::prelude::{
     pyclass, pymethods, pyproto, FromPyObject, IntoPy, Py, PyAny, PyCell, PyErr, PyObject, PyRef,
     PyRefMut, PyResult, Python,
 };
 use pyo3::{PyIterProtocol, PyMappingProtocol, PyNativeType, PyObjectProtocol};
-use std::convert::TryFrom;
 use std::vec::IntoIter;
 
 pub fn build_query_options(
@@ -24,17 +23,17 @@ pub fn build_query_options(
     if let Some(default_graph) = default_graph {
         if let Ok(default_graphs) = default_graph.iter() {
             if default_graph.is_empty()? {
-                return Err(ValueError::py_err(
+                return Err(PyValueError::new_err(
                     "The query() method default_graph argument cannot be empty list",
                 ));
             }
             for default_graph in default_graphs {
-                options = options.with_default_graph(&PyGraphNameRef::try_from(default_graph?)?);
+                options = options.with_default_graph(default_graph?.extract::<PyGraphName>()?);
             }
-        } else if let Ok(default_graph) = PyGraphNameRef::try_from(default_graph) {
-            options = options.with_default_graph(&default_graph);
+        } else if let Ok(default_graph) = default_graph.extract::<PyGraphName>() {
+            options = options.with_default_graph(default_graph);
         } else {
-            return Err(ValueError::py_err(
+            return Err(PyValueError::new_err(
                 format!("The query() method default_graph argument should be a NamedNode, a BlankNode, the DefaultGraph or a not empty list of them. {} found", default_graph.get_type()
             )));
         }
@@ -42,12 +41,12 @@ pub fn build_query_options(
 
     if let Some(named_graphs) = named_graphs {
         if named_graphs.is_empty()? {
-            return Err(ValueError::py_err(
+            return Err(PyValueError::new_err(
                 "The query() method named_graphs argument cannot be empty",
             ));
         }
         for named_graph in named_graphs.iter()? {
-            options = options.with_named_graph(&PyNamedOrBlankNodeRef::try_from(named_graph?)?);
+            options = options.with_named_graph(named_graph?.extract::<PyNamedOrBlankNode>()?);
         }
     }
 
@@ -126,7 +125,7 @@ impl PyMappingProtocol for PyQuerySolution {
                 .get(<&Variable>::from(key))
                 .map(|term| term_to_python(input.py(), term.clone())))
         } else {
-            Err(TypeError::py_err(format!(
+            Err(PyTypeError::new_err(format!(
                 "{} is not an integer of a string",
                 input.get_type().name(),
             )))
@@ -148,7 +147,7 @@ impl PyIterProtocol for PyQuerySolution {
     }
 }
 
-#[pyclass(unsendable)]
+#[pyclass]
 pub struct SolutionValueIter {
     inner: IntoIter<Option<Term>>,
 }
@@ -240,9 +239,9 @@ impl PyIterProtocol for PyQueryTriples {
 
 pub fn map_evaluation_error(error: EvaluationError) -> PyErr {
     match error {
-        EvaluationError::Parsing(error) => SyntaxError::py_err(error.to_string()),
+        EvaluationError::Parsing(error) => PySyntaxError::new_err(error.to_string()),
         EvaluationError::Io(error) => map_io_err(error),
-        EvaluationError::Query(error) => ValueError::py_err(error.to_string()),
-        _ => RuntimeError::py_err(error.to_string()),
+        EvaluationError::Query(error) => PyValueError::new_err(error.to_string()),
+        _ => PyRuntimeError::new_err(error.to_string()),
     }
 }

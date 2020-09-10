@@ -4,7 +4,7 @@ use crate::sparql::*;
 use crate::store_utils::*;
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::store::sled::*;
-use pyo3::exceptions::ValueError;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{
     pyclass, pymethods, pyproto, Py, PyAny, PyObject, PyRef, PyRefMut, PyResult, Python, ToPyObject,
 };
@@ -273,7 +273,7 @@ impl PySledStore {
                 .map_err(map_io_err)
         } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
             if to_graph_name.is_some() {
-                return Err(ValueError::py_err(
+                return Err(PyValueError::new_err(
                     "The target graph name parameter is not available for dataset formats",
                 ));
             }
@@ -281,7 +281,7 @@ impl PySledStore {
                 .load_dataset(input, dataset_format, base_iri)
                 .map_err(map_io_err)
         } else {
-            Err(ValueError::py_err(format!(
+            Err(PyValueError::new_err(format!(
                 "Not supported MIME type: {}",
                 mime_type
             )))
@@ -342,7 +342,7 @@ impl PySledStore {
                 .map_err(map_io_err)
         } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
             if from_graph_name.is_some() {
-                return Err(ValueError::py_err(
+                return Err(PyValueError::new_err(
                     "The target graph name parameter is not available for dataset formats",
                 ));
             }
@@ -350,7 +350,7 @@ impl PySledStore {
                 .dump_dataset(output, dataset_format)
                 .map_err(map_io_err)
         } else {
-            Err(ValueError::py_err(format!(
+            Err(PyValueError::new_err(format!(
                 "Not supported MIME type: {}",
                 mime_type
             )))
@@ -389,7 +389,7 @@ impl PyIterProtocol for PySledStore {
     }
 }
 
-#[pyclass(unsendable)]
+#[pyclass]
 pub struct QuadIter {
     inner: SledQuadIter,
 }

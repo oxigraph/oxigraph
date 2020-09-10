@@ -1,7 +1,7 @@
 use oxigraph::model::*;
 use oxigraph::sparql::Variable;
 use pyo3::basic::CompareOp;
-use pyo3::exceptions::{IndexError, NotImplementedError, TypeError, ValueError};
+use pyo3::exceptions::{PyIndexError, PyNotImplementedError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::{PyIterProtocol, PyMappingProtocol, PyObjectProtocol, PyTypeInfo};
 use std::collections::hash_map::DefaultHasher;
@@ -62,7 +62,7 @@ impl PyNamedNode {
     #[new]
     fn new(value: String) -> PyResult<Self> {
         Ok(NamedNode::new(value)
-            .map_err(|e| ValueError::py_err(e.to_string()))?
+            .map_err(|e| PyValueError::new_err(e.to_string()))?
             .into())
     }
 
@@ -102,7 +102,7 @@ impl PyObjectProtocol for PyNamedNode {
         {
             eq_compare_other_type(op)
         } else {
-            Err(TypeError::py_err(
+            Err(PyTypeError::new_err(
                 "NamedNode could only be compared with RDF terms",
             ))
         }
@@ -161,7 +161,7 @@ impl PyBlankNode {
     #[new]
     fn new(value: Option<String>) -> PyResult<Self> {
         Ok(if let Some(value) = value {
-            BlankNode::new(value).map_err(|e| ValueError::py_err(e.to_string()))?
+            BlankNode::new(value).map_err(|e| PyValueError::new_err(e.to_string()))?
         } else {
             BlankNode::default()
         }
@@ -204,7 +204,7 @@ impl PyObjectProtocol for PyBlankNode {
         {
             eq_compare_other_type(op)
         } else {
-            Err(TypeError::py_err(
+            Err(PyTypeError::new_err(
                 "BlankNode could only be compared with RDF terms",
             ))
         }
@@ -266,13 +266,13 @@ impl PyLiteral {
         Ok(if let Some(language) = language {
             if let Some(datatype) = datatype {
                 if datatype.value() != "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" {
-                    return Err(ValueError::py_err(
+                    return Err(PyValueError::new_err(
                         "The literals with a language tag must use the rdf:langString datatype",
                     ));
                 }
             }
             Literal::new_language_tagged_literal(value, language)
-                .map_err(|e| ValueError::py_err(e.to_string()))?
+                .map_err(|e| PyValueError::new_err(e.to_string()))?
         } else if let Some(datatype) = datatype {
             Literal::new_typed_literal(value, datatype)
         } else {
@@ -343,7 +343,7 @@ impl PyObjectProtocol for PyLiteral {
         {
             eq_compare_other_type(op)
         } else {
-            Err(TypeError::py_err(
+            Err(PyTypeError::new_err(
                 "Literal could only be compared with RDF terms",
             ))
         }
@@ -397,9 +397,41 @@ impl PyObjectProtocol for PyDefaultGraph {
         {
             eq_compare_other_type(op)
         } else {
-            Err(TypeError::py_err(
+            Err(PyTypeError::new_err(
                 "DefaultGraph could only be compared with RDF terms",
             ))
+        }
+    }
+}
+
+#[derive(FromPyObject)]
+pub enum PyNamedOrBlankNode {
+    NamedNode(PyNamedNode),
+    BlankNode(PyBlankNode),
+}
+
+impl From<PyNamedOrBlankNode> for NamedOrBlankNode {
+    fn from(node: PyNamedOrBlankNode) -> Self {
+        match node {
+            PyNamedOrBlankNode::NamedNode(node) => node.into(),
+            PyNamedOrBlankNode::BlankNode(node) => node.into(),
+        }
+    }
+}
+
+#[derive(FromPyObject)]
+enum PyTerm {
+    NamedNode(PyNamedNode),
+    BlankNode(PyBlankNode),
+    Literal(PyLiteral),
+}
+
+impl From<PyTerm> for Term {
+    fn from(term: PyTerm) -> Self {
+        match term {
+            PyTerm::NamedNode(node) => node.into(),
+            PyTerm::BlankNode(node) => node.into(),
+            PyTerm::Literal(literal) => literal.into(),
         }
     }
 }
@@ -449,13 +481,8 @@ impl<'a> From<&'a PyTriple> for TripleRef<'a> {
 #[pymethods]
 impl PyTriple {
     #[new]
-    fn new(subject: &PyAny, predicate: PyNamedNode, object: &PyAny) -> PyResult<Self> {
-        Ok(Triple::new(
-            &PyNamedOrBlankNodeRef::try_from(subject)?,
-            predicate,
-            &PyTermRef::try_from(object)?,
-        )
-        .into())
+    fn new(subject: PyNamedOrBlankNode, predicate: PyNamedNode, object: PyTerm) -> Self {
+        Triple::new(subject, predicate, object).into()
     }
 
     /// :return: the triple subject
@@ -531,7 +558,7 @@ impl PyMappingProtocol<'p> for PyTriple {
             )),
             1 => Ok(PyNamedNode::from(self.inner.predicate.clone()).into_py(gil.python())),
             2 => Ok(term_to_python(gil.python(), self.inner.object.clone())),
-            _ => Err(IndexError::py_err("A triple has only 3 elements")),
+            _ => Err(PyIndexError::new_err("A triple has only 3 elements")),
         }
     }
 }
@@ -550,6 +577,22 @@ impl PyIterProtocol for PyTriple {
     }
 }
 
+#[derive(FromPyObject)]
+pub enum PyGraphName {
+    NamedNode(PyNamedNode),
+    BlankNode(PyBlankNode),
+    DefaultGraph(PyDefaultGraph),
+}
+
+impl From<PyGraphName> for GraphName {
+    fn from(graph_name: PyGraphName) -> Self {
+        match graph_name {
+            PyGraphName::NamedNode(node) => node.into(),
+            PyGraphName::BlankNode(node) => node.into(),
+            PyGraphName::DefaultGraph(default_graph) => default_graph.into(),
+        }
+    }
+}
 /// An RDF `triple <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple>`_
 /// in a `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_
 ///
@@ -602,22 +645,18 @@ impl<'a> From<&'a PyQuad> for QuadRef<'a> {
 impl PyQuad {
     #[new]
     fn new(
-        subject: &PyAny,
+        subject: PyNamedOrBlankNode,
         predicate: PyNamedNode,
-        object: &PyAny,
-        graph_name: Option<&PyAny>,
-    ) -> PyResult<Self> {
-        Ok(Quad::new(
-            &PyNamedOrBlankNodeRef::try_from(subject)?,
+        object: PyTerm,
+        graph_name: Option<PyGraphName>,
+    ) -> Self {
+        Quad::new(
+            subject,
             predicate,
-            &PyTermRef::try_from(object)?,
-            &if let Some(graph_name) = graph_name {
-                PyGraphNameRef::try_from(graph_name)?
-            } else {
-                PyGraphNameRef::DefaultGraph
-            },
+            object,
+            graph_name.unwrap_or_else(|| PyGraphName::DefaultGraph(PyDefaultGraph {})),
         )
-        .into())
+        .into()
     }
 
     /// :return: the quad subject
@@ -719,7 +758,7 @@ impl PyMappingProtocol<'p> for PyQuad {
                 gil.python(),
                 self.inner.graph_name.clone(),
             )),
-            _ => Err(IndexError::py_err("A quad has only 4 elements")),
+            _ => Err(PyIndexError::new_err("A quad has only 4 elements")),
         }
     }
 }
@@ -783,7 +822,7 @@ impl PyVariable {
     #[new]
     fn new(value: String) -> PyResult<Self> {
         Ok(Variable::new(value)
-            .map_err(|e| ValueError::py_err(e.to_string()))?
+            .map_err(|e| PyValueError::new_err(e.to_string()))?
             .into())
     }
 
@@ -832,7 +871,7 @@ impl<'a> TryFrom<&'a PyAny> for PyNamedNodeRef<'a> {
         if let Ok(node) = value.downcast::<PyCell<PyNamedNode>>() {
             Ok(Self(node.borrow()))
         } else {
-            Err(TypeError::py_err(format!(
+            Err(PyTypeError::new_err(format!(
                 "{} is not an RDF named node",
                 value.get_type().name(),
             )))
@@ -854,12 +893,6 @@ impl<'a> From<&'a PyNamedOrBlankNodeRef<'a>> for NamedOrBlankNodeRef<'a> {
     }
 }
 
-impl<'a> From<&'a PyNamedOrBlankNodeRef<'a>> for NamedOrBlankNode {
-    fn from(value: &'a PyNamedOrBlankNodeRef<'a>) -> Self {
-        NamedOrBlankNodeRef::from(value).into()
-    }
-}
-
 impl<'a> TryFrom<&'a PyAny> for PyNamedOrBlankNodeRef<'a> {
     type Error = PyErr;
 
@@ -869,7 +902,7 @@ impl<'a> TryFrom<&'a PyAny> for PyNamedOrBlankNodeRef<'a> {
         } else if let Ok(node) = value.downcast::<PyCell<PyBlankNode>>() {
             Ok(Self::BlankNode(node.borrow()))
         } else {
-            Err(TypeError::py_err(format!(
+            Err(PyTypeError::new_err(format!(
                 "{} is not an RDF named or blank node",
                 value.get_type().name(),
             )))
@@ -917,7 +950,7 @@ impl<'a> TryFrom<&'a PyAny> for PyTermRef<'a> {
         } else if let Ok(node) = value.downcast::<PyCell<PyLiteral>>() {
             Ok(Self::Literal(node.borrow()))
         } else {
-            Err(TypeError::py_err(format!(
+            Err(PyTypeError::new_err(format!(
                 "{} is not an RDF term",
                 value.get_type().name(),
             )))
@@ -966,7 +999,7 @@ impl<'a> TryFrom<&'a PyAny> for PyGraphNameRef<'a> {
         } else if value.downcast::<PyCell<PyDefaultGraph>>().is_ok() {
             Ok(Self::DefaultGraph)
         } else {
-            Err(TypeError::py_err(format!(
+            Err(PyTypeError::new_err(format!(
                 "{} is not an RDF graph name",
                 value.get_type().name(),
             )))
@@ -986,7 +1019,9 @@ fn eq_compare<T: Eq>(a: &T, b: &T, op: CompareOp) -> PyResult<bool> {
     match op {
         CompareOp::Eq => Ok(a == b),
         CompareOp::Ne => Ok(a != b),
-        _ => Err(NotImplementedError::py_err("Ordering is not implemented")),
+        _ => Err(PyNotImplementedError::new_err(
+            "Ordering is not implemented",
+        )),
     }
 }
 
@@ -994,7 +1029,9 @@ fn eq_compare_other_type(op: CompareOp) -> PyResult<bool> {
     match op {
         CompareOp::Eq => Ok(false),
         CompareOp::Ne => Ok(true),
-        _ => Err(NotImplementedError::py_err("Ordering is not implemented")),
+        _ => Err(PyNotImplementedError::new_err(
+            "Ordering is not implemented",
+        )),
     }
 }
 
@@ -1056,7 +1093,7 @@ fn graph_name_repr(term: GraphNameRef<'_>, buffer: &mut String) {
     }
 }
 
-#[pyclass(unsendable)]
+#[pyclass]
 pub struct TripleComponentsIter {
     inner: IntoIter<Term>,
 }
@@ -1072,7 +1109,7 @@ impl PyIterProtocol for TripleComponentsIter {
     }
 }
 
-#[pyclass(unsendable)]
+#[pyclass]
 pub struct QuadComponentsIter {
     inner: IntoIter<Option<Term>>,
 }

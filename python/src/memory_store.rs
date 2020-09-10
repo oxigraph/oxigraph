@@ -5,7 +5,7 @@ use crate::store_utils::*;
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::store::memory::*;
 use pyo3::basic::CompareOp;
-use pyo3::exceptions::{NotImplementedError, ValueError};
+use pyo3::exceptions::{PyNotImplementedError, PyValueError};
 use pyo3::prelude::{
     pyclass, pymethods, pyproto, Py, PyAny, PyCell, PyObject, PyRef, PyRefMut, PyResult, Python,
     ToPyObject,
@@ -257,7 +257,7 @@ impl PyMemoryStore {
                 .map_err(map_io_err)
         } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
             if to_graph_name.is_some() {
-                return Err(ValueError::py_err(
+                return Err(PyValueError::new_err(
                     "The target graph name parameter is not available for dataset formats",
                 ));
             }
@@ -265,7 +265,7 @@ impl PyMemoryStore {
                 .load_dataset(input, dataset_format, base_iri)
                 .map_err(map_io_err)
         } else {
-            Err(ValueError::py_err(format!(
+            Err(PyValueError::new_err(format!(
                 "Not supported MIME type: {}",
                 mime_type
             )))
@@ -325,7 +325,7 @@ impl PyMemoryStore {
                 .map_err(map_io_err)
         } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
             if from_graph_name.is_some() {
-                return Err(ValueError::py_err(
+                return Err(PyValueError::new_err(
                     "The target graph name parameter is not available for dataset formats",
                 ));
             }
@@ -333,7 +333,7 @@ impl PyMemoryStore {
                 .dump_dataset(output, dataset_format)
                 .map_err(map_io_err)
         } else {
-            Err(ValueError::py_err(format!(
+            Err(PyValueError::new_err(format!(
                 "Not supported MIME type: {}",
                 mime_type
             )))
@@ -352,7 +352,9 @@ impl PyObjectProtocol for PyMemoryStore {
         match op {
             CompareOp::Eq => Ok(self == other),
             CompareOp::Ne => Ok(self != other),
-            _ => Err(NotImplementedError::py_err("Ordering is not implemented")),
+            _ => Err(PyNotImplementedError::new_err(
+                "Ordering is not implemented",
+            )),
         }
     }
 

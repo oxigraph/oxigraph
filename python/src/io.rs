@@ -4,7 +4,7 @@ use oxigraph::io::read::{QuadReader, TripleReader};
 use oxigraph::io::{
     DatasetFormat, DatasetParser, DatasetSerializer, GraphFormat, GraphParser, GraphSerializer,
 };
-use pyo3::exceptions::ValueError;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::wrap_pyfunction;
@@ -59,7 +59,7 @@ pub fn parse(
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
-                .map_err(|e| ValueError::py_err(e.to_string()))?;
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
         }
         Ok(PyTripleReader {
             inner: parser.read_triples(input).map_err(map_io_err)?,
@@ -70,14 +70,14 @@ pub fn parse(
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
-                .map_err(|e| ValueError::py_err(e.to_string()))?;
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
         }
         Ok(PyQuadReader {
             inner: parser.read_quads(input).map_err(map_io_err)?,
         }
         .into_py(py))
     } else {
-        Err(ValueError::py_err(format!(
+        Err(PyValueError::new_err(format!(
             "Not supported MIME type: {}",
             mime_type
         )))
@@ -138,14 +138,14 @@ pub fn serialize(input: &PyAny, output: &PyAny, mime_type: &str, py: Python<'_>)
         writer.finish().map_err(map_io_err)?;
         Ok(())
     } else {
-        Err(ValueError::py_err(format!(
+        Err(PyValueError::new_err(format!(
             "Not supported MIME type: {}",
             mime_type
         )))
     }
 }
 
-#[pyclass(unsendable, name= TripleReader)]
+#[pyclass(name = TripleReader)]
 pub struct PyTripleReader {
     inner: TripleReader<BufReader<PyFileLike>>,
 }
@@ -164,7 +164,7 @@ impl PyIterProtocol for PyTripleReader {
     }
 }
 
-#[pyclass(unsendable, name= QuadReader)]
+#[pyclass(name = QuadReader)]
 pub struct PyQuadReader {
     inner: QuadReader<BufReader<PyFileLike>>,
 }

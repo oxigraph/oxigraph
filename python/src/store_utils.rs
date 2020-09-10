@@ -1,5 +1,5 @@
 use crate::model::*;
-use pyo3::exceptions::{IOError, SyntaxError, ValueError};
+use pyo3::exceptions::{PyIOError, PySyntaxError, PyValueError};
 use pyo3::{PyAny, PyErr, PyResult};
 use std::convert::TryInto;
 use std::io;
@@ -45,10 +45,10 @@ pub fn extract_quads_pattern<'a>(
 
 pub fn map_io_err(error: io::Error) -> PyErr {
     match error.kind() {
-        io::ErrorKind::InvalidInput => ValueError::py_err(error.to_string()),
+        io::ErrorKind::InvalidInput => PyValueError::new_err(error.to_string()),
         io::ErrorKind::InvalidData | io::ErrorKind::UnexpectedEof => {
-            SyntaxError::py_err(error.to_string())
+            PySyntaxError::new_err(error.to_string())
         }
-        _ => IOError::py_err(error.to_string()),
+        _ => PyIOError::new_err(error.to_string()),
     }
 }
