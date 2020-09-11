@@ -47,7 +47,7 @@ native-tls = { version = "0.2", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"
-getrandom = {version="0.1", features=["wasm-bindgen"]}
+getrandom = {version="0.2", features=["wasm-bindgen"]}
 
 [dev-dependencies]
 rayon = "1"
