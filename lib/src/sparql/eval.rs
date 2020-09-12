@@ -2,10 +2,9 @@ use crate::model::vocab::{rdf, xsd};
 use crate::model::xsd::*;
 use crate::model::Triple;
 use crate::model::{BlankNode, LiteralRef, NamedNodeRef};
-use crate::sparql::algebra::{DatasetSpec, GraphPattern, QueryVariants};
+use crate::sparql::algebra::{GraphPattern, Query, QueryDataset, QueryVariants};
 use crate::sparql::error::EvaluationError;
 use crate::sparql::model::*;
-use crate::sparql::parser::Query;
 use crate::sparql::plan::*;
 use crate::sparql::service::ServiceHandler;
 use crate::store::numeric_encoder::*;
@@ -527,7 +526,7 @@ where
                     .ok_or_else(|| EvaluationError::msg("The SERVICE name is not bound"))?,
             )?,
             Query(QueryVariants::Select {
-                dataset: Rc::new(DatasetSpec::default()),
+                dataset: QueryDataset::default(),
                 algebra: graph_pattern,
                 base_iri: self.base_iri.clone(),
             }),

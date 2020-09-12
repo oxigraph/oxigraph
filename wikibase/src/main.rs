@@ -175,14 +175,15 @@ async fn evaluate_sparql_query(
 ) -> Result<Response> {
     spawn_blocking(move || {
         //TODO: stream
-        let query = Query::parse(&query, None).map_err(|e| {
+        let mut query = Query::parse(&query, None).map_err(|e| {
             let mut e = Error::from(e);
             e.set_status(StatusCode::BadRequest);
             e
         })?;
-        let options = QueryOptions::default()
-            .with_default_graph_as_union()
-            .with_simple_service_handler();
+        if query.dataset().is_default_dataset() {
+            query.dataset_mut().set_default_graph_as_union();
+        }
+        let options = QueryOptions::default().with_simple_service_handler();
         let results = store.query(query, options)?;
         if let QueryResults::Graph(_) = results {
             let format = content_negotiation(

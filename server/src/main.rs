@@ -17,7 +17,7 @@ use async_std::prelude::*;
 use async_std::task::{block_on, spawn, spawn_blocking};
 use http_types::{headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode};
 use oxigraph::io::{DatasetFormat, GraphFormat};
-use oxigraph::model::{GraphName, NamedNode};
+use oxigraph::model::{GraphName, NamedNode, NamedOrBlankNode};
 use oxigraph::sparql::{Query, QueryOptions, QueryResults, QueryResultsFormat, Update};
 use std::io::BufReader;
 use std::str::FromStr;
@@ -101,9 +101,7 @@ async fn handle_request(request: Request, store: Store) -> Result<Response> {
                 {
                     Ok(()) => Response::new(StatusCode::NoContent),
                     Err(error) => {
-                        let mut error = Error::from(error);
-                        error.set_status(StatusCode::BadRequest);
-                        return Err(error);
+                        return Err(bad_request(error));
                     }
                 }
             } else {
@@ -229,29 +227,26 @@ async fn evaluate_sparql_query(
     request: Request,
 ) -> Result<Response> {
     spawn_blocking(move || {
-        let query = Query::parse(&query, None).map_err(|e| {
-            let mut e = Error::from(e);
-            e.set_status(StatusCode::BadRequest);
-            e
-        })?;
+        let mut query = Query::parse(&query, None).map_err(bad_request)?;
+        let default_graph_uris = default_graph_uris
+            .into_iter()
+            .map(|e| Ok(NamedNode::new(e)?.into()))
+            .collect::<Result<Vec<GraphName>>>()
+            .map_err(bad_request)?;
+        let named_graph_uris = named_graph_uris
+            .into_iter()
+            .map(|e| Ok(NamedNode::new(e)?.into()))
+            .collect::<Result<Vec<NamedOrBlankNode>>>()
+            .map_err(bad_request)?;
 
-        let mut options = QueryOptions::default().with_simple_service_handler();
-        for default_graph_uri in default_graph_uris {
-            options =
-                options.with_default_graph(NamedNode::new(default_graph_uri).map_err(|e| {
-                    let mut e = Error::from(e);
-                    e.set_status(StatusCode::BadRequest);
-                    e
-                })?)
-        }
-        for named_graph_uri in named_graph_uris {
-            options = options.with_named_graph(NamedNode::new(named_graph_uri).map_err(|e| {
-                let mut e = Error::from(e);
-                e.set_status(StatusCode::BadRequest);
-                e
-            })?)
+        if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
+            query.dataset_mut().set_default_graph(default_graph_uris);
+            query
+                .dataset_mut()
+                .set_available_named_graphs(named_graph_uris);
         }
 
+        let options = QueryOptions::default().with_simple_service_handler();
         let results = store.query(query, options)?;
         //TODO: stream
         if let QueryResults::Graph(_) = results {
@@ -417,6 +412,12 @@ fn content_negotiation<F>(
 
     parse(result.essence())
         .ok_or_else(|| Error::from_str(StatusCode::InternalServerError, "Unknown mime type"))
+}
+
+fn bad_request(e: impl Into<Error>) -> Error {
+    let mut e = e.into();
+    e.set_status(StatusCode::BadRequest);
+    e
 }
 
 struct SyncAsyncReader<R: Unpin> {

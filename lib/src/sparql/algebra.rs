@@ -2,12 +2,150 @@
 
 use crate::model::*;
 use crate::sparql::model::*;
+use crate::sparql::parser::{parse_query, parse_update, ParseError};
 use oxiri::Iri;
 use rio_api::model as rio;
 use std::collections::BTreeSet;
+use std::convert::TryFrom;
 use std::fmt;
-use std::ops::Add;
 use std::rc::Rc;
+use std::str::FromStr;
+
+/// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/)
+///
+/// ```
+/// use oxigraph::model::NamedNode;
+/// use oxigraph::sparql::Query;
+///
+/// let query_str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
+/// let mut query = Query::parse(query_str, None)?;
+///
+/// assert_eq!(query.to_string(), query_str);
+///
+/// // We edit the query dataset specification
+/// query.dataset_mut().set_default_graph(vec![NamedNode::new("http://example.com").unwrap().into()]);
+/// assert_eq!(query.to_string(), "SELECT ?s ?p ?o FROM <http://example.com> WHERE { ?s ?p ?o . }");
+/// # Result::Ok::<_, Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct Query(pub(crate) QueryVariants);
+
+impl Query {
+    /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query
+    pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self, ParseError> {
+        parse_query(query, base_iri)
+    }
+
+    /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset)
+    pub fn dataset(&self) -> &QueryDataset {
+        match &self.0 {
+            QueryVariants::Select { dataset, .. } => dataset,
+            QueryVariants::Construct { dataset, .. } => dataset,
+            QueryVariants::Describe { dataset, .. } => dataset,
+            QueryVariants::Ask { dataset, .. } => dataset,
+        }
+    }
+
+    /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset)
+    pub fn dataset_mut(&mut self) -> &mut QueryDataset {
+        match &mut self.0 {
+            QueryVariants::Select { dataset, .. } => dataset,
+            QueryVariants::Construct { dataset, .. } => dataset,
+            QueryVariants::Describe { dataset, .. } => dataset,
+            QueryVariants::Ask { dataset, .. } => dataset,
+        }
+    }
+}
+
+impl fmt::Display for Query {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl FromStr for Query {
+    type Err = ParseError;
+
+    fn from_str(query: &str) -> Result<Self, ParseError> {
+        Self::parse(query, None)
+    }
+}
+
+impl<'a> TryFrom<&'a str> for Query {
+    type Error = ParseError;
+
+    fn try_from(query: &str) -> Result<Self, ParseError> {
+        Self::from_str(query)
+    }
+}
+
+impl<'a> TryFrom<&'a String> for Query {
+    type Error = ParseError;
+
+    fn try_from(query: &String) -> Result<Self, ParseError> {
+        Self::from_str(query)
+    }
+}
+
+/// A parsed [SPARQL update](https://www.w3.org/TR/sparql11-update/)
+///
+/// ```
+/// use oxigraph::sparql::Update;
+///
+/// let update_str = "CLEAR ALL ;";
+/// let update = Update::parse(update_str, None)?;
+///
+/// assert_eq!(update.to_string().trim(), update_str);
+/// # Result::Ok::<_, oxigraph::sparql::ParseError>(())
+/// ```
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct Update {
+    pub(crate) base_iri: Option<Rc<Iri<String>>>,
+    pub(crate) operations: Vec<GraphUpdateOperation>,
+}
+
+impl Update {
+    /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query
+    pub fn parse(update: &str, base_iri: Option<&str>) -> Result<Self, ParseError> {
+        parse_update(update, base_iri)
+    }
+}
+
+impl fmt::Display for Update {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(base_iri) = &self.base_iri {
+            writeln!(f, "BASE <{}>", base_iri)?;
+        }
+        for update in &self.operations {
+            writeln!(f, "{} ;", update)?;
+        }
+        Ok(())
+    }
+}
+
+impl FromStr for Update {
+    type Err = ParseError;
+
+    fn from_str(update: &str) -> Result<Self, ParseError> {
+        Self::parse(update, None)
+    }
+}
+
+impl<'a> TryFrom<&'a str> for Update {
+    type Error = ParseError;
+
+    fn try_from(update: &str) -> Result<Self, ParseError> {
+        Self::from_str(update)
+    }
+}
+
+impl<'a> TryFrom<&'a String> for Update {
+    type Error = ParseError;
+
+    fn try_from(update: &String) -> Result<Self, ParseError> {
+        Self::from_str(update)
+    }
+}
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum NamedNodeOrVariable {
@@ -986,7 +1124,7 @@ impl<'a> fmt::Display for SparqlGraphPattern<'a> {
                 "{{ {} }}",
                 SparqlGraphRootPattern {
                     algebra: p,
-                    dataset: &EMPTY_DATASET
+                    dataset: &QueryDataset::default()
                 }
             ),
         }
@@ -995,7 +1133,7 @@ impl<'a> fmt::Display for SparqlGraphPattern<'a> {
 
 struct SparqlGraphRootPattern<'a> {
     algebra: &'a GraphPattern,
-    dataset: &'a DatasetSpec,
+    dataset: &'a QueryDataset,
 }
 
 impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
@@ -1041,7 +1179,7 @@ impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
                     }
                     write!(
                         f,
-                        "{} {} WHERE {{ {} }}",
+                        "{}{} WHERE {{ {} }}",
                         build_sparql_select_arguments(project),
                         self.dataset,
                         SparqlGraphPattern(p)
@@ -1304,79 +1442,130 @@ impl<'a> fmt::Display for SparqlOrderComparator<'a> {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash, Default)]
-pub struct DatasetSpec {
-    pub default: Vec<NamedNode>,
-    pub named: Vec<NamedNode>,
+/// A SPARQL query [dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset)
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct QueryDataset {
+    default: Option<Vec<GraphName>>,
+    named: Option<Vec<NamedOrBlankNode>>,
 }
 
-impl DatasetSpec {
-    pub fn new_with_default(graph: NamedNode) -> Self {
+impl Default for QueryDataset {
+    fn default() -> Self {
         Self {
-            default: vec![graph],
-            named: Vec::default(),
+            default: Some(vec![GraphName::DefaultGraph]),
+            named: None,
         }
     }
+}
 
-    pub fn new_with_named(graph: NamedNode) -> Self {
-        Self {
-            default: Vec::default(),
-            named: vec![graph],
-        }
+impl QueryDataset {
+    /// Checks if this dataset specification is the default one
+    /// (i.e. the default graph is the store default graph and all the store named graphs are available)
+    ///
+    /// ```
+    /// use oxigraph::sparql::Query;
+    ///
+    /// assert!(Query::parse("SELECT ?s ?p ?o WHERE { ?s ?p ?o . }", None)?.dataset().is_default_dataset());
+    /// assert!(!Query::parse("SELECT ?s ?p ?o FROM <http://example.com> WHERE { ?s ?p ?o . }", None)?.dataset().is_default_dataset());
+    ///
+    /// # Result::Ok::<_, Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn is_default_dataset(&self) -> bool {
+        self.default
+            .as_ref()
+            .map_or(false, |t| t == &[GraphName::DefaultGraph])
+            && self.named.is_none()
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.default.is_empty() && self.named.is_empty()
+    /// Returns the list of the store graphs that are available to the query as the default graph or `None` if the union of all graphs is used as the default graph
+    /// This list is by default only the store default graph
+    pub fn default_graph_graphs(&self) -> Option<&[GraphName]> {
+        self.default.as_deref()
+    }
+
+    /// Sets if the default graph for the query should be the union of all the graphs in the queried store
+    pub fn set_default_graph_as_union(&mut self) {
+        self.default = None;
+    }
+
+    /// Sets the list of graphs the query should consider as being part of the default graph.
+    ///
+    /// By default only the store default graph is considered.
+    /// ```
+    /// use oxigraph::model::NamedNode;
+    /// use oxigraph::sparql::Query;
+    ///
+    /// let mut query = Query::parse("SELECT ?s ?p ?o WHERE { ?s ?p ?o . }", None)?;
+    /// query.dataset_mut().set_default_graph(vec![NamedNode::new("http://example.com")?.into()]);
+    /// assert_eq!(query.to_string(), "SELECT ?s ?p ?o FROM <http://example.com> WHERE { ?s ?p ?o . }");
+    ///
+    /// # Result::Ok::<_, Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn set_default_graph(&mut self, graphs: Vec<GraphName>) {
+        self.default = Some(graphs)
+    }
+
+    /// Returns the list of the available named graphs for the query or `None` if all graphs are available
+    pub fn available_named_graphs(&self) -> Option<&[NamedOrBlankNode]> {
+        self.named.as_deref()
+    }
+
+    /// Sets the list of allowed named graphs in the query.
+    ///
+    /// ```
+    /// use oxigraph::model::NamedNode;
+    /// use oxigraph::sparql::Query;
+    ///
+    /// let mut query = Query::parse("SELECT ?s ?p ?o WHERE { ?s ?p ?o . }", None)?;
+    /// query.dataset_mut().set_available_named_graphs(vec![NamedNode::new("http://example.com")?.into()]);
+    /// assert_eq!(query.to_string(), "SELECT ?s ?p ?o FROM NAMED <http://example.com> WHERE { ?s ?p ?o . }");
+    ///
+    /// # Result::Ok::<_, Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn set_available_named_graphs(&mut self, named_graphs: Vec<NamedOrBlankNode>) {
+        self.named = Some(named_graphs);
     }
 }
 
-impl Add for DatasetSpec {
-    type Output = Self;
-
-    fn add(mut self, rhs: Self) -> Self {
-        self.default.extend_from_slice(&rhs.default);
-        self.named.extend_from_slice(&rhs.named);
-        self
-    }
-}
-
-impl fmt::Display for DatasetSpec {
+impl fmt::Display for QueryDataset {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for g in &self.default {
-            write!(f, "FROM {} ", g)?;
+        //TODO: does not encode everything
+        if let Some(graphs) = &self.default {
+            for g in graphs {
+                if !g.is_default_graph() {
+                    write!(f, " FROM {}", g)?;
+                }
+            }
         }
-        for g in &self.named {
-            write!(f, "FROM NAMED {} ", g)?;
+        if let Some(graphs) = &self.named {
+            for g in graphs {
+                write!(f, " FROM NAMED {}", g)?;
+            }
         }
         Ok(())
     }
 }
 
-const EMPTY_DATASET: DatasetSpec = DatasetSpec {
-    default: Vec::new(),
-    named: Vec::new(),
-};
-
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum QueryVariants {
     Select {
-        dataset: Rc<DatasetSpec>,
+        dataset: QueryDataset,
         algebra: Rc<GraphPattern>,
         base_iri: Option<Rc<Iri<String>>>,
     },
     Construct {
         construct: Rc<Vec<TriplePattern>>,
-        dataset: Rc<DatasetSpec>,
+        dataset: QueryDataset,
         algebra: Rc<GraphPattern>,
         base_iri: Option<Rc<Iri<String>>>,
     },
     Describe {
-        dataset: Rc<DatasetSpec>,
+        dataset: QueryDataset,
         algebra: Rc<GraphPattern>,
         base_iri: Option<Rc<Iri<String>>>,
     },
     Ask {
-        dataset: Rc<DatasetSpec>,
+        dataset: QueryDataset,
         algebra: Rc<GraphPattern>,
         base_iri: Option<Rc<Iri<String>>>,
     },
@@ -1410,11 +1599,11 @@ impl fmt::Display for QueryVariants {
                 }
                 write!(
                     f,
-                    "}} {} WHERE {{ {} }}",
+                    "}}{} WHERE {{ {} }}",
                     dataset,
                     SparqlGraphRootPattern {
                         algebra,
-                        dataset: &EMPTY_DATASET
+                        dataset: &QueryDataset::default()
                     }
                 )
             }
@@ -1428,11 +1617,11 @@ impl fmt::Display for QueryVariants {
                 }
                 write!(
                     f,
-                    "DESCRIBE * {} WHERE {{ {} }}",
+                    "DESCRIBE *{} WHERE {{ {} }}",
                     dataset,
                     SparqlGraphRootPattern {
                         algebra,
-                        dataset: &EMPTY_DATASET
+                        dataset: &QueryDataset::default()
                     }
                 )
             }
@@ -1446,11 +1635,11 @@ impl fmt::Display for QueryVariants {
                 }
                 write!(
                     f,
-                    "ASK {} WHERE {{ {} }}",
+                    "ASK{} WHERE {{ {} }}",
                     dataset,
                     SparqlGraphRootPattern {
                         algebra,
-                        dataset: &EMPTY_DATASET
+                        dataset: &QueryDataset::default()
                     }
                 )
             }
@@ -1469,7 +1658,7 @@ pub enum GraphUpdateOperation {
     DeleteInsert {
         delete: Vec<QuadPattern>,
         insert: Vec<QuadPattern>,
-        using: DatasetSpec,
+        using: QueryDataset,
         algebra: GraphPattern,
     },
     /// [load](https://www.w3.org/TR/sparql11-update/#def_loadoperation)
@@ -1523,18 +1712,24 @@ impl fmt::Display for GraphUpdateOperation {
                     }
                     writeln!(f, "}}")?;
                 }
-                for g in &using.default {
-                    writeln!(f, "USING {}", g)?;
+                if let Some(using_default) = using.default_graph_graphs() {
+                    for g in using_default {
+                        if !g.is_default_graph() {
+                            writeln!(f, "USING {}", g)?;
+                        }
+                    }
                 }
-                for g in &using.named {
-                    writeln!(f, "USING NAMED {}", g)?;
+                if let Some(using_named) = using.available_named_graphs() {
+                    for g in using_named {
+                        writeln!(f, "USING NAMED {}", g)?;
+                    }
                 }
                 write!(
                     f,
                     "WHERE {{ {} }}",
                     SparqlGraphRootPattern {
                         algebra,
-                        dataset: &DatasetSpec::default()
+                        dataset: &QueryDataset::default()
                     }
                 )
             }

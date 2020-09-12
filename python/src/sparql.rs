@@ -10,47 +10,52 @@ use pyo3::prelude::{
 use pyo3::{PyIterProtocol, PyMappingProtocol, PyNativeType, PyObjectProtocol};
 use std::vec::IntoIter;
 
-pub fn build_query_options(
+pub fn parse_query(
+    query: &str,
     use_default_graph_as_union: bool,
     default_graph: Option<&PyAny>,
     named_graphs: Option<&PyAny>,
-) -> PyResult<QueryOptions> {
-    let mut options = QueryOptions::default();
+) -> PyResult<Query> {
+    let mut query = Query::parse(query, None).map_err(|e| map_evaluation_error(e.into()))?;
+
+    if use_default_graph_as_union && default_graph.is_some() {
+        return Err(PyValueError::new_err(
+            "The query() method use_default_graph_as_union and default_graph arguments should not be set at the same time",
+        ));
+    }
+
     if use_default_graph_as_union {
-        options = options.with_default_graph_as_union();
+        query.dataset_mut().set_default_graph_as_union();
     }
 
     if let Some(default_graph) = default_graph {
         if let Ok(default_graphs) = default_graph.iter() {
-            if default_graph.is_empty()? {
-                return Err(PyValueError::new_err(
-                    "The query() method default_graph argument cannot be empty list",
-                ));
-            }
-            for default_graph in default_graphs {
-                options = options.with_default_graph(default_graph?.extract::<PyGraphName>()?);
-            }
+            query.dataset_mut().set_default_graph(
+                default_graphs
+                    .map(|graph| Ok(graph?.extract::<PyGraphName>()?.into()))
+                    .collect::<PyResult<_>>()?,
+            )
         } else if let Ok(default_graph) = default_graph.extract::<PyGraphName>() {
-            options = options.with_default_graph(default_graph);
+            query
+                .dataset_mut()
+                .set_default_graph(vec![default_graph.into()]);
         } else {
             return Err(PyValueError::new_err(
                 format!("The query() method default_graph argument should be a NamedNode, a BlankNode, the DefaultGraph or a not empty list of them. {} found", default_graph.get_type()
-            )));
+                )));
         }
     }
 
     if let Some(named_graphs) = named_graphs {
-        if named_graphs.is_empty()? {
-            return Err(PyValueError::new_err(
-                "The query() method named_graphs argument cannot be empty",
-            ));
-        }
-        for named_graph in named_graphs.iter()? {
-            options = options.with_named_graph(named_graph?.extract::<PyNamedOrBlankNode>()?);
-        }
+        query.dataset_mut().set_available_named_graphs(
+            named_graphs
+                .iter()?
+                .map(|graph| Ok(graph?.extract::<PyNamedOrBlankNode>()?.into()))
+                .collect::<PyResult<_>>()?,
+        )
     }
 
-    Ok(options)
+    Ok(query)
 }
 
 pub fn query_results_to_python(py: Python<'_>, results: QueryResults) -> PyResult<PyObject> {

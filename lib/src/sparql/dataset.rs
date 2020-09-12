@@ -1,5 +1,4 @@
-use crate::model::{GraphName, NamedOrBlankNode};
-use crate::sparql::algebra::DatasetSpec;
+use crate::sparql::algebra::QueryDataset;
 use crate::sparql::EvaluationError;
 use crate::store::numeric_encoder::{
     EncodedQuad, EncodedTerm, ReadEncoder, StrContainer, StrEncodingAware, StrId, StrLookup,
@@ -12,61 +11,45 @@ use std::iter::empty;
 pub(crate) struct DatasetView<S: ReadableEncodedStore> {
     store: S,
     extra: RefCell<Rodeo>,
-    default_graph_as_union: bool,
-    dataset: Option<EncodedDatasetSpec<S::StrId>>,
+    dataset: EncodedDatasetSpec<S::StrId>,
 }
 
 impl<S: ReadableEncodedStore> DatasetView<S> {
-    pub fn new(
-        store: S,
-        default_graph_as_union: bool,
-        default_graphs: &[GraphName],
-        named_graphs: &[NamedOrBlankNode],
-        dataset: &DatasetSpec,
-    ) -> Result<Self, EvaluationError> {
-        let dataset = if !default_graphs.is_empty() || !named_graphs.is_empty() {
-            Some(EncodedDatasetSpec {
-                default: default_graphs
-                    .iter()
-                    .flat_map(|g| store.get_encoded_graph_name(g.as_ref()).transpose())
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|e| e.into())?,
-                named: named_graphs
-                    .iter()
-                    .flat_map(|g| {
-                        store
-                            .get_encoded_named_or_blank_node(g.as_ref())
-                            .transpose()
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|e| e.into())?,
-            })
-        } else if dataset.is_empty() {
-            None
-        } else {
-            Some(EncodedDatasetSpec {
-                default: dataset
-                    .default
-                    .iter()
-                    .flat_map(|g| store.get_encoded_named_node(g.as_ref()).transpose())
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|e| e.into())?,
-                named: dataset
-                    .named
-                    .iter()
-                    .flat_map(|g| store.get_encoded_named_node(g.as_ref()).transpose())
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|e| e.into())?,
-            })
+    pub fn new(store: S, dataset: &QueryDataset) -> Result<Self, EvaluationError> {
+        let dataset = EncodedDatasetSpec {
+            default: dataset
+                .default_graph_graphs()
+                .map(|graphs| {
+                    graphs
+                        .iter()
+                        .flat_map(|g| store.get_encoded_graph_name(g.as_ref()).transpose())
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()
+                .map_err(|e| e.into())?,
+            named: dataset
+                .available_named_graphs()
+                .map(|graphs| {
+                    graphs
+                        .iter()
+                        .flat_map(|g| {
+                            store
+                                .get_encoded_named_or_blank_node(g.as_ref())
+                                .transpose()
+                        })
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()
+                .map_err(|e| e.into())?,
         };
         Ok(Self {
             store,
             extra: RefCell::new(Rodeo::default()),
-            default_graph_as_union,
             dataset,
         })
     }
 
+    #[allow(clippy::needless_collect)]
     fn encoded_quads_for_pattern_in_dataset(
         &self,
         subject: Option<EncodedTerm<S::StrId>>,
@@ -75,56 +58,85 @@ impl<S: ReadableEncodedStore> DatasetView<S> {
         graph_name: Option<EncodedTerm<S::StrId>>,
     ) -> Box<dyn Iterator<Item = Result<EncodedQuad<DatasetStrId<S::StrId>>, EvaluationError>>>
     {
-        if let Some(dataset) = &self.dataset {
-            if let Some(graph_name) = graph_name {
-                if graph_name == EncodedTerm::DefaultGraph {
-                    let iters = dataset
-                        .default
-                        .iter()
-                        .map(|graph_name| {
-                            self.store.encoded_quads_for_pattern(
+        if let Some(graph_name) = graph_name {
+            if graph_name.is_default_graph() {
+                if let Some(default_graph_graphs) = &self.dataset.default {
+                    if default_graph_graphs.len() == 1 {
+                        // Single graph optimization
+                        Box::new(
+                            map_iter(self.store.encoded_quads_for_pattern(
                                 subject,
                                 predicate,
                                 object,
-                                Some(*graph_name),
-                            )
-                        })
-                        .collect::<Vec<_>>();
-                    Box::new(map_iter(iters.into_iter().flatten()).map(|quad| {
-                        let quad = quad?;
-                        Ok(EncodedQuad::new(
-                            quad.subject,
-                            quad.predicate,
-                            quad.object,
-                            EncodedTerm::DefaultGraph,
-                        ))
-                    }))
-                } else if dataset.named.contains(&graph_name) {
-                    Box::new(map_iter(self.store.encoded_quads_for_pattern(
+                                Some(default_graph_graphs[0]),
+                            ))
+                            .map(|quad| {
+                                let quad = quad?;
+                                Ok(EncodedQuad::new(
+                                    quad.subject,
+                                    quad.predicate,
+                                    quad.object,
+                                    EncodedTerm::DefaultGraph,
+                                ))
+                            }),
+                        )
+                    } else {
+                        let iters = default_graph_graphs
+                            .iter()
+                            .map(|graph_name| {
+                                self.store.encoded_quads_for_pattern(
+                                    subject,
+                                    predicate,
+                                    object,
+                                    Some(*graph_name),
+                                )
+                            })
+                            .collect::<Vec<_>>();
+                        Box::new(map_iter(iters.into_iter().flatten()).map(|quad| {
+                            let quad = quad?;
+                            Ok(EncodedQuad::new(
+                                quad.subject,
+                                quad.predicate,
+                                quad.object,
+                                EncodedTerm::DefaultGraph,
+                            ))
+                        }))
+                    }
+                } else {
+                    Box::new(map_iter(
+                        self.store
+                            .encoded_quads_for_pattern(subject, predicate, object, None),
+                    ))
+                }
+            } else if self
+                .dataset
+                .named
+                .as_ref()
+                .map_or(true, |d| d.contains(&graph_name))
+            {
+                Box::new(map_iter(self.store.encoded_quads_for_pattern(
+                    subject,
+                    predicate,
+                    object,
+                    Some(graph_name),
+                )))
+            } else {
+                Box::new(empty())
+            }
+        } else if let Some(named_graphs) = &self.dataset.named {
+            let iters = named_graphs
+                .iter()
+                .map(|graph_name| {
+                    self.store.encoded_quads_for_pattern(
                         subject,
                         predicate,
                         object,
-                        Some(graph_name),
-                    )))
-                } else {
-                    Box::new(empty())
-                }
-            } else {
-                let iters = dataset
-                    .named
-                    .iter()
-                    .map(|graph_name| {
-                        self.store.encoded_quads_for_pattern(
-                            subject,
-                            predicate,
-                            object,
-                            Some(*graph_name),
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                Box::new(map_iter(iters.into_iter().flatten()))
-            }
-        } else if graph_name == None {
+                        Some(*graph_name),
+                    )
+                })
+                .collect::<Vec<_>>();
+            Box::new(map_iter(iters.into_iter().flatten()))
+        } else {
             Box::new(
                 map_iter(
                     self.store
@@ -135,10 +147,6 @@ impl<S: ReadableEncodedStore> DatasetView<S> {
                     Ok(quad) => quad.graph_name != EncodedTerm::DefaultGraph,
                 }),
             )
-        } else {
-            Box::new(map_iter(self.store.encoded_quads_for_pattern(
-                subject, predicate, object, graph_name,
-            )))
         }
     }
 }
@@ -186,21 +194,7 @@ impl<S: ReadableEncodedStore> ReadableEncodedStore for DatasetView<S> {
         if let Some((subject, predicate, object, graph_name)) =
             try_map_quad_pattern(subject, predicate, object, graph_name)
         {
-            if graph_name == Some(EncodedTerm::DefaultGraph) && self.default_graph_as_union {
-                Box::new(
-                    self.encoded_quads_for_pattern_in_dataset(
-                        subject,
-                        predicate,
-                        object,
-                        Some(EncodedTerm::DefaultGraph),
-                    )
-                    .chain(
-                        self.encoded_quads_for_pattern_in_dataset(subject, predicate, object, None),
-                    ),
-                )
-            } else {
-                self.encoded_quads_for_pattern_in_dataset(subject, predicate, object, graph_name)
-            }
+            self.encoded_quads_for_pattern_in_dataset(subject, predicate, object, graph_name)
         } else {
             Box::new(empty())
         }
@@ -278,6 +272,6 @@ pub enum DatasetStrId<I: StrId> {
 impl<I: StrId> StrId for DatasetStrId<I> {}
 
 struct EncodedDatasetSpec<I: StrId> {
-    default: Vec<EncodedTerm<I>>,
-    named: Vec<EncodedTerm<I>>,
+    default: Option<Vec<EncodedTerm<I>>>,
+    named: Option<Vec<EncodedTerm<I>>>,
 }

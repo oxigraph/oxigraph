@@ -1,9 +1,9 @@
 use crate::error::{invalid_data_error, invalid_input_error};
 use crate::model::NamedNode;
+use crate::sparql::algebra::Query;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::http::Client;
 use crate::sparql::model::QueryResults;
-use crate::sparql::parser::Query;
 use crate::sparql::QueryResultsFormat;
 use http::header::{ACCEPT, CONTENT_TYPE, USER_AGENT};
 use http::{Method, Request, StatusCode};

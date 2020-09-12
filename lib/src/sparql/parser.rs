@@ -8,167 +8,67 @@ use peg::parser;
 use peg::str::LineCol;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
 use std::error::Error;
 use std::rc::Rc;
 use std::str::Chars;
 use std::str::FromStr;
 use std::{char, fmt};
 
-/// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/)
-///
-/// ```
-/// use oxigraph::sparql::Query;
-///
-/// let query_str = "SELECT ?s ?p ?o  WHERE { ?s ?p ?o . }";
-/// let query = Query::parse(query_str, None)?;
-///
-/// assert_eq!(query.to_string(), query_str);
-/// # Result::Ok::<_, oxigraph::sparql::ParseError>(())
-/// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct Query(pub(crate) QueryVariants);
-
-impl fmt::Display for Query {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl Query {
-    /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query
-    pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self, ParseError> {
-        let mut state = ParserState {
-            base_iri: if let Some(base_iri) = base_iri {
-                Some(Rc::new(Iri::parse(base_iri.to_owned()).map_err(|e| {
-                    ParseError {
-                        inner: ParseErrorKind::InvalidBaseIri(e),
-                    }
-                })?))
-            } else {
-                None
-            },
-            namespaces: HashMap::default(),
-            used_bnodes: HashSet::default(),
-            currently_used_bnodes: HashSet::default(),
-            aggregations: Vec::default(),
-        };
-
-        Ok(Self(
-            parser::QueryUnit(&unescape_unicode_codepoints(query), &mut state).map_err(|e| {
+/// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query
+pub fn parse_query(query: &str, base_iri: Option<&str>) -> Result<Query, ParseError> {
+    let mut state = ParserState {
+        base_iri: if let Some(base_iri) = base_iri {
+            Some(Rc::new(Iri::parse(base_iri.to_owned()).map_err(|e| {
                 ParseError {
-                    inner: ParseErrorKind::Parser(e),
+                    inner: ParseErrorKind::InvalidBaseIri(e),
                 }
-            })?,
-        ))
-    }
-}
+            })?))
+        } else {
+            None
+        },
+        namespaces: HashMap::default(),
+        used_bnodes: HashSet::default(),
+        currently_used_bnodes: HashSet::default(),
+        aggregations: Vec::default(),
+    };
 
-impl FromStr for Query {
-    type Err = ParseError;
-
-    fn from_str(query: &str) -> Result<Self, ParseError> {
-        Self::parse(query, None)
-    }
-}
-
-impl<'a> TryFrom<&'a str> for Query {
-    type Error = ParseError;
-
-    fn try_from(query: &str) -> Result<Self, ParseError> {
-        Self::from_str(query)
-    }
-}
-
-impl<'a> TryFrom<&'a String> for Query {
-    type Error = ParseError;
-
-    fn try_from(query: &String) -> Result<Self, ParseError> {
-        Self::from_str(query)
-    }
-}
-
-/// A parsed [SPARQL update](https://www.w3.org/TR/sparql11-update/)
-///
-/// ```
-/// use oxigraph::sparql::Update;
-///
-/// let update_str = "CLEAR ALL ;";
-/// let update = Update::parse(update_str, None)?;
-///
-/// assert_eq!(update.to_string().trim(), update_str);
-/// # Result::Ok::<_, oxigraph::sparql::ParseError>(())
-/// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct Update {
-    pub(crate) base_iri: Option<Rc<Iri<String>>>,
-    pub(crate) operations: Vec<GraphUpdateOperation>,
-}
-
-impl fmt::Display for Update {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(base_iri) = &self.base_iri {
-            writeln!(f, "BASE <{}>", base_iri)?;
-        }
-        for update in &self.operations {
-            writeln!(f, "{} ;", update)?;
-        }
-        Ok(())
-    }
-}
-
-impl Update {
-    /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query
-    pub fn parse(update: &str, base_iri: Option<&str>) -> Result<Self, ParseError> {
-        let mut state = ParserState {
-            base_iri: if let Some(base_iri) = base_iri {
-                Some(Rc::new(Iri::parse(base_iri.to_owned()).map_err(|e| {
-                    ParseError {
-                        inner: ParseErrorKind::InvalidBaseIri(e),
-                    }
-                })?))
-            } else {
-                None
-            },
-            namespaces: HashMap::default(),
-            used_bnodes: HashSet::default(),
-            currently_used_bnodes: HashSet::default(),
-            aggregations: Vec::default(),
-        };
-
-        let operations = parser::UpdateInit(&unescape_unicode_codepoints(update), &mut state)
-            .map_err(|e| ParseError {
+    Ok(Query(
+        parser::QueryUnit(&unescape_unicode_codepoints(query), &mut state).map_err(|e| {
+            ParseError {
                 inner: ParseErrorKind::Parser(e),
-            })?;
-        Ok(Self {
-            operations,
-            base_iri: state.base_iri,
-        })
-    }
+            }
+        })?,
+    ))
 }
 
-impl FromStr for Update {
-    type Err = ParseError;
+/// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query
+pub fn parse_update(update: &str, base_iri: Option<&str>) -> Result<Update, ParseError> {
+    let mut state = ParserState {
+        base_iri: if let Some(base_iri) = base_iri {
+            Some(Rc::new(Iri::parse(base_iri.to_owned()).map_err(|e| {
+                ParseError {
+                    inner: ParseErrorKind::InvalidBaseIri(e),
+                }
+            })?))
+        } else {
+            None
+        },
+        namespaces: HashMap::default(),
+        used_bnodes: HashSet::default(),
+        currently_used_bnodes: HashSet::default(),
+        aggregations: Vec::default(),
+    };
 
-    fn from_str(update: &str) -> Result<Self, ParseError> {
-        Self::parse(update, None)
-    }
-}
-
-impl<'a> TryFrom<&'a str> for Update {
-    type Error = ParseError;
-
-    fn try_from(update: &str) -> Result<Self, ParseError> {
-        Self::from_str(update)
-    }
-}
-
-impl<'a> TryFrom<&'a String> for Update {
-    type Error = ParseError;
-
-    fn try_from(update: &String) -> Result<Self, ParseError> {
-        Self::from_str(update)
-    }
+    let operations =
+        parser::UpdateInit(&unescape_unicode_codepoints(update), &mut state).map_err(|e| {
+            ParseError {
+                inner: ParseErrorKind::Parser(e),
+            }
+        })?;
+    Ok(Update {
+        operations,
+        base_iri: state.base_iri,
+    })
 }
 
 /// Error returned during SPARQL parsing.
@@ -488,7 +388,7 @@ fn copy_graph(
             Variable::new_unchecked("o"),
             to.into(),
         )],
-        using: DatasetSpec::default(),
+        using: QueryDataset::default(),
         algebra: match from {
             NamedOrDefaultGraphTarget::NamedNode(from) => {
                 GraphPattern::Graph(from.into(), Box::new(bgp))
@@ -771,7 +671,7 @@ parser! {
         //[7]
         rule SelectQuery() -> QueryVariants = s:SelectClause() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
             QueryVariants::Select {
-                dataset: Rc::new(d),
+                dataset: d,
                 algebra: Rc::new(build_select(s, w, g, h, o, l, v, state)),
                 base_iri: state.base_iri.clone()
             }
@@ -808,7 +708,7 @@ parser! {
             i("CONSTRUCT") _ c:ConstructTemplate() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
                 QueryVariants::Construct {
                     construct: Rc::new(c),
-                    dataset: Rc::new(d),
+                    dataset: d,
                     algebra: Rc::new(build_select(Selection::default(), w, g, h, o, l, v, state)),
                     base_iri: state.base_iri.clone()
                 }
@@ -816,7 +716,7 @@ parser! {
             i("CONSTRUCT") _ d:DatasetClauses() _ i("WHERE") _ "{" _ c:ConstructQuery_optional_triple_template() _ "}" _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
                 QueryVariants::Construct {
                     construct: Rc::new(c.clone()),
-                    dataset: Rc::new(d),
+                    dataset: d,
                     algebra: Rc::new(build_select(
                         Selection::default(),
                         GraphPattern::BGP(c.into_iter().map(TripleOrPathPattern::from).collect()),
@@ -832,14 +732,14 @@ parser! {
         rule DescribeQuery() -> QueryVariants =
             i("DESCRIBE") _ "*" _ d:DatasetClauses() w:WhereClause()? _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
                 QueryVariants::Describe {
-                    dataset: Rc::new(d),
+                    dataset: d,
                     algebra: Rc::new(build_select(Selection::default(), w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state)),
                     base_iri: state.base_iri.clone()
                 }
             } /
             i("DESCRIBE") _ p:DescribeQuery_item()+ _ d:DatasetClauses() w:WhereClause()? _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
                 QueryVariants::Describe {
-                    dataset: Rc::new(d),
+                    dataset: d,
                     algebra: Rc::new(build_select(Selection {
                         option: SelectionOption::Default,
                         variables: Some(p.into_iter().map(|var_or_iri| match var_or_iri {
@@ -855,27 +755,41 @@ parser! {
         //[12]
         rule AskQuery() -> QueryVariants = i("ASK") _ d:DatasetClauses() w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
             QueryVariants::Ask {
-                dataset: Rc::new(d),
+                dataset: d,
                 algebra: Rc::new(build_select(Selection::default(), w, g, h, o, l, v, state)),
                 base_iri: state.base_iri.clone()
             }
         }
 
         //[13]
-        rule DatasetClause() -> DatasetSpec = i("FROM") _ d:(DefaultGraphClause() / NamedGraphClause()) { d }
-        rule DatasetClauses() -> DatasetSpec = d:DatasetClauses_item()* {
-            d.into_iter().fold(DatasetSpec::default(), |mut a, b| a + b)
+        rule DatasetClause() -> (Option<GraphName>, Option<NamedOrBlankNode>) = i("FROM") _ d:(DefaultGraphClause() / NamedGraphClause()) { d }
+        rule DatasetClauses() -> QueryDataset = d:DatasetClause() ** (_) {
+            let mut dataset = QueryDataset::default();
+            if !d.is_empty() {
+                let mut default = Vec::new();
+                let mut named = Vec::new();
+                for (d, n) in d {
+                    if let Some(d) = d {
+                        default.push(d);
+                    }
+                    if let Some(n) = n {
+                        named.push(n);
+                    }
+                }
+                dataset.set_default_graph(default);
+                dataset.set_available_named_graphs(named);
+            }
+            dataset
         }
-        rule DatasetClauses_item() -> DatasetSpec = d:DatasetClause() _ { d }
 
         //[14]
-        rule DefaultGraphClause() -> DatasetSpec = s:SourceSelector() {
-            DatasetSpec::new_with_default(s)
+        rule DefaultGraphClause() -> (Option<GraphName>, Option<NamedOrBlankNode>) = s:SourceSelector() {
+            (Some(s.into()), None)
         }
 
         //[15]
-        rule NamedGraphClause() -> DatasetSpec = i("NAMED") _ s:SourceSelector() {
-            DatasetSpec::new_with_named(s)
+        rule NamedGraphClause() -> (Option<GraphName>, Option<NamedOrBlankNode>) = i("NAMED") _ s:SourceSelector() {
+            (None, Some(s.into()))
         }
 
         //[16]
@@ -1034,13 +948,13 @@ parser! {
             vec![GraphUpdateOperation::DeleteInsert {
                 delete: d,
                 insert: Vec::new(),
-                using: DatasetSpec::default(),
+                using: QueryDataset::default(),
                 algebra
             }]
         }
 
         //[41]
-        rule Modify() -> Vec<GraphUpdateOperation> = with:Modify_with()? _ Modify_clear() c:Modify_clauses() _ using:(UsingClause() ** (_)) _ i("WHERE") _ algebra:GroupGraphPattern() {
+        rule Modify() -> Vec<GraphUpdateOperation> = with:Modify_with()? _ Modify_clear() c:Modify_clauses() _ u:(UsingClause() ** (_)) _ i("WHERE") _ algebra:GroupGraphPattern() {
             let (delete, insert) = c;
             let mut delete = delete.unwrap_or_else(Vec::new);
             let mut insert = insert.unwrap_or_else(Vec::new);
@@ -1061,10 +975,26 @@ parser! {
                 algebra = GraphPattern::Graph(with.into(), Box::new(algebra));
             }
 
+            let mut using = QueryDataset::default();
+            if !u.is_empty() {
+                let mut using_default = Vec::new();
+                let mut using_named = Vec::new();
+                for (d, n) in u {
+                    if let Some(d) = d {
+                        using_default.push(d)
+                    }
+                    if let Some(n) = n {
+                        using_named.push(n)
+                    }
+                }
+                using.set_default_graph(using_default);
+                using.set_available_named_graphs(using_named);
+            }
+
             vec![GraphUpdateOperation::DeleteInsert {
                 delete,
                 insert,
-                using: using.into_iter().fold(DatasetSpec::default(), |mut a, b| a + b),
+                using,
                 algebra
             }]
         }
@@ -1086,12 +1016,12 @@ parser! {
         rule InsertClause() -> Vec<QuadPattern> = i("INSERT") _ q:QuadPattern() { q }
 
         //[44]
-        rule UsingClause() -> DatasetSpec = i("USING") _ d:(UsingClause_default() / UsingClause_named()) { d }
-        rule UsingClause_default() -> DatasetSpec = i:iri() {
-            DatasetSpec::new_with_default(i)
+        rule UsingClause() -> (Option<GraphName>, Option<NamedOrBlankNode>) = i("USING") _ d:(UsingClause_default() / UsingClause_named()) { d }
+        rule UsingClause_default() -> (Option<GraphName>, Option<NamedOrBlankNode>) = i:iri() {
+            (Some(i.into()), None)
         }
-        rule UsingClause_named() -> DatasetSpec = i("NAMED") _ i:iri() {
-            DatasetSpec::new_with_named(i)
+        rule UsingClause_named() -> (Option<GraphName>, Option<NamedOrBlankNode>) = i("NAMED") _ i:iri() {
+            (None, Some(i.into()))
         }
 
         //[45]

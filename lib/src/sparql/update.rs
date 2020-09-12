@@ -2,8 +2,8 @@ use crate::error::{invalid_data_error, invalid_input_error};
 use crate::io::GraphFormat;
 use crate::model::{BlankNode, GraphNameRef, NamedNode, Term};
 use crate::sparql::algebra::{
-    DatasetSpec, GraphPattern, GraphTarget, GraphUpdateOperation, NamedNodeOrVariable, QuadPattern,
-    TermOrVariable,
+    GraphPattern, GraphTarget, GraphUpdateOperation, NamedNodeOrVariable, QuadPattern,
+    QueryDataset, TermOrVariable,
 };
 use crate::sparql::dataset::{DatasetStrId, DatasetView};
 use crate::sparql::eval::SimpleEvaluator;
@@ -111,10 +111,10 @@ where
         &mut self,
         delete: &[QuadPattern],
         insert: &[QuadPattern],
-        using: &DatasetSpec,
+        using: &QueryDataset,
         algebra: &GraphPattern,
     ) -> Result<(), EvaluationError> {
-        let dataset = Rc::new(DatasetView::new(self.read.clone(), false, &[], &[], using)?);
+        let dataset = Rc::new(DatasetView::new(self.read.clone(), using)?);
         let (plan, variables) = PlanBuilder::build(dataset.as_ref(), algebra)?;
         let evaluator = SimpleEvaluator::<DatasetView<R>>::new(
             dataset.clone(),
