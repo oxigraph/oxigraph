@@ -19,10 +19,14 @@ use http_types::{headers, Body, Error, Method, Mime, Request, Response, Result, 
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::{GraphName, NamedNode};
 use oxigraph::sparql::{Query, QueryOptions, QueryResults, QueryResultsFormat, Update};
-use oxigraph::RocksDbStore;
 use std::io::BufReader;
 use std::str::FromStr;
 use url::form_urlencoded;
+
+#[cfg(feature = "rocksdb")]
+use oxigraph::RocksDbStore as Store;
+#[cfg(all(feature = "sled", not(feature = "rocksdb")))]
+use oxigraph::SledStore as Store;
 
 const MAX_SPARQL_BODY_SIZE: u64 = 1_048_576;
 const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
@@ -44,7 +48,7 @@ struct Args {
 #[async_std::main]
 pub async fn main() -> Result<()> {
     let args: Args = argh::from_env();
-    let store = RocksDbStore::open(args.file)?;
+    let store = Store::open(args.file)?;
 
     println!("Listening for requests at http://{}", &args.bind);
     http_server(&args.bind, move |request| {
@@ -53,7 +57,7 @@ pub async fn main() -> Result<()> {
     .await
 }
 
-async fn handle_request(request: Request, store: RocksDbStore) -> Result<Response> {
+async fn handle_request(request: Request, store: Store) -> Result<Response> {
     let mut response = match (request.url().path(), request.method()) {
         ("/", Method::Get) => {
             let mut response = Response::new(StatusCode::Ok);
@@ -187,7 +191,7 @@ fn simple_response(status: StatusCode, body: impl Into<Body>) -> Response {
 }
 
 async fn evaluate_urlencoded_sparql_query(
-    store: RocksDbStore,
+    store: Store,
     encoded: Vec<u8>,
     request: Request,
 ) -> Result<Response> {
@@ -218,7 +222,7 @@ async fn evaluate_urlencoded_sparql_query(
 }
 
 async fn evaluate_sparql_query(
-    store: RocksDbStore,
+    store: Store,
     query: String,
     default_graph_uris: Vec<String>,
     named_graph_uris: Vec<String>,
@@ -286,10 +290,7 @@ async fn evaluate_sparql_query(
     .await
 }
 
-async fn evaluate_urlencoded_sparql_update(
-    store: RocksDbStore,
-    encoded: Vec<u8>,
-) -> Result<Response> {
+async fn evaluate_urlencoded_sparql_update(store: Store, encoded: Vec<u8>) -> Result<Response> {
     let mut update = None;
     let mut default_graph_uris = Vec::new();
     let mut named_graph_uris = Vec::new();
@@ -317,7 +318,7 @@ async fn evaluate_urlencoded_sparql_update(
 }
 
 async fn evaluate_sparql_update(
-    store: RocksDbStore,
+    store: Store,
     update: String,
     default_graph_uris: Vec<String>,
     named_graph_uris: Vec<String>,
@@ -438,10 +439,10 @@ impl<R: Read + Unpin> std::io::Read for SyncAsyncReader<R> {
 
 #[cfg(test)]
 mod tests {
+    use super::Store;
     use crate::handle_request;
     use async_std::task::block_on;
     use http_types::{Method, Request, StatusCode, Url};
-    use oxigraph::RocksDbStore;
     use std::collections::hash_map::DefaultHasher;
     use std::env::temp_dir;
     use std::fs::remove_dir_all;
@@ -570,7 +571,7 @@ mod tests {
         format!("{:?}", request).hash(&mut s);
         path.push(&s.finish().to_string());
 
-        let store = RocksDbStore::open(&path).unwrap();
+        let store = Store::open(&path).unwrap();
         let (code, message) = match block_on(handle_request(request, store)) {
             Ok(r) => (r.status(), "".to_string()),
             Err(e) => (e.status(), e.to_string()),
