@@ -23,7 +23,7 @@ http_client = ["httparse", "native-tls"]
 [dependencies]
 rocksdb = { version = "0.15", optional = true }
 sled = { version = "0.34", optional = true }
-quick-xml = "0.18"
+quick-xml = "0.19"
 rand = "0.7"
 md-5 = "0.9"
 sha-1 = "0.9"
