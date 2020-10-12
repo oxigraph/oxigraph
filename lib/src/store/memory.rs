@@ -4,8 +4,7 @@ use crate::error::{invalid_input_error, UnwrapInfallible};
 use crate::io::{DatasetFormat, DatasetParser, GraphFormat, GraphParser};
 use crate::model::*;
 use crate::sparql::{
-    evaluate_update, EvaluationError, Query, QueryOptions, QueryResults, SimplePreparedQuery,
-    Update,
+    evaluate_query, evaluate_update, EvaluationError, Query, QueryOptions, QueryResults, Update,
 };
 use crate::store::numeric_encoder::{
     Decoder, ReadEncoder, StrContainer, StrEncodingAware, StrId, StrLookup, WriteEncoder,
@@ -116,41 +115,7 @@ impl MemoryStore {
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
         options: QueryOptions,
     ) -> Result<QueryResults, EvaluationError> {
-        self.prepare_query(query, options)?.exec()
-    }
-
-    /// Prepares a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) and returns an object that could be used to execute it.
-    /// It is useful if you want to execute multiple times the same SPARQL query.
-    ///
-    /// Usage example:
-    /// ```
-    /// use oxigraph::MemoryStore;
-    /// use oxigraph::model::*;
-    /// use oxigraph::sparql::{QueryResults, QueryOptions};
-    ///
-    /// let store = MemoryStore::new();
-    ///
-    /// // insertions
-    /// let ex = NamedNode::new("http://example.com")?;
-    /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), None));
-    ///
-    /// // SPARQL query
-    /// let prepared_query = store.prepare_query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?;
-    /// if let QueryResults::Solutions(mut solutions) = prepared_query.exec()? {
-    ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
-    /// }
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
-    /// ```
-    pub fn prepare_query(
-        &self,
-        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
-        options: QueryOptions,
-    ) -> Result<MemoryPreparedQuery, EvaluationError> {
-        Ok(MemoryPreparedQuery(SimplePreparedQuery::new(
-            self.clone(),
-            query,
-            options,
-        )?))
+        evaluate_query(self.clone(), query, options)
     }
 
     /// Retrieves quads with a filter on each quad component
@@ -1108,16 +1073,6 @@ fn quad_map_flatten<'a, T: Copy>(gspo: &'a QuadMap<T>) -> impl Iterator<Item = (
             })
         })
     })
-}
-
-/// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/) for the [`MemoryStore`](struct.MemoryStore.html).
-pub struct MemoryPreparedQuery(SimplePreparedQuery<MemoryStore>);
-
-impl MemoryPreparedQuery {
-    /// Evaluates the query and returns its results
-    pub fn exec(&self) -> Result<QueryResults, EvaluationError> {
-        self.0.exec()
-    }
 }
 
 /// Allows inserting and deleting quads during an ACID transaction with the [`MemoryStore`](struct.MemoryStore.html).

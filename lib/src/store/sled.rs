@@ -4,8 +4,7 @@ use crate::error::invalid_data_error;
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use crate::sparql::{
-    evaluate_update, EvaluationError, Query, QueryOptions, QueryResults, SimplePreparedQuery,
-    Update,
+    evaluate_query, evaluate_update, EvaluationError, Query, QueryOptions, QueryResults, Update,
 };
 use crate::store::binary_encoder::*;
 use crate::store::numeric_encoder::{
@@ -140,22 +139,7 @@ impl SledStore {
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
         options: QueryOptions,
     ) -> Result<QueryResults, EvaluationError> {
-        self.prepare_query(query, options)?.exec()
-    }
-
-    /// Prepares a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) and returns an object that could be used to execute it.
-    ///
-    /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.prepare_query) for a usage example.
-    pub fn prepare_query(
-        &self,
-        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
-        options: QueryOptions,
-    ) -> Result<SledPreparedQuery, EvaluationError> {
-        Ok(SledPreparedQuery(SimplePreparedQuery::new(
-            (*self).clone(),
-            query,
-            options,
-        )?))
+        evaluate_query(self.clone(), query, options)
     }
 
     /// Retrieves quads with a filter on each quad component
@@ -1176,16 +1160,6 @@ impl<T> From<SledConflictableTransactionError<T>> for ConflictableTransactionErr
                 ConflictableTransactionError::Storage(e.into())
             }
         }
-    }
-}
-
-/// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/) for the [`SledStore`](struct.SledStore.html).
-pub struct SledPreparedQuery(SimplePreparedQuery<SledStore>);
-
-impl SledPreparedQuery {
-    /// Evaluates the query and returns its results
-    pub fn exec(&self) -> Result<QueryResults, EvaluationError> {
-        self.0.exec()
     }
 }
 

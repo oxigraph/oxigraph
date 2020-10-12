@@ -29,126 +29,63 @@ pub use crate::sparql::model::QuerySolutionIter;
 pub use crate::sparql::model::QueryTripleIter;
 pub use crate::sparql::model::{Variable, VariableNameParseError};
 pub use crate::sparql::parser::ParseError;
-use crate::sparql::plan::{PlanNode, TripleTemplate};
 use crate::sparql::plan_builder::PlanBuilder;
 pub use crate::sparql::service::ServiceHandler;
 use crate::sparql::service::{EmptyServiceHandler, ErrorConversionServiceHandler};
 use crate::sparql::update::SimpleUpdateEvaluator;
-use crate::store::numeric_encoder::{StrContainer, StrEncodingAware};
+use crate::store::numeric_encoder::StrContainer;
 use crate::store::{ReadableEncodedStore, StoreOrParseError, WritableEncodedStore};
 use std::convert::TryInto;
 use std::io;
 use std::rc::Rc;
 
-/// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/)
-pub(crate) struct SimplePreparedQuery<S: ReadableEncodedStore + 'static>(
-    SimplePreparedQueryAction<S>,
-);
-
-#[derive(Clone)]
-enum SimplePreparedQueryAction<S: ReadableEncodedStore + 'static> {
-    Select {
-        plan: Rc<PlanNode<<DatasetView<S> as StrEncodingAware>::StrId>>,
-        variables: Rc<Vec<Variable>>,
-        evaluator: SimpleEvaluator<DatasetView<S>>,
-    },
-    Ask {
-        plan: Rc<PlanNode<<DatasetView<S> as StrEncodingAware>::StrId>>,
-        evaluator: SimpleEvaluator<DatasetView<S>>,
-    },
-    Construct {
-        plan: Rc<PlanNode<<DatasetView<S> as StrEncodingAware>::StrId>>,
-        construct: Rc<Vec<TripleTemplate<<DatasetView<S> as StrEncodingAware>::StrId>>>,
-        evaluator: SimpleEvaluator<DatasetView<S>>,
-    },
-    Describe {
-        plan: Rc<PlanNode<<DatasetView<S> as StrEncodingAware>::StrId>>,
-        evaluator: SimpleEvaluator<DatasetView<S>>,
-    },
-}
-
-impl<S: ReadableEncodedStore + 'static> SimplePreparedQuery<S> {
-    pub(crate) fn new(
-        store: S,
-        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
-        options: QueryOptions,
-    ) -> Result<Self, EvaluationError> {
-        Ok(Self(match query.try_into().map_err(|e| e.into())?.0 {
-            QueryVariants::Select {
-                algebra,
-                base_iri,
-                dataset,
-            } => {
-                let dataset = Rc::new(DatasetView::new(store, &dataset)?);
-                let (plan, variables) = PlanBuilder::build(dataset.as_ref(), &algebra)?;
-                SimplePreparedQueryAction::Select {
-                    plan: Rc::new(plan),
-                    variables: Rc::new(variables),
-                    evaluator: SimpleEvaluator::new(dataset, base_iri, options.service_handler),
-                }
-            }
-            QueryVariants::Ask {
-                algebra,
-                base_iri,
-                dataset,
-            } => {
-                let dataset = Rc::new(DatasetView::new(store, &dataset)?);
-                let (plan, _) = PlanBuilder::build(dataset.as_ref(), &algebra)?;
-                SimplePreparedQueryAction::Ask {
-                    plan: Rc::new(plan),
-                    evaluator: SimpleEvaluator::new(dataset, base_iri, options.service_handler),
-                }
-            }
-            QueryVariants::Construct {
-                construct,
-                algebra,
-                base_iri,
-                dataset,
-            } => {
-                let dataset = Rc::new(DatasetView::new(store, &dataset)?);
-                let (plan, variables) = PlanBuilder::build(dataset.as_ref(), &algebra)?;
-                SimplePreparedQueryAction::Construct {
-                    plan: Rc::new(plan),
-                    construct: Rc::new(PlanBuilder::build_graph_template(
-                        dataset.as_ref(),
-                        &construct,
-                        variables,
-                    )?),
-                    evaluator: SimpleEvaluator::new(dataset, base_iri, options.service_handler),
-                }
-            }
-            QueryVariants::Describe {
-                algebra,
-                base_iri,
-                dataset,
-            } => {
-                let dataset = Rc::new(DatasetView::new(store, &dataset)?);
-                let (plan, _) = PlanBuilder::build(dataset.as_ref(), &algebra)?;
-                SimplePreparedQueryAction::Describe {
-                    plan: Rc::new(plan),
-                    evaluator: SimpleEvaluator::new(dataset, base_iri, options.service_handler),
-                }
-            }
-        }))
-    }
-
-    /// Evaluates the query and returns its results
-    pub fn exec(&self) -> Result<QueryResults, EvaluationError> {
-        match &self.0 {
-            SimplePreparedQueryAction::Select {
-                plan,
-                variables,
-                evaluator,
-            } => evaluator.evaluate_select_plan(plan, variables.clone()),
-            SimplePreparedQueryAction::Ask { plan, evaluator } => evaluator.evaluate_ask_plan(plan),
-            SimplePreparedQueryAction::Construct {
-                plan,
-                construct,
-                evaluator,
-            } => evaluator.evaluate_construct_plan(plan, construct.clone()),
-            SimplePreparedQueryAction::Describe { plan, evaluator } => {
-                evaluator.evaluate_describe_plan(plan)
-            }
+pub(crate) fn evaluate_query<R: ReadableEncodedStore + 'static>(
+    store: R,
+    query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
+    options: QueryOptions,
+) -> Result<QueryResults, EvaluationError> {
+    match query.try_into().map_err(|e| e.into())?.0 {
+        QueryVariants::Select {
+            algebra,
+            base_iri,
+            dataset,
+        } => {
+            let dataset = DatasetView::new(store, &dataset)?;
+            let (plan, variables) = PlanBuilder::build(&dataset, &algebra)?;
+            SimpleEvaluator::new(Rc::new(dataset), base_iri, options.service_handler)
+                .evaluate_select_plan(&plan, Rc::new(variables))
+        }
+        QueryVariants::Ask {
+            algebra,
+            base_iri,
+            dataset,
+        } => {
+            let dataset = DatasetView::new(store, &dataset)?;
+            let (plan, _) = PlanBuilder::build(&dataset, &algebra)?;
+            SimpleEvaluator::new(Rc::new(dataset), base_iri, options.service_handler)
+                .evaluate_ask_plan(&plan)
+        }
+        QueryVariants::Construct {
+            construct,
+            algebra,
+            base_iri,
+            dataset,
+        } => {
+            let dataset = DatasetView::new(store, &dataset)?;
+            let (plan, variables) = PlanBuilder::build(&dataset, &algebra)?;
+            let construct = PlanBuilder::build_graph_template(&dataset, &construct, variables)?;
+            SimpleEvaluator::new(Rc::new(dataset), base_iri, options.service_handler)
+                .evaluate_construct_plan(&plan, construct)
+        }
+        QueryVariants::Describe {
+            algebra,
+            base_iri,
+            dataset,
+        } => {
+            let dataset = DatasetView::new(store, &dataset)?;
+            let (plan, _) = PlanBuilder::build(&dataset, &algebra)?;
+            SimpleEvaluator::new(Rc::new(dataset), base_iri, options.service_handler)
+                .evaluate_describe_plan(&plan)
         }
     }
 }

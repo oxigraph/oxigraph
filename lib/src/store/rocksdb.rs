@@ -4,8 +4,7 @@ use crate::error::invalid_data_error;
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use crate::sparql::{
-    evaluate_update, EvaluationError, Query, QueryOptions, QueryResults, SimplePreparedQuery,
-    Update,
+    evaluate_query, evaluate_update, EvaluationError, Query, QueryOptions, QueryResults, Update,
 };
 use crate::store::binary_encoder::*;
 use crate::store::numeric_encoder::{
@@ -130,23 +129,7 @@ impl RocksDbStore {
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
         options: QueryOptions,
     ) -> Result<QueryResults, EvaluationError> {
-        self.prepare_query(query, options)?.exec()
-    }
-
-    /// Prepares a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) and returns an object that could be used to execute it.
-    /// It is useful if you want to execute multiple times the same SPARQL query.
-    ///
-    /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.prepare_query) for a usage example.
-    pub fn prepare_query(
-        &self,
-        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
-        options: QueryOptions,
-    ) -> Result<RocksDbPreparedQuery, EvaluationError> {
-        Ok(RocksDbPreparedQuery(SimplePreparedQuery::new(
-            (*self).clone(),
-            query,
-            options,
-        )?))
+        evaluate_query(self.clone(), query, options)
     }
 
     /// Retrieves quads with a filter on each quad component
@@ -746,16 +729,6 @@ impl ReadableEncodedStore for RocksDbStore {
                 },
             },
         }
-    }
-}
-
-/// A prepared [SPARQL query](https://www.w3.org/TR/sparql11-query/) for the [`RocksDbStore`](struct.RocksDbStore.html).
-pub struct RocksDbPreparedQuery(SimplePreparedQuery<RocksDbStore>);
-
-impl RocksDbPreparedQuery {
-    /// Evaluates the query and returns its results
-    pub fn exec(&self) -> Result<QueryResults, EvaluationError> {
-        self.0.exec()
     }
 }
 

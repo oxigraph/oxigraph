@@ -92,14 +92,14 @@ where
     pub fn evaluate_construct_plan(
         &self,
         plan: &PlanNode<S::StrId>,
-        construct: Rc<Vec<TripleTemplate<S::StrId>>>,
+        template: Vec<TripleTemplate<S::StrId>>,
     ) -> Result<QueryResults, EvaluationError> {
         let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
         Ok(QueryResults::Graph(QueryTripleIter {
             iter: Box::new(ConstructIterator {
                 eval: self.clone(),
                 iter: self.eval_plan(plan, from),
-                template: construct,
+                template,
                 buffered_results: Vec::default(),
                 bnodes: Vec::default(),
             }),
@@ -2634,7 +2634,7 @@ where
 struct ConstructIterator<S: ReadableEncodedStore + 'static> {
     eval: SimpleEvaluator<S>,
     iter: EncodedTuplesIterator<S::StrId>,
-    template: Rc<Vec<TripleTemplate<S::StrId>>>,
+    template: Vec<TripleTemplate<S::StrId>>,
     buffered_results: Vec<Result<Triple, EvaluationError>>,
     bnodes: Vec<EncodedTerm<S::StrId>>,
 }
@@ -2652,7 +2652,7 @@ impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Iterator for Co
                     Ok(tuple) => tuple,
                     Err(error) => return Some(Err(error)),
                 };
-                for template in self.template.iter() {
+                for template in &self.template {
                     if let (Some(subject), Some(predicate), Some(object)) = (
                         get_triple_template_value(&template.subject, &tuple, &mut self.bnodes),
                         get_triple_template_value(&template.predicate, &tuple, &mut self.bnodes),
