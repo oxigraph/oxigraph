@@ -275,26 +275,17 @@ pub enum TermRef<'a> {
 impl<'a> TermRef<'a> {
     #[inline]
     pub fn is_named_node(&self) -> bool {
-        match self {
-            Self::NamedNode(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::NamedNode(_))
     }
 
     #[inline]
     pub fn is_blank_node(&self) -> bool {
-        match self {
-            Self::BlankNode(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::BlankNode(_))
     }
 
     #[inline]
     pub fn is_literal(&self) -> bool {
-        match self {
-            Self::Literal(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Literal(_))
     }
 
     #[inline]
@@ -660,26 +651,17 @@ pub enum GraphNameRef<'a> {
 impl<'a> GraphNameRef<'a> {
     #[inline]
     pub fn is_named_node(&self) -> bool {
-        match self {
-            GraphNameRef::NamedNode(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::NamedNode(_))
     }
 
     #[inline]
     pub fn is_blank_node(&self) -> bool {
-        match self {
-            GraphNameRef::BlankNode(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::BlankNode(_))
     }
 
     #[inline]
     pub fn is_default_graph(&self) -> bool {
-        match self {
-            GraphNameRef::DefaultGraph => true,
-            _ => false,
-        }
+        matches!(self, Self::DefaultGraph)
     }
 
     #[inline]

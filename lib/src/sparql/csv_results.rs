@@ -71,10 +71,7 @@ fn write_csv_term<'a>(term: impl Into<TermRef<'a>>, mut sink: impl Write) -> io:
 }
 
 fn write_escaped_csv_string(s: &str, mut sink: impl Write) -> io::Result<()> {
-    if s.bytes().any(|c| match c {
-        b'"' | b',' | b'\n' | b'\r' => true,
-        _ => false,
-    }) {
+    if s.bytes().any(|c| matches!(c, b'"' | b',' | b'\n' | b'\r')) {
         sink.write_all(b"\"")?;
         for c in s.bytes() {
             if c == b'\"' {
@@ -153,10 +150,7 @@ fn write_tsv_term<'a>(term: impl Into<TermRef<'a>>, mut sink: impl Write) -> io:
                 _ => sink.write_all(literal.to_string().as_bytes()),
             },
             xsd::INTEGER => {
-                if literal.value().bytes().all(|c| match c {
-                    b'0'..=b'9' => true,
-                    _ => false,
-                }) {
+                if literal.value().bytes().all(|c| matches!(c, b'0'..=b'9')) {
                     sink.write_all(literal.value().as_bytes())
                 } else {
                     sink.write_all(literal.to_string().as_bytes())

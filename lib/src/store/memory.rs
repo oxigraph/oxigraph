@@ -1407,7 +1407,7 @@ fn hash_bnodes(
                     2,
                 ));
             }
-            to_hash.sort();
+            to_hash.sort_unstable();
             let hash = hash_tuple((old_hash, &to_hash));
             to_hash.clear();
             new_hashes.insert(*bnode, hash);

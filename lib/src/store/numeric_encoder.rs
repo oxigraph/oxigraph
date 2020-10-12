@@ -256,23 +256,19 @@ impl<I: StrId> Hash for EncodedTerm<I> {
 
 impl<I: StrId> EncodedTerm<I> {
     pub fn is_named_node(&self) -> bool {
-        match self {
-            Self::NamedNode { .. } => true,
-            _ => false,
-        }
+        matches!(self,
+            Self::NamedNode { .. })
     }
 
     pub fn is_blank_node(&self) -> bool {
-        match self {
+        matches!(self,
             Self::NumericalBlankNode { .. }
             | Self::SmallBlankNode { .. }
-            | Self::BigBlankNode { .. } => true,
-            _ => false,
-        }
+            | Self::BigBlankNode { .. })
     }
 
     pub fn is_literal(&self) -> bool {
-        match self {
+        matches!(self,
             Self::SmallStringLiteral { .. }
             | Self::BigStringLiteral { .. }
             | Self::SmallSmallLangStringLiteral { .. }
@@ -296,20 +292,15 @@ impl<I: StrId> EncodedTerm<I> {
             | Self::GMonthLiteral(_)
             | Self::DurationLiteral(_)
             | Self::YearMonthDurationLiteral(_)
-            | Self::DayTimeDurationLiteral(_) => true,
-            _ => false,
-        }
+            | Self::DayTimeDurationLiteral(_))
     }
 
     pub fn is_unknown_typed_literal(&self) -> bool {
-        match self {
-            Self::SmallTypedLiteral { .. } | Self::BigTypedLiteral { .. } => true,
-            _ => false,
-        }
+        matches!(self, Self::SmallTypedLiteral { .. } | Self::BigTypedLiteral { .. })
     }
 
     pub fn is_default_graph(&self) -> bool {
-        *self == EncodedTerm::DefaultGraph
+        matches!(self, Self::DefaultGraph)
     }
 
     pub fn map_id<J: StrId>(self, mapping: impl Fn(I) -> J) -> EncodedTerm<J> {
