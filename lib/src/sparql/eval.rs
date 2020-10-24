@@ -1435,6 +1435,10 @@ where
             }
             PlanExpression::BooleanCast(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::BooleanLiteral(value) => Some(value.into()),
+                EncodedTerm::FloatLiteral(value) => Some((value != 0. && !value.is_nan()).into()),
+                EncodedTerm::DoubleLiteral(value) => Some((value != 0. && !value.is_nan()).into()),
+                EncodedTerm::IntegerLiteral(value) => Some((value != 0).into()),
+                EncodedTerm::DecimalLiteral(value) => Some((value != Decimal::default()).into()),
                 EncodedTerm::SmallStringLiteral(value) => parse_boolean_str(&value),
                 EncodedTerm::BigStringLiteral { value_id } => {
                     parse_boolean_str(&*self.dataset.get_str(value_id).ok()??)
