@@ -18,7 +18,7 @@ use async_std::task::{block_on, spawn, spawn_blocking};
 use http_types::{headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode};
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::{GraphName, NamedNode, NamedOrBlankNode};
-use oxigraph::sparql::{Query, QueryOptions, QueryResults, QueryResultsFormat, Update};
+use oxigraph::sparql::{Query, QueryResults, QueryResultsFormat, Update};
 use std::io::BufReader;
 use std::str::FromStr;
 use url::form_urlencoded;
@@ -246,8 +246,7 @@ async fn evaluate_sparql_query(
                 .set_available_named_graphs(named_graph_uris);
         }
 
-        let options = QueryOptions::default().with_simple_service_handler();
-        let results = store.query(query, options)?;
+        let results = store.query(query)?;
         //TODO: stream
         if let QueryResults::Graph(_) = results {
             let format = content_negotiation(

@@ -3,7 +3,6 @@ use crate::model::*;
 use crate::sparql::*;
 use crate::store_utils::*;
 use oxigraph::io::{DatasetFormat, GraphFormat};
-use oxigraph::sparql::QueryOptions;
 use oxigraph::store::sled::*;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{
@@ -178,10 +177,7 @@ impl PySledStore {
             default_graph,
             named_graphs,
         )?;
-        let results = self
-            .inner
-            .query(query, QueryOptions::default())
-            .map_err(map_evaluation_error)?;
+        let results = self.inner.query(query).map_err(map_evaluation_error)?;
         query_results_to_python(py, results)
     }
 

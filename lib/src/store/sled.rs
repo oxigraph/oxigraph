@@ -36,7 +36,7 @@ use std::{fmt, io, str};
 /// Usage example:
 /// ```
 /// use oxigraph::SledStore;
-/// use oxigraph::sparql::{QueryOptions, QueryResults};
+/// use oxigraph::sparql::QueryResults;
 /// use oxigraph::model::*;
 /// # use std::fs::remove_dir_all;
 ///
@@ -53,7 +53,7 @@ use std::{fmt, io, str};
 /// assert_eq!(vec![quad], results?);
 ///
 /// // SPARQL query
-/// if let QueryResults::Solutions(mut solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
+/// if let QueryResults::Solutions(mut solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }")? {
 ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 /// };
 /// #
@@ -135,6 +135,14 @@ impl SledStore {
     ///
     /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.query) for a usage example.
     pub fn query(
+        &self,
+        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
+    ) -> Result<QueryResults, EvaluationError> {
+        self.query_opt(query, QueryOptions::default())
+    }
+
+    /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) with some options.
+    pub fn query_opt(
         &self,
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
         options: QueryOptions,

@@ -89,7 +89,7 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
                 test,
                 error
             )),
-            Ok(query) => match store.query(query, options) {
+            Ok(query) => match store.query_opt(query, options) {
                 Err(error) => Err(anyhow!(
                     "Failure to execute query of {} with error: {}",
                     test,
@@ -272,7 +272,7 @@ impl ServiceHandler for StaticServiceHandler {
                     format!("Service {} not found", service_name),
                 )
             })?
-            .query(
+            .query_opt(
                 query,
                 QueryOptions::default().with_service_handler(self.clone()),
             )

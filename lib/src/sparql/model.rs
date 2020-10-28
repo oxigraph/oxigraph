@@ -47,14 +47,14 @@ impl QueryResults {
     /// ```
     /// use oxigraph::MemoryStore;
     /// use oxigraph::model::*;
-    /// use oxigraph::sparql::{QueryOptions, QueryResultsFormat};
+    /// use oxigraph::sparql::QueryResultsFormat;
     ///
     /// let store = MemoryStore::new();
     /// let ex = NamedNode::new("http://example.com")?;
     /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), None));
     ///
     /// let mut results = Vec::new();
-    /// store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())?.write(&mut results, QueryResultsFormat::Json)?;
+    /// store.query("SELECT ?s WHERE { ?s ?p ?o }")?.write(&mut results, QueryResultsFormat::Json)?;
     /// assert_eq!(results, "{\"head\":{\"vars\":[\"s\"]},\"results\":{\"bindings\":[{\"s\":{\"type\":\"uri\",\"value\":\"http://example.com\"}}]}}".as_bytes());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -78,7 +78,6 @@ impl QueryResults {
     /// ```
     /// use oxigraph::MemoryStore;
     /// use oxigraph::io::GraphFormat;
-    /// use oxigraph::sparql::QueryOptions;
     /// use oxigraph::model::*;
     /// use std::io::Cursor;
     ///
@@ -88,7 +87,7 @@ impl QueryResults {
     /// store.load_graph(Cursor::new(graph), GraphFormat::NTriples, &GraphName::DefaultGraph, None)?;
     ///
     /// let mut results = Vec::new();
-    /// store.query("CONSTRUCT WHERE { ?s ?p ?o }", QueryOptions::default())?.write_graph(&mut results, GraphFormat::NTriples)?;
+    /// store.query("CONSTRUCT WHERE { ?s ?p ?o }")?.write_graph(&mut results, GraphFormat::NTriples)?;
     /// assert_eq!(results, graph);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -219,10 +218,10 @@ impl QueryResultsFormat {
 ///
 /// ```
 /// use oxigraph::MemoryStore;
-/// use oxigraph::sparql::{QueryResults, QueryOptions};
+/// use oxigraph::sparql::QueryResults;
 ///
 /// let store = MemoryStore::new();
-/// if let QueryResults::Solutions(solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
+/// if let QueryResults::Solutions(solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }")? {
 ///     for solution in solutions {
 ///         println!("{:?}", solution?.get("s"));
 ///     }
@@ -246,10 +245,10 @@ impl QuerySolutionIter {
     ///
     /// ```
     /// use oxigraph::MemoryStore;
-    /// use oxigraph::sparql::{QueryResults, QueryOptions, Variable};
+    /// use oxigraph::sparql::{QueryResults, Variable};
     ///
     /// let store = MemoryStore::new();
-    /// if let QueryResults::Solutions(solutions) = store.query("SELECT ?s ?o WHERE { ?s ?p ?o }", QueryOptions::default())? {
+    /// if let QueryResults::Solutions(solutions) = store.query("SELECT ?s ?o WHERE { ?s ?p ?o }")? {
     ///     assert_eq!(solutions.variables(), &[Variable::new("s")?, Variable::new("o")?]);
     /// }
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -368,10 +367,10 @@ impl VariableSolutionIndex for Variable {
 ///
 /// ```
 /// use oxigraph::MemoryStore;
-/// use oxigraph::sparql::{QueryResults, QueryOptions};
+/// use oxigraph::sparql::QueryResults;
 ///
 /// let store = MemoryStore::new();
-/// if let QueryResults::Graph(triples) = store.query("CONSTRUCT WHERE { ?s ?p ?o }", QueryOptions::default())? {
+/// if let QueryResults::Graph(triples) = store.query("CONSTRUCT WHERE { ?s ?p ?o }")? {
 ///     for triple in triples {
 ///         println!("{}", triple?);
 ///     }

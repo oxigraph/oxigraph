@@ -90,7 +90,11 @@ pub(crate) fn evaluate_query<R: ReadableEncodedStore + 'static>(
     }
 }
 
-/// Options for SPARQL query evaluation
+/// Options for SPARQL query evaluation.
+///
+///
+/// If the `"http_client"` optional feature is enabled,
+/// a simple HTTP 1.1 client is used to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls.
 #[derive(Clone)]
 pub struct QueryOptions {
     pub(crate) service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
@@ -100,26 +104,27 @@ impl Default for QueryOptions {
     #[inline]
     fn default() -> Self {
         Self {
-            service_handler: Rc::new(EmptyServiceHandler),
+            service_handler: if cfg!(feature = "http_client") {
+                Rc::new(service::SimpleServiceHandler::new())
+            } else {
+                Rc::new(EmptyServiceHandler)
+            },
         }
     }
 }
 
 impl QueryOptions {
-    /// Use a simple HTTP 1.1 client built into Oxigraph to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls.
-    ///
-    /// Requires the `"http_client"` optional feature.
-    #[inline]
-    #[cfg(feature = "http_client")]
-    pub fn with_simple_service_handler(mut self) -> Self {
-        self.service_handler = Rc::new(service::SimpleServiceHandler::new());
-        self
-    }
-
     /// Use a given [`ServiceHandler`](trait.ServiceHandler.html) to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls.
     #[inline]
     pub fn with_service_handler(mut self, service_handler: impl ServiceHandler + 'static) -> Self {
         self.service_handler = Rc::new(ErrorConversionServiceHandler::wrap(service_handler));
+        self
+    }
+
+    /// Disables the `SERVICE` calls
+    #[inline]
+    pub fn without_service_handler(mut self) -> Self {
+        self.service_handler = Rc::new(EmptyServiceHandler);
         self
     }
 }

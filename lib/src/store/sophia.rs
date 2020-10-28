@@ -1,7 +1,7 @@
 //! This crate provides implementation of [Sophia] traits for the `store` module.
 //! [Sophia]: https://docs.rs/sophia/latest/sophia/
 use crate::model::*;
-use crate::sparql::{EvaluationError, QueryOptions, QueryResults};
+use crate::sparql::{EvaluationError, QueryResults};
 use crate::store::*;
 use sophia_api::dataset::*;
 use sophia_api::quad::stream::{QuadSource, StreamResult};
@@ -24,9 +24,7 @@ type StreamedSophiaQuad<'a> = StreamedQuad<'a, ByValue<SophiaQuad>>;
 macro_rules! sparql_to_hashset {
     ($store: ident, $err_map: ident, $sparql: expr) => {{
         (|| -> Result<HashSet<Term>, EvaluationError> {
-            if let QueryResults::Solutions(solutions) =
-                $store.query($sparql, QueryOptions::default())?
-            {
+            if let QueryResults::Solutions(solutions) = $store.query($sparql)? {
                 solutions
                     .map(|r| r.map(|v| v.get(0).unwrap().clone()))
                     .collect()

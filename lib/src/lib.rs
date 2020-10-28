@@ -21,7 +21,7 @@
 //! ```
 //! use oxigraph::MemoryStore;
 //! use oxigraph::model::*;
-//! use oxigraph::sparql::{QueryOptions, QueryResults};
+//! use oxigraph::sparql::QueryResults;
 //!
 //! let store = MemoryStore::new();
 //!
@@ -35,7 +35,7 @@
 //! assert_eq!(vec![quad], results);
 //!
 //! // SPARQL query
-//! if let QueryResults::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
+//! if let QueryResults::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { ?s ?p ?o }")? {
 //!     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 //! }
 //! # Result::<_,Box<dyn std::error::Error>>::Ok(())

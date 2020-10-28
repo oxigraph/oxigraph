@@ -17,7 +17,7 @@ use async_std::prelude::*;
 use async_std::task::{spawn, spawn_blocking};
 use http_types::{headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode};
 use oxigraph::io::GraphFormat;
-use oxigraph::sparql::{Query, QueryOptions, QueryResults, QueryResultsFormat};
+use oxigraph::sparql::{Query, QueryResults, QueryResultsFormat};
 use oxigraph::RocksDbStore;
 use std::str::FromStr;
 use std::time::Duration;
@@ -183,8 +183,7 @@ async fn evaluate_sparql_query(
         if query.dataset().is_default_dataset() {
             query.dataset_mut().set_default_graph_as_union();
         }
-        let options = QueryOptions::default().with_simple_service_handler();
-        let results = store.query(query, options)?;
+        let results = store.query(query)?;
         if let QueryResults::Graph(_) = results {
             let format = content_negotiation(
                 request,

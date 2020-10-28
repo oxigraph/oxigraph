@@ -29,7 +29,7 @@ use std::error::Error;
 ///
 ///     fn handle(&self,service_name: NamedNode, query: Query) -> Result<QueryResults,EvaluationError> {
 ///         if service_name == "http://example.com/service" {
-///             self.store.query(query, QueryOptions::default())
+///             self.store.query(query)
 ///         } else {
 ///             panic!()
 ///         }
@@ -41,7 +41,7 @@ use std::error::Error;
 /// let ex = NamedNode::new("http://example.com")?;
 /// service.store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), None));
 ///
-/// if let QueryResults::Solutions(mut solutions) = store.query(
+/// if let QueryResults::Solutions(mut solutions) = store.query_opt(
 ///     "SELECT ?s WHERE { SERVICE <http://example.com/service> { ?s ?p ?o } }",
 ///     QueryOptions::default().with_service_handler(service)
 /// )? {

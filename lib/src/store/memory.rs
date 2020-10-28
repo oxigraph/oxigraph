@@ -32,7 +32,7 @@ use std::{fmt, io};
 /// ```
 /// use oxigraph::MemoryStore;
 /// use oxigraph::model::*;
-/// use oxigraph::sparql::{QueryResults, QueryOptions};
+/// use oxigraph::sparql::QueryResults;
 ///
 /// let store = MemoryStore::new();
 ///
@@ -46,7 +46,7 @@ use std::{fmt, io};
 /// assert_eq!(vec![quad], results);
 ///
 /// // SPARQL query
-/// if let QueryResults::Solutions(mut solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
+/// if let QueryResults::Solutions(mut solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }")? {
 ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 /// }
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -92,11 +92,13 @@ impl MemoryStore {
 
     /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/).
     ///
+    /// The default query options are used.
+    ///
     /// Usage example:
     /// ```
     /// use oxigraph::MemoryStore;
     /// use oxigraph::model::*;
-    /// use oxigraph::sparql::{QueryResults, QueryOptions};
+    /// use oxigraph::sparql::QueryResults;
     ///
     /// let store = MemoryStore::new();
     ///
@@ -105,12 +107,20 @@ impl MemoryStore {
     /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), None));
     ///
     /// // SPARQL query
-    /// if let QueryResults::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { ?s ?p ?o }", QueryOptions::default())? {
+    /// if let QueryResults::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { ?s ?p ?o }")? {
     ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
     /// }
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn query(
+        &self,
+        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
+    ) -> Result<QueryResults, EvaluationError> {
+        self.query_opt(query, QueryOptions::default())
+    }
+
+    /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) with some options.
+    pub fn query_opt(
         &self,
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
         options: QueryOptions,
