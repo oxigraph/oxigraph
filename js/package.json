@@ -5,7 +5,7 @@
   "devDependencies": {
     "mocha": "^8.0.1",
     "@rdfjs/data-model": "1.1.2",
-    "standard": "^15.0.0"
+    "standard": "^16.0.0"
   },
   "scripts": {
     "test": "standard test/*.js && wasm-pack build --dev --target nodejs && mocha",
