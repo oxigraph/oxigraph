@@ -654,7 +654,7 @@ impl PyQuad {
             subject,
             predicate,
             object,
-            graph_name.unwrap_or_else(|| PyGraphName::DefaultGraph(PyDefaultGraph {})),
+            graph_name.unwrap_or(PyGraphName::DefaultGraph(PyDefaultGraph {})),
         )
         .into()
     }

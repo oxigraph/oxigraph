@@ -421,10 +421,7 @@ impl ParserState {
     }
 
     fn new_aggregation(&mut self, agg: Aggregation) -> Result<Variable, &'static str> {
-        let aggregations = self
-            .aggregations
-            .last_mut()
-            .ok_or_else(|| "Unexpected aggregate")?;
+        let aggregations = self.aggregations.last_mut().ok_or("Unexpected aggregate")?;
         Ok(aggregations
             .iter()
             .find_map(|(a, v)| if a == &agg { Some(v) } else { None })

@@ -1033,13 +1033,13 @@ fn remove_from_quad_map<T: Eq + Hash>(quad_map: &mut QuadMap<T>, e1: &T, e2: &T,
     }
 }
 
-fn option_set_flatten<'a, T: Clone>(i: Option<&'a HashSet<T>>) -> impl Iterator<Item = T> + 'a {
+fn option_set_flatten<T: Clone>(i: Option<&HashSet<T>>) -> impl Iterator<Item = T> + '_ {
     i.into_iter().flat_map(|s| s.iter().cloned())
 }
 
-fn option_pair_map_flatten<'a, T: Copy>(
-    i: Option<&'a HashMap<T, HashSet<T>>>,
-) -> impl Iterator<Item = (T, T)> + 'a {
+fn option_pair_map_flatten<T: Copy>(
+    i: Option<&HashMap<T, HashSet<T>>>,
+) -> impl Iterator<Item = (T, T)> + '_ {
     i.into_iter().flat_map(|kv| {
         kv.iter().flat_map(|(k, vs)| {
             let k = *k;
@@ -1048,7 +1048,7 @@ fn option_pair_map_flatten<'a, T: Copy>(
     })
 }
 
-fn triple_map_flatten<'a, T: Copy>(spo: &'a TripleMap<T>) -> impl Iterator<Item = (T, T, T)> + 'a {
+fn triple_map_flatten<T: Copy>(spo: &TripleMap<T>) -> impl Iterator<Item = (T, T, T)> + '_ {
     spo.iter().flat_map(|(s, po)| {
         let s = *s;
         po.iter().flat_map(move |(p, os)| {
@@ -1058,9 +1058,9 @@ fn triple_map_flatten<'a, T: Copy>(spo: &'a TripleMap<T>) -> impl Iterator<Item 
     })
 }
 
-fn option_triple_map_flatten<'a, T: Copy>(
-    i: Option<&'a TripleMap<T>>,
-) -> impl Iterator<Item = (T, T, T)> + 'a {
+fn option_triple_map_flatten<T: Copy>(
+    i: Option<&TripleMap<T>>,
+) -> impl Iterator<Item = (T, T, T)> + '_ {
     i.into_iter().flat_map(|spo| {
         spo.iter().flat_map(|(s, po)| {
             let s = *s;
@@ -1072,7 +1072,7 @@ fn option_triple_map_flatten<'a, T: Copy>(
     })
 }
 
-fn quad_map_flatten<'a, T: Copy>(gspo: &'a QuadMap<T>) -> impl Iterator<Item = (T, T, T, T)> + 'a {
+fn quad_map_flatten<T: Copy>(gspo: &QuadMap<T>) -> impl Iterator<Item = (T, T, T, T)> + '_ {
     gspo.iter().flat_map(|(g, spo)| {
         let g = *g;
         spo.iter().flat_map(move |(s, po)| {

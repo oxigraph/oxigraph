@@ -500,7 +500,7 @@ impl<I: StrId> EncodedTuple<I> {
         self.inner.get(index).cloned().unwrap_or(None)
     }
 
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = Option<EncodedTerm<I>>> + 'a {
+    pub fn iter(&self) -> impl Iterator<Item = Option<EncodedTerm<I>>> + '_ {
         self.inner.iter().cloned()
     }
 

@@ -1155,7 +1155,7 @@ impl Timestamp {
 
         Ok(Self {
             timezone_offset: props.timezone_offset,
-            value: time_on_timeline(props).ok_or_else(|| DateTimeError {
+            value: time_on_timeline(props).ok_or(DateTimeError {
                 kind: DateTimeErrorKind::Overflow,
             })?,
         })

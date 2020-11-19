@@ -52,6 +52,10 @@
 )]
 #![doc(html_favicon_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/master/logo.svg")]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/master/logo.svg")]
+#![allow(
+    clippy::multiple_crate_versions, //TODO
+    clippy::rc_buffer //TODO: enforce
+)]
 #![warn(
     clippy::cast_lossless,
     clippy::cast_possible_truncation,

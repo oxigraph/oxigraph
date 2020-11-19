@@ -80,28 +80,28 @@ impl FromStr for Literal {
     /// assert_eq!(Literal::from_str("-122e+1").unwrap(), Literal::new_typed_literal("-122e+1", xsd::DOUBLE));
     /// ```
     fn from_str(s: &str) -> Result<Self, TermParseError> {
-        if s.starts_with('"') {
-            let mut value = String::with_capacity(s.len() - 2);
-            let mut chars = s[1..].chars();
+        if let Some(s) = s.strip_prefix('"') {
+            let mut value = String::with_capacity(s.len() - 1);
+            let mut chars = s.chars();
             while let Some(c) = chars.next() {
                 match c {
                     '"' => {
                         let remain = chars.as_str();
                         return if remain.is_empty() {
                             Ok(Literal::new_simple_literal(value))
-                        } else if remain.starts_with('@') {
+                        } else if let Some(language) = remain.strip_prefix('@') {
                             Literal::new_language_tagged_literal(value, &remain[1..]).map_err(
                                 |error| TermParseError {
                                     kind: TermParseErrorKind::LanguageTag {
-                                        value: remain[1..].to_owned(),
+                                        value: language.to_owned(),
                                         error,
                                     },
                                 },
                             )
-                        } else if remain.starts_with("^^") {
+                        } else if let Some(datatype) = remain.strip_prefix("^^") {
                             Ok(Literal::new_typed_literal(
                                 value,
-                                NamedNode::from_str(&remain[2..])?,
+                                NamedNode::from_str(datatype)?,
                             ))
                         } else {
                             Err(TermParseError::msg("Unexpected characters after a literal"))
