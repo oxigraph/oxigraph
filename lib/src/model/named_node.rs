@@ -34,7 +34,7 @@ impl NamedNode {
     ///
     /// It is the caller's responsibility to ensure that `iri` is a valid IRI.
     ///
-    /// [`parse`](#method.parse) is a safe version of this constructor and should be used for untrusted data.
+    /// [`NamedNode::parse()`] is a safe version of this constructor and should be used for untrusted data.
     #[inline]
     pub fn new_unchecked(iri: impl Into<String>) -> Self {
         Self { iri: iri.into() }
@@ -123,7 +123,7 @@ impl<'a> NamedNodeRef<'a> {
     ///
     /// It is the caller's responsibility to ensure that `iri` is a valid IRI.
     ///
-    /// [`parse`](#method.parse) is a safe version of this constructor and should be used for untrusted data.
+    /// [`NamedNodeRef::parse()`] is a safe version of this constructor and should be used for untrusted data.
     #[inline]
     pub const fn new_unchecked(iri: &'a str) -> Self {
         Self { iri }

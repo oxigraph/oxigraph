@@ -214,7 +214,7 @@ impl QueryResultsFormat {
     }
 }
 
-/// An iterator over [`QuerySolution`s](struct.QuerySolution.html)
+/// An iterator over [`QuerySolution`]s
 ///
 /// ```
 /// use oxigraph::MemoryStore;
@@ -285,7 +285,7 @@ pub struct QuerySolution {
 }
 
 impl QuerySolution {
-    /// Returns a value for a given position in the tuple ([`usize`](https://doc.rust-lang.org/std/primitive.usize.html)) or a given variable name ([`&str`](https://doc.rust-lang.org/std/primitive.str.html) or [`Variable`](struct.Variable.html))
+    /// Returns a value for a given position in the tuple ([`usize`](std::usize)) or a given variable name ([`&str`](std::str) or [`Variable`])
     ///
     /// ```ignore
     /// let foo = solution.get("foo"); // Get the value of the variable ?foo if it exists
@@ -434,7 +434,7 @@ impl Variable {
     /// It is the caller's responsibility to ensure that `id` is a valid blank node identifier
     /// according to the SPARQL grammar.
     ///
-    /// [`new`](#method.new) is a safe version of this constructor and should be used for untrusted data.
+    /// [`Variable::new()`] is a safe version of this constructor and should be used for untrusted data.
     #[inline]
     pub fn new_unchecked(name: impl Into<String>) -> Self {
         Variable { name: name.into() }
@@ -513,7 +513,7 @@ fn validate_variable_identifier(id: &str) -> Result<(), VariableNameParseError> 
     Ok(())
 }
 
-/// An error raised during [`Variable`](struct.Variable.html) name validation.
+/// An error raised during [`Variable`] name validation.
 #[allow(missing_copy_implementations)]
 #[derive(Debug)]
 pub struct VariableNameParseError {}

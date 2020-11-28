@@ -1,5 +1,4 @@
-//! This crate provides implementation of [Sophia] traits for the `model` module.
-//! [Sophia]: https://docs.rs/sophia/latest/sophia/
+//! This crate provides implementation of [Sophia](https://docs.rs/sophia/) traits for the `model` module.
 
 use crate::model::*;
 use sophia_api::term::*;
@@ -393,7 +392,7 @@ impl<'a> From<TripleRef<'a>> for [TermRef<'a>; 3] {
     }
 }
 
-/// Error raised when trying to copy a [Sophia](https://docs.rs/sophia/)
+/// Error raised when trying to copy a [Sophia](sophia)
 /// term as an incompatible Oxigraph term
 /// (e.g. a literal into `NamedNode`).
 #[derive(Clone, Copy, Debug)]

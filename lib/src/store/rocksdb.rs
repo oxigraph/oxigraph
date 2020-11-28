@@ -123,7 +123,7 @@ impl RocksDbStore {
 
     /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/).
     ///
-    /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.query) for a usage example.
+    /// See [`MemoryStore`](super::memory::MemoryStore::query()) for a usage example.
     pub fn query(
         &self,
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
@@ -142,7 +142,7 @@ impl RocksDbStore {
 
     /// Retrieves quads with a filter on each quad component
     ///
-    /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.quads_for_pattern) for a usage example.
+    /// See [`MemoryStore`](super::memory::MemoryStore::quads_for_pattern()) for a usage example.
     pub fn quads_for_pattern(
         &self,
         subject: Option<NamedOrBlankNodeRef<'_>>,
@@ -211,7 +211,7 @@ impl RocksDbStore {
     /// The store does not track the existence of empty named graphs.
     /// This method has no ACID guarantees.
     ///
-    /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.update) for a usage example.
+    /// See [`MemoryStore`](super::memory::MemoryStore::update()) for a usage example.
     pub fn update(
         &self,
         update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
@@ -232,7 +232,7 @@ impl RocksDbStore {
     ///
     /// The transaction data are stored in memory while the transaction is not committed or rollbacked.
     ///
-    /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.transaction) for a usage example.
+    /// See [`MemoryStore`](super::memory::MemoryStore::transaction()) for a usage example.
     pub fn transaction<'a, E: From<io::Error>>(
         &'a self,
         f: impl FnOnce(&mut RocksDbTransaction<'a>) -> Result<(), E>,
@@ -250,12 +250,12 @@ impl RocksDbStore {
     /// Loads a graph file (i.e. triples) into the store
     ///
     /// Warning: This functions saves the triples in batch. If the parsing fails in the middle of the file,
-    /// only a part of it may be written. Use a (memory greedy) [transaction](#method.transaction) if you do not want that.
+    /// only a part of it may be written. Use a (memory greedy) [transaction](RocksDbStore::transaction()) if you do not want that.
     ///
-    /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.load_graph) for a usage example.
+    /// See [`MemoryStore`](super::memory::MemoryStore::load_graph()) for a usage example.
     ///
-    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) or [`UnexpectedEof`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.UnexpectedEof) error kinds.
+    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
     /// Errors related to data loading into the store use the other error kinds.
     pub fn load_graph<'a>(
         &self,
@@ -278,12 +278,12 @@ impl RocksDbStore {
     /// Loads a dataset file (i.e. quads) into the store.
     ///
     /// Warning: This functions saves the quads in batch. If the parsing fails in the middle of the file,
-    /// only a part of it may be written. Use a (memory greedy) [transaction](#method.transaction) if you do not want that.
+    /// only a part of it may be written. Use a (memory greedy) [transaction](RocksDbStore::transaction()) if you do not want that.
     ///
-    /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.load_dataset) for a usage example.
+    /// See [`MemoryStore`](super::memory::MemoryStore::load_dataset()) for a usage example.
     ///
-    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) or [`UnexpectedEof`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.UnexpectedEof) error kinds.
+    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
     /// Errors related to data loading into the store use the other error kinds.
     pub fn load_dataset(
         &self,
@@ -319,7 +319,7 @@ impl RocksDbStore {
 
     /// Dumps a store graph into a file.
     ///    
-    /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.dump_graph) for a usage example.
+    /// See [`MemoryStore`](super::memory::MemoryStore::dump_graph()) for a usage example.
     pub fn dump_graph<'a>(
         &self,
         writer: impl Write,
@@ -336,7 +336,7 @@ impl RocksDbStore {
 
     /// Dumps the store into a file.
     ///    
-    /// See [`MemoryStore`](../memory/struct.MemoryStore.html#method.dump_dataset) for a usage example.
+    /// See [`MemoryStore`](super::memory::MemoryStore::dump_dataset()) for a usage example.
     pub fn dump_dataset(&self, writer: impl Write, syntax: DatasetFormat) -> Result<(), io::Error> {
         dump_dataset(self.iter(), writer, syntax)
     }
@@ -862,7 +862,7 @@ impl WritableEncodedStore for AutoBatchWriter<'_> {
     }
 }
 
-/// Allows inserting and deleting quads during an ACID transaction with the [`RocksDbStore`](struct.RocksDbStore.html).
+/// Allows inserting and deleting quads during an ACID transaction with the [`RocksDbStore`].
 pub struct RocksDbTransaction<'a> {
     store: &'a RocksDbStore,
     batch: WriteBatch,
@@ -877,14 +877,14 @@ impl RocksDbTransaction<'_> {
     /// the full file content is temporarily stored in main memory.
     /// Do not use for big files.
     ///
-    /// See [`MemoryTransaction`](../memory/struct.MemoryTransaction.html#method.load_graph) for a usage example.
+    /// See [`MemoryTransaction`](super::memory::MemoryTransaction::load_graph()) for a usage example.
     ///
     /// If the file parsing fails in the middle of the file, the triples read before are still
     /// considered by the transaction. Rollback the transaction by making the transaction closure
     /// return an error if you don't want that.
     ///
-    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) or [`UnexpectedEof`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.UnexpectedEof) error kinds.
+    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
     pub fn load_graph<'a>(
         &mut self,
         reader: impl BufRead,
@@ -902,14 +902,14 @@ impl RocksDbTransaction<'_> {
     /// the full file content is temporarily stored in main memory.
     /// Do not use for big files.
     ///
-    /// See [`MemoryTransaction`](../memory/struct.MemoryTransaction.html#method.load_dataset) for a usage example.
+    /// See [`MemoryTransaction`](super::memory::MemoryTransaction::load_dataset()) for a usage example.
     ///
     /// If the file parsing fails in the middle of the file, the quads read before are still
     /// considered by the transaction. Rollback the transaction by making the transaction closure
     /// return an error if you don't want that.
     ///
-    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) or [`UnexpectedEof`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.UnexpectedEof) error kinds.
+    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
     pub fn load_dataset(
         &mut self,
         reader: impl BufRead,
@@ -1167,7 +1167,7 @@ fn map_err(e: Error) -> io::Error {
     io::Error::new(io::ErrorKind::Other, e)
 }
 
-/// An iterator returning the quads contained in a [`RocksDbStore`](struct.RocksDbStore.html).
+/// An iterator returning the quads contained in a [`RocksDbStore`].
 pub struct RocksDbQuadIter {
     inner: QuadIterInner,
 }

@@ -1,6 +1,6 @@
 //! [SPARQL](https://www.w3.org/TR/sparql11-overview/) implementation.
 //!
-//! Stores execute SPARQL. See [`MemoryStore`](../store/memory/struct.MemoryStore.html#method.query) for an example.
+//! Stores execute SPARQL. See [`MemoryStore`](super::store::memory::MemoryStore::query()) for an example.
 
 mod algebra;
 mod csv_results;
@@ -114,7 +114,7 @@ impl Default for QueryOptions {
 }
 
 impl QueryOptions {
-    /// Use a given [`ServiceHandler`](trait.ServiceHandler.html) to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls.
+    /// Use a given [`ServiceHandler`] to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls.
     #[inline]
     pub fn with_service_handler(mut self, service_handler: impl ServiceHandler + 'static) -> Self {
         self.service_handler = Rc::new(ErrorConversionServiceHandler::wrap(service_handler));

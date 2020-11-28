@@ -1,4 +1,4 @@
-//! Provides ready to use [`NamedNodeRef`s](struct.NamedNodeRef.html) for basic RDF vocabularies
+//! Provides ready to use [`NamedNodeRef`]s for basic RDF vocabularies
 
 pub mod rdf {
     //! [RDF](https://www.w3.org/TR/rdf11-concepts/) vocabulary

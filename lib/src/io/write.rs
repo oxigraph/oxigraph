@@ -11,9 +11,9 @@ use std::io::Write;
 /// A serializer for RDF graph serialization formats.
 ///
 /// It currently supports the following formats:
-/// * [N-Triples](https://www.w3.org/TR/n-triples/) ([`GraphFormat::NTriples`](../enum.GraphFormat.html#variant.NTriples))
-/// * [Turtle](https://www.w3.org/TR/turtle/) ([`GraphFormat::Turtle`](../enum.GraphFormat.html#variant.Turtle))
-/// * [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) ([`GraphFormat::RdfXml`](../enum.GraphFormat.html#variant.RdfXml))
+/// * [N-Triples](https://www.w3.org/TR/n-triples/) ([`GraphFormat::NTriples`](super::GraphFormat::NTriples))
+/// * [Turtle](https://www.w3.org/TR/turtle/) ([`GraphFormat::Turtle`](super::GraphFormat::Turtle))
+/// * [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) ([`GraphFormat::RdfXml`](super::GraphFormat::RdfXml))
 ///
 /// ```
 /// use oxigraph::io::{GraphFormat, GraphSerializer};
@@ -42,7 +42,7 @@ impl GraphSerializer {
         Self { format }
     }
 
-    /// Returns a `TripleWriter` allowing writing triples into the given [`Write`](https://doc.rust-lang.org/std/io/trait.Write.html) implementation
+    /// Returns a `TripleWriter` allowing writing triples into the given [`Write`](std::io::Write) implementation
     pub fn triple_writer<W: Write>(&self, writer: W) -> Result<TripleWriter<W>, io::Error> {
         Ok(TripleWriter {
             formatter: match self.format {
@@ -55,9 +55,9 @@ impl GraphSerializer {
 }
 
 /// Allows writing triples.
-/// Could be built using a [`GraphSerializer`](struct.GraphSerializer.html).
+/// Could be built using a [`GraphSerializer`].
 ///
-/// Warning: Do not forget to run the [`finish`](#method.finish) method to properly write the last bytes of the file.
+/// Warning: Do not forget to run the [`finish`](TripleWriter::finish()) method to properly write the last bytes of the file.
 ///
 /// ```
 /// use oxigraph::io::{GraphFormat, GraphSerializer};
@@ -112,8 +112,8 @@ impl<W: Write> TripleWriter<W> {
 /// A serializer for RDF graph serialization formats.
 ///
 /// It currently supports the following formats:
-/// * [N-Quads](https://www.w3.org/TR/n-quads/) ([`DatasetFormat::NQuads`](../enum.DatasetFormat.html#variant.NQuads))
-/// * [TriG](https://www.w3.org/TR/trig/) ([`DatasetFormat::TriG`](../enum.DatasetFormat.html#variant.TriG))
+/// * [N-Quads](https://www.w3.org/TR/n-quads/) ([`DatasetFormat::NQuads`](super::DatasetFormat::NQuads))
+/// * [TriG](https://www.w3.org/TR/trig/) ([`DatasetFormat::TriG`](super::DatasetFormat::TriG))
 ///
 /// ```
 /// use oxigraph::io::{DatasetFormat, DatasetSerializer};
@@ -143,7 +143,7 @@ impl DatasetSerializer {
         Self { format }
     }
 
-    /// Returns a `QuadWriter` allowing writing triples into the given [`Write`](https://doc.rust-lang.org/std/io/trait.Write.html) implementation
+    /// Returns a `QuadWriter` allowing writing triples into the given [`Write`](std::io::Write) implementation
     pub fn quad_writer<W: Write>(&self, writer: W) -> Result<QuadWriter<W>, io::Error> {
         Ok(QuadWriter {
             formatter: match self.format {
@@ -155,9 +155,9 @@ impl DatasetSerializer {
 }
 
 /// Allows writing triples.
-/// Could be built using a [`DatasetSerializer`](struct.DatasetSerializer.html).
+/// Could be built using a [`DatasetSerializer`].
 ///
-/// Warning: Do not forget to run the [`finish`](#method.finish) method to properly write the last bytes of the file.
+/// Warning: Do not forget to run the [`finish`](QuadWriter::finish()) method to properly write the last bytes of the file.
 ///
 /// ```
 /// use oxigraph::io::{DatasetFormat, DatasetSerializer};

@@ -9,7 +9,7 @@ use std::str;
 ///
 /// The common way to create a new blank node is to use the [`BlankNode::default`](#impl-Default) function.
 ///
-/// It is also possible to create a blank node from a blank node identifier using the [`BlankNode::new`](#method.new) function.
+/// It is also possible to create a blank node from a blank node identifier using the [`BlankNode::new()`] function.
 /// The blank node identifier must be valid according to N-Triples, Turtle and SPARQL grammars.
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
@@ -49,7 +49,7 @@ impl BlankNode {
     /// It is the caller's responsibility to ensure that `id` is a valid blank node identifier
     /// according to N-Triples, Turtle and SPARQL grammars.
     ///
-    /// [`new`](#method.new) is a safe version of this constructor and should be used for untrusted data.
+    /// [`BlankNode::new()`] is a safe version of this constructor and should be used for untrusted data.
     pub fn new_unchecked(id: impl Into<String>) -> Self {
         let id = id.into();
         if let Some(numerical_id) = to_integer_id(&id) {
@@ -119,7 +119,7 @@ impl Default for BlankNode {
 ///
 /// The common way to create a new blank node is to use the [`BlankNode::default`](#impl-Default) trait method.
 ///
-/// It is also possible to create a blank node from a blank node identifier using the [`BlankNodeRef::new`](#method.new) function.
+/// It is also possible to create a blank node from a blank node identifier using the [`BlankNodeRef::new()`] function.
 /// The blank node identifier must be valid according to N-Triples, Turtle and SPARQL grammars.
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
@@ -158,7 +158,7 @@ impl<'a> BlankNodeRef<'a> {
     /// It is the caller's responsibility to ensure that `id` is a valid blank node identifier
     /// according to N-Triples, Turtle and SPARQL grammars.
     ///
-    /// [`new`](#method.new) is a safe version of this constructor and should be used for untrusted data.
+    /// [`BlankNodeRef::new()`) is a safe version of this constructor and should be used for untrusted data.
     pub fn new_unchecked(id: &'a str) -> Self {
         if let Some(numerical_id) = to_integer_id(id) {
             Self(BlankNodeRefContent::Anonymous {
@@ -336,7 +336,7 @@ fn to_integer_id(id: &str) -> Option<u128> {
     Some(value)
 }
 
-/// An error raised during [`BlankNode`](struct.BlankNode.html) IDs validation.
+/// An error raised during [`BlankNode`] IDs validation.
 #[allow(missing_copy_implementations)]
 #[derive(Debug)]
 pub struct BlankNodeIdParseError {}

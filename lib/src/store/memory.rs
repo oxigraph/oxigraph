@@ -26,7 +26,7 @@ use std::{fmt, io};
 
 /// In-memory store.
 /// It encodes a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) and allows to query it using SPARQL.
-/// It is cheap to build using the [`MemoryStore::new()`](#method.new) method.
+/// It is cheap to build using the [`MemoryStore::new()`] method.
 ///
 /// Usage example:
 /// ```
@@ -312,10 +312,10 @@ impl MemoryStore {
     ///
     /// Warning: This functions saves the triples during the parsing.
     /// If the parsing fails in the middle of the file, the triples read before stay in the store.
-    /// Use a (memory greedy) [transaction](#method.transaction) if you do not want that.
+    /// Use a (memory greedy) [transaction](MemoryStore::transaction()) if you do not want that.
     ///
-    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) or [`UnexpectedEof`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.UnexpectedEof) error kinds.
+    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
     pub fn load_graph<'a>(
         &self,
         reader: impl BufRead,
@@ -350,10 +350,10 @@ impl MemoryStore {
     ///
     /// Warning: This functions saves the quads during the parsing.
     /// If the parsing fails in the middle of the file, the quads read before stay in the store.
-    /// Use a (memory greedy) [transaction](#method.transaction) if you do not want that.
+    /// Use a (memory greedy) [transaction](MemoryStore::transaction()) if you do not want that.
     ///
-    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) or [`UnexpectedEof`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.UnexpectedEof) error kinds.
+    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
     pub fn load_dataset(
         &self,
         reader: impl BufRead,
@@ -1085,7 +1085,7 @@ fn quad_map_flatten<T: Copy>(gspo: &QuadMap<T>) -> impl Iterator<Item = (T, T, T
     })
 }
 
-/// Allows inserting and deleting quads during an ACID transaction with the [`MemoryStore`](struct.MemoryStore.html).
+/// Allows inserting and deleting quads during an ACID transaction with the [`MemoryStore`].
 pub struct MemoryTransaction {
     ops: Vec<TransactionOp>,
 }
@@ -1122,8 +1122,8 @@ impl MemoryTransaction {
     /// considered by the transaction. Rollback the transaction by making the transaction closure
     /// return an error if you don't want that.
     ///
-    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) or [`UnexpectedEof`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.UnexpectedEof) error kinds.
+    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
     pub fn load_graph<'a>(
         &mut self,
         reader: impl BufRead,
@@ -1169,8 +1169,8 @@ impl MemoryTransaction {
     /// considered by the transaction. Rollback the transaction by making the transaction closure
     /// return an error if you don't want that.
     ///
-    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.InvalidData) or [`UnexpectedEof`](https://doc.rust-lang.org/std/io/enum.ErrorKind.html#variant.UnexpectedEof) error kinds.
+    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
     pub fn load_dataset(
         &mut self,
         reader: impl BufRead,
@@ -1275,7 +1275,7 @@ impl Iterator for EncodedQuadsIter {
     }
 }
 
-/// An iterator returning the quads contained in a [`MemoryStore`](struct.MemoryStore.html).
+/// An iterator returning the quads contained in a [`MemoryStore`].
 pub struct MemoryQuadIter {
     iter: IntoIter<EncodedQuad>,
     store: MemoryStore,

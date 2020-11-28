@@ -1,5 +1,4 @@
-//! This crate provides implementation of [Sophia] traits for the `store` module.
-//! [Sophia]: https://docs.rs/sophia/latest/sophia/
+//! This crate provides implementation of [Sophia](https://docs.rs/sophia/) traits for the `store` module.
 use crate::model::*;
 use crate::sparql::{EvaluationError, QueryResults};
 use crate::store::*;
