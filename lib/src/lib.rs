@@ -14,7 +14,7 @@
 //!
 //! Oxigraph also provides a set of utility functions for reading, writing and processing RDF files.
 //!
-//! The disabled by default `"sophia"` feature provides [`sophia_api`] traits implemention on Oxigraph terms and stores.
+//! The disabled by default `"sophia"` feature provides [`sophia_api`](https://docs.rs/sophia_api/) traits implemention on Oxigraph terms and stores.
 //!
 //! Usage example with the [`MemoryStore`](store::memory::MemoryStore):
 //!

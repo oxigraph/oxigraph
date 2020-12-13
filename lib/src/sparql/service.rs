@@ -11,7 +11,7 @@ use std::error::Error;
 
 /// Handler for [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE.
 ///
-/// Should be given to [`QueryOptions`](QueryOptions::with_service_handler())
+/// Should be given to [`QueryOptions`](super::QueryOptions::with_service_handler())
 /// before evaluating a SPARQL query that uses SERVICE calls.
 ///
 /// ```
@@ -52,7 +52,7 @@ use std::error::Error;
 pub trait ServiceHandler {
     type Error: Error + Send + Sync + 'static;
 
-    /// Evaluates a [`Query`] against a given service identified by a [`NamedNode`](super::model::NamedNode).
+    /// Evaluates a [`Query`] against a given service identified by a [`NamedNode`](crate::model::NamedNode).
     fn handle(&self, service_name: NamedNode, query: Query) -> Result<QueryResults, Self::Error>;
 }
 
