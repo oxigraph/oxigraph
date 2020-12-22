@@ -77,6 +77,12 @@ describe('MemoryStore', function () {
       const results = store.query('SELECT (YEAR(NOW()) AS ?y) WHERE {}')
       assert.strictEqual(1, results.length)
     })
+
+    it('SELECT with RAND()', function () {
+      const store = new MemoryStore([dataFactory.triple(ex, ex, ex)])
+      const results = store.query('SELECT (RAND() AS ?y) WHERE {}')
+      assert.strictEqual(1, results.length)
+    })
   })
 
   describe('#update()', function () {

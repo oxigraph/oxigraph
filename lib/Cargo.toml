@@ -24,7 +24,7 @@ http_client = ["httparse", "native-tls"]
 rocksdb = { version = "0.15", optional = true }
 sled = { version = "0.34", optional = true }
 quick-xml = "0.20"
-rand = "0.7"
+rand = "0.8"
 md-5 = "0.9"
 sha-1 = "0.9"
 sha2 = "0.9"
@@ -47,7 +47,7 @@ native-tls = { version = "0.2", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"
-getrandom = {version="0.1", features=["wasm-bindgen"]}
+getrandom = {version="0.2", features=["js"]}
 
 [dev-dependencies]
 rayon = "1"
