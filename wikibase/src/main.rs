@@ -14,7 +14,7 @@ use argh::FromArgs;
 use async_std::future::Future;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
-use async_std::task::{spawn, spawn_blocking};
+use async_std::task::spawn;
 use http_types::{headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode};
 use oxigraph::io::GraphFormat;
 use oxigraph::sparql::{Query, QueryResults, QueryResultsFormat};
@@ -79,16 +79,16 @@ pub async fn main() -> Result<()> {
         .collect::<Vec<_>>();
     let slot = args.slot.clone();
     let repo = store.clone();
-    spawn_blocking(move || {
-        let mut loader = WikibaseLoader::new(
-            repo,
-            &mediawiki_api,
-            &mediawiki_base_url,
-            &namespaces,
-            slot.as_deref(),
-            Duration::new(10, 0),
-        )
-        .unwrap();
+    let mut loader = WikibaseLoader::new(
+        repo,
+        &mediawiki_api,
+        &mediawiki_base_url,
+        &namespaces,
+        slot.as_deref(),
+        Duration::new(10, 0),
+    )
+    .unwrap();
+    spawn(async move {
         loader.initial_loading().unwrap();
         loader.update_loop();
     });
@@ -173,51 +173,48 @@ async fn evaluate_sparql_query(
     query: String,
     request: Request,
 ) -> Result<Response> {
-    spawn_blocking(move || {
-        //TODO: stream
-        let mut query = Query::parse(&query, None).map_err(|e| {
-            let mut e = Error::from(e);
-            e.set_status(StatusCode::BadRequest);
-            e
-        })?;
-        if query.dataset().is_default_dataset() {
-            query.dataset_mut().set_default_graph_as_union();
-        }
-        let results = store.query(query)?;
-        if let QueryResults::Graph(_) = results {
-            let format = content_negotiation(
-                request,
-                &[
-                    GraphFormat::NTriples.media_type(),
-                    GraphFormat::Turtle.media_type(),
-                    GraphFormat::RdfXml.media_type(),
-                ],
-                GraphFormat::from_media_type,
-            )?;
-            let mut body = Vec::default();
-            results.write_graph(&mut body, format)?;
-            let mut response = Response::from(body);
-            response.insert_header(headers::CONTENT_TYPE, format.media_type());
-            Ok(response)
-        } else {
-            let format = content_negotiation(
-                request,
-                &[
-                    QueryResultsFormat::Xml.media_type(),
-                    QueryResultsFormat::Json.media_type(),
-                    QueryResultsFormat::Csv.media_type(),
-                    QueryResultsFormat::Tsv.media_type(),
-                ],
-                QueryResultsFormat::from_media_type,
-            )?;
-            let mut body = Vec::default();
-            results.write(&mut body, format)?;
-            let mut response = Response::from(body);
-            response.insert_header(headers::CONTENT_TYPE, format.media_type());
-            Ok(response)
-        }
-    })
-    .await
+    //TODO: stream
+    let mut query = Query::parse(&query, None).map_err(|e| {
+        let mut e = Error::from(e);
+        e.set_status(StatusCode::BadRequest);
+        e
+    })?;
+    if query.dataset().is_default_dataset() {
+        query.dataset_mut().set_default_graph_as_union();
+    }
+    let results = store.query(query)?;
+    if let QueryResults::Graph(_) = results {
+        let format = content_negotiation(
+            request,
+            &[
+                GraphFormat::NTriples.media_type(),
+                GraphFormat::Turtle.media_type(),
+                GraphFormat::RdfXml.media_type(),
+            ],
+            GraphFormat::from_media_type,
+        )?;
+        let mut body = Vec::default();
+        results.write_graph(&mut body, format)?;
+        let mut response = Response::from(body);
+        response.insert_header(headers::CONTENT_TYPE, format.media_type());
+        Ok(response)
+    } else {
+        let format = content_negotiation(
+            request,
+            &[
+                QueryResultsFormat::Xml.media_type(),
+                QueryResultsFormat::Json.media_type(),
+                QueryResultsFormat::Csv.media_type(),
+                QueryResultsFormat::Tsv.media_type(),
+            ],
+            QueryResultsFormat::from_media_type,
+        )?;
+        let mut body = Vec::default();
+        results.write(&mut body, format)?;
+        let mut response = Response::from(body);
+        response.insert_header(headers::CONTENT_TYPE, format.media_type());
+        Ok(response)
+    }
 }
 
 async fn http_server<
