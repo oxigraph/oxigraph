@@ -24,7 +24,7 @@ use std::io::BufReader;
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
 /// >>> str(store)
 /// '<http://example.com> <http://example.com/p> "1" <http://example.com/g> .\n'
-#[pyclass(name = MemoryStore)]
+#[pyclass(name = "MemoryStore", module = "oxigraph")]
 #[derive(Eq, PartialEq, Clone)]
 #[text_signature = "()"]
 pub struct PyMemoryStore {
@@ -385,7 +385,7 @@ impl PyIterProtocol for PyMemoryStore {
     }
 }
 
-#[pyclass(unsendable)]
+#[pyclass(unsendable, module = "oxigraph")]
 pub struct QuadIter {
     inner: MemoryQuadIter,
 }

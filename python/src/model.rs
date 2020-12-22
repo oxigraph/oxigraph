@@ -20,7 +20,7 @@ use std::vec::IntoIter;
 ///
 /// >>> str(NamedNode('http://example.com'))
 /// '<http://example.com>'
-#[pyclass(name = NamedNode)]
+#[pyclass(name = "NamedNode", module = "oxigraph")]
 #[text_signature = "(value)"]
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct PyNamedNode {
@@ -96,9 +96,9 @@ impl PyObjectProtocol for PyNamedNode {
     fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
         if let Ok(other) = other.downcast::<PyCell<PyNamedNode>>() {
             Ok(eq_ord_compare(self, &other.borrow(), op))
-        } else if PyBlankNode::is_instance(other)
-            || PyLiteral::is_instance(other)
-            || PyDefaultGraph::is_instance(other)
+        } else if PyBlankNode::is_type_of(other)
+            || PyLiteral::is_type_of(other)
+            || PyDefaultGraph::is_type_of(other)
         {
             eq_compare_other_type(op)
         } else {
@@ -119,7 +119,7 @@ impl PyObjectProtocol for PyNamedNode {
 ///
 /// >>> str(BlankNode('ex'))
 /// '_:ex'
-#[pyclass(name = BlankNode)]
+#[pyclass(name = "BlankNode", module = "oxigraph")]
 #[text_signature = "(value)"]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyBlankNode {
@@ -198,9 +198,9 @@ impl PyObjectProtocol for PyBlankNode {
     fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
         if let Ok(other) = other.downcast::<PyCell<PyBlankNode>>() {
             eq_compare(self, &other.borrow(), op)
-        } else if PyNamedNode::is_instance(other)
-            || PyLiteral::is_instance(other)
-            || PyDefaultGraph::is_instance(other)
+        } else if PyNamedNode::is_type_of(other)
+            || PyLiteral::is_type_of(other)
+            || PyDefaultGraph::is_type_of(other)
         {
             eq_compare_other_type(op)
         } else {
@@ -229,7 +229,7 @@ impl PyObjectProtocol for PyBlankNode {
 /// '"example"@en'
 /// >>> str(Literal('11', datatype=NamedNode('http://www.w3.org/2001/XMLSchema#integer')))
 /// '"11"^^<http://www.w3.org/2001/XMLSchema#integer>'
-#[pyclass(name = Literal)]
+#[pyclass(name = "Literal", module = "oxigraph")]
 #[text_signature = "(value, *, datatype = None, language = None)"]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyLiteral {
@@ -337,9 +337,9 @@ impl PyObjectProtocol for PyLiteral {
     fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
         if let Ok(other) = other.downcast::<PyCell<PyLiteral>>() {
             eq_compare(self, &other.borrow(), op)
-        } else if PyNamedNode::is_instance(other)
-            || PyBlankNode::is_instance(other)
-            || PyDefaultGraph::is_instance(other)
+        } else if PyNamedNode::is_type_of(other)
+            || PyBlankNode::is_type_of(other)
+            || PyDefaultGraph::is_type_of(other)
         {
             eq_compare_other_type(op)
         } else {
@@ -351,7 +351,7 @@ impl PyObjectProtocol for PyLiteral {
 }
 
 /// The RDF `default graph name <https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph>`_
-#[pyclass(name = DefaultGraph)]
+#[pyclass(name = "DefaultGraph", module = "oxigraph")]
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct PyDefaultGraph {}
 
@@ -391,9 +391,9 @@ impl PyObjectProtocol for PyDefaultGraph {
     fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
         if let Ok(other) = other.downcast::<PyCell<PyDefaultGraph>>() {
             eq_compare(self, &other.borrow(), op)
-        } else if PyNamedNode::is_instance(other)
-            || PyBlankNode::is_instance(other)
-            || PyLiteral::is_instance(other)
+        } else if PyNamedNode::is_type_of(other)
+            || PyBlankNode::is_type_of(other)
+            || PyLiteral::is_type_of(other)
         {
             eq_compare_other_type(op)
         } else {
@@ -453,7 +453,7 @@ impl From<PyTerm> for Term {
 /// A triple could also be easily destructed into its components:
 ///
 /// >>> (s, p, o) = Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))
-#[pyclass(name = Triple)]
+#[pyclass(name = "Triple", module = "oxigraph")]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 #[text_signature = "(subject, predicate, object)"]
 pub struct PyTriple {
@@ -616,7 +616,7 @@ impl From<PyGraphName> for GraphName {
 /// A quad could also be easily destructed into its components:
 ///
 /// >>> (s, p, o, g) = Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))
-#[pyclass(name = Quad)]
+#[pyclass(name = "Quad", module = "oxigraph")]
 #[text_signature = "(subject, predicate, object, graph_name = None)"]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyQuad {
@@ -792,7 +792,7 @@ impl PyIterProtocol for PyQuad {
 ///
 /// >>> str(Variable('foo'))
 /// '?foo'
-#[pyclass(name = Variable)]
+#[pyclass(name = "Variable", module = "oxigraph")]
 #[text_signature = "(value)"]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyVariable {
@@ -873,7 +873,7 @@ impl<'a> TryFrom<&'a PyAny> for PyNamedNodeRef<'a> {
         } else {
             Err(PyTypeError::new_err(format!(
                 "{} is not an RDF named node",
-                value.get_type().name(),
+                value.get_type().name()?,
             )))
         }
     }
@@ -904,7 +904,7 @@ impl<'a> TryFrom<&'a PyAny> for PyNamedOrBlankNodeRef<'a> {
         } else {
             Err(PyTypeError::new_err(format!(
                 "{} is not an RDF named or blank node",
-                value.get_type().name(),
+                value.get_type().name()?,
             )))
         }
     }
@@ -952,7 +952,7 @@ impl<'a> TryFrom<&'a PyAny> for PyTermRef<'a> {
         } else {
             Err(PyTypeError::new_err(format!(
                 "{} is not an RDF term",
-                value.get_type().name(),
+                value.get_type().name()?,
             )))
         }
     }
@@ -1001,7 +1001,7 @@ impl<'a> TryFrom<&'a PyAny> for PyGraphNameRef<'a> {
         } else {
             Err(PyTypeError::new_err(format!(
                 "{} is not an RDF graph name",
-                value.get_type().name(),
+                value.get_type().name()?,
             )))
         }
     }
@@ -1093,7 +1093,7 @@ fn graph_name_repr(term: GraphNameRef<'_>, buffer: &mut String) {
     }
 }
 
-#[pyclass]
+#[pyclass(module = "oxigraph")]
 pub struct TripleComponentsIter {
     inner: IntoIter<Term>,
 }
@@ -1109,7 +1109,7 @@ impl PyIterProtocol for TripleComponentsIter {
     }
 }
 
-#[pyclass]
+#[pyclass(module = "oxigraph")]
 pub struct QuadComponentsIter {
     inner: IntoIter<Option<Term>>,
 }

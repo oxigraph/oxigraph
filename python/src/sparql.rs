@@ -85,7 +85,7 @@ pub fn query_results_to_python(py: Python<'_>, results: QueryResults) -> PyResul
 /// >>> s, p, o = solution
 /// >>> s
 /// <NamedNode value=http://example.com>
-#[pyclass(unsendable, name = QuerySolution)]
+#[pyclass(unsendable, name = "QuerySolution", module = "oxigraph")]
 pub struct PyQuerySolution {
     inner: QuerySolution,
 }
@@ -132,7 +132,7 @@ impl PyMappingProtocol for PyQuerySolution {
         } else {
             Err(PyTypeError::new_err(format!(
                 "{} is not an integer of a string",
-                input.get_type().name(),
+                input.get_type().name()?,
             )))
         }
     }
@@ -152,7 +152,7 @@ impl PyIterProtocol for PyQuerySolution {
     }
 }
 
-#[pyclass]
+#[pyclass(module = "oxigraph")]
 pub struct SolutionValueIter {
     inner: IntoIter<Option<Term>>,
 }
@@ -176,7 +176,7 @@ impl PyIterProtocol for SolutionValueIter {
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
 /// >>> list(store.query('SELECT ?s WHERE { ?s ?p ?o }'))
 /// [<QuerySolution s=<NamedNode value=http://example.com>>]
-#[pyclass(unsendable, name = QuerySolutions)]
+#[pyclass(unsendable, name = "QuerySolutions", module = "oxigraph")]
 pub struct PyQuerySolutions {
     inner: QuerySolutionIter,
 }
@@ -221,7 +221,7 @@ impl PyIterProtocol for PyQuerySolutions {
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
 /// >>> list(store.query('CONSTRUCT WHERE { ?s ?p ?o }'))
 /// [<Triple subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>>>]
-#[pyclass(unsendable, name = QueryTriples)]
+#[pyclass(unsendable, name = "QueryTriples", module = "oxigraph")]
 pub struct PyQueryTriples {
     inner: QueryTripleIter,
 }

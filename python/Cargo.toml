@@ -16,7 +16,7 @@ doctest = false
 
 [dependencies]
 oxigraph = {version = "0.1.1", path="../lib", features = ["sled", "http_client"]}
-pyo3 = {version = "0.12", features = ["extension-module"]}
+pyo3 = {version = "0.13", features = ["extension-module"]}
 
 [package.metadata.maturin]
 classifier = [

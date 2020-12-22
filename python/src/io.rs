@@ -145,7 +145,7 @@ pub fn serialize(input: &PyAny, output: &PyAny, mime_type: &str, py: Python<'_>)
     }
 }
 
-#[pyclass(name = TripleReader)]
+#[pyclass(name = "TripleReader", module = "oxigraph")]
 pub struct PyTripleReader {
     inner: TripleReader<BufReader<PyFileLike>>,
 }
@@ -164,7 +164,7 @@ impl PyIterProtocol for PyTripleReader {
     }
 }
 
-#[pyclass(name = QuadReader)]
+#[pyclass(name = "QuadReader", module = "oxigraph")]
 pub struct PyQuadReader {
     inner: QuadReader<BufReader<PyFileLike>>,
 }
