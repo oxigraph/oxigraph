@@ -69,8 +69,8 @@ where
                 delete,
                 insert,
                 using,
-                algebra,
-            } => self.eval_delete_insert(delete, insert, using, algebra),
+                pattern,
+            } => self.eval_delete_insert(delete, insert, using, pattern),
             GraphUpdateOperation::Load { silent, from, to } => {
                 if let Err(error) = self.eval_load(from, to) {
                     if *silent {

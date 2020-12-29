@@ -18,45 +18,41 @@ use std::{char, fmt};
 pub fn parse_query(query: &str, base_iri: Option<&str>) -> Result<Query, ParseError> {
     let mut state = ParserState {
         base_iri: if let Some(base_iri) = base_iri {
-            Some(Rc::new(Iri::parse(base_iri.to_owned()).map_err(|e| {
-                ParseError {
-                    inner: ParseErrorKind::InvalidBaseIri(e),
-                }
-            })?))
+            Some(Iri::parse(base_iri.to_owned()).map_err(|e| ParseError {
+                inner: ParseErrorKind::InvalidBaseIri(e),
+            })?)
         } else {
             None
         },
         namespaces: HashMap::default(),
         used_bnodes: HashSet::default(),
         currently_used_bnodes: HashSet::default(),
-        aggregations: Vec::default(),
+        aggregates: Vec::default(),
     };
 
-    Ok(Query(
+    Ok(
         parser::QueryUnit(&unescape_unicode_codepoints(query), &mut state).map_err(|e| {
             ParseError {
                 inner: ParseErrorKind::Parser(e),
             }
         })?,
-    ))
+    )
 }
 
 /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query
 pub fn parse_update(update: &str, base_iri: Option<&str>) -> Result<Update, ParseError> {
     let mut state = ParserState {
         base_iri: if let Some(base_iri) = base_iri {
-            Some(Rc::new(Iri::parse(base_iri.to_owned()).map_err(|e| {
-                ParseError {
-                    inner: ParseErrorKind::InvalidBaseIri(e),
-                }
-            })?))
+            Some(Iri::parse(base_iri.to_owned()).map_err(|e| ParseError {
+                inner: ParseErrorKind::InvalidBaseIri(e),
+            })?)
         } else {
             None
         },
         namespaces: HashMap::default(),
         used_bnodes: HashSet::default(),
         currently_used_bnodes: HashSet::default(),
-        aggregations: Vec::default(),
+        aggregates: Vec::default(),
     };
 
     let operations =
@@ -131,7 +127,7 @@ impl<F> From<FocusedTriplePattern<F>> for FocusedTriplePattern<Vec<F>> {
 #[derive(Clone)]
 enum VariableOrPropertyPath {
     Variable(Variable),
-    PropertyPath(PropertyPath),
+    PropertyPath(PropertyPathExpression),
 }
 
 impl From<Variable> for VariableOrPropertyPath {
@@ -140,8 +136,8 @@ impl From<Variable> for VariableOrPropertyPath {
     }
 }
 
-impl From<PropertyPath> for VariableOrPropertyPath {
-    fn from(path: PropertyPath) -> Self {
+impl From<PropertyPathExpression> for VariableOrPropertyPath {
+    fn from(path: PropertyPathExpression) -> Self {
         VariableOrPropertyPath::PropertyPath(path)
     }
 }
@@ -157,19 +153,65 @@ fn add_to_triple_or_path_patterns(
             patterns.push(TriplePattern::new(subject, p, object).into())
         }
         VariableOrPropertyPath::PropertyPath(p) => match p {
-            PropertyPath::PredicatePath(p) => {
+            PropertyPathExpression::NamedNode(p) => {
                 patterns.push(TriplePattern::new(subject, p, object).into())
             }
-            PropertyPath::InversePath(p) => {
+            PropertyPathExpression::Reverse(p) => {
                 add_to_triple_or_path_patterns(object, *p, subject, patterns)
             }
-            PropertyPath::SequencePath(a, b) => {
+            PropertyPathExpression::Sequence(a, b) => {
                 let middle = BlankNode::default();
                 add_to_triple_or_path_patterns(subject, *a, middle.clone().into(), patterns);
                 add_to_triple_or_path_patterns(middle.into(), *b, object, patterns);
             }
-            p => patterns.push(PathPattern::new(subject, p, object).into()),
+            path => patterns.push(TripleOrPathPattern::Path {
+                subject,
+                path,
+                object,
+            }),
         },
+    }
+}
+
+fn build_bgp(patterns: Vec<TripleOrPathPattern>) -> GraphPattern {
+    let mut bgp = Vec::with_capacity(patterns.len());
+    let mut paths = Vec::with_capacity(patterns.len());
+    for pattern in patterns {
+        match pattern {
+            TripleOrPathPattern::Triple(t) => bgp.push(t),
+            TripleOrPathPattern::Path {
+                subject,
+                path,
+                object,
+            } => paths.push((subject, path, object)),
+        }
+    }
+    let mut graph_pattern = GraphPattern::BGP(bgp);
+    for (subject, path, object) in paths {
+        graph_pattern = new_join(
+            graph_pattern,
+            GraphPattern::Path {
+                subject,
+                path,
+                object,
+            },
+        )
+    }
+    graph_pattern
+}
+
+enum TripleOrPathPattern {
+    Triple(TriplePattern),
+    Path {
+        subject: TermOrVariable,
+        path: PropertyPathExpression,
+        object: TermOrVariable,
+    },
+}
+
+impl From<TriplePattern> for TripleOrPathPattern {
+    fn from(tp: TriplePattern) -> Self {
+        TripleOrPathPattern::Triple(tp)
     }
 }
 
@@ -239,14 +281,29 @@ fn new_join(l: GraphPattern, r: GraphPattern) -> GraphPattern {
     //Merge BGPs
     match (l, r) {
         (GraphPattern::BGP(mut pl), GraphPattern::BGP(pr)) => {
-            pl.extend_from_slice(&pr);
+            pl.extend(pr);
             GraphPattern::BGP(pl)
         }
-        (GraphPattern::Graph(g1, l), GraphPattern::Graph(g2, r)) if g1 == g2 => {
+        (
+            GraphPattern::Graph {
+                graph_name: g1,
+                inner: l,
+            },
+            GraphPattern::Graph {
+                graph_name: g2,
+                inner: r,
+            },
+        ) if g1 == g2 => {
             // We merge identical graphs
-            GraphPattern::Graph(g1, Box::new(new_join(*l, *r)))
+            GraphPattern::Graph {
+                graph_name: g1,
+                inner: Box::new(new_join(*l, *r)),
+            }
         }
-        (l, r) => GraphPattern::Join(Box::new(l), Box::new(r)),
+        (l, r) => GraphPattern::Join {
+            left: Box::new(l),
+            right: Box::new(r),
+        },
     }
 }
 
@@ -299,8 +356,8 @@ fn build_select(
     let mut p = wher;
 
     //GROUP BY
-    let aggregations = state.aggregations.pop().unwrap_or_else(Vec::default);
-    if group.is_none() && !aggregations.is_empty() {
+    let aggregates = state.aggregates.pop().unwrap_or_else(Vec::default);
+    if group.is_none() && !aggregates.is_empty() {
         let const_variable = Variable::new_random();
         group = Some((
             vec![const_variable.clone()],
@@ -309,16 +366,26 @@ fn build_select(
     }
 
     if let Some((clauses, binds)) = group {
-        for (e, v) in binds {
-            p = GraphPattern::Extend(Box::new(p), v, e);
+        for (expr, var) in binds {
+            p = GraphPattern::Extend {
+                inner: Box::new(p),
+                var,
+                expr,
+            };
         }
-        let g = GroupPattern(clauses, Box::new(p));
-        p = GraphPattern::AggregateJoin(g, aggregations);
+        p = GraphPattern::Group {
+            inner: Box::new(p),
+            by: clauses,
+            aggregates,
+        };
     }
 
     //HAVING
-    if let Some(ex) = having {
-        p = GraphPattern::Filter(ex, Box::new(p));
+    if let Some(expr) = having {
+        p = GraphPattern::Filter {
+            expr,
+            inner: Box::new(p),
+        };
     }
 
     //VALUES
@@ -333,11 +400,15 @@ fn build_select(
             for sel_item in sel_items {
                 match sel_item {
                     SelectionMember::Variable(v) => pv.push(v),
-                    SelectionMember::Expression(e, v) => {
+                    SelectionMember::Expression(expr, v) => {
                         if pv.contains(&v) {
                             //TODO: fail
                         } else {
-                            p = GraphPattern::Extend(Box::new(p), v.clone(), e);
+                            p = GraphPattern::Extend {
+                                inner: Box::new(p),
+                                var: v.clone(),
+                                expr,
+                            };
                             pv.push(v);
                         }
                     }
@@ -351,50 +422,58 @@ fn build_select(
     let mut m = p;
 
     //ORDER BY
-    if let Some(order) = order_by {
-        m = GraphPattern::OrderBy(Box::new(m), order);
+    if let Some(condition) = order_by {
+        m = GraphPattern::OrderBy {
+            inner: Box::new(m),
+            condition,
+        };
     }
 
     //PROJECT
-    m = GraphPattern::Project(Box::new(m), pv);
+    m = GraphPattern::Project {
+        inner: Box::new(m),
+        projection: pv,
+    };
     match select.option {
-        SelectionOption::Distinct => m = GraphPattern::Distinct(Box::new(m)),
-        SelectionOption::Reduced => m = GraphPattern::Reduced(Box::new(m)),
+        SelectionOption::Distinct => m = GraphPattern::Distinct { inner: Box::new(m) },
+        SelectionOption::Reduced => m = GraphPattern::Reduced { inner: Box::new(m) },
         SelectionOption::Default => (),
     }
 
     //OFFSET LIMIT
-    if let Some((offset, limit)) = offset_limit {
-        m = GraphPattern::Slice(Box::new(m), offset, limit)
+    if let Some((start, length)) = offset_limit {
+        m = GraphPattern::Slice {
+            inner: Box::new(m),
+            start,
+            length,
+        }
     }
     m
 }
 
-fn copy_graph(
-    from: NamedOrDefaultGraphTarget,
-    to: impl Into<Option<NamedNodeOrVariable>>,
-) -> GraphUpdateOperation {
+fn copy_graph(from: Option<NamedNode>, to: Option<NamedNodeOrVariable>) -> GraphUpdateOperation {
     let bgp = GraphPattern::BGP(vec![TriplePattern::new(
         Variable::new_unchecked("s"),
         Variable::new_unchecked("p"),
         Variable::new_unchecked("o"),
-    )
-    .into()]);
+    )]);
     GraphUpdateOperation::DeleteInsert {
         delete: Vec::new(),
         insert: vec![QuadPattern::new(
             Variable::new_unchecked("s"),
             Variable::new_unchecked("p"),
             Variable::new_unchecked("o"),
-            to.into(),
+            to,
         )],
         using: QueryDataset::default(),
-        algebra: match from {
-            NamedOrDefaultGraphTarget::NamedNode(from) => {
-                GraphPattern::Graph(from.into(), Box::new(bgp))
+        pattern: Box::new(if let Some(from) = from {
+            GraphPattern::Graph {
+                graph_name: from.into(),
+                inner: Box::new(bgp),
             }
-            NamedOrDefaultGraphTarget::DefaultGraph => bgp,
-        },
+        } else {
+            bgp
+        }),
     }
 }
 
@@ -404,11 +483,11 @@ enum Either<L, R> {
 }
 
 pub struct ParserState {
-    base_iri: Option<Rc<Iri<String>>>,
+    base_iri: Option<Iri<String>>,
     namespaces: HashMap<String, String>,
     used_bnodes: HashSet<BlankNode>,
     currently_used_bnodes: HashSet<BlankNode>,
-    aggregations: Vec<Vec<(Aggregation, Variable)>>,
+    aggregates: Vec<Vec<(Variable, SetFunction)>>,
 }
 
 impl ParserState {
@@ -420,15 +499,15 @@ impl ParserState {
         }
     }
 
-    fn new_aggregation(&mut self, agg: Aggregation) -> Result<Variable, &'static str> {
-        let aggregations = self.aggregations.last_mut().ok_or("Unexpected aggregate")?;
-        Ok(aggregations
+    fn new_aggregation(&mut self, agg: SetFunction) -> Result<Variable, &'static str> {
+        let aggregates = self.aggregates.last_mut().ok_or("Unexpected aggregate")?;
+        Ok(aggregates
             .iter()
-            .find_map(|(a, v)| if a == &agg { Some(v) } else { None })
+            .find_map(|(v, a)| if a == &agg { Some(v) } else { None })
             .cloned()
             .unwrap_or_else(|| {
                 let new_var = Variable::new_random();
-                aggregations.push((agg, new_var.clone()));
+                aggregates.push((new_var.clone(), agg));
                 new_var
             }))
     }
@@ -642,10 +721,10 @@ parser! {
     //See https://www.w3.org/TR/turtle/#sec-grammar
     grammar parser(state: &mut ParserState) for str {
         //[1]
-        pub rule QueryUnit() -> QueryVariants = Query()
+        pub rule QueryUnit() -> Query = Query()
 
         //[2]
-        rule Query() -> QueryVariants = _ Prologue() _ q:(SelectQuery() / ConstructQuery() / DescribeQuery() / AskQuery()) _ {
+        rule Query() -> Query = _ Prologue() _ q:(SelectQuery() / ConstructQuery() / DescribeQuery() / AskQuery()) _ {
             q
         }
 
@@ -657,7 +736,7 @@ parser! {
 
         //[5]
         rule BaseDecl() = i("BASE") _ i:IRIREF() {
-            state.base_iri = Some(Rc::new(i))
+            state.base_iri = Some(i)
         }
 
         //[6]
@@ -666,10 +745,10 @@ parser! {
         }
 
         //[7]
-        rule SelectQuery() -> QueryVariants = s:SelectClause() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
-            QueryVariants::Select {
+        rule SelectQuery() -> Query = s:SelectClause() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
+            Query::Select {
                 dataset: d,
-                algebra: Rc::new(build_select(s, w, g, h, o, l, v, state)),
+                pattern: build_select(s, w, g, h, o, l, v, state),
                 base_iri: state.base_iri.clone()
             }
         }
@@ -687,7 +766,7 @@ parser! {
             }
         }
         rule Selection_init() = {
-            state.aggregations.push(Vec::default())
+            state.aggregates.push(Vec::default())
         }
         rule SelectClause_option() -> SelectionOption =
             i("DISTINCT") { SelectionOption::Distinct } /
@@ -701,24 +780,24 @@ parser! {
             "(" _ e:Expression() _ i("AS") _ v:Var() _ ")" _ { SelectionMember::Expression(e, v) }
 
         //[10]
-        rule ConstructQuery() -> QueryVariants =
+        rule ConstructQuery() -> Query =
             i("CONSTRUCT") _ c:ConstructTemplate() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
-                QueryVariants::Construct {
-                    construct: Rc::new(c),
+                Query::Construct {
+                    template: c,
                     dataset: d,
-                    algebra: Rc::new(build_select(Selection::default(), w, g, h, o, l, v, state)),
+                    pattern: build_select(Selection::default(), w, g, h, o, l, v, state),
                     base_iri: state.base_iri.clone()
                 }
             } /
             i("CONSTRUCT") _ d:DatasetClauses() _ i("WHERE") _ "{" _ c:ConstructQuery_optional_triple_template() _ "}" _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
-                QueryVariants::Construct {
-                    construct: Rc::new(c.clone()),
+                Query::Construct {
+                    template: c.clone(),
                     dataset: d,
-                    algebra: Rc::new(build_select(
+                    pattern: build_select(
                         Selection::default(),
-                        GraphPattern::BGP(c.into_iter().map(TripleOrPathPattern::from).collect()),
+                        GraphPattern::BGP(c),
                         g, h, o, l, v, state
-                    )),
+                    ),
                     base_iri: state.base_iri.clone()
                 }
             }
@@ -726,34 +805,34 @@ parser! {
         rule ConstructQuery_optional_triple_template() -> Vec<TriplePattern> = TriplesTemplate() / { Vec::default() }
 
         //[11]
-        rule DescribeQuery() -> QueryVariants =
+        rule DescribeQuery() -> Query =
             i("DESCRIBE") _ "*" _ d:DatasetClauses() w:WhereClause()? _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
-                QueryVariants::Describe {
+                Query::Describe {
                     dataset: d,
-                    algebra: Rc::new(build_select(Selection::default(), w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state)),
+                    pattern: build_select(Selection::default(), w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state),
                     base_iri: state.base_iri.clone()
                 }
             } /
             i("DESCRIBE") _ p:DescribeQuery_item()+ _ d:DatasetClauses() w:WhereClause()? _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
-                QueryVariants::Describe {
+                Query::Describe {
                     dataset: d,
-                    algebra: Rc::new(build_select(Selection {
+                    pattern: build_select(Selection {
                         option: SelectionOption::Default,
                         variables: Some(p.into_iter().map(|var_or_iri| match var_or_iri {
                             NamedNodeOrVariable::NamedNode(n) => SelectionMember::Expression(n.into(), Variable::new_random()),
                             NamedNodeOrVariable::Variable(v) => SelectionMember::Variable(v)
                         }).collect())
-                    }, w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state)),
+                    }, w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state),
                     base_iri: state.base_iri.clone()
                 }
             }
         rule DescribeQuery_item() -> NamedNodeOrVariable = i:VarOrIri() _ { i }
 
         //[12]
-        rule AskQuery() -> QueryVariants = i("ASK") _ d:DatasetClauses() w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
-            QueryVariants::Ask {
+        rule AskQuery() -> Query = i("ASK") _ d:DatasetClauses() w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
+            Query::Ask {
                 dataset: d,
-                algebra: Rc::new(build_select(Selection::default(), w, g, h, o, l, v, state)),
+                pattern: Rc::new(build_select(Selection::default(), w, g, h, o, l, v, state)),
                 base_iri: state.base_iri.clone()
             }
         }
@@ -837,8 +916,8 @@ parser! {
         rule OrderCondition() -> OrderComparator =
             i("ASC") _ e: BrackettedExpression() { OrderComparator::Asc(e) } /
             i("DESC") _ e: BrackettedExpression() { OrderComparator::Desc(e) } /
-            e: Constraint() { e.into() } /
-            v: Var() { Expression::from(v).into() }
+            e: Constraint() { OrderComparator::Asc(e) } /
+            v: Var() { OrderComparator::Asc(Expression::from(v)) }
 
         //[25]
         rule LimitOffsetClauses() -> (usize, Option<usize>) =
@@ -895,8 +974,8 @@ parser! {
             if from == to {
                 Vec::new() // identity case
             } else {
-                let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new_unchecked("s"), Variable::new_unchecked("p"), Variable::new_unchecked("o")).into()]);
-                vec![copy_graph(from, to)]
+                let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new_unchecked("s"), Variable::new_unchecked("p"), Variable::new_unchecked("o"))]);
+                vec![copy_graph(from, to.map(NamedNodeOrVariable::NamedNode))]
             }
         }
 
@@ -906,8 +985,8 @@ parser! {
             if from == to {
                 Vec::new() // identity case
             } else {
-                let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new_unchecked("s"), Variable::new_unchecked("p"), Variable::new_unchecked("o")).into()]);
-                vec![GraphUpdateOperation::Drop { silent, graph: to.clone().into() }, copy_graph(from.clone(), to), GraphUpdateOperation::Drop { silent, graph: from.into() }]
+                let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new_unchecked("s"), Variable::new_unchecked("p"), Variable::new_unchecked("o"))]);
+                vec![GraphUpdateOperation::Drop { silent, graph: to.clone().map_or(GraphTarget::DefaultGraph, GraphTarget::NamedNode) }, copy_graph(from.clone(), to.map(NamedNodeOrVariable::NamedNode)), GraphUpdateOperation::Drop { silent, graph: from.map_or(GraphTarget::DefaultGraph, GraphTarget::NamedNode) }]
             }
         }
 
@@ -917,8 +996,8 @@ parser! {
             if from == to {
                 Vec::new() // identity case
             } else {
-                let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new_unchecked("s"), Variable::new_unchecked("p"), Variable::new_unchecked("o")).into()]);
-                vec![GraphUpdateOperation::Drop { silent, graph: to.clone().into() }, copy_graph(from, to)]
+                let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new_unchecked("s"), Variable::new_unchecked("p"), Variable::new_unchecked("o"))]);
+                vec![GraphUpdateOperation::Drop { silent, graph: to.clone().map_or(GraphTarget::DefaultGraph, GraphTarget::NamedNode) }, copy_graph(from, to.map(NamedNodeOrVariable::NamedNode))]
             }
         }
 
@@ -934,10 +1013,10 @@ parser! {
 
         //[40]
         rule DeleteWhere() -> Vec<GraphUpdateOperation> = i("DELETE") _ i("WHERE") _ d:QuadData() {
-            let algebra = d.iter().map(|q| {
-                let bgp = GraphPattern::BGP(vec![TriplePattern::new(q.subject.clone(), q.predicate.clone(), q.object.clone()).into()]);
+            let pattern = d.iter().map(|q| {
+                let bgp = GraphPattern::BGP(vec![TriplePattern::new(q.subject.clone(), q.predicate.clone(), q.object.clone())]);
                 if let Some(graph_name) = &q.graph_name {
-                    GraphPattern::Graph(graph_name.clone(), Box::new(bgp))
+                    GraphPattern::Graph { graph_name: graph_name.clone(), inner: Box::new(bgp) }
                 } else {
                     bgp
                 }
@@ -946,16 +1025,16 @@ parser! {
                 delete: d,
                 insert: Vec::new(),
                 using: QueryDataset::default(),
-                algebra
+                pattern: Box::new(pattern)
             }]
         }
 
         //[41]
-        rule Modify() -> Vec<GraphUpdateOperation> = with:Modify_with()? _ Modify_clear() c:Modify_clauses() _ u:(UsingClause() ** (_)) _ i("WHERE") _ algebra:GroupGraphPattern() {
+        rule Modify() -> Vec<GraphUpdateOperation> = with:Modify_with()? _ Modify_clear() c:Modify_clauses() _ u:(UsingClause() ** (_)) _ i("WHERE") _ pattern:GroupGraphPattern() {
             let (delete, insert) = c;
             let mut delete = delete.unwrap_or_else(Vec::new);
             let mut insert = insert.unwrap_or_else(Vec::new);
-            let mut algebra = algebra;
+            let mut pattern = pattern;
 
             if let Some(with) = with {
                 // We inject WITH everywhere
@@ -969,7 +1048,7 @@ parser! {
                 } else {
                     q
                 }).collect();
-                algebra = GraphPattern::Graph(with.into(), Box::new(algebra));
+                pattern = GraphPattern::Graph { graph_name: with.into(), inner: Box::new(pattern) };
             }
 
             let mut using = QueryDataset::default();
@@ -992,7 +1071,7 @@ parser! {
                 delete,
                 insert,
                 using,
-                algebra
+                pattern: Box::new(pattern)
             }]
         }
         rule Modify_with() -> NamedNode = i("WITH") _ i:iri() _ { i }
@@ -1022,10 +1101,10 @@ parser! {
         }
 
         //[45]
-        rule GraphOrDefault() -> NamedOrDefaultGraphTarget = i("DEFAULT") {
-            NamedOrDefaultGraphTarget::DefaultGraph
+        rule GraphOrDefault() -> Option<NamedNode> = i("DEFAULT") {
+            None
         } / (i("GRAPH") _)? g:iri() {
-            NamedOrDefaultGraphTarget::NamedNode(g)
+            Some(g)
         }
 
         //[46]
@@ -1061,7 +1140,7 @@ parser! {
         rule TriplesTemplate() -> Vec<TriplePattern> =  h:TriplesSameSubject() _ t:TriplesTemplate_tail()? {
             let mut triples = h;
             if let Some(l) = t {
-                triples.extend_from_slice(&l)
+                triples.extend(l)
             }
             triples
         }
@@ -1076,22 +1155,22 @@ parser! {
 
         //[54]
         rule GroupGraphPatternSub() -> GraphPattern = a:TriplesBlock()? _ b:GroupGraphPatternSub_item()* {
-            let mut p = a.map_or_else(Vec::default, |v| vec![PartialGraphPattern::Other(GraphPattern::BGP(v))]);
+            let mut p = a.map_or_else(Vec::default, |v| vec![PartialGraphPattern::Other(build_bgp(v))]);
             for v in b {
-                p.extend_from_slice(&v)
+                p.extend(v)
             }
             let mut filter: Option<Expression> = None;
             let mut g = GraphPattern::default();
             for e in p {
                 match e {
                     PartialGraphPattern::Optional(p, f) => {
-                        g = GraphPattern::LeftJoin(Box::new(g), Box::new(p), f)
+                        g = GraphPattern::LeftJoin { left: Box::new(g), right: Box::new(p), expr: f }
                     }
                     PartialGraphPattern::Minus(p) => {
-                        g = GraphPattern::Minus(Box::new(g), Box::new(p))
+                        g = GraphPattern::Minus { left: Box::new(g), right: Box::new(p) }
                     }
                     PartialGraphPattern::Bind(expr, var) => {
-                        g = GraphPattern::Extend(Box::new(g), var, expr)
+                        g = GraphPattern::Extend { inner: Box::new(g), var, expr }
                     }
                     PartialGraphPattern::Filter(expr) => filter = Some(if let Some(f) = filter {
                         Expression::And(Box::new(f), Box::new(expr))
@@ -1106,8 +1185,8 @@ parser! {
             state.used_bnodes.extend(state.currently_used_bnodes.iter().cloned());
             state.currently_used_bnodes.clear();
 
-            if let Some(filter) = filter {
-                GraphPattern::Filter(filter, Box::new(g))
+            if let Some(expr) = filter {
+                GraphPattern::Filter { expr, inner: Box::new(g) }
             } else {
                 g
             }
@@ -1115,7 +1194,7 @@ parser! {
         rule GroupGraphPatternSub_item() -> Vec<PartialGraphPattern> = a:GraphPatternNotTriples() _ ("." _)? b:TriplesBlock()? _ {
             let mut result = vec![a];
             if let Some(v) = b {
-                result.push(PartialGraphPattern::Other(GraphPattern::BGP(v)));
+                result.push(PartialGraphPattern::Other(build_bgp(v)));
             }
             result
         }
@@ -1124,7 +1203,7 @@ parser! {
         rule TriplesBlock() -> Vec<TripleOrPathPattern> = h:TriplesSameSubjectPath() _ t:TriplesBlock_tail()? {
             let mut triples = h;
             if let Some(l) = t {
-                triples.extend_from_slice(&l)
+                triples.extend(l)
             }
             triples
         }
@@ -1137,22 +1216,22 @@ parser! {
 
         //[57]
         rule OptionalGraphPattern() -> PartialGraphPattern = i("OPTIONAL") _ p:GroupGraphPattern() {
-            if let GraphPattern::Filter(f, p) =  p {
-               PartialGraphPattern::Optional(*p, Some(f))
+            if let GraphPattern::Filter { expr, inner } =  p {
+               PartialGraphPattern::Optional(*inner, Some(expr))
             } else {
                PartialGraphPattern::Optional(p, None)
             }
         }
 
         //[58]
-        rule GraphGraphPattern() -> PartialGraphPattern = i("GRAPH") _ g:VarOrIri() _ p:GroupGraphPattern() {
-            PartialGraphPattern::Other(GraphPattern::Graph(g, Box::new(p)))
+        rule GraphGraphPattern() -> PartialGraphPattern = i("GRAPH") _ graph_name:VarOrIri() _ p:GroupGraphPattern() {
+            PartialGraphPattern::Other(GraphPattern::Graph { graph_name, inner: Box::new(p) })
         }
 
         //[59]
         rule ServiceGraphPattern() -> PartialGraphPattern =
-            i("SERVICE") _ i("SILENT") _ s:VarOrIri() _ p:GroupGraphPattern() { PartialGraphPattern::Other(GraphPattern::Service(s, Box::new(p), true)) } /
-            i("SERVICE") _ s:VarOrIri() _ p:GroupGraphPattern() { PartialGraphPattern::Other(GraphPattern::Service(s, Box::new(p), false)) }
+            i("SERVICE") _ i("SILENT") _ name:VarOrIri() _ p:GroupGraphPattern() { PartialGraphPattern::Other(GraphPattern::Service { name, pattern: Box::new(p), silent: true }) } /
+            i("SERVICE") _ name:VarOrIri() _ p:GroupGraphPattern() { PartialGraphPattern::Other(GraphPattern::Service{ name, pattern: Box::new(p), silent: true }) }
 
         //[60]
         rule Bind() -> PartialGraphPattern = i("BIND") _ "(" _ e:Expression() _ i("AS") _ v:Var() _ ")" {
@@ -1164,18 +1243,18 @@ parser! {
 
         //[62]
         rule DataBlock() -> GraphPattern = l:(InlineDataOneVar() / InlineDataFull()) {
-            GraphPattern::Data(l)
+            GraphPattern::Table { variables: l.0, rows: l.1 }
         }
 
         //[63]
-        rule InlineDataOneVar() -> StaticBindings = var:Var() _ "{" _ d:InlineDataOneVar_value()* "}" {
-            StaticBindings::new(vec![var], d)
+        rule InlineDataOneVar() -> (Vec<Variable>, Vec<Vec<Option<Term>>>) = var:Var() _ "{" _ d:InlineDataOneVar_value()* "}" {
+            (vec![var], d)
         }
         rule InlineDataOneVar_value() -> Vec<Option<Term>> = t:DataBlockValue() _ { vec![t] }
 
         //[64]
-        rule InlineDataFull() -> StaticBindings = "(" _ vars:InlineDataFull_var()* _ ")" _ "{" _ val:InlineDataFull_values()* "}" {
-            StaticBindings::new(vars, val)
+        rule InlineDataFull() -> (Vec<Variable>, Vec<Vec<Option<Term>>>) = "(" _ vars:InlineDataFull_var()* _ ")" _ "{" _ val:InlineDataFull_values()* "}" {
+            (vars, val)
         }
         rule InlineDataFull_var() -> Variable = v:Var() _ { v }
         rule InlineDataFull_values() -> Vec<Option<Term>> = "(" _ v:InlineDataFull_value()* _ ")" _ { v }
@@ -1197,7 +1276,7 @@ parser! {
         //[67]
         rule GroupOrUnionGraphPattern() -> PartialGraphPattern = p:GroupOrUnionGraphPattern_item() **<1,> (i("UNION") _) {?
             not_empty_fold(p.into_iter(), |a, b| {
-                GraphPattern::Union(Box::new(a), Box::new(b))
+                GraphPattern::Union { left: Box::new(a), right: Box::new(b) }
             }).map(PartialGraphPattern::Other)
         }
         rule GroupOrUnionGraphPattern_item() -> GraphPattern = p:GroupGraphPattern() _ { p }
@@ -1249,7 +1328,7 @@ parser! {
             } /
             s:TriplesNode() _ po:PropertyList() {
                 let mut patterns = s.patterns;
-                patterns.extend_from_slice(&po.patterns);
+                patterns.extend(po.patterns);
                 for (p, os) in po.focus {
                     for o in os {
                         patterns.push(TriplePattern::new(s.focus.clone(), p.clone(), o))
@@ -1267,7 +1346,7 @@ parser! {
         rule PropertyListNotEmpty() -> FocusedTriplePattern<Vec<(NamedNodeOrVariable,Vec<TermOrVariable>)>> = l:PropertyListNotEmpty_item() **<1,> (";" _) {
             l.into_iter().fold(FocusedTriplePattern::<Vec<(NamedNodeOrVariable,Vec<TermOrVariable>)>>::default(), |mut a, b| {
                 a.focus.push(b.focus);
-                a.patterns.extend_from_slice(&b.patterns);
+                a.patterns.extend(b.patterns);
                 a
             })
         }
@@ -1279,7 +1358,7 @@ parser! {
         }
 
         //[78]
-        rule Verb() -> NamedNodeOrVariable = VarOrIri() / "a" { rdf::TYPE.into() }
+        rule Verb() -> NamedNodeOrVariable = VarOrIri() / "a" { rdf::TYPE.into_owned().into() }
 
         //[79]
         rule ObjectList() -> FocusedTriplePattern<Vec<TermOrVariable>> = o:ObjectList_item() **<1,> ("," _) {
@@ -1307,7 +1386,7 @@ parser! {
             } /
             s:TriplesNodePath() _ po:PropertyListPath() {
                 let mut patterns = s.patterns;
-                    patterns.extend_from_slice(&po.patterns);
+                    patterns.extend(po.patterns);
                 for (p, os) in po.focus {
                     for o in os {
                         add_to_triple_or_path_patterns(s.focus.clone(), p.clone(), o, &mut patterns);
@@ -1356,7 +1435,7 @@ parser! {
         rule ObjectListPath() -> FocusedTripleOrPathPattern<Vec<TermOrVariable>> = o:ObjectPath_item() **<1,> ("," _) {
             o.into_iter().fold(FocusedTripleOrPathPattern::<Vec<TermOrVariable>>::default(), |mut a, b| {
                 a.focus.push(b.focus);
-                a.patterns.extend_from_slice(&b.patterns);
+                a.patterns.extend(b.patterns);
                 a
             })
         }
@@ -1366,45 +1445,45 @@ parser! {
         rule ObjectPath() -> FocusedTripleOrPathPattern<TermOrVariable> = GraphNodePath()
 
         //[88]
-        rule Path() -> PropertyPath = PathAlternative()
+        rule Path() -> PropertyPathExpression = PathAlternative()
 
         //[89]
-        rule PathAlternative() -> PropertyPath = p:PathAlternative_item() **<1,> ("|" _) {?
+        rule PathAlternative() -> PropertyPathExpression = p:PathAlternative_item() **<1,> ("|" _) {?
             not_empty_fold(p.into_iter(), |a, b| {
-                PropertyPath::AlternativePath(Box::new(a), Box::new(b))
+                PropertyPathExpression::Alternative(Box::new(a), Box::new(b))
             })
         }
-        rule PathAlternative_item() -> PropertyPath = p:PathSequence() _ { p }
+        rule PathAlternative_item() -> PropertyPathExpression = p:PathSequence() _ { p }
 
         //[90]
-        rule PathSequence() -> PropertyPath = p:PathSequence_item() **<1,> ("/" _) {?
+        rule PathSequence() -> PropertyPathExpression = p:PathSequence_item() **<1,> ("/" _) {?
             not_empty_fold(p.into_iter(), |a, b| {
-                PropertyPath::SequencePath(Box::new(a), Box::new(b))
+                PropertyPathExpression::Sequence(Box::new(a), Box::new(b))
             })
         }
-        rule PathSequence_item() -> PropertyPath = p:PathEltOrInverse() _ { p }
+        rule PathSequence_item() -> PropertyPathExpression = p:PathEltOrInverse() _ { p }
 
         //[91]
-        rule PathElt() -> PropertyPath =
-            p:PathPrimary() "?" { PropertyPath::ZeroOrOnePath(Box::new(p)) } / //TODO: allow space before "?"
-            p:PathPrimary() _ "*" { PropertyPath::ZeroOrMorePath(Box::new(p)) } /
-            p:PathPrimary() _ "+" { PropertyPath::OneOrMorePath(Box::new(p)) } /
+        rule PathElt() -> PropertyPathExpression =
+            p:PathPrimary() "?" { PropertyPathExpression::ZeroOrOne(Box::new(p)) } / //TODO: allow space before "?"
+            p:PathPrimary() _ "*" { PropertyPathExpression::ZeroOrMore(Box::new(p)) } /
+            p:PathPrimary() _ "+" { PropertyPathExpression::OneOrMore(Box::new(p)) } /
             PathPrimary()
 
         //[92]
-        rule PathEltOrInverse() -> PropertyPath =
-            "^" _ p:PathElt() { PropertyPath::InversePath(Box::new(p)) } /
+        rule PathEltOrInverse() -> PropertyPathExpression =
+            "^" _ p:PathElt() { PropertyPathExpression::Reverse(Box::new(p)) } /
             PathElt()
 
         //[94]
-        rule PathPrimary() -> PropertyPath =
+        rule PathPrimary() -> PropertyPathExpression =
             v:iri() { v.into() } /
-            "a" { NamedNode::from(rdf::TYPE).into() } /
+            "a" { rdf::TYPE.into_owned().into() } /
             "!" _ p:PathNegatedPropertySet() { p } /
             "(" _ p:Path() _ ")" { p }
 
         //[95]
-        rule PathNegatedPropertySet() -> PropertyPath =
+        rule PathNegatedPropertySet() -> PropertyPathExpression =
             "(" _ p:PathNegatedPropertySet_item() **<1,> ("|" _) ")" {
                 let mut direct = Vec::default();
                 let mut inverse = Vec::default();
@@ -1415,20 +1494,20 @@ parser! {
                     }
                 }
                 if inverse.is_empty() {
-                    PropertyPath::NegatedPropertySet(direct)
+                    PropertyPathExpression::NegatedPropertySet(direct)
                 } else if direct.is_empty() {
-                   PropertyPath::InversePath(Box::new(PropertyPath::NegatedPropertySet(inverse)))
+                   PropertyPathExpression::Reverse(Box::new(PropertyPathExpression::NegatedPropertySet(inverse)))
                 } else {
-                    PropertyPath::AlternativePath(
-                        Box::new(PropertyPath::NegatedPropertySet(direct)),
-                        Box::new(PropertyPath::InversePath(Box::new(PropertyPath::NegatedPropertySet(inverse))))
+                    PropertyPathExpression::Alternative(
+                        Box::new(PropertyPathExpression::NegatedPropertySet(direct)),
+                        Box::new(PropertyPathExpression::Reverse(Box::new(PropertyPathExpression::NegatedPropertySet(inverse))))
                     )
                 }
             } /
             p:PathOneInPropertySet() {
                 match p {
-                    Either::Left(a) => PropertyPath::NegatedPropertySet(vec![a]),
-                    Either::Right(b) => PropertyPath::InversePath(Box::new(PropertyPath::NegatedPropertySet(vec![b]))),
+                    Either::Left(a) => PropertyPathExpression::NegatedPropertySet(vec![a]),
+                    Either::Right(b) => PropertyPathExpression::Reverse(Box::new(PropertyPathExpression::NegatedPropertySet(vec![b]))),
                 }
             }
         rule PathNegatedPropertySet_item() -> Either<NamedNode,NamedNode> = p:PathOneInPropertySet() _ { p }
@@ -1436,9 +1515,9 @@ parser! {
         //[96]
         rule PathOneInPropertySet() -> Either<NamedNode,NamedNode> =
             "^" _ v:iri() { Either::Right(v) } /
-            "^" _ "a" { Either::Right(rdf::TYPE.into()) } /
+            "^" _ "a" { Either::Right(rdf::TYPE.into_owned()) } /
             v:iri() { Either::Left(v) } /
-            "a" { Either::Left(rdf::TYPE.into()) }
+            "a" { Either::Left(rdf::TYPE.into_owned()) }
 
         //[98]
         rule TriplesNode() -> FocusedTriplePattern<TermOrVariable> = Collection() / BlankNodePropertyList()
@@ -1479,11 +1558,11 @@ parser! {
         //[102]
         rule Collection() -> FocusedTriplePattern<TermOrVariable> = "(" _ o:Collection_item()+ ")" {
             let mut patterns: Vec<TriplePattern> = Vec::default();
-            let mut current_list_node = TermOrVariable::from(rdf::NIL);
+            let mut current_list_node = TermOrVariable::from(rdf::NIL.into_owned());
             for objWithPatterns in o.into_iter().rev() {
                 let new_blank_node = TermOrVariable::from(BlankNode::default());
-                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::FIRST, objWithPatterns.focus.clone()));
-                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::REST, current_list_node));
+                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::FIRST.into_owned(), objWithPatterns.focus.clone()));
+                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::REST.into_owned(), current_list_node));
                 current_list_node = new_blank_node;
                 patterns.extend_from_slice(&objWithPatterns.patterns);
             }
@@ -1497,13 +1576,13 @@ parser! {
         //[103]
         rule CollectionPath() -> FocusedTripleOrPathPattern<TermOrVariable> = "(" _ o:CollectionPath_item()+ _ ")" {
             let mut patterns: Vec<TripleOrPathPattern> = Vec::default();
-            let mut current_list_node = TermOrVariable::from(rdf::NIL);
+            let mut current_list_node = TermOrVariable::from(rdf::NIL.into_owned());
             for objWithPatterns in o.into_iter().rev() {
                 let new_blank_node = TermOrVariable::from(BlankNode::default());
-                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::FIRST, objWithPatterns.focus.clone()).into());
-                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::REST, current_list_node).into());
+                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::FIRST.into_owned(), objWithPatterns.focus.clone()).into());
+                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::REST.into_owned(), current_list_node).into());
                 current_list_node = new_blank_node;
-                patterns.extend_from_slice(&objWithPatterns.patterns);
+                patterns.extend(objWithPatterns.patterns);
             }
             FocusedTripleOrPathPattern {
                 focus: current_list_node,
@@ -1565,13 +1644,13 @@ parser! {
         //[114]
         rule RelationalExpression() -> Expression = a:NumericExpression() _ o: RelationalExpression_inner()? { match o {
             Some(("=", Some(b), None)) => Expression::Equal(Box::new(a), Box::new(b)),
-            Some(("!=", Some(b), None)) => Expression::NotEqual(Box::new(a), Box::new(b)),
+            Some(("!=", Some(b), None)) => Expression::Not(Box::new(Expression::Equal(Box::new(a), Box::new(b)))),
             Some((">", Some(b), None)) => Expression::Greater(Box::new(a), Box::new(b)),
-            Some((">=", Some(b), None)) => Expression::GreaterOrEq(Box::new(a), Box::new(b)),
-            Some(("<", Some(b), None)) => Expression::Lower(Box::new(a), Box::new(b)),
-            Some(("<=", Some(b), None)) => Expression::LowerOrEq(Box::new(a), Box::new(b)),
+            Some((">=", Some(b), None)) => Expression::GreaterOrEqual(Box::new(a), Box::new(b)),
+            Some(("<", Some(b), None)) => Expression::Less(Box::new(a), Box::new(b)),
+            Some(("<=", Some(b), None)) => Expression::LessOrEqual(Box::new(a), Box::new(b)),
             Some(("IN", None, Some(l))) => Expression::In(Box::new(a), l),
-            Some(("NOT IN", None, Some(l))) => Expression::NotIn(Box::new(a), l),
+            Some(("NOT IN", None, Some(l))) => Expression::Not(Box::new(Expression::In(Box::new(a), l))),
             Some(_) => unreachable!(),
             None => a
         } }
@@ -1586,7 +1665,7 @@ parser! {
         //[116]
         rule AdditiveExpression() -> Expression = a:MultiplicativeExpression() _ o:AdditiveExpression_inner()? { match o {
             Some(("+", b)) => Expression::Add(Box::new(a), Box::new(b)),
-            Some(("-", b)) => Expression::Sub(Box::new(a), Box::new(b)),
+            Some(("-", b)) => Expression::Subtract(Box::new(a), Box::new(b)),
             Some(_) => unreachable!(),
             None => a,
         } }
@@ -1596,8 +1675,8 @@ parser! {
 
         //[117]
         rule MultiplicativeExpression() -> Expression = a:UnaryExpression() _ o: MultiplicativeExpression_inner()? { match o {
-            Some(("*", b)) => Expression::Mul(Box::new(a), Box::new(b)),
-            Some(("/", b)) => Expression::Div(Box::new(a), Box::new(b)),
+            Some(("*", b)) => Expression::Multiply(Box::new(a), Box::new(b)),
+            Some(("/", b)) => Expression::Divide(Box::new(a), Box::new(b)),
             Some(_) => unreachable!(),
             None => a
         } }
@@ -1607,7 +1686,7 @@ parser! {
 
         //[118]
         rule UnaryExpression() -> Expression = s: $("!" / "+" / "-")? _ e:PrimaryExpression() { match s {
-            Some("!") => Expression::UnaryNot(Box::new(e)),
+            Some("!") => Expression::Not(Box::new(e)),
             Some("+") => Expression::UnaryPlus(Box::new(e)),
             Some("-") => Expression::UnaryMinus(Box::new(e)),
             Some(_) => unreachable!(),
@@ -1671,11 +1750,11 @@ parser! {
             i("SHA256") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::SHA256, vec![e]) } /
             i("SHA384") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::SHA384, vec![e]) } /
             i("SHA512") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::SHA512, vec![e]) } /
-            i("COALESCE") e:ExpressionList() { Expression::FunctionCall(Function::Coalesce, e) } /
-            i("IF") _ "(" _ a:Expression() _ "," _ b:Expression() _ "," _ c:Expression() _ ")" { Expression::FunctionCall(Function::If, vec![a, b, c]) } /
+            i("COALESCE") e:ExpressionList() { Expression::Coalesce(e) } /
+            i("IF") _ "(" _ a:Expression() _ "," _ b:Expression() _ "," _ c:Expression() _ ")" { Expression::If(Box::new(a), Box::new(b), Box::new(c)) } /
             i("STRLANG") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::StrLang, vec![a, b]) }  /
             i("STRDT") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::StrDT, vec![a, b]) } /
-            i("sameTerm") "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::SameTerm, vec![a, b]) } /
+            i("sameTerm") "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::SameTerm(Box::new(a), Box::new(b)) } /
             (i("isIRI") / i("isURI")) _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsIRI, vec![e]) } /
             i("isBLANK") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsBlank, vec![e]) } /
             i("isLITERAL") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsLiteral, vec![e]) } /
@@ -1704,28 +1783,28 @@ parser! {
         rule ExistsFunc() -> Expression = i("EXISTS") _ p:GroupGraphPattern() { Expression::Exists(Box::new(p)) }
 
         //[126]
-        rule NotExistsFunc() -> Expression = i("NOT") _ i("EXISTS") _ p:GroupGraphPattern() { Expression::UnaryNot(Box::new(Expression::Exists(Box::new(p)))) }
+        rule NotExistsFunc() -> Expression = i("NOT") _ i("EXISTS") _ p:GroupGraphPattern() { Expression::Not(Box::new(Expression::Exists(Box::new(p)))) }
 
         //[127]
-        rule Aggregate() -> Aggregation =
-            i("COUNT") _ "(" _ i("DISTINCT") _ "*" _ ")" { Aggregation::Count(None, true) } /
-            i("COUNT") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { Aggregation::Count(Some(Box::new(e)), true) } /
-            i("COUNT") _ "(" _ "*" _ ")" { Aggregation::Count(None, false) } /
-            i("COUNT") _ "(" _ e:Expression() _ ")" { Aggregation::Count(Some(Box::new(e)), false) } /
-            i("SUM") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { Aggregation::Sum(Box::new(e), true) } /
-            i("SUM") _ "(" _ e:Expression() _ ")" { Aggregation::Sum(Box::new(e), false) } /
-            i("MIN") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { Aggregation::Min(Box::new(e), true) } /
-            i("MIN") _ "(" _ e:Expression() _ ")" { Aggregation::Min(Box::new(e), false) } /
-            i("MAX") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { Aggregation::Max(Box::new(e), true) } /
-            i("MAX") _ "(" _ e:Expression() _ ")" { Aggregation::Max(Box::new(e), false) } /
-            i("AVG") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { Aggregation::Avg(Box::new(e), true) } /
-            i("AVG") _ "(" _ e:Expression() _ ")" { Aggregation::Avg(Box::new(e), false) } /
-            i("SAMPLE") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { Aggregation::Sample(Box::new(e), true) } /
-            i("SAMPLE") _ "(" _ e:Expression() _ ")" { Aggregation::Sample(Box::new(e), false) } /
-            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ e:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { Aggregation::GroupConcat(Box::new(e), true, Some(s)) } /
-            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { Aggregation::GroupConcat(Box::new(e), true, None) } /
-            i("GROUP_CONCAT") _ "(" _ e:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { Aggregation::GroupConcat(Box::new(e), true, Some(s)) } /
-            i("GROUP_CONCAT") _ "(" _ e:Expression() _ ")" { Aggregation::GroupConcat(Box::new(e), false, None) }
+        rule Aggregate() -> SetFunction =
+            i("COUNT") _ "(" _ i("DISTINCT") _ "*" _ ")" { SetFunction::Count { expr: None, distinct: true } } /
+            i("COUNT") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { SetFunction::Count { expr: Some(Box::new(e)), distinct: true } } /
+            i("COUNT") _ "(" _ "*" _ ")" { SetFunction::Count { expr: None, distinct: false } } /
+            i("COUNT") _ "(" _ e:Expression() _ ")" { SetFunction::Count { expr: Some(Box::new(e)), distinct: false } } /
+            i("SUM") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { SetFunction::Sum { expr: Box::new(e), distinct: true } } /
+            i("SUM") _ "(" _ e:Expression() _ ")" { SetFunction::Sum { expr: Box::new(e), distinct: false } } /
+            i("MIN") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { SetFunction::Min { expr: Box::new(e), distinct: true } } /
+            i("MIN") _ "(" _ e:Expression() _ ")" { SetFunction::Min { expr: Box::new(e), distinct: false } } /
+            i("MAX") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { SetFunction::Max { expr: Box::new(e), distinct: true } } /
+            i("MAX") _ "(" _ e:Expression() _ ")" { SetFunction::Max { expr: Box::new(e), distinct: false } } /
+            i("AVG") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { SetFunction::Avg { expr: Box::new(e), distinct: true } } /
+            i("AVG") _ "(" _ e:Expression() _ ")" { SetFunction::Avg { expr: Box::new(e), distinct: false } } /
+            i("SAMPLE") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { SetFunction::Sample { expr: Box::new(e), distinct: true } } /
+            i("SAMPLE") _ "(" _ e:Expression() _ ")" { SetFunction::Sample { expr: Box::new(e), distinct: false } } /
+            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ e:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { SetFunction::GroupConcat { expr: Box::new(e), distinct: true, separator: Some(s) } } /
+            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { SetFunction::GroupConcat { expr: Box::new(e), distinct: true, separator: None } } /
+            i("GROUP_CONCAT") _ "(" _ e:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { SetFunction::GroupConcat { expr: Box::new(e), distinct: true, separator: Some(s) } } /
+            i("GROUP_CONCAT") _ "(" _ e:Expression() _ ")" { SetFunction::GroupConcat { expr: Box::new(e), distinct: false, separator: None } }
 
         //[128]
         rule iriOrFunction() -> Expression = i: iri() _ a: ArgList()? {

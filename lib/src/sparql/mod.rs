@@ -2,7 +2,7 @@
 //!
 //! Stores execute SPARQL. See [`MemoryStore`](super::store::memory::MemoryStore::query()) for an example.
 
-mod algebra;
+pub mod algebra;
 mod csv_results;
 mod dataset;
 mod error;
@@ -17,7 +17,6 @@ mod service;
 mod update;
 mod xml_results;
 
-use crate::sparql::algebra::QueryVariants;
 pub use crate::sparql::algebra::{Query, Update};
 use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::EvaluationError;
@@ -44,48 +43,64 @@ pub(crate) fn evaluate_query<R: ReadableEncodedStore + 'static>(
     query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
     options: QueryOptions,
 ) -> Result<QueryResults, EvaluationError> {
-    match query.try_into().map_err(|e| e.into())?.0 {
-        QueryVariants::Select {
-            algebra,
+    match query.try_into().map_err(|e| e.into())? {
+        Query::Select {
+            pattern,
             base_iri,
             dataset,
         } => {
             let dataset = DatasetView::new(store, &dataset)?;
-            let (plan, variables) = PlanBuilder::build(&dataset, &algebra)?;
-            SimpleEvaluator::new(Rc::new(dataset), base_iri, options.service_handler)
-                .evaluate_select_plan(&plan, Rc::new(variables))
+            let (plan, variables) = PlanBuilder::build(&dataset, &pattern)?;
+            SimpleEvaluator::new(
+                Rc::new(dataset),
+                base_iri.map(Rc::new),
+                options.service_handler,
+            )
+            .evaluate_select_plan(&plan, Rc::new(variables))
         }
-        QueryVariants::Ask {
-            algebra,
+        Query::Ask {
+            pattern,
             base_iri,
             dataset,
         } => {
             let dataset = DatasetView::new(store, &dataset)?;
-            let (plan, _) = PlanBuilder::build(&dataset, &algebra)?;
-            SimpleEvaluator::new(Rc::new(dataset), base_iri, options.service_handler)
-                .evaluate_ask_plan(&plan)
+            let (plan, _) = PlanBuilder::build(&dataset, &pattern)?;
+            SimpleEvaluator::new(
+                Rc::new(dataset),
+                base_iri.map(Rc::new),
+                options.service_handler,
+            )
+            .evaluate_ask_plan(&plan)
         }
-        QueryVariants::Construct {
-            construct,
-            algebra,
+        Query::Construct {
+            template,
+            pattern,
             base_iri,
             dataset,
         } => {
             let dataset = DatasetView::new(store, &dataset)?;
-            let (plan, variables) = PlanBuilder::build(&dataset, &algebra)?;
-            let construct = PlanBuilder::build_graph_template(&dataset, &construct, variables)?;
-            SimpleEvaluator::new(Rc::new(dataset), base_iri, options.service_handler)
-                .evaluate_construct_plan(&plan, construct)
+            let (plan, variables) = PlanBuilder::build(&dataset, &pattern)?;
+            let construct = PlanBuilder::build_graph_template(&dataset, &template, variables)?;
+            SimpleEvaluator::new(
+                Rc::new(dataset),
+                base_iri.map(Rc::new),
+                options.service_handler,
+            )
+            .evaluate_construct_plan(&plan, construct)
         }
-        QueryVariants::Describe {
-            algebra,
+        Query::Describe {
+            pattern,
             base_iri,
             dataset,
         } => {
             let dataset = DatasetView::new(store, &dataset)?;
-            let (plan, _) = PlanBuilder::build(&dataset, &algebra)?;
-            SimpleEvaluator::new(Rc::new(dataset), base_iri, options.service_handler)
-                .evaluate_describe_plan(&plan)
+            let (plan, _) = PlanBuilder::build(&dataset, &pattern)?;
+            SimpleEvaluator::new(
+                Rc::new(dataset),
+                base_iri.map(Rc::new),
+                options.service_handler,
+            )
+            .evaluate_describe_plan(&plan)
         }
     }
 }
@@ -135,7 +150,7 @@ pub(crate) fn evaluate_update<
 >(
     read: R,
     write: &mut W,
-    update: &Update,
+    update: Update,
 ) -> Result<(), EvaluationError>
 where
     io::Error: From<StoreOrParseError<W::Error>>,
@@ -143,7 +158,7 @@ where
     SimpleUpdateEvaluator::new(
         read,
         write,
-        update.base_iri.clone(),
+        update.base_iri.map(Rc::new),
         Rc::new(EmptyServiceHandler),
     )
     .eval_all(&update.operations)

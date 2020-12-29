@@ -1,4 +1,8 @@
-//! [SPARQL 1.1 Query Algebra](https://www.w3.org/TR/sparql11-query/#sparqlQuery) AST
+//! [SPARQL 1.1 Query Algebra](https://www.w3.org/TR/sparql11-query/#sparqlQuery)
+//!
+//! The root type for SPARQL queries is [`Query`] and the root type for updates is [`Update`].
+//!
+//! Warning: this implementation is an unstable work in progress
 
 use crate::model::*;
 use crate::sparql::model::*;
@@ -28,7 +32,46 @@ use std::str::FromStr;
 /// # Result::Ok::<_, Box<dyn std::error::Error>>(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct Query(pub(crate) QueryVariants);
+pub enum Query {
+    /// [SELECT](https://www.w3.org/TR/sparql11-query/#select)
+    Select {
+        /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset)
+        dataset: QueryDataset,
+        /// The query selection graph pattern
+        pattern: GraphPattern,
+        /// The query base IRI
+        base_iri: Option<Iri<String>>,
+    },
+    /// [CONSTRUCT](https://www.w3.org/TR/sparql11-query/#construct)
+    Construct {
+        /// The query construction template
+        template: Vec<TriplePattern>,
+        /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset)
+        dataset: QueryDataset,
+        /// The query selection graph pattern
+        pattern: GraphPattern,
+        /// The query base IRI
+        base_iri: Option<Iri<String>>,
+    },
+    /// [DESCRIBE](https://www.w3.org/TR/sparql11-query/#describe)
+    Describe {
+        /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset)
+        dataset: QueryDataset,
+        /// The query selection graph pattern
+        pattern: GraphPattern,
+        /// The query base IRI
+        base_iri: Option<Iri<String>>,
+    },
+    /// [ASK](https://www.w3.org/TR/sparql11-query/#ask)
+    Ask {
+        /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset)
+        dataset: QueryDataset,
+        /// The query selection graph pattern
+        pattern: Rc<GraphPattern>,
+        /// The query base IRI
+        base_iri: Option<Iri<String>>,
+    },
+}
 
 impl Query {
     /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query
@@ -38,28 +81,98 @@ impl Query {
 
     /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset)
     pub fn dataset(&self) -> &QueryDataset {
-        match &self.0 {
-            QueryVariants::Select { dataset, .. } => dataset,
-            QueryVariants::Construct { dataset, .. } => dataset,
-            QueryVariants::Describe { dataset, .. } => dataset,
-            QueryVariants::Ask { dataset, .. } => dataset,
+        match self {
+            Query::Select { dataset, .. } => dataset,
+            Query::Construct { dataset, .. } => dataset,
+            Query::Describe { dataset, .. } => dataset,
+            Query::Ask { dataset, .. } => dataset,
         }
     }
 
     /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset)
     pub fn dataset_mut(&mut self) -> &mut QueryDataset {
-        match &mut self.0 {
-            QueryVariants::Select { dataset, .. } => dataset,
-            QueryVariants::Construct { dataset, .. } => dataset,
-            QueryVariants::Describe { dataset, .. } => dataset,
-            QueryVariants::Ask { dataset, .. } => dataset,
+        match self {
+            Query::Select { dataset, .. } => dataset,
+            Query::Construct { dataset, .. } => dataset,
+            Query::Describe { dataset, .. } => dataset,
+            Query::Ask { dataset, .. } => dataset,
         }
     }
 }
 
 impl fmt::Display for Query {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
+        match self {
+            Query::Select {
+                dataset,
+                pattern,
+                base_iri,
+            } => {
+                if let Some(base_iri) = base_iri {
+                    writeln!(f, "BASE <{}>", base_iri)?;
+                }
+                write!(f, "{}", SparqlGraphRootPattern { pattern, dataset })
+            }
+            Query::Construct {
+                template,
+                dataset,
+                pattern,
+                base_iri,
+            } => {
+                if let Some(base_iri) = base_iri {
+                    writeln!(f, "BASE <{}>", base_iri)?;
+                }
+                write!(f, "CONSTRUCT {{ ")?;
+                for triple in template.iter() {
+                    write!(f, "{} ", SparqlTriplePattern(triple))?;
+                }
+                write!(
+                    f,
+                    "}}{} WHERE {{ {} }}",
+                    dataset,
+                    SparqlGraphRootPattern {
+                        pattern,
+                        dataset: &QueryDataset::default()
+                    }
+                )
+            }
+            Query::Describe {
+                dataset,
+                pattern,
+                base_iri,
+            } => {
+                if let Some(base_iri) = base_iri {
+                    writeln!(f, "BASE <{}>", base_iri.as_str())?;
+                }
+                write!(
+                    f,
+                    "DESCRIBE *{} WHERE {{ {} }}",
+                    dataset,
+                    SparqlGraphRootPattern {
+                        pattern,
+                        dataset: &QueryDataset::default()
+                    }
+                )
+            }
+            Query::Ask {
+                dataset,
+                pattern,
+                base_iri,
+            } => {
+                if let Some(base_iri) = base_iri {
+                    writeln!(f, "BASE <{}>", base_iri)?;
+                }
+                write!(
+                    f,
+                    "ASK{} WHERE {{ {} }}",
+                    dataset,
+                    SparqlGraphRootPattern {
+                        pattern,
+                        dataset: &QueryDataset::default()
+                    }
+                )
+            }
+        }
     }
 }
 
@@ -100,8 +213,10 @@ impl<'a> TryFrom<&'a String> for Query {
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Update {
-    pub(crate) base_iri: Option<Rc<Iri<String>>>,
-    pub(crate) operations: Vec<GraphUpdateOperation>,
+    /// The update base IRI
+    pub base_iri: Option<Iri<String>>,
+    /// The update operations
+    pub operations: Vec<GraphUpdateOperation>,
 }
 
 impl Update {
@@ -147,6 +262,7 @@ impl<'a> TryFrom<&'a String> for Update {
     }
 }
 
+/// The union of [`NamedNode`]s and [`Variable`]s
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum NamedNodeOrVariable {
     NamedNode(NamedNode),
@@ -168,18 +284,13 @@ impl From<NamedNode> for NamedNodeOrVariable {
     }
 }
 
-impl From<NamedNodeRef<'_>> for NamedNodeOrVariable {
-    fn from(node: NamedNodeRef<'_>) -> Self {
-        NamedNodeOrVariable::NamedNode(node.into())
-    }
-}
-
 impl From<Variable> for NamedNodeOrVariable {
     fn from(var: Variable) -> Self {
         NamedNodeOrVariable::Variable(var)
     }
 }
 
+/// The union of [`Term`]s and [`Variable`]s
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum TermOrVariable {
     Term(Term),
@@ -197,12 +308,6 @@ impl fmt::Display for TermOrVariable {
 
 impl From<NamedNode> for TermOrVariable {
     fn from(node: NamedNode) -> Self {
-        TermOrVariable::Term(node.into())
-    }
-}
-
-impl From<NamedNodeRef<'_>> for TermOrVariable {
-    fn from(node: NamedNodeRef<'_>) -> Self {
         TermOrVariable::Term(node.into())
     }
 }
@@ -240,43 +345,7 @@ impl From<NamedNodeOrVariable> for TermOrVariable {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct StaticBindings {
-    variables: Vec<Variable>,
-    values: Vec<Vec<Option<Term>>>,
-}
-
-impl StaticBindings {
-    pub fn new(variables: Vec<Variable>, values: Vec<Vec<Option<Term>>>) -> Self {
-        Self { variables, values }
-    }
-
-    pub fn variables(&self) -> &[Variable] {
-        &*self.variables
-    }
-
-    pub fn variables_iter(&self) -> impl Iterator<Item = &Variable> {
-        self.variables.iter()
-    }
-
-    pub fn values_iter(&self) -> impl Iterator<Item = &Vec<Option<Term>>> {
-        self.values.iter()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.values.is_empty()
-    }
-}
-
-impl Default for StaticBindings {
-    fn default() -> Self {
-        Self {
-            variables: Vec::default(),
-            values: Vec::default(),
-        }
-    }
-}
-
+/// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern)
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct TriplePattern {
     pub subject: TermOrVariable,
@@ -285,7 +354,7 @@ pub struct TriplePattern {
 }
 
 impl TriplePattern {
-    pub fn new(
+    pub(crate) fn new(
         subject: impl Into<TermOrVariable>,
         predicate: impl Into<NamedNodeOrVariable>,
         object: impl Into<TermOrVariable>,
@@ -300,10 +369,27 @@ impl TriplePattern {
 
 impl fmt::Display for TriplePattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {} {} .", self.subject, self.predicate, self.object)
+        write!(
+            f,
+            "(triple {} {} {})",
+            self.subject, self.predicate, self.object
+        )
     }
 }
 
+struct SparqlTriplePattern<'a>(&'a TriplePattern);
+
+impl<'a> fmt::Display for SparqlTriplePattern<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} {} {} .",
+            self.0.subject, self.0.predicate, self.0.object
+        )
+    }
+}
+
+/// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) in a specific graph
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct QuadPattern {
     pub subject: TermOrVariable,
@@ -313,7 +399,7 @@ pub struct QuadPattern {
 }
 
 impl QuadPattern {
-    pub fn new(
+    pub(crate) fn new(
         subject: impl Into<TermOrVariable>,
         predicate: impl Into<NamedNodeOrVariable>,
         object: impl Into<TermOrVariable>,
@@ -333,72 +419,96 @@ impl fmt::Display for QuadPattern {
         if let Some(graph_name) = &self.graph_name {
             write!(
                 f,
-                "GRAPH {} {{ {} {} {} }}",
+                "(graph {} (triple {} {} {}))",
                 graph_name, self.subject, self.predicate, self.object
             )
         } else {
-            write!(f, "{} {} {} .", self.subject, self.predicate, self.object)
+            write!(
+                f,
+                "(triple {} {} {})",
+                self.subject, self.predicate, self.object
+            )
         }
     }
 }
 
+struct SparqlQuadPattern<'a>(&'a QuadPattern);
+
+impl<'a> fmt::Display for SparqlQuadPattern<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(graph_name) = &self.0.graph_name {
+            write!(
+                f,
+                "GRAPH {} {{ {} {} {} }}",
+                graph_name, self.0.subject, self.0.predicate, self.0.object
+            )
+        } else {
+            write!(
+                f,
+                "{} {} {} .",
+                self.0.subject, self.0.predicate, self.0.object
+            )
+        }
+    }
+}
+
+/// A [property path expression](https://www.w3.org/TR/sparql11-query/#defn_PropertyPathExpr)
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum PropertyPath {
-    PredicatePath(NamedNode),
-    InversePath(Box<PropertyPath>),
-    SequencePath(Box<PropertyPath>, Box<PropertyPath>),
-    AlternativePath(Box<PropertyPath>, Box<PropertyPath>),
-    ZeroOrMorePath(Box<PropertyPath>),
-    OneOrMorePath(Box<PropertyPath>),
-    ZeroOrOnePath(Box<PropertyPath>),
+pub enum PropertyPathExpression {
+    NamedNode(NamedNode),
+    Reverse(Box<PropertyPathExpression>),
+    Sequence(Box<PropertyPathExpression>, Box<PropertyPathExpression>),
+    Alternative(Box<PropertyPathExpression>, Box<PropertyPathExpression>),
+    ZeroOrMore(Box<PropertyPathExpression>),
+    OneOrMore(Box<PropertyPathExpression>),
+    ZeroOrOne(Box<PropertyPathExpression>),
     NegatedPropertySet(Vec<NamedNode>),
 }
 
-impl fmt::Display for PropertyPath {
+impl fmt::Display for PropertyPathExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PropertyPath::PredicatePath(p) => write!(f, "link({})", p),
-            PropertyPath::InversePath(p) => write!(f, "inv({})", p),
-            PropertyPath::AlternativePath(a, b) => write!(f, "alt({}, {})", a, b),
-            PropertyPath::SequencePath(a, b) => write!(f, "seq({}, {})", a, b),
-            PropertyPath::ZeroOrMorePath(p) => write!(f, "ZeroOrMorePath({})", p),
-            PropertyPath::OneOrMorePath(p) => write!(f, "OneOrMorePath({})", p),
-            PropertyPath::ZeroOrOnePath(p) => write!(f, "ZeroOrOnePath({})", p),
-            PropertyPath::NegatedPropertySet(p) => write!(
-                f,
-                "NPS({{ {} }})",
-                p.iter()
-                    .map(|v| v.to_string())
-                    .collect::<Vec<String>>()
-                    .join(" ")
-            ),
+            PropertyPathExpression::NamedNode(p) => p.fmt(f),
+            PropertyPathExpression::Reverse(p) => write!(f, "(reverse {})", p),
+            PropertyPathExpression::Alternative(a, b) => write!(f, "(alt {} {})", a, b),
+            PropertyPathExpression::Sequence(a, b) => write!(f, "(seq {} {})", a, b),
+            PropertyPathExpression::ZeroOrMore(p) => write!(f, "(path* {})", p),
+            PropertyPathExpression::OneOrMore(p) => write!(f, "(path+ {})", p),
+            PropertyPathExpression::ZeroOrOne(p) => write!(f, "(path? {})", p),
+            PropertyPathExpression::NegatedPropertySet(p) => {
+                write!(f, "(notoneof ")?;
+                for p in p {
+                    write!(f, " {}", p)?;
+                }
+                write!(f, ")")
+            }
         }
     }
 }
 
-struct SparqlPropertyPath<'a>(&'a PropertyPath);
+struct SparqlPropertyPath<'a>(&'a PropertyPathExpression);
 
 impl<'a> fmt::Display for SparqlPropertyPath<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
-            PropertyPath::PredicatePath(p) => write!(f, "{}", p),
-            PropertyPath::InversePath(p) => write!(f, "^{}", SparqlPropertyPath(&*p)),
-            PropertyPath::SequencePath(a, b) => write!(
+            PropertyPathExpression::NamedNode(p) => p.fmt(f),
+            PropertyPathExpression::Reverse(p) => write!(f, "^{}", SparqlPropertyPath(&*p)),
+            PropertyPathExpression::Sequence(a, b) => write!(
                 f,
                 "({} / {})",
                 SparqlPropertyPath(&*a),
                 SparqlPropertyPath(&*b)
             ),
-            PropertyPath::AlternativePath(a, b) => write!(
+            PropertyPathExpression::Alternative(a, b) => write!(
                 f,
                 "({} | {})",
                 SparqlPropertyPath(&*a),
                 SparqlPropertyPath(&*b)
             ),
-            PropertyPath::ZeroOrMorePath(p) => write!(f, "{}*", SparqlPropertyPath(&*p)),
-            PropertyPath::OneOrMorePath(p) => write!(f, "{}+", SparqlPropertyPath(&*p)),
-            PropertyPath::ZeroOrOnePath(p) => write!(f, "{}?", SparqlPropertyPath(&*p)),
-            PropertyPath::NegatedPropertySet(p) => write!(
+            PropertyPathExpression::ZeroOrMore(p) => write!(f, "{}*", SparqlPropertyPath(&*p)),
+            PropertyPathExpression::OneOrMore(p) => write!(f, "{}+", SparqlPropertyPath(&*p)),
+            PropertyPathExpression::ZeroOrOne(p) => write!(f, "{}?", SparqlPropertyPath(&*p)),
+            PropertyPathExpression::NegatedPropertySet(p) => write!(
                 f,
                 "!({})",
                 p.iter()
@@ -410,132 +520,58 @@ impl<'a> fmt::Display for SparqlPropertyPath<'a> {
     }
 }
 
-impl From<NamedNode> for PropertyPath {
+impl From<NamedNode> for PropertyPathExpression {
     fn from(p: NamedNode) -> Self {
-        PropertyPath::PredicatePath(p)
+        PropertyPathExpression::NamedNode(p)
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct PathPattern {
-    pub subject: TermOrVariable,
-    pub path: PropertyPath,
-    pub object: TermOrVariable,
-}
-
-impl fmt::Display for PathPattern {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Path({} {} {})", self.subject, self.path, self.object)
-    }
-}
-
-impl PathPattern {
-    pub fn new(
-        subject: impl Into<TermOrVariable>,
-        path: impl Into<PropertyPath>,
-        object: impl Into<TermOrVariable>,
-    ) -> Self {
-        Self {
-            subject: subject.into(),
-            path: path.into(),
-            object: object.into(),
-        }
-    }
-}
-
-struct SparqlPathPattern<'a>(&'a PathPattern);
-
-impl<'a> fmt::Display for SparqlPathPattern<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} {} {} .",
-            self.0.subject,
-            SparqlPropertyPath(&self.0.path),
-            self.0.object
-        )
-    }
-}
-
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum TripleOrPathPattern {
-    Triple(TriplePattern),
-    Path(PathPattern),
-}
-
-impl TripleOrPathPattern {
-    pub(crate) fn subject(&self) -> &TermOrVariable {
-        match self {
-            TripleOrPathPattern::Triple(t) => &t.subject,
-            TripleOrPathPattern::Path(t) => &t.subject,
-        }
-    }
-
-    pub(crate) fn object(&self) -> &TermOrVariable {
-        match self {
-            TripleOrPathPattern::Triple(t) => &t.object,
-            TripleOrPathPattern::Path(t) => &t.object,
-        }
-    }
-}
-
-impl<'a> fmt::Display for TripleOrPathPattern {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            TripleOrPathPattern::Triple(tp) => write!(f, "{}", tp),
-            TripleOrPathPattern::Path(ppp) => write!(f, "{}", ppp),
-        }
-    }
-}
-
-impl From<TriplePattern> for TripleOrPathPattern {
-    fn from(tp: TriplePattern) -> Self {
-        TripleOrPathPattern::Triple(tp)
-    }
-}
-
-impl From<PathPattern> for TripleOrPathPattern {
-    fn from(ppp: PathPattern) -> Self {
-        TripleOrPathPattern::Path(ppp)
-    }
-}
-
-struct SparqlTripleOrPathPattern<'a>(&'a TripleOrPathPattern);
-
-impl<'a> fmt::Display for SparqlTripleOrPathPattern<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 {
-            TripleOrPathPattern::Triple(tp) => write!(f, "{}", tp),
-            TripleOrPathPattern::Path(ppp) => write!(f, "{}", SparqlPathPattern(ppp)),
-        }
-    }
-}
-
+/// An [expression](https://www.w3.org/TR/sparql11-query/#expressions)
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Expression {
     NamedNode(NamedNode),
     Literal(Literal),
     Variable(Variable),
+    /// [Logical-or](https://www.w3.org/TR/sparql11-query/#func-logical-or)
     Or(Box<Expression>, Box<Expression>),
+    /// [Logical-and](https://www.w3.org/TR/sparql11-query/#func-logical-and)
     And(Box<Expression>, Box<Expression>),
+    /// [RDFterm-equal](https://www.w3.org/TR/sparql11-query/#func-RDFterm-equal) and all the XSD equalities
     Equal(Box<Expression>, Box<Expression>),
-    NotEqual(Box<Expression>, Box<Expression>),
+    /// [sameTerm](https://www.w3.org/TR/sparql11-query/#func-sameTerm)
+    SameTerm(Box<Expression>, Box<Expression>),
+    /// [op:numeric-greater-than](https://www.w3.org/TR/xpath-functions/#func-numeric-greater-than) and other XSD greater than operators
     Greater(Box<Expression>, Box<Expression>),
-    GreaterOrEq(Box<Expression>, Box<Expression>),
-    Lower(Box<Expression>, Box<Expression>),
-    LowerOrEq(Box<Expression>, Box<Expression>),
+    GreaterOrEqual(Box<Expression>, Box<Expression>),
+    /// [op:numeric-less-than](https://www.w3.org/TR/xpath-functions/#func-numeric-less-than) and other XSD greater than operators
+    Less(Box<Expression>, Box<Expression>),
+    LessOrEqual(Box<Expression>, Box<Expression>),
+    /// [IN](https://www.w3.org/TR/sparql11-query/#func-in)
     In(Box<Expression>, Vec<Expression>),
-    NotIn(Box<Expression>, Vec<Expression>),
+    /// [op:numeric-add](https://www.w3.org/TR/xpath-functions/#func-numeric-add) and other XSD additions
     Add(Box<Expression>, Box<Expression>),
-    Sub(Box<Expression>, Box<Expression>),
-    Mul(Box<Expression>, Box<Expression>),
-    Div(Box<Expression>, Box<Expression>),
+    /// [op:numeric-subtract](https://www.w3.org/TR/xpath-functions/#func-numeric-subtract) and other XSD subtractions
+    Subtract(Box<Expression>, Box<Expression>),
+    /// [op:numeric-multiply](https://www.w3.org/TR/xpath-functions/#func-numeric-multiply) and other XSD multiplications
+    Multiply(Box<Expression>, Box<Expression>),
+    /// [op:numeric-divide](https://www.w3.org/TR/xpath-functions/#func-numeric-divide) and other XSD divides
+    Divide(Box<Expression>, Box<Expression>),
+    /// [op:numeric-unary-plus](https://www.w3.org/TR/xpath-functions/#func-numeric-unary-plus) and other XSD unary plus
     UnaryPlus(Box<Expression>),
+    /// [op:numeric-unary-minus](https://www.w3.org/TR/xpath-functions/#func-numeric-unary-minus) and other XSD unary minus
     UnaryMinus(Box<Expression>),
-    UnaryNot(Box<Expression>),
-    FunctionCall(Function, Vec<Expression>),
+    /// [fn:not](https://www.w3.org/TR/xpath-functions/#func-not)
+    Not(Box<Expression>),
+    /// [EXISTS](https://www.w3.org/TR/sparql11-query/#func-filter-exists)
     Exists(Box<GraphPattern>),
+    /// [BOUND](https://www.w3.org/TR/sparql11-query/#func-bound)
     Bound(Variable),
+    /// [IF](https://www.w3.org/TR/sparql11-query/#func-if)
+    If(Box<Expression>, Box<Expression>, Box<Expression>),
+    /// [COALESCE](https://www.w3.org/TR/sparql11-query/#func-coalesce)
+    Coalesce(Vec<Expression>),
+    /// A regular function call
+    FunctionCall(Function, Vec<Expression>),
 }
 
 impl fmt::Display for Expression {
@@ -544,53 +580,45 @@ impl fmt::Display for Expression {
             Expression::NamedNode(node) => node.fmt(f),
             Expression::Literal(l) => l.fmt(f),
             Expression::Variable(var) => var.fmt(f),
-            Expression::Or(a, b) => write!(f, "({} || {})", a, b),
-            Expression::And(a, b) => write!(f, "({} && {})", a, b),
-            Expression::Equal(a, b) => write!(f, "({} = {})", a, b),
-            Expression::NotEqual(a, b) => write!(f, "({} != {})", a, b),
-            Expression::Greater(a, b) => write!(f, "({} > {})", a, b),
-            Expression::GreaterOrEq(a, b) => write!(f, "({} >= {})", a, b),
-            Expression::Lower(a, b) => write!(f, "({} < {})", a, b),
-            Expression::LowerOrEq(a, b) => write!(f, "({} <= {})", a, b),
-            Expression::In(a, b) => write!(
-                f,
-                "({} IN ({}))",
-                a,
-                b.iter()
-                    .map(|v| v.to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
-            Expression::NotIn(a, b) => write!(
-                f,
-                "({} NOT IN ({}))",
-                a,
-                b.iter()
-                    .map(|v| v.to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
-            Expression::Add(a, b) => write!(f, "{} + {}", a, b),
-            Expression::Sub(a, b) => write!(f, "{} - {}", a, b),
-            Expression::Mul(a, b) => write!(f, "{} * {}", a, b),
-            Expression::Div(a, b) => write!(f, "{} / {}", a, b),
-            Expression::UnaryPlus(e) => write!(f, "+{}", e),
-            Expression::UnaryMinus(e) => write!(f, "-{}", e),
-            Expression::UnaryNot(e) => write!(f, "!{}", e),
-            Expression::FunctionCall(function, parameters) => {
-                write!(f, "{}(", function)?;
-                let mut cont = false;
-                for p in parameters {
-                    if cont {
-                        write!(f, ", ")?;
-                    }
-                    p.fmt(f)?;
-                    cont = true;
+            Expression::Or(a, b) => write!(f, "(|| {} {})", a, b),
+            Expression::And(a, b) => write!(f, "(&& {} {})", a, b),
+            Expression::Equal(a, b) => write!(f, "(= {} {})", a, b),
+            Expression::SameTerm(a, b) => write!(f, "(sameTerm {} {})", a, b),
+            Expression::Greater(a, b) => write!(f, "(> {} {})", a, b),
+            Expression::GreaterOrEqual(a, b) => write!(f, "(>= {} {})", a, b),
+            Expression::Less(a, b) => write!(f, "(< {} {})", a, b),
+            Expression::LessOrEqual(a, b) => write!(f, "(<= {} {})", a, b),
+            Expression::In(a, b) => {
+                write!(f, "(in {}", a)?;
+                for p in b {
+                    write!(f, " {}", p)?;
                 }
                 write!(f, ")")
             }
-            Expression::Exists(p) => write!(f, "EXISTS {{ {} }}", p),
-            Expression::Bound(v) => write!(f, "BOUND({})", v),
+            Expression::Add(a, b) => write!(f, "(+ {} {})", a, b),
+            Expression::Subtract(a, b) => write!(f, "(- {} {})", a, b),
+            Expression::Multiply(a, b) => write!(f, "(* {} {})", a, b),
+            Expression::Divide(a, b) => write!(f, "(/ {} {})", a, b),
+            Expression::UnaryPlus(e) => write!(f, "(+ {})", e),
+            Expression::UnaryMinus(e) => write!(f, "(- {})", e),
+            Expression::Not(e) => write!(f, "(! {})", e),
+            Expression::FunctionCall(function, parameters) => {
+                write!(f, "({}", function)?;
+                for p in parameters {
+                    write!(f, " {}", p)?;
+                }
+                write!(f, ")")
+            }
+            Expression::Exists(p) => write!(f, "(exists {})", p),
+            Expression::Bound(v) => write!(f, "(bound {})", v),
+            Expression::If(a, b, c) => write!(f, "(if {} {} {})", a, b, c),
+            Expression::Coalesce(parameters) => {
+                write!(f, "(coalesce")?;
+                for p in parameters {
+                    write!(f, " {}", p)?;
+                }
+                write!(f, ")")
+            }
         }
     }
 }
@@ -636,84 +664,93 @@ impl<'a> fmt::Display for SparqlExpression<'a> {
             Expression::Equal(a, b) => {
                 write!(f, "({} = {})", SparqlExpression(&*a), SparqlExpression(&*b))
             }
-            Expression::NotEqual(a, b) => write!(
-                f,
-                "({} != {})",
-                SparqlExpression(&*a),
-                SparqlExpression(&*b)
-            ),
+            Expression::SameTerm(a, b) => {
+                write!(
+                    f,
+                    "sameTerm({}, {})",
+                    SparqlExpression(&*a),
+                    SparqlExpression(&*b)
+                )
+            }
             Expression::Greater(a, b) => {
                 write!(f, "({} > {})", SparqlExpression(&*a), SparqlExpression(&*b))
             }
-            Expression::GreaterOrEq(a, b) => write!(
+            Expression::GreaterOrEqual(a, b) => write!(
                 f,
                 "({} >= {})",
                 SparqlExpression(&*a),
                 SparqlExpression(&*b)
             ),
-            Expression::Lower(a, b) => {
+            Expression::Less(a, b) => {
                 write!(f, "({} < {})", SparqlExpression(&*a), SparqlExpression(&*b))
             }
-            Expression::LowerOrEq(a, b) => write!(
+            Expression::LessOrEqual(a, b) => write!(
                 f,
                 "({} <= {})",
                 SparqlExpression(&*a),
                 SparqlExpression(&*b)
             ),
-            Expression::In(a, b) => write!(
-                f,
-                "({} IN ({}))",
-                a,
-                b.iter()
-                    .map(|v| SparqlExpression(v).to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
-            Expression::NotIn(a, b) => write!(
-                f,
-                "({} NOT IN ({}))",
-                a,
-                b.iter()
-                    .map(|v| SparqlExpression(v).to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
+            Expression::In(a, b) => {
+                write!(f, "({} IN ", SparqlExpression(&*a))?;
+                write_arg_list(b.iter().map(|p| SparqlExpression(&*p)), f)?;
+                write!(f, ")")
+            }
             Expression::Add(a, b) => {
                 write!(f, "{} + {}", SparqlExpression(&*a), SparqlExpression(&*b))
             }
-            Expression::Sub(a, b) => {
+            Expression::Subtract(a, b) => {
                 write!(f, "{} - {}", SparqlExpression(&*a), SparqlExpression(&*b))
             }
-            Expression::Mul(a, b) => {
+            Expression::Multiply(a, b) => {
                 write!(f, "{} * {}", SparqlExpression(&*a), SparqlExpression(&*b))
             }
-            Expression::Div(a, b) => {
+            Expression::Divide(a, b) => {
                 write!(f, "{} / {}", SparqlExpression(&*a), SparqlExpression(&*b))
             }
             Expression::UnaryPlus(e) => write!(f, "+{}", SparqlExpression(&*e)),
             Expression::UnaryMinus(e) => write!(f, "-{}", SparqlExpression(&*e)),
-            Expression::UnaryNot(e) => match e.as_ref() {
+            Expression::Not(e) => match e.as_ref() {
                 Expression::Exists(p) => write!(f, "NOT EXISTS {{ {} }}", SparqlGraphPattern(&*p)),
-                e => write!(f, "!{}", e),
+                e => write!(f, "!{}", SparqlExpression(&*e)),
             },
             Expression::FunctionCall(function, parameters) => {
-                write!(f, "{}(", function)?;
-                let mut cont = false;
-                for p in parameters {
-                    if cont {
-                        write!(f, ", ")?;
-                    }
-                    SparqlExpression(&*p).fmt(f)?;
-                    cont = true;
-                }
-                write!(f, ")")
+                write!(f, "{}", function)?;
+                write_arg_list(parameters.iter().map(|p| SparqlExpression(&*p)), f)
             }
             Expression::Bound(v) => write!(f, "BOUND({})", v),
             Expression::Exists(p) => write!(f, "EXISTS {{ {} }}", SparqlGraphPattern(&*p)),
+            Expression::If(a, b, c) => write!(
+                f,
+                "IF({}, {}, {})",
+                SparqlExpression(&*a),
+                SparqlExpression(&*b),
+                SparqlExpression(&*c)
+            ),
+            Expression::Coalesce(parameters) => {
+                write!(f, "COALESCE")?;
+                write_arg_list(parameters.iter().map(|p| SparqlExpression(&*p)), f)
+            }
         }
     }
 }
 
+fn write_arg_list(
+    params: impl IntoIterator<Item = impl fmt::Display>,
+    f: &mut fmt::Formatter<'_>,
+) -> fmt::Result {
+    write!(f, "(")?;
+    let mut cont = false;
+    for p in params {
+        if cont {
+            write!(f, ", ")?;
+        }
+        p.fmt(f)?;
+        cont = true;
+    }
+    write!(f, ")")
+}
+
+/// A function name
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Function {
     Str,
@@ -755,11 +792,8 @@ pub enum Function {
     SHA256,
     SHA384,
     SHA512,
-    Coalesce,
-    If,
     StrLang,
     StrDT,
-    SameTerm,
     IsIRI,
     IsBlank,
     IsLiteral,
@@ -810,11 +844,8 @@ impl fmt::Display for Function {
             Function::SHA256 => write!(f, "SHA256"),
             Function::SHA384 => write!(f, "SHA384"),
             Function::SHA512 => write!(f, "SHA512"),
-            Function::Coalesce => write!(f, "COALESCE"),
-            Function::If => write!(f, "IF"),
             Function::StrLang => write!(f, "STRLANG"),
             Function::StrDT => write!(f, "STRDT"),
-            Function::SameTerm => write!(f, "sameTerm"),
             Function::IsIRI => write!(f, "isIRI"),
             Function::IsBlank => write!(f, "isBLANK"),
             Function::IsLiteral => write!(f, "isLITERAL"),
@@ -825,102 +856,204 @@ impl fmt::Display for Function {
     }
 }
 
+/// A SPARQL query [graph pattern](https://www.w3.org/TR/sparql11-query/#sparqlQuery)
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GraphPattern {
-    BGP(Vec<TripleOrPathPattern>),
-    Join(Box<GraphPattern>, Box<GraphPattern>),
-    LeftJoin(Box<GraphPattern>, Box<GraphPattern>, Option<Expression>),
-    Filter(Expression, Box<GraphPattern>),
-    Union(Box<GraphPattern>, Box<GraphPattern>),
-    Graph(NamedNodeOrVariable, Box<GraphPattern>),
-    Extend(Box<GraphPattern>, Variable, Expression),
-    Minus(Box<GraphPattern>, Box<GraphPattern>),
-    Service(NamedNodeOrVariable, Box<GraphPattern>, bool),
-    AggregateJoin(GroupPattern, Vec<(Aggregation, Variable)>),
-    Data(StaticBindings),
-    OrderBy(Box<GraphPattern>, Vec<OrderComparator>),
-    Project(Box<GraphPattern>, Vec<Variable>),
-    Distinct(Box<GraphPattern>),
-    Reduced(Box<GraphPattern>),
-    Slice(Box<GraphPattern>, usize, Option<usize>),
+    /// A [basic graph pattern](https://www.w3.org/TR/sparql11-query/#defn_BasicGraphPattern)
+    BGP(Vec<TriplePattern>),
+    /// A [property path pattern](https://www.w3.org/TR/sparql11-query/#defn_evalPP_predicate)
+    Path {
+        subject: TermOrVariable,
+        path: PropertyPathExpression,
+        object: TermOrVariable,
+    },
+    /// [Join](https://www.w3.org/TR/sparql11-query/#defn_algJoin)
+    Join {
+        left: Box<GraphPattern>,
+        right: Box<GraphPattern>,
+    },
+    /// [LeftJoin](https://www.w3.org/TR/sparql11-query/#defn_algLeftJoin)
+    LeftJoin {
+        left: Box<GraphPattern>,
+        right: Box<GraphPattern>,
+        expr: Option<Expression>,
+    },
+    /// [Filter](https://www.w3.org/TR/sparql11-query/#defn_algFilter)
+    Filter {
+        expr: Expression,
+        inner: Box<GraphPattern>,
+    },
+    /// [Union](https://www.w3.org/TR/sparql11-query/#defn_algUnion)
+    Union {
+        left: Box<GraphPattern>,
+        right: Box<GraphPattern>,
+    },
+    Graph {
+        graph_name: NamedNodeOrVariable,
+        inner: Box<GraphPattern>,
+    },
+    /// [Extend](https://www.w3.org/TR/sparql11-query/#defn_extend)
+    Extend {
+        inner: Box<GraphPattern>,
+        var: Variable,
+        expr: Expression,
+    },
+    /// [Minus](https://www.w3.org/TR/sparql11-query/#defn_algMinus)
+    Minus {
+        left: Box<GraphPattern>,
+        right: Box<GraphPattern>,
+    },
+    /// A table used to provide inline values
+    Table {
+        variables: Vec<Variable>,
+        rows: Vec<Vec<Option<Term>>>,
+    },
+    /// [OrderBy](https://www.w3.org/TR/sparql11-query/#defn_algOrdered)
+    OrderBy {
+        inner: Box<GraphPattern>,
+        condition: Vec<OrderComparator>,
+    },
+    /// [Project](https://www.w3.org/TR/sparql11-query/#defn_algProjection)
+    Project {
+        inner: Box<GraphPattern>,
+        projection: Vec<Variable>,
+    },
+    /// [Distinct](https://www.w3.org/TR/sparql11-query/#defn_algDistinct)
+    Distinct { inner: Box<GraphPattern> },
+    /// [Reduced](https://www.w3.org/TR/sparql11-query/#defn_algReduced)
+    Reduced { inner: Box<GraphPattern> },
+    /// [Slice](https://www.w3.org/TR/sparql11-query/#defn_algSlice)
+    Slice {
+        inner: Box<GraphPattern>,
+        start: usize,
+        length: Option<usize>,
+    },
+    /// [Group](https://www.w3.org/TR/sparql11-federated-query/#aggregateAlgebra)
+    Group {
+        inner: Box<GraphPattern>,
+        by: Vec<Variable>,
+        aggregates: Vec<(Variable, SetFunction)>,
+    },
+    /// [Service](https://www.w3.org/TR/sparql11-federated-query/#defn_evalService)
+    Service {
+        name: NamedNodeOrVariable,
+        pattern: Box<GraphPattern>,
+        silent: bool,
+    },
 }
 
 impl fmt::Display for GraphPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GraphPattern::BGP(p) => write!(
-                f,
-                "BGP({})",
-                p.iter()
-                    .map(|v| v.to_string())
-                    .collect::<Vec<String>>()
-                    .join(" ")
-            ),
-            GraphPattern::Join(a, b) => write!(f, "Join({}, {})", a, b),
-            GraphPattern::LeftJoin(a, b, e) => {
-                if let Some(e) = e {
-                    write!(f, "LeftJoin({}, {}, {})", a, b, e)
+            GraphPattern::BGP(p) => {
+                write!(f, "(bgp")?;
+                for pattern in p {
+                    write!(f, " {}", pattern)?;
+                }
+                write!(f, ")")
+            }
+            GraphPattern::Path {
+                subject,
+                path,
+                object,
+            } => write!(f, "(path {} {} {})", subject, path, object),
+            GraphPattern::Join { left, right } => write!(f, "(join {} {})", left, right),
+            GraphPattern::LeftJoin { left, right, expr } => {
+                if let Some(expr) = expr {
+                    write!(f, "(leftjoin {} {} {})", left, right, expr)
                 } else {
-                    write!(f, "LeftJoin({}, {})", a, b)
+                    write!(f, "(leftjoin {} {})", left, right)
                 }
             }
-            GraphPattern::Filter(e, p) => write!(f, "Filter({}, {})", e, p),
-            GraphPattern::Union(a, b) => write!(f, "Union({}, {})", a, b),
-            GraphPattern::Graph(g, p) => write!(f, "Graph({}, {})", g, p),
-            GraphPattern::Extend(p, v, e) => write!(f, "Extend({}), {}, {})", p, v, e),
-            GraphPattern::Minus(a, b) => write!(f, "Minus({}, {})", a, b),
-            GraphPattern::Service(n, p, s) => write!(f, "Service({}, {}, {})", n, p, s),
-            GraphPattern::AggregateJoin(g, a) => write!(
+            GraphPattern::Filter { expr, inner } => write!(f, "(filter {} {})", expr, inner),
+            GraphPattern::Union { left, right } => write!(f, "(union {} {})", left, right),
+            GraphPattern::Graph { graph_name, inner } => {
+                write!(f, "(graph {} {})", graph_name, inner)
+            }
+            GraphPattern::Extend { inner, var, expr } => {
+                write!(f, "(extend ({} {}) {})", var, expr, inner)
+            }
+            GraphPattern::Minus { left, right } => write!(f, "(minus {} {})", left, right),
+            GraphPattern::Service {
+                name,
+                pattern,
+                silent,
+            } => {
+                if *silent {
+                    write!(f, "(service silent {} {})", name, pattern)
+                } else {
+                    write!(f, "(service {} {})", name, pattern)
+                }
+            }
+            GraphPattern::Group {
+                inner,
+                by,
+                aggregates,
+            } => write!(
                 f,
-                "AggregateJoin({}, {})",
-                g,
-                a.iter()
-                    .map(|(a, v)| format!("{}: {}", v, a))
+                "(group ({}) ({}) {})",
+                by.iter()
+                    .map(|v| v.as_str())
+                    .collect::<Vec<&str>>()
+                    .join(" "),
+                aggregates
+                    .iter()
+                    .map(|(a, v)| format!("({} {})", v, a))
                     .collect::<Vec<String>>()
-                    .join(", ")
+                    .join(" "),
+                inner
             ),
-            GraphPattern::Data(bs) => {
-                let variables = bs.variables();
-                write!(f, "{{ ")?;
-                for values in bs.values_iter() {
-                    write!(f, "{{")?;
-                    for i in 0..values.len() {
-                        if let Some(ref val) = values[i] {
-                            write!(f, " {} \u{2192} {} ", variables[i], val)?;
+            GraphPattern::Table { variables, rows } => {
+                write!(f, "(table (vars")?;
+                for var in variables {
+                    write!(f, " {}", var)?;
+                }
+                write!(f, ")")?;
+                for row in rows {
+                    write!(f, " (row")?;
+                    for (value, var) in row.iter().zip(variables) {
+                        if let Some(value) = value {
+                            write!(f, " ({} {})", var, value)?;
                         }
                     }
-                    write!(f, "}}")?;
+                    write!(f, ")")?;
                 }
-                write!(f, "}}")
+                write!(f, ")")
             }
-            GraphPattern::OrderBy(l, o) => write!(
+            GraphPattern::OrderBy { inner, condition } => write!(
                 f,
-                "OrderBy({}, ({}))",
-                l,
-                o.iter()
+                "(order ({}) {})",
+                condition
+                    .iter()
                     .map(|c| c.to_string())
                     .collect::<Vec<String>>()
-                    .join(", ")
+                    .join(" "),
+                inner
             ),
-            GraphPattern::Project(l, pv) => write!(
+            GraphPattern::Project { inner, projection } => write!(
                 f,
-                "Project({}, ({}))",
-                l,
-                pv.iter()
+                "(project ({}) {})",
+                projection
+                    .iter()
                     .map(|v| v.to_string())
                     .collect::<Vec<String>>()
-                    .join(", ")
+                    .join(" "),
+                inner
             ),
-            GraphPattern::Distinct(l) => write!(f, "Distinct({})", l),
-            GraphPattern::Reduced(l) => write!(f, "Reduce({})", l),
-            GraphPattern::Slice(l, start, length) => write!(
+            GraphPattern::Distinct { inner } => write!(f, "(distinct {})", inner),
+            GraphPattern::Reduced { inner } => write!(f, "(reduced {})", inner),
+            GraphPattern::Slice {
+                inner,
+                start,
+                length,
+            } => write!(
                 f,
-                "Slice({}, {}, {})",
-                l,
+                "(slice {} {} {})",
                 start,
                 length
                     .map(|l| l.to_string())
-                    .unwrap_or_else(|| '?'.to_string())
+                    .unwrap_or_else(|| '_'.to_string()),
+                inner
             ),
         }
     }
@@ -929,12 +1062,6 @@ impl fmt::Display for GraphPattern {
 impl Default for GraphPattern {
     fn default() -> Self {
         GraphPattern::BGP(Vec::default())
-    }
-}
-
-impl From<TripleOrPathPattern> for GraphPattern {
-    fn from(p: TripleOrPathPattern) -> Self {
-        GraphPattern::BGP(vec![p])
     }
 }
 
@@ -949,65 +1076,58 @@ impl GraphPattern {
         match self {
             GraphPattern::BGP(p) => {
                 for pattern in p {
-                    match pattern {
-                        TripleOrPathPattern::Triple(tp) => {
-                            if let TermOrVariable::Variable(ref s) = tp.subject {
-                                vars.insert(s);
-                            }
-                            if let NamedNodeOrVariable::Variable(ref p) = tp.predicate {
-                                vars.insert(p);
-                            }
-                            if let TermOrVariable::Variable(ref o) = tp.object {
-                                vars.insert(o);
-                            }
-                        }
-                        TripleOrPathPattern::Path(ppp) => {
-                            if let TermOrVariable::Variable(ref s) = ppp.subject {
-                                vars.insert(s);
-                            }
-                            if let TermOrVariable::Variable(ref o) = ppp.object {
-                                vars.insert(o);
-                            }
-                        }
+                    if let TermOrVariable::Variable(s) = &pattern.subject {
+                        vars.insert(s);
+                    }
+                    if let NamedNodeOrVariable::Variable(p) = &pattern.predicate {
+                        vars.insert(p);
+                    }
+                    if let TermOrVariable::Variable(o) = &pattern.object {
+                        vars.insert(o);
                     }
                 }
             }
-            GraphPattern::Join(a, b) => {
-                a.add_visible_variables(vars);
-                b.add_visible_variables(vars);
+            GraphPattern::Path {
+                subject, object, ..
+            } => {
+                if let TermOrVariable::Variable(s) = subject {
+                    vars.insert(s);
+                }
+                if let TermOrVariable::Variable(o) = object {
+                    vars.insert(o);
+                }
             }
-            GraphPattern::LeftJoin(a, b, _) => {
-                a.add_visible_variables(vars);
-                b.add_visible_variables(vars);
+            GraphPattern::Join { left, right }
+            | GraphPattern::LeftJoin { left, right, .. }
+            | GraphPattern::Union { left, right } => {
+                left.add_visible_variables(vars);
+                right.add_visible_variables(vars);
             }
-            GraphPattern::Filter(_, p) => p.add_visible_variables(vars),
-            GraphPattern::Union(a, b) => {
-                a.add_visible_variables(vars);
-                b.add_visible_variables(vars);
-            }
-            GraphPattern::Graph(g, p) => {
-                if let NamedNodeOrVariable::Variable(ref g) = g {
+            GraphPattern::Filter { inner, .. } => inner.add_visible_variables(vars),
+            GraphPattern::Graph { graph_name, inner } => {
+                if let NamedNodeOrVariable::Variable(ref g) = graph_name {
                     vars.insert(g);
                 }
-                p.add_visible_variables(vars);
+                inner.add_visible_variables(vars);
             }
-            GraphPattern::Extend(p, v, _) => {
-                vars.insert(v);
-                p.add_visible_variables(vars);
+            GraphPattern::Extend { inner, var, .. } => {
+                vars.insert(var);
+                inner.add_visible_variables(vars);
             }
-            GraphPattern::Minus(a, _) => a.add_visible_variables(vars),
-            GraphPattern::Service(_, p, _) => p.add_visible_variables(vars),
-            GraphPattern::AggregateJoin(_, a) => {
-                for (_, v) in a {
+            GraphPattern::Minus { left, .. } => left.add_visible_variables(vars),
+            GraphPattern::Service { pattern, .. } => pattern.add_visible_variables(vars),
+            GraphPattern::Group { by, aggregates, .. } => {
+                vars.extend(by);
+                for (v, _) in aggregates {
                     vars.insert(v);
                 }
             }
-            GraphPattern::Data(b) => vars.extend(b.variables_iter()),
-            GraphPattern::OrderBy(l, _) => l.add_visible_variables(vars),
-            GraphPattern::Project(_, pv) => vars.extend(pv.iter()),
-            GraphPattern::Distinct(l) => l.add_visible_variables(vars),
-            GraphPattern::Reduced(l) => l.add_visible_variables(vars),
-            GraphPattern::Slice(l, _, _) => l.add_visible_variables(vars),
+            GraphPattern::Table { variables, .. } => vars.extend(variables),
+            GraphPattern::Project { projection, .. } => vars.extend(projection.iter()),
+            GraphPattern::OrderBy { inner, .. }
+            | GraphPattern::Distinct { inner }
+            | GraphPattern::Reduced { inner }
+            | GraphPattern::Slice { inner, .. } => inner.add_visible_variables(vars),
         }
     }
 }
@@ -1019,102 +1139,126 @@ impl<'a> fmt::Display for SparqlGraphPattern<'a> {
         match self.0 {
             GraphPattern::BGP(p) => {
                 for pattern in p {
-                    write!(f, "{}", SparqlTripleOrPathPattern(pattern))?
+                    write!(f, "{}", SparqlTriplePattern(pattern))?
                 }
                 Ok(())
             }
-            GraphPattern::Join(a, b) => write!(
+            GraphPattern::Path {
+                subject,
+                path,
+                object,
+            } => write!(f, "{} {} {} .", subject, SparqlPropertyPath(path), object),
+            GraphPattern::Join { left, right } => write!(
                 f,
-                "{{ {} }} {{ {} }}",
-                SparqlGraphPattern(&*a),
-                SparqlGraphPattern(&*b)
+                "{} {}",
+                SparqlGraphPattern(&*left),
+                SparqlGraphPattern(&*right)
             ),
-            GraphPattern::LeftJoin(a, b, e) => {
-                if let Some(e) = e {
+            GraphPattern::LeftJoin { left, right, expr } => {
+                if let Some(expr) = expr {
                     write!(
                         f,
                         "{} OPTIONAL {{ {} FILTER({}) }}",
-                        SparqlGraphPattern(&*a),
-                        SparqlGraphPattern(&*b),
-                        SparqlExpression(e)
+                        SparqlGraphPattern(&*left),
+                        SparqlGraphPattern(&*right),
+                        SparqlExpression(expr)
                     )
                 } else {
                     write!(
                         f,
                         "{} OPTIONAL {{ {} }}",
-                        SparqlGraphPattern(&*a),
-                        SparqlGraphPattern(&*b)
+                        SparqlGraphPattern(&*left),
+                        SparqlGraphPattern(&*right)
                     )
                 }
             }
-            GraphPattern::Filter(e, p) => write!(
+            GraphPattern::Filter { expr, inner } => write!(
                 f,
                 "{} FILTER({})",
-                SparqlGraphPattern(&*p),
-                SparqlExpression(e)
+                SparqlGraphPattern(&*inner),
+                SparqlExpression(expr)
             ),
-            GraphPattern::Union(a, b) => write!(
+            GraphPattern::Union { left, right } => write!(
                 f,
                 "{{ {} }} UNION {{ {} }}",
-                SparqlGraphPattern(&*a),
-                SparqlGraphPattern(&*b),
+                SparqlGraphPattern(&*left),
+                SparqlGraphPattern(&*right),
             ),
-            GraphPattern::Graph(g, p) => {
-                write!(f, "GRAPH {} {{ {} }}", g, SparqlGraphPattern(&*p),)
+            GraphPattern::Graph { graph_name, inner } => {
+                write!(
+                    f,
+                    "GRAPH {} {{ {} }}",
+                    graph_name,
+                    SparqlGraphPattern(&*inner)
+                )
             }
-            GraphPattern::Extend(p, v, e) => write!(
+            GraphPattern::Extend { inner, var, expr } => write!(
                 f,
                 "{} BIND({} AS {})",
-                SparqlGraphPattern(&*p),
-                SparqlExpression(e),
-                v
+                SparqlGraphPattern(&*inner),
+                SparqlExpression(expr),
+                var
             ),
-            GraphPattern::Minus(a, b) => write!(
+            GraphPattern::Minus { left, right } => write!(
                 f,
                 "{} MINUS {{ {} }}",
-                SparqlGraphPattern(&*a),
-                SparqlGraphPattern(&*b)
+                SparqlGraphPattern(&*left),
+                SparqlGraphPattern(&*right)
             ),
-            GraphPattern::Service(n, p, s) => {
-                if *s {
-                    write!(f, "SERVICE SILENT {} {{ {} }}", n, SparqlGraphPattern(&*p))
+            GraphPattern::Service {
+                name,
+                pattern,
+                silent,
+            } => {
+                if *silent {
+                    write!(
+                        f,
+                        "SERVICE SILENT {} {{ {} }}",
+                        name,
+                        SparqlGraphPattern(&*pattern)
+                    )
                 } else {
-                    write!(f, "SERVICE {} {{ {} }}", n, SparqlGraphPattern(&*p))
+                    write!(
+                        f,
+                        "SERVICE {} {{ {} }}",
+                        name,
+                        SparqlGraphPattern(&*pattern)
+                    )
                 }
             }
-            GraphPattern::Data(bs) => {
-                if bs.is_empty() {
-                    Ok(())
-                } else {
-                    write!(f, "VALUES ( ")?;
-                    for var in bs.variables() {
-                        write!(f, "{} ", var)?;
-                    }
-                    write!(f, ") {{ ")?;
-                    for values in bs.values_iter() {
-                        write!(f, "( ")?;
-                        for val in values {
-                            match val {
-                                Some(val) => write!(f, "{} ", val),
-                                None => write!(f, "UNDEF "),
-                            }?;
-                        }
-                        write!(f, ") ")?;
-                    }
-                    write!(f, " }}")
+            GraphPattern::Table { variables, rows } => {
+                write!(f, "VALUES ( ")?;
+                for var in variables {
+                    write!(f, "{} ", var)?;
                 }
+                write!(f, ") {{ ")?;
+                for row in rows {
+                    write!(f, "( ")?;
+                    for val in row {
+                        match val {
+                            Some(val) => write!(f, "{} ", val),
+                            None => write!(f, "UNDEF "),
+                        }?;
+                    }
+                    write!(f, ") ")?;
+                }
+                write!(f, " }}")
             }
-            GraphPattern::AggregateJoin(GroupPattern(group, p), agg) => write!(
+            GraphPattern::Group {
+                inner,
+                by,
+                aggregates,
+            } => write!(
                 f,
                 "{{ SELECT {} WHERE {{ {} }} GROUP BY {} }}",
-                agg.iter()
-                    .map(|(a, v)| format!("({} AS {})", SparqlAggregation(a), v))
-                    .chain(group.iter().map(|e| e.to_string()))
+                aggregates
+                    .iter()
+                    .map(|(v, a)| format!("({} AS {})", SparqlAggregation(a), v))
+                    .chain(by.iter().map(|e| e.to_string()))
                     .collect::<Vec<String>>()
                     .join(" "),
-                SparqlGraphPattern(&*p),
-                group
-                    .iter()
+                SparqlGraphPattern(&*inner),
+                by.iter()
                     .map(|e| format!("({})", e.to_string()))
                     .collect::<Vec<String>>()
                     .join(" ")
@@ -1123,7 +1267,7 @@ impl<'a> fmt::Display for SparqlGraphPattern<'a> {
                 f,
                 "{{ {} }}",
                 SparqlGraphRootPattern {
-                    algebra: p,
+                    pattern: p,
                     dataset: &QueryDataset::default()
                 }
             ),
@@ -1132,7 +1276,7 @@ impl<'a> fmt::Display for SparqlGraphPattern<'a> {
 }
 
 struct SparqlGraphRootPattern<'a> {
-    algebra: &'a GraphPattern,
+    pattern: &'a GraphPattern,
     dataset: &'a QueryDataset,
 }
 
@@ -1145,29 +1289,33 @@ impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
         let mut length = None;
         let mut project: &[Variable] = &[];
 
-        let mut child = self.algebra;
+        let mut child = self.pattern;
         loop {
             match child {
-                GraphPattern::OrderBy(l, o) => {
-                    order = Some(o);
-                    child = &*l;
+                GraphPattern::OrderBy { inner, condition } => {
+                    order = Some(condition);
+                    child = &*inner;
                 }
-                GraphPattern::Project(l, pv) if project.is_empty() => {
-                    project = pv;
-                    child = &*l;
+                GraphPattern::Project { inner, projection } if project.is_empty() => {
+                    project = projection;
+                    child = &*inner;
                 }
-                GraphPattern::Distinct(l) => {
+                GraphPattern::Distinct { inner } => {
                     distinct = true;
-                    child = &*l;
+                    child = &*inner;
                 }
-                GraphPattern::Reduced(l) => {
+                GraphPattern::Reduced { inner } => {
                     reduced = true;
-                    child = &*l;
+                    child = &*inner;
                 }
-                GraphPattern::Slice(l, s, len) => {
+                GraphPattern::Slice {
+                    inner,
+                    start: s,
+                    length: l,
+                } => {
                     start = *s;
-                    length = *len;
-                    child = l;
+                    length = *l;
+                    child = inner;
                 }
                 p => {
                     write!(f, "SELECT ")?;
@@ -1208,24 +1356,6 @@ impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct GroupPattern(pub Vec<Variable>, pub Box<GraphPattern>);
-
-impl fmt::Display for GroupPattern {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Group(({}), {})",
-            self.0
-                .iter()
-                .map(|c| c.to_string())
-                .collect::<Vec<String>>()
-                .join(", "),
-            self.1
-        )
-    }
-}
-
 fn build_sparql_select_arguments(args: &[Variable]) -> String {
     if args.is_empty() {
         "*".to_owned()
@@ -1237,169 +1367,197 @@ fn build_sparql_select_arguments(args: &[Variable]) -> String {
     }
 }
 
+/// A set function used in aggregates (c.f. [`GraphPattern::Group`])
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum Aggregation {
-    Count(Option<Box<Expression>>, bool),
-    Sum(Box<Expression>, bool),
-    Min(Box<Expression>, bool),
-    Max(Box<Expression>, bool),
-    Avg(Box<Expression>, bool),
-    Sample(Box<Expression>, bool),
-    GroupConcat(Box<Expression>, bool, Option<String>),
+pub enum SetFunction {
+    /// [Count](https://www.w3.org/TR/sparql11-query/#defn_aggCount)
+    Count {
+        expr: Option<Box<Expression>>,
+        distinct: bool,
+    },
+    /// [Sum](https://www.w3.org/TR/sparql11-query/#defn_aggSum)
+    Sum {
+        expr: Box<Expression>,
+        distinct: bool,
+    },
+    /// [Avg](https://www.w3.org/TR/sparql11-query/#defn_aggAvg)
+    Avg {
+        expr: Box<Expression>,
+        distinct: bool,
+    },
+    /// [Min](https://www.w3.org/TR/sparql11-query/#defn_aggMin)
+    Min {
+        expr: Box<Expression>,
+        distinct: bool,
+    },
+    /// [Max](https://www.w3.org/TR/sparql11-query/#defn_aggMax)
+    Max {
+        expr: Box<Expression>,
+        distinct: bool,
+    },
+    /// [GroupConcat](https://www.w3.org/TR/sparql11-query/#defn_aggGroupConcat)
+    GroupConcat {
+        expr: Box<Expression>,
+        distinct: bool,
+        separator: Option<String>,
+    },
+    /// [Sample](https://www.w3.org/TR/sparql11-query/#defn_aggSample)
+    Sample {
+        expr: Box<Expression>,
+        distinct: bool,
+    },
 }
 
-impl fmt::Display for Aggregation {
+impl fmt::Display for SetFunction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Aggregation::Count(e, distinct) => {
+            SetFunction::Count { expr, distinct } => {
                 if *distinct {
-                    if let Some(ex) = e {
-                        write!(f, "COUNT(DISTINCT {})", ex)
+                    if let Some(expr) = expr {
+                        write!(f, "(count distinct {})", expr)
                     } else {
-                        write!(f, "COUNT(DISTINCT *)")
+                        write!(f, "(count distinct)")
                     }
-                } else if let Some(ex) = e {
-                    write!(f, "COUNT({})", ex)
+                } else if let Some(expr) = expr {
+                    write!(f, "(count {})", expr)
                 } else {
-                    write!(f, "COUNT(*)")
+                    write!(f, "(count)")
                 }
             }
-            Aggregation::Sum(e, distinct) => {
+            SetFunction::Sum { expr, distinct } => {
                 if *distinct {
-                    write!(f, "Aggregation(Distinct({}), Sum, {{}})", e)
+                    write!(f, "(sum distinct {})", expr)
                 } else {
-                    write!(f, "Aggregation({}, Sum, {{}})", e)
+                    write!(f, "(sum {})", expr)
                 }
             }
-            Aggregation::Min(e, distinct) => {
+            SetFunction::Avg { expr, distinct } => {
                 if *distinct {
-                    write!(f, "Aggregation(Distinct({}), Min, {{}})", e)
+                    write!(f, "(avg distinct {})", expr)
                 } else {
-                    write!(f, "Aggregation({}, Min, {{}})", e)
+                    write!(f, "(avg {})", expr)
                 }
             }
-            Aggregation::Max(e, distinct) => {
+            SetFunction::Min { expr, distinct } => {
                 if *distinct {
-                    write!(f, "Aggregation(Distinct({}), Max, {{}})", e)
+                    write!(f, "(min distinct {})", expr)
                 } else {
-                    write!(f, "Aggregation({}, Max, {{}})", e)
+                    write!(f, "(min {})", expr)
                 }
             }
-            Aggregation::Avg(e, distinct) => {
+            SetFunction::Max { expr, distinct } => {
                 if *distinct {
-                    write!(f, "Aggregation(Distinct({}), Avg, {{}})", e)
+                    write!(f, "(max distinct {})", expr)
                 } else {
-                    write!(f, "Aggregation({}, Avg, {{}})", e)
+                    write!(f, "(max {})", expr)
                 }
             }
-            Aggregation::Sample(e, distinct) => {
+            SetFunction::Sample { expr, distinct } => {
                 if *distinct {
-                    write!(f, "Aggregation(Distinct({}), Sum, {{}})", e)
+                    write!(f, "(sample distinct {})", expr)
                 } else {
-                    write!(f, "Aggregation({}, Sample, {{}})", e)
+                    write!(f, "(sample {})", expr)
                 }
             }
-            Aggregation::GroupConcat(e, distinct, sep) => {
+            SetFunction::GroupConcat {
+                expr,
+                distinct,
+                separator,
+            } => {
                 if *distinct {
-                    if let Some(s) = sep {
-                        write!(
-                            f,
-                            "Aggregation(Distinct({}), GroupConcat, {{\"separator\" \u{2192} {}}})",
-                            e,
-                            fmt_str(s)
-                        )
+                    if let Some(separator) = separator {
+                        write!(f, "(group_concat distinct {} {})", expr, fmt_str(separator))
                     } else {
-                        write!(f, "Aggregation(Distinct({}), GroupConcat, {{}})", e)
+                        write!(f, "(group_concat distinct {})", expr)
                     }
-                } else if let Some(s) = sep {
-                    write!(
-                        f,
-                        "Aggregation({}, GroupConcat, {{\"separator\" \u{2192} {}}})",
-                        e,
-                        fmt_str(s)
-                    )
+                } else if let Some(separator) = separator {
+                    write!(f, "(group_concat {} {})", expr, fmt_str(separator))
                 } else {
-                    write!(f, "Aggregation(Distinct({}), GroupConcat, {{}})", e)
+                    write!(f, "(group_concat {})", expr)
                 }
             }
         }
     }
 }
 
-struct SparqlAggregation<'a>(&'a Aggregation);
+struct SparqlAggregation<'a>(&'a SetFunction);
 
 impl<'a> fmt::Display for SparqlAggregation<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
-            Aggregation::Count(e, distinct) => {
+            SetFunction::Count { expr, distinct } => {
                 if *distinct {
-                    if let Some(e) = e {
-                        write!(f, "COUNT(DISTINCT {})", SparqlExpression(e))
+                    if let Some(expr) = expr {
+                        write!(f, "COUNT(DISTINCT {})", SparqlExpression(expr))
                     } else {
                         write!(f, "COUNT(DISTINCT *)")
                     }
-                } else if let Some(e) = e {
-                    write!(f, "COUNT({})", SparqlExpression(e))
+                } else if let Some(expr) = expr {
+                    write!(f, "COUNT({})", SparqlExpression(expr))
                 } else {
                     write!(f, "COUNT(*)")
                 }
             }
-            Aggregation::Sum(e, distinct) => {
+            SetFunction::Sum { expr, distinct } => {
                 if *distinct {
-                    write!(f, "SUM(DISTINCT {})", SparqlExpression(e))
+                    write!(f, "SUM(DISTINCT {})", SparqlExpression(expr))
                 } else {
-                    write!(f, "SUM({})", SparqlExpression(e))
+                    write!(f, "SUM({})", SparqlExpression(expr))
                 }
             }
-            Aggregation::Min(e, distinct) => {
+            SetFunction::Min { expr, distinct } => {
                 if *distinct {
-                    write!(f, "MIN(DISTINCT {})", SparqlExpression(e))
+                    write!(f, "MIN(DISTINCT {})", SparqlExpression(expr))
                 } else {
-                    write!(f, "MIN({})", SparqlExpression(e))
+                    write!(f, "MIN({})", SparqlExpression(expr))
                 }
             }
-            Aggregation::Max(e, distinct) => {
+            SetFunction::Max { expr, distinct } => {
                 if *distinct {
-                    write!(f, "MAX(DISTINCT {})", SparqlExpression(e))
+                    write!(f, "MAX(DISTINCT {})", SparqlExpression(expr))
                 } else {
-                    write!(f, "MAX({})", SparqlExpression(e))
+                    write!(f, "MAX({})", SparqlExpression(expr))
                 }
             }
-            Aggregation::Avg(e, distinct) => {
+            SetFunction::Avg { expr, distinct } => {
                 if *distinct {
-                    write!(f, "AVG(DISTINCT {})", SparqlExpression(e))
+                    write!(f, "AVG(DISTINCT {})", SparqlExpression(expr))
                 } else {
-                    write!(f, "AVG({})", SparqlExpression(e))
+                    write!(f, "AVG({})", SparqlExpression(expr))
                 }
             }
-            Aggregation::Sample(e, distinct) => {
+            SetFunction::Sample { expr, distinct } => {
                 if *distinct {
-                    write!(f, "SAMPLE(DISTINCT {})", SparqlExpression(e))
+                    write!(f, "SAMPLE(DISTINCT {})", SparqlExpression(expr))
                 } else {
-                    write!(f, "SAMPLE({})", SparqlExpression(e))
+                    write!(f, "SAMPLE({})", SparqlExpression(expr))
                 }
             }
-            Aggregation::GroupConcat(e, distinct, sep) => {
+            SetFunction::GroupConcat {
+                expr,
+                distinct,
+                separator,
+            } => {
                 if *distinct {
-                    if let Some(sep) = sep {
+                    if let Some(separator) = separator {
                         write!(
                             f,
                             "GROUP_CONCAT(DISTINCT {}; SEPARATOR = {})",
-                            SparqlExpression(e),
-                            fmt_str(sep)
+                            SparqlExpression(expr),
+                            fmt_str(separator)
                         )
                     } else {
-                        write!(f, "GROUP_CONCAT(DISTINCT {})", SparqlExpression(e))
+                        write!(f, "GROUP_CONCAT(DISTINCT {})", SparqlExpression(expr))
                     }
-                } else if let Some(sep) = sep {
+                } else if let Some(separator) = separator {
                     write!(
                         f,
                         "GROUP_CONCAT({}; SEPARATOR = {})",
-                        SparqlExpression(e),
-                        fmt_str(sep)
+                        SparqlExpression(expr),
+                        fmt_str(separator)
                     )
                 } else {
-                    write!(f, "GROUP_CONCAT({})", SparqlExpression(e))
+                    write!(f, "GROUP_CONCAT({})", SparqlExpression(expr))
                 }
             }
         }
@@ -1410,24 +1568,21 @@ fn fmt_str(value: &str) -> rio::Literal<'_> {
     rio::Literal::Simple { value }
 }
 
+/// An ordering comparator used by [`GraphPattern::OrderBy`]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum OrderComparator {
+    /// Ascending order
     Asc(Expression),
+    /// Descending order
     Desc(Expression),
 }
 
 impl fmt::Display for OrderComparator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            OrderComparator::Asc(e) => write!(f, "ASC({})", e),
-            OrderComparator::Desc(e) => write!(f, "DESC({})", e),
+            OrderComparator::Asc(e) => write!(f, "(asc {})", e),
+            OrderComparator::Desc(e) => write!(f, "(desc {})", e),
         }
-    }
-}
-
-impl From<Expression> for OrderComparator {
-    fn from(e: Expression) -> Self {
-        OrderComparator::Asc(e)
     }
 }
 
@@ -1546,107 +1701,6 @@ impl fmt::Display for QueryDataset {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum QueryVariants {
-    Select {
-        dataset: QueryDataset,
-        algebra: Rc<GraphPattern>,
-        base_iri: Option<Rc<Iri<String>>>,
-    },
-    Construct {
-        construct: Rc<Vec<TriplePattern>>,
-        dataset: QueryDataset,
-        algebra: Rc<GraphPattern>,
-        base_iri: Option<Rc<Iri<String>>>,
-    },
-    Describe {
-        dataset: QueryDataset,
-        algebra: Rc<GraphPattern>,
-        base_iri: Option<Rc<Iri<String>>>,
-    },
-    Ask {
-        dataset: QueryDataset,
-        algebra: Rc<GraphPattern>,
-        base_iri: Option<Rc<Iri<String>>>,
-    },
-}
-
-impl fmt::Display for QueryVariants {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            QueryVariants::Select {
-                dataset,
-                algebra,
-                base_iri,
-            } => {
-                if let Some(base_iri) = base_iri {
-                    writeln!(f, "BASE <{}>", base_iri)?;
-                }
-                write!(f, "{}", SparqlGraphRootPattern { algebra, dataset })
-            }
-            QueryVariants::Construct {
-                construct,
-                dataset,
-                algebra,
-                base_iri,
-            } => {
-                if let Some(base_iri) = base_iri {
-                    writeln!(f, "BASE <{}>", base_iri)?;
-                }
-                write!(f, "CONSTRUCT {{ ")?;
-                for triple in construct.iter() {
-                    write!(f, "{} ", triple)?;
-                }
-                write!(
-                    f,
-                    "}}{} WHERE {{ {} }}",
-                    dataset,
-                    SparqlGraphRootPattern {
-                        algebra,
-                        dataset: &QueryDataset::default()
-                    }
-                )
-            }
-            QueryVariants::Describe {
-                dataset,
-                algebra,
-                base_iri,
-            } => {
-                if let Some(base_iri) = base_iri {
-                    writeln!(f, "BASE <{}>", base_iri.as_str())?;
-                }
-                write!(
-                    f,
-                    "DESCRIBE *{} WHERE {{ {} }}",
-                    dataset,
-                    SparqlGraphRootPattern {
-                        algebra,
-                        dataset: &QueryDataset::default()
-                    }
-                )
-            }
-            QueryVariants::Ask {
-                dataset,
-                algebra,
-                base_iri,
-            } => {
-                if let Some(base_iri) = base_iri {
-                    writeln!(f, "BASE <{}>", base_iri)?;
-                }
-                write!(
-                    f,
-                    "ASK{} WHERE {{ {} }}",
-                    dataset,
-                    SparqlGraphRootPattern {
-                        algebra,
-                        dataset: &QueryDataset::default()
-                    }
-                )
-            }
-        }
-    }
-}
-
 /// The [graph update operations](https://www.w3.org/TR/sparql11-update/#formalModelGraphUpdate)
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GraphUpdateOperation {
@@ -1659,7 +1713,7 @@ pub enum GraphUpdateOperation {
         delete: Vec<QuadPattern>,
         insert: Vec<QuadPattern>,
         using: QueryDataset,
-        algebra: GraphPattern,
+        pattern: Box<GraphPattern>,
     },
     /// [load](https://www.w3.org/TR/sparql11-update/#def_loadoperation)
     Load {
@@ -1681,14 +1735,14 @@ impl fmt::Display for GraphUpdateOperation {
             GraphUpdateOperation::InsertData { data } => {
                 writeln!(f, "INSERT DATA {{")?;
                 for quad in data {
-                    writeln!(f, "\t{}", quad)?;
+                    writeln!(f, "\t{}", SparqlQuadPattern(quad))?;
                 }
                 write!(f, "}}")
             }
             GraphUpdateOperation::DeleteData { data } => {
                 writeln!(f, "DELETE DATA {{")?;
                 for quad in data {
-                    writeln!(f, "\t{}", quad)?;
+                    writeln!(f, "\t{}", SparqlQuadPattern(quad))?;
                 }
                 write!(f, "}}")
             }
@@ -1696,19 +1750,19 @@ impl fmt::Display for GraphUpdateOperation {
                 delete,
                 insert,
                 using,
-                algebra,
+                pattern,
             } => {
                 if !delete.is_empty() {
                     writeln!(f, "DELETE {{")?;
                     for quad in delete {
-                        writeln!(f, "\t{}", quad)?;
+                        writeln!(f, "\t{}", SparqlQuadPattern(quad))?;
                     }
                     writeln!(f, "}}")?;
                 }
                 if !insert.is_empty() {
                     writeln!(f, "INSERT {{")?;
                     for quad in insert {
-                        writeln!(f, "\t{}", quad)?;
+                        writeln!(f, "\t{}", SparqlQuadPattern(quad))?;
                     }
                     writeln!(f, "}}")?;
                 }
@@ -1728,7 +1782,7 @@ impl fmt::Display for GraphUpdateOperation {
                     f,
                     "WHERE {{ {} }}",
                     SparqlGraphRootPattern {
-                        algebra,
+                        pattern,
                         dataset: &QueryDataset::default()
                     }
                 )
@@ -1769,6 +1823,9 @@ impl fmt::Display for GraphUpdateOperation {
     }
 }
 
+/// A target RDF graph for update operations
+///
+/// Could be a specific graph, all named graphs or the complete dataset.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GraphTarget {
     NamedNode(NamedNode),
@@ -1791,56 +1848,5 @@ impl fmt::Display for GraphTarget {
 impl From<NamedNode> for GraphTarget {
     fn from(node: NamedNode) -> Self {
         Self::NamedNode(node)
-    }
-}
-
-impl From<NamedNodeRef<'_>> for GraphTarget {
-    fn from(node: NamedNodeRef<'_>) -> Self {
-        Self::NamedNode(node.into())
-    }
-}
-
-impl From<NamedOrDefaultGraphTarget> for GraphTarget {
-    fn from(graph: NamedOrDefaultGraphTarget) -> Self {
-        match graph {
-            NamedOrDefaultGraphTarget::NamedNode(node) => Self::NamedNode(node),
-            NamedOrDefaultGraphTarget::DefaultGraph => Self::DefaultGraph,
-        }
-    }
-}
-
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum NamedOrDefaultGraphTarget {
-    NamedNode(NamedNode),
-    DefaultGraph,
-}
-
-impl fmt::Display for NamedOrDefaultGraphTarget {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NamedNode(node) => write!(f, "GRAPH {}", node),
-            Self::DefaultGraph => write!(f, "DEFAULT"),
-        }
-    }
-}
-
-impl From<NamedNode> for NamedOrDefaultGraphTarget {
-    fn from(node: NamedNode) -> Self {
-        Self::NamedNode(node)
-    }
-}
-
-impl From<NamedNodeRef<'_>> for NamedOrDefaultGraphTarget {
-    fn from(node: NamedNodeRef<'_>) -> Self {
-        Self::NamedNode(node.into())
-    }
-}
-
-impl From<NamedOrDefaultGraphTarget> for Option<NamedNodeOrVariable> {
-    fn from(graph: NamedOrDefaultGraphTarget) -> Self {
-        match graph {
-            NamedOrDefaultGraphTarget::NamedNode(node) => Some(node.into()),
-            NamedOrDefaultGraphTarget::DefaultGraph => None,
-        }
     }
 }

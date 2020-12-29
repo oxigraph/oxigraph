@@ -2,7 +2,7 @@ use crate::model::vocab::{rdf, xsd};
 use crate::model::xsd::*;
 use crate::model::Triple;
 use crate::model::{BlankNode, LiteralRef, NamedNodeRef};
-use crate::sparql::algebra::{GraphPattern, Query, QueryDataset, QueryVariants};
+use crate::sparql::algebra::{GraphPattern, Query, QueryDataset};
 use crate::sparql::error::EvaluationError;
 use crate::sparql::model::*;
 use crate::sparql::plan::*;
@@ -134,25 +134,22 @@ where
                 service_name,
                 graph_pattern,
                 ..
-            } => match self.evaluate_service(
-                service_name,
-                graph_pattern.clone(),
-                variables.clone(),
-                &from,
-            ) {
-                Ok(result) => Box::new(result.flat_map(move |binding| {
-                    binding
-                        .map(|binding| binding.combine_with(&from))
-                        .transpose()
-                })),
-                Err(e) => {
-                    if *silent {
-                        Box::new(once(Ok(from)))
-                    } else {
-                        Box::new(once(Err(e)))
+            } => {
+                match self.evaluate_service(service_name, graph_pattern, variables.clone(), &from) {
+                    Ok(result) => Box::new(result.flat_map(move |binding| {
+                        binding
+                            .map(|binding| binding.combine_with(&from))
+                            .transpose()
+                    })),
+                    Err(e) => {
+                        if *silent {
+                            Box::new(once(Ok(from)))
+                        } else {
+                            Box::new(once(Err(e)))
+                        }
                     }
                 }
-            },
+            }
             PlanNode::QuadPatternJoin {
                 child,
                 subject,
@@ -516,7 +513,7 @@ where
     fn evaluate_service(
         &self,
         service_name: &PatternValue<S::StrId>,
-        graph_pattern: Rc<GraphPattern>,
+        graph_pattern: &GraphPattern,
         variables: Rc<Vec<Variable>>,
         from: &EncodedTuple<S::StrId>,
     ) -> Result<EncodedTuplesIterator<S::StrId>, EvaluationError> {
@@ -525,11 +522,11 @@ where
                 get_pattern_value(service_name, from)
                     .ok_or_else(|| EvaluationError::msg("The SERVICE name is not bound"))?,
             )?,
-            Query(QueryVariants::Select {
+            Query::Select {
                 dataset: QueryDataset::default(),
-                algebra: graph_pattern,
-                base_iri: self.base_iri.clone(),
-            }),
+                pattern: graph_pattern.clone(),
+                base_iri: self.base_iri.as_ref().map(|iri| iri.as_ref().clone()),
+            },
         )? {
             Ok(self.encode_bindings(variables, iter))
         } else {
@@ -589,13 +586,13 @@ where
         graph_name: EncodedTerm<S::StrId>,
     ) -> Box<dyn Iterator<Item = Result<EncodedTerm<S::StrId>, EvaluationError>>> {
         match path {
-            PlanPropertyPath::PredicatePath(p) => Box::new(
+            PlanPropertyPath::Path(p) => Box::new(
                 self.dataset
                     .encoded_quads_for_pattern(Some(start), Some(*p), None, Some(graph_name))
                     .map(|t| Ok(t?.object)),
             ),
-            PlanPropertyPath::InversePath(p) => self.eval_path_to(p, start, graph_name),
-            PlanPropertyPath::SequencePath(a, b) => {
+            PlanPropertyPath::Reverse(p) => self.eval_path_to(p, start, graph_name),
+            PlanPropertyPath::Sequence(a, b) => {
                 let eval = self.clone();
                 let b = b.clone();
                 Box::new(
@@ -603,18 +600,18 @@ where
                         .flat_map_ok(move |middle| eval.eval_path_from(&b, middle, graph_name)),
                 )
             }
-            PlanPropertyPath::AlternativePath(a, b) => Box::new(
+            PlanPropertyPath::Alternative(a, b) => Box::new(
                 self.eval_path_from(a, start, graph_name)
                     .chain(self.eval_path_from(b, start, graph_name)),
             ),
-            PlanPropertyPath::ZeroOrMorePath(p) => {
+            PlanPropertyPath::ZeroOrMore(p) => {
                 let eval = self.clone();
                 let p = p.clone();
                 Box::new(transitive_closure(Some(Ok(start)), move |e| {
                     eval.eval_path_from(&p, e, graph_name)
                 }))
             }
-            PlanPropertyPath::OneOrMorePath(p) => {
+            PlanPropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
                 let p = p.clone();
                 Box::new(transitive_closure(
@@ -622,7 +619,7 @@ where
                     move |e| eval.eval_path_from(&p, e, graph_name),
                 ))
             }
-            PlanPropertyPath::ZeroOrOnePath(p) => Box::new(hash_deduplicate(
+            PlanPropertyPath::ZeroOrOne(p) => Box::new(hash_deduplicate(
                 once(Ok(start)).chain(self.eval_path_from(p, start, graph_name)),
             )),
             PlanPropertyPath::NegatedPropertySet(ps) => {
@@ -652,13 +649,13 @@ where
         graph_name: EncodedTerm<S::StrId>,
     ) -> Box<dyn Iterator<Item = Result<EncodedTerm<S::StrId>, EvaluationError>>> {
         match path {
-            PlanPropertyPath::PredicatePath(p) => Box::new(
+            PlanPropertyPath::Path(p) => Box::new(
                 self.dataset
                     .encoded_quads_for_pattern(None, Some(*p), Some(end), Some(graph_name))
                     .map(|t| Ok(t?.subject)),
             ),
-            PlanPropertyPath::InversePath(p) => self.eval_path_from(p, end, graph_name),
-            PlanPropertyPath::SequencePath(a, b) => {
+            PlanPropertyPath::Reverse(p) => self.eval_path_from(p, end, graph_name),
+            PlanPropertyPath::Sequence(a, b) => {
                 let eval = self.clone();
                 let a = a.clone();
                 Box::new(
@@ -666,18 +663,18 @@ where
                         .flat_map_ok(move |middle| eval.eval_path_to(&a, middle, graph_name)),
                 )
             }
-            PlanPropertyPath::AlternativePath(a, b) => Box::new(
+            PlanPropertyPath::Alternative(a, b) => Box::new(
                 self.eval_path_to(a, end, graph_name)
                     .chain(self.eval_path_to(b, end, graph_name)),
             ),
-            PlanPropertyPath::ZeroOrMorePath(p) => {
+            PlanPropertyPath::ZeroOrMore(p) => {
                 let eval = self.clone();
                 let p = p.clone();
                 Box::new(transitive_closure(Some(Ok(end)), move |e| {
                     eval.eval_path_to(&p, e, graph_name)
                 }))
             }
-            PlanPropertyPath::OneOrMorePath(p) => {
+            PlanPropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
                 let p = p.clone();
                 Box::new(transitive_closure(
@@ -685,7 +682,7 @@ where
                     move |e| eval.eval_path_to(&p, e, graph_name),
                 ))
             }
-            PlanPropertyPath::ZeroOrOnePath(p) => Box::new(hash_deduplicate(
+            PlanPropertyPath::ZeroOrOne(p) => Box::new(hash_deduplicate(
                 once(Ok(end)).chain(self.eval_path_to(p, end, graph_name)),
             )),
             PlanPropertyPath::NegatedPropertySet(ps) => {
@@ -718,16 +715,16 @@ where
         >,
     > {
         match path {
-            PlanPropertyPath::PredicatePath(p) => Box::new(
+            PlanPropertyPath::Path(p) => Box::new(
                 self.dataset
                     .encoded_quads_for_pattern(None, Some(*p), None, Some(graph_name))
                     .map(|t| t.map(|t| (t.subject, t.object))),
             ),
-            PlanPropertyPath::InversePath(p) => Box::new(
+            PlanPropertyPath::Reverse(p) => Box::new(
                 self.eval_open_path(p, graph_name)
                     .map(|t| t.map(|(s, o)| (o, s))),
             ),
-            PlanPropertyPath::SequencePath(a, b) => {
+            PlanPropertyPath::Sequence(a, b) => {
                 let eval = self.clone();
                 let b = b.clone();
                 Box::new(
@@ -738,11 +735,11 @@ where
                         }),
                 )
             }
-            PlanPropertyPath::AlternativePath(a, b) => Box::new(
+            PlanPropertyPath::Alternative(a, b) => Box::new(
                 self.eval_open_path(a, graph_name)
                     .chain(self.eval_open_path(b, graph_name)),
             ),
-            PlanPropertyPath::ZeroOrMorePath(p) => {
+            PlanPropertyPath::ZeroOrMore(p) => {
                 let eval = self.clone();
                 let p = p.clone();
                 Box::new(transitive_closure(
@@ -753,7 +750,7 @@ where
                     },
                 ))
             }
-            PlanPropertyPath::OneOrMorePath(p) => {
+            PlanPropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
                 let p = p.clone();
                 Box::new(transitive_closure(
@@ -764,7 +761,7 @@ where
                     },
                 ))
             }
-            PlanPropertyPath::ZeroOrOnePath(p) => Box::new(hash_deduplicate(
+            PlanPropertyPath::ZeroOrOne(p) => Box::new(hash_deduplicate(
                 self.get_subject_or_object_identity_pairs(graph_name)
                     .chain(self.eval_open_path(p, graph_name)),
             )),
@@ -845,11 +842,6 @@ where
                 let b = self.eval_expression(b, tuple)?;
                 self.equals(a, b).map(|v| v.into())
             }
-            PlanExpression::NotEqual(a, b) => {
-                let a = self.eval_expression(a, tuple)?;
-                let b = self.eval_expression(b, tuple)?;
-                self.equals(a, b).map(|v| (!v).into())
-            }
             PlanExpression::Greater(a, b) => Some(
                 (self.partial_cmp_literals(
                     self.eval_expression(a, tuple)?,
@@ -857,7 +849,7 @@ where
                 )? == Ordering::Greater)
                     .into(),
             ),
-            PlanExpression::GreaterOrEq(a, b) => Some(
+            PlanExpression::GreaterOrEqual(a, b) => Some(
                 match self.partial_cmp_literals(
                     self.eval_expression(a, tuple)?,
                     self.eval_expression(b, tuple)?,
@@ -867,14 +859,14 @@ where
                 }
                 .into(),
             ),
-            PlanExpression::Lower(a, b) => Some(
+            PlanExpression::Less(a, b) => Some(
                 (self.partial_cmp_literals(
                     self.eval_expression(a, tuple)?,
                     self.eval_expression(b, tuple)?,
                 )? == Ordering::Less)
                     .into(),
             ),
-            PlanExpression::LowerOrEq(a, b) => Some(
+            PlanExpression::LessOrEqual(a, b) => Some(
                 match self.partial_cmp_literals(
                     self.eval_expression(a, tuple)?,
                     self.eval_expression(b, tuple)?,
@@ -938,46 +930,52 @@ where
                 }
                 _ => None,
             },
-            PlanExpression::Sub(a, b) => Some(match self.parse_numeric_operands(a, b, tuple)? {
-                NumericBinaryOperands::Float(v1, v2) => (v1 - v2).into(),
-                NumericBinaryOperands::Double(v1, v2) => (v1 - v2).into(),
-                NumericBinaryOperands::Integer(v1, v2) => v1.checked_sub(v2)?.into(),
-                NumericBinaryOperands::Decimal(v1, v2) => v1.checked_sub(v2)?.into(),
-                NumericBinaryOperands::DateTime(v1, v2) => v1.checked_sub(v2)?.into(),
-                NumericBinaryOperands::Date(v1, v2) => v1.checked_sub(v2)?.into(),
-                NumericBinaryOperands::Time(v1, v2) => v1.checked_sub(v2)?.into(),
-                NumericBinaryOperands::Duration(v1, v2) => v1.checked_sub(v2)?.into(),
-                NumericBinaryOperands::YearMonthDuration(v1, v2) => v1.checked_sub(v2)?.into(),
-                NumericBinaryOperands::DayTimeDuration(v1, v2) => v1.checked_sub(v2)?.into(),
-                NumericBinaryOperands::DateTimeDuration(v1, v2) => {
-                    v1.checked_sub_duration(v2)?.into()
-                }
-                NumericBinaryOperands::DateTimeYearMonthDuration(v1, v2) => {
-                    v1.checked_sub_year_month_duration(v2)?.into()
-                }
-                NumericBinaryOperands::DateTimeDayTimeDuration(v1, v2) => {
-                    v1.checked_sub_day_time_duration(v2)?.into()
-                }
-                NumericBinaryOperands::DateDuration(v1, v2) => v1.checked_sub_duration(v2)?.into(),
-                NumericBinaryOperands::DateYearMonthDuration(v1, v2) => {
-                    v1.checked_sub_year_month_duration(v2)?.into()
-                }
-                NumericBinaryOperands::DateDayTimeDuration(v1, v2) => {
-                    v1.checked_sub_day_time_duration(v2)?.into()
-                }
-                NumericBinaryOperands::TimeDuration(v1, v2) => v1.checked_sub_duration(v2)?.into(),
-                NumericBinaryOperands::TimeDayTimeDuration(v1, v2) => {
-                    v1.checked_sub_day_time_duration(v2)?.into()
-                }
-            }),
-            PlanExpression::Mul(a, b) => match self.parse_numeric_operands(a, b, tuple)? {
+            PlanExpression::Subtract(a, b) => {
+                Some(match self.parse_numeric_operands(a, b, tuple)? {
+                    NumericBinaryOperands::Float(v1, v2) => (v1 - v2).into(),
+                    NumericBinaryOperands::Double(v1, v2) => (v1 - v2).into(),
+                    NumericBinaryOperands::Integer(v1, v2) => v1.checked_sub(v2)?.into(),
+                    NumericBinaryOperands::Decimal(v1, v2) => v1.checked_sub(v2)?.into(),
+                    NumericBinaryOperands::DateTime(v1, v2) => v1.checked_sub(v2)?.into(),
+                    NumericBinaryOperands::Date(v1, v2) => v1.checked_sub(v2)?.into(),
+                    NumericBinaryOperands::Time(v1, v2) => v1.checked_sub(v2)?.into(),
+                    NumericBinaryOperands::Duration(v1, v2) => v1.checked_sub(v2)?.into(),
+                    NumericBinaryOperands::YearMonthDuration(v1, v2) => v1.checked_sub(v2)?.into(),
+                    NumericBinaryOperands::DayTimeDuration(v1, v2) => v1.checked_sub(v2)?.into(),
+                    NumericBinaryOperands::DateTimeDuration(v1, v2) => {
+                        v1.checked_sub_duration(v2)?.into()
+                    }
+                    NumericBinaryOperands::DateTimeYearMonthDuration(v1, v2) => {
+                        v1.checked_sub_year_month_duration(v2)?.into()
+                    }
+                    NumericBinaryOperands::DateTimeDayTimeDuration(v1, v2) => {
+                        v1.checked_sub_day_time_duration(v2)?.into()
+                    }
+                    NumericBinaryOperands::DateDuration(v1, v2) => {
+                        v1.checked_sub_duration(v2)?.into()
+                    }
+                    NumericBinaryOperands::DateYearMonthDuration(v1, v2) => {
+                        v1.checked_sub_year_month_duration(v2)?.into()
+                    }
+                    NumericBinaryOperands::DateDayTimeDuration(v1, v2) => {
+                        v1.checked_sub_day_time_duration(v2)?.into()
+                    }
+                    NumericBinaryOperands::TimeDuration(v1, v2) => {
+                        v1.checked_sub_duration(v2)?.into()
+                    }
+                    NumericBinaryOperands::TimeDayTimeDuration(v1, v2) => {
+                        v1.checked_sub_day_time_duration(v2)?.into()
+                    }
+                })
+            }
+            PlanExpression::Multiply(a, b) => match self.parse_numeric_operands(a, b, tuple)? {
                 NumericBinaryOperands::Float(v1, v2) => Some((v1 * v2).into()),
                 NumericBinaryOperands::Double(v1, v2) => Some((v1 * v2).into()),
                 NumericBinaryOperands::Integer(v1, v2) => Some(v1.checked_mul(v2)?.into()),
                 NumericBinaryOperands::Decimal(v1, v2) => Some(v1.checked_mul(v2)?.into()),
                 _ => None,
             },
-            PlanExpression::Div(a, b) => match self.parse_numeric_operands(a, b, tuple)? {
+            PlanExpression::Divide(a, b) => match self.parse_numeric_operands(a, b, tuple)? {
                 NumericBinaryOperands::Float(v1, v2) => Some((v1 / v2).into()),
                 NumericBinaryOperands::Double(v1, v2) => Some((v1 / v2).into()),
                 NumericBinaryOperands::Integer(v1, v2) => {
@@ -1006,7 +1004,7 @@ where
                 EncodedTerm::DayTimeDurationLiteral(value) => Some((-value).into()),
                 _ => None,
             },
-            PlanExpression::UnaryNot(e) => self
+            PlanExpression::Not(e) => self
                 .to_bool(self.eval_expression(e, tuple)?)
                 .map(|v| (!v).into()),
             PlanExpression::Str(e) => {

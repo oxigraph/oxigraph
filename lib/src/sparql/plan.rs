@@ -216,19 +216,18 @@ pub enum PlanExpression<I: StrId> {
     Or(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
     And(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
     Equal(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    NotEqual(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
     Greater(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    GreaterOrEq(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    Lower(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    LowerOrEq(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    GreaterOrEqual(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    Less(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    LessOrEqual(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
     In(Box<PlanExpression<I>>, Vec<PlanExpression<I>>),
     Add(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    Sub(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    Mul(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    Div(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    Subtract(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    Multiply(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    Divide(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
     UnaryPlus(Box<PlanExpression<I>>),
     UnaryMinus(Box<PlanExpression<I>>),
-    UnaryNot(Box<PlanExpression<I>>),
+    Not(Box<PlanExpression<I>>),
     Str(Box<PlanExpression<I>>),
     Lang(Box<PlanExpression<I>>),
     LangMatches(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
@@ -324,7 +323,7 @@ impl<I: StrId> PlanExpression<I> {
             | PlanExpression::BNode(None) => (),
             PlanExpression::UnaryPlus(e)
             | PlanExpression::UnaryMinus(e)
-            | PlanExpression::UnaryNot(e)
+            | PlanExpression::Not(e)
             | PlanExpression::BNode(Some(e))
             | PlanExpression::Str(e)
             | PlanExpression::Lang(e)
@@ -370,15 +369,14 @@ impl<I: StrId> PlanExpression<I> {
             PlanExpression::Or(a, b)
             | PlanExpression::And(a, b)
             | PlanExpression::Equal(a, b)
-            | PlanExpression::NotEqual(a, b)
             | PlanExpression::Greater(a, b)
-            | PlanExpression::GreaterOrEq(a, b)
-            | PlanExpression::Lower(a, b)
-            | PlanExpression::LowerOrEq(a, b)
+            | PlanExpression::GreaterOrEqual(a, b)
+            | PlanExpression::Less(a, b)
+            | PlanExpression::LessOrEqual(a, b)
             | PlanExpression::Add(a, b)
-            | PlanExpression::Sub(a, b)
-            | PlanExpression::Mul(a, b)
-            | PlanExpression::Div(a, b)
+            | PlanExpression::Subtract(a, b)
+            | PlanExpression::Multiply(a, b)
+            | PlanExpression::Divide(a, b)
             | PlanExpression::LangMatches(a, b)
             | PlanExpression::Contains(a, b)
             | PlanExpression::StrStarts(a, b)
@@ -446,13 +444,13 @@ pub enum PlanAggregationFunction {
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum PlanPropertyPath<I: StrId> {
-    PredicatePath(EncodedTerm<I>),
-    InversePath(Rc<PlanPropertyPath<I>>),
-    SequencePath(Rc<PlanPropertyPath<I>>, Rc<PlanPropertyPath<I>>),
-    AlternativePath(Rc<PlanPropertyPath<I>>, Rc<PlanPropertyPath<I>>),
-    ZeroOrMorePath(Rc<PlanPropertyPath<I>>),
-    OneOrMorePath(Rc<PlanPropertyPath<I>>),
-    ZeroOrOnePath(Rc<PlanPropertyPath<I>>),
+    Path(EncodedTerm<I>),
+    Reverse(Rc<PlanPropertyPath<I>>),
+    Sequence(Rc<PlanPropertyPath<I>>, Rc<PlanPropertyPath<I>>),
+    Alternative(Rc<PlanPropertyPath<I>>, Rc<PlanPropertyPath<I>>),
+    ZeroOrMore(Rc<PlanPropertyPath<I>>),
+    OneOrMore(Rc<PlanPropertyPath<I>>),
+    ZeroOrOne(Rc<PlanPropertyPath<I>>),
     NegatedPropertySet(Rc<Vec<EncodedTerm<I>>>),
 }
 

@@ -220,7 +220,7 @@ impl RocksDbStore {
         evaluate_update(
             self.clone(),
             &mut writer,
-            &update.try_into().map_err(|e| e.into())?,
+            update.try_into().map_err(|e| e.into())?,
         )?;
         Ok(writer.apply()?)
     }
