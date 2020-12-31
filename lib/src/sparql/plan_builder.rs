@@ -818,56 +818,59 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
 
     fn build_for_aggregate(
         &mut self,
-        aggregate: &SetFunction,
+        aggregate: &AggregationFunction,
         variables: &mut Vec<Variable>,
         graph_name: PatternValue<E::StrId>,
     ) -> Result<PlanAggregation<E::StrId>, EvaluationError> {
-        Ok(match aggregate {
-            SetFunction::Count { expr, distinct } => PlanAggregation {
+        match aggregate {
+            AggregationFunction::Count { expr, distinct } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::Count,
                 parameter: match expr {
                     Some(expr) => Some(self.build_for_expression(expr, variables, graph_name)?),
                     None => None,
                 },
                 distinct: *distinct,
-            },
-            SetFunction::Sum { expr, distinct } => PlanAggregation {
+            }),
+            AggregationFunction::Sum { expr, distinct } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::Sum,
                 parameter: Some(self.build_for_expression(expr, variables, graph_name)?),
                 distinct: *distinct,
-            },
-            SetFunction::Min { expr, distinct } => PlanAggregation {
+            }),
+            AggregationFunction::Min { expr, distinct } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::Min,
                 parameter: Some(self.build_for_expression(expr, variables, graph_name)?),
                 distinct: *distinct,
-            },
-            SetFunction::Max { expr, distinct } => PlanAggregation {
+            }),
+            AggregationFunction::Max { expr, distinct } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::Max,
                 parameter: Some(self.build_for_expression(expr, variables, graph_name)?),
                 distinct: *distinct,
-            },
-            SetFunction::Avg { expr, distinct } => PlanAggregation {
+            }),
+            AggregationFunction::Avg { expr, distinct } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::Avg,
                 parameter: Some(self.build_for_expression(expr, variables, graph_name)?),
                 distinct: *distinct,
-            },
-            SetFunction::Sample { expr, distinct } => PlanAggregation {
+            }),
+            AggregationFunction::Sample { expr, distinct } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::Sample,
                 parameter: Some(self.build_for_expression(expr, variables, graph_name)?),
                 distinct: *distinct,
-            },
-            SetFunction::GroupConcat {
+            }),
+            AggregationFunction::GroupConcat {
                 expr,
                 distinct,
                 separator,
-            } => PlanAggregation {
+            } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::GroupConcat {
                     separator: Rc::new(separator.clone().unwrap_or_else(|| " ".to_string())),
                 },
                 parameter: Some(self.build_for_expression(expr, variables, graph_name)?),
                 distinct: *distinct,
-            },
-        })
+            }),
+            AggregationFunction::Custom { .. } => Err(EvaluationError::msg(
+                "Custom aggregation functions are not supported yet",
+            )),
+        }
     }
 
     fn build_for_graph_template(

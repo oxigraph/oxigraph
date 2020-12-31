@@ -487,7 +487,7 @@ pub struct ParserState {
     namespaces: HashMap<String, String>,
     used_bnodes: HashSet<BlankNode>,
     currently_used_bnodes: HashSet<BlankNode>,
-    aggregates: Vec<Vec<(Variable, SetFunction)>>,
+    aggregates: Vec<Vec<(Variable, AggregationFunction)>>,
 }
 
 impl ParserState {
@@ -499,7 +499,7 @@ impl ParserState {
         }
     }
 
-    fn new_aggregation(&mut self, agg: SetFunction) -> Result<Variable, &'static str> {
+    fn new_aggregation(&mut self, agg: AggregationFunction) -> Result<Variable, &'static str> {
         let aggregates = self.aggregates.last_mut().ok_or("Unexpected aggregate")?;
         Ok(aggregates
             .iter()
@@ -1825,25 +1825,27 @@ parser! {
         rule NotExistsFunc() -> Expression = i("NOT") _ i("EXISTS") _ p:GroupGraphPattern() { Expression::Not(Box::new(Expression::Exists(Box::new(p)))) }
 
         //[127]
-        rule Aggregate() -> SetFunction =
-            i("COUNT") _ "(" _ i("DISTINCT") _ "*" _ ")" { SetFunction::Count { expr: None, distinct: true } } /
-            i("COUNT") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { SetFunction::Count { expr: Some(Box::new(e)), distinct: true } } /
-            i("COUNT") _ "(" _ "*" _ ")" { SetFunction::Count { expr: None, distinct: false } } /
-            i("COUNT") _ "(" _ e:Expression() _ ")" { SetFunction::Count { expr: Some(Box::new(e)), distinct: false } } /
-            i("SUM") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { SetFunction::Sum { expr: Box::new(e), distinct: true } } /
-            i("SUM") _ "(" _ e:Expression() _ ")" { SetFunction::Sum { expr: Box::new(e), distinct: false } } /
-            i("MIN") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { SetFunction::Min { expr: Box::new(e), distinct: true } } /
-            i("MIN") _ "(" _ e:Expression() _ ")" { SetFunction::Min { expr: Box::new(e), distinct: false } } /
-            i("MAX") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { SetFunction::Max { expr: Box::new(e), distinct: true } } /
-            i("MAX") _ "(" _ e:Expression() _ ")" { SetFunction::Max { expr: Box::new(e), distinct: false } } /
-            i("AVG") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { SetFunction::Avg { expr: Box::new(e), distinct: true } } /
-            i("AVG") _ "(" _ e:Expression() _ ")" { SetFunction::Avg { expr: Box::new(e), distinct: false } } /
-            i("SAMPLE") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { SetFunction::Sample { expr: Box::new(e), distinct: true } } /
-            i("SAMPLE") _ "(" _ e:Expression() _ ")" { SetFunction::Sample { expr: Box::new(e), distinct: false } } /
-            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ e:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { SetFunction::GroupConcat { expr: Box::new(e), distinct: true, separator: Some(s) } } /
-            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { SetFunction::GroupConcat { expr: Box::new(e), distinct: true, separator: None } } /
-            i("GROUP_CONCAT") _ "(" _ e:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { SetFunction::GroupConcat { expr: Box::new(e), distinct: true, separator: Some(s) } } /
-            i("GROUP_CONCAT") _ "(" _ e:Expression() _ ")" { SetFunction::GroupConcat { expr: Box::new(e), distinct: false, separator: None } }
+        rule Aggregate() -> AggregationFunction =
+            i("COUNT") _ "(" _ i("DISTINCT") _ "*" _ ")" { AggregationFunction::Count { expr: None, distinct: true } } /
+            i("COUNT") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregationFunction::Count { expr: Some(Box::new(e)), distinct: true } } /
+            i("COUNT") _ "(" _ "*" _ ")" { AggregationFunction::Count { expr: None, distinct: false } } /
+            i("COUNT") _ "(" _ e:Expression() _ ")" { AggregationFunction::Count { expr: Some(Box::new(e)), distinct: false } } /
+            i("SUM") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregationFunction::Sum { expr: Box::new(e), distinct: true } } /
+            i("SUM") _ "(" _ e:Expression() _ ")" { AggregationFunction::Sum { expr: Box::new(e), distinct: false } } /
+            i("MIN") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregationFunction::Min { expr: Box::new(e), distinct: true } } /
+            i("MIN") _ "(" _ e:Expression() _ ")" { AggregationFunction::Min { expr: Box::new(e), distinct: false } } /
+            i("MAX") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregationFunction::Max { expr: Box::new(e), distinct: true } } /
+            i("MAX") _ "(" _ e:Expression() _ ")" { AggregationFunction::Max { expr: Box::new(e), distinct: false } } /
+            i("AVG") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregationFunction::Avg { expr: Box::new(e), distinct: true } } /
+            i("AVG") _ "(" _ e:Expression() _ ")" { AggregationFunction::Avg { expr: Box::new(e), distinct: false } } /
+            i("SAMPLE") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregationFunction::Sample { expr: Box::new(e), distinct: true } } /
+            i("SAMPLE") _ "(" _ e:Expression() _ ")" { AggregationFunction::Sample { expr: Box::new(e), distinct: false } } /
+            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ e:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { AggregationFunction::GroupConcat { expr: Box::new(e), distinct: true, separator: Some(s) } } /
+            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregationFunction::GroupConcat { expr: Box::new(e), distinct: true, separator: None } } /
+            i("GROUP_CONCAT") _ "(" _ e:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { AggregationFunction::GroupConcat { expr: Box::new(e), distinct: true, separator: Some(s) } } /
+            i("GROUP_CONCAT") _ "(" _ e:Expression() _ ")" { AggregationFunction::GroupConcat { expr: Box::new(e), distinct: false, separator: None } } /
+            name:iri() _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregationFunction::Custom { name, expr: Box::new(e), distinct: true } } /
+            name:iri() _ "(" _ e:Expression() _ ")" { AggregationFunction::Custom { name, expr: Box::new(e), distinct: false } }
 
         //[128]
         rule iriOrFunction() -> Expression = i: iri() _ a: ArgList()? {

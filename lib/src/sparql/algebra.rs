@@ -932,7 +932,7 @@ pub enum GraphPattern {
     Group {
         inner: Box<GraphPattern>,
         by: Vec<Variable>,
-        aggregates: Vec<(Variable, SetFunction)>,
+        aggregates: Vec<(Variable, AggregationFunction)>,
     },
     /// [Service](https://www.w3.org/TR/sparql11-federated-query/#defn_evalService)
     Service {
@@ -1253,7 +1253,7 @@ impl<'a> fmt::Display for SparqlGraphPattern<'a> {
                 "{{ SELECT {} WHERE {{ {} }} GROUP BY {} }}",
                 aggregates
                     .iter()
-                    .map(|(v, a)| format!("({} AS {})", SparqlAggregation(a), v))
+                    .map(|(v, a)| format!("({} AS {})", SparqlAggregationFunction(a), v))
                     .chain(by.iter().map(|e| e.to_string()))
                     .collect::<Vec<String>>()
                     .join(" "),
@@ -1369,7 +1369,7 @@ fn build_sparql_select_arguments(args: &[Variable]) -> String {
 
 /// A set function used in aggregates (c.f. [`GraphPattern::Group`])
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum SetFunction {
+pub enum AggregationFunction {
     /// [Count](https://www.w3.org/TR/sparql11-query/#defn_aggCount)
     Count {
         expr: Option<Box<Expression>>,
@@ -1406,12 +1406,18 @@ pub enum SetFunction {
         expr: Box<Expression>,
         distinct: bool,
     },
+    /// Custom function
+    Custom {
+        name: NamedNode,
+        expr: Box<Expression>,
+        distinct: bool,
+    },
 }
 
-impl fmt::Display for SetFunction {
+impl fmt::Display for AggregationFunction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SetFunction::Count { expr, distinct } => {
+            AggregationFunction::Count { expr, distinct } => {
                 if *distinct {
                     if let Some(expr) = expr {
                         write!(f, "(count distinct {})", expr)
@@ -1424,42 +1430,42 @@ impl fmt::Display for SetFunction {
                     write!(f, "(count)")
                 }
             }
-            SetFunction::Sum { expr, distinct } => {
+            AggregationFunction::Sum { expr, distinct } => {
                 if *distinct {
                     write!(f, "(sum distinct {})", expr)
                 } else {
                     write!(f, "(sum {})", expr)
                 }
             }
-            SetFunction::Avg { expr, distinct } => {
+            AggregationFunction::Avg { expr, distinct } => {
                 if *distinct {
                     write!(f, "(avg distinct {})", expr)
                 } else {
                     write!(f, "(avg {})", expr)
                 }
             }
-            SetFunction::Min { expr, distinct } => {
+            AggregationFunction::Min { expr, distinct } => {
                 if *distinct {
                     write!(f, "(min distinct {})", expr)
                 } else {
                     write!(f, "(min {})", expr)
                 }
             }
-            SetFunction::Max { expr, distinct } => {
+            AggregationFunction::Max { expr, distinct } => {
                 if *distinct {
                     write!(f, "(max distinct {})", expr)
                 } else {
                     write!(f, "(max {})", expr)
                 }
             }
-            SetFunction::Sample { expr, distinct } => {
+            AggregationFunction::Sample { expr, distinct } => {
                 if *distinct {
                     write!(f, "(sample distinct {})", expr)
                 } else {
                     write!(f, "(sample {})", expr)
                 }
             }
-            SetFunction::GroupConcat {
+            AggregationFunction::GroupConcat {
                 expr,
                 distinct,
                 separator,
@@ -1476,16 +1482,27 @@ impl fmt::Display for SetFunction {
                     write!(f, "(group_concat {})", expr)
                 }
             }
+            AggregationFunction::Custom {
+                name,
+                expr,
+                distinct,
+            } => {
+                if *distinct {
+                    write!(f, "({} distinct {})", name, expr)
+                } else {
+                    write!(f, "({} {})", name, expr)
+                }
+            }
         }
     }
 }
 
-struct SparqlAggregation<'a>(&'a SetFunction);
+struct SparqlAggregationFunction<'a>(&'a AggregationFunction);
 
-impl<'a> fmt::Display for SparqlAggregation<'a> {
+impl<'a> fmt::Display for SparqlAggregationFunction<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
-            SetFunction::Count { expr, distinct } => {
+            AggregationFunction::Count { expr, distinct } => {
                 if *distinct {
                     if let Some(expr) = expr {
                         write!(f, "COUNT(DISTINCT {})", SparqlExpression(expr))
@@ -1498,42 +1515,42 @@ impl<'a> fmt::Display for SparqlAggregation<'a> {
                     write!(f, "COUNT(*)")
                 }
             }
-            SetFunction::Sum { expr, distinct } => {
+            AggregationFunction::Sum { expr, distinct } => {
                 if *distinct {
                     write!(f, "SUM(DISTINCT {})", SparqlExpression(expr))
                 } else {
                     write!(f, "SUM({})", SparqlExpression(expr))
                 }
             }
-            SetFunction::Min { expr, distinct } => {
+            AggregationFunction::Min { expr, distinct } => {
                 if *distinct {
                     write!(f, "MIN(DISTINCT {})", SparqlExpression(expr))
                 } else {
                     write!(f, "MIN({})", SparqlExpression(expr))
                 }
             }
-            SetFunction::Max { expr, distinct } => {
+            AggregationFunction::Max { expr, distinct } => {
                 if *distinct {
                     write!(f, "MAX(DISTINCT {})", SparqlExpression(expr))
                 } else {
                     write!(f, "MAX({})", SparqlExpression(expr))
                 }
             }
-            SetFunction::Avg { expr, distinct } => {
+            AggregationFunction::Avg { expr, distinct } => {
                 if *distinct {
                     write!(f, "AVG(DISTINCT {})", SparqlExpression(expr))
                 } else {
                     write!(f, "AVG({})", SparqlExpression(expr))
                 }
             }
-            SetFunction::Sample { expr, distinct } => {
+            AggregationFunction::Sample { expr, distinct } => {
                 if *distinct {
                     write!(f, "SAMPLE(DISTINCT {})", SparqlExpression(expr))
                 } else {
                     write!(f, "SAMPLE({})", SparqlExpression(expr))
                 }
             }
-            SetFunction::GroupConcat {
+            AggregationFunction::GroupConcat {
                 expr,
                 distinct,
                 separator,
@@ -1558,6 +1575,17 @@ impl<'a> fmt::Display for SparqlAggregation<'a> {
                     )
                 } else {
                     write!(f, "GROUP_CONCAT({})", SparqlExpression(expr))
+                }
+            }
+            AggregationFunction::Custom {
+                name,
+                expr,
+                distinct,
+            } => {
+                if *distinct {
+                    write!(f, "{}(DISTINCT {})", name, SparqlExpression(expr))
+                } else {
+                    write!(f, "{}({})", name, SparqlExpression(expr))
                 }
             }
         }
