@@ -1,6 +1,6 @@
 use crate::error::{invalid_data_error, invalid_input_error};
 use crate::io::GraphFormat;
-use crate::model::{BlankNode, GraphNameRef, NamedNode, Term};
+use crate::model::{BlankNode, GraphNameRef, NamedNode, NamedOrBlankNode, Quad, Term};
 use crate::sparql::algebra::{
     GraphPattern, GraphTarget, GraphUpdateOperation, NamedNodeOrVariable, QuadPattern,
     QueryDataset, TermOrVariable,
@@ -87,19 +87,19 @@ where
         }
     }
 
-    fn eval_insert_data(&mut self, data: &[QuadPattern]) -> Result<(), EvaluationError> {
+    fn eval_insert_data(&mut self, data: &[Quad]) -> Result<(), EvaluationError> {
         let mut bnodes = HashMap::new();
         for quad in data {
-            if let Some(quad) = self.encode_quad_for_insertion(quad, &[], &[], &mut bnodes)? {
+            if let Some(quad) = self.encode_quad_for_insertion(quad, &mut bnodes)? {
                 self.write.insert_encoded(&quad).map_err(to_eval_error)?;
             }
         }
         Ok(())
     }
 
-    fn eval_delete_data(&mut self, data: &[QuadPattern]) -> Result<(), EvaluationError> {
+    fn eval_delete_data(&mut self, data: &[Quad]) -> Result<(), EvaluationError> {
         for quad in data {
-            if let Some(quad) = self.encode_quad_for_deletion(quad, &[], &[])? {
+            if let Some(quad) = self.encode_quad_for_deletion(quad)? {
                 self.write.remove_encoded(&quad).map_err(to_eval_error)?;
             }
         }
@@ -156,13 +156,15 @@ where
                 .collect::<Result<Vec<_>, EvaluationError>>()?;
 
             for quad in delete {
-                if let Some(quad) = self.encode_quad_for_deletion(quad, &variables, &tuple)? {
+                if let Some(quad) =
+                    self.encode_quad_pattern_for_deletion(quad, &variables, &tuple)?
+                {
                     self.write.remove_encoded(&quad).map_err(to_eval_error)?;
                 }
             }
             for quad in insert {
                 if let Some(quad) =
-                    self.encode_quad_for_insertion(quad, &variables, &tuple, &mut bnodes)?
+                    self.encode_quad_pattern_for_insertion(quad, &variables, &tuple, &mut bnodes)?
                 {
                     self.write.insert_encoded(&quad).map_err(to_eval_error)?;
                 }
@@ -278,6 +280,40 @@ where
 
     fn encode_quad_for_insertion(
         &mut self,
+        quad: &Quad,
+        bnodes: &mut HashMap<BlankNode, BlankNode>,
+    ) -> Result<Option<EncodedQuad<R::StrId>>, EvaluationError> {
+        Ok(Some(EncodedQuad {
+            subject: match &quad.subject {
+                NamedOrBlankNode::NamedNode(subject) => {
+                    self.write.encode_named_node(subject.as_ref())
+                }
+                NamedOrBlankNode::BlankNode(subject) => self
+                    .write
+                    .encode_blank_node(bnodes.entry(subject.clone()).or_default().as_ref()),
+            }
+            .map_err(to_eval_error)?,
+            predicate: self
+                .write
+                .encode_named_node(quad.predicate.as_ref())
+                .map_err(to_eval_error)?,
+            object: match &quad.object {
+                Term::NamedNode(object) => self.write.encode_named_node(object.as_ref()),
+                Term::BlankNode(object) => self
+                    .write
+                    .encode_blank_node(bnodes.entry(object.clone()).or_default().as_ref()),
+                Term::Literal(object) => self.write.encode_literal(object.as_ref()),
+            }
+            .map_err(to_eval_error)?,
+            graph_name: self
+                .write
+                .encode_graph_name(quad.graph_name.as_ref())
+                .map_err(to_eval_error)?,
+        }))
+    }
+
+    fn encode_quad_pattern_for_insertion(
+        &mut self,
         quad: &QuadPattern,
         variables: &[Variable],
         values: &[Option<EncodedTerm<R::StrId>>],
@@ -388,6 +424,50 @@ where
     }
 
     fn encode_quad_for_deletion(
+        &mut self,
+        quad: &Quad,
+    ) -> Result<Option<EncodedQuad<R::StrId>>, EvaluationError> {
+        Ok(Some(EncodedQuad {
+            subject: if let Some(subject) = self
+                .read
+                .get_encoded_named_or_blank_node(quad.subject.as_ref())
+                .map_err(to_eval_error)?
+            {
+                subject
+            } else {
+                return Ok(None);
+            },
+            predicate: if let Some(predicate) = self
+                .read
+                .get_encoded_named_node(quad.predicate.as_ref())
+                .map_err(to_eval_error)?
+            {
+                predicate
+            } else {
+                return Ok(None);
+            },
+            object: if let Some(object) = self
+                .read
+                .get_encoded_term(quad.object.as_ref())
+                .map_err(to_eval_error)?
+            {
+                object
+            } else {
+                return Ok(None);
+            },
+            graph_name: if let Some(graph_name) = self
+                .read
+                .get_encoded_graph_name(quad.graph_name.as_ref())
+                .map_err(to_eval_error)?
+            {
+                graph_name
+            } else {
+                return Ok(None);
+            },
+        }))
+    }
+
+    fn encode_quad_pattern_for_deletion(
         &self,
         quad: &QuadPattern,
         variables: &[Variable],

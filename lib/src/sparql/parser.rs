@@ -1007,26 +1007,34 @@ parser! {
         }
 
         //[39]
-        rule DeleteData() -> Vec<GraphUpdateOperation> = i("DELETE") _ i("DATA") _ data:QuadData() {
-            vec![GraphUpdateOperation::DeleteData { data }]
+        rule DeleteData() -> Vec<GraphUpdateOperation> = i("DELETE") _ i("DATA") _ data:QuadData() {?
+            if data.iter().any(|quad| quad.subject.is_blank_node() || quad.object.is_blank_node() || quad.graph_name.is_blank_node()) {
+                Err("Blank nodes are not allowed in DELETE DATA")
+            } else {
+                Ok(vec![GraphUpdateOperation::DeleteData { data }])
+            }
         }
 
         //[40]
-        rule DeleteWhere() -> Vec<GraphUpdateOperation> = i("DELETE") _ i("WHERE") _ d:QuadData() {
-            let pattern = d.iter().map(|q| {
-                let bgp = GraphPattern::BGP(vec![TriplePattern::new(q.subject.clone(), q.predicate.clone(), q.object.clone())]);
-                if let Some(graph_name) = &q.graph_name {
-                    GraphPattern::Graph { graph_name: graph_name.clone(), inner: Box::new(bgp) }
-                } else {
-                    bgp
-                }
-            }).fold(GraphPattern::BGP(Vec::new()), new_join);
-            vec![GraphUpdateOperation::DeleteInsert {
-                delete: d,
-                insert: Vec::new(),
-                using: QueryDataset::default(),
-                pattern: Box::new(pattern)
-            }]
+        rule DeleteWhere() -> Vec<GraphUpdateOperation> = i("DELETE") _ i("WHERE") _ d:QuadPattern() {?
+            if d.iter().any(|quad| matches!(quad.subject, TermOrVariable::Term(Term::BlankNode(_))) || matches!(quad.object, TermOrVariable::Term(Term::BlankNode(_)))) {
+                Err("Blank nodes are not allowed in DELETE WHERE")
+            } else {
+                let pattern = d.iter().map(|q| {
+                    let bgp = GraphPattern::BGP(vec![TriplePattern::new(q.subject.clone(), q.predicate.clone(), q.object.clone())]);
+                    if let Some(graph_name) = &q.graph_name {
+                        GraphPattern::Graph { graph_name: graph_name.clone(), inner: Box::new(bgp) }
+                    } else {
+                        bgp
+                    }
+                }).fold(GraphPattern::BGP(Vec::new()), new_join);
+                Ok(vec![GraphUpdateOperation::DeleteInsert {
+                    delete: d,
+                    insert: Vec::new(),
+                    using: QueryDataset::default(),
+                    pattern: Box::new(pattern)
+                }])
+            }
         }
 
         //[41]
@@ -1088,7 +1096,13 @@ parser! {
         }
 
         //[42]
-        rule DeleteClause() -> Vec<QuadPattern> = i("DELETE") _ q:QuadPattern() { q }
+        rule DeleteClause() -> Vec<QuadPattern> = i("DELETE") _ q:QuadPattern() {?
+            if q.iter().any(|quad| matches!(quad.subject, TermOrVariable::Term(Term::BlankNode(_))) || matches!(quad.object, TermOrVariable::Term(Term::BlankNode(_)))) {
+                Err("Blank nodes are not allowed in DELETE")
+            } else {
+                Ok(q)
+            }
+        }
 
         //[43]
         rule InsertClause() -> Vec<QuadPattern> = i("INSERT") _ q:QuadPattern() { q }
@@ -1122,7 +1136,30 @@ parser! {
         rule QuadPattern() -> Vec<QuadPattern> = "{" _ q:Quads() _ "}" { q }
 
         //[49]
-        rule QuadData() -> Vec<QuadPattern> = "{" _ q:Quads() _ "}" { q }
+        rule QuadData() -> Vec<Quad> = "{" _ q:Quads() _ "}" {?
+            q.into_iter().map(|q| Ok(Quad {
+                subject: match q.subject {
+                    TermOrVariable::Term(Term::NamedNode(t)) => t.into(),
+                    TermOrVariable::Term(Term::BlankNode(t)) => t.into(),
+                    _ => return Err(())
+                },
+                predicate: if let NamedNodeOrVariable::NamedNode(t) = q.predicate {
+                    t
+                } else {
+                    return Err(())
+                },
+                object: if let TermOrVariable::Term(t) = q.object {
+                    t
+                } else {
+                    return Err(())
+                },
+                graph_name: match q.graph_name {
+                    Some(NamedNodeOrVariable::NamedNode(t)) => t.into(),
+                    None => GraphName::DefaultGraph,
+                    _ => return Err(())
+                }
+            })).collect::<Result<Vec<_>, ()>>().map_err(|_| "Variables are not allowed in INSERT DATA and DELETE DATA")
+        }
 
         //[50]
         rule Quads() -> Vec<QuadPattern> = q:(Quads_TriplesTemplate() / Quads_QuadsNotTriples()) ** (_) {

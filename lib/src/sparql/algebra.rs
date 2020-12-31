@@ -1705,9 +1705,9 @@ impl fmt::Display for QueryDataset {
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GraphUpdateOperation {
     /// [insert data](https://www.w3.org/TR/sparql11-update/#def_insertdataoperation)
-    InsertData { data: Vec<QuadPattern> },
+    InsertData { data: Vec<Quad> },
     /// [delete data](https://www.w3.org/TR/sparql11-update/#def_deletedataoperation)
-    DeleteData { data: Vec<QuadPattern> },
+    DeleteData { data: Vec<Quad> },
     /// [delete insert](https://www.w3.org/TR/sparql11-update/#def_deleteinsertoperation)
     DeleteInsert {
         delete: Vec<QuadPattern>,
@@ -1734,16 +1734,12 @@ impl fmt::Display for GraphUpdateOperation {
         match self {
             GraphUpdateOperation::InsertData { data } => {
                 writeln!(f, "INSERT DATA {{")?;
-                for quad in data {
-                    writeln!(f, "\t{}", SparqlQuadPattern(quad))?;
-                }
+                write_quads(data, f)?;
                 write!(f, "}}")
             }
             GraphUpdateOperation::DeleteData { data } => {
                 writeln!(f, "DELETE DATA {{")?;
-                for quad in data {
-                    writeln!(f, "\t{}", SparqlQuadPattern(quad))?;
-                }
+                write_quads(data, f)?;
                 write!(f, "}}")
             }
             GraphUpdateOperation::DeleteInsert {
@@ -1821,6 +1817,21 @@ impl fmt::Display for GraphUpdateOperation {
             }
         }
     }
+}
+
+fn write_quads(quads: &[Quad], f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    for quad in quads {
+        if quad.graph_name == GraphName::DefaultGraph {
+            writeln!(f, "\t{} {} {} .", quad.subject, quad.predicate, quad.object)?;
+        } else {
+            writeln!(
+                f,
+                "\tGRAPH {} {{ {} {} {} }}",
+                quad.graph_name, quad.subject, quad.predicate, quad.object
+            )?;
+        }
+    }
+    Ok(())
 }
 
 /// A target RDF graph for update operations
