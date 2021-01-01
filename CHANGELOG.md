@@ -3,14 +3,23 @@
 ### Added
 - [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/) support for Rust, Python and JavaScript.
 - [SPARQL 1.1 Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql11-results-csv-tsv/) serializers and TSV format parser.
+- The SPARQL Query and Update algebra is now public.
+- A simple built-in HTTP client. In the Rust library, is disabled by default behind the `http_client` feature. It powers SPARQL federation and SPARQL UPDATE `LOAD` operations.
 - `std::str::FromStr` implementations to `NamedNode`, `BlankNode`, `Literal`, `Term` and `Variable` allowing to easily parse Turtle/SPARQL serialization of these terms.
+- Optional Sled storage for `oxigraph_server`.
 
 ### Removed
 - The `default_graph_uris` and `named_graph_uris` parameters from `pyoxigraph` `query` methods.
+- Python 3.5 support.
+- `(Memory|RocksDB|Sled)Store::prepare_query` methods. It is possible to cache SPARQL query parsing using the `Query::parse` function and give the parsed query to the `query` method.
 
 ### Changed
 - Fixes evaluation of `MONTH()` and `DAY()` functions on the `xsd:date` values.
 - `Variable::new` now validates the variable name.
+- `(Memory|RocksDB|Sled)Store::query` does not have an option parameter anymore. There is now a new `query_opt` method that allows giving options.
+- `xsd:boolean` SPARQL function now properly follows XPath specification.
+- Fixes SPARQL `DESCRIBE` evaluation.
+
 
 ## [0.1.1] - 2020-08-14
 

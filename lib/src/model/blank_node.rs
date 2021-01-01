@@ -7,7 +7,7 @@ use std::str;
 
 /// An owned RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 ///
-/// The common way to create a new blank node is to use the [`BlankNode::default`](#impl-Default) function.
+/// The common way to create a new blank node is to use the [`BlankNode::default()`] function.
 ///
 /// It is also possible to create a blank node from a blank node identifier using the [`BlankNode::new()`] function.
 /// The blank node identifier must be valid according to N-Triples, Turtle and SPARQL grammars.
@@ -36,7 +36,7 @@ impl BlankNode {
     ///
     /// The blank node identifier must be valid according to N-Triples, Turtle and SPARQL grammars.
     ///
-    /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default()`](#impl-Default)
+    /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default()`]
     ///that creates a random ID that could be easily inlined by Oxigraph stores.
     pub fn new(id: impl Into<String>) -> Result<Self, BlankNodeIdParseError> {
         let id = id.into();
@@ -61,7 +61,7 @@ impl BlankNode {
 
     /// Creates a blank node from a unique numerical id
     ///
-    /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default()`](#impl-Default).
+    /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default()`].
     pub fn new_from_unique_id(id: impl Into<u128>) -> Self {
         let id = id.into();
         Self(BlankNodeContent::Anonymous {
@@ -117,7 +117,7 @@ impl Default for BlankNode {
 
 /// A borrowed RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 ///
-/// The common way to create a new blank node is to use the [`BlankNode::default`](#impl-Default) trait method.
+/// The common way to create a new blank node is to use the [`BlankNode::default`] trait method.
 ///
 /// It is also possible to create a blank node from a blank node identifier using the [`BlankNodeRef::new()`] function.
 /// The blank node identifier must be valid according to N-Triples, Turtle and SPARQL grammars.
@@ -146,7 +146,7 @@ impl<'a> BlankNodeRef<'a> {
     ///
     /// The blank node identifier must be valid according to N-Triples, Turtle and SPARQL grammars.
     ///
-    /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default()`](#impl-Default)
+    /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default()`].
     /// that creates a random ID that could be easily inlined by Oxigraph stores.
     pub fn new(id: &'a str) -> Result<Self, BlankNodeIdParseError> {
         validate_blank_node_identifier(id)?;
