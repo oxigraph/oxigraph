@@ -48,12 +48,12 @@ pub fn add_to_module(module: &PyModule) -> PyResult<()> {
 #[pyfunction]
 #[text_signature = "(input, /, mime_type, *, base_iri = None)"]
 pub fn parse(
-    input: &PyAny,
+    input: PyObject,
     mime_type: &str,
     base_iri: Option<&str>,
     py: Python<'_>,
 ) -> PyResult<PyObject> {
-    let input = BufReader::new(PyFileLike::new(input.to_object(py)));
+    let input = BufReader::new(PyFileLike::new(input));
     if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
         let mut parser = GraphParser::from_format(graph_format);
         if let Some(base_iri) = base_iri {
@@ -113,8 +113,8 @@ pub fn parse(
 /// b'<http://example.com> <http://example.com/p> "1" .\n'
 #[pyfunction]
 #[text_signature = "(input, output, /, mime_type, *, base_iri = None)"]
-pub fn serialize(input: &PyAny, output: &PyAny, mime_type: &str, py: Python<'_>) -> PyResult<()> {
-    let output = PyFileLike::new(output.to_object(py));
+pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str) -> PyResult<()> {
+    let output = PyFileLike::new(output);
     if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
         let mut writer = GraphSerializer::from_format(graph_format)
             .triple_writer(output)

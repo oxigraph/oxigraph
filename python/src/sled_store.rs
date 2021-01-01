@@ -6,7 +6,7 @@ use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::store::sled::*;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{
-    pyclass, pymethods, pyproto, Py, PyAny, PyObject, PyRef, PyRefMut, PyResult, Python, ToPyObject,
+    pyclass, pymethods, pyproto, Py, PyAny, PyObject, PyRef, PyRefMut, PyResult, Python,
 };
 use pyo3::{PyIterProtocol, PyObjectProtocol, PySequenceProtocol};
 use std::convert::TryFrom;
@@ -252,18 +252,17 @@ impl PySledStore {
     #[args(input, mime_type, "*", base_iri = "None", to_graph = "None")]
     fn load(
         &self,
-        input: &PyAny,
+        input: PyObject,
         mime_type: &str,
         base_iri: Option<&str>,
         to_graph: Option<&PyAny>,
-        py: Python<'_>,
     ) -> PyResult<()> {
         let to_graph_name = if let Some(graph_name) = to_graph {
             Some(PyGraphNameRef::try_from(graph_name)?)
         } else {
             None
         };
-        let input = BufReader::new(PyFileLike::new(input.to_object(py)));
+        let input = BufReader::new(PyFileLike::new(input));
         if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
             self.inner
                 .load_graph(
@@ -321,19 +320,13 @@ impl PySledStore {
     /// b'<http://example.com> <http://example.com/p> "1" .\n'
     #[text_signature = "($self, output, /, mime_type, *, from_graph = None)"]
     #[args(output, mime_type, "*", from_graph = "None")]
-    fn dump(
-        &self,
-        output: &PyAny,
-        mime_type: &str,
-        from_graph: Option<&PyAny>,
-        py: Python<'_>,
-    ) -> PyResult<()> {
+    fn dump(&self, output: PyObject, mime_type: &str, from_graph: Option<&PyAny>) -> PyResult<()> {
         let from_graph_name = if let Some(graph_name) = from_graph {
             Some(PyGraphNameRef::try_from(graph_name)?)
         } else {
             None
         };
-        let output = PyFileLike::new(output.to_object(py));
+        let output = PyFileLike::new(output);
         if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
             self.inner
                 .dump_graph(

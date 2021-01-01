@@ -8,7 +8,6 @@ use pyo3::basic::CompareOp;
 use pyo3::exceptions::{PyNotImplementedError, PyValueError};
 use pyo3::prelude::{
     pyclass, pymethods, pyproto, Py, PyAny, PyCell, PyObject, PyRef, PyRefMut, PyResult, Python,
-    ToPyObject,
 };
 use pyo3::{PyIterProtocol, PyObjectProtocol, PySequenceProtocol};
 use std::convert::TryFrom;
@@ -51,7 +50,7 @@ impl PyMemoryStore {
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
     #[text_signature = "($self, quad)"]
     fn add(&self, quad: PyQuad) {
-        self.inner.insert(quad);
+        self.inner.insert(quad)
     }
 
     /// Removes a quad from the store
@@ -67,7 +66,7 @@ impl PyMemoryStore {
     /// []
     #[text_signature = "($self, quad)"]
     fn remove(&self, quad: &PyQuad) {
-        self.inner.remove(quad);
+        self.inner.remove(quad)
     }
 
     /// Looks for the quads matching a given pattern
@@ -236,18 +235,17 @@ impl PyMemoryStore {
     #[args(input, mime_type, "*", base_iri = "None", to_graph = "None")]
     fn load(
         &self,
-        input: &PyAny,
+        input: PyObject,
         mime_type: &str,
         base_iri: Option<&str>,
         to_graph: Option<&PyAny>,
-        py: Python<'_>,
     ) -> PyResult<()> {
         let to_graph_name = if let Some(graph_name) = to_graph {
             Some(PyGraphNameRef::try_from(graph_name)?)
         } else {
             None
         };
-        let input = BufReader::new(PyFileLike::new(input.to_object(py)));
+        let input = BufReader::new(PyFileLike::new(input));
         if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
             self.inner
                 .load_graph(
@@ -304,19 +302,13 @@ impl PyMemoryStore {
     /// b'<http://example.com> <http://example.com/p> "1" .\n'
     #[text_signature = "($self, output, /, mime_type, *, from_graph = None)"]
     #[args(output, mime_type, "*", from_graph = "None")]
-    fn dump(
-        &self,
-        output: &PyAny,
-        mime_type: &str,
-        from_graph: Option<&PyAny>,
-        py: Python<'_>,
-    ) -> PyResult<()> {
+    fn dump(&self, output: PyObject, mime_type: &str, from_graph: Option<&PyAny>) -> PyResult<()> {
         let from_graph_name = if let Some(graph_name) = from_graph {
             Some(PyGraphNameRef::try_from(graph_name)?)
         } else {
             None
         };
-        let output = PyFileLike::new(output.to_object(py));
+        let output = PyFileLike::new(output);
         if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
             self.inner
                 .dump_graph(

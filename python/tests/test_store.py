@@ -232,6 +232,14 @@ class TestAbstractStore(unittest.TestCase, ABC):
             b"<http://foo> <http://bar> <http://baz> <http://graph> .\n",
         )
 
+    def test_write_in_read(self):
+        store = self.store()
+        store.add(Quad(foo, bar, bar))
+        store.add(Quad(foo, bar, baz))
+        for triple in store:
+            store.add(Quad(triple.object, triple.predicate, triple.subject))
+        self.assertEqual(len(store), 4)
+
 
 class TestMemoryStore(TestAbstractStore):
     def store(self):
