@@ -385,6 +385,19 @@ impl SledStore {
         dump_dataset(self.iter(), writer, format)
     }
 
+    /// Removes a graph from this store.
+    ///
+    /// See [`MemoryStore`](super::memory::MemoryStore::drop_graph()) for a usage example.
+    pub fn drop_graph<'a>(&self, graph_name: impl Into<GraphNameRef<'a>>) -> Result<(), io::Error> {
+        if let Some(graph_name) = self.get_encoded_graph_name(graph_name.into())? {
+            for quad in self.encoded_quads_for_pattern(None, None, None, Some(graph_name)) {
+                let mut this = self;
+                this.remove_encoded(&quad?)?;
+            }
+        }
+        Ok(())
+    }
+
     fn contains_encoded(&self, quad: &EncodedQuad) -> Result<bool, io::Error> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
         if quad.graph_name.is_default_graph() {

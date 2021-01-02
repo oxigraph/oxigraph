@@ -352,6 +352,21 @@ impl RocksDbStore {
         dump_dataset(self.iter(), writer, syntax)
     }
 
+    /// Removes a graph from this store.
+    ///
+    /// See [`MemoryStore`](super::memory::MemoryStore::drop_graph()) for a usage example.
+    pub fn drop_graph<'a>(&self, graph_name: impl Into<GraphNameRef<'a>>) -> Result<(), io::Error> {
+        if let Some(graph_name) = self.get_encoded_graph_name(graph_name.into())? {
+            let mut transaction = self.auto_batch_writer();
+            for quad in self.encoded_quads_for_pattern(None, None, None, Some(graph_name)) {
+                transaction.remove_encoded(&quad?)?;
+            }
+            transaction.apply()
+        } else {
+            Ok(())
+        }
+    }
+
     fn id2str_cf(&self) -> &ColumnFamily {
         get_cf(&self.db, ID2STR_CF)
     }

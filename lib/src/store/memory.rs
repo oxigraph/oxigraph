@@ -455,6 +455,35 @@ impl MemoryStore {
         dump_dataset(self.iter().map(Ok), writer, format)
     }
 
+    /// Removes a graph from this store.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::MemoryStore;
+    /// use oxigraph::model::{NamedNode, Quad};
+    ///
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone());
+    /// let store = MemoryStore::new();
+    /// store.insert(quad.clone());    
+    /// assert_eq!(1, store.len());
+    ///
+    /// store.drop_graph(&ex);
+    /// assert_eq!(0, store.len());
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn drop_graph<'a>(&self, graph_name: impl Into<GraphNameRef<'a>>) {
+        if let Some(graph_name) = self
+            .get_encoded_graph_name(graph_name.into())
+            .unwrap_infallible()
+        {
+            for quad in self.encoded_quads_for_pattern_inner(None, None, None, Some(graph_name)) {
+                let mut this = self;
+                this.remove_encoded(&quad).unwrap_infallible();
+            }
+        }
+    }
+
     #[allow(clippy::expect_used)]
     fn indexes(&self) -> RwLockReadGuard<'_, MemoryStoreIndexes> {
         self.indexes

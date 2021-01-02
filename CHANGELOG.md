@@ -1,12 +1,13 @@
 ## Master
 
 ### Added
-- [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/) support for Rust, Python and JavaScript.
+- [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/) support for Rust, Python and JavaScript. All store-like classes now provide an `update` method.
 - [SPARQL 1.1 Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql11-results-csv-tsv/) serializers and TSV format parser.
 - The SPARQL Query and Update algebra is now public.
 - A simple built-in HTTP client. In the Rust library, is disabled by default behind the `http_client` feature. It powers SPARQL federation and SPARQL UPDATE `LOAD` operations.
 - `std::str::FromStr` implementations to `NamedNode`, `BlankNode`, `Literal`, `Term` and `Variable` allowing to easily parse Turtle/SPARQL serialization of these terms.
 - Optional Sled storage for `oxigraph_server`.
+- `(Memory|RocksDB|Sled)Store::drop_graph`.
 
 ### Removed
 - The `default_graph_uris` and `named_graph_uris` parameters from `pyoxigraph` `query` methods.
