@@ -21,4 +21,8 @@ async-std = { version = "1", features = ["attributes"] }
 async-h1 = "2"
 http-types = "2"
 oxigraph = { version = "0.1", path="../lib", features = ["http_client"] }
+rand = "0.8"
 url = "2"
+
+[dev-dependencies]
+tempfile = "3"

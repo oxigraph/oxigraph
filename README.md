@@ -23,11 +23,11 @@ It is split into multiple parts:
 * The `python` directory contains Pyoxigraph. Pyoxigraph allows using Oxigraph in Python. See the [Pyoxigraph website](https://oxigraph.org/pyoxigraph/) for Pyoxigraph documentation. [![PyPI](https://img.shields.io/pypi/v/pyoxigraph)](https://pypi.org/project/pyoxigraph/)
 * The `js` directory contains bindings to use Oxigraph in JavaScript with the help of WebAssembly. See [its README](https://github.com/oxigraph/oxigraph/blob/master/js/README.md) for the JS bindings documentation.
 [![npm](https://img.shields.io/npm/v/oxigraph)](https://www.npmjs.com/package/oxigraph)
-* The `server` directory contains a stand-alone binary of a web server implementing the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/). It uses the [RocksDB](https://rocksdb.org/) key-value store.
+* The `server` directory contains a stand-alone binary of a web server implementing the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/) and the [SPARQL 1.1 Graph Store Protocol](https://www.w3.org/TR/sparql11-http-rdf-update/). It uses the [RocksDB](https://rocksdb.org/) key-value store.
 [![Latest Version](https://img.shields.io/crates/v/oxigraph_server.svg)](https://crates.io/crates/oxigraph_server) 
 [![Docker Image Version (latest semver)](https://img.shields.io/docker/v/oxigraph/oxigraph?sort=semver)](https://hub.docker.com/repository/docker/oxigraph/oxigraph)
 * The `wikibase` directory contains a stand-alone binary of a web server able to synchronize with a [Wikibase instance](https://wikiba.se/).
-[![Latest Version](https://img.shields.io/crates/v/oxigraph_wikibase.svg)](https://crates.io/crates/oxigraph_wikibase)  
+[![Latest Version](https://img.shields.io/crates/v/oxigraph_wikibase.svg)](https://crates.io/crates/oxigraph_wikibase)
 [![Docker Image Version (latest semver)](https://img.shields.io/docker/v/oxigraph/oxigraph-wikibase?sort=semver)](https://hub.docker.com/repository/docker/oxigraph/oxigraph-wikibase)
 
 Oxigraph implements the following specifications:
@@ -56,14 +56,16 @@ Run `oxigraph_server -f my_data_storage_directory` to start the server where `my
 The server provides an HTML UI with a form to execute SPARQL requests.
 
 It provides the following REST actions:
-* `/` allows to `POST` data to the server.
-  For example `curl -f -X POST -H 'Content-Type:application/n-triples' --data-binary "@MY_FILE.nt" http://localhost:7878/`
-  will add the N-Triples file MY_FILE.nt to the server repository. [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/) and [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) are supported.
 * `/query` allows to evaluate SPARQL queries against the server repository following the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/#query-operation).
   For example `curl -X POST -H 'Content-Type:application/sparql-query' --data 'SELECT * WHERE { ?s ?p ?o } LIMIT 10' http://localhost:7878/query`.
   This action supports content negotiation and could return [Turtle](https://www.w3.org/TR/turtle/), [N-Triples](https://www.w3.org/TR/n-triples/), [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/), [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/) and [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/).
 * `/update` allows to execute SPARQL updates against the server repository following the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/#update-operation).
   For example `curl -X POST -H 'Content-Type: application/sparql-update' --data 'DELETE WHERE { <http://example.com/s> ?p ?o }' http://localhost:7878/update`.
+* `/server` allows to retrieve and change the server content using the [SPARQL 1.1 Graph Store HTTP Protocol](https://www.w3.org/TR/sparql11-http-rdf-update/).
+  For example `curl -f -X POST -H 'Content-Type:application/n-triples' --data-binary "@MY_FILE.nt" http://localhost:7878/store?graph=http://example.com/g` will add the N-Triples file MY_FILE.nt to the server dataset inside of the `http://example.com/g` named graph.
+  [Turtle](https://www.w3.org/TR/turtle/), [N-Triples](https://www.w3.org/TR/n-triples/) and [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) are supported.
+  It is also possible to `POST`, `PUT` and `GET` the complete RDF dataset on the server using RDF dataset formats ([TriG](https://www.w3.org/TR/trig/) and [N-Quads](https://www.w3.org/TR/n-quads/)) against the `/server` endpoint.
+  For example `curl -f -X POST -H 'Content-Type:application/n-quads' --data-binary "@MY_FILE.nq" http://localhost:7878/store` will add the N-Quads file MY_FILE.nt to the server dataset.
 
 Use `oxigraph_server --help` to see the possible options when starting the server.
 
@@ -86,7 +88,7 @@ You can then access it from your machine on port `7878`:
 firefox http://localhost:7878
 
 # Post some data
-curl http://localhost:7878 -H 'Content-Type: application/x-turtle' -d@./data.ttl
+curl http://localhost:7878/store?default -H 'Content-Type: text/turtle' -d@./data.ttl
 
 # Make a query
 curl -X POST -H 'Accept: application/sparql-results+json' -H 'Content-Type: application/sparql-query' --data 'SELECT * WHERE { ?s ?p ?o } LIMIT 10' http://localhost:7878/query

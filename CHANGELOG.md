@@ -3,6 +3,7 @@
 ### Added
 - [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/) support for Rust, Python and JavaScript. All store-like classes now provide an `update` method.
 - [SPARQL 1.1 Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql11-results-csv-tsv/) serializers and TSV format parser.
+- [SPARQL 1.1 Graph Store HTTP Protocol](https://www.w3.org/TR/sparql11-http-rdf-update/) partial support in `oxigraph_server`. This protocol is accessible under the `/server` path.
 - The SPARQL Query and Update algebra is now public.
 - The stores are now "graph aware" i.e. it is possible to create and keep empty named graphs.
 - A simple built-in HTTP client. In the Rust library, is disabled by default behind the `http_client` feature. It powers SPARQL federation and SPARQL UPDATE `LOAD` operations.
@@ -15,12 +16,17 @@
 - `(Memory|RocksDB|Sled)Store::prepare_query` methods. It is possible to cache SPARQL query parsing using the `Query::parse` function and give the parsed query to the `query` method.
 
 ### Changed
+- Loading data into `oxigraph_server` is now possible using `/store` and not anymore using `/`.
+  For example, you should use now `curl -f -X POST -H 'Content-Type:application/n-quads' --data-binary "@MY_FILE.nq" http://localhost:7878/store` to add the N-Quads file MY_FILE.nt to the server dataset.
 - Fixes evaluation of `MONTH()` and `DAY()` functions on the `xsd:date` values.
 - `Variable::new` now validates the variable name.
 - `(Memory|RocksDB|Sled)Store::query` does not have an option parameter anymore. There is now a new `query_opt` method that allows giving options.
 - `xsd:boolean` SPARQL function now properly follows XPath specification.
 - Fixes SPARQL `DESCRIBE` evaluation.
 
+### Disk data format
+
+The disk data format has been changed between Oxigraph 0.1 (version 0) and Oxigraph 0.2 (version 1). Data is automatically migrated from the version 0 format to the version 1 format when opened with Oxigraph 0.2.
 
 ## [0.1.1] - 2020-08-14
 
