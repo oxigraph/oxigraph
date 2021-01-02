@@ -484,6 +484,27 @@ impl MemoryStore {
         }
     }
 
+    /// Clears the store.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::MemoryStore;
+    /// use oxigraph::model::{NamedNode, Quad};
+    ///
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), ex);
+    /// let store = MemoryStore::new();
+    /// store.insert(quad.clone());    
+    /// assert_eq!(1, store.len());
+    ///
+    /// store.clear();
+    /// assert_eq!(0, store.len());
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn clear(&self) {
+        *self.indexes_mut() = MemoryStoreIndexes::default();
+    }
+
     #[allow(clippy::expect_used)]
     fn indexes(&self) -> RwLockReadGuard<'_, MemoryStoreIndexes> {
         self.indexes
@@ -900,6 +921,7 @@ impl StrEncodingAware for MemoryStoreIndexes {
     type Error = Infallible;
     type StrId = LargeSpur;
 }
+
 impl WritableEncodedStore for MemoryStoreIndexes {
     fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Infallible> {
         if quad.graph_name.is_default_graph() {

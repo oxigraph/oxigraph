@@ -367,6 +367,23 @@ impl RocksDbStore {
         }
     }
 
+    /// Clears the store.
+    ///
+    /// See [`MemoryStore`](super::memory::MemoryStore::clear()) for a usage example.
+    pub fn clear(&self) -> Result<(), io::Error> {
+        self.clear_cf(self.id2str_cf())?;
+        self.clear_cf(self.spog_cf())?;
+        self.clear_cf(self.posg_cf())?;
+        self.clear_cf(self.ospg_cf())?;
+        self.clear_cf(self.gspo_cf())?;
+        self.clear_cf(self.gpos_cf())?;
+        self.clear_cf(self.gosp_cf())?;
+        self.clear_cf(self.dspo_cf())?;
+        self.clear_cf(self.dpos_cf())?;
+        self.clear_cf(self.dosp_cf())?;
+        Ok(())
+    }
+
     fn id2str_cf(&self) -> &ColumnFamily {
         get_cf(&self.db, ID2STR_CF)
     }
@@ -654,6 +671,34 @@ impl RocksDbStore {
             prefix,
             encoding,
         }
+    }
+
+    fn clear_cf(&self, cf: &ColumnFamily) -> Result<(), io::Error> {
+        self.db
+            .delete_range_cf(
+                cf,
+                [
+                    u8::MIN,
+                    u8::MIN,
+                    u8::MIN,
+                    u8::MIN,
+                    u8::MIN,
+                    u8::MIN,
+                    u8::MIN,
+                    u8::MIN,
+                ],
+                [
+                    u8::MAX,
+                    u8::MAX,
+                    u8::MAX,
+                    u8::MAX,
+                    u8::MAX,
+                    u8::MAX,
+                    u8::MAX,
+                    u8::MAX,
+                ],
+            )
+            .map_err(map_err)
     }
 }
 

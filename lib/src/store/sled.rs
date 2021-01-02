@@ -398,6 +398,23 @@ impl SledStore {
         Ok(())
     }
 
+    /// Clears the store.
+    ///
+    /// See [`MemoryStore`](super::memory::MemoryStore::clear()) for a usage example.
+    pub fn clear(&self) -> Result<(), io::Error> {
+        self.dspo.clear()?;
+        self.dpos.clear()?;
+        self.dosp.clear()?;
+        self.gspo.clear()?;
+        self.gpos.clear()?;
+        self.gosp.clear()?;
+        self.spog.clear()?;
+        self.posg.clear()?;
+        self.ospg.clear()?;
+        self.id2str.clear()?;
+        Ok(())
+    }
+
     fn contains_encoded(&self, quad: &EncodedQuad) -> Result<bool, io::Error> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
         if quad.graph_name.is_default_graph() {

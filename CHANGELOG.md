@@ -7,7 +7,7 @@
 - A simple built-in HTTP client. In the Rust library, is disabled by default behind the `http_client` feature. It powers SPARQL federation and SPARQL UPDATE `LOAD` operations.
 - `std::str::FromStr` implementations to `NamedNode`, `BlankNode`, `Literal`, `Term` and `Variable` allowing to easily parse Turtle/SPARQL serialization of these terms.
 - Optional Sled storage for `oxigraph_server`.
-- `(Memory|RocksDB|Sled)Store::drop_graph`.
+- `(Memory|RocksDB|Sled)Store::drop_graph` and `(Memory|RocksDB|Sled)Store::clear`.
 
 ### Removed
 - The `default_graph_uris` and `named_graph_uris` parameters from `pyoxigraph` `query` methods.
