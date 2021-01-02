@@ -94,16 +94,20 @@ class TestAbstractStore(unittest.TestCase, ABC):
     def test_select_query(self):
         store = self.store()
         store.add(Quad(foo, bar, baz))
-        solutions = store.query("SELECT ?s WHERE { ?s ?p ?o }")
+        solutions = store.query("SELECT ?s ?o WHERE { ?s ?p ?o }")
         self.assertIsInstance(solutions, QuerySolutions)
-        self.assertEqual(solutions.variables, [Variable("s")])
+        self.assertEqual(solutions.variables, [Variable("s"), Variable("o")])
         solution = next(solutions)
         self.assertIsInstance(solution, QuerySolution)
         self.assertEqual(solution[0], foo)
+        self.assertEqual(solution[1], baz)
         self.assertEqual(solution["s"], foo)
+        self.assertEqual(solution["o"], baz)
         self.assertEqual(solution[Variable("s")], foo)
-        s, = solution
+        self.assertEqual(solution[Variable("o")], baz)
+        s,o = solution
         self.assertEqual(s, foo)
+        self.assertEqual(o, baz)
 
     def test_select_query_union_default_graph(self):
         store = self.store()

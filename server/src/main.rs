@@ -16,7 +16,7 @@ use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::task::{block_on, spawn};
 use http_types::{
-    bail_status, headers, Body, Error, Method, Mime, Request, Response, Result, StatusCode,
+    bail_status, headers, Error, Method, Mime, Request, Response, Result, StatusCode,
 };
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::{GraphName, NamedNode, NamedOrBlankNode};
@@ -75,7 +75,7 @@ async fn handle_request(request: Request, store: Store) -> Result<Response> {
         }
         ("/", Method::Post) => {
             if let Some(content_type) = request.content_type() {
-                match if let Some(format) = GraphFormat::from_media_type(content_type.essence()) {
+                if let Some(format) = GraphFormat::from_media_type(content_type.essence()) {
                     store.load_graph(
                         BufReader::new(SyncAsyncReader::from(request)),
                         format,
@@ -86,18 +86,16 @@ async fn handle_request(request: Request, store: Store) -> Result<Response> {
                 {
                     store.load_dataset(BufReader::new(SyncAsyncReader::from(request)), format, None)
                 } else {
-                    return Ok(simple_response(
-                        StatusCode::UnsupportedMediaType,
-                        format!("No supported content Content-Type given: {}", content_type),
-                    ));
-                } {
-                    Ok(()) => Response::new(StatusCode::NoContent),
-                    Err(error) => {
-                        return Err(bad_request(error));
-                    }
+                    bail_status!(
+                        415,
+                        "No supported content Content-Type given: {}",
+                        content_type
+                    )
                 }
+                .map_err(bad_request)?;
+                Response::new(StatusCode::NoContent)
             } else {
-                simple_response(StatusCode::BadRequest, "No Content-Type given")
+                bail_status!(400, "No Content-Type given")
             }
         }
         ("/query", Method::Get) => {
@@ -129,13 +127,10 @@ async fn handle_request(request: Request, store: Store) -> Result<Response> {
                         .await?;
                     configure_and_evaluate_sparql_query(store, buffer, None, request)?
                 } else {
-                    simple_response(
-                        StatusCode::UnsupportedMediaType,
-                        format!("Not supported Content-Type given: {}", content_type),
-                    )
+                    bail_status!(415, "Not supported Content-Type given: {}", content_type)
                 }
             } else {
-                simple_response(StatusCode::BadRequest, "No Content-Type given")
+                bail_status!(400, "No Content-Type given");
             }
         }
         ("/update", Method::Post) => {
@@ -164,25 +159,16 @@ async fn handle_request(request: Request, store: Store) -> Result<Response> {
                         .await?;
                     configure_and_evaluate_sparql_update(store, buffer, None, request)?
                 } else {
-                    simple_response(
-                        StatusCode::UnsupportedMediaType,
-                        format!("Not supported Content-Type given: {}", content_type),
-                    )
+                    bail_status!(415, "Not supported Content-Type given: {}", content_type)
                 }
             } else {
-                simple_response(StatusCode::BadRequest, "No Content-Type given")
+                bail_status!(400, "No Content-Type given")
             }
         }
         _ => Response::new(StatusCode::NotFound),
     };
     response.append_header(headers::SERVER, SERVER);
     Ok(response)
-}
-
-fn simple_response(status: StatusCode, body: impl Into<Body>) -> Response {
-    let mut response = Response::new(status);
-    response.set_body(body);
-    response
 }
 
 fn base_url(request: &Request) -> &str {
@@ -212,21 +198,13 @@ fn configure_and_evaluate_sparql_query(
             }
             "default-graph-uri" => default_graph_uris.push(v.into_owned()),
             "named-graph-uri" => named_graph_uris.push(v.into_owned()),
-            _ => {
-                return Ok(simple_response(
-                    StatusCode::BadRequest,
-                    format!("Unexpected parameter: {}", k),
-                ))
-            }
+            _ => bail_status!(400, "Unexpected parameter: {}", k),
         }
     }
     if let Some(query) = query {
         evaluate_sparql_query(store, query, default_graph_uris, named_graph_uris, request)
     } else {
-        Ok(simple_response(
-            StatusCode::BadRequest,
-            "You should set the 'query' parameter",
-        ))
+        bail_status!(400, "You should set the 'query' parameter")
     }
 }
 
@@ -259,15 +237,7 @@ fn evaluate_sparql_query(
     let results = store.query(query)?;
     //TODO: stream
     if let QueryResults::Graph(_) = results {
-        let format = content_negotiation(
-            request,
-            &[
-                GraphFormat::NTriples.media_type(),
-                GraphFormat::Turtle.media_type(),
-                GraphFormat::RdfXml.media_type(),
-            ],
-            GraphFormat::from_media_type,
-        )?;
+        let format = graph_content_negotiation(request)?;
         let mut body = Vec::default();
         results.write_graph(&mut body, format)?;
         let mut response = Response::from(body);
@@ -310,21 +280,13 @@ fn configure_and_evaluate_sparql_update(
             }
             "using-graph-uri" => default_graph_uris.push(v.into_owned()),
             "using-named-graph-uri" => named_graph_uris.push(v.into_owned()),
-            _ => {
-                return Ok(simple_response(
-                    StatusCode::BadRequest,
-                    format!("Unexpected parameter: {}", k),
-                ))
-            }
+            _ => bail_status!(400, "Unexpected parameter: {}", k),
         }
     }
     if let Some(update) = update {
         evaluate_sparql_update(store, update, default_graph_uris, named_graph_uris, request)
     } else {
-        Ok(simple_response(
-            StatusCode::BadRequest,
-            "You should set the 'update' parameter",
-        ))
+        bail_status!(400, "You should set the 'update' parameter")
     }
 }
 
@@ -335,11 +297,7 @@ fn evaluate_sparql_update(
     named_graph_uris: Vec<String>,
     request: Request,
 ) -> Result<Response> {
-    let mut update = Update::parse(&update, Some(base_url(&request))).map_err(|e| {
-        let mut e = Error::from(e);
-        e.set_status(StatusCode::BadRequest);
-        e
-    })?;
+    let mut update = Update::parse(&update, Some(base_url(&request))).map_err(bad_request)?;
     let default_graph_uris = default_graph_uris
         .into_iter()
         .map(|e| Ok(NamedNode::new(e)?.into()))
@@ -354,11 +312,9 @@ fn evaluate_sparql_update(
         for operation in &mut update.operations {
             if let GraphUpdateOperation::DeleteInsert { using, .. } = operation {
                 if !using.is_default_dataset() {
-                    let result = Ok(simple_response(
-                        StatusCode::BadRequest,
+                    bail_status!(400,
                         "using-graph-uri and using-named-graph-uri must not be used with a SPARQL UPDATE containing USING",
-                    ));
-                    return result;
+                    );
                 }
                 using.set_default_graph(default_graph_uris.clone());
                 using.set_available_named_graphs(named_graph_uris.clone());
@@ -383,7 +339,14 @@ async fn http_server<
         async_h1::accept(stream, |request| async {
             Ok(match handle(request).await {
                 Ok(result) => result,
-                Err(error) => simple_response(error.status(), error.to_string()),
+                Err(error) => {
+                    if error.status().is_server_error() {
+                        eprintln!("{}", error);
+                    }
+                    let mut response = Response::new(error.status());
+                    response.set_body(error.to_string());
+                    response
+                }
             })
         })
         .await
@@ -395,12 +358,24 @@ async fn http_server<
         let stream = stream?;
         let handle = handle.clone();
         spawn(async {
-            if let Err(err) = accept(stream, handle).await {
-                eprintln!("{}", err);
+            if let Err(error) = accept(stream, handle).await {
+                eprintln!("{}", error);
             };
         });
     }
     Ok(())
+}
+
+fn graph_content_negotiation(request: Request) -> Result<GraphFormat> {
+    content_negotiation(
+        request,
+        &[
+            GraphFormat::NTriples.media_type(),
+            GraphFormat::Turtle.media_type(),
+            GraphFormat::RdfXml.media_type(),
+        ],
+        GraphFormat::from_media_type,
+    )
 }
 
 fn content_negotiation<F>(
