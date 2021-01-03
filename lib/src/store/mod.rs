@@ -34,6 +34,7 @@ use std::iter::Iterator;
 
 pub(crate) trait ReadableEncodedStore: StrLookup {
     type QuadsIter: Iterator<Item = Result<EncodedQuad<Self::StrId>, Self::Error>> + 'static;
+    type GraphsIter: Iterator<Item = Result<EncodedTerm<Self::StrId>, Self::Error>> + 'static;
 
     fn encoded_quads_for_pattern(
         &self,
@@ -42,12 +43,36 @@ pub(crate) trait ReadableEncodedStore: StrLookup {
         object: Option<EncodedTerm<Self::StrId>>,
         graph_name: Option<EncodedTerm<Self::StrId>>,
     ) -> Self::QuadsIter;
+
+    fn encoded_named_graphs(&self) -> Self::GraphsIter;
+
+    fn contains_encoded_named_graph(
+        &self,
+        graph_name: EncodedTerm<Self::StrId>,
+    ) -> Result<bool, Self::Error>;
 }
 
 pub(crate) trait WritableEncodedStore: StrEncodingAware {
     fn insert_encoded(&mut self, quad: &EncodedQuad<Self::StrId>) -> Result<(), Self::Error>;
 
     fn remove_encoded(&mut self, quad: &EncodedQuad<Self::StrId>) -> Result<(), Self::Error>;
+
+    fn insert_encoded_named_graph(
+        &mut self,
+        graph_name: EncodedTerm<Self::StrId>,
+    ) -> Result<(), Self::Error>;
+
+    fn clear_encoded_graph(
+        &mut self,
+        graph_name: EncodedTerm<Self::StrId>,
+    ) -> Result<(), Self::Error>;
+
+    fn remove_encoded_named_graph(
+        &mut self,
+        graph_name: EncodedTerm<Self::StrId>,
+    ) -> Result<(), Self::Error>;
+
+    fn clear(&mut self) -> Result<(), Self::Error>;
 }
 
 pub(crate) fn load_graph<S: WritableEncodedStore + StrContainer>(

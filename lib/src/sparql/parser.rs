@@ -986,7 +986,7 @@ parser! {
                 Vec::new() // identity case
             } else {
                 let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new_unchecked("s"), Variable::new_unchecked("p"), Variable::new_unchecked("o"))]);
-                vec![GraphUpdateOperation::Drop { silent, graph: to.clone().map_or(GraphTarget::DefaultGraph, GraphTarget::NamedNode) }, copy_graph(from.clone(), to.map(NamedNodeOrVariable::NamedNode)), GraphUpdateOperation::Drop { silent, graph: from.map_or(GraphTarget::DefaultGraph, GraphTarget::NamedNode) }]
+                vec![GraphUpdateOperation::Drop { silent: true, graph: to.clone().map_or(GraphTarget::DefaultGraph, GraphTarget::NamedNode) }, copy_graph(from.clone(), to.map(NamedNodeOrVariable::NamedNode)), GraphUpdateOperation::Drop { silent, graph: from.map_or(GraphTarget::DefaultGraph, GraphTarget::NamedNode) }]
             }
         }
 
@@ -997,7 +997,7 @@ parser! {
                 Vec::new() // identity case
             } else {
                 let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new_unchecked("s"), Variable::new_unchecked("p"), Variable::new_unchecked("o"))]);
-                vec![GraphUpdateOperation::Drop { silent, graph: to.clone().map_or(GraphTarget::DefaultGraph, GraphTarget::NamedNode) }, copy_graph(from, to.map(NamedNodeOrVariable::NamedNode))]
+                vec![GraphUpdateOperation::Drop { silent: true, graph: to.clone().map_or(GraphTarget::DefaultGraph, GraphTarget::NamedNode) }, copy_graph(from, to.map(NamedNodeOrVariable::NamedNode))]
             }
         }
 

@@ -1,5 +1,3 @@
-#![cfg(features = "sled")]
-
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
@@ -24,7 +22,8 @@ wd:Q90 a schema:City ;
 "#;
 const NUMBER_OF_TRIPLES: usize = 8;
 
-fn quads(graph_name: GraphNameRef<'static>) -> Vec<QuadRef<'static>> {
+fn quads(graph_name: impl Into<GraphNameRef<'static>>) -> Vec<QuadRef<'static>> {
+    let graph_name = graph_name.into();
     let paris = NamedNodeRef::new_unchecked("http://www.wikidata.org/entity/Q90");
     let france = NamedNodeRef::new_unchecked("http://www.wikidata.org/entity/Q142");
     let city = NamedNodeRef::new_unchecked("http://schema.org/City");
@@ -161,18 +160,26 @@ fn test_backward_compatibility() -> io::Result<()> {
         for q in quads(GraphNameRef::DefaultGraph) {
             assert!(store.contains(q)?);
         }
-        for q in quads(
-            NamedNodeRef::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90")
-                .into(),
-        ) {
+        let graph_name =
+            NamedNodeRef::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90");
+        for q in quads(graph_name) {
             assert!(store.contains(q)?);
         }
+        assert!(store.contains_named_graph(graph_name)?);
+        assert_eq!(
+            vec![NamedOrBlankNode::from(graph_name)],
+            store.named_graphs().collect::<io::Result<Vec<_>>>()?
+        );
     };
     reset_dir("tests/sled_bc_data")?;
     Ok(())
 }
 
 fn reset_dir(dir: &str) -> io::Result<()> {
+    assert!(Command::new("git")
+        .args(&["clean", "-fX", dir])
+        .status()?
+        .success());
     assert!(Command::new("git")
         .args(&["checkout", "HEAD", "--", dir])
         .status()?

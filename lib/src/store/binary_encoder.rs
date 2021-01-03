@@ -11,7 +11,7 @@ use std::mem::size_of;
 type EncodedTerm = crate::store::numeric_encoder::EncodedTerm<StrHash>;
 type EncodedQuad = crate::store::numeric_encoder::EncodedQuad<StrHash>;
 
-pub const LATEST_STORAGE_VERSION: u64 = 0;
+pub const LATEST_STORAGE_VERSION: u64 = 1;
 pub const WRITTEN_TERM_MAX_SIZE: usize = size_of::<u8>() + 2 * size_of::<StrHash>();
 
 // Encoded term type blocks
@@ -109,6 +109,10 @@ impl QuadEncoding {
             QuadEncoding::DOSP => cursor.read_dosp_quad(),
         }
     }
+}
+
+pub fn decode_term(buffer: &[u8]) -> Result<EncodedTerm, io::Error> {
+    Cursor::new(&buffer).read_term()
 }
 
 pub trait TermReader {

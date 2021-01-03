@@ -75,6 +75,7 @@ pub struct SledStore {
     dspo: Tree,
     dpos: Tree,
     dosp: Tree,
+    graphs: Tree,
 }
 
 type EncodedTerm = crate::store::numeric_encoder::EncodedTerm<StrHash>;
@@ -107,17 +108,35 @@ impl SledStore {
             dspo: db.open_tree("dspo")?,
             dpos: db.open_tree("dpos")?,
             dosp: db.open_tree("dosp")?,
+            graphs: db.open_tree("graphs")?,
         };
 
-        let version = this.ensure_version()?;
-        if version != LATEST_STORAGE_VERSION {
-            return Err(invalid_data_error(format!(
-                "The Sled database is still using the encoding version {}, please upgrade it",
-                version
-            )));
+        let mut version = this.ensure_version()?;
+        if version == 0 {
+            // We migrate to v1
+            for quad in this.encoded_quads_for_pattern(None, None, None, None) {
+                let mut this_mut = &this;
+                let quad = quad?;
+                if !quad.graph_name.is_default_graph() {
+                    this_mut.insert_encoded_named_graph(quad.graph_name)?;
+                }
+            }
+            version = 1;
+            this.set_version(version)?;
+            this.graphs.flush()?;
         }
 
-        Ok(this)
+        match version {
+            _ if version < LATEST_STORAGE_VERSION => Err(invalid_data_error(format!(
+                "The Sled database is using the outdated encoding version {}. Automated migration is not supported, please dump the store dataset using a compatible Oxigraph version and load it again using the current version",
+                version
+            ))),
+            LATEST_STORAGE_VERSION => Ok(this),
+            _ => Err(invalid_data_error(format!(
+                "The Sled database is using the too recent version {}. Upgrade to the latest Oxigraph version to load this database",
+                version
+            )))
+        }
     }
 
     fn ensure_version(&self) -> Result<u64, io::Error> {
@@ -126,10 +145,14 @@ impl SledStore {
             buffer.copy_from_slice(&version);
             u64::from_be_bytes(buffer)
         } else {
-            self.default
-                .insert("oxversion", &LATEST_STORAGE_VERSION.to_be_bytes())?;
+            self.set_version(LATEST_STORAGE_VERSION)?;
             LATEST_STORAGE_VERSION
         })
+    }
+
+    fn set_version(&self, version: u64) -> Result<(), io::Error> {
+        self.default.insert("oxversion", &version.to_be_bytes())?;
+        Ok(())
     }
 
     /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/).
@@ -268,9 +291,10 @@ impl SledStore {
             &self.dspo,
             &self.dpos,
             &self.dosp,
+            &self.graphs,
         )
             .transaction(
-                move |(id2str, spog, posg, ospg, gspo, gpos, gosp, dspo, dpos, dosp)| {
+                move |(id2str, spog, posg, ospg, gspo, gpos, gosp, dspo, dpos, dosp, graphs)| {
                     Ok(f(SledTransaction {
                         id2str,
                         spog,
@@ -282,6 +306,7 @@ impl SledStore {
                         dspo,
                         dpos,
                         dosp,
+                        graphs,
                     })?)
                 },
             )?)
@@ -385,34 +410,78 @@ impl SledStore {
         dump_dataset(self.iter(), writer, format)
     }
 
+    /// Returns all the store named graphs
+    ///
+    /// See [`MemoryStore`](super::memory::MemoryStore::named_graphs()) for a usage example.
+    pub fn named_graphs(&self) -> SledGraphNameIter {
+        SledGraphNameIter {
+            iter: self.encoded_named_graphs(),
+            store: self.clone(),
+        }
+    }
+
+    /// Checks if the store contains a given graph
+    ///
+    /// See [`MemoryStore`](super::memory::MemoryStore::contains_named_graph()) for a usage example.
+    pub fn contains_named_graph<'a>(
+        &self,
+        graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
+    ) -> Result<bool, io::Error> {
+        if let Some(graph_name) = self.get_encoded_named_or_blank_node(graph_name.into())? {
+            self.contains_encoded_named_graph(graph_name)
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Inserts a graph into this store
+    ///
+    /// See [`MemoryStore`](super::memory::MemoryStore::insert_named_graph()) for a usage example.
+    pub fn insert_named_graph<'a>(
+        &self,
+        graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
+    ) -> Result<(), io::Error> {
+        let mut this = self;
+        let graph_name = this.encode_named_or_blank_node(graph_name.into())?;
+        this.insert_encoded_named_graph(graph_name)
+    }
+
+    /// Clears a graph from this store.
+    ///
+    /// See [`MemoryStore`](super::memory::MemoryStore::clear_graph()) for a usage example.
+    pub fn clear_graph<'a>(
+        &self,
+        graph_name: impl Into<GraphNameRef<'a>>,
+    ) -> Result<(), io::Error> {
+        if let Some(graph_name) = self.get_encoded_graph_name(graph_name.into())? {
+            let mut this = self;
+            this.clear_encoded_graph(graph_name)
+        } else {
+            Ok(())
+        }
+    }
+
     /// Removes a graph from this store.
     ///
-    /// See [`MemoryStore`](super::memory::MemoryStore::drop_graph()) for a usage example.
-    pub fn drop_graph<'a>(&self, graph_name: impl Into<GraphNameRef<'a>>) -> Result<(), io::Error> {
-        if let Some(graph_name) = self.get_encoded_graph_name(graph_name.into())? {
-            for quad in self.encoded_quads_for_pattern(None, None, None, Some(graph_name)) {
-                let mut this = self;
-                this.remove_encoded(&quad?)?;
-            }
+    /// See [`MemoryStore`](super::memory::MemoryStore::remove_named_graph()) for a usage example.
+    pub fn remove_named_graph<'a>(
+        &self,
+        graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
+    ) -> Result<(), io::Error> {
+        if let Some(graph_name) = self.get_encoded_named_or_blank_node(graph_name.into())? {
+            let mut this = self;
+            this.remove_encoded_named_graph(graph_name)
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 
     /// Clears the store.
     ///
     /// See [`MemoryStore`](super::memory::MemoryStore::clear()) for a usage example.
     pub fn clear(&self) -> Result<(), io::Error> {
-        self.dspo.clear()?;
-        self.dpos.clear()?;
-        self.dosp.clear()?;
-        self.gspo.clear()?;
-        self.gpos.clear()?;
-        self.gosp.clear()?;
-        self.spog.clear()?;
-        self.posg.clear()?;
-        self.ospg.clear()?;
-        self.id2str.clear()?;
-        Ok(())
+        let mut this = self;
+        (&mut this).clear()
     }
 
     fn contains_encoded(&self, quad: &EncodedQuad) -> Result<bool, io::Error> {
@@ -679,6 +748,7 @@ impl StrLookup for SledStore {
 
 impl ReadableEncodedStore for SledStore {
     type QuadsIter = DecodingQuadsIterator;
+    type GraphsIter = DecodingGraphIterator;
 
     fn encoded_quads_for_pattern(
         &self,
@@ -742,6 +812,16 @@ impl ReadableEncodedStore for SledStore {
             },
         }
     }
+
+    fn encoded_named_graphs(&self) -> DecodingGraphIterator {
+        DecodingGraphIterator {
+            iter: self.graphs.iter(),
+        }
+    }
+
+    fn contains_encoded_named_graph(&self, graph_name: EncodedTerm) -> Result<bool, io::Error> {
+        Ok(self.graphs.contains_key(&encode_term(graph_name))?)
+    }
 }
 
 impl<'a> StrContainer for &'a SledStore {
@@ -792,6 +872,10 @@ impl<'a> WritableEncodedStore for &'a SledStore {
             write_gosp_quad(&mut buffer, quad);
             self.gosp.insert(buffer.as_slice(), &[])?;
             buffer.clear();
+
+            write_term(&mut buffer, quad.graph_name);
+            self.graphs.insert(&buffer, &[])?;
+            buffer.clear();
         }
 
         Ok(())
@@ -840,6 +924,47 @@ impl<'a> WritableEncodedStore for &'a SledStore {
 
         Ok(())
     }
+
+    fn insert_encoded_named_graph(&mut self, graph_name: EncodedTerm) -> Result<(), io::Error> {
+        self.graphs.insert(&encode_term(graph_name), &[])?;
+        Ok(())
+    }
+
+    fn clear_encoded_graph(&mut self, graph_name: EncodedTerm) -> Result<(), io::Error> {
+        if graph_name.is_default_graph() {
+            self.dspo.clear()?;
+            self.dpos.clear()?;
+            self.dosp.clear()?;
+        } else {
+            for quad in self.quads_for_graph(graph_name) {
+                self.remove_encoded(&quad?)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn remove_encoded_named_graph(&mut self, graph_name: EncodedTerm) -> Result<(), io::Error> {
+        for quad in self.quads_for_graph(graph_name) {
+            self.remove_encoded(&quad?)?;
+        }
+        self.graphs.remove(&encode_term(graph_name))?;
+        Ok(())
+    }
+
+    fn clear(&mut self) -> Result<(), io::Error> {
+        self.dspo.clear()?;
+        self.dpos.clear()?;
+        self.dosp.clear()?;
+        self.gspo.clear()?;
+        self.gpos.clear()?;
+        self.gosp.clear()?;
+        self.spog.clear()?;
+        self.posg.clear()?;
+        self.ospg.clear()?;
+        self.graphs.clear()?;
+        self.id2str.clear()?;
+        Ok(())
+    }
 }
 
 /// Allows inserting and deleting quads during an ACID transaction with the [`SledStore`].
@@ -854,6 +979,7 @@ pub struct SledTransaction<'a> {
     dspo: &'a TransactionalTree,
     dpos: &'a TransactionalTree,
     dosp: &'a TransactionalTree,
+    graphs: &'a TransactionalTree,
 }
 
 impl SledTransaction<'_> {
@@ -1057,6 +1183,41 @@ impl<'a> WritableEncodedStore for &'a SledTransaction<'a> {
         }
 
         Ok(())
+    }
+
+    fn insert_encoded_named_graph(
+        &mut self,
+        graph_name: EncodedTerm,
+    ) -> Result<(), SledUnabortableTransactionError> {
+        self.graphs.insert(encode_term(graph_name), &[])?;
+        Ok(())
+    }
+
+    fn clear_encoded_graph(
+        &mut self,
+        _: EncodedTerm,
+    ) -> Result<(), SledUnabortableTransactionError> {
+        Err(SledUnabortableTransactionError::Storage(io::Error::new(
+            io::ErrorKind::Other,
+            "CLEAR is not implemented in Sled transactions",
+        )))
+    }
+
+    fn remove_encoded_named_graph(
+        &mut self,
+        _: EncodedTerm,
+    ) -> Result<(), SledUnabortableTransactionError> {
+        Err(SledUnabortableTransactionError::Storage(io::Error::new(
+            io::ErrorKind::Other,
+            "DROP is not implemented in Sled transactions",
+        )))
+    }
+
+    fn clear(&mut self) -> Result<(), SledUnabortableTransactionError> {
+        Err(SledUnabortableTransactionError::Storage(io::Error::new(
+            io::ErrorKind::Other,
+            "CLEAR ALL is not implemented in Sled transactions",
+        )))
     }
 }
 
@@ -1263,6 +1424,21 @@ impl Iterator for DecodingQuadIterator {
     }
 }
 
+pub(crate) struct DecodingGraphIterator {
+    iter: Iter,
+}
+
+impl Iterator for DecodingGraphIterator {
+    type Item = Result<EncodedTerm, io::Error>;
+
+    fn next(&mut self) -> Option<Result<EncodedTerm, io::Error>> {
+        Some(match self.iter.next()? {
+            Ok((encoded, _)) => decode_term(&encoded),
+            Err(error) => Err(error.into()),
+        })
+    }
+}
+
 /// An iterator returning the quads contained in a [`SledStore`].
 pub struct SledQuadIter {
     inner: QuadIterInner,
@@ -1289,6 +1465,28 @@ impl Iterator for SledQuadIter {
             QuadIterInner::Error(iter) => iter.next().map(Err),
             QuadIterInner::Empty => None,
         }
+    }
+}
+
+/// An iterator returning the graph names contained in a [`SledStore`].
+pub struct SledGraphNameIter {
+    iter: DecodingGraphIterator,
+    store: SledStore,
+}
+
+impl Iterator for SledGraphNameIter {
+    type Item = Result<NamedOrBlankNode, io::Error>;
+
+    fn next(&mut self) -> Option<Result<NamedOrBlankNode, io::Error>> {
+        Some(
+            self.iter
+                .next()?
+                .and_then(|graph_name| Ok(self.store.decode_named_or_blank_node(graph_name)?)),
+        )
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
     }
 }
 

@@ -455,6 +455,102 @@ impl MemoryStore {
         dump_dataset(self.iter().map(Ok), writer, format)
     }
 
+    /// Returns all the store named graphs
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::MemoryStore;
+    /// use oxigraph::model::{NamedNode, Quad, NamedOrBlankNode};
+    ///
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let store = MemoryStore::new();
+    /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone()));
+    /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), None));     
+    /// assert_eq!(vec![NamedOrBlankNode::from(ex)], store.named_graphs().collect::<Vec<_>>());
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn named_graphs(&self) -> MemoryGraphNameIter {
+        MemoryGraphNameIter {
+            iter: self.encoded_named_graphs(),
+            store: self.clone(),
+        }
+    }
+
+    /// Checks if the store contains a given graph
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::MemoryStore;
+    /// use oxigraph::model::{NamedNode, Quad};
+    ///
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let store = MemoryStore::new();
+    /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone()));
+    /// assert!(store.contains_named_graph(&ex));
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn contains_named_graph<'a>(&self, graph_name: impl Into<NamedOrBlankNodeRef<'a>>) -> bool {
+        if let Some(graph_name) = self
+            .get_encoded_named_or_blank_node(graph_name.into())
+            .unwrap_infallible()
+        {
+            self.contains_encoded_named_graph(graph_name)
+                .unwrap_infallible()
+        } else {
+            false
+        }
+    }
+
+    /// Inserts a graph into this store
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::MemoryStore;
+    /// use oxigraph::model::NamedNode;
+    ///
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let store = MemoryStore::new();
+    /// store.insert_named_graph(ex.clone());
+    /// assert_eq!(store.named_graphs().count(), 1);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn insert_named_graph(&self, graph_name: impl Into<NamedOrBlankNode>) {
+        let mut this = self;
+        let graph_name = this
+            .encode_named_or_blank_node(graph_name.into().as_ref())
+            .unwrap_infallible();
+        this.insert_encoded_named_graph(graph_name)
+            .unwrap_infallible()
+    }
+
+    /// Clears a graph from this store.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::MemoryStore;
+    /// use oxigraph::model::{NamedNode, Quad};
+    ///
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone());
+    /// let store = MemoryStore::new();
+    /// store.insert(quad.clone());
+    /// assert_eq!(1, store.len());
+    ///
+    /// store.clear_graph(&ex);
+    /// assert_eq!(0, store.len());
+    /// assert_eq!(1, store.named_graphs().count());
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn clear_graph<'a>(&self, graph_name: impl Into<GraphNameRef<'a>>) {
+        if let Some(graph_name) = self
+            .get_encoded_graph_name(graph_name.into())
+            .unwrap_infallible()
+        {
+            let mut this = self;
+            this.clear_encoded_graph(graph_name).unwrap_infallible()
+        }
+    }
+
     /// Removes a graph from this store.
     ///
     /// Usage example:
@@ -465,22 +561,22 @@ impl MemoryStore {
     /// let ex = NamedNode::new("http://example.com")?;
     /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone());
     /// let store = MemoryStore::new();
-    /// store.insert(quad.clone());    
+    /// store.insert(quad.clone());
     /// assert_eq!(1, store.len());
     ///
-    /// store.drop_graph(&ex);
+    /// store.remove_named_graph(&ex);
     /// assert_eq!(0, store.len());
+    /// assert_eq!(0, store.named_graphs().count());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn drop_graph<'a>(&self, graph_name: impl Into<GraphNameRef<'a>>) {
+    pub fn remove_named_graph<'a>(&self, graph_name: impl Into<NamedOrBlankNodeRef<'a>>) {
         if let Some(graph_name) = self
-            .get_encoded_graph_name(graph_name.into())
+            .get_encoded_named_or_blank_node(graph_name.into())
             .unwrap_infallible()
         {
-            for quad in self.encoded_quads_for_pattern_inner(None, None, None, Some(graph_name)) {
-                let mut this = self;
-                this.remove_encoded(&quad).unwrap_infallible();
-            }
+            let mut this = self;
+            this.remove_encoded_named_graph(graph_name)
+                .unwrap_infallible()
         }
     }
 
@@ -502,7 +598,7 @@ impl MemoryStore {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn clear(&self) {
-        *self.indexes_mut() = MemoryStoreIndexes::default();
+        self.indexes_mut().clear().unwrap_infallible()
     }
 
     #[allow(clippy::expect_used)]
@@ -891,6 +987,7 @@ impl<'a> StrContainer for &'a MemoryStore {
 
 impl<'a> ReadableEncodedStore for MemoryStore {
     type QuadsIter = EncodedQuadsIter;
+    type GraphsIter = EncodedGraphsIter;
 
     fn encoded_quads_for_pattern(
         &self,
@@ -905,6 +1002,22 @@ impl<'a> ReadableEncodedStore for MemoryStore {
                 .into_iter(),
         }
     }
+
+    fn encoded_named_graphs(&self) -> Self::GraphsIter {
+        EncodedGraphsIter {
+            iter: self
+                .indexes()
+                .gosp
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+                .into_iter(),
+        }
+    }
+
+    fn contains_encoded_named_graph(&self, graph_name: EncodedTerm) -> Result<bool, Infallible> {
+        Ok(self.indexes().gspo.contains_key(&graph_name))
+    }
 }
 
 impl<'a> WritableEncodedStore for &'a MemoryStore {
@@ -914,6 +1027,22 @@ impl<'a> WritableEncodedStore for &'a MemoryStore {
 
     fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Infallible> {
         self.indexes_mut().remove_encoded(quad)
+    }
+
+    fn insert_encoded_named_graph(&mut self, graph_name: EncodedTerm) -> Result<(), Infallible> {
+        self.indexes_mut().insert_encoded_named_graph(graph_name)
+    }
+
+    fn clear_encoded_graph(&mut self, graph_name: EncodedTerm) -> Result<(), Infallible> {
+        self.indexes_mut().clear_encoded_graph(graph_name)
+    }
+
+    fn remove_encoded_named_graph(&mut self, graph_name: EncodedTerm) -> Result<(), Infallible> {
+        self.indexes_mut().remove_encoded_named_graph(graph_name)
+    }
+
+    fn clear(&mut self) -> Result<(), Self::Error> {
+        self.indexes_mut().clear()
     }
 }
 
@@ -1011,27 +1140,15 @@ impl WritableEncodedStore for MemoryStoreIndexes {
                 &quad.predicate,
             );
         } else {
-            remove_from_quad_map(
-                &mut self.gspo,
-                &quad.graph_name,
-                &quad.subject,
-                &quad.predicate,
-                &quad.object,
-            );
-            remove_from_quad_map(
-                &mut self.gpos,
-                &quad.graph_name,
-                &quad.predicate,
-                &quad.object,
-                &quad.subject,
-            );
-            remove_from_quad_map(
-                &mut self.gosp,
-                &quad.graph_name,
-                &quad.object,
-                &quad.subject,
-                &quad.predicate,
-            );
+            if let Some(spo) = self.gspo.get_mut(&quad.graph_name) {
+                remove_from_triple_map(spo, &quad.subject, &quad.predicate, &quad.object);
+            }
+            if let Some(pos) = self.gpos.get_mut(&quad.graph_name) {
+                remove_from_triple_map(pos, &quad.predicate, &quad.object, &quad.subject);
+            }
+            if let Some(osp) = self.gosp.get_mut(&quad.graph_name) {
+                remove_from_triple_map(osp, &quad.object, &quad.subject, &quad.predicate);
+            }
             remove_from_quad_map(
                 &mut self.spog,
                 &quad.subject,
@@ -1054,6 +1171,66 @@ impl WritableEncodedStore for MemoryStoreIndexes {
                 &quad.graph_name,
             );
         }
+        Ok(())
+    }
+
+    fn insert_encoded_named_graph(&mut self, graph_name: EncodedTerm) -> Result<(), Infallible> {
+        self.gspo.entry(graph_name).or_default();
+        self.gpos.entry(graph_name).or_default();
+        self.gosp.entry(graph_name).or_default();
+        Ok(())
+    }
+
+    fn clear_encoded_graph(&mut self, graph_name: EncodedTerm) -> Result<(), Infallible> {
+        if graph_name.is_default_graph() {
+            self.default_spo.clear();
+            self.default_pos.clear();
+            self.default_osp.clear();
+        } else {
+            if let Some(spo) = self.gspo.get(&graph_name) {
+                for (s, po) in spo {
+                    for (p, os) in po {
+                        for o in os {
+                            remove_from_quad_map(&mut self.spog, s, p, o, &graph_name);
+                            remove_from_quad_map(&mut self.posg, p, o, s, &graph_name);
+                            remove_from_quad_map(&mut self.ospg, o, s, p, &graph_name);
+                        }
+                    }
+                }
+            }
+            if let Some(spo) = self.gspo.get_mut(&graph_name) {
+                spo.clear();
+            }
+            if let Some(pos) = self.gpos.get_mut(&graph_name) {
+                pos.clear();
+            }
+            if let Some(osp) = self.gosp.get_mut(&graph_name) {
+                osp.clear();
+            }
+        }
+        Ok(())
+    }
+
+    fn remove_encoded_named_graph(&mut self, graph_name: EncodedTerm) -> Result<(), Infallible> {
+        if let Some(spo) = self.gspo.get(&graph_name) {
+            for (s, po) in spo {
+                for (p, os) in po {
+                    for o in os {
+                        remove_from_quad_map(&mut self.spog, s, p, o, &graph_name);
+                        remove_from_quad_map(&mut self.posg, p, o, s, &graph_name);
+                        remove_from_quad_map(&mut self.ospg, o, s, p, &graph_name);
+                    }
+                }
+            }
+        }
+        self.gspo.remove(&graph_name);
+        self.gpos.remove(&graph_name);
+        self.gosp.remove(&graph_name);
+        Ok(())
+    }
+
+    fn clear(&mut self) -> Result<(), Infallible> {
+        *self = MemoryStoreIndexes::default();
         Ok(())
     }
 }
@@ -1337,6 +1514,29 @@ impl Iterator for EncodedQuadsIter {
     }
 }
 
+pub(crate) struct EncodedGraphsIter {
+    iter: IntoIter<EncodedTerm>,
+}
+
+impl Iterator for EncodedGraphsIter {
+    type Item = Result<EncodedTerm, Infallible>;
+
+    fn next(&mut self) -> Option<Result<EncodedTerm, Infallible>> {
+        self.iter.next().map(Ok)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+
+    fn fold<Acc, G>(self, init: Acc, mut g: G) -> Acc
+    where
+        G: FnMut(Acc, Self::Item) -> Acc,
+    {
+        self.iter.fold(init, |acc, elt| g(acc, Ok(elt)))
+    }
+}
+
 /// An iterator returning the quads contained in a [`MemoryStore`].
 pub struct MemoryQuadIter {
     iter: IntoIter<EncodedQuad>,
@@ -1348,6 +1548,28 @@ impl Iterator for MemoryQuadIter {
 
     fn next(&mut self) -> Option<Quad> {
         Some(self.store.decode_quad(&self.iter.next()?).unwrap())
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+}
+
+/// An iterator returning the graph names contained in a [`MemoryStore`].
+pub struct MemoryGraphNameIter {
+    iter: EncodedGraphsIter,
+    store: MemoryStore,
+}
+
+impl Iterator for MemoryGraphNameIter {
+    type Item = NamedOrBlankNode;
+
+    fn next(&mut self) -> Option<NamedOrBlankNode> {
+        Some(
+            self.store
+                .decode_named_or_blank_node(self.iter.next()?.unwrap_infallible())
+                .unwrap(),
+        )
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {

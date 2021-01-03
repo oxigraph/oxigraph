@@ -6,7 +6,7 @@ use crate::store::numeric_encoder::{
 use crate::store::ReadableEncodedStore;
 use lasso::{Rodeo, Spur};
 use std::cell::RefCell;
-use std::iter::empty;
+use std::iter::{empty, once, Once};
 
 pub(crate) struct DatasetView<S: ReadableEncodedStore> {
     store: S,
@@ -182,6 +182,7 @@ impl<S: ReadableEncodedStore> StrLookup for DatasetView<S> {
 impl<S: ReadableEncodedStore> ReadableEncodedStore for DatasetView<S> {
     type QuadsIter =
         Box<dyn Iterator<Item = Result<EncodedQuad<DatasetStrId<S::StrId>>, EvaluationError>>>;
+    type GraphsIter = Once<Result<EncodedTerm<DatasetStrId<S::StrId>>, EvaluationError>>;
 
     fn encoded_quads_for_pattern(
         &self,
@@ -198,6 +199,21 @@ impl<S: ReadableEncodedStore> ReadableEncodedStore for DatasetView<S> {
         } else {
             Box::new(empty())
         }
+    }
+
+    fn encoded_named_graphs(&self) -> Self::GraphsIter {
+        once(Err(EvaluationError::msg(
+            "Graphs lookup is not implemented by DatasetView",
+        )))
+    }
+
+    fn contains_encoded_named_graph(
+        &self,
+        _: EncodedTerm<Self::StrId>,
+    ) -> Result<bool, EvaluationError> {
+        Err(EvaluationError::msg(
+            "Graphs lookup is not implemented by DatasetView",
+        ))
     }
 }
 

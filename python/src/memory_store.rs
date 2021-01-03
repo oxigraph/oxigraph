@@ -3,6 +3,7 @@ use crate::model::*;
 use crate::sparql::*;
 use crate::store_utils::*;
 use oxigraph::io::{DatasetFormat, GraphFormat};
+use oxigraph::model::GraphNameRef;
 use oxigraph::store::memory::*;
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::{PyNotImplementedError, PyValueError};
@@ -333,6 +334,63 @@ impl PyMemoryStore {
             )))
         }
     }
+
+    /// Returns an iterator over all the store named graphs
+    ///
+    /// >>> store = MemoryStore()
+    /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
+    /// >>> list(store.named_graphs())
+    /// [<NamedNode value=http://example.com/g>]
+    #[text_signature = "($self)"]
+    fn named_graphs(&self) -> GraphNameIter {
+        GraphNameIter {
+            inner: self.inner.named_graphs(),
+        }
+    }
+
+    /// Adds a named graph to the store
+    ///
+    /// :param graph_name: the quad to add
+    /// :type graph_name: NamedNode or BlankNode
+    ///
+    /// >>> store = MemoryStore()
+    /// >>> store.add_graph(NamedNode('http://example.com/g'))
+    /// >>> list(store.named_graphs())
+    /// [<NamedNode value=http://example.com/g>]
+    #[text_signature = "($self, graph_name)"]
+    fn add_graph(&self, graph_name: PyGraphName) {
+        match graph_name {
+            PyGraphName::DefaultGraph(_) => (),
+            PyGraphName::NamedNode(graph_name) => self.inner.insert_named_graph(graph_name),
+            PyGraphName::BlankNode(graph_name) => self.inner.insert_named_graph(graph_name),
+        }
+    }
+
+    /// Removes a graph from the store
+    ///
+    /// The default graph will not be remove but just cleared.
+    ///
+    /// :param graph_name: the quad to add
+    /// :type graph_name: NamedNode or BlankNode or DefaultGraph
+    ///
+    /// >>> store = MemoryStore()
+    /// >>> quad = Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))
+    /// >>> store.remove_graph(NamedNode('http://example.com/g'))
+    /// >>> list(store)
+    /// []
+    #[text_signature = "($self, graph_name)"]
+    fn remove_graph(&self, graph_name: &PyAny) -> PyResult<()> {
+        match PyGraphNameRef::try_from(graph_name)? {
+            PyGraphNameRef::DefaultGraph => self.inner.clear_graph(GraphNameRef::DefaultGraph),
+            PyGraphNameRef::NamedNode(graph_name) => self
+                .inner
+                .remove_named_graph(&PyNamedOrBlankNodeRef::NamedNode(graph_name)),
+            PyGraphNameRef::BlankNode(graph_name) => self
+                .inner
+                .remove_named_graph(&PyNamedOrBlankNodeRef::BlankNode(graph_name)),
+        }
+        Ok(())
+    }
 }
 
 #[pyproto]
@@ -389,6 +447,22 @@ impl PyIterProtocol for QuadIter {
     }
 
     fn __next__(mut slf: PyRefMut<Self>) -> Option<PyQuad> {
+        slf.inner.next().map(|q| q.into())
+    }
+}
+
+#[pyclass(unsendable, module = "oxigraph")]
+pub struct GraphNameIter {
+    inner: MemoryGraphNameIter,
+}
+
+#[pyproto]
+impl PyIterProtocol for GraphNameIter {
+    fn __iter__(slf: PyRefMut<Self>) -> Py<Self> {
+        slf.into()
+    }
+
+    fn __next__(mut slf: PyRefMut<Self>) -> Option<PyNamedOrBlankNode> {
         slf.inner.next().map(|q| q.into())
     }
 }

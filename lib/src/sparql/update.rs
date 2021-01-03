@@ -81,9 +81,9 @@ where
                     Ok(())
                 }
             }
-            GraphUpdateOperation::Clear { graph, .. } => self.eval_clear(graph),
-            GraphUpdateOperation::Create { .. } => Ok(()),
-            GraphUpdateOperation::Drop { graph, .. } => self.eval_clear(graph),
+            GraphUpdateOperation::Clear { graph, silent } => self.eval_clear(graph, *silent),
+            GraphUpdateOperation::Create { graph, silent } => self.eval_create(graph, *silent),
+            GraphUpdateOperation::Drop { graph, silent } => self.eval_drop(graph, *silent),
         }
     }
 
@@ -227,55 +227,129 @@ where
         Ok(())
     }
 
-    fn eval_clear(&mut self, graph: &GraphTarget) -> Result<(), EvaluationError> {
+    fn eval_create(&mut self, graph: &NamedNode, silent: bool) -> Result<(), EvaluationError> {
+        let encoded_graph_name = self
+            .write
+            .encode_named_node(graph.as_ref())
+            .map_err(to_eval_error)?;
+        if self
+            .read
+            .contains_encoded_named_graph(encoded_graph_name)
+            .map_err(to_eval_error)?
+        {
+            if silent {
+                Ok(())
+            } else {
+                Err(EvaluationError::msg(format!(
+                    "The graph {} already exists",
+                    graph
+                )))
+            }
+        } else {
+            self.write
+                .insert_encoded_named_graph(encoded_graph_name)
+                .map_err(to_eval_error)
+        }
+    }
+
+    fn eval_clear(&mut self, graph: &GraphTarget, silent: bool) -> Result<(), EvaluationError> {
         match graph {
-            GraphTarget::NamedNode(graph) => {
-                if let Some(graph) = self
+            GraphTarget::NamedNode(graph_name) => {
+                if let Some(graph_name) = self
                     .read
-                    .get_encoded_named_node(graph.into())
+                    .get_encoded_named_node(graph_name.as_ref())
                     .map_err(to_eval_error)?
                 {
-                    for quad in self
+                    if self
                         .read
-                        .encoded_quads_for_pattern(None, None, None, Some(graph))
+                        .contains_encoded_named_graph(graph_name)
+                        .map_err(to_eval_error)?
                     {
-                        self.write
-                            .remove_encoded(&quad.map_err(to_eval_error)?)
-                            .map_err(to_eval_error)?;
+                        return self
+                            .write
+                            .clear_encoded_graph(graph_name)
+                            .map_err(to_eval_error);
                     }
+                }
+                if silent {
+                    Ok(())
                 } else {
-                    //we do not track created graph so it's fine
+                    Err(EvaluationError::msg(format!(
+                        "The graph {} does not exists",
+                        graph
+                    )))
                 }
             }
-            GraphTarget::DefaultGraph => {
-                for quad in self.read.encoded_quads_for_pattern(
-                    None,
-                    None,
-                    None,
-                    Some(EncodedTerm::DefaultGraph),
-                ) {
+            GraphTarget::DefaultGraph => self
+                .write
+                .clear_encoded_graph(EncodedTerm::DefaultGraph)
+                .map_err(to_eval_error),
+            GraphTarget::NamedGraphs => {
+                // TODO: optimize?
+                for graph in self.read.encoded_named_graphs() {
                     self.write
-                        .remove_encoded(&quad.map_err(to_eval_error)?)
+                        .clear_encoded_graph(graph.map_err(to_eval_error)?)
                         .map_err(to_eval_error)?;
                 }
-            }
-            GraphTarget::NamedGraphs => {
-                for quad in self.read.encoded_quads_for_pattern(None, None, None, None) {
-                    let quad = quad.map_err(to_eval_error)?;
-                    if !quad.graph_name.is_default_graph() {
-                        self.write.remove_encoded(&quad).map_err(to_eval_error)?;
-                    }
-                }
+                Ok(())
             }
             GraphTarget::AllGraphs => {
-                for quad in self.read.encoded_quads_for_pattern(None, None, None, None) {
+                // TODO: optimize?
+                for graph in self.read.encoded_named_graphs() {
                     self.write
-                        .remove_encoded(&quad.map_err(to_eval_error)?)
+                        .clear_encoded_graph(graph.map_err(to_eval_error)?)
                         .map_err(to_eval_error)?;
                 }
+                self.write
+                    .clear_encoded_graph(EncodedTerm::DefaultGraph)
+                    .map_err(to_eval_error)
             }
-        };
-        Ok(())
+        }
+    }
+
+    fn eval_drop(&mut self, graph: &GraphTarget, silent: bool) -> Result<(), EvaluationError> {
+        match graph {
+            GraphTarget::NamedNode(graph_name) => {
+                if let Some(graph_name) = self
+                    .read
+                    .get_encoded_named_node(graph_name.as_ref())
+                    .map_err(to_eval_error)?
+                {
+                    if self
+                        .read
+                        .contains_encoded_named_graph(graph_name)
+                        .map_err(to_eval_error)?
+                    {
+                        return self
+                            .write
+                            .remove_encoded_named_graph(graph_name)
+                            .map_err(to_eval_error);
+                    }
+                }
+                if silent {
+                    Ok(())
+                } else {
+                    Err(EvaluationError::msg(format!(
+                        "The graph {} does not exists",
+                        graph
+                    )))
+                }
+            }
+            GraphTarget::DefaultGraph => self
+                .write
+                .clear_encoded_graph(EncodedTerm::DefaultGraph)
+                .map_err(to_eval_error),
+            GraphTarget::NamedGraphs => {
+                // TODO: optimize?
+                for graph in self.read.encoded_named_graphs() {
+                    self.write
+                        .remove_encoded_named_graph(graph.map_err(to_eval_error)?)
+                        .map_err(to_eval_error)?;
+                }
+                Ok(())
+            }
+            GraphTarget::AllGraphs => self.write.clear().map_err(to_eval_error),
+        }
     }
 
     fn encode_quad_for_insertion(

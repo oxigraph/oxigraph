@@ -244,6 +244,20 @@ class TestAbstractStore(unittest.TestCase, ABC):
             store.add(Quad(triple.object, triple.predicate, triple.subject))
         self.assertEqual(len(store), 4)
 
+    def test_add_graph(self):
+        store = self.store()
+        store.add_graph(graph)
+        self.assertEqual(list(store.named_graphs()), [graph])
+
+    def test_remove_graph(self):
+        store = self.store()
+        store.add(Quad(foo, bar, baz, graph))
+        store.add_graph(NamedNode("http://graph2"))
+        store.remove_graph(graph)
+        store.remove_graph(NamedNode("http://graph2"))
+        self.assertEqual(list(store.named_graphs()), [])
+        self.assertEqual(list(store), [])
+
 
 class TestMemoryStore(TestAbstractStore):
     def store(self):
