@@ -419,8 +419,26 @@ impl From<PyNamedOrBlankNode> for NamedOrBlankNode {
     }
 }
 
+impl From<NamedOrBlankNode> for PyNamedOrBlankNode {
+    fn from(node: NamedOrBlankNode) -> Self {
+        match node {
+            NamedOrBlankNode::NamedNode(node) => PyNamedOrBlankNode::NamedNode(node.into()),
+            NamedOrBlankNode::BlankNode(node) => PyNamedOrBlankNode::BlankNode(node.into()),
+        }
+    }
+}
+
+impl IntoPy<PyObject> for PyNamedOrBlankNode {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        match self {
+            PyNamedOrBlankNode::NamedNode(node) => node.into_py(py),
+            PyNamedOrBlankNode::BlankNode(node) => node.into_py(py),
+        }
+    }
+}
+
 #[derive(FromPyObject)]
-enum PyTerm {
+pub enum PyTerm {
     NamedNode(PyNamedNode),
     BlankNode(PyBlankNode),
     Literal(PyLiteral),
@@ -432,6 +450,26 @@ impl From<PyTerm> for Term {
             PyTerm::NamedNode(node) => node.into(),
             PyTerm::BlankNode(node) => node.into(),
             PyTerm::Literal(literal) => literal.into(),
+        }
+    }
+}
+
+impl From<Term> for PyTerm {
+    fn from(term: Term) -> Self {
+        match term {
+            Term::NamedNode(node) => PyTerm::NamedNode(node.into()),
+            Term::BlankNode(node) => PyTerm::BlankNode(node.into()),
+            Term::Literal(literal) => PyTerm::Literal(literal.into()),
+        }
+    }
+}
+
+impl IntoPy<PyObject> for PyTerm {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        match self {
+            PyTerm::NamedNode(node) => node.into_py(py),
+            PyTerm::BlankNode(node) => node.into_py(py),
+            PyTerm::Literal(literal) => literal.into_py(py),
         }
     }
 }
@@ -491,8 +529,8 @@ impl PyTriple {
     /// >>> Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')).subject
     /// <NamedNode value=http://example.com>
     #[getter]
-    fn subject(&self, py: Python<'_>) -> PyObject {
-        named_or_blank_node_to_python(py, self.inner.subject.clone())
+    fn subject(&self) -> PyNamedOrBlankNode {
+        self.inner.subject.clone().into()
     }
 
     /// :return: the triple predicate
@@ -511,8 +549,8 @@ impl PyTriple {
     /// >>> Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')).object
     /// <Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>>
     #[getter]
-    fn object(&self, py: Python<'_>) -> PyObject {
-        term_to_python(py, self.inner.object.clone())
+    fn object(&self) -> PyTerm {
+        self.inner.object.clone().into()
     }
 }
 
@@ -549,15 +587,11 @@ impl PyMappingProtocol<'p> for PyTriple {
         3
     }
 
-    fn __getitem__(&self, input: usize) -> PyResult<PyObject> {
-        let gil = Python::acquire_gil();
+    fn __getitem__(&self, input: usize) -> PyResult<PyTerm> {
         match input {
-            0 => Ok(named_or_blank_node_to_python(
-                gil.python(),
-                self.inner.subject.clone(),
-            )),
-            1 => Ok(PyNamedNode::from(self.inner.predicate.clone()).into_py(gil.python())),
-            2 => Ok(term_to_python(gil.python(), self.inner.object.clone())),
+            0 => Ok(Term::from(self.inner.subject.clone()).into()),
+            1 => Ok(Term::from(self.inner.predicate.clone()).into()),
+            2 => Ok(self.inner.object.clone().into()),
             _ => Err(PyIndexError::new_err("A triple has only 3 elements")),
         }
     }
@@ -593,6 +627,27 @@ impl From<PyGraphName> for GraphName {
         }
     }
 }
+
+impl From<GraphName> for PyGraphName {
+    fn from(graph_name: GraphName) -> Self {
+        match graph_name {
+            GraphName::NamedNode(node) => PyGraphName::NamedNode(node.into()),
+            GraphName::BlankNode(node) => PyGraphName::BlankNode(node.into()),
+            GraphName::DefaultGraph => PyGraphName::DefaultGraph(PyDefaultGraph::new()),
+        }
+    }
+}
+
+impl IntoPy<PyObject> for PyGraphName {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        match self {
+            PyGraphName::NamedNode(node) => node.into_py(py),
+            PyGraphName::BlankNode(node) => node.into_py(py),
+            PyGraphName::DefaultGraph(node) => node.into_py(py),
+        }
+    }
+}
+
 /// An RDF `triple <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple>`_
 /// in a `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_
 ///
@@ -665,8 +720,8 @@ impl PyQuad {
     /// >>> Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')).subject
     /// <NamedNode value=http://example.com>
     #[getter]
-    fn subject(&self, py: Python<'_>) -> PyObject {
-        named_or_blank_node_to_python(py, self.inner.subject.clone())
+    fn subject(&self) -> PyNamedOrBlankNode {
+        self.inner.subject.clone().into()
     }
 
     /// :return: the quad predicate
@@ -685,8 +740,8 @@ impl PyQuad {
     /// >>> Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')).object
     /// <Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>>
     #[getter]
-    fn object(&self, py: Python<'_>) -> PyObject {
-        term_to_python(py, self.inner.object.clone())
+    fn object(&self) -> PyTerm {
+        self.inner.object.clone().into()
     }
 
     /// :return: the quad graph name
@@ -695,8 +750,8 @@ impl PyQuad {
     /// >>> Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')).graph_name
     /// <NamedNode value=http://example.com/g>
     #[getter]
-    fn graph_name(&self, py: Python<'_>) -> PyObject {
-        graph_name_to_python(py, self.inner.graph_name.clone())
+    fn graph_name(&self) -> PyGraphName {
+        self.inner.graph_name.clone().into()
     }
 
     /// :return: the quad underlying triple
@@ -747,17 +802,12 @@ impl PyMappingProtocol<'p> for PyQuad {
 
     fn __getitem__(&self, input: usize) -> PyResult<PyObject> {
         let gil = Python::acquire_gil();
+        let py = gil.python();
         match input {
-            0 => Ok(named_or_blank_node_to_python(
-                gil.python(),
-                self.inner.subject.clone(),
-            )),
-            1 => Ok(PyNamedNode::from(self.inner.predicate.clone()).into_py(gil.python())),
-            2 => Ok(term_to_python(gil.python(), self.inner.object.clone())),
-            3 => Ok(graph_name_to_python(
-                gil.python(),
-                self.inner.graph_name.clone(),
-            )),
+            0 => Ok(PyNamedOrBlankNode::from(self.inner.subject.clone()).into_py(py)),
+            1 => Ok(PyNamedNode::from(self.inner.predicate.clone()).into_py(py)),
+            2 => Ok(PyTerm::from(self.inner.object.clone()).into_py(py)),
+            3 => Ok(PyGraphName::from(self.inner.graph_name.clone()).into_py(py)),
             _ => Err(PyIndexError::new_err("A quad has only 4 elements")),
         }
     }
@@ -910,13 +960,6 @@ impl<'a> TryFrom<&'a PyAny> for PyNamedOrBlankNodeRef<'a> {
     }
 }
 
-pub fn named_or_blank_node_to_python(py: Python<'_>, node: NamedOrBlankNode) -> PyObject {
-    match node {
-        NamedOrBlankNode::NamedNode(node) => PyNamedNode::from(node).into_py(py),
-        NamedOrBlankNode::BlankNode(node) => PyBlankNode::from(node).into_py(py),
-    }
-}
-
 pub enum PyTermRef<'a> {
     NamedNode(PyRef<'a, PyNamedNode>),
     BlankNode(PyRef<'a, PyBlankNode>),
@@ -958,14 +1001,6 @@ impl<'a> TryFrom<&'a PyAny> for PyTermRef<'a> {
     }
 }
 
-pub fn term_to_python(py: Python<'_>, term: Term) -> PyObject {
-    match term {
-        Term::NamedNode(node) => PyNamedNode::from(node).into_py(py),
-        Term::BlankNode(node) => PyBlankNode::from(node).into_py(py),
-        Term::Literal(literal) => PyLiteral::from(literal).into_py(py),
-    }
-}
-
 pub enum PyGraphNameRef<'a> {
     NamedNode(PyRef<'a, PyNamedNode>),
     BlankNode(PyRef<'a, PyBlankNode>),
@@ -1004,14 +1039,6 @@ impl<'a> TryFrom<&'a PyAny> for PyGraphNameRef<'a> {
                 value.get_type().name()?,
             )))
         }
-    }
-}
-
-pub fn graph_name_to_python(py: Python<'_>, name: GraphName) -> PyObject {
-    match name {
-        GraphName::NamedNode(node) => PyNamedNode::from(node).into_py(py),
-        GraphName::BlankNode(node) => PyBlankNode::from(node).into_py(py),
-        GraphName::DefaultGraph => PyDefaultGraph::new().into_py(py),
     }
 }
 
@@ -1104,8 +1131,8 @@ impl PyIterProtocol for TripleComponentsIter {
         slf.into()
     }
 
-    fn __next__(mut slf: PyRefMut<Self>) -> Option<PyObject> {
-        slf.inner.next().map(move |t| term_to_python(slf.py(), t))
+    fn __next__(mut slf: PyRefMut<Self>) -> Option<PyTerm> {
+        slf.inner.next().map(PyTerm::from)
     }
 }
 
@@ -1123,7 +1150,7 @@ impl PyIterProtocol for QuadComponentsIter {
     fn __next__(mut slf: PyRefMut<Self>) -> Option<PyObject> {
         slf.inner.next().map(move |t| {
             if let Some(t) = t {
-                term_to_python(slf.py(), t)
+                PyTerm::from(t).into_py(slf.py())
             } else {
                 PyDefaultGraph {}.into_py(slf.py())
             }

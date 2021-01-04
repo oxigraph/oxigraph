@@ -7,7 +7,7 @@ use pyo3::prelude::{
     pyclass, pymethods, pyproto, FromPyObject, IntoPy, Py, PyAny, PyCell, PyErr, PyObject, PyRef,
     PyRefMut, PyResult, Python,
 };
-use pyo3::{PyIterProtocol, PyMappingProtocol, PyNativeType, PyObjectProtocol};
+use pyo3::{PyIterProtocol, PyMappingProtocol, PyObjectProtocol};
 use std::vec::IntoIter;
 
 pub fn parse_query(
@@ -112,23 +112,17 @@ impl PyMappingProtocol for PyQuerySolution {
         self.inner.len()
     }
 
-    fn __getitem__(&self, input: &PyAny) -> PyResult<Option<PyObject>> {
+    fn __getitem__(&self, input: &PyAny) -> PyResult<Option<PyTerm>> {
         if let Ok(key) = usize::extract(input) {
-            Ok(self
-                .inner
-                .get(key)
-                .map(|term| term_to_python(input.py(), term.clone())))
+            Ok(self.inner.get(key).map(|term| PyTerm::from(term.clone())))
         } else if let Ok(key) = <&str>::extract(input) {
-            Ok(self
-                .inner
-                .get(key)
-                .map(|term| term_to_python(input.py(), term.clone())))
+            Ok(self.inner.get(key).map(|term| PyTerm::from(term.clone())))
         } else if let Ok(key) = input.downcast::<PyCell<PyVariable>>() {
             let key = &*key.borrow();
             Ok(self
                 .inner
                 .get(<&Variable>::from(key))
-                .map(|term| term_to_python(input.py(), term.clone())))
+                .map(|term| PyTerm::from(term.clone())))
         } else {
             Err(PyTypeError::new_err(format!(
                 "{} is not an integer of a string",
@@ -163,10 +157,8 @@ impl PyIterProtocol for SolutionValueIter {
         slf.into()
     }
 
-    fn __next__(mut slf: PyRefMut<Self>) -> Option<Option<PyObject>> {
-        slf.inner
-            .next()
-            .map(|v| v.map(|v| term_to_python(slf.py(), v)))
+    fn __next__(mut slf: PyRefMut<Self>) -> Option<Option<PyTerm>> {
+        slf.inner.next().map(|v| v.map(PyTerm::from))
     }
 }
 
