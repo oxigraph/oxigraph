@@ -453,7 +453,7 @@ impl PyIterProtocol for PySledStore {
     }
 }
 
-#[pyclass(module = "oxigraph")]
+#[pyclass(unsendable, module = "oxigraph")]
 pub struct QuadIter {
     inner: SledQuadIter,
 }
