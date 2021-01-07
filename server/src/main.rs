@@ -33,7 +33,7 @@ use url::{form_urlencoded, Url};
 
 const MAX_SPARQL_BODY_SIZE: u64 = 1_048_576;
 const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
-const LOGO: &str = include_str!("../../logo.svg");
+const LOGO: &str = include_str!("../logo.svg");
 const SERVER: &str = concat!("Oxigraph/", env!("CARGO_PKG_VERSION"));
 
 #[derive(FromArgs)]
