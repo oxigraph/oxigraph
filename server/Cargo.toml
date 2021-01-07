@@ -3,7 +3,7 @@ name = "oxigraph_server"
 version = "0.1.1"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
-readme = "../README.md"
+readme = "README.md"
 repository = "https://github.com/oxigraph/oxigraph"
 description = """
 SPARQL server based on Oxigraph

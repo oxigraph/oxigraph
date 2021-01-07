@@ -355,6 +355,10 @@ impl PySledStore {
 
     /// Returns an iterator over all the store named graphs
     ///
+    /// :return: an iterator of the store graph names
+    /// :rtype: iter(NamedNode or BlankNode)
+    /// :raises IOError: if an I/O error happens during the named graphs lookup
+    ///
     /// >>> store = MemoryStore()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     /// >>> list(store.named_graphs())
@@ -368,8 +372,9 @@ impl PySledStore {
 
     /// Adds a named graph to the store
     ///
-    /// :param graph_name: the quad to add
+    /// :param graph_name: the name of the name graph to add
     /// :type graph_name: NamedNode or BlankNode
+    /// :raises IOError: if an I/O error happens during the named graph insertion
     ///
     /// >>> store = MemoryStore()
     /// >>> store.add_graph(NamedNode('http://example.com/g'))
@@ -393,8 +398,9 @@ impl PySledStore {
     ///
     /// The default graph will not be remove but just cleared.
     ///
-    /// :param graph_name: the quad to add
+    /// :param graph_name: the name of the name graph to remove
     /// :type graph_name: NamedNode or BlankNode or DefaultGraph
+    /// :raises IOError: if an I/O error happens during the named graph removal
     ///
     /// >>> store = MemoryStore()
     /// >>> quad = Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))

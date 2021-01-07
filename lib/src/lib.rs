@@ -1,6 +1,7 @@
-//! Oxigraph is a graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
+//! Oxigraph is a graph database library implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
 //!
 //! Its goal is to provide a compliant, safe and fast graph database.
+//! It also provides a set of utility functions for reading, writing, and processing RDF files.
 //!
 //! It currently provides three store implementations providing [SPARQL](https://www.w3.org/TR/sparql11-overview/) capability:
 //! * [`MemoryStore`](store::memory::MemoryStore): a simple in memory implementation.
@@ -12,9 +13,11 @@
 //!   Sled is much faster to build than RockDB and does not require a C++ compiler.
 //!   However, Sled is still in developpment, less tested and data load seems much slower than RocksDB.
 //!
-//! Oxigraph also provides a set of utility functions for reading, writing and processing RDF files.
+//! Oxigraph is in heavy development and SPARQL query evaluation has not been optimized yet.
 //!
 //! The disabled by default `"sophia"` feature provides [`sophia_api`](https://docs.rs/sophia_api/) traits implemention on Oxigraph terms and stores.
+//!
+//! Oxigraph also provides [a standalone HTTP server](https://crates.io/crates/oxigraph_server) based on this library.
 //!
 //! Usage example with the [`MemoryStore`](store::memory::MemoryStore):
 //!

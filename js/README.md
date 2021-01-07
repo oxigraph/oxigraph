@@ -5,7 +5,7 @@ Oxigraph for JavaScript
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
 [![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
-This package provides a JavaScript API on top of Oxigraph compiled with WebAssembly.
+This package provides a JavaScript API on top of [Oxigraph](https://crates.io/crates/oxigraph), compiled with WebAssembly.
 
 Oxigraph is a graph database written in Rust implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
 
@@ -185,7 +185,6 @@ Example of building a Turtle file from the named graph `<http://example.com/grap
 store.dump("text/turtle", store.dataFactory.namedNode("http://example.com/graph"));
 ```
 
-
 ## How to contribute
 
 The Oxigraph bindings are written in Rust using [the Rust WASM toolkit](https://rustwasm.github.io/docs.html).
@@ -193,3 +192,20 @@ The Oxigraph bindings are written in Rust using [the Rust WASM toolkit](https://
 The [The Rust Wasm Book](https://rustwasm.github.io/docs/book/) is a great tutorial to get started.
 
 To run the tests of the JS bindings written in JS run `npm test`.
+
+
+## License
+
+This project is licensed under either of
+
+* Apache License, Version 2.0, ([LICENSE-APACHE](../LICENSE-APACHE) or
+  http://www.apache.org/licenses/LICENSE-2.0)
+* MIT license ([LICENSE-MIT](../LICENSE-MIT) or
+  http://opensource.org/licenses/MIT)
+
+at your option.
+
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in Futures by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.

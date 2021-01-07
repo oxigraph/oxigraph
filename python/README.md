@@ -8,7 +8,7 @@ Pyoxigraph (Oxigraph for Python)
 [![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 Pyoxigraph is a graph database library implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
-It is a Python library written on top of [Oxigraph](https://github.com/oxigraph/oxigraph).
+It is a Python library written on top of [Oxigraph](https://crates.io/crates/oxigraph).
  
 Pyoxigraph offers two stores with [SPARQL 1.1](https://www.w3.org/TR/sparql11-overview/) capabilities.
 One of the store is in-memory, and the other one is disk based.
@@ -32,7 +32,6 @@ Pyoxigraph documentation is [available on the Oxigraph website](https://oxigraph
 To build and install the development version of pyoxigraph you need to clone this git repository
 and to run `pip install .` in the `python` directory (the one this README is in).
 
-
 ## How to contribute
 
 Pyoxigraph is written in Rust using [PyO3](https://github.com/PyO3/pyo3).
@@ -43,3 +42,19 @@ To install a development version of Oxigraph just run `maturin develop` in this 
 
 The Python bindings tests are written in Python.
 To run them use `python -m unittest` in the `tests` directory.
+
+## License
+
+This project is licensed under either of
+
+* Apache License, Version 2.0, ([LICENSE-APACHE](../LICENSE-APACHE) or
+  http://www.apache.org/licenses/LICENSE-2.0)
+* MIT license ([LICENSE-MIT](../LICENSE-MIT) or
+  http://opensource.org/licenses/MIT)
+
+at your option.
+
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in Futures by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.

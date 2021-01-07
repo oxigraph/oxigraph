@@ -17,7 +17,6 @@ use std::io::BufReader;
 /// In-memory store.
 /// It encodes a `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_ and allows to query it using SPARQL.
 ///
-///
 /// The :py:func:`str` function provides a serialization of the store in NQuads:
 ///
 /// >>> store = MemoryStore()
@@ -337,6 +336,9 @@ impl PyMemoryStore {
 
     /// Returns an iterator over all the store named graphs
     ///
+    /// :return: an iterator of the store graph names
+    /// :rtype: iter(NamedNode or BlankNode)
+    ///
     /// >>> store = MemoryStore()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     /// >>> list(store.named_graphs())
@@ -350,7 +352,7 @@ impl PyMemoryStore {
 
     /// Adds a named graph to the store
     ///
-    /// :param graph_name: the quad to add
+    /// :param graph_name: the name of the name graph to add
     /// :type graph_name: NamedNode or BlankNode
     ///
     /// >>> store = MemoryStore()
@@ -370,7 +372,7 @@ impl PyMemoryStore {
     ///
     /// The default graph will not be remove but just cleared.
     ///
-    /// :param graph_name: the quad to add
+    /// :param graph_name: the name of the name graph to remove
     /// :type graph_name: NamedNode or BlankNode or DefaultGraph
     ///
     /// >>> store = MemoryStore()

@@ -14,7 +14,7 @@ pyoxigraph |release|
 
 Pyoxigraph is a Python graph database library implementing the `SPARQL <https://www.w3.org/TR/sparql11-overview/>`_ standard.
 
-It is built on top of `Oxigraph <https://github.com/oxigraph/oxigraph>`_ using `PyO3 <https://pyo3.rs/>`_.
+It is built on top of `Oxigraph <https://crates.io/crates/oxigraph>`_ using `PyO3 <https://pyo3.rs/>`_.
 
 It offers two stores with `SPARQL 1.1 <https://www.w3.org/TR/sparql11-overview/>`_ capabilities.
 One of the store is in-memory, and the other one is disk based.
