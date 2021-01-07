@@ -171,7 +171,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
 
     def test_update_load(self):
         store = self.store()
-        store.update('LOAD <http://www.w3.org/1999/02/22-rdf-syntax-ns>')
+        store.update('LOAD <https://www.w3.org/1999/02/22-rdf-syntax-ns>')
         self.assertGreater(len(store), 100)
 
     def test_load_ntriples_to_default_graph(self):
