@@ -1,6 +1,6 @@
 [package]
 name = "pyoxigraph"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["Tpt"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -15,7 +15,7 @@ name = "pyoxigraph"
 doctest = false
 
 [dependencies]
-oxigraph = {version = "0.1.1", path="../lib", features = ["sled", "http_client"]}
+oxigraph = {version = "0.2", path="../lib", features = ["sled", "http_client"]}
 pyo3 = {version = "0.13", features = ["extension-module"]}
 
 [package.metadata.maturin]

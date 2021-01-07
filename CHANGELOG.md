@@ -1,4 +1,4 @@
-## Master
+## [0.2.0] - 2021-01-07
 
 ### Added
 - [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/) support for Rust, Python and JavaScript. All store-like classes now provide an `update` method.
