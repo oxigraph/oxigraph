@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: docker/build-push-action@v1
+      - uses: docker/build-push-action@v2.2.2
         with:
           dockerfile: server/Dockerfile
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: docker/build-push-action@v1
+      - uses: docker/build-push-action@v2.2.2
         with:
           dockerfile: wikibase/Dockerfile
           username: ${{ secrets.DOCKER_USERNAME }}
