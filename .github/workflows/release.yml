@@ -74,7 +74,7 @@ jobs:
         with:
           user: __token__
           password: ${{ secrets.PYPI_PASSWORD }}
-          packages_dir: ./python/target/wheels
+          packages_dir: ./target/wheels
   publish_npm:
     runs-on: ubuntu-latest
     steps:
