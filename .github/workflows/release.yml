@@ -68,7 +68,6 @@ jobs:
     needs: publish_lib_crate
     steps:
       - uses: actions/checkout@v2
-      - run: sed -i 's/path="..\/lib", //g' python/Cargo.toml
       - run: docker run --rm -v $(pwd):/io konstin2/maturin build --release
         working-directory: ./python
       - uses: pypa/gh-action-pypi-publish@v1.4.1

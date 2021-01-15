@@ -34,9 +34,5 @@ classifier = [
     "Topic :: Database :: Database Engines/Servers",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-project-url = [
-    "Documentation, https://oxigraph.org/pyoxigraph/",
-    "Source, https://github.com/oxigraph/oxigraph/tree/master/python",
-    "Tracker, https://github.com/oxigraph/oxrdflib/issues",
-]
+project-url = { Documentation = "https://oxigraph.org/pyoxigraph/", Source = "https://github.com/oxigraph/oxigraph/tree/master/python", Tracker = "https://github.com/oxigraph/oxrdflib/issues" }
 requires-python = ">=3.6"
