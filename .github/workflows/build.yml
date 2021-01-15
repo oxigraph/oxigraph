@@ -66,3 +66,29 @@ jobs:
         working-directory: ./python/docs
       - run: source ../venv/bin/activate && sphinx-build -M html . build
         working-directory: ./python/docs
+
+  python_wheel_linux:
+    runs-on: ubuntu-latest
+    needs: python
+    steps:
+      - uses: actions/checkout@v2
+      - run: docker run --rm -v $(pwd):/io konstin2/maturin build
+        working-directory: ./python
+
+  python_wheel_mac:
+    runs-on: macos-latest
+    needs: python
+    steps:
+      - uses: actions/checkout@v2
+      - run: pip install maturin
+      - run: maturin build --no-sdist
+        working-directory: ./python
+
+  python_wheel_windows:
+    runs-on: windows-latest
+    needs: python
+    steps:
+      - uses: actions/checkout@v2
+      - run: pip install maturin
+      - run: maturin build --no-sdist
+        working-directory: ./python

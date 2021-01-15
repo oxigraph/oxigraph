@@ -75,6 +75,32 @@ jobs:
           user: __token__
           password: ${{ secrets.PYPI_PASSWORD }}
           packages_dir: ./target/wheels
+  publish_pypi_mac:
+    runs-on: macos-latest
+    needs: publish_lib_crate
+    steps:
+      - uses: actions/checkout@v2
+      - run: pip install maturin
+      - run: maturin build --release --no-sdist
+        working-directory: ./python
+      - uses: pypa/gh-action-pypi-publish@v1.4.1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_PASSWORD }}
+          packages_dir: ./target/wheels
+  publish_pypi_windows:
+    runs-on: windows-latest
+    needs: publish_lib_crate
+    steps:
+      - uses: actions/checkout@v2
+      - run: pip install maturin
+      - run: maturin build --release --no-sdist
+        working-directory: ./python
+      - uses: pypa/gh-action-pypi-publish@v1.4.1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_PASSWORD }}
+          packages_dir: ./target/wheels
   publish_npm:
     runs-on: ubuntu-latest
     steps:
