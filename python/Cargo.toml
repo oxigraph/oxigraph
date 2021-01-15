@@ -16,7 +16,7 @@ doctest = false
 
 [dependencies]
 oxigraph = {version = "0.2", path="../lib", features = ["sled", "http_client"]}
-pyo3 = {version = "0.13", features = ["extension-module"]}
+pyo3 = {version = "0.13", features = ["extension-module", "abi3-py36"]}
 native-tls = {version = "0.2", features = ["vendored"]}
 
 [package.metadata.maturin]
