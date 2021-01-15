@@ -74,6 +74,7 @@ jobs:
     needs: python
     steps:
       - uses: actions/checkout@v2
+      - run: sed -i 's/path="..\/lib", //g' python/Cargo.toml
       - run: docker run --rm -v $(pwd):/io konstin2/maturin build
         working-directory: ./python
 
@@ -82,8 +83,8 @@ jobs:
     needs: python
     steps:
       - uses: actions/checkout@v2
-      - run: pip install maturin
-      - run: maturin build --no-sdist
+      - run: pip3 install maturin
+      - run: python3 -m maturin build --no-sdist
         working-directory: ./python
 
   python_wheel_windows:

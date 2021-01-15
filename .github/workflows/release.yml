@@ -68,20 +68,21 @@ jobs:
     needs: publish_lib_crate
     steps:
       - uses: actions/checkout@v2
+      - run: sed -i 's/path="..\/lib", //g' python/Cargo.toml
       - run: docker run --rm -v $(pwd):/io konstin2/maturin build --release
         working-directory: ./python
       - uses: pypa/gh-action-pypi-publish@v1.4.1
         with:
           user: __token__
           password: ${{ secrets.PYPI_PASSWORD }}
-          packages_dir: ./target/wheels
+          packages_dir: ./python/target/wheels
   publish_pypi_mac:
     runs-on: macos-latest
     needs: publish_lib_crate
     steps:
       - uses: actions/checkout@v2
-      - run: pip install maturin
-      - run: maturin build --release --no-sdist
+      - run: pip3 install maturin
+      - run: python3 -m maturin build --release --no-sdist
         working-directory: ./python
       - uses: pypa/gh-action-pypi-publish@v1.4.1
         with:
