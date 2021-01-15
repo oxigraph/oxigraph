@@ -63,7 +63,7 @@ jobs:
           CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
       - run: cargo publish
         working-directory: ./wikibase
-  publish_pypi:
+  publish_pypi_linux:
     runs-on: ubuntu-latest
     needs: publish_lib_crate
     steps:
@@ -76,24 +76,17 @@ jobs:
           user: __token__
           password: ${{ secrets.PYPI_PASSWORD }}
           packages_dir: ./python/target/wheels
-  publish_pypi_mac:
-    runs-on: macos-latest
-    needs: publish_lib_crate
+  publish_pypi_mac_windows:
+    runs-on: ${{ matrix.os }}
+    needs: python
+    strategy:
+      matrix:
+        os: [ macos-latest, windows-latest ]
     steps:
       - uses: actions/checkout@v2
-      - run: pip3 install maturin
-      - run: python3 -m maturin build --release --no-sdist
-        working-directory: ./python
-      - uses: pypa/gh-action-pypi-publish@v1.4.1
+      - uses: actions/setup-python@v2
         with:
-          user: __token__
-          password: ${{ secrets.PYPI_PASSWORD }}
-          packages_dir: ./target/wheels
-  publish_pypi_windows:
-    runs-on: windows-latest
-    needs: publish_lib_crate
-    steps:
-      - uses: actions/checkout@v2
+          python-version: 3.6
       - run: pip install maturin
       - run: maturin build --release --no-sdist
         working-directory: ./python

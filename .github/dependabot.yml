@@ -15,7 +15,7 @@ updates:
     schedule:
       interval: daily
   - package-ecosystem: gitsubmodule
-    directory: "/testsuite/rdf-tests"
+    directory: "/"
     schedule:
       interval: daily
   - package-ecosystem: docker

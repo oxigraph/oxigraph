@@ -78,20 +78,17 @@ jobs:
       - run: docker run --rm -v $(pwd):/io konstin2/maturin build
         working-directory: ./python
 
-  python_wheel_mac:
-    runs-on: macos-latest
+  python_wheel_mac_windows:
+    runs-on: ${{ matrix.os }}
     needs: python
+    strategy:
+      matrix:
+        os: [ macos-latest, windows-latest ]
     steps:
       - uses: actions/checkout@v2
-      - run: pip3 install maturin
-      - run: python3 -m maturin build --no-sdist
-        working-directory: ./python
-
-  python_wheel_windows:
-    runs-on: windows-latest
-    needs: python
-    steps:
-      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.6
       - run: pip install maturin
       - run: maturin build --no-sdist
         working-directory: ./python
