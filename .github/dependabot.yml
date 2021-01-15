@@ -10,3 +10,19 @@ updates:
     schedule:
       interval: daily
     open-pull-requests-limit: 10
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: daily
+  - package-ecosystem: gitsubmodule
+    directory: "/testsuite"
+    schedule:
+      interval: daily
+  - package-ecosystem: docker
+    directory: "/server"
+    schedule:
+      interval: daily
+  - package-ecosystem: docker
+    directory: "/wikibase"
+    schedule:
+      interval: daily
