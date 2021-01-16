@@ -35,16 +35,6 @@ fn sparql10_w3c_query_syntax_testsuite() -> Result<()> {
 #[test]
 fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
     run_testsuite("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/manifest-evaluation.ttl", vec![
-        // FROM and FROM name tests support is not implemented yet
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/dataset/manifest#dawg-dataset-01",
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/dataset/manifest#dawg-dataset-03",
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/dataset/manifest#dawg-dataset-05",
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/dataset/manifest#dawg-dataset-06",
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/dataset/manifest#dawg-dataset-07",
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/dataset/manifest#dawg-dataset-08",
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/dataset/manifest#dawg-dataset-11",
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/dataset/manifest#dawg-dataset-11",
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/dataset/manifest#dawg-dataset-12b",
         //Multiple writing of the same xsd:integer. Our system does strong normalization.
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-1",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-9",
@@ -98,8 +88,6 @@ fn sparql11_query_w3c_evaluation_testsuite() -> Result<()> {
             // SPARQL 1.1 JSON query results deserialization is not implemented yet
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-empty-group-count-1",
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-empty-group-count-2",
-            // FROM tests support
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/construct/manifest#constructwhere04",
             //BNODE() scope is currently wrong
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#bnode01",
             //Property path with unbound graph name are not supported yet

@@ -89,39 +89,69 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
                 test,
                 error
             )),
-            Ok(query) => match store.query_opt(query, options) {
-                Err(error) => Err(anyhow!(
-                    "Failure to execute query of {} with error: {}",
-                    test,
-                    error
-                )),
-                Ok(actual_results) => {
-                    let expected_results = load_sparql_query_result(test.result.as_ref().unwrap())
+            Ok(query) => {
+                // FROM and FROM NAMED support. We make sure the data is in the store
+                if !query.dataset().is_default_dataset() {
+                    for graph_name in query.dataset().default_graph_graphs().unwrap_or(&[]) {
+                        if let GraphName::NamedNode(graph_name) = graph_name {
+                            load_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
+                        } else {
+                            return Err(anyhow!(
+                                "Invalid FROM in query {} for test {}",
+                                query,
+                                test
+                            ));
+                        }
+                    }
+                    for graph_name in query.dataset().available_named_graphs().unwrap_or(&[]) {
+                        if let NamedOrBlankNode::NamedNode(graph_name) = graph_name {
+                            load_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
+                        } else {
+                            return Err(anyhow!(
+                                "Invalid FROM NAMED in query {} for test {}",
+                                query,
+                                test
+                            ));
+                        }
+                    }
+                }
+                match store.query_opt(query, options) {
+                    Err(error) => Err(anyhow!(
+                        "Failure to execute query of {} with error: {}",
+                        test,
+                        error
+                    )),
+                    Ok(actual_results) => {
+                        let expected_results = load_sparql_query_result(
+                            test.result.as_ref().unwrap(),
+                        )
                         .map_err(|e| {
                             anyhow!("Error constructing expected graph for {}: {}", test, e)
                         })?;
-                    let with_order =
-                        if let StaticQueryResults::Solutions { ordered, .. } = &expected_results {
+                        let with_order = if let StaticQueryResults::Solutions { ordered, .. } =
+                            &expected_results
+                        {
                             *ordered
                         } else {
                             false
                         };
-                    let actual_results =
-                        StaticQueryResults::from_query_results(actual_results, with_order)?;
+                        let actual_results =
+                            StaticQueryResults::from_query_results(actual_results, with_order)?;
 
-                    if are_query_results_isomorphic(&expected_results, &actual_results) {
-                        Ok(())
-                    } else {
-                        Err(anyhow!("Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
+                        if are_query_results_isomorphic(&expected_results, &actual_results) {
+                            Ok(())
+                        } else {
+                            Err(anyhow!("Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
                                                test,
                                                expected_results,
                                                actual_results,
                                                Query::parse(&read_file_to_string(query_file)?, Some(query_file)).unwrap(),
                                                store
-                        ))
+                            ))
+                        }
                     }
                 }
-            },
+            }
         }
     } else if test.kind
         == "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#PositiveUpdateSyntaxTest11"
