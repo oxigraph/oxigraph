@@ -78,7 +78,7 @@ jobs:
           packages_dir: ./python/target/wheels
   publish_pypi_mac_windows:
     runs-on: ${{ matrix.os }}
-    needs: python
+    needs: publish_lib_crate
     strategy:
       matrix:
         os: [ macos-latest, windows-latest ]

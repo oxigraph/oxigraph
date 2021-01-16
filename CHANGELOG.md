@@ -1,3 +1,10 @@
+## [0.2.1] - 2021-01-16
+
+### Changed
+- Fixes `pyoxigraph` build by enforcing a given `maturin` version.
+- Adds code to build Python wheels for MacOS and Windows.
+
+
 ## [0.2.0] - 2021-01-07
 
 ### Added
@@ -27,6 +34,7 @@
 ### Disk data format
 
 The disk data format has been changed between Oxigraph 0.1 (version 0) and Oxigraph 0.2 (version 1). Data is automatically migrated from the version 0 format to the version 1 format when opened with Oxigraph 0.2.
+
 
 ## [0.1.1] - 2020-08-14
 
