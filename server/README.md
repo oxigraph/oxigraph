@@ -17,6 +17,11 @@ It also provides a set of utility functions for reading, writing, and processing
 
 Oxigraph is in heavy development and SPARQL query evaluation has not been optimized yet.
 
+Oxigraph provides three different installation methods for Oxigraph server.
+* [`cargo install`](#installation) (multiplatform)
+* [A Docker image](#using-a-docker-image)
+* [A Homebrew formula](#homebrew)
+
 It is also usable as [a Rust library](https://crates.io/crates/oxigraph) and as [a Python library](https://oxigraph.org/pyoxigraph/).
 
 Oxigraph implements the following specifications:
@@ -86,6 +91,17 @@ curl -X POST -H 'Content-Type: application/sparql-update' --data 'DELETE WHERE {
 ```
 
 You could easily build your own Docker image by running `docker build -t oxigraph server -f server/Dockerfile .` from the root directory.
+
+## Homebrew
+
+Oxigraph maintains a [Homebrew](https://brew.sh) formula in [a custom tap](https://github.com/oxigraph/homebrew-oxigraph).
+
+To install Oxigraph server using Homebrew do:
+```sh
+brew tap oxigraph/oxigraph
+brew install oxigraph
+```
+It installs the `oxigraph_server` binary. [See the usage documentation to know how to use it](#usage).
 
 ## License
 
