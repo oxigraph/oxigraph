@@ -1,6 +1,6 @@
-use crate::files::load_store;
+use crate::files::load_dataset;
 use crate::manifest::Test;
-use crate::report::{store_diff, TestResult};
+use crate::report::{dataset_diff, TestResult};
 use anyhow::{anyhow, Result};
 use chrono::Utc;
 
@@ -30,7 +30,7 @@ fn evaluate_parser_test(test: &Test) -> Result<()> {
         || test.kind == "http://www.w3.org/ns/rdftest#TestTurtlePositiveSyntax"
         || test.kind == "http://www.w3.org/ns/rdftest#TestTrigPositiveSyntax"
     {
-        match load_store(action) {
+        match load_dataset(action) {
             Ok(_) => Ok(()),
             Err(e) => Err(anyhow!(format!("Parse error: {}", e))),
         }
@@ -42,7 +42,7 @@ fn evaluate_parser_test(test: &Test) -> Result<()> {
         || test.kind == "http://www.w3.org/ns/rdftest#TestTrigNegativeEval"
         || test.kind == "http://www.w3.org/ns/rdftest#TestXMLNegativeSyntax"
     {
-        match load_store(action) {
+        match load_dataset(action) {
             Ok(_) => Err(anyhow!("File parsed with an error even if it should not",)),
             Err(_) => Ok(()),
         }
@@ -50,17 +50,19 @@ fn evaluate_parser_test(test: &Test) -> Result<()> {
         || test.kind == "http://www.w3.org/ns/rdftest#TestTrigEval"
         || test.kind == "http://www.w3.org/ns/rdftest#TestXMLEval"
     {
-        match load_store(action) {
-            Ok(actual_graph) => {
+        match load_dataset(action) {
+            Ok(mut actual_graph) => {
+                actual_graph.canonicalize();
                 if let Some(result) = &test.result {
-                    match load_store(result) {
-                        Ok(expected_graph) => {
-                            if expected_graph.is_isomorphic(&actual_graph) {
+                    match load_dataset(result) {
+                        Ok(mut expected_graph) => {
+                            expected_graph.canonicalize();
+                            if expected_graph == actual_graph {
                                 Ok(())
                             } else {
                                 Err(anyhow!(
                                     "The two files are not isomorphic. Diff:\n{}",
-                                    store_diff(&expected_graph, &actual_graph)
+                                    dataset_diff(&expected_graph, &actual_graph)
                                 ))
                             }
                         }

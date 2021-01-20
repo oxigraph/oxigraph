@@ -1,7 +1,6 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use oxigraph::model::NamedNode;
-use oxigraph::MemoryStore;
+use oxigraph::model::{Dataset, NamedNode};
 use text_diff::{diff, Difference};
 
 #[derive(Debug)]
@@ -11,10 +10,10 @@ pub struct TestResult {
     pub date: DateTime<Utc>,
 }
 
-pub fn store_diff(expected: &MemoryStore, actual: &MemoryStore) -> String {
+pub fn dataset_diff(expected: &Dataset, actual: &Dataset) -> String {
     let (_, changeset) = diff(
-        &normalize_store_text(expected),
-        &normalize_store_text(actual),
+        &normalize_dataset_text(expected),
+        &normalize_dataset_text(actual),
         "\n",
     );
     let mut ret = String::new();
@@ -42,11 +41,8 @@ pub fn store_diff(expected: &MemoryStore, actual: &MemoryStore) -> String {
     ret
 }
 
-fn normalize_store_text(store: &MemoryStore) -> String {
-    let mut quads: Vec<_> = store
-        .quads_for_pattern(None, None, None, None)
-        .map(|q| q.to_string())
-        .collect();
+fn normalize_dataset_text(store: &Dataset) -> String {
+    let mut quads: Vec<_> = store.iter().map(|q| q.to_string()).collect();
     quads.sort();
     quads.join("\n")
 }

@@ -1,11 +1,50 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use oxigraph::model::{NamedNode, Quad};
+use oxigraph::model::{Dataset, Graph, NamedNode, Quad, Triple};
 use oxigraph::{MemoryStore, SledStore};
 use rand::random;
+use std::iter::FromIterator;
 
-criterion_group!(store_load, memory_load_bench, sled_load_bench);
+criterion_group!(
+    store_load,
+    graph_load_bench,
+    dataset_load_bench,
+    memory_load_bench,
+    sled_load_bench
+);
 
 criterion_main!(store_load);
+
+fn graph_load_bench(c: &mut Criterion) {
+    let mut group = c.benchmark_group("graph");
+    group.nresamples(10);
+    group.sample_size(10);
+    for size in [100, 1_000, 10_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+        let triples: Vec<_> = create_quads(*size).into_iter().map(Triple::from).collect();
+        group.bench_function(BenchmarkId::from_parameter(size), |b| {
+            b.iter(|| {
+                Graph::from_iter(triples.iter());
+            });
+        });
+    }
+    group.finish();
+}
+
+fn dataset_load_bench(c: &mut Criterion) {
+    let mut group = c.benchmark_group("dataset");
+    group.nresamples(10);
+    group.sample_size(10);
+    for size in [100, 1_000, 10_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+        let quads = create_quads(*size);
+        group.bench_function(BenchmarkId::from_parameter(size), |b| {
+            b.iter(|| {
+                Dataset::from_iter(quads.iter());
+            });
+        });
+    }
+    group.finish();
+}
 
 fn memory_load_bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory");

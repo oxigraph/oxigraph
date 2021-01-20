@@ -1,6 +1,6 @@
 use crate::files::*;
 use crate::manifest::*;
-use crate::report::{store_diff, TestResult};
+use crate::report::{dataset_diff, TestResult};
 use crate::vocab::*;
 use anyhow::{anyhow, Result};
 use chrono::Utc;
@@ -223,13 +223,17 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
                     error
                 )),
                 Ok(()) => {
-                    if store.is_isomorphic(&result_store) {
+                    let mut store_dataset: Dataset = store.iter().collect();
+                    store_dataset.canonicalize();
+                    let mut result_store_dataset: Dataset = result_store.iter().collect();
+                    result_store_dataset.canonicalize();
+                    if store_dataset == result_store_dataset {
                         Ok(())
                     } else {
                         Err(anyhow!(
                             "Failure on {}.\nDiff:\n{}\nParsed update:\n{}\n",
                             test,
-                            store_diff(&result_store, &store),
+                            dataset_diff(&result_store_dataset, &store_dataset),
                             Update::parse(&read_file_to_string(update_file)?, Some(update_file))
                                 .unwrap(),
                         ))
@@ -259,7 +263,7 @@ fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
             false,
         )
     } else {
-        Ok(StaticQueryResults::from_dataset(load_store(url)?))
+        Ok(StaticQueryResults::from_graph(load_graph(url)?))
     }
 }
 
@@ -309,82 +313,56 @@ impl ServiceHandler for StaticServiceHandler {
     }
 }
 
-fn to_dataset(result: QueryResults, with_order: bool) -> Result<MemoryStore> {
-    match result {
-        QueryResults::Graph(graph) => Ok(graph
-            .map(|t| t.map(|t| t.in_graph(None)))
-            .collect::<Result<_, _>>()?),
+fn to_graph(result: QueryResults, with_order: bool) -> Result<Graph> {
+    Ok(match result {
+        QueryResults::Graph(graph) => graph.collect::<Result<Graph, _>>()?,
         QueryResults::Boolean(value) => {
-            let store = MemoryStore::new();
+            let mut graph = Graph::new();
             let result_set = BlankNode::default();
-            store.insert(Quad::new(
-                result_set.clone(),
-                rdf::TYPE,
-                rs::RESULT_SET,
-                None,
-            ));
-            store.insert(Quad::new(
-                result_set,
+            graph.insert(TripleRef::new(&result_set, rdf::TYPE, rs::RESULT_SET));
+            graph.insert(TripleRef::new(
+                &result_set,
                 rs::BOOLEAN,
-                Literal::from(value),
-                None,
+                &Literal::from(value),
             ));
-            Ok(store)
+            graph
         }
         QueryResults::Solutions(solutions) => {
-            let store = MemoryStore::new();
+            let mut graph = Graph::new();
             let result_set = BlankNode::default();
-            store.insert(Quad::new(
-                result_set.clone(),
-                rdf::TYPE,
-                rs::RESULT_SET,
-                None,
-            ));
+            graph.insert(TripleRef::new(&result_set, rdf::TYPE, rs::RESULT_SET));
             for variable in solutions.variables() {
-                store.insert(Quad::new(
-                    result_set.clone(),
+                graph.insert(TripleRef::new(
+                    &result_set,
                     rs::RESULT_VARIABLE,
-                    Literal::new_simple_literal(variable.as_str()),
-                    None,
+                    LiteralRef::new_simple_literal(variable.as_str()),
                 ));
             }
             for (i, solution) in solutions.enumerate() {
                 let solution = solution?;
                 let solution_id = BlankNode::default();
-                store.insert(Quad::new(
-                    result_set.clone(),
-                    rs::SOLUTION,
-                    solution_id.clone(),
-                    None,
-                ));
+                graph.insert(TripleRef::new(&result_set, rs::SOLUTION, &solution_id));
                 for (variable, value) in solution.iter() {
                     let binding = BlankNode::default();
-                    store.insert(Quad::new(
-                        solution_id.clone(),
-                        rs::BINDING,
-                        binding.clone(),
-                        None,
-                    ));
-                    store.insert(Quad::new(binding.clone(), rs::VALUE, value.clone(), None));
-                    store.insert(Quad::new(
-                        binding,
+                    graph.insert(TripleRef::new(&solution_id, rs::BINDING, &binding));
+                    graph.insert(TripleRef::new(&binding, rs::VALUE, value));
+                    graph.insert(TripleRef::new(
+                        &binding,
                         rs::VARIABLE,
-                        Literal::new_simple_literal(variable.as_str()),
-                        None,
+                        LiteralRef::new_simple_literal(variable.as_str()),
                     ));
                 }
                 if with_order {
-                    store.insert(Quad::new(
-                        solution_id,
+                    graph.insert(TripleRef::new(
+                        &solution_id,
                         rs::INDEX,
-                        Literal::from((i + 1) as i128),
-                        None,
+                        &Literal::from((i + 1) as i128),
                     ));
                 }
             }
-            Ok(store)
+            graph
         }
-    }
+    })
 }
 
 fn are_query_results_isomorphic(
@@ -423,7 +401,7 @@ fn are_query_results_isomorphic(
             expected == actual
         }
         (StaticQueryResults::Graph(expected), StaticQueryResults::Graph(actual)) => {
-            expected.is_isomorphic(&actual)
+            expected == actual
         }
         _ => false,
     }
@@ -445,7 +423,7 @@ fn compare_solutions(expected: &[(Variable, Term)], actual: &[(Variable, Term)])
 }
 
 enum StaticQueryResults {
-    Graph(MemoryStore),
+    Graph(Graph),
     Solutions {
         variables: Vec<Variable>,
         solutions: Vec<Vec<(Variable, Term)>>,
@@ -483,83 +461,80 @@ impl fmt::Display for StaticQueryResults {
 
 impl StaticQueryResults {
     fn from_query_results(results: QueryResults, with_order: bool) -> Result<StaticQueryResults> {
-        Ok(Self::from_dataset(to_dataset(results, with_order)?))
+        Ok(Self::from_graph(to_graph(results, with_order)?))
     }
 
-    fn from_dataset(dataset: MemoryStore) -> StaticQueryResults {
-        if let Some(result_set) = dataset
-            .quads_for_pattern(None, Some(rdf::TYPE), Some(rs::RESULT_SET.into()), None)
-            .map(|q| q.subject)
-            .next()
-        {
-            if let Some(bool) = object_for_subject_predicate(&dataset, &result_set, rs::BOOLEAN) {
+    fn from_graph(graph: Graph) -> StaticQueryResults {
+        // Hack to normalize literals
+        let mut graph: Graph = graph
+            .iter()
+            .map(|t| t.into_owned().in_graph(GraphName::DefaultGraph))
+            .collect::<MemoryStore>()
+            .into_iter()
+            .map(Triple::from)
+            .collect();
+
+        if let Some(result_set) = graph.subject_for_predicate_object(rdf::TYPE, rs::RESULT_SET) {
+            if let Some(bool) = graph.object_for_subject_predicate(result_set, rs::BOOLEAN) {
                 // Boolean query
-                StaticQueryResults::Boolean(bool == Literal::from(true).into())
+                StaticQueryResults::Boolean(bool == Literal::from(true).as_ref().into())
             } else {
                 // Regular query
-                let mut variables: Vec<Variable> =
-                    objects_for_subject_predicate(&dataset, &result_set, rs::RESULT_VARIABLE)
-                        .filter_map(|object| {
-                            if let Term::Literal(l) = object {
-                                Some(Variable::new_unchecked(l.value()))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
+                let mut variables: Vec<Variable> = graph
+                    .objects_for_subject_predicate(result_set, rs::RESULT_VARIABLE)
+                    .filter_map(|object| {
+                        if let TermRef::Literal(l) = object {
+                            Some(Variable::new_unchecked(l.value()))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 variables.sort();
 
-                let mut solutions: Vec<_> =
-                    objects_for_subject_predicate(&dataset, &result_set, rs::SOLUTION)
-                        .filter_map(|object| {
-                            if let Term::BlankNode(solution) = object {
-                                let mut bindings =
-                                    objects_for_subject_predicate(&dataset, &solution, rs::BINDING)
-                                        .filter_map(|object| {
-                                            if let Term::BlankNode(binding) = object {
-                                                if let (
-                                                    Some(Term::Literal(variable)),
-                                                    Some(value),
-                                                ) = (
-                                                    object_for_subject_predicate(
-                                                        &dataset,
-                                                        &binding,
-                                                        rs::VARIABLE,
-                                                    ),
-                                                    object_for_subject_predicate(
-                                                        &dataset,
-                                                        &binding,
-                                                        rs::VALUE,
-                                                    ),
-                                                ) {
-                                                    Some((
-                                                        Variable::new_unchecked(variable.value()),
-                                                        value,
-                                                    ))
-                                                } else {
-                                                    None
-                                                }
-                                            } else {
-                                                None
-                                            }
-                                        })
-                                        .collect::<Vec<_>>();
-                                bindings.sort_by(|(a, _), (b, _)| a.cmp(&b));
-                                let index =
-                                    object_for_subject_predicate(&dataset, &solution, rs::INDEX)
-                                        .and_then(|object| {
-                                            if let Term::Literal(l) = object {
-                                                u64::from_str(l.value()).ok()
-                                            } else {
-                                                None
-                                            }
-                                        });
-                                Some((bindings, index))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
+                let mut solutions: Vec<_> = graph
+                    .objects_for_subject_predicate(result_set, rs::SOLUTION)
+                    .filter_map(|object| {
+                        if let TermRef::BlankNode(solution) = object {
+                            let mut bindings = graph
+                                .objects_for_subject_predicate(solution, rs::BINDING)
+                                .filter_map(|object| {
+                                    if let TermRef::BlankNode(binding) = object {
+                                        if let (Some(TermRef::Literal(variable)), Some(value)) = (
+                                            graph.object_for_subject_predicate(
+                                                binding,
+                                                rs::VARIABLE,
+                                            ),
+                                            graph.object_for_subject_predicate(binding, rs::VALUE),
+                                        ) {
+                                            Some((
+                                                Variable::new_unchecked(variable.value()),
+                                                value.into_owned(),
+                                            ))
+                                        } else {
+                                            None
+                                        }
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect::<Vec<_>>();
+                            bindings.sort_by(|(a, _), (b, _)| a.cmp(&b));
+                            let index = graph
+                                .object_for_subject_predicate(solution, rs::INDEX)
+                                .and_then(|object| {
+                                    if let TermRef::Literal(l) = object {
+                                        u64::from_str(l.value()).ok()
+                                    } else {
+                                        None
+                                    }
+                                });
+                            Some((bindings, index))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 solutions.sort_by(|(_, index_a), (_, index_b)| index_a.cmp(index_b));
 
                 let ordered = solutions.iter().all(|(_, index)| index.is_some());
@@ -574,25 +549,8 @@ impl StaticQueryResults {
                 }
             }
         } else {
-            StaticQueryResults::Graph(dataset)
+            graph.canonicalize();
+            StaticQueryResults::Graph(graph)
         }
     }
-}
-
-fn object_for_subject_predicate<'a>(
-    store: &MemoryStore,
-    subject: impl Into<NamedOrBlankNodeRef<'a>>,
-    predicate: impl Into<NamedNodeRef<'a>>,
-) -> Option<Term> {
-    objects_for_subject_predicate(store, subject, predicate).next()
-}
-
-fn objects_for_subject_predicate<'a>(
-    store: &MemoryStore,
-    subject: impl Into<NamedOrBlankNodeRef<'a>>,
-    predicate: impl Into<NamedNodeRef<'a>>,
-) -> impl Iterator<Item = Term> {
-    store
-        .quads_for_pattern(Some(subject.into()), Some(predicate.into()), None, None)
-        .map(|t| t.object)
 }

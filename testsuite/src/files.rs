@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use oxigraph::io::{DatasetFormat, GraphFormat};
-use oxigraph::model::{GraphName, GraphNameRef};
+use oxigraph::model::{Dataset, Graph, GraphNameRef};
 use oxigraph::MemoryStore;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
@@ -75,8 +75,54 @@ pub fn load_to_store<'a>(
     Ok(())
 }
 
-pub fn load_store(url: &str) -> Result<MemoryStore> {
-    let store = MemoryStore::new();
-    load_to_store(url, &store, &GraphName::DefaultGraph)?;
-    Ok(store)
+pub fn load_to_graph(url: &str, graph: &mut Graph) -> Result<()> {
+    if url.ends_with(".nt") {
+        graph.load(read_file(url)?, GraphFormat::NTriples, Some(url))?
+    } else if url.ends_with(".ttl") {
+        graph.load(read_file(url)?, GraphFormat::Turtle, Some(url))?
+    } else if url.ends_with(".rdf") {
+        graph.load(read_file(url)?, GraphFormat::RdfXml, Some(url))?
+    } else {
+        return Err(anyhow!("Serialization type not found for {}", url));
+    }
+    Ok(())
+}
+
+pub fn load_graph(url: &str) -> Result<Graph> {
+    let mut graph = Graph::new();
+    load_to_graph(url, &mut graph)?;
+    Ok(graph)
+}
+
+pub fn load_to_dataset<'a>(
+    url: &str,
+    dataset: &mut Dataset,
+    to_graph_name: impl Into<GraphNameRef<'a>>,
+) -> Result<()> {
+    if url.ends_with(".nt") {
+        dataset
+            .graph_mut(to_graph_name)
+            .load(read_file(url)?, GraphFormat::NTriples, Some(url))?
+    } else if url.ends_with(".ttl") {
+        dataset
+            .graph_mut(to_graph_name)
+            .load(read_file(url)?, GraphFormat::Turtle, Some(url))?
+    } else if url.ends_with(".rdf") {
+        dataset
+            .graph_mut(to_graph_name)
+            .load(read_file(url)?, GraphFormat::RdfXml, Some(url))?
+    } else if url.ends_with(".nq") {
+        dataset.load(read_file(url)?, DatasetFormat::NQuads, Some(url))?
+    } else if url.ends_with(".trig") {
+        dataset.load(read_file(url)?, DatasetFormat::TriG, Some(url))?
+    } else {
+        return Err(anyhow!("Serialization type not found for {}", url));
+    }
+    Ok(())
+}
+
+pub fn load_dataset(url: &str) -> Result<Dataset> {
+    let mut dataset = Dataset::new();
+    load_to_dataset(url, &mut dataset, GraphNameRef::DefaultGraph)?;
+    Ok(dataset)
 }

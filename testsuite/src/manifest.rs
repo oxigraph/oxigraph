@@ -1,9 +1,8 @@
-use crate::files::load_to_store;
+use crate::files::load_to_graph;
 use crate::vocab::*;
 use anyhow::{anyhow, Result};
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
-use oxigraph::MemoryStore;
 use std::fmt;
 
 pub struct Test {
@@ -50,7 +49,7 @@ impl fmt::Display for Test {
 }
 
 pub struct TestManifest {
-    graph: MemoryStore,
+    graph: Graph,
     tests_to_do: Vec<Term>,
     manifests_to_do: Vec<String>,
 }
@@ -58,7 +57,7 @@ pub struct TestManifest {
 impl TestManifest {
     pub fn new<S: ToString>(manifest_urls: impl IntoIterator<Item = S>) -> Self {
         Self {
-            graph: MemoryStore::new(),
+            graph: Graph::new(),
             tests_to_do: Vec::new(),
             manifests_to_do: manifest_urls
                 .into_iter()
@@ -74,158 +73,160 @@ impl Iterator for TestManifest {
     fn next(&mut self) -> Option<Result<Test>> {
         match self.tests_to_do.pop() {
             Some(Term::NamedNode(test_node)) => {
-                let kind = match object_for_subject_predicate(&self.graph, &test_node, rdf::TYPE) {
-                    Some(Term::NamedNode(c)) => c,
+                let kind = match self
+                    .graph
+                    .object_for_subject_predicate(&test_node, rdf::TYPE)
+                {
+                    Some(TermRef::NamedNode(c)) => c.into_owned(),
                     _ => return self.next(), //We ignore the test
                 };
-                let name = match object_for_subject_predicate(&self.graph, &test_node, mf::NAME) {
-                    Some(Term::Literal(c)) => Some(c.value().to_string()),
+                let name = match self
+                    .graph
+                    .object_for_subject_predicate(&test_node, mf::NAME)
+                {
+                    Some(TermRef::Literal(c)) => Some(c.value().to_string()),
                     _ => None,
                 };
-                let comment =
-                    match object_for_subject_predicate(&self.graph, &test_node, rdfs::COMMENT) {
-                        Some(Term::Literal(c)) => Some(c.value().to_string()),
-                        _ => None,
-                    };
-                let (action, query, update, data, graph_data, service_data) =
-                    match object_for_subject_predicate(&self.graph, &test_node, mf::ACTION) {
-                        Some(Term::NamedNode(n)) => {
-                            (Some(n.into_string()), None, None, None, vec![], vec![])
-                        }
-                        Some(Term::BlankNode(n)) => {
-                            let query =
-                                match object_for_subject_predicate(&self.graph, &n, qt::QUERY) {
-                                    Some(Term::NamedNode(q)) => Some(q.into_string()),
-                                    _ => None,
-                                };
-                            let update =
-                                match object_for_subject_predicate(&self.graph, &n, ut::REQUEST) {
-                                    Some(Term::NamedNode(q)) => Some(q.into_string()),
-                                    _ => None,
-                                };
-                            let data = match object_for_subject_predicate(&self.graph, &n, qt::DATA)
-                                .or_else(|| object_for_subject_predicate(&self.graph, &n, ut::DATA))
-                            {
-                                Some(Term::NamedNode(q)) => Some(q.into_string()),
-                                _ => None,
-                            };
-                            let graph_data =
-                                objects_for_subject_predicate(&self.graph, &n, qt::GRAPH_DATA)
-                                    .chain(objects_for_subject_predicate(
-                                        &self.graph,
-                                        &n,
-                                        ut::GRAPH_DATA,
-                                    ))
-                                    .filter_map(|g| match g {
-                                        Term::NamedNode(q) => Some((q.clone(), q.into_string())),
-                                        Term::BlankNode(node) => {
-                                            if let Some(Term::NamedNode(graph)) =
-                                                object_for_subject_predicate(
-                                                    &self.graph,
-                                                    &node,
-                                                    ut::GRAPH,
-                                                )
-                                            {
-                                                if let Some(Term::Literal(name)) =
-                                                    object_for_subject_predicate(
-                                                        &self.graph,
-                                                        &node,
-                                                        rdfs::LABEL,
-                                                    )
-                                                {
-                                                    Some((
-                                                        NamedNode::new(name.value()).unwrap(),
-                                                        graph.into_string(),
-                                                    ))
-                                                } else {
-                                                    Some((graph.clone(), graph.into_string()))
-                                                }
-                                            } else {
-                                                None
-                                            }
-                                        }
-                                        _ => None,
-                                    })
-                                    .collect();
-                            let service_data =
-                                objects_for_subject_predicate(&self.graph, &n, qt::SERVICE_DATA)
-                                    .filter_map(|g| match g {
-                                        Term::NamedNode(g) => Some(g.into()),
-                                        Term::BlankNode(g) => Some(g.into()),
-                                        _ => None,
-                                    })
-                                    .filter_map(|g: NamedOrBlankNode| {
-                                        if let (
-                                            Some(Term::NamedNode(endpoint)),
-                                            Some(Term::NamedNode(data)),
-                                        ) = (
-                                            object_for_subject_predicate(
-                                                &self.graph,
-                                                &g,
-                                                qt::ENDPOINT,
-                                            ),
-                                            object_for_subject_predicate(&self.graph, &g, qt::DATA),
-                                        ) {
-                                            Some((endpoint.into_string(), data.into_string()))
-                                        } else {
-                                            None
-                                        }
-                                    })
-                                    .collect();
-                            (None, query, update, data, graph_data, service_data)
-                        }
-                        Some(_) => return Some(Err(anyhow!("invalid action"))),
-                        None => {
-                            return Some(Err(anyhow!("action not found for test {}", test_node)));
-                        }
-                    };
-                let (result, result_graph_data) =
-                    match object_for_subject_predicate(&self.graph, &test_node, mf::RESULT) {
-                        Some(Term::NamedNode(n)) => (Some(n.into_string()), Vec::new()),
-                        Some(Term::BlankNode(n)) => (
-                            if let Some(Term::NamedNode(result)) =
-                                object_for_subject_predicate(&self.graph, &n, ut::DATA)
-                            {
-                                Some(result.into_string())
-                            } else {
-                                None
-                            },
-                            objects_for_subject_predicate(&self.graph, &n, ut::GRAPH_DATA)
-                                .filter_map(|g| match g {
-                                    Term::NamedNode(q) => Some((q.clone(), q.into_string())),
-                                    Term::BlankNode(node) => {
-                                        if let Some(Term::NamedNode(graph)) =
-                                            object_for_subject_predicate(
-                                                &self.graph,
-                                                &node,
-                                                ut::GRAPH,
-                                            )
+                let comment = match self
+                    .graph
+                    .object_for_subject_predicate(&test_node, rdfs::COMMENT)
+                {
+                    Some(TermRef::Literal(c)) => Some(c.value().to_string()),
+                    _ => None,
+                };
+                let (action, query, update, data, graph_data, service_data) = match self
+                    .graph
+                    .object_for_subject_predicate(&test_node, mf::ACTION)
+                {
+                    Some(TermRef::NamedNode(n)) => (
+                        Some(n.as_str().to_owned()),
+                        None,
+                        None,
+                        None,
+                        vec![],
+                        vec![],
+                    ),
+                    Some(TermRef::BlankNode(n)) => {
+                        let query = match self.graph.object_for_subject_predicate(n, qt::QUERY) {
+                            Some(TermRef::NamedNode(q)) => Some(q.as_str().to_owned()),
+                            _ => None,
+                        };
+                        let update = match self.graph.object_for_subject_predicate(n, ut::REQUEST) {
+                            Some(TermRef::NamedNode(q)) => Some(q.as_str().to_owned()),
+                            _ => None,
+                        };
+                        let data = match self
+                            .graph
+                            .object_for_subject_predicate(n, qt::DATA)
+                            .or_else(|| self.graph.object_for_subject_predicate(n, ut::DATA))
+                        {
+                            Some(TermRef::NamedNode(q)) => Some(q.as_str().to_owned()),
+                            _ => None,
+                        };
+                        let graph_data = self
+                            .graph
+                            .objects_for_subject_predicate(n, qt::GRAPH_DATA)
+                            .chain(self.graph.objects_for_subject_predicate(n, ut::GRAPH_DATA))
+                            .filter_map(|g| match g {
+                                TermRef::NamedNode(q) => {
+                                    Some((q.into_owned(), q.as_str().to_owned()))
+                                }
+                                TermRef::BlankNode(node) => {
+                                    if let Some(TermRef::NamedNode(graph)) =
+                                        self.graph.object_for_subject_predicate(node, ut::GRAPH)
+                                    {
+                                        if let Some(TermRef::Literal(name)) = self
+                                            .graph
+                                            .object_for_subject_predicate(node, rdfs::LABEL)
                                         {
-                                            if let Some(Term::Literal(name)) =
-                                                object_for_subject_predicate(
-                                                    &self.graph,
-                                                    &node,
-                                                    rdfs::LABEL,
-                                                )
-                                            {
-                                                Some((
-                                                    NamedNode::new(name.value()).unwrap(),
-                                                    graph.into_string(),
-                                                ))
-                                            } else {
-                                                Some((graph.clone(), graph.into_string()))
-                                            }
+                                            Some((
+                                                NamedNode::new(name.value()).unwrap(),
+                                                graph.as_str().to_owned(),
+                                            ))
                                         } else {
-                                            None
+                                            Some((graph.into_owned(), graph.as_str().to_owned()))
                                         }
+                                    } else {
+                                        None
                                     }
-                                    _ => None,
-                                })
-                                .collect(),
-                        ),
-                        Some(_) => return Some(Err(anyhow!("invalid result"))),
-                        None => (None, Vec::new()),
-                    };
+                                }
+                                _ => None,
+                            })
+                            .collect();
+                        let service_data = self
+                            .graph
+                            .objects_for_subject_predicate(n, qt::SERVICE_DATA)
+                            .filter_map(|g| match g {
+                                TermRef::NamedNode(g) => Some(g.into()),
+                                TermRef::BlankNode(g) => Some(g.into()),
+                                _ => None,
+                            })
+                            .filter_map(|g: NamedOrBlankNodeRef<'_>| {
+                                if let (
+                                    Some(TermRef::NamedNode(endpoint)),
+                                    Some(TermRef::NamedNode(data)),
+                                ) = (
+                                    self.graph.object_for_subject_predicate(g, qt::ENDPOINT),
+                                    self.graph.object_for_subject_predicate(g, qt::DATA),
+                                ) {
+                                    Some((endpoint.as_str().to_owned(), data.as_str().to_owned()))
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        (None, query, update, data, graph_data, service_data)
+                    }
+                    Some(_) => return Some(Err(anyhow!("invalid action"))),
+                    None => {
+                        return Some(Err(anyhow!("action not found for test {}", test_node)));
+                    }
+                };
+                let (result, result_graph_data) = match self
+                    .graph
+                    .object_for_subject_predicate(&test_node, mf::RESULT)
+                {
+                    Some(TermRef::NamedNode(n)) => (Some(n.as_str().to_owned()), Vec::new()),
+                    Some(TermRef::BlankNode(n)) => (
+                        if let Some(TermRef::NamedNode(result)) =
+                            self.graph.object_for_subject_predicate(n, ut::DATA)
+                        {
+                            Some(result.as_str().to_owned())
+                        } else {
+                            None
+                        },
+                        self.graph
+                            .objects_for_subject_predicate(n, ut::GRAPH_DATA)
+                            .filter_map(|g| match g {
+                                TermRef::NamedNode(q) => {
+                                    Some((q.into_owned(), q.as_str().to_owned()))
+                                }
+                                TermRef::BlankNode(node) => {
+                                    if let Some(TermRef::NamedNode(graph)) =
+                                        self.graph.object_for_subject_predicate(node, ut::GRAPH)
+                                    {
+                                        if let Some(TermRef::Literal(name)) = self
+                                            .graph
+                                            .object_for_subject_predicate(node, rdfs::LABEL)
+                                        {
+                                            Some((
+                                                NamedNode::new(name.value()).unwrap(),
+                                                graph.as_str().to_owned(),
+                                            ))
+                                        } else {
+                                            Some((graph.into_owned(), graph.as_str().to_owned()))
+                                        }
+                                    } else {
+                                        None
+                                    }
+                                }
+                                _ => None,
+                            })
+                            .collect(),
+                    ),
+                    Some(_) => return Some(Err(anyhow!("invalid result"))),
+                    None => (None, Vec::new()),
+                };
                 Some(Ok(Test {
                     id: test_node,
                     kind,
@@ -247,15 +248,16 @@ impl Iterator for TestManifest {
                     Some(url) => {
                         let manifest =
                             NamedOrBlankNodeRef::from(NamedNodeRef::new(url.as_str()).unwrap());
-                        if let Err(error) =
-                            load_to_store(&url, &self.graph, GraphNameRef::DefaultGraph)
-                        {
+                        if let Err(error) = load_to_graph(&url, &mut self.graph) {
                             return Some(Err(error));
                         }
 
                         // New manifests
-                        match object_for_subject_predicate(&self.graph, manifest, mf::INCLUDE) {
-                            Some(Term::BlankNode(list)) => {
+                        match self
+                            .graph
+                            .object_for_subject_predicate(manifest, mf::INCLUDE)
+                        {
+                            Some(TermRef::BlankNode(list)) => {
                                 self.manifests_to_do.extend(
                                     RdfListIterator::iter(&self.graph, list.into()).filter_map(
                                         |m| match m {
@@ -270,8 +272,11 @@ impl Iterator for TestManifest {
                         }
 
                         // New tests
-                        match object_for_subject_predicate(&self.graph, manifest, mf::ENTRIES) {
-                            Some(Term::BlankNode(list)) => {
+                        match self
+                            .graph
+                            .object_for_subject_predicate(manifest, mf::ENTRIES)
+                        {
+                            Some(TermRef::BlankNode(list)) => {
                                 self.tests_to_do
                                     .extend(RdfListIterator::iter(&self.graph, list.into()));
                             }
@@ -290,12 +295,12 @@ impl Iterator for TestManifest {
 }
 
 struct RdfListIterator<'a> {
-    graph: &'a MemoryStore,
-    current_node: Option<NamedOrBlankNode>,
+    graph: &'a Graph,
+    current_node: Option<NamedOrBlankNodeRef<'a>>,
 }
 
 impl<'a> RdfListIterator<'a> {
-    fn iter(graph: &'a MemoryStore, root: NamedOrBlankNode) -> RdfListIterator<'a> {
+    fn iter(graph: &'a Graph, root: NamedOrBlankNodeRef<'a>) -> RdfListIterator<'a> {
         RdfListIterator {
             graph,
             current_node: Some(root),
@@ -307,14 +312,17 @@ impl<'a> Iterator for RdfListIterator<'a> {
     type Item = Term;
 
     fn next(&mut self) -> Option<Term> {
-        match self.current_node.clone() {
+        match self.current_node {
             Some(current) => {
-                let result = object_for_subject_predicate(&self.graph, &current, rdf::FIRST);
+                let result = self
+                    .graph
+                    .object_for_subject_predicate(current, rdf::FIRST)
+                    .map(|v| v.into_owned());
                 self.current_node =
-                    match object_for_subject_predicate(&self.graph, &current, rdf::REST) {
-                        Some(Term::NamedNode(n)) if n == rdf::NIL => None,
-                        Some(Term::NamedNode(n)) => Some(n.into()),
-                        Some(Term::BlankNode(n)) => Some(n.into()),
+                    match self.graph.object_for_subject_predicate(current, rdf::REST) {
+                        Some(TermRef::NamedNode(n)) if n == rdf::NIL => None,
+                        Some(TermRef::NamedNode(n)) => Some(n.into()),
+                        Some(TermRef::BlankNode(n)) => Some(n.into()),
                         _ => None,
                     };
                 result
@@ -322,22 +330,4 @@ impl<'a> Iterator for RdfListIterator<'a> {
             None => None,
         }
     }
-}
-
-fn object_for_subject_predicate<'a>(
-    store: &MemoryStore,
-    subject: impl Into<NamedOrBlankNodeRef<'a>>,
-    predicate: impl Into<NamedNodeRef<'a>>,
-) -> Option<Term> {
-    objects_for_subject_predicate(store, subject, predicate).next()
-}
-
-fn objects_for_subject_predicate<'a>(
-    store: &MemoryStore,
-    subject: impl Into<NamedOrBlankNodeRef<'a>>,
-    predicate: impl Into<NamedNodeRef<'a>>,
-) -> impl Iterator<Item = Term> {
-    store
-        .quads_for_pattern(Some(subject.into()), Some(predicate.into()), None, None)
-        .map(|t| t.object)
 }
