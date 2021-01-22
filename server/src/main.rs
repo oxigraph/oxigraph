@@ -15,6 +15,7 @@ use async_std::io::Read;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::task::{block_on, spawn};
+use http_types::content::{Accept, ContentType};
 use http_types::{
     bail_status, headers, Error, Method, Mime, Request, Response, Result, StatusCode,
 };
@@ -61,16 +62,16 @@ pub async fn main() -> Result<()> {
 }
 
 async fn handle_request(request: Request, store: Store) -> Result<Response> {
-    let mut response = match (request.url().path(), request.method()) {
+    Ok(match (request.url().path(), request.method()) {
         ("/", Method::Get) => {
             let mut response = Response::new(StatusCode::Ok);
-            response.append_header(headers::CONTENT_TYPE, "text/html");
+            ContentType::new("text/html").apply(&mut response);
             response.set_body(HTML_ROOT_PAGE);
             response
         }
         ("/logo.svg", Method::Get) => {
             let mut response = Response::new(StatusCode::Ok);
-            response.append_header(headers::CONTENT_TYPE, "image/svg+xml");
+            ContentType::new("image/svg+xml").apply(&mut response);
             response.set_body(LOGO);
             response
         }
@@ -161,7 +162,7 @@ async fn handle_request(request: Request, store: Store) -> Result<Response> {
                 format.media_type()
             };
             let mut response = Response::from(body);
-            response.insert_header(headers::CONTENT_TYPE, format);
+            ContentType::new(format).apply(&mut response);
             response
         }
         (path, Method::Put) if path.starts_with("/store") => {
@@ -337,9 +338,7 @@ async fn handle_request(request: Request, store: Store) -> Result<Response> {
             request.method(),
             request.url().path()
         ),
-    };
-    response.append_header(headers::SERVER, SERVER);
-    Ok(response)
+    })
 }
 
 fn base_url(request: &Request) -> Result<Url> {
@@ -418,7 +417,7 @@ fn evaluate_sparql_query(
         let mut body = Vec::default();
         results.write_graph(&mut body, format)?;
         let mut response = Response::from(body);
-        response.insert_header(headers::CONTENT_TYPE, format.media_type());
+        ContentType::new(format.media_type()).apply(&mut response);
         Ok(response)
     } else {
         let format = content_negotiation(
@@ -434,7 +433,7 @@ fn evaluate_sparql_query(
         let mut body = Vec::default();
         results.write(&mut body, format)?;
         let mut response = Response::from(body);
-        response.insert_header(headers::CONTENT_TYPE, format.media_type());
+        ContentType::new(format.media_type()).apply(&mut response);
         Ok(response)
     }
 }
@@ -556,7 +555,7 @@ async fn http_server<
         handle: F,
     ) -> Result<()> {
         async_h1::accept(stream, |request| async {
-            Ok(match handle(request).await {
+            let mut response = match handle(request).await {
                 Ok(result) => result,
                 Err(error) => {
                     if error.status().is_server_error() {
@@ -566,7 +565,9 @@ async fn http_server<
                     response.set_body(error.to_string());
                     response
                 }
-            })
+            };
+            response.append_header(headers::SERVER, SERVER);
+            Ok(response)
         })
         .await
     }
@@ -613,43 +614,21 @@ fn content_negotiation<F>(
     supported: &[&str],
     parse: impl Fn(&str) -> Option<F>,
 ) -> Result<F> {
-    let header = request
-        .header(headers::ACCEPT)
-        .map(|h| h.last().as_str().trim())
-        .unwrap_or("");
-    let supported: Vec<Mime> = supported
-        .iter()
-        .map(|h| Mime::from_str(h).unwrap())
-        .collect();
-
-    let mut result = supported.first().unwrap();
-    let mut result_score = 0f32;
-
-    if !header.is_empty() {
-        for possible in header.split(',') {
-            let possible = Mime::from_str(possible.trim())?;
-            let score = if let Some(q) = possible.param("q") {
-                f32::from_str(&q.to_string())?
-            } else {
-                1.
-            };
-            if score <= result_score {
-                continue;
-            }
-            for candidate in &supported {
-                if (possible.basetype() == candidate.basetype() || possible.basetype() == "*")
-                    && (possible.subtype() == candidate.subtype() || possible.subtype() == "*")
-                {
-                    result = candidate;
-                    result_score = score;
-                    break;
-                }
-            }
-        }
+    if let Some(mut accept) = Accept::from_headers(request)? {
+        let supported: Vec<Mime> = supported
+            .iter()
+            .map(|h| Mime::from_str(h).unwrap())
+            .collect();
+        parse(accept.negotiate(&supported)?.value().as_str())
+    } else {
+        parse(supported.first().ok_or_else(|| {
+            Error::from_str(
+                StatusCode::InternalServerError,
+                "No default MIME type provided",
+            )
+        })?)
     }
-
-    parse(result.essence())
-        .ok_or_else(|| Error::from_str(StatusCode::InternalServerError, "Unknown mime type"))
+    .ok_or_else(|| Error::from_str(StatusCode::InternalServerError, "Unknown mime type"))
 }
 
 fn bad_request(e: impl Into<Error>) -> Error {
