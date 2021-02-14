@@ -620,7 +620,7 @@ mod rocksdb {
 }
 
 // helper functions
-
+#[allow(clippy::unnecessary_wraps)]
 fn infallible_quad_map<'a>(q: Quad) -> Result<StreamedSophiaQuad<'a>, Infallible> {
     let q: SophiaQuad = q.into();
     Ok(StreamedQuad::by_value(q))
