@@ -256,47 +256,53 @@ impl<I: StrId> Hash for EncodedTerm<I> {
 
 impl<I: StrId> EncodedTerm<I> {
     pub fn is_named_node(&self) -> bool {
-        matches!(self,
-            Self::NamedNode { .. })
+        matches!(self, Self::NamedNode { .. })
     }
 
     pub fn is_blank_node(&self) -> bool {
-        matches!(self,
+        matches!(
+            self,
             Self::NumericalBlankNode { .. }
-            | Self::SmallBlankNode { .. }
-            | Self::BigBlankNode { .. })
+                | Self::SmallBlankNode { .. }
+                | Self::BigBlankNode { .. }
+        )
     }
 
     pub fn is_literal(&self) -> bool {
-        matches!(self,
+        matches!(
+            self,
             Self::SmallStringLiteral { .. }
-            | Self::BigStringLiteral { .. }
-            | Self::SmallSmallLangStringLiteral { .. }
-            | Self::SmallBigLangStringLiteral { .. }
-            | Self::BigSmallLangStringLiteral { .. }
-            | Self::BigBigLangStringLiteral { .. }
-            | Self::SmallTypedLiteral { .. }
-            | Self::BigTypedLiteral { .. }
-            | Self::BooleanLiteral(_)
-            | Self::FloatLiteral(_)
-            | Self::DoubleLiteral(_)
-            | Self::IntegerLiteral(_)
-            | Self::DecimalLiteral(_)
-            | Self::DateTimeLiteral(_)
-            | Self::TimeLiteral(_)
-            | Self::DateLiteral(_)
-            | Self::GYearMonthLiteral(_)
-            | Self::GYearLiteral(_)
-            | Self::GMonthDayLiteral(_)
-            | Self::GDayLiteral(_)
-            | Self::GMonthLiteral(_)
-            | Self::DurationLiteral(_)
-            | Self::YearMonthDurationLiteral(_)
-            | Self::DayTimeDurationLiteral(_))
+                | Self::BigStringLiteral { .. }
+                | Self::SmallSmallLangStringLiteral { .. }
+                | Self::SmallBigLangStringLiteral { .. }
+                | Self::BigSmallLangStringLiteral { .. }
+                | Self::BigBigLangStringLiteral { .. }
+                | Self::SmallTypedLiteral { .. }
+                | Self::BigTypedLiteral { .. }
+                | Self::BooleanLiteral(_)
+                | Self::FloatLiteral(_)
+                | Self::DoubleLiteral(_)
+                | Self::IntegerLiteral(_)
+                | Self::DecimalLiteral(_)
+                | Self::DateTimeLiteral(_)
+                | Self::TimeLiteral(_)
+                | Self::DateLiteral(_)
+                | Self::GYearMonthLiteral(_)
+                | Self::GYearLiteral(_)
+                | Self::GMonthDayLiteral(_)
+                | Self::GDayLiteral(_)
+                | Self::GMonthLiteral(_)
+                | Self::DurationLiteral(_)
+                | Self::YearMonthDurationLiteral(_)
+                | Self::DayTimeDurationLiteral(_)
+        )
     }
 
     pub fn is_unknown_typed_literal(&self) -> bool {
-        matches!(self, Self::SmallTypedLiteral { .. } | Self::BigTypedLiteral { .. })
+        matches!(
+            self,
+            Self::SmallTypedLiteral { .. } | Self::BigTypedLiteral { .. }
+        )
     }
 
     pub fn is_default_graph(&self) -> bool {

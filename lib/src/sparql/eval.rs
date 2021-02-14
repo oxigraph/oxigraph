@@ -1411,11 +1411,13 @@ where
                 Some(self.eval_expression(e, tuple)?.is_literal().into())
             }
             PlanExpression::IsNumeric(e) => Some(
-                matches!(self.eval_expression(e, tuple)?,
+                matches!(
+                    self.eval_expression(e, tuple)?,
                     EncodedTerm::FloatLiteral(_)
-                    | EncodedTerm::DoubleLiteral(_)
-                    | EncodedTerm::IntegerLiteral(_)
-                    | EncodedTerm::DecimalLiteral(_))
+                        | EncodedTerm::DoubleLiteral(_)
+                        | EncodedTerm::IntegerLiteral(_)
+                        | EncodedTerm::DecimalLiteral(_)
+                )
                 .into(),
             ),
             PlanExpression::Regex(text, pattern, flags) => {

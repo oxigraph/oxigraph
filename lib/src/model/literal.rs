@@ -508,7 +508,10 @@ impl<'a> LiteralRef<'a> {
     /// or has the datatype [xsd:string](http://www.w3.org/2001/XMLSchema#string).
     #[inline]
     pub fn is_plain(self) -> bool {
-        matches!(self.0, LiteralRefContent::String(_) | LiteralRefContent::LanguageTaggedString { .. })
+        matches!(
+            self.0,
+            LiteralRefContent::String(_) | LiteralRefContent::LanguageTaggedString { .. }
+        )
     }
 
     #[inline]
