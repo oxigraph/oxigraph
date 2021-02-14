@@ -37,7 +37,7 @@ rio_api = "0.5"
 rio_turtle = "0.5"
 rio_xml = "0.5"
 hex = "0.4"
-nom = "6"
+nom = "5"
 peg = "0.6"
 siphasher = "0.3"
 lasso = {version="0.4", features=["multi-threaded", "inline-more"]}

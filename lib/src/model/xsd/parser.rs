@@ -146,7 +146,7 @@ const OVERFLOW_ERROR: XsdParseError = XsdParseError {
 };
 
 pub fn parse_value<'a, T>(
-    mut f: impl FnMut(&'a str) -> XsdResult<'a, T>,
+    f: impl Fn(&'a str) -> XsdResult<'a, T>,
     input: &'a str,
 ) -> Result<T, XsdParseError> {
     let (left, result) = f(input)?;
@@ -528,10 +528,10 @@ fn parsed_u8_range(input: &str, min: u8, max: u8) -> Result<u8, XsdParseError> {
     }
 }
 
-pub fn map_res<'a, O1, O2, E2: Into<XsdParseError>>(
-    mut first: impl FnMut(&'a str) -> XsdResult<'a, O1>,
-    mut second: impl FnMut(O1) -> Result<O2, E2>,
-) -> impl FnMut(&'a str) -> XsdResult<'a, O2> {
+fn map_res<'a, O1, O2, E2: Into<XsdParseError>>(
+    first: impl Fn(&'a str) -> XsdResult<'a, O1>,
+    second: impl Fn(O1) -> Result<O2, E2>,
+) -> impl Fn(&'a str) -> XsdResult<'a, O2> {
     move |input| {
         let (input, o1) = first(input)?;
         Ok((input, second(o1).map_err(|e| Err::Error(e.into()))?))
