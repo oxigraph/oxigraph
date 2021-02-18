@@ -1133,6 +1133,10 @@ impl<'a> WritableEncodedStore for &'a SledTransaction<'a> {
             write_gosp_quad(&mut buffer, quad);
             self.gosp.insert(buffer.as_slice(), &[])?;
             buffer.clear();
+
+            write_term(&mut buffer, quad.graph_name);
+            self.graphs.insert(buffer.as_slice(), &[])?;
+            buffer.clear();
         }
 
         Ok(())
