@@ -267,7 +267,7 @@ impl MemoryStore {
     /// let store = MemoryStore::new();
     ///
     /// let ex = NamedNode::new("http://example.com")?;
-    /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
+    /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone());
     ///
     /// store.transaction(|transaction| {
     ///     transaction.insert(quad.clone());
@@ -275,6 +275,7 @@ impl MemoryStore {
     /// })?;
     ///
     /// assert!(store.contains(&quad));
+    /// assert!(store.contains_named_graph(&ex));
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn transaction<E>(
@@ -316,7 +317,7 @@ impl MemoryStore {
     /// store.load_graph(file.as_ref(), GraphFormat::NTriples, &GraphName::DefaultGraph, None)?;
     ///
     /// // we inspect the store contents
-    /// let ex = NamedNodeRef::new("http://example.com").unwrap();
+    /// let ex = NamedNodeRef::new("http://example.com")?;
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, None)));
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -354,7 +355,7 @@ impl MemoryStore {
     /// store.load_dataset(file.as_ref(), DatasetFormat::NQuads, None)?;
     ///
     /// // we inspect the store contents
-    /// let ex = NamedNodeRef::new("http://example.com").unwrap();
+    /// let ex = NamedNodeRef::new("http://example.com")?;
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex)));
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -406,7 +407,7 @@ impl MemoryStore {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::{MemoryStore};
+    /// use oxigraph::MemoryStore;
     /// use oxigraph::io::GraphFormat;
     /// use oxigraph::model::GraphName;
     ///
@@ -537,7 +538,7 @@ impl MemoryStore {
     /// assert_eq!(1, store.len());
     ///
     /// store.clear_graph(&ex);
-    /// assert_eq!(0, store.len());
+    /// assert!(store.is_empty());
     /// assert_eq!(1, store.named_graphs().count());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -565,7 +566,7 @@ impl MemoryStore {
     /// assert_eq!(1, store.len());
     ///
     /// store.remove_named_graph(&ex);
-    /// assert_eq!(0, store.len());
+    /// assert!(store.is_empty());
     /// assert_eq!(0, store.named_graphs().count());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -588,13 +589,13 @@ impl MemoryStore {
     /// use oxigraph::model::{NamedNode, Quad};
     ///
     /// let ex = NamedNode::new("http://example.com")?;
-    /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), ex);
     /// let store = MemoryStore::new();
-    /// store.insert(quad.clone());    
-    /// assert_eq!(1, store.len());
+    /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone()));
+    /// store.insert(Quad::new(ex.clone(), ex.clone(), ex, None));
+    /// assert_eq!(2, store.len());
     ///
     /// store.clear();
-    /// assert_eq!(0, store.len());
+    /// assert!(store.is_empty());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn clear(&self) {
@@ -1352,9 +1353,9 @@ impl MemoryTransaction {
     /// })?;
     ///
     /// // we inspect the store content
-    /// let ex = NamedNodeRef::new("http://example.com").unwrap();
-    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), None)));
-    /// # Result::<_, oxigraph::sparql::EvaluationError>::Ok(())
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, None)));
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     ///
     /// If the file parsing fails in the middle of the file, the triples read before are still
@@ -1396,12 +1397,14 @@ impl MemoryTransaction {
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
-    /// store.load_dataset(file.as_ref(), DatasetFormat::NQuads, None)?;
+    /// store.transaction(|transaction| {
+    ///     transaction.load_dataset(file.as_ref(), DatasetFormat::NQuads, None)
+    /// })?;    
     ///
     /// // we inspect the store content
-    /// let ex = NamedNodeRef::new("http://example.com").unwrap();
+    /// let ex = NamedNodeRef::new("http://example.com")?;
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex)));
-    /// # Result::<_, oxigraph::sparql::EvaluationError>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     ///
     /// If the file parsing fails in the middle of the file, the quads read before are still

@@ -157,7 +157,24 @@ impl SledStore {
 
     /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/).
     ///
-    /// See [`MemoryStore`](super::memory::MemoryStore::query()) for a usage example.
+    /// Usage example:
+    /// ```
+    /// use oxigraph::SledStore;
+    /// use oxigraph::model::*;
+    /// use oxigraph::sparql::QueryResults;
+    ///
+    /// let store = SledStore::new()?;
+    ///
+    /// // insertions
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// store.insert(QuadRef::new(ex, ex, ex, None))?;
+    ///
+    /// // SPARQL query
+    /// if let QueryResults::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { ?s ?p ?o }")? {
+    ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into_owned().into()));
+    /// }
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
     pub fn query(
         &self,
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
@@ -176,7 +193,23 @@ impl SledStore {
 
     /// Retrieves quads with a filter on each quad component
     ///
-    /// See [`MemoryStore`](super::memory::MemoryStore::quads_for_pattern()) for a usage example.
+    /// Usage example:
+    /// ```
+    /// use oxigraph::SledStore;
+    /// use oxigraph::model::*;
+    ///
+    /// let store = SledStore::new()?;
+    ///
+    /// // insertion
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
+    /// store.insert(&quad)?;
+    ///
+    /// // quad filter by object
+    /// let results = store.quads_for_pattern(None, None, Some((&ex).into()), None).collect::<Result<Vec<_>,_>>()?;
+    /// assert_eq!(vec![quad], results);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
     pub fn quads_for_pattern(
         &self,
         subject: Option<NamedOrBlankNodeRef<'_>>,
@@ -227,7 +260,21 @@ impl SledStore {
     /// The store does not track the existence of empty named graphs.
     /// This method has no ACID guarantees.
     ///
-    /// See [`MemoryStore`](super::memory::MemoryStore::update()) for a usage example.
+    /// Usage example:
+    /// ```
+    /// use oxigraph::SledStore;
+    /// use oxigraph::model::*;
+    ///
+    /// let store = SledStore::new()?;
+    ///
+    /// // insertion
+    /// store.update("INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }")?;
+    ///
+    /// // we inspect the store contents
+    /// let ex = NamedNodeRef::new("http://example.com").unwrap();
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, None))?);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
     pub fn update(
         &self,
         update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
@@ -263,17 +310,17 @@ impl SledStore {
     ///
     /// let store = SledStore::new()?;
     ///
-    /// let ex = NamedNode::new("http://example.com")?;
-    /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// let quad = QuadRef::new(ex, ex, ex, ex);
     ///
     /// // transaction
     /// store.transaction(|transaction| {
-    ///     transaction.insert(&quad)?;
+    ///     transaction.insert(quad)?;
     ///     Ok(()) as Result<(),SledConflictableTransactionError<Infallible>>
     /// })?;
     ///
-    /// // quad filter
-    /// assert!(store.contains(&quad)?);
+    /// assert!(store.contains(quad)?);
+    /// assert!(store.contains_named_graph(ex)?);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn transaction<T, E>(
@@ -314,13 +361,28 @@ impl SledStore {
 
     /// Loads a graph file (i.e. triples) into the store
     ///
-    /// Warning: This functions saves the triples in a not atomic way. If the parsing fails in the middle of the file,
-    /// only a part of it may be written to the store.
-    /// Also, this method is optimized for performances and is not atomic.
+    /// Warning: This functions saves the triples in a not atomic way.
+    /// If the parsing fails in the middle of the file only a part of it may be written to the store.
     /// It might leave the store in a bad state if a crash happens during a triple insertion.
     /// Use a (memory greedy) [transaction](SledStore::transaction()) if you do not want that.
     ///
-    /// See [`MemoryStore`](super::memory::MemoryStore::load_graph()) for a usage example.
+    /// Usage example:
+    /// ```
+    /// use oxigraph::SledStore;
+    /// use oxigraph::io::GraphFormat;
+    /// use oxigraph::model::*;
+    ///
+    /// let store = SledStore::new()?;
+    ///
+    /// // insertion
+    /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
+    /// store.load_graph(file.as_ref(), GraphFormat::NTriples, &GraphName::DefaultGraph, None)?;
+    ///
+    /// // we inspect the store contents
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, None))?);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
     ///
     /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
     /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
@@ -339,13 +401,28 @@ impl SledStore {
 
     /// Loads a dataset file (i.e. quads) into the store.
     ///
-    /// Warning: This functions saves the triples in a not atomic way. If the parsing fails in the middle of the file,
-    /// only a part of it may be written to the store.
-    /// Also, this method is optimized for performances and is not atomic.
+    /// Warning: This functions saves the triples in a not atomic way.
+    /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
     /// It might leave the store in a bad state if a crash happens during a quad insertion.
     /// Use a (memory greedy) [transaction](SledStore::transaction()) if you do not want that.
     ///
-    /// See [`MemoryStore`](super::memory::MemoryStore::load_dataset()) for a usage example.
+    /// Usage example:
+    /// ```
+    /// use oxigraph::SledStore;
+    /// use oxigraph::io::DatasetFormat;
+    /// use oxigraph::model::*;
+    ///
+    /// let store = SledStore::new()?;
+    ///
+    /// // insertion
+    /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
+    /// store.load_dataset(file.as_ref(), DatasetFormat::NQuads, None)?;
+    ///
+    /// // we inspect the store contents
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
     ///
     /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
     /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
@@ -388,7 +465,22 @@ impl SledStore {
 
     /// Dumps a store graph into a file.
     ///    
-    /// See [`MemoryStore`](super::memory::MemoryStore::dump_graph()) for a usage example.
+    /// Usage example:
+    /// ```
+    /// use oxigraph::SledStore;
+    /// use oxigraph::io::GraphFormat;
+    /// use oxigraph::model::GraphName;
+    ///
+    /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
+    ///
+    /// let store = SledStore::new()?;
+    /// store.load_graph(file, GraphFormat::NTriples, &GraphName::DefaultGraph, None)?;
+    ///
+    /// let mut buffer = Vec::new();
+    /// store.dump_graph(&mut buffer, GraphFormat::NTriples, &GraphName::DefaultGraph)?;
+    /// assert_eq!(file, buffer.as_slice());
+    /// # std::io::Result::Ok(())
+    /// ```
     pub fn dump_graph<'a>(
         &self,
         writer: impl Write,
@@ -405,14 +497,38 @@ impl SledStore {
 
     /// Dumps the store into a file.
     ///    
-    /// See [`MemoryStore`](super::memory::MemoryStore::dump_dataset()) for a usage example.
+    /// ```
+    /// use oxigraph::SledStore;
+    /// use oxigraph::io::DatasetFormat;
+    ///
+    /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
+    ///
+    /// let store = SledStore::new()?;
+    /// store.load_dataset(file, DatasetFormat::NQuads, None)?;
+    ///
+    /// let mut buffer = Vec::new();
+    /// store.dump_dataset(&mut buffer, DatasetFormat::NQuads)?;
+    /// assert_eq!(file, buffer.as_slice());
+    /// # std::io::Result::Ok(())
+    /// ```
     pub fn dump_dataset(&self, writer: impl Write, format: DatasetFormat) -> Result<(), io::Error> {
         dump_dataset(self.iter(), writer, format)
     }
 
     /// Returns all the store named graphs
     ///
-    /// See [`MemoryStore`](super::memory::MemoryStore::named_graphs()) for a usage example.
+    /// Usage example:
+    /// ```
+    /// use oxigraph::SledStore;
+    /// use oxigraph::model::{NamedNode, QuadRef, NamedOrBlankNode};
+    ///
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let store = SledStore::new()?;
+    /// store.insert(QuadRef::new(&ex, &ex, &ex, &ex))?;
+    /// store.insert(QuadRef::new(&ex, &ex, &ex, None))?;
+    /// assert_eq!(vec![NamedOrBlankNode::from(ex)], store.named_graphs().collect::<Result<Vec<_>,_>>()?);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
     pub fn named_graphs(&self) -> SledGraphNameIter {
         SledGraphNameIter {
             iter: self.encoded_named_graphs(),
@@ -422,7 +538,17 @@ impl SledStore {
 
     /// Checks if the store contains a given graph
     ///
-    /// See [`MemoryStore`](super::memory::MemoryStore::contains_named_graph()) for a usage example.
+    /// Usage example:
+    /// ```
+    /// use oxigraph::SledStore;
+    /// use oxigraph::model::{NamedNode, QuadRef};
+    ///
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let store = SledStore::new()?;
+    /// store.insert(QuadRef::new(&ex, &ex, &ex, &ex))?;
+    /// assert!(store.contains_named_graph(&ex)?);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
     pub fn contains_named_graph<'a>(
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
@@ -436,7 +562,17 @@ impl SledStore {
 
     /// Inserts a graph into this store
     ///
-    /// See [`MemoryStore`](super::memory::MemoryStore::insert_named_graph()) for a usage example.
+    /// Usage example:
+    /// ```
+    /// use oxigraph::SledStore;
+    /// use oxigraph::model::NamedNodeRef;
+    ///
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// let store = SledStore::new()?;
+    /// store.insert_named_graph(ex)?;
+    /// assert_eq!(store.named_graphs().count(), 1);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
     pub fn insert_named_graph<'a>(
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
@@ -448,7 +584,22 @@ impl SledStore {
 
     /// Clears a graph from this store.
     ///
-    /// See [`MemoryStore`](super::memory::MemoryStore::clear_graph()) for a usage example.
+    /// Usage example:
+    /// ```
+    /// use oxigraph::SledStore;
+    /// use oxigraph::model::{NamedNodeRef, QuadRef};
+    ///
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// let quad = QuadRef::new(ex, ex, ex, ex);
+    /// let store = SledStore::new()?;
+    /// store.insert(quad)?;
+    /// assert_eq!(1, store.len());
+    ///
+    /// store.clear_graph(ex)?;
+    /// assert_eq!(0, store.len());
+    /// assert_eq!(1, store.named_graphs().count());
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
     pub fn clear_graph<'a>(
         &self,
         graph_name: impl Into<GraphNameRef<'a>>,
@@ -463,7 +614,22 @@ impl SledStore {
 
     /// Removes a graph from this store.
     ///
-    /// See [`MemoryStore`](super::memory::MemoryStore::remove_named_graph()) for a usage example.
+    /// Usage example:
+    /// ```
+    /// use oxigraph::SledStore;
+    /// use oxigraph::model::{NamedNodeRef, QuadRef};
+    ///
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// let quad = QuadRef::new(ex, ex, ex, ex);
+    /// let store = SledStore::new()?;
+    /// store.insert(quad)?;
+    /// assert_eq!(1, store.len());
+    ///
+    /// store.remove_named_graph(ex)?;
+    /// assert!(store.is_empty());
+    /// assert_eq!(0, store.named_graphs().count());
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
     pub fn remove_named_graph<'a>(
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
@@ -478,7 +644,21 @@ impl SledStore {
 
     /// Clears the store.
     ///
-    /// See [`MemoryStore`](super::memory::MemoryStore::clear()) for a usage example.
+    /// Usage example:
+    /// ```
+    /// use oxigraph::SledStore;
+    /// use oxigraph::model::{NamedNodeRef, QuadRef};
+    ///
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// let store = SledStore::new()?;
+    /// store.insert(QuadRef::new(ex, ex, ex, ex))?;
+    /// store.insert(QuadRef::new(ex, ex, ex, None))?;    
+    /// assert_eq!(2, store.len());
+    ///
+    /// store.clear()?;
+    /// assert!(store.is_empty());
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
     pub fn clear(&self) -> Result<(), io::Error> {
         let mut this = self;
         (&mut this).clear()
@@ -989,11 +1169,32 @@ impl SledTransaction<'_> {
     /// the full file content might be temporarily stored in main memory.
     /// Do not use for big files.
     ///
-    /// See [`MemoryTransaction`](super::memory::MemoryTransaction::load_graph()) for a usage example.
+    /// Usage example:
+    /// ```
+    /// use oxigraph::SledStore;
+    /// use oxigraph::io::GraphFormat;
+    /// use oxigraph::model::*;
+    /// use oxigraph::store::sled::SledConflictableTransactionError;
+    ///
+    /// let store = SledStore::new()?;
+    ///
+    /// // insertion
+    /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
+    /// store.transaction(|transaction| {
+    ///     transaction.load_graph(file.as_ref(), GraphFormat::NTriples, &GraphName::DefaultGraph, None)?;
+    ///     Ok(()) as Result<(),SledConflictableTransactionError<std::io::Error>>
+    /// })?;
+    ///
+    /// // we inspect the store content
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, None))?);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
     ///
     /// If the file parsing fails in the middle of the file, the triples read before are still
     /// considered by the transaction. Rollback the transaction by making the transaction closure
     /// return an error if you don't want that.
+    /// Moving up the parsing error through the transaction is enough to do that.
     ///
     /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
     /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
@@ -1015,11 +1216,32 @@ impl SledTransaction<'_> {
     /// the full file content might be temporarily stored in main memory.
     /// Do not use for big files.
     ///
-    /// See [`MemoryTransaction`](super::memory::MemoryTransaction::load_dataset()) for a usage example.
+    /// Usage example:
+    /// ```
+    /// use oxigraph::SledStore;
+    /// use oxigraph::io::DatasetFormat;
+    /// use oxigraph::model::*;
+    /// use oxigraph::store::sled::SledConflictableTransactionError;
+    ///
+    /// let store = SledStore::new()?;
+    ///
+    /// // insertion
+    /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
+    /// store.transaction(|transaction| {
+    ///     transaction.load_dataset(file.as_ref(), DatasetFormat::NQuads, None)?;
+    ///     Ok(()) as Result<(),SledConflictableTransactionError<std::io::Error>>
+    /// })?;
+    ///
+    /// // we inspect the store content
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```    
     ///
     /// If the file parsing fails in the middle of the file, the quads read before are still
     /// considered by the transaction. Rollback the transaction by making the transaction closure
     /// return an error if you don't want that.
+    /// Moving up the parsing error through the transaction is enough to do that.
     ///
     /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
     /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
