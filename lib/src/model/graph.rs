@@ -187,7 +187,7 @@ impl Graph {
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
     /// graph.load(file.as_ref(), GraphFormat::NTriples, None)?;
     ///
-    /// // we inspect the store contents
+    /// // we inspect the graph contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// assert!(graph.contains(TripleRef::new(ex, ex, ex)));
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -216,11 +216,11 @@ impl Graph {
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
     ///
-    /// let mut store = Graph::new();
-    /// store.load(file, GraphFormat::NTriples,None)?;
+    /// let mut graph = Graph::new();
+    /// graph.load(file, GraphFormat::NTriples, None)?;
     ///
     /// let mut buffer = Vec::new();
-    /// store.dump(&mut buffer, GraphFormat::NTriples)?;
+    /// graph.dump(&mut buffer, GraphFormat::NTriples)?;
     /// assert_eq!(file, buffer.as_slice());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -230,8 +230,32 @@ impl Graph {
 
     /// Applies on the graph the canonicalization process described in
     /// [Canonical Forms for Isomorphic and Equivalent RDF Graphs: Algorithms for Leaning and Labelling Blank Nodes, Aidan Hogan, 2017](http://aidanhogan.com/docs/rdf-canonicalisation.pdf)
+    ///   
+    /// Usage example ([Graph isomorphim](https://www.w3.org/TR/rdf11-concepts/#dfn-graph-isomorphism)):
+    /// ```
+    /// use oxigraph::io::GraphFormat;
+    /// use oxigraph::model::Graph;
     ///
-    /// Warning: This implementation worst-case complexity is in O(b!) with b the number of blank nodes in the input graphs.
+    /// let file = "<http://example.com> <http://example.com> [ <http://example.com/p> <http://example.com/o> ] .".as_bytes();
+    ///
+    /// let mut graph1 = Graph::new();
+    /// graph1.load(file, GraphFormat::Turtle, None)?;
+    /// let mut graph2 = Graph::new();
+    /// graph2.load(file, GraphFormat::Turtle, None)?;
+    ///
+    /// assert_ne!(graph1, graph2);
+    /// graph1.canonicalize();
+    /// graph2.canonicalize();
+    /// assert_eq!(graph1, graph2);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    ///
+    /// Warning 1: Blank node ids depends on the current shape of the graph. Adding a new triple might change the ids of a lot of blank nodes.
+    /// Hence, this canonization might not be suitable for diffs.
+    ///
+    /// Warning 2: The canonicalization algorithm is not stable and canonical blank node Ids might change between Oxigraph version.
+    ///
+    /// Warning 3: This implementation worst-case complexity is in *O(b!)* with b the number of blank nodes in the input graph.
     pub fn canonicalize(&mut self) {
         self.dataset.canonicalize()
     }
