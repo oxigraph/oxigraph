@@ -13,9 +13,6 @@ edition = "2018"
 crate-type = ["cdylib"]
 name = "oxigraph"
 
-[package.metadata.wasm-pack.profile.release]
-wasm-opt = false
-
 [dependencies]
 oxigraph = { version = "0.2", path="../lib" }
 wasm-bindgen = "0.2"
