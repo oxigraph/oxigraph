@@ -373,7 +373,7 @@ fn configure_and_evaluate_sparql_query(
             }
             "default-graph-uri" => default_graph_uris.push(v.into_owned()),
             "named-graph-uri" => named_graph_uris.push(v.into_owned()),
-            _ => bail_status!(400, "Unexpected parameter: {}", k),
+            _ => (),
         }
     }
     if let Some(query) = query {
@@ -456,7 +456,7 @@ fn configure_and_evaluate_sparql_update(
             }
             "using-graph-uri" => default_graph_uris.push(v.into_owned()),
             "using-named-graph-uri" => named_graph_uris.push(v.into_owned()),
-            _ => bail_status!(400, "Unexpected parameter: {}", k),
+            _ => (),
         }
     }
     if let Some(update) = update {
