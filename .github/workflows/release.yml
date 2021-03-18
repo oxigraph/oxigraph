@@ -151,3 +151,22 @@ jobs:
           git diff-index --quiet HEAD || git commit -m "Updates pyoxigraph documentation"
           git push
         working-directory: ./website
+  publish_homebrew:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          repository: oxigraph/heombrew-oxigraph
+          token: ${{ secrets.FULL_ACCESS_TOKEN }}
+      - run: echo "RELEASE_VERSION=$(echo ${GITHUB_REF:10})" >> $GITHUB_ENV
+      - run: |
+          wget "https://github.com/oxigraph/oxigraph/archive/$RELEASE_VERSION.tar.gz"
+          SHA=`shasum -a 256 "$RELEASE_VERSION.tar.gz" | awk '{ print $1 }'`
+          rm "$RELEASE_VERSION.tar.gz"
+          sed -i "s/archive\/.*\.tar/archive\/$RELEASE_VERSION.tar/g" Formula/oxigraph.rb
+          sed -i "s/sha256 \".*\"/sha256 \"$SHA\"/g" Formula/oxigraph.rb
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add .
+          git diff-index --quiet HEAD || git commit -m "Upgrades to $RELEASE_VERSION"
+          git push
