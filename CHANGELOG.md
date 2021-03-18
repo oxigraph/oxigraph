@@ -1,3 +1,13 @@
+## [0.2.2] - 2021-03-18
+
+### Added
+- Support of XML entities to the RDF/XML parser
+
+### Changed
+- Serve: Allows unsupported query parameters in HTTP SPARQL requests. 
+- Fixes WASM compilation bug and optimises WASM release packages.
+- Fixes named graph creation inside of a SledStore transaction.
+
 ## [0.2.1] - 2021-01-16
 
 ### Changed
