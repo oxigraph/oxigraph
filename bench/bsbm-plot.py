@@ -4,6 +4,7 @@ from collections import defaultdict
 from glob import glob
 from numpy import array
 
+
 def plot_y_per_x_per_plot(data, xlabel, ylabel, file, log=False):
     plt.figure(file)
 
@@ -19,24 +20,19 @@ def plot_y_per_x_per_plot(data, xlabel, ylabel, file, log=False):
     plt.savefig(file)
 
 
-# BSBM explore
-aqet = defaultdict(dict)
-for file in glob('bsbm.explore.*.xml'):
-    run = file.replace('bsbm.explore.', '').replace('.xml', '')
-    for query in ET.parse(file).getroot().find('queries').findall('query'):
-        val =  float(query.find('aqet').text)
-        if val > 0:
-            aqet[run][int(query.attrib['nr'])] = val
-plot_y_per_x_per_plot(aqet, 'query id', 'execution time (s)', 'bsbm.explore.svg')
+def plot_usecase(name: str):
+    aqet = defaultdict(dict)
+    for file in glob('bsbm.{}.*.xml'.format(name)):
+        run = file.replace('bsbm.{}.'.format(name), '').replace('.xml', '')
+        for query in ET.parse(file).getroot().find('queries').findall('query'):
+            val = float(query.find('aqet').text)
+            if val > 0:
+                aqet[run][int(query.attrib['nr'])] = val
+    plot_y_per_x_per_plot(aqet, 'query id', 'execution time (s)', 'bsbm.{}.svg'.format(name))
 
-# BSBM business intelligence
-aqet = defaultdict(dict)
-for file in glob('bsbm.businessIntelligence.*.xml'):
-    run = file.replace('bsbm.businessIntelligence.', '').replace('.xml', '')
-    for query in ET.parse(file).getroot().find('queries').findall('query'):
-        val =  float(query.find('aqet').text)
-        if val > 0:
-            aqet[run][int(query.attrib['nr'])] = val
-plot_y_per_x_per_plot(aqet, 'query id', 'execution time (s) - log scale', 'bsbm.businessIntelligence.svg', log=True)
+
+plot_usecase('explore')
+plot_usecase('exploreAndUpdate')
+plot_usecase('businessIntelligence')
 
 plt.show()
