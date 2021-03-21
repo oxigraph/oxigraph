@@ -6,8 +6,8 @@ cd bsbm-tools
 cargo build --release --manifest-path="../../server/Cargo.toml"
 ./../../target/release/oxigraph_server --file oxigraph_data --bind 127.0.0.1:7878 &
 sleep 5
-curl -f -X POST -H 'Content-Type:application/n-triples' --data-binary "@explore-${DATASET_SIZE}.nt" http://127.0.0.1:7878/
-./testdriver -ucf usecases/explore/sparql.txt -o "../bsbm.explore.oxigraph.${DATASET_SIZE}.0.1.0-rocksdb.xml" http://127.0.0.1:7878/query
+curl -f -X POST -H 'Content-Type:application/n-triples' --data-binary "@explore-${DATASET_SIZE}.nt" http://127.0.0.1:7878/store?default
+./testdriver -ucf usecases/explore/sparql.txt -o "../bsbm.explore.oxigraph.${DATASET_SIZE}.main-rocksdb.xml" http://127.0.0.1:7878/query
 ./testdriver -ucf usecases/businessIntelligence/sparql.txt -o "../bsbm.businessIntelligence.${DATASET_SIZE}.0.1.0-rocksdb.xml" "http://127.0.0.1:7878/query"
 kill $!
 rm -r oxigraph_data
