@@ -392,24 +392,22 @@ impl<R: BufRead> ResultsIterator<R> {
                         } else if event.name() == b"bnode" {
                             state = State::BNode;
                         } else if event.name() == b"literal" {
-                            for attr in event.attributes() {
-                                if let Ok(attr) = attr {
-                                    if attr.key == b"xml:lang" {
-                                        lang = Some(
-                                            attr.unescape_and_decode_value(&self.reader)
-                                                .map_err(map_xml_error)?,
-                                        );
-                                    } else if attr.key == b"datatype" {
-                                        let iri = attr
-                                            .unescape_and_decode_value(&self.reader)
-                                            .map_err(map_xml_error)?;
-                                        datatype = Some(NamedNode::new(&iri).map_err(|e| {
-                                            invalid_data_error(format!(
-                                                "Invalid datatype IRI '{}': {}",
-                                                iri, e
-                                            ))
-                                        })?);
-                                    }
+                            for attr in event.attributes().flatten() {
+                                if attr.key == b"xml:lang" {
+                                    lang = Some(
+                                        attr.unescape_and_decode_value(&self.reader)
+                                            .map_err(map_xml_error)?,
+                                    );
+                                } else if attr.key == b"datatype" {
+                                    let iri = attr
+                                        .unescape_and_decode_value(&self.reader)
+                                        .map_err(map_xml_error)?;
+                                    datatype = Some(NamedNode::new(&iri).map_err(|e| {
+                                        invalid_data_error(format!(
+                                            "Invalid datatype IRI '{}': {}",
+                                            iri, e
+                                        ))
+                                    })?);
                                 }
                             }
                             state = State::Literal;

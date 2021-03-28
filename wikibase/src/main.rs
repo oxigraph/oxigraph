@@ -136,18 +136,20 @@ async fn handle_request(request: Request, store: RocksDbStore) -> Result<Respons
                         .await?;
                     configure_and_evaluate_sparql_query(store, buffer, None, request)?
                 } else {
-                    bail_status!(415, "Not supported Content-Type given: {}", content_type)
+                    bail_status!(415, "Not supported Content-Type given: {}", content_type);
                 }
             } else {
                 bail_status!(400, "No Content-Type given");
             }
         }
-        _ => bail_status!(
-            404,
-            "{} {} is not supported by this server",
-            request.method(),
-            request.url().path()
-        ),
+        _ => {
+            bail_status!(
+                404,
+                "{} {} is not supported by this server",
+                request.method(),
+                request.url().path()
+            );
+        }
     })
 }
 

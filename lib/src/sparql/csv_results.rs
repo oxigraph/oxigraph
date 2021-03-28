@@ -179,7 +179,7 @@ pub fn read_tsv_results(mut source: impl BufRead + 'static) -> Result<QueryResul
 
     Ok(QueryResults::Solutions(QuerySolutionIter::new(
         Rc::new(variables),
-        Box::new(TsvResultsIterator { buffer, source }),
+        Box::new(TsvResultsIterator { source, buffer }),
     )))
 }
 

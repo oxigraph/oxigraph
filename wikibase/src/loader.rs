@@ -200,12 +200,12 @@ impl WikibaseLoader {
     }
 
     fn get_entity_data(&self, id: &str) -> Result<Vec<u8>> {
-        Ok(self.get_request(
+        self.get_request(
             &self.entity_data_url,
             [("id", id), ("format", "nt"), ("flavor", "dump")]
                 .iter()
                 .cloned(),
-        )?)
+        )
     }
 
     fn get_request<K: AsRef<str>, V: AsRef<str>>(

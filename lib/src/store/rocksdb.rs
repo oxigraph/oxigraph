@@ -314,7 +314,7 @@ impl RocksDbStore {
             to_graph_name.into(),
             base_iri,
         )?;
-        Ok(transaction.apply()?)
+        transaction.apply()
     }
 
     /// Loads a dataset file (i.e. quads) into the store.
@@ -335,7 +335,7 @@ impl RocksDbStore {
     ) -> Result<(), io::Error> {
         let mut transaction = self.auto_batch_writer();
         load_dataset(&mut transaction, reader, format, base_iri)?;
-        Ok(transaction.apply()?)
+        transaction.apply()
     }
 
     /// Adds a quad to this store.
@@ -701,39 +701,39 @@ impl RocksDbStore {
     }
 
     fn spog_quads(&self, prefix: Vec<u8>) -> DecodingIndexIterator {
-        self.inner_quads(self.spog_cf(), prefix, QuadEncoding::SPOG)
+        self.inner_quads(self.spog_cf(), prefix, QuadEncoding::Spog)
     }
 
     fn posg_quads(&self, prefix: Vec<u8>) -> DecodingIndexIterator {
-        self.inner_quads(self.posg_cf(), prefix, QuadEncoding::POSG)
+        self.inner_quads(self.posg_cf(), prefix, QuadEncoding::Posg)
     }
 
     fn ospg_quads(&self, prefix: Vec<u8>) -> DecodingIndexIterator {
-        self.inner_quads(self.ospg_cf(), prefix, QuadEncoding::OSPG)
+        self.inner_quads(self.ospg_cf(), prefix, QuadEncoding::Ospg)
     }
 
     fn gspo_quads(&self, prefix: Vec<u8>) -> DecodingIndexIterator {
-        self.inner_quads(self.gspo_cf(), prefix, QuadEncoding::GSPO)
+        self.inner_quads(self.gspo_cf(), prefix, QuadEncoding::Gspo)
     }
 
     fn gpos_quads(&self, prefix: Vec<u8>) -> DecodingIndexIterator {
-        self.inner_quads(self.gpos_cf(), prefix, QuadEncoding::GPOS)
+        self.inner_quads(self.gpos_cf(), prefix, QuadEncoding::Gpos)
     }
 
     fn gosp_quads(&self, prefix: Vec<u8>) -> DecodingIndexIterator {
-        self.inner_quads(self.gosp_cf(), prefix, QuadEncoding::GOSP)
+        self.inner_quads(self.gosp_cf(), prefix, QuadEncoding::Gosp)
     }
 
     fn dspo_quads(&self, prefix: Vec<u8>) -> DecodingIndexIterator {
-        self.inner_quads(self.dspo_cf(), prefix, QuadEncoding::DSPO)
+        self.inner_quads(self.dspo_cf(), prefix, QuadEncoding::Dspo)
     }
 
     fn dpos_quads(&self, prefix: Vec<u8>) -> DecodingIndexIterator {
-        self.inner_quads(self.dpos_cf(), prefix, QuadEncoding::DPOS)
+        self.inner_quads(self.dpos_cf(), prefix, QuadEncoding::Dpos)
     }
 
     fn dosp_quads(&self, prefix: Vec<u8>) -> DecodingIndexIterator {
-        self.inner_quads(self.dosp_cf(), prefix, QuadEncoding::DOSP)
+        self.inner_quads(self.dosp_cf(), prefix, QuadEncoding::Dosp)
     }
 
     fn inner_quads(
@@ -752,9 +752,9 @@ impl RocksDbStore {
     }
 
     #[allow(unsafe_code)]
-    fn db_iter(&self, cf: &ColumnFamily) -> StaticDBRowIterator {
+    fn db_iter(&self, cf: &ColumnFamily) -> StaticDbRowIterator {
         // Valid because it's the same database so db can't be dropped before iter
-        unsafe { StaticDBRowIterator::new(self.db.raw_iterator_cf(cf), self.db.clone()) }
+        unsafe { StaticDbRowIterator::new(self.db.raw_iterator_cf(cf), self.db.clone()) }
     }
 }
 
@@ -1322,12 +1322,12 @@ fn get_cf<'a>(db: &'a DB, name: &str) -> &'a ColumnFamily {
         .expect("A column family that should exist in RocksDB does not exist")
 }
 
-struct StaticDBRowIterator {
+struct StaticDbRowIterator {
     iter: DBRawIterator<'static>,
     _db: Arc<DB>, // needed to ensure that DB still lives while iter is used
 }
 
-impl StaticDBRowIterator {
+impl StaticDbRowIterator {
     /// Creates a static iterator from a non static one by keeping a ARC reference to the database
     /// Caller must ensure that the iterator belongs to the same database
     ///
@@ -1386,7 +1386,7 @@ impl Iterator for DecodingIndexesIterator {
 }
 
 struct DecodingIndexIterator {
-    iter: StaticDBRowIterator,
+    iter: StaticDbRowIterator,
     prefix: Vec<u8>,
     encoding: QuadEncoding,
 }
@@ -1443,7 +1443,7 @@ impl Iterator for RocksDbQuadIter {
 }
 
 pub(crate) struct DecodingGraphIterator {
-    iter: StaticDBRowIterator,
+    iter: StaticDbRowIterator,
 }
 
 impl Iterator for DecodingGraphIterator {

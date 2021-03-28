@@ -30,13 +30,9 @@ pub fn parse_query(query: &str, base_iri: Option<&str>) -> Result<Query, ParseEr
         aggregates: Vec::default(),
     };
 
-    Ok(
-        parser::QueryUnit(&unescape_unicode_codepoints(query), &mut state).map_err(|e| {
-            ParseError {
-                inner: ParseErrorKind::Parser(e),
-            }
-        })?,
-    )
+    parser::QueryUnit(&unescape_unicode_codepoints(query), &mut state).map_err(|e| ParseError {
+        inner: ParseErrorKind::Parser(e),
+    })
 }
 
 /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query

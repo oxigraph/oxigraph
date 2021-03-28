@@ -104,7 +104,7 @@ async fn handle_request(request: Request, store: Store) -> Result<Response> {
                         .await?;
                     configure_and_evaluate_sparql_query(store, buffer, None, request)?
                 } else {
-                    bail_status!(415, "Not supported Content-Type given: {}", content_type)
+                    bail_status!(415, "Not supported Content-Type given: {}", content_type);
                 }
             } else {
                 bail_status!(400, "No Content-Type given");
@@ -136,10 +136,10 @@ async fn handle_request(request: Request, store: Store) -> Result<Response> {
                         .await?;
                     configure_and_evaluate_sparql_update(store, buffer, None, request)?
                 } else {
-                    bail_status!(415, "Not supported Content-Type given: {}", content_type)
+                    bail_status!(415, "Not supported Content-Type given: {}", content_type);
                 }
             } else {
-                bail_status!(400, "No Content-Type given")
+                bail_status!(400, "No Content-Type given");
             }
         }
         (path, Method::Get) if path.starts_with("/store") => {
@@ -151,7 +151,7 @@ async fn handle_request(request: Request, store: Store) -> Result<Response> {
                     GraphName::NamedNode(target) => store.contains_named_graph(target)?,
                     GraphName::BlankNode(target) => store.contains_named_graph(target)?,
                 } {
-                    bail_status!(404, "The graph {} does not exists", target)
+                    bail_status!(404, "The graph {} does not exists", target);
                 }
                 let format = graph_content_negotiation(request)?;
                 store.dump_graph(&mut body, format, &target)?;
@@ -211,7 +211,7 @@ async fn handle_request(request: Request, store: Store) -> Result<Response> {
                             415,
                             "No supported content Content-Type given: {}",
                             content_type
-                        )
+                        );
                     }
                 } else if let Some(format) = DatasetFormat::from_media_type(content_type.essence())
                 {
@@ -225,10 +225,10 @@ async fn handle_request(request: Request, store: Store) -> Result<Response> {
                         415,
                         "No supported content Content-Type given: {}",
                         content_type
-                    )
+                    );
                 }
             } else {
-                bail_status!(400, "No Content-Type given")
+                bail_status!(400, "No Content-Type given");
             }
         }
         (path, Method::Delete) if path.starts_with("/store") => {
@@ -239,14 +239,14 @@ async fn handle_request(request: Request, store: Store) -> Result<Response> {
                         if store.contains_named_graph(&target)? {
                             store.remove_named_graph(&target)?;
                         } else {
-                            bail_status!(404, "The graph {} does not exists", target)
+                            bail_status!(404, "The graph {} does not exists", target);
                         }
                     }
                     GraphName::BlankNode(target) => {
                         if store.contains_named_graph(&target)? {
                             store.remove_named_graph(&target)?;
                         } else {
-                            bail_status!(404, "The graph {} does not exists", target)
+                            bail_status!(404, "The graph {} does not exists", target);
                         }
                     }
                 }
@@ -282,7 +282,7 @@ async fn handle_request(request: Request, store: Store) -> Result<Response> {
                             415,
                             "No supported content Content-Type given: {}",
                             content_type
-                        )
+                        );
                     }
                 } else if let Some(format) = DatasetFormat::from_media_type(content_type.essence())
                 {
@@ -312,7 +312,7 @@ async fn handle_request(request: Request, store: Store) -> Result<Response> {
                         415,
                         "No supported content Content-Type given: {}",
                         content_type
-                    )
+                    );
                 }
             } else {
                 bail_status!(400, "No Content-Type given")
@@ -325,19 +325,21 @@ async fn handle_request(request: Request, store: Store) -> Result<Response> {
                     GraphName::NamedNode(target) => store.contains_named_graph(target)?,
                     GraphName::BlankNode(target) => store.contains_named_graph(target)?,
                 } {
-                    bail_status!(404, "The graph {} does not exists", target)
+                    bail_status!(404, "The graph {} does not exists", target);
                 }
                 Response::new(StatusCode::Ok)
             } else {
                 Response::new(StatusCode::Ok)
             }
         }
-        _ => bail_status!(
-            404,
-            "{} {} is not supported by this server",
-            request.method(),
-            request.url().path()
-        ),
+        _ => {
+            bail_status!(
+                404,
+                "{} {} is not supported by this server",
+                request.method(),
+                request.url().path()
+            );
+        }
     })
 }
 
@@ -510,7 +512,9 @@ fn store_target(request: &Request) -> Result<Option<GraphName>> {
             match k.as_ref() {
                 "graph" => graph = Some(v.into_owned()),
                 "default" => default = true,
-                _ => bail_status!(400, "Unexpected parameter: {}", k),
+                _ => {
+                    bail_status!(400, "Unexpected parameter: {}", k);
+                }
             }
         }
         Ok(if let Some(graph) = graph {
@@ -518,7 +522,7 @@ fn store_target(request: &Request) -> Result<Option<GraphName>> {
                 bail_status!(
                     400,
                     "Both graph and default parameters should not be set at the same time",
-                )
+                );
             } else {
                 Some(
                     NamedNode::new(

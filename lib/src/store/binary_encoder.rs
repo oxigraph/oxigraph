@@ -83,30 +83,30 @@ impl StrId for StrHash {}
 
 #[derive(Clone, Copy)]
 pub enum QuadEncoding {
-    SPOG,
-    POSG,
-    OSPG,
-    GSPO,
-    GPOS,
-    GOSP,
-    DSPO,
-    DPOS,
-    DOSP,
+    Spog,
+    Posg,
+    Ospg,
+    Gspo,
+    Gpos,
+    Gosp,
+    Dspo,
+    Dpos,
+    Dosp,
 }
 
 impl QuadEncoding {
     pub fn decode(self, buffer: &[u8]) -> Result<EncodedQuad, io::Error> {
         let mut cursor = Cursor::new(&buffer);
         match self {
-            QuadEncoding::SPOG => cursor.read_spog_quad(),
-            QuadEncoding::POSG => cursor.read_posg_quad(),
-            QuadEncoding::OSPG => cursor.read_ospg_quad(),
-            QuadEncoding::GSPO => cursor.read_gspo_quad(),
-            QuadEncoding::GPOS => cursor.read_gpos_quad(),
-            QuadEncoding::GOSP => cursor.read_gosp_quad(),
-            QuadEncoding::DSPO => cursor.read_dspo_quad(),
-            QuadEncoding::DPOS => cursor.read_dpos_quad(),
-            QuadEncoding::DOSP => cursor.read_dosp_quad(),
+            QuadEncoding::Spog => cursor.read_spog_quad(),
+            QuadEncoding::Posg => cursor.read_posg_quad(),
+            QuadEncoding::Ospg => cursor.read_ospg_quad(),
+            QuadEncoding::Gspo => cursor.read_gspo_quad(),
+            QuadEncoding::Gpos => cursor.read_gpos_quad(),
+            QuadEncoding::Gosp => cursor.read_gosp_quad(),
+            QuadEncoding::Dspo => cursor.read_dspo_quad(),
+            QuadEncoding::Dpos => cursor.read_dpos_quad(),
+            QuadEncoding::Dosp => cursor.read_dosp_quad(),
         }
     }
 }

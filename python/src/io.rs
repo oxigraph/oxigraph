@@ -211,13 +211,13 @@ impl Write for PyFileLike {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let gil = Python::acquire_gil();
         let py = gil.python();
-        Ok(usize::extract(
+        usize::extract(
             self.inner
                 .call_method(py, "write", (PyBytes::new(py, buf),), None)
                 .map_err(|e| to_io_err(e, py))?
                 .as_ref(py),
         )
-        .map_err(|e| to_io_err(e, py))?)
+        .map_err(|e| to_io_err(e, py))
     }
 
     fn flush(&mut self) -> io::Result<()> {

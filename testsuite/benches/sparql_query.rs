@@ -18,11 +18,7 @@ fn sparql_w3c_syntax_bench(c: &mut Criterion) {
             if test.kind == "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#PositiveSyntaxTest"
                 || test.kind
                 == "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#PositiveSyntaxTest11" {
-                if let Some(query) = test.action {
-                    Some((read_file_to_string(&query).unwrap(), query))
-                } else {
-                    None
-                }
+                test.action.map(|query| (read_file_to_string(&query).unwrap(), query))
             } else {
                 None
             }

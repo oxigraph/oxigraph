@@ -411,7 +411,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                 Function::Datatype => PlanExpression::Datatype(Box::new(
                     self.build_for_expression(&parameters[0], variables, graph_name)?,
                 )),
-                Function::IRI => PlanExpression::IRI(Box::new(self.build_for_expression(
+                Function::IRI => PlanExpression::Iri(Box::new(self.build_for_expression(
                     &parameters[0],
                     variables,
                     graph_name,
@@ -482,7 +482,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                     variables,
                     graph_name,
                 )?)),
-                Function::EncodeForURI => PlanExpression::EncodeForURI(Box::new(
+                Function::EncodeForURI => PlanExpression::EncodeForUri(Box::new(
                     self.build_for_expression(&parameters[0], variables, graph_name)?,
                 )),
                 Function::Contains => PlanExpression::Contains(
@@ -544,29 +544,29 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                     graph_name,
                 )?)),
                 Function::Now => PlanExpression::Now,
-                Function::UUID => PlanExpression::UUID,
-                Function::StrUUID => PlanExpression::StrUUID,
-                Function::MD5 => PlanExpression::MD5(Box::new(self.build_for_expression(
+                Function::UUID => PlanExpression::Uuid,
+                Function::StrUUID => PlanExpression::StrUuid,
+                Function::MD5 => PlanExpression::Md5(Box::new(self.build_for_expression(
                     &parameters[0],
                     variables,
                     graph_name,
                 )?)),
-                Function::SHA1 => PlanExpression::SHA1(Box::new(self.build_for_expression(
+                Function::SHA1 => PlanExpression::Sha1(Box::new(self.build_for_expression(
                     &parameters[0],
                     variables,
                     graph_name,
                 )?)),
-                Function::SHA256 => PlanExpression::SHA256(Box::new(self.build_for_expression(
+                Function::SHA256 => PlanExpression::Sha256(Box::new(self.build_for_expression(
                     &parameters[0],
                     variables,
                     graph_name,
                 )?)),
-                Function::SHA384 => PlanExpression::SHA384(Box::new(self.build_for_expression(
+                Function::SHA384 => PlanExpression::Sha384(Box::new(self.build_for_expression(
                     &parameters[0],
                     variables,
                     graph_name,
                 )?)),
-                Function::SHA512 => PlanExpression::SHA512(Box::new(self.build_for_expression(
+                Function::SHA512 => PlanExpression::Sha512(Box::new(self.build_for_expression(
                     &parameters[0],
                     variables,
                     graph_name,
@@ -575,11 +575,11 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                     Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
                     Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
                 ),
-                Function::StrDT => PlanExpression::StrDT(
+                Function::StrDT => PlanExpression::StrDt(
                     Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
                     Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
                 ),
-                Function::IsIRI => PlanExpression::IsIRI(Box::new(self.build_for_expression(
+                Function::IsIRI => PlanExpression::IsIri(Box::new(self.build_for_expression(
                     &parameters[0],
                     variables,
                     graph_name,
@@ -1037,18 +1037,18 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
         &mut self,
         node: &NamedNode,
     ) -> Result<EncodedTerm<E::StrId>, EvaluationError> {
-        Ok(self.encoder.encode_named_node(node.as_ref())?)
+        self.encoder.encode_named_node(node.as_ref())
     }
 
     fn build_literal(
         &mut self,
         literal: &Literal,
     ) -> Result<EncodedTerm<E::StrId>, EvaluationError> {
-        Ok(self.encoder.encode_literal(literal.as_ref())?)
+        self.encoder.encode_literal(literal.as_ref())
     }
 
     fn build_term(&mut self, term: &Term) -> Result<EncodedTerm<E::StrId>, EvaluationError> {
-        Ok(self.encoder.encode_term(term.as_ref())?)
+        self.encoder.encode_term(term.as_ref())
     }
 }
 

@@ -233,7 +233,7 @@ pub enum PlanExpression<I: StrId> {
     LangMatches(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
     Datatype(Box<PlanExpression<I>>),
     Bound(usize),
-    IRI(Box<PlanExpression<I>>),
+    Iri(Box<PlanExpression<I>>),
     BNode(Option<Box<PlanExpression<I>>>),
     Rand,
     Abs(Box<PlanExpression<I>>),
@@ -255,7 +255,7 @@ pub enum PlanExpression<I: StrId> {
     ),
     UCase(Box<PlanExpression<I>>),
     LCase(Box<PlanExpression<I>>),
-    EncodeForURI(Box<PlanExpression<I>>),
+    EncodeForUri(Box<PlanExpression<I>>),
     Contains(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
     StrStarts(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
     StrEnds(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
@@ -270,13 +270,13 @@ pub enum PlanExpression<I: StrId> {
     Timezone(Box<PlanExpression<I>>),
     Tz(Box<PlanExpression<I>>),
     Now,
-    UUID,
-    StrUUID,
-    MD5(Box<PlanExpression<I>>),
-    SHA1(Box<PlanExpression<I>>),
-    SHA256(Box<PlanExpression<I>>),
-    SHA384(Box<PlanExpression<I>>),
-    SHA512(Box<PlanExpression<I>>),
+    Uuid,
+    StrUuid,
+    Md5(Box<PlanExpression<I>>),
+    Sha1(Box<PlanExpression<I>>),
+    Sha256(Box<PlanExpression<I>>),
+    Sha384(Box<PlanExpression<I>>),
+    Sha512(Box<PlanExpression<I>>),
     Coalesce(Vec<PlanExpression<I>>),
     If(
         Box<PlanExpression<I>>,
@@ -284,9 +284,9 @@ pub enum PlanExpression<I: StrId> {
         Box<PlanExpression<I>>,
     ),
     StrLang(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    StrDT(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
+    StrDt(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
     SameTerm(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    IsIRI(Box<PlanExpression<I>>),
+    IsIri(Box<PlanExpression<I>>),
     IsBlank(Box<PlanExpression<I>>),
     IsLiteral(Box<PlanExpression<I>>),
     IsNumeric(Box<PlanExpression<I>>),
@@ -318,8 +318,8 @@ impl<I: StrId> PlanExpression<I> {
             PlanExpression::Constant(_)
             | PlanExpression::Rand
             | PlanExpression::Now
-            | PlanExpression::UUID
-            | PlanExpression::StrUUID
+            | PlanExpression::Uuid
+            | PlanExpression::StrUuid
             | PlanExpression::BNode(None) => (),
             PlanExpression::UnaryPlus(e)
             | PlanExpression::UnaryMinus(e)
@@ -328,7 +328,7 @@ impl<I: StrId> PlanExpression<I> {
             | PlanExpression::Str(e)
             | PlanExpression::Lang(e)
             | PlanExpression::Datatype(e)
-            | PlanExpression::IRI(e)
+            | PlanExpression::Iri(e)
             | PlanExpression::Abs(e)
             | PlanExpression::Ceil(e)
             | PlanExpression::Floor(e)
@@ -336,7 +336,7 @@ impl<I: StrId> PlanExpression<I> {
             | PlanExpression::UCase(e)
             | PlanExpression::LCase(e)
             | PlanExpression::StrLen(e)
-            | PlanExpression::EncodeForURI(e)
+            | PlanExpression::EncodeForUri(e)
             | PlanExpression::Year(e)
             | PlanExpression::Month(e)
             | PlanExpression::Day(e)
@@ -345,12 +345,12 @@ impl<I: StrId> PlanExpression<I> {
             | PlanExpression::Seconds(e)
             | PlanExpression::Timezone(e)
             | PlanExpression::Tz(e)
-            | PlanExpression::MD5(e)
-            | PlanExpression::SHA1(e)
-            | PlanExpression::SHA256(e)
-            | PlanExpression::SHA384(e)
-            | PlanExpression::SHA512(e)
-            | PlanExpression::IsIRI(e)
+            | PlanExpression::Md5(e)
+            | PlanExpression::Sha1(e)
+            | PlanExpression::Sha256(e)
+            | PlanExpression::Sha384(e)
+            | PlanExpression::Sha512(e)
+            | PlanExpression::IsIri(e)
             | PlanExpression::IsBlank(e)
             | PlanExpression::IsLiteral(e)
             | PlanExpression::IsNumeric(e)
@@ -384,7 +384,7 @@ impl<I: StrId> PlanExpression<I> {
             | PlanExpression::StrBefore(a, b)
             | PlanExpression::StrAfter(a, b)
             | PlanExpression::StrLang(a, b)
-            | PlanExpression::StrDT(a, b)
+            | PlanExpression::StrDt(a, b)
             | PlanExpression::SameTerm(a, b)
             | PlanExpression::SubStr(a, b, None)
             | PlanExpression::Regex(a, b, None) => {

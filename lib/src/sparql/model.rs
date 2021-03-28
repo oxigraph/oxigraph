@@ -314,13 +314,7 @@ impl QuerySolution {
         self.values
             .iter()
             .enumerate()
-            .filter_map(move |(i, value)| {
-                if let Some(value) = value {
-                    Some((&self.variables[i], value))
-                } else {
-                    None
-                }
-            })
+            .filter_map(move |(i, value)| value.as_ref().map(|value| (&self.variables[i], value)))
     }
 
     /// Returns an iterator over all values, bound or not

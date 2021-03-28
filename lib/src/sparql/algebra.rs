@@ -751,6 +751,7 @@ fn write_arg_list(
 }
 
 /// A function name
+#[allow(clippy::upper_case_acronyms)] //TODO: Fix on the next breaking release
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Function {
     Str,
@@ -857,6 +858,7 @@ impl fmt::Display for Function {
 }
 
 /// A SPARQL query [graph pattern](https://www.w3.org/TR/sparql11-query/#sparqlQuery)
+#[allow(clippy::upper_case_acronyms)] //TODO: Fix on the next breaking release
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GraphPattern {
     /// A [basic graph pattern](https://www.w3.org/TR/sparql11-query/#defn_BasicGraphPattern)

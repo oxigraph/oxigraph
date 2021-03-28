@@ -1050,7 +1050,7 @@ where
             }
             PlanExpression::Datatype(e) => self.datatype(self.eval_expression(e, tuple)?),
             PlanExpression::Bound(v) => Some(tuple.contains(*v).into()),
-            PlanExpression::IRI(e) => {
+            PlanExpression::Iri(e) => {
                 let e = self.eval_expression(e, tuple)?;
                 if e.is_named_node() {
                     Some(e)
@@ -1210,7 +1210,7 @@ where
                 )?;
                 Some((&arg1).starts_with(arg2.as_str()).into())
             }
-            PlanExpression::EncodeForURI(ltrl) => {
+            PlanExpression::EncodeForUri(ltrl) => {
                 let ltlr = self.to_string(self.eval_expression(ltrl, tuple)?)?;
                 let mut result = Vec::with_capacity(ltlr.len());
                 for c in ltlr.bytes() {
@@ -1344,22 +1344,22 @@ where
                 }
             }
             PlanExpression::Now => Some(self.now.into()),
-            PlanExpression::UUID => {
+            PlanExpression::Uuid => {
                 let mut buffer = String::with_capacity(44);
                 buffer.push_str("urn:uuid:");
                 generate_uuid(&mut buffer);
                 self.build_named_node(&buffer)
             }
-            PlanExpression::StrUUID => {
+            PlanExpression::StrUuid => {
                 let mut buffer = String::with_capacity(36);
                 generate_uuid(&mut buffer);
                 self.build_string_literal(&buffer)
             }
-            PlanExpression::MD5(arg) => self.hash::<Md5>(arg, tuple),
-            PlanExpression::SHA1(arg) => self.hash::<Sha1>(arg, tuple),
-            PlanExpression::SHA256(arg) => self.hash::<Sha256>(arg, tuple),
-            PlanExpression::SHA384(arg) => self.hash::<Sha384>(arg, tuple),
-            PlanExpression::SHA512(arg) => self.hash::<Sha512>(arg, tuple),
+            PlanExpression::Md5(arg) => self.hash::<Md5>(arg, tuple),
+            PlanExpression::Sha1(arg) => self.hash::<Sha1>(arg, tuple),
+            PlanExpression::Sha256(arg) => self.hash::<Sha256>(arg, tuple),
+            PlanExpression::Sha384(arg) => self.hash::<Sha384>(arg, tuple),
+            PlanExpression::Sha512(arg) => self.hash::<Sha512>(arg, tuple),
             PlanExpression::Coalesce(l) => {
                 for e in l {
                     if let Some(result) = self.eval_expression(e, tuple) {
@@ -1381,7 +1381,7 @@ where
                     self.build_language_id(self.eval_expression(lang_tag, tuple)?)?,
                 ))
             }
-            PlanExpression::StrDT(lexical_form, datatype) => {
+            PlanExpression::StrDt(lexical_form, datatype) => {
                 let value = self.to_simple_string(self.eval_expression(lexical_form, tuple)?)?;
                 let datatype = if let EncodedTerm::NamedNode { iri_id } =
                     self.eval_expression(datatype, tuple)?
@@ -1401,7 +1401,7 @@ where
             PlanExpression::SameTerm(a, b) => {
                 Some((self.eval_expression(a, tuple)? == self.eval_expression(b, tuple)?).into())
             }
-            PlanExpression::IsIRI(e) => {
+            PlanExpression::IsIri(e) => {
                 Some(self.eval_expression(e, tuple)?.is_named_node().into())
             }
             PlanExpression::IsBlank(e) => {

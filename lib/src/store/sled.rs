@@ -845,39 +845,39 @@ impl SledStore {
     }
 
     fn spog_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
-        self.inner_quads(&self.spog, prefix, QuadEncoding::SPOG)
+        self.inner_quads(&self.spog, prefix, QuadEncoding::Spog)
     }
 
     fn posg_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
-        self.inner_quads(&self.posg, prefix, QuadEncoding::POSG)
+        self.inner_quads(&self.posg, prefix, QuadEncoding::Posg)
     }
 
     fn ospg_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
-        self.inner_quads(&self.ospg, prefix, QuadEncoding::OSPG)
+        self.inner_quads(&self.ospg, prefix, QuadEncoding::Ospg)
     }
 
     fn gspo_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
-        self.inner_quads(&self.gspo, prefix, QuadEncoding::GSPO)
+        self.inner_quads(&self.gspo, prefix, QuadEncoding::Gspo)
     }
 
     fn gpos_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
-        self.inner_quads(&self.gpos, prefix, QuadEncoding::GPOS)
+        self.inner_quads(&self.gpos, prefix, QuadEncoding::Gpos)
     }
 
     fn gosp_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
-        self.inner_quads(&self.gosp, prefix, QuadEncoding::GOSP)
+        self.inner_quads(&self.gosp, prefix, QuadEncoding::Gosp)
     }
 
     fn dspo_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
-        self.inner_quads(&self.dspo, prefix, QuadEncoding::DSPO)
+        self.inner_quads(&self.dspo, prefix, QuadEncoding::Dspo)
     }
 
     fn dpos_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
-        self.inner_quads(&self.dpos, prefix, QuadEncoding::DPOS)
+        self.inner_quads(&self.dpos, prefix, QuadEncoding::Dpos)
     }
 
     fn dosp_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
-        self.inner_quads(&self.dosp, prefix, QuadEncoding::DOSP)
+        self.inner_quads(&self.dosp, prefix, QuadEncoding::Dosp)
     }
 
     fn inner_quads(
