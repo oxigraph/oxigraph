@@ -1,15 +1,15 @@
-use crate::model::vocab::rdf;
-use crate::model::vocab::xsd;
-use crate::model::*;
-use crate::sparql::algebra::*;
-use crate::sparql::model::*;
+use crate::algebra::*;
+use crate::query::*;
+use crate::term::*;
+use crate::update::*;
+use oxilangtag::LanguageTag;
 use oxiri::{Iri, IriParseError};
 use peg::parser;
 use peg::str::LineCol;
+use rand::random;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
-use std::rc::Rc;
 use std::str::Chars;
 use std::str::FromStr;
 use std::{char, fmt};
@@ -156,7 +156,7 @@ fn add_to_triple_or_path_patterns(
                 add_to_triple_or_path_patterns(object, *p, subject, patterns)
             }
             PropertyPathExpression::Sequence(a, b) => {
-                let middle = BlankNode::default();
+                let middle = bnode();
                 add_to_triple_or_path_patterns(subject, *a, middle.clone().into(), patterns);
                 add_to_triple_or_path_patterns(middle.into(), *b, object, patterns);
             }
@@ -182,7 +182,7 @@ fn build_bgp(patterns: Vec<TripleOrPathPattern>) -> GraphPattern {
             } => paths.push((subject, path, object)),
         }
     }
-    let mut graph_pattern = GraphPattern::BGP(bgp);
+    let mut graph_pattern = GraphPattern::Bgp(bgp);
     for (subject, path, object) in paths {
         graph_pattern = new_join(
             graph_pattern,
@@ -263,12 +263,12 @@ enum PartialGraphPattern {
 
 fn new_join(l: GraphPattern, r: GraphPattern) -> GraphPattern {
     //Avoid to output empty BGPs
-    if let GraphPattern::BGP(pl) = &l {
+    if let GraphPattern::Bgp(pl) = &l {
         if pl.is_empty() {
             return r;
         }
     }
-    if let GraphPattern::BGP(pr) = &r {
+    if let GraphPattern::Bgp(pr) = &r {
         if pr.is_empty() {
             return l;
         }
@@ -276,9 +276,9 @@ fn new_join(l: GraphPattern, r: GraphPattern) -> GraphPattern {
 
     //Merge BGPs
     match (l, r) {
-        (GraphPattern::BGP(mut pl), GraphPattern::BGP(pr)) => {
+        (GraphPattern::Bgp(mut pl), GraphPattern::Bgp(pr)) => {
             pl.extend(pr);
-            GraphPattern::BGP(pl)
+            GraphPattern::Bgp(pl)
         }
         (
             GraphPattern::Graph {
@@ -354,10 +354,17 @@ fn build_select(
     //GROUP BY
     let aggregates = state.aggregates.pop().unwrap_or_else(Vec::default);
     if group.is_none() && !aggregates.is_empty() {
-        let const_variable = Variable::new_random();
+        let const_variable = variable();
         group = Some((
             vec![const_variable.clone()],
-            vec![(Literal::from(1).into(), const_variable)],
+            vec![(
+                Literal::Typed {
+                    value: "1".into(),
+                    datatype: iri("http://www.w3.org/2001/XMLSchema#integer"),
+                }
+                .into(),
+                const_variable,
+            )],
         ));
     }
 
@@ -448,20 +455,20 @@ fn build_select(
 }
 
 fn copy_graph(from: Option<NamedNode>, to: Option<NamedNodeOrVariable>) -> GraphUpdateOperation {
-    let bgp = GraphPattern::BGP(vec![TriplePattern::new(
-        Variable::new_unchecked("s"),
-        Variable::new_unchecked("p"),
-        Variable::new_unchecked("o"),
+    let bgp = GraphPattern::Bgp(vec![TriplePattern::new(
+        Variable { name: "s".into() },
+        Variable { name: "p".into() },
+        Variable { name: "o".into() },
     )]);
     GraphUpdateOperation::DeleteInsert {
         delete: Vec::new(),
         insert: vec![QuadPattern::new(
-            Variable::new_unchecked("s"),
-            Variable::new_unchecked("p"),
-            Variable::new_unchecked("o"),
+            Variable { name: "s".into() },
+            Variable { name: "p".into() },
+            Variable { name: "o".into() },
             to,
         )],
-        using: QueryDataset::default(),
+        using: None,
         pattern: Box::new(if let Some(from) = from {
             GraphPattern::Graph {
                 graph_name: from.into(),
@@ -502,7 +509,7 @@ impl ParserState {
             .find_map(|(v, a)| if a == &agg { Some(v) } else { None })
             .cloned()
             .unwrap_or_else(|| {
-                let new_var = Variable::new_random();
+                let new_var = variable();
                 aggregates.push((new_var.clone(), agg));
                 new_var
             }))
@@ -713,6 +720,22 @@ pub fn unescape_pn_local(input: &str) -> Cow<'_, str> {
     unescape_characters(input, &UNESCAPE_PN_CHARACTERS, &UNESCAPE_PN_REPLACEMENT)
 }
 
+fn iri(value: impl Into<String>) -> NamedNode {
+    NamedNode { iri: value.into() }
+}
+
+fn bnode() -> BlankNode {
+    BlankNode {
+        id: format!("{:x}", random::<u128>()),
+    }
+}
+
+fn variable() -> Variable {
+    Variable {
+        name: format!("{:x}", random::<u128>()),
+    }
+}
+
 parser! {
     //See https://www.w3.org/TR/turtle/#sec-grammar
     grammar parser(state: &mut ParserState) for str {
@@ -791,7 +814,7 @@ parser! {
                     dataset: d,
                     pattern: build_select(
                         Selection::default(),
-                        GraphPattern::BGP(c),
+                        GraphPattern::Bgp(c),
                         g, h, o, l, v, state
                     ),
                     base_iri: state.base_iri.clone()
@@ -815,7 +838,7 @@ parser! {
                     pattern: build_select(Selection {
                         option: SelectionOption::Default,
                         variables: Some(p.into_iter().map(|var_or_iri| match var_or_iri {
-                            NamedNodeOrVariable::NamedNode(n) => SelectionMember::Expression(n.into(), Variable::new_random()),
+                            NamedNodeOrVariable::NamedNode(n) => SelectionMember::Expression(n.into(), variable()),
                             NamedNodeOrVariable::Variable(v) => SelectionMember::Variable(v)
                         }).collect())
                     }, w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state),
@@ -828,40 +851,40 @@ parser! {
         rule AskQuery() -> Query = i("ASK") _ d:DatasetClauses() w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
             Query::Ask {
                 dataset: d,
-                pattern: Rc::new(build_select(Selection::default(), w, g, h, o, l, v, state)),
+                pattern: build_select(Selection::default(), w, g, h, o, l, v, state),
                 base_iri: state.base_iri.clone()
             }
         }
 
         //[13]
-        rule DatasetClause() -> (Option<GraphName>, Option<NamedOrBlankNode>) = i("FROM") _ d:(DefaultGraphClause() / NamedGraphClause()) { d }
-        rule DatasetClauses() -> QueryDataset = d:DatasetClause() ** (_) {
-            let mut dataset = QueryDataset::default();
-            if !d.is_empty() {
-                let mut default = Vec::new();
-                let mut named = Vec::new();
-                for (d, n) in d {
-                    if let Some(d) = d {
-                        default.push(d);
-                    }
-                    if let Some(n) = n {
-                        named.push(n);
-                    }
-                }
-                dataset.set_default_graph(default);
-                dataset.set_available_named_graphs(named);
+        rule DatasetClause() -> (Option<NamedNode>, Option<NamedNode>) = i("FROM") _ d:(DefaultGraphClause() / NamedGraphClause()) { d }
+        rule DatasetClauses() -> Option<QueryDataset> = d:DatasetClause() ** (_) {
+            if d.is_empty() {
+                return None;
             }
-            dataset
+            let mut default = Vec::new();
+            let mut named = Vec::new();
+            for (d, n) in d {
+                if let Some(d) = d {
+                    default.push(d);
+                }
+                if let Some(n) = n {
+                    named.push(n);
+                }
+            }
+            Some(QueryDataset {
+                default, named: Some(named)
+            })
         }
 
         //[14]
-        rule DefaultGraphClause() -> (Option<GraphName>, Option<NamedOrBlankNode>) = s:SourceSelector() {
-            (Some(s.into()), None)
+        rule DefaultGraphClause() -> (Option<NamedNode>, Option<NamedNode>) = s:SourceSelector() {
+            (Some(s), None)
         }
 
         //[15]
-        rule NamedGraphClause() -> (Option<GraphName>, Option<NamedOrBlankNode>) = i("NAMED") _ s:SourceSelector() {
-            (None, Some(s.into()))
+        rule NamedGraphClause() -> (Option<NamedNode>, Option<NamedNode>) = i("NAMED") _ s:SourceSelector() {
+            (None, Some(s))
         }
 
         //[16]
@@ -879,7 +902,7 @@ parser! {
                 if let Expression::Variable(v) = e {
                     v
                 } else {
-                    let v = vo.unwrap_or_else(Variable::new_random);
+                    let v = vo.unwrap_or_else(variable);
                     projections.push((e, v.clone()));
                     v
                 }
@@ -970,7 +993,7 @@ parser! {
             if from == to {
                 Vec::new() // identity case
             } else {
-                let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new_unchecked("s"), Variable::new_unchecked("p"), Variable::new_unchecked("o"))]);
+                let bgp = GraphPattern::Bgp(vec![TriplePattern::new(Variable { name: "s".into() }, Variable { name: "p".into() }, Variable { name: "o".into() })]);
                 vec![copy_graph(from, to.map(NamedNodeOrVariable::NamedNode))]
             }
         }
@@ -981,7 +1004,7 @@ parser! {
             if from == to {
                 Vec::new() // identity case
             } else {
-                let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new_unchecked("s"), Variable::new_unchecked("p"), Variable::new_unchecked("o"))]);
+                let bgp = GraphPattern::Bgp(vec![TriplePattern::new(Variable { name: "s".into() }, Variable { name: "p".into() }, Variable { name: "o".into() })]);
                 vec![GraphUpdateOperation::Drop { silent: true, graph: to.clone().map_or(GraphTarget::DefaultGraph, GraphTarget::NamedNode) }, copy_graph(from.clone(), to.map(NamedNodeOrVariable::NamedNode)), GraphUpdateOperation::Drop { silent, graph: from.map_or(GraphTarget::DefaultGraph, GraphTarget::NamedNode) }]
             }
         }
@@ -992,7 +1015,7 @@ parser! {
             if from == to {
                 Vec::new() // identity case
             } else {
-                let bgp = GraphPattern::BGP(vec![TriplePattern::new(Variable::new_unchecked("s"), Variable::new_unchecked("p"), Variable::new_unchecked("o"))]);
+                let bgp = GraphPattern::Bgp(vec![TriplePattern::new(Variable { name: "s".into() }, Variable { name: "p".into() }, Variable{ name: "o".into() })]);
                 vec![GraphUpdateOperation::Drop { silent: true, graph: to.clone().map_or(GraphTarget::DefaultGraph, GraphTarget::NamedNode) }, copy_graph(from, to.map(NamedNodeOrVariable::NamedNode))]
             }
         }
@@ -1004,7 +1027,7 @@ parser! {
 
         //[39]
         rule DeleteData() -> Vec<GraphUpdateOperation> = i("DELETE") _ i("DATA") _ data:QuadData() {?
-            if data.iter().any(|quad| quad.subject.is_blank_node() || quad.object.is_blank_node() || quad.graph_name.is_blank_node()) {
+            if data.iter().any(|quad| matches!(quad.subject, NamedOrBlankNode::BlankNode(_)) || matches!(quad.object, Term::BlankNode(_))) {
                 Err("Blank nodes are not allowed in DELETE DATA")
             } else {
                 Ok(vec![GraphUpdateOperation::DeleteData { data }])
@@ -1017,17 +1040,17 @@ parser! {
                 Err("Blank nodes are not allowed in DELETE WHERE")
             } else {
                 let pattern = d.iter().map(|q| {
-                    let bgp = GraphPattern::BGP(vec![TriplePattern::new(q.subject.clone(), q.predicate.clone(), q.object.clone())]);
+                    let bgp = GraphPattern::Bgp(vec![TriplePattern::new(q.subject.clone(), q.predicate.clone(), q.object.clone())]);
                     if let Some(graph_name) = &q.graph_name {
                         GraphPattern::Graph { graph_name: graph_name.clone(), inner: Box::new(bgp) }
                     } else {
                         bgp
                     }
-                }).fold(GraphPattern::BGP(Vec::new()), new_join);
+                }).fold(GraphPattern::Bgp(Vec::new()), new_join);
                 Ok(vec![GraphUpdateOperation::DeleteInsert {
                     delete: d,
                     insert: Vec::new(),
-                    using: QueryDataset::default(),
+                    using: None,
                     pattern: Box::new(pattern)
                 }])
             }
@@ -1040,21 +1063,21 @@ parser! {
             let mut insert = insert.unwrap_or_else(Vec::new);
             let mut pattern = pattern;
 
-            let mut using = QueryDataset::default();
-            if !u.is_empty() {
-                let mut using_default = Vec::new();
-                let mut using_named = Vec::new();
+            let mut using = if u.is_empty() {
+                None
+            } else {
+                let mut default = Vec::new();
+                let mut named = Vec::new();
                 for (d, n) in u {
                     if let Some(d) = d {
-                        using_default.push(d)
+                        default.push(d)
                     }
                     if let Some(n) = n {
-                        using_named.push(n)
+                        named.push(n)
                     }
                 }
-                using.set_default_graph(using_default);
-                using.set_available_named_graphs(using_named);
-            }
+                Some(QueryDataset { default, named: Some(named) })
+            };
 
             if let Some(with) = with {
                 // We inject WITH everywhere
@@ -1068,8 +1091,8 @@ parser! {
                 } else {
                     q
                 }).collect();
-                if using.is_default_dataset() {
-                    using.set_default_graph(vec![with.into()]);
+                if using.is_none() {
+                    using = Some(QueryDataset { default: vec![with], named: None });
                 }
             }
 
@@ -1104,12 +1127,12 @@ parser! {
         rule InsertClause() -> Vec<QuadPattern> = i("INSERT") _ q:QuadPattern() { q }
 
         //[44]
-        rule UsingClause() -> (Option<GraphName>, Option<NamedOrBlankNode>) = i("USING") _ d:(UsingClause_default() / UsingClause_named()) { d }
-        rule UsingClause_default() -> (Option<GraphName>, Option<NamedOrBlankNode>) = i:iri() {
-            (Some(i.into()), None)
+        rule UsingClause() -> (Option<NamedNode>, Option<NamedNode>) = i("USING") _ d:(UsingClause_default() / UsingClause_named()) { d }
+        rule UsingClause_default() -> (Option<NamedNode>, Option<NamedNode>) = i:iri() {
+            (Some(i), None)
         }
-        rule UsingClause_named() -> (Option<GraphName>, Option<NamedOrBlankNode>) = i("NAMED") _ i:iri() {
-            (None, Some(i.into()))
+        rule UsingClause_named() -> (Option<NamedNode>, Option<NamedNode>) = i("NAMED") _ i:iri() {
+            (None, Some(i))
         }
 
         //[45]
@@ -1282,21 +1305,21 @@ parser! {
         }
 
         //[63]
-        rule InlineDataOneVar() -> (Vec<Variable>, Vec<Vec<Option<Term>>>) = var:Var() _ "{" _ d:InlineDataOneVar_value()* "}" {
+        rule InlineDataOneVar() -> (Vec<Variable>, Vec<Vec<Option<NamedNodeOrLiteral>>>) = var:Var() _ "{" _ d:InlineDataOneVar_value()* "}" {
             (vec![var], d)
         }
-        rule InlineDataOneVar_value() -> Vec<Option<Term>> = t:DataBlockValue() _ { vec![t] }
+        rule InlineDataOneVar_value() -> Vec<Option<NamedNodeOrLiteral>> = t:DataBlockValue() _ { vec![t] }
 
         //[64]
-        rule InlineDataFull() -> (Vec<Variable>, Vec<Vec<Option<Term>>>) = "(" _ vars:InlineDataFull_var()* _ ")" _ "{" _ val:InlineDataFull_values()* "}" {
+        rule InlineDataFull() -> (Vec<Variable>, Vec<Vec<Option<NamedNodeOrLiteral>>>) = "(" _ vars:InlineDataFull_var()* _ ")" _ "{" _ val:InlineDataFull_values()* "}" {
             (vars, val)
         }
         rule InlineDataFull_var() -> Variable = v:Var() _ { v }
-        rule InlineDataFull_values() -> Vec<Option<Term>> = "(" _ v:InlineDataFull_value()* _ ")" _ { v }
-        rule InlineDataFull_value() -> Option<Term> = v:DataBlockValue() _ { v }
+        rule InlineDataFull_values() -> Vec<Option<NamedNodeOrLiteral>> = "(" _ v:InlineDataFull_value()* _ ")" _ { v }
+        rule InlineDataFull_value() -> Option<NamedNodeOrLiteral> = v:DataBlockValue() _ { v }
 
         //[65]
-        rule DataBlockValue() -> Option<Term> =
+        rule DataBlockValue() -> Option<NamedNodeOrLiteral> =
             i:iri() { Some(i.into()) } /
             l:RDFLiteral() { Some(l.into()) } /
             l:NumericLiteral() { Some(l.into()) } /
@@ -1331,7 +1354,7 @@ parser! {
 
         //[71]
         rule ArgList() -> Vec<Expression> =
-            "(" _ i("DISTINCT")? _ e:ArgList_item() **<1,> ("," _) _ ")" { e } /
+            "(" _ e:ArgList_item() **<1,> ("," _) _ ")" { e } /
             NIL() { Vec::new() }
         rule ArgList_item() -> Expression = e:Expression() _ { e }
 
@@ -1393,7 +1416,7 @@ parser! {
         }
 
         //[78]
-        rule Verb() -> NamedNodeOrVariable = VarOrIri() / "a" { rdf::TYPE.into_owned().into() }
+        rule Verb() -> NamedNodeOrVariable = VarOrIri() / "a" { iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").into() }
 
         //[79]
         rule ObjectList() -> FocusedTriplePattern<Vec<TermOrVariable>> = o:ObjectList_item() **<1,> ("," _) {
@@ -1513,7 +1536,7 @@ parser! {
         //[94]
         rule PathPrimary() -> PropertyPathExpression =
             v:iri() { v.into() } /
-            "a" { rdf::TYPE.into_owned().into() } /
+            "a" { iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").into() } /
             "!" _ p:PathNegatedPropertySet() { p } /
             "(" _ p:Path() _ ")" { p }
 
@@ -1550,9 +1573,9 @@ parser! {
         //[96]
         rule PathOneInPropertySet() -> Either<NamedNode,NamedNode> =
             "^" _ v:iri() { Either::Right(v) } /
-            "^" _ "a" { Either::Right(rdf::TYPE.into_owned()) } /
+            "^" _ "a" { Either::Right(iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")) } /
             v:iri() { Either::Left(v) } /
-            "a" { Either::Left(rdf::TYPE.into_owned()) }
+            "a" { Either::Left(iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")) }
 
         //[98]
         rule TriplesNode() -> FocusedTriplePattern<TermOrVariable> = Collection() / BlankNodePropertyList()
@@ -1560,7 +1583,7 @@ parser! {
         //[99]
         rule BlankNodePropertyList() -> FocusedTriplePattern<TermOrVariable> = "[" _ po:PropertyListNotEmpty() _ "]" {
             let mut patterns: Vec<TriplePattern> = Vec::default();
-            let mut bnode = TermOrVariable::from(BlankNode::default());
+            let mut bnode = TermOrVariable::from(bnode());
             for (p, os) in po.focus {
                 for o in os {
                     patterns.push(TriplePattern::new(bnode.clone(), p.clone(), o));
@@ -1578,7 +1601,7 @@ parser! {
         //[101]
         rule BlankNodePropertyListPath() -> FocusedTripleOrPathPattern<TermOrVariable> = "[" _ po:PropertyListPathNotEmpty() _ "]" {
             let mut patterns: Vec<TripleOrPathPattern> = Vec::default();
-            let mut bnode = TermOrVariable::from(BlankNode::default());
+            let mut bnode = TermOrVariable::from(bnode());
             for (p, os) in po.focus {
                 for o in os {
                     add_to_triple_or_path_patterns(bnode.clone(), p.clone(), o, &mut patterns);
@@ -1593,11 +1616,11 @@ parser! {
         //[102]
         rule Collection() -> FocusedTriplePattern<TermOrVariable> = "(" _ o:Collection_item()+ ")" {
             let mut patterns: Vec<TriplePattern> = Vec::default();
-            let mut current_list_node = TermOrVariable::from(rdf::NIL.into_owned());
+            let mut current_list_node = TermOrVariable::from(iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"));
             for objWithPatterns in o.into_iter().rev() {
-                let new_blank_node = TermOrVariable::from(BlankNode::default());
-                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::FIRST.into_owned(), objWithPatterns.focus.clone()));
-                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::REST.into_owned(), current_list_node));
+                let new_blank_node = TermOrVariable::from(bnode());
+                patterns.push(TriplePattern::new(new_blank_node.clone(), iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#first"), objWithPatterns.focus.clone()));
+                patterns.push(TriplePattern::new(new_blank_node.clone(), iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"), current_list_node));
                 current_list_node = new_blank_node;
                 patterns.extend_from_slice(&objWithPatterns.patterns);
             }
@@ -1611,11 +1634,11 @@ parser! {
         //[103]
         rule CollectionPath() -> FocusedTripleOrPathPattern<TermOrVariable> = "(" _ o:CollectionPath_item()+ _ ")" {
             let mut patterns: Vec<TripleOrPathPattern> = Vec::default();
-            let mut current_list_node = TermOrVariable::from(rdf::NIL.into_owned());
+            let mut current_list_node = TermOrVariable::from(iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"));
             for objWithPatterns in o.into_iter().rev() {
-                let new_blank_node = TermOrVariable::from(BlankNode::default());
-                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::FIRST.into_owned(), objWithPatterns.focus.clone()).into());
-                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::REST.into_owned(), current_list_node).into());
+                let new_blank_node = TermOrVariable::from(bnode());
+                patterns.push(TriplePattern::new(new_blank_node.clone(), iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#first"), objWithPatterns.focus.clone()).into());
+                patterns.push(TriplePattern::new(new_blank_node.clone(), iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"), current_list_node).into());
                 current_list_node = new_blank_node;
                 patterns.extend(objWithPatterns.patterns);
             }
@@ -1647,7 +1670,7 @@ parser! {
             i:iri() { i.into() }
 
         //[108]
-        rule Var() -> Variable = v:(VAR1() / VAR2()) { Variable::new_unchecked(v) }
+        rule Var() -> Variable = name:(VAR1() / VAR2()) { Variable { name: name.into() } }
 
         //[109]
         rule GraphTerm() -> Term =
@@ -1656,7 +1679,7 @@ parser! {
             l:NumericLiteral() { l.into() } /
             l:BooleanLiteral() { l.into() } /
             b:BlankNode() { b.into() } /
-            NIL() { rdf::NIL.into() }
+            NIL() { iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil").into() }
 
         //[110]
         rule Expression() -> Expression = e:ConditionalOrExpression() {e}
@@ -1749,7 +1772,7 @@ parser! {
             i("LANGMATCHES") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::LangMatches, vec![a, b]) } /
             i("DATATYPE") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Datatype, vec![e]) } /
             i("BOUND") _ "(" _ v:Var() _ ")" { Expression::Bound(v) } /
-            (i("IRI") / i("URI")) _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IRI, vec![e]) } /
+            (i("IRI") / i("URI")) _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Iri, vec![e]) } /
             i("BNODE") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::BNode, vec![e]) } /
             i("BNODE") NIL() { Expression::FunctionCall(Function::BNode, vec![]) }  /
             i("RAND") _ NIL() { Expression::FunctionCall(Function::Rand, vec![]) } /
@@ -1763,7 +1786,7 @@ parser! {
             StrReplaceExpression() /
             i("UCASE") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::UCase, vec![e]) } /
             i("LCASE") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::LCase, vec![e]) } /
-            i("ENCODE_FOR_URI") "(" _ e: Expression() _ ")" { Expression::FunctionCall(Function::EncodeForURI, vec![e]) } /
+            i("ENCODE_FOR_URI") "(" _ e: Expression() _ ")" { Expression::FunctionCall(Function::EncodeForUri, vec![e]) } /
             i("CONTAINS") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::Contains, vec![a, b]) } /
             i("STRSTARTS") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::StrStarts, vec![a, b]) } /
             i("STRENDS") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::StrEnds, vec![a, b]) } /
@@ -1778,19 +1801,19 @@ parser! {
             i("TIMEZONE") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Timezone, vec![e]) } /
             i("TZ") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Tz, vec![e]) } /
             i("NOW") _ NIL() { Expression::FunctionCall(Function::Now, vec![]) } /
-            i("UUID") _ NIL() { Expression::FunctionCall(Function::UUID, vec![]) }/
-            i("STRUUID") _ NIL() { Expression::FunctionCall(Function::StrUUID, vec![]) } /
-            i("MD5") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::MD5, vec![e]) } /
-            i("SHA1") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::SHA1, vec![e]) } /
-            i("SHA256") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::SHA256, vec![e]) } /
-            i("SHA384") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::SHA384, vec![e]) } /
-            i("SHA512") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::SHA512, vec![e]) } /
+            i("UUID") _ NIL() { Expression::FunctionCall(Function::Uuid, vec![]) }/
+            i("STRUUID") _ NIL() { Expression::FunctionCall(Function::StrUuid, vec![]) } /
+            i("MD5") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Md5, vec![e]) } /
+            i("SHA1") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Sha1, vec![e]) } /
+            i("SHA256") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Sha256, vec![e]) } /
+            i("SHA384") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Sha384, vec![e]) } /
+            i("SHA512") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Sha512, vec![e]) } /
             i("COALESCE") e:ExpressionList() { Expression::Coalesce(e) } /
             i("IF") _ "(" _ a:Expression() _ "," _ b:Expression() _ "," _ c:Expression() _ ")" { Expression::If(Box::new(a), Box::new(b), Box::new(c)) } /
             i("STRLANG") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::StrLang, vec![a, b]) }  /
-            i("STRDT") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::StrDT, vec![a, b]) } /
+            i("STRDT") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::StrDt, vec![a, b]) } /
             i("sameTerm") "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::SameTerm(Box::new(a), Box::new(b)) } /
-            (i("isIRI") / i("isURI")) _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsIRI, vec![e]) } /
+            (i("isIRI") / i("isURI")) _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsIri, vec![e]) } /
             i("isBLANK") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsBlank, vec![e]) } /
             i("isLITERAL") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsLiteral, vec![e]) } /
             i("isNUMERIC") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsNumeric, vec![e]) } /
@@ -1853,52 +1876,43 @@ parser! {
 
         //[129]
         rule RDFLiteral() -> Literal =
-            v:String() _ "^^" _ t:iri() { Literal::new_typed_literal(v, t) } /
-            v:String() _ l:LANGTAG() {? Literal::new_language_tagged_literal(v, l).map_err(|_| "language tag parsing failed") } /
-            v:String() { Literal::new_simple_literal(v) }
+            value:String() _ "^^" _ datatype:iri() { Literal::Typed { value, datatype } } /
+            value:String() _ language:LANGTAG() { Literal::LanguageTaggedString { value, language: language.into_inner() } } /
+            value:String() { Literal::Simple { value } }
 
         //[130]
         rule NumericLiteral() -> Literal  = NumericLiteralUnsigned() / NumericLiteralPositive() / NumericLiteralNegative()
 
         //[131]
         rule NumericLiteralUnsigned() -> Literal =
-            d:$(DOUBLE()) {? match f64::from_str(d) {
-                Ok(value) => Ok(value.into()),
-                Err(_) => Err("Invalid xsd:double()")
-            } } /
-            d:$(DECIMAL()) { Literal::new_typed_literal(d, xsd::DECIMAL) } /
-            i:$(INTEGER()) { Literal::new_typed_literal(i, xsd::INTEGER) }
+            d:$(DOUBLE()) { Literal::Typed { value: d.into(), datatype: iri("http://www.w3.org/2001/XMLSchema#double") } } /
+            d:$(DECIMAL()) { Literal::Typed { value: d.into(), datatype: iri("http://www.w3.org/2001/XMLSchema#decimal") } } /
+            i:$(INTEGER()) { Literal::Typed { value: i.into(), datatype: iri("http://www.w3.org/2001/XMLSchema#integer") } }
 
         //[132]
         rule NumericLiteralPositive() -> Literal =
-            d:$(DOUBLE_POSITIVE()) {? match f64::from_str(d) {
-                Ok(value) => Ok(value.into()),
-                Err(_) => Err("Invalid xsd:double()")
-            } } /
-            d:$(DECIMAL_POSITIVE()) { Literal::new_typed_literal(d, xsd::DECIMAL) } /
-            i:$(INTEGER_POSITIVE()) { Literal::new_typed_literal(i, xsd::INTEGER) }
+            d:$(DOUBLE_POSITIVE()) { Literal::Typed { value: d.into(), datatype: iri("http://www.w3.org/2001/XMLSchema#double") } } /
+            d:$(DECIMAL_POSITIVE()) { Literal::Typed { value: d.into(), datatype: iri("http://www.w3.org/2001/XMLSchema#decimal") } } /
+            i:$(INTEGER_POSITIVE()) { Literal::Typed { value: i.into(), datatype: iri("http://www.w3.org/2001/XMLSchema#integer") } }
 
 
         //[133]
         rule NumericLiteralNegative() -> Literal =
-            d:$(DOUBLE_NEGATIVE()) {? match f64::from_str(d) {
-                Ok(value) => Ok(value.into()),
-                Err(_) => Err("Invalid xsd:double()")
-            } } /
-            d:$(DECIMAL_NEGATIVE()) { Literal::new_typed_literal(d, xsd::DECIMAL) } /
-            i:$(INTEGER_NEGATIVE()) { Literal::new_typed_literal(i, xsd::INTEGER) }
+            d:$(DOUBLE_NEGATIVE()) { Literal::Typed { value: d.into(), datatype: iri("http://www.w3.org/2001/XMLSchema#double") } } /
+            d:$(DECIMAL_NEGATIVE()) { Literal::Typed { value: d.into(), datatype: iri("http://www.w3.org/2001/XMLSchema#decimal") } } /
+            i:$(INTEGER_NEGATIVE()) { Literal::Typed { value: i.into(), datatype: iri("http://www.w3.org/2001/XMLSchema#integer") } }
 
         //[134]
         rule BooleanLiteral() -> Literal =
-            "true" { true.into() } /
-            "false" { false.into() }
+            "true" { Literal::Typed { value: "true".into(), datatype: iri("http://www.w3.org/2001/XMLSchema#boolean") } } /
+            "false" { Literal::Typed { value: "false".into(), datatype: iri("http://www.w3.org/2001/XMLSchema#boolean") } }
 
         //[135]
         rule String() -> String = STRING_LITERAL_LONG1() / STRING_LITERAL_LONG2() / STRING_LITERAL1() / STRING_LITERAL2()
 
         //[136]
         rule iri() -> NamedNode = i:(IRIREF() / PrefixedName()) {
-            NamedNode::new_from_iri(i)
+            iri(i.into_inner())
         }
 
         //[137]
@@ -1910,19 +1924,15 @@ parser! {
             } }
 
         //[138]
-        rule BlankNode() -> BlankNode =
-            b:BLANK_NODE_LABEL() {?
-                match BlankNode::new(b) {
-                    Ok(node) => if state.used_bnodes.contains(&node) {
-                        Err("Already used blank node id")
-                    } else {
-                        state.currently_used_bnodes.insert(node.clone());
-                        Ok(node)
-                    },
-                    Err(_) => Err("Invalid blank node identifier")
-                }
-            } /
-            ANON() { BlankNode::default() }
+        rule BlankNode() -> BlankNode = id:BLANK_NODE_LABEL() {?
+            let node = BlankNode { id: id.to_owned() };
+            if state.used_bnodes.contains(&node) {
+                Err("Already used blank node id")
+            } else {
+                state.currently_used_bnodes.insert(node.clone());
+                Ok(node)
+            }
+        } / ANON() { bnode() }
 
         //[139]
         rule IRIREF() -> Iri<String> = "<" i:$((!['>'] [_])*) ">" {?
@@ -1957,8 +1967,8 @@ parser! {
         rule VAR2() -> &'input str = "$" v:$(VARNAME()) { v }
 
         //[145]
-        rule LANGTAG() -> String = "@" l:$(['a' ..= 'z' | 'A' ..= 'Z']+ ("-" ['a' ..= 'z' | 'A' ..= 'Z' | '0' ..= '9']+)*) {
-            l.to_ascii_lowercase()
+        rule LANGTAG() -> LanguageTag<String> = "@" l:$(['a' ..= 'z' | 'A' ..= 'Z']+ ("-" ['a' ..= 'z' | 'A' ..= 'Z' | '0' ..= '9']+)*) {?
+            LanguageTag::parse(l.to_ascii_lowercase()).map_err(|_| "language tag parsing failed")
         }
 
         //[146]

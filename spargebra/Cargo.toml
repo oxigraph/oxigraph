@@ -1,0 +1,19 @@
+[package]
+name = "spargebra"
+version = "0.1.0"
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["SPARQL"]
+repository = "https://github.com/oxigraph/oxigraph/tree/master/spargebra"
+homepage = "https://oxigraph.org/"
+description = """
+A SPARQL parser
+"""
+edition = "2018"
+
+[dependencies]
+peg = "0.7"
+rand = "0.8"
+oxiri = "0.1"
+oxilangtag = "0.1"

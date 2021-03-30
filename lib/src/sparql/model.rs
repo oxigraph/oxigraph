@@ -6,7 +6,6 @@ use crate::sparql::csv_results::{read_tsv_results, write_csv_results, write_tsv_
 use crate::sparql::error::EvaluationError;
 use crate::sparql::json_results::write_json_results;
 use crate::sparql::xml_results::{read_xml_results, write_xml_results};
-use rand::random;
 use std::error::Error;
 use std::io::{BufRead, Write};
 use std::rc::Rc;
@@ -442,11 +441,6 @@ impl Variable {
     #[inline]
     pub fn into_string(self) -> String {
         self.name
-    }
-
-    #[inline]
-    pub(crate) fn new_random() -> Self {
-        Self::new_unchecked(format!("{:x}", random::<u128>()))
     }
 }
 

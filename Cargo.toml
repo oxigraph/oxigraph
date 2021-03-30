@@ -3,6 +3,7 @@ members = [
     "lib",
     "python",
     "server",
+    "spargebra",
     "testsuite",
     "wikibase"
 ]

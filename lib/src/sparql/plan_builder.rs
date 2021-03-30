@@ -1,9 +1,11 @@
-use crate::model::{BlankNode, Literal, NamedNode, Term};
-use crate::sparql::algebra::*;
+use crate::model::{LiteralRef, NamedNodeRef};
 use crate::sparql::error::EvaluationError;
-use crate::sparql::model::*;
+use crate::sparql::model::Variable as OxVariable;
 use crate::sparql::plan::*;
 use crate::store::numeric_encoder::{EncodedTerm, WriteEncoder};
+use rand::random;
+use spargebra::algebra::*;
+use spargebra::term::*;
 use std::collections::{BTreeSet, HashSet};
 use std::rc::Rc;
 
@@ -40,7 +42,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
         graph_name: PatternValue,
     ) -> Result<PlanNode, EvaluationError> {
         Ok(match pattern {
-            GraphPattern::BGP(p) => self.build_for_bgp(p, variables, graph_name)?,
+            GraphPattern::Bgp(p) => self.build_for_bgp(p, variables, graph_name)?,
             GraphPattern::Path {
                 subject,
                 path,
@@ -147,7 +149,12 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                     self.pattern_value_from_named_node_or_variable(name, variables)?;
                 PlanNode::Service {
                     service_name,
-                    variables: Rc::new(variables.clone()),
+                    variables: Rc::new(
+                        variables
+                            .iter()
+                            .map(|v| OxVariable::new_unchecked(v.name.clone()))
+                            .collect(),
+                    ),
                     child: Rc::new(child),
                     graph_pattern: Rc::new(*pattern.clone()),
                     silent: *silent,
@@ -411,7 +418,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                 Function::Datatype => PlanExpression::Datatype(Box::new(
                     self.build_for_expression(&parameters[0], variables, graph_name)?,
                 )),
-                Function::IRI => PlanExpression::Iri(Box::new(self.build_for_expression(
+                Function::Iri => PlanExpression::Iri(Box::new(self.build_for_expression(
                     &parameters[0],
                     variables,
                     graph_name,
@@ -482,7 +489,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                     variables,
                     graph_name,
                 )?)),
-                Function::EncodeForURI => PlanExpression::EncodeForUri(Box::new(
+                Function::EncodeForUri => PlanExpression::EncodeForUri(Box::new(
                     self.build_for_expression(&parameters[0], variables, graph_name)?,
                 )),
                 Function::Contains => PlanExpression::Contains(
@@ -544,29 +551,29 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                     graph_name,
                 )?)),
                 Function::Now => PlanExpression::Now,
-                Function::UUID => PlanExpression::Uuid,
-                Function::StrUUID => PlanExpression::StrUuid,
-                Function::MD5 => PlanExpression::Md5(Box::new(self.build_for_expression(
+                Function::Uuid => PlanExpression::Uuid,
+                Function::StrUuid => PlanExpression::StrUuid,
+                Function::Md5 => PlanExpression::Md5(Box::new(self.build_for_expression(
                     &parameters[0],
                     variables,
                     graph_name,
                 )?)),
-                Function::SHA1 => PlanExpression::Sha1(Box::new(self.build_for_expression(
+                Function::Sha1 => PlanExpression::Sha1(Box::new(self.build_for_expression(
                     &parameters[0],
                     variables,
                     graph_name,
                 )?)),
-                Function::SHA256 => PlanExpression::Sha256(Box::new(self.build_for_expression(
+                Function::Sha256 => PlanExpression::Sha256(Box::new(self.build_for_expression(
                     &parameters[0],
                     variables,
                     graph_name,
                 )?)),
-                Function::SHA384 => PlanExpression::Sha384(Box::new(self.build_for_expression(
+                Function::Sha384 => PlanExpression::Sha384(Box::new(self.build_for_expression(
                     &parameters[0],
                     variables,
                     graph_name,
                 )?)),
-                Function::SHA512 => PlanExpression::Sha512(Box::new(self.build_for_expression(
+                Function::Sha512 => PlanExpression::Sha512(Box::new(self.build_for_expression(
                     &parameters[0],
                     variables,
                     graph_name,
@@ -575,11 +582,11 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                     Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
                     Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
                 ),
-                Function::StrDT => PlanExpression::StrDt(
+                Function::StrDt => PlanExpression::StrDt(
                     Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
                     Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
                 ),
-                Function::IsIRI => PlanExpression::IsIri(Box::new(self.build_for_expression(
+                Function::IsIri => PlanExpression::IsIri(Box::new(self.build_for_expression(
                     &parameters[0],
                     variables,
                     graph_name,
@@ -606,7 +613,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                     },
                 ),
                 Function::Custom(name) => {
-                    if name == "http://www.w3.org/2001/XMLSchema#boolean" {
+                    if name.iri == "http://www.w3.org/2001/XMLSchema#boolean" {
                         self.build_cast(
                             parameters,
                             PlanExpression::BooleanCast,
@@ -614,7 +621,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                             graph_name,
                             "boolean",
                         )?
-                    } else if name == "http://www.w3.org/2001/XMLSchema#double" {
+                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#double" {
                         self.build_cast(
                             parameters,
                             PlanExpression::DoubleCast,
@@ -622,7 +629,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                             graph_name,
                             "double",
                         )?
-                    } else if name == "http://www.w3.org/2001/XMLSchema#float" {
+                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#float" {
                         self.build_cast(
                             parameters,
                             PlanExpression::FloatCast,
@@ -630,7 +637,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                             graph_name,
                             "float",
                         )?
-                    } else if name == "http://www.w3.org/2001/XMLSchema#decimal" {
+                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#decimal" {
                         self.build_cast(
                             parameters,
                             PlanExpression::DecimalCast,
@@ -638,7 +645,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                             graph_name,
                             "decimal",
                         )?
-                    } else if name == "http://www.w3.org/2001/XMLSchema#integer" {
+                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#integer" {
                         self.build_cast(
                             parameters,
                             PlanExpression::IntegerCast,
@@ -646,7 +653,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                             graph_name,
                             "integer",
                         )?
-                    } else if name == "http://www.w3.org/2001/XMLSchema#date" {
+                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#date" {
                         self.build_cast(
                             parameters,
                             PlanExpression::DateCast,
@@ -654,7 +661,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                             graph_name,
                             "date",
                         )?
-                    } else if name == "http://www.w3.org/2001/XMLSchema#time" {
+                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#time" {
                         self.build_cast(
                             parameters,
                             PlanExpression::TimeCast,
@@ -662,7 +669,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                             graph_name,
                             "time",
                         )?
-                    } else if name == "http://www.w3.org/2001/XMLSchema#dateTime" {
+                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#dateTime" {
                         self.build_cast(
                             parameters,
                             PlanExpression::DateTimeCast,
@@ -670,7 +677,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                             graph_name,
                             "dateTime",
                         )?
-                    } else if name == "http://www.w3.org/2001/XMLSchema#duration" {
+                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#duration" {
                         self.build_cast(
                             parameters,
                             PlanExpression::DurationCast,
@@ -678,7 +685,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                             graph_name,
                             "duration",
                         )?
-                    } else if name == "http://www.w3.org/2001/XMLSchema#yearMonthDuration" {
+                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#yearMonthDuration" {
                         self.build_cast(
                             parameters,
                             PlanExpression::YearMonthDurationCast,
@@ -686,7 +693,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                             graph_name,
                             "yearMonthDuration",
                         )?
-                    } else if name == "http://www.w3.org/2001/XMLSchema#dayTimeDuration" {
+                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#dayTimeDuration" {
                         self.build_cast(
                             parameters,
                             PlanExpression::DayTimeDurationCast,
@@ -694,7 +701,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                             graph_name,
                             "dayTimeDuration",
                         )?
-                    } else if name == "http://www.w3.org/2001/XMLSchema#string" {
+                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#string" {
                         self.build_cast(
                             parameters,
                             PlanExpression::StringCast,
@@ -770,7 +777,9 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
             TermOrVariable::Term(Term::BlankNode(bnode)) => {
                 PatternValue::Variable(variable_key(
                     variables,
-                    &Variable::new_unchecked(bnode.as_str()),
+                    &Variable {
+                        name: bnode.id.clone(),
+                    },
                 ))
                 //TODO: very bad hack to convert bnode to variable
             }
@@ -796,7 +805,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
     fn encode_bindings(
         &mut self,
         table_variables: &[Variable],
-        rows: &[Vec<Option<Term>>],
+        rows: &[Vec<Option<NamedNodeOrLiteral>>],
         variables: &mut Vec<Variable>,
     ) -> Result<Vec<EncodedTuple>, EvaluationError> {
         let bindings_variables_keys = table_variables
@@ -808,7 +817,13 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
                 let mut result = EncodedTuple::with_capacity(variables.len());
                 for (key, value) in row.iter().enumerate() {
                     if let Some(term) = value {
-                        result.set(bindings_variables_keys[key], self.build_term(term)?);
+                        result.set(
+                            bindings_variables_keys[key],
+                            match term {
+                                NamedNodeOrLiteral::NamedNode(node) => self.build_named_node(node),
+                                NamedNodeOrLiteral::Literal(literal) => self.build_literal(literal),
+                            }?,
+                        );
                     }
                 }
                 Ok(result)
@@ -961,7 +976,9 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
         }) {
             to_id
         } else {
-            to.push(Variable::new_random());
+            to.push(Variable {
+                name: format!("{:x}", random::<u128>()),
+            });
             to.len() - 1
         }
     }
@@ -1030,15 +1047,29 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
     }
 
     fn build_named_node(&mut self, node: &NamedNode) -> Result<EncodedTerm, EvaluationError> {
-        self.encoder.encode_named_node(node.as_ref())
+        self.encoder
+            .encode_named_node(NamedNodeRef::new_unchecked(node.iri.as_str()))
     }
 
     fn build_literal(&mut self, literal: &Literal) -> Result<EncodedTerm, EvaluationError> {
-        self.encoder.encode_literal(literal.as_ref())
+        self.encoder.encode_literal(match literal {
+            Literal::Simple { value } => LiteralRef::new_simple_literal(value),
+            Literal::LanguageTaggedString { value, language } => {
+                LiteralRef::new_language_tagged_literal_unchecked(value, language.as_str())
+            }
+            Literal::Typed { value, datatype } => LiteralRef::new_typed_literal(
+                value,
+                NamedNodeRef::new_unchecked(datatype.iri.as_str()),
+            ),
+        })
     }
 
     fn build_term(&mut self, term: &Term) -> Result<EncodedTerm, EvaluationError> {
-        self.encoder.encode_term(term.as_ref())
+        match term {
+            Term::NamedNode(node) => self.build_named_node(node),
+            Term::BlankNode(_) => Err(EvaluationError::msg("Unexpected blank node")),
+            Term::Literal(literal) => self.build_literal(literal),
+        }
     }
 }
 

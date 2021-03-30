@@ -1,16 +1,13 @@
 use crate::error::{invalid_data_error, invalid_input_error};
 use crate::io::GraphFormat;
-use crate::model::{BlankNode, GraphNameRef, NamedNode, NamedOrBlankNode, Quad, Term};
-use crate::sparql::algebra::{
-    GraphPattern, GraphTarget, GraphUpdateOperation, NamedNodeOrVariable, QuadPattern,
-    QueryDataset, TermOrVariable,
-};
+use crate::model::{BlankNode as OxBlankNode, GraphNameRef, LiteralRef, NamedNodeRef};
+use crate::sparql::algebra::QueryDataset;
 use crate::sparql::dataset::DatasetView;
 use crate::sparql::eval::SimpleEvaluator;
 use crate::sparql::http::Client;
 use crate::sparql::plan::EncodedTuple;
 use crate::sparql::plan_builder::PlanBuilder;
-use crate::sparql::{EvaluationError, UpdateOptions, Variable};
+use crate::sparql::{EvaluationError, UpdateOptions};
 use crate::store::numeric_encoder::{
     EncodedQuad, EncodedTerm, ReadEncoder, StrContainer, StrLookup, WriteEncoder,
 };
@@ -18,6 +15,12 @@ use crate::store::{load_graph, ReadableEncodedStore, StoreOrParseError, Writable
 use http::header::{ACCEPT, CONTENT_TYPE, USER_AGENT};
 use http::{Method, Request, StatusCode};
 use oxiri::Iri;
+use spargebra::algebra::{GraphPattern, GraphTarget, QuadPattern};
+use spargebra::term::{
+    BlankNode, GraphName, Literal, NamedNode, NamedNodeOrVariable, NamedOrBlankNode, Quad, Term,
+    TermOrVariable, Variable,
+};
+use spargebra::GraphUpdateOperation;
 use std::collections::HashMap;
 use std::io;
 use std::rc::Rc;
@@ -53,23 +56,31 @@ where
         }
     }
 
-    pub fn eval_all(&mut self, updates: &[GraphUpdateOperation]) -> Result<(), EvaluationError> {
-        for update in updates {
-            self.eval(update)?;
+    pub fn eval_all(
+        &mut self,
+        updates: &[GraphUpdateOperation],
+        using_datasets: &[Option<QueryDataset>],
+    ) -> Result<(), EvaluationError> {
+        for (update, using_dataset) in updates.iter().zip(using_datasets) {
+            self.eval(update, using_dataset)?;
         }
         Ok(())
     }
 
-    fn eval(&mut self, update: &GraphUpdateOperation) -> Result<(), EvaluationError> {
+    fn eval(
+        &mut self,
+        update: &GraphUpdateOperation,
+        using_dataset: &Option<QueryDataset>,
+    ) -> Result<(), EvaluationError> {
         match update {
             GraphUpdateOperation::InsertData { data } => self.eval_insert_data(data),
             GraphUpdateOperation::DeleteData { data } => self.eval_delete_data(data),
             GraphUpdateOperation::DeleteInsert {
                 delete,
                 insert,
-                using,
                 pattern,
-            } => self.eval_delete_insert(delete, insert, using, pattern),
+                ..
+            } => self.eval_delete_insert(delete, insert, using_dataset.as_ref().unwrap(), pattern),
             GraphUpdateOperation::Load { silent, from, to } => {
                 if let Err(error) = self.eval_load(from, to) {
                     if *silent {
@@ -176,7 +187,7 @@ where
     ) -> Result<(), EvaluationError> {
         let request = Request::builder()
             .method(Method::GET)
-            .uri(from.as_str())
+            .uri(&from.iri)
             .header(
                 ACCEPT,
                 "application/n-triples, text/turtle, application/rdf+xml",
@@ -207,7 +218,7 @@ where
             ))
         })?;
         let to_graph_name = if let Some(graph_name) = to {
-            graph_name.as_ref().into()
+            NamedNodeRef::new_unchecked(&graph_name.iri).into()
         } else {
             GraphNameRef::DefaultGraph
         };
@@ -216,17 +227,14 @@ where
             response.into_body(),
             format,
             to_graph_name,
-            Some(from.as_str()),
+            Some(&from.iri),
         )
         .map_err(io::Error::from)?;
         Ok(())
     }
 
     fn eval_create(&mut self, graph: &NamedNode, silent: bool) -> Result<(), EvaluationError> {
-        let encoded_graph_name = self
-            .write
-            .encode_named_node(graph.as_ref())
-            .map_err(to_eval_error)?;
+        let encoded_graph_name = self.encode_named_node_for_insertion(graph)?;
         if self
             .read
             .contains_encoded_named_graph(encoded_graph_name)
@@ -250,11 +258,7 @@ where
     fn eval_clear(&mut self, graph: &GraphTarget, silent: bool) -> Result<(), EvaluationError> {
         match graph {
             GraphTarget::NamedNode(graph_name) => {
-                if let Some(graph_name) = self
-                    .read
-                    .get_encoded_named_node(graph_name.as_ref())
-                    .map_err(to_eval_error)?
-                {
+                if let Some(graph_name) = self.encode_named_node_for_deletion(graph_name)? {
                     if self
                         .read
                         .contains_encoded_named_graph(graph_name)
@@ -305,11 +309,7 @@ where
     fn eval_drop(&mut self, graph: &GraphTarget, silent: bool) -> Result<(), EvaluationError> {
         match graph {
             GraphTarget::NamedNode(graph_name) => {
-                if let Some(graph_name) = self
-                    .read
-                    .get_encoded_named_node(graph_name.as_ref())
-                    .map_err(to_eval_error)?
-                {
+                if let Some(graph_name) = self.encode_named_node_for_deletion(graph_name)? {
                     if self
                         .read
                         .contains_encoded_named_graph(graph_name)
@@ -350,34 +350,36 @@ where
     fn encode_quad_for_insertion(
         &mut self,
         quad: &Quad,
-        bnodes: &mut HashMap<BlankNode, BlankNode>,
+        bnodes: &mut HashMap<BlankNode, OxBlankNode>,
     ) -> Result<Option<EncodedQuad>, EvaluationError> {
         Ok(Some(EncodedQuad {
             subject: match &quad.subject {
                 NamedOrBlankNode::NamedNode(subject) => {
-                    self.write.encode_named_node(subject.as_ref())
+                    self.encode_named_node_for_insertion(subject)?
                 }
                 NamedOrBlankNode::BlankNode(subject) => self
                     .write
-                    .encode_blank_node(bnodes.entry(subject.clone()).or_default().as_ref()),
-            }
-            .map_err(to_eval_error)?,
+                    .encode_blank_node(bnodes.entry(subject.clone()).or_default().as_ref())
+                    .map_err(to_eval_error)?,
+            },
             predicate: self
                 .write
-                .encode_named_node(quad.predicate.as_ref())
+                .encode_named_node(NamedNodeRef::new_unchecked(&quad.predicate.iri))
                 .map_err(to_eval_error)?,
             object: match &quad.object {
-                Term::NamedNode(object) => self.write.encode_named_node(object.as_ref()),
+                Term::NamedNode(object) => self.encode_named_node_for_insertion(object)?,
                 Term::BlankNode(object) => self
                     .write
-                    .encode_blank_node(bnodes.entry(object.clone()).or_default().as_ref()),
-                Term::Literal(object) => self.write.encode_literal(object.as_ref()),
-            }
-            .map_err(to_eval_error)?,
-            graph_name: self
-                .write
-                .encode_graph_name(quad.graph_name.as_ref())
-                .map_err(to_eval_error)?,
+                    .encode_blank_node(bnodes.entry(object.clone()).or_default().as_ref())
+                    .map_err(to_eval_error)?,
+                Term::Literal(object) => self.encode_literal_for_insertion(object)?,
+            },
+            graph_name: match &quad.graph_name {
+                GraphName::NamedNode(graph_name) => {
+                    self.encode_named_node_for_insertion(graph_name)?
+                }
+                GraphName::DefaultGraph => EncodedTerm::DefaultGraph,
+            },
         }))
     }
 
@@ -386,35 +388,41 @@ where
         quad: &QuadPattern,
         variables: &[Variable],
         values: &[Option<EncodedTerm>],
-        bnodes: &mut HashMap<BlankNode, BlankNode>,
+        bnodes: &mut HashMap<BlankNode, OxBlankNode>,
     ) -> Result<Option<EncodedQuad>, EvaluationError> {
         Ok(Some(EncodedQuad {
-            subject: if let Some(subject) =
-                self.encode_term_for_insertion(&quad.subject, variables, values, bnodes, |t| {
-                    t.is_named_node() || t.is_blank_node()
-                })? {
+            subject: if let Some(subject) = self.encode_term_or_var_for_insertion(
+                &quad.subject,
+                variables,
+                values,
+                bnodes,
+                |t| t.is_named_node() || t.is_blank_node(),
+            )? {
                 subject
             } else {
                 return Ok(None);
             },
             predicate: if let Some(predicate) =
-                self.encode_named_node_for_insertion(&quad.predicate, variables, values)?
+                self.encode_named_node_or_var_for_insertion(&quad.predicate, variables, values)?
             {
                 predicate
             } else {
                 return Ok(None);
             },
-            object: if let Some(object) =
-                self.encode_term_for_insertion(&quad.object, variables, values, bnodes, |t| {
-                    !t.is_default_graph()
-                })? {
+            object: if let Some(object) = self.encode_term_or_var_for_insertion(
+                &quad.object,
+                variables,
+                values,
+                bnodes,
+                |t| !t.is_default_graph(),
+            )? {
                 object
             } else {
                 return Ok(None);
             },
             graph_name: if let Some(graph_name) = &quad.graph_name {
                 if let Some(graph_name) =
-                    self.encode_named_node_for_insertion(graph_name, variables, values)?
+                    self.encode_named_node_or_var_for_insertion(graph_name, variables, values)?
                 {
                     graph_name
                 } else {
@@ -426,24 +434,23 @@ where
         }))
     }
 
-    fn encode_term_for_insertion(
+    fn encode_term_or_var_for_insertion(
         &mut self,
         term: &TermOrVariable,
         variables: &[Variable],
         values: &[Option<EncodedTerm>],
-        bnodes: &mut HashMap<BlankNode, BlankNode>,
+        bnodes: &mut HashMap<BlankNode, OxBlankNode>,
         validate: impl FnOnce(&EncodedTerm) -> bool,
     ) -> Result<Option<EncodedTerm>, EvaluationError> {
         Ok(match term {
-            TermOrVariable::Term(term) => Some(
-                self.write
-                    .encode_term(if let Term::BlankNode(bnode) = term {
-                        bnodes.entry(bnode.clone()).or_default().as_ref().into()
-                    } else {
-                        term.as_ref()
-                    })
+            TermOrVariable::Term(term) => Some(match term {
+                Term::NamedNode(term) => self.encode_named_node_for_insertion(term)?,
+                Term::BlankNode(bnode) => self
+                    .write
+                    .encode_blank_node(bnodes.entry(bnode.clone()).or_default().as_ref())
                     .map_err(to_eval_error)?,
-            ),
+                Term::Literal(term) => self.encode_literal_for_insertion(term)?,
+            }),
             TermOrVariable::Variable(v) => {
                 if let Some(Some(term)) = variables
                     .iter()
@@ -462,18 +469,16 @@ where
         })
     }
 
-    fn encode_named_node_for_insertion(
+    fn encode_named_node_or_var_for_insertion(
         &mut self,
         term: &NamedNodeOrVariable,
         variables: &[Variable],
         values: &[Option<EncodedTerm>],
     ) -> Result<Option<EncodedTerm>, EvaluationError> {
         Ok(match term {
-            NamedNodeOrVariable::NamedNode(term) => Some(
-                self.write
-                    .encode_named_node(term.into())
-                    .map_err(to_eval_error)?,
-            ),
+            NamedNodeOrVariable::NamedNode(term) => {
+                Some(self.encode_named_node_for_insertion(term)?)
+            }
             NamedNodeOrVariable::Variable(v) => {
                 if let Some(Some(term)) = variables
                     .iter()
@@ -492,43 +497,77 @@ where
         })
     }
 
+    fn encode_named_node_for_insertion(
+        &mut self,
+        term: &NamedNode,
+    ) -> Result<EncodedTerm, EvaluationError> {
+        self.write
+            .encode_named_node(NamedNodeRef::new_unchecked(&term.iri))
+            .map_err(to_eval_error)
+    }
+
+    fn encode_literal_for_insertion(
+        &mut self,
+        term: &Literal,
+    ) -> Result<EncodedTerm, EvaluationError> {
+        self.write
+            .encode_literal(match term {
+                Literal::Simple { value } => LiteralRef::new_simple_literal(value),
+                Literal::LanguageTaggedString { value, language } => {
+                    LiteralRef::new_language_tagged_literal_unchecked(value, language)
+                }
+                Literal::Typed { value, datatype } => {
+                    LiteralRef::new_typed_literal(value, NamedNodeRef::new_unchecked(&datatype.iri))
+                }
+            })
+            .map_err(to_eval_error)
+    }
+
     fn encode_quad_for_deletion(
         &mut self,
         quad: &Quad,
     ) -> Result<Option<EncodedQuad>, EvaluationError> {
         Ok(Some(EncodedQuad {
-            subject: if let Some(subject) = self
-                .read
-                .get_encoded_named_or_blank_node(quad.subject.as_ref())
-                .map_err(to_eval_error)?
-            {
+            subject: if let Some(subject) = match &quad.subject {
+                NamedOrBlankNode::NamedNode(subject) => {
+                    self.encode_named_node_for_deletion(subject)?
+                }
+                NamedOrBlankNode::BlankNode(_) => {
+                    return Err(EvaluationError::msg(
+                        "Blank nodes are not allowed in DELETE DATA",
+                    ))
+                }
+            } {
                 subject
             } else {
                 return Ok(None);
             },
-            predicate: if let Some(predicate) = self
-                .read
-                .get_encoded_named_node(quad.predicate.as_ref())
-                .map_err(to_eval_error)?
+            predicate: if let Some(predicate) =
+                self.encode_named_node_for_deletion(&quad.predicate)?
             {
                 predicate
             } else {
                 return Ok(None);
             },
-            object: if let Some(object) = self
-                .read
-                .get_encoded_term(quad.object.as_ref())
-                .map_err(to_eval_error)?
-            {
+            object: if let Some(object) = match &quad.object {
+                Term::NamedNode(object) => self.encode_named_node_for_deletion(object)?,
+                Term::BlankNode(_) => {
+                    return Err(EvaluationError::msg(
+                        "Blank nodes are not allowed in DELETE DATA",
+                    ))
+                }
+                Term::Literal(object) => self.encode_literal_for_deletion(object)?,
+            } {
                 object
             } else {
                 return Ok(None);
             },
-            graph_name: if let Some(graph_name) = self
-                .read
-                .get_encoded_graph_name(quad.graph_name.as_ref())
-                .map_err(to_eval_error)?
-            {
+            graph_name: if let Some(graph_name) = match &quad.graph_name {
+                GraphName::NamedNode(graph_name) => {
+                    self.encode_named_node_for_deletion(graph_name)?
+                }
+                GraphName::DefaultGraph => Some(EncodedTerm::DefaultGraph),
+            } {
                 graph_name
             } else {
                 return Ok(None);
@@ -544,21 +583,21 @@ where
     ) -> Result<Option<EncodedQuad>, EvaluationError> {
         Ok(Some(EncodedQuad {
             subject: if let Some(subject) =
-                self.encode_term_for_deletion(&quad.subject, variables, values)?
+                self.encode_term_or_var_for_deletion(&quad.subject, variables, values)?
             {
                 subject
             } else {
                 return Ok(None);
             },
             predicate: if let Some(predicate) =
-                self.encode_named_node_for_deletion(&quad.predicate, variables, values)?
+                self.encode_named_node_or_var_for_deletion(&quad.predicate, variables, values)?
             {
                 predicate
             } else {
                 return Ok(None);
             },
             object: if let Some(object) =
-                self.encode_term_for_deletion(&quad.object, variables, values)?
+                self.encode_term_or_var_for_deletion(&quad.object, variables, values)?
             {
                 object
             } else {
@@ -566,7 +605,7 @@ where
             },
             graph_name: if let Some(graph_name) = &quad.graph_name {
                 if let Some(graph_name) =
-                    self.encode_named_node_for_deletion(graph_name, variables, values)?
+                    self.encode_named_node_or_var_for_deletion(graph_name, variables, values)?
                 {
                     graph_name
                 } else {
@@ -578,24 +617,20 @@ where
         }))
     }
 
-    fn encode_term_for_deletion(
+    fn encode_term_or_var_for_deletion(
         &self,
         term: &TermOrVariable,
         variables: &[Variable],
         values: &[Option<EncodedTerm>],
     ) -> Result<Option<EncodedTerm>, EvaluationError> {
         match term {
-            TermOrVariable::Term(term) => {
-                if term.is_blank_node() {
-                    Err(EvaluationError::msg(
-                        "Blank node are not allowed in deletion patterns",
-                    ))
-                } else {
-                    self.read
-                        .get_encoded_term(term.into())
-                        .map_err(to_eval_error)
-                }
-            }
+            TermOrVariable::Term(term) => match term {
+                Term::NamedNode(term) => self.encode_named_node_for_deletion(term),
+                Term::BlankNode(_) => Err(EvaluationError::msg(
+                    "Blank nodes are not allowed in DELETE patterns",
+                )),
+                Term::Literal(term) => self.encode_literal_for_deletion(term),
+            },
             TermOrVariable::Variable(v) => Ok(
                 if let Some(Some(term)) = variables
                     .iter()
@@ -610,17 +645,14 @@ where
         }
     }
 
-    fn encode_named_node_for_deletion(
+    fn encode_named_node_or_var_for_deletion(
         &self,
         term: &NamedNodeOrVariable,
         variables: &[Variable],
         values: &[Option<EncodedTerm>],
     ) -> Result<Option<EncodedTerm>, EvaluationError> {
         Ok(match term {
-            NamedNodeOrVariable::NamedNode(term) => self
-                .read
-                .get_encoded_named_node(term.into())
-                .map_err(to_eval_error)?,
+            NamedNodeOrVariable::NamedNode(term) => self.encode_named_node_for_deletion(term)?,
             NamedNodeOrVariable::Variable(v) => {
                 if let Some(Some(term)) = variables
                     .iter()
@@ -637,6 +669,32 @@ where
                 }
             }
         })
+    }
+
+    fn encode_named_node_for_deletion(
+        &self,
+        term: &NamedNode,
+    ) -> Result<Option<EncodedTerm>, EvaluationError> {
+        self.read
+            .get_encoded_named_node(NamedNodeRef::new_unchecked(&term.iri))
+            .map_err(to_eval_error)
+    }
+
+    fn encode_literal_for_deletion(
+        &self,
+        term: &Literal,
+    ) -> Result<Option<EncodedTerm>, EvaluationError> {
+        self.read
+            .get_encoded_literal(match term {
+                Literal::Simple { value } => LiteralRef::new_simple_literal(value),
+                Literal::LanguageTaggedString { value, language } => {
+                    LiteralRef::new_language_tagged_literal_unchecked(value, language)
+                }
+                Literal::Typed { value, datatype } => {
+                    LiteralRef::new_typed_literal(value, NamedNodeRef::new_unchecked(&datatype.iri))
+                }
+            })
+            .map_err(to_eval_error)
     }
 }
 

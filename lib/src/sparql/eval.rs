@@ -2,7 +2,7 @@ use crate::model::vocab::{rdf, xsd};
 use crate::model::xsd::*;
 use crate::model::Triple;
 use crate::model::{BlankNode, LiteralRef, NamedNodeRef};
-use crate::sparql::algebra::{GraphPattern, Query, QueryDataset};
+use crate::sparql::algebra::{Query, QueryDataset};
 use crate::sparql::error::EvaluationError;
 use crate::sparql::model::*;
 use crate::sparql::plan::*;
@@ -18,6 +18,7 @@ use rand::random;
 use regex::{Regex, RegexBuilder};
 use sha1::Sha1;
 use sha2::{Sha256, Sha384, Sha512};
+use spargebra::algebra::GraphPattern;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
@@ -510,10 +511,13 @@ where
                 get_pattern_value(service_name, from)
                     .ok_or_else(|| EvaluationError::msg("The SERVICE name is not bound"))?,
             )?,
-            Query::Select {
-                dataset: QueryDataset::default(),
-                pattern: graph_pattern.clone(),
-                base_iri: self.base_iri.as_ref().map(|iri| iri.as_ref().clone()),
+            Query {
+                inner: spargebra::Query::Select {
+                    dataset: None,
+                    pattern: graph_pattern.clone(),
+                    base_iri: self.base_iri.as_ref().map(|iri| iri.as_ref().clone()),
+                },
+                dataset: QueryDataset::new(),
             },
         )? {
             Ok(self.encode_bindings(variables, iter))

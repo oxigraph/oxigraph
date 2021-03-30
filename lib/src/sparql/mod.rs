@@ -10,7 +10,6 @@ mod eval;
 mod http;
 mod json_results;
 mod model;
-mod parser;
 mod plan;
 mod plan_builder;
 mod service;
@@ -27,13 +26,13 @@ pub use crate::sparql::model::QuerySolution;
 pub use crate::sparql::model::QuerySolutionIter;
 pub use crate::sparql::model::QueryTripleIter;
 pub use crate::sparql::model::{Variable, VariableNameParseError};
-pub use crate::sparql::parser::ParseError;
 use crate::sparql::plan_builder::PlanBuilder;
 pub use crate::sparql::service::ServiceHandler;
 use crate::sparql::service::{EmptyServiceHandler, ErrorConversionServiceHandler};
 use crate::sparql::update::SimpleUpdateEvaluator;
 use crate::store::numeric_encoder::StrContainer;
 use crate::store::{ReadableEncodedStore, StoreOrParseError, WritableEncodedStore};
+pub use spargebra::ParseError;
 use std::convert::TryInto;
 use std::io;
 use std::rc::Rc;
@@ -43,27 +42,31 @@ pub(crate) fn evaluate_query<R: ReadableEncodedStore + 'static>(
     query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
     options: QueryOptions,
 ) -> Result<QueryResults, EvaluationError> {
-    match query.try_into().map_err(|e| e.into())? {
-        Query::Select {
-            pattern,
-            base_iri,
-            dataset,
+    let query = query.try_into().map_err(|e| e.into())?;
+    let dataset = DatasetView::new(store, &query.dataset)?;
+    match query.inner {
+        spargebra::Query::Select {
+            pattern, base_iri, ..
         } => {
-            let dataset = DatasetView::new(store, &dataset)?;
             let (plan, variables) = PlanBuilder::build(&dataset, &pattern)?;
             SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
                 options.service_handler,
             )
-            .evaluate_select_plan(&plan, Rc::new(variables))
+            .evaluate_select_plan(
+                &plan,
+                Rc::new(
+                    variables
+                        .into_iter()
+                        .map(|v| Variable::new_unchecked(v.name))
+                        .collect(),
+                ),
+            )
         }
-        Query::Ask {
-            pattern,
-            base_iri,
-            dataset,
+        spargebra::Query::Ask {
+            pattern, base_iri, ..
         } => {
-            let dataset = DatasetView::new(store, &dataset)?;
             let (plan, _) = PlanBuilder::build(&dataset, &pattern)?;
             SimpleEvaluator::new(
                 Rc::new(dataset),
@@ -72,13 +75,12 @@ pub(crate) fn evaluate_query<R: ReadableEncodedStore + 'static>(
             )
             .evaluate_ask_plan(&plan)
         }
-        Query::Construct {
+        spargebra::Query::Construct {
             template,
             pattern,
             base_iri,
-            dataset,
+            ..
         } => {
-            let dataset = DatasetView::new(store, &dataset)?;
             let (plan, variables) = PlanBuilder::build(&dataset, &pattern)?;
             let construct = PlanBuilder::build_graph_template(&dataset, &template, variables)?;
             SimpleEvaluator::new(
@@ -88,12 +90,9 @@ pub(crate) fn evaluate_query<R: ReadableEncodedStore + 'static>(
             )
             .evaluate_construct_plan(&plan, construct)
         }
-        Query::Describe {
-            pattern,
-            base_iri,
-            dataset,
+        spargebra::Query::Describe {
+            pattern, base_iri, ..
         } => {
-            let dataset = DatasetView::new(store, &dataset)?;
             let (plan, _) = PlanBuilder::build(&dataset, &pattern)?;
             SimpleEvaluator::new(
                 Rc::new(dataset),
@@ -192,6 +191,6 @@ pub(crate) fn evaluate_update<
 where
     io::Error: From<StoreOrParseError<W::Error>>,
 {
-    SimpleUpdateEvaluator::new(read, write, update.base_iri.map(Rc::new), options)
-        .eval_all(&update.operations)
+    SimpleUpdateEvaluator::new(read, write, update.inner.base_iri.map(Rc::new), options)
+        .eval_all(&update.inner.operations, &update.using_datasets)
 }
