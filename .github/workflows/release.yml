@@ -99,7 +99,7 @@ jobs:
         with:
           python-version: 3.6
       - run: pip install 'maturin>=0.9.2,<0.10'
-      - run: maturin publish --universal2 --no-sdist -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
+      - run: maturin publish --no-sdist -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
         working-directory: ./python
   publish_npm:
     runs-on: ubuntu-latest
