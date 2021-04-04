@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: 3.8
       - run: python -m venv python/venv
-      - run: source python/venv/bin/activate && pip install --upgrade pip maturin sphinx
+      - run: source python/venv/bin/activate && pip install --upgrade pip 'maturin>=0.9.2,<0.10' sphinx
       - run: source venv/bin/activate && maturin develop
         working-directory: ./python
       - run: source ../venv/bin/activate && sphinx-build -M doctest . build

@@ -37,7 +37,7 @@ and to run `pip install .` in the `python` directory (the one this README is in)
 Pyoxigraph is written in Rust using [PyO3](https://github.com/PyO3/pyo3).
 
 Pyoxigraph is built using [Maturin](https://github.com/PyO3/maturin).
-Maturin could be installed using the `pip install maturin`.
+Maturin could be installed using the `pip install 'maturin>=0.9,<0.10'`.
 To install a development version of Oxigraph just run `maturin develop` in this README directory.
 
 The Python bindings tests are written in Python.
