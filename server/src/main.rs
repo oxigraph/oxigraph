@@ -15,9 +15,10 @@ use async_std::io::Read;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::task::{block_on, spawn};
-use http_types::content::{Accept, ContentType};
+use http_types::content::ContentType;
 use http_types::{
-    bail_status, headers, Error, Method, Mime, Request, Response, Result, StatusCode,
+    bail_status, format_err_status, headers, Error, Method, Mime, Request, Response, Result,
+    StatusCode,
 };
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::{GraphName, GraphNameRef, NamedNode, NamedOrBlankNode};
@@ -618,21 +619,53 @@ fn content_negotiation<F>(
     supported: &[&str],
     parse: impl Fn(&str) -> Option<F>,
 ) -> Result<F> {
-    if let Some(mut accept) = Accept::from_headers(request)? {
-        let supported: Vec<Mime> = supported
-            .iter()
-            .map(|h| Mime::from_str(h).unwrap())
-            .collect();
-        parse(accept.negotiate(&supported)?.value().as_str())
-    } else {
-        parse(supported.first().ok_or_else(|| {
-            Error::from_str(
-                StatusCode::InternalServerError,
-                "No default MIME type provided",
-            )
-        })?)
+    let header = request
+        .header(headers::ACCEPT)
+        .map(|h| h.last().as_str().trim())
+        .unwrap_or("");
+    let supported_mime: Vec<Mime> = supported
+        .iter()
+        .map(|h| Mime::from_str(h).unwrap())
+        .collect();
+
+    if header.is_empty() {
+        return parse(supported.first().unwrap())
+            .ok_or_else(|| Error::from_str(StatusCode::InternalServerError, "Unknown mime type"));
     }
-    .ok_or_else(|| Error::from_str(StatusCode::InternalServerError, "Unknown mime type"))
+    let mut result = None;
+    let mut result_score = 0f32;
+
+    for possible in header.split(',') {
+        let possible = Mime::from_str(possible.trim())?;
+        let score = if let Some(q) = possible.param("q") {
+            f32::from_str(&q.to_string())?
+        } else {
+            1.
+        };
+        if score <= result_score {
+            continue;
+        }
+        for candidate in &supported_mime {
+            if (possible.basetype() == candidate.basetype() || possible.basetype() == "*")
+                && (possible.subtype() == candidate.subtype() || possible.subtype() == "*")
+            {
+                result = Some(candidate);
+                result_score = score;
+                break;
+            }
+        }
+    }
+
+    let result = result.ok_or_else(|| {
+        format_err_status!(
+            406,
+            "The available Content-Types are {}",
+            supported.join(", ")
+        )
+    })?;
+
+    parse(result.essence())
+        .ok_or_else(|| Error::from_str(StatusCode::InternalServerError, "Unknown mime type"))
 }
 
 fn bad_request(e: impl Into<Error>) -> Error {
@@ -709,6 +742,39 @@ mod tests {
             ),
             StatusCode::Ok,
         );
+    }
+
+    #[test]
+    fn get_query_accept_star() {
+        let mut request = Request::new(
+            Method::Get,
+            Url::parse("http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}")
+                .unwrap(),
+        );
+        request.insert_header("Accept", "*/*");
+        ServerTest::new().test_status(request, StatusCode::Ok);
+    }
+
+    #[test]
+    fn get_query_accept_good() {
+        let mut request = Request::new(
+            Method::Get,
+            Url::parse("http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}")
+                .unwrap(),
+        );
+        request.insert_header("Accept", "application/sparql-results+json;charset=utf-8");
+        ServerTest::new().test_status(request, StatusCode::Ok);
+    }
+
+    #[test]
+    fn get_query_accept_bad() {
+        let mut request = Request::new(
+            Method::Get,
+            Url::parse("http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}")
+                .unwrap(),
+        );
+        request.insert_header("Accept", "application/foo");
+        ServerTest::new().test_status(request, StatusCode::NotAcceptable);
     }
 
     #[test]
