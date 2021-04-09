@@ -24,6 +24,7 @@ http-types = "2"
 oxigraph = { version = "0.2", path="../lib", features = ["http_client"] }
 rand = "0.8"
 url = "2"
+oxiri = "0.1"
 
 [dev-dependencies]
 tempfile = "3"

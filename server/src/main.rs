@@ -28,10 +28,11 @@ use oxigraph::sparql::{Query, QueryResults, QueryResultsFormat, Update};
 use oxigraph::RocksDbStore as Store;
 #[cfg(all(feature = "sled", not(feature = "rocksdb")))]
 use oxigraph::SledStore as Store;
+use oxiri::Iri;
 use rand::random;
 use std::io::BufReader;
 use std::str::FromStr;
-use url::{form_urlencoded, Url};
+use url::form_urlencoded;
 
 const MAX_SPARQL_BODY_SIZE: u64 = 1_048_576;
 const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
@@ -292,11 +293,8 @@ async fn handle_request(request: Request, store: Store) -> Result<Response> {
                         .map_err(bad_request)?;
                     Response::new(StatusCode::NoContent)
                 } else if let Some(format) = GraphFormat::from_media_type(content_type.essence()) {
-                    let graph = NamedNode::new(
-                        base_url(&request)?
-                            .join(&format!("/store/{:x}", random::<u128>()))?
-                            .into_string(),
-                    )?;
+                    let graph =
+                        resolve_with_base(&request, &format!("/store/{:x}", random::<u128>()))?;
                     store
                         .load_graph(
                             BufReader::new(SyncAsyncReader::from(request)),
@@ -344,14 +342,24 @@ async fn handle_request(request: Request, store: Store) -> Result<Response> {
     })
 }
 
-fn base_url(request: &Request) -> Result<Url> {
+fn base_url(request: &Request) -> Result<String> {
     let mut url = request.url().clone();
     if let Some(host) = request.host() {
         url.set_host(Some(host)).map_err(bad_request)?;
     }
     url.set_query(None);
     url.set_fragment(None);
-    Ok(url)
+    Ok(url.into_string())
+}
+
+fn resolve_with_base(request: &Request, url: &str) -> Result<NamedNode> {
+    Ok(NamedNode::new_unchecked(
+        Iri::parse(base_url(request)?)
+            .map_err(bad_request)?
+            .resolve(url)
+            .map_err(bad_request)?
+            .into_inner(),
+    ))
 }
 
 fn url_query(request: &Request) -> Vec<u8> {
@@ -525,16 +533,7 @@ fn store_target(request: &Request) -> Result<Option<GraphName>> {
                     "Both graph and default parameters should not be set at the same time",
                 );
             } else {
-                Some(
-                    NamedNode::new(
-                        base_url(request)?
-                            .join(&graph)
-                            .map_err(bad_request)?
-                            .into_string(),
-                    )
-                    .map_err(bad_request)?
-                    .into(),
-                )
+                Some(resolve_with_base(request, &graph)?.into())
             }
         } else if default {
             Some(GraphName::DefaultGraph)
@@ -542,9 +541,7 @@ fn store_target(request: &Request) -> Result<Option<GraphName>> {
             None
         })
     } else {
-        Ok(Some(
-            NamedNode::new(base_url(request)?.into_string())?.into(),
-        ))
+        Ok(Some(resolve_with_base(request, "")?.into()))
     }
 }
 
@@ -697,6 +694,7 @@ mod tests {
     use super::*;
     use crate::handle_request;
     use async_std::task::block_on;
+    use http_types::Url;
     use tempfile::{tempdir, TempDir};
 
     #[test]
@@ -846,6 +844,38 @@ mod tests {
         request.insert_header("Content-Type", "application/sparql-update");
         request.set_body("INSERT");
         ServerTest::new().test_status(request, StatusCode::BadRequest)
+    }
+
+    #[test]
+    fn graph_store_url_normalization() {
+        let server = ServerTest::new();
+
+        // PUT
+        let mut request = Request::new(
+            Method::Put,
+            Url::parse("http://localhost/store?graph=http://example.com").unwrap(),
+        );
+        request.insert_header("Content-Type", "text/turtle");
+        request.set_body("<http://example.com> <http://example.com> <http://example.com> .");
+        server.test_status(request, StatusCode::Created);
+
+        // GET good URI
+        server.test_status(
+            Request::new(
+                Method::Get,
+                Url::parse("http://localhost/store?graph=http://example.com").unwrap(),
+            ),
+            StatusCode::Ok,
+        );
+
+        // GET bad URI
+        server.test_status(
+            Request::new(
+                Method::Get,
+                Url::parse("http://localhost/store?graph=http://example.com/").unwrap(),
+            ),
+            StatusCode::NotFound,
+        );
     }
 
     #[test]
