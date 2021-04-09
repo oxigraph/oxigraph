@@ -374,6 +374,7 @@ fn configure_and_evaluate_sparql_query(
 ) -> Result<Response> {
     let mut default_graph_uris = Vec::new();
     let mut named_graph_uris = Vec::new();
+    let mut use_default_graph_as_union = false;
     for (k, v) in form_urlencoded::parse(&encoded) {
         match k.as_ref() {
             "query" => {
@@ -383,12 +384,20 @@ fn configure_and_evaluate_sparql_query(
                 query = Some(v.into_owned())
             }
             "default-graph-uri" => default_graph_uris.push(v.into_owned()),
+            "union-default-graph" => use_default_graph_as_union = true,
             "named-graph-uri" => named_graph_uris.push(v.into_owned()),
             _ => (),
         }
     }
     if let Some(query) = query {
-        evaluate_sparql_query(store, query, default_graph_uris, named_graph_uris, request)
+        evaluate_sparql_query(
+            store,
+            query,
+            use_default_graph_as_union,
+            default_graph_uris,
+            named_graph_uris,
+            request,
+        )
     } else {
         bail_status!(400, "You should set the 'query' parameter")
     }
@@ -397,28 +406,37 @@ fn configure_and_evaluate_sparql_query(
 fn evaluate_sparql_query(
     store: Store,
     query: String,
+    use_default_graph_as_union: bool,
     default_graph_uris: Vec<String>,
     named_graph_uris: Vec<String>,
     request: Request,
 ) -> Result<Response> {
     let mut query =
         Query::parse(&query, Some(base_url(&request)?.as_str())).map_err(bad_request)?;
-    let default_graph_uris = default_graph_uris
-        .into_iter()
-        .map(|e| Ok(NamedNode::new(e)?.into()))
-        .collect::<Result<Vec<GraphName>>>()
-        .map_err(bad_request)?;
-    let named_graph_uris = named_graph_uris
-        .into_iter()
-        .map(|e| Ok(NamedNode::new(e)?.into()))
-        .collect::<Result<Vec<NamedOrBlankNode>>>()
-        .map_err(bad_request)?;
 
-    if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
-        query.dataset_mut().set_default_graph(default_graph_uris);
-        query
-            .dataset_mut()
-            .set_available_named_graphs(named_graph_uris);
+    if use_default_graph_as_union {
+        if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
+            bail_status!(
+                400,
+                "default-graph-uri or named-graph-uri and union-default-graph should not be set at the same time"
+            );
+        }
+        query.dataset_mut().set_default_graph_as_union()
+    } else if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
+        query.dataset_mut().set_default_graph(
+            default_graph_uris
+                .into_iter()
+                .map(|e| Ok(NamedNode::new(e)?.into()))
+                .collect::<Result<_>>()
+                .map_err(bad_request)?,
+        );
+        query.dataset_mut().set_available_named_graphs(
+            named_graph_uris
+                .into_iter()
+                .map(|e| Ok(NamedNode::new(e)?.into()))
+                .collect::<Result<_>>()
+                .map_err(bad_request)?,
+        );
     }
 
     let results = store.query(query)?;
@@ -455,6 +473,7 @@ fn configure_and_evaluate_sparql_update(
     mut update: Option<String>,
     request: Request,
 ) -> Result<Response> {
+    let mut use_default_graph_as_union = false;
     let mut default_graph_uris = Vec::new();
     let mut named_graph_uris = Vec::new();
     for (k, v) in form_urlencoded::parse(&encoded) {
@@ -466,12 +485,20 @@ fn configure_and_evaluate_sparql_update(
                 update = Some(v.into_owned())
             }
             "using-graph-uri" => default_graph_uris.push(v.into_owned()),
+            "using-union-graph" => use_default_graph_as_union = true,
             "using-named-graph-uri" => named_graph_uris.push(v.into_owned()),
             _ => (),
         }
     }
     if let Some(update) = update {
-        evaluate_sparql_update(store, update, default_graph_uris, named_graph_uris, request)
+        evaluate_sparql_update(
+            store,
+            update,
+            use_default_graph_as_union,
+            default_graph_uris,
+            named_graph_uris,
+            request,
+        )
     } else {
         bail_status!(400, "You should set the 'update' parameter")
     }
@@ -480,27 +507,48 @@ fn configure_and_evaluate_sparql_update(
 fn evaluate_sparql_update(
     store: Store,
     update: String,
+    use_default_graph_as_union: bool,
     default_graph_uris: Vec<String>,
     named_graph_uris: Vec<String>,
     request: Request,
 ) -> Result<Response> {
     let mut update =
         Update::parse(&update, Some(base_url(&request)?.as_str())).map_err(bad_request)?;
-    let default_graph_uris = default_graph_uris
-        .into_iter()
-        .map(|e| Ok(NamedNode::new(e)?.into()))
-        .collect::<Result<Vec<GraphName>>>()
-        .map_err(bad_request)?;
-    let named_graph_uris = named_graph_uris
-        .into_iter()
-        .map(|e| Ok(NamedNode::new(e)?.into()))
-        .collect::<Result<Vec<NamedOrBlankNode>>>()
-        .map_err(bad_request)?;
-    if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
+
+    if use_default_graph_as_union {
+        if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
+            bail_status!(
+                400,
+                "using-graph-uri or using-named-graph-uri and using-union-graph should not be set at the same time"
+            );
+        }
         for operation in &mut update.operations {
             if let GraphUpdateOperation::DeleteInsert { using, .. } = operation {
                 if !using.is_default_dataset() {
-                    bail_status!(400,
+                    bail_status!(
+                        400,
+                        "using-union-graph must not be used with a SPARQL UPDATE containing USING",
+                    );
+                }
+                using.set_default_graph_as_union();
+            }
+        }
+    } else if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
+        let default_graph_uris = default_graph_uris
+            .into_iter()
+            .map(|e| Ok(NamedNode::new(e)?.into()))
+            .collect::<Result<Vec<GraphName>>>()
+            .map_err(bad_request)?;
+        let named_graph_uris = named_graph_uris
+            .into_iter()
+            .map(|e| Ok(NamedNode::new(e)?.into()))
+            .collect::<Result<Vec<NamedOrBlankNode>>>()
+            .map_err(bad_request)?;
+        for operation in &mut update.operations {
+            if let GraphUpdateOperation::DeleteInsert { using, .. } = operation {
+                if !using.is_default_dataset() {
+                    bail_status!(
+                        400,
                         "using-graph-uri and using-named-graph-uri must not be used with a SPARQL UPDATE containing USING",
                     );
                 }
@@ -784,6 +832,24 @@ mod tests {
             ),
             StatusCode::BadRequest,
         );
+    }
+
+    #[test]
+    fn get_query_union_graph() {
+        ServerTest::new().test_status(Request::new(
+            Method::Get,
+            Url::parse("http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}&union-default-graph")
+                .unwrap(),
+        ), StatusCode::Ok);
+    }
+
+    #[test]
+    fn get_query_union_graph_and_default_graph() {
+        ServerTest::new().test_status(Request::new(
+            Method::Get,
+            Url::parse("http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}&union-default-graph&default-graph-uri=http://example.com")
+                .unwrap(),
+        ), StatusCode::BadRequest);
     }
 
     #[test]
