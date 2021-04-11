@@ -156,7 +156,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
         with:
-          repository: oxigraph/heombrew-oxigraph
+          repository: oxigraph/homebrew-oxigraph
           token: ${{ secrets.FULL_ACCESS_TOKEN }}
       - run: echo "RELEASE_VERSION=$(echo ${GITHUB_REF:10})" >> $GITHUB_ENV
       - run: |
