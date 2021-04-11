@@ -1,3 +1,10 @@
+## [0.2.3] - 2021-04-11
+
+### Changed
+- Server: Fixes HTTP content negotiation (charset constraints, failure to properly handle `*/*`...).
+- Makes Clippy 1.51 happy.
+
+
 ## [0.2.2] - 2021-03-18
 
 ### Added
@@ -7,6 +14,7 @@
 - Serve: Allows unsupported query parameters in HTTP SPARQL requests. 
 - Fixes WASM compilation bug and optimises WASM release packages.
 - Fixes named graph creation inside of a SledStore transaction.
+
 
 ## [0.2.1] - 2021-01-16
 
