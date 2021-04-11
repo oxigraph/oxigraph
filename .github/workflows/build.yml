@@ -39,6 +39,20 @@ jobs:
       env:
         RUST_BACKTRACE: 1
 
+  test_windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - run: rustup update
+      - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
+      - run: choco install llvm -y
+      - run: cargo build
+      - run: cargo test --verbose --all --all-features --exclude pyoxigraph
+        env:
+          RUST_BACKTRACE: 1
+
   js:
     runs-on: ubuntu-latest
     steps:
