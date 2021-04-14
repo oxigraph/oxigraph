@@ -10,7 +10,7 @@ Oxigraph
 
 Oxigraph is a graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
 
-Its goal is to provide a compliant, safe, and fast graph database based on the [RocksDB](https://rocksdb.org/) and [Sled](https://sled.rs/) key-value stores.
+Its goal is to provide a compliant, safe, and fast graph database based on the [Sled](https://sled.rs/) key-value store.
 It is written in Rust.
 It also provides a set of utility functions for reading, writing, and processing RDF files.
 
@@ -23,7 +23,7 @@ It is split into multiple parts:
 * [`pyoxigraph` that exposes Oxigraph to the Python world](https://oxigraph.org/pyoxigraph/). Its source code is in the `python` directory. [![PyPI](https://img.shields.io/pypi/v/pyoxigraph)](https://pypi.org/project/pyoxigraph/)
 * [JavaScript bindings for Oxigraph](https://www.npmjs.com/package/oxigraph). WebAssembly is used to package Oxigraph into a NodeJS compatible NPM package. Its source code is in the `js` directory.
 [![npm](https://img.shields.io/npm/v/oxigraph)](https://www.npmjs.com/package/oxigraph)
-* [Oxigraph server](https://crates.io/crates/oxigraph_server) that provides a standalone binary of a web server implementing the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/) and the [SPARQL 1.1 Graph Store Protocol](https://www.w3.org/TR/sparql11-http-rdf-update/). It uses the [RocksDB](https://rocksdb.org/) key-value store. Its source code is in the `server` directory.
+* [Oxigraph server](https://crates.io/crates/oxigraph_server) that provides a standalone binary of a web server implementing the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/) and the [SPARQL 1.1 Graph Store Protocol](https://www.w3.org/TR/sparql11-http-rdf-update/). Its source code is in the `server` directory.
 [![Latest Version](https://img.shields.io/crates/v/oxigraph_server.svg)](https://crates.io/crates/oxigraph_server) 
 [![Docker Image Version (latest semver)](https://img.shields.io/docker/v/oxigraph/oxigraph?sort=semver)](https://hub.docker.com/repository/docker/oxigraph/oxigraph)
 * [Oxigraph Wikibase](https://crates.io/crates/oxigraph_wikibase), a web server able to synchronize with a [Wikibase instance](https://wikiba.se/). Its source code is in the `wikibase` directory.

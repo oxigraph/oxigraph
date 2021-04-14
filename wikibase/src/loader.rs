@@ -7,7 +7,7 @@ use http_client::HttpClient;
 use http_types::{headers, Method, Request, Result};
 use oxigraph::io::GraphFormat;
 use oxigraph::model::NamedNodeRef;
-use oxigraph::RocksDbStore;
+use oxigraph::SledStore;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::io::{BufReader, Cursor, Read};
@@ -16,7 +16,7 @@ use std::time::Duration;
 use url::{form_urlencoded, Url};
 
 pub struct WikibaseLoader {
-    store: RocksDbStore,
+    store: SledStore,
     client: H1Client,
     api_url: Url,
     entity_data_url: Url,
@@ -28,7 +28,7 @@ pub struct WikibaseLoader {
 
 impl WikibaseLoader {
     pub fn new(
-        store: RocksDbStore,
+        store: SledStore,
         api_url: &str,
         pages_base_url: &str,
         namespaces: &[u32],
@@ -230,23 +230,20 @@ impl WikibaseLoader {
     }
 
     fn load_entity_data(&self, uri: &str, data: impl Read) -> Result<()> {
-        let graph_name = NamedNodeRef::new(uri)?.into();
-        self.store.transaction(|transaction| {
-            let to_remove = self
-                .store
-                .quads_for_pattern(None, None, None, Some(graph_name))
-                .collect::<std::result::Result<Vec<_>, _>>()?;
-            for q in to_remove {
-                transaction.remove(&q)?;
-            }
-
-            transaction.load_graph(
-                BufReader::new(data),
-                GraphFormat::NTriples,
-                NamedNodeRef::new(uri)?,
-                None,
-            )?;
-            Ok(())
-        })
+        let graph_name = NamedNodeRef::new(uri)?;
+        //TODO: proper transaction
+        for q in self
+            .store
+            .quads_for_pattern(None, None, None, Some(graph_name.into()))
+        {
+            self.store.remove(&q?)?;
+        }
+        self.store.load_graph(
+            BufReader::new(data),
+            GraphFormat::NTriples,
+            graph_name,
+            None,
+        )?;
+        Ok(())
     }
 }

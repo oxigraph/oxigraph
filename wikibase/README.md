@@ -16,7 +16,7 @@ Oxigraph and Oxigraph Wikibase are in heavy development and not been optimized y
 
 ## Installation
 
-You need to have [a recent stable version of Rust and Cargo installed](https://www.rust-lang.org/tools/install). You also need [clang](https://clang.llvm.org/) to build RocksDB.
+You need to have [a recent stable version of Rust and Cargo installed](https://www.rust-lang.org/tools/install).
 
 To download, build and install the latest released version run `cargo install oxigraph_wikibase`.
 There is no need to clone the git repository.

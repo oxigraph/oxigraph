@@ -1,6 +1,5 @@
 FROM rust:1-buster as builder
 
-RUN apt-get update && apt-get install clang -y
 COPY . /oxigraph
 RUN cd /oxigraph/wikibase && cargo build --release
 

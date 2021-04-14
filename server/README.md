@@ -11,7 +11,7 @@ Oxigraph Server
 
 Oxigraph Server is a standalone HTTP server providing a graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
 
-Its goal is to provide a compliant, safe, and fast graph database based on the [RocksDB](https://rocksdb.org/) key-value stores.
+Its goal is to provide a compliant, safe, and fast graph database based on the [Sled](https://sled.rs/) key-value stores.
 It is written in Rust.
 It also provides a set of utility functions for reading, writing, and processing RDF files.
 
@@ -34,7 +34,7 @@ A preliminary benchmark [is provided](../bench/README.md).
 
 ## Installation
 
-You need to have [a recent stable version of Rust and Cargo installed](https://www.rust-lang.org/tools/install). You also need [clang](https://clang.llvm.org/) to build RocksDB.
+You need to have [a recent stable version of Rust and Cargo installed](https://www.rust-lang.org/tools/install).
 
 To download, build and install the latest released version run `cargo install oxigraph_server`.
 There is no need to clone the git repository.

@@ -5,13 +5,8 @@
 //!
 //! It currently provides three store implementations providing [SPARQL](https://www.w3.org/TR/sparql11-overview/) capability:
 //! * [`MemoryStore`](store::memory::MemoryStore): a simple in memory implementation.
-//! * [`RocksDbStore`](store::rocksdb::RocksDbStore): a file system implementation based on the [RocksDB](https://rocksdb.org/) key-value store.
-//!   It requires the `"rocksdb"` feature to be activated.
-//!   The [clang](https://clang.llvm.org/) compiler needs to be installed to compile RocksDB.
 //! * [`SledStore`](store::sled::SledStore): another file system implementation based on the [Sled](https://sled.rs/) key-value store.
 //!   It requires the `"sled"` feature to be activated.
-//!   Sled is much faster to build than RockDB and does not require a C++ compiler.
-//!   However, Sled is still in developpment, less tested and data load seems much slower than RocksDB.
 //!
 //! Oxigraph is in heavy development and SPARQL query evaluation has not been optimized yet.
 //!
@@ -128,7 +123,5 @@ pub mod sparql;
 pub mod store;
 
 pub use crate::store::memory::MemoryStore;
-#[cfg(feature = "rocksdb")]
-pub use crate::store::rocksdb::RocksDbStore;
 #[cfg(feature = "sled")]
 pub use crate::store::sled::SledStore;

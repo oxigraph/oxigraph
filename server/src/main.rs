@@ -24,9 +24,6 @@ use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::{GraphName, GraphNameRef, NamedNode, NamedOrBlankNode};
 use oxigraph::sparql::algebra::GraphUpdateOperation;
 use oxigraph::sparql::{Query, QueryResults, QueryResultsFormat, Update};
-#[cfg(feature = "rocksdb")]
-use oxigraph::RocksDbStore as Store;
-#[cfg(all(feature = "sled", not(feature = "rocksdb")))]
 use oxigraph::SledStore as Store;
 use oxiri::Iri;
 use rand::random;

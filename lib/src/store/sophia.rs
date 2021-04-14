@@ -560,65 +560,6 @@ mod sled {
     sophia_api::test_dataset_impl!(test, SledStore, false, false);
 }
 
-#[cfg(feature = "rocksdb")]
-mod rocksdb {
-    use super::*;
-    impl_dataset!(RocksDbStore, std::io::Error, io_quad_map, io_err_map);
-
-    impl MutableDataset for RocksDbStore {
-        type MutationError = std::io::Error;
-        fn insert<TS, TP, TO, TG>(
-            &mut self,
-            s: &TS,
-            p: &TP,
-            o: &TO,
-            g: Option<&TG>,
-        ) -> MDResult<Self, bool>
-        where
-            TS: TTerm + ?Sized,
-            TP: TTerm + ?Sized,
-            TO: TTerm + ?Sized,
-            TG: TTerm + ?Sized,
-        {
-            let mut buf_s = String::new();
-            let mut buf_p = String::new();
-            let mut buf_o = String::new();
-            let mut buf_g = String::new();
-            let quadref =
-                match convert_quadref(s, p, o, g, &mut buf_s, &mut buf_p, &mut buf_o, &mut buf_g) {
-                    Some(quad) => quad,
-                    None => return Ok(false),
-                };
-            RocksDbStore::insert(self, quadref).map(|_| true)
-        }
-
-        fn remove<TS, TP, TO, TG>(
-            &mut self,
-            s: &TS,
-            p: &TP,
-            o: &TO,
-            g: Option<&TG>,
-        ) -> MDResult<Self, bool>
-        where
-            TS: TTerm + ?Sized,
-            TP: TTerm + ?Sized,
-            TO: TTerm + ?Sized,
-            TG: TTerm + ?Sized,
-        {
-            let mut buf_s = String::new();
-            let mut buf_p = String::new();
-            let mut buf_o = String::new();
-            let mut buf_g = String::new();
-            let quadref =
-                match convert_quadref(s, p, o, g, &mut buf_s, &mut buf_p, &mut buf_o, &mut buf_g) {
-                    Some(quad) => quad,
-                    None => return Ok(false),
-                };
-            RocksDbStore::remove(self, quadref).map(|_| true)
-        }
-    }
-}
-
 // helper functions
 #[allow(clippy::unnecessary_wraps)]
 fn infallible_quad_map<'a>(q: Quad) -> Result<StreamedSophiaQuad<'a>, Infallible> {
@@ -630,7 +571,7 @@ fn infallible_err_map(_: EvaluationError) -> Infallible {
     panic!("Unexpected error")
 }
 
-#[cfg(any(feature = "rocksdb", feature = "sled"))]
+#[cfg(feature = "sled")]
 fn io_quad_map<'a>(
     res: Result<Quad, std::io::Error>,
 ) -> Result<StreamedSophiaQuad<'a>, std::io::Error> {
@@ -640,7 +581,7 @@ fn io_quad_map<'a>(
     })
 }
 
-#[cfg(any(feature = "rocksdb", feature = "sled"))]
+#[cfg(feature = "sled")]
 fn io_err_map(err: EvaluationError) -> std::io::Error {
     match err {
         EvaluationError::Io(err) => err,

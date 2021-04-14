@@ -17,6 +17,6 @@ async-h1 = "2"
 chrono = "0.4"
 http-client = { version = "6", features = ["h1_client"] }
 http-types = "2"
-oxigraph = { version = "0.2", path ="../lib", features = ["rocksdb", "http_client"] }
+oxigraph = { version = "0.2", path ="../lib", features = ["sled", "http_client"] }
 serde_json = "1"
 url = "2"

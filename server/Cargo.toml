@@ -11,17 +11,12 @@ SPARQL server based on Oxigraph
 """
 edition = "2018"
 
-[features]
-sled = ["oxigraph/sled"]
-rocksdb = ["oxigraph/rocksdb"]
-default = ["rocksdb"]
-
 [dependencies]
 argh = "0.1"
 async-std = { version = "1", features = ["attributes"] }
 async-h1 = "2"
 http-types = "2"
-oxigraph = { version = "0.2", path="../lib", features = ["http_client"] }
+oxigraph = { version = "0.2", path="../lib", features = ["sled", "http_client"] }
 rand = "0.8"
 url = "2"
 oxiri = "0.1"

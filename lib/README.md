@@ -14,13 +14,8 @@ It also provides a set of utility functions for reading, writing, and processing
 
 It currently provides three store implementations providing [SPARQL](https://www.w3.org/TR/sparql11-overview/) capability:
 * `MemoryStore`: a simple in memory implementation.
-* `RocksDbStore`: a file system implementation based on the [RocksDB](https://rocksdb.org/) key-value store.
-  It requires the `"rocksdb"` feature to be activated.
-  The [clang](https://clang.llvm.org/) compiler needs to be installed to compile RocksDB.
-* `SledStore`: another file system implementation based on the [Sled](https://sled.rs/) key-value store.
+* `SledStore`: a file system implementation based on the [Sled](https://sled.rs/) key-value store.
   It requires the `"sled"` feature to be activated.
-  Sled is much faster to build than RockDB and does not require a C++ compiler.
-  However, Sled is still in development, less tested and data load seems much slower than RocksDB.
 
 Oxigraph is in heavy development and SPARQL query evaluation has not been optimized yet.
 
