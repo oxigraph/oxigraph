@@ -16,8 +16,6 @@ use std::hash::Hash;
 use std::hash::Hasher;
 use std::{fmt, io, str};
 
-pub trait StrId: Eq + Debug + Copy + Hash {}
-
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
 #[repr(transparent)]
 pub struct StrHash {
@@ -46,24 +44,22 @@ impl StrHash {
     }
 }
 
-impl StrId for StrHash {}
-
 #[derive(Debug, Clone, Copy)]
-pub enum EncodedTerm<I: StrId> {
+pub enum EncodedTerm {
     DefaultGraph,
     NamedNode {
-        iri_id: I,
+        iri_id: StrHash,
     },
     NumericalBlankNode {
         id: u128,
     },
     SmallBlankNode(SmallString),
     BigBlankNode {
-        id_id: I,
+        id_id: StrHash,
     },
     SmallStringLiteral(SmallString),
     BigStringLiteral {
-        value_id: I,
+        value_id: StrHash,
     },
     SmallSmallLangStringLiteral {
         value: SmallString,
@@ -71,23 +67,23 @@ pub enum EncodedTerm<I: StrId> {
     },
     SmallBigLangStringLiteral {
         value: SmallString,
-        language_id: I,
+        language_id: StrHash,
     },
     BigSmallLangStringLiteral {
-        value_id: I,
+        value_id: StrHash,
         language: SmallString,
     },
     BigBigLangStringLiteral {
-        value_id: I,
-        language_id: I,
+        value_id: StrHash,
+        language_id: StrHash,
     },
     SmallTypedLiteral {
         value: SmallString,
-        datatype_id: I,
+        datatype_id: StrHash,
     },
     BigTypedLiteral {
-        value_id: I,
-        datatype_id: I,
+        value_id: StrHash,
+        datatype_id: StrHash,
     },
     BooleanLiteral(bool),
     FloatLiteral(f32),
@@ -107,7 +103,7 @@ pub enum EncodedTerm<I: StrId> {
     DayTimeDurationLiteral(DayTimeDuration),
 }
 
-impl<I: StrId> PartialEq for EncodedTerm<I> {
+impl PartialEq for EncodedTerm {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::DefaultGraph, Self::DefaultGraph) => true,
@@ -223,9 +219,9 @@ impl<I: StrId> PartialEq for EncodedTerm<I> {
     }
 }
 
-impl<I: StrId> Eq for EncodedTerm<I> {}
+impl Eq for EncodedTerm {}
 
-impl<I: StrId> Hash for EncodedTerm<I> {
+impl Hash for EncodedTerm {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
             Self::NamedNode { iri_id } => iri_id.hash(state),
@@ -285,7 +281,7 @@ impl<I: StrId> Hash for EncodedTerm<I> {
     }
 }
 
-impl<I: StrId> EncodedTerm<I> {
+impl EncodedTerm {
     pub fn is_named_node(&self) -> bool {
         matches!(self, Self::NamedNode { .. })
     }
@@ -340,241 +336,146 @@ impl<I: StrId> EncodedTerm<I> {
         matches!(self, Self::DefaultGraph)
     }
 
-    pub fn map_id<J: StrId>(self, mapping: impl Fn(I) -> J) -> EncodedTerm<J> {
-        match self {
-            Self::DefaultGraph { .. } => EncodedTerm::DefaultGraph,
-            Self::NamedNode { iri_id } => EncodedTerm::NamedNode {
-                iri_id: mapping(iri_id),
-            },
-            Self::NumericalBlankNode { id } => EncodedTerm::NumericalBlankNode { id },
-            Self::SmallBlankNode(id) => EncodedTerm::SmallBlankNode(id),
-            Self::BigBlankNode { id_id } => EncodedTerm::BigBlankNode {
-                id_id: mapping(id_id),
-            },
-            Self::SmallStringLiteral(value) => EncodedTerm::SmallStringLiteral(value),
-            Self::BigStringLiteral { value_id } => EncodedTerm::BigStringLiteral {
-                value_id: mapping(value_id),
-            },
-            Self::SmallSmallLangStringLiteral { value, language } => {
-                EncodedTerm::SmallSmallLangStringLiteral { value, language }
-            }
-            Self::SmallBigLangStringLiteral { value, language_id } => {
-                EncodedTerm::SmallBigLangStringLiteral {
-                    value,
-                    language_id: mapping(language_id),
-                }
-            }
-            Self::BigSmallLangStringLiteral { value_id, language } => {
-                EncodedTerm::BigSmallLangStringLiteral {
-                    value_id: mapping(value_id),
-                    language,
-                }
-            }
-            Self::BigBigLangStringLiteral {
-                value_id,
-                language_id,
-            } => EncodedTerm::BigBigLangStringLiteral {
-                value_id: mapping(value_id),
-                language_id: mapping(language_id),
-            },
-            Self::SmallTypedLiteral { value, datatype_id } => EncodedTerm::SmallTypedLiteral {
-                value,
-                datatype_id: mapping(datatype_id),
-            },
-            Self::BigTypedLiteral {
-                value_id,
-                datatype_id,
-            } => EncodedTerm::BigTypedLiteral {
-                value_id: mapping(value_id),
-                datatype_id: mapping(datatype_id),
-            },
-            Self::BooleanLiteral(value) => EncodedTerm::BooleanLiteral(value),
-            Self::FloatLiteral(value) => EncodedTerm::FloatLiteral(value),
-            Self::DoubleLiteral(value) => EncodedTerm::DoubleLiteral(value),
-            Self::IntegerLiteral(value) => EncodedTerm::IntegerLiteral(value),
-            Self::DecimalLiteral(value) => EncodedTerm::DecimalLiteral(value),
-            Self::DateTimeLiteral(value) => EncodedTerm::DateTimeLiteral(value),
-            Self::DateLiteral(value) => EncodedTerm::DateLiteral(value),
-            Self::TimeLiteral(value) => EncodedTerm::TimeLiteral(value),
-            Self::GYearMonthLiteral(value) => EncodedTerm::GYearMonthLiteral(value),
-            Self::GYearLiteral(value) => EncodedTerm::GYearLiteral(value),
-            Self::GMonthDayLiteral(value) => EncodedTerm::GMonthDayLiteral(value),
-            Self::GDayLiteral(value) => EncodedTerm::GDayLiteral(value),
-            Self::GMonthLiteral(value) => EncodedTerm::GMonthLiteral(value),
-            Self::DurationLiteral(value) => EncodedTerm::DurationLiteral(value),
-            Self::YearMonthDurationLiteral(value) => EncodedTerm::YearMonthDurationLiteral(value),
-            Self::DayTimeDurationLiteral(value) => EncodedTerm::DayTimeDurationLiteral(value),
-        }
-    }
-
-    pub fn try_map_id<J: StrId, E>(
+    pub fn on_each_id<E>(
         self,
-        mut mapping: impl FnMut(I) -> Result<J, E>,
-    ) -> Result<EncodedTerm<J>, E> {
-        Ok(match self {
-            Self::DefaultGraph { .. } => EncodedTerm::DefaultGraph,
-            Self::NamedNode { iri_id } => EncodedTerm::NamedNode {
-                iri_id: mapping(iri_id)?,
-            },
-            Self::NumericalBlankNode { id } => EncodedTerm::NumericalBlankNode { id },
-            Self::SmallBlankNode(id) => EncodedTerm::SmallBlankNode(id),
-            Self::BigBlankNode { id_id } => EncodedTerm::BigBlankNode {
-                id_id: mapping(id_id)?,
-            },
-            Self::SmallStringLiteral(value) => EncodedTerm::SmallStringLiteral(value),
-            Self::BigStringLiteral { value_id } => EncodedTerm::BigStringLiteral {
-                value_id: mapping(value_id)?,
-            },
-            Self::SmallSmallLangStringLiteral { value, language } => {
-                EncodedTerm::SmallSmallLangStringLiteral { value, language }
+        mut callback: impl FnMut(StrHash) -> Result<(), E>,
+    ) -> Result<(), E> {
+        match self {
+            Self::NamedNode { iri_id } => {
+                callback(iri_id)?;
             }
-            Self::SmallBigLangStringLiteral { value, language_id } => {
-                EncodedTerm::SmallBigLangStringLiteral {
-                    value,
-                    language_id: mapping(language_id)?,
-                }
+            Self::BigBlankNode { id_id } => {
+                callback(id_id)?;
             }
-            Self::BigSmallLangStringLiteral { value_id, language } => {
-                EncodedTerm::BigSmallLangStringLiteral {
-                    value_id: mapping(value_id)?,
-                    language,
-                }
+            Self::BigStringLiteral { value_id } => {
+                callback(value_id)?;
+            }
+            Self::SmallBigLangStringLiteral { language_id, .. } => {
+                callback(language_id)?;
+            }
+            Self::BigSmallLangStringLiteral { value_id, .. } => {
+                callback(value_id)?;
             }
             Self::BigBigLangStringLiteral {
                 value_id,
                 language_id,
-            } => EncodedTerm::BigBigLangStringLiteral {
-                value_id: mapping(value_id)?,
-                language_id: mapping(language_id)?,
-            },
-            Self::SmallTypedLiteral { value, datatype_id } => EncodedTerm::SmallTypedLiteral {
-                value,
-                datatype_id: mapping(datatype_id)?,
-            },
+            } => {
+                callback(value_id)?;
+                callback(language_id)?;
+            }
+            Self::SmallTypedLiteral { datatype_id, .. } => {
+                callback(datatype_id)?;
+            }
             Self::BigTypedLiteral {
                 value_id,
                 datatype_id,
-            } => EncodedTerm::BigTypedLiteral {
-                value_id: mapping(value_id)?,
-                datatype_id: mapping(datatype_id)?,
-            },
-            Self::BooleanLiteral(value) => EncodedTerm::BooleanLiteral(value),
-            Self::FloatLiteral(value) => EncodedTerm::FloatLiteral(value),
-            Self::DoubleLiteral(value) => EncodedTerm::DoubleLiteral(value),
-            Self::IntegerLiteral(value) => EncodedTerm::IntegerLiteral(value),
-            Self::DecimalLiteral(value) => EncodedTerm::DecimalLiteral(value),
-            Self::DateTimeLiteral(value) => EncodedTerm::DateTimeLiteral(value),
-            Self::DateLiteral(value) => EncodedTerm::DateLiteral(value),
-            Self::TimeLiteral(value) => EncodedTerm::TimeLiteral(value),
-            Self::GYearMonthLiteral(value) => EncodedTerm::GYearMonthLiteral(value),
-            Self::GYearLiteral(value) => EncodedTerm::GYearLiteral(value),
-            Self::GMonthDayLiteral(value) => EncodedTerm::GMonthDayLiteral(value),
-            Self::GDayLiteral(value) => EncodedTerm::GDayLiteral(value),
-            Self::GMonthLiteral(value) => EncodedTerm::GMonthLiteral(value),
-            Self::DurationLiteral(value) => EncodedTerm::DurationLiteral(value),
-            Self::YearMonthDurationLiteral(value) => EncodedTerm::YearMonthDurationLiteral(value),
-            Self::DayTimeDurationLiteral(value) => EncodedTerm::DayTimeDurationLiteral(value),
-        })
+            } => {
+                callback(value_id)?;
+                callback(datatype_id)?;
+            }
+            _ => (),
+        }
+        Ok(())
     }
 }
 
-impl<I: StrId> From<bool> for EncodedTerm<I> {
+impl From<bool> for EncodedTerm {
     fn from(value: bool) -> Self {
         Self::BooleanLiteral(value)
     }
 }
 
-impl<I: StrId> From<i64> for EncodedTerm<I> {
+impl From<i64> for EncodedTerm {
     fn from(value: i64) -> Self {
         Self::IntegerLiteral(value)
     }
 }
 
-impl<I: StrId> From<i32> for EncodedTerm<I> {
+impl From<i32> for EncodedTerm {
     fn from(value: i32) -> Self {
         Self::IntegerLiteral(value.into())
     }
 }
 
-impl<I: StrId> From<u32> for EncodedTerm<I> {
+impl From<u32> for EncodedTerm {
     fn from(value: u32) -> Self {
         Self::IntegerLiteral(value.into())
     }
 }
 
-impl<I: StrId> From<u8> for EncodedTerm<I> {
+impl From<u8> for EncodedTerm {
     fn from(value: u8) -> Self {
         Self::IntegerLiteral(value.into())
     }
 }
-impl<I: StrId> From<f32> for EncodedTerm<I> {
+impl From<f32> for EncodedTerm {
     fn from(value: f32) -> Self {
         Self::FloatLiteral(value)
     }
 }
 
-impl<I: StrId> From<f64> for EncodedTerm<I> {
+impl From<f64> for EncodedTerm {
     fn from(value: f64) -> Self {
         Self::DoubleLiteral(value)
     }
 }
 
-impl<I: StrId> From<Decimal> for EncodedTerm<I> {
+impl From<Decimal> for EncodedTerm {
     fn from(value: Decimal) -> Self {
         Self::DecimalLiteral(value)
     }
 }
 
-impl<I: StrId> From<DateTime> for EncodedTerm<I> {
+impl From<DateTime> for EncodedTerm {
     fn from(value: DateTime) -> Self {
         Self::DateTimeLiteral(value)
     }
 }
 
-impl<I: StrId> From<Time> for EncodedTerm<I> {
+impl From<Time> for EncodedTerm {
     fn from(value: Time) -> Self {
         Self::TimeLiteral(value)
     }
 }
 
-impl<I: StrId> From<Date> for EncodedTerm<I> {
+impl From<Date> for EncodedTerm {
     fn from(value: Date) -> Self {
         Self::DateLiteral(value)
     }
 }
 
-impl<I: StrId> From<Duration> for EncodedTerm<I> {
+impl From<Duration> for EncodedTerm {
     fn from(value: Duration) -> Self {
         Self::DurationLiteral(value)
     }
 }
 
-impl<I: StrId> From<YearMonthDuration> for EncodedTerm<I> {
+impl From<YearMonthDuration> for EncodedTerm {
     fn from(value: YearMonthDuration) -> Self {
         Self::YearMonthDurationLiteral(value)
     }
 }
 
-impl<I: StrId> From<DayTimeDuration> for EncodedTerm<I> {
+impl From<DayTimeDuration> for EncodedTerm {
     fn from(value: DayTimeDuration) -> Self {
         Self::DayTimeDurationLiteral(value)
     }
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
-pub struct EncodedQuad<I: StrId> {
-    pub subject: EncodedTerm<I>,
-    pub predicate: EncodedTerm<I>,
-    pub object: EncodedTerm<I>,
-    pub graph_name: EncodedTerm<I>,
+pub struct EncodedQuad {
+    pub subject: EncodedTerm,
+    pub predicate: EncodedTerm,
+    pub object: EncodedTerm,
+    pub graph_name: EncodedTerm,
 }
 
-impl<I: StrId> EncodedQuad<I> {
+impl EncodedQuad {
     pub fn new(
-        subject: EncodedTerm<I>,
-        predicate: EncodedTerm<I>,
-        object: EncodedTerm<I>,
-        graph_name: EncodedTerm<I>,
+        subject: EncodedTerm,
+        predicate: EncodedTerm,
+        object: EncodedTerm,
+        graph_name: EncodedTerm,
     ) -> Self {
         Self {
             subject,
@@ -588,22 +489,20 @@ impl<I: StrId> EncodedQuad<I> {
 pub(crate) trait StrEncodingAware {
     //TODO: rename
     type Error: Error + Into<EvaluationError> + 'static;
-    type StrId: StrId + 'static;
 }
 
 impl<'a, T: StrEncodingAware> StrEncodingAware for &'a T {
     type Error = T::Error;
-    type StrId = T::StrId;
 }
 
 pub(crate) trait StrLookup: StrEncodingAware {
-    fn get_str(&self, id: Self::StrId) -> Result<Option<String>, Self::Error>;
+    fn get_str(&self, id: StrHash) -> Result<Option<String>, Self::Error>;
 
-    fn get_str_id(&self, value: &str) -> Result<Option<Self::StrId>, Self::Error>;
+    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, Self::Error>;
 }
 
 pub(crate) trait StrContainer: StrEncodingAware {
-    fn insert_str(&mut self, value: &str) -> Result<Self::StrId, Self::Error>;
+    fn insert_str(&mut self, value: &str) -> Result<StrHash, Self::Error>;
 }
 
 /// Tries to encode a term based on the existing strings (does not insert anything)
@@ -611,7 +510,7 @@ pub(crate) trait ReadEncoder: StrEncodingAware {
     fn get_encoded_named_node(
         &self,
         named_node: NamedNodeRef<'_>,
-    ) -> Result<Option<EncodedTerm<Self::StrId>>, Self::Error> {
+    ) -> Result<Option<EncodedTerm>, Self::Error> {
         Ok(Some(EncodedTerm::NamedNode {
             iri_id: if let Some(iri_id) = self.get_encoded_str(named_node.as_str())? {
                 iri_id
@@ -624,7 +523,7 @@ pub(crate) trait ReadEncoder: StrEncodingAware {
     fn get_encoded_blank_node(
         &self,
         blank_node: BlankNodeRef<'_>,
-    ) -> Result<Option<EncodedTerm<Self::StrId>>, Self::Error> {
+    ) -> Result<Option<EncodedTerm>, Self::Error> {
         Ok(Some(if let Some(id) = blank_node.id() {
             EncodedTerm::NumericalBlankNode { id }
         } else {
@@ -646,7 +545,7 @@ pub(crate) trait ReadEncoder: StrEncodingAware {
     fn get_encoded_literal(
         &self,
         literal: LiteralRef<'_>,
-    ) -> Result<Option<EncodedTerm<Self::StrId>>, Self::Error> {
+    ) -> Result<Option<EncodedTerm>, Self::Error> {
         let value = literal.value();
         let datatype = literal.datatype().as_str();
         Ok(Some(
@@ -783,17 +682,14 @@ pub(crate) trait ReadEncoder: StrEncodingAware {
     fn get_encoded_named_or_blank_node(
         &self,
         term: NamedOrBlankNodeRef<'_>,
-    ) -> Result<Option<EncodedTerm<Self::StrId>>, Self::Error> {
+    ) -> Result<Option<EncodedTerm>, Self::Error> {
         match term {
             NamedOrBlankNodeRef::NamedNode(named_node) => self.get_encoded_named_node(named_node),
             NamedOrBlankNodeRef::BlankNode(blank_node) => self.get_encoded_blank_node(blank_node),
         }
     }
 
-    fn get_encoded_term(
-        &self,
-        term: TermRef<'_>,
-    ) -> Result<Option<EncodedTerm<Self::StrId>>, Self::Error> {
+    fn get_encoded_term(&self, term: TermRef<'_>) -> Result<Option<EncodedTerm>, Self::Error> {
         match term {
             TermRef::NamedNode(named_node) => self.get_encoded_named_node(named_node),
             TermRef::BlankNode(blank_node) => self.get_encoded_blank_node(blank_node),
@@ -804,7 +700,7 @@ pub(crate) trait ReadEncoder: StrEncodingAware {
     fn get_encoded_graph_name(
         &self,
         name: GraphNameRef<'_>,
-    ) -> Result<Option<EncodedTerm<Self::StrId>>, Self::Error> {
+    ) -> Result<Option<EncodedTerm>, Self::Error> {
         match name {
             GraphNameRef::NamedNode(named_node) => self.get_encoded_named_node(named_node),
             GraphNameRef::BlankNode(blank_node) => self.get_encoded_blank_node(blank_node),
@@ -812,10 +708,7 @@ pub(crate) trait ReadEncoder: StrEncodingAware {
         }
     }
 
-    fn get_encoded_quad(
-        &self,
-        quad: QuadRef<'_>,
-    ) -> Result<Option<EncodedQuad<Self::StrId>>, Self::Error> {
+    fn get_encoded_quad(&self, quad: QuadRef<'_>) -> Result<Option<EncodedQuad>, Self::Error> {
         Ok(Some(EncodedQuad {
             subject: if let Some(subject) = self.get_encoded_named_or_blank_node(quad.subject)? {
                 subject
@@ -840,11 +733,11 @@ pub(crate) trait ReadEncoder: StrEncodingAware {
         }))
     }
 
-    fn get_encoded_str(&self, value: &str) -> Result<Option<Self::StrId>, Self::Error>;
+    fn get_encoded_str(&self, value: &str) -> Result<Option<StrHash>, Self::Error>;
 }
 
 impl<S: StrLookup> ReadEncoder for S {
-    fn get_encoded_str(&self, value: &str) -> Result<Option<Self::StrId>, Self::Error> {
+    fn get_encoded_str(&self, value: &str) -> Result<Option<StrHash>, Self::Error> {
         self.get_str_id(value)
     }
 }
@@ -854,14 +747,14 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
     fn encode_named_node(
         &mut self,
         named_node: NamedNodeRef<'_>,
-    ) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
+    ) -> Result<EncodedTerm, Self::Error> {
         self.encode_rio_named_node(named_node.into())
     }
 
     fn encode_blank_node(
         &mut self,
         blank_node: BlankNodeRef<'_>,
-    ) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
+    ) -> Result<EncodedTerm, Self::Error> {
         Ok(if let Some(id) = blank_node.id() {
             EncodedTerm::NumericalBlankNode { id }
         } else {
@@ -876,24 +769,21 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
         })
     }
 
-    fn encode_literal(
-        &mut self,
-        literal: LiteralRef<'_>,
-    ) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
+    fn encode_literal(&mut self, literal: LiteralRef<'_>) -> Result<EncodedTerm, Self::Error> {
         self.encode_rio_literal(literal.into())
     }
 
     fn encode_named_or_blank_node(
         &mut self,
         term: NamedOrBlankNodeRef<'_>,
-    ) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
+    ) -> Result<EncodedTerm, Self::Error> {
         match term {
             NamedOrBlankNodeRef::NamedNode(named_node) => self.encode_named_node(named_node),
             NamedOrBlankNodeRef::BlankNode(blank_node) => self.encode_blank_node(blank_node),
         }
     }
 
-    fn encode_term(&mut self, term: TermRef<'_>) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
+    fn encode_term(&mut self, term: TermRef<'_>) -> Result<EncodedTerm, Self::Error> {
         match term {
             TermRef::NamedNode(named_node) => self.encode_named_node(named_node),
             TermRef::BlankNode(blank_node) => self.encode_blank_node(blank_node),
@@ -901,10 +791,7 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
         }
     }
 
-    fn encode_graph_name(
-        &mut self,
-        name: GraphNameRef<'_>,
-    ) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
+    fn encode_graph_name(&mut self, name: GraphNameRef<'_>) -> Result<EncodedTerm, Self::Error> {
         match name {
             GraphNameRef::NamedNode(named_node) => self.encode_named_node(named_node),
             GraphNameRef::BlankNode(blank_node) => self.encode_blank_node(blank_node),
@@ -912,7 +799,7 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
         }
     }
 
-    fn encode_quad(&mut self, quad: QuadRef<'_>) -> Result<EncodedQuad<Self::StrId>, Self::Error> {
+    fn encode_quad(&mut self, quad: QuadRef<'_>) -> Result<EncodedQuad, Self::Error> {
         Ok(EncodedQuad {
             subject: self.encode_named_or_blank_node(quad.subject)?,
             predicate: self.encode_named_node(quad.predicate)?,
@@ -924,8 +811,8 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
     fn encode_triple_in_graph(
         &mut self,
         triple: TripleRef<'_>,
-        graph_name: EncodedTerm<Self::StrId>,
-    ) -> Result<EncodedQuad<Self::StrId>, Self::Error> {
+        graph_name: EncodedTerm,
+    ) -> Result<EncodedQuad, Self::Error> {
         Ok(EncodedQuad {
             subject: self.encode_named_or_blank_node(triple.subject)?,
             predicate: self.encode_named_node(triple.predicate)?,
@@ -937,7 +824,7 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
     fn encode_rio_named_node(
         &mut self,
         named_node: rio::NamedNode<'_>,
-    ) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
+    ) -> Result<EncodedTerm, Self::Error> {
         Ok(EncodedTerm::NamedNode {
             iri_id: self.encode_str(named_node.iri)?,
         })
@@ -947,7 +834,7 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
         &mut self,
         blank_node: rio::BlankNode<'_>,
         bnodes_map: &mut HashMap<String, u128>,
-    ) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
+    ) -> Result<EncodedTerm, Self::Error> {
         Ok(if let Some(id) = bnodes_map.get(blank_node.id) {
             EncodedTerm::NumericalBlankNode { id: *id }
         } else {
@@ -959,7 +846,7 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
     fn encode_rio_literal(
         &mut self,
         literal: rio::Literal<'_>,
-    ) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
+    ) -> Result<EncodedTerm, Self::Error> {
         Ok(match literal {
             rio::Literal::Simple { value } => {
                 if let Ok(value) = SmallString::try_from(value) {
@@ -1065,7 +952,7 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
         &mut self,
         term: rio::NamedOrBlankNode<'_>,
         bnodes_map: &mut HashMap<String, u128>,
-    ) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
+    ) -> Result<EncodedTerm, Self::Error> {
         match term {
             rio::NamedOrBlankNode::NamedNode(named_node) => self.encode_rio_named_node(named_node),
             rio::NamedOrBlankNode::BlankNode(blank_node) => {
@@ -1078,7 +965,7 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
         &mut self,
         term: rio::Term<'_>,
         bnodes_map: &mut HashMap<String, u128>,
-    ) -> Result<EncodedTerm<Self::StrId>, Self::Error> {
+    ) -> Result<EncodedTerm, Self::Error> {
         match term {
             rio::Term::NamedNode(named_node) => self.encode_rio_named_node(named_node),
             rio::Term::BlankNode(blank_node) => self.encode_rio_blank_node(blank_node, bnodes_map),
@@ -1090,7 +977,7 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
         &mut self,
         quad: rio::Quad<'_>,
         bnodes_map: &mut HashMap<String, u128>,
-    ) -> Result<EncodedQuad<Self::StrId>, Self::Error> {
+    ) -> Result<EncodedQuad, Self::Error> {
         Ok(EncodedQuad {
             subject: self.encode_rio_named_or_blank_node(quad.subject, bnodes_map)?,
             predicate: self.encode_rio_named_node(quad.predicate)?,
@@ -1105,9 +992,9 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
     fn encode_rio_triple_in_graph(
         &mut self,
         triple: rio::Triple<'_>,
-        graph_name: EncodedTerm<Self::StrId>,
+        graph_name: EncodedTerm,
         bnodes_map: &mut HashMap<String, u128>,
-    ) -> Result<EncodedQuad<Self::StrId>, Self::Error> {
+    ) -> Result<EncodedQuad, Self::Error> {
         Ok(EncodedQuad {
             subject: self.encode_rio_named_or_blank_node(triple.subject, bnodes_map)?,
             predicate: self.encode_rio_named_node(triple.predicate)?,
@@ -1116,16 +1003,16 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
         })
     }
 
-    fn encode_str(&mut self, value: &str) -> Result<Self::StrId, Self::Error>;
+    fn encode_str(&mut self, value: &str) -> Result<StrHash, Self::Error>;
 }
 
 impl<S: StrContainer> WriteEncoder for S {
-    fn encode_str(&mut self, value: &str) -> Result<Self::StrId, Self::Error> {
+    fn encode_str(&mut self, value: &str) -> Result<StrHash, Self::Error> {
         self.insert_str(value)
     }
 }
 
-pub fn parse_boolean_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+pub fn parse_boolean_str(value: &str) -> Option<EncodedTerm> {
     match value {
         "true" | "1" => Some(EncodedTerm::BooleanLiteral(true)),
         "false" | "0" => Some(EncodedTerm::BooleanLiteral(false)),
@@ -1133,78 +1020,75 @@ pub fn parse_boolean_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
     }
 }
 
-pub fn parse_float_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+pub fn parse_float_str(value: &str) -> Option<EncodedTerm> {
     value.parse().map(EncodedTerm::FloatLiteral).ok()
 }
 
-pub fn parse_double_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+pub fn parse_double_str(value: &str) -> Option<EncodedTerm> {
     value.parse().map(EncodedTerm::DoubleLiteral).ok()
 }
 
-pub fn parse_integer_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+pub fn parse_integer_str(value: &str) -> Option<EncodedTerm> {
     value.parse().map(EncodedTerm::IntegerLiteral).ok()
 }
 
-pub fn parse_decimal_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+pub fn parse_decimal_str(value: &str) -> Option<EncodedTerm> {
     value.parse().map(EncodedTerm::DecimalLiteral).ok()
 }
 
-pub fn parse_date_time_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+pub fn parse_date_time_str(value: &str) -> Option<EncodedTerm> {
     value.parse().map(EncodedTerm::DateTimeLiteral).ok()
 }
 
-pub fn parse_time_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+pub fn parse_time_str(value: &str) -> Option<EncodedTerm> {
     value.parse().map(EncodedTerm::TimeLiteral).ok()
 }
 
-pub fn parse_date_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+pub fn parse_date_str(value: &str) -> Option<EncodedTerm> {
     value.parse().map(EncodedTerm::DateLiteral).ok()
 }
 
-pub fn parse_g_year_month_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+pub fn parse_g_year_month_str(value: &str) -> Option<EncodedTerm> {
     value.parse().map(EncodedTerm::GYearMonthLiteral).ok()
 }
 
-pub fn parse_g_year_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+pub fn parse_g_year_str(value: &str) -> Option<EncodedTerm> {
     value.parse().map(EncodedTerm::GYearLiteral).ok()
 }
 
-pub fn parse_g_month_day_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+pub fn parse_g_month_day_str(value: &str) -> Option<EncodedTerm> {
     value.parse().map(EncodedTerm::GMonthDayLiteral).ok()
 }
 
-pub fn parse_g_day_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+pub fn parse_g_day_str(value: &str) -> Option<EncodedTerm> {
     value.parse().map(EncodedTerm::GDayLiteral).ok()
 }
 
-pub fn parse_g_month_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+pub fn parse_g_month_str(value: &str) -> Option<EncodedTerm> {
     value.parse().map(EncodedTerm::GMonthLiteral).ok()
 }
 
-pub fn parse_duration_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+pub fn parse_duration_str(value: &str) -> Option<EncodedTerm> {
     value.parse().map(EncodedTerm::DurationLiteral).ok()
 }
 
-pub fn parse_year_month_duration_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+pub fn parse_year_month_duration_str(value: &str) -> Option<EncodedTerm> {
     value
         .parse()
         .map(EncodedTerm::YearMonthDurationLiteral)
         .ok()
 }
 
-pub fn parse_day_time_duration_str<I: StrId>(value: &str) -> Option<EncodedTerm<I>> {
+pub fn parse_day_time_duration_str(value: &str) -> Option<EncodedTerm> {
     value.parse().map(EncodedTerm::DayTimeDurationLiteral).ok()
 }
 
 pub(crate) trait Decoder: StrLookup {
-    fn decode_term(
-        &self,
-        encoded: EncodedTerm<Self::StrId>,
-    ) -> Result<Term, DecoderError<Self::Error>>;
+    fn decode_term(&self, encoded: EncodedTerm) -> Result<Term, DecoderError<Self::Error>>;
 
     fn decode_named_or_blank_node(
         &self,
-        encoded: EncodedTerm<Self::StrId>,
+        encoded: EncodedTerm,
     ) -> Result<NamedOrBlankNode, DecoderError<Self::Error>> {
         match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node.into()),
@@ -1217,7 +1101,7 @@ pub(crate) trait Decoder: StrLookup {
 
     fn decode_named_node(
         &self,
-        encoded: EncodedTerm<Self::StrId>,
+        encoded: EncodedTerm,
     ) -> Result<NamedNode, DecoderError<Self::Error>> {
         match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node),
@@ -1230,10 +1114,7 @@ pub(crate) trait Decoder: StrLookup {
         }
     }
 
-    fn decode_triple(
-        &self,
-        encoded: &EncodedQuad<Self::StrId>,
-    ) -> Result<Triple, DecoderError<Self::Error>> {
+    fn decode_triple(&self, encoded: &EncodedQuad) -> Result<Triple, DecoderError<Self::Error>> {
         Ok(Triple::new(
             self.decode_named_or_blank_node(encoded.subject)?,
             self.decode_named_node(encoded.predicate)?,
@@ -1241,10 +1122,7 @@ pub(crate) trait Decoder: StrLookup {
         ))
     }
 
-    fn decode_quad(
-        &self,
-        encoded: &EncodedQuad<Self::StrId>,
-    ) -> Result<Quad, DecoderError<Self::Error>> {
+    fn decode_quad(&self, encoded: &EncodedQuad) -> Result<Quad, DecoderError<Self::Error>> {
         Ok(Quad::new(
             self.decode_named_or_blank_node(encoded.subject)?,
             self.decode_named_node(encoded.predicate)?,
@@ -1258,10 +1136,7 @@ pub(crate) trait Decoder: StrLookup {
 }
 
 impl<S: StrLookup> Decoder for S {
-    fn decode_term(
-        &self,
-        encoded: EncodedTerm<Self::StrId>,
-    ) -> Result<Term, DecoderError<Self::Error>> {
+    fn decode_term(&self, encoded: EncodedTerm) -> Result<Term, DecoderError<Self::Error>> {
         match encoded {
             EncodedTerm::DefaultGraph => Err(DecoderError::Decoder {
                 msg: "The default graph tag is not a valid term".to_owned(),
@@ -1340,7 +1215,7 @@ impl<S: StrLookup> Decoder for S {
 
 fn get_required_str<L: StrLookup>(
     lookup: &L,
-    id: L::StrId,
+    id: StrHash,
 ) -> Result<String, DecoderError<L::Error>> {
     lookup
         .get_str(id)

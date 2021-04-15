@@ -6,8 +6,8 @@ use std::io;
 use std::io::{Cursor, Read};
 use std::mem::size_of;
 
-type EncodedTerm = crate::store::numeric_encoder::EncodedTerm<StrHash>;
-type EncodedQuad = crate::store::numeric_encoder::EncodedQuad<StrHash>;
+type EncodedTerm = crate::store::numeric_encoder::EncodedTerm;
+type EncodedQuad = crate::store::numeric_encoder::EncodedQuad;
 
 pub const LATEST_STORAGE_VERSION: u64 = 1;
 pub const WRITTEN_TERM_MAX_SIZE: usize = size_of::<u8>() + 2 * size_of::<StrHash>();
@@ -648,7 +648,6 @@ mod tests {
 
     impl StrEncodingAware for MemoryStrStore {
         type Error = Infallible;
-        type StrId = StrHash;
     }
 
     impl StrLookup for MemoryStrStore {

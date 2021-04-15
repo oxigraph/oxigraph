@@ -5,7 +5,7 @@ use crate::sparql::algebra::{
     GraphPattern, GraphTarget, GraphUpdateOperation, NamedNodeOrVariable, QuadPattern,
     QueryDataset, TermOrVariable,
 };
-use crate::sparql::dataset::{DatasetStrId, DatasetView};
+use crate::sparql::dataset::DatasetView;
 use crate::sparql::eval::SimpleEvaluator;
 use crate::sparql::http::Client;
 use crate::sparql::plan::EncodedTuple;
@@ -33,7 +33,7 @@ pub(crate) struct SimpleUpdateEvaluator<'a, R, W> {
 impl<
         'a,
         R: ReadableEncodedStore + Clone + 'static,
-        W: StrContainer<StrId = R::StrId> + WritableEncodedStore<StrId = R::StrId> + 'a,
+        W: StrContainer + WritableEncodedStore + 'a,
     > SimpleUpdateEvaluator<'a, R, W>
 where
     io::Error: From<StoreOrParseError<W::Error>>,
@@ -127,28 +127,23 @@ where
                 .into_iter()
                 .map(|t| {
                     Ok(if let Some(t) = t {
-                        Some(
-                            t.try_map_id(|id| {
-                                if let DatasetStrId::Store(s) = id {
-                                    Ok(s)
-                                } else {
-                                    self.write
-                                        .insert_str(
-                                            &dataset
-                                                .get_str(id)
-                                                .map_err(to_eval_error)?
-                                                .ok_or_else(|| {
-                                                    EvaluationError::msg(
-                                                        "String not stored in the string store",
-                                                    )
-                                                })
-                                                .map_err(to_eval_error)?,
-                                        )
-                                        .map_err(to_eval_error)
-                                }
-                            })
-                            .map_err(to_eval_error)?,
-                        )
+                        t.on_each_id(|id| {
+                            self.write
+                                .insert_str(
+                                    &dataset
+                                        .get_str(id)
+                                        .map_err(to_eval_error)?
+                                        .ok_or_else(|| {
+                                            EvaluationError::msg(
+                                                "String not stored in the string store",
+                                            )
+                                        })
+                                        .map_err(to_eval_error)?,
+                                )
+                                .map(|_| ())
+                                .map_err(to_eval_error)
+                        })?;
+                        Some(t)
                     } else {
                         None
                     })
@@ -356,7 +351,7 @@ where
         &mut self,
         quad: &Quad,
         bnodes: &mut HashMap<BlankNode, BlankNode>,
-    ) -> Result<Option<EncodedQuad<R::StrId>>, EvaluationError> {
+    ) -> Result<Option<EncodedQuad>, EvaluationError> {
         Ok(Some(EncodedQuad {
             subject: match &quad.subject {
                 NamedOrBlankNode::NamedNode(subject) => {
@@ -390,9 +385,9 @@ where
         &mut self,
         quad: &QuadPattern,
         variables: &[Variable],
-        values: &[Option<EncodedTerm<R::StrId>>],
+        values: &[Option<EncodedTerm>],
         bnodes: &mut HashMap<BlankNode, BlankNode>,
-    ) -> Result<Option<EncodedQuad<R::StrId>>, EvaluationError> {
+    ) -> Result<Option<EncodedQuad>, EvaluationError> {
         Ok(Some(EncodedQuad {
             subject: if let Some(subject) =
                 self.encode_term_for_insertion(&quad.subject, variables, values, bnodes, |t| {
@@ -435,10 +430,10 @@ where
         &mut self,
         term: &TermOrVariable,
         variables: &[Variable],
-        values: &[Option<EncodedTerm<R::StrId>>],
+        values: &[Option<EncodedTerm>],
         bnodes: &mut HashMap<BlankNode, BlankNode>,
-        validate: impl FnOnce(&EncodedTerm<R::StrId>) -> bool,
-    ) -> Result<Option<EncodedTerm<R::StrId>>, EvaluationError> {
+        validate: impl FnOnce(&EncodedTerm) -> bool,
+    ) -> Result<Option<EncodedTerm>, EvaluationError> {
         Ok(match term {
             TermOrVariable::Term(term) => Some(
                 self.write
@@ -471,8 +466,8 @@ where
         &mut self,
         term: &NamedNodeOrVariable,
         variables: &[Variable],
-        values: &[Option<EncodedTerm<R::StrId>>],
-    ) -> Result<Option<EncodedTerm<R::StrId>>, EvaluationError> {
+        values: &[Option<EncodedTerm>],
+    ) -> Result<Option<EncodedTerm>, EvaluationError> {
         Ok(match term {
             NamedNodeOrVariable::NamedNode(term) => Some(
                 self.write
@@ -500,7 +495,7 @@ where
     fn encode_quad_for_deletion(
         &mut self,
         quad: &Quad,
-    ) -> Result<Option<EncodedQuad<R::StrId>>, EvaluationError> {
+    ) -> Result<Option<EncodedQuad>, EvaluationError> {
         Ok(Some(EncodedQuad {
             subject: if let Some(subject) = self
                 .read
@@ -545,8 +540,8 @@ where
         &self,
         quad: &QuadPattern,
         variables: &[Variable],
-        values: &[Option<EncodedTerm<R::StrId>>],
-    ) -> Result<Option<EncodedQuad<R::StrId>>, EvaluationError> {
+        values: &[Option<EncodedTerm>],
+    ) -> Result<Option<EncodedQuad>, EvaluationError> {
         Ok(Some(EncodedQuad {
             subject: if let Some(subject) =
                 self.encode_term_for_deletion(&quad.subject, variables, values)?
@@ -587,8 +582,8 @@ where
         &self,
         term: &TermOrVariable,
         variables: &[Variable],
-        values: &[Option<EncodedTerm<R::StrId>>],
-    ) -> Result<Option<EncodedTerm<R::StrId>>, EvaluationError> {
+        values: &[Option<EncodedTerm>],
+    ) -> Result<Option<EncodedTerm>, EvaluationError> {
         match term {
             TermOrVariable::Term(term) => {
                 if term.is_blank_node() {
@@ -619,8 +614,8 @@ where
         &self,
         term: &NamedNodeOrVariable,
         variables: &[Variable],
-        values: &[Option<EncodedTerm<R::StrId>>],
-    ) -> Result<Option<EncodedTerm<R::StrId>>, EvaluationError> {
+        values: &[Option<EncodedTerm>],
+    ) -> Result<Option<EncodedTerm>, EvaluationError> {
         Ok(match term {
             NamedNodeOrVariable::NamedNode(term) => self
                 .read

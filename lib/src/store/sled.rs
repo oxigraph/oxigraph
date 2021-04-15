@@ -76,8 +76,8 @@ pub struct SledStore {
     graphs: Tree,
 }
 
-type EncodedTerm = crate::store::numeric_encoder::EncodedTerm<StrHash>;
-type EncodedQuad = crate::store::numeric_encoder::EncodedQuad<StrHash>;
+type EncodedTerm = crate::store::numeric_encoder::EncodedTerm;
+type EncodedQuad = crate::store::numeric_encoder::EncodedQuad;
 
 //TODO: indexes for the default graph and indexes for the named graphs (no more Optional and space saving)
 
@@ -902,7 +902,6 @@ impl fmt::Display for SledStore {
 
 impl StrEncodingAware for SledStore {
     type Error = io::Error;
-    type StrId = StrHash;
 }
 
 impl StrLookup for SledStore {
@@ -1280,7 +1279,6 @@ impl SledTransaction<'_> {
 
 impl<'a> StrEncodingAware for &'a SledTransaction<'a> {
     type Error = SledUnabortableTransactionError;
-    type StrId = StrHash;
 }
 
 impl<'a> StrLookup for &'a SledTransaction<'a> {

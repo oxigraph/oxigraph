@@ -15,7 +15,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
     pub fn build(
         encoder: E,
         pattern: &GraphPattern,
-    ) -> Result<(PlanNode<E::StrId>, Vec<Variable>), EvaluationError> {
+    ) -> Result<(PlanNode, Vec<Variable>), EvaluationError> {
         let mut variables = Vec::default();
         let plan = PlanBuilder { encoder }.build_for_graph_pattern(
             pattern,
@@ -29,7 +29,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
         encoder: E,
         template: &[TriplePattern],
         mut variables: Vec<Variable>,
-    ) -> Result<Vec<TripleTemplate<E::StrId>>, EvaluationError> {
+    ) -> Result<Vec<TripleTemplate>, EvaluationError> {
         PlanBuilder { encoder }.build_for_graph_template(template, &mut variables)
     }
 
@@ -37,8 +37,8 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
         &mut self,
         pattern: &GraphPattern,
         variables: &mut Vec<Variable>,
-        graph_name: PatternValue<E::StrId>,
-    ) -> Result<PlanNode<E::StrId>, EvaluationError> {
+        graph_name: PatternValue,
+    ) -> Result<PlanNode, EvaluationError> {
         Ok(match pattern {
             GraphPattern::BGP(p) => self.build_for_bgp(p, variables, graph_name)?,
             GraphPattern::Path {
@@ -268,8 +268,8 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
         &mut self,
         p: &[TriplePattern],
         variables: &mut Vec<Variable>,
-        graph_name: PatternValue<E::StrId>,
-    ) -> Result<PlanNode<E::StrId>, EvaluationError> {
+        graph_name: PatternValue,
+    ) -> Result<PlanNode, EvaluationError> {
         let mut plan = PlanNode::Init;
         for pattern in sort_bgp(p) {
             plan = PlanNode::QuadPatternJoin {
@@ -287,7 +287,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
     fn build_for_path(
         &mut self,
         path: &PropertyPathExpression,
-    ) -> Result<PlanPropertyPath<E::StrId>, EvaluationError> {
+    ) -> Result<PlanPropertyPath, EvaluationError> {
         Ok(match path {
             PropertyPathExpression::NamedNode(p) => {
                 PlanPropertyPath::Path(self.build_named_node(p)?)
@@ -326,8 +326,8 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
         &mut self,
         expression: &Expression,
         variables: &mut Vec<Variable>,
-        graph_name: PatternValue<E::StrId>,
-    ) -> Result<PlanExpression<E::StrId>, EvaluationError> {
+        graph_name: PatternValue,
+    ) -> Result<PlanExpression, EvaluationError> {
         Ok(match expression {
             Expression::NamedNode(node) => PlanExpression::Constant(self.build_named_node(node)?),
             Expression::Literal(l) => PlanExpression::Constant(self.build_literal(l)?),
@@ -728,11 +728,11 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
     fn build_cast(
         &mut self,
         parameters: &[Expression],
-        constructor: impl Fn(Box<PlanExpression<E::StrId>>) -> PlanExpression<E::StrId>,
+        constructor: impl Fn(Box<PlanExpression>) -> PlanExpression,
         variables: &mut Vec<Variable>,
-        graph_name: PatternValue<E::StrId>,
+        graph_name: PatternValue,
         name: &'static str,
-    ) -> Result<PlanExpression<E::StrId>, EvaluationError> {
+    ) -> Result<PlanExpression, EvaluationError> {
         if parameters.len() == 1 {
             Ok(constructor(Box::new(self.build_for_expression(
                 &parameters[0],
@@ -751,8 +751,8 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
         &mut self,
         l: &[Expression],
         variables: &mut Vec<Variable>,
-        graph_name: PatternValue<E::StrId>,
-    ) -> Result<Vec<PlanExpression<E::StrId>>, EvaluationError> {
+        graph_name: PatternValue,
+    ) -> Result<Vec<PlanExpression>, EvaluationError> {
         l.iter()
             .map(|e| self.build_for_expression(e, variables, graph_name))
             .collect()
@@ -762,7 +762,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
         &mut self,
         term_or_variable: &TermOrVariable,
         variables: &mut Vec<Variable>,
-    ) -> Result<PatternValue<E::StrId>, EvaluationError> {
+    ) -> Result<PatternValue, EvaluationError> {
         Ok(match term_or_variable {
             TermOrVariable::Variable(variable) => {
                 PatternValue::Variable(variable_key(variables, variable))
@@ -782,7 +782,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
         &mut self,
         named_node_or_variable: &NamedNodeOrVariable,
         variables: &mut Vec<Variable>,
-    ) -> Result<PatternValue<E::StrId>, EvaluationError> {
+    ) -> Result<PatternValue, EvaluationError> {
         Ok(match named_node_or_variable {
             NamedNodeOrVariable::NamedNode(named_node) => {
                 PatternValue::Constant(self.build_named_node(named_node)?)
@@ -798,7 +798,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
         table_variables: &[Variable],
         rows: &[Vec<Option<Term>>],
         variables: &mut Vec<Variable>,
-    ) -> Result<Vec<EncodedTuple<E::StrId>>, EvaluationError> {
+    ) -> Result<Vec<EncodedTuple>, EvaluationError> {
         let bindings_variables_keys = table_variables
             .iter()
             .map(|v| variable_key(variables, v))
@@ -820,8 +820,8 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
         &mut self,
         aggregate: &AggregationFunction,
         variables: &mut Vec<Variable>,
-        graph_name: PatternValue<E::StrId>,
-    ) -> Result<PlanAggregation<E::StrId>, EvaluationError> {
+        graph_name: PatternValue,
+    ) -> Result<PlanAggregation, EvaluationError> {
         match aggregate {
             AggregationFunction::Count { expr, distinct } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::Count,
@@ -877,7 +877,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
         &mut self,
         template: &[TriplePattern],
         variables: &mut Vec<Variable>,
-    ) -> Result<Vec<TripleTemplate<E::StrId>>, EvaluationError> {
+    ) -> Result<Vec<TripleTemplate>, EvaluationError> {
         let mut bnodes = Vec::default();
         template
             .iter()
@@ -905,7 +905,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
         term_or_variable: &TermOrVariable,
         variables: &mut Vec<Variable>,
         bnodes: &mut Vec<BlankNode>,
-    ) -> Result<TripleTemplateValue<E::StrId>, EvaluationError> {
+    ) -> Result<TripleTemplateValue, EvaluationError> {
         Ok(match term_or_variable {
             TermOrVariable::Variable(variable) => {
                 TripleTemplateValue::Variable(variable_key(variables, variable))
@@ -921,7 +921,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
         &mut self,
         named_node_or_variable: &NamedNodeOrVariable,
         variables: &mut Vec<Variable>,
-    ) -> Result<TripleTemplateValue<E::StrId>, EvaluationError> {
+    ) -> Result<TripleTemplateValue, EvaluationError> {
         Ok(match named_node_or_variable {
             NamedNodeOrVariable::Variable(variable) => {
                 TripleTemplateValue::Variable(variable_key(variables, variable))
@@ -934,10 +934,10 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
 
     fn convert_pattern_value_id(
         &self,
-        from_value: PatternValue<E::StrId>,
+        from_value: PatternValue,
         from: &[Variable],
         to: &mut Vec<Variable>,
-    ) -> PatternValue<E::StrId> {
+    ) -> PatternValue {
         match from_value {
             PatternValue::Constant(v) => PatternValue::Constant(v),
             PatternValue::Variable(from_id) => {
@@ -966,11 +966,7 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
         }
     }
 
-    fn add_left_join_problematic_variables(
-        &self,
-        node: &PlanNode<E::StrId>,
-        set: &mut BTreeSet<usize>,
-    ) {
+    fn add_left_join_problematic_variables(&self, node: &PlanNode, set: &mut BTreeSet<usize>) {
         match node {
             PlanNode::Init
             | PlanNode::StaticBindings { .. }
@@ -1033,21 +1029,15 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
         }
     }
 
-    fn build_named_node(
-        &mut self,
-        node: &NamedNode,
-    ) -> Result<EncodedTerm<E::StrId>, EvaluationError> {
+    fn build_named_node(&mut self, node: &NamedNode) -> Result<EncodedTerm, EvaluationError> {
         self.encoder.encode_named_node(node.as_ref())
     }
 
-    fn build_literal(
-        &mut self,
-        literal: &Literal,
-    ) -> Result<EncodedTerm<E::StrId>, EvaluationError> {
+    fn build_literal(&mut self, literal: &Literal) -> Result<EncodedTerm, EvaluationError> {
         self.encoder.encode_literal(literal.as_ref())
     }
 
-    fn build_term(&mut self, term: &Term) -> Result<EncodedTerm<E::StrId>, EvaluationError> {
+    fn build_term(&mut self, term: &Term) -> Result<EncodedTerm, EvaluationError> {
         self.encoder.encode_term(term.as_ref())
     }
 }

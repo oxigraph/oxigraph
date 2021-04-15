@@ -182,7 +182,7 @@ impl From<QueryOptions> for UpdateOptions {
 
 pub(crate) fn evaluate_update<
     R: ReadableEncodedStore + Clone + 'static,
-    W: StrContainer<StrId = R::StrId> + WritableEncodedStore<StrId = R::StrId>,
+    W: StrContainer + WritableEncodedStore,
 >(
     read: R,
     write: &mut W,

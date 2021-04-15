@@ -29,7 +29,7 @@ use std::str;
 
 const REGEX_SIZE_LIMIT: usize = 1_000_000;
 
-type EncodedTuplesIterator<I> = Box<dyn Iterator<Item = Result<EncodedTuple<I>, EvaluationError>>>;
+type EncodedTuplesIterator = Box<dyn Iterator<Item = Result<EncodedTuple, EvaluationError>>>;
 
 pub(crate) struct SimpleEvaluator<S> {
     dataset: Rc<S>,
@@ -51,7 +51,7 @@ impl<S> Clone for SimpleEvaluator<S> {
 
 impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> SimpleEvaluator<S>
 where
-    for<'a> &'a S: StrContainer<StrId = S::StrId>,
+    for<'a> &'a S: StrContainer,
 {
     pub fn new(
         dataset: Rc<S>,
@@ -68,7 +68,7 @@ where
 
     pub fn evaluate_select_plan(
         &self,
-        plan: &PlanNode<S::StrId>,
+        plan: &PlanNode,
         variables: Rc<Vec<Variable>>,
     ) -> Result<QueryResults, EvaluationError> {
         let iter = self.eval_plan(plan, EncodedTuple::with_capacity(variables.len()));
@@ -77,10 +77,7 @@ where
         ))
     }
 
-    pub fn evaluate_ask_plan(
-        &self,
-        plan: &PlanNode<S::StrId>,
-    ) -> Result<QueryResults, EvaluationError> {
+    pub fn evaluate_ask_plan(&self, plan: &PlanNode) -> Result<QueryResults, EvaluationError> {
         let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
         match self.eval_plan(plan, from).next() {
             Some(Ok(_)) => Ok(QueryResults::Boolean(true)),
@@ -91,8 +88,8 @@ where
 
     pub fn evaluate_construct_plan(
         &self,
-        plan: &PlanNode<S::StrId>,
-        template: Vec<TripleTemplate<S::StrId>>,
+        plan: &PlanNode,
+        template: Vec<TripleTemplate>,
     ) -> Result<QueryResults, EvaluationError> {
         let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
         Ok(QueryResults::Graph(QueryTripleIter {
@@ -106,10 +103,7 @@ where
         }))
     }
 
-    pub fn evaluate_describe_plan(
-        &self,
-        plan: &PlanNode<S::StrId>,
-    ) -> Result<QueryResults, EvaluationError> {
+    pub fn evaluate_describe_plan(&self, plan: &PlanNode) -> Result<QueryResults, EvaluationError> {
         let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
         Ok(QueryResults::Graph(QueryTripleIter {
             iter: Box::new(DescribeIterator {
@@ -120,11 +114,7 @@ where
         }))
     }
 
-    pub fn eval_plan(
-        &self,
-        node: &PlanNode<S::StrId>,
-        from: EncodedTuple<S::StrId>,
-    ) -> EncodedTuplesIterator<S::StrId> {
+    pub fn eval_plan(&self, node: &PlanNode, from: EncodedTuple) -> EncodedTuplesIterator {
         match node {
             PlanNode::Init => Box::new(once(Ok(from))),
             PlanNode::StaticBindings { tuples } => Box::new(tuples.clone().into_iter().map(Ok)),
@@ -208,7 +198,7 @@ where
                             }))
                         }
                     }
-                    let iter: EncodedTuplesIterator<_> = Box::new(iter.map(move |quad| {
+                    let iter: EncodedTuplesIterator = Box::new(iter.map(move |quad| {
                         let quad = quad?;
                         let mut new_tuple = tuple.clone();
                         put_pattern_value(&subject, quad.subject, &mut new_tuple);
@@ -239,7 +229,7 @@ where
                         if let Some(graph_name) = get_pattern_value(&graph_name, &tuple) {
                             graph_name
                         } else {
-                            let result: EncodedTuplesIterator<_> =
+                            let result: EncodedTuplesIterator =
                             Box::new(once(Err(EvaluationError::msg(
                                 "Unknown graph name is not allowed when evaluating property path",
                             ))));
@@ -443,10 +433,8 @@ where
                 let key_mapping = key_mapping.clone();
                 let aggregates = aggregates.clone();
                 let mut errors = Vec::default();
-                let mut accumulators_for_group = HashMap::<
-                    Vec<Option<EncodedTerm<S::StrId>>>,
-                    Vec<Box<dyn Accumulator<S::StrId>>>,
-                >::default();
+                let mut accumulators_for_group =
+                    HashMap::<Vec<Option<EncodedTerm>>, Vec<Box<dyn Accumulator>>>::default();
                 self.eval_plan(child, from)
                     .filter_map(|result| match result {
                         Ok(result) => Some(result),
@@ -512,11 +500,11 @@ where
 
     fn evaluate_service(
         &self,
-        service_name: &PatternValue<S::StrId>,
+        service_name: &PatternValue,
         graph_pattern: &GraphPattern,
         variables: Rc<Vec<Variable>>,
-        from: &EncodedTuple<S::StrId>,
-    ) -> Result<EncodedTuplesIterator<S::StrId>, EvaluationError> {
+        from: &EncodedTuple,
+    ) -> Result<EncodedTuplesIterator, EvaluationError> {
         if let QueryResults::Solutions(iter) = self.service_handler.handle(
             self.dataset.decode_named_node(
                 get_pattern_value(service_name, from)
@@ -540,7 +528,7 @@ where
         &self,
         function: &PlanAggregationFunction,
         distinct: bool,
-    ) -> Box<dyn Accumulator<S::StrId> + 'static> {
+    ) -> Box<dyn Accumulator + 'static> {
         match function {
             PlanAggregationFunction::Count => {
                 if distinct {
@@ -581,10 +569,10 @@ where
 
     fn eval_path_from(
         &self,
-        path: &PlanPropertyPath<S::StrId>,
-        start: EncodedTerm<S::StrId>,
-        graph_name: EncodedTerm<S::StrId>,
-    ) -> Box<dyn Iterator<Item = Result<EncodedTerm<S::StrId>, EvaluationError>>> {
+        path: &PlanPropertyPath,
+        start: EncodedTerm,
+        graph_name: EncodedTerm,
+    ) -> Box<dyn Iterator<Item = Result<EncodedTerm, EvaluationError>>> {
         match path {
             PlanPropertyPath::Path(p) => Box::new(
                 self.dataset
@@ -644,10 +632,10 @@ where
 
     fn eval_path_to(
         &self,
-        path: &PlanPropertyPath<S::StrId>,
-        end: EncodedTerm<S::StrId>,
-        graph_name: EncodedTerm<S::StrId>,
-    ) -> Box<dyn Iterator<Item = Result<EncodedTerm<S::StrId>, EvaluationError>>> {
+        path: &PlanPropertyPath,
+        end: EncodedTerm,
+        graph_name: EncodedTerm,
+    ) -> Box<dyn Iterator<Item = Result<EncodedTerm, EvaluationError>>> {
         match path {
             PlanPropertyPath::Path(p) => Box::new(
                 self.dataset
@@ -707,13 +695,9 @@ where
 
     fn eval_open_path(
         &self,
-        path: &PlanPropertyPath<S::StrId>,
-        graph_name: EncodedTerm<S::StrId>,
-    ) -> Box<
-        dyn Iterator<
-            Item = Result<(EncodedTerm<S::StrId>, EncodedTerm<S::StrId>), EvaluationError>,
-        >,
-    > {
+        path: &PlanPropertyPath,
+        graph_name: EncodedTerm,
+    ) -> Box<dyn Iterator<Item = Result<(EncodedTerm, EncodedTerm), EvaluationError>>> {
         match path {
             PlanPropertyPath::Path(p) => Box::new(
                 self.dataset
@@ -787,9 +771,8 @@ where
 
     fn get_subject_or_object_identity_pairs(
         &self,
-        graph_name: EncodedTerm<S::StrId>,
-    ) -> impl Iterator<Item = Result<(EncodedTerm<S::StrId>, EncodedTerm<S::StrId>), EvaluationError>>
-    {
+        graph_name: EncodedTerm,
+    ) -> impl Iterator<Item = Result<(EncodedTerm, EncodedTerm), EvaluationError>> {
         self.dataset
             .encoded_quads_for_pattern(None, None, None, Some(graph_name))
             .flat_map_ok(|t| once(Ok(t.subject)).chain(once(Ok(t.object))))
@@ -799,9 +782,9 @@ where
     #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
     fn eval_expression(
         &self,
-        expression: &PlanExpression<S::StrId>,
-        tuple: &EncodedTuple<S::StrId>,
-    ) -> Option<EncodedTerm<S::StrId>> {
+        expression: &PlanExpression,
+        tuple: &EncodedTuple,
+    ) -> Option<EncodedTerm> {
         match expression {
             PlanExpression::Constant(t) => Some(*t),
             PlanExpression::Variable(v) => tuple.get(*v),
@@ -1565,7 +1548,7 @@ where
         }
     }
 
-    fn to_bool(&self, term: EncodedTerm<S::StrId>) -> Option<bool> {
+    fn to_bool(&self, term: EncodedTerm) -> Option<bool> {
         match term {
             EncodedTerm::BooleanLiteral(value) => Some(value),
             EncodedTerm::SmallStringLiteral(value) => Some(!value.is_empty()),
@@ -1580,7 +1563,7 @@ where
         }
     }
 
-    fn to_string_id(&self, term: EncodedTerm<S::StrId>) -> Option<SmallStringOrId<S::StrId>> {
+    fn to_string_id(&self, term: EncodedTerm) -> Option<SmallStringOrId> {
         match term {
             EncodedTerm::DefaultGraph => None,
             EncodedTerm::NamedNode { iri_id } => Some(iri_id.into()),
@@ -1618,7 +1601,7 @@ where
         }
     }
 
-    fn to_simple_string(&self, term: EncodedTerm<S::StrId>) -> Option<String> {
+    fn to_simple_string(&self, term: EncodedTerm) -> Option<String> {
         match term {
             EncodedTerm::SmallStringLiteral(value) => Some(value.into()),
             EncodedTerm::BigStringLiteral { value_id } => self.dataset.get_str(value_id).ok()?,
@@ -1626,10 +1609,7 @@ where
         }
     }
 
-    fn to_simple_string_id(
-        &self,
-        term: EncodedTerm<S::StrId>,
-    ) -> Option<SmallStringOrId<S::StrId>> {
+    fn to_simple_string_id(&self, term: EncodedTerm) -> Option<SmallStringOrId> {
         match term {
             EncodedTerm::SmallStringLiteral(value) => Some(value.into()),
             EncodedTerm::BigStringLiteral { value_id } => Some(value_id.into()),
@@ -1637,7 +1617,7 @@ where
         }
     }
 
-    fn to_string(&self, term: EncodedTerm<S::StrId>) -> Option<String> {
+    fn to_string(&self, term: EncodedTerm) -> Option<String> {
         match term {
             EncodedTerm::SmallStringLiteral(value)
             | EncodedTerm::SmallSmallLangStringLiteral { value, .. }
@@ -1653,8 +1633,8 @@ where
 
     fn to_string_and_language(
         &self,
-        term: EncodedTerm<S::StrId>,
-    ) -> Option<(String, Option<SmallStringOrId<S::StrId>>)> {
+        term: EncodedTerm,
+    ) -> Option<(String, Option<SmallStringOrId>)> {
         match term {
             EncodedTerm::SmallStringLiteral(value) => Some((value.into(), None)),
             EncodedTerm::BigStringLiteral { value_id } => {
@@ -1680,17 +1660,17 @@ where
         }
     }
 
-    fn build_named_node(&self, iri: &str) -> Option<EncodedTerm<S::StrId>> {
+    fn build_named_node(&self, iri: &str) -> Option<EncodedTerm> {
         Some(EncodedTerm::NamedNode {
             iri_id: self.dataset.as_ref().encode_str(iri).ok()?,
         })
     }
 
-    fn build_string_literal(&self, value: &str) -> Option<EncodedTerm<S::StrId>> {
+    fn build_string_literal(&self, value: &str) -> Option<EncodedTerm> {
         Some(self.build_string_literal_from_id(self.build_string_id(value)?))
     }
 
-    fn build_string_literal_from_id(&self, id: SmallStringOrId<S::StrId>) -> EncodedTerm<S::StrId> {
+    fn build_string_literal_from_id(&self, id: SmallStringOrId) -> EncodedTerm {
         match id {
             SmallStringOrId::Small(value) => EncodedTerm::SmallStringLiteral(value),
             SmallStringOrId::Big(value_id) => EncodedTerm::BigStringLiteral { value_id },
@@ -1700,16 +1680,16 @@ where
     fn build_lang_string_literal(
         &self,
         value: &str,
-        language_id: SmallStringOrId<S::StrId>,
-    ) -> Option<EncodedTerm<S::StrId>> {
+        language_id: SmallStringOrId,
+    ) -> Option<EncodedTerm> {
         Some(self.build_lang_string_literal_from_id(self.build_string_id(value)?, language_id))
     }
 
     fn build_lang_string_literal_from_id(
         &self,
-        value_id: SmallStringOrId<S::StrId>,
-        language_id: SmallStringOrId<S::StrId>,
-    ) -> EncodedTerm<S::StrId> {
+        value_id: SmallStringOrId,
+        language_id: SmallStringOrId,
+    ) -> EncodedTerm {
         match (value_id, language_id) {
             (SmallStringOrId::Small(value), SmallStringOrId::Small(language)) => {
                 EncodedTerm::SmallSmallLangStringLiteral { value, language }
@@ -1732,8 +1712,8 @@ where
     fn build_plain_literal(
         &self,
         value: &str,
-        language: Option<SmallStringOrId<S::StrId>>,
-    ) -> Option<EncodedTerm<S::StrId>> {
+        language: Option<SmallStringOrId>,
+    ) -> Option<EncodedTerm> {
         if let Some(language_id) = language {
             self.build_lang_string_literal(value, language_id)
         } else {
@@ -1741,7 +1721,7 @@ where
         }
     }
 
-    fn build_string_id(&self, value: &str) -> Option<SmallStringOrId<S::StrId>> {
+    fn build_string_id(&self, value: &str) -> Option<SmallStringOrId> {
         Some(if let Ok(value) = SmallString::try_from(value) {
             value.into()
         } else {
@@ -1749,7 +1729,7 @@ where
         })
     }
 
-    fn build_language_id(&self, value: EncodedTerm<S::StrId>) -> Option<SmallStringOrId<S::StrId>> {
+    fn build_language_id(&self, value: EncodedTerm) -> Option<SmallStringOrId> {
         let mut language = self.to_simple_string(value)?;
         language.make_ascii_lowercase();
         self.build_string_id(LanguageTag::parse(language).ok()?.as_str())
@@ -1757,9 +1737,9 @@ where
 
     fn to_argument_compatible_strings(
         &self,
-        arg1: EncodedTerm<S::StrId>,
-        arg2: EncodedTerm<S::StrId>,
-    ) -> Option<(String, String, Option<SmallStringOrId<S::StrId>>)> {
+        arg1: EncodedTerm,
+        arg2: EncodedTerm,
+    ) -> Option<(String, String, Option<SmallStringOrId>)> {
         let (value1, language1) = self.to_string_and_language(arg1)?;
         let (value2, language2) = self.to_string_and_language(arg2)?;
         if language2.is_none() || language1 == language2 {
@@ -1769,11 +1749,7 @@ where
         }
     }
 
-    fn compile_pattern(
-        &self,
-        pattern: EncodedTerm<S::StrId>,
-        flags: Option<EncodedTerm<S::StrId>>,
-    ) -> Option<Regex> {
+    fn compile_pattern(&self, pattern: EncodedTerm, flags: Option<EncodedTerm>) -> Option<Regex> {
         // TODO Avoid to compile the regex each time
         let pattern = self.to_simple_string(pattern)?;
         let mut regex_builder = RegexBuilder::new(&pattern);
@@ -1804,9 +1780,9 @@ where
 
     fn parse_numeric_operands(
         &self,
-        e1: &PlanExpression<S::StrId>,
-        e2: &PlanExpression<S::StrId>,
-        tuple: &EncodedTuple<S::StrId>,
+        e1: &PlanExpression,
+        e2: &PlanExpression,
+        tuple: &EncodedTuple,
     ) -> Option<NumericBinaryOperands> {
         NumericBinaryOperands::new(
             self.eval_expression(e1, tuple)?,
@@ -1816,7 +1792,7 @@ where
 
     fn decode_bindings(
         &self,
-        iter: EncodedTuplesIterator<S::StrId>,
+        iter: EncodedTuplesIterator,
         variables: Rc<Vec<Variable>>,
     ) -> QuerySolutionIter {
         let eval = self.clone();
@@ -1840,7 +1816,7 @@ where
         &self,
         variables: Rc<Vec<Variable>>,
         iter: QuerySolutionIter,
-    ) -> EncodedTuplesIterator<S::StrId> {
+    ) -> EncodedTuplesIterator {
         let eval = self.clone();
         Box::new(iter.map(move |solution| {
             let mut encoder = eval.dataset.as_ref();
@@ -1862,7 +1838,7 @@ where
         clippy::cast_possible_truncation,
         clippy::cast_precision_loss
     )]
-    fn equals(&self, a: EncodedTerm<S::StrId>, b: EncodedTerm<S::StrId>) -> Option<bool> {
+    fn equals(&self, a: EncodedTerm, b: EncodedTerm) -> Option<bool> {
         match a {
             EncodedTerm::DefaultGraph
             | EncodedTerm::NamedNode { .. }
@@ -2012,9 +1988,9 @@ where
 
     fn cmp_according_to_expression(
         &self,
-        tuple_a: &EncodedTuple<S::StrId>,
-        tuple_b: &EncodedTuple<S::StrId>,
-        expression: &PlanExpression<S::StrId>,
+        tuple_a: &EncodedTuple,
+        tuple_b: &EncodedTuple,
+        expression: &PlanExpression,
     ) -> Ordering {
         self.cmp_terms(
             self.eval_expression(expression, tuple_a),
@@ -2022,11 +1998,7 @@ where
         )
     }
 
-    fn cmp_terms(
-        &self,
-        a: Option<EncodedTerm<S::StrId>>,
-        b: Option<EncodedTerm<S::StrId>>,
-    ) -> Ordering {
+    fn cmp_terms(&self, a: Option<EncodedTerm>, b: Option<EncodedTerm>) -> Ordering {
         match (a, b) {
             (Some(a), Some(b)) => match a {
                 _ if a.is_blank_node() => match b {
@@ -2052,11 +2024,7 @@ where
     }
 
     #[allow(clippy::cast_precision_loss)]
-    fn partial_cmp_literals(
-        &self,
-        a: EncodedTerm<S::StrId>,
-        b: EncodedTerm<S::StrId>,
-    ) -> Option<Ordering> {
+    fn partial_cmp_literals(&self, a: EncodedTerm, b: EncodedTerm) -> Option<Ordering> {
         match a {
             EncodedTerm::SmallStringLiteral(a) => match b {
                 EncodedTerm::SmallStringLiteral(b) => a.partial_cmp(&b),
@@ -2174,7 +2142,7 @@ where
         }
     }
 
-    fn compare_str_ids(&self, a: S::StrId, b: S::StrId) -> Option<Ordering> {
+    fn compare_str_ids(&self, a: StrHash, b: StrHash) -> Option<Ordering> {
         Some(
             self.dataset
                 .get_str(a)
@@ -2183,25 +2151,21 @@ where
         )
     }
 
-    fn compare_str_id_str(&self, a: S::StrId, b: &str) -> Option<Ordering> {
+    fn compare_str_id_str(&self, a: StrHash, b: &str) -> Option<Ordering> {
         Some(self.dataset.get_str(a).ok()??.as_str().cmp(b))
     }
 
-    fn compare_str_str_id(&self, a: &str, b: S::StrId) -> Option<Ordering> {
+    fn compare_str_str_id(&self, a: &str, b: StrHash) -> Option<Ordering> {
         Some(a.cmp(self.dataset.get_str(b).ok()??.as_str()))
     }
 
-    fn hash<H: Digest>(
-        &self,
-        arg: &PlanExpression<S::StrId>,
-        tuple: &EncodedTuple<S::StrId>,
-    ) -> Option<EncodedTerm<S::StrId>> {
+    fn hash<H: Digest>(&self, arg: &PlanExpression, tuple: &EncodedTuple) -> Option<EncodedTerm> {
         let input = self.to_simple_string(self.eval_expression(arg, tuple)?)?;
         let hash = hex::encode(H::new().chain(input.as_str()).finalize());
         self.build_string_literal(&hash)
     }
 
-    fn datatype(&self, value: EncodedTerm<S::StrId>) -> Option<EncodedTerm<S::StrId>> {
+    fn datatype(&self, value: EncodedTerm) -> Option<EncodedTerm> {
         //TODO: optimize?
         match value {
             EncodedTerm::NamedNode { .. }
@@ -2269,7 +2233,7 @@ enum NumericBinaryOperands {
 
 impl NumericBinaryOperands {
     #[allow(clippy::cast_precision_loss)]
-    fn new<I: StrId>(a: EncodedTerm<I>, b: EncodedTerm<I>) -> Option<Self> {
+    fn new(a: EncodedTerm, b: EncodedTerm) -> Option<Self> {
         match (a, b) {
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
                 Some(NumericBinaryOperands::Float(v1, v2))
@@ -2387,32 +2351,25 @@ impl NumericBinaryOperands {
     }
 }
 
-fn get_pattern_value<I: StrId>(
-    selector: &PatternValue<I>,
-    tuple: &EncodedTuple<I>,
-) -> Option<EncodedTerm<I>> {
+fn get_pattern_value(selector: &PatternValue, tuple: &EncodedTuple) -> Option<EncodedTerm> {
     match selector {
         PatternValue::Constant(term) => Some(*term),
         PatternValue::Variable(v) => tuple.get(*v),
     }
 }
 
-fn put_pattern_value<I: StrId>(
-    selector: &PatternValue<I>,
-    value: EncodedTerm<I>,
-    tuple: &mut EncodedTuple<I>,
-) {
+fn put_pattern_value(selector: &PatternValue, value: EncodedTerm, tuple: &mut EncodedTuple) {
     match selector {
         PatternValue::Constant(_) => (),
         PatternValue::Variable(v) => tuple.set(*v, value),
     }
 }
 
-fn put_variable_value<I: StrId>(
+fn put_variable_value(
     selector: &Variable,
     variables: &[Variable],
-    value: EncodedTerm<I>,
-    tuple: &mut EncodedTuple<I>,
+    value: EncodedTerm,
+    tuple: &mut EncodedTuple,
 ) {
     for (i, v) in variables.iter().enumerate() {
         if selector == v {
@@ -2422,17 +2379,13 @@ fn put_variable_value<I: StrId>(
     }
 }
 
-fn unbind_variables<I: StrId>(binding: &mut EncodedTuple<I>, variables: &[usize]) {
+fn unbind_variables(binding: &mut EncodedTuple, variables: &[usize]) {
     for var in variables {
         binding.unset(*var)
     }
 }
 
-fn combine_tuples<I: StrId>(
-    mut a: EncodedTuple<I>,
-    b: &EncodedTuple<I>,
-    vars: &[usize],
-) -> Option<EncodedTuple<I>> {
+fn combine_tuples(mut a: EncodedTuple, b: &EncodedTuple, vars: &[usize]) -> Option<EncodedTuple> {
     for var in vars {
         if let Some(b_value) = b.get(*var) {
             if let Some(a_value) = a.get(*var) {
@@ -2447,10 +2400,7 @@ fn combine_tuples<I: StrId>(
     Some(a)
 }
 
-pub fn are_compatible_and_not_disjointed<I: StrId>(
-    a: &EncodedTuple<I>,
-    b: &EncodedTuple<I>,
-) -> bool {
+pub fn are_compatible_and_not_disjointed(a: &EncodedTuple, b: &EncodedTuple) -> bool {
     let mut found_intersection = false;
     for (a_value, b_value) in a.iter().zip(b.iter()) {
         if let (Some(a_value), Some(b_value)) = (a_value, b_value) {
@@ -2463,16 +2413,16 @@ pub fn are_compatible_and_not_disjointed<I: StrId>(
     found_intersection
 }
 
-struct JoinIterator<I: StrId> {
-    left: Vec<EncodedTuple<I>>,
-    right_iter: EncodedTuplesIterator<I>,
-    buffered_results: Vec<Result<EncodedTuple<I>, EvaluationError>>,
+struct JoinIterator {
+    left: Vec<EncodedTuple>,
+    right_iter: EncodedTuplesIterator,
+    buffered_results: Vec<Result<EncodedTuple, EvaluationError>>,
 }
 
-impl<I: StrId> Iterator for JoinIterator<I> {
-    type Item = Result<EncodedTuple<I>, EvaluationError>;
+impl Iterator for JoinIterator {
+    type Item = Result<EncodedTuple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple<I>, EvaluationError>> {
+    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
         loop {
             if let Some(result) = self.buffered_results.pop() {
                 return Some(result);
@@ -2490,15 +2440,15 @@ impl<I: StrId> Iterator for JoinIterator<I> {
     }
 }
 
-struct AntiJoinIterator<I: StrId> {
-    left_iter: EncodedTuplesIterator<I>,
-    right: Vec<EncodedTuple<I>>,
+struct AntiJoinIterator {
+    left_iter: EncodedTuplesIterator,
+    right: Vec<EncodedTuple>,
 }
 
-impl<I: StrId> Iterator for AntiJoinIterator<I> {
-    type Item = Result<EncodedTuple<I>, EvaluationError>;
+impl Iterator for AntiJoinIterator {
+    type Item = Result<EncodedTuple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple<I>, EvaluationError>> {
+    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
         loop {
             match self.left_iter.next()? {
                 Ok(left_tuple) => {
@@ -2517,18 +2467,18 @@ impl<I: StrId> Iterator for AntiJoinIterator<I> {
 
 struct LeftJoinIterator<S: ReadableEncodedStore + 'static> {
     eval: SimpleEvaluator<S>,
-    right_plan: Rc<PlanNode<S::StrId>>,
-    left_iter: EncodedTuplesIterator<S::StrId>,
-    current_right: EncodedTuplesIterator<S::StrId>,
+    right_plan: Rc<PlanNode>,
+    left_iter: EncodedTuplesIterator,
+    current_right: EncodedTuplesIterator,
 }
 
 impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Iterator for LeftJoinIterator<S>
 where
-    for<'a> &'a S: StrContainer<StrId = S::StrId>,
+    for<'a> &'a S: StrContainer,
 {
-    type Item = Result<EncodedTuple<S::StrId>, EvaluationError>;
+    type Item = Result<EncodedTuple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple<S::StrId>, EvaluationError>> {
+    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
         if let Some(tuple) = self.current_right.next() {
             return Some(tuple);
         }
@@ -2548,20 +2498,20 @@ where
 
 struct BadLeftJoinIterator<S: ReadableEncodedStore + 'static> {
     eval: SimpleEvaluator<S>,
-    right_plan: Rc<PlanNode<S::StrId>>,
-    left_iter: EncodedTuplesIterator<S::StrId>,
-    current_left: Option<EncodedTuple<S::StrId>>,
-    current_right: EncodedTuplesIterator<S::StrId>,
+    right_plan: Rc<PlanNode>,
+    left_iter: EncodedTuplesIterator,
+    current_left: Option<EncodedTuple>,
+    current_right: EncodedTuplesIterator,
     problem_vars: Rc<Vec<usize>>,
 }
 
 impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Iterator for BadLeftJoinIterator<S>
 where
-    for<'a> &'a S: StrContainer<StrId = S::StrId>,
+    for<'a> &'a S: StrContainer,
 {
-    type Item = Result<EncodedTuple<S::StrId>, EvaluationError>;
+    type Item = Result<EncodedTuple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple<S::StrId>, EvaluationError>> {
+    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
         while let Some(right_tuple) = self.current_right.next() {
             match right_tuple {
                 Ok(right_tuple) => {
@@ -2603,19 +2553,19 @@ where
 
 struct UnionIterator<S: ReadableEncodedStore + 'static> {
     eval: SimpleEvaluator<S>,
-    plans: Vec<Rc<PlanNode<S::StrId>>>,
-    input: EncodedTuple<S::StrId>,
-    current_iterator: EncodedTuplesIterator<S::StrId>,
+    plans: Vec<Rc<PlanNode>>,
+    input: EncodedTuple,
+    current_iterator: EncodedTuplesIterator,
     current_plan: usize,
 }
 
 impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Iterator for UnionIterator<S>
 where
-    for<'a> &'a S: StrContainer<StrId = S::StrId>,
+    for<'a> &'a S: StrContainer,
 {
-    type Item = Result<EncodedTuple<S::StrId>, EvaluationError>;
+    type Item = Result<EncodedTuple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple<S::StrId>, EvaluationError>> {
+    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
         loop {
             if let Some(tuple) = self.current_iterator.next() {
                 return Some(tuple);
@@ -2633,10 +2583,10 @@ where
 
 struct ConstructIterator<S: ReadableEncodedStore + 'static> {
     eval: SimpleEvaluator<S>,
-    iter: EncodedTuplesIterator<S::StrId>,
-    template: Vec<TripleTemplate<S::StrId>>,
+    iter: EncodedTuplesIterator,
+    template: Vec<TripleTemplate>,
     buffered_results: Vec<Result<Triple, EvaluationError>>,
-    bnodes: Vec<EncodedTerm<S::StrId>>,
+    bnodes: Vec<EncodedTerm>,
 }
 
 impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Iterator for ConstructIterator<S> {
@@ -2672,11 +2622,11 @@ impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Iterator for Co
     }
 }
 
-fn get_triple_template_value<I: StrId>(
-    selector: &TripleTemplateValue<I>,
-    tuple: &EncodedTuple<I>,
-    bnodes: &mut Vec<EncodedTerm<I>>,
-) -> Option<EncodedTerm<I>> {
+fn get_triple_template_value(
+    selector: &TripleTemplateValue,
+    tuple: &EncodedTuple,
+    bnodes: &mut Vec<EncodedTerm>,
+) -> Option<EncodedTerm> {
     match selector {
         TripleTemplateValue::Constant(term) => Some(*term),
         TripleTemplateValue::Variable(v) => tuple.get(*v),
@@ -2689,15 +2639,15 @@ fn get_triple_template_value<I: StrId>(
     }
 }
 
-fn new_bnode<I: StrId>() -> EncodedTerm<I> {
+fn new_bnode() -> EncodedTerm {
     EncodedTerm::NumericalBlankNode { id: random() }
 }
 
 fn decode_triple<D: Decoder>(
     decoder: &D,
-    subject: EncodedTerm<D::StrId>,
-    predicate: EncodedTerm<D::StrId>,
-    object: EncodedTerm<D::StrId>,
+    subject: EncodedTerm,
+    predicate: EncodedTerm,
+    object: EncodedTerm,
 ) -> Result<Triple, EvaluationError> {
     Ok(Triple::new(
         decoder.decode_named_or_blank_node(subject)?,
@@ -2708,8 +2658,8 @@ fn decode_triple<D: Decoder>(
 
 struct DescribeIterator<S: ReadableEncodedStore + 'static> {
     eval: SimpleEvaluator<S>,
-    iter: EncodedTuplesIterator<S::StrId>,
-    quads: Box<dyn Iterator<Item = Result<EncodedQuad<S::StrId>, EvaluationError>>>,
+    iter: EncodedTuplesIterator,
+    quads: Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>>,
 }
 
 impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Iterator for DescribeIterator<S> {
@@ -2894,19 +2844,19 @@ impl<
     }
 }
 
-trait Accumulator<I: StrId> {
-    fn add(&mut self, element: Option<EncodedTerm<I>>);
+trait Accumulator {
+    fn add(&mut self, element: Option<EncodedTerm>);
 
-    fn state(&self) -> Option<EncodedTerm<I>>;
+    fn state(&self) -> Option<EncodedTerm>;
 }
 
 #[derive(Default, Debug)]
-struct DistinctAccumulator<I: StrId, T: Accumulator<I>> {
-    seen: HashSet<Option<EncodedTerm<I>>>,
+struct DistinctAccumulator<T: Accumulator> {
+    seen: HashSet<Option<EncodedTerm>>,
     inner: T,
 }
 
-impl<I: StrId, T: Accumulator<I>> DistinctAccumulator<I, T> {
+impl<T: Accumulator> DistinctAccumulator<T> {
     fn new(inner: T) -> Self {
         Self {
             seen: HashSet::default(),
@@ -2915,14 +2865,14 @@ impl<I: StrId, T: Accumulator<I>> DistinctAccumulator<I, T> {
     }
 }
 
-impl<I: StrId, T: Accumulator<I>> Accumulator<I> for DistinctAccumulator<I, T> {
-    fn add(&mut self, element: Option<EncodedTerm<I>>) {
+impl<T: Accumulator> Accumulator for DistinctAccumulator<T> {
+    fn add(&mut self, element: Option<EncodedTerm>) {
         if self.seen.insert(element) {
             self.inner.add(element)
         }
     }
 
-    fn state(&self) -> Option<EncodedTerm<I>> {
+    fn state(&self) -> Option<EncodedTerm> {
         self.inner.state()
     }
 }
@@ -2932,22 +2882,22 @@ struct CountAccumulator {
     count: i64,
 }
 
-impl<I: StrId> Accumulator<I> for CountAccumulator {
-    fn add(&mut self, _element: Option<EncodedTerm<I>>) {
+impl Accumulator for CountAccumulator {
+    fn add(&mut self, _element: Option<EncodedTerm>) {
         self.count += 1;
     }
 
-    fn state(&self) -> Option<EncodedTerm<I>> {
+    fn state(&self) -> Option<EncodedTerm> {
         Some(self.count.into())
     }
 }
 
 #[derive(Debug)]
-struct SumAccumulator<I: StrId> {
-    sum: Option<EncodedTerm<I>>,
+struct SumAccumulator {
+    sum: Option<EncodedTerm>,
 }
 
-impl<I: StrId> Default for SumAccumulator<I> {
+impl Default for SumAccumulator {
     fn default() -> Self {
         Self {
             sum: Some(0.into()),
@@ -2955,8 +2905,8 @@ impl<I: StrId> Default for SumAccumulator<I> {
     }
 }
 
-impl<I: StrId> Accumulator<I> for SumAccumulator<I> {
-    fn add(&mut self, element: Option<EncodedTerm<I>>) {
+impl Accumulator for SumAccumulator {
+    fn add(&mut self, element: Option<EncodedTerm>) {
         if let Some(sum) = self.sum {
             if let Some(operands) = element.and_then(|e| NumericBinaryOperands::new(sum, e)) {
                 //TODO: unify with addition?
@@ -2974,18 +2924,18 @@ impl<I: StrId> Accumulator<I> for SumAccumulator<I> {
         }
     }
 
-    fn state(&self) -> Option<EncodedTerm<I>> {
+    fn state(&self) -> Option<EncodedTerm> {
         self.sum
     }
 }
 
 #[derive(Debug)]
-struct AvgAccumulator<I: StrId> {
-    sum: SumAccumulator<I>,
+struct AvgAccumulator {
+    sum: SumAccumulator,
     count: CountAccumulator,
 }
 
-impl<I: StrId> Default for AvgAccumulator<I> {
+impl Default for AvgAccumulator {
     fn default() -> Self {
         Self {
             sum: SumAccumulator::default(),
@@ -2994,13 +2944,13 @@ impl<I: StrId> Default for AvgAccumulator<I> {
     }
 }
 
-impl<I: StrId> Accumulator<I> for AvgAccumulator<I> {
-    fn add(&mut self, element: Option<EncodedTerm<I>>) {
+impl Accumulator for AvgAccumulator {
+    fn add(&mut self, element: Option<EncodedTerm>) {
         self.sum.add(element);
         self.count.add(element);
     }
 
-    fn state(&self) -> Option<EncodedTerm<I>> {
+    fn state(&self) -> Option<EncodedTerm> {
         let sum = self.sum.state()?;
         let count = self.count.state()?;
         if count == EncodedTerm::from(0) {
@@ -3024,7 +2974,7 @@ impl<I: StrId> Accumulator<I> for AvgAccumulator<I> {
 #[allow(clippy::option_option)]
 struct MinAccumulator<S: ReadableEncodedStore + 'static> {
     eval: SimpleEvaluator<S>,
-    min: Option<Option<EncodedTerm<S::StrId>>>,
+    min: Option<Option<EncodedTerm>>,
 }
 
 impl<S: ReadableEncodedStore + 'static> MinAccumulator<S> {
@@ -3033,12 +2983,11 @@ impl<S: ReadableEncodedStore + 'static> MinAccumulator<S> {
     }
 }
 
-impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Accumulator<S::StrId>
-    for MinAccumulator<S>
+impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Accumulator for MinAccumulator<S>
 where
-    for<'a> &'a S: StrContainer<StrId = S::StrId>,
+    for<'a> &'a S: StrContainer,
 {
-    fn add(&mut self, element: Option<EncodedTerm<S::StrId>>) {
+    fn add(&mut self, element: Option<EncodedTerm>) {
         if let Some(min) = self.min {
             if self.eval.cmp_terms(element, min) == Ordering::Less {
                 self.min = Some(element)
@@ -3048,7 +2997,7 @@ where
         }
     }
 
-    fn state(&self) -> Option<EncodedTerm<S::StrId>> {
+    fn state(&self) -> Option<EncodedTerm> {
         self.min.and_then(|v| v)
     }
 }
@@ -3056,7 +3005,7 @@ where
 #[allow(clippy::option_option)]
 struct MaxAccumulator<S: ReadableEncodedStore + 'static> {
     eval: SimpleEvaluator<S>,
-    max: Option<Option<EncodedTerm<S::StrId>>>,
+    max: Option<Option<EncodedTerm>>,
 }
 
 impl<S: ReadableEncodedStore + 'static> MaxAccumulator<S> {
@@ -3065,12 +3014,11 @@ impl<S: ReadableEncodedStore + 'static> MaxAccumulator<S> {
     }
 }
 
-impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Accumulator<S::StrId>
-    for MaxAccumulator<S>
+impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Accumulator for MaxAccumulator<S>
 where
-    for<'a> &'a S: StrContainer<StrId = S::StrId>,
+    for<'a> &'a S: StrContainer,
 {
-    fn add(&mut self, element: Option<EncodedTerm<S::StrId>>) {
+    fn add(&mut self, element: Option<EncodedTerm>) {
         if let Some(max) = self.max {
             if self.eval.cmp_terms(element, max) == Ordering::Greater {
                 self.max = Some(element)
@@ -3080,30 +3028,30 @@ where
         }
     }
 
-    fn state(&self) -> Option<EncodedTerm<S::StrId>> {
+    fn state(&self) -> Option<EncodedTerm> {
         self.max.and_then(|v| v)
     }
 }
 
 #[derive(Debug)]
-struct SampleAccumulator<I: StrId> {
-    value: Option<EncodedTerm<I>>,
+struct SampleAccumulator {
+    value: Option<EncodedTerm>,
 }
 
-impl<I: StrId> Default for SampleAccumulator<I> {
+impl Default for SampleAccumulator {
     fn default() -> Self {
         Self { value: None }
     }
 }
 
-impl<I: StrId> Accumulator<I> for SampleAccumulator<I> {
-    fn add(&mut self, element: Option<EncodedTerm<I>>) {
+impl Accumulator for SampleAccumulator {
+    fn add(&mut self, element: Option<EncodedTerm>) {
         if element.is_some() {
             self.value = element
         }
     }
 
-    fn state(&self) -> Option<EncodedTerm<I>> {
+    fn state(&self) -> Option<EncodedTerm> {
         self.value
     }
 }
@@ -3112,7 +3060,7 @@ impl<I: StrId> Accumulator<I> for SampleAccumulator<I> {
 struct GroupConcatAccumulator<S: ReadableEncodedStore + 'static> {
     eval: SimpleEvaluator<S>,
     concat: Option<String>,
-    language: Option<Option<SmallStringOrId<S::StrId>>>,
+    language: Option<Option<SmallStringOrId>>,
     separator: Rc<String>,
 }
 
@@ -3127,12 +3075,12 @@ impl<S: ReadableEncodedStore + 'static> GroupConcatAccumulator<S> {
     }
 }
 
-impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Accumulator<S::StrId>
+impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Accumulator
     for GroupConcatAccumulator<S>
 where
-    for<'a> &'a S: StrContainer<StrId = S::StrId>,
+    for<'a> &'a S: StrContainer,
 {
-    fn add(&mut self, element: Option<EncodedTerm<S::StrId>>) {
+    fn add(&mut self, element: Option<EncodedTerm>) {
         if let Some(concat) = self.concat.as_mut() {
             if let Some(element) = element {
                 if let Some((value, e_language)) = self.eval.to_string_and_language(element) {
@@ -3150,7 +3098,7 @@ where
         }
     }
 
-    fn state(&self) -> Option<EncodedTerm<S::StrId>> {
+    fn state(&self) -> Option<EncodedTerm> {
         self.concat.as_ref().and_then(|result| {
             self.eval
                 .build_plain_literal(result, self.language.and_then(|v| v))
@@ -3192,19 +3140,19 @@ fn write_hexa_bytes(bytes: &[u8], buffer: &mut String) {
 }
 
 #[derive(Eq, PartialEq, Clone, Copy)]
-enum SmallStringOrId<I: StrId> {
+enum SmallStringOrId {
     Small(SmallString),
-    Big(I),
+    Big(StrHash),
 }
 
-impl<I: StrId> From<SmallString> for SmallStringOrId<I> {
+impl From<SmallString> for SmallStringOrId {
     fn from(value: SmallString) -> Self {
         Self::Small(value)
     }
 }
 
-impl<I: StrId> From<I> for SmallStringOrId<I> {
-    fn from(value: I) -> Self {
+impl From<StrHash> for SmallStringOrId {
+    fn from(value: StrHash) -> Self {
         Self::Big(value)
     }
 }

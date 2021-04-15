@@ -24,44 +24,32 @@ use std::io::{BufRead, Write};
 use std::iter::Iterator;
 
 pub(crate) trait ReadableEncodedStore: StrLookup {
-    type QuadsIter: Iterator<Item = Result<EncodedQuad<Self::StrId>, Self::Error>> + 'static;
-    type GraphsIter: Iterator<Item = Result<EncodedTerm<Self::StrId>, Self::Error>> + 'static;
+    type QuadsIter: Iterator<Item = Result<EncodedQuad, Self::Error>> + 'static;
+    type GraphsIter: Iterator<Item = Result<EncodedTerm, Self::Error>> + 'static;
 
     fn encoded_quads_for_pattern(
         &self,
-        subject: Option<EncodedTerm<Self::StrId>>,
-        predicate: Option<EncodedTerm<Self::StrId>>,
-        object: Option<EncodedTerm<Self::StrId>>,
-        graph_name: Option<EncodedTerm<Self::StrId>>,
+        subject: Option<EncodedTerm>,
+        predicate: Option<EncodedTerm>,
+        object: Option<EncodedTerm>,
+        graph_name: Option<EncodedTerm>,
     ) -> Self::QuadsIter;
 
     fn encoded_named_graphs(&self) -> Self::GraphsIter;
 
-    fn contains_encoded_named_graph(
-        &self,
-        graph_name: EncodedTerm<Self::StrId>,
-    ) -> Result<bool, Self::Error>;
+    fn contains_encoded_named_graph(&self, graph_name: EncodedTerm) -> Result<bool, Self::Error>;
 }
 
 pub(crate) trait WritableEncodedStore: StrEncodingAware {
-    fn insert_encoded(&mut self, quad: &EncodedQuad<Self::StrId>) -> Result<(), Self::Error>;
+    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Self::Error>;
 
-    fn remove_encoded(&mut self, quad: &EncodedQuad<Self::StrId>) -> Result<(), Self::Error>;
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<(), Self::Error>;
 
-    fn insert_encoded_named_graph(
-        &mut self,
-        graph_name: EncodedTerm<Self::StrId>,
-    ) -> Result<(), Self::Error>;
+    fn insert_encoded_named_graph(&mut self, graph_name: EncodedTerm) -> Result<(), Self::Error>;
 
-    fn clear_encoded_graph(
-        &mut self,
-        graph_name: EncodedTerm<Self::StrId>,
-    ) -> Result<(), Self::Error>;
+    fn clear_encoded_graph(&mut self, graph_name: EncodedTerm) -> Result<(), Self::Error>;
 
-    fn remove_encoded_named_graph(
-        &mut self,
-        graph_name: EncodedTerm<Self::StrId>,
-    ) -> Result<(), Self::Error>;
+    fn remove_encoded_named_graph(&mut self, graph_name: EncodedTerm) -> Result<(), Self::Error>;
 
     fn clear(&mut self) -> Result<(), Self::Error>;
 }
@@ -215,11 +203,11 @@ impl From<StoreOrParseError<Infallible>> for io::Error {
     }
 }
 
-type QuadPattern<I> = (
-    Option<EncodedTerm<I>>,
-    Option<EncodedTerm<I>>,
-    Option<EncodedTerm<I>>,
-    Option<EncodedTerm<I>>,
+type QuadPattern = (
+    Option<EncodedTerm>,
+    Option<EncodedTerm>,
+    Option<EncodedTerm>,
+    Option<EncodedTerm>,
 );
 
 fn get_encoded_quad_pattern<E: ReadEncoder>(
@@ -228,7 +216,7 @@ fn get_encoded_quad_pattern<E: ReadEncoder>(
     predicate: Option<NamedNodeRef<'_>>,
     object: Option<TermRef<'_>>,
     graph_name: Option<GraphNameRef<'_>>,
-) -> Result<Option<QuadPattern<E::StrId>>, E::Error> {
+) -> Result<Option<QuadPattern>, E::Error> {
     Ok(Some((
         if let Some(subject) = transpose(
             subject

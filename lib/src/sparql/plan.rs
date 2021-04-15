@@ -1,89 +1,89 @@
 use crate::sparql::algebra::GraphPattern;
 use crate::sparql::model::Variable;
-use crate::store::numeric_encoder::{EncodedTerm, StrId};
+use crate::store::numeric_encoder::EncodedTerm;
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum PlanNode<I: StrId> {
+pub enum PlanNode {
     Init,
     StaticBindings {
-        tuples: Vec<EncodedTuple<I>>,
+        tuples: Vec<EncodedTuple>,
     },
     Service {
-        service_name: PatternValue<I>,
+        service_name: PatternValue,
         variables: Rc<Vec<Variable>>,
-        child: Rc<PlanNode<I>>,
+        child: Rc<PlanNode>,
         graph_pattern: Rc<GraphPattern>,
         silent: bool,
     },
     QuadPatternJoin {
-        child: Rc<PlanNode<I>>,
-        subject: PatternValue<I>,
-        predicate: PatternValue<I>,
-        object: PatternValue<I>,
-        graph_name: PatternValue<I>,
+        child: Rc<PlanNode>,
+        subject: PatternValue,
+        predicate: PatternValue,
+        object: PatternValue,
+        graph_name: PatternValue,
     },
     PathPatternJoin {
-        child: Rc<PlanNode<I>>,
-        subject: PatternValue<I>,
-        path: Rc<PlanPropertyPath<I>>,
-        object: PatternValue<I>,
-        graph_name: PatternValue<I>,
+        child: Rc<PlanNode>,
+        subject: PatternValue,
+        path: Rc<PlanPropertyPath>,
+        object: PatternValue,
+        graph_name: PatternValue,
     },
     Join {
-        left: Rc<PlanNode<I>>,
-        right: Rc<PlanNode<I>>,
+        left: Rc<PlanNode>,
+        right: Rc<PlanNode>,
     },
     AntiJoin {
-        left: Rc<PlanNode<I>>,
-        right: Rc<PlanNode<I>>,
+        left: Rc<PlanNode>,
+        right: Rc<PlanNode>,
     },
     Filter {
-        child: Rc<PlanNode<I>>,
-        expression: Rc<PlanExpression<I>>,
+        child: Rc<PlanNode>,
+        expression: Rc<PlanExpression>,
     },
     Union {
-        children: Vec<Rc<PlanNode<I>>>,
+        children: Vec<Rc<PlanNode>>,
     },
     LeftJoin {
-        left: Rc<PlanNode<I>>,
-        right: Rc<PlanNode<I>>,
+        left: Rc<PlanNode>,
+        right: Rc<PlanNode>,
         possible_problem_vars: Rc<Vec<usize>>, //Variables that should not be part of the entry of the left join
     },
     Extend {
-        child: Rc<PlanNode<I>>,
+        child: Rc<PlanNode>,
         position: usize,
-        expression: Rc<PlanExpression<I>>,
+        expression: Rc<PlanExpression>,
     },
     Sort {
-        child: Rc<PlanNode<I>>,
-        by: Vec<Comparator<I>>,
+        child: Rc<PlanNode>,
+        by: Vec<Comparator>,
     },
     HashDeduplicate {
-        child: Rc<PlanNode<I>>,
+        child: Rc<PlanNode>,
     },
     Skip {
-        child: Rc<PlanNode<I>>,
+        child: Rc<PlanNode>,
         count: usize,
     },
     Limit {
-        child: Rc<PlanNode<I>>,
+        child: Rc<PlanNode>,
         count: usize,
     },
     Project {
-        child: Rc<PlanNode<I>>,
+        child: Rc<PlanNode>,
         mapping: Rc<Vec<(usize, usize)>>, // pairs of (variable key in child, variable key in output)
     },
     Aggregate {
         // By definition the group by key are the range 0..key_mapping.len()
-        child: Rc<PlanNode<I>>,
+        child: Rc<PlanNode>,
         key_mapping: Rc<Vec<(usize, usize)>>, // aggregate key pairs of (variable key in child, variable key in output)
-        aggregates: Rc<Vec<(PlanAggregation<I>, usize)>>,
+        aggregates: Rc<Vec<(PlanAggregation, usize)>>,
     },
 }
 
-impl<I: StrId> PlanNode<I> {
+impl PlanNode {
     /// Returns variables that might be bound in the result set
     pub fn maybe_bound_variables(&self) -> BTreeSet<usize> {
         let mut set = BTreeSet::default();
@@ -194,12 +194,12 @@ impl<I: StrId> PlanNode<I> {
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
-pub enum PatternValue<I: StrId> {
-    Constant(EncodedTerm<I>),
+pub enum PatternValue {
+    Constant(EncodedTerm),
     Variable(usize),
 }
 
-impl<I: StrId> PatternValue<I> {
+impl PatternValue {
     pub fn is_var(&self) -> bool {
         match self {
             PatternValue::Constant(_) => false,
@@ -209,107 +209,107 @@ impl<I: StrId> PatternValue<I> {
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum PlanExpression<I: StrId> {
-    Constant(EncodedTerm<I>),
+pub enum PlanExpression {
+    Constant(EncodedTerm),
     Variable(usize),
-    Exists(Rc<PlanNode<I>>),
-    Or(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    And(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    Equal(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    Greater(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    GreaterOrEqual(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    Less(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    LessOrEqual(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    In(Box<PlanExpression<I>>, Vec<PlanExpression<I>>),
-    Add(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    Subtract(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    Multiply(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    Divide(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    UnaryPlus(Box<PlanExpression<I>>),
-    UnaryMinus(Box<PlanExpression<I>>),
-    Not(Box<PlanExpression<I>>),
-    Str(Box<PlanExpression<I>>),
-    Lang(Box<PlanExpression<I>>),
-    LangMatches(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    Datatype(Box<PlanExpression<I>>),
+    Exists(Rc<PlanNode>),
+    Or(Box<PlanExpression>, Box<PlanExpression>),
+    And(Box<PlanExpression>, Box<PlanExpression>),
+    Equal(Box<PlanExpression>, Box<PlanExpression>),
+    Greater(Box<PlanExpression>, Box<PlanExpression>),
+    GreaterOrEqual(Box<PlanExpression>, Box<PlanExpression>),
+    Less(Box<PlanExpression>, Box<PlanExpression>),
+    LessOrEqual(Box<PlanExpression>, Box<PlanExpression>),
+    In(Box<PlanExpression>, Vec<PlanExpression>),
+    Add(Box<PlanExpression>, Box<PlanExpression>),
+    Subtract(Box<PlanExpression>, Box<PlanExpression>),
+    Multiply(Box<PlanExpression>, Box<PlanExpression>),
+    Divide(Box<PlanExpression>, Box<PlanExpression>),
+    UnaryPlus(Box<PlanExpression>),
+    UnaryMinus(Box<PlanExpression>),
+    Not(Box<PlanExpression>),
+    Str(Box<PlanExpression>),
+    Lang(Box<PlanExpression>),
+    LangMatches(Box<PlanExpression>, Box<PlanExpression>),
+    Datatype(Box<PlanExpression>),
     Bound(usize),
-    Iri(Box<PlanExpression<I>>),
-    BNode(Option<Box<PlanExpression<I>>>),
+    Iri(Box<PlanExpression>),
+    BNode(Option<Box<PlanExpression>>),
     Rand,
-    Abs(Box<PlanExpression<I>>),
-    Ceil(Box<PlanExpression<I>>),
-    Floor(Box<PlanExpression<I>>),
-    Round(Box<PlanExpression<I>>),
-    Concat(Vec<PlanExpression<I>>),
+    Abs(Box<PlanExpression>),
+    Ceil(Box<PlanExpression>),
+    Floor(Box<PlanExpression>),
+    Round(Box<PlanExpression>),
+    Concat(Vec<PlanExpression>),
     SubStr(
-        Box<PlanExpression<I>>,
-        Box<PlanExpression<I>>,
-        Option<Box<PlanExpression<I>>>,
+        Box<PlanExpression>,
+        Box<PlanExpression>,
+        Option<Box<PlanExpression>>,
     ),
-    StrLen(Box<PlanExpression<I>>),
+    StrLen(Box<PlanExpression>),
     Replace(
-        Box<PlanExpression<I>>,
-        Box<PlanExpression<I>>,
-        Box<PlanExpression<I>>,
-        Option<Box<PlanExpression<I>>>,
+        Box<PlanExpression>,
+        Box<PlanExpression>,
+        Box<PlanExpression>,
+        Option<Box<PlanExpression>>,
     ),
-    UCase(Box<PlanExpression<I>>),
-    LCase(Box<PlanExpression<I>>),
-    EncodeForUri(Box<PlanExpression<I>>),
-    Contains(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    StrStarts(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    StrEnds(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    StrBefore(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    StrAfter(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    Year(Box<PlanExpression<I>>),
-    Month(Box<PlanExpression<I>>),
-    Day(Box<PlanExpression<I>>),
-    Hours(Box<PlanExpression<I>>),
-    Minutes(Box<PlanExpression<I>>),
-    Seconds(Box<PlanExpression<I>>),
-    Timezone(Box<PlanExpression<I>>),
-    Tz(Box<PlanExpression<I>>),
+    UCase(Box<PlanExpression>),
+    LCase(Box<PlanExpression>),
+    EncodeForUri(Box<PlanExpression>),
+    Contains(Box<PlanExpression>, Box<PlanExpression>),
+    StrStarts(Box<PlanExpression>, Box<PlanExpression>),
+    StrEnds(Box<PlanExpression>, Box<PlanExpression>),
+    StrBefore(Box<PlanExpression>, Box<PlanExpression>),
+    StrAfter(Box<PlanExpression>, Box<PlanExpression>),
+    Year(Box<PlanExpression>),
+    Month(Box<PlanExpression>),
+    Day(Box<PlanExpression>),
+    Hours(Box<PlanExpression>),
+    Minutes(Box<PlanExpression>),
+    Seconds(Box<PlanExpression>),
+    Timezone(Box<PlanExpression>),
+    Tz(Box<PlanExpression>),
     Now,
     Uuid,
     StrUuid,
-    Md5(Box<PlanExpression<I>>),
-    Sha1(Box<PlanExpression<I>>),
-    Sha256(Box<PlanExpression<I>>),
-    Sha384(Box<PlanExpression<I>>),
-    Sha512(Box<PlanExpression<I>>),
-    Coalesce(Vec<PlanExpression<I>>),
+    Md5(Box<PlanExpression>),
+    Sha1(Box<PlanExpression>),
+    Sha256(Box<PlanExpression>),
+    Sha384(Box<PlanExpression>),
+    Sha512(Box<PlanExpression>),
+    Coalesce(Vec<PlanExpression>),
     If(
-        Box<PlanExpression<I>>,
-        Box<PlanExpression<I>>,
-        Box<PlanExpression<I>>,
+        Box<PlanExpression>,
+        Box<PlanExpression>,
+        Box<PlanExpression>,
     ),
-    StrLang(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    StrDt(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    SameTerm(Box<PlanExpression<I>>, Box<PlanExpression<I>>),
-    IsIri(Box<PlanExpression<I>>),
-    IsBlank(Box<PlanExpression<I>>),
-    IsLiteral(Box<PlanExpression<I>>),
-    IsNumeric(Box<PlanExpression<I>>),
+    StrLang(Box<PlanExpression>, Box<PlanExpression>),
+    StrDt(Box<PlanExpression>, Box<PlanExpression>),
+    SameTerm(Box<PlanExpression>, Box<PlanExpression>),
+    IsIri(Box<PlanExpression>),
+    IsBlank(Box<PlanExpression>),
+    IsLiteral(Box<PlanExpression>),
+    IsNumeric(Box<PlanExpression>),
     Regex(
-        Box<PlanExpression<I>>,
-        Box<PlanExpression<I>>,
-        Option<Box<PlanExpression<I>>>,
+        Box<PlanExpression>,
+        Box<PlanExpression>,
+        Option<Box<PlanExpression>>,
     ),
-    BooleanCast(Box<PlanExpression<I>>),
-    DoubleCast(Box<PlanExpression<I>>),
-    FloatCast(Box<PlanExpression<I>>),
-    DecimalCast(Box<PlanExpression<I>>),
-    IntegerCast(Box<PlanExpression<I>>),
-    DateCast(Box<PlanExpression<I>>),
-    TimeCast(Box<PlanExpression<I>>),
-    DateTimeCast(Box<PlanExpression<I>>),
-    DurationCast(Box<PlanExpression<I>>),
-    YearMonthDurationCast(Box<PlanExpression<I>>),
-    DayTimeDurationCast(Box<PlanExpression<I>>),
-    StringCast(Box<PlanExpression<I>>),
+    BooleanCast(Box<PlanExpression>),
+    DoubleCast(Box<PlanExpression>),
+    FloatCast(Box<PlanExpression>),
+    DecimalCast(Box<PlanExpression>),
+    IntegerCast(Box<PlanExpression>),
+    DateCast(Box<PlanExpression>),
+    TimeCast(Box<PlanExpression>),
+    DateTimeCast(Box<PlanExpression>),
+    DurationCast(Box<PlanExpression>),
+    YearMonthDurationCast(Box<PlanExpression>),
+    DayTimeDurationCast(Box<PlanExpression>),
+    StringCast(Box<PlanExpression>),
 }
 
-impl<I: StrId> PlanExpression<I> {
+impl PlanExpression {
     pub fn add_maybe_bound_variables(&self, set: &mut BTreeSet<usize>) {
         match self {
             PlanExpression::Variable(v) | PlanExpression::Bound(v) => {
@@ -425,9 +425,9 @@ impl<I: StrId> PlanExpression<I> {
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct PlanAggregation<I: StrId> {
+pub struct PlanAggregation {
     pub function: PlanAggregationFunction,
-    pub parameter: Option<PlanExpression<I>>,
+    pub parameter: Option<PlanExpression>,
     pub distinct: bool,
 }
 
@@ -443,43 +443,43 @@ pub enum PlanAggregationFunction {
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum PlanPropertyPath<I: StrId> {
-    Path(EncodedTerm<I>),
-    Reverse(Rc<PlanPropertyPath<I>>),
-    Sequence(Rc<PlanPropertyPath<I>>, Rc<PlanPropertyPath<I>>),
-    Alternative(Rc<PlanPropertyPath<I>>, Rc<PlanPropertyPath<I>>),
-    ZeroOrMore(Rc<PlanPropertyPath<I>>),
-    OneOrMore(Rc<PlanPropertyPath<I>>),
-    ZeroOrOne(Rc<PlanPropertyPath<I>>),
-    NegatedPropertySet(Rc<Vec<EncodedTerm<I>>>),
+pub enum PlanPropertyPath {
+    Path(EncodedTerm),
+    Reverse(Rc<PlanPropertyPath>),
+    Sequence(Rc<PlanPropertyPath>, Rc<PlanPropertyPath>),
+    Alternative(Rc<PlanPropertyPath>, Rc<PlanPropertyPath>),
+    ZeroOrMore(Rc<PlanPropertyPath>),
+    OneOrMore(Rc<PlanPropertyPath>),
+    ZeroOrOne(Rc<PlanPropertyPath>),
+    NegatedPropertySet(Rc<Vec<EncodedTerm>>),
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum Comparator<I: StrId> {
-    Asc(PlanExpression<I>),
-    Desc(PlanExpression<I>),
+pub enum Comparator {
+    Asc(PlanExpression),
+    Desc(PlanExpression),
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
-pub struct TripleTemplate<I: StrId> {
-    pub subject: TripleTemplateValue<I>,
-    pub predicate: TripleTemplateValue<I>,
-    pub object: TripleTemplateValue<I>,
+pub struct TripleTemplate {
+    pub subject: TripleTemplateValue,
+    pub predicate: TripleTemplateValue,
+    pub object: TripleTemplateValue,
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
-pub enum TripleTemplateValue<I: StrId> {
-    Constant(EncodedTerm<I>),
+pub enum TripleTemplateValue {
+    Constant(EncodedTerm),
     BlankNode(usize),
     Variable(usize),
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct EncodedTuple<I: StrId> {
-    inner: Vec<Option<EncodedTerm<I>>>,
+pub struct EncodedTuple {
+    inner: Vec<Option<EncodedTerm>>,
 }
 
-impl<I: StrId> EncodedTuple<I> {
+impl EncodedTuple {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             inner: Vec::with_capacity(capacity),
@@ -494,15 +494,15 @@ impl<I: StrId> EncodedTuple<I> {
         self.inner.get(index).map_or(false, Option::is_some)
     }
 
-    pub fn get(&self, index: usize) -> Option<EncodedTerm<I>> {
+    pub fn get(&self, index: usize) -> Option<EncodedTerm> {
         self.inner.get(index).cloned().unwrap_or(None)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = Option<EncodedTerm<I>>> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = Option<EncodedTerm>> + '_ {
         self.inner.iter().cloned()
     }
 
-    pub fn set(&mut self, index: usize, value: EncodedTerm<I>) {
+    pub fn set(&mut self, index: usize, value: EncodedTerm) {
         if self.inner.len() <= index {
             self.inner.resize(index + 1, None);
         }
@@ -515,7 +515,7 @@ impl<I: StrId> EncodedTuple<I> {
         }
     }
 
-    pub fn combine_with(&self, other: &EncodedTuple<I>) -> Option<Self> {
+    pub fn combine_with(&self, other: &EncodedTuple) -> Option<Self> {
         if self.inner.len() < other.inner.len() {
             let mut result = other.inner.to_owned();
             for (key, self_value) in self.inner.iter().enumerate() {
@@ -550,9 +550,9 @@ impl<I: StrId> EncodedTuple<I> {
     }
 }
 
-impl<I: StrId> IntoIterator for EncodedTuple<I> {
-    type Item = Option<EncodedTerm<I>>;
-    type IntoIter = std::vec::IntoIter<Option<EncodedTerm<I>>>;
+impl IntoIterator for EncodedTuple {
+    type Item = Option<EncodedTerm>;
+    type IntoIter = std::vec::IntoIter<Option<EncodedTerm>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.inner.into_iter()
