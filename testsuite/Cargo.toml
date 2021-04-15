@@ -14,7 +14,7 @@ publish = false
 [dependencies]
 anyhow = "1"
 chrono = "0.4"
-oxigraph = { version = "0.2", path="../lib" }
+oxigraph = { version = "0.2", path="../lib", features=["sled"] }
 text-diff = "0.4"
 
 [dev-dependencies]

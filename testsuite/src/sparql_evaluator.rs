@@ -7,7 +7,7 @@ use chrono::Utc;
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
 use oxigraph::sparql::*;
-use oxigraph::MemoryStore;
+use oxigraph::SledStore;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -70,7 +70,7 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
     } else if test.kind
         == "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#QueryEvaluationTest"
     {
-        let store = MemoryStore::new();
+        let store = SledStore::new()?;
         if let Some(data) = &test.data {
             load_to_store(data, &store, GraphNameRef::DefaultGraph)?;
         }
@@ -190,7 +190,7 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
     } else if test.kind
         == "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#UpdateEvaluationTest"
     {
-        let store = MemoryStore::new();
+        let store = SledStore::new()?;
         if let Some(data) = &test.data {
             load_to_store(data, &store, &GraphName::DefaultGraph)?;
         }
@@ -198,7 +198,7 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
             load_to_store(value, &store, name)?;
         }
 
-        let result_store = MemoryStore::new();
+        let result_store = SledStore::new()?;
         if let Some(data) = &test.result {
             load_to_store(data, &result_store, &GraphName::DefaultGraph)?;
         }
@@ -223,9 +223,10 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
                     error
                 )),
                 Ok(()) => {
-                    let mut store_dataset: Dataset = store.iter().collect();
+                    let mut store_dataset: Dataset = store.iter().collect::<Result<_, _>>()?;
                     store_dataset.canonicalize();
-                    let mut result_store_dataset: Dataset = result_store.iter().collect();
+                    let mut result_store_dataset: Dataset =
+                        result_store.iter().collect::<Result<_, _>>()?;
                     result_store_dataset.canonicalize();
                     if store_dataset == result_store_dataset {
                         Ok(())
@@ -269,7 +270,7 @@ fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
 
 #[derive(Clone)]
 struct StaticServiceHandler {
-    services: Arc<HashMap<NamedNode, MemoryStore>>,
+    services: Arc<HashMap<NamedNode, SledStore>>,
 }
 
 impl StaticServiceHandler {
@@ -280,7 +281,7 @@ impl StaticServiceHandler {
                     .iter()
                     .map(|(name, data)| {
                         let name = NamedNode::new(name)?;
-                        let store = MemoryStore::new();
+                        let store = SledStore::new()?;
                         load_to_store(&data, &store, &GraphName::DefaultGraph)?;
                         Ok((name, store))
                     })
@@ -466,13 +467,13 @@ impl StaticQueryResults {
 
     fn from_graph(graph: Graph) -> StaticQueryResults {
         // Hack to normalize literals
-        let mut graph: Graph = graph
-            .iter()
-            .map(|t| t.into_owned().in_graph(GraphName::DefaultGraph))
-            .collect::<MemoryStore>()
-            .into_iter()
-            .map(Triple::from)
-            .collect();
+        let store = SledStore::new().unwrap();
+        for t in graph.iter() {
+            store
+                .insert(t.in_graph(GraphNameRef::DefaultGraph))
+                .unwrap();
+        }
+        let mut graph: Graph = store.iter().map(|q| Triple::from(q.unwrap())).collect();
 
         if let Some(result_set) = graph.subject_for_predicate_object(rdf::TYPE, rs::RESULT_SET) {
             if let Some(bool) = graph.object_for_subject_predicate(result_set, rs::BOOLEAN) {
