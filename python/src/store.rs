@@ -1,72 +1,83 @@
-use crate::io::PyFileLike;
+use crate::io::{map_io_err, PyFileLike};
 use crate::model::*;
 use crate::sparql::*;
-use crate::store_utils::*;
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::GraphNameRef;
-use oxigraph::store::memory::*;
-use pyo3::basic::CompareOp;
-use pyo3::exceptions::{PyNotImplementedError, PyValueError};
+use oxigraph::store::sled::*;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{
-    pyclass, pymethods, pyproto, Py, PyAny, PyCell, PyObject, PyRef, PyRefMut, PyResult, Python,
+    pyclass, pymethods, pyproto, Py, PyAny, PyObject, PyRef, PyRefMut, PyResult, Python,
 };
 use pyo3::{PyIterProtocol, PyObjectProtocol, PySequenceProtocol};
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::io::BufReader;
 
-/// In-memory store.
+/// Disk-based RDF store.
+///
 /// It encodes a `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_ and allows to query it using SPARQL.
+/// It is based on the `Sled <https://sled.rs/>`_ key-value database
+///
+/// :param path: the path of the directory in which the store should read and write its data. If the directory does not exist, it is created. If no directory is provided a temporary one is created and removed when the Python garbage collector removes the store.
+/// :type path: str or None, optional
+/// :raises IOError: if the target directory contains invalid data or could not be accessed
 ///
 /// The :py:func:`str` function provides a serialization of the store in NQuads:
 ///
-/// >>> store = MemoryStore()
+/// >>> store = Store()
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
 /// >>> str(store)
 /// '<http://example.com> <http://example.com/p> "1" <http://example.com/g> .\n'
-#[pyclass(name = "MemoryStore", module = "oxigraph")]
-#[derive(Eq, PartialEq, Clone)]
-#[text_signature = "()"]
-pub struct PyMemoryStore {
-    inner: MemoryStore,
+#[pyclass(name = "Store", module = "oxigraph")]
+#[text_signature = "(path = None)"]
+#[derive(Clone)]
+pub struct PyStore {
+    inner: SledStore,
 }
 
 #[pymethods]
-impl PyMemoryStore {
+impl PyStore {
     #[new]
-    fn new() -> Self {
-        Self {
-            inner: MemoryStore::new(),
-        }
+    fn new(path: Option<&str>) -> PyResult<Self> {
+        Ok(Self {
+            inner: if let Some(path) = path {
+                SledStore::open(path)
+            } else {
+                SledStore::new()
+            }
+            .map_err(map_io_err)?,
+        })
     }
 
     /// Adds a quad to the store
     ///
     /// :param quad: the quad to add
     /// :type quad: Quad
+    /// :raises IOError: if an I/O error happens during the quad insertion
     ///
-    /// >>> store = MemoryStore()
+    /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
     #[text_signature = "($self, quad)"]
-    fn add(&self, quad: PyQuad) {
-        self.inner.insert(quad)
+    fn add(&self, quad: &PyQuad) -> PyResult<()> {
+        self.inner.insert(quad).map_err(map_io_err)
     }
 
     /// Removes a quad from the store
     ///
     /// :param quad: the quad to remove
     /// :type quad: Quad
+    /// :raises IOError: if an I/O error happens during the quad removal
     ///
-    /// >>> store = MemoryStore()
+    /// >>> store = Store()
     /// >>> quad = Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))
     /// >>> store.add(quad)
     /// >>> store.remove(quad)
     /// >>> list(store)
     /// []
     #[text_signature = "($self, quad)"]
-    fn remove(&self, quad: &PyQuad) {
-        self.inner.remove(quad)
+    fn remove(&self, quad: &PyQuad) -> PyResult<()> {
+        self.inner.remove(quad).map_err(map_io_err)
     }
 
     /// Looks for the quads matching a given pattern
@@ -81,8 +92,9 @@ impl PyMemoryStore {
     /// :type graph: NamedNode or BlankNode or DefaultGraph or None
     /// :return: an iterator of the quads matching the pattern
     /// :rtype: iter(Quad)
+    /// :raises IOError: if an I/O error happens during the quads lookup
     ///
-    /// >>> store = MemoryStore()
+    /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     /// >>> list(store.quads_for_pattern(NamedNode('http://example.com'), None, None, None))
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
@@ -119,24 +131,25 @@ impl PyMemoryStore {
     /// :return: a :py:class:`bool` for ``ASK`` queries, an iterator of :py:class:`Triple` for ``CONSTRUCT`` and ``DESCRIBE`` queries and an iterator of :py:class:`QuerySolution` for ``SELECT`` queries.
     /// :rtype: QuerySolutions or QueryTriples or bool
     /// :raises SyntaxError: if the provided query is invalid
+    /// :raises IOError: if an I/O error happens while reading the store
     ///
     /// ``SELECT`` query:
     ///
-    /// >>> store = MemoryStore()
+    /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
     /// >>> list(solution['s'] for solution in store.query('SELECT ?s WHERE { ?s ?p ?o }'))
     /// [<NamedNode value=http://example.com>]
     ///
     /// ``CONSTRUCT`` query:
     ///
-    /// >>> store = MemoryStore()
+    /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
     /// >>> list(store.query('CONSTRUCT WHERE { ?s ?p ?o }'))
     /// [<Triple subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>>>]
     ///
     /// ``ASK`` query:
     ///
-    /// >>> store = MemoryStore()
+    /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
     /// >>> store.query('ASK { ?s ?p ?o }')
     /// True
@@ -171,20 +184,21 @@ impl PyMemoryStore {
     /// :param update: the update to execute
     /// :type update: str
     /// :raises SyntaxError: if the provided update is invalid
+    /// :raises IOError: if an I/O error happens while reading the store
     ///
     /// The store does not track the existence of empty named graphs.
     /// This method has no ACID guarantees.
     ///
     /// ``INSERT DATA`` update:
     ///
-    /// >>> store = MemoryStore()
+    /// >>> store = Store()
     /// >>> store.update('INSERT DATA { <http://example.com> <http://example.com/p> "1" }')
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<DefaultGraph>>]
     ///
     /// ``DELETE DATA`` update:
     ///
-    /// >>> store = MemoryStore()
+    /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
     /// >>> store.update('DELETE DATA { <http://example.com> <http://example.com/p> "1" }')
     /// >>> list(store)
@@ -192,7 +206,7 @@ impl PyMemoryStore {
     ///
     /// ``DELETE`` update:
     ///
-    /// >>> store = MemoryStore()
+    /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
     /// >>> store.update('DELETE WHERE { <http://example.com> ?p ?o }')
     /// >>> list(store)
@@ -226,12 +240,13 @@ impl PyMemoryStore {
     /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :raises ValueError: if the MIME type is not supported or the `to_graph` parameter is given with a quad file.
     /// :raises SyntaxError: if the provided data is invalid
+    /// :raises IOError: if an I/O error happens during a quad insertion
     ///
-    /// >>> store = MemoryStore()
+    /// >>> store = Store()
     /// >>> store.load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[text_signature = "($self, input, /, mime_type, *, base_iri = None, to_graph = None)"]
+    #[text_signature = "($self, data, /, mime_type, *, base_iri = None, to_graph = None)"]
     #[args(input, mime_type, "*", base_iri = "None", to_graph = "None")]
     fn load(
         &self,
@@ -293,8 +308,9 @@ impl PyMemoryStore {
     /// :param from_graph: if a triple based format is requested, the store graph from which dump the triples. By default, the default graph is used.
     /// :type from_graph: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :raises ValueError: if the MIME type is not supported or the `from_graph` parameter is given with a quad syntax.
+    /// :raises IOError: if an I/O error happens during a quad lookup
     ///
-    /// >>> store = MemoryStore()
+    /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     /// >>> output = io.BytesIO()
     /// >>> store.dump(output, "text/turtle", from_graph=NamedNode("http://example.com/g"))
@@ -338,8 +354,9 @@ impl PyMemoryStore {
     ///
     /// :return: an iterator of the store graph names
     /// :rtype: iter(NamedNode or BlankNode)
+    /// :raises IOError: if an I/O error happens during the named graphs lookup
     ///
-    /// >>> store = MemoryStore()
+    /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     /// >>> list(store.named_graphs())
     /// [<NamedNode value=http://example.com/g>]
@@ -354,18 +371,24 @@ impl PyMemoryStore {
     ///
     /// :param graph_name: the name of the name graph to add
     /// :type graph_name: NamedNode or BlankNode
+    /// :raises IOError: if an I/O error happens during the named graph insertion
     ///
-    /// >>> store = MemoryStore()
+    /// >>> store = Store()
     /// >>> store.add_graph(NamedNode('http://example.com/g'))
     /// >>> list(store.named_graphs())
     /// [<NamedNode value=http://example.com/g>]
     #[text_signature = "($self, graph_name)"]
-    fn add_graph(&self, graph_name: PyGraphName) {
-        match graph_name {
-            PyGraphName::DefaultGraph(_) => (),
-            PyGraphName::NamedNode(graph_name) => self.inner.insert_named_graph(graph_name),
-            PyGraphName::BlankNode(graph_name) => self.inner.insert_named_graph(graph_name),
+    fn add_graph(&self, graph_name: &PyAny) -> PyResult<()> {
+        match PyGraphNameRef::try_from(graph_name)? {
+            PyGraphNameRef::DefaultGraph => Ok(()),
+            PyGraphNameRef::NamedNode(graph_name) => self
+                .inner
+                .insert_named_graph(&PyNamedOrBlankNodeRef::NamedNode(graph_name)),
+            PyGraphNameRef::BlankNode(graph_name) => self
+                .inner
+                .insert_named_graph(&PyNamedOrBlankNodeRef::BlankNode(graph_name)),
         }
+        .map_err(map_io_err)
     }
 
     /// Removes a graph from the store
@@ -374,8 +397,9 @@ impl PyMemoryStore {
     ///
     /// :param graph_name: the name of the name graph to remove
     /// :type graph_name: NamedNode or BlankNode or DefaultGraph
+    /// :raises IOError: if an I/O error happens during the named graph removal
     ///
-    /// >>> store = MemoryStore()
+    /// >>> store = Store()
     /// >>> quad = Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))
     /// >>> store.remove_graph(NamedNode('http://example.com/g'))
     /// >>> list(store)
@@ -391,25 +415,14 @@ impl PyMemoryStore {
                 .inner
                 .remove_named_graph(&PyNamedOrBlankNodeRef::BlankNode(graph_name)),
         }
-        Ok(())
+        .map_err(map_io_err)
     }
 }
 
 #[pyproto]
-impl PyObjectProtocol for PyMemoryStore {
+impl PyObjectProtocol for PyStore {
     fn __str__(&self) -> String {
         self.inner.to_string()
-    }
-
-    fn __richcmp__(&self, other: &PyCell<Self>, op: CompareOp) -> PyResult<bool> {
-        let other: &PyMemoryStore = &other.borrow();
-        match op {
-            CompareOp::Eq => Ok(self == other),
-            CompareOp::Ne => Ok(self != other),
-            _ => Err(PyNotImplementedError::new_err(
-                "Ordering is not implemented",
-            )),
-        }
     }
 
     fn __bool__(&self) -> bool {
@@ -418,18 +431,18 @@ impl PyObjectProtocol for PyMemoryStore {
 }
 
 #[pyproto]
-impl<'p> PySequenceProtocol<'p> for PyMemoryStore {
+impl PySequenceProtocol for PyStore {
     fn __len__(&self) -> usize {
         self.inner.len()
     }
 
-    fn __contains__(&self, quad: PyQuad) -> bool {
-        self.inner.contains(&quad)
+    fn __contains__(&self, quad: PyQuad) -> PyResult<bool> {
+        self.inner.contains(&quad).map_err(map_io_err)
     }
 }
 
 #[pyproto]
-impl PyIterProtocol for PyMemoryStore {
+impl PyIterProtocol for PyStore {
     fn __iter__(slf: PyRef<Self>) -> QuadIter {
         QuadIter {
             inner: slf.inner.iter(),
@@ -439,7 +452,7 @@ impl PyIterProtocol for PyMemoryStore {
 
 #[pyclass(unsendable, module = "oxigraph")]
 pub struct QuadIter {
-    inner: MemoryQuadIter,
+    inner: SledQuadIter,
 }
 
 #[pyproto]
@@ -448,14 +461,17 @@ impl PyIterProtocol for QuadIter {
         slf.into()
     }
 
-    fn __next__(mut slf: PyRefMut<Self>) -> Option<PyQuad> {
-        slf.inner.next().map(|q| q.into())
+    fn __next__(mut slf: PyRefMut<Self>) -> PyResult<Option<PyQuad>> {
+        slf.inner
+            .next()
+            .map(|q| Ok(q.map_err(map_io_err)?.into()))
+            .transpose()
     }
 }
 
 #[pyclass(unsendable, module = "oxigraph")]
 pub struct GraphNameIter {
-    inner: MemoryGraphNameIter,
+    inner: SledGraphNameIter,
 }
 
 #[pyproto]
@@ -464,7 +480,49 @@ impl PyIterProtocol for GraphNameIter {
         slf.into()
     }
 
-    fn __next__(mut slf: PyRefMut<Self>) -> Option<PyNamedOrBlankNode> {
-        slf.inner.next().map(|q| q.into())
+    fn __next__(mut slf: PyRefMut<Self>) -> PyResult<Option<PyNamedOrBlankNode>> {
+        slf.inner
+            .next()
+            .map(|q| Ok(q.map_err(map_io_err)?.into()))
+            .transpose()
     }
+}
+
+pub fn extract_quads_pattern<'a>(
+    subject: &'a PyAny,
+    predicate: &'a PyAny,
+    object: &'a PyAny,
+    graph_name: Option<&'a PyAny>,
+) -> PyResult<(
+    Option<PyNamedOrBlankNodeRef<'a>>,
+    Option<PyNamedNodeRef<'a>>,
+    Option<PyTermRef<'a>>,
+    Option<PyGraphNameRef<'a>>,
+)> {
+    Ok((
+        if subject.is_none() {
+            None
+        } else {
+            Some(subject.try_into()?)
+        },
+        if predicate.is_none() {
+            None
+        } else {
+            Some(predicate.try_into()?)
+        },
+        if object.is_none() {
+            None
+        } else {
+            Some(object.try_into()?)
+        },
+        if let Some(graph_name) = graph_name {
+            if graph_name.is_none() {
+                None
+            } else {
+                Some(graph_name.try_into()?)
+            }
+        } else {
+            None
+        },
+    ))
 }

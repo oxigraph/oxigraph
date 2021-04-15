@@ -9,16 +9,13 @@
 )]
 
 mod io;
-mod memory_store;
 mod model;
-mod sled_store;
 mod sparql;
-mod store_utils;
+mod store;
 
-use crate::memory_store::*;
 use crate::model::*;
-use crate::sled_store::*;
 use crate::sparql::*;
+use crate::store::*;
 use pyo3::prelude::*;
 
 /// Oxigraph Python bindings
@@ -34,8 +31,7 @@ fn pyoxigraph(_py: Python<'_>, module: &PyModule) -> PyResult<()> {
     module.add_class::<PyDefaultGraph>()?;
     module.add_class::<PyTriple>()?;
     module.add_class::<PyQuad>()?;
-    module.add_class::<PyMemoryStore>()?;
-    module.add_class::<PySledStore>()?;
+    module.add_class::<PyStore>()?;
     module.add_class::<PyVariable>()?;
     module.add_class::<PyQuerySolutions>()?;
     module.add_class::<PyQuerySolution>()?;

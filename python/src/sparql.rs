@@ -1,5 +1,5 @@
+use crate::io::map_io_err;
 use crate::model::*;
-use crate::store_utils::*;
 use oxigraph::model::Term;
 use oxigraph::sparql::*;
 use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyTypeError, PyValueError};
@@ -73,7 +73,7 @@ pub fn query_results_to_python(py: Python<'_>, results: QueryResults) -> PyResul
 /// It could be indexes by variable name (:py:class:`Variable` or :py:class:`str`) or position in the tuple (:py:class:`int`).
 /// Unpacking also works.
 ///
-/// >>> store = SledStore()
+/// >>> store = Store()
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
 /// >>> solution = next(store.query('SELECT ?s ?p ?o WHERE { ?s ?p ?o }'))
 /// >>> solution[Variable('s')]
@@ -164,7 +164,7 @@ impl PyIterProtocol for SolutionValueIter {
 
 /// An iterator of :py:class:`QuerySolution` returned by a SPARQL ``SELECT`` query
 ///
-/// >>> store = SledStore()
+/// >>> store = Store()
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
 /// >>> list(store.query('SELECT ?s WHERE { ?s ?p ?o }'))
 /// [<QuerySolution s=<NamedNode value=http://example.com>>]
@@ -178,7 +178,7 @@ impl PyQuerySolutions {
     /// :return: the ordered list of all variables that could appear in the query results
     /// :rtype: list(Variable)
     ///
-    /// >>> store = SledStore()
+    /// >>> store = Store()
     /// >>> store.query('SELECT ?s WHERE { ?s ?p ?o }').variables
     /// [<Variable value=s>]
     #[getter]
@@ -209,7 +209,7 @@ impl PyIterProtocol for PyQuerySolutions {
 
 /// An iterator of :py:class:`Triple` returned by a SPARQL ``CONSTRUCT`` or ``DESCRIBE`` query
 ///
-/// >>> store = MemoryStore()
+/// >>> store = Store()
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
 /// >>> list(store.query('CONSTRUCT WHERE { ?s ?p ?o }'))
 /// [<Triple subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>>>]

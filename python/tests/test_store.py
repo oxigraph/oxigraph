@@ -1,5 +1,4 @@
 import unittest
-from abc import ABC, abstractmethod
 from io import BytesIO
 
 from pyoxigraph import *
@@ -10,20 +9,16 @@ baz = NamedNode("http://baz")
 graph = NamedNode("http://graph")
 
 
-class TestAbstractStore(unittest.TestCase, ABC):
-    @abstractmethod
-    def store(self):
-        pass
-
+class TestStore(unittest.TestCase):
     def test_add(self):
-        store = self.store()
+        store = Store()
         store.add(Quad(foo, bar, baz))
         store.add(Quad(foo, bar, baz, DefaultGraph()))
         store.add(Quad(foo, bar, baz, graph))
         self.assertEqual(len(store), 2)
 
     def test_remove(self):
-        store = self.store()
+        store = Store()
         store.add(Quad(foo, bar, baz))
         store.add(Quad(foo, bar, baz, DefaultGraph()))
         store.add(Quad(foo, bar, baz, graph))
@@ -31,13 +26,13 @@ class TestAbstractStore(unittest.TestCase, ABC):
         self.assertEqual(len(store), 1)
 
     def test_len(self):
-        store = self.store()
+        store = Store()
         store.add(Quad(foo, bar, baz))
         store.add(Quad(foo, bar, baz, graph))
         self.assertEqual(len(store), 2)
 
     def test_in(self):
-        store = self.store()
+        store = Store()
         store.add(Quad(foo, bar, baz))
         store.add(Quad(foo, bar, baz, DefaultGraph()))
         store.add(Quad(foo, bar, baz, graph))
@@ -47,7 +42,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
         self.assertNotIn(Quad(foo, bar, baz, foo), store)
 
     def test_iter(self):
-        store = self.store()
+        store = Store()
         store.add(Quad(foo, bar, baz, DefaultGraph()))
         store.add(Quad(foo, bar, baz, graph))
         self.assertEqual(
@@ -56,7 +51,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
         )
 
     def test_quads_for_pattern(self):
-        store = self.store()
+        store = Store()
         store.add(Quad(foo, bar, baz, DefaultGraph()))
         store.add(Quad(foo, bar, baz, graph))
         self.assertEqual(
@@ -77,13 +72,13 @@ class TestAbstractStore(unittest.TestCase, ABC):
         )
 
     def test_ask_query(self):
-        store = self.store()
+        store = Store()
         store.add(Quad(foo, foo, foo))
         self.assertTrue(store.query("ASK { ?s ?s ?s }"))
         self.assertFalse(store.query("ASK { FILTER(false) }"))
 
     def test_construct_query(self):
-        store = self.store()
+        store = Store()
         store.add(Quad(foo, bar, baz))
         results = store.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
         self.assertIsInstance(results, QueryTriples)
@@ -92,7 +87,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
         )
 
     def test_select_query(self):
-        store = self.store()
+        store = Store()
         store.add(Quad(foo, bar, baz))
         solutions = store.query("SELECT ?s ?o WHERE { ?s ?p ?o }")
         self.assertIsInstance(solutions, QuerySolutions)
@@ -110,7 +105,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
         self.assertEqual(o, baz)
 
     def test_select_query_union_default_graph(self):
-        store = self.store()
+        store = Store()
         store.add(Quad(foo, bar, baz, graph))
         self.assertEqual(len(list(store.query("SELECT ?s WHERE { ?s ?p ?o }"))), 0)
         results = store.query(
@@ -125,7 +120,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
         self.assertEqual(len(list(results)), 1)
 
     def test_select_query_with_default_graph(self):
-        store = self.store()
+        store = Store()
         graph_bnode = BlankNode("g")
         store.add(Quad(foo, bar, baz, graph))
         store.add(Quad(foo, bar, foo))
@@ -140,7 +135,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
         self.assertEqual(len(list(results)), 3)
 
     def test_select_query_with_named_graph(self):
-        store = self.store()
+        store = Store()
         graph_bnode = BlankNode("g")
         store.add(Quad(foo, bar, baz, graph))
         store.add(Quad(foo, bar, foo))
@@ -153,29 +148,29 @@ class TestAbstractStore(unittest.TestCase, ABC):
         self.assertEqual(len(list(results)), 2)
 
     def test_update_insert_data(self):
-        store = self.store()
+        store = Store()
         store.update('INSERT DATA { <http://foo> <http://foo> <http://foo> }')
         self.assertEqual(len(store), 1)
 
     def test_update_delete_data(self):
-        store = self.store()
+        store = Store()
         store.add(Quad(foo, foo, foo))
         store.update('DELETE DATA { <http://foo> <http://foo> <http://foo> }')
         self.assertEqual(len(store), 0)
 
     def test_update_delete_where(self):
-        store = self.store()
+        store = Store()
         store.add(Quad(foo, foo, foo))
         store.update('DELETE WHERE { ?v ?v ?v }')
         self.assertEqual(len(store), 0)
 
     def test_update_load(self):
-        store = self.store()
+        store = Store()
         store.update('LOAD <https://www.w3.org/1999/02/22-rdf-syntax-ns>')
         self.assertGreater(len(store), 100)
 
     def test_load_ntriples_to_default_graph(self):
-        store = self.store()
+        store = Store()
         store.load(
             BytesIO(b"<http://foo> <http://bar> <http://baz> ."),
             mime_type="application/n-triples",
@@ -183,7 +178,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
         self.assertEqual(set(store), {Quad(foo, bar, baz, DefaultGraph())})
 
     def test_load_ntriples_to_named_graph(self):
-        store = self.store()
+        store = Store()
         store.load(
             BytesIO(b"<http://foo> <http://bar> <http://baz> ."),
             mime_type="application/n-triples",
@@ -192,7 +187,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
     def test_load_turtle_with_base_iri(self):
-        store = self.store()
+        store = Store()
         store.load(
             BytesIO(b"<http://foo> <http://bar> <> ."),
             mime_type="text/turtle",
@@ -201,7 +196,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
         self.assertEqual(set(store), {Quad(foo, bar, baz, DefaultGraph())})
 
     def test_load_nquads(self):
-        store = self.store()
+        store = Store()
         store.load(
             BytesIO(b"<http://foo> <http://bar> <http://baz> <http://graph>."),
             mime_type="application/n-quads",
@@ -209,7 +204,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
     def test_load_trig_with_base_iri(self):
-        store = self.store()
+        store = Store()
         store.load(
             BytesIO(b"<http://graph> { <http://foo> <http://bar> <> . }"),
             mime_type="application/trig",
@@ -218,7 +213,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
     def test_dump_ntriples(self):
-        store = self.store()
+        store = Store()
         store.add(Quad(foo, bar, baz, graph))
         output = BytesIO()
         store.dump(output, "application/n-triples", from_graph=graph)
@@ -227,7 +222,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
         )
 
     def test_dump_nquads(self):
-        store = self.store()
+        store = Store()
         store.add(Quad(foo, bar, baz, graph))
         output = BytesIO()
         store.dump(output, "application/n-quads")
@@ -237,7 +232,7 @@ class TestAbstractStore(unittest.TestCase, ABC):
         )
 
     def test_write_in_read(self):
-        store = self.store()
+        store = Store()
         store.add(Quad(foo, bar, bar))
         store.add(Quad(foo, bar, baz))
         for triple in store:
@@ -245,12 +240,12 @@ class TestAbstractStore(unittest.TestCase, ABC):
         self.assertEqual(len(store), 4)
 
     def test_add_graph(self):
-        store = self.store()
+        store = Store()
         store.add_graph(graph)
         self.assertEqual(list(store.named_graphs()), [graph])
 
     def test_remove_graph(self):
-        store = self.store()
+        store = Store()
         store.add(Quad(foo, bar, baz, graph))
         store.add_graph(NamedNode("http://graph2"))
         store.remove_graph(graph)
@@ -258,18 +253,6 @@ class TestAbstractStore(unittest.TestCase, ABC):
         self.assertEqual(list(store.named_graphs()), [])
         self.assertEqual(list(store), [])
 
-
-class TestMemoryStore(TestAbstractStore):
-    def store(self):
-        return MemoryStore()
-
-
-class TestSledStore(TestAbstractStore):
-    def store(self):
-        return SledStore()
-
-
-del TestAbstractStore  # We do not want to expose this class to the test runner
 
 if __name__ == "__main__":
     unittest.main()

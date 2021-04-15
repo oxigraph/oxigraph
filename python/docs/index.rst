@@ -50,7 +50,7 @@ Insert the triple ``<http://example/> <http://schema.org/name> "example"`` and p
 
     from pyoxigraph import *
 
-    store = MemoryStore()
+    store = Store()
     ex = NamedNode('http://example/')
     schema_name = NamedNode('http://schema.org/name')
     store.add(Quad(ex, schema_name, Literal('example')))
@@ -66,6 +66,5 @@ Table of contents
 
    model
    io
-   store/memory
-   store/sled
+   store
    sparql

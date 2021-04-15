@@ -1,10 +1,9 @@
 use crate::model::{PyQuad, PyTriple};
-use crate::store_utils::map_io_err;
 use oxigraph::io::read::{QuadReader, TripleReader};
 use oxigraph::io::{
     DatasetFormat, DatasetParser, DatasetSerializer, GraphFormat, GraphParser, GraphSerializer,
 };
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyIOError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::wrap_pyfunction;
@@ -241,5 +240,15 @@ fn to_io_err(error: impl Into<PyErr>, py: Python<'_>) -> io::Error {
         }
     } else {
         io::Error::new(io::ErrorKind::Other, "An unknown error has occurred")
+    }
+}
+
+pub fn map_io_err(error: io::Error) -> PyErr {
+    match error.kind() {
+        io::ErrorKind::InvalidInput => PyValueError::new_err(error.to_string()),
+        io::ErrorKind::InvalidData | io::ErrorKind::UnexpectedEof => {
+            PySyntaxError::new_err(error.to_string())
+        }
+        _ => PyIOError::new_err(error.to_string()),
     }
 }
