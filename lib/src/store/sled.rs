@@ -30,8 +30,6 @@ use std::{fmt, io, str};
 /// Store based on the [Sled](https://sled.rs/) key-value database.
 /// It encodes a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) and allows to query it using SPARQL.
 ///
-/// To use it, the `"sled"` feature needs to be activated.
-///
 /// Warning: Sled is not stable yet and might break its storage format.
 ///
 /// Usage example:

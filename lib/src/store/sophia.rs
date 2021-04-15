@@ -411,7 +411,6 @@ macro_rules! impl_dataset {
     };
 }
 
-#[cfg(feature = "sled")]
 mod sled {
     use super::*;
 
@@ -486,7 +485,6 @@ mod sled {
 }
 
 // helper functions
-#[cfg(feature = "sled")]
 fn io_quad_map<'a>(
     res: Result<Quad, std::io::Error>,
 ) -> Result<StreamedSophiaQuad<'a>, std::io::Error> {
@@ -496,7 +494,6 @@ fn io_quad_map<'a>(
     })
 }
 
-#[cfg(feature = "sled")]
 fn io_err_map(err: EvaluationError) -> std::io::Error {
     match err {
         EvaluationError::Io(err) => err,

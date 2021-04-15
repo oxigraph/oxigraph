@@ -22,7 +22,7 @@ sophia = ["sophia_api"]
 http_client = ["httparse", "native-tls"]
 
 [dependencies]
-sled = { version = "0.34", optional = true }
+sled = "0.34"
 quick-xml = "0.22"
 rand = "0.8"
 md-5 = "0.9"
@@ -53,4 +53,3 @@ sophia_api = { version = "0.6.2", features = ["test_macro"] }
 [[bench]]
 name = "store"
 harness = false
-required-features = ["sled"]

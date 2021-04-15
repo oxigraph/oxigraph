@@ -115,5 +115,4 @@ pub mod model;
 pub mod sparql;
 pub mod store;
 
-#[cfg(feature = "sled")]
 pub use crate::store::sled::SledStore;
