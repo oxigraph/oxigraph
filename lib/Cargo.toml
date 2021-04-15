@@ -45,17 +45,10 @@ http = "0.2"
 httparse = { version = "1", optional = true }
 native-tls = { version = "0.2", optional = true }
 
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-js-sys = "0.3"
-getrandom = {version="0.2", features=["js"]}
-
 [dev-dependencies]
 rayon = "1"
 criterion = "0.3"
 sophia_api = { version = "0.6.2", features = ["test_macro"] }
-
-[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
-wasm-bindgen-test = "0.3"
 
 [[bench]]
 name = "store"

@@ -101,24 +101,6 @@ jobs:
       - run: pip install 'maturin>=0.9.2,<0.10'
       - run: maturin publish --no-sdist -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
         working-directory: ./python
-  publish_npm:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-node@v2
-        with:
-          node-version: 14
-          registry-url: https://registry.npmjs.org
-      - run: rustup update
-      - run: cargo install wasm-pack
-      - run: npm install
-        working-directory: ./js
-      - run: npm run build
-        working-directory: ./js
-      - run: npm run release
-        working-directory: ./js
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
   publish_python_doc:
     runs-on: ubuntu-latest
     steps:

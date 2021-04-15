@@ -10,6 +10,7 @@ use std::error::Error;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
+use std::time::SystemTime;
 use std::time::SystemTimeError;
 
 /// [XML Schema `dateTime` datatype](https://www.w3.org/TR/xmlschema11-2/#dateTime) implementation.
@@ -1341,18 +1342,7 @@ impl Timestamp {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
 fn since_unix_epoch() -> Result<Duration, DateTimeError> {
-    Ok(Duration::new(
-        0,
-        Decimal::from_f64(js_sys::Date::now() / 1000.),
-    ))
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn since_unix_epoch() -> Result<Duration, DateTimeError> {
-    use std::time::SystemTime;
-
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)?
         .try_into()
