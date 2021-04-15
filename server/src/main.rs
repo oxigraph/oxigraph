@@ -22,7 +22,6 @@ use http_types::{
 };
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::{GraphName, GraphNameRef, NamedNode, NamedOrBlankNode};
-use oxigraph::sparql::algebra::GraphUpdateOperation;
 use oxigraph::sparql::{Query, QueryResults, QueryResultsFormat, Update};
 use oxigraph::SledStore as Store;
 use oxiri::Iri;
@@ -494,16 +493,14 @@ fn evaluate_sparql_update(
         .collect::<Result<Vec<NamedOrBlankNode>>>()
         .map_err(bad_request)?;
     if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
-        for operation in &mut update.operations {
-            if let GraphUpdateOperation::DeleteInsert { using, .. } = operation {
-                if !using.is_default_dataset() {
-                    bail_status!(400,
+        for using in update.using_datasets_mut() {
+            if !using.is_default_dataset() {
+                bail_status!(400,
                         "using-graph-uri and using-named-graph-uri must not be used with a SPARQL UPDATE containing USING",
                     );
-                }
-                using.set_default_graph(default_graph_uris.clone());
-                using.set_available_named_graphs(named_graph_uris.clone());
             }
+            using.set_default_graph(default_graph_uris.clone());
+            using.set_available_named_graphs(named_graph_uris.clone());
         }
     }
     store.update(update)?;

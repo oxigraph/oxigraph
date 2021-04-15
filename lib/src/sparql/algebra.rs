@@ -214,15 +214,37 @@ impl<'a> TryFrom<&'a String> for Query {
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Update {
     /// The update base IRI
-    pub base_iri: Option<Iri<String>>,
+    pub(super) base_iri: Option<Iri<String>>,
     /// The [update operations](https://www.w3.org/TR/sparql11-update/#formalModelGraphUpdate)
-    pub operations: Vec<GraphUpdateOperation>,
+    pub(super) operations: Vec<GraphUpdateOperation>,
 }
 
 impl Update {
     /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query
     pub fn parse(update: &str, base_iri: Option<&str>) -> Result<Self, ParseError> {
         parse_update(update, base_iri)
+    }
+
+    /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset) in [DELETE/INSERT operations](https://www.w3.org/TR/sparql11-update/#deleteInsert).
+    pub fn using_datasets(&self) -> impl Iterator<Item = &QueryDataset> {
+        self.operations.iter().filter_map(|operation| {
+            if let GraphUpdateOperation::DeleteInsert { using, .. } = operation {
+                Some(using)
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset) in [DELETE/INSERT operations](https://www.w3.org/TR/sparql11-update/#deleteInsert).
+    pub fn using_datasets_mut(&mut self) -> impl Iterator<Item = &mut QueryDataset> {
+        self.operations.iter_mut().filter_map(|operation| {
+            if let GraphUpdateOperation::DeleteInsert { using, .. } = operation {
+                Some(using)
+            } else {
+                None
+            }
+        })
     }
 }
 
