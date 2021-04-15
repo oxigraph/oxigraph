@@ -15,13 +15,12 @@ use std::error::Error;
 /// before evaluating a SPARQL query that uses SERVICE calls.
 ///
 /// ```
-/// use oxigraph::MemoryStore;
+/// use oxigraph::SledStore;
 /// use oxigraph::model::*;
 /// use oxigraph::sparql::{QueryOptions, QueryResults, ServiceHandler, Query, EvaluationError};
 ///
-/// #[derive(Default)]
 /// struct TestServiceHandler {
-///     store: MemoryStore
+///     store: SledStore
 /// }
 ///
 /// impl ServiceHandler for TestServiceHandler {
@@ -36,10 +35,12 @@ use std::error::Error;
 ///     }
 /// }
 ///
-/// let store = MemoryStore::new();
-/// let service = TestServiceHandler::default();
-/// let ex = NamedNode::new("http://example.com")?;
-/// service.store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), None));
+/// let store = SledStore::new()?;
+/// let service = TestServiceHandler {
+///     store: SledStore::new()?
+/// };
+/// let ex = NamedNodeRef::new("http://example.com")?;
+/// service.store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;
 ///
 /// if let QueryResults::Solutions(mut solutions) = store.query_opt(
 ///     "SELECT ?s WHERE { SERVICE <http://example.com/service> { ?s ?p ?o } }",

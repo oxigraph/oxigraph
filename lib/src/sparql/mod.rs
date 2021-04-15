@@ -1,6 +1,6 @@
 //! [SPARQL](https://www.w3.org/TR/sparql11-overview/) implementation.
 //!
-//! Stores execute SPARQL. See [`MemoryStore`](super::store::memory::MemoryStore::query()) for an example.
+//! Stores execute SPARQL. See [`SledStore`](super::store::memory::SledStore::query()) for an example.
 
 pub mod algebra;
 mod csv_results;

@@ -5,9 +5,8 @@ use crate::store::*;
 use sophia_api::dataset::*;
 use sophia_api::quad::stream::{QuadSource, StreamResult};
 use sophia_api::quad::streaming_mode::{ByValue, StreamedQuad};
-use sophia_api::term::{TTerm, TermKind, TryCopyTerm};
+use sophia_api::term::{TTerm, TermKind};
 use std::collections::HashSet;
-use std::convert::Infallible;
 use std::hash::Hash;
 use std::iter::empty;
 
@@ -412,80 +411,6 @@ macro_rules! impl_dataset {
     };
 }
 
-mod memory {
-    use super::*;
-
-    impl_dataset!(
-        MemoryStore,
-        Infallible,
-        infallible_quad_map,
-        infallible_err_map
-    );
-
-    impl MutableDataset for MemoryStore {
-        type MutationError = Infallible;
-        fn insert<TS, TP, TO, TG>(
-            &mut self,
-            s: &TS,
-            p: &TP,
-            o: &TO,
-            g: Option<&TG>,
-        ) -> MDResult<Self, bool>
-        where
-            TS: TTerm + ?Sized,
-            TP: TTerm + ?Sized,
-            TO: TTerm + ?Sized,
-            TG: TTerm + ?Sized,
-        {
-            let quad = match convert_quad(s, p, o, g) {
-                Some(quad) => quad,
-                None => return Ok(false),
-            };
-            MemoryStore::insert(self, quad);
-            Ok(true)
-        }
-
-        fn remove<TS, TP, TO, TG>(
-            &mut self,
-            s: &TS,
-            p: &TP,
-            o: &TO,
-            g: Option<&TG>,
-        ) -> MDResult<Self, bool>
-        where
-            TS: TTerm + ?Sized,
-            TP: TTerm + ?Sized,
-            TO: TTerm + ?Sized,
-            TG: TTerm + ?Sized,
-        {
-            let mut buf_s = String::new();
-            let mut buf_p = String::new();
-            let mut buf_o = String::new();
-            let mut buf_g = String::new();
-            let quadref =
-                match convert_quadref(s, p, o, g, &mut buf_s, &mut buf_p, &mut buf_o, &mut buf_g) {
-                    Some(quad) => quad,
-                    None => return Ok(false),
-                };
-            MemoryStore::remove(self, quadref);
-            Ok(true)
-        }
-    }
-
-    impl CollectibleDataset for MemoryStore {
-        fn from_quad_source<QS: QuadSource>(
-            quads: QS,
-        ) -> StreamResult<Self, QS::Error, Self::Error> {
-            let mut d = MemoryStore::new();
-            d.insert_all(quads)?;
-            Ok(d)
-        }
-    }
-
-    #[cfg(test)]
-    sophia_api::test_dataset_impl!(test, MemoryStore, false, false);
-}
-
 #[cfg(feature = "sled")]
 mod sled {
     use super::*;
@@ -561,16 +486,6 @@ mod sled {
 }
 
 // helper functions
-#[allow(clippy::unnecessary_wraps)]
-fn infallible_quad_map<'a>(q: Quad) -> Result<StreamedSophiaQuad<'a>, Infallible> {
-    let q: SophiaQuad = q.into();
-    Ok(StreamedQuad::by_value(q))
-}
-
-fn infallible_err_map(_: EvaluationError) -> Infallible {
-    panic!("Unexpected error")
-}
-
 #[cfg(feature = "sled")]
 fn io_quad_map<'a>(
     res: Result<Quad, std::io::Error>,
@@ -674,35 +589,6 @@ fn convert_iri_raw<'a>(
         None => ns,
     };
     NamedNodeRef::new_unchecked(iri)
-}
-
-fn convert_quad<TS, TP, TO, TG>(s: &TS, p: &TP, o: &TO, g: Option<&TG>) -> Option<Quad>
-where
-    TS: TTerm + ?Sized,
-    TP: TTerm + ?Sized,
-    TO: TTerm + ?Sized,
-    TG: TTerm + ?Sized,
-{
-    let s = match NamedOrBlankNode::try_copy(s) {
-        Ok(s) => s,
-        Err(_) => return None,
-    };
-    let p = match NamedNode::try_copy(p) {
-        Ok(p) => p,
-        Err(_) => return None,
-    };
-    let o = match Term::try_copy(o) {
-        Ok(o) => o,
-        Err(_) => return None,
-    };
-    let g = match g {
-        None => GraphName::DefaultGraph,
-        Some(g) => match NamedOrBlankNode::try_copy(g) {
-            Ok(g) => g.into(),
-            Err(_) => return None,
-        },
-    };
-    Some(Quad::new(s, p, o, g))
 }
 
 fn convert_quadref<'a, TS, TP, TO, TG>(

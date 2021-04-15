@@ -2,7 +2,6 @@
 
 #[cfg(feature = "sled")]
 mod binary_encoder;
-pub mod memory;
 pub(crate) mod numeric_encoder;
 #[cfg(feature = "sled")]
 pub mod sled;
@@ -10,7 +9,6 @@ pub(crate) mod small_string;
 #[cfg(feature = "sophia")]
 mod sophia;
 
-pub use crate::store::memory::MemoryStore;
 #[cfg(feature = "sled")]
 pub use crate::store::sled::SledStore;
 

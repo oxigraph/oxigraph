@@ -1,12 +1,7 @@
 //! Oxigraph is a graph database library implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
 //!
-//! Its goal is to provide a compliant, safe and fast graph database.
+//! Its goal is to provide a compliant, safe and fast graph on-disk database.
 //! It also provides a set of utility functions for reading, writing, and processing RDF files.
-//!
-//! It currently provides three store implementations providing [SPARQL](https://www.w3.org/TR/sparql11-overview/) capability:
-//! * [`MemoryStore`](store::memory::MemoryStore): a simple in memory implementation.
-//! * [`SledStore`](store::sled::SledStore): another file system implementation based on the [Sled](https://sled.rs/) key-value store.
-//!   It requires the `"sled"` feature to be activated.
 //!
 //! Oxigraph is in heavy development and SPARQL query evaluation has not been optimized yet.
 //!
@@ -14,22 +9,20 @@
 //!
 //! Oxigraph also provides [a standalone HTTP server](https://crates.io/crates/oxigraph_server) based on this library.
 //!
-//! Usage example with the [`MemoryStore`](store::memory::MemoryStore):
-//!
 //! ```
-//! use oxigraph::MemoryStore;
+//! use oxigraph::SledStore;
 //! use oxigraph::model::*;
 //! use oxigraph::sparql::QueryResults;
 //!
-//! let store = MemoryStore::new();
+//! let store = SledStore::new()?;
 //!
 //! // insertion
 //! let ex = NamedNode::new("http://example.com")?;
 //! let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
-//! store.insert(quad.clone());
+//! store.insert(&quad)?;
 //!
 //! // quad filter
-//! let results: Vec<Quad> = store.quads_for_pattern(Some(ex.as_ref().into()), None, None, None).collect();
+//! let results = store.quads_for_pattern(Some(ex.as_ref().into()), None, None, None).collect::<Result<Vec<Quad>,_>>()?;
 //! assert_eq!(vec![quad], results);
 //!
 //! // SPARQL query
@@ -122,6 +115,5 @@ pub mod model;
 pub mod sparql;
 pub mod store;
 
-pub use crate::store::memory::MemoryStore;
 #[cfg(feature = "sled")]
 pub use crate::store::sled::SledStore;
