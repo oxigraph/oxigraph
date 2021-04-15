@@ -9,7 +9,7 @@ use crate::sparql::{
 };
 use crate::store::binary_encoder::*;
 use crate::store::numeric_encoder::{
-    Decoder, ReadEncoder, StrContainer, StrEncodingAware, StrLookup, WriteEncoder,
+    Decoder, ReadEncoder, StrContainer, StrEncodingAware, StrHash, StrLookup, WriteEncoder,
 };
 use crate::store::{
     dump_dataset, dump_graph, get_encoded_quad_pattern, load_dataset, load_graph,

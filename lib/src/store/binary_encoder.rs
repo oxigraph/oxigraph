@@ -1,9 +1,7 @@
 use crate::error::invalid_data_error;
 use crate::model::xsd::*;
-use crate::store::numeric_encoder::StrId;
+use crate::store::numeric_encoder::StrHash;
 use crate::store::small_string::SmallString;
-use siphasher::sip128::{Hasher128, SipHasher24};
-use std::hash::Hasher;
 use std::io;
 use std::io::{Cursor, Read};
 use std::mem::size_of;
@@ -50,36 +48,6 @@ const TYPE_G_MONTH_LITERAL: u8 = 41;
 const TYPE_DURATION_LITERAL: u8 = 42;
 const TYPE_YEAR_MONTH_DURATION_LITERAL: u8 = 43;
 const TYPE_DAY_TIME_DURATION_LITERAL: u8 = 44;
-
-#[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
-#[repr(transparent)]
-pub struct StrHash {
-    hash: u128,
-}
-
-impl StrHash {
-    pub fn new(value: &str) -> Self {
-        let mut hasher = SipHasher24::new();
-        hasher.write(value.as_bytes());
-        Self {
-            hash: hasher.finish128().into(),
-        }
-    }
-
-    #[inline]
-    pub fn from_be_bytes(bytes: [u8; 16]) -> Self {
-        Self {
-            hash: u128::from_be_bytes(bytes),
-        }
-    }
-
-    #[inline]
-    pub fn to_be_bytes(&self) -> [u8; 16] {
-        self.hash.to_be_bytes()
-    }
-}
-
-impl StrId for StrHash {}
 
 #[derive(Clone, Copy)]
 pub enum QuadEncoding {

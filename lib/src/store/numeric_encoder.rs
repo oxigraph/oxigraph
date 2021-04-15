@@ -7,6 +7,7 @@ use crate::sparql::EvaluationError;
 use crate::store::small_string::SmallString;
 use rand::random;
 use rio_api::model as rio;
+use siphasher::sip128::{Hasher128, SipHasher24};
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::error::Error;
@@ -16,6 +17,36 @@ use std::hash::Hasher;
 use std::{fmt, io, str};
 
 pub trait StrId: Eq + Debug + Copy + Hash {}
+
+#[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
+#[repr(transparent)]
+pub struct StrHash {
+    hash: u128,
+}
+
+impl StrHash {
+    pub fn new(value: &str) -> Self {
+        let mut hasher = SipHasher24::new();
+        hasher.write(value.as_bytes());
+        Self {
+            hash: hasher.finish128().into(),
+        }
+    }
+
+    #[inline]
+    pub fn from_be_bytes(bytes: [u8; 16]) -> Self {
+        Self {
+            hash: u128::from_be_bytes(bytes),
+        }
+    }
+
+    #[inline]
+    pub fn to_be_bytes(&self) -> [u8; 16] {
+        self.hash.to_be_bytes()
+    }
+}
+
+impl StrId for StrHash {}
 
 #[derive(Debug, Clone, Copy)]
 pub enum EncodedTerm<I: StrId> {
