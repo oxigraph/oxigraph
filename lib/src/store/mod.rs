@@ -6,6 +6,7 @@ pub mod sled;
 pub(crate) mod small_string;
 #[cfg(feature = "sophia")]
 mod sophia;
+pub(crate) mod storage;
 
 pub use crate::store::sled::SledStore;
 

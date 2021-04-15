@@ -1,13 +1,10 @@
 use crate::error::invalid_data_error;
 use crate::model::xsd::*;
-use crate::store::numeric_encoder::StrHash;
+use crate::store::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash};
 use crate::store::small_string::SmallString;
 use std::io;
 use std::io::{Cursor, Read};
 use std::mem::size_of;
-
-type EncodedTerm = crate::store::numeric_encoder::EncodedTerm;
-type EncodedQuad = crate::store::numeric_encoder::EncodedQuad;
 
 pub const LATEST_STORAGE_VERSION: u64 = 1;
 pub const WRITTEN_TERM_MAX_SIZE: usize = size_of::<u8>() + 2 * size_of::<StrHash>();
