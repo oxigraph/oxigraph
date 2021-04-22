@@ -3,8 +3,8 @@
 use crate::error::invalid_input_error;
 use crate::io::{DatasetFormat, DatasetSerializer, GraphFormat, GraphSerializer};
 use crate::model::{GraphNameRef, Quad, Triple};
-use crate::store::numeric_encoder::WriteEncoder;
-use crate::store::storage::StorageLike;
+use crate::storage::numeric_encoder::WriteEncoder;
+use crate::storage::StorageLike;
 use oxiri::Iri;
 use rio_api::parser::{QuadsParser, TriplesParser};
 use rio_turtle::{NQuadsParser, NTriplesParser, TriGParser, TurtleError, TurtleParser};

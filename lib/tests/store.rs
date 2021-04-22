@@ -1,8 +1,8 @@
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
-use oxigraph::store::sled::SledConflictableTransactionError;
-use oxigraph::SledStore;
+use oxigraph::store::ConflictableTransactionError;
+use oxigraph::store::Store;
 use std::io;
 use std::io::Cursor;
 use std::process::Command;
@@ -77,7 +77,7 @@ fn quads(graph_name: impl Into<GraphNameRef<'static>>) -> Vec<QuadRef<'static>> 
 
 #[test]
 fn test_load_graph() -> io::Result<()> {
-    let store = SledStore::new()?;
+    let store = Store::new()?;
     store.load_graph(Cursor::new(DATA), GraphFormat::Turtle, None, None)?;
     for q in quads(GraphNameRef::DefaultGraph) {
         assert!(store.contains(q)?);
@@ -87,7 +87,7 @@ fn test_load_graph() -> io::Result<()> {
 
 #[test]
 fn test_load_dataset() -> io::Result<()> {
-    let store = SledStore::new()?;
+    let store = Store::new()?;
     store.load_dataset(Cursor::new(DATA), DatasetFormat::TriG, None)?;
     for q in quads(GraphNameRef::DefaultGraph) {
         assert!(store.contains(q)?);
@@ -97,7 +97,7 @@ fn test_load_dataset() -> io::Result<()> {
 
 #[test]
 fn test_dump_graph() -> io::Result<()> {
-    let store = SledStore::new()?;
+    let store = Store::new()?;
     for q in quads(GraphNameRef::DefaultGraph) {
         store.insert(q)?;
     }
@@ -113,7 +113,7 @@ fn test_dump_graph() -> io::Result<()> {
 
 #[test]
 fn test_dump_dataset() -> io::Result<()> {
-    let store = SledStore::new()?;
+    let store = Store::new()?;
     for q in quads(GraphNameRef::DefaultGraph) {
         store.insert(q)?;
     }
@@ -129,10 +129,10 @@ fn test_dump_dataset() -> io::Result<()> {
 
 #[test]
 fn test_transaction_load_graph() -> io::Result<()> {
-    let store = SledStore::new()?;
+    let store = Store::new()?;
     store.transaction(|t| {
         t.load_graph(Cursor::new(DATA), GraphFormat::Turtle, None, None)?;
-        Ok(()) as Result<_, SledConflictableTransactionError<io::Error>>
+        Ok(()) as Result<_, ConflictableTransactionError<io::Error>>
     })?;
     for q in quads(GraphNameRef::DefaultGraph) {
         assert!(store.contains(q)?);
@@ -142,10 +142,10 @@ fn test_transaction_load_graph() -> io::Result<()> {
 
 #[test]
 fn test_transaction_load_dataset() -> io::Result<()> {
-    let store = SledStore::new()?;
+    let store = Store::new()?;
     store.transaction(|t| {
         t.load_dataset(Cursor::new(DATA), DatasetFormat::TriG, None)?;
-        Ok(()) as Result<_, SledConflictableTransactionError<io::Error>>
+        Ok(()) as Result<_, ConflictableTransactionError<io::Error>>
     })?;
     for q in quads(GraphNameRef::DefaultGraph) {
         assert!(store.contains(q)?);
@@ -156,7 +156,7 @@ fn test_transaction_load_dataset() -> io::Result<()> {
 #[test]
 fn test_backward_compatibility() -> io::Result<()> {
     {
-        let store = SledStore::open("tests/sled_bc_data")?;
+        let store = Store::open("tests/sled_bc_data")?;
         for q in quads(GraphNameRef::DefaultGraph) {
             assert!(store.contains(q)?);
         }

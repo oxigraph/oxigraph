@@ -15,12 +15,12 @@ use std::error::Error;
 /// before evaluating a SPARQL query that uses SERVICE calls.
 ///
 /// ```
-/// use oxigraph::SledStore;
+/// use oxigraph::store::Store;
 /// use oxigraph::model::*;
 /// use oxigraph::sparql::{QueryOptions, QueryResults, ServiceHandler, Query, EvaluationError};
 ///
 /// struct TestServiceHandler {
-///     store: SledStore
+///     store: Store
 /// }
 ///
 /// impl ServiceHandler for TestServiceHandler {
@@ -35,9 +35,9 @@ use std::error::Error;
 ///     }
 /// }
 ///
-/// let store = SledStore::new()?;
+/// let store = Store::new()?;
 /// let service = TestServiceHandler {
-///     store: SledStore::new()?
+///     store: Store::new()?
 /// };
 /// let ex = NamedNodeRef::new("http://example.com")?;
 /// service.store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;

@@ -5,7 +5,7 @@ use crate::model::{
     TermRef,
 };
 use crate::sparql::{EvaluationError, QueryResults};
-use crate::store::SledStore;
+use crate::store::Store;
 use sophia_api::dataset::{
     CollectibleDataset, DQuadSource, DResultTermSet, DTerm, Dataset, MDResult, MutableDataset,
 };
@@ -20,7 +20,7 @@ use std::iter::empty;
 type SophiaQuad = ([Term; 3], Option<Term>);
 type StreamedSophiaQuad<'a> = StreamedQuad<'a, ByValue<SophiaQuad>>;
 
-impl Dataset for SledStore {
+impl Dataset for Store {
     type Quad = ByValue<SophiaQuad>;
     type Error = Error;
 
@@ -373,7 +373,7 @@ impl Dataset for SledStore {
     }
 }
 
-impl MutableDataset for SledStore {
+impl MutableDataset for Store {
     type MutationError = Error;
     fn insert<TS, TP, TO, TG>(
         &mut self,
@@ -397,7 +397,7 @@ impl MutableDataset for SledStore {
                 Some(quad) => quad,
                 None => return Ok(false),
             };
-        SledStore::insert(self, quadref).map(|_| true)
+        Store::insert(self, quadref).map(|_| true)
     }
 
     fn remove<TS, TP, TO, TG>(
@@ -422,13 +422,13 @@ impl MutableDataset for SledStore {
                 Some(quad) => quad,
                 None => return Ok(false),
             };
-        SledStore::remove(self, quadref).map(|_| true)
+        Store::remove(self, quadref).map(|_| true)
     }
 }
 
-impl CollectibleDataset for SledStore {
+impl CollectibleDataset for Store {
     fn from_quad_source<QS: QuadSource>(quads: QS) -> StreamResult<Self, QS::Error, Self::Error> {
-        let mut d = SledStore::new().map_err(sophia_api::quad::stream::StreamError::SinkError)?;
+        let mut d = Store::new().map_err(sophia_api::quad::stream::StreamError::SinkError)?;
         d.insert_all(quads)?;
         Ok(d)
     }
@@ -576,7 +576,7 @@ where
 /// # Precondition
 /// + the query must be a SELECT query with a single selected variable
 /// + it must not produce NULL results
-fn sparql_to_hashset(store: &SledStore, sparql: &str) -> Result<HashSet<Term>, Error> {
+fn sparql_to_hashset(store: &Store, sparql: &str) -> Result<HashSet<Term>, Error> {
     if let QueryResults::Solutions(solutions) = store.query(sparql).map_err(io_err_map)? {
         solutions
             .map(|r| r.map(|v| v.get(0).unwrap().clone()))
@@ -588,4 +588,4 @@ fn sparql_to_hashset(store: &SledStore, sparql: &str) -> Result<HashSet<Term>, E
 }
 
 #[cfg(test)]
-sophia_api::test_dataset_impl!(test, SledStore, false, false);
+sophia_api::test_dataset_impl!(test, Store, false, false);

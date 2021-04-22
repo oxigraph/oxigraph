@@ -1,7 +1,7 @@
 use crate::error::invalid_data_error;
 use crate::model::xsd::*;
-use crate::store::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash};
-use crate::store::small_string::SmallString;
+use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash};
+use crate::storage::small_string::SmallString;
 use std::io;
 use std::io::{Cursor, Read};
 use std::mem::size_of;
@@ -627,7 +627,7 @@ pub fn write_term(sink: &mut Vec<u8>, term: EncodedTerm) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::numeric_encoder::*;
+    use crate::storage::numeric_encoder::*;
     use std::collections::HashMap;
     use std::convert::Infallible;
     use std::sync::RwLock;

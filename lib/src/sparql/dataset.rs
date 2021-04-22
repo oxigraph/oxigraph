@@ -1,9 +1,9 @@
 use crate::sparql::algebra::QueryDataset;
 use crate::sparql::EvaluationError;
-use crate::store::numeric_encoder::{
+use crate::storage::numeric_encoder::{
     EncodedQuad, EncodedTerm, ReadEncoder, StrContainer, StrEncodingAware, StrHash, StrLookup,
 };
-use crate::store::storage::Storage;
+use crate::storage::Storage;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::iter::empty;

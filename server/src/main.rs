@@ -23,7 +23,7 @@ use http_types::{
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::{GraphName, GraphNameRef, NamedNode, NamedOrBlankNode};
 use oxigraph::sparql::{Query, QueryResults, QueryResultsFormat, Update};
-use oxigraph::SledStore as Store;
+use oxigraph::store::Store;
 use oxiri::Iri;
 use rand::random;
 use std::io::BufReader;

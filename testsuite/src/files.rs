@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::{Dataset, Graph, GraphNameRef};
-use oxigraph::SledStore;
+use oxigraph::store::Store;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::path::PathBuf;
@@ -41,7 +41,7 @@ pub fn read_file_to_string(url: &str) -> Result<String> {
 
 pub fn load_to_store<'a>(
     url: &str,
-    store: &SledStore,
+    store: &Store,
     to_graph_name: impl Into<GraphNameRef<'a>>,
 ) -> Result<()> {
     if url.ends_with(".nt") {

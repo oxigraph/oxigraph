@@ -1,18 +1,31 @@
 use std::error::Error;
 use std::fmt;
-use std::io;
 use std::path::Path;
 
 use sled::transaction::{
-    ConflictableTransactionError, TransactionError, TransactionalTree, UnabortableTransactionError,
+    ConflictableTransactionError as Sled2ConflictableTransactionError,
+    TransactionError as Sled2TransactionError, TransactionalTree,
+    UnabortableTransactionError as Sled2UnabortableTransactionError,
 };
 use sled::{Config, Db, Iter, Transactional, Tree};
 
 use crate::error::invalid_data_error;
 use crate::sparql::EvaluationError;
-use crate::store::binary_encoder::*;
-use crate::store::io::StoreOrParseError;
-use crate::store::numeric_encoder::*;
+use crate::storage::binary_encoder::{
+    decode_term, encode_term, encode_term_pair, encode_term_quad, encode_term_triple,
+    write_gosp_quad, write_gpos_quad, write_gspo_quad, write_osp_quad, write_ospg_quad,
+    write_pos_quad, write_posg_quad, write_spo_quad, write_spog_quad, write_term, QuadEncoding,
+    LATEST_STORAGE_VERSION, WRITTEN_TERM_MAX_SIZE,
+};
+use crate::storage::io::StoreOrParseError;
+use crate::storage::numeric_encoder::{
+    EncodedQuad, EncodedTerm, StrContainer, StrEncodingAware, StrHash, StrLookup,
+};
+
+mod binary_encoder;
+pub(crate) mod io;
+pub(crate) mod numeric_encoder;
+pub(crate) mod small_string;
 
 /// Low level storage primitives
 #[derive(Clone)]
@@ -32,15 +45,15 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub fn new() -> Result<Self, io::Error> {
+    pub fn new() -> Result<Self, std::io::Error> {
         Self::do_open(&Config::new().temporary(true))
     }
 
-    pub fn open(path: &Path) -> Result<Self, io::Error> {
+    pub fn open(path: &Path) -> Result<Self, std::io::Error> {
         Self::do_open(&Config::new().path(path))
     }
 
-    fn do_open(config: &Config) -> Result<Self, io::Error> {
+    fn do_open(config: &Config) -> Result<Self, std::io::Error> {
         let db = config.open()?;
         let this = Self {
             default: db.clone(),
@@ -84,7 +97,7 @@ impl Storage {
         }
     }
 
-    fn ensure_version(&self) -> Result<u64, io::Error> {
+    fn ensure_version(&self) -> Result<u64, std::io::Error> {
         Ok(if let Some(version) = self.default.get("oxversion")? {
             let mut buffer = [0; 8];
             buffer.copy_from_slice(&version);
@@ -95,15 +108,15 @@ impl Storage {
         })
     }
 
-    fn set_version(&self, version: u64) -> Result<(), io::Error> {
+    fn set_version(&self, version: u64) -> Result<(), std::io::Error> {
         self.default.insert("oxversion", &version.to_be_bytes())?;
         Ok(())
     }
 
     pub fn transaction<T, E>(
         &self,
-        f: impl Fn(StorageTransaction<'_>) -> Result<T, SledConflictableTransactionError<E>>,
-    ) -> Result<T, SledTransactionError<E>> {
+        f: impl Fn(StorageTransaction<'_>) -> Result<T, ConflictableTransactionError<E>>,
+    ) -> Result<T, TransactionError<E>> {
         Ok((
             &self.id2str,
             &self.spog,
@@ -144,7 +157,7 @@ impl Storage {
         self.gspo.is_empty() && self.dspo.is_empty()
     }
 
-    pub fn contains(&self, quad: &EncodedQuad) -> Result<bool, io::Error> {
+    pub fn contains(&self, quad: &EncodedQuad) -> Result<bool, std::io::Error> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
         if quad.graph_name.is_default_graph() {
             write_spo_quad(&mut buffer, quad);
@@ -394,7 +407,7 @@ impl Storage {
         }
     }
 
-    pub fn contains_named_graph(&self, graph_name: EncodedTerm) -> Result<bool, io::Error> {
+    pub fn contains_named_graph(&self, graph_name: EncodedTerm) -> Result<bool, std::io::Error> {
         Ok(self.graphs.contains_key(&encode_term(graph_name))?)
     }
 
@@ -446,7 +459,7 @@ impl Storage {
         }
     }
 
-    pub fn insert(&self, quad: &EncodedQuad) -> Result<bool, io::Error> {
+    pub fn insert(&self, quad: &EncodedQuad) -> Result<bool, std::io::Error> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
 
         if quad.graph_name.is_default_graph() {
@@ -501,7 +514,7 @@ impl Storage {
         }
     }
 
-    pub fn remove(&self, quad: &EncodedQuad) -> Result<bool, io::Error> {
+    pub fn remove(&self, quad: &EncodedQuad) -> Result<bool, std::io::Error> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
 
         if quad.graph_name.is_default_graph() {
@@ -553,11 +566,11 @@ impl Storage {
         }
     }
 
-    pub fn insert_named_graph(&self, graph_name: EncodedTerm) -> Result<bool, io::Error> {
+    pub fn insert_named_graph(&self, graph_name: EncodedTerm) -> Result<bool, std::io::Error> {
         Ok(self.graphs.insert(&encode_term(graph_name), &[])?.is_none())
     }
 
-    pub fn clear_graph(&self, graph_name: EncodedTerm) -> Result<(), io::Error> {
+    pub fn clear_graph(&self, graph_name: EncodedTerm) -> Result<(), std::io::Error> {
         if graph_name.is_default_graph() {
             self.dspo.clear()?;
             self.dpos.clear()?;
@@ -570,14 +583,14 @@ impl Storage {
         Ok(())
     }
 
-    pub fn remove_named_graph(&self, graph_name: EncodedTerm) -> Result<bool, io::Error> {
+    pub fn remove_named_graph(&self, graph_name: EncodedTerm) -> Result<bool, std::io::Error> {
         for quad in self.quads_for_graph(graph_name) {
             self.remove(&quad?)?;
         }
         Ok(self.graphs.remove(&encode_term(graph_name))?.is_some())
     }
 
-    pub fn clear(&self) -> Result<(), io::Error> {
+    pub fn clear(&self) -> Result<(), std::io::Error> {
         self.dspo.clear()?;
         self.dpos.clear()?;
         self.dosp.clear()?;
@@ -592,7 +605,7 @@ impl Storage {
         Ok(())
     }
 
-    pub fn get_str(&self, key: StrHash) -> Result<Option<String>, io::Error> {
+    pub fn get_str(&self, key: StrHash) -> Result<Option<String>, std::io::Error> {
         self.id2str
             .get(key.to_be_bytes())?
             .map(|v| String::from_utf8(v.to_vec()))
@@ -600,11 +613,11 @@ impl Storage {
             .map_err(invalid_data_error)
     }
 
-    pub fn contains_str(&self, key: StrHash) -> Result<bool, io::Error> {
+    pub fn contains_str(&self, key: StrHash) -> Result<bool, std::io::Error> {
         Ok(self.id2str.contains_key(key.to_be_bytes())?)
     }
 
-    pub fn insert_str(&self, key: StrHash, value: &str) -> Result<bool, io::Error> {
+    pub fn insert_str(&self, key: StrHash, value: &str) -> Result<bool, std::io::Error> {
         Ok(self.id2str.insert(key.to_be_bytes(), value)?.is_none())
     }
 }
@@ -631,9 +644,9 @@ impl ChainedDecodingQuadIterator {
 }
 
 impl Iterator for ChainedDecodingQuadIterator {
-    type Item = Result<EncodedQuad, io::Error>;
+    type Item = Result<EncodedQuad, std::io::Error>;
 
-    fn next(&mut self) -> Option<Result<EncodedQuad, io::Error>> {
+    fn next(&mut self) -> Option<Result<EncodedQuad, std::io::Error>> {
         if let Some(result) = self.first.next() {
             Some(result)
         } else if let Some(second) = self.second.as_mut() {
@@ -650,9 +663,9 @@ pub struct DecodingQuadIterator {
 }
 
 impl Iterator for DecodingQuadIterator {
-    type Item = Result<EncodedQuad, io::Error>;
+    type Item = Result<EncodedQuad, std::io::Error>;
 
-    fn next(&mut self) -> Option<Result<EncodedQuad, io::Error>> {
+    fn next(&mut self) -> Option<Result<EncodedQuad, std::io::Error>> {
         Some(match self.iter.next()? {
             Ok((encoded, _)) => self.encoding.decode(&encoded),
             Err(error) => Err(error.into()),
@@ -665,9 +678,9 @@ pub struct DecodingGraphIterator {
 }
 
 impl Iterator for DecodingGraphIterator {
-    type Item = Result<EncodedTerm, io::Error>;
+    type Item = Result<EncodedTerm, std::io::Error>;
 
-    fn next(&mut self) -> Option<Result<EncodedTerm, io::Error>> {
+    fn next(&mut self) -> Option<Result<EncodedTerm, std::io::Error>> {
         Some(match self.iter.next()? {
             Ok((encoded, _)) => decode_term(&encoded),
             Err(error) => Err(error.into()),
@@ -690,7 +703,7 @@ pub struct StorageTransaction<'a> {
 }
 
 impl<'a> StorageTransaction<'a> {
-    pub fn insert(&self, quad: &EncodedQuad) -> Result<bool, SledUnabortableTransactionError> {
+    pub fn insert(&self, quad: &EncodedQuad) -> Result<bool, UnabortableTransactionError> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
 
         if quad.graph_name.is_default_graph() {
@@ -746,7 +759,7 @@ impl<'a> StorageTransaction<'a> {
         }
     }
 
-    pub fn remove(&self, quad: &EncodedQuad) -> Result<bool, SledUnabortableTransactionError> {
+    pub fn remove(&self, quad: &EncodedQuad) -> Result<bool, UnabortableTransactionError> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
 
         if quad.graph_name.is_default_graph() {
@@ -801,19 +814,19 @@ impl<'a> StorageTransaction<'a> {
     pub fn insert_named_graph(
         &self,
         graph_name: EncodedTerm,
-    ) -> Result<bool, SledUnabortableTransactionError> {
+    ) -> Result<bool, UnabortableTransactionError> {
         Ok(self.graphs.insert(encode_term(graph_name), &[])?.is_none())
     }
 
-    pub fn get_str(&self, key: StrHash) -> Result<Option<String>, SledUnabortableTransactionError> {
+    pub fn get_str(&self, key: StrHash) -> Result<Option<String>, UnabortableTransactionError> {
         self.id2str
             .get(key.to_be_bytes())?
             .map(|v| String::from_utf8(v.to_vec()))
             .transpose()
-            .map_err(|e| SledUnabortableTransactionError::Storage(invalid_data_error(e)))
+            .map_err(|e| UnabortableTransactionError::Storage(invalid_data_error(e)))
     }
 
-    pub fn contains_str(&self, key: StrHash) -> Result<bool, SledUnabortableTransactionError> {
+    pub fn contains_str(&self, key: StrHash) -> Result<bool, UnabortableTransactionError> {
         Ok(self.id2str.get(key.to_be_bytes())?.is_some())
     }
 
@@ -821,21 +834,21 @@ impl<'a> StorageTransaction<'a> {
         &self,
         key: StrHash,
         value: &str,
-    ) -> Result<bool, SledUnabortableTransactionError> {
+    ) -> Result<bool, UnabortableTransactionError> {
         Ok(self.id2str.insert(&key.to_be_bytes(), value)?.is_none())
     }
 }
 
 /// Error returned by a Sled transaction
 #[derive(Debug)]
-pub enum SledTransactionError<T> {
+pub enum TransactionError<T> {
     /// A failure returned by the API user that have aborted the transaction
     Abort(T),
     /// A storage related error
-    Storage(io::Error),
+    Storage(std::io::Error),
 }
 
-impl<T: fmt::Display> fmt::Display for SledTransactionError<T> {
+impl<T: fmt::Display> fmt::Display for TransactionError<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Abort(e) => e.fmt(f),
@@ -844,7 +857,7 @@ impl<T: fmt::Display> fmt::Display for SledTransactionError<T> {
     }
 }
 
-impl<T: Error + 'static> Error for SledTransactionError<T> {
+impl<T: Error + 'static> Error for TransactionError<T> {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Abort(e) => Some(e),
@@ -853,20 +866,20 @@ impl<T: Error + 'static> Error for SledTransactionError<T> {
     }
 }
 
-impl<T> From<TransactionError<T>> for SledTransactionError<T> {
-    fn from(e: TransactionError<T>) -> Self {
+impl<T> From<Sled2TransactionError<T>> for TransactionError<T> {
+    fn from(e: Sled2TransactionError<T>) -> Self {
         match e {
-            TransactionError::Abort(e) => Self::Abort(e),
-            TransactionError::Storage(e) => Self::Storage(e.into()),
+            Sled2TransactionError::Abort(e) => Self::Abort(e),
+            Sled2TransactionError::Storage(e) => Self::Storage(e.into()),
         }
     }
 }
 
-impl<T: Into<io::Error>> From<SledTransactionError<T>> for io::Error {
-    fn from(e: SledTransactionError<T>) -> Self {
+impl<T: Into<std::io::Error>> From<TransactionError<T>> for std::io::Error {
+    fn from(e: TransactionError<T>) -> Self {
         match e {
-            SledTransactionError::Abort(e) => e.into(),
-            SledTransactionError::Storage(e) => e,
+            TransactionError::Abort(e) => e.into(),
+            TransactionError::Storage(e) => e,
         }
     }
 }
@@ -874,14 +887,14 @@ impl<T: Into<io::Error>> From<SledTransactionError<T>> for io::Error {
 /// An error returned from the transaction methods.
 /// Should be returned as it is
 #[derive(Debug)]
-pub enum SledUnabortableTransactionError {
+pub enum UnabortableTransactionError {
     #[doc(hidden)]
     Conflict,
     /// A regular error
-    Storage(io::Error),
+    Storage(std::io::Error),
 }
 
-impl fmt::Display for SledUnabortableTransactionError {
+impl fmt::Display for UnabortableTransactionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Conflict => write!(f, "Transaction conflict"),
@@ -890,7 +903,7 @@ impl fmt::Display for SledUnabortableTransactionError {
     }
 }
 
-impl Error for SledUnabortableTransactionError {
+impl Error for UnabortableTransactionError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Storage(e) => Some(e),
@@ -899,17 +912,17 @@ impl Error for SledUnabortableTransactionError {
     }
 }
 
-impl From<SledUnabortableTransactionError> for EvaluationError {
-    fn from(e: SledUnabortableTransactionError) -> Self {
+impl From<UnabortableTransactionError> for EvaluationError {
+    fn from(e: UnabortableTransactionError) -> Self {
         match e {
-            SledUnabortableTransactionError::Storage(e) => Self::Io(e),
-            SledUnabortableTransactionError::Conflict => Self::Conflict,
+            UnabortableTransactionError::Storage(e) => Self::Io(e),
+            UnabortableTransactionError::Conflict => Self::Conflict,
         }
     }
 }
 
-impl From<StoreOrParseError<SledUnabortableTransactionError>> for SledUnabortableTransactionError {
-    fn from(e: StoreOrParseError<SledUnabortableTransactionError>) -> Self {
+impl From<StoreOrParseError<UnabortableTransactionError>> for UnabortableTransactionError {
+    fn from(e: StoreOrParseError<UnabortableTransactionError>) -> Self {
         match e {
             StoreOrParseError::Store(e) => e,
             StoreOrParseError::Parse(e) => Self::Storage(e),
@@ -917,27 +930,27 @@ impl From<StoreOrParseError<SledUnabortableTransactionError>> for SledUnabortabl
     }
 }
 
-impl From<UnabortableTransactionError> for SledUnabortableTransactionError {
-    fn from(e: UnabortableTransactionError) -> Self {
+impl From<Sled2UnabortableTransactionError> for UnabortableTransactionError {
+    fn from(e: Sled2UnabortableTransactionError) -> Self {
         match e {
-            UnabortableTransactionError::Storage(e) => Self::Storage(e.into()),
-            UnabortableTransactionError::Conflict => Self::Conflict,
+            Sled2UnabortableTransactionError::Storage(e) => Self::Storage(e.into()),
+            Sled2UnabortableTransactionError::Conflict => Self::Conflict,
         }
     }
 }
 
 /// An error returned from the transaction closure
 #[derive(Debug)]
-pub enum SledConflictableTransactionError<T> {
+pub enum ConflictableTransactionError<T> {
     /// A failure returned by the user that will abort the transaction
     Abort(T),
     #[doc(hidden)]
     Conflict,
     /// A storage related error
-    Storage(io::Error),
+    Storage(std::io::Error),
 }
 
-impl<T: fmt::Display> fmt::Display for SledConflictableTransactionError<T> {
+impl<T: fmt::Display> fmt::Display for ConflictableTransactionError<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Conflict => write!(f, "Transaction conflict"),
@@ -947,7 +960,7 @@ impl<T: fmt::Display> fmt::Display for SledConflictableTransactionError<T> {
     }
 }
 
-impl<T: Error + 'static> Error for SledConflictableTransactionError<T> {
+impl<T: Error + 'static> Error for ConflictableTransactionError<T> {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Abort(e) => Some(e),
@@ -957,37 +970,37 @@ impl<T: Error + 'static> Error for SledConflictableTransactionError<T> {
     }
 }
 
-impl<T> From<SledUnabortableTransactionError> for SledConflictableTransactionError<T> {
-    fn from(e: SledUnabortableTransactionError) -> Self {
+impl<T> From<UnabortableTransactionError> for ConflictableTransactionError<T> {
+    fn from(e: UnabortableTransactionError) -> Self {
         match e {
-            SledUnabortableTransactionError::Storage(e) => Self::Storage(e),
-            SledUnabortableTransactionError::Conflict => Self::Conflict,
+            UnabortableTransactionError::Storage(e) => Self::Storage(e),
+            UnabortableTransactionError::Conflict => Self::Conflict,
         }
     }
 }
 
-impl<T> From<SledConflictableTransactionError<T>> for ConflictableTransactionError<T> {
-    fn from(e: SledConflictableTransactionError<T>) -> Self {
+impl<T> From<ConflictableTransactionError<T>> for Sled2ConflictableTransactionError<T> {
+    fn from(e: ConflictableTransactionError<T>) -> Self {
         match e {
-            SledConflictableTransactionError::Abort(e) => ConflictableTransactionError::Abort(e),
-            SledConflictableTransactionError::Conflict => ConflictableTransactionError::Conflict,
-            SledConflictableTransactionError::Storage(e) => {
-                ConflictableTransactionError::Storage(e.into())
+            ConflictableTransactionError::Abort(e) => Sled2ConflictableTransactionError::Abort(e),
+            ConflictableTransactionError::Conflict => Sled2ConflictableTransactionError::Conflict,
+            ConflictableTransactionError::Storage(e) => {
+                Sled2ConflictableTransactionError::Storage(e.into())
             }
         }
     }
 }
 
 impl StrEncodingAware for Storage {
-    type Error = io::Error;
+    type Error = std::io::Error;
 }
 
 impl StrLookup for Storage {
-    fn get_str(&self, id: StrHash) -> Result<Option<String>, io::Error> {
+    fn get_str(&self, id: StrHash) -> Result<Option<String>, std::io::Error> {
         self.get_str(id)
     }
 
-    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, io::Error> {
+    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, std::io::Error> {
         let key = StrHash::new(value);
         Ok(if self.contains_str(key)? {
             Some(key)
@@ -998,7 +1011,7 @@ impl StrLookup for Storage {
 }
 
 impl StrContainer for Storage {
-    fn insert_str(&self, value: &str) -> Result<StrHash, io::Error> {
+    fn insert_str(&self, value: &str) -> Result<StrHash, std::io::Error> {
         let key = StrHash::new(value);
         self.insert_str(key, value)?;
         Ok(key)
@@ -1006,15 +1019,15 @@ impl StrContainer for Storage {
 }
 
 impl<'a> StrEncodingAware for StorageTransaction<'a> {
-    type Error = SledUnabortableTransactionError;
+    type Error = UnabortableTransactionError;
 }
 
 impl<'a> StrLookup for StorageTransaction<'a> {
-    fn get_str(&self, id: StrHash) -> Result<Option<String>, SledUnabortableTransactionError> {
+    fn get_str(&self, id: StrHash) -> Result<Option<String>, UnabortableTransactionError> {
         self.get_str(id)
     }
 
-    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, SledUnabortableTransactionError> {
+    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, UnabortableTransactionError> {
         let key = StrHash::new(value);
         Ok(if self.contains_str(key)? {
             Some(key)
@@ -1025,7 +1038,7 @@ impl<'a> StrLookup for StorageTransaction<'a> {
 }
 
 impl<'a> StrContainer for StorageTransaction<'a> {
-    fn insert_str(&self, value: &str) -> Result<StrHash, SledUnabortableTransactionError> {
+    fn insert_str(&self, value: &str) -> Result<StrHash, UnabortableTransactionError> {
         let key = StrHash::new(value);
         self.insert_str(key, value)?;
         Ok(key)

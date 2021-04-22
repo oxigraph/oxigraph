@@ -3,7 +3,7 @@ use crate::model::*;
 use crate::sparql::*;
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::GraphNameRef;
-use oxigraph::store::sled::*;
+use oxigraph::store::{self, Store};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{
     pyclass, pymethods, pyproto, Py, PyAny, PyObject, PyRef, PyRefMut, PyResult, Python,
@@ -31,7 +31,7 @@ use std::io::BufReader;
 #[text_signature = "(path = None)"]
 #[derive(Clone)]
 pub struct PyStore {
-    inner: SledStore,
+    inner: Store,
 }
 
 #[pymethods]
@@ -40,9 +40,9 @@ impl PyStore {
     fn new(path: Option<&str>) -> PyResult<Self> {
         Ok(Self {
             inner: if let Some(path) = path {
-                SledStore::open(path)
+                Store::open(path)
             } else {
-                SledStore::new()
+                Store::new()
             }
             .map_err(map_io_err)?,
         })
@@ -459,7 +459,7 @@ impl PyIterProtocol for PyStore {
 
 #[pyclass(unsendable, module = "oxigraph")]
 pub struct QuadIter {
-    inner: SledQuadIter,
+    inner: store::QuadIter,
 }
 
 #[pyproto]
@@ -478,7 +478,7 @@ impl PyIterProtocol for QuadIter {
 
 #[pyclass(unsendable, module = "oxigraph")]
 pub struct GraphNameIter {
-    inner: SledGraphNameIter,
+    inner: store::GraphNameIter,
 }
 
 #[pyproto]

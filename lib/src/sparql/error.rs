@@ -1,6 +1,6 @@
 use crate::error::invalid_data_error;
 use crate::sparql::ParseError;
-use crate::store::numeric_encoder::DecoderError;
+use crate::storage::numeric_encoder::DecoderError;
 use std::convert::Infallible;
 use std::error;
 use std::fmt;

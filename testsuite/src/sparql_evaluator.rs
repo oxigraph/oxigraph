@@ -7,7 +7,7 @@ use chrono::Utc;
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
 use oxigraph::sparql::*;
-use oxigraph::SledStore;
+use oxigraph::store::Store;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -70,7 +70,7 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
     } else if test.kind
         == "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#QueryEvaluationTest"
     {
-        let store = SledStore::new()?;
+        let store = Store::new()?;
         if let Some(data) = &test.data {
             load_to_store(data, &store, GraphNameRef::DefaultGraph)?;
         }
@@ -190,7 +190,7 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
     } else if test.kind
         == "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#UpdateEvaluationTest"
     {
-        let store = SledStore::new()?;
+        let store = Store::new()?;
         if let Some(data) = &test.data {
             load_to_store(data, &store, &GraphName::DefaultGraph)?;
         }
@@ -198,7 +198,7 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
             load_to_store(value, &store, name)?;
         }
 
-        let result_store = SledStore::new()?;
+        let result_store = Store::new()?;
         if let Some(data) = &test.result {
             load_to_store(data, &result_store, &GraphName::DefaultGraph)?;
         }
@@ -270,7 +270,7 @@ fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
 
 #[derive(Clone)]
 struct StaticServiceHandler {
-    services: Arc<HashMap<NamedNode, SledStore>>,
+    services: Arc<HashMap<NamedNode, Store>>,
 }
 
 impl StaticServiceHandler {
@@ -281,7 +281,7 @@ impl StaticServiceHandler {
                     .iter()
                     .map(|(name, data)| {
                         let name = NamedNode::new(name)?;
-                        let store = SledStore::new()?;
+                        let store = Store::new()?;
                         load_to_store(&data, &store, &GraphName::DefaultGraph)?;
                         Ok((name, store))
                     })
@@ -467,7 +467,7 @@ impl StaticQueryResults {
 
     fn from_graph(graph: Graph) -> StaticQueryResults {
         // Hack to normalize literals
-        let store = SledStore::new().unwrap();
+        let store = Store::new().unwrap();
         for t in graph.iter() {
             store
                 .insert(t.in_graph(GraphNameRef::DefaultGraph))

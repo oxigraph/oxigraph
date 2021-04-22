@@ -1,6 +1,6 @@
 //! [SPARQL](https://www.w3.org/TR/sparql11-overview/) implementation.
 //!
-//! Stores execute SPARQL. See [`SledStore`](super::store::sled::SledStore::query()) for an example.
+//! Stores execute SPARQL. See [`Store`](crate::store::Store::query()) for an example.
 
 mod algebra;
 mod csv_results;
@@ -30,7 +30,7 @@ use crate::sparql::plan_builder::PlanBuilder;
 pub use crate::sparql::service::ServiceHandler;
 use crate::sparql::service::{EmptyServiceHandler, ErrorConversionServiceHandler};
 use crate::sparql::update::SimpleUpdateEvaluator;
-use crate::store::storage::Storage;
+use crate::storage::Storage;
 pub use spargebra::ParseError;
 use std::convert::TryInto;
 use std::rc::Rc;

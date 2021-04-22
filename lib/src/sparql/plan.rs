@@ -1,5 +1,5 @@
 use crate::sparql::model::Variable;
-use crate::store::numeric_encoder::EncodedTerm;
+use crate::storage::numeric_encoder::EncodedTerm;
 use spargebra::algebra::GraphPattern;
 use std::collections::BTreeSet;
 use std::rc::Rc;

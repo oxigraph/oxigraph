@@ -29,11 +29,11 @@ A preliminary benchmark [is provided](../bench/README.md).
 Usage example:
 
 ```rust
-use oxigraph::SledStore;
-use oxigraph::model::*;
+use oxigraph::store::Store;
 use oxigraph::sparql::QueryResults;
+use oxigraph::model::*;
 
-let store = SledStore::new()?;
+let store = Store::open("example.db")?;
 
 // insertion
 let ex = NamedNode::new("http://example.com")?;
@@ -41,13 +41,13 @@ let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
 store.insert(&quad)?;
 
 // quad filter
-let results = store.quads_for_pattern(Some(ex.as_ref().into()), None, None, None).collect::<Result<Vec<Quad>,_>>()?;
-assert_eq!(vec![quad], results);
+let results: Result<Vec<Quad>,_> = store.quads_for_pattern(None, None, None, None).collect();
+assert_eq!(vec![quad], results?);
 
 // SPARQL query
-if let QueryResults::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { ?s ?p ?o }")? {
-    assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
-}
+if let QueryResults::Solutions(mut solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }")? {
+assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
+};
 ```
 
 ## License

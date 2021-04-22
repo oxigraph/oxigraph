@@ -4,7 +4,7 @@ use crate::error::invalid_data_error;
 use crate::model::xsd::*;
 use crate::model::*;
 use crate::sparql::EvaluationError;
-use crate::store::small_string::SmallString;
+use crate::storage::small_string::SmallString;
 use rand::random;
 use rio_api::model as rio;
 use siphasher::sip128::{Hasher128, SipHasher24};

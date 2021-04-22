@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxigraph::model::{Dataset, Graph, NamedNode, Quad, Triple};
-use oxigraph::SledStore;
+use oxigraph::store::Store;
 use rand::random;
 use std::iter::FromIterator;
 
@@ -54,7 +54,7 @@ fn sled_load_bench(c: &mut Criterion) {
         let quads = create_quads(*size);
         group.bench_function(BenchmarkId::from_parameter(size), |b| {
             b.iter(|| {
-                let store = SledStore::new().unwrap();
+                let store = Store::new().unwrap();
                 for quad in &quads {
                     store.insert(quad).unwrap();
                 }

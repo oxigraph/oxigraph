@@ -1,4 +1,33 @@
-//! Store based on the [Sled](https://sled.rs/) key-value database.
+//! API to access an on-on disk [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
+//!
+//! Usage example:
+//! ```
+//! use oxigraph::store::Store;
+//! use oxigraph::sparql::QueryResults;
+//! use oxigraph::model::*;
+//! # use std::fs::remove_dir_all;
+//!
+//! # {
+//! let store = Store::open("example.db")?;
+//!
+//! // insertion
+//! let ex = NamedNode::new("http://example.com")?;
+//! let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
+//! store.insert(&quad)?;
+//!
+//! // quad filter
+//! let results: Result<Vec<Quad>,_> = store.quads_for_pattern(None, None, None, None).collect();
+//! assert_eq!(vec![quad], results?);
+//!
+//! // SPARQL query
+//! if let QueryResults::Solutions(mut solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }")? {
+//!     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
+//! };
+//! #
+//! # };
+//! # remove_dir_all("example.db")?;
+//! # Result::<_,Box<dyn std::error::Error>>::Ok(())
+//! ```
 
 use std::convert::TryInto;
 use std::io::{BufRead, Write};
@@ -12,30 +41,33 @@ use crate::sparql::{
     evaluate_query, evaluate_update, EvaluationError, Query, QueryOptions, QueryResults, Update,
     UpdateOptions,
 };
-use crate::store::io::{dump_dataset, dump_graph, load_dataset, load_graph};
-use crate::store::numeric_encoder::{
+use crate::storage::io::{dump_dataset, dump_graph, load_dataset, load_graph};
+use crate::storage::numeric_encoder::{
     Decoder, EncodedTerm, ReadEncoder, StrContainer, StrEncodingAware, StrHash, StrLookup,
     WriteEncoder,
 };
-use crate::store::storage::*;
-pub use crate::store::storage::{
-    SledConflictableTransactionError, SledTransactionError, SledUnabortableTransactionError,
+pub use crate::storage::ConflictableTransactionError;
+pub use crate::storage::TransactionError;
+pub use crate::storage::UnabortableTransactionError;
+use crate::storage::{
+    ChainedDecodingQuadIterator, DecodingGraphIterator, Storage, StorageTransaction,
 };
 
-/// Store based on the [Sled](https://sled.rs/) key-value database.
-/// It encodes a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) and allows to query it using SPARQL.
+/// An on-on disk [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
+/// Allows to query and update it using SPARQL.
+/// It is based on the [Sled](https://sled.rs/) key-value database.
 ///
 /// Warning: Sled is not stable yet and might break its storage format.
 ///
 /// Usage example:
 /// ```
-/// use oxigraph::SledStore;
+/// use oxigraph::store::Store;
 /// use oxigraph::sparql::QueryResults;
 /// use oxigraph::model::*;
 /// # use std::fs::remove_dir_all;
 ///
 /// # {
-/// let store = SledStore::open("example.db")?;
+/// let store = Store::open("example.db")?;
 ///
 /// // insertion
 /// let ex = NamedNode::new("http://example.com")?;
@@ -56,21 +88,21 @@ pub use crate::store::storage::{
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Clone)]
-pub struct SledStore {
+pub struct Store {
     storage: Storage,
 }
 
 //TODO: indexes for the default graph and indexes for the named graphs (no more Optional and space saving)
 
-impl SledStore {
-    /// Creates a temporary [`SledStore`]() that will be deleted after drop.
+impl Store {
+    /// Creates a temporary [`Store`]() that will be deleted after drop.
     pub fn new() -> Result<Self, io::Error> {
         Ok(Self {
             storage: Storage::new()?,
         })
     }
 
-    /// Opens a [`SledStore`]() and creates it if it does not exist yet.
+    /// Opens a [`Store`]() and creates it if it does not exist yet.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, io::Error> {
         Ok(Self {
             storage: Storage::open(path.as_ref())?,
@@ -81,11 +113,11 @@ impl SledStore {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::SledStore;
+    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
     /// use oxigraph::sparql::QueryResults;
     ///
-    /// let store = SledStore::new()?;
+    /// let store = Store::new()?;
     ///
     /// // insertions
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -117,10 +149,10 @@ impl SledStore {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::SledStore;
+    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
     ///
-    /// let store = SledStore::new()?;
+    /// let store = Store::new()?;
     ///
     /// // insertion
     /// let ex = NamedNode::new("http://example.com")?;
@@ -138,8 +170,8 @@ impl SledStore {
         predicate: Option<NamedNodeRef<'_>>,
         object: Option<TermRef<'_>>,
         graph_name: Option<GraphNameRef<'_>>,
-    ) -> SledQuadIter {
-        SledQuadIter {
+    ) -> QuadIter {
+        QuadIter {
             inner: match self.get_encoded_quad_pattern(subject, predicate, object, graph_name) {
                 Ok(Some((subject, predicate, object, graph_name))) => QuadIterInner::Quads {
                     iter: self
@@ -209,7 +241,7 @@ impl SledStore {
     }
 
     /// Returns all the quads contained in the store
-    pub fn iter(&self) -> SledQuadIter {
+    pub fn iter(&self) -> QuadIter {
         self.quads_for_pattern(None, None, None, None)
     }
 
@@ -241,10 +273,10 @@ impl SledStore {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::SledStore;
+    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
     ///
-    /// let store = SledStore::new()?;
+    /// let store = Store::new()?;
     ///
     /// // insertion
     /// store.update("INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }")?;
@@ -281,12 +313,11 @@ impl SledStore {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::SledStore;
+    /// use oxigraph::store::{ConflictableTransactionError, Store};
     /// use oxigraph::model::*;
-    /// use oxigraph::store::sled::SledConflictableTransactionError;
     /// use std::convert::Infallible;
     ///
-    /// let store = SledStore::new()?;
+    /// let store = Store::new()?;
     ///
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let quad = QuadRef::new(ex, ex, ex, ex);
@@ -294,7 +325,7 @@ impl SledStore {
     /// // transaction
     /// store.transaction(|transaction| {
     ///     transaction.insert(quad)?;
-    ///     Ok(()) as Result<(),SledConflictableTransactionError<Infallible>>
+    ///     Ok(()) as Result<(),ConflictableTransactionError<Infallible>>
     /// })?;
     ///
     /// assert!(store.contains(quad)?);
@@ -303,10 +334,10 @@ impl SledStore {
     /// ```
     pub fn transaction<T, E>(
         &self,
-        f: impl Fn(SledTransaction<'_>) -> Result<T, SledConflictableTransactionError<E>>,
-    ) -> Result<T, SledTransactionError<E>> {
+        f: impl Fn(Transaction<'_>) -> Result<T, ConflictableTransactionError<E>>,
+    ) -> Result<T, TransactionError<E>> {
         self.storage
-            .transaction(|storage| f(SledTransaction { storage }))
+            .transaction(|storage| f(Transaction { storage }))
     }
 
     /// Loads a graph file (i.e. triples) into the store
@@ -314,15 +345,15 @@ impl SledStore {
     /// Warning: This functions saves the triples in a not atomic way.
     /// If the parsing fails in the middle of the file only a part of it may be written to the store.
     /// It might leave the store in a bad state if a crash happens during a triple insertion.
-    /// Use a (memory greedy) [transaction](SledStore::transaction()) if you do not want that.
+    /// Use a (memory greedy) [transaction](Store::transaction()) if you do not want that.
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::SledStore;
+    /// use oxigraph::store::Store;
     /// use oxigraph::io::GraphFormat;
     /// use oxigraph::model::*;
     ///
-    /// let store = SledStore::new()?;
+    /// let store = Store::new()?;
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
@@ -359,15 +390,15 @@ impl SledStore {
     /// Warning: This functions saves the triples in a not atomic way.
     /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
     /// It might leave the store in a bad state if a crash happens during a quad insertion.
-    /// Use a (memory greedy) [transaction](SledStore::transaction()) if you do not want that.
+    /// Use a (memory greedy) [transaction](Store::transaction()) if you do not want that.
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::SledStore;
+    /// use oxigraph::store::Store;
     /// use oxigraph::io::DatasetFormat;
     /// use oxigraph::model::*;
     ///
-    /// let store = SledStore::new()?;
+    /// let store = Store::new()?;
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
@@ -398,7 +429,7 @@ impl SledStore {
     ///
     /// This method is optimized for performances and is not atomic.
     /// It might leave the store in a bad state if a crash happens during the insertion.
-    /// Use a (memory greedy) [transaction](SledStore::transaction()) if you do not want that.
+    /// Use a (memory greedy) [transaction](Store::transaction()) if you do not want that.
     pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, io::Error> {
         let quad = self.encode_quad(quad.into())?;
         self.storage.insert(&quad)
@@ -410,7 +441,7 @@ impl SledStore {
     ///
     /// This method is optimized for performances and is not atomic.
     /// It might leave the store in a bad state if a crash happens during the removal.
-    /// Use a (memory greedy) [transaction](SledStore::transaction()) if you do not want that.
+    /// Use a (memory greedy) [transaction](Store::transaction()) if you do not want that.
     pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, io::Error> {
         if let Some(quad) = self.get_encoded_quad(quad.into())? {
             self.storage.remove(&quad)
@@ -423,13 +454,13 @@ impl SledStore {
     ///    
     /// Usage example:
     /// ```
-    /// use oxigraph::SledStore;
+    /// use oxigraph::store::Store;
     /// use oxigraph::io::GraphFormat;
     /// use oxigraph::model::GraphName;
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
     ///
-    /// let store = SledStore::new()?;
+    /// let store = Store::new()?;
     /// store.load_graph(file, GraphFormat::NTriples, &GraphName::DefaultGraph, None)?;
     ///
     /// let mut buffer = Vec::new();
@@ -454,12 +485,12 @@ impl SledStore {
     /// Dumps the store into a file.
     ///    
     /// ```
-    /// use oxigraph::SledStore;
+    /// use oxigraph::store::Store;
     /// use oxigraph::io::DatasetFormat;
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
     ///
-    /// let store = SledStore::new()?;
+    /// let store = Store::new()?;
     /// store.load_dataset(file, DatasetFormat::NQuads, None)?;
     ///
     /// let mut buffer = Vec::new();
@@ -475,18 +506,18 @@ impl SledStore {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::SledStore;
+    /// use oxigraph::store::Store;
     /// use oxigraph::model::{NamedNode, QuadRef, NamedOrBlankNode};
     ///
     /// let ex = NamedNode::new("http://example.com")?;
-    /// let store = SledStore::new()?;
+    /// let store = Store::new()?;
     /// store.insert(QuadRef::new(&ex, &ex, &ex, &ex))?;
     /// store.insert(QuadRef::new(&ex, &ex, &ex, None))?;
     /// assert_eq!(vec![NamedOrBlankNode::from(ex)], store.named_graphs().collect::<Result<Vec<_>,_>>()?);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn named_graphs(&self) -> SledGraphNameIter {
-        SledGraphNameIter {
+    pub fn named_graphs(&self) -> GraphNameIter {
+        GraphNameIter {
             iter: self.storage.named_graphs(),
             store: self.clone(),
         }
@@ -496,11 +527,11 @@ impl SledStore {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::SledStore;
+    /// use oxigraph::store::Store;
     /// use oxigraph::model::{NamedNode, QuadRef};
     ///
     /// let ex = NamedNode::new("http://example.com")?;
-    /// let store = SledStore::new()?;
+    /// let store = Store::new()?;
     /// store.insert(QuadRef::new(&ex, &ex, &ex, &ex))?;
     /// assert!(store.contains_named_graph(&ex)?);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -522,11 +553,11 @@ impl SledStore {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::SledStore;
+    /// use oxigraph::store::Store;
     /// use oxigraph::model::NamedNodeRef;
     ///
     /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// let store = SledStore::new()?;
+    /// let store = Store::new()?;
     /// store.insert_named_graph(ex)?;
     /// assert_eq!(store.named_graphs().count(), 1);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -543,12 +574,12 @@ impl SledStore {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::SledStore;
+    /// use oxigraph::store::Store;
     /// use oxigraph::model::{NamedNodeRef, QuadRef};
     ///
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let quad = QuadRef::new(ex, ex, ex, ex);
-    /// let store = SledStore::new()?;
+    /// let store = Store::new()?;
     /// store.insert(quad)?;
     /// assert_eq!(1, store.len());
     ///
@@ -574,12 +605,12 @@ impl SledStore {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::SledStore;
+    /// use oxigraph::store::Store;
     /// use oxigraph::model::{NamedNodeRef, QuadRef};
     ///
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let quad = QuadRef::new(ex, ex, ex, ex);
-    /// let store = SledStore::new()?;
+    /// let store = Store::new()?;
     /// store.insert(quad)?;
     /// assert_eq!(1, store.len());
     ///
@@ -603,11 +634,11 @@ impl SledStore {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::SledStore;
+    /// use oxigraph::store::Store;
     /// use oxigraph::model::{NamedNodeRef, QuadRef};
     ///
     /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// let store = SledStore::new()?;
+    /// let store = Store::new()?;
     /// store.insert(QuadRef::new(ex, ex, ex, ex))?;
     /// store.insert(QuadRef::new(ex, ex, ex, None))?;    
     /// assert_eq!(2, store.len());
@@ -621,7 +652,7 @@ impl SledStore {
     }
 }
 
-impl fmt::Display for SledStore {
+impl fmt::Display for Store {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for t in self.iter() {
             writeln!(f, "{}", t.map_err(|_| fmt::Error)?)?;
@@ -630,11 +661,11 @@ impl fmt::Display for SledStore {
     }
 }
 
-impl StrEncodingAware for SledStore {
+impl StrEncodingAware for Store {
     type Error = io::Error;
 }
 
-impl StrLookup for SledStore {
+impl StrLookup for Store {
     fn get_str(&self, id: StrHash) -> Result<Option<String>, io::Error> {
         self.storage.get_str(id)
     }
@@ -644,7 +675,7 @@ impl StrLookup for SledStore {
     }
 }
 
-impl<'a> StrContainer for &'a SledStore {
+impl<'a> StrContainer for &'a Store {
     fn insert_str(&self, value: &str) -> Result<StrHash, io::Error> {
         let key = StrHash::new(value);
         self.storage.insert_str(key, value)?;
@@ -652,12 +683,12 @@ impl<'a> StrContainer for &'a SledStore {
     }
 }
 
-/// Allows inserting and deleting quads during an ACID transaction with the [`SledStore`].
-pub struct SledTransaction<'a> {
+/// Allows inserting and deleting quads during an ACID transaction with the [`Store`].
+pub struct Transaction<'a> {
     storage: StorageTransaction<'a>,
 }
 
-impl SledTransaction<'_> {
+impl Transaction<'_> {
     /// Loads a graph file (i.e. triples) into the store during the transaction.
     ///
     /// Warning: Because the load happens during a transaction,
@@ -666,18 +697,18 @@ impl SledTransaction<'_> {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::SledStore;
+    /// use oxigraph::store::Store;
     /// use oxigraph::io::GraphFormat;
     /// use oxigraph::model::*;
-    /// use oxigraph::store::sled::SledConflictableTransactionError;
+    /// use oxigraph::store::ConflictableTransactionError;
     ///
-    /// let store = SledStore::new()?;
+    /// let store = Store::new()?;
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
     /// store.transaction(|transaction| {
     ///     transaction.load_graph(file.as_ref(), GraphFormat::NTriples, &GraphName::DefaultGraph, None)?;
-    ///     Ok(()) as Result<(),SledConflictableTransactionError<std::io::Error>>
+    ///     Ok(()) as Result<(),ConflictableTransactionError<std::io::Error>>
     /// })?;
     ///
     /// // we inspect the store content
@@ -699,7 +730,7 @@ impl SledTransaction<'_> {
         format: GraphFormat,
         to_graph_name: impl Into<GraphNameRef<'a>>,
         base_iri: Option<&str>,
-    ) -> Result<(), SledUnabortableTransactionError> {
+    ) -> Result<(), UnabortableTransactionError> {
         load_graph(
             &self.storage,
             reader,
@@ -718,18 +749,18 @@ impl SledTransaction<'_> {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::SledStore;
+    /// use oxigraph::store::{Store, ConflictableTransactionError};
     /// use oxigraph::io::DatasetFormat;
     /// use oxigraph::model::*;
-    /// use oxigraph::store::sled::SledConflictableTransactionError;
+    /// use oxigraph::store::ConflictableTransactionError;
     ///
-    /// let store = SledStore::new()?;
+    /// let store = Store::new()?;
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
     /// store.transaction(|transaction| {
     ///     transaction.load_dataset(file.as_ref(), DatasetFormat::NQuads, None)?;
-    ///     Ok(()) as Result<(),SledConflictableTransactionError<std::io::Error>>
+    ///     Ok(()) as Result<(),ConflictableTransactionError<std::io::Error>>
     /// })?;
     ///
     /// // we inspect the store content
@@ -750,7 +781,7 @@ impl SledTransaction<'_> {
         reader: impl BufRead,
         format: DatasetFormat,
         base_iri: Option<&str>,
-    ) -> Result<(), SledUnabortableTransactionError> {
+    ) -> Result<(), UnabortableTransactionError> {
         Ok(load_dataset(&self.storage, reader, format, base_iri)?)
     }
 
@@ -760,7 +791,7 @@ impl SledTransaction<'_> {
     pub fn insert<'a>(
         &self,
         quad: impl Into<QuadRef<'a>>,
-    ) -> Result<bool, SledUnabortableTransactionError> {
+    ) -> Result<bool, UnabortableTransactionError> {
         let quad = self.encode_quad(quad.into())?;
         self.storage.insert(&quad)
     }
@@ -771,7 +802,7 @@ impl SledTransaction<'_> {
     pub fn remove<'a>(
         &self,
         quad: impl Into<QuadRef<'a>>,
-    ) -> Result<bool, SledUnabortableTransactionError> {
+    ) -> Result<bool, UnabortableTransactionError> {
         if let Some(quad) = self.get_encoded_quad(quad.into())? {
             self.storage.remove(&quad)
         } else {
@@ -785,49 +816,49 @@ impl SledTransaction<'_> {
     pub fn insert_named_graph<'a>(
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
-    ) -> Result<bool, SledUnabortableTransactionError> {
+    ) -> Result<bool, UnabortableTransactionError> {
         let graph_name = self.encode_named_or_blank_node(graph_name.into())?;
         self.storage.insert_named_graph(graph_name)
     }
 }
 
-impl<'a> StrEncodingAware for &'a SledTransaction<'a> {
-    type Error = SledUnabortableTransactionError;
+impl<'a> StrEncodingAware for &'a Transaction<'a> {
+    type Error = UnabortableTransactionError;
 }
 
-impl<'a> StrLookup for &'a SledTransaction<'a> {
-    fn get_str(&self, id: StrHash) -> Result<Option<String>, SledUnabortableTransactionError> {
+impl<'a> StrLookup for &'a Transaction<'a> {
+    fn get_str(&self, id: StrHash) -> Result<Option<String>, UnabortableTransactionError> {
         self.storage.get_str(id)
     }
 
-    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, SledUnabortableTransactionError> {
+    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, UnabortableTransactionError> {
         self.storage.get_str_id(value)
     }
 }
 
-impl<'a> StrContainer for &'a SledTransaction<'a> {
-    fn insert_str(&self, value: &str) -> Result<StrHash, SledUnabortableTransactionError> {
+impl<'a> StrContainer for &'a Transaction<'a> {
+    fn insert_str(&self, value: &str) -> Result<StrHash, UnabortableTransactionError> {
         let key = StrHash::new(value);
         self.storage.insert_str(key, value)?;
         Ok(key)
     }
 }
 
-/// An iterator returning the quads contained in a [`SledStore`].
-pub struct SledQuadIter {
+/// An iterator returning the quads contained in a [`Store`].
+pub struct QuadIter {
     inner: QuadIterInner,
 }
 
 enum QuadIterInner {
     Quads {
         iter: ChainedDecodingQuadIterator,
-        store: SledStore,
+        store: Store,
     },
     Error(Once<io::Error>),
     Empty,
 }
 
-impl Iterator for SledQuadIter {
+impl Iterator for QuadIter {
     type Item = Result<Quad, io::Error>;
 
     fn next(&mut self) -> Option<Result<Quad, io::Error>> {
@@ -842,13 +873,13 @@ impl Iterator for SledQuadIter {
     }
 }
 
-/// An iterator returning the graph names contained in a [`SledStore`].
-pub struct SledGraphNameIter {
+/// An iterator returning the graph names contained in a [`Store`].
+pub struct GraphNameIter {
     iter: DecodingGraphIterator,
-    store: SledStore,
+    store: Store,
 }
 
-impl Iterator for SledGraphNameIter {
+impl Iterator for GraphNameIter {
     type Item = Result<NamedOrBlankNode, io::Error>;
 
     fn next(&mut self) -> Option<Result<NamedOrBlankNode, io::Error>> {
@@ -910,12 +941,12 @@ fn store() -> Result<(), io::Error> {
         named_quad.clone(),
     ];
 
-    let store = SledStore::new()?;
+    let store = Store::new()?;
     for t in &default_quads {
         assert!(store.insert(t)?);
     }
 
-    let result: Result<_, SledTransactionError<io::Error>> = store.transaction(|t| {
+    let result: Result<_, TransactionError<io::Error>> = store.transaction(|t| {
         assert!(t.remove(&default_quad)?);
         assert_eq!(t.remove(&default_quad)?, false);
         assert!(t.insert(&named_quad)?);

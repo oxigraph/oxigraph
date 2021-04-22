@@ -44,11 +44,11 @@ impl QueryResults {
     /// This method fails if it is called on the `Graph` results
     ///
     /// ```
-    /// use oxigraph::SledStore;
+    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
     /// use oxigraph::sparql::QueryResultsFormat;
     ///
-    /// let store = SledStore::new()?;
+    /// let store = Store::new()?;
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;
     ///
@@ -75,14 +75,14 @@ impl QueryResults {
     /// This method fails if it is called on the `Solution` or `Boolean` results
     ///
     /// ```
-    /// use oxigraph::SledStore;
+    /// use oxigraph::store::Store;
     /// use oxigraph::io::GraphFormat;
     /// use oxigraph::model::*;
     /// use std::io::Cursor;
     ///
     /// let graph = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
     ///
-    /// let store = SledStore::new()?;
+    /// let store = Store::new()?;
     /// store.load_graph(Cursor::new(graph), GraphFormat::NTriples, &GraphName::DefaultGraph, None)?;
     ///
     /// let mut results = Vec::new();
@@ -216,10 +216,10 @@ impl QueryResultsFormat {
 /// An iterator over [`QuerySolution`]s
 ///
 /// ```
-/// use oxigraph::SledStore;
+/// use oxigraph::store::Store;
 /// use oxigraph::sparql::QueryResults;
 ///
-/// let store = SledStore::new()?;
+/// let store = Store::new()?;
 /// if let QueryResults::Solutions(solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }")? {
 ///     for solution in solutions {
 ///         println!("{:?}", solution?.get("s"));
@@ -243,10 +243,10 @@ impl QuerySolutionIter {
     /// The variables used in the solutions
     ///
     /// ```
-    /// use oxigraph::SledStore;
+    /// use oxigraph::store::Store;
     /// use oxigraph::sparql::{QueryResults, Variable};
     ///
-    /// let store = SledStore::new()?;
+    /// let store = Store::new()?;
     /// if let QueryResults::Solutions(solutions) = store.query("SELECT ?s ?o WHERE { ?s ?p ?o }")? {
     ///     assert_eq!(solutions.variables(), &[Variable::new("s")?, Variable::new("o")?]);
     /// }
@@ -359,10 +359,10 @@ impl VariableSolutionIndex for Variable {
 /// An iterator over the triples that compose a graph solution
 ///
 /// ```
-/// use oxigraph::SledStore;
+/// use oxigraph::store::Store;
 /// use oxigraph::sparql::QueryResults;
 ///
-/// let store = SledStore::new()?;
+/// let store = Store::new()?;
 /// if let QueryResults::Graph(triples) = store.query("CONSTRUCT WHERE { ?s ?p ?o }")? {
 ///     for triple in triples {
 ///         println!("{}", triple?);

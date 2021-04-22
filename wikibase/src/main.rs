@@ -23,7 +23,7 @@ use http_types::{
 use oxigraph::io::GraphFormat;
 use oxigraph::model::{GraphName, NamedNode, NamedOrBlankNode};
 use oxigraph::sparql::{Query, QueryResults, QueryResultsFormat};
-use oxigraph::SledStore;
+use oxigraph::store::Store;
 use std::str::FromStr;
 use std::time::Duration;
 use url::form_urlencoded;
@@ -65,7 +65,7 @@ struct Args {
 pub async fn main() -> Result<()> {
     let args: Args = argh::from_env();
 
-    let store = SledStore::open(args.file)?;
+    let store = Store::open(args.file)?;
     let mediawiki_api = args.mediawiki_api.clone();
     let mediawiki_base_url = args.mediawiki_base_url.clone();
     let namespaces = args
@@ -106,7 +106,7 @@ pub async fn main() -> Result<()> {
     .await
 }
 
-async fn handle_request(request: Request, store: SledStore) -> Result<Response> {
+async fn handle_request(request: Request, store: Store) -> Result<Response> {
     Ok(match (request.url().path(), request.method()) {
         ("/query", Method::Get) => {
             configure_and_evaluate_sparql_query(store, url_query(&request), None, request)?
@@ -159,7 +159,7 @@ fn url_query(request: &Request) -> Vec<u8> {
 }
 
 fn configure_and_evaluate_sparql_query(
-    store: SledStore,
+    store: Store,
     encoded: Vec<u8>,
     mut query: Option<String>,
     request: Request,
@@ -187,7 +187,7 @@ fn configure_and_evaluate_sparql_query(
 }
 
 fn evaluate_sparql_query(
-    store: SledStore,
+    store: Store,
     query: String,
     default_graph_uris: Vec<String>,
     named_graph_uris: Vec<String>,

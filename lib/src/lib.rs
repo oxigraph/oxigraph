@@ -9,12 +9,15 @@
 //!
 //! Oxigraph also provides [a standalone HTTP server](https://crates.io/crates/oxigraph_server) based on this library.
 //!
+//!
+//! The main entry point of Oxigraph is the [`Store`](store::Store) struct:
+//!
 //! ```
-//! use oxigraph::SledStore;
+//! use oxigraph::store::Store;
 //! use oxigraph::model::*;
 //! use oxigraph::sparql::QueryResults;
 //!
-//! let store = SledStore::new()?;
+//! let store = Store::new()?;
 //!
 //! // insertion
 //! let ex = NamedNode::new("http://example.com")?;
@@ -112,7 +115,8 @@
 mod error;
 pub mod io;
 pub mod model;
+#[cfg(feature = "sophia")]
+mod sophia;
 pub mod sparql;
+mod storage;
 pub mod store;
-
-pub use crate::store::sled::SledStore;

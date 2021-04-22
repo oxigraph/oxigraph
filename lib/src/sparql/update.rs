@@ -8,11 +8,11 @@ use crate::sparql::http::Client;
 use crate::sparql::plan::EncodedTuple;
 use crate::sparql::plan_builder::PlanBuilder;
 use crate::sparql::{EvaluationError, UpdateOptions};
-use crate::store::io::load_graph;
-use crate::store::numeric_encoder::{
+use crate::storage::io::load_graph;
+use crate::storage::numeric_encoder::{
     EncodedQuad, EncodedTerm, ReadEncoder, StrLookup, WriteEncoder,
 };
-use crate::store::storage::Storage;
+use crate::storage::Storage;
 use http::header::{ACCEPT, CONTENT_TYPE, USER_AGENT};
 use http::{Method, Request, StatusCode};
 use oxiri::Iri;
