@@ -502,7 +502,7 @@ pub(crate) trait StrLookup: StrEncodingAware {
 }
 
 pub(crate) trait StrContainer: StrEncodingAware {
-    fn insert_str(&mut self, value: &str) -> Result<StrHash, Self::Error>;
+    fn insert_str(&self, value: &str) -> Result<StrHash, Self::Error>;
 }
 
 /// Tries to encode a term based on the existing strings (does not insert anything)
@@ -744,17 +744,11 @@ impl<S: StrLookup> ReadEncoder for S {
 
 /// Encodes a term and insert strings if needed
 pub(crate) trait WriteEncoder: StrEncodingAware {
-    fn encode_named_node(
-        &mut self,
-        named_node: NamedNodeRef<'_>,
-    ) -> Result<EncodedTerm, Self::Error> {
+    fn encode_named_node(&self, named_node: NamedNodeRef<'_>) -> Result<EncodedTerm, Self::Error> {
         self.encode_rio_named_node(named_node.into())
     }
 
-    fn encode_blank_node(
-        &mut self,
-        blank_node: BlankNodeRef<'_>,
-    ) -> Result<EncodedTerm, Self::Error> {
+    fn encode_blank_node(&self, blank_node: BlankNodeRef<'_>) -> Result<EncodedTerm, Self::Error> {
         Ok(if let Some(id) = blank_node.id() {
             EncodedTerm::NumericalBlankNode { id }
         } else {
@@ -769,12 +763,12 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
         })
     }
 
-    fn encode_literal(&mut self, literal: LiteralRef<'_>) -> Result<EncodedTerm, Self::Error> {
+    fn encode_literal(&self, literal: LiteralRef<'_>) -> Result<EncodedTerm, Self::Error> {
         self.encode_rio_literal(literal.into())
     }
 
     fn encode_named_or_blank_node(
-        &mut self,
+        &self,
         term: NamedOrBlankNodeRef<'_>,
     ) -> Result<EncodedTerm, Self::Error> {
         match term {
@@ -783,7 +777,7 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
         }
     }
 
-    fn encode_term(&mut self, term: TermRef<'_>) -> Result<EncodedTerm, Self::Error> {
+    fn encode_term(&self, term: TermRef<'_>) -> Result<EncodedTerm, Self::Error> {
         match term {
             TermRef::NamedNode(named_node) => self.encode_named_node(named_node),
             TermRef::BlankNode(blank_node) => self.encode_blank_node(blank_node),
@@ -791,7 +785,7 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
         }
     }
 
-    fn encode_graph_name(&mut self, name: GraphNameRef<'_>) -> Result<EncodedTerm, Self::Error> {
+    fn encode_graph_name(&self, name: GraphNameRef<'_>) -> Result<EncodedTerm, Self::Error> {
         match name {
             GraphNameRef::NamedNode(named_node) => self.encode_named_node(named_node),
             GraphNameRef::BlankNode(blank_node) => self.encode_blank_node(blank_node),
@@ -799,7 +793,7 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
         }
     }
 
-    fn encode_quad(&mut self, quad: QuadRef<'_>) -> Result<EncodedQuad, Self::Error> {
+    fn encode_quad(&self, quad: QuadRef<'_>) -> Result<EncodedQuad, Self::Error> {
         Ok(EncodedQuad {
             subject: self.encode_named_or_blank_node(quad.subject)?,
             predicate: self.encode_named_node(quad.predicate)?,
@@ -809,7 +803,7 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
     }
 
     fn encode_triple_in_graph(
-        &mut self,
+        &self,
         triple: TripleRef<'_>,
         graph_name: EncodedTerm,
     ) -> Result<EncodedQuad, Self::Error> {
@@ -822,7 +816,7 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
     }
 
     fn encode_rio_named_node(
-        &mut self,
+        &self,
         named_node: rio::NamedNode<'_>,
     ) -> Result<EncodedTerm, Self::Error> {
         Ok(EncodedTerm::NamedNode {
@@ -831,7 +825,7 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
     }
 
     fn encode_rio_blank_node(
-        &mut self,
+        &self,
         blank_node: rio::BlankNode<'_>,
         bnodes_map: &mut HashMap<String, u128>,
     ) -> Result<EncodedTerm, Self::Error> {
@@ -843,10 +837,7 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
             EncodedTerm::NumericalBlankNode { id }
         })
     }
-    fn encode_rio_literal(
-        &mut self,
-        literal: rio::Literal<'_>,
-    ) -> Result<EncodedTerm, Self::Error> {
+    fn encode_rio_literal(&self, literal: rio::Literal<'_>) -> Result<EncodedTerm, Self::Error> {
         Ok(match literal {
             rio::Literal::Simple { value } => {
                 if let Ok(value) = SmallString::try_from(value) {
@@ -949,7 +940,7 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
     }
 
     fn encode_rio_named_or_blank_node(
-        &mut self,
+        &self,
         term: rio::NamedOrBlankNode<'_>,
         bnodes_map: &mut HashMap<String, u128>,
     ) -> Result<EncodedTerm, Self::Error> {
@@ -962,7 +953,7 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
     }
 
     fn encode_rio_term(
-        &mut self,
+        &self,
         term: rio::Term<'_>,
         bnodes_map: &mut HashMap<String, u128>,
     ) -> Result<EncodedTerm, Self::Error> {
@@ -974,7 +965,7 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
     }
 
     fn encode_rio_quad(
-        &mut self,
+        &self,
         quad: rio::Quad<'_>,
         bnodes_map: &mut HashMap<String, u128>,
     ) -> Result<EncodedQuad, Self::Error> {
@@ -990,7 +981,7 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
     }
 
     fn encode_rio_triple_in_graph(
-        &mut self,
+        &self,
         triple: rio::Triple<'_>,
         graph_name: EncodedTerm,
         bnodes_map: &mut HashMap<String, u128>,
@@ -1003,11 +994,11 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
         })
     }
 
-    fn encode_str(&mut self, value: &str) -> Result<StrHash, Self::Error>;
+    fn encode_str(&self, value: &str) -> Result<StrHash, Self::Error>;
 }
 
 impl<S: StrContainer> WriteEncoder for S {
-    fn encode_str(&mut self, value: &str) -> Result<StrHash, Self::Error> {
+    fn encode_str(&self, value: &str) -> Result<StrHash, Self::Error> {
         self.insert_str(value)
     }
 }

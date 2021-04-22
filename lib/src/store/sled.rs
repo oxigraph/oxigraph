@@ -336,26 +336,28 @@ impl SledStore {
 
     /// Adds a quad to this store.
     ///
+    /// Returns `true` if the quad was not already in the store.
+    ///
     /// This method is optimized for performances and is not atomic.
     /// It might leave the store in a bad state if a crash happens during the insertion.
     /// Use a (memory greedy) [transaction](SledStore::transaction()) if you do not want that.
-    pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<(), io::Error> {
-        let mut this = self;
-        let quad = this.encode_quad(quad.into())?;
-        this.insert_encoded(&quad)
+    pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, io::Error> {
+        let quad = self.encode_quad(quad.into())?;
+        self.storage.insert(&quad)
     }
 
     /// Removes a quad from this store.
     ///
+    /// Returns `true` if the quad was in the store and has been removed.
+    ///
     /// This method is optimized for performances and is not atomic.
     /// It might leave the store in a bad state if a crash happens during the removal.
     /// Use a (memory greedy) [transaction](SledStore::transaction()) if you do not want that.
-    pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<(), io::Error> {
+    pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, io::Error> {
         if let Some(quad) = self.get_encoded_quad(quad.into())? {
-            let mut this = self;
-            this.remove_encoded(&quad)
+            self.storage.remove(&quad)
         } else {
-            Ok(())
+            Ok(false)
         }
     }
 
@@ -458,6 +460,8 @@ impl SledStore {
 
     /// Inserts a graph into this store
     ///
+    /// Returns `true` if the graph was not already in the store.
+    ///
     /// Usage example:
     /// ```
     /// use oxigraph::SledStore;
@@ -472,10 +476,9 @@ impl SledStore {
     pub fn insert_named_graph<'a>(
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
-    ) -> Result<(), io::Error> {
-        let mut this = self;
-        let graph_name = this.encode_named_or_blank_node(graph_name.into())?;
-        this.insert_encoded_named_graph(graph_name)
+    ) -> Result<bool, io::Error> {
+        let graph_name = self.encode_named_or_blank_node(graph_name.into())?;
+        self.storage.insert_named_graph(graph_name)
     }
 
     /// Clears a graph from this store.
@@ -510,6 +513,8 @@ impl SledStore {
 
     /// Removes a graph from this store.
     ///
+    /// Returns `true` if the graph was in the store and has been removed.
+    ///
     /// Usage example:
     /// ```
     /// use oxigraph::SledStore;
@@ -529,12 +534,11 @@ impl SledStore {
     pub fn remove_named_graph<'a>(
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
-    ) -> Result<(), io::Error> {
+    ) -> Result<bool, io::Error> {
         if let Some(graph_name) = self.get_encoded_named_or_blank_node(graph_name.into())? {
-            let mut this = self;
-            this.remove_encoded_named_graph(graph_name)
+            self.storage.remove_named_graph(graph_name)
         } else {
-            Ok(())
+            Ok(false)
         }
     }
 
@@ -580,12 +584,7 @@ impl StrLookup for SledStore {
     }
 
     fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, io::Error> {
-        let key = StrHash::new(value);
-        Ok(if self.storage.contains_str(key)? {
-            Some(key)
-        } else {
-            None
-        })
+        self.storage.get_str_id(value)
     }
 }
 
@@ -614,7 +613,7 @@ impl ReadableEncodedStore for SledStore {
 }
 
 impl<'a> StrContainer for &'a SledStore {
-    fn insert_str(&mut self, value: &str) -> Result<StrHash, io::Error> {
+    fn insert_str(&self, value: &str) -> Result<StrHash, io::Error> {
         let key = StrHash::new(value);
         self.storage.insert_str(key, value)?;
         Ok(key)
@@ -623,15 +622,18 @@ impl<'a> StrContainer for &'a SledStore {
 
 impl<'a> WritableEncodedStore for &'a SledStore {
     fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), io::Error> {
-        self.storage.insert(quad)
+        self.storage.insert(quad)?;
+        Ok(())
     }
 
     fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<(), io::Error> {
-        self.storage.remove(quad)
+        self.storage.remove(quad)?;
+        Ok(())
     }
 
     fn insert_encoded_named_graph(&mut self, graph_name: EncodedTerm) -> Result<(), io::Error> {
-        self.storage.insert_named_graph(graph_name)
+        self.storage.insert_named_graph(graph_name)?;
+        Ok(())
     }
 
     fn clear_encoded_graph(&mut self, graph_name: EncodedTerm) -> Result<(), io::Error> {
@@ -639,7 +641,8 @@ impl<'a> WritableEncodedStore for &'a SledStore {
     }
 
     fn remove_encoded_named_graph(&mut self, graph_name: EncodedTerm) -> Result<(), io::Error> {
-        self.storage.remove_named_graph(graph_name)
+        self.storage.remove_named_graph(graph_name)?;
+        Ok(())
     }
 
     fn clear(&mut self) -> Result<(), io::Error> {
@@ -747,25 +750,27 @@ impl SledTransaction<'_> {
     }
 
     /// Adds a quad to this store during the transaction.
+    ///
+    /// Returns `true` if the quad was not already in the store.
     pub fn insert<'a>(
         &self,
         quad: impl Into<QuadRef<'a>>,
-    ) -> Result<(), SledUnabortableTransactionError> {
-        let mut this = self;
-        let quad = this.encode_quad(quad.into())?;
-        this.insert_encoded(&quad)
+    ) -> Result<bool, SledUnabortableTransactionError> {
+        let quad = self.encode_quad(quad.into())?;
+        self.storage.insert(&quad)
     }
 
     /// Removes a quad from this store during the transaction.
+    ///
+    /// Returns `true` if the quad was in the store and has been removed.
     pub fn remove<'a>(
         &self,
         quad: impl Into<QuadRef<'a>>,
-    ) -> Result<(), SledUnabortableTransactionError> {
-        let mut this = self;
-        if let Some(quad) = this.get_encoded_quad(quad.into())? {
-            this.remove_encoded(&quad)
+    ) -> Result<bool, SledUnabortableTransactionError> {
+        if let Some(quad) = self.get_encoded_quad(quad.into())? {
+            self.storage.remove(&quad)
         } else {
-            Ok(())
+            Ok(false)
         }
     }
 }
@@ -780,17 +785,12 @@ impl<'a> StrLookup for &'a SledTransaction<'a> {
     }
 
     fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, SledUnabortableTransactionError> {
-        let key = StrHash::new(value);
-        Ok(if self.storage.contains_str(key)? {
-            Some(key)
-        } else {
-            None
-        })
+        self.storage.get_str_id(value)
     }
 }
 
 impl<'a> StrContainer for &'a SledTransaction<'a> {
-    fn insert_str(&mut self, value: &str) -> Result<StrHash, SledUnabortableTransactionError> {
+    fn insert_str(&self, value: &str) -> Result<StrHash, SledUnabortableTransactionError> {
         let key = StrHash::new(value);
         self.storage.insert_str(key, value)?;
         Ok(key)
@@ -802,21 +802,24 @@ impl<'a> WritableEncodedStore for &'a SledTransaction<'a> {
         &mut self,
         quad: &EncodedQuad,
     ) -> Result<(), SledUnabortableTransactionError> {
-        self.storage.insert(quad)
+        self.storage.insert(quad)?;
+        Ok(())
     }
 
     fn remove_encoded(
         &mut self,
         quad: &EncodedQuad,
     ) -> Result<(), SledUnabortableTransactionError> {
-        self.storage.remove(quad)
+        self.storage.remove(quad)?;
+        Ok(())
     }
 
     fn insert_encoded_named_graph(
         &mut self,
         graph_name: EncodedTerm,
     ) -> Result<(), SledUnabortableTransactionError> {
-        self.storage.insert_named_graph(graph_name)
+        self.storage.insert_named_graph(graph_name)?;
+        Ok(())
     }
 
     fn clear_encoded_graph(
@@ -938,16 +941,20 @@ fn store() -> Result<(), io::Error> {
 
     let store = SledStore::new()?;
     for t in &default_quads {
-        store.insert(t)?;
+        assert!(store.insert(t)?);
     }
 
     let result: Result<_, SledTransactionError<io::Error>> = store.transaction(|t| {
-        t.remove(&default_quad)?;
-        t.insert(&named_quad)?;
-        t.insert(&default_quad)?;
+        assert!(t.remove(&default_quad)?);
+        assert_eq!(t.remove(&default_quad)?, false);
+        assert!(t.insert(&named_quad)?);
+        assert_eq!(t.insert(&named_quad)?, false);
+        assert!(t.insert(&default_quad)?);
+        assert_eq!(t.insert(&default_quad)?, false);
         Ok(())
     });
     result?;
+    assert_eq!(store.insert(&default_quad)?, false);
 
     assert_eq!(store.len(), 4);
     assert_eq!(store.iter().collect::<Result<Vec<_>, _>>()?, all_quads);

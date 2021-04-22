@@ -60,7 +60,8 @@ impl PyStore {
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
     #[text_signature = "($self, quad)"]
     fn add(&self, quad: &PyQuad) -> PyResult<()> {
-        self.inner.insert(quad).map_err(map_io_err)
+        self.inner.insert(quad).map_err(map_io_err)?;
+        Ok(())
     }
 
     /// Removes a quad from the store
@@ -77,7 +78,8 @@ impl PyStore {
     /// []
     #[text_signature = "($self, quad)"]
     fn remove(&self, quad: &PyQuad) -> PyResult<()> {
-        self.inner.remove(quad).map_err(map_io_err)
+        self.inner.remove(quad).map_err(map_io_err)?;
+        Ok(())
     }
 
     /// Looks for the quads matching a given pattern
@@ -383,10 +385,12 @@ impl PyStore {
             PyGraphNameRef::DefaultGraph => Ok(()),
             PyGraphNameRef::NamedNode(graph_name) => self
                 .inner
-                .insert_named_graph(&PyNamedOrBlankNodeRef::NamedNode(graph_name)),
+                .insert_named_graph(&PyNamedOrBlankNodeRef::NamedNode(graph_name))
+                .map(|_| ()),
             PyGraphNameRef::BlankNode(graph_name) => self
                 .inner
-                .insert_named_graph(&PyNamedOrBlankNodeRef::BlankNode(graph_name)),
+                .insert_named_graph(&PyNamedOrBlankNodeRef::BlankNode(graph_name))
+                .map(|_| ()),
         }
         .map_err(map_io_err)
     }
@@ -410,12 +414,15 @@ impl PyStore {
             PyGraphNameRef::DefaultGraph => self.inner.clear_graph(GraphNameRef::DefaultGraph),
             PyGraphNameRef::NamedNode(graph_name) => self
                 .inner
-                .remove_named_graph(&PyNamedOrBlankNodeRef::NamedNode(graph_name)),
+                .remove_named_graph(&PyNamedOrBlankNodeRef::NamedNode(graph_name))
+                .map(|_| ()),
             PyGraphNameRef::BlankNode(graph_name) => self
                 .inner
-                .remove_named_graph(&PyNamedOrBlankNodeRef::BlankNode(graph_name)),
+                .remove_named_graph(&PyNamedOrBlankNodeRef::BlankNode(graph_name))
+                .map(|_| ()),
         }
-        .map_err(map_io_err)
+        .map_err(map_io_err)?;
+        Ok(())
     }
 }
 

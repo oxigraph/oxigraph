@@ -444,101 +444,115 @@ impl Storage {
         }
     }
 
-    pub fn insert(&self, quad: &EncodedQuad) -> Result<(), io::Error> {
+    pub fn insert(&self, quad: &EncodedQuad) -> Result<bool, io::Error> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
 
         if quad.graph_name.is_default_graph() {
             write_spo_quad(&mut buffer, quad);
-            self.dspo.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
+            let is_new = self.dspo.insert(buffer.as_slice(), &[])?.is_none();
 
-            write_pos_quad(&mut buffer, quad);
-            self.dpos.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
+            if is_new {
+                buffer.clear();
 
-            write_osp_quad(&mut buffer, quad);
-            self.dosp.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
+                write_pos_quad(&mut buffer, quad);
+                self.dpos.insert(buffer.as_slice(), &[])?;
+                buffer.clear();
+
+                write_osp_quad(&mut buffer, quad);
+                self.dosp.insert(buffer.as_slice(), &[])?;
+                buffer.clear();
+            }
+
+            Ok(is_new)
         } else {
             write_spog_quad(&mut buffer, quad);
-            self.spog.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
+            let is_new = self.spog.insert(buffer.as_slice(), &[])?.is_none();
+            if is_new {
+                buffer.clear();
 
-            write_posg_quad(&mut buffer, quad);
-            self.posg.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
+                write_posg_quad(&mut buffer, quad);
+                self.posg.insert(buffer.as_slice(), &[])?;
+                buffer.clear();
 
-            write_ospg_quad(&mut buffer, quad);
-            self.ospg.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
+                write_ospg_quad(&mut buffer, quad);
+                self.ospg.insert(buffer.as_slice(), &[])?;
+                buffer.clear();
 
-            write_gspo_quad(&mut buffer, quad);
-            self.gspo.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
+                write_gspo_quad(&mut buffer, quad);
+                self.gspo.insert(buffer.as_slice(), &[])?;
+                buffer.clear();
 
-            write_gpos_quad(&mut buffer, quad);
-            self.gpos.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
+                write_gpos_quad(&mut buffer, quad);
+                self.gpos.insert(buffer.as_slice(), &[])?;
+                buffer.clear();
 
-            write_gosp_quad(&mut buffer, quad);
-            self.gosp.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
+                write_gosp_quad(&mut buffer, quad);
+                self.gosp.insert(buffer.as_slice(), &[])?;
+                buffer.clear();
 
-            write_term(&mut buffer, quad.graph_name);
-            self.graphs.insert(&buffer, &[])?;
-            buffer.clear();
+                write_term(&mut buffer, quad.graph_name);
+                self.graphs.insert(&buffer, &[])?;
+                buffer.clear();
+            }
+
+            Ok(is_new)
         }
-
-        Ok(())
     }
 
-    pub fn remove(&self, quad: &EncodedQuad) -> Result<(), io::Error> {
+    pub fn remove(&self, quad: &EncodedQuad) -> Result<bool, io::Error> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
 
         if quad.graph_name.is_default_graph() {
             write_spo_quad(&mut buffer, quad);
-            self.dspo.remove(buffer.as_slice())?;
-            buffer.clear();
+            let is_present = self.dspo.remove(buffer.as_slice())?.is_some();
 
-            write_pos_quad(&mut buffer, quad);
-            self.dpos.remove(buffer.as_slice())?;
-            buffer.clear();
+            if is_present {
+                buffer.clear();
 
-            write_osp_quad(&mut buffer, quad);
-            self.dosp.remove(buffer.as_slice())?;
-            buffer.clear();
+                write_pos_quad(&mut buffer, quad);
+                self.dpos.remove(buffer.as_slice())?;
+                buffer.clear();
+
+                write_osp_quad(&mut buffer, quad);
+                self.dosp.remove(buffer.as_slice())?;
+                buffer.clear();
+            }
+
+            Ok(is_present)
         } else {
             write_spog_quad(&mut buffer, quad);
-            self.spog.remove(buffer.as_slice())?;
-            buffer.clear();
+            let is_present = self.spog.remove(buffer.as_slice())?.is_some();
 
-            write_posg_quad(&mut buffer, quad);
-            self.posg.remove(buffer.as_slice())?;
-            buffer.clear();
+            if is_present {
+                buffer.clear();
 
-            write_ospg_quad(&mut buffer, quad);
-            self.ospg.remove(buffer.as_slice())?;
-            buffer.clear();
+                write_posg_quad(&mut buffer, quad);
+                self.posg.remove(buffer.as_slice())?;
+                buffer.clear();
 
-            write_gspo_quad(&mut buffer, quad);
-            self.gspo.remove(buffer.as_slice())?;
-            buffer.clear();
+                write_ospg_quad(&mut buffer, quad);
+                self.ospg.remove(buffer.as_slice())?;
+                buffer.clear();
 
-            write_gpos_quad(&mut buffer, quad);
-            self.gpos.remove(buffer.as_slice())?;
-            buffer.clear();
+                write_gspo_quad(&mut buffer, quad);
+                self.gspo.remove(buffer.as_slice())?;
+                buffer.clear();
 
-            write_gosp_quad(&mut buffer, quad);
-            self.gosp.remove(buffer.as_slice())?;
-            buffer.clear();
+                write_gpos_quad(&mut buffer, quad);
+                self.gpos.remove(buffer.as_slice())?;
+                buffer.clear();
+
+                write_gosp_quad(&mut buffer, quad);
+                self.gosp.remove(buffer.as_slice())?;
+                buffer.clear();
+            }
+
+            Ok(is_present)
         }
-
-        Ok(())
     }
 
-    pub fn insert_named_graph(&self, graph_name: EncodedTerm) -> Result<(), io::Error> {
-        self.graphs.insert(&encode_term(graph_name), &[])?;
-        Ok(())
+    pub fn insert_named_graph(&self, graph_name: EncodedTerm) -> Result<bool, io::Error> {
+        Ok(self.graphs.insert(&encode_term(graph_name), &[])?.is_none())
     }
 
     pub fn clear_graph(&self, graph_name: EncodedTerm) -> Result<(), io::Error> {
@@ -554,12 +568,11 @@ impl Storage {
         Ok(())
     }
 
-    pub fn remove_named_graph(&self, graph_name: EncodedTerm) -> Result<(), io::Error> {
+    pub fn remove_named_graph(&self, graph_name: EncodedTerm) -> Result<bool, io::Error> {
         for quad in self.quads_for_graph(graph_name) {
             self.remove(&quad?)?;
         }
-        self.graphs.remove(&encode_term(graph_name))?;
-        Ok(())
+        Ok(self.graphs.remove(&encode_term(graph_name))?.is_some())
     }
 
     pub fn clear(&self) -> Result<(), io::Error> {
@@ -589,9 +602,8 @@ impl Storage {
         Ok(self.id2str.contains_key(key.to_be_bytes())?)
     }
 
-    pub fn insert_str(&self, key: StrHash, value: &str) -> Result<(), io::Error> {
-        self.id2str.insert(key.to_be_bytes(), value)?;
-        Ok(())
+    pub fn insert_str(&self, key: StrHash, value: &str) -> Result<bool, io::Error> {
+        Ok(self.id2str.insert(key.to_be_bytes(), value)?.is_none())
     }
 }
 
@@ -676,104 +688,119 @@ pub struct StorageTransaction<'a> {
 }
 
 impl<'a> StorageTransaction<'a> {
-    pub fn insert(&self, quad: &EncodedQuad) -> Result<(), SledUnabortableTransactionError> {
+    pub fn insert(&self, quad: &EncodedQuad) -> Result<bool, SledUnabortableTransactionError> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
 
         if quad.graph_name.is_default_graph() {
             write_spo_quad(&mut buffer, quad);
-            self.dspo.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
+            let is_new = self.dspo.insert(buffer.as_slice(), &[])?.is_none();
 
-            write_pos_quad(&mut buffer, quad);
-            self.dpos.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
+            if is_new {
+                buffer.clear();
 
-            write_osp_quad(&mut buffer, quad);
-            self.dosp.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
+                write_pos_quad(&mut buffer, quad);
+                self.dpos.insert(buffer.as_slice(), &[])?;
+                buffer.clear();
+
+                write_osp_quad(&mut buffer, quad);
+                self.dosp.insert(buffer.as_slice(), &[])?;
+                buffer.clear();
+            }
+
+            Ok(is_new)
         } else {
             write_spog_quad(&mut buffer, quad);
-            self.spog.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
+            let is_new = self.spog.insert(buffer.as_slice(), &[])?.is_none();
 
-            write_posg_quad(&mut buffer, quad);
-            self.posg.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
+            if is_new {
+                buffer.clear();
 
-            write_ospg_quad(&mut buffer, quad);
-            self.ospg.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
+                write_posg_quad(&mut buffer, quad);
+                self.posg.insert(buffer.as_slice(), &[])?;
+                buffer.clear();
 
-            write_gspo_quad(&mut buffer, quad);
-            self.gspo.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
+                write_ospg_quad(&mut buffer, quad);
+                self.ospg.insert(buffer.as_slice(), &[])?;
+                buffer.clear();
 
-            write_gpos_quad(&mut buffer, quad);
-            self.gpos.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
+                write_gspo_quad(&mut buffer, quad);
+                self.gspo.insert(buffer.as_slice(), &[])?;
+                buffer.clear();
 
-            write_gosp_quad(&mut buffer, quad);
-            self.gosp.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
+                write_gpos_quad(&mut buffer, quad);
+                self.gpos.insert(buffer.as_slice(), &[])?;
+                buffer.clear();
 
-            write_term(&mut buffer, quad.graph_name);
-            self.graphs.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
+                write_gosp_quad(&mut buffer, quad);
+                self.gosp.insert(buffer.as_slice(), &[])?;
+                buffer.clear();
+
+                write_term(&mut buffer, quad.graph_name);
+                self.graphs.insert(buffer.as_slice(), &[])?;
+                buffer.clear();
+            }
+
+            Ok(is_new)
         }
-
-        Ok(())
     }
 
-    pub fn remove(&self, quad: &EncodedQuad) -> Result<(), SledUnabortableTransactionError> {
+    pub fn remove(&self, quad: &EncodedQuad) -> Result<bool, SledUnabortableTransactionError> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
 
         if quad.graph_name.is_default_graph() {
             write_spo_quad(&mut buffer, quad);
-            self.dspo.remove(buffer.as_slice())?;
-            buffer.clear();
+            let is_present = self.dspo.remove(buffer.as_slice())?.is_some();
 
-            write_pos_quad(&mut buffer, quad);
-            self.dpos.remove(buffer.as_slice())?;
-            buffer.clear();
+            if is_present {
+                buffer.clear();
 
-            write_osp_quad(&mut buffer, quad);
-            self.dosp.remove(buffer.as_slice())?;
-            buffer.clear();
+                write_pos_quad(&mut buffer, quad);
+                self.dpos.remove(buffer.as_slice())?;
+                buffer.clear();
+
+                write_osp_quad(&mut buffer, quad);
+                self.dosp.remove(buffer.as_slice())?;
+                buffer.clear();
+            }
+
+            Ok(is_present)
         } else {
             write_spog_quad(&mut buffer, quad);
-            self.spog.remove(buffer.as_slice())?;
-            buffer.clear();
+            let is_present = self.spog.remove(buffer.as_slice())?.is_some();
 
-            write_posg_quad(&mut buffer, quad);
-            self.posg.remove(buffer.as_slice())?;
-            buffer.clear();
+            if is_present {
+                buffer.clear();
 
-            write_ospg_quad(&mut buffer, quad);
-            self.ospg.remove(buffer.as_slice())?;
-            buffer.clear();
+                write_posg_quad(&mut buffer, quad);
+                self.posg.remove(buffer.as_slice())?;
+                buffer.clear();
 
-            write_gspo_quad(&mut buffer, quad);
-            self.gspo.remove(buffer.as_slice())?;
-            buffer.clear();
+                write_ospg_quad(&mut buffer, quad);
+                self.ospg.remove(buffer.as_slice())?;
+                buffer.clear();
 
-            write_gpos_quad(&mut buffer, quad);
-            self.gpos.remove(buffer.as_slice())?;
-            buffer.clear();
+                write_gspo_quad(&mut buffer, quad);
+                self.gspo.remove(buffer.as_slice())?;
+                buffer.clear();
 
-            write_gosp_quad(&mut buffer, quad);
-            self.gosp.remove(buffer.as_slice())?;
-            buffer.clear();
+                write_gpos_quad(&mut buffer, quad);
+                self.gpos.remove(buffer.as_slice())?;
+                buffer.clear();
+
+                write_gosp_quad(&mut buffer, quad);
+                self.gosp.remove(buffer.as_slice())?;
+                buffer.clear();
+            }
+
+            Ok(is_present)
         }
-
-        Ok(())
     }
 
     pub fn insert_named_graph(
         &self,
         graph_name: EncodedTerm,
-    ) -> Result<(), SledUnabortableTransactionError> {
-        self.graphs.insert(encode_term(graph_name), &[])?;
-        Ok(())
+    ) -> Result<bool, SledUnabortableTransactionError> {
+        Ok(self.graphs.insert(encode_term(graph_name), &[])?.is_none())
     }
 
     pub fn get_str(&self, key: StrHash) -> Result<Option<String>, SledUnabortableTransactionError> {
@@ -792,9 +819,8 @@ impl<'a> StorageTransaction<'a> {
         &self,
         key: StrHash,
         value: &str,
-    ) -> Result<(), SledUnabortableTransactionError> {
-        self.id2str.insert(&key.to_be_bytes(), value)?;
-        Ok(())
+    ) -> Result<bool, SledUnabortableTransactionError> {
+        Ok(self.id2str.insert(&key.to_be_bytes(), value)?.is_none())
     }
 }
 
@@ -947,5 +973,59 @@ impl<T> From<SledConflictableTransactionError<T>> for ConflictableTransactionErr
                 ConflictableTransactionError::Storage(e.into())
             }
         }
+    }
+}
+
+impl StrEncodingAware for Storage {
+    type Error = io::Error;
+}
+
+impl StrLookup for Storage {
+    fn get_str(&self, id: StrHash) -> Result<Option<String>, io::Error> {
+        self.get_str(id)
+    }
+
+    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, io::Error> {
+        let key = StrHash::new(value);
+        Ok(if self.contains_str(key)? {
+            Some(key)
+        } else {
+            None
+        })
+    }
+}
+
+impl StrContainer for Storage {
+    fn insert_str(&self, value: &str) -> Result<StrHash, io::Error> {
+        let key = StrHash::new(value);
+        self.insert_str(key, value)?;
+        Ok(key)
+    }
+}
+
+impl<'a> StrEncodingAware for StorageTransaction<'a> {
+    type Error = SledUnabortableTransactionError;
+}
+
+impl<'a> StrLookup for StorageTransaction<'a> {
+    fn get_str(&self, id: StrHash) -> Result<Option<String>, SledUnabortableTransactionError> {
+        self.get_str(id)
+    }
+
+    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, SledUnabortableTransactionError> {
+        let key = StrHash::new(value);
+        Ok(if self.contains_str(key)? {
+            Some(key)
+        } else {
+            None
+        })
+    }
+}
+
+impl<'a> StrContainer for StorageTransaction<'a> {
+    fn insert_str(&self, value: &str) -> Result<StrHash, SledUnabortableTransactionError> {
+        let key = StrHash::new(value);
+        self.insert_str(key, value)?;
+        Ok(key)
     }
 }

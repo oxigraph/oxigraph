@@ -630,17 +630,11 @@ mod tests {
     use crate::store::numeric_encoder::*;
     use std::collections::HashMap;
     use std::convert::Infallible;
+    use std::sync::RwLock;
 
+    #[derive(Default)]
     struct MemoryStrStore {
-        id2str: HashMap<StrHash, String>,
-    }
-
-    impl Default for MemoryStrStore {
-        fn default() -> Self {
-            Self {
-                id2str: HashMap::default(),
-            }
-        }
+        id2str: RwLock<HashMap<StrHash, String>>,
     }
 
     impl StrEncodingAware for MemoryStrStore {
@@ -649,12 +643,12 @@ mod tests {
 
     impl StrLookup for MemoryStrStore {
         fn get_str(&self, id: StrHash) -> Result<Option<String>, Infallible> {
-            Ok(self.id2str.get(&id).cloned())
+            Ok(self.id2str.read().unwrap().get(&id).cloned())
         }
 
         fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, Infallible> {
             let id = StrHash::new(value);
-            Ok(if self.id2str.contains_key(&id) {
+            Ok(if self.id2str.read().unwrap().contains_key(&id) {
                 Some(id)
             } else {
                 None
@@ -663,9 +657,13 @@ mod tests {
     }
 
     impl StrContainer for MemoryStrStore {
-        fn insert_str(&mut self, value: &str) -> Result<StrHash, Infallible> {
+        fn insert_str(&self, value: &str) -> Result<StrHash, Infallible> {
             let key = StrHash::new(value);
-            self.id2str.entry(key).or_insert_with(|| value.to_owned());
+            self.id2str
+                .write()
+                .unwrap()
+                .entry(key)
+                .or_insert_with(|| value.to_owned());
             Ok(key)
         }
     }
@@ -675,7 +673,7 @@ mod tests {
         use crate::model::vocab::xsd;
         use crate::model::*;
 
-        let mut store = MemoryStrStore::default();
+        let store = MemoryStrStore::default();
         let terms: Vec<Term> = vec![
             NamedNode::new_unchecked("http://foo.com").into(),
             NamedNode::new_unchecked("http://bar.com").into(),

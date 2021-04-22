@@ -1377,7 +1377,7 @@ where
                 } else {
                     None
                 }?;
-                let mut encoder = self.dataset.as_ref();
+                let encoder = self.dataset.as_ref();
                 encoder
                     .encode_literal(LiteralRef::new_typed_literal(
                         &value,
@@ -1823,7 +1823,7 @@ where
     ) -> EncodedTuplesIterator {
         let eval = self.clone();
         Box::new(iter.map(move |solution| {
-            let mut encoder = eval.dataset.as_ref();
+            let encoder = eval.dataset.as_ref();
             let mut encoded_terms = EncodedTuple::with_capacity(variables.len());
             for (variable, term) in solution?.iter() {
                 put_variable_value(

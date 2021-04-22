@@ -199,7 +199,7 @@ impl<S: ReadableEncodedStore + 'static> ReadableEncodedStore for DatasetView<S> 
 }
 
 impl<'a, S: ReadableEncodedStore> StrContainer for &'a DatasetView<S> {
-    fn insert_str(&mut self, value: &str) -> Result<StrHash, EvaluationError> {
+    fn insert_str(&self, value: &str) -> Result<StrHash, EvaluationError> {
         if let Some(hash) = self.store.get_str_id(value).map_err(|e| e.into())? {
             Ok(hash)
         } else {
