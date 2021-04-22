@@ -1,10 +1,11 @@
 use crate::sparql::algebra::QueryDataset;
 use crate::sparql::EvaluationError;
 use crate::storage::numeric_encoder::{
-    EncodedQuad, EncodedTerm, ReadEncoder, StrContainer, StrEncodingAware, StrHash, StrLookup,
+    EncodedQuad, EncodedTerm, ReadEncoder, StrContainer, StrHash, StrLookup,
 };
 use crate::storage::Storage;
 use std::cell::RefCell;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::iter::empty;
 
@@ -154,40 +155,34 @@ impl DatasetView {
     }
 }
 
-impl StrEncodingAware for DatasetView {
-    type Error = EvaluationError;
-}
-
 impl StrLookup for DatasetView {
-    fn get_str(&self, id: StrHash) -> Result<Option<String>, EvaluationError> {
-        Ok(if let Some(value) = self.extra.borrow().get(&id) {
+    type Error = EvaluationError;
+
+    fn get_str(&self, key: StrHash) -> Result<Option<String>, EvaluationError> {
+        Ok(if let Some(value) = self.extra.borrow().get(&key) {
             Some(value.clone())
         } else {
-            self.storage.get_str(id)?
+            self.storage.get_str(key)?
         })
     }
 
-    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, EvaluationError> {
-        let id = StrHash::new(value);
-        Ok(if self.extra.borrow().contains_key(&id) {
-            Some(id)
-        } else {
-            self.storage.get_str_id(value)?
-        })
+    fn contains_str(&self, key: StrHash) -> Result<bool, EvaluationError> {
+        Ok(self.extra.borrow().contains_key(&key) || self.storage.contains_str(key)?)
     }
 }
 
 impl StrContainer for DatasetView {
-    fn insert_str(&self, value: &str) -> Result<StrHash, EvaluationError> {
-        if let Some(hash) = self.storage.get_str_id(value)? {
-            Ok(hash)
+    fn insert_str(&self, key: StrHash, value: &str) -> Result<bool, EvaluationError> {
+        if self.storage.contains_str(key)? {
+            Ok(false)
         } else {
-            let hash = StrHash::new(value);
-            self.extra
-                .borrow_mut()
-                .entry(hash)
-                .or_insert_with(|| value.to_owned());
-            Ok(hash)
+            match self.extra.borrow_mut().entry(key) {
+                Entry::Occupied(_) => Ok(false),
+                Entry::Vacant(entry) => {
+                    entry.insert(value.to_owned());
+                    Ok(true)
+                }
+            }
         }
     }
 }

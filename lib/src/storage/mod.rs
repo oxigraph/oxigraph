@@ -18,9 +18,7 @@ use crate::storage::binary_encoder::{
     LATEST_STORAGE_VERSION, WRITTEN_TERM_MAX_SIZE,
 };
 use crate::storage::io::StoreOrParseError;
-use crate::storage::numeric_encoder::{
-    EncodedQuad, EncodedTerm, StrContainer, StrEncodingAware, StrHash, StrLookup,
-};
+use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrContainer, StrHash, StrLookup};
 
 mod binary_encoder;
 pub(crate) mod io;
@@ -991,57 +989,39 @@ impl<T> From<ConflictableTransactionError<T>> for Sled2ConflictableTransactionEr
     }
 }
 
-impl StrEncodingAware for Storage {
-    type Error = std::io::Error;
-}
-
 impl StrLookup for Storage {
-    fn get_str(&self, id: StrHash) -> Result<Option<String>, std::io::Error> {
-        self.get_str(id)
+    type Error = std::io::Error;
+
+    fn get_str(&self, key: StrHash) -> Result<Option<String>, std::io::Error> {
+        self.get_str(key)
     }
 
-    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, std::io::Error> {
-        let key = StrHash::new(value);
-        Ok(if self.contains_str(key)? {
-            Some(key)
-        } else {
-            None
-        })
+    fn contains_str(&self, key: StrHash) -> Result<bool, std::io::Error> {
+        self.contains_str(key)
     }
 }
 
 impl StrContainer for Storage {
-    fn insert_str(&self, value: &str) -> Result<StrHash, std::io::Error> {
-        let key = StrHash::new(value);
-        self.insert_str(key, value)?;
-        Ok(key)
+    fn insert_str(&self, key: StrHash, value: &str) -> Result<bool, std::io::Error> {
+        self.insert_str(key, value)
     }
-}
-
-impl<'a> StrEncodingAware for StorageTransaction<'a> {
-    type Error = UnabortableTransactionError;
 }
 
 impl<'a> StrLookup for StorageTransaction<'a> {
-    fn get_str(&self, id: StrHash) -> Result<Option<String>, UnabortableTransactionError> {
-        self.get_str(id)
+    type Error = UnabortableTransactionError;
+
+    fn get_str(&self, key: StrHash) -> Result<Option<String>, UnabortableTransactionError> {
+        self.get_str(key)
     }
 
-    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, UnabortableTransactionError> {
-        let key = StrHash::new(value);
-        Ok(if self.contains_str(key)? {
-            Some(key)
-        } else {
-            None
-        })
+    fn contains_str(&self, key: StrHash) -> Result<bool, UnabortableTransactionError> {
+        self.contains_str(key)
     }
 }
 
 impl<'a> StrContainer for StorageTransaction<'a> {
-    fn insert_str(&self, value: &str) -> Result<StrHash, UnabortableTransactionError> {
-        let key = StrHash::new(value);
-        self.insert_str(key, value)?;
-        Ok(key)
+    fn insert_str(&self, key: StrHash, value: &str) -> Result<bool, UnabortableTransactionError> {
+        self.insert_str(key, value)
     }
 }
 

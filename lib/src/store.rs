@@ -42,10 +42,7 @@ use crate::sparql::{
     UpdateOptions,
 };
 use crate::storage::io::{dump_dataset, dump_graph, load_dataset, load_graph};
-use crate::storage::numeric_encoder::{
-    Decoder, EncodedTerm, ReadEncoder, StrContainer, StrEncodingAware, StrHash, StrLookup,
-    WriteEncoder,
-};
+use crate::storage::numeric_encoder::{Decoder, EncodedTerm, ReadEncoder, WriteEncoder};
 pub use crate::storage::ConflictableTransactionError;
 pub use crate::storage::TransactionError;
 pub use crate::storage::UnabortableTransactionError;
@@ -247,7 +244,7 @@ impl Store {
 
     /// Checks if this store contains a given quad
     pub fn contains<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, io::Error> {
-        if let Some(quad) = self.get_encoded_quad(quad.into())? {
+        if let Some(quad) = self.storage.get_encoded_quad(quad.into())? {
             self.storage.contains(&quad)
         } else {
             Ok(false)
@@ -431,7 +428,7 @@ impl Store {
     /// It might leave the store in a bad state if a crash happens during the insertion.
     /// Use a (memory greedy) [transaction](Store::transaction()) if you do not want that.
     pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, io::Error> {
-        let quad = self.encode_quad(quad.into())?;
+        let quad = self.storage.encode_quad(quad.into())?;
         self.storage.insert(&quad)
     }
 
@@ -443,7 +440,7 @@ impl Store {
     /// It might leave the store in a bad state if a crash happens during the removal.
     /// Use a (memory greedy) [transaction](Store::transaction()) if you do not want that.
     pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, io::Error> {
-        if let Some(quad) = self.get_encoded_quad(quad.into())? {
+        if let Some(quad) = self.storage.get_encoded_quad(quad.into())? {
             self.storage.remove(&quad)
         } else {
             Ok(false)
@@ -540,7 +537,10 @@ impl Store {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool, io::Error> {
-        if let Some(graph_name) = self.get_encoded_named_or_blank_node(graph_name.into())? {
+        if let Some(graph_name) = self
+            .storage
+            .get_encoded_named_or_blank_node(graph_name.into())?
+        {
             self.storage.contains_named_graph(graph_name)
         } else {
             Ok(false)
@@ -566,7 +566,7 @@ impl Store {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool, io::Error> {
-        let graph_name = self.encode_named_or_blank_node(graph_name.into())?;
+        let graph_name = self.storage.encode_named_or_blank_node(graph_name.into())?;
         self.storage.insert_named_graph(graph_name)
     }
 
@@ -592,7 +592,7 @@ impl Store {
         &self,
         graph_name: impl Into<GraphNameRef<'a>>,
     ) -> Result<(), io::Error> {
-        if let Some(graph_name) = self.get_encoded_graph_name(graph_name.into())? {
+        if let Some(graph_name) = self.storage.get_encoded_graph_name(graph_name.into())? {
             self.storage.clear_graph(graph_name)
         } else {
             Ok(())
@@ -623,7 +623,10 @@ impl Store {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool, io::Error> {
-        if let Some(graph_name) = self.get_encoded_named_or_blank_node(graph_name.into())? {
+        if let Some(graph_name) = self
+            .storage
+            .get_encoded_named_or_blank_node(graph_name.into())?
+        {
             self.storage.remove_named_graph(graph_name)
         } else {
             Ok(false)
@@ -658,28 +661,6 @@ impl fmt::Display for Store {
             writeln!(f, "{}", t.map_err(|_| fmt::Error)?)?;
         }
         Ok(())
-    }
-}
-
-impl StrEncodingAware for Store {
-    type Error = io::Error;
-}
-
-impl StrLookup for Store {
-    fn get_str(&self, id: StrHash) -> Result<Option<String>, io::Error> {
-        self.storage.get_str(id)
-    }
-
-    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, io::Error> {
-        self.storage.get_str_id(value)
-    }
-}
-
-impl<'a> StrContainer for &'a Store {
-    fn insert_str(&self, value: &str) -> Result<StrHash, io::Error> {
-        let key = StrHash::new(value);
-        self.storage.insert_str(key, value)?;
-        Ok(key)
     }
 }
 
@@ -792,7 +773,7 @@ impl Transaction<'_> {
         &self,
         quad: impl Into<QuadRef<'a>>,
     ) -> Result<bool, UnabortableTransactionError> {
-        let quad = self.encode_quad(quad.into())?;
+        let quad = self.storage.encode_quad(quad.into())?;
         self.storage.insert(&quad)
     }
 
@@ -803,7 +784,7 @@ impl Transaction<'_> {
         &self,
         quad: impl Into<QuadRef<'a>>,
     ) -> Result<bool, UnabortableTransactionError> {
-        if let Some(quad) = self.get_encoded_quad(quad.into())? {
+        if let Some(quad) = self.storage.get_encoded_quad(quad.into())? {
             self.storage.remove(&quad)
         } else {
             Ok(false)
@@ -817,30 +798,8 @@ impl Transaction<'_> {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool, UnabortableTransactionError> {
-        let graph_name = self.encode_named_or_blank_node(graph_name.into())?;
+        let graph_name = self.storage.encode_named_or_blank_node(graph_name.into())?;
         self.storage.insert_named_graph(graph_name)
-    }
-}
-
-impl<'a> StrEncodingAware for &'a Transaction<'a> {
-    type Error = UnabortableTransactionError;
-}
-
-impl<'a> StrLookup for &'a Transaction<'a> {
-    fn get_str(&self, id: StrHash) -> Result<Option<String>, UnabortableTransactionError> {
-        self.storage.get_str(id)
-    }
-
-    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, UnabortableTransactionError> {
-        self.storage.get_str_id(value)
-    }
-}
-
-impl<'a> StrContainer for &'a Transaction<'a> {
-    fn insert_str(&self, value: &str) -> Result<StrHash, UnabortableTransactionError> {
-        let key = StrHash::new(value);
-        self.storage.insert_str(key, value)?;
-        Ok(key)
     }
 }
 
@@ -864,7 +823,7 @@ impl Iterator for QuadIter {
     fn next(&mut self) -> Option<Result<Quad, io::Error>> {
         match &mut self.inner {
             QuadIterInner::Quads { iter, store } => Some(match iter.next()? {
-                Ok(quad) => store.decode_quad(&quad).map_err(|e| e.into()),
+                Ok(quad) => store.storage.decode_quad(&quad).map_err(|e| e.into()),
                 Err(error) => Err(error),
             }),
             QuadIterInner::Error(iter) => iter.next().map(Err),
@@ -884,9 +843,9 @@ impl Iterator for GraphNameIter {
 
     fn next(&mut self) -> Option<Result<NamedOrBlankNode, io::Error>> {
         Some(
-            self.iter
-                .next()?
-                .and_then(|graph_name| Ok(self.store.decode_named_or_blank_node(graph_name)?)),
+            self.iter.next()?.and_then(|graph_name| {
+                Ok(self.store.storage.decode_named_or_blank_node(graph_name)?)
+            }),
         )
     }
 

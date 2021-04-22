@@ -486,27 +486,20 @@ impl EncodedQuad {
     }
 }
 
-pub(crate) trait StrEncodingAware {
-    //TODO: rename
+pub(crate) trait StrLookup {
     type Error: Error + Into<EvaluationError> + 'static;
+
+    fn get_str(&self, key: StrHash) -> Result<Option<String>, Self::Error>;
+
+    fn contains_str(&self, key: StrHash) -> Result<bool, Self::Error>;
 }
 
-impl<'a, T: StrEncodingAware> StrEncodingAware for &'a T {
-    type Error = T::Error;
-}
-
-pub(crate) trait StrLookup: StrEncodingAware {
-    fn get_str(&self, id: StrHash) -> Result<Option<String>, Self::Error>;
-
-    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, Self::Error>;
-}
-
-pub(crate) trait StrContainer: StrEncodingAware {
-    fn insert_str(&self, value: &str) -> Result<StrHash, Self::Error>;
+pub(crate) trait StrContainer: StrLookup {
+    fn insert_str(&self, key: StrHash, value: &str) -> Result<bool, Self::Error>;
 }
 
 /// Tries to encode a term based on the existing strings (does not insert anything)
-pub(crate) trait ReadEncoder: StrEncodingAware {
+pub(crate) trait ReadEncoder: StrLookup {
     fn get_encoded_named_node(
         &self,
         named_node: NamedNodeRef<'_>,
@@ -738,12 +731,17 @@ pub(crate) trait ReadEncoder: StrEncodingAware {
 
 impl<S: StrLookup> ReadEncoder for S {
     fn get_encoded_str(&self, value: &str) -> Result<Option<StrHash>, Self::Error> {
-        self.get_str_id(value)
+        let key = StrHash::new(value);
+        Ok(if self.contains_str(key)? {
+            Some(key)
+        } else {
+            None
+        })
     }
 }
 
 /// Encodes a term and insert strings if needed
-pub(crate) trait WriteEncoder: StrEncodingAware {
+pub(crate) trait WriteEncoder: StrContainer {
     fn encode_named_node(&self, named_node: NamedNodeRef<'_>) -> Result<EncodedTerm, Self::Error> {
         self.encode_rio_named_node(named_node.into())
     }
@@ -999,7 +997,9 @@ pub(crate) trait WriteEncoder: StrEncodingAware {
 
 impl<S: StrContainer> WriteEncoder for S {
     fn encode_str(&self, value: &str) -> Result<StrHash, Self::Error> {
-        self.insert_str(value)
+        let key = StrHash::new(value);
+        self.insert_str(key, value)?;
+        Ok(key)
     }
 }
 

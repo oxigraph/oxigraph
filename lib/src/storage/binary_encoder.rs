@@ -628,43 +628,37 @@ pub fn write_term(sink: &mut Vec<u8>, term: EncodedTerm) {
 mod tests {
     use super::*;
     use crate::storage::numeric_encoder::*;
+    use std::cell::RefCell;
+    use std::collections::hash_map::Entry;
     use std::collections::HashMap;
     use std::convert::Infallible;
-    use std::sync::RwLock;
 
     #[derive(Default)]
     struct MemoryStrStore {
-        id2str: RwLock<HashMap<StrHash, String>>,
-    }
-
-    impl StrEncodingAware for MemoryStrStore {
-        type Error = Infallible;
+        id2str: RefCell<HashMap<StrHash, String>>,
     }
 
     impl StrLookup for MemoryStrStore {
-        fn get_str(&self, id: StrHash) -> Result<Option<String>, Infallible> {
-            Ok(self.id2str.read().unwrap().get(&id).cloned())
+        type Error = Infallible;
+
+        fn get_str(&self, key: StrHash) -> Result<Option<String>, Infallible> {
+            Ok(self.id2str.borrow().get(&key).cloned())
         }
 
-        fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, Infallible> {
-            let id = StrHash::new(value);
-            Ok(if self.id2str.read().unwrap().contains_key(&id) {
-                Some(id)
-            } else {
-                None
-            })
+        fn contains_str(&self, key: StrHash) -> Result<bool, Infallible> {
+            Ok(self.id2str.borrow().contains_key(&key))
         }
     }
 
     impl StrContainer for MemoryStrStore {
-        fn insert_str(&self, value: &str) -> Result<StrHash, Infallible> {
-            let key = StrHash::new(value);
-            self.id2str
-                .write()
-                .unwrap()
-                .entry(key)
-                .or_insert_with(|| value.to_owned());
-            Ok(key)
+        fn insert_str(&self, key: StrHash, value: &str) -> Result<bool, Infallible> {
+            match self.id2str.borrow_mut().entry(key) {
+                Entry::Occupied(_) => Ok(false),
+                Entry::Vacant(entry) => {
+                    entry.insert(value.to_owned());
+                    Ok(true)
+                }
+            }
         }
     }
 
