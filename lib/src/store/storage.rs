@@ -1,16 +1,18 @@
-use crate::error::invalid_data_error;
-use crate::sparql::EvaluationError;
-use crate::store::binary_encoder::*;
-use crate::store::numeric_encoder::*;
-use crate::store::StoreOrParseError;
-use sled::transaction::{
-    ConflictableTransactionError, TransactionError, TransactionalTree, UnabortableTransactionError,
-};
-use sled::{Config, Db, Iter, Transactional, Tree};
 use std::error::Error;
 use std::fmt;
 use std::io;
 use std::path::Path;
+
+use sled::transaction::{
+    ConflictableTransactionError, TransactionError, TransactionalTree, UnabortableTransactionError,
+};
+use sled::{Config, Db, Iter, Transactional, Tree};
+
+use crate::error::invalid_data_error;
+use crate::sparql::EvaluationError;
+use crate::store::binary_encoder::*;
+use crate::store::io::StoreOrParseError;
+use crate::store::numeric_encoder::*;
 
 /// Low level storage primitives
 #[derive(Clone)]

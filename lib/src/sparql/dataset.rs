@@ -4,10 +4,9 @@ use crate::store::numeric_encoder::{
     EncodedQuad, EncodedTerm, ReadEncoder, StrContainer, StrEncodingAware, StrHash, StrLookup,
 };
 use crate::store::storage::Storage;
-use crate::store::ReadableEncodedStore;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::iter::{empty, once, Once};
+use std::iter::empty;
 
 pub(crate) struct DatasetView {
     storage: Storage,
@@ -59,37 +58,9 @@ impl DatasetView {
             .quads_for_pattern(subject, predicate, object, graph_name)
             .map(|t| t.map_err(|e| e.into()))
     }
-}
-
-impl StrEncodingAware for DatasetView {
-    type Error = EvaluationError;
-}
-
-impl StrLookup for DatasetView {
-    fn get_str(&self, id: StrHash) -> Result<Option<String>, EvaluationError> {
-        Ok(if let Some(value) = self.extra.borrow().get(&id) {
-            Some(value.clone())
-        } else {
-            self.storage.get_str(id)?
-        })
-    }
-
-    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, EvaluationError> {
-        let id = StrHash::new(value);
-        Ok(if self.extra.borrow().contains_key(&id) {
-            Some(id)
-        } else {
-            self.storage.get_str_id(value)?
-        })
-    }
-}
-
-impl ReadableEncodedStore for DatasetView {
-    type QuadsIter = Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>>;
-    type GraphsIter = Once<Result<EncodedTerm, EvaluationError>>;
 
     #[allow(clippy::needless_collect)]
-    fn encoded_quads_for_pattern(
+    pub fn encoded_quads_for_pattern(
         &self,
         subject: Option<EncodedTerm>,
         predicate: Option<EncodedTerm>,
@@ -181,17 +152,28 @@ impl ReadableEncodedStore for DatasetView {
             )
         }
     }
+}
 
-    fn encoded_named_graphs(&self) -> Self::GraphsIter {
-        once(Err(EvaluationError::msg(
-            "Graphs lookup is not implemented by DatasetView",
-        )))
+impl StrEncodingAware for DatasetView {
+    type Error = EvaluationError;
+}
+
+impl StrLookup for DatasetView {
+    fn get_str(&self, id: StrHash) -> Result<Option<String>, EvaluationError> {
+        Ok(if let Some(value) = self.extra.borrow().get(&id) {
+            Some(value.clone())
+        } else {
+            self.storage.get_str(id)?
+        })
     }
 
-    fn contains_encoded_named_graph(&self, _: EncodedTerm) -> Result<bool, EvaluationError> {
-        Err(EvaluationError::msg(
-            "Graphs lookup is not implemented by DatasetView",
-        ))
+    fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, EvaluationError> {
+        let id = StrHash::new(value);
+        Ok(if self.extra.borrow().contains_key(&id) {
+            Some(id)
+        } else {
+            self.storage.get_str_id(value)?
+        })
     }
 }
 

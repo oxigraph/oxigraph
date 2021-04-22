@@ -10,7 +10,6 @@ use crate::sparql::plan::*;
 use crate::sparql::service::ServiceHandler;
 use crate::store::numeric_encoder::*;
 use crate::store::small_string::SmallString;
-use crate::store::ReadableEncodedStore;
 use digest::Digest;
 use md5::Md5;
 use oxilangtag::LanguageTag;

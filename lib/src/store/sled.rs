@@ -1,28 +1,26 @@
 //! Store based on the [Sled](https://sled.rs/) key-value database.
 
+use std::convert::TryInto;
+use std::io::{BufRead, Write};
+use std::iter::{once, Once};
+use std::path::Path;
+use std::{fmt, io, str};
+
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use crate::sparql::{
     evaluate_query, evaluate_update, EvaluationError, Query, QueryOptions, QueryResults, Update,
     UpdateOptions,
 };
+use crate::store::io::{dump_dataset, dump_graph, load_dataset, load_graph};
 use crate::store::numeric_encoder::{
-    Decoder, EncodedQuad, EncodedTerm, ReadEncoder, StrContainer, StrEncodingAware, StrHash,
-    StrLookup, WriteEncoder,
+    Decoder, EncodedTerm, ReadEncoder, StrContainer, StrEncodingAware, StrHash, StrLookup,
+    WriteEncoder,
 };
 use crate::store::storage::*;
 pub use crate::store::storage::{
     SledConflictableTransactionError, SledTransactionError, SledUnabortableTransactionError,
 };
-use crate::store::{
-    dump_dataset, dump_graph, get_encoded_quad_pattern, load_dataset, load_graph,
-    ReadableEncodedStore, WritableEncodedStore,
-};
-use std::convert::TryInto;
-use std::io::{BufRead, Write};
-use std::iter::{once, Once};
-use std::path::Path;
-use std::{fmt, io, str};
 
 /// Store based on the [Sled](https://sled.rs/) key-value database.
 /// It encodes a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) and allows to query it using SPARQL.
@@ -142,15 +140,72 @@ impl SledStore {
         graph_name: Option<GraphNameRef<'_>>,
     ) -> SledQuadIter {
         SledQuadIter {
-            inner: match get_encoded_quad_pattern(self, subject, predicate, object, graph_name) {
+            inner: match self.get_encoded_quad_pattern(subject, predicate, object, graph_name) {
                 Ok(Some((subject, predicate, object, graph_name))) => QuadIterInner::Quads {
-                    iter: self.encoded_quads_for_pattern(subject, predicate, object, graph_name),
+                    iter: self
+                        .storage
+                        .quads_for_pattern(subject, predicate, object, graph_name),
                     store: self.clone(),
                 },
                 Ok(None) => QuadIterInner::Empty,
                 Err(error) => QuadIterInner::Error(once(error)),
             },
         }
+    }
+
+    fn get_encoded_quad_pattern(
+        &self,
+        subject: Option<NamedOrBlankNodeRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+        graph_name: Option<GraphNameRef<'_>>,
+    ) -> Result<
+        Option<(
+            Option<EncodedTerm>,
+            Option<EncodedTerm>,
+            Option<EncodedTerm>,
+            Option<EncodedTerm>,
+        )>,
+        io::Error,
+    > {
+        Ok(Some((
+            if let Some(subject) = transpose(
+                subject
+                    .map(|t| self.storage.get_encoded_named_or_blank_node(t))
+                    .transpose()?,
+            ) {
+                subject
+            } else {
+                return Ok(None);
+            },
+            if let Some(predicate) = transpose(
+                predicate
+                    .map(|t| self.storage.get_encoded_named_node(t))
+                    .transpose()?,
+            ) {
+                predicate
+            } else {
+                return Ok(None);
+            },
+            if let Some(object) = transpose(
+                object
+                    .map(|t| self.storage.get_encoded_term(t))
+                    .transpose()?,
+            ) {
+                object
+            } else {
+                return Ok(None);
+            },
+            if let Some(graph_name) = transpose(
+                graph_name
+                    .map(|t| self.storage.get_encoded_graph_name(t))
+                    .transpose()?,
+            ) {
+                graph_name
+            } else {
+                return Ok(None);
+            },
+        )))
     }
 
     /// Returns all the quads contained in the store
@@ -333,8 +388,7 @@ impl SledStore {
         format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
-        let mut this = self;
-        load_dataset(&mut this, reader, format, base_iri)?;
+        load_dataset(&self.storage, reader, format, base_iri)?;
         Ok(())
     }
 
@@ -433,7 +487,7 @@ impl SledStore {
     /// ```
     pub fn named_graphs(&self) -> SledGraphNameIter {
         SledGraphNameIter {
-            iter: self.encoded_named_graphs(),
+            iter: self.storage.named_graphs(),
             store: self.clone(),
         }
     }
@@ -456,7 +510,7 @@ impl SledStore {
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool, io::Error> {
         if let Some(graph_name) = self.get_encoded_named_or_blank_node(graph_name.into())? {
-            self.contains_encoded_named_graph(graph_name)
+            self.storage.contains_named_graph(graph_name)
         } else {
             Ok(false)
         }
@@ -508,8 +562,7 @@ impl SledStore {
         graph_name: impl Into<GraphNameRef<'a>>,
     ) -> Result<(), io::Error> {
         if let Some(graph_name) = self.get_encoded_graph_name(graph_name.into())? {
-            let mut this = self;
-            this.clear_encoded_graph(graph_name)
+            self.storage.clear_graph(graph_name)
         } else {
             Ok(())
         }
@@ -564,8 +617,7 @@ impl SledStore {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn clear(&self) -> Result<(), io::Error> {
-        let mut this = self;
-        (&mut this).clear()
+        self.storage.clear()
     }
 }
 
@@ -592,65 +644,11 @@ impl StrLookup for SledStore {
     }
 }
 
-impl ReadableEncodedStore for SledStore {
-    type QuadsIter = ChainedDecodingQuadIterator;
-    type GraphsIter = DecodingGraphIterator;
-
-    fn encoded_quads_for_pattern(
-        &self,
-        subject: Option<EncodedTerm>,
-        predicate: Option<EncodedTerm>,
-        object: Option<EncodedTerm>,
-        graph_name: Option<EncodedTerm>,
-    ) -> ChainedDecodingQuadIterator {
-        self.storage
-            .quads_for_pattern(subject, predicate, object, graph_name)
-    }
-
-    fn encoded_named_graphs(&self) -> DecodingGraphIterator {
-        self.storage.named_graphs()
-    }
-
-    fn contains_encoded_named_graph(&self, graph_name: EncodedTerm) -> Result<bool, io::Error> {
-        self.storage.contains_named_graph(graph_name)
-    }
-}
-
 impl<'a> StrContainer for &'a SledStore {
     fn insert_str(&self, value: &str) -> Result<StrHash, io::Error> {
         let key = StrHash::new(value);
         self.storage.insert_str(key, value)?;
         Ok(key)
-    }
-}
-
-impl<'a> WritableEncodedStore for &'a SledStore {
-    fn insert_encoded(&mut self, quad: &EncodedQuad) -> Result<(), io::Error> {
-        self.storage.insert(quad)?;
-        Ok(())
-    }
-
-    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<(), io::Error> {
-        self.storage.remove(quad)?;
-        Ok(())
-    }
-
-    fn insert_encoded_named_graph(&mut self, graph_name: EncodedTerm) -> Result<(), io::Error> {
-        self.storage.insert_named_graph(graph_name)?;
-        Ok(())
-    }
-
-    fn clear_encoded_graph(&mut self, graph_name: EncodedTerm) -> Result<(), io::Error> {
-        self.storage.clear_graph(graph_name)
-    }
-
-    fn remove_encoded_named_graph(&mut self, graph_name: EncodedTerm) -> Result<(), io::Error> {
-        self.storage.remove_named_graph(graph_name)?;
-        Ok(())
-    }
-
-    fn clear(&mut self) -> Result<(), io::Error> {
-        self.storage.clear()
     }
 }
 
@@ -753,9 +751,7 @@ impl SledTransaction<'_> {
         format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> Result<(), SledUnabortableTransactionError> {
-        let mut this = self;
-        load_dataset(&mut this, reader, format, base_iri)?;
-        Ok(())
+        Ok(load_dataset(&self.storage, reader, format, base_iri)?)
     }
 
     /// Adds a quad to this store during the transaction.
@@ -782,6 +778,17 @@ impl SledTransaction<'_> {
             Ok(false)
         }
     }
+
+    /// Inserts a graph into this store during the transaction
+    ///
+    /// Returns `true` if the graph was not already in the store.
+    pub fn insert_named_graph<'a>(
+        &self,
+        graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
+    ) -> Result<bool, SledUnabortableTransactionError> {
+        let graph_name = self.encode_named_or_blank_node(graph_name.into())?;
+        self.storage.insert_named_graph(graph_name)
+    }
 }
 
 impl<'a> StrEncodingAware for &'a SledTransaction<'a> {
@@ -803,59 +810,6 @@ impl<'a> StrContainer for &'a SledTransaction<'a> {
         let key = StrHash::new(value);
         self.storage.insert_str(key, value)?;
         Ok(key)
-    }
-}
-
-impl<'a> WritableEncodedStore for &'a SledTransaction<'a> {
-    fn insert_encoded(
-        &mut self,
-        quad: &EncodedQuad,
-    ) -> Result<(), SledUnabortableTransactionError> {
-        self.storage.insert(quad)?;
-        Ok(())
-    }
-
-    fn remove_encoded(
-        &mut self,
-        quad: &EncodedQuad,
-    ) -> Result<(), SledUnabortableTransactionError> {
-        self.storage.remove(quad)?;
-        Ok(())
-    }
-
-    fn insert_encoded_named_graph(
-        &mut self,
-        graph_name: EncodedTerm,
-    ) -> Result<(), SledUnabortableTransactionError> {
-        self.storage.insert_named_graph(graph_name)?;
-        Ok(())
-    }
-
-    fn clear_encoded_graph(
-        &mut self,
-        _: EncodedTerm,
-    ) -> Result<(), SledUnabortableTransactionError> {
-        Err(SledUnabortableTransactionError::Storage(io::Error::new(
-            io::ErrorKind::Other,
-            "CLEAR is not implemented in Sled transactions",
-        )))
-    }
-
-    fn remove_encoded_named_graph(
-        &mut self,
-        _: EncodedTerm,
-    ) -> Result<(), SledUnabortableTransactionError> {
-        Err(SledUnabortableTransactionError::Storage(io::Error::new(
-            io::ErrorKind::Other,
-            "DROP is not implemented in Sled transactions",
-        )))
-    }
-
-    fn clear(&mut self) -> Result<(), SledUnabortableTransactionError> {
-        Err(SledUnabortableTransactionError::Storage(io::Error::new(
-            io::ErrorKind::Other,
-            "CLEAR ALL is not implemented in Sled transactions",
-        )))
     }
 }
 
@@ -907,6 +861,14 @@ impl Iterator for SledGraphNameIter {
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.iter.size_hint()
+    }
+}
+
+fn transpose<T>(o: Option<Option<T>>) -> Option<Option<T>> {
+    match o {
+        Some(Some(v)) => Some(Some(v)),
+        Some(None) => None,
+        None => Some(None),
     }
 }
 

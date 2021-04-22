@@ -8,7 +8,7 @@ use crate::sparql::http::Client;
 use crate::sparql::plan::EncodedTuple;
 use crate::sparql::plan_builder::PlanBuilder;
 use crate::sparql::{EvaluationError, UpdateOptions};
-use crate::store::load_graph;
+use crate::store::io::load_graph;
 use crate::store::numeric_encoder::{
     EncodedQuad, EncodedTerm, ReadEncoder, StrLookup, WriteEncoder,
 };
