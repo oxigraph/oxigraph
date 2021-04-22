@@ -497,246 +497,147 @@ pub(crate) trait StrLookup {
 pub(crate) trait StrContainer: StrLookup {
     fn insert_str(&self, key: StrHash, value: &str) -> Result<bool, Self::Error>;
 }
-
-/// Tries to encode a term based on the existing strings (does not insert anything)
-pub(crate) trait ReadEncoder: StrLookup {
-    fn get_encoded_named_node(
-        &self,
-        named_node: NamedNodeRef<'_>,
-    ) -> Result<Option<EncodedTerm>, Self::Error> {
-        Ok(Some(EncodedTerm::NamedNode {
-            iri_id: if let Some(iri_id) = self.get_encoded_str(named_node.as_str())? {
-                iri_id
-            } else {
-                return Ok(None);
-            },
-        }))
+pub(crate) fn get_encoded_named_node(named_node: NamedNodeRef<'_>) -> EncodedTerm {
+    EncodedTerm::NamedNode {
+        iri_id: StrHash::new(named_node.as_str()),
     }
-
-    fn get_encoded_blank_node(
-        &self,
-        blank_node: BlankNodeRef<'_>,
-    ) -> Result<Option<EncodedTerm>, Self::Error> {
-        Ok(Some(if let Some(id) = blank_node.id() {
-            EncodedTerm::NumericalBlankNode { id }
-        } else {
-            let id = blank_node.as_str();
-            if let Ok(id) = id.try_into() {
-                EncodedTerm::SmallBlankNode(id)
-            } else {
-                EncodedTerm::BigBlankNode {
-                    id_id: if let Some(id_id) = self.get_encoded_str(id)? {
-                        id_id
-                    } else {
-                        return Ok(None);
-                    },
-                }
-            }
-        }))
-    }
-
-    fn get_encoded_literal(
-        &self,
-        literal: LiteralRef<'_>,
-    ) -> Result<Option<EncodedTerm>, Self::Error> {
-        let value = literal.value();
-        let datatype = literal.datatype().as_str();
-        Ok(Some(
-            match match datatype {
-                "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" => {
-                    if let Some(language) = literal.language() {
-                        if let Ok(value) = SmallString::try_from(value) {
-                            if let Ok(language) = SmallString::try_from(language) {
-                                Some(EncodedTerm::SmallSmallLangStringLiteral { value, language })
-                            } else {
-                                Some(EncodedTerm::SmallBigLangStringLiteral {
-                                    value,
-                                    language_id: if let Some(language_id) =
-                                        self.get_encoded_str(language)?
-                                    {
-                                        language_id
-                                    } else {
-                                        return Ok(None);
-                                    },
-                                })
-                            }
-                        } else if let Ok(language) = SmallString::try_from(language) {
-                            Some(EncodedTerm::BigSmallLangStringLiteral {
-                                value_id: if let Some(value_id) = self.get_encoded_str(value)? {
-                                    value_id
-                                } else {
-                                    return Ok(None);
-                                },
-                                language,
-                            })
-                        } else {
-                            Some(EncodedTerm::BigBigLangStringLiteral {
-                                value_id: if let Some(value_id) = self.get_encoded_str(value)? {
-                                    value_id
-                                } else {
-                                    return Ok(None);
-                                },
-                                language_id: if let Some(language_id) =
-                                    self.get_encoded_str(language)?
-                                {
-                                    language_id
-                                } else {
-                                    return Ok(None);
-                                },
-                            })
-                        }
-                    } else {
-                        None
-                    }
-                }
-                "http://www.w3.org/2001/XMLSchema#boolean" => parse_boolean_str(value),
-                "http://www.w3.org/2001/XMLSchema#string" => {
-                    let value = value;
-                    Some(if let Ok(value) = SmallString::try_from(value) {
-                        EncodedTerm::SmallStringLiteral(value)
-                    } else {
-                        EncodedTerm::BigStringLiteral {
-                            value_id: if let Some(value_id) = self.get_encoded_str(value)? {
-                                value_id
-                            } else {
-                                return Ok(None);
-                            },
-                        }
-                    })
-                }
-                "http://www.w3.org/2001/XMLSchema#float" => parse_float_str(value),
-                "http://www.w3.org/2001/XMLSchema#double" => parse_double_str(value),
-                "http://www.w3.org/2001/XMLSchema#integer"
-                | "http://www.w3.org/2001/XMLSchema#byte"
-                | "http://www.w3.org/2001/XMLSchema#short"
-                | "http://www.w3.org/2001/XMLSchema#int"
-                | "http://www.w3.org/2001/XMLSchema#long"
-                | "http://www.w3.org/2001/XMLSchema#unsignedByte"
-                | "http://www.w3.org/2001/XMLSchema#unsignedShort"
-                | "http://www.w3.org/2001/XMLSchema#unsignedInt"
-                | "http://www.w3.org/2001/XMLSchema#unsignedLong"
-                | "http://www.w3.org/2001/XMLSchema#positiveInteger"
-                | "http://www.w3.org/2001/XMLSchema#negativeInteger"
-                | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
-                | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => parse_integer_str(value),
-                "http://www.w3.org/2001/XMLSchema#decimal" => parse_decimal_str(value),
-                "http://www.w3.org/2001/XMLSchema#dateTime"
-                | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => parse_date_time_str(value),
-                "http://www.w3.org/2001/XMLSchema#time" => parse_time_str(value),
-                "http://www.w3.org/2001/XMLSchema#date" => parse_date_str(value),
-                "http://www.w3.org/2001/XMLSchema#gYearMonth" => parse_g_year_month_str(value),
-                "http://www.w3.org/2001/XMLSchema#gYear" => parse_g_year_str(value),
-                "http://www.w3.org/2001/XMLSchema#gMonthDay" => parse_g_month_day_str(value),
-                "http://www.w3.org/2001/XMLSchema#gDay" => parse_g_day_str(value),
-                "http://www.w3.org/2001/XMLSchema#gMonth" => parse_g_month_str(value),
-                "http://www.w3.org/2001/XMLSchema#duration" => parse_duration_str(value),
-                "http://www.w3.org/2001/XMLSchema#yearMonthDuration" => {
-                    parse_year_month_duration_str(value)
-                }
-                "http://www.w3.org/2001/XMLSchema#dayTimeDuration" => {
-                    parse_day_time_duration_str(value)
-                }
-                _ => None,
-            } {
-                Some(term) => term,
-                None => {
-                    if let Ok(value) = SmallString::try_from(value) {
-                        EncodedTerm::SmallTypedLiteral {
-                            value,
-                            datatype_id: if let Some(datatype_id) =
-                                self.get_encoded_str(datatype)?
-                            {
-                                datatype_id
-                            } else {
-                                return Ok(None);
-                            },
-                        }
-                    } else {
-                        EncodedTerm::BigTypedLiteral {
-                            value_id: if let Some(value_id) = self.get_encoded_str(value)? {
-                                value_id
-                            } else {
-                                return Ok(None);
-                            },
-                            datatype_id: if let Some(datatype_id) =
-                                self.get_encoded_str(datatype)?
-                            {
-                                datatype_id
-                            } else {
-                                return Ok(None);
-                            },
-                        }
-                    }
-                }
-            },
-        ))
-    }
-
-    fn get_encoded_named_or_blank_node(
-        &self,
-        term: NamedOrBlankNodeRef<'_>,
-    ) -> Result<Option<EncodedTerm>, Self::Error> {
-        match term {
-            NamedOrBlankNodeRef::NamedNode(named_node) => self.get_encoded_named_node(named_node),
-            NamedOrBlankNodeRef::BlankNode(blank_node) => self.get_encoded_blank_node(blank_node),
-        }
-    }
-
-    fn get_encoded_term(&self, term: TermRef<'_>) -> Result<Option<EncodedTerm>, Self::Error> {
-        match term {
-            TermRef::NamedNode(named_node) => self.get_encoded_named_node(named_node),
-            TermRef::BlankNode(blank_node) => self.get_encoded_blank_node(blank_node),
-            TermRef::Literal(literal) => self.get_encoded_literal(literal),
-        }
-    }
-
-    fn get_encoded_graph_name(
-        &self,
-        name: GraphNameRef<'_>,
-    ) -> Result<Option<EncodedTerm>, Self::Error> {
-        match name {
-            GraphNameRef::NamedNode(named_node) => self.get_encoded_named_node(named_node),
-            GraphNameRef::BlankNode(blank_node) => self.get_encoded_blank_node(blank_node),
-            GraphNameRef::DefaultGraph => Ok(Some(EncodedTerm::DefaultGraph)),
-        }
-    }
-
-    fn get_encoded_quad(&self, quad: QuadRef<'_>) -> Result<Option<EncodedQuad>, Self::Error> {
-        Ok(Some(EncodedQuad {
-            subject: if let Some(subject) = self.get_encoded_named_or_blank_node(quad.subject)? {
-                subject
-            } else {
-                return Ok(None);
-            },
-            predicate: if let Some(predicate) = self.get_encoded_named_node(quad.predicate)? {
-                predicate
-            } else {
-                return Ok(None);
-            },
-            object: if let Some(object) = self.get_encoded_term(quad.object)? {
-                object
-            } else {
-                return Ok(None);
-            },
-            graph_name: if let Some(graph_name) = self.get_encoded_graph_name(quad.graph_name)? {
-                graph_name
-            } else {
-                return Ok(None);
-            },
-        }))
-    }
-
-    fn get_encoded_str(&self, value: &str) -> Result<Option<StrHash>, Self::Error>;
 }
 
-impl<S: StrLookup> ReadEncoder for S {
-    fn get_encoded_str(&self, value: &str) -> Result<Option<StrHash>, Self::Error> {
-        let key = StrHash::new(value);
-        Ok(if self.contains_str(key)? {
-            Some(key)
+pub(crate) fn get_encoded_blank_node(blank_node: BlankNodeRef<'_>) -> EncodedTerm {
+    if let Some(id) = blank_node.id() {
+        EncodedTerm::NumericalBlankNode { id }
+    } else {
+        let id = blank_node.as_str();
+        if let Ok(id) = id.try_into() {
+            EncodedTerm::SmallBlankNode(id)
         } else {
-            None
-        })
+            EncodedTerm::BigBlankNode {
+                id_id: StrHash::new(id),
+            }
+        }
+    }
+}
+
+pub(crate) fn get_encoded_literal(literal: LiteralRef<'_>) -> EncodedTerm {
+    let value = literal.value();
+    let datatype = literal.datatype().as_str();
+    let native_encoding = match datatype {
+        "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" => {
+            if let Some(language) = literal.language() {
+                Some(if let Ok(value) = SmallString::try_from(value) {
+                    if let Ok(language) = SmallString::try_from(language) {
+                        EncodedTerm::SmallSmallLangStringLiteral { value, language }
+                    } else {
+                        EncodedTerm::SmallBigLangStringLiteral {
+                            value,
+                            language_id: StrHash::new(language),
+                        }
+                    }
+                } else if let Ok(language) = SmallString::try_from(language) {
+                    EncodedTerm::BigSmallLangStringLiteral {
+                        value_id: StrHash::new(value),
+                        language,
+                    }
+                } else {
+                    EncodedTerm::BigBigLangStringLiteral {
+                        value_id: StrHash::new(value),
+                        language_id: StrHash::new(language),
+                    }
+                })
+            } else {
+                None
+            }
+        }
+        "http://www.w3.org/2001/XMLSchema#boolean" => parse_boolean_str(value),
+        "http://www.w3.org/2001/XMLSchema#string" => {
+            let value = value;
+            Some(if let Ok(value) = SmallString::try_from(value) {
+                EncodedTerm::SmallStringLiteral(value)
+            } else {
+                EncodedTerm::BigStringLiteral {
+                    value_id: StrHash::new(value),
+                }
+            })
+        }
+        "http://www.w3.org/2001/XMLSchema#float" => parse_float_str(value),
+        "http://www.w3.org/2001/XMLSchema#double" => parse_double_str(value),
+        "http://www.w3.org/2001/XMLSchema#integer"
+        | "http://www.w3.org/2001/XMLSchema#byte"
+        | "http://www.w3.org/2001/XMLSchema#short"
+        | "http://www.w3.org/2001/XMLSchema#int"
+        | "http://www.w3.org/2001/XMLSchema#long"
+        | "http://www.w3.org/2001/XMLSchema#unsignedByte"
+        | "http://www.w3.org/2001/XMLSchema#unsignedShort"
+        | "http://www.w3.org/2001/XMLSchema#unsignedInt"
+        | "http://www.w3.org/2001/XMLSchema#unsignedLong"
+        | "http://www.w3.org/2001/XMLSchema#positiveInteger"
+        | "http://www.w3.org/2001/XMLSchema#negativeInteger"
+        | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
+        | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => parse_integer_str(value),
+        "http://www.w3.org/2001/XMLSchema#decimal" => parse_decimal_str(value),
+        "http://www.w3.org/2001/XMLSchema#dateTime"
+        | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => parse_date_time_str(value),
+        "http://www.w3.org/2001/XMLSchema#time" => parse_time_str(value),
+        "http://www.w3.org/2001/XMLSchema#date" => parse_date_str(value),
+        "http://www.w3.org/2001/XMLSchema#gYearMonth" => parse_g_year_month_str(value),
+        "http://www.w3.org/2001/XMLSchema#gYear" => parse_g_year_str(value),
+        "http://www.w3.org/2001/XMLSchema#gMonthDay" => parse_g_month_day_str(value),
+        "http://www.w3.org/2001/XMLSchema#gDay" => parse_g_day_str(value),
+        "http://www.w3.org/2001/XMLSchema#gMonth" => parse_g_month_str(value),
+        "http://www.w3.org/2001/XMLSchema#duration" => parse_duration_str(value),
+        "http://www.w3.org/2001/XMLSchema#yearMonthDuration" => {
+            parse_year_month_duration_str(value)
+        }
+        "http://www.w3.org/2001/XMLSchema#dayTimeDuration" => parse_day_time_duration_str(value),
+        _ => None,
+    };
+    match native_encoding {
+        Some(term) => term,
+        None => {
+            if let Ok(value) = SmallString::try_from(value) {
+                EncodedTerm::SmallTypedLiteral {
+                    value,
+                    datatype_id: StrHash::new(datatype),
+                }
+            } else {
+                EncodedTerm::BigTypedLiteral {
+                    value_id: StrHash::new(value),
+                    datatype_id: StrHash::new(datatype),
+                }
+            }
+        }
+    }
+}
+
+pub(crate) fn get_encoded_named_or_blank_node(term: NamedOrBlankNodeRef<'_>) -> EncodedTerm {
+    match term {
+        NamedOrBlankNodeRef::NamedNode(named_node) => get_encoded_named_node(named_node),
+        NamedOrBlankNodeRef::BlankNode(blank_node) => get_encoded_blank_node(blank_node),
+    }
+}
+
+pub(crate) fn get_encoded_term(term: TermRef<'_>) -> EncodedTerm {
+    match term {
+        TermRef::NamedNode(named_node) => get_encoded_named_node(named_node),
+        TermRef::BlankNode(blank_node) => get_encoded_blank_node(blank_node),
+        TermRef::Literal(literal) => get_encoded_literal(literal),
+    }
+}
+
+pub(crate) fn get_encoded_graph_name(name: GraphNameRef<'_>) -> EncodedTerm {
+    match name {
+        GraphNameRef::NamedNode(named_node) => get_encoded_named_node(named_node),
+        GraphNameRef::BlankNode(blank_node) => get_encoded_blank_node(blank_node),
+        GraphNameRef::DefaultGraph => EncodedTerm::DefaultGraph,
+    }
+}
+
+pub(crate) fn get_encoded_quad(quad: QuadRef<'_>) -> EncodedQuad {
+    EncodedQuad {
+        subject: get_encoded_named_or_blank_node(quad.subject),
+        predicate: get_encoded_named_node(quad.predicate),
+        object: get_encoded_term(quad.object),
+        graph_name: get_encoded_graph_name(quad.graph_name),
     }
 }
 

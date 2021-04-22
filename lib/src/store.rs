@@ -29,12 +29,6 @@
 //! # Result::<_,Box<dyn std::error::Error>>::Ok(())
 //! ```
 
-use std::convert::TryInto;
-use std::io::{BufRead, Write};
-use std::iter::{once, Once};
-use std::path::Path;
-use std::{fmt, io, str};
-
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use crate::sparql::{
@@ -42,13 +36,20 @@ use crate::sparql::{
     UpdateOptions,
 };
 use crate::storage::io::{dump_dataset, dump_graph, load_dataset, load_graph};
-use crate::storage::numeric_encoder::{Decoder, EncodedTerm, ReadEncoder, WriteEncoder};
+use crate::storage::numeric_encoder::{
+    get_encoded_graph_name, get_encoded_named_node, get_encoded_named_or_blank_node,
+    get_encoded_quad, get_encoded_term, Decoder, WriteEncoder,
+};
 pub use crate::storage::ConflictableTransactionError;
 pub use crate::storage::TransactionError;
 pub use crate::storage::UnabortableTransactionError;
 use crate::storage::{
     ChainedDecodingQuadIterator, DecodingGraphIterator, Storage, StorageTransaction,
 };
+use std::convert::TryInto;
+use std::io::{BufRead, Write};
+use std::path::Path;
+use std::{fmt, io, str};
 
 /// An on-on disk [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 /// Allows to query and update it using SPARQL.
@@ -169,72 +170,14 @@ impl Store {
         graph_name: Option<GraphNameRef<'_>>,
     ) -> QuadIter {
         QuadIter {
-            inner: match self.get_encoded_quad_pattern(subject, predicate, object, graph_name) {
-                Ok(Some((subject, predicate, object, graph_name))) => QuadIterInner::Quads {
-                    iter: self
-                        .storage
-                        .quads_for_pattern(subject, predicate, object, graph_name),
-                    store: self.clone(),
-                },
-                Ok(None) => QuadIterInner::Empty,
-                Err(error) => QuadIterInner::Error(once(error)),
-            },
+            iter: self.storage.quads_for_pattern(
+                subject.map(|s| get_encoded_named_or_blank_node(s)),
+                predicate.map(|p| get_encoded_named_node(p)),
+                object.map(|o| get_encoded_term(o)),
+                graph_name.map(|g| get_encoded_graph_name(g)),
+            ),
+            storage: self.storage.clone(),
         }
-    }
-
-    fn get_encoded_quad_pattern(
-        &self,
-        subject: Option<NamedOrBlankNodeRef<'_>>,
-        predicate: Option<NamedNodeRef<'_>>,
-        object: Option<TermRef<'_>>,
-        graph_name: Option<GraphNameRef<'_>>,
-    ) -> Result<
-        Option<(
-            Option<EncodedTerm>,
-            Option<EncodedTerm>,
-            Option<EncodedTerm>,
-            Option<EncodedTerm>,
-        )>,
-        io::Error,
-    > {
-        Ok(Some((
-            if let Some(subject) = transpose(
-                subject
-                    .map(|t| self.storage.get_encoded_named_or_blank_node(t))
-                    .transpose()?,
-            ) {
-                subject
-            } else {
-                return Ok(None);
-            },
-            if let Some(predicate) = transpose(
-                predicate
-                    .map(|t| self.storage.get_encoded_named_node(t))
-                    .transpose()?,
-            ) {
-                predicate
-            } else {
-                return Ok(None);
-            },
-            if let Some(object) = transpose(
-                object
-                    .map(|t| self.storage.get_encoded_term(t))
-                    .transpose()?,
-            ) {
-                object
-            } else {
-                return Ok(None);
-            },
-            if let Some(graph_name) = transpose(
-                graph_name
-                    .map(|t| self.storage.get_encoded_graph_name(t))
-                    .transpose()?,
-            ) {
-                graph_name
-            } else {
-                return Ok(None);
-            },
-        )))
     }
 
     /// Returns all the quads contained in the store
@@ -244,11 +187,8 @@ impl Store {
 
     /// Checks if this store contains a given quad
     pub fn contains<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, io::Error> {
-        if let Some(quad) = self.storage.get_encoded_quad(quad.into())? {
-            self.storage.contains(&quad)
-        } else {
-            Ok(false)
-        }
+        let quad = get_encoded_quad(quad.into());
+        self.storage.contains(&quad)
     }
 
     /// Returns the number of quads in the store
@@ -440,11 +380,8 @@ impl Store {
     /// It might leave the store in a bad state if a crash happens during the removal.
     /// Use a (memory greedy) [transaction](Store::transaction()) if you do not want that.
     pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, io::Error> {
-        if let Some(quad) = self.storage.get_encoded_quad(quad.into())? {
-            self.storage.remove(&quad)
-        } else {
-            Ok(false)
-        }
+        let quad = get_encoded_quad(quad.into());
+        self.storage.remove(&quad)
     }
 
     /// Dumps a store graph into a file.
@@ -537,14 +474,8 @@ impl Store {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool, io::Error> {
-        if let Some(graph_name) = self
-            .storage
-            .get_encoded_named_or_blank_node(graph_name.into())?
-        {
-            self.storage.contains_named_graph(graph_name)
-        } else {
-            Ok(false)
-        }
+        let graph_name = get_encoded_named_or_blank_node(graph_name.into());
+        self.storage.contains_named_graph(graph_name)
     }
 
     /// Inserts a graph into this store
@@ -592,11 +523,8 @@ impl Store {
         &self,
         graph_name: impl Into<GraphNameRef<'a>>,
     ) -> Result<(), io::Error> {
-        if let Some(graph_name) = self.storage.get_encoded_graph_name(graph_name.into())? {
-            self.storage.clear_graph(graph_name)
-        } else {
-            Ok(())
-        }
+        let graph_name = get_encoded_graph_name(graph_name.into());
+        self.storage.clear_graph(graph_name)
     }
 
     /// Removes a graph from this store.
@@ -623,14 +551,8 @@ impl Store {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool, io::Error> {
-        if let Some(graph_name) = self
-            .storage
-            .get_encoded_named_or_blank_node(graph_name.into())?
-        {
-            self.storage.remove_named_graph(graph_name)
-        } else {
-            Ok(false)
-        }
+        let graph_name = get_encoded_named_or_blank_node(graph_name.into());
+        self.storage.remove_named_graph(graph_name)
     }
 
     /// Clears the store.
@@ -733,7 +655,6 @@ impl Transaction<'_> {
     /// use oxigraph::store::{Store, ConflictableTransactionError};
     /// use oxigraph::io::DatasetFormat;
     /// use oxigraph::model::*;
-    /// use oxigraph::store::ConflictableTransactionError;
     ///
     /// let store = Store::new()?;
     ///
@@ -784,11 +705,8 @@ impl Transaction<'_> {
         &self,
         quad: impl Into<QuadRef<'a>>,
     ) -> Result<bool, UnabortableTransactionError> {
-        if let Some(quad) = self.storage.get_encoded_quad(quad.into())? {
-            self.storage.remove(&quad)
-        } else {
-            Ok(false)
-        }
+        let quad = get_encoded_quad(quad.into());
+        self.storage.remove(&quad)
     }
 
     /// Inserts a graph into this store during the transaction
@@ -805,30 +723,18 @@ impl Transaction<'_> {
 
 /// An iterator returning the quads contained in a [`Store`].
 pub struct QuadIter {
-    inner: QuadIterInner,
-}
-
-enum QuadIterInner {
-    Quads {
-        iter: ChainedDecodingQuadIterator,
-        store: Store,
-    },
-    Error(Once<io::Error>),
-    Empty,
+    iter: ChainedDecodingQuadIterator,
+    storage: Storage,
 }
 
 impl Iterator for QuadIter {
     type Item = Result<Quad, io::Error>;
 
     fn next(&mut self) -> Option<Result<Quad, io::Error>> {
-        match &mut self.inner {
-            QuadIterInner::Quads { iter, store } => Some(match iter.next()? {
-                Ok(quad) => store.storage.decode_quad(&quad).map_err(|e| e.into()),
-                Err(error) => Err(error),
-            }),
-            QuadIterInner::Error(iter) => iter.next().map(Err),
-            QuadIterInner::Empty => None,
-        }
+        Some(match self.iter.next()? {
+            Ok(quad) => self.storage.decode_quad(&quad).map_err(|e| e.into()),
+            Err(error) => Err(error),
+        })
     }
 }
 
@@ -851,14 +757,6 @@ impl Iterator for GraphNameIter {
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.iter.size_hint()
-    }
-}
-
-fn transpose<T>(o: Option<Option<T>>) -> Option<Option<T>> {
-    match o {
-        Some(Some(v)) => Some(Some(v)),
-        Some(None) => None,
-        None => Some(None),
     }
 }
 

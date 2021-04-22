@@ -718,10 +718,7 @@ mod tests {
         ];
         for term in terms {
             let encoded = store.encode_term(term.as_ref()).unwrap();
-            assert_eq!(
-                Some(encoded),
-                store.get_encoded_term(term.as_ref()).unwrap()
-            );
+            assert_eq!(encoded, get_encoded_term(term.as_ref()));
             assert_eq!(term, store.decode_term(encoded).unwrap());
 
             let mut buffer = Vec::new();
