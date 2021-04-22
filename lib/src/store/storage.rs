@@ -1029,3 +1029,29 @@ impl<'a> StrContainer for StorageTransaction<'a> {
         Ok(key)
     }
 }
+
+pub(crate) trait StorageLike: StrLookup + StrContainer {
+    fn insert(&self, quad: &EncodedQuad) -> Result<bool, Self::Error>;
+
+    fn remove(&self, quad: &EncodedQuad) -> Result<bool, Self::Error>;
+}
+
+impl StorageLike for Storage {
+    fn insert(&self, quad: &EncodedQuad) -> Result<bool, Self::Error> {
+        self.insert(quad)
+    }
+
+    fn remove(&self, quad: &EncodedQuad) -> Result<bool, Self::Error> {
+        self.remove(quad)
+    }
+}
+
+impl<'a> StorageLike for StorageTransaction<'a> {
+    fn insert(&self, quad: &EncodedQuad) -> Result<bool, Self::Error> {
+        self.insert(quad)
+    }
+
+    fn remove(&self, quad: &EncodedQuad) -> Result<bool, Self::Error> {
+        self.remove(quad)
+    }
+}

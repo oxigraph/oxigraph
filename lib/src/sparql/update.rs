@@ -8,10 +8,11 @@ use crate::sparql::http::Client;
 use crate::sparql::plan::EncodedTuple;
 use crate::sparql::plan_builder::PlanBuilder;
 use crate::sparql::{EvaluationError, UpdateOptions};
+use crate::store::load_graph;
 use crate::store::numeric_encoder::{
-    EncodedQuad, EncodedTerm, ReadEncoder, StrContainer, StrLookup, WriteEncoder,
+    EncodedQuad, EncodedTerm, ReadEncoder, StrLookup, WriteEncoder,
 };
-use crate::store::{load_graph, ReadableEncodedStore, StoreOrParseError, WritableEncodedStore};
+use crate::store::storage::Storage;
 use http::header::{ACCEPT, CONTENT_TYPE, USER_AGENT};
 use http::{Method, Request, StatusCode};
 use oxiri::Iri;
@@ -25,31 +26,21 @@ use std::collections::HashMap;
 use std::io;
 use std::rc::Rc;
 
-pub(crate) struct SimpleUpdateEvaluator<'a, R, W> {
-    read: R,
-    write: &'a mut W,
+pub(crate) struct SimpleUpdateEvaluator<'a> {
+    storage: &'a Storage,
     base_iri: Option<Rc<Iri<String>>>,
     options: UpdateOptions,
     client: Client,
 }
 
-impl<
-        'a,
-        R: ReadableEncodedStore + Clone + 'static,
-        W: StrContainer + WritableEncodedStore + 'a,
-    > SimpleUpdateEvaluator<'a, R, W>
-where
-    io::Error: From<StoreOrParseError<W::Error>>,
-{
+impl<'a> SimpleUpdateEvaluator<'a> {
     pub fn new(
-        read: R,
-        write: &'a mut W,
+        storage: &'a Storage,
         base_iri: Option<Rc<Iri<String>>>,
         options: UpdateOptions,
     ) -> Self {
         Self {
-            read,
-            write,
+            storage,
             base_iri,
             options,
             client: Client::new(),
@@ -102,7 +93,7 @@ where
         let mut bnodes = HashMap::new();
         for quad in data {
             if let Some(quad) = self.encode_quad_for_insertion(quad, &mut bnodes)? {
-                self.write.insert_encoded(&quad).map_err(to_eval_error)?;
+                self.storage.insert(&quad)?;
             }
         }
         Ok(())
@@ -111,7 +102,7 @@ where
     fn eval_delete_data(&mut self, data: &[Quad]) -> Result<(), EvaluationError> {
         for quad in data {
             if let Some(quad) = self.encode_quad_for_deletion(quad)? {
-                self.write.remove_encoded(&quad).map_err(to_eval_error)?;
+                self.storage.remove(&quad)?;
             }
         }
         Ok(())
@@ -124,9 +115,9 @@ where
         using: &QueryDataset,
         algebra: &GraphPattern,
     ) -> Result<(), EvaluationError> {
-        let dataset = Rc::new(DatasetView::new(self.read.clone(), using)?);
+        let dataset = Rc::new(DatasetView::new(self.storage.clone(), using)?);
         let (plan, variables) = PlanBuilder::build(dataset.as_ref(), algebra)?;
-        let evaluator = SimpleEvaluator::<DatasetView<R>>::new(
+        let evaluator = SimpleEvaluator::new(
             dataset.clone(),
             self.base_iri.clone(),
             self.options.query_options.service_handler.clone(),
@@ -138,22 +129,16 @@ where
                 .into_iter()
                 .map(|t| {
                     Ok(if let Some(t) = t {
-                        t.on_each_id(|id| {
-                            self.write
-                                .insert_str(
-                                    &dataset
-                                        .get_str(id)
-                                        .map_err(to_eval_error)?
-                                        .ok_or_else(|| {
-                                            EvaluationError::msg(
-                                                "String not stored in the string store",
-                                            )
-                                        })
-                                        .map_err(to_eval_error)?,
-                                )
-                                .map(|_| ())
-                                .map_err(to_eval_error)
-                        })?;
+                        let r: Result<_, EvaluationError> = t.on_each_id(|id| {
+                            self.storage.insert_str(
+                                id,
+                                &dataset.get_str(id)?.ok_or_else(|| {
+                                    EvaluationError::msg("String not stored in the string store")
+                                })?,
+                            )?;
+                            Ok(())
+                        });
+                        r?;
                         Some(t)
                     } else {
                         None
@@ -165,14 +150,14 @@ where
                 if let Some(quad) =
                     self.encode_quad_pattern_for_deletion(quad, &variables, &tuple)?
                 {
-                    self.write.remove_encoded(&quad).map_err(to_eval_error)?;
+                    self.storage.remove(&quad)?;
                 }
             }
             for quad in insert {
                 if let Some(quad) =
                     self.encode_quad_pattern_for_insertion(quad, &variables, &tuple, &mut bnodes)?
                 {
-                    self.write.insert_encoded(&quad).map_err(to_eval_error)?;
+                    self.storage.insert(&quad)?;
                 }
             }
             bnodes.clear();
@@ -223,7 +208,7 @@ where
             GraphNameRef::DefaultGraph
         };
         load_graph(
-            self.write,
+            self.storage,
             response.into_body(),
             format,
             to_graph_name,
@@ -235,11 +220,7 @@ where
 
     fn eval_create(&mut self, graph: &NamedNode, silent: bool) -> Result<(), EvaluationError> {
         let encoded_graph_name = self.encode_named_node_for_insertion(graph)?;
-        if self
-            .read
-            .contains_encoded_named_graph(encoded_graph_name)
-            .map_err(to_eval_error)?
-        {
+        if self.storage.contains_named_graph(encoded_graph_name)? {
             if silent {
                 Ok(())
             } else {
@@ -249,9 +230,8 @@ where
                 )))
             }
         } else {
-            self.write
-                .insert_encoded_named_graph(encoded_graph_name)
-                .map_err(to_eval_error)
+            self.storage.insert_named_graph(encoded_graph_name)?;
+            Ok(())
         }
     }
 
@@ -259,15 +239,8 @@ where
         match graph {
             GraphTarget::NamedNode(graph_name) => {
                 if let Some(graph_name) = self.encode_named_node_for_deletion(graph_name)? {
-                    if self
-                        .read
-                        .contains_encoded_named_graph(graph_name)
-                        .map_err(to_eval_error)?
-                    {
-                        return self
-                            .write
-                            .clear_encoded_graph(graph_name)
-                            .map_err(to_eval_error);
+                    if self.storage.contains_named_graph(graph_name)? {
+                        return Ok(self.storage.clear_graph(graph_name)?);
                     }
                 }
                 if silent {
@@ -279,29 +252,20 @@ where
                     )))
                 }
             }
-            GraphTarget::DefaultGraph => self
-                .write
-                .clear_encoded_graph(EncodedTerm::DefaultGraph)
-                .map_err(to_eval_error),
+            GraphTarget::DefaultGraph => Ok(self.storage.clear_graph(EncodedTerm::DefaultGraph)?),
             GraphTarget::NamedGraphs => {
                 // TODO: optimize?
-                for graph in self.read.encoded_named_graphs() {
-                    self.write
-                        .clear_encoded_graph(graph.map_err(to_eval_error)?)
-                        .map_err(to_eval_error)?;
+                for graph in self.storage.named_graphs() {
+                    self.storage.clear_graph(graph?)?;
                 }
                 Ok(())
             }
             GraphTarget::AllGraphs => {
                 // TODO: optimize?
-                for graph in self.read.encoded_named_graphs() {
-                    self.write
-                        .clear_encoded_graph(graph.map_err(to_eval_error)?)
-                        .map_err(to_eval_error)?;
+                for graph in self.storage.named_graphs() {
+                    self.storage.clear_graph(graph?)?;
                 }
-                self.write
-                    .clear_encoded_graph(EncodedTerm::DefaultGraph)
-                    .map_err(to_eval_error)
+                Ok(self.storage.clear_graph(EncodedTerm::DefaultGraph)?)
             }
         }
     }
@@ -310,15 +274,9 @@ where
         match graph {
             GraphTarget::NamedNode(graph_name) => {
                 if let Some(graph_name) = self.encode_named_node_for_deletion(graph_name)? {
-                    if self
-                        .read
-                        .contains_encoded_named_graph(graph_name)
-                        .map_err(to_eval_error)?
-                    {
-                        return self
-                            .write
-                            .remove_encoded_named_graph(graph_name)
-                            .map_err(to_eval_error);
+                    if self.storage.contains_named_graph(graph_name)? {
+                        self.storage.remove_named_graph(graph_name)?;
+                        return Ok(());
                     }
                 }
                 if silent {
@@ -330,20 +288,15 @@ where
                     )))
                 }
             }
-            GraphTarget::DefaultGraph => self
-                .write
-                .clear_encoded_graph(EncodedTerm::DefaultGraph)
-                .map_err(to_eval_error),
+            GraphTarget::DefaultGraph => Ok(self.storage.clear_graph(EncodedTerm::DefaultGraph)?),
             GraphTarget::NamedGraphs => {
                 // TODO: optimize?
-                for graph in self.read.encoded_named_graphs() {
-                    self.write
-                        .remove_encoded_named_graph(graph.map_err(to_eval_error)?)
-                        .map_err(to_eval_error)?;
+                for graph in self.storage.named_graphs() {
+                    self.storage.remove_named_graph(graph?)?;
                 }
                 Ok(())
             }
-            GraphTarget::AllGraphs => self.write.clear().map_err(to_eval_error),
+            GraphTarget::AllGraphs => Ok(self.storage.clear()?),
         }
     }
 
@@ -358,20 +311,17 @@ where
                     self.encode_named_node_for_insertion(subject)?
                 }
                 NamedOrBlankNode::BlankNode(subject) => self
-                    .write
-                    .encode_blank_node(bnodes.entry(subject.clone()).or_default().as_ref())
-                    .map_err(to_eval_error)?,
+                    .storage
+                    .encode_blank_node(bnodes.entry(subject.clone()).or_default().as_ref())?,
             },
             predicate: self
-                .write
-                .encode_named_node(NamedNodeRef::new_unchecked(&quad.predicate.iri))
-                .map_err(to_eval_error)?,
+                .storage
+                .encode_named_node(NamedNodeRef::new_unchecked(&quad.predicate.iri))?,
             object: match &quad.object {
                 Term::NamedNode(object) => self.encode_named_node_for_insertion(object)?,
                 Term::BlankNode(object) => self
-                    .write
-                    .encode_blank_node(bnodes.entry(object.clone()).or_default().as_ref())
-                    .map_err(to_eval_error)?,
+                    .storage
+                    .encode_blank_node(bnodes.entry(object.clone()).or_default().as_ref())?,
                 Term::Literal(object) => self.encode_literal_for_insertion(object)?,
             },
             graph_name: match &quad.graph_name {
@@ -446,9 +396,8 @@ where
             TermOrVariable::Term(term) => Some(match term {
                 Term::NamedNode(term) => self.encode_named_node_for_insertion(term)?,
                 Term::BlankNode(bnode) => self
-                    .write
-                    .encode_blank_node(bnodes.entry(bnode.clone()).or_default().as_ref())
-                    .map_err(to_eval_error)?,
+                    .storage
+                    .encode_blank_node(bnodes.entry(bnode.clone()).or_default().as_ref())?,
                 Term::Literal(term) => self.encode_literal_for_insertion(term)?,
             }),
             TermOrVariable::Variable(v) => {
@@ -501,26 +450,24 @@ where
         &mut self,
         term: &NamedNode,
     ) -> Result<EncodedTerm, EvaluationError> {
-        self.write
-            .encode_named_node(NamedNodeRef::new_unchecked(&term.iri))
-            .map_err(to_eval_error)
+        Ok(self
+            .storage
+            .encode_named_node(NamedNodeRef::new_unchecked(&term.iri))?)
     }
 
     fn encode_literal_for_insertion(
         &mut self,
         term: &Literal,
     ) -> Result<EncodedTerm, EvaluationError> {
-        self.write
-            .encode_literal(match term {
-                Literal::Simple { value } => LiteralRef::new_simple_literal(value),
-                Literal::LanguageTaggedString { value, language } => {
-                    LiteralRef::new_language_tagged_literal_unchecked(value, language)
-                }
-                Literal::Typed { value, datatype } => {
-                    LiteralRef::new_typed_literal(value, NamedNodeRef::new_unchecked(&datatype.iri))
-                }
-            })
-            .map_err(to_eval_error)
+        Ok(self.storage.encode_literal(match term {
+            Literal::Simple { value } => LiteralRef::new_simple_literal(value),
+            Literal::LanguageTaggedString { value, language } => {
+                LiteralRef::new_language_tagged_literal_unchecked(value, language)
+            }
+            Literal::Typed { value, datatype } => {
+                LiteralRef::new_typed_literal(value, NamedNodeRef::new_unchecked(&datatype.iri))
+            }
+        })?)
     }
 
     fn encode_quad_for_deletion(
@@ -675,29 +622,23 @@ where
         &self,
         term: &NamedNode,
     ) -> Result<Option<EncodedTerm>, EvaluationError> {
-        self.read
-            .get_encoded_named_node(NamedNodeRef::new_unchecked(&term.iri))
-            .map_err(to_eval_error)
+        Ok(self
+            .storage
+            .get_encoded_named_node(NamedNodeRef::new_unchecked(&term.iri))?)
     }
 
     fn encode_literal_for_deletion(
         &self,
         term: &Literal,
     ) -> Result<Option<EncodedTerm>, EvaluationError> {
-        self.read
-            .get_encoded_literal(match term {
-                Literal::Simple { value } => LiteralRef::new_simple_literal(value),
-                Literal::LanguageTaggedString { value, language } => {
-                    LiteralRef::new_language_tagged_literal_unchecked(value, language)
-                }
-                Literal::Typed { value, datatype } => {
-                    LiteralRef::new_typed_literal(value, NamedNodeRef::new_unchecked(&datatype.iri))
-                }
-            })
-            .map_err(to_eval_error)
+        Ok(self.storage.get_encoded_literal(match term {
+            Literal::Simple { value } => LiteralRef::new_simple_literal(value),
+            Literal::LanguageTaggedString { value, language } => {
+                LiteralRef::new_language_tagged_literal_unchecked(value, language)
+            }
+            Literal::Typed { value, datatype } => {
+                LiteralRef::new_typed_literal(value, NamedNodeRef::new_unchecked(&datatype.iri))
+            }
+        })?)
     }
-}
-
-fn to_eval_error(e: impl Into<EvaluationError>) -> EvaluationError {
-    e.into()
 }

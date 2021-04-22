@@ -3,47 +3,46 @@ use crate::sparql::EvaluationError;
 use crate::store::numeric_encoder::{
     EncodedQuad, EncodedTerm, ReadEncoder, StrContainer, StrEncodingAware, StrHash, StrLookup,
 };
+use crate::store::storage::Storage;
 use crate::store::ReadableEncodedStore;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::iter::{empty, once, Once};
 
-pub(crate) struct DatasetView<S: ReadableEncodedStore> {
-    store: S,
+pub(crate) struct DatasetView {
+    storage: Storage,
     extra: RefCell<HashMap<StrHash, String>>,
     dataset: EncodedDatasetSpec,
 }
 
-impl<S: ReadableEncodedStore> DatasetView<S> {
-    pub fn new(store: S, dataset: &QueryDataset) -> Result<Self, EvaluationError> {
+impl DatasetView {
+    pub fn new(storage: Storage, dataset: &QueryDataset) -> Result<Self, EvaluationError> {
         let dataset = EncodedDatasetSpec {
             default: dataset
                 .default_graph_graphs()
                 .map(|graphs| {
                     graphs
                         .iter()
-                        .flat_map(|g| store.get_encoded_graph_name(g.as_ref()).transpose())
+                        .flat_map(|g| storage.get_encoded_graph_name(g.as_ref()).transpose())
                         .collect::<Result<Vec<_>, _>>()
                 })
-                .transpose()
-                .map_err(|e| e.into())?,
+                .transpose()?,
             named: dataset
                 .available_named_graphs()
                 .map(|graphs| {
                     graphs
                         .iter()
                         .flat_map(|g| {
-                            store
+                            storage
                                 .get_encoded_named_or_blank_node(g.as_ref())
                                 .transpose()
                         })
                         .collect::<Result<Vec<_>, _>>()
                 })
-                .transpose()
-                .map_err(|e| e.into())?,
+                .transpose()?,
         };
         Ok(Self {
-            store,
+            storage,
             extra: RefCell::new(HashMap::default()),
             dataset,
         })
@@ -56,25 +55,23 @@ impl<S: ReadableEncodedStore> DatasetView<S> {
         object: Option<EncodedTerm>,
         graph_name: Option<EncodedTerm>,
     ) -> impl Iterator<Item = Result<EncodedQuad, EvaluationError>> + 'static {
-        self.store
-            .encoded_quads_for_pattern(subject, predicate, object, graph_name)
+        self.storage
+            .quads_for_pattern(subject, predicate, object, graph_name)
             .map(|t| t.map_err(|e| e.into()))
     }
 }
 
-impl<S: ReadableEncodedStore> StrEncodingAware for DatasetView<S> {
+impl StrEncodingAware for DatasetView {
     type Error = EvaluationError;
 }
 
-impl<S: ReadableEncodedStore> StrLookup for DatasetView<S> {
+impl StrLookup for DatasetView {
     fn get_str(&self, id: StrHash) -> Result<Option<String>, EvaluationError> {
-        self.extra
-            .borrow()
-            .get(&id)
-            .cloned()
-            .map(Ok)
-            .or_else(|| self.store.get_str(id).map_err(|e| e.into()).transpose())
-            .transpose()
+        Ok(if let Some(value) = self.extra.borrow().get(&id) {
+            Some(value.clone())
+        } else {
+            self.storage.get_str(id)?
+        })
     }
 
     fn get_str_id(&self, value: &str) -> Result<Option<StrHash>, EvaluationError> {
@@ -82,12 +79,12 @@ impl<S: ReadableEncodedStore> StrLookup for DatasetView<S> {
         Ok(if self.extra.borrow().contains_key(&id) {
             Some(id)
         } else {
-            self.store.get_str_id(value).map_err(|e| e.into())?
+            self.storage.get_str_id(value)?
         })
     }
 }
 
-impl<S: ReadableEncodedStore + 'static> ReadableEncodedStore for DatasetView<S> {
+impl ReadableEncodedStore for DatasetView {
     type QuadsIter = Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>>;
     type GraphsIter = Once<Result<EncodedTerm, EvaluationError>>;
 
@@ -198,9 +195,9 @@ impl<S: ReadableEncodedStore + 'static> ReadableEncodedStore for DatasetView<S> 
     }
 }
 
-impl<'a, S: ReadableEncodedStore> StrContainer for &'a DatasetView<S> {
+impl StrContainer for DatasetView {
     fn insert_str(&self, value: &str) -> Result<StrHash, EvaluationError> {
-        if let Some(hash) = self.store.get_str_id(value).map_err(|e| e.into())? {
+        if let Some(hash) = self.storage.get_str_id(value)? {
             Ok(hash)
         } else {
             let hash = StrHash::new(value);

@@ -14,6 +14,7 @@ use crate::error::invalid_input_error;
 use crate::io::{DatasetFormat, DatasetSerializer, GraphFormat, GraphSerializer};
 use crate::model::*;
 use crate::store::numeric_encoder::*;
+use crate::store::storage::StorageLike;
 use oxiri::Iri;
 use rio_api::parser::{QuadsParser, TriplesParser};
 use rio_turtle::{NQuadsParser, NTriplesParser, TriGParser, TurtleError, TurtleParser};
@@ -55,8 +56,8 @@ pub(crate) trait WritableEncodedStore: StrEncodingAware {
     fn clear(&mut self) -> Result<(), Self::Error>;
 }
 
-pub(crate) fn load_graph<S: WritableEncodedStore + StrContainer>(
-    store: &mut S,
+pub(crate) fn load_graph<S: StorageLike>(
+    storage: &S,
     reader: impl BufRead,
     format: GraphFormat,
     to_graph_name: GraphNameRef<'_>,
@@ -69,19 +70,19 @@ pub(crate) fn load_graph<S: WritableEncodedStore + StrContainer>(
     };
     match format {
         GraphFormat::NTriples => {
-            load_from_triple_parser(store, NTriplesParser::new(reader), to_graph_name)
+            load_from_triple_parser(storage, NTriplesParser::new(reader), to_graph_name)
         }
         GraphFormat::Turtle => {
-            load_from_triple_parser(store, TurtleParser::new(reader, base_iri), to_graph_name)
+            load_from_triple_parser(storage, TurtleParser::new(reader, base_iri), to_graph_name)
         }
         GraphFormat::RdfXml => {
-            load_from_triple_parser(store, RdfXmlParser::new(reader, base_iri), to_graph_name)
+            load_from_triple_parser(storage, RdfXmlParser::new(reader, base_iri), to_graph_name)
         }
     }
 }
 
-fn load_from_triple_parser<S: WritableEncodedStore + StrContainer, P: TriplesParser>(
-    store: &mut S,
+fn load_from_triple_parser<S: StorageLike, P: TriplesParser>(
+    storage: &S,
     mut parser: P,
     to_graph_name: GraphNameRef<'_>,
 ) -> Result<(), StoreOrParseError<S::Error>>
@@ -89,16 +90,14 @@ where
     StoreOrParseError<S::Error>: From<P::Error>,
 {
     let mut bnode_map = HashMap::default();
-    let to_graph_name = store
+    let to_graph_name = storage
         .encode_graph_name(to_graph_name)
         .map_err(StoreOrParseError::Store)?;
     parser.parse_all(&mut move |t| {
-        let quad = store
+        let quad = storage
             .encode_rio_triple_in_graph(t, to_graph_name, &mut bnode_map)
             .map_err(StoreOrParseError::Store)?;
-        store
-            .insert_encoded(&quad)
-            .map_err(StoreOrParseError::Store)?;
+        storage.insert(&quad).map_err(StoreOrParseError::Store)?;
         Ok(())
     })
 }

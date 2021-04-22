@@ -3,6 +3,7 @@ use crate::model::xsd::*;
 use crate::model::Triple;
 use crate::model::{BlankNode, LiteralRef, NamedNodeRef};
 use crate::sparql::algebra::{Query, QueryDataset};
+use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::model::*;
 use crate::sparql::plan::*;
@@ -32,30 +33,17 @@ const REGEX_SIZE_LIMIT: usize = 1_000_000;
 
 type EncodedTuplesIterator = Box<dyn Iterator<Item = Result<EncodedTuple, EvaluationError>>>;
 
-pub(crate) struct SimpleEvaluator<S> {
-    dataset: Rc<S>,
+#[derive(Clone)]
+pub(crate) struct SimpleEvaluator {
+    dataset: Rc<DatasetView>,
     base_iri: Option<Rc<Iri<String>>>,
     now: DateTime,
     service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
 }
 
-impl<S> Clone for SimpleEvaluator<S> {
-    fn clone(&self) -> Self {
-        Self {
-            dataset: self.dataset.clone(),
-            base_iri: self.base_iri.clone(),
-            now: self.now,
-            service_handler: self.service_handler.clone(),
-        }
-    }
-}
-
-impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> SimpleEvaluator<S>
-where
-    for<'a> &'a S: StrContainer,
-{
+impl SimpleEvaluator {
     pub fn new(
-        dataset: Rc<S>,
+        dataset: Rc<DatasetView>,
         base_iri: Option<Rc<Iri<String>>>,
         service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
     ) -> Self {
@@ -1829,7 +1817,7 @@ where
                 put_variable_value(
                     variable,
                     &variables,
-                    encoder.encode_term(term.as_ref()).map_err(|e| e.into())?,
+                    encoder.encode_term(term.as_ref())?,
                     &mut encoded_terms,
                 )
             }
@@ -2469,17 +2457,14 @@ impl Iterator for AntiJoinIterator {
     }
 }
 
-struct LeftJoinIterator<S: ReadableEncodedStore + 'static> {
-    eval: SimpleEvaluator<S>,
+struct LeftJoinIterator {
+    eval: SimpleEvaluator,
     right_plan: Rc<PlanNode>,
     left_iter: EncodedTuplesIterator,
     current_right: EncodedTuplesIterator,
 }
 
-impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Iterator for LeftJoinIterator<S>
-where
-    for<'a> &'a S: StrContainer,
-{
+impl Iterator for LeftJoinIterator {
     type Item = Result<EncodedTuple, EvaluationError>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
@@ -2500,8 +2485,8 @@ where
     }
 }
 
-struct BadLeftJoinIterator<S: ReadableEncodedStore + 'static> {
-    eval: SimpleEvaluator<S>,
+struct BadLeftJoinIterator {
+    eval: SimpleEvaluator,
     right_plan: Rc<PlanNode>,
     left_iter: EncodedTuplesIterator,
     current_left: Option<EncodedTuple>,
@@ -2509,10 +2494,7 @@ struct BadLeftJoinIterator<S: ReadableEncodedStore + 'static> {
     problem_vars: Rc<Vec<usize>>,
 }
 
-impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Iterator for BadLeftJoinIterator<S>
-where
-    for<'a> &'a S: StrContainer,
-{
+impl Iterator for BadLeftJoinIterator {
     type Item = Result<EncodedTuple, EvaluationError>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
@@ -2555,18 +2537,15 @@ where
     }
 }
 
-struct UnionIterator<S: ReadableEncodedStore + 'static> {
-    eval: SimpleEvaluator<S>,
+struct UnionIterator {
+    eval: SimpleEvaluator,
     plans: Vec<Rc<PlanNode>>,
     input: EncodedTuple,
     current_iterator: EncodedTuplesIterator,
     current_plan: usize,
 }
 
-impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Iterator for UnionIterator<S>
-where
-    for<'a> &'a S: StrContainer,
-{
+impl Iterator for UnionIterator {
     type Item = Result<EncodedTuple, EvaluationError>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
@@ -2585,15 +2564,15 @@ where
     }
 }
 
-struct ConstructIterator<S: ReadableEncodedStore + 'static> {
-    eval: SimpleEvaluator<S>,
+struct ConstructIterator {
+    eval: SimpleEvaluator,
     iter: EncodedTuplesIterator,
     template: Vec<TripleTemplate>,
     buffered_results: Vec<Result<Triple, EvaluationError>>,
     bnodes: Vec<EncodedTerm>,
 }
 
-impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Iterator for ConstructIterator<S> {
+impl Iterator for ConstructIterator {
     type Item = Result<Triple, EvaluationError>;
 
     fn next(&mut self) -> Option<Result<Triple, EvaluationError>> {
@@ -2660,13 +2639,13 @@ fn decode_triple<D: Decoder>(
     ))
 }
 
-struct DescribeIterator<S: ReadableEncodedStore + 'static> {
-    eval: SimpleEvaluator<S>,
+struct DescribeIterator {
+    eval: SimpleEvaluator,
     iter: EncodedTuplesIterator,
     quads: Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>>,
 }
 
-impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Iterator for DescribeIterator<S> {
+impl Iterator for DescribeIterator {
     type Item = Result<Triple, EvaluationError>;
 
     fn next(&mut self) -> Option<Result<Triple, EvaluationError>> {
@@ -2976,21 +2955,18 @@ impl Accumulator for AvgAccumulator {
 }
 
 #[allow(clippy::option_option)]
-struct MinAccumulator<S: ReadableEncodedStore + 'static> {
-    eval: SimpleEvaluator<S>,
+struct MinAccumulator {
+    eval: SimpleEvaluator,
     min: Option<Option<EncodedTerm>>,
 }
 
-impl<S: ReadableEncodedStore + 'static> MinAccumulator<S> {
-    fn new(eval: SimpleEvaluator<S>) -> Self {
+impl MinAccumulator {
+    fn new(eval: SimpleEvaluator) -> Self {
         Self { eval, min: None }
     }
 }
 
-impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Accumulator for MinAccumulator<S>
-where
-    for<'a> &'a S: StrContainer,
-{
+impl Accumulator for MinAccumulator {
     fn add(&mut self, element: Option<EncodedTerm>) {
         if let Some(min) = self.min {
             if self.eval.cmp_terms(element, min) == Ordering::Less {
@@ -3007,21 +2983,18 @@ where
 }
 
 #[allow(clippy::option_option)]
-struct MaxAccumulator<S: ReadableEncodedStore + 'static> {
-    eval: SimpleEvaluator<S>,
+struct MaxAccumulator {
+    eval: SimpleEvaluator,
     max: Option<Option<EncodedTerm>>,
 }
 
-impl<S: ReadableEncodedStore + 'static> MaxAccumulator<S> {
-    fn new(eval: SimpleEvaluator<S>) -> Self {
+impl MaxAccumulator {
+    fn new(eval: SimpleEvaluator) -> Self {
         Self { eval, max: None }
     }
 }
 
-impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Accumulator for MaxAccumulator<S>
-where
-    for<'a> &'a S: StrContainer,
-{
+impl Accumulator for MaxAccumulator {
     fn add(&mut self, element: Option<EncodedTerm>) {
         if let Some(max) = self.max {
             if self.eval.cmp_terms(element, max) == Ordering::Greater {
@@ -3061,15 +3034,15 @@ impl Accumulator for SampleAccumulator {
 }
 
 #[allow(clippy::option_option)]
-struct GroupConcatAccumulator<S: ReadableEncodedStore + 'static> {
-    eval: SimpleEvaluator<S>,
+struct GroupConcatAccumulator {
+    eval: SimpleEvaluator,
     concat: Option<String>,
     language: Option<Option<SmallStringOrId>>,
     separator: Rc<String>,
 }
 
-impl<S: ReadableEncodedStore + 'static> GroupConcatAccumulator<S> {
-    fn new(eval: SimpleEvaluator<S>, separator: Rc<String>) -> Self {
+impl GroupConcatAccumulator {
+    fn new(eval: SimpleEvaluator, separator: Rc<String>) -> Self {
         Self {
             eval,
             concat: Some("".to_owned()),
@@ -3079,11 +3052,7 @@ impl<S: ReadableEncodedStore + 'static> GroupConcatAccumulator<S> {
     }
 }
 
-impl<S: ReadableEncodedStore<Error = EvaluationError> + 'static> Accumulator
-    for GroupConcatAccumulator<S>
-where
-    for<'a> &'a S: StrContainer,
-{
+impl Accumulator for GroupConcatAccumulator {
     fn add(&mut self, element: Option<EncodedTerm>) {
         if let Some(concat) = self.concat.as_mut() {
             if let Some(element) = element {

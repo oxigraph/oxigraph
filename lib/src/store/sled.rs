@@ -112,7 +112,7 @@ impl SledStore {
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
         options: QueryOptions,
     ) -> Result<QueryResults, EvaluationError> {
-        evaluate_query(self.clone(), query, options)
+        evaluate_query(self.storage.clone(), query, options)
     }
 
     /// Retrieves quads with a filter on each quad component
@@ -213,8 +213,7 @@ impl SledStore {
         options: UpdateOptions,
     ) -> Result<(), EvaluationError> {
         evaluate_update(
-            self.clone(),
-            &mut &*self,
+            &self.storage,
             update.try_into().map_err(|e| e.into())?,
             options,
         )
@@ -290,8 +289,13 @@ impl SledStore {
         to_graph_name: impl Into<GraphNameRef<'a>>,
         base_iri: Option<&str>,
     ) -> Result<(), io::Error> {
-        let mut this = self;
-        load_graph(&mut this, reader, format, to_graph_name.into(), base_iri)?;
+        load_graph(
+            &self.storage,
+            reader,
+            format,
+            to_graph_name.into(),
+            base_iri,
+        )?;
         Ok(())
     }
 
@@ -698,8 +702,13 @@ impl SledTransaction<'_> {
         to_graph_name: impl Into<GraphNameRef<'a>>,
         base_iri: Option<&str>,
     ) -> Result<(), SledUnabortableTransactionError> {
-        let mut this = self;
-        load_graph(&mut this, reader, format, to_graph_name.into(), base_iri)?;
+        load_graph(
+            &self.storage,
+            reader,
+            format,
+            to_graph_name.into(),
+            base_iri,
+        )?;
         Ok(())
     }
 

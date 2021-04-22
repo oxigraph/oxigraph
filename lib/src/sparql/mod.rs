@@ -30,20 +30,18 @@ use crate::sparql::plan_builder::PlanBuilder;
 pub use crate::sparql::service::ServiceHandler;
 use crate::sparql::service::{EmptyServiceHandler, ErrorConversionServiceHandler};
 use crate::sparql::update::SimpleUpdateEvaluator;
-use crate::store::numeric_encoder::StrContainer;
-use crate::store::{ReadableEncodedStore, StoreOrParseError, WritableEncodedStore};
+use crate::store::storage::Storage;
 pub use spargebra::ParseError;
 use std::convert::TryInto;
-use std::io;
 use std::rc::Rc;
 
-pub(crate) fn evaluate_query<R: ReadableEncodedStore + 'static>(
-    store: R,
+pub(crate) fn evaluate_query(
+    storage: Storage,
     query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
     options: QueryOptions,
 ) -> Result<QueryResults, EvaluationError> {
     let query = query.try_into().map_err(|e| e.into())?;
-    let dataset = DatasetView::new(store, &query.dataset)?;
+    let dataset = DatasetView::new(storage, &query.dataset)?;
     match query.inner {
         spargebra::Query::Select {
             pattern, base_iri, ..
@@ -179,18 +177,11 @@ impl From<QueryOptions> for UpdateOptions {
     }
 }
 
-pub(crate) fn evaluate_update<
-    R: ReadableEncodedStore + Clone + 'static,
-    W: StrContainer + WritableEncodedStore,
->(
-    read: R,
-    write: &mut W,
+pub(crate) fn evaluate_update(
+    storage: &Storage,
     update: Update,
     options: UpdateOptions,
-) -> Result<(), EvaluationError>
-where
-    io::Error: From<StoreOrParseError<W::Error>>,
-{
-    SimpleUpdateEvaluator::new(read, write, update.inner.base_iri.map(Rc::new), options)
+) -> Result<(), EvaluationError> {
+    SimpleUpdateEvaluator::new(storage, update.inner.base_iri.map(Rc::new), options)
         .eval_all(&update.inner.operations, &update.using_datasets)
 }

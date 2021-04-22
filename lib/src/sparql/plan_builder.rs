@@ -1,4 +1,5 @@
 use crate::model::{LiteralRef, NamedNodeRef};
+use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::model::Variable as OxVariable;
 use crate::sparql::plan::*;
@@ -9,17 +10,17 @@ use spargebra::term::*;
 use std::collections::{BTreeSet, HashSet};
 use std::rc::Rc;
 
-pub(crate) struct PlanBuilder<E: WriteEncoder> {
-    encoder: E,
+pub(crate) struct PlanBuilder<'a> {
+    dataset: &'a DatasetView,
 }
 
-impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
+impl<'a> PlanBuilder<'a> {
     pub fn build(
-        encoder: E,
+        dataset: &'a DatasetView,
         pattern: &GraphPattern,
     ) -> Result<(PlanNode, Vec<Variable>), EvaluationError> {
         let mut variables = Vec::default();
-        let plan = PlanBuilder { encoder }.build_for_graph_pattern(
+        let plan = PlanBuilder { dataset }.build_for_graph_pattern(
             pattern,
             &mut variables,
             PatternValue::Constant(EncodedTerm::DefaultGraph),
@@ -28,11 +29,11 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
     }
 
     pub fn build_graph_template(
-        encoder: E,
+        dataset: &'a DatasetView,
         template: &[TriplePattern],
         mut variables: Vec<Variable>,
     ) -> Result<Vec<TripleTemplate>, EvaluationError> {
-        PlanBuilder { encoder }.build_for_graph_template(template, &mut variables)
+        PlanBuilder { dataset }.build_for_graph_template(template, &mut variables)
     }
 
     fn build_for_graph_pattern(
@@ -1047,12 +1048,12 @@ impl<E: WriteEncoder<Error = EvaluationError>> PlanBuilder<E> {
     }
 
     fn build_named_node(&mut self, node: &NamedNode) -> Result<EncodedTerm, EvaluationError> {
-        self.encoder
+        self.dataset
             .encode_named_node(NamedNodeRef::new_unchecked(node.iri.as_str()))
     }
 
     fn build_literal(&mut self, literal: &Literal) -> Result<EncodedTerm, EvaluationError> {
-        self.encoder.encode_literal(match literal {
+        self.dataset.encode_literal(match literal {
             Literal::Simple { value } => LiteralRef::new_simple_literal(value),
             Literal::LanguageTaggedString { value, language } => {
                 LiteralRef::new_language_tagged_literal_unchecked(value, language.as_str())
