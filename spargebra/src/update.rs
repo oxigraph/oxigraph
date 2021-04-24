@@ -70,28 +70,28 @@ impl<'a> TryFrom<&'a String> for Update {
 /// The [graph update operations](https://www.w3.org/TR/sparql11-update/#formalModelGraphUpdate)
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GraphUpdateOperation {
-    /// [insert data](https://www.w3.org/TR/sparql11-update/#def_insertdataoperation)
+    /// [insert data](https://www.w3.org/TR/sparql11-update/#defn_insertDataOperation)
     InsertData { data: Vec<Quad> },
-    /// [delete data](https://www.w3.org/TR/sparql11-update/#def_deletedataoperation)
-    DeleteData { data: Vec<Quad> },
-    /// [delete insert](https://www.w3.org/TR/sparql11-update/#def_deleteinsertoperation)
+    /// [delete data](https://www.w3.org/TR/sparql11-update/#defn_deleteDataOperation)
+    DeleteData { data: Vec<GroundQuad> },
+    /// [delete insert](https://www.w3.org/TR/sparql11-update/#defn_deleteInsertOperation)
     DeleteInsert {
-        delete: Vec<QuadPattern>,
+        delete: Vec<GroundQuadPattern>,
         insert: Vec<QuadPattern>,
         using: Option<QueryDataset>,
         pattern: Box<GraphPattern>,
     },
-    /// [load](https://www.w3.org/TR/sparql11-update/#def_loadoperation)
+    /// [load](https://www.w3.org/TR/sparql11-update/#defn_loadOperation)
     Load {
         silent: bool,
         from: NamedNode,
-        to: Option<NamedNode>,
+        to: GraphName,
     },
-    /// [clear](https://www.w3.org/TR/sparql11-update/#def_clearoperation)
+    /// [clear](https://www.w3.org/TR/sparql11-update/#defn_clearOperation)
     Clear { silent: bool, graph: GraphTarget },
-    /// [create](https://www.w3.org/TR/sparql11-update/#def_createoperation)
+    /// [create](https://www.w3.org/TR/sparql11-update/#defn_createOperation)
     Create { silent: bool, graph: NamedNode },
-    /// [drop](https://www.w3.org/TR/sparql11-update/#def_dropoperation)
+    /// [drop](https://www.w3.org/TR/sparql11-update/#defn_dropOperation)
     Drop { silent: bool, graph: GraphTarget },
 }
 
@@ -105,7 +105,7 @@ impl fmt::Display for GraphUpdateOperation {
             }
             GraphUpdateOperation::DeleteData { data } => {
                 writeln!(f, "DELETE DATA {{")?;
-                write_quads(data, f)?;
+                write_ground_quads(data, f)?;
                 write!(f, "}}")
             }
             GraphUpdateOperation::DeleteInsert {
@@ -117,7 +117,7 @@ impl fmt::Display for GraphUpdateOperation {
                 if !delete.is_empty() {
                     writeln!(f, "DELETE {{")?;
                     for quad in delete {
-                        writeln!(f, "\t{}", SparqlQuadPattern(quad))?;
+                        writeln!(f, "\t{}", SparqlGroundQuadPattern(quad))?;
                     }
                     writeln!(f, "}}")?;
                 }
@@ -153,7 +153,7 @@ impl fmt::Display for GraphUpdateOperation {
                     write!(f, "SILENT ")?;
                 }
                 write!(f, "{}", from)?;
-                if let Some(to) = to {
+                if to != &GraphName::DefaultGraph {
                     write!(f, " INTO GRAPH {}", to)?;
                 }
                 Ok(())
@@ -184,6 +184,21 @@ impl fmt::Display for GraphUpdateOperation {
 }
 
 fn write_quads(quads: &[Quad], f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    for quad in quads {
+        if quad.graph_name == GraphName::DefaultGraph {
+            writeln!(f, "\t{} {} {} .", quad.subject, quad.predicate, quad.object)?;
+        } else {
+            writeln!(
+                f,
+                "\tGRAPH {} {{ {} {} {} }}",
+                quad.graph_name, quad.subject, quad.predicate, quad.object
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn write_ground_quads(quads: &[GroundQuad], f: &mut fmt::Formatter<'_>) -> fmt::Result {
     for quad in quads {
         if quad.graph_name == GraphName::DefaultGraph {
             writeln!(f, "\t{} {} {} .", quad.subject, quad.predicate, quad.object)?;

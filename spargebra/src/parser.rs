@@ -454,7 +454,10 @@ fn build_select(
     m
 }
 
-fn copy_graph(from: Option<NamedNode>, to: Option<NamedNodeOrVariable>) -> GraphUpdateOperation {
+fn copy_graph(
+    from: impl Into<GraphName>,
+    to: impl Into<GraphNameOrVariable>,
+) -> GraphUpdateOperation {
     let bgp = GraphPattern::Bgp(vec![TriplePattern::new(
         Variable { name: "s".into() },
         Variable { name: "p".into() },
@@ -469,13 +472,12 @@ fn copy_graph(from: Option<NamedNode>, to: Option<NamedNodeOrVariable>) -> Graph
             to,
         )],
         using: None,
-        pattern: Box::new(if let Some(from) = from {
-            GraphPattern::Graph {
+        pattern: Box::new(match from.into() {
+            GraphName::NamedNode(from) => GraphPattern::Graph {
                 graph_name: from.into(),
                 inner: Box::new(bgp),
-            }
-        } else {
-            bgp
+            },
+            GraphName::DefaultGraph => bgp,
         }),
     }
 }
@@ -968,7 +970,7 @@ parser! {
 
         //[31]
         rule Load() -> Vec<GraphUpdateOperation> = i("LOAD") _ silent:Update1_silent() _ from:iri() _ to:Load_to()? {
-            vec![GraphUpdateOperation::Load { silent, from, to }]
+            vec![GraphUpdateOperation::Load { silent, from, to: to.map_or(GraphName::DefaultGraph, GraphName::NamedNode) }]
         }
         rule Load_to() -> NamedNode = i("INTO") _ g: GraphRef() { g }
 
@@ -994,7 +996,7 @@ parser! {
                 Vec::new() // identity case
             } else {
                 let bgp = GraphPattern::Bgp(vec![TriplePattern::new(Variable { name: "s".into() }, Variable { name: "p".into() }, Variable { name: "o".into() })]);
-                vec![copy_graph(from, to.map(NamedNodeOrVariable::NamedNode))]
+                vec![copy_graph(from, to)]
             }
         }
 
@@ -1005,7 +1007,7 @@ parser! {
                 Vec::new() // identity case
             } else {
                 let bgp = GraphPattern::Bgp(vec![TriplePattern::new(Variable { name: "s".into() }, Variable { name: "p".into() }, Variable { name: "o".into() })]);
-                vec![GraphUpdateOperation::Drop { silent: true, graph: to.clone().map_or(GraphTarget::DefaultGraph, GraphTarget::NamedNode) }, copy_graph(from.clone(), to.map(NamedNodeOrVariable::NamedNode)), GraphUpdateOperation::Drop { silent, graph: from.map_or(GraphTarget::DefaultGraph, GraphTarget::NamedNode) }]
+                vec![GraphUpdateOperation::Drop { silent: true, graph: to.clone().into() }, copy_graph(from.clone(), to), GraphUpdateOperation::Drop { silent, graph: from.into() }]
             }
         }
 
@@ -1016,7 +1018,7 @@ parser! {
                 Vec::new() // identity case
             } else {
                 let bgp = GraphPattern::Bgp(vec![TriplePattern::new(Variable { name: "s".into() }, Variable { name: "p".into() }, Variable{ name: "o".into() })]);
-                vec![GraphUpdateOperation::Drop { silent: true, graph: to.clone().map_or(GraphTarget::DefaultGraph, GraphTarget::NamedNode) }, copy_graph(from, to.map(NamedNodeOrVariable::NamedNode))]
+                vec![GraphUpdateOperation::Drop { silent: true, graph: to.clone().into() }, copy_graph(from, to)]
             }
         }
 
@@ -1026,34 +1028,42 @@ parser! {
         }
 
         //[39]
-        rule DeleteData() -> Vec<GraphUpdateOperation> = i("DELETE") _ i("DATA") _ data:QuadData() {?
-            if data.iter().any(|quad| matches!(quad.subject, NamedOrBlankNode::BlankNode(_)) || matches!(quad.object, Term::BlankNode(_))) {
-                Err("Blank nodes are not allowed in DELETE DATA")
-            } else {
-                Ok(vec![GraphUpdateOperation::DeleteData { data }])
-            }
+        rule DeleteData() -> Vec<GraphUpdateOperation> = i("DELETE") _ i("DATA") _ data:GroundQuadData() {
+            vec![GraphUpdateOperation::DeleteData { data }]
         }
 
         //[40]
         rule DeleteWhere() -> Vec<GraphUpdateOperation> = i("DELETE") _ i("WHERE") _ d:QuadPattern() {?
-            if d.iter().any(|quad| matches!(quad.subject, TermOrVariable::Term(Term::BlankNode(_))) || matches!(quad.object, TermOrVariable::Term(Term::BlankNode(_)))) {
-                Err("Blank nodes are not allowed in DELETE WHERE")
-            } else {
-                let pattern = d.iter().map(|q| {
-                    let bgp = GraphPattern::Bgp(vec![TriplePattern::new(q.subject.clone(), q.predicate.clone(), q.object.clone())]);
-                    if let Some(graph_name) = &q.graph_name {
-                        GraphPattern::Graph { graph_name: graph_name.clone(), inner: Box::new(bgp) }
-                    } else {
-                        bgp
-                    }
-                }).fold(GraphPattern::Bgp(Vec::new()), new_join);
-                Ok(vec![GraphUpdateOperation::DeleteInsert {
-                    delete: d,
-                    insert: Vec::new(),
-                    using: None,
-                    pattern: Box::new(pattern)
-                }])
-            }
+                        let pattern = d.iter().map(|q| {
+                let bgp = GraphPattern::Bgp(vec![TriplePattern::new(q.subject.clone(), q.predicate.clone(), q.object.clone())]);
+                match &q.graph_name {
+                    GraphNameOrVariable::NamedNode(graph_name) => GraphPattern::Graph { graph_name: graph_name.clone().into(), inner: Box::new(bgp) },
+                    GraphNameOrVariable::DefaultGraph => bgp,
+                    GraphNameOrVariable::Variable(graph_name) => GraphPattern::Graph { graph_name: graph_name.clone().into(), inner: Box::new(bgp) },
+                }
+            }).fold(GraphPattern::Bgp(Vec::new()), new_join);
+            let delete = d.into_iter().map(|q| Ok(GroundQuadPattern {
+                subject: match q.subject {
+                    TermOrVariable::NamedNode(subject) => subject.into(),
+                    TermOrVariable::BlankNode(_) => return Err("Blank nodes are not allowed in DELETE WHERE"),
+                    TermOrVariable::Literal(subject) => subject.into(),
+                    TermOrVariable::Variable(subject) => subject.into(),
+                },
+                predicate: q.predicate,
+                object: match q.object {
+                    TermOrVariable::NamedNode(object) => object.into(),
+                    TermOrVariable::BlankNode(_) => return Err("Blank nodes are not allowed in DELETE WHERE"),
+                    TermOrVariable::Literal(object) => object.into(),
+                    TermOrVariable::Variable(object) => object.into(),
+                },
+                graph_name: q.graph_name
+            })).collect::<Result<Vec<_>,_>>()?;
+            Ok(vec![GraphUpdateOperation::DeleteInsert {
+                delete,
+                insert: Vec::new(),
+                using: None,
+                pattern: Box::new(pattern)
+            }])
         }
 
         //[41]
@@ -1081,13 +1091,23 @@ parser! {
 
             if let Some(with) = with {
                 // We inject WITH everywhere
-                delete = delete.into_iter().map(|q| if q.graph_name.is_none() {
-                    QuadPattern::new(q.subject, q.predicate, q.object, Some(with.clone().into()))
+                delete = delete.into_iter().map(|q| if q.graph_name == GraphNameOrVariable::DefaultGraph {
+                    GroundQuadPattern {
+                        subject: q.subject,
+                        predicate: q.predicate,
+                        object: q.object,
+                        graph_name: with.clone().into()
+                    }
                 } else {
                     q
                 }).collect();
-                insert = insert.into_iter().map(|q| if q.graph_name.is_none() {
-                    QuadPattern::new(q.subject, q.predicate, q.object, Some(with.clone().into()))
+                insert = insert.into_iter().map(|q| if q.graph_name == GraphNameOrVariable::DefaultGraph {
+                    QuadPattern {
+                        subject: q.subject,
+                        predicate: q.predicate,
+                        object: q.object,
+                        graph_name: with.clone().into()
+                    }
                 } else {
                     q
                 }).collect();
@@ -1104,7 +1124,7 @@ parser! {
             }]
         }
         rule Modify_with() -> NamedNode = i("WITH") _ i:iri() _ { i }
-        rule Modify_clauses() -> (Option<Vec<QuadPattern>>, Option<Vec<QuadPattern>>) = d:DeleteClause() _ i:InsertClause()? {
+        rule Modify_clauses() -> (Option<Vec<GroundQuadPattern>>, Option<Vec<QuadPattern>>) = d:DeleteClause() _ i:InsertClause()? {
             (Some(d), i)
         } / i:InsertClause() {
             (None, Some(i))
@@ -1115,12 +1135,23 @@ parser! {
         }
 
         //[42]
-        rule DeleteClause() -> Vec<QuadPattern> = i("DELETE") _ q:QuadPattern() {?
-            if q.iter().any(|quad| matches!(quad.subject, TermOrVariable::Term(Term::BlankNode(_))) || matches!(quad.object, TermOrVariable::Term(Term::BlankNode(_)))) {
-                Err("Blank nodes are not allowed in DELETE")
-            } else {
-                Ok(q)
-            }
+        rule DeleteClause() -> Vec<GroundQuadPattern> = i("DELETE") _ q:QuadPattern() {?
+            q.into_iter().map(|q| Ok(GroundQuadPattern {
+                subject: match q.subject {
+                    TermOrVariable::NamedNode(subject) => subject.into(),
+                    TermOrVariable::BlankNode(_) => return Err("Blank nodes are not allowed in DELETE WHERE"),
+                    TermOrVariable::Literal(subject) => subject.into(),
+                    TermOrVariable::Variable(subject) => subject.into(),
+                },
+                predicate: q.predicate,
+                object: match q.object {
+                    TermOrVariable::NamedNode(object) => object.into(),
+                    TermOrVariable::BlankNode(_) => return Err("Blank nodes are not allowed in DELETE WHERE"),
+                    TermOrVariable::Literal(object) => object.into(),
+                    TermOrVariable::Variable(object) => object.into(),
+                },
+                graph_name: q.graph_name
+            })).collect::<Result<Vec<_>,_>>()
         }
 
         //[43]
@@ -1136,10 +1167,10 @@ parser! {
         }
 
         //[45]
-        rule GraphOrDefault() -> Option<NamedNode> = i("DEFAULT") {
-            None
+        rule GraphOrDefault() -> GraphName = i("DEFAULT") {
+            GraphName::DefaultGraph
         } / (i("GRAPH") _)? g:iri() {
-            Some(g)
+            GraphName::NamedNode(g)
         }
 
         //[46]
@@ -1158,24 +1189,49 @@ parser! {
         rule QuadData() -> Vec<Quad> = "{" _ q:Quads() _ "}" {?
             q.into_iter().map(|q| Ok(Quad {
                 subject: match q.subject {
-                    TermOrVariable::Term(Term::NamedNode(t)) => t.into(),
-                    TermOrVariable::Term(Term::BlankNode(t)) => t.into(),
-                    _ => return Err(())
+                    TermOrVariable::NamedNode(t) => t.into(),
+                    TermOrVariable::BlankNode(t) => t.into(),
+                    TermOrVariable::Literal(_) | TermOrVariable::Variable(_) => return Err(())
                 },
                 predicate: if let NamedNodeOrVariable::NamedNode(t) = q.predicate {
                     t
                 } else {
                     return Err(())
                 },
-                object: if let TermOrVariable::Term(t) = q.object {
+                object: match q.object {
+                    TermOrVariable::NamedNode(t) => t.into(),
+                    TermOrVariable::BlankNode(t) => t.into(),
+                    TermOrVariable::Literal(t) => t.into(),
+                    TermOrVariable::Variable(_) => return Err(())
+                },
+                graph_name: match q.graph_name {
+                    GraphNameOrVariable::NamedNode(t) => t.into(),
+                    GraphNameOrVariable::DefaultGraph => GraphName::DefaultGraph,
+                    GraphNameOrVariable::Variable(_) => return Err(())
+                }
+            })).collect::<Result<Vec<_>, ()>>().map_err(|_| "Variables are not allowed in INSERT DATA and DELETE DATA")
+        }
+        rule GroundQuadData() -> Vec<GroundQuad> = "{" _ q:Quads() _ "}" {?
+            q.into_iter().map(|q| Ok(GroundQuad {
+                subject: if let TermOrVariable::NamedNode(t) = q.subject {
                     t
                 } else {
                     return Err(())
                 },
+                predicate: if let NamedNodeOrVariable::NamedNode(t) = q.predicate {
+                    t
+                } else {
+                    return Err(())
+                },
+                object: match q.object {
+                    TermOrVariable::NamedNode(t) => t.into(),
+                    TermOrVariable::Literal(t) => t.into(),
+                    TermOrVariable::BlankNode(_) | TermOrVariable::Variable(_) => return Err(())
+                },
                 graph_name: match q.graph_name {
-                    Some(NamedNodeOrVariable::NamedNode(t)) => t.into(),
-                    None => GraphName::DefaultGraph,
-                    _ => return Err(())
+                    GraphNameOrVariable::NamedNode(t) => t.into(),
+                    GraphNameOrVariable::DefaultGraph => GraphName::DefaultGraph,
+                    GraphNameOrVariable::Variable(_) => return Err(())
                 }
             })).collect::<Result<Vec<_>, ()>>().map_err(|_| "Variables are not allowed in INSERT DATA and DELETE DATA")
         }
@@ -1185,13 +1241,13 @@ parser! {
             q.into_iter().flatten().collect()
         }
         rule Quads_TriplesTemplate() -> Vec<QuadPattern> = t:TriplesTemplate() {
-            t.into_iter().map(|t| QuadPattern::new(t.subject, t.predicate, t.object, None)).collect()
+            t.into_iter().map(|t| QuadPattern::new(t.subject, t.predicate, t.object, GraphNameOrVariable::DefaultGraph)).collect()
         } //TODO: return iter?
         rule Quads_QuadsNotTriples() -> Vec<QuadPattern> = q:QuadsNotTriples() _ "."? { q }
 
         //[51]
         rule QuadsNotTriples() -> Vec<QuadPattern> = i("GRAPH") _ g:VarOrIri() _ "{" _ t:TriplesTemplate()? _ "}" {
-            t.unwrap_or_else(Vec::new).into_iter().map(|t| QuadPattern::new(t.subject, t.predicate, t.object, Some(g.clone()))).collect()
+            t.unwrap_or_else(Vec::new).into_iter().map(|t| QuadPattern::new(t.subject, t.predicate, t.object, g.clone())).collect()
         }
 
         //[52]
@@ -1305,21 +1361,21 @@ parser! {
         }
 
         //[63]
-        rule InlineDataOneVar() -> (Vec<Variable>, Vec<Vec<Option<NamedNodeOrLiteral>>>) = var:Var() _ "{" _ d:InlineDataOneVar_value()* "}" {
+        rule InlineDataOneVar() -> (Vec<Variable>, Vec<Vec<Option<GroundTerm>>>) = var:Var() _ "{" _ d:InlineDataOneVar_value()* "}" {
             (vec![var], d)
         }
-        rule InlineDataOneVar_value() -> Vec<Option<NamedNodeOrLiteral>> = t:DataBlockValue() _ { vec![t] }
+        rule InlineDataOneVar_value() -> Vec<Option<GroundTerm>> = t:DataBlockValue() _ { vec![t] }
 
         //[64]
-        rule InlineDataFull() -> (Vec<Variable>, Vec<Vec<Option<NamedNodeOrLiteral>>>) = "(" _ vars:InlineDataFull_var()* _ ")" _ "{" _ val:InlineDataFull_values()* "}" {
+        rule InlineDataFull() -> (Vec<Variable>, Vec<Vec<Option<GroundTerm>>>) = "(" _ vars:InlineDataFull_var()* _ ")" _ "{" _ val:InlineDataFull_values()* "}" {
             (vars, val)
         }
         rule InlineDataFull_var() -> Variable = v:Var() _ { v }
-        rule InlineDataFull_values() -> Vec<Option<NamedNodeOrLiteral>> = "(" _ v:InlineDataFull_value()* _ ")" _ { v }
-        rule InlineDataFull_value() -> Option<NamedNodeOrLiteral> = v:DataBlockValue() _ { v }
+        rule InlineDataFull_values() -> Vec<Option<GroundTerm>> = "(" _ v:InlineDataFull_value()* _ ")" _ { v }
+        rule InlineDataFull_value() -> Option<GroundTerm> = v:DataBlockValue() _ { v }
 
         //[65]
-        rule DataBlockValue() -> Option<NamedNodeOrLiteral> =
+        rule DataBlockValue() -> Option<GroundTerm> =
             i:iri() { Some(i.into()) } /
             l:RDFLiteral() { Some(l.into()) } /
             l:NumericLiteral() { Some(l.into()) } /

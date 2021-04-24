@@ -55,7 +55,7 @@ pub struct QuadPattern {
     pub subject: TermOrVariable,
     pub predicate: NamedNodeOrVariable,
     pub object: TermOrVariable,
-    pub graph_name: Option<NamedNodeOrVariable>,
+    pub graph_name: GraphNameOrVariable,
 }
 
 impl QuadPattern {
@@ -63,30 +63,57 @@ impl QuadPattern {
         subject: impl Into<TermOrVariable>,
         predicate: impl Into<NamedNodeOrVariable>,
         object: impl Into<TermOrVariable>,
-        graph_name: Option<NamedNodeOrVariable>,
+        graph_name: impl Into<GraphNameOrVariable>,
     ) -> Self {
         Self {
             subject: subject.into(),
             predicate: predicate.into(),
             object: object.into(),
-            graph_name,
+            graph_name: graph_name.into(),
         }
     }
 }
 
 impl fmt::Display for QuadPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(graph_name) = &self.graph_name {
-            write!(
-                f,
-                "(graph {} (triple {} {} {}))",
-                graph_name, self.subject, self.predicate, self.object
-            )
-        } else {
+        if self.graph_name == GraphNameOrVariable::DefaultGraph {
             write!(
                 f,
                 "(triple {} {} {})",
                 self.subject, self.predicate, self.object
+            )
+        } else {
+            write!(
+                f,
+                "(graph {} (triple {} {} {}))",
+                self.graph_name, self.subject, self.predicate, self.object
+            )
+        }
+    }
+}
+
+/// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) in a specific graph without blank nodes
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct GroundQuadPattern {
+    pub subject: GroundTermOrVariable,
+    pub predicate: NamedNodeOrVariable,
+    pub object: GroundTermOrVariable,
+    pub graph_name: GraphNameOrVariable,
+}
+
+impl fmt::Display for GroundQuadPattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.graph_name == GraphNameOrVariable::DefaultGraph {
+            write!(
+                f,
+                "(triple {} {} {})",
+                self.subject, self.predicate, self.object
+            )
+        } else {
+            write!(
+                f,
+                "(graph {} (triple {} {} {}))",
+                self.graph_name, self.subject, self.predicate, self.object
             )
         }
     }
@@ -96,17 +123,37 @@ pub(crate) struct SparqlQuadPattern<'a>(pub(crate) &'a QuadPattern);
 
 impl<'a> fmt::Display for SparqlQuadPattern<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(graph_name) = &self.0.graph_name {
-            write!(
-                f,
-                "GRAPH {} {{ {} {} {} }}",
-                graph_name, self.0.subject, self.0.predicate, self.0.object
-            )
-        } else {
+        if self.0.graph_name == GraphNameOrVariable::DefaultGraph {
             write!(
                 f,
                 "{} {} {} .",
                 self.0.subject, self.0.predicate, self.0.object
+            )
+        } else {
+            write!(
+                f,
+                "GRAPH {} {{ {} {} {} }}",
+                self.0.graph_name, self.0.subject, self.0.predicate, self.0.object
+            )
+        }
+    }
+}
+
+pub(crate) struct SparqlGroundQuadPattern<'a>(pub(crate) &'a GroundQuadPattern);
+
+impl<'a> fmt::Display for SparqlGroundQuadPattern<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.0.graph_name == GraphNameOrVariable::DefaultGraph {
+            write!(
+                f,
+                "{} {} {} .",
+                self.0.subject, self.0.predicate, self.0.object
+            )
+        } else {
+            write!(
+                f,
+                "GRAPH {} {{ {} {} {} }}",
+                self.0.graph_name, self.0.subject, self.0.predicate, self.0.object
             )
         }
     }
@@ -566,7 +613,7 @@ pub enum GraphPattern {
     /// A table used to provide inline values
     Table {
         variables: Vec<Variable>,
-        rows: Vec<Vec<Option<NamedNodeOrLiteral>>>,
+        rows: Vec<Vec<Option<GroundTerm>>>,
     },
     /// [OrderBy](https://www.w3.org/TR/sparql11-query/#defn_algOrdered)
     OrderBy {
@@ -1327,5 +1374,14 @@ impl fmt::Display for GraphTarget {
 impl From<NamedNode> for GraphTarget {
     fn from(node: NamedNode) -> Self {
         Self::NamedNode(node)
+    }
+}
+
+impl From<GraphName> for GraphTarget {
+    fn from(graph_name: GraphName) -> Self {
+        match graph_name {
+            GraphName::NamedNode(node) => Self::NamedNode(node),
+            GraphName::DefaultGraph => Self::DefaultGraph,
+        }
     }
 }

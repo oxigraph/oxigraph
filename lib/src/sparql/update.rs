@@ -16,10 +16,11 @@ use crate::storage::Storage;
 use http::header::{ACCEPT, CONTENT_TYPE, USER_AGENT};
 use http::{Method, Request, StatusCode};
 use oxiri::Iri;
-use spargebra::algebra::{GraphPattern, GraphTarget, QuadPattern};
+use spargebra::algebra::{GraphPattern, GraphTarget, GroundQuadPattern, QuadPattern};
 use spargebra::term::{
-    BlankNode, GraphName, Literal, NamedNode, NamedNodeOrVariable, NamedOrBlankNode, Quad, Term,
-    TermOrVariable, Variable,
+    BlankNode, GraphName, GraphNameOrVariable, GroundQuad, GroundTerm, GroundTermOrVariable,
+    Literal, NamedNode, NamedNodeOrVariable, NamedOrBlankNode, Quad, Term, TermOrVariable,
+    Variable,
 };
 use spargebra::GraphUpdateOperation;
 use std::collections::HashMap;
@@ -99,9 +100,9 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         Ok(())
     }
 
-    fn eval_delete_data(&mut self, data: &[Quad]) -> Result<(), EvaluationError> {
+    fn eval_delete_data(&mut self, data: &[GroundQuad]) -> Result<(), EvaluationError> {
         for quad in data {
-            let quad = self.encode_quad_for_deletion(quad)?;
+            let quad = self.encode_quad_for_deletion(quad);
             self.storage.remove(&quad)?;
         }
         Ok(())
@@ -109,7 +110,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
 
     fn eval_delete_insert(
         &mut self,
-        delete: &[QuadPattern],
+        delete: &[GroundQuadPattern],
         insert: &[QuadPattern],
         using: &QueryDataset,
         algebra: &GraphPattern,
@@ -146,8 +147,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                 .collect::<Result<Vec<_>, EvaluationError>>()?;
 
             for quad in delete {
-                if let Some(quad) =
-                    self.encode_quad_pattern_for_deletion(quad, &variables, &tuple)?
+                if let Some(quad) = self.encode_quad_pattern_for_deletion(quad, &variables, &tuple)
                 {
                     self.storage.remove(&quad)?;
                 }
@@ -164,11 +164,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         Ok(())
     }
 
-    fn eval_load(
-        &mut self,
-        from: &NamedNode,
-        to: &Option<NamedNode>,
-    ) -> Result<(), EvaluationError> {
+    fn eval_load(&mut self, from: &NamedNode, to: &GraphName) -> Result<(), EvaluationError> {
         let request = Request::builder()
             .method(Method::GET)
             .uri(&from.iri)
@@ -201,10 +197,9 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                 from, content_type
             ))
         })?;
-        let to_graph_name = if let Some(graph_name) = to {
-            NamedNodeRef::new_unchecked(&graph_name.iri).into()
-        } else {
-            GraphNameRef::DefaultGraph
+        let to_graph_name = match to {
+            GraphName::NamedNode(graph_name) => NamedNodeRef::new_unchecked(&graph_name.iri).into(),
+            GraphName::DefaultGraph => GraphNameRef::DefaultGraph,
         };
         load_graph(
             self.storage,
@@ -365,16 +360,12 @@ impl<'a> SimpleUpdateEvaluator<'a> {
             } else {
                 return Ok(None);
             },
-            graph_name: if let Some(graph_name) = &quad.graph_name {
-                if let Some(graph_name) =
-                    self.encode_named_node_or_var_for_insertion(graph_name, variables, values)?
-                {
-                    graph_name
-                } else {
-                    return Ok(None);
-                }
+            graph_name: if let Some(graph_name) =
+                self.encode_graph_name_or_var_for_insertion(&quad.graph_name, variables, values)?
+            {
+                graph_name
             } else {
-                EncodedTerm::DefaultGraph
+                return Ok(None);
             },
         }))
     }
@@ -388,27 +379,14 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         validate: impl FnOnce(&EncodedTerm) -> bool,
     ) -> Result<Option<EncodedTerm>, EvaluationError> {
         Ok(match term {
-            TermOrVariable::Term(term) => Some(match term {
-                Term::NamedNode(term) => self.encode_named_node_for_insertion(term)?,
-                Term::BlankNode(bnode) => self
-                    .storage
+            TermOrVariable::NamedNode(term) => Some(self.encode_named_node_for_insertion(term)?),
+            TermOrVariable::BlankNode(bnode) => Some(
+                self.storage
                     .encode_blank_node(bnodes.entry(bnode.clone()).or_default().as_ref())?,
-                Term::Literal(term) => self.encode_literal_for_insertion(term)?,
-            }),
+            ),
+            TermOrVariable::Literal(term) => Some(self.encode_literal_for_insertion(term)?),
             TermOrVariable::Variable(v) => {
-                if let Some(Some(term)) = variables
-                    .iter()
-                    .position(|v2| v == v2)
-                    .and_then(|i| values.get(i))
-                {
-                    if validate(term) {
-                        Some(*term)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
+                self.lookup_variable(v, variables, values).filter(validate)
             }
         })
     }
@@ -423,22 +401,46 @@ impl<'a> SimpleUpdateEvaluator<'a> {
             NamedNodeOrVariable::NamedNode(term) => {
                 Some(self.encode_named_node_for_insertion(term)?)
             }
-            NamedNodeOrVariable::Variable(v) => {
-                if let Some(Some(term)) = variables
-                    .iter()
-                    .position(|v2| v == v2)
-                    .and_then(|i| values.get(i))
-                {
-                    if term.is_named_node() {
-                        Some(*term)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            }
+            NamedNodeOrVariable::Variable(v) => self
+                .lookup_variable(v, variables, values)
+                .filter(|value| value.is_named_node()),
         })
+    }
+
+    fn encode_graph_name_or_var_for_insertion(
+        &mut self,
+        term: &GraphNameOrVariable,
+        variables: &[Variable],
+        values: &[Option<EncodedTerm>],
+    ) -> Result<Option<EncodedTerm>, EvaluationError> {
+        Ok(match term {
+            GraphNameOrVariable::NamedNode(term) => {
+                Some(self.encode_named_node_for_insertion(term)?)
+            }
+            GraphNameOrVariable::DefaultGraph => Some(EncodedTerm::DefaultGraph),
+            GraphNameOrVariable::Variable(v) => self
+                .lookup_variable(v, variables, values)
+                .filter(|value| value.is_named_node()),
+        })
+    }
+
+    fn lookup_variable(
+        &self,
+        v: &Variable,
+        variables: &[Variable],
+        values: &[Option<EncodedTerm>],
+    ) -> Option<EncodedTerm> {
+        {
+            if let Some(Some(term)) = variables
+                .iter()
+                .position(|v2| v == v2)
+                .and_then(|i| values.get(i))
+            {
+                Some(*term)
+            } else {
+                None
+            }
+        }
     }
 
     fn encode_named_node_for_insertion(
@@ -465,105 +467,56 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         })?)
     }
 
-    fn encode_quad_for_deletion(&mut self, quad: &Quad) -> Result<EncodedQuad, EvaluationError> {
-        Ok(EncodedQuad {
-            subject: match &quad.subject {
-                NamedOrBlankNode::NamedNode(subject) => {
-                    self.encode_named_node_for_deletion(subject)
-                }
-                NamedOrBlankNode::BlankNode(_) => {
-                    return Err(EvaluationError::msg(
-                        "Blank nodes are not allowed in DELETE DATA",
-                    ))
-                }
-            },
+    fn encode_quad_for_deletion(&mut self, quad: &GroundQuad) -> EncodedQuad {
+        EncodedQuad {
+            subject: self.encode_named_node_for_deletion(&quad.subject),
             predicate: self.encode_named_node_for_deletion(&quad.predicate),
             object: match &quad.object {
-                Term::NamedNode(object) => self.encode_named_node_for_deletion(object),
-                Term::BlankNode(_) => {
-                    return Err(EvaluationError::msg(
-                        "Blank nodes are not allowed in DELETE DATA",
-                    ))
-                }
-                Term::Literal(object) => self.encode_literal_for_deletion(object),
+                GroundTerm::NamedNode(object) => self.encode_named_node_for_deletion(object),
+                GroundTerm::Literal(object) => self.encode_literal_for_deletion(object),
             },
             graph_name: match &quad.graph_name {
                 GraphName::NamedNode(graph_name) => self.encode_named_node_for_deletion(graph_name),
                 GraphName::DefaultGraph => EncodedTerm::DefaultGraph,
             },
-        })
+        }
     }
 
     fn encode_quad_pattern_for_deletion(
         &self,
-        quad: &QuadPattern,
+        quad: &GroundQuadPattern,
         variables: &[Variable],
         values: &[Option<EncodedTerm>],
-    ) -> Result<Option<EncodedQuad>, EvaluationError> {
-        Ok(Some(EncodedQuad {
-            subject: if let Some(subject) =
-                self.encode_term_or_var_for_deletion(&quad.subject, variables, values)?
-            {
-                subject
-            } else {
-                return Ok(None);
-            },
-            predicate: if let Some(predicate) =
-                self.encode_named_node_or_var_for_deletion(&quad.predicate, variables, values)
-            {
-                predicate
-            } else {
-                return Ok(None);
-            },
-            object: if let Some(object) =
-                self.encode_term_or_var_for_deletion(&quad.object, variables, values)?
-            {
-                object
-            } else {
-                return Ok(None);
-            },
-            graph_name: if let Some(graph_name) = &quad.graph_name {
-                if let Some(graph_name) =
-                    self.encode_named_node_or_var_for_deletion(graph_name, variables, values)
-                {
-                    graph_name
-                } else {
-                    return Ok(None);
-                }
-            } else {
-                EncodedTerm::DefaultGraph
-            },
-        }))
+    ) -> Option<EncodedQuad> {
+        Some(EncodedQuad {
+            subject: self.encode_term_or_var_for_deletion(&quad.subject, variables, values)?,
+            predicate: self.encode_named_node_or_var_for_deletion(
+                &quad.predicate,
+                variables,
+                values,
+            )?,
+            object: self.encode_term_or_var_for_deletion(&quad.object, variables, values)?,
+            graph_name: self.encode_graph_name_or_var_for_deletion(
+                &quad.graph_name,
+                variables,
+                values,
+            )?,
+        })
     }
 
     fn encode_term_or_var_for_deletion(
         &self,
-        term: &TermOrVariable,
+        term: &GroundTermOrVariable,
         variables: &[Variable],
         values: &[Option<EncodedTerm>],
-    ) -> Result<Option<EncodedTerm>, EvaluationError> {
-        Ok(match term {
-            TermOrVariable::Term(term) => match term {
-                Term::NamedNode(term) => Some(self.encode_named_node_for_deletion(term)),
-                Term::BlankNode(_) => {
-                    return Err(EvaluationError::msg(
-                        "Blank nodes are not allowed in DELETE patterns",
-                    ))
-                }
-                Term::Literal(term) => Some(self.encode_literal_for_deletion(term)),
-            },
-            TermOrVariable::Variable(v) => {
-                if let Some(Some(term)) = variables
-                    .iter()
-                    .position(|v2| v == v2)
-                    .and_then(|i| values.get(i))
-                {
-                    Some(*term)
-                } else {
-                    None
-                }
+    ) -> Option<EncodedTerm> {
+        match term {
+            GroundTermOrVariable::NamedNode(term) => {
+                Some(self.encode_named_node_for_deletion(term))
             }
-        })
+            GroundTermOrVariable::Literal(term) => Some(self.encode_literal_for_deletion(term)),
+            GroundTermOrVariable::Variable(v) => self.lookup_variable(v, variables, values),
+        }
     }
 
     fn encode_named_node_or_var_for_deletion(
@@ -574,21 +527,24 @@ impl<'a> SimpleUpdateEvaluator<'a> {
     ) -> Option<EncodedTerm> {
         match term {
             NamedNodeOrVariable::NamedNode(term) => Some(self.encode_named_node_for_deletion(term)),
-            NamedNodeOrVariable::Variable(v) => {
-                if let Some(Some(term)) = variables
-                    .iter()
-                    .position(|v2| v == v2)
-                    .and_then(|i| values.get(i))
-                {
-                    if term.is_named_node() {
-                        Some(*term)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            }
+            NamedNodeOrVariable::Variable(v) => self
+                .lookup_variable(v, variables, values)
+                .filter(|v| v.is_named_node()),
+        }
+    }
+
+    fn encode_graph_name_or_var_for_deletion(
+        &self,
+        graph_name: &GraphNameOrVariable,
+        variables: &[Variable],
+        values: &[Option<EncodedTerm>],
+    ) -> Option<EncodedTerm> {
+        match graph_name {
+            GraphNameOrVariable::NamedNode(term) => Some(self.encode_named_node_for_deletion(term)),
+            GraphNameOrVariable::DefaultGraph => Some(EncodedTerm::DefaultGraph),
+            GraphNameOrVariable::Variable(v) => self
+                .lookup_variable(v, variables, values)
+                .filter(|v| v.is_named_node()),
         }
     }
 

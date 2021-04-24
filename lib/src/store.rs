@@ -171,10 +171,10 @@ impl Store {
     ) -> QuadIter {
         QuadIter {
             iter: self.storage.quads_for_pattern(
-                subject.map(|s| get_encoded_named_or_blank_node(s)),
-                predicate.map(|p| get_encoded_named_node(p)),
-                object.map(|o| get_encoded_term(o)),
-                graph_name.map(|g| get_encoded_graph_name(g)),
+                subject.map(get_encoded_named_or_blank_node),
+                predicate.map(get_encoded_named_node),
+                object.map(get_encoded_term),
+                graph_name.map(get_encoded_graph_name),
             ),
             storage: self.storage.clone(),
         }
