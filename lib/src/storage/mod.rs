@@ -74,7 +74,7 @@ impl Storage {
             for quad in this.quads() {
                 let quad = quad?;
                 if !quad.graph_name.is_default_graph() {
-                    this.insert_named_graph(quad.graph_name)?;
+                    this.insert_named_graph(&quad.graph_name)?;
                 }
             }
             version = 1;
@@ -168,10 +168,10 @@ impl Storage {
 
     pub fn quads_for_pattern(
         &self,
-        subject: Option<EncodedTerm>,
-        predicate: Option<EncodedTerm>,
-        object: Option<EncodedTerm>,
-        graph_name: Option<EncodedTerm>,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_name: Option<&EncodedTerm>,
     ) -> ChainedDecodingQuadIterator {
         match subject {
             Some(subject) => match predicate {
@@ -236,7 +236,7 @@ impl Storage {
         )
     }
 
-    fn quads_for_subject(&self, subject: EncodedTerm) -> ChainedDecodingQuadIterator {
+    fn quads_for_subject(&self, subject: &EncodedTerm) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::pair(
             self.dspo_quads(encode_term(subject)),
             self.spog_quads(encode_term(subject)),
@@ -245,8 +245,8 @@ impl Storage {
 
     fn quads_for_subject_predicate(
         &self,
-        subject: EncodedTerm,
-        predicate: EncodedTerm,
+        subject: &EncodedTerm,
+        predicate: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::pair(
             self.dspo_quads(encode_term_pair(subject, predicate)),
@@ -256,9 +256,9 @@ impl Storage {
 
     fn quads_for_subject_predicate_object(
         &self,
-        subject: EncodedTerm,
-        predicate: EncodedTerm,
-        object: EncodedTerm,
+        subject: &EncodedTerm,
+        predicate: &EncodedTerm,
+        object: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::pair(
             self.dspo_quads(encode_term_triple(subject, predicate, object)),
@@ -268,8 +268,8 @@ impl Storage {
 
     fn quads_for_subject_object(
         &self,
-        subject: EncodedTerm,
-        object: EncodedTerm,
+        subject: &EncodedTerm,
+        object: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::pair(
             self.dosp_quads(encode_term_pair(object, subject)),
@@ -277,7 +277,7 @@ impl Storage {
         )
     }
 
-    fn quads_for_predicate(&self, predicate: EncodedTerm) -> ChainedDecodingQuadIterator {
+    fn quads_for_predicate(&self, predicate: &EncodedTerm) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::pair(
             self.dpos_quads(encode_term(predicate)),
             self.posg_quads(encode_term(predicate)),
@@ -286,8 +286,8 @@ impl Storage {
 
     fn quads_for_predicate_object(
         &self,
-        predicate: EncodedTerm,
-        object: EncodedTerm,
+        predicate: &EncodedTerm,
+        object: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::pair(
             self.dpos_quads(encode_term_pair(predicate, object)),
@@ -295,14 +295,14 @@ impl Storage {
         )
     }
 
-    fn quads_for_object(&self, object: EncodedTerm) -> ChainedDecodingQuadIterator {
+    fn quads_for_object(&self, object: &EncodedTerm) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::pair(
             self.dosp_quads(encode_term(object)),
             self.ospg_quads(encode_term(object)),
         )
     }
 
-    fn quads_for_graph(&self, graph_name: EncodedTerm) -> ChainedDecodingQuadIterator {
+    fn quads_for_graph(&self, graph_name: &EncodedTerm) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
             self.dspo_quads(Vec::default())
         } else {
@@ -312,8 +312,8 @@ impl Storage {
 
     fn quads_for_subject_graph(
         &self,
-        subject: EncodedTerm,
-        graph_name: EncodedTerm,
+        subject: &EncodedTerm,
+        graph_name: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
             self.dspo_quads(encode_term(subject))
@@ -324,9 +324,9 @@ impl Storage {
 
     fn quads_for_subject_predicate_graph(
         &self,
-        subject: EncodedTerm,
-        predicate: EncodedTerm,
-        graph_name: EncodedTerm,
+        subject: &EncodedTerm,
+        predicate: &EncodedTerm,
+        graph_name: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
             self.dspo_quads(encode_term_pair(subject, predicate))
@@ -337,10 +337,10 @@ impl Storage {
 
     fn quads_for_subject_predicate_object_graph(
         &self,
-        subject: EncodedTerm,
-        predicate: EncodedTerm,
-        object: EncodedTerm,
-        graph_name: EncodedTerm,
+        subject: &EncodedTerm,
+        predicate: &EncodedTerm,
+        object: &EncodedTerm,
+        graph_name: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
             self.dspo_quads(encode_term_triple(subject, predicate, object))
@@ -351,9 +351,9 @@ impl Storage {
 
     fn quads_for_subject_object_graph(
         &self,
-        subject: EncodedTerm,
-        object: EncodedTerm,
-        graph_name: EncodedTerm,
+        subject: &EncodedTerm,
+        object: &EncodedTerm,
+        graph_name: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
             self.dosp_quads(encode_term_pair(object, subject))
@@ -364,8 +364,8 @@ impl Storage {
 
     fn quads_for_predicate_graph(
         &self,
-        predicate: EncodedTerm,
-        graph_name: EncodedTerm,
+        predicate: &EncodedTerm,
+        graph_name: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
             self.dpos_quads(encode_term(predicate))
@@ -376,9 +376,9 @@ impl Storage {
 
     fn quads_for_predicate_object_graph(
         &self,
-        predicate: EncodedTerm,
-        object: EncodedTerm,
-        graph_name: EncodedTerm,
+        predicate: &EncodedTerm,
+        object: &EncodedTerm,
+        graph_name: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
             self.dpos_quads(encode_term_pair(predicate, object))
@@ -389,8 +389,8 @@ impl Storage {
 
     fn quads_for_object_graph(
         &self,
-        object: EncodedTerm,
-        graph_name: EncodedTerm,
+        object: &EncodedTerm,
+        graph_name: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
             self.dosp_quads(encode_term(object))
@@ -405,7 +405,7 @@ impl Storage {
         }
     }
 
-    pub fn contains_named_graph(&self, graph_name: EncodedTerm) -> Result<bool, std::io::Error> {
+    pub fn contains_named_graph(&self, graph_name: &EncodedTerm) -> Result<bool, std::io::Error> {
         Ok(self.graphs.contains_key(&encode_term(graph_name))?)
     }
 
@@ -503,7 +503,7 @@ impl Storage {
                 self.gosp.insert(buffer.as_slice(), &[])?;
                 buffer.clear();
 
-                write_term(&mut buffer, quad.graph_name);
+                write_term(&mut buffer, &quad.graph_name);
                 self.graphs.insert(&buffer, &[])?;
                 buffer.clear();
             }
@@ -564,11 +564,11 @@ impl Storage {
         }
     }
 
-    pub fn insert_named_graph(&self, graph_name: EncodedTerm) -> Result<bool, std::io::Error> {
+    pub fn insert_named_graph(&self, graph_name: &EncodedTerm) -> Result<bool, std::io::Error> {
         Ok(self.graphs.insert(&encode_term(graph_name), &[])?.is_none())
     }
 
-    pub fn clear_graph(&self, graph_name: EncodedTerm) -> Result<(), std::io::Error> {
+    pub fn clear_graph(&self, graph_name: &EncodedTerm) -> Result<(), std::io::Error> {
         if graph_name.is_default_graph() {
             self.dspo.clear()?;
             self.dpos.clear()?;
@@ -581,7 +581,7 @@ impl Storage {
         Ok(())
     }
 
-    pub fn remove_named_graph(&self, graph_name: EncodedTerm) -> Result<bool, std::io::Error> {
+    pub fn remove_named_graph(&self, graph_name: &EncodedTerm) -> Result<bool, std::io::Error> {
         for quad in self.quads_for_graph(graph_name) {
             self.remove(&quad?)?;
         }
@@ -603,7 +603,7 @@ impl Storage {
         Ok(())
     }
 
-    pub fn get_str(&self, key: StrHash) -> Result<Option<String>, std::io::Error> {
+    pub fn get_str(&self, key: &StrHash) -> Result<Option<String>, std::io::Error> {
         self.id2str
             .get(key.to_be_bytes())?
             .map(|v| String::from_utf8(v.to_vec()))
@@ -611,11 +611,11 @@ impl Storage {
             .map_err(invalid_data_error)
     }
 
-    pub fn contains_str(&self, key: StrHash) -> Result<bool, std::io::Error> {
+    pub fn contains_str(&self, key: &StrHash) -> Result<bool, std::io::Error> {
         Ok(self.id2str.contains_key(key.to_be_bytes())?)
     }
 
-    pub fn insert_str(&self, key: StrHash, value: &str) -> Result<bool, std::io::Error> {
+    pub fn insert_str(&self, key: &StrHash, value: &str) -> Result<bool, std::io::Error> {
         Ok(self.id2str.insert(key.to_be_bytes(), value)?.is_none())
     }
 }
@@ -748,7 +748,7 @@ impl<'a> StorageTransaction<'a> {
                 self.gosp.insert(buffer.as_slice(), &[])?;
                 buffer.clear();
 
-                write_term(&mut buffer, quad.graph_name);
+                write_term(&mut buffer, &quad.graph_name);
                 self.graphs.insert(buffer.as_slice(), &[])?;
                 buffer.clear();
             }
@@ -811,12 +811,12 @@ impl<'a> StorageTransaction<'a> {
 
     pub fn insert_named_graph(
         &self,
-        graph_name: EncodedTerm,
+        graph_name: &EncodedTerm,
     ) -> Result<bool, UnabortableTransactionError> {
         Ok(self.graphs.insert(encode_term(graph_name), &[])?.is_none())
     }
 
-    pub fn get_str(&self, key: StrHash) -> Result<Option<String>, UnabortableTransactionError> {
+    pub fn get_str(&self, key: &StrHash) -> Result<Option<String>, UnabortableTransactionError> {
         self.id2str
             .get(key.to_be_bytes())?
             .map(|v| String::from_utf8(v.to_vec()))
@@ -824,13 +824,13 @@ impl<'a> StorageTransaction<'a> {
             .map_err(|e| UnabortableTransactionError::Storage(invalid_data_error(e)))
     }
 
-    pub fn contains_str(&self, key: StrHash) -> Result<bool, UnabortableTransactionError> {
+    pub fn contains_str(&self, key: &StrHash) -> Result<bool, UnabortableTransactionError> {
         Ok(self.id2str.get(key.to_be_bytes())?.is_some())
     }
 
     pub fn insert_str(
         &self,
-        key: StrHash,
+        key: &StrHash,
         value: &str,
     ) -> Result<bool, UnabortableTransactionError> {
         Ok(self.id2str.insert(&key.to_be_bytes(), value)?.is_none())
@@ -992,17 +992,17 @@ impl<T> From<ConflictableTransactionError<T>> for Sled2ConflictableTransactionEr
 impl StrLookup for Storage {
     type Error = std::io::Error;
 
-    fn get_str(&self, key: StrHash) -> Result<Option<String>, std::io::Error> {
+    fn get_str(&self, key: &StrHash) -> Result<Option<String>, std::io::Error> {
         self.get_str(key)
     }
 
-    fn contains_str(&self, key: StrHash) -> Result<bool, std::io::Error> {
+    fn contains_str(&self, key: &StrHash) -> Result<bool, std::io::Error> {
         self.contains_str(key)
     }
 }
 
 impl StrContainer for Storage {
-    fn insert_str(&self, key: StrHash, value: &str) -> Result<bool, std::io::Error> {
+    fn insert_str(&self, key: &StrHash, value: &str) -> Result<bool, std::io::Error> {
         self.insert_str(key, value)
     }
 }
@@ -1010,17 +1010,17 @@ impl StrContainer for Storage {
 impl<'a> StrLookup for StorageTransaction<'a> {
     type Error = UnabortableTransactionError;
 
-    fn get_str(&self, key: StrHash) -> Result<Option<String>, UnabortableTransactionError> {
+    fn get_str(&self, key: &StrHash) -> Result<Option<String>, UnabortableTransactionError> {
         self.get_str(key)
     }
 
-    fn contains_str(&self, key: StrHash) -> Result<bool, UnabortableTransactionError> {
+    fn contains_str(&self, key: &StrHash) -> Result<bool, UnabortableTransactionError> {
         self.contains_str(key)
     }
 }
 
 impl<'a> StrContainer for StorageTransaction<'a> {
-    fn insert_str(&self, key: StrHash, value: &str) -> Result<bool, UnabortableTransactionError> {
+    fn insert_str(&self, key: &StrHash, value: &str) -> Result<bool, UnabortableTransactionError> {
         self.insert_str(key, value)
     }
 }

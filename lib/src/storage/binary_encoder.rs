@@ -402,79 +402,79 @@ impl<R: Read> TermReader for R {
 }
 
 pub fn write_spog_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.subject);
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.object);
-    write_term(sink, quad.graph_name);
+    write_term(sink, &quad.subject);
+    write_term(sink, &quad.predicate);
+    write_term(sink, &quad.object);
+    write_term(sink, &quad.graph_name);
 }
 
 pub fn write_posg_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.object);
-    write_term(sink, quad.subject);
-    write_term(sink, quad.graph_name);
+    write_term(sink, &quad.predicate);
+    write_term(sink, &quad.object);
+    write_term(sink, &quad.subject);
+    write_term(sink, &quad.graph_name);
 }
 
 pub fn write_ospg_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.object);
-    write_term(sink, quad.subject);
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.graph_name);
+    write_term(sink, &quad.object);
+    write_term(sink, &quad.subject);
+    write_term(sink, &quad.predicate);
+    write_term(sink, &quad.graph_name);
 }
 
 pub fn write_gspo_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.graph_name);
-    write_term(sink, quad.subject);
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.object);
+    write_term(sink, &quad.graph_name);
+    write_term(sink, &quad.subject);
+    write_term(sink, &quad.predicate);
+    write_term(sink, &quad.object);
 }
 
 pub fn write_gpos_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.graph_name);
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.object);
-    write_term(sink, quad.subject);
+    write_term(sink, &quad.graph_name);
+    write_term(sink, &quad.predicate);
+    write_term(sink, &quad.object);
+    write_term(sink, &quad.subject);
 }
 
 pub fn write_gosp_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.graph_name);
-    write_term(sink, quad.object);
-    write_term(sink, quad.subject);
-    write_term(sink, quad.predicate);
+    write_term(sink, &quad.graph_name);
+    write_term(sink, &quad.object);
+    write_term(sink, &quad.subject);
+    write_term(sink, &quad.predicate);
 }
 
 pub fn write_spo_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.subject);
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.object);
+    write_term(sink, &quad.subject);
+    write_term(sink, &quad.predicate);
+    write_term(sink, &quad.object);
 }
 
 pub fn write_pos_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.predicate);
-    write_term(sink, quad.object);
-    write_term(sink, quad.subject);
+    write_term(sink, &quad.predicate);
+    write_term(sink, &quad.object);
+    write_term(sink, &quad.subject);
 }
 
 pub fn write_osp_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, quad.object);
-    write_term(sink, quad.subject);
-    write_term(sink, quad.predicate);
+    write_term(sink, &quad.object);
+    write_term(sink, &quad.subject);
+    write_term(sink, &quad.predicate);
 }
 
-pub fn encode_term(t: EncodedTerm) -> Vec<u8> {
+pub fn encode_term(t: &EncodedTerm) -> Vec<u8> {
     let mut vec = Vec::with_capacity(WRITTEN_TERM_MAX_SIZE);
     write_term(&mut vec, t);
     vec
 }
 
-pub fn encode_term_pair(t1: EncodedTerm, t2: EncodedTerm) -> Vec<u8> {
+pub fn encode_term_pair(t1: &EncodedTerm, t2: &EncodedTerm) -> Vec<u8> {
     let mut vec = Vec::with_capacity(2 * WRITTEN_TERM_MAX_SIZE);
     write_term(&mut vec, t1);
     write_term(&mut vec, t2);
     vec
 }
 
-pub fn encode_term_triple(t1: EncodedTerm, t2: EncodedTerm, t3: EncodedTerm) -> Vec<u8> {
+pub fn encode_term_triple(t1: &EncodedTerm, t2: &EncodedTerm, t3: &EncodedTerm) -> Vec<u8> {
     let mut vec = Vec::with_capacity(3 * WRITTEN_TERM_MAX_SIZE);
     write_term(&mut vec, t1);
     write_term(&mut vec, t2);
@@ -483,10 +483,10 @@ pub fn encode_term_triple(t1: EncodedTerm, t2: EncodedTerm, t3: EncodedTerm) -> 
 }
 
 pub fn encode_term_quad(
-    t1: EncodedTerm,
-    t2: EncodedTerm,
-    t3: EncodedTerm,
-    t4: EncodedTerm,
+    t1: &EncodedTerm,
+    t2: &EncodedTerm,
+    t3: &EncodedTerm,
+    t4: &EncodedTerm,
 ) -> Vec<u8> {
     let mut vec = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
     write_term(&mut vec, t1);
@@ -496,7 +496,7 @@ pub fn encode_term_quad(
     vec
 }
 
-pub fn write_term(sink: &mut Vec<u8>, term: EncodedTerm) {
+pub fn write_term(sink: &mut Vec<u8>, term: &EncodedTerm) {
     match term {
         EncodedTerm::DefaultGraph => (),
         EncodedTerm::NamedNode { iri_id } => {
@@ -641,18 +641,18 @@ mod tests {
     impl StrLookup for MemoryStrStore {
         type Error = Infallible;
 
-        fn get_str(&self, key: StrHash) -> Result<Option<String>, Infallible> {
-            Ok(self.id2str.borrow().get(&key).cloned())
+        fn get_str(&self, key: &StrHash) -> Result<Option<String>, Infallible> {
+            Ok(self.id2str.borrow().get(key).cloned())
         }
 
-        fn contains_str(&self, key: StrHash) -> Result<bool, Infallible> {
-            Ok(self.id2str.borrow().contains_key(&key))
+        fn contains_str(&self, key: &StrHash) -> Result<bool, Infallible> {
+            Ok(self.id2str.borrow().contains_key(key))
         }
     }
 
     impl StrContainer for MemoryStrStore {
-        fn insert_str(&self, key: StrHash, value: &str) -> Result<bool, Infallible> {
-            match self.id2str.borrow_mut().entry(key) {
+        fn insert_str(&self, key: &StrHash, value: &str) -> Result<bool, Infallible> {
+            match self.id2str.borrow_mut().entry(*key) {
                 Entry::Occupied(_) => Ok(false),
                 Entry::Vacant(entry) => {
                     entry.insert(value.to_owned());
@@ -719,10 +719,10 @@ mod tests {
         for term in terms {
             let encoded = store.encode_term(term.as_ref()).unwrap();
             assert_eq!(encoded, get_encoded_term(term.as_ref()));
-            assert_eq!(term, store.decode_term(encoded).unwrap());
+            assert_eq!(term, store.decode_term(&encoded).unwrap());
 
             let mut buffer = Vec::new();
-            write_term(&mut buffer, encoded);
+            write_term(&mut buffer, &encoded);
             assert_eq!(encoded, Cursor::new(&buffer).read_term().unwrap());
         }
     }

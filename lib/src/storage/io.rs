@@ -52,7 +52,7 @@ where
         .map_err(StoreOrParseError::Store)?;
     parser.parse_all(&mut move |t| {
         let quad = storage
-            .encode_rio_triple_in_graph(t, to_graph_name, &mut bnode_map)
+            .encode_rio_triple_in_graph(t, to_graph_name.clone(), &mut bnode_map)
             .map_err(StoreOrParseError::Store)?;
         storage.insert(&quad).map_err(StoreOrParseError::Store)?;
         Ok(())

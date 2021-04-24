@@ -41,10 +41,10 @@ impl DatasetView {
 
     fn store_encoded_quads_for_pattern(
         &self,
-        subject: Option<EncodedTerm>,
-        predicate: Option<EncodedTerm>,
-        object: Option<EncodedTerm>,
-        graph_name: Option<EncodedTerm>,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_name: Option<&EncodedTerm>,
     ) -> impl Iterator<Item = Result<EncodedQuad, EvaluationError>> + 'static {
         self.storage
             .quads_for_pattern(subject, predicate, object, graph_name)
@@ -54,10 +54,10 @@ impl DatasetView {
     #[allow(clippy::needless_collect)]
     pub fn encoded_quads_for_pattern(
         &self,
-        subject: Option<EncodedTerm>,
-        predicate: Option<EncodedTerm>,
-        object: Option<EncodedTerm>,
-        graph_name: Option<EncodedTerm>,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_name: Option<&EncodedTerm>,
     ) -> Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>> {
         if let Some(graph_name) = graph_name {
             if graph_name.is_default_graph() {
@@ -69,7 +69,7 @@ impl DatasetView {
                                 subject,
                                 predicate,
                                 object,
-                                Some(default_graph_graphs[0]),
+                                Some(&default_graph_graphs[0]),
                             )
                             .map(|quad| {
                                 let quad = quad?;
@@ -89,7 +89,7 @@ impl DatasetView {
                                     subject,
                                     predicate,
                                     object,
-                                    Some(*graph_name),
+                                    Some(graph_name),
                                 )
                             })
                             .collect::<Vec<_>>();
@@ -110,7 +110,7 @@ impl DatasetView {
                 .dataset
                 .named
                 .as_ref()
-                .map_or(true, |d| d.contains(&graph_name))
+                .map_or(true, |d| d.contains(graph_name))
             {
                 Box::new(self.store_encoded_quads_for_pattern(
                     subject,
@@ -129,7 +129,7 @@ impl DatasetView {
                         subject,
                         predicate,
                         object,
-                        Some(*graph_name),
+                        Some(graph_name),
                     )
                 })
                 .collect::<Vec<_>>();
@@ -149,25 +149,25 @@ impl DatasetView {
 impl StrLookup for DatasetView {
     type Error = EvaluationError;
 
-    fn get_str(&self, key: StrHash) -> Result<Option<String>, EvaluationError> {
-        Ok(if let Some(value) = self.extra.borrow().get(&key) {
+    fn get_str(&self, key: &StrHash) -> Result<Option<String>, EvaluationError> {
+        Ok(if let Some(value) = self.extra.borrow().get(key) {
             Some(value.clone())
         } else {
             self.storage.get_str(key)?
         })
     }
 
-    fn contains_str(&self, key: StrHash) -> Result<bool, EvaluationError> {
-        Ok(self.extra.borrow().contains_key(&key) || self.storage.contains_str(key)?)
+    fn contains_str(&self, key: &StrHash) -> Result<bool, EvaluationError> {
+        Ok(self.extra.borrow().contains_key(key) || self.storage.contains_str(key)?)
     }
 }
 
 impl StrContainer for DatasetView {
-    fn insert_str(&self, key: StrHash, value: &str) -> Result<bool, EvaluationError> {
+    fn insert_str(&self, key: &StrHash, value: &str) -> Result<bool, EvaluationError> {
         if self.storage.contains_str(key)? {
             Ok(false)
         } else {
-            match self.extra.borrow_mut().entry(key) {
+            match self.extra.borrow_mut().entry(*key) {
                 Entry::Occupied(_) => Ok(false),
                 Entry::Vacant(entry) => {
                     entry.insert(value.to_owned());

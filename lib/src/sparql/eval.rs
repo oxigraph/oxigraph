@@ -136,10 +136,10 @@ impl SimpleEvaluator {
                 graph_name,
             } => {
                 let eval = self.clone();
-                let subject = *subject;
-                let predicate = *predicate;
-                let object = *object;
-                let graph_name = *graph_name;
+                let subject = subject.clone();
+                let predicate = predicate.clone();
+                let object = object.clone();
+                let graph_name = graph_name.clone();
                 Box::new(self.eval_plan(child, from).flat_map_ok(move |tuple| {
                     let mut iter: Box<dyn Iterator<Item = _>> =
                         Box::new(eval.dataset.encoded_quads_for_pattern(
@@ -186,6 +186,10 @@ impl SimpleEvaluator {
                             }))
                         }
                     }
+                    let subject = subject.clone();
+                    let predicate = predicate.clone();
+                    let object = object.clone();
+                    let graph_name = graph_name.clone();
                     let iter: EncodedTuplesIterator = Box::new(iter.map(move |quad| {
                         let quad = quad?;
                         let mut new_tuple = tuple.clone();
@@ -206,10 +210,10 @@ impl SimpleEvaluator {
                 graph_name,
             } => {
                 let eval = self.clone();
-                let subject = *subject;
+                let subject = subject.clone();
                 let path = path.clone();
-                let object = *object;
-                let graph_name = *graph_name;
+                let object = object.clone();
+                let graph_name = graph_name.clone();
                 Box::new(self.eval_plan(child, from).flat_map_ok(move |tuple| {
                     let input_subject = get_pattern_value(&subject, &tuple);
                     let input_object = get_pattern_value(&object, &tuple);
@@ -224,43 +228,53 @@ impl SimpleEvaluator {
                             return result;
                         };
                     match (input_subject, input_object) {
-                        (Some(input_subject), Some(input_object)) => Box::new(
-                            eval.eval_path_from(&path, input_subject, input_graph_name)
-                                .filter_map(move |o| match o {
-                                    Ok(o) => {
-                                        if o == input_object {
-                                            Some(Ok(tuple.clone()))
-                                        } else {
-                                            None
+                        (Some(input_subject), Some(input_object)) => {
+                            let input_object = input_object.clone();
+                            Box::new(
+                                eval.eval_path_from(&path, input_subject, input_graph_name)
+                                    .filter_map(move |o| match o {
+                                        Ok(o) => {
+                                            if o == input_object {
+                                                Some(Ok(tuple.clone()))
+                                            } else {
+                                                None
+                                            }
                                         }
-                                    }
-                                    Err(error) => Some(Err(error)),
-                                }),
-                        ),
-                        (Some(input_subject), None) => Box::new(
-                            eval.eval_path_from(&path, input_subject, input_graph_name)
-                                .map(move |o| {
-                                    let mut new_tuple = tuple.clone();
-                                    put_pattern_value(&object, o?, &mut new_tuple);
-                                    Ok(new_tuple)
-                                }),
-                        ),
-                        (None, Some(input_object)) => Box::new(
-                            eval.eval_path_to(&path, input_object, input_graph_name)
-                                .map(move |s| {
-                                    let mut new_tuple = tuple.clone();
-                                    put_pattern_value(&subject, s?, &mut new_tuple);
-                                    Ok(new_tuple)
-                                }),
-                        ),
+                                        Err(error) => Some(Err(error)),
+                                    }),
+                            )
+                        }
+                        (Some(input_subject), None) => {
+                            let object = object.clone();
+                            Box::new(
+                                eval.eval_path_from(&path, input_subject, input_graph_name)
+                                    .map(move |o| {
+                                        let mut new_tuple = tuple.clone();
+                                        put_pattern_value(&object, o?, &mut new_tuple);
+                                        Ok(new_tuple)
+                                    }),
+                            )
+                        }
+                        (None, Some(input_object)) => {
+                            let subject = subject.clone();
+                            Box::new(
+                                eval.eval_path_to(&path, input_object, input_graph_name)
+                                    .map(move |s| {
+                                        let mut new_tuple = tuple.clone();
+                                        put_pattern_value(&subject, s?, &mut new_tuple);
+                                        Ok(new_tuple)
+                                    }),
+                            )
+                        }
                         (None, None) => {
+                            let subject = subject.clone();
+                            let object = object.clone();
                             Box::new(eval.eval_open_path(&path, input_graph_name).map(move |so| {
                                 let mut new_tuple = tuple.clone();
-                                so.map(move |(s, o)| {
-                                    put_pattern_value(&subject, s, &mut new_tuple);
-                                    put_pattern_value(&object, o, &mut new_tuple);
-                                    new_tuple
-                                })
+                                let (s, o) = so?;
+                                put_pattern_value(&subject, s, &mut new_tuple);
+                                put_pattern_value(&object, o, &mut new_tuple);
+                                Ok(new_tuple)
                             }))
                         }
                     }
@@ -326,7 +340,7 @@ impl SimpleEvaluator {
                     match tuple {
                         Ok(tuple) => eval
                             .eval_expression(&expression, tuple)
-                            .and_then(|term| eval.to_bool(term))
+                            .and_then(|term| eval.to_bool(&term))
                             .unwrap_or(false),
                         Err(_) => true,
                     }
@@ -405,7 +419,7 @@ impl SimpleEvaluator {
                             let mut output_tuple = EncodedTuple::with_capacity(from.capacity());
                             for (input_key, output_key) in mapping.iter() {
                                 if let Some(value) = tuple.get(*input_key) {
-                                    output_tuple.set(*output_key, value)
+                                    output_tuple.set(*output_key, value.clone())
                                 }
                             }
                             Ok(output_tuple)
@@ -433,7 +447,10 @@ impl SimpleEvaluator {
                     })
                     .for_each(|tuple| {
                         //TODO avoid copy for key?
-                        let key = key_mapping.iter().map(|(v, _)| tuple.get(*v)).collect();
+                        let key = key_mapping
+                            .iter()
+                            .map(|(v, _)| tuple.get(*v).cloned())
+                            .collect();
 
                         let key_accumulators =
                             accumulators_for_group.entry(key).or_insert_with(|| {
@@ -469,8 +486,8 @@ impl SimpleEvaluator {
                             move |(key, accumulators)| {
                                 let mut result = EncodedTuple::with_capacity(tuple_size);
                                 for (from_position, to_position) in key_mapping.iter() {
-                                    if let Some(value) = key[*from_position] {
-                                        result.set(*to_position, value);
+                                    if let Some(value) = &key[*from_position] {
+                                        result.set(*to_position, value.clone());
                                     }
                                 }
                                 for (i, accumulator) in accumulators.into_iter().enumerate() {
@@ -493,11 +510,10 @@ impl SimpleEvaluator {
         variables: Rc<Vec<Variable>>,
         from: &EncodedTuple,
     ) -> Result<EncodedTuplesIterator, EvaluationError> {
+        let service_name = get_pattern_value(service_name, from)
+            .ok_or_else(|| EvaluationError::msg("The SERVICE name is not bound"))?;
         if let QueryResults::Solutions(iter) = self.service_handler.handle(
-            self.dataset.decode_named_node(
-                get_pattern_value(service_name, from)
-                    .ok_or_else(|| EvaluationError::msg("The SERVICE name is not bound"))?,
-            )?,
+            self.dataset.decode_named_node(service_name)?,
             Query {
                 inner: spargebra::Query::Select {
                     dataset: None,
@@ -561,22 +577,23 @@ impl SimpleEvaluator {
     fn eval_path_from(
         &self,
         path: &PlanPropertyPath,
-        start: EncodedTerm,
-        graph_name: EncodedTerm,
+        start: &EncodedTerm,
+        graph_name: &EncodedTerm,
     ) -> Box<dyn Iterator<Item = Result<EncodedTerm, EvaluationError>>> {
         match path {
             PlanPropertyPath::Path(p) => Box::new(
                 self.dataset
-                    .encoded_quads_for_pattern(Some(start), Some(*p), None, Some(graph_name))
+                    .encoded_quads_for_pattern(Some(start), Some(p), None, Some(graph_name))
                     .map(|t| Ok(t?.object)),
             ),
             PlanPropertyPath::Reverse(p) => self.eval_path_to(p, start, graph_name),
             PlanPropertyPath::Sequence(a, b) => {
                 let eval = self.clone();
                 let b = b.clone();
+                let graph_name2 = graph_name.clone();
                 Box::new(
                     self.eval_path_from(a, start, graph_name)
-                        .flat_map_ok(move |middle| eval.eval_path_from(&b, middle, graph_name)),
+                        .flat_map_ok(move |middle| eval.eval_path_from(&b, &middle, &graph_name2)),
                 )
             }
             PlanPropertyPath::Alternative(a, b) => Box::new(
@@ -586,20 +603,22 @@ impl SimpleEvaluator {
             PlanPropertyPath::ZeroOrMore(p) => {
                 let eval = self.clone();
                 let p = p.clone();
-                Box::new(transitive_closure(Some(Ok(start)), move |e| {
-                    eval.eval_path_from(&p, e, graph_name)
+                let graph_name2 = graph_name.clone();
+                Box::new(transitive_closure(Some(Ok(start.clone())), move |e| {
+                    eval.eval_path_from(&p, &e, &graph_name2)
                 }))
             }
             PlanPropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
                 let p = p.clone();
+                let graph_name2 = graph_name.clone();
                 Box::new(transitive_closure(
                     self.eval_path_from(&p, start, graph_name),
-                    move |e| eval.eval_path_from(&p, e, graph_name),
+                    move |e| eval.eval_path_from(&p, &e, &graph_name2),
                 ))
             }
             PlanPropertyPath::ZeroOrOne(p) => Box::new(hash_deduplicate(
-                once(Ok(start)).chain(self.eval_path_from(p, start, graph_name)),
+                once(Ok(start.clone())).chain(self.eval_path_from(p, start, graph_name)),
             )),
             PlanPropertyPath::NegatedPropertySet(ps) => {
                 let ps = ps.clone();
@@ -624,22 +643,23 @@ impl SimpleEvaluator {
     fn eval_path_to(
         &self,
         path: &PlanPropertyPath,
-        end: EncodedTerm,
-        graph_name: EncodedTerm,
+        end: &EncodedTerm,
+        graph_name: &EncodedTerm,
     ) -> Box<dyn Iterator<Item = Result<EncodedTerm, EvaluationError>>> {
         match path {
             PlanPropertyPath::Path(p) => Box::new(
                 self.dataset
-                    .encoded_quads_for_pattern(None, Some(*p), Some(end), Some(graph_name))
+                    .encoded_quads_for_pattern(None, Some(p), Some(end), Some(graph_name))
                     .map(|t| Ok(t?.subject)),
             ),
             PlanPropertyPath::Reverse(p) => self.eval_path_from(p, end, graph_name),
             PlanPropertyPath::Sequence(a, b) => {
                 let eval = self.clone();
                 let a = a.clone();
+                let graph_name2 = graph_name.clone();
                 Box::new(
                     self.eval_path_to(b, end, graph_name)
-                        .flat_map_ok(move |middle| eval.eval_path_to(&a, middle, graph_name)),
+                        .flat_map_ok(move |middle| eval.eval_path_to(&a, &middle, &graph_name2)),
                 )
             }
             PlanPropertyPath::Alternative(a, b) => Box::new(
@@ -649,20 +669,22 @@ impl SimpleEvaluator {
             PlanPropertyPath::ZeroOrMore(p) => {
                 let eval = self.clone();
                 let p = p.clone();
-                Box::new(transitive_closure(Some(Ok(end)), move |e| {
-                    eval.eval_path_to(&p, e, graph_name)
+                let graph_name2 = graph_name.clone();
+                Box::new(transitive_closure(Some(Ok(end.clone())), move |e| {
+                    eval.eval_path_to(&p, &e, &graph_name2)
                 }))
             }
             PlanPropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
                 let p = p.clone();
+                let graph_name2 = graph_name.clone();
                 Box::new(transitive_closure(
                     self.eval_path_to(&p, end, graph_name),
-                    move |e| eval.eval_path_to(&p, e, graph_name),
+                    move |e| eval.eval_path_to(&p, &e, &graph_name2),
                 ))
             }
             PlanPropertyPath::ZeroOrOne(p) => Box::new(hash_deduplicate(
-                once(Ok(end)).chain(self.eval_path_to(p, end, graph_name)),
+                once(Ok(end.clone())).chain(self.eval_path_to(p, end, graph_name)),
             )),
             PlanPropertyPath::NegatedPropertySet(ps) => {
                 let ps = ps.clone();
@@ -687,12 +709,12 @@ impl SimpleEvaluator {
     fn eval_open_path(
         &self,
         path: &PlanPropertyPath,
-        graph_name: EncodedTerm,
+        graph_name: &EncodedTerm,
     ) -> Box<dyn Iterator<Item = Result<(EncodedTerm, EncodedTerm), EvaluationError>>> {
         match path {
             PlanPropertyPath::Path(p) => Box::new(
                 self.dataset
-                    .encoded_quads_for_pattern(None, Some(*p), None, Some(graph_name))
+                    .encoded_quads_for_pattern(None, Some(p), None, Some(graph_name))
                     .map(|t| t.map(|t| (t.subject, t.object))),
             ),
             PlanPropertyPath::Reverse(p) => Box::new(
@@ -702,11 +724,12 @@ impl SimpleEvaluator {
             PlanPropertyPath::Sequence(a, b) => {
                 let eval = self.clone();
                 let b = b.clone();
+                let graph_name2 = graph_name.clone();
                 Box::new(
                     self.eval_open_path(a, graph_name)
                         .flat_map_ok(move |(start, middle)| {
-                            eval.eval_path_from(&b, middle, graph_name)
-                                .map(move |end| Ok((start, end?)))
+                            eval.eval_path_from(&b, &middle, &graph_name2)
+                                .map(move |end| Ok((start.clone(), end?)))
                         }),
                 )
             }
@@ -717,22 +740,24 @@ impl SimpleEvaluator {
             PlanPropertyPath::ZeroOrMore(p) => {
                 let eval = self.clone();
                 let p = p.clone();
+                let graph_name2 = graph_name.clone();
                 Box::new(transitive_closure(
                     self.get_subject_or_object_identity_pairs(graph_name), //TODO: avoid to inject everything
                     move |(start, middle)| {
-                        eval.eval_path_from(&p, middle, graph_name)
-                            .map(move |end| Ok((start, end?)))
+                        eval.eval_path_from(&p, &middle, &graph_name2)
+                            .map(move |end| Ok((start.clone(), end?)))
                     },
                 ))
             }
             PlanPropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
                 let p = p.clone();
+                let graph_name2 = graph_name.clone();
                 Box::new(transitive_closure(
                     self.eval_open_path(&p, graph_name),
                     move |(start, middle)| {
-                        eval.eval_path_from(&p, middle, graph_name)
-                            .map(move |end| Ok((start, end?)))
+                        eval.eval_path_from(&p, &middle, &graph_name2)
+                            .map(move |end| Ok((start.clone(), end?)))
                     },
                 ))
             }
@@ -762,12 +787,12 @@ impl SimpleEvaluator {
 
     fn get_subject_or_object_identity_pairs(
         &self,
-        graph_name: EncodedTerm,
+        graph_name: &EncodedTerm,
     ) -> impl Iterator<Item = Result<(EncodedTerm, EncodedTerm), EvaluationError>> {
         self.dataset
             .encoded_quads_for_pattern(None, None, None, Some(graph_name))
             .flat_map_ok(|t| once(Ok(t.subject)).chain(once(Ok(t.object))))
-            .map(|e| e.map(|e| (e, e)))
+            .map(|e| e.map(|e| (e.clone(), e)))
     }
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
@@ -777,18 +802,23 @@ impl SimpleEvaluator {
         tuple: &EncodedTuple,
     ) -> Option<EncodedTerm> {
         match expression {
-            PlanExpression::Constant(t) => Some(*t),
-            PlanExpression::Variable(v) => tuple.get(*v),
+            PlanExpression::Constant(t) => Some(t.clone()),
+            PlanExpression::Variable(v) => tuple.get(*v).cloned(),
             PlanExpression::Exists(node) => {
                 Some(self.eval_plan(node, tuple.clone()).next().is_some().into())
             }
             PlanExpression::Or(a, b) => {
-                match self.eval_expression(a, tuple).and_then(|v| self.to_bool(v)) {
+                match self
+                    .eval_expression(a, tuple)
+                    .and_then(|v| self.to_bool(&v))
+                {
                     Some(true) => Some(true.into()),
                     Some(false) => self.eval_expression(b, tuple),
                     None => {
                         if Some(true)
-                            == self.eval_expression(b, tuple).and_then(|v| self.to_bool(v))
+                            == self
+                                .eval_expression(b, tuple)
+                                .and_then(|v| self.to_bool(&v))
                         {
                             Some(true.into())
                         } else {
@@ -799,12 +829,16 @@ impl SimpleEvaluator {
             }
             PlanExpression::And(a, b) => match self
                 .eval_expression(a, tuple)
-                .and_then(|v| self.to_bool(v))
+                .and_then(|v| self.to_bool(&v))
             {
                 Some(true) => self.eval_expression(b, tuple),
                 Some(false) => Some(false.into()),
                 None => {
-                    if Some(false) == self.eval_expression(b, tuple).and_then(|v| self.to_bool(v)) {
+                    if Some(false)
+                        == self
+                            .eval_expression(b, tuple)
+                            .and_then(|v| self.to_bool(&v))
+                    {
                         Some(false.into())
                     } else {
                         None
@@ -814,19 +848,19 @@ impl SimpleEvaluator {
             PlanExpression::Equal(a, b) => {
                 let a = self.eval_expression(a, tuple)?;
                 let b = self.eval_expression(b, tuple)?;
-                self.equals(a, b).map(|v| v.into())
+                self.equals(&a, &b).map(|v| v.into())
             }
             PlanExpression::Greater(a, b) => Some(
                 (self.partial_cmp_literals(
-                    self.eval_expression(a, tuple)?,
-                    self.eval_expression(b, tuple)?,
+                    &self.eval_expression(a, tuple)?,
+                    &self.eval_expression(b, tuple)?,
                 )? == Ordering::Greater)
                     .into(),
             ),
             PlanExpression::GreaterOrEqual(a, b) => Some(
                 match self.partial_cmp_literals(
-                    self.eval_expression(a, tuple)?,
-                    self.eval_expression(b, tuple)?,
+                    &self.eval_expression(a, tuple)?,
+                    &self.eval_expression(b, tuple)?,
                 )? {
                     Ordering::Greater | Ordering::Equal => true,
                     Ordering::Less => false,
@@ -835,15 +869,15 @@ impl SimpleEvaluator {
             ),
             PlanExpression::Less(a, b) => Some(
                 (self.partial_cmp_literals(
-                    self.eval_expression(a, tuple)?,
-                    self.eval_expression(b, tuple)?,
+                    &self.eval_expression(a, tuple)?,
+                    &self.eval_expression(b, tuple)?,
                 )? == Ordering::Less)
                     .into(),
             ),
             PlanExpression::LessOrEqual(a, b) => Some(
                 match self.partial_cmp_literals(
-                    self.eval_expression(a, tuple)?,
-                    self.eval_expression(b, tuple)?,
+                    &self.eval_expression(a, tuple)?,
+                    &self.eval_expression(b, tuple)?,
                 )? {
                     Ordering::Less | Ordering::Equal => true,
                     Ordering::Greater => false,
@@ -855,7 +889,7 @@ impl SimpleEvaluator {
                 let mut error = false;
                 for possible in l {
                     if let Some(possible) = self.eval_expression(possible, tuple) {
-                        if Some(true) == self.equals(needed, possible) {
+                        if Some(true) == self.equals(&needed, &possible) {
                             return Some(true.into());
                         }
                     } else {
@@ -979,13 +1013,11 @@ impl SimpleEvaluator {
                 _ => None,
             },
             PlanExpression::Not(e) => self
-                .to_bool(self.eval_expression(e, tuple)?)
+                .to_bool(&self.eval_expression(e, tuple)?)
                 .map(|v| (!v).into()),
-            PlanExpression::Str(e) => {
-                Some(self.build_string_literal_from_id(
-                    self.to_string_id(self.eval_expression(e, tuple)?)?,
-                ))
-            }
+            PlanExpression::Str(e) => Some(self.build_string_literal_from_id(
+                self.to_string_id(&self.eval_expression(e, tuple)?)?,
+            )),
             PlanExpression::Lang(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::SmallSmallLangStringLiteral { language, .. }
                 | EncodedTerm::BigSmallLangStringLiteral { language, .. } => {
@@ -1000,10 +1032,10 @@ impl SimpleEvaluator {
             },
             PlanExpression::LangMatches(language_tag, language_range) => {
                 let mut language_tag =
-                    self.to_simple_string(self.eval_expression(language_tag, tuple)?)?;
+                    self.to_simple_string(&self.eval_expression(language_tag, tuple)?)?;
                 language_tag.make_ascii_lowercase();
                 let mut language_range =
-                    self.to_simple_string(self.eval_expression(language_range, tuple)?)?;
+                    self.to_simple_string(&self.eval_expression(language_range, tuple)?)?;
                 language_range.make_ascii_lowercase();
                 Some(
                     if &*language_range == "*" {
@@ -1022,14 +1054,14 @@ impl SimpleEvaluator {
                     .into(),
                 )
             }
-            PlanExpression::Datatype(e) => self.datatype(self.eval_expression(e, tuple)?),
+            PlanExpression::Datatype(e) => self.datatype(&self.eval_expression(e, tuple)?),
             PlanExpression::Bound(v) => Some(tuple.contains(*v).into()),
             PlanExpression::Iri(e) => {
                 let e = self.eval_expression(e, tuple)?;
                 if e.is_named_node() {
                     Some(e)
                 } else {
-                    let iri = self.to_simple_string(e)?;
+                    let iri = self.to_simple_string(&e)?;
                     self.build_named_node(
                         &if let Some(base_iri) = &self.base_iri {
                             base_iri.resolve(&iri)
@@ -1044,7 +1076,7 @@ impl SimpleEvaluator {
             PlanExpression::BNode(id) => match id {
                 Some(id) => {
                     let bnode =
-                        BlankNode::new(self.to_simple_string(self.eval_expression(id, tuple)?)?)
+                        BlankNode::new(self.to_simple_string(&self.eval_expression(id, tuple)?)?)
                             .ok()?;
                     Some(
                         self.dataset
@@ -1091,7 +1123,7 @@ impl SimpleEvaluator {
                 let mut language = None;
                 for e in l {
                     let (value, e_language) =
-                        self.to_string_and_language(self.eval_expression(e, tuple)?)?;
+                        self.to_string_and_language(&self.eval_expression(e, tuple)?)?;
                     if let Some(lang) = language {
                         if lang != e_language {
                             language = Some(None)
@@ -1105,7 +1137,7 @@ impl SimpleEvaluator {
             }
             PlanExpression::SubStr(source, starting_loc, length) => {
                 let (source, language) =
-                    self.to_string_and_language(self.eval_expression(source, tuple)?)?;
+                    self.to_string_and_language(&self.eval_expression(source, tuple)?)?;
 
                 let starting_location: usize = if let EncodedTerm::IntegerLiteral(v) =
                     self.eval_expression(starting_loc, tuple)?
@@ -1147,14 +1179,14 @@ impl SimpleEvaluator {
             }
             PlanExpression::StrLen(arg) => Some(
                 (self
-                    .to_string(self.eval_expression(arg, tuple)?)?
+                    .to_string(&self.eval_expression(arg, tuple)?)?
                     .chars()
                     .count() as i64)
                     .into(),
             ),
             PlanExpression::Replace(arg, pattern, replacement, flags) => {
                 let regex = self.compile_pattern(
-                    self.eval_expression(pattern, tuple)?,
+                    &self.eval_expression(pattern, tuple)?,
                     if let Some(flags) = flags {
                         Some(self.eval_expression(flags, tuple)?)
                     } else {
@@ -1162,30 +1194,30 @@ impl SimpleEvaluator {
                     },
                 )?;
                 let (text, language) =
-                    self.to_string_and_language(self.eval_expression(arg, tuple)?)?;
+                    self.to_string_and_language(&self.eval_expression(arg, tuple)?)?;
                 let replacement =
-                    self.to_simple_string(self.eval_expression(replacement, tuple)?)?;
+                    self.to_simple_string(&self.eval_expression(replacement, tuple)?)?;
                 self.build_plain_literal(&regex.replace_all(&text, replacement.as_str()), language)
             }
             PlanExpression::UCase(e) => {
                 let (value, language) =
-                    self.to_string_and_language(self.eval_expression(e, tuple)?)?;
+                    self.to_string_and_language(&self.eval_expression(e, tuple)?)?;
                 self.build_plain_literal(&value.to_uppercase(), language)
             }
             PlanExpression::LCase(e) => {
                 let (value, language) =
-                    self.to_string_and_language(self.eval_expression(e, tuple)?)?;
+                    self.to_string_and_language(&self.eval_expression(e, tuple)?)?;
                 self.build_plain_literal(&value.to_lowercase(), language)
             }
             PlanExpression::StrStarts(arg1, arg2) => {
                 let (arg1, arg2, _) = self.to_argument_compatible_strings(
-                    self.eval_expression(arg1, tuple)?,
-                    self.eval_expression(arg2, tuple)?,
+                    &self.eval_expression(arg1, tuple)?,
+                    &self.eval_expression(arg2, tuple)?,
                 )?;
                 Some((&arg1).starts_with(arg2.as_str()).into())
             }
             PlanExpression::EncodeForUri(ltrl) => {
-                let ltlr = self.to_string(self.eval_expression(ltrl, tuple)?)?;
+                let ltlr = self.to_string(&self.eval_expression(ltrl, tuple)?)?;
                 let mut result = Vec::with_capacity(ltlr.len());
                 for c in ltlr.bytes() {
                     match c {
@@ -1213,22 +1245,22 @@ impl SimpleEvaluator {
             }
             PlanExpression::StrEnds(arg1, arg2) => {
                 let (arg1, arg2, _) = self.to_argument_compatible_strings(
-                    self.eval_expression(arg1, tuple)?,
-                    self.eval_expression(arg2, tuple)?,
+                    &self.eval_expression(arg1, tuple)?,
+                    &self.eval_expression(arg2, tuple)?,
                 )?;
                 Some((&arg1).ends_with(arg2.as_str()).into())
             }
             PlanExpression::Contains(arg1, arg2) => {
                 let (arg1, arg2, _) = self.to_argument_compatible_strings(
-                    self.eval_expression(arg1, tuple)?,
-                    self.eval_expression(arg2, tuple)?,
+                    &self.eval_expression(arg1, tuple)?,
+                    &self.eval_expression(arg2, tuple)?,
                 )?;
                 Some((&arg1).contains(arg2.as_str()).into())
             }
             PlanExpression::StrBefore(arg1, arg2) => {
                 let (arg1, arg2, language) = self.to_argument_compatible_strings(
-                    self.eval_expression(arg1, tuple)?,
-                    self.eval_expression(arg2, tuple)?,
+                    &self.eval_expression(arg1, tuple)?,
+                    &self.eval_expression(arg2, tuple)?,
                 )?;
                 if let Some(position) = (&arg1).find(arg2.as_str()) {
                     self.build_plain_literal(&arg1[..position], language)
@@ -1238,8 +1270,8 @@ impl SimpleEvaluator {
             }
             PlanExpression::StrAfter(arg1, arg2) => {
                 let (arg1, arg2, language) = self.to_argument_compatible_strings(
-                    self.eval_expression(arg1, tuple)?,
-                    self.eval_expression(arg2, tuple)?,
+                    &self.eval_expression(arg1, tuple)?,
+                    &self.eval_expression(arg2, tuple)?,
                 )?;
                 if let Some(position) = (&arg1).find(arg2.as_str()) {
                     self.build_plain_literal(&arg1[position + arg2.len()..], language)
@@ -1343,7 +1375,7 @@ impl SimpleEvaluator {
                 None
             }
             PlanExpression::If(a, b, c) => {
-                if self.to_bool(self.eval_expression(a, tuple)?)? {
+                if self.to_bool(&self.eval_expression(a, tuple)?)? {
                     self.eval_expression(b, tuple)
                 } else {
                     self.eval_expression(c, tuple)
@@ -1351,16 +1383,16 @@ impl SimpleEvaluator {
             }
             PlanExpression::StrLang(lexical_form, lang_tag) => {
                 Some(self.build_lang_string_literal_from_id(
-                    self.to_simple_string_id(self.eval_expression(lexical_form, tuple)?)?,
-                    self.build_language_id(self.eval_expression(lang_tag, tuple)?)?,
+                    self.to_simple_string_id(&self.eval_expression(lexical_form, tuple)?)?,
+                    self.build_language_id(&self.eval_expression(lang_tag, tuple)?)?,
                 ))
             }
             PlanExpression::StrDt(lexical_form, datatype) => {
-                let value = self.to_simple_string(self.eval_expression(lexical_form, tuple)?)?;
+                let value = self.to_simple_string(&self.eval_expression(lexical_form, tuple)?)?;
                 let datatype = if let EncodedTerm::NamedNode { iri_id } =
                     self.eval_expression(datatype, tuple)?
                 {
-                    self.dataset.get_str(iri_id).ok()?
+                    self.dataset.get_str(&iri_id).ok()?
                 } else {
                     None
                 }?;
@@ -1396,14 +1428,14 @@ impl SimpleEvaluator {
             ),
             PlanExpression::Regex(text, pattern, flags) => {
                 let regex = self.compile_pattern(
-                    self.eval_expression(pattern, tuple)?,
+                    &self.eval_expression(pattern, tuple)?,
                     if let Some(flags) = flags {
                         Some(self.eval_expression(flags, tuple)?)
                     } else {
                         None
                     },
                 )?;
-                let text = self.to_string(self.eval_expression(text, tuple)?)?;
+                let text = self.to_string(&self.eval_expression(text, tuple)?)?;
                 Some(regex.is_match(&text).into())
             }
             PlanExpression::BooleanCast(e) => match self.eval_expression(e, tuple)? {
@@ -1414,7 +1446,7 @@ impl SimpleEvaluator {
                 EncodedTerm::DecimalLiteral(value) => Some((value != Decimal::default()).into()),
                 EncodedTerm::SmallStringLiteral(value) => parse_boolean_str(&value),
                 EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_boolean_str(&*self.dataset.get_str(value_id).ok()??)
+                    parse_boolean_str(&*self.dataset.get_str(&value_id).ok()??)
                 }
                 _ => None,
             },
@@ -1428,7 +1460,7 @@ impl SimpleEvaluator {
                 }
                 EncodedTerm::SmallStringLiteral(value) => parse_double_str(&value),
                 EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_double_str(&*self.dataset.get_str(value_id).ok()??)
+                    parse_double_str(&*self.dataset.get_str(&value_id).ok()??)
                 }
                 _ => None,
             },
@@ -1442,7 +1474,7 @@ impl SimpleEvaluator {
                 }
                 EncodedTerm::SmallStringLiteral(value) => parse_float_str(&value),
                 EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_float_str(&*self.dataset.get_str(value_id).ok()??)
+                    parse_float_str(&*self.dataset.get_str(&value_id).ok()??)
                 }
                 _ => None,
             },
@@ -1454,7 +1486,7 @@ impl SimpleEvaluator {
                 EncodedTerm::BooleanLiteral(value) => Some(if value { 1 } else { 0 }.into()),
                 EncodedTerm::SmallStringLiteral(value) => parse_integer_str(&value),
                 EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_integer_str(&*self.dataset.get_str(value_id).ok()??)
+                    parse_integer_str(&*self.dataset.get_str(&value_id).ok()??)
                 }
                 _ => None,
             },
@@ -1468,7 +1500,7 @@ impl SimpleEvaluator {
                 }
                 EncodedTerm::SmallStringLiteral(value) => parse_decimal_str(&value),
                 EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_decimal_str(&*self.dataset.get_str(value_id).ok()??)
+                    parse_decimal_str(&*self.dataset.get_str(&value_id).ok()??)
                 }
                 _ => None,
             },
@@ -1477,7 +1509,7 @@ impl SimpleEvaluator {
                 EncodedTerm::DateTimeLiteral(value) => Some(Date::try_from(value).ok()?.into()),
                 EncodedTerm::SmallStringLiteral(value) => parse_date_str(&value),
                 EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_date_str(&*self.dataset.get_str(value_id).ok()??)
+                    parse_date_str(&*self.dataset.get_str(&value_id).ok()??)
                 }
                 _ => None,
             },
@@ -1486,7 +1518,7 @@ impl SimpleEvaluator {
                 EncodedTerm::DateTimeLiteral(value) => Some(Time::try_from(value).ok()?.into()),
                 EncodedTerm::SmallStringLiteral(value) => parse_time_str(&value),
                 EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_time_str(&*self.dataset.get_str(value_id).ok()??)
+                    parse_time_str(&*self.dataset.get_str(&value_id).ok()??)
                 }
                 _ => None,
             },
@@ -1495,7 +1527,7 @@ impl SimpleEvaluator {
                 EncodedTerm::DateLiteral(value) => Some(DateTime::try_from(value).ok()?.into()),
                 EncodedTerm::SmallStringLiteral(value) => parse_date_time_str(&value),
                 EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_date_time_str(&*self.dataset.get_str(value_id).ok()??)
+                    parse_date_time_str(&*self.dataset.get_str(&value_id).ok()??)
                 }
                 _ => None,
             },
@@ -1505,7 +1537,7 @@ impl SimpleEvaluator {
                 EncodedTerm::DayTimeDurationLiteral(value) => Some(Duration::from(value).into()),
                 EncodedTerm::SmallStringLiteral(value) => parse_duration_str(&value),
                 EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_duration_str(&*self.dataset.get_str(value_id).ok()??)
+                    parse_duration_str(&*self.dataset.get_str(&value_id).ok()??)
                 }
                 _ => None,
             },
@@ -1516,7 +1548,7 @@ impl SimpleEvaluator {
                 EncodedTerm::YearMonthDurationLiteral(value) => Some(value.into()),
                 EncodedTerm::SmallStringLiteral(value) => parse_year_month_duration_str(&value),
                 EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_year_month_duration_str(&*self.dataset.get_str(value_id).ok()??)
+                    parse_year_month_duration_str(&*self.dataset.get_str(&value_id).ok()??)
                 }
                 _ => None,
             },
@@ -1527,50 +1559,48 @@ impl SimpleEvaluator {
                 EncodedTerm::DayTimeDurationLiteral(value) => Some(value.into()),
                 EncodedTerm::SmallStringLiteral(value) => parse_day_time_duration_str(&value),
                 EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_day_time_duration_str(&*self.dataset.get_str(value_id).ok()??)
+                    parse_day_time_duration_str(&*self.dataset.get_str(&value_id).ok()??)
                 }
                 _ => None,
             },
-            PlanExpression::StringCast(e) => {
-                Some(self.build_string_literal_from_id(
-                    self.to_string_id(self.eval_expression(e, tuple)?)?,
-                ))
-            }
+            PlanExpression::StringCast(e) => Some(self.build_string_literal_from_id(
+                self.to_string_id(&self.eval_expression(e, tuple)?)?,
+            )),
         }
     }
 
-    fn to_bool(&self, term: EncodedTerm) -> Option<bool> {
+    fn to_bool(&self, term: &EncodedTerm) -> Option<bool> {
         match term {
-            EncodedTerm::BooleanLiteral(value) => Some(value),
+            EncodedTerm::BooleanLiteral(value) => Some(*value),
             EncodedTerm::SmallStringLiteral(value) => Some(!value.is_empty()),
             EncodedTerm::BigStringLiteral { value_id } => {
                 Some(!self.dataset.get_str(value_id).ok()??.is_empty())
             }
-            EncodedTerm::FloatLiteral(value) => Some(value != 0_f32),
-            EncodedTerm::DoubleLiteral(value) => Some(value != 0_f64),
-            EncodedTerm::IntegerLiteral(value) => Some(value != 0),
-            EncodedTerm::DecimalLiteral(value) => Some(value != Decimal::default()),
+            EncodedTerm::FloatLiteral(value) => Some(*value != 0_f32),
+            EncodedTerm::DoubleLiteral(value) => Some(*value != 0_f64),
+            EncodedTerm::IntegerLiteral(value) => Some(*value != 0),
+            EncodedTerm::DecimalLiteral(value) => Some(*value != Decimal::default()),
             _ => None,
         }
     }
 
-    fn to_string_id(&self, term: EncodedTerm) -> Option<SmallStringOrId> {
+    fn to_string_id(&self, term: &EncodedTerm) -> Option<SmallStringOrId> {
         match term {
             EncodedTerm::DefaultGraph => None,
-            EncodedTerm::NamedNode { iri_id } => Some(iri_id.into()),
+            EncodedTerm::NamedNode { iri_id } => Some((*iri_id).into()),
             EncodedTerm::NumericalBlankNode { .. }
             | EncodedTerm::SmallBlankNode { .. }
             | EncodedTerm::BigBlankNode { .. } => None,
             EncodedTerm::SmallStringLiteral(value)
             | EncodedTerm::SmallSmallLangStringLiteral { value, .. }
             | EncodedTerm::SmallBigLangStringLiteral { value, .. }
-            | EncodedTerm::SmallTypedLiteral { value, .. } => Some(value.into()),
+            | EncodedTerm::SmallTypedLiteral { value, .. } => Some((*value).into()),
             EncodedTerm::BigStringLiteral { value_id }
             | EncodedTerm::BigSmallLangStringLiteral { value_id, .. }
             | EncodedTerm::BigBigLangStringLiteral { value_id, .. }
-            | EncodedTerm::BigTypedLiteral { value_id, .. } => Some(value_id.into()),
+            | EncodedTerm::BigTypedLiteral { value_id, .. } => Some((*value_id).into()),
             EncodedTerm::BooleanLiteral(value) => {
-                self.build_string_id(if value { "true" } else { "false" })
+                self.build_string_id(if *value { "true" } else { "false" })
             }
             EncodedTerm::FloatLiteral(value) => self.build_string_id(&value.to_string()),
             EncodedTerm::DoubleLiteral(value) => self.build_string_id(&value.to_string()),
@@ -1592,27 +1622,27 @@ impl SimpleEvaluator {
         }
     }
 
-    fn to_simple_string(&self, term: EncodedTerm) -> Option<String> {
+    fn to_simple_string(&self, term: &EncodedTerm) -> Option<String> {
         match term {
-            EncodedTerm::SmallStringLiteral(value) => Some(value.into()),
+            EncodedTerm::SmallStringLiteral(value) => Some((*value).into()),
             EncodedTerm::BigStringLiteral { value_id } => self.dataset.get_str(value_id).ok()?,
             _ => None,
         }
     }
 
-    fn to_simple_string_id(&self, term: EncodedTerm) -> Option<SmallStringOrId> {
+    fn to_simple_string_id(&self, term: &EncodedTerm) -> Option<SmallStringOrId> {
         match term {
-            EncodedTerm::SmallStringLiteral(value) => Some(value.into()),
-            EncodedTerm::BigStringLiteral { value_id } => Some(value_id.into()),
+            EncodedTerm::SmallStringLiteral(value) => Some((*value).into()),
+            EncodedTerm::BigStringLiteral { value_id } => Some((*value_id).into()),
             _ => None,
         }
     }
 
-    fn to_string(&self, term: EncodedTerm) -> Option<String> {
+    fn to_string(&self, term: &EncodedTerm) -> Option<String> {
         match term {
             EncodedTerm::SmallStringLiteral(value)
             | EncodedTerm::SmallSmallLangStringLiteral { value, .. }
-            | EncodedTerm::SmallBigLangStringLiteral { value, .. } => Some(value.into()),
+            | EncodedTerm::SmallBigLangStringLiteral { value, .. } => Some((*value).into()),
             EncodedTerm::BigStringLiteral { value_id }
             | EncodedTerm::BigSmallLangStringLiteral { value_id, .. }
             | EncodedTerm::BigBigLangStringLiteral { value_id, .. } => {
@@ -1624,28 +1654,29 @@ impl SimpleEvaluator {
 
     fn to_string_and_language(
         &self,
-        term: EncodedTerm,
+        term: &EncodedTerm,
     ) -> Option<(String, Option<SmallStringOrId>)> {
         match term {
-            EncodedTerm::SmallStringLiteral(value) => Some((value.into(), None)),
+            EncodedTerm::SmallStringLiteral(value) => Some(((*value).into(), None)),
             EncodedTerm::BigStringLiteral { value_id } => {
                 Some((self.dataset.get_str(value_id).ok()??, None))
             }
             EncodedTerm::SmallSmallLangStringLiteral { value, language } => {
-                Some((value.into(), Some(language.into())))
+                Some(((*value).into(), Some((*language).into())))
             }
             EncodedTerm::SmallBigLangStringLiteral { value, language_id } => {
-                Some((value.into(), Some(language_id.into())))
+                Some(((*value).into(), Some((*language_id).into())))
             }
-            EncodedTerm::BigSmallLangStringLiteral { value_id, language } => {
-                Some((self.dataset.get_str(value_id).ok()??, Some(language.into())))
-            }
+            EncodedTerm::BigSmallLangStringLiteral { value_id, language } => Some((
+                self.dataset.get_str(value_id).ok()??,
+                Some((*language).into()),
+            )),
             EncodedTerm::BigBigLangStringLiteral {
                 value_id,
                 language_id,
             } => Some((
                 self.dataset.get_str(value_id).ok()??,
-                Some(language_id.into()),
+                Some((*language_id).into()),
             )),
             _ => None,
         }
@@ -1720,7 +1751,7 @@ impl SimpleEvaluator {
         })
     }
 
-    fn build_language_id(&self, value: EncodedTerm) -> Option<SmallStringOrId> {
+    fn build_language_id(&self, value: &EncodedTerm) -> Option<SmallStringOrId> {
         let mut language = self.to_simple_string(value)?;
         language.make_ascii_lowercase();
         self.build_string_id(LanguageTag::parse(language).ok()?.as_str())
@@ -1728,8 +1759,8 @@ impl SimpleEvaluator {
 
     fn to_argument_compatible_strings(
         &self,
-        arg1: EncodedTerm,
-        arg2: EncodedTerm,
+        arg1: &EncodedTerm,
+        arg2: &EncodedTerm,
     ) -> Option<(String, String, Option<SmallStringOrId>)> {
         let (value1, language1) = self.to_string_and_language(arg1)?;
         let (value2, language2) = self.to_string_and_language(arg2)?;
@@ -1740,13 +1771,13 @@ impl SimpleEvaluator {
         }
     }
 
-    fn compile_pattern(&self, pattern: EncodedTerm, flags: Option<EncodedTerm>) -> Option<Regex> {
+    fn compile_pattern(&self, pattern: &EncodedTerm, flags: Option<EncodedTerm>) -> Option<Regex> {
         // TODO Avoid to compile the regex each time
         let pattern = self.to_simple_string(pattern)?;
         let mut regex_builder = RegexBuilder::new(&pattern);
         regex_builder.size_limit(REGEX_SIZE_LIMIT);
         if let Some(flags) = flags {
-            let flags = self.to_simple_string(flags)?;
+            let flags = self.to_simple_string(&flags)?;
             for flag in flags.chars() {
                 match flag {
                     's' => {
@@ -1776,8 +1807,8 @@ impl SimpleEvaluator {
         tuple: &EncodedTuple,
     ) -> Option<NumericBinaryOperands> {
         NumericBinaryOperands::new(
-            self.eval_expression(e1, tuple)?,
-            self.eval_expression(e2, tuple)?,
+            &self.eval_expression(e1, tuple)?,
+            &self.eval_expression(e2, tuple)?,
         )
     }
 
@@ -1794,7 +1825,7 @@ impl SimpleEvaluator {
                 let mut result = vec![None; tuple_size];
                 for (i, value) in values?.iter().enumerate() {
                     if let Some(term) = value {
-                        result[i] = Some(eval.dataset.decode_term(term)?)
+                        result[i] = Some(eval.dataset.decode_term(&term)?)
                     }
                 }
                 Ok(result)
@@ -1829,7 +1860,7 @@ impl SimpleEvaluator {
         clippy::cast_possible_truncation,
         clippy::cast_precision_loss
     )]
-    fn equals(&self, a: EncodedTerm, b: EncodedTerm) -> Option<bool> {
+    fn equals(&self, a: &EncodedTerm, b: &EncodedTerm) -> Option<bool> {
         match a {
             EncodedTerm::DefaultGraph
             | EncodedTerm::NamedNode { .. }
@@ -1883,32 +1914,32 @@ impl SimpleEvaluator {
             },
             EncodedTerm::FloatLiteral(a) => match b {
                 EncodedTerm::FloatLiteral(b) => Some(a == b),
-                EncodedTerm::DoubleLiteral(b) => Some(f64::from(a) == b),
-                EncodedTerm::IntegerLiteral(b) => Some(a == b as f32),
-                EncodedTerm::DecimalLiteral(b) => Some(a == b.to_f32()),
+                EncodedTerm::DoubleLiteral(b) => Some(f64::from(*a) == *b),
+                EncodedTerm::IntegerLiteral(b) => Some(*a == *b as f32),
+                EncodedTerm::DecimalLiteral(b) => Some(*a == b.to_f32()),
                 _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
             },
             EncodedTerm::DoubleLiteral(a) => match b {
-                EncodedTerm::FloatLiteral(b) => Some(a == f64::from(b)),
+                EncodedTerm::FloatLiteral(b) => Some(*a == f64::from(*b)),
                 EncodedTerm::DoubleLiteral(b) => Some(a == b),
-                EncodedTerm::IntegerLiteral(b) => Some(a == (b as f64)),
-                EncodedTerm::DecimalLiteral(b) => Some(a == b.to_f64()),
+                EncodedTerm::IntegerLiteral(b) => Some(*a == (*b as f64)),
+                EncodedTerm::DecimalLiteral(b) => Some(*a == b.to_f64()),
                 _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
             },
             EncodedTerm::IntegerLiteral(a) => match b {
-                EncodedTerm::FloatLiteral(b) => Some((a as f32) == b),
-                EncodedTerm::DoubleLiteral(b) => Some((a as f64) == b),
+                EncodedTerm::FloatLiteral(b) => Some((*a as f32) == *b),
+                EncodedTerm::DoubleLiteral(b) => Some((*a as f64) == *b),
                 EncodedTerm::IntegerLiteral(b) => Some(a == b),
-                EncodedTerm::DecimalLiteral(b) => Some(Decimal::from(a) == b),
+                EncodedTerm::DecimalLiteral(b) => Some(Decimal::from(*a) == *b),
                 _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
             },
             EncodedTerm::DecimalLiteral(a) => match b {
-                EncodedTerm::FloatLiteral(b) => Some(a.to_f32() == b),
-                EncodedTerm::DoubleLiteral(b) => Some(a.to_f64() == b),
-                EncodedTerm::IntegerLiteral(b) => Some(a == Decimal::from(b)),
+                EncodedTerm::FloatLiteral(b) => Some(a.to_f32() == *b),
+                EncodedTerm::DoubleLiteral(b) => Some(a.to_f64() == *b),
+                EncodedTerm::IntegerLiteral(b) => Some(*a == Decimal::from(*b)),
                 EncodedTerm::DecimalLiteral(b) => Some(a == b),
                 _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
@@ -1984,12 +2015,12 @@ impl SimpleEvaluator {
         expression: &PlanExpression,
     ) -> Ordering {
         self.cmp_terms(
-            self.eval_expression(expression, tuple_a),
-            self.eval_expression(expression, tuple_b),
+            self.eval_expression(expression, tuple_a).as_ref(),
+            self.eval_expression(expression, tuple_b).as_ref(),
         )
     }
 
-    fn cmp_terms(&self, a: Option<EncodedTerm>, b: Option<EncodedTerm>) -> Ordering {
+    fn cmp_terms(&self, a: Option<&EncodedTerm>, b: Option<&EncodedTerm>) -> Ordering {
         match (a, b) {
             (Some(a), Some(b)) => match a {
                 _ if a.is_blank_node() => match b {
@@ -2015,43 +2046,43 @@ impl SimpleEvaluator {
     }
 
     #[allow(clippy::cast_precision_loss)]
-    fn partial_cmp_literals(&self, a: EncodedTerm, b: EncodedTerm) -> Option<Ordering> {
+    fn partial_cmp_literals(&self, a: &EncodedTerm, b: &EncodedTerm) -> Option<Ordering> {
         match a {
             EncodedTerm::SmallStringLiteral(a) => match b {
-                EncodedTerm::SmallStringLiteral(b) => a.partial_cmp(&b),
-                EncodedTerm::BigStringLiteral { value_id: b } => self.compare_str_str_id(&a, b),
+                EncodedTerm::SmallStringLiteral(b) => a.partial_cmp(b),
+                EncodedTerm::BigStringLiteral { value_id: b } => self.compare_str_str_id(a, b),
                 _ => None,
             },
             EncodedTerm::BigStringLiteral { value_id: a } => match b {
-                EncodedTerm::SmallStringLiteral(b) => self.compare_str_id_str(a, &b),
+                EncodedTerm::SmallStringLiteral(b) => self.compare_str_id_str(a, b),
                 EncodedTerm::BigStringLiteral { value_id: b } => self.compare_str_ids(a, b),
                 _ => None,
             },
             EncodedTerm::FloatLiteral(a) => match b {
                 EncodedTerm::FloatLiteral(ref b) => a.partial_cmp(b),
-                EncodedTerm::DoubleLiteral(ref b) => f64::from(a).partial_cmp(b),
-                EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&(b as f32)),
+                EncodedTerm::DoubleLiteral(ref b) => f64::from(*a).partial_cmp(b),
+                EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&((*b) as f32)),
                 EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&b.to_f32()),
                 _ => None,
             },
             EncodedTerm::DoubleLiteral(a) => match b {
-                EncodedTerm::FloatLiteral(b) => a.partial_cmp(&b.into()),
+                EncodedTerm::FloatLiteral(b) => a.partial_cmp(&(*b).into()),
                 EncodedTerm::DoubleLiteral(ref b) => a.partial_cmp(b),
-                EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&(b as f64)),
+                EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&((*b) as f64)),
                 EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&b.to_f64()),
                 _ => None,
             },
             EncodedTerm::IntegerLiteral(a) => match b {
-                EncodedTerm::FloatLiteral(ref b) => (a as f32).partial_cmp(b),
-                EncodedTerm::DoubleLiteral(ref b) => (a as f64).partial_cmp(b),
+                EncodedTerm::FloatLiteral(ref b) => ((*a) as f32).partial_cmp(b),
+                EncodedTerm::DoubleLiteral(ref b) => ((*a) as f64).partial_cmp(b),
                 EncodedTerm::IntegerLiteral(ref b) => a.partial_cmp(b),
-                EncodedTerm::DecimalLiteral(b) => Decimal::from(a).partial_cmp(&b),
+                EncodedTerm::DecimalLiteral(b) => Decimal::from(*a).partial_cmp(b),
                 _ => None,
             },
             EncodedTerm::DecimalLiteral(a) => match b {
                 EncodedTerm::FloatLiteral(ref b) => a.to_f32().partial_cmp(b),
                 EncodedTerm::DoubleLiteral(ref b) => a.to_f64().partial_cmp(b),
-                EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&Decimal::from(b)),
+                EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&Decimal::from(*b)),
                 EncodedTerm::DecimalLiteral(ref b) => a.partial_cmp(b),
                 _ => None,
             },
@@ -2133,7 +2164,7 @@ impl SimpleEvaluator {
         }
     }
 
-    fn compare_str_ids(&self, a: StrHash, b: StrHash) -> Option<Ordering> {
+    fn compare_str_ids(&self, a: &StrHash, b: &StrHash) -> Option<Ordering> {
         Some(
             self.dataset
                 .get_str(a)
@@ -2142,21 +2173,21 @@ impl SimpleEvaluator {
         )
     }
 
-    fn compare_str_id_str(&self, a: StrHash, b: &str) -> Option<Ordering> {
+    fn compare_str_id_str(&self, a: &StrHash, b: &str) -> Option<Ordering> {
         Some(self.dataset.get_str(a).ok()??.as_str().cmp(b))
     }
 
-    fn compare_str_str_id(&self, a: &str, b: StrHash) -> Option<Ordering> {
+    fn compare_str_str_id(&self, a: &str, b: &StrHash) -> Option<Ordering> {
         Some(a.cmp(self.dataset.get_str(b).ok()??.as_str()))
     }
 
     fn hash<H: Digest>(&self, arg: &PlanExpression, tuple: &EncodedTuple) -> Option<EncodedTerm> {
-        let input = self.to_simple_string(self.eval_expression(arg, tuple)?)?;
+        let input = self.to_simple_string(&self.eval_expression(arg, tuple)?)?;
         let hash = hex::encode(H::new().chain(input.as_str()).finalize());
         self.build_string_literal(&hash)
     }
 
-    fn datatype(&self, value: EncodedTerm) -> Option<EncodedTerm> {
+    fn datatype(&self, value: &EncodedTerm) -> Option<EncodedTerm> {
         //TODO: optimize?
         match value {
             EncodedTerm::NamedNode { .. }
@@ -2175,7 +2206,7 @@ impl SimpleEvaluator {
             }
             EncodedTerm::SmallTypedLiteral { datatype_id, .. }
             | EncodedTerm::BigTypedLiteral { datatype_id, .. } => Some(EncodedTerm::NamedNode {
-                iri_id: datatype_id,
+                iri_id: *datatype_id,
             }),
             EncodedTerm::BooleanLiteral(..) => self.build_named_node(xsd::BOOLEAN.as_str()),
             EncodedTerm::FloatLiteral(..) => self.build_named_node(xsd::FLOAT.as_str()),
@@ -2224,127 +2255,130 @@ enum NumericBinaryOperands {
 
 impl NumericBinaryOperands {
     #[allow(clippy::cast_precision_loss)]
-    fn new(a: EncodedTerm, b: EncodedTerm) -> Option<Self> {
+    fn new(a: &EncodedTerm, b: &EncodedTerm) -> Option<Self> {
         match (a, b) {
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(NumericBinaryOperands::Float(v1, v2))
+                Some(NumericBinaryOperands::Float(*v1, *v2))
             }
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(v1.into(), v2))
+                Some(NumericBinaryOperands::Double((*v1).into(), *v2))
             }
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
-                Some(NumericBinaryOperands::Float(v1, v2 as f32))
+                Some(NumericBinaryOperands::Float(*v1, *v2 as f32))
             }
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
-                Some(NumericBinaryOperands::Float(v1, v2.to_f32()))
+                Some(NumericBinaryOperands::Float(*v1, v2.to_f32()))
             }
             (EncodedTerm::DoubleLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(v1, v2.into()))
+                Some(NumericBinaryOperands::Double(*v1, (*v2).into()))
             }
             (EncodedTerm::DoubleLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(v1, v2))
+                Some(NumericBinaryOperands::Double(*v1, *v2))
             }
             (EncodedTerm::DoubleLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(v1, v2 as f64))
+                Some(NumericBinaryOperands::Double(*v1, *v2 as f64))
             }
             (EncodedTerm::DoubleLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(v1, v2.to_f64()))
+                Some(NumericBinaryOperands::Double(*v1, v2.to_f64()))
             }
             (EncodedTerm::IntegerLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(NumericBinaryOperands::Float(v1 as f32, v2))
+                Some(NumericBinaryOperands::Float(*v1 as f32, *v2))
             }
             (EncodedTerm::IntegerLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(v1 as f64, v2))
+                Some(NumericBinaryOperands::Double(*v1 as f64, *v2))
             }
             (EncodedTerm::IntegerLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
-                Some(NumericBinaryOperands::Integer(v1, v2))
+                Some(NumericBinaryOperands::Integer(*v1, *v2))
             }
             (EncodedTerm::IntegerLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
-                Some(NumericBinaryOperands::Decimal(Decimal::from(v1), v2))
+                Some(NumericBinaryOperands::Decimal(Decimal::from(*v1), *v2))
             }
             (EncodedTerm::DecimalLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(NumericBinaryOperands::Float(v1.to_f32(), v2))
+                Some(NumericBinaryOperands::Float(v1.to_f32(), *v2))
             }
             (EncodedTerm::DecimalLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(v1.to_f64(), v2))
+                Some(NumericBinaryOperands::Double(v1.to_f64(), *v2))
             }
             (EncodedTerm::DecimalLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
-                Some(NumericBinaryOperands::Decimal(v1, Decimal::from(v2)))
+                Some(NumericBinaryOperands::Decimal(*v1, Decimal::from(*v2)))
             }
             (EncodedTerm::DecimalLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
-                Some(NumericBinaryOperands::Decimal(v1, v2))
+                Some(NumericBinaryOperands::Decimal(*v1, *v2))
             }
             (EncodedTerm::DurationLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::Duration(v1, v2))
+                Some(NumericBinaryOperands::Duration(*v1, *v2))
             }
             (EncodedTerm::DurationLiteral(v1), EncodedTerm::YearMonthDurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::Duration(v1, v2.into()))
+                Some(NumericBinaryOperands::Duration(*v1, (*v2).into()))
             }
             (EncodedTerm::DurationLiteral(v1), EncodedTerm::DayTimeDurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::Duration(v1, v2.into()))
+                Some(NumericBinaryOperands::Duration(*v1, (*v2).into()))
             }
             (EncodedTerm::YearMonthDurationLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::Duration(v1.into(), v2))
+                Some(NumericBinaryOperands::Duration((*v1).into(), *v2))
             }
             (
                 EncodedTerm::YearMonthDurationLiteral(v1),
                 EncodedTerm::YearMonthDurationLiteral(v2),
-            ) => Some(NumericBinaryOperands::YearMonthDuration(v1, v2)),
+            ) => Some(NumericBinaryOperands::YearMonthDuration(*v1, *v2)),
             (
                 EncodedTerm::YearMonthDurationLiteral(v1),
                 EncodedTerm::DayTimeDurationLiteral(v2),
-            ) => Some(NumericBinaryOperands::Duration(v1.into(), v2.into())),
+            ) => Some(NumericBinaryOperands::Duration((*v1).into(), (*v2).into())),
             (EncodedTerm::DayTimeDurationLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::Duration(v1.into(), v2))
+                Some(NumericBinaryOperands::Duration((*v1).into(), *v2))
             }
             (
                 EncodedTerm::DayTimeDurationLiteral(v1),
                 EncodedTerm::YearMonthDurationLiteral(v2),
-            ) => Some(NumericBinaryOperands::Duration(v1.into(), v2.into())),
+            ) => Some(NumericBinaryOperands::Duration((*v1).into(), (*v2).into())),
             (EncodedTerm::DayTimeDurationLiteral(v1), EncodedTerm::DayTimeDurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::DayTimeDuration(v1, v2))
+                Some(NumericBinaryOperands::DayTimeDuration(*v1, *v2))
             }
             (EncodedTerm::DateTimeLiteral(v1), EncodedTerm::DateTimeLiteral(v2)) => {
-                Some(NumericBinaryOperands::DateTime(v1, v2))
+                Some(NumericBinaryOperands::DateTime(*v1, *v2))
             }
             (EncodedTerm::DateLiteral(v1), EncodedTerm::DateLiteral(v2)) => {
-                Some(NumericBinaryOperands::Date(v1, v2))
+                Some(NumericBinaryOperands::Date(*v1, *v2))
             }
             (EncodedTerm::TimeLiteral(v1), EncodedTerm::TimeLiteral(v2)) => {
-                Some(NumericBinaryOperands::Time(v1, v2))
+                Some(NumericBinaryOperands::Time(*v1, *v2))
             }
             (EncodedTerm::DateTimeLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::DateTimeDuration(v1, v2))
+                Some(NumericBinaryOperands::DateTimeDuration(*v1, *v2))
             }
             (EncodedTerm::DateTimeLiteral(v1), EncodedTerm::YearMonthDurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::DateTimeYearMonthDuration(v1, v2))
+                Some(NumericBinaryOperands::DateTimeYearMonthDuration(*v1, *v2))
             }
             (EncodedTerm::DateTimeLiteral(v1), EncodedTerm::DayTimeDurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::DateTimeDayTimeDuration(v1, v2))
+                Some(NumericBinaryOperands::DateTimeDayTimeDuration(*v1, *v2))
             }
             (EncodedTerm::DateLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::DateDuration(v1, v2))
+                Some(NumericBinaryOperands::DateDuration(*v1, *v2))
             }
             (EncodedTerm::DateLiteral(v1), EncodedTerm::YearMonthDurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::DateYearMonthDuration(v1, v2))
+                Some(NumericBinaryOperands::DateYearMonthDuration(*v1, *v2))
             }
             (EncodedTerm::DateLiteral(v1), EncodedTerm::DayTimeDurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::DateDayTimeDuration(v1, v2))
+                Some(NumericBinaryOperands::DateDayTimeDuration(*v1, *v2))
             }
             (EncodedTerm::TimeLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::TimeDuration(v1, v2))
+                Some(NumericBinaryOperands::TimeDuration(*v1, *v2))
             }
             (EncodedTerm::TimeLiteral(v1), EncodedTerm::DayTimeDurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::TimeDayTimeDuration(v1, v2))
+                Some(NumericBinaryOperands::TimeDayTimeDuration(*v1, *v2))
             }
             _ => None,
         }
     }
 }
 
-fn get_pattern_value(selector: &PatternValue, tuple: &EncodedTuple) -> Option<EncodedTerm> {
+fn get_pattern_value<'a>(
+    selector: &'a PatternValue,
+    tuple: &'a EncodedTuple,
+) -> Option<&'a EncodedTerm> {
     match selector {
-        PatternValue::Constant(term) => Some(*term),
+        PatternValue::Constant(term) => Some(term),
         PatternValue::Variable(v) => tuple.get(*v),
     }
 }
@@ -2384,7 +2418,7 @@ fn combine_tuples(mut a: EncodedTuple, b: &EncodedTuple, vars: &[usize]) -> Opti
                     return None;
                 }
             } else {
-                a.set(*var, b_value);
+                a.set(*var, b_value.clone());
             }
         }
     }
@@ -2586,14 +2620,16 @@ impl Iterator for ConstructIterator {
                 };
                 for template in &self.template {
                     if let (Some(subject), Some(predicate), Some(object)) = (
-                        get_triple_template_value(&template.subject, &tuple, &mut self.bnodes),
-                        get_triple_template_value(&template.predicate, &tuple, &mut self.bnodes),
+                        get_triple_template_value(&template.subject, &tuple, &mut self.bnodes)
+                            .cloned(),
+                        get_triple_template_value(&template.predicate, &tuple, &mut self.bnodes)
+                            .cloned(),
                         get_triple_template_value(&template.object, &tuple, &mut self.bnodes),
                     ) {
                         self.buffered_results.push(decode_triple(
                             &*self.eval.dataset,
-                            subject,
-                            predicate,
+                            &subject,
+                            &predicate,
                             object,
                         ));
                     }
@@ -2604,19 +2640,19 @@ impl Iterator for ConstructIterator {
     }
 }
 
-fn get_triple_template_value(
-    selector: &TripleTemplateValue,
-    tuple: &EncodedTuple,
-    bnodes: &mut Vec<EncodedTerm>,
-) -> Option<EncodedTerm> {
+fn get_triple_template_value<'a>(
+    selector: &'a TripleTemplateValue,
+    tuple: &'a EncodedTuple,
+    bnodes: &'a mut Vec<EncodedTerm>,
+) -> Option<&'a EncodedTerm> {
     match selector {
-        TripleTemplateValue::Constant(term) => Some(*term),
+        TripleTemplateValue::Constant(term) => Some(term),
         TripleTemplateValue::Variable(v) => tuple.get(*v),
         TripleTemplateValue::BlankNode(id) => {
             if *id >= bnodes.len() {
                 bnodes.resize_with(*id, new_bnode)
             }
-            Some(bnodes[*id])
+            Some(&bnodes[*id])
         }
     }
 }
@@ -2627,9 +2663,9 @@ fn new_bnode() -> EncodedTerm {
 
 fn decode_triple<D: Decoder>(
     decoder: &D,
-    subject: EncodedTerm,
-    predicate: EncodedTerm,
-    object: EncodedTerm,
+    subject: &EncodedTerm,
+    predicate: &EncodedTerm,
+    object: &EncodedTerm,
 ) -> Result<Triple, EvaluationError> {
     Ok(Triple::new(
         decoder.decode_named_or_blank_node(subject)?,
@@ -2668,14 +2704,14 @@ impl Iterator for DescribeIterator {
             self.quads = Box::new(tuple.into_iter().flatten().flat_map(move |subject| {
                 eval.dataset
                     .encoded_quads_for_pattern(
-                        Some(subject),
+                        Some(&subject),
                         None,
                         None,
-                        Some(EncodedTerm::DefaultGraph),
+                        Some(&EncodedTerm::DefaultGraph),
                     )
                     .chain(
                         eval.dataset
-                            .encoded_quads_for_pattern(Some(subject), None, None, None),
+                            .encoded_quads_for_pattern(Some(&subject), None, None, None),
                     )
             }));
         }
@@ -2706,7 +2742,7 @@ impl<T1, T2, I1: Iterator<Item = T1>, I2: Iterator<Item = T2>> Iterator
     }
 }
 
-fn transitive_closure<T: Copy + Eq + Hash, NI: Iterator<Item = Result<T, EvaluationError>>>(
+fn transitive_closure<T: Clone + Eq + Hash, NI: Iterator<Item = Result<T, EvaluationError>>>(
     start: impl IntoIterator<Item = Result<T, EvaluationError>>,
     next: impl Fn(T) -> NI,
 ) -> impl Iterator<Item = Result<T, EvaluationError>> {
@@ -2717,7 +2753,7 @@ fn transitive_closure<T: Copy + Eq + Hash, NI: Iterator<Item = Result<T, Evaluat
         .into_iter()
         .filter_map(|e| match e {
             Ok(e) => {
-                all.insert(e);
+                all.insert(e.clone());
                 Some(e)
             }
             Err(error) => {
@@ -2736,7 +2772,7 @@ fn transitive_closure<T: Copy + Eq + Hash, NI: Iterator<Item = Result<T, Evaluat
                     if all.contains(&e) {
                         None
                     } else {
-                        all.insert(e);
+                        all.insert(e.clone());
                         Some(e)
                     }
                 }
@@ -2849,7 +2885,7 @@ impl<T: Accumulator> DistinctAccumulator<T> {
 
 impl<T: Accumulator> Accumulator for DistinctAccumulator<T> {
     fn add(&mut self, element: Option<EncodedTerm>) {
-        if self.seen.insert(element) {
+        if self.seen.insert(element.clone()) {
             self.inner.add(element)
         }
     }
@@ -2889,8 +2925,8 @@ impl Default for SumAccumulator {
 
 impl Accumulator for SumAccumulator {
     fn add(&mut self, element: Option<EncodedTerm>) {
-        if let Some(sum) = self.sum {
-            if let Some(operands) = element.and_then(|e| NumericBinaryOperands::new(sum, e)) {
+        if let Some(sum) = &self.sum {
+            if let Some(operands) = element.and_then(|e| NumericBinaryOperands::new(sum, &e)) {
                 //TODO: unify with addition?
                 self.sum = match operands {
                     NumericBinaryOperands::Float(v1, v2) => Some((v1 + v2).into()),
@@ -2907,7 +2943,7 @@ impl Accumulator for SumAccumulator {
     }
 
     fn state(&self) -> Option<EncodedTerm> {
-        self.sum
+        self.sum.clone()
     }
 }
 
@@ -2928,7 +2964,7 @@ impl Default for AvgAccumulator {
 
 impl Accumulator for AvgAccumulator {
     fn add(&mut self, element: Option<EncodedTerm>) {
-        self.sum.add(element);
+        self.sum.add(element.clone());
         self.count.add(element);
     }
 
@@ -2940,7 +2976,7 @@ impl Accumulator for AvgAccumulator {
         } else {
             //TODO: deduplicate?
             //TODO: duration?
-            match NumericBinaryOperands::new(sum, count)? {
+            match NumericBinaryOperands::new(&sum, &count)? {
                 NumericBinaryOperands::Float(v1, v2) => Some((v1 / v2).into()),
                 NumericBinaryOperands::Double(v1, v2) => Some((v1 / v2).into()),
                 NumericBinaryOperands::Integer(v1, v2) => {
@@ -2967,8 +3003,8 @@ impl MinAccumulator {
 
 impl Accumulator for MinAccumulator {
     fn add(&mut self, element: Option<EncodedTerm>) {
-        if let Some(min) = self.min {
-            if self.eval.cmp_terms(element, min) == Ordering::Less {
+        if let Some(min) = &self.min {
+            if self.eval.cmp_terms(element.as_ref(), min.as_ref()) == Ordering::Less {
                 self.min = Some(element)
             }
         } else {
@@ -2977,7 +3013,7 @@ impl Accumulator for MinAccumulator {
     }
 
     fn state(&self) -> Option<EncodedTerm> {
-        self.min.and_then(|v| v)
+        self.min.clone().and_then(|v| v)
     }
 }
 
@@ -2995,8 +3031,8 @@ impl MaxAccumulator {
 
 impl Accumulator for MaxAccumulator {
     fn add(&mut self, element: Option<EncodedTerm>) {
-        if let Some(max) = self.max {
-            if self.eval.cmp_terms(element, max) == Ordering::Greater {
+        if let Some(max) = &self.max {
+            if self.eval.cmp_terms(element.as_ref(), max.as_ref()) == Ordering::Greater {
                 self.max = Some(element)
             }
         } else {
@@ -3005,7 +3041,7 @@ impl Accumulator for MaxAccumulator {
     }
 
     fn state(&self) -> Option<EncodedTerm> {
-        self.max.and_then(|v| v)
+        self.max.clone().and_then(|v| v)
     }
 }
 
@@ -3028,7 +3064,7 @@ impl Accumulator for SampleAccumulator {
     }
 
     fn state(&self) -> Option<EncodedTerm> {
-        self.value
+        self.value.clone()
     }
 }
 
@@ -3055,7 +3091,7 @@ impl Accumulator for GroupConcatAccumulator {
     fn add(&mut self, element: Option<EncodedTerm>) {
         if let Some(concat) = self.concat.as_mut() {
             if let Some(element) = element {
-                if let Some((value, e_language)) = self.eval.to_string_and_language(element) {
+                if let Some((value, e_language)) = self.eval.to_string_and_language(&element) {
                     if let Some(lang) = self.language {
                         if lang != e_language {
                             self.language = Some(None)

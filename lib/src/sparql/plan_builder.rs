@@ -23,7 +23,7 @@ impl<'a> PlanBuilder<'a> {
         let plan = PlanBuilder { dataset }.build_for_graph_pattern(
             pattern,
             &mut variables,
-            PatternValue::Constant(EncodedTerm::DefaultGraph),
+            &PatternValue::Constant(EncodedTerm::DefaultGraph),
         )?;
         Ok((plan, variables))
     }
@@ -40,7 +40,7 @@ impl<'a> PlanBuilder<'a> {
         &mut self,
         pattern: &GraphPattern,
         variables: &mut Vec<Variable>,
-        graph_name: PatternValue,
+        graph_name: &PatternValue,
     ) -> Result<PlanNode, EvaluationError> {
         Ok(match pattern {
             GraphPattern::Bgp(p) => self.build_for_bgp(p, variables, graph_name)?,
@@ -53,7 +53,7 @@ impl<'a> PlanBuilder<'a> {
                 subject: self.pattern_value_from_term_or_variable(subject, variables)?,
                 path: Rc::new(self.build_for_path(path)?),
                 object: self.pattern_value_from_term_or_variable(object, variables)?,
-                graph_name,
+                graph_name: graph_name.clone(),
             },
             GraphPattern::Join { left, right } => {
                 //TODO: improve
@@ -69,7 +69,7 @@ impl<'a> PlanBuilder<'a> {
                         subject: self.pattern_value_from_term_or_variable(subject, variables)?,
                         path: Rc::new(self.build_for_path(path)?),
                         object: self.pattern_value_from_term_or_variable(object, variables)?,
-                        graph_name,
+                        graph_name: graph_name.clone(),
                     }
                 } else {
                     PlanNode::Join {
@@ -128,7 +128,7 @@ impl<'a> PlanBuilder<'a> {
             GraphPattern::Graph { graph_name, inner } => {
                 let graph_name =
                     self.pattern_value_from_named_node_or_variable(graph_name, variables)?;
-                self.build_for_graph_pattern(inner, variables, graph_name)?
+                self.build_for_graph_pattern(inner, variables, &graph_name)?
             }
             GraphPattern::Extend { inner, var, expr } => PlanNode::Extend {
                 child: Rc::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
@@ -174,7 +174,7 @@ impl<'a> PlanBuilder<'a> {
                     child: Rc::new(self.build_for_graph_pattern(
                         inner,
                         &mut inner_variables,
-                        inner_graph_name,
+                        &inner_graph_name,
                     )?),
                     key_mapping: Rc::new(
                         by.iter()
@@ -230,7 +230,7 @@ impl<'a> PlanBuilder<'a> {
                     child: Rc::new(self.build_for_graph_pattern(
                         inner,
                         &mut inner_variables,
-                        inner_graph_name,
+                        &inner_graph_name,
                     )?),
                     mapping: Rc::new(
                         projection
@@ -276,7 +276,7 @@ impl<'a> PlanBuilder<'a> {
         &mut self,
         p: &[TriplePattern],
         variables: &mut Vec<Variable>,
-        graph_name: PatternValue,
+        graph_name: &PatternValue,
     ) -> Result<PlanNode, EvaluationError> {
         let mut plan = PlanNode::Init;
         for pattern in sort_bgp(p) {
@@ -286,7 +286,7 @@ impl<'a> PlanBuilder<'a> {
                 predicate: self
                     .pattern_value_from_named_node_or_variable(&pattern.predicate, variables)?,
                 object: self.pattern_value_from_term_or_variable(&pattern.object, variables)?,
-                graph_name,
+                graph_name: graph_name.clone(),
             }
         }
         Ok(plan)
@@ -334,7 +334,7 @@ impl<'a> PlanBuilder<'a> {
         &mut self,
         expression: &Expression,
         variables: &mut Vec<Variable>,
-        graph_name: PatternValue,
+        graph_name: &PatternValue,
     ) -> Result<PlanExpression, EvaluationError> {
         Ok(match expression {
             Expression::NamedNode(node) => PlanExpression::Constant(self.build_named_node(node)?),
@@ -738,7 +738,7 @@ impl<'a> PlanBuilder<'a> {
         parameters: &[Expression],
         constructor: impl Fn(Box<PlanExpression>) -> PlanExpression,
         variables: &mut Vec<Variable>,
-        graph_name: PatternValue,
+        graph_name: &PatternValue,
         name: &'static str,
     ) -> Result<PlanExpression, EvaluationError> {
         if parameters.len() == 1 {
@@ -759,7 +759,7 @@ impl<'a> PlanBuilder<'a> {
         &mut self,
         l: &[Expression],
         variables: &mut Vec<Variable>,
-        graph_name: PatternValue,
+        graph_name: &PatternValue,
     ) -> Result<Vec<PlanExpression>, EvaluationError> {
         l.iter()
             .map(|e| self.build_for_expression(e, variables, graph_name))
@@ -839,7 +839,7 @@ impl<'a> PlanBuilder<'a> {
         &mut self,
         aggregate: &AggregationFunction,
         variables: &mut Vec<Variable>,
-        graph_name: PatternValue,
+        graph_name: &PatternValue,
     ) -> Result<PlanAggregation, EvaluationError> {
         match aggregate {
             AggregationFunction::Count { expr, distinct } => Ok(PlanAggregation {
@@ -958,14 +958,14 @@ impl<'a> PlanBuilder<'a> {
 
     fn convert_pattern_value_id(
         &self,
-        from_value: PatternValue,
+        from_value: &PatternValue,
         from: &[Variable],
         to: &mut Vec<Variable>,
     ) -> PatternValue {
         match from_value {
-            PatternValue::Constant(v) => PatternValue::Constant(v),
+            PatternValue::Constant(v) => PatternValue::Constant(v.clone()),
             PatternValue::Variable(from_id) => {
-                PatternValue::Variable(self.convert_variable_id(from_id, from, to))
+                PatternValue::Variable(self.convert_variable_id(*from_id, from, to))
             }
         }
     }

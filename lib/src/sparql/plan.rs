@@ -193,7 +193,7 @@ impl PlanNode {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum PatternValue {
     Constant(EncodedTerm),
     Variable(usize),
@@ -460,14 +460,14 @@ pub enum Comparator {
     Desc(PlanExpression),
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct TripleTemplate {
     pub subject: TripleTemplateValue,
     pub predicate: TripleTemplateValue,
     pub object: TripleTemplateValue,
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum TripleTemplateValue {
     Constant(EncodedTerm),
     BlankNode(usize),
@@ -494,8 +494,8 @@ impl EncodedTuple {
         self.inner.get(index).map_or(false, Option::is_some)
     }
 
-    pub fn get(&self, index: usize) -> Option<EncodedTerm> {
-        self.inner.get(index).cloned().unwrap_or(None)
+    pub fn get(&self, index: usize) -> Option<&EncodedTerm> {
+        self.inner.get(index).unwrap_or(&None).as_ref()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = Option<EncodedTerm>> + '_ {
@@ -526,7 +526,7 @@ impl EncodedTuple {
                                 return None;
                             }
                         }
-                        None => result[key] = Some(*self_value),
+                        None => result[key] = Some(self_value.clone()),
                     }
                 }
             }
@@ -541,7 +541,7 @@ impl EncodedTuple {
                                 return None;
                             }
                         }
-                        None => result[key] = Some(*other_value),
+                        None => result[key] = Some(other_value.clone()),
                     }
                 }
             }

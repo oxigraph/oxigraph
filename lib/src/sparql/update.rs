@@ -214,7 +214,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
 
     fn eval_create(&mut self, graph: &NamedNode, silent: bool) -> Result<(), EvaluationError> {
         let encoded_graph_name = self.encode_named_node_for_insertion(graph)?;
-        if self.storage.contains_named_graph(encoded_graph_name)? {
+        if self.storage.contains_named_graph(&encoded_graph_name)? {
             if silent {
                 Ok(())
             } else {
@@ -224,7 +224,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                 )))
             }
         } else {
-            self.storage.insert_named_graph(encoded_graph_name)?;
+            self.storage.insert_named_graph(&encoded_graph_name)?;
             Ok(())
         }
     }
@@ -233,8 +233,8 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         match graph {
             GraphTarget::NamedNode(graph_name) => {
                 let graph_name = self.encode_named_node_for_deletion(graph_name);
-                if self.storage.contains_named_graph(graph_name)? {
-                    Ok(self.storage.clear_graph(graph_name)?)
+                if self.storage.contains_named_graph(&graph_name)? {
+                    Ok(self.storage.clear_graph(&graph_name)?)
                 } else if silent {
                     Ok(())
                 } else {
@@ -244,20 +244,22 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                     )))
                 }
             }
-            GraphTarget::DefaultGraph => Ok(self.storage.clear_graph(EncodedTerm::DefaultGraph)?),
+            GraphTarget::DefaultGraph => {
+                Ok(self.storage.clear_graph(&EncodedTerm::DefaultGraph)?)
+            }
             GraphTarget::NamedGraphs => {
                 // TODO: optimize?
                 for graph in self.storage.named_graphs() {
-                    self.storage.clear_graph(graph?)?;
+                    self.storage.clear_graph(&graph?)?;
                 }
                 Ok(())
             }
             GraphTarget::AllGraphs => {
                 // TODO: optimize?
                 for graph in self.storage.named_graphs() {
-                    self.storage.clear_graph(graph?)?;
+                    self.storage.clear_graph(&graph?)?;
                 }
-                Ok(self.storage.clear_graph(EncodedTerm::DefaultGraph)?)
+                Ok(self.storage.clear_graph(&EncodedTerm::DefaultGraph)?)
             }
         }
     }
@@ -266,8 +268,8 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         match graph {
             GraphTarget::NamedNode(graph_name) => {
                 let graph_name = self.encode_named_node_for_deletion(graph_name);
-                if self.storage.contains_named_graph(graph_name)? {
-                    self.storage.remove_named_graph(graph_name)?;
+                if self.storage.contains_named_graph(&graph_name)? {
+                    self.storage.remove_named_graph(&graph_name)?;
                     Ok(())
                 } else if silent {
                     Ok(())
@@ -278,11 +280,13 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                     )))
                 }
             }
-            GraphTarget::DefaultGraph => Ok(self.storage.clear_graph(EncodedTerm::DefaultGraph)?),
+            GraphTarget::DefaultGraph => {
+                Ok(self.storage.clear_graph(&EncodedTerm::DefaultGraph)?)
+            }
             GraphTarget::NamedGraphs => {
                 // TODO: optimize?
                 for graph in self.storage.named_graphs() {
-                    self.storage.remove_named_graph(graph?)?;
+                    self.storage.remove_named_graph(&graph?)?;
                 }
                 Ok(())
             }
@@ -436,7 +440,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                 .position(|v2| v == v2)
                 .and_then(|i| values.get(i))
             {
-                Some(*term)
+                Some(term.clone())
             } else {
                 None
             }

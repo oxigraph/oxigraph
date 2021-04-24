@@ -16,7 +16,7 @@ use std::hash::Hash;
 use std::hash::Hasher;
 use std::{fmt, io, str};
 
-#[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 #[repr(transparent)]
 pub struct StrHash {
     hash: u128,
@@ -44,7 +44,7 @@ impl StrHash {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum EncodedTerm {
     DefaultGraph,
     NamedNode {
@@ -337,8 +337,8 @@ impl EncodedTerm {
     }
 
     pub fn on_each_id<E>(
-        self,
-        mut callback: impl FnMut(StrHash) -> Result<(), E>,
+        &self,
+        mut callback: impl FnMut(&StrHash) -> Result<(), E>,
     ) -> Result<(), E> {
         match self {
             Self::NamedNode { iri_id } => {
@@ -462,7 +462,7 @@ impl From<DayTimeDuration> for EncodedTerm {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct EncodedQuad {
     pub subject: EncodedTerm,
     pub predicate: EncodedTerm,
@@ -489,13 +489,13 @@ impl EncodedQuad {
 pub(crate) trait StrLookup {
     type Error: Error + Into<EvaluationError> + 'static;
 
-    fn get_str(&self, key: StrHash) -> Result<Option<String>, Self::Error>;
+    fn get_str(&self, key: &StrHash) -> Result<Option<String>, Self::Error>;
 
-    fn contains_str(&self, key: StrHash) -> Result<bool, Self::Error>;
+    fn contains_str(&self, key: &StrHash) -> Result<bool, Self::Error>;
 }
 
 pub(crate) trait StrContainer: StrLookup {
-    fn insert_str(&self, key: StrHash, value: &str) -> Result<bool, Self::Error>;
+    fn insert_str(&self, key: &StrHash, value: &str) -> Result<bool, Self::Error>;
 }
 pub(crate) fn get_encoded_named_node(named_node: NamedNodeRef<'_>) -> EncodedTerm {
     EncodedTerm::NamedNode {
@@ -899,7 +899,7 @@ pub(crate) trait WriteEncoder: StrContainer {
 impl<S: StrContainer> WriteEncoder for S {
     fn encode_str(&self, value: &str) -> Result<StrHash, Self::Error> {
         let key = StrHash::new(value);
-        self.insert_str(key, value)?;
+        self.insert_str(&key, value)?;
         Ok(key)
     }
 }
@@ -976,11 +976,11 @@ pub fn parse_day_time_duration_str(value: &str) -> Option<EncodedTerm> {
 }
 
 pub(crate) trait Decoder: StrLookup {
-    fn decode_term(&self, encoded: EncodedTerm) -> Result<Term, DecoderError<Self::Error>>;
+    fn decode_term(&self, encoded: &EncodedTerm) -> Result<Term, DecoderError<Self::Error>>;
 
     fn decode_named_or_blank_node(
         &self,
-        encoded: EncodedTerm,
+        encoded: &EncodedTerm,
     ) -> Result<NamedOrBlankNode, DecoderError<Self::Error>> {
         match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node.into()),
@@ -993,7 +993,7 @@ pub(crate) trait Decoder: StrLookup {
 
     fn decode_named_node(
         &self,
-        encoded: EncodedTerm,
+        encoded: &EncodedTerm,
     ) -> Result<NamedNode, DecoderError<Self::Error>> {
         match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node),
@@ -1006,20 +1006,12 @@ pub(crate) trait Decoder: StrLookup {
         }
     }
 
-    fn decode_triple(&self, encoded: &EncodedQuad) -> Result<Triple, DecoderError<Self::Error>> {
-        Ok(Triple::new(
-            self.decode_named_or_blank_node(encoded.subject)?,
-            self.decode_named_node(encoded.predicate)?,
-            self.decode_term(encoded.object)?,
-        ))
-    }
-
     fn decode_quad(&self, encoded: &EncodedQuad) -> Result<Quad, DecoderError<Self::Error>> {
         Ok(Quad::new(
-            self.decode_named_or_blank_node(encoded.subject)?,
-            self.decode_named_node(encoded.predicate)?,
-            self.decode_term(encoded.object)?,
-            match encoded.graph_name {
+            self.decode_named_or_blank_node(&encoded.subject)?,
+            self.decode_named_node(&encoded.predicate)?,
+            self.decode_term(&encoded.object)?,
+            match &encoded.graph_name {
                 EncodedTerm::DefaultGraph => None,
                 graph_name => Some(self.decode_named_or_blank_node(graph_name)?),
             },
@@ -1028,7 +1020,7 @@ pub(crate) trait Decoder: StrLookup {
 }
 
 impl<S: StrLookup> Decoder for S {
-    fn decode_term(&self, encoded: EncodedTerm) -> Result<Term, DecoderError<Self::Error>> {
+    fn decode_term(&self, encoded: &EncodedTerm) -> Result<Term, DecoderError<Self::Error>> {
         match encoded {
             EncodedTerm::DefaultGraph => Err(DecoderError::Decoder {
                 msg: "The default graph tag is not a valid term".to_owned(),
@@ -1036,21 +1028,23 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::NamedNode { iri_id } => {
                 Ok(NamedNode::new_unchecked(get_required_str(self, iri_id)?).into())
             }
-            EncodedTerm::NumericalBlankNode { id } => Ok(BlankNode::new_from_unique_id(id).into()),
+            EncodedTerm::NumericalBlankNode { id } => Ok(BlankNode::new_from_unique_id(*id).into()),
             EncodedTerm::SmallBlankNode(id) => Ok(BlankNode::new_unchecked(id.as_str()).into()),
             EncodedTerm::BigBlankNode { id_id } => {
                 Ok(BlankNode::new_unchecked(get_required_str(self, id_id)?).into())
             }
-            EncodedTerm::SmallStringLiteral(value) => Ok(Literal::new_simple_literal(value).into()),
+            EncodedTerm::SmallStringLiteral(value) => {
+                Ok(Literal::new_simple_literal(*value).into())
+            }
             EncodedTerm::BigStringLiteral { value_id } => {
                 Ok(Literal::new_simple_literal(get_required_str(self, value_id)?).into())
             }
             EncodedTerm::SmallSmallLangStringLiteral { value, language } => {
-                Ok(Literal::new_language_tagged_literal_unchecked(value, language).into())
+                Ok(Literal::new_language_tagged_literal_unchecked(*value, *language).into())
             }
             EncodedTerm::SmallBigLangStringLiteral { value, language_id } => {
                 Ok(Literal::new_language_tagged_literal_unchecked(
-                    value,
+                    *value,
                     get_required_str(self, language_id)?,
                 )
                 .into())
@@ -1058,7 +1052,7 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::BigSmallLangStringLiteral { value_id, language } => {
                 Ok(Literal::new_language_tagged_literal_unchecked(
                     get_required_str(self, value_id)?,
-                    language,
+                    *language,
                 )
                 .into())
             }
@@ -1072,7 +1066,7 @@ impl<S: StrLookup> Decoder for S {
             .into()),
             EncodedTerm::SmallTypedLiteral { value, datatype_id } => {
                 Ok(Literal::new_typed_literal(
-                    value,
+                    *value,
                     NamedNode::new_unchecked(get_required_str(self, datatype_id)?),
                 )
                 .into())
@@ -1085,29 +1079,29 @@ impl<S: StrLookup> Decoder for S {
                 NamedNode::new_unchecked(get_required_str(self, datatype_id)?),
             )
             .into()),
-            EncodedTerm::BooleanLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::FloatLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::DoubleLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::IntegerLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::DecimalLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::DateTimeLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::DateLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::TimeLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::GYearMonthLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::GYearLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::GMonthDayLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::GDayLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::GMonthLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::DurationLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::YearMonthDurationLiteral(value) => Ok(Literal::from(value).into()),
-            EncodedTerm::DayTimeDurationLiteral(value) => Ok(Literal::from(value).into()),
+            EncodedTerm::BooleanLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::FloatLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::DoubleLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::IntegerLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::DecimalLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::DateTimeLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::DateLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::TimeLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::GYearMonthLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::GYearLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::GMonthDayLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::GDayLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::GMonthLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::DurationLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::YearMonthDurationLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::DayTimeDurationLiteral(value) => Ok(Literal::from(*value).into()),
         }
     }
 }
 
 fn get_required_str<L: StrLookup>(
     lookup: &L,
-    id: StrHash,
+    id: &StrHash,
 ) -> Result<String, DecoderError<L::Error>> {
     lookup
         .get_str(id)

@@ -171,10 +171,10 @@ impl Store {
     ) -> QuadIter {
         QuadIter {
             iter: self.storage.quads_for_pattern(
-                subject.map(get_encoded_named_or_blank_node),
-                predicate.map(get_encoded_named_node),
-                object.map(get_encoded_term),
-                graph_name.map(get_encoded_graph_name),
+                subject.map(get_encoded_named_or_blank_node).as_ref(),
+                predicate.map(get_encoded_named_node).as_ref(),
+                object.map(get_encoded_term).as_ref(),
+                graph_name.map(get_encoded_graph_name).as_ref(),
             ),
             storage: self.storage.clone(),
         }
@@ -475,7 +475,7 @@ impl Store {
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool, io::Error> {
         let graph_name = get_encoded_named_or_blank_node(graph_name.into());
-        self.storage.contains_named_graph(graph_name)
+        self.storage.contains_named_graph(&graph_name)
     }
 
     /// Inserts a graph into this store
@@ -498,7 +498,7 @@ impl Store {
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool, io::Error> {
         let graph_name = self.storage.encode_named_or_blank_node(graph_name.into())?;
-        self.storage.insert_named_graph(graph_name)
+        self.storage.insert_named_graph(&graph_name)
     }
 
     /// Clears a graph from this store.
@@ -524,7 +524,7 @@ impl Store {
         graph_name: impl Into<GraphNameRef<'a>>,
     ) -> Result<(), io::Error> {
         let graph_name = get_encoded_graph_name(graph_name.into());
-        self.storage.clear_graph(graph_name)
+        self.storage.clear_graph(&graph_name)
     }
 
     /// Removes a graph from this store.
@@ -552,7 +552,7 @@ impl Store {
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool, io::Error> {
         let graph_name = get_encoded_named_or_blank_node(graph_name.into());
-        self.storage.remove_named_graph(graph_name)
+        self.storage.remove_named_graph(&graph_name)
     }
 
     /// Clears the store.
@@ -717,7 +717,7 @@ impl Transaction<'_> {
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool, UnabortableTransactionError> {
         let graph_name = self.storage.encode_named_or_blank_node(graph_name.into())?;
-        self.storage.insert_named_graph(graph_name)
+        self.storage.insert_named_graph(&graph_name)
     }
 }
 
@@ -750,7 +750,7 @@ impl Iterator for GraphNameIter {
     fn next(&mut self) -> Option<Result<NamedOrBlankNode, io::Error>> {
         Some(
             self.iter.next()?.and_then(|graph_name| {
-                Ok(self.store.storage.decode_named_or_blank_node(graph_name)?)
+                Ok(self.store.storage.decode_named_or_blank_node(&graph_name)?)
             }),
         )
     }
