@@ -4,12 +4,14 @@ use crate::model::named_node::NamedNode;
 use crate::model::{BlankNodeRef, LiteralRef, NamedNodeRef};
 use rio_api::model as rio;
 use std::fmt;
+use std::sync::Arc;
 
-/// The owned union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
+/// The owned union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node)  and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Subject {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
+    Triple(Arc<Triple>),
 }
 
 impl Subject {
@@ -24,10 +26,16 @@ impl Subject {
     }
 
     #[inline]
+    pub fn is_triple(&self) -> bool {
+        self.as_ref().is_triple()
+    }
+
+    #[inline]
     pub fn as_ref(&self) -> SubjectRef<'_> {
         match self {
             Self::NamedNode(node) => SubjectRef::NamedNode(node.as_ref()),
             Self::BlankNode(node) => SubjectRef::BlankNode(node.as_ref()),
+            Self::Triple(triple) => SubjectRef::Triple(triple),
         }
     }
 }
@@ -67,28 +75,42 @@ impl From<BlankNodeRef<'_>> for Subject {
     }
 }
 
-/// The borrowed union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
+impl From<Triple> for Subject {
+    #[inline]
+    fn from(node: Triple) -> Self {
+        Self::Triple(Arc::new(node))
+    }
+}
+
+impl From<TripleRef<'_>> for Subject {
+    #[inline]
+    fn from(node: TripleRef<'_>) -> Self {
+        node.into_owned().into()
+    }
+}
+
+/// The borrowed union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub enum SubjectRef<'a> {
     NamedNode(NamedNodeRef<'a>),
     BlankNode(BlankNodeRef<'a>),
+    Triple(&'a Triple),
 }
 
 impl<'a> SubjectRef<'a> {
     #[inline]
     pub fn is_named_node(&self) -> bool {
-        match self {
-            Self::NamedNode(_) => true,
-            Self::BlankNode(_) => false,
-        }
+        matches!(self, Self::NamedNode(_))
     }
 
     #[inline]
     pub fn is_blank_node(&self) -> bool {
-        match self {
-            Self::NamedNode(_) => false,
-            Self::BlankNode(_) => true,
-        }
+        matches!(self, Self::BlankNode(_))
+    }
+
+    #[inline]
+    pub fn is_triple(&self) -> bool {
+        matches!(self, Self::Triple(_))
     }
 
     #[inline]
@@ -96,6 +118,7 @@ impl<'a> SubjectRef<'a> {
         match self {
             Self::NamedNode(node) => Subject::NamedNode(node.into_owned()),
             Self::BlankNode(node) => Subject::BlankNode(node.into_owned()),
+            Self::Triple(triple) => Subject::Triple(Arc::new(triple.clone())),
         }
     }
 }
@@ -106,6 +129,11 @@ impl fmt::Display for SubjectRef<'_> {
         match self {
             Self::NamedNode(node) => node.fmt(f),
             Self::BlankNode(node) => node.fmt(f),
+            Self::Triple(triple) => write!(
+                f,
+                "<< {} {} {} >>",
+                triple.subject, triple.predicate, triple.object
+            ),
         }
     }
 }
@@ -138,6 +166,13 @@ impl<'a> From<&'a BlankNode> for SubjectRef<'a> {
     }
 }
 
+impl<'a> From<&'a Triple> for SubjectRef<'a> {
+    #[inline]
+    fn from(node: &'a Triple) -> Self {
+        Self::Triple(node)
+    }
+}
+
 impl<'a> From<&'a Subject> for SubjectRef<'a> {
     #[inline]
     fn from(node: &'a Subject) -> Self {
@@ -152,23 +187,26 @@ impl<'a> From<SubjectRef<'a>> for Subject {
     }
 }
 
+#[allow(clippy::unimplemented, clippy::fallible_impl_from)]
 impl<'a> From<SubjectRef<'a>> for rio::NamedOrBlankNode<'a> {
     #[inline]
     fn from(node: SubjectRef<'a>) -> Self {
         match node {
             SubjectRef::NamedNode(node) => rio::NamedNode::from(node).into(),
             SubjectRef::BlankNode(node) => rio::BlankNode::from(node).into(),
+            SubjectRef::Triple(_) => unimplemented!("Rio library does not support RDF* yet"),
         }
     }
 }
 
 /// An owned RDF [term](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term)
-/// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) and [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
+/// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Term {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
     Literal(Literal),
+    Triple(Arc<Triple>),
 }
 
 impl Term {
@@ -188,11 +226,17 @@ impl Term {
     }
 
     #[inline]
+    pub fn is_triple(&self) -> bool {
+        self.as_ref().is_triple()
+    }
+
+    #[inline]
     pub fn as_ref(&self) -> TermRef<'_> {
         match self {
             Self::NamedNode(node) => TermRef::NamedNode(node.as_ref()),
             Self::BlankNode(node) => TermRef::BlankNode(node.as_ref()),
             Self::Literal(literal) => TermRef::Literal(literal.as_ref()),
+            Self::Triple(triple) => TermRef::Triple(triple),
         }
     }
 }
@@ -245,6 +289,19 @@ impl From<LiteralRef<'_>> for Term {
         literal.into_owned().into()
     }
 }
+impl From<Triple> for Term {
+    #[inline]
+    fn from(triple: Triple) -> Self {
+        Self::Triple(Arc::new(triple))
+    }
+}
+
+impl From<TripleRef<'_>> for Term {
+    #[inline]
+    fn from(triple: TripleRef<'_>) -> Self {
+        triple.into_owned().into()
+    }
+}
 
 impl From<Subject> for Term {
     #[inline]
@@ -252,6 +309,7 @@ impl From<Subject> for Term {
         match node {
             Subject::NamedNode(node) => node.into(),
             Subject::BlankNode(node) => node.into(),
+            Subject::Triple(triple) => Self::Triple(triple),
         }
     }
 }
@@ -264,12 +322,13 @@ impl From<SubjectRef<'_>> for Term {
 }
 
 /// A borrowed RDF [term](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term)
-/// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) and [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
+/// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub enum TermRef<'a> {
     NamedNode(NamedNodeRef<'a>),
     BlankNode(BlankNodeRef<'a>),
     Literal(LiteralRef<'a>),
+    Triple(&'a Triple),
 }
 
 impl<'a> TermRef<'a> {
@@ -289,11 +348,17 @@ impl<'a> TermRef<'a> {
     }
 
     #[inline]
+    pub fn is_triple(&self) -> bool {
+        matches!(self, Self::Triple(_))
+    }
+
+    #[inline]
     pub fn into_owned(self) -> Term {
         match self {
             Self::NamedNode(node) => Term::NamedNode(node.into_owned()),
             Self::BlankNode(node) => Term::BlankNode(node.into_owned()),
             Self::Literal(literal) => Term::Literal(literal.into_owned()),
+            Self::Triple(triple) => Term::Triple(Arc::new(triple.clone())),
         }
     }
 }
@@ -304,7 +369,14 @@ impl fmt::Display for TermRef<'_> {
         match self {
             Self::NamedNode(node) => node.fmt(f),
             Self::BlankNode(node) => node.fmt(f),
-            Self::Literal(node) => node.fmt(f),
+            Self::Literal(literal) => literal.fmt(f),
+            Self::Triple(triple) => {
+                write!(
+                    f,
+                    "<< {} {} {} >>",
+                    triple.subject, triple.predicate, triple.object
+                )
+            }
         }
     }
 }
@@ -351,12 +423,20 @@ impl<'a> From<&'a Literal> for TermRef<'a> {
     }
 }
 
+impl<'a> From<&'a Triple> for TermRef<'a> {
+    #[inline]
+    fn from(node: &'a Triple) -> Self {
+        Self::Triple(node)
+    }
+}
+
 impl<'a> From<SubjectRef<'a>> for TermRef<'a> {
     #[inline]
     fn from(node: SubjectRef<'a>) -> Self {
         match node {
             SubjectRef::NamedNode(node) => node.into(),
             SubjectRef::BlankNode(node) => node.into(),
+            SubjectRef::Triple(triple) => triple.into(),
         }
     }
 }
@@ -382,6 +462,7 @@ impl<'a> From<TermRef<'a>> for Term {
     }
 }
 
+#[allow(clippy::unimplemented, clippy::fallible_impl_from)]
 impl<'a> From<TermRef<'a>> for rio::Term<'a> {
     #[inline]
     fn from(node: TermRef<'a>) -> Self {
@@ -389,6 +470,7 @@ impl<'a> From<TermRef<'a>> for rio::Term<'a> {
             TermRef::NamedNode(node) => rio::NamedNode::from(node).into(),
             TermRef::BlankNode(node) => rio::BlankNode::from(node).into(),
             TermRef::Literal(node) => rio::Literal::from(node).into(),
+            TermRef::Triple(_) => unimplemented!("Rio library does not support RDF* yet"),
         }
     }
 }
@@ -600,45 +682,6 @@ impl From<BlankNodeRef<'_>> for GraphName {
     }
 }
 
-impl From<Subject> for GraphName {
-    #[inline]
-    fn from(node: Subject) -> Self {
-        match node {
-            Subject::NamedNode(node) => node.into(),
-            Subject::BlankNode(node) => node.into(),
-        }
-    }
-}
-
-impl From<SubjectRef<'_>> for GraphName {
-    #[inline]
-    fn from(node: SubjectRef<'_>) -> Self {
-        node.into_owned().into()
-    }
-}
-
-impl From<Option<Subject>> for GraphName {
-    #[inline]
-    fn from(name: Option<Subject>) -> Self {
-        if let Some(node) = name {
-            node.into()
-        } else {
-            GraphName::DefaultGraph
-        }
-    }
-}
-
-impl From<GraphName> for Option<Subject> {
-    #[inline]
-    fn from(name: GraphName) -> Self {
-        match name {
-            GraphName::NamedNode(node) => Some(node.into()),
-            GraphName::BlankNode(node) => Some(node.into()),
-            GraphName::DefaultGraph => None,
-        }
-    }
-}
-
 /// A possible borrowed graph name.
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
@@ -713,23 +756,6 @@ impl<'a> From<&'a BlankNode> for GraphNameRef<'a> {
     }
 }
 
-impl<'a> From<SubjectRef<'a>> for GraphNameRef<'a> {
-    #[inline]
-    fn from(node: SubjectRef<'a>) -> Self {
-        match node {
-            SubjectRef::NamedNode(node) => node.into(),
-            SubjectRef::BlankNode(node) => node.into(),
-        }
-    }
-}
-
-impl<'a> From<&'a Subject> for GraphNameRef<'a> {
-    #[inline]
-    fn from(node: &'a Subject) -> Self {
-        node.as_ref().into()
-    }
-}
-
 impl<'a> From<&'a GraphName> for GraphNameRef<'a> {
     #[inline]
     fn from(node: &'a GraphName) -> Self {
@@ -741,28 +767,6 @@ impl<'a> From<GraphNameRef<'a>> for GraphName {
     #[inline]
     fn from(node: GraphNameRef<'a>) -> Self {
         node.into_owned()
-    }
-}
-
-impl<'a> From<Option<SubjectRef<'a>>> for GraphNameRef<'a> {
-    #[inline]
-    fn from(name: Option<SubjectRef<'a>>) -> Self {
-        if let Some(node) = name {
-            node.into()
-        } else {
-            GraphNameRef::DefaultGraph
-        }
-    }
-}
-
-impl<'a> From<GraphNameRef<'a>> for Option<SubjectRef<'a>> {
-    #[inline]
-    fn from(name: GraphNameRef<'a>) -> Self {
-        match name {
-            GraphNameRef::NamedNode(node) => Some(node.into()),
-            GraphNameRef::BlankNode(node) => Some(node.into()),
-            GraphNameRef::DefaultGraph => None,
-        }
     }
 }
 

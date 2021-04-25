@@ -37,7 +37,7 @@ let store = Store::open("example.db")?;
 
 // insertion
 let ex = NamedNode::new("http://example.com")?;
-let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
+let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), GraphName::DefaultGraph);
 store.insert(&quad)?;
 
 // quad filter

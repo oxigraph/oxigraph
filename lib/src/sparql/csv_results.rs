@@ -59,18 +59,25 @@ pub fn write_csv_results(
     Ok(())
 }
 
-fn write_csv_term<'a>(term: impl Into<TermRef<'a>>, mut sink: impl Write) -> io::Result<()> {
+fn write_csv_term<'a>(term: impl Into<TermRef<'a>>, sink: &mut impl Write) -> io::Result<()> {
     match term.into() {
         TermRef::NamedNode(uri) => sink.write_all(uri.as_str().as_bytes()),
         TermRef::BlankNode(bnode) => {
             sink.write_all(b"_:")?;
             sink.write_all(bnode.as_str().as_bytes())
         }
-        TermRef::Literal(literal) => write_escaped_csv_string(literal.value(), &mut sink),
+        TermRef::Literal(literal) => write_escaped_csv_string(literal.value(), sink),
+        TermRef::Triple(triple) => {
+            write_csv_term(&triple.subject, sink)?;
+            sink.write_all(b" ")?;
+            write_csv_term(&triple.predicate, sink)?;
+            sink.write_all(b" ")?;
+            write_csv_term(&triple.object, sink)
+        }
     }
 }
 
-fn write_escaped_csv_string(s: &str, mut sink: impl Write) -> io::Result<()> {
+fn write_escaped_csv_string(s: &str, sink: &mut impl Write) -> io::Result<()> {
     if s.bytes().any(|c| matches!(c, b'"' | b',' | b'\n' | b'\r')) {
         sink.write_all(b"\"")?;
         for c in s.bytes() {
@@ -138,7 +145,7 @@ pub fn write_tsv_results(
     Ok(())
 }
 
-fn write_tsv_term<'a>(term: impl Into<TermRef<'a>>, mut sink: impl Write) -> io::Result<()> {
+fn write_tsv_term<'a>(term: impl Into<TermRef<'a>>, sink: &mut impl Write) -> io::Result<()> {
     //TODO: full Turtle serialization
     match term.into() {
         TermRef::NamedNode(node) => write!(sink, "<{}>", node.as_str()),
@@ -158,6 +165,16 @@ fn write_tsv_term<'a>(term: impl Into<TermRef<'a>>, mut sink: impl Write) -> io:
             }
             _ => sink.write_all(literal.to_string().as_bytes()),
         },
+        TermRef::Triple(triple) => {
+            sink.write_all(b"<< ")?;
+            write_tsv_term(&triple.subject, sink)?;
+            sink.write_all(b" ")?;
+            write_tsv_term(&triple.predicate, sink)?;
+            sink.write_all(b" ")?;
+            write_tsv_term(&triple.object, sink)?;
+            sink.write_all(b" >>")?;
+            Ok(())
+        }
     }
 }
 

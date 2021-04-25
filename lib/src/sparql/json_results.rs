@@ -47,30 +47,8 @@ pub fn write_json_results(
                         sink.write_all(b",")?;
                     }
                     write_escaped_json_string(variable.as_str(), &mut sink)?;
-                    match value {
-                        Term::NamedNode(uri) => {
-                            sink.write_all(b":{\"type\":\"uri\",\"value\":")?;
-                            write_escaped_json_string(uri.as_str(), &mut sink)?;
-                            sink.write_all(b"}")?;
-                        }
-                        Term::BlankNode(bnode) => {
-                            sink.write_all(b":{\"type\":\"bnode\",\"value\":")?;
-                            write_escaped_json_string(bnode.as_str(), &mut sink)?;
-                            sink.write_all(b"}")?;
-                        }
-                        Term::Literal(literal) => {
-                            sink.write_all(b":{\"type\":\"literal\",\"value\":")?;
-                            write_escaped_json_string(literal.value(), &mut sink)?;
-                            if let Some(language) = literal.language() {
-                                sink.write_all(b",\"xml:lang\":")?;
-                                write_escaped_json_string(language, &mut sink)?;
-                            } else if !literal.is_plain() {
-                                sink.write_all(b",\"datatype\":")?;
-                                write_escaped_json_string(literal.datatype().as_str(), &mut sink)?;
-                            }
-                            sink.write_all(b"}")?;
-                        }
-                    }
+                    sink.write_all(b":")?;
+                    write_json_term(value.as_ref(), &mut sink)?;
                 }
                 sink.write_all(b"}")?;
             }
@@ -84,7 +62,44 @@ pub fn write_json_results(
     }
 }
 
-fn write_escaped_json_string(s: &str, mut sink: impl Write) -> Result<(), EvaluationError> {
+fn write_json_term(term: TermRef<'_>, sink: &mut impl Write) -> Result<(), EvaluationError> {
+    match term {
+        TermRef::NamedNode(uri) => {
+            sink.write_all(b"{\"type\":\"uri\",\"value\":")?;
+            write_escaped_json_string(uri.as_str(), sink)?;
+            sink.write_all(b"}")?;
+        }
+        TermRef::BlankNode(bnode) => {
+            sink.write_all(b"{\"type\":\"bnode\",\"value\":")?;
+            write_escaped_json_string(bnode.as_str(), sink)?;
+            sink.write_all(b"}")?;
+        }
+        TermRef::Literal(literal) => {
+            sink.write_all(b"{\"type\":\"literal\",\"value\":")?;
+            write_escaped_json_string(literal.value(), sink)?;
+            if let Some(language) = literal.language() {
+                sink.write_all(b",\"xml:lang\":")?;
+                write_escaped_json_string(language, sink)?;
+            } else if !literal.is_plain() {
+                sink.write_all(b",\"datatype\":")?;
+                write_escaped_json_string(literal.datatype().as_str(), sink)?;
+            }
+            sink.write_all(b"}")?;
+        }
+        TermRef::Triple(triple) => {
+            sink.write_all(b":{\"type\":\"triple\",\"value\":{\"subject\":")?;
+            write_json_term(triple.subject.as_ref().into(), sink)?;
+            sink.write_all(b":,\"predicate\":")?;
+            write_json_term(triple.predicate.as_ref().into(), sink)?;
+            sink.write_all(b":,\"object\":")?;
+            write_json_term(triple.object.as_ref(), sink)?;
+            sink.write_all(b"}}")?;
+        }
+    }
+    Ok(())
+}
+
+fn write_escaped_json_string(s: &str, sink: &mut impl Write) -> Result<(), EvaluationError> {
     sink.write_all(b"\"")?;
     for c in s.chars() {
         match c {

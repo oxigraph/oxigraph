@@ -78,7 +78,12 @@ fn quads(graph_name: impl Into<GraphNameRef<'static>>) -> Vec<QuadRef<'static>> 
 #[test]
 fn test_load_graph() -> io::Result<()> {
     let store = Store::new()?;
-    store.load_graph(Cursor::new(DATA), GraphFormat::Turtle, None, None)?;
+    store.load_graph(
+        Cursor::new(DATA),
+        GraphFormat::Turtle,
+        GraphNameRef::DefaultGraph,
+        None,
+    )?;
     for q in quads(GraphNameRef::DefaultGraph) {
         assert!(store.contains(q)?);
     }
@@ -103,7 +108,11 @@ fn test_dump_graph() -> io::Result<()> {
     }
 
     let mut buffer = Vec::new();
-    store.dump_graph(&mut buffer, GraphFormat::NTriples, None)?;
+    store.dump_graph(
+        &mut buffer,
+        GraphFormat::NTriples,
+        GraphNameRef::DefaultGraph,
+    )?;
     assert_eq!(
         buffer.into_iter().filter(|c| *c == b'\n').count(),
         NUMBER_OF_TRIPLES
@@ -131,7 +140,12 @@ fn test_dump_dataset() -> io::Result<()> {
 fn test_transaction_load_graph() -> io::Result<()> {
     let store = Store::new()?;
     store.transaction(|t| {
-        t.load_graph(Cursor::new(DATA), GraphFormat::Turtle, None, None)?;
+        t.load_graph(
+            Cursor::new(DATA),
+            GraphFormat::Turtle,
+            GraphNameRef::DefaultGraph,
+            None,
+        )?;
         Ok(()) as Result<_, ConflictableTransactionError<io::Error>>
     })?;
     for q in quads(GraphNameRef::DefaultGraph) {

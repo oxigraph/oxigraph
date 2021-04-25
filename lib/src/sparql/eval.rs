@@ -1590,7 +1590,8 @@ impl SimpleEvaluator {
             EncodedTerm::NamedNode { iri_id } => Some((*iri_id).into()),
             EncodedTerm::NumericalBlankNode { .. }
             | EncodedTerm::SmallBlankNode { .. }
-            | EncodedTerm::BigBlankNode { .. } => None,
+            | EncodedTerm::BigBlankNode { .. }
+            | EncodedTerm::Triple(_) => None,
             EncodedTerm::SmallStringLiteral(value)
             | EncodedTerm::SmallSmallLangStringLiteral { value, .. }
             | EncodedTerm::SmallBigLangStringLiteral { value, .. }
@@ -2005,6 +2006,17 @@ impl SimpleEvaluator {
                 _ if b.is_unknown_typed_literal() => None,
                 _ => Some(false),
             },
+            EncodedTerm::Triple(a) => {
+                if let EncodedTerm::Triple(b) = b {
+                    Some(
+                        self.equals(&a.subject, &b.subject)?
+                            && self.equals(&a.predicate, &b.predicate)?
+                            && self.equals(&a.object, &b.object)?,
+                    )
+                } else {
+                    Some(false)
+                }
+            }
         }
     }
 
@@ -2194,7 +2206,8 @@ impl SimpleEvaluator {
             | EncodedTerm::SmallBlankNode { .. }
             | EncodedTerm::BigBlankNode { .. }
             | EncodedTerm::NumericalBlankNode { .. }
-            | EncodedTerm::DefaultGraph => None,
+            | EncodedTerm::DefaultGraph
+            | EncodedTerm::Triple(_) => None,
             EncodedTerm::SmallStringLiteral(_) | EncodedTerm::BigStringLiteral { .. } => {
                 self.build_named_node(xsd::STRING.as_str())
             }

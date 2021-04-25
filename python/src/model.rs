@@ -408,6 +408,7 @@ impl PyObjectProtocol for PyDefaultGraph {
 pub enum PySubject {
     NamedNode(PyNamedNode),
     BlankNode(PyBlankNode),
+    Triple(PyTriple),
 }
 
 impl From<PySubject> for Subject {
@@ -415,6 +416,7 @@ impl From<PySubject> for Subject {
         match node {
             PySubject::NamedNode(node) => node.into(),
             PySubject::BlankNode(node) => node.into(),
+            PySubject::Triple(triple) => triple.into(),
         }
     }
 }
@@ -424,6 +426,7 @@ impl From<Subject> for PySubject {
         match node {
             Subject::NamedNode(node) => PySubject::NamedNode(node.into()),
             Subject::BlankNode(node) => PySubject::BlankNode(node.into()),
+            Subject::Triple(triple) => PySubject::Triple(triple.as_ref().clone().into()),
         }
     }
 }
@@ -433,6 +436,7 @@ impl IntoPy<PyObject> for PySubject {
         match self {
             PySubject::NamedNode(node) => node.into_py(py),
             PySubject::BlankNode(node) => node.into_py(py),
+            PySubject::Triple(triple) => triple.into_py(py),
         }
     }
 }
@@ -442,6 +446,7 @@ pub enum PyTerm {
     NamedNode(PyNamedNode),
     BlankNode(PyBlankNode),
     Literal(PyLiteral),
+    Triple(PyTriple),
 }
 
 impl From<PyTerm> for Term {
@@ -450,6 +455,7 @@ impl From<PyTerm> for Term {
             PyTerm::NamedNode(node) => node.into(),
             PyTerm::BlankNode(node) => node.into(),
             PyTerm::Literal(literal) => literal.into(),
+            PyTerm::Triple(triple) => triple.into(),
         }
     }
 }
@@ -460,6 +466,7 @@ impl From<Term> for PyTerm {
             Term::NamedNode(node) => PyTerm::NamedNode(node.into()),
             Term::BlankNode(node) => PyTerm::BlankNode(node.into()),
             Term::Literal(literal) => PyTerm::Literal(literal.into()),
+            Term::Triple(triple) => PyTerm::Triple(triple.as_ref().clone().into()),
         }
     }
 }
@@ -470,6 +477,7 @@ impl IntoPy<PyObject> for PyTerm {
             PyTerm::NamedNode(node) => node.into_py(py),
             PyTerm::BlankNode(node) => node.into_py(py),
             PyTerm::Literal(literal) => literal.into_py(py),
+            PyTerm::Triple(triple) => triple.into_py(py),
         }
     }
 }
@@ -505,14 +513,26 @@ impl From<Triple> for PyTriple {
 }
 
 impl From<PyTriple> for Triple {
-    fn from(node: PyTriple) -> Self {
-        node.inner
+    fn from(triple: PyTriple) -> Self {
+        triple.inner
     }
 }
 
 impl<'a> From<&'a PyTriple> for TripleRef<'a> {
-    fn from(node: &'a PyTriple) -> Self {
-        node.inner.as_ref()
+    fn from(triple: &'a PyTriple) -> Self {
+        triple.inner.as_ref()
+    }
+}
+
+impl From<PyTriple> for Subject {
+    fn from(triple: PyTriple) -> Self {
+        triple.inner.into()
+    }
+}
+
+impl From<PyTriple> for Term {
+    fn from(triple: PyTriple) -> Self {
+        triple.inner.into()
     }
 }
 
@@ -562,13 +582,7 @@ impl PyObjectProtocol for PyTriple {
 
     fn __repr__(&self) -> String {
         let mut buffer = String::new();
-        buffer.push_str("<Triple subject=");
-        term_repr(self.inner.subject.as_ref().into(), &mut buffer);
-        buffer.push_str(" predicate=");
-        named_node_repr(self.inner.predicate.as_ref(), &mut buffer);
-        buffer.push_str(" object=");
-        term_repr(self.inner.object.as_ref(), &mut buffer);
-        buffer.push('>');
+        triple_repr(self.inner.as_ref(), &mut buffer);
         buffer
     }
 
@@ -1109,6 +1123,7 @@ pub fn term_repr(term: TermRef<'_>, buffer: &mut String) {
         TermRef::NamedNode(node) => named_node_repr(node, buffer),
         TermRef::BlankNode(node) => blank_node_repr(node, buffer),
         TermRef::Literal(literal) => literal_repr(literal, buffer),
+        TermRef::Triple(triple) => triple_repr(triple.as_ref(), buffer),
     }
 }
 
@@ -1118,6 +1133,16 @@ fn graph_name_repr(term: GraphNameRef<'_>, buffer: &mut String) {
         GraphNameRef::BlankNode(node) => blank_node_repr(node, buffer),
         GraphNameRef::DefaultGraph => buffer.push_str("<DefaultGraph>"),
     }
+}
+
+fn triple_repr(triple: TripleRef<'_>, buffer: &mut String) {
+    buffer.push_str("<Triple subject=");
+    term_repr(triple.subject.into(), buffer);
+    buffer.push_str(" predicate=");
+    named_node_repr(triple.predicate, buffer);
+    buffer.push_str(" object=");
+    term_repr(triple.object, buffer);
+    buffer.push('>');
 }
 
 #[pyclass(module = "oxigraph")]

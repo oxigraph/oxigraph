@@ -14,6 +14,7 @@ use std::error::Error;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::hash::Hasher;
+use std::rc::Rc;
 use std::{fmt, io, str};
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
@@ -101,6 +102,7 @@ pub enum EncodedTerm {
     DurationLiteral(Duration),
     YearMonthDurationLiteral(YearMonthDuration),
     DayTimeDurationLiteral(DayTimeDuration),
+    Triple(Rc<EncodedTriple>),
 }
 
 impl PartialEq for EncodedTerm {
@@ -214,6 +216,7 @@ impl PartialEq for EncodedTerm {
             (Self::DurationLiteral(a), Self::DurationLiteral(b)) => a == b,
             (Self::YearMonthDurationLiteral(a), Self::YearMonthDurationLiteral(b)) => a == b,
             (Self::DayTimeDurationLiteral(a), Self::DayTimeDurationLiteral(b)) => a == b,
+            (Self::Triple(a), Self::Triple(b)) => a == b,
             (_, _) => false,
         }
     }
@@ -277,6 +280,7 @@ impl Hash for EncodedTerm {
             Self::DurationLiteral(value) => value.hash(state),
             Self::YearMonthDurationLiteral(value) => value.hash(state),
             Self::DayTimeDurationLiteral(value) => value.hash(state),
+            Self::Triple(value) => value.hash(state),
         }
     }
 }
@@ -338,7 +342,7 @@ impl EncodedTerm {
 
     pub fn on_each_id<E>(
         &self,
-        mut callback: impl FnMut(&StrHash) -> Result<(), E>,
+        callback: &mut impl FnMut(&StrHash) -> Result<(), E>,
     ) -> Result<(), E> {
         match self {
             Self::NamedNode { iri_id } => {
@@ -372,6 +376,11 @@ impl EncodedTerm {
             } => {
                 callback(value_id)?;
                 callback(datatype_id)?;
+            }
+            Self::Triple(triple) => {
+                triple.subject.on_each_id(callback)?;
+                triple.predicate.on_each_id(callback)?;
+                triple.object.on_each_id(callback)?;
             }
             _ => (),
         }
@@ -460,6 +469,19 @@ impl From<DayTimeDuration> for EncodedTerm {
     fn from(value: DayTimeDuration) -> Self {
         Self::DayTimeDurationLiteral(value)
     }
+}
+
+impl From<EncodedTriple> for EncodedTerm {
+    fn from(value: EncodedTriple) -> Self {
+        Self::Triple(Rc::new(value))
+    }
+}
+
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct EncodedTriple {
+    pub subject: EncodedTerm,
+    pub predicate: EncodedTerm,
+    pub object: EncodedTerm,
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -613,6 +635,9 @@ pub(crate) fn get_encoded_subject(term: SubjectRef<'_>) -> EncodedTerm {
     match term {
         SubjectRef::NamedNode(named_node) => get_encoded_named_node(named_node),
         SubjectRef::BlankNode(blank_node) => get_encoded_blank_node(blank_node),
+        SubjectRef::Triple(triple) => {
+            EncodedTerm::Triple(Rc::new(get_encoded_triple(triple.as_ref())))
+        }
     }
 }
 
@@ -621,6 +646,9 @@ pub(crate) fn get_encoded_term(term: TermRef<'_>) -> EncodedTerm {
         TermRef::NamedNode(named_node) => get_encoded_named_node(named_node),
         TermRef::BlankNode(blank_node) => get_encoded_blank_node(blank_node),
         TermRef::Literal(literal) => get_encoded_literal(literal),
+        TermRef::Triple(triple) => {
+            EncodedTerm::Triple(Rc::new(get_encoded_triple(triple.as_ref())))
+        }
     }
 }
 
@@ -629,6 +657,14 @@ pub(crate) fn get_encoded_graph_name(name: GraphNameRef<'_>) -> EncodedTerm {
         GraphNameRef::NamedNode(named_node) => get_encoded_named_node(named_node),
         GraphNameRef::BlankNode(blank_node) => get_encoded_blank_node(blank_node),
         GraphNameRef::DefaultGraph => EncodedTerm::DefaultGraph,
+    }
+}
+
+pub(crate) fn get_encoded_triple(quad: TripleRef<'_>) -> EncodedTriple {
+    EncodedTriple {
+        subject: get_encoded_subject(quad.subject),
+        predicate: get_encoded_named_node(quad.predicate),
+        object: get_encoded_term(quad.object),
     }
 }
 
@@ -670,6 +706,9 @@ pub(crate) trait WriteEncoder: StrContainer {
         match term {
             SubjectRef::NamedNode(named_node) => self.encode_named_node(named_node),
             SubjectRef::BlankNode(blank_node) => self.encode_blank_node(blank_node),
+            SubjectRef::Triple(triple) => Ok(EncodedTerm::Triple(Rc::new(
+                self.encode_triple(triple.as_ref())?,
+            ))),
         }
     }
 
@@ -678,6 +717,9 @@ pub(crate) trait WriteEncoder: StrContainer {
             TermRef::NamedNode(named_node) => self.encode_named_node(named_node),
             TermRef::BlankNode(blank_node) => self.encode_blank_node(blank_node),
             TermRef::Literal(literal) => self.encode_literal(literal),
+            TermRef::Triple(triple) => Ok(EncodedTerm::Triple(Rc::new(
+                self.encode_triple(triple.as_ref())?,
+            ))),
         }
     }
 
@@ -687,6 +729,14 @@ pub(crate) trait WriteEncoder: StrContainer {
             GraphNameRef::BlankNode(blank_node) => self.encode_blank_node(blank_node),
             GraphNameRef::DefaultGraph => Ok(EncodedTerm::DefaultGraph),
         }
+    }
+
+    fn encode_triple(&self, quad: TripleRef<'_>) -> Result<EncodedTriple, Self::Error> {
+        Ok(EncodedTriple {
+            subject: self.encode_subject(quad.subject)?,
+            predicate: self.encode_named_node(quad.predicate)?,
+            object: self.encode_term(quad.object)?,
+        })
     }
 
     fn encode_quad(&self, quad: QuadRef<'_>) -> Result<EncodedQuad, Self::Error> {
@@ -980,7 +1030,10 @@ pub(crate) trait Decoder: StrLookup {
             Term::NamedNode(named_node) => Ok(named_node.into()),
             Term::BlankNode(blank_node) => Ok(blank_node.into()),
             Term::Literal(_) => Err(DecoderError::Decoder {
-                msg: "A literal has ben found instead of a named node".to_owned(),
+                msg: "A literal has been found instead of a named node".to_owned(),
+            }),
+            Term::Triple(_) => Err(DecoderError::Decoder {
+                msg: "A triple has been found instead of a named node".to_owned(),
             }),
         }
     }
@@ -995,9 +1048,20 @@ pub(crate) trait Decoder: StrLookup {
                 msg: "A blank node has been found instead of a named node".to_owned(),
             }),
             Term::Literal(_) => Err(DecoderError::Decoder {
-                msg: "A literal has ben found instead of a named node".to_owned(),
+                msg: "A literal has been found instead of a named node".to_owned(),
+            }),
+            Term::Triple(_) => Err(DecoderError::Decoder {
+                msg: "A triple has been found instead of a named node".to_owned(),
             }),
         }
+    }
+
+    fn decode_triple(&self, encoded: &EncodedTriple) -> Result<Triple, DecoderError<Self::Error>> {
+        Ok(Triple::new(
+            self.decode_subject(&encoded.subject)?,
+            self.decode_named_node(&encoded.predicate)?,
+            self.decode_term(&encoded.object)?,
+        ))
     }
 
     fn decode_quad(&self, encoded: &EncodedQuad) -> Result<Quad, DecoderError<Self::Error>> {
@@ -1005,9 +1069,23 @@ pub(crate) trait Decoder: StrLookup {
             self.decode_subject(&encoded.subject)?,
             self.decode_named_node(&encoded.predicate)?,
             self.decode_term(&encoded.object)?,
-            match &encoded.graph_name {
-                EncodedTerm::DefaultGraph => None,
-                graph_name => Some(self.decode_subject(graph_name)?),
+            if encoded.graph_name == EncodedTerm::DefaultGraph {
+                GraphName::DefaultGraph
+            } else {
+                match self.decode_term(&encoded.graph_name)? {
+                    Term::NamedNode(named_node) => named_node.into(),
+                    Term::BlankNode(blank_node) => blank_node.into(),
+                    Term::Literal(_) => {
+                        return Err(DecoderError::Decoder {
+                            msg: "A literal is not a valid graph name".to_owned(),
+                        })
+                    }
+                    Term::Triple(_) => {
+                        return Err(DecoderError::Decoder {
+                            msg: "A triple is not a valid graph name".to_owned(),
+                        })
+                    }
+                }
             },
         ))
     }
@@ -1089,6 +1167,7 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::DurationLiteral(value) => Ok(Literal::from(*value).into()),
             EncodedTerm::YearMonthDurationLiteral(value) => Ok(Literal::from(*value).into()),
             EncodedTerm::DayTimeDurationLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::Triple(triple) => Ok(self.decode_triple(triple)?.into()),
         }
     }
 }

@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use oxigraph::model::{Dataset, Graph, NamedNode, Quad, Triple};
+use oxigraph::model::{Dataset, Graph, GraphName, NamedNode, Quad, Triple};
 use oxigraph::store::Store;
 use rand::random;
 use std::iter::FromIterator;
@@ -80,7 +80,7 @@ fn create_quads(size: u64) -> Vec<Quad> {
                     "http://example.com/id/{}",
                     random::<u64>() % size
                 )),
-                None,
+                GraphName::DefaultGraph,
             )
         })
         .collect()

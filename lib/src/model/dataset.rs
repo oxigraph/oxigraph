@@ -29,7 +29,6 @@ use crate::io::{
 use crate::model::interning::*;
 use crate::model::SubjectRef;
 use crate::model::*;
-use lasso::Rodeo;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeSet;
 use std::collections::{HashMap, HashSet};
@@ -66,7 +65,8 @@ use std::{fmt, io};
 /// ```
 #[derive(Debug, Default)]
 pub struct Dataset {
-    interner: Rodeo,
+    interner: Interner,
+    triples: HashMap<InternedTriple, Triple>,
     gspo: BTreeSet<(
         InternedGraphName,
         InternedSubject,
@@ -607,15 +607,32 @@ impl Dataset {
         for (g, s, _, o) in &self.gspo {
             if let InternedSubject::BlankNode(bnode) = s {
                 bnodes.insert(*bnode);
+            } else if let InternedSubject::Triple(triple) = s {
+                self.triple_blank_nodes(triple, &mut bnodes);
             }
             if let InternedTerm::BlankNode(bnode) = o {
                 bnodes.insert(*bnode);
+            } else if let InternedTerm::Triple(triple) = o {
+                self.triple_blank_nodes(triple, &mut bnodes);
             }
             if let InternedGraphName::BlankNode(bnode) = g {
                 bnodes.insert(*bnode);
             }
         }
         bnodes
+    }
+
+    fn triple_blank_nodes(&self, triple: &InternedTriple, bnodes: &mut HashSet<InternedBlankNode>) {
+        if let InternedSubject::BlankNode(bnode) = &triple.subject {
+            bnodes.insert(*bnode);
+        } else if let InternedSubject::Triple(t) = &triple.subject {
+            self.triple_blank_nodes(t, bnodes);
+        }
+        if let InternedTerm::BlankNode(bnode) = &triple.object {
+            bnodes.insert(*bnode);
+        } else if let InternedTerm::Triple(t) = &triple.object {
+            self.triple_blank_nodes(t, bnodes);
+        }
     }
 
     fn hash_bnodes(
@@ -688,7 +705,9 @@ impl Dataset {
         bnodes_hash: &HashMap<InternedBlankNode, u64>,
     ) -> u64 {
         if let InternedSubject::BlankNode(bnode) = node {
-            *bnodes_hash.get(bnode).unwrap()
+            bnodes_hash[bnode]
+        } else if let InternedSubject::Triple(triple) = node {
+            self.hash_triple(triple, bnodes_hash)
         } else {
             self.hash_tuple(node.decode_from(&self.interner))
         }
@@ -696,7 +715,9 @@ impl Dataset {
 
     fn hash_term(&self, term: &InternedTerm, bnodes_hash: &HashMap<InternedBlankNode, u64>) -> u64 {
         if let InternedTerm::BlankNode(bnode) = term {
-            *bnodes_hash.get(bnode).unwrap()
+            bnodes_hash[bnode]
+        } else if let InternedTerm::Triple(triple) = term {
+            self.hash_triple(triple, bnodes_hash)
         } else {
             self.hash_tuple(term.decode_from(&self.interner))
         }
@@ -708,10 +729,22 @@ impl Dataset {
         bnodes_hash: &HashMap<InternedBlankNode, u64>,
     ) -> u64 {
         if let InternedGraphName::BlankNode(bnode) = graph_name {
-            *bnodes_hash.get(bnode).unwrap()
+            bnodes_hash[bnode]
         } else {
             self.hash_tuple(graph_name.decode_from(&self.interner))
         }
+    }
+
+    fn hash_triple(
+        &self,
+        triple: &InternedTriple,
+        bnodes_hash: &HashMap<InternedBlankNode, u64>,
+    ) -> u64 {
+        self.hash_tuple((
+            self.hash_subject(&triple.subject, bnodes_hash),
+            self.hash_named_node(&triple.predicate),
+            self.hash_term(&triple.object, bnodes_hash),
+        ))
     }
 
     fn hash_tuple(&self, v: impl Hash) -> u64 {
@@ -775,12 +808,22 @@ impl Dataset {
                 (
                     if let InternedSubject::BlankNode(bnode) = s {
                         InternedSubject::BlankNode(self.map_bnode(&bnode, hashes))
+                    } else if let InternedSubject::Triple(triple) = s {
+                        InternedSubject::Triple(Box::new(InternedTriple::encoded_into(
+                            self.label_triple(&triple, hashes).as_ref(),
+                            &mut self.interner,
+                        )))
                     } else {
                         s
                     },
                     p,
                     if let InternedTerm::BlankNode(bnode) = o {
                         InternedTerm::BlankNode(self.map_bnode(&bnode, hashes))
+                    } else if let InternedTerm::Triple(triple) = o {
+                        InternedTerm::Triple(Box::new(InternedTriple::encoded_into(
+                            self.label_triple(&triple, hashes).as_ref(),
+                            &mut self.interner,
+                        )))
                     } else {
                         o
                     },
@@ -796,15 +839,47 @@ impl Dataset {
         quads
     }
 
+    fn label_triple(
+        &mut self,
+        triple: &InternedTriple,
+        hashes: &HashMap<InternedBlankNode, u64>,
+    ) -> Triple {
+        Triple {
+            subject: if let InternedSubject::BlankNode(bnode) = &triple.subject {
+                self.gen_bnode(bnode, hashes).into()
+            } else if let InternedSubject::Triple(t) = &triple.subject {
+                self.label_triple(t, hashes).into()
+            } else {
+                triple.subject.decode_from(&self.interner).into_owned()
+            },
+            predicate: triple.predicate.decode_from(&self.interner).into_owned(),
+            object: if let InternedTerm::BlankNode(bnode) = &triple.object {
+                self.gen_bnode(bnode, hashes).into()
+            } else if let InternedTerm::Triple(t) = &triple.object {
+                self.label_triple(t, hashes).into()
+            } else {
+                triple.object.decode_from(&self.interner).into_owned()
+            },
+        }
+    }
+
     fn map_bnode(
         &mut self,
         old_bnode: &InternedBlankNode,
         hashes: &HashMap<InternedBlankNode, u64>,
     ) -> InternedBlankNode {
         InternedBlankNode::encoded_into(
-            BlankNode::new_from_unique_id(*hashes.get(old_bnode).unwrap()).as_ref(),
+            self.gen_bnode(old_bnode, hashes).as_ref(),
             &mut self.interner,
         )
+    }
+
+    fn gen_bnode(
+        &self,
+        old_bnode: &InternedBlankNode,
+        hashes: &HashMap<InternedBlankNode, u64>,
+    ) -> BlankNode {
+        BlankNode::new_from_unique_id(hashes[old_bnode])
     }
 }
 
@@ -1151,10 +1226,13 @@ impl<'a> GraphView<'a> {
 
     /// Checks if the graph contains the given triple
     pub fn contains<'b>(&self, triple: impl Into<TripleRef<'b>>) -> bool {
-        if let Some((s, p, o)) = self.encoded_triple(triple.into()) {
-            self.dataset
-                .gspo
-                .contains(&(self.graph_name.clone(), s, p, o))
+        if let Some(triple) = self.encoded_triple(triple.into()) {
+            self.dataset.gspo.contains(&(
+                self.graph_name.clone(),
+                triple.subject,
+                triple.predicate,
+                triple.object,
+            ))
         } else {
             false
         }
@@ -1195,15 +1273,12 @@ impl<'a> GraphView<'a> {
         writer.finish()
     }
 
-    fn encoded_triple(
-        &self,
-        triple: TripleRef<'_>,
-    ) -> Option<(InternedSubject, InternedNamedNode, InternedTerm)> {
-        Some((
-            self.dataset.encoded_subject(triple.subject)?,
-            self.dataset.encoded_named_node(triple.predicate)?,
-            self.dataset.encoded_term(triple.object)?,
-        ))
+    fn encoded_triple(&self, triple: TripleRef<'_>) -> Option<InternedTriple> {
+        Some(InternedTriple {
+            subject: self.dataset.encoded_subject(triple.subject)?,
+            predicate: self.dataset.encoded_named_node(triple.predicate)?,
+            object: self.dataset.encoded_term(triple.object)?,
+        })
     }
 }
 
@@ -1274,16 +1349,24 @@ impl<'a> GraphViewMut<'a> {
 
     /// Adds a triple to the graph
     pub fn insert<'b>(&mut self, triple: impl Into<TripleRef<'b>>) -> bool {
-        let (s, p, o) = self.encode_triple(triple.into());
-        self.dataset
-            .insert_encoded((s, p, o, self.graph_name.clone()))
+        let triple = self.encode_triple(triple.into());
+        self.dataset.insert_encoded((
+            triple.subject,
+            triple.predicate,
+            triple.object,
+            self.graph_name.clone(),
+        ))
     }
 
     /// Removes a concrete triple from the graph
     pub fn remove<'b>(&mut self, triple: impl Into<TripleRef<'b>>) -> bool {
-        if let Some((s, p, o)) = self.read().encoded_triple(triple.into()) {
-            self.dataset
-                .remove_encoded((s, p, o, self.graph_name.clone()))
+        if let Some(triple) = self.read().encoded_triple(triple.into()) {
+            self.dataset.remove_encoded((
+                triple.subject,
+                triple.predicate,
+                triple.object,
+                self.graph_name.clone(),
+            ))
         } else {
             false
         }
@@ -1332,15 +1415,15 @@ impl<'a> GraphViewMut<'a> {
         Ok(())
     }
 
-    fn encode_triple(
-        &mut self,
-        triple: TripleRef<'_>,
-    ) -> (InternedSubject, InternedNamedNode, InternedTerm) {
-        (
-            InternedSubject::encoded_into(triple.subject, &mut self.dataset.interner),
-            InternedNamedNode::encoded_into(triple.predicate, &mut self.dataset.interner),
-            InternedTerm::encoded_into(triple.object, &mut self.dataset.interner),
-        )
+    fn encode_triple(&mut self, triple: TripleRef<'_>) -> InternedTriple {
+        InternedTriple {
+            subject: InternedSubject::encoded_into(triple.subject, &mut self.dataset.interner),
+            predicate: InternedNamedNode::encoded_into(
+                triple.predicate,
+                &mut self.dataset.interner,
+            ),
+            object: InternedTerm::encoded_into(triple.object, &mut self.dataset.interner),
+        }
     }
 
     /// Returns all the triples contained by the graph

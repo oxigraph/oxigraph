@@ -88,47 +88,7 @@ fn write_solutions(solutions: QuerySolutionIter, sink: impl Write) -> Result<(),
             writer
                 .write_event(Event::Start(binding_tag))
                 .map_err(map_xml_error)?;
-            match value {
-                Term::NamedNode(uri) => {
-                    writer
-                        .write_event(Event::Start(BytesStart::borrowed_name(b"uri")))
-                        .map_err(map_xml_error)?;
-                    writer
-                        .write_event(Event::Text(BytesText::from_plain_str(uri.as_str())))
-                        .map_err(map_xml_error)?;
-                    writer
-                        .write_event(Event::End(BytesEnd::borrowed(b"uri")))
-                        .map_err(map_xml_error)?;
-                }
-                Term::BlankNode(bnode) => {
-                    writer
-                        .write_event(Event::Start(BytesStart::borrowed_name(b"bnode")))
-                        .map_err(map_xml_error)?;
-                    writer
-                        .write_event(Event::Text(BytesText::from_plain_str(bnode.as_str())))
-                        .map_err(map_xml_error)?;
-                    writer
-                        .write_event(Event::End(BytesEnd::borrowed(b"bnode")))
-                        .map_err(map_xml_error)?;
-                }
-                Term::Literal(literal) => {
-                    let mut literal_tag = BytesStart::borrowed_name(b"literal");
-                    if let Some(language) = literal.language() {
-                        literal_tag.push_attribute(("xml:lang", language));
-                    } else if !literal.is_plain() {
-                        literal_tag.push_attribute(("datatype", literal.datatype().as_str()));
-                    }
-                    writer
-                        .write_event(Event::Start(literal_tag))
-                        .map_err(map_xml_error)?;
-                    writer
-                        .write_event(Event::Text(BytesText::from_plain_str(literal.value())))
-                        .map_err(map_xml_error)?;
-                    writer
-                        .write_event(Event::End(BytesEnd::borrowed(b"literal")))
-                        .map_err(map_xml_error)?;
-                }
-            }
+            write_xml_term(value.as_ref(), &mut writer)?;
             writer
                 .write_event(Event::End(BytesEnd::borrowed(b"binding")))
                 .map_err(map_xml_error)?;
@@ -143,6 +103,83 @@ fn write_solutions(solutions: QuerySolutionIter, sink: impl Write) -> Result<(),
     writer
         .write_event(Event::End(BytesEnd::borrowed(b"sparql")))
         .map_err(map_xml_error)?;
+    Ok(())
+}
+
+fn write_xml_term(
+    term: TermRef<'_>,
+    writer: &mut Writer<impl Write>,
+) -> Result<(), EvaluationError> {
+    match term {
+        TermRef::NamedNode(uri) => {
+            writer
+                .write_event(Event::Start(BytesStart::borrowed_name(b"uri")))
+                .map_err(map_xml_error)?;
+            writer
+                .write_event(Event::Text(BytesText::from_plain_str(uri.as_str())))
+                .map_err(map_xml_error)?;
+            writer
+                .write_event(Event::End(BytesEnd::borrowed(b"uri")))
+                .map_err(map_xml_error)?;
+        }
+        TermRef::BlankNode(bnode) => {
+            writer
+                .write_event(Event::Start(BytesStart::borrowed_name(b"bnode")))
+                .map_err(map_xml_error)?;
+            writer
+                .write_event(Event::Text(BytesText::from_plain_str(bnode.as_str())))
+                .map_err(map_xml_error)?;
+            writer
+                .write_event(Event::End(BytesEnd::borrowed(b"bnode")))
+                .map_err(map_xml_error)?;
+        }
+        TermRef::Literal(literal) => {
+            let mut literal_tag = BytesStart::borrowed_name(b"literal");
+            if let Some(language) = literal.language() {
+                literal_tag.push_attribute(("xml:lang", language));
+            } else if !literal.is_plain() {
+                literal_tag.push_attribute(("datatype", literal.datatype().as_str()));
+            }
+            writer
+                .write_event(Event::Start(literal_tag))
+                .map_err(map_xml_error)?;
+            writer
+                .write_event(Event::Text(BytesText::from_plain_str(literal.value())))
+                .map_err(map_xml_error)?;
+            writer
+                .write_event(Event::End(BytesEnd::borrowed(b"literal")))
+                .map_err(map_xml_error)?;
+        }
+        TermRef::Triple(triple) => {
+            writer
+                .write_event(Event::Start(BytesStart::borrowed_name(b"triple")))
+                .map_err(map_xml_error)?;
+            writer
+                .write_event(Event::Start(BytesStart::borrowed_name(b"subject")))
+                .map_err(map_xml_error)?;
+            write_xml_term(triple.subject.as_ref().into(), writer)?;
+            writer
+                .write_event(Event::End(BytesEnd::borrowed(b"subject")))
+                .map_err(map_xml_error)?;
+            writer
+                .write_event(Event::Start(BytesStart::borrowed_name(b"predicate")))
+                .map_err(map_xml_error)?;
+            write_xml_term(triple.predicate.as_ref().into(), writer)?;
+            writer
+                .write_event(Event::End(BytesEnd::borrowed(b"predicate")))
+                .map_err(map_xml_error)?;
+            writer
+                .write_event(Event::Start(BytesStart::borrowed_name(b"object")))
+                .map_err(map_xml_error)?;
+            write_xml_term(triple.object.as_ref(), writer)?;
+            writer
+                .write_event(Event::End(BytesEnd::borrowed(b"object")))
+                .map_err(map_xml_error)?;
+            writer
+                .write_event(Event::End(BytesEnd::borrowed(b"triple")))
+                .map_err(map_xml_error)?;
+        }
+    }
     Ok(())
 }
 

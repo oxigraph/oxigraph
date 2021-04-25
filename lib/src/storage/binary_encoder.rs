@@ -1,10 +1,11 @@
 use crate::error::invalid_data_error;
 use crate::model::xsd::*;
-use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash};
+use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, EncodedTriple, StrHash};
 use crate::storage::small_string::SmallString;
 use std::io;
 use std::io::{Cursor, Read};
 use std::mem::size_of;
+use std::rc::Rc;
 
 pub const LATEST_STORAGE_VERSION: u64 = 1;
 pub const WRITTEN_TERM_MAX_SIZE: usize = size_of::<u8>() + 2 * size_of::<StrHash>();
@@ -13,7 +14,8 @@ pub const WRITTEN_TERM_MAX_SIZE: usize = size_of::<u8>() + 2 * size_of::<StrHash
 // 1-7: usual named nodes (except prefixes c.f. later)
 // 8-15: blank nodes
 // 16-47: literals
-// 48-64: future use
+// 48-55: triples
+// 56-64: future use
 // 64-127: default named node prefixes
 // 128-255: custom named node prefixes
 const TYPE_NAMED_NODE_ID: u8 = 1;
@@ -45,6 +47,7 @@ const TYPE_G_MONTH_LITERAL: u8 = 41;
 const TYPE_DURATION_LITERAL: u8 = 42;
 const TYPE_YEAR_MONTH_DURATION_LITERAL: u8 = 43;
 const TYPE_DAY_TIME_DURATION_LITERAL: u8 = 44;
+const TYPE_TRIPLE: u8 = 48;
 
 #[derive(Clone, Copy)]
 pub enum QuadEncoding {
@@ -396,6 +399,11 @@ impl<R: Read> TermReader for R {
                     DayTimeDuration::from_be_bytes(buffer),
                 ))
             }
+            TYPE_TRIPLE => Ok(EncodedTerm::Triple(Rc::new(EncodedTriple {
+                subject: self.read_term()?,
+                predicate: self.read_term()?,
+                object: self.read_term()?,
+            }))),
             _ => Err(invalid_data_error("the term buffer has an invalid type id")),
         }
     }
@@ -621,6 +629,12 @@ pub fn write_term(sink: &mut Vec<u8>, term: &EncodedTerm) {
             sink.push(TYPE_DAY_TIME_DURATION_LITERAL);
             sink.extend_from_slice(&value.to_be_bytes())
         }
+        EncodedTerm::Triple(value) => {
+            sink.push(TYPE_TRIPLE);
+            write_term(sink, &value.subject);
+            write_term(sink, &value.predicate);
+            write_term(sink, &value.object);
+        }
     }
 }
 
@@ -713,6 +727,12 @@ mod tests {
             Literal::new_typed_literal(
                 "-foo-thisisaverybigtypedliteralwiththefoodatatype",
                 NamedNode::new_unchecked("http://foo.com"),
+            )
+            .into(),
+            Triple::new(
+                NamedNode::new_unchecked("http://foo.com"),
+                NamedNode::new_unchecked("http://bar.com"),
+                Literal::from(true),
             )
             .into(),
         ];

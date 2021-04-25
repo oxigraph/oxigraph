@@ -76,6 +76,31 @@ class TestTriple(unittest.TestCase):
         self.assertEqual(t.predicate, NamedNode("http://example.com/p"))
         self.assertEqual(t.object, NamedNode("http://example.com/o"))
 
+    def test_rdf_star_constructor(self):
+        t = Triple(
+            Triple(
+                NamedNode("http://example.com/ss"),
+                NamedNode("http://example.com/sp"),
+                NamedNode("http://example.com/so")
+            ),
+            NamedNode("http://example.com/p"),
+            Triple(
+                NamedNode("http://example.com/os"),
+                NamedNode("http://example.com/op"),
+                NamedNode("http://example.com/oo")
+            ), )
+        self.assertEqual(t.subject, Triple(
+            NamedNode("http://example.com/ss"),
+            NamedNode("http://example.com/sp"),
+            NamedNode("http://example.com/so")
+        ))
+        self.assertEqual(t.predicate, NamedNode("http://example.com/p"))
+        self.assertEqual(t.object, Triple(
+            NamedNode("http://example.com/os"),
+            NamedNode("http://example.com/op"),
+            NamedNode("http://example.com/oo")
+        ))
+
     def test_mapping(self):
         t = Triple(
             NamedNode("http://example.com/s"),

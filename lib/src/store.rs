@@ -5,14 +5,12 @@
 //! use oxigraph::store::Store;
 //! use oxigraph::sparql::QueryResults;
 //! use oxigraph::model::*;
-//! # use std::fs::remove_dir_all;
 //!
-//! # {
-//! let store = Store::open("example.db")?;
+//! let store = Store::new()?;
 //!
 //! // insertion
 //! let ex = NamedNode::new("http://example.com")?;
-//! let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
+//! let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), GraphName::DefaultGraph);
 //! store.insert(&quad)?;
 //!
 //! // quad filter
@@ -23,9 +21,6 @@
 //! if let QueryResults::Solutions(mut solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }")? {
 //!     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 //! };
-//! #
-//! # };
-//! # remove_dir_all("example.db")?;
 //! # Result::<_,Box<dyn std::error::Error>>::Ok(())
 //! ```
 
@@ -69,7 +64,7 @@ use std::{fmt, io, str};
 ///
 /// // insertion
 /// let ex = NamedNode::new("http://example.com")?;
-/// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
+/// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), GraphName::DefaultGraph);
 /// store.insert(&quad)?;
 ///
 /// // quad filter
@@ -119,7 +114,7 @@ impl Store {
     ///
     /// // insertions
     /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// store.insert(QuadRef::new(ex, ex, ex, None))?;
+    /// store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;
     ///
     /// // SPARQL query
     /// if let QueryResults::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { ?s ?p ?o }")? {
@@ -154,7 +149,7 @@ impl Store {
     ///
     /// // insertion
     /// let ex = NamedNode::new("http://example.com")?;
-    /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), None);
+    /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), GraphName::DefaultGraph);
     /// store.insert(&quad)?;
     ///
     /// // quad filter by object
@@ -220,7 +215,7 @@ impl Store {
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com").unwrap();
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, None))?);
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn update(
@@ -298,7 +293,7 @@ impl Store {
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, None))?);
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     ///
@@ -441,12 +436,12 @@ impl Store {
     /// Usage example:
     /// ```
     /// use oxigraph::store::Store;
-    /// use oxigraph::model::{NamedNode, QuadRef, Subject};
+    /// use oxigraph::model::*;
     ///
     /// let ex = NamedNode::new("http://example.com")?;
     /// let store = Store::new()?;
     /// store.insert(QuadRef::new(&ex, &ex, &ex, &ex))?;
-    /// store.insert(QuadRef::new(&ex, &ex, &ex, None))?;
+    /// store.insert(QuadRef::new(&ex, &ex, &ex, GraphNameRef::DefaultGraph))?;
     /// assert_eq!(vec![Subject::from(ex)], store.named_graphs().collect::<Result<Vec<_>,_>>()?);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -560,12 +555,12 @@ impl Store {
     /// Usage example:
     /// ```
     /// use oxigraph::store::Store;
-    /// use oxigraph::model::{NamedNodeRef, QuadRef};
+    /// use oxigraph::model::*;
     ///
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let store = Store::new()?;
     /// store.insert(QuadRef::new(ex, ex, ex, ex))?;
-    /// store.insert(QuadRef::new(ex, ex, ex, None))?;    
+    /// store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;    
     /// assert_eq!(2, store.len());
     ///
     /// store.clear()?;
@@ -616,7 +611,7 @@ impl Transaction<'_> {
     ///
     /// // we inspect the store content
     /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, None))?);
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     ///
@@ -769,7 +764,12 @@ fn store() -> Result<(), io::Error> {
     let main_o = Term::from(Literal::from(1));
     let main_g = GraphName::from(BlankNode::default());
 
-    let default_quad = Quad::new(main_s.clone(), main_p.clone(), main_o.clone(), None);
+    let default_quad = Quad::new(
+        main_s.clone(),
+        main_p.clone(),
+        main_o.clone(),
+        GraphName::DefaultGraph,
+    );
     let named_quad = Quad::new(
         main_s.clone(),
         main_p.clone(),
@@ -777,23 +777,33 @@ fn store() -> Result<(), io::Error> {
         main_g.clone(),
     );
     let default_quads = vec![
-        Quad::new(main_s.clone(), main_p.clone(), Literal::from(0), None),
+        Quad::new(
+            main_s.clone(),
+            main_p.clone(),
+            Literal::from(0),
+            GraphName::DefaultGraph,
+        ),
         default_quad.clone(),
         Quad::new(
             main_s.clone(),
             main_p.clone(),
             Literal::from(200000000),
-            None,
+            GraphName::DefaultGraph,
         ),
     ];
     let all_quads = vec![
-        Quad::new(main_s.clone(), main_p.clone(), Literal::from(0), None),
+        Quad::new(
+            main_s.clone(),
+            main_p.clone(),
+            Literal::from(0),
+            GraphName::DefaultGraph,
+        ),
         default_quad.clone(),
         Quad::new(
             main_s.clone(),
             main_p.clone(),
             Literal::from(200000000),
-            None,
+            GraphName::DefaultGraph,
         ),
         named_quad.clone(),
     ];

@@ -191,26 +191,26 @@ impl<'a> From<GraphNameRef<'a>> for Option<TermRef<'a>> {
 
 impl TTerm for Subject {
     fn kind(&self) -> TermKind {
-        use Subject::*;
         match self {
-            NamedNode(_) => TermKind::Iri,
-            BlankNode(_) => TermKind::BlankNode,
+            Self::NamedNode(_) => TermKind::Iri,
+            Self::BlankNode(_) => TermKind::BlankNode,
+            Self::Triple(_) => panic!("RDF-star is not supported yet by Sophia"),
         }
     }
 
     fn value_raw(&self) -> RawValue<'_> {
-        use Subject::*;
         match self {
-            NamedNode(n) => n.value_raw(),
-            BlankNode(n) => n.value_raw(),
+            Self::NamedNode(n) => n.value_raw(),
+            Self::BlankNode(n) => n.value_raw(),
+            Self::Triple(_) => panic!("RDF-star is not supported yet by Sophia"),
         }
     }
 
     fn as_dyn(&self) -> &dyn TTerm {
-        use Subject::*;
         match self {
-            NamedNode(n) => n.as_dyn(),
-            BlankNode(n) => n.as_dyn(),
+            Self::NamedNode(n) => n.as_dyn(),
+            Self::BlankNode(n) => n.as_dyn(),
+            Self::Triple(_) => panic!("RDF-star is not supported yet by Sophia"),
         }
     }
 }
@@ -232,71 +232,71 @@ impl TryCopyTerm for Subject {
 
 impl<'a> TTerm for SubjectRef<'a> {
     fn kind(&self) -> TermKind {
-        use SubjectRef::*;
         match self {
-            NamedNode(_) => TermKind::Iri,
-            BlankNode(_) => TermKind::BlankNode,
+            Self::NamedNode(_) => TermKind::Iri,
+            Self::BlankNode(_) => TermKind::BlankNode,
+            Self::Triple(_) => panic!("RDF-star is not supported yet by Sophia"),
         }
     }
 
     fn value_raw(&self) -> RawValue<'_> {
-        use SubjectRef::*;
         match self {
-            NamedNode(n) => n.value_raw(),
-            BlankNode(n) => n.value_raw(),
+            Self::NamedNode(n) => n.value_raw(),
+            Self::BlankNode(n) => n.value_raw(),
+            Self::Triple(_) => panic!("RDF-star is not supported yet by Sophia"),
         }
     }
 
     fn as_dyn(&self) -> &dyn TTerm {
-        use SubjectRef::*;
         match self {
-            NamedNode(n) => n.as_dyn(),
-            BlankNode(n) => n.as_dyn(),
+            Self::NamedNode(n) => n.as_dyn(),
+            Self::BlankNode(n) => n.as_dyn(),
+            Self::Triple(_) => panic!("RDF-star is not supported yet by Sophia"),
         }
     }
 }
 
 impl TTerm for Term {
     fn kind(&self) -> TermKind {
-        use Term::*;
         match self {
-            NamedNode(_) => TermKind::Iri,
-            BlankNode(_) => TermKind::BlankNode,
-            Literal(_) => TermKind::Literal,
+            Self::NamedNode(_) => TermKind::Iri,
+            Self::BlankNode(_) => TermKind::BlankNode,
+            Self::Literal(_) => TermKind::Literal,
+            Self::Triple(_) => panic!("RDF-star is not supported yet by Sophia"),
         }
     }
 
     fn value_raw(&self) -> RawValue<'_> {
-        use Term::*;
         match self {
-            NamedNode(n) => n.value_raw(),
-            BlankNode(n) => n.value_raw(),
-            Literal(l) => l.value_raw(),
+            Self::NamedNode(n) => n.value_raw(),
+            Self::BlankNode(n) => n.value_raw(),
+            Self::Literal(l) => l.value_raw(),
+            Self::Triple(_) => panic!("RDF-star is not supported yet by Sophia"),
         }
     }
 
     fn datatype(&self) -> Option<SimpleIri<'_>> {
-        use Term::*;
-        match self {
-            Literal(l) => TTerm::datatype(l),
-            _ => None,
+        if let Self::Literal(l) = self {
+            TTerm::datatype(l)
+        } else {
+            None
         }
     }
 
     fn language(&self) -> Option<&str> {
-        use Term::*;
-        match self {
-            Literal(l) => TTerm::language(l),
-            _ => None,
+        if let Self::Literal(l) = self {
+            TTerm::language(l)
+        } else {
+            None
         }
     }
 
     fn as_dyn(&self) -> &dyn TTerm {
-        use Term::*;
         match self {
-            NamedNode(n) => n.as_dyn(),
-            BlankNode(n) => n.as_dyn(),
-            Literal(l) => l.as_dyn(),
+            Self::NamedNode(n) => n.as_dyn(),
+            Self::BlankNode(n) => n.as_dyn(),
+            Self::Literal(l) => l.as_dyn(),
+            Self::Triple(_) => panic!("RDF-star is not supported yet by Sophia"),
         }
     }
 }
@@ -319,45 +319,45 @@ impl TryCopyTerm for Term {
 
 impl<'a> TTerm for TermRef<'a> {
     fn kind(&self) -> TermKind {
-        use TermRef::*;
         match self {
-            NamedNode(_) => TermKind::Iri,
-            BlankNode(_) => TermKind::BlankNode,
-            Literal(_) => TermKind::Literal,
+            Self::NamedNode(_) => TermKind::Iri,
+            Self::BlankNode(_) => TermKind::BlankNode,
+            Self::Literal(_) => TermKind::Literal,
+            Self::Triple(_) => panic!("RDF-star is not supported yet by Sophia"),
         }
     }
 
     fn value_raw(&self) -> RawValue<'_> {
-        use TermRef::*;
         match self {
-            NamedNode(n) => n.value_raw(),
-            BlankNode(n) => n.value_raw(),
-            Literal(l) => l.value_raw(),
+            Self::NamedNode(n) => n.value_raw(),
+            Self::BlankNode(n) => n.value_raw(),
+            Self::Literal(l) => l.value_raw(),
+            Self::Triple(_) => panic!("RDF-star is not supported yet by Sophia"),
         }
     }
 
     fn datatype(&self) -> Option<SimpleIri<'_>> {
-        use TermRef::*;
-        match self {
-            Literal(l) => TTerm::datatype(l),
-            _ => None,
+        if let Self::Literal(l) = self {
+            TTerm::datatype(l)
+        } else {
+            None
         }
     }
 
     fn language(&self) -> Option<&str> {
-        use TermRef::*;
-        match self {
-            Literal(l) => TTerm::language(l),
-            _ => None,
+        if let Self::Literal(l) = self {
+            TTerm::language(l)
+        } else {
+            None
         }
     }
 
     fn as_dyn(&self) -> &dyn TTerm {
-        use TermRef::*;
         match self {
-            NamedNode(n) => n.as_dyn(),
-            BlankNode(n) => n.as_dyn(),
-            Literal(l) => l.as_dyn(),
+            Self::NamedNode(n) => n.as_dyn(),
+            Self::BlankNode(n) => n.as_dyn(),
+            Self::Literal(l) => l.as_dyn(),
+            Self::Triple(_) => panic!("RDF-star is not supported yet by Sophia"),
         }
     }
 }

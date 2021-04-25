@@ -129,7 +129,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                 .into_iter()
                 .map(|t| {
                     Ok(if let Some(t) = t {
-                        let r: Result<_, EvaluationError> = t.on_each_id(|id| {
+                        let r: Result<_, EvaluationError> = t.on_each_id(&mut |id| {
                             self.storage.insert_str(
                                 id,
                                 &dataset.get_str(id)?.ok_or_else(|| {

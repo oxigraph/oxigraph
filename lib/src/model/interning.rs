@@ -2,7 +2,14 @@
 
 use crate::model::*;
 use lasso::{Key, Rodeo, Spur};
+use std::collections::HashMap;
 use std::convert::TryInto;
+
+#[derive(Debug, Default)]
+pub struct Interner {
+    strings: Rodeo,
+    triples: HashMap<InternedTriple, Triple>,
+}
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct InternedNamedNode {
@@ -10,20 +17,20 @@ pub struct InternedNamedNode {
 }
 
 impl InternedNamedNode {
-    pub fn encoded_into(named_node: NamedNodeRef<'_>, interner: &mut Rodeo) -> Self {
+    pub fn encoded_into(named_node: NamedNodeRef<'_>, interner: &mut Interner) -> Self {
         Self {
-            id: interner.get_or_intern(named_node.as_str()),
+            id: interner.strings.get_or_intern(named_node.as_str()),
         }
     }
 
-    pub fn encoded_from(named_node: NamedNodeRef<'_>, interner: &Rodeo) -> Option<Self> {
+    pub fn encoded_from(named_node: NamedNodeRef<'_>, interner: &Interner) -> Option<Self> {
         Some(Self {
-            id: interner.get(named_node.as_str())?,
+            id: interner.strings.get(named_node.as_str())?,
         })
     }
 
-    pub fn decode_from<'a>(&self, interner: &'a Rodeo) -> NamedNodeRef<'a> {
-        NamedNodeRef::new_unchecked(interner.resolve(&self.id))
+    pub fn decode_from<'a>(&self, interner: &'a Interner) -> NamedNodeRef<'a> {
+        NamedNodeRef::new_unchecked(interner.strings.resolve(&self.id))
     }
 
     pub fn first() -> Self {
@@ -49,20 +56,20 @@ pub struct InternedBlankNode {
 }
 
 impl InternedBlankNode {
-    pub fn encoded_into(blank_node: BlankNodeRef<'_>, interner: &mut Rodeo) -> Self {
+    pub fn encoded_into(blank_node: BlankNodeRef<'_>, interner: &mut Interner) -> Self {
         Self {
-            id: interner.get_or_intern(blank_node.as_str()),
+            id: interner.strings.get_or_intern(blank_node.as_str()),
         }
     }
 
-    pub fn encoded_from(blank_node: BlankNodeRef<'_>, interner: &Rodeo) -> Option<Self> {
+    pub fn encoded_from(blank_node: BlankNodeRef<'_>, interner: &Interner) -> Option<Self> {
         Some(Self {
-            id: interner.get(blank_node.as_str())?,
+            id: interner.strings.get(blank_node.as_str())?,
         })
     }
 
-    pub fn decode_from<'a>(&self, interner: &'a Rodeo) -> BlankNodeRef<'a> {
-        BlankNodeRef::new_unchecked(interner.resolve(&self.id))
+    pub fn decode_from<'a>(&self, interner: &'a Interner) -> BlankNodeRef<'a> {
+        BlankNodeRef::new_unchecked(interner.strings.resolve(&self.id))
     }
 
     pub fn next(&self) -> Self {
@@ -88,13 +95,13 @@ pub enum InternedLiteral {
 }
 
 impl InternedLiteral {
-    pub fn encoded_into(literal: LiteralRef<'_>, interner: &mut Rodeo) -> Self {
-        let value_id = interner.get_or_intern(literal.value());
+    pub fn encoded_into(literal: LiteralRef<'_>, interner: &mut Interner) -> Self {
+        let value_id = interner.strings.get_or_intern(literal.value());
         if literal.is_plain() {
             if let Some(language) = literal.language() {
                 Self::LanguageTaggedString {
                     value_id,
-                    language_id: interner.get_or_intern(language),
+                    language_id: interner.strings.get_or_intern(language),
                 }
             } else {
                 Self::String { value_id }
@@ -107,13 +114,13 @@ impl InternedLiteral {
         }
     }
 
-    pub fn encoded_from(literal: LiteralRef<'_>, interner: &Rodeo) -> Option<Self> {
-        let value_id = interner.get(literal.value())?;
+    pub fn encoded_from(literal: LiteralRef<'_>, interner: &Interner) -> Option<Self> {
+        let value_id = interner.strings.get(literal.value())?;
         Some(if literal.is_plain() {
             if let Some(language) = literal.language() {
                 Self::LanguageTaggedString {
                     value_id,
-                    language_id: interner.get(language)?,
+                    language_id: interner.strings.get(language)?,
                 }
             } else {
                 Self::String { value_id }
@@ -126,20 +133,20 @@ impl InternedLiteral {
         })
     }
 
-    pub fn decode_from<'a>(&self, interner: &'a Rodeo) -> LiteralRef<'a> {
+    pub fn decode_from<'a>(&self, interner: &'a Interner) -> LiteralRef<'a> {
         match self {
             InternedLiteral::String { value_id } => {
-                LiteralRef::new_simple_literal(interner.resolve(value_id))
+                LiteralRef::new_simple_literal(interner.strings.resolve(value_id))
             }
             InternedLiteral::LanguageTaggedString {
                 value_id,
                 language_id,
             } => LiteralRef::new_language_tagged_literal_unchecked(
-                interner.resolve(value_id),
-                interner.resolve(language_id),
+                interner.strings.resolve(value_id),
+                interner.strings.resolve(language_id),
             ),
             InternedLiteral::TypedLiteral { value_id, datatype } => LiteralRef::new_typed_literal(
-                interner.resolve(value_id),
+                interner.strings.resolve(value_id),
                 datatype.decode_from(interner),
             ),
         }
@@ -169,10 +176,11 @@ impl InternedLiteral {
 pub enum InternedSubject {
     NamedNode(InternedNamedNode),
     BlankNode(InternedBlankNode),
+    Triple(Box<InternedTriple>),
 }
 
 impl InternedSubject {
-    pub fn encoded_into(node: SubjectRef<'_>, interner: &mut Rodeo) -> Self {
+    pub fn encoded_into(node: SubjectRef<'_>, interner: &mut Interner) -> Self {
         match node {
             SubjectRef::NamedNode(node) => {
                 Self::NamedNode(InternedNamedNode::encoded_into(node, interner))
@@ -180,10 +188,14 @@ impl InternedSubject {
             SubjectRef::BlankNode(node) => {
                 Self::BlankNode(InternedBlankNode::encoded_into(node, interner))
             }
+            SubjectRef::Triple(triple) => Self::Triple(Box::new(InternedTriple::encoded_into(
+                triple.as_ref(),
+                interner,
+            ))),
         }
     }
 
-    pub fn encoded_from(node: SubjectRef<'_>, interner: &Rodeo) -> Option<Self> {
+    pub fn encoded_from(node: SubjectRef<'_>, interner: &Interner) -> Option<Self> {
         Some(match node {
             SubjectRef::NamedNode(node) => {
                 Self::NamedNode(InternedNamedNode::encoded_from(node, interner)?)
@@ -191,13 +203,18 @@ impl InternedSubject {
             SubjectRef::BlankNode(node) => {
                 Self::BlankNode(InternedBlankNode::encoded_from(node, interner)?)
             }
+            SubjectRef::Triple(triple) => Self::Triple(Box::new(InternedTriple::encoded_from(
+                triple.as_ref(),
+                interner,
+            )?)),
         })
     }
 
-    pub fn decode_from<'a>(&self, interner: &'a Rodeo) -> SubjectRef<'a> {
+    pub fn decode_from<'a>(&self, interner: &'a Interner) -> SubjectRef<'a> {
         match self {
             Self::NamedNode(node) => SubjectRef::NamedNode(node.decode_from(interner)),
             Self::BlankNode(node) => SubjectRef::BlankNode(node.decode_from(interner)),
+            Self::Triple(triple) => SubjectRef::Triple(&interner.triples[triple.as_ref()]),
         }
     }
 
@@ -209,6 +226,7 @@ impl InternedSubject {
         match self {
             Self::NamedNode(node) => Self::NamedNode(node.next()),
             Self::BlankNode(node) => Self::BlankNode(node.next()),
+            Self::Triple(triple) => Self::Triple(Box::new(triple.next())),
         }
     }
 
@@ -225,7 +243,7 @@ pub enum InternedGraphName {
 }
 
 impl InternedGraphName {
-    pub fn encoded_into(node: GraphNameRef<'_>, interner: &mut Rodeo) -> Self {
+    pub fn encoded_into(node: GraphNameRef<'_>, interner: &mut Interner) -> Self {
         match node {
             GraphNameRef::DefaultGraph => Self::DefaultGraph,
             GraphNameRef::NamedNode(node) => {
@@ -237,7 +255,7 @@ impl InternedGraphName {
         }
     }
 
-    pub fn encoded_from(node: GraphNameRef<'_>, interner: &Rodeo) -> Option<Self> {
+    pub fn encoded_from(node: GraphNameRef<'_>, interner: &Interner) -> Option<Self> {
         Some(match node {
             GraphNameRef::DefaultGraph => Self::DefaultGraph,
             GraphNameRef::NamedNode(node) => {
@@ -249,7 +267,7 @@ impl InternedGraphName {
         })
     }
 
-    pub fn decode_from<'a>(&self, interner: &'a Rodeo) -> GraphNameRef<'a> {
+    pub fn decode_from<'a>(&self, interner: &'a Interner) -> GraphNameRef<'a> {
         match self {
             Self::DefaultGraph => GraphNameRef::DefaultGraph,
             Self::NamedNode(node) => GraphNameRef::NamedNode(node.decode_from(interner)),
@@ -279,10 +297,11 @@ pub enum InternedTerm {
     NamedNode(InternedNamedNode),
     BlankNode(InternedBlankNode),
     Literal(InternedLiteral),
+    Triple(Box<InternedTriple>),
 }
 
 impl InternedTerm {
-    pub fn encoded_into(term: TermRef<'_>, interner: &mut Rodeo) -> Self {
+    pub fn encoded_into(term: TermRef<'_>, interner: &mut Interner) -> Self {
         match term {
             TermRef::NamedNode(term) => {
                 Self::NamedNode(InternedNamedNode::encoded_into(term, interner))
@@ -291,10 +310,14 @@ impl InternedTerm {
                 Self::BlankNode(InternedBlankNode::encoded_into(term, interner))
             }
             TermRef::Literal(term) => Self::Literal(InternedLiteral::encoded_into(term, interner)),
+            TermRef::Triple(triple) => Self::Triple(Box::new(InternedTriple::encoded_into(
+                triple.as_ref(),
+                interner,
+            ))),
         }
     }
 
-    pub fn encoded_from(term: TermRef<'_>, interner: &Rodeo) -> Option<Self> {
+    pub fn encoded_from(term: TermRef<'_>, interner: &Interner) -> Option<Self> {
         Some(match term {
             TermRef::NamedNode(term) => {
                 Self::NamedNode(InternedNamedNode::encoded_from(term, interner)?)
@@ -303,14 +326,19 @@ impl InternedTerm {
                 Self::BlankNode(InternedBlankNode::encoded_from(term, interner)?)
             }
             TermRef::Literal(term) => Self::Literal(InternedLiteral::encoded_from(term, interner)?),
+            TermRef::Triple(triple) => Self::Triple(Box::new(InternedTriple::encoded_from(
+                triple.as_ref(),
+                interner,
+            )?)),
         })
     }
 
-    pub fn decode_from<'a>(&self, interner: &'a Rodeo) -> TermRef<'a> {
+    pub fn decode_from<'a>(&self, interner: &'a Interner) -> TermRef<'a> {
         match self {
             Self::NamedNode(term) => TermRef::NamedNode(term.decode_from(interner)),
             Self::BlankNode(term) => TermRef::BlankNode(term.decode_from(interner)),
             Self::Literal(term) => TermRef::Literal(term.decode_from(interner)),
+            Self::Triple(triple) => TermRef::Triple(&interner.triples[triple.as_ref()]),
         }
     }
 
@@ -323,11 +351,54 @@ impl InternedTerm {
             Self::NamedNode(node) => Self::NamedNode(node.next()),
             Self::BlankNode(node) => Self::BlankNode(node.next()),
             Self::Literal(node) => Self::Literal(node.next()),
+            Self::Triple(triple) => Self::Triple(Box::new(triple.next())),
         }
     }
 
     pub fn impossible() -> Self {
         Self::NamedNode(InternedNamedNode::impossible())
+    }
+}
+
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+pub struct InternedTriple {
+    pub subject: InternedSubject,
+    pub predicate: InternedNamedNode,
+    pub object: InternedTerm,
+}
+
+impl InternedTriple {
+    pub fn encoded_into(triple: TripleRef<'_>, interner: &mut Interner) -> Self {
+        let interned_triple = Self {
+            subject: InternedSubject::encoded_into(triple.subject, interner),
+            predicate: InternedNamedNode::encoded_into(triple.predicate, interner),
+            object: InternedTerm::encoded_into(triple.object, interner),
+        };
+        interner
+            .triples
+            .insert(interned_triple.clone(), triple.into_owned());
+        interned_triple
+    }
+
+    pub fn encoded_from(triple: TripleRef<'_>, interner: &Interner) -> Option<Self> {
+        let interned_triple = Self {
+            subject: InternedSubject::encoded_from(triple.subject, interner)?,
+            predicate: InternedNamedNode::encoded_from(triple.predicate, interner)?,
+            object: InternedTerm::encoded_from(triple.object, interner)?,
+        };
+        if interner.triples.contains_key(&interned_triple) {
+            Some(interned_triple)
+        } else {
+            None
+        }
+    }
+
+    pub fn next(&self) -> Self {
+        Self {
+            subject: self.subject.clone(),
+            predicate: self.predicate,
+            object: self.object.next(),
+        }
     }
 }
 
