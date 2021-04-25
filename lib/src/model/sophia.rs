@@ -189,9 +189,9 @@ impl<'a> From<GraphNameRef<'a>> for Option<TermRef<'a>> {
     }
 }
 
-impl TTerm for NamedOrBlankNode {
+impl TTerm for Subject {
     fn kind(&self) -> TermKind {
-        use NamedOrBlankNode::*;
+        use Subject::*;
         match self {
             NamedNode(_) => TermKind::Iri,
             BlankNode(_) => TermKind::BlankNode,
@@ -199,7 +199,7 @@ impl TTerm for NamedOrBlankNode {
     }
 
     fn value_raw(&self) -> RawValue<'_> {
-        use NamedOrBlankNode::*;
+        use Subject::*;
         match self {
             NamedNode(n) => n.value_raw(),
             BlankNode(n) => n.value_raw(),
@@ -207,7 +207,7 @@ impl TTerm for NamedOrBlankNode {
     }
 
     fn as_dyn(&self) -> &dyn TTerm {
-        use NamedOrBlankNode::*;
+        use Subject::*;
         match self {
             NamedNode(n) => n.as_dyn(),
             BlankNode(n) => n.as_dyn(),
@@ -215,7 +215,7 @@ impl TTerm for NamedOrBlankNode {
     }
 }
 
-impl TryCopyTerm for NamedOrBlankNode {
+impl TryCopyTerm for Subject {
     type Error = SophiaToOxigraphConversionError;
 
     fn try_copy<T>(other: &T) -> Result<Self, Self::Error>
@@ -230,9 +230,9 @@ impl TryCopyTerm for NamedOrBlankNode {
     }
 }
 
-impl<'a> TTerm for NamedOrBlankNodeRef<'a> {
+impl<'a> TTerm for SubjectRef<'a> {
     fn kind(&self) -> TermKind {
-        use NamedOrBlankNodeRef::*;
+        use SubjectRef::*;
         match self {
             NamedNode(_) => TermKind::Iri,
             BlankNode(_) => TermKind::BlankNode,
@@ -240,7 +240,7 @@ impl<'a> TTerm for NamedOrBlankNodeRef<'a> {
     }
 
     fn value_raw(&self) -> RawValue<'_> {
-        use NamedOrBlankNodeRef::*;
+        use SubjectRef::*;
         match self {
             NamedNode(n) => n.value_raw(),
             BlankNode(n) => n.value_raw(),
@@ -248,7 +248,7 @@ impl<'a> TTerm for NamedOrBlankNodeRef<'a> {
     }
 
     fn as_dyn(&self) -> &dyn TTerm {
-        use NamedOrBlankNodeRef::*;
+        use SubjectRef::*;
         match self {
             NamedNode(n) => n.as_dyn(),
             BlankNode(n) => n.as_dyn(),

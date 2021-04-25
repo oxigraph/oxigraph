@@ -330,7 +330,7 @@ impl<'a> RioMapper {
         }
     }
 
-    fn named_or_blank_node(&mut self, node: rio::NamedOrBlankNode<'a>) -> NamedOrBlankNode {
+    fn subject(&mut self, node: rio::NamedOrBlankNode<'a>) -> Subject {
         match node {
             rio::NamedOrBlankNode::NamedNode(node) => self.named_node(node).into(),
             rio::NamedOrBlankNode::BlankNode(node) => self.blank_node(node).into(),
@@ -347,7 +347,7 @@ impl<'a> RioMapper {
 
     fn triple(&mut self, triple: &rio::Triple<'a>) -> Triple {
         Triple {
-            subject: self.named_or_blank_node(triple.subject),
+            subject: self.subject(triple.subject),
             predicate: self.named_node(triple.predicate),
             object: self.term(triple.object),
         }
@@ -363,7 +363,7 @@ impl<'a> RioMapper {
 
     fn quad(&mut self, quad: &rio::Quad<'a>) -> Quad {
         Quad {
-            subject: self.named_or_blank_node(quad.subject),
+            subject: self.subject(quad.subject),
             predicate: self.named_node(quad.predicate),
             object: self.term(quad.object),
             graph_name: self.graph_name(quad.graph_name),

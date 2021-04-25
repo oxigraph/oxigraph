@@ -385,11 +385,11 @@ impl PyStore {
             PyGraphNameRef::DefaultGraph => Ok(()),
             PyGraphNameRef::NamedNode(graph_name) => self
                 .inner
-                .insert_named_graph(&PyNamedOrBlankNodeRef::NamedNode(graph_name))
+                .insert_named_graph(&PySubjectRef::NamedNode(graph_name))
                 .map(|_| ()),
             PyGraphNameRef::BlankNode(graph_name) => self
                 .inner
-                .insert_named_graph(&PyNamedOrBlankNodeRef::BlankNode(graph_name))
+                .insert_named_graph(&PySubjectRef::BlankNode(graph_name))
                 .map(|_| ()),
         }
         .map_err(map_io_err)
@@ -414,11 +414,11 @@ impl PyStore {
             PyGraphNameRef::DefaultGraph => self.inner.clear_graph(GraphNameRef::DefaultGraph),
             PyGraphNameRef::NamedNode(graph_name) => self
                 .inner
-                .remove_named_graph(&PyNamedOrBlankNodeRef::NamedNode(graph_name))
+                .remove_named_graph(&PySubjectRef::NamedNode(graph_name))
                 .map(|_| ()),
             PyGraphNameRef::BlankNode(graph_name) => self
                 .inner
-                .remove_named_graph(&PyNamedOrBlankNodeRef::BlankNode(graph_name))
+                .remove_named_graph(&PySubjectRef::BlankNode(graph_name))
                 .map(|_| ()),
         }
         .map_err(map_io_err)?;
@@ -487,7 +487,7 @@ impl PyIterProtocol for GraphNameIter {
         slf.into()
     }
 
-    fn __next__(mut slf: PyRefMut<Self>) -> PyResult<Option<PyNamedOrBlankNode>> {
+    fn __next__(mut slf: PyRefMut<Self>) -> PyResult<Option<PySubject>> {
         slf.inner
             .next()
             .map(|q| Ok(q.map_err(map_io_err)?.into()))
@@ -501,7 +501,7 @@ pub fn extract_quads_pattern<'a>(
     object: &'a PyAny,
     graph_name: Option<&'a PyAny>,
 ) -> PyResult<(
-    Option<PyNamedOrBlankNodeRef<'a>>,
+    Option<PySubjectRef<'a>>,
     Option<PyNamedNodeRef<'a>>,
     Option<PyTermRef<'a>>,
     Option<PyGraphNameRef<'a>>,

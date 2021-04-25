@@ -27,7 +27,7 @@ use crate::io::{
     DatasetFormat, DatasetParser, DatasetSerializer, GraphFormat, GraphParser, GraphSerializer,
 };
 use crate::model::interning::*;
-use crate::model::NamedOrBlankNodeRef;
+use crate::model::SubjectRef;
 use crate::model::*;
 use lasso::Rodeo;
 use std::collections::hash_map::DefaultHasher;
@@ -69,7 +69,7 @@ pub struct Dataset {
     interner: Rodeo,
     gspo: BTreeSet<(
         InternedGraphName,
-        InternedNamedOrBlankNode,
+        InternedSubject,
         InternedNamedNode,
         InternedTerm,
     )>,
@@ -77,16 +77,16 @@ pub struct Dataset {
         InternedGraphName,
         InternedNamedNode,
         InternedTerm,
-        InternedNamedOrBlankNode,
+        InternedSubject,
     )>,
     gosp: BTreeSet<(
         InternedGraphName,
         InternedTerm,
-        InternedNamedOrBlankNode,
+        InternedSubject,
         InternedNamedNode,
     )>,
     spog: BTreeSet<(
-        InternedNamedOrBlankNode,
+        InternedSubject,
         InternedNamedNode,
         InternedTerm,
         InternedGraphName,
@@ -94,12 +94,12 @@ pub struct Dataset {
     posg: BTreeSet<(
         InternedNamedNode,
         InternedTerm,
-        InternedNamedOrBlankNode,
+        InternedSubject,
         InternedGraphName,
     )>,
     ospg: BTreeSet<(
         InternedTerm,
-        InternedNamedOrBlankNode,
+        InternedSubject,
         InternedNamedNode,
         InternedGraphName,
     )>,
@@ -177,21 +177,21 @@ impl Dataset {
 
     pub fn quads_for_subject<'a, 'b>(
         &'a self,
-        subject: impl Into<NamedOrBlankNodeRef<'b>>,
+        subject: impl Into<SubjectRef<'b>>,
     ) -> impl Iterator<Item = QuadRef<'a>> + 'a {
         let subject = self
-            .encoded_named_or_blank_node(subject)
-            .unwrap_or_else(InternedNamedOrBlankNode::impossible);
+            .encoded_subject(subject)
+            .unwrap_or_else(InternedSubject::impossible);
         self.interned_quads_for_subject(subject)
             .map(move |q| self.decode_spog(q))
     }
 
     fn interned_quads_for_subject(
         &self,
-        subject: InternedNamedOrBlankNode,
+        subject: InternedSubject,
     ) -> impl Iterator<
         Item = (
-            InternedNamedOrBlankNode,
+            InternedSubject,
             InternedNamedNode,
             InternedTerm,
             InternedGraphName,
@@ -231,7 +231,7 @@ impl Dataset {
         predicate: InternedNamedNode,
     ) -> impl Iterator<
         Item = (
-            InternedNamedOrBlankNode,
+            InternedSubject,
             InternedNamedNode,
             InternedTerm,
             InternedGraphName,
@@ -242,13 +242,13 @@ impl Dataset {
                 &(
                     predicate,
                     InternedTerm::first(),
-                    InternedNamedOrBlankNode::first(),
+                    InternedSubject::first(),
                     InternedGraphName::first(),
                 )
                     ..&(
                         predicate.next(),
                         InternedTerm::first(),
-                        InternedNamedOrBlankNode::first(),
+                        InternedSubject::first(),
                         InternedGraphName::first(),
                     ),
             )
@@ -273,7 +273,7 @@ impl Dataset {
         object: InternedTerm,
     ) -> impl Iterator<
         Item = (
-            InternedNamedOrBlankNode,
+            InternedSubject,
             InternedNamedNode,
             InternedTerm,
             InternedGraphName,
@@ -283,13 +283,13 @@ impl Dataset {
             .range(
                 &(
                     object,
-                    InternedNamedOrBlankNode::first(),
+                    InternedSubject::first(),
                     InternedNamedNode::first(),
                     InternedGraphName::first(),
                 )
                     ..&(
                         object.next(),
-                        InternedNamedOrBlankNode::first(),
+                        InternedSubject::first(),
                         InternedNamedNode::first(),
                         InternedGraphName::first(),
                     ),
@@ -303,7 +303,7 @@ impl Dataset {
         graph_name: InternedGraphName,
     ) -> impl Iterator<
         Item = (
-            InternedNamedOrBlankNode,
+            InternedSubject,
             InternedNamedNode,
             InternedTerm,
             InternedGraphName,
@@ -313,13 +313,13 @@ impl Dataset {
             .range(
                 &(
                     graph_name,
-                    InternedNamedOrBlankNode::first(),
+                    InternedSubject::first(),
                     InternedNamedNode::first(),
                     InternedTerm::first(),
                 )
                     ..&(
                         graph_name.next(),
-                        InternedNamedOrBlankNode::first(),
+                        InternedSubject::first(),
                         InternedNamedNode::first(),
                         InternedTerm::first(),
                     ),
@@ -356,7 +356,7 @@ impl Dataset {
     fn insert_encoded(
         &mut self,
         quad: (
-            InternedNamedOrBlankNode,
+            InternedSubject,
             InternedNamedNode,
             InternedTerm,
             InternedGraphName,
@@ -383,7 +383,7 @@ impl Dataset {
     fn remove_encoded(
         &mut self,
         quad: (
-            InternedNamedOrBlankNode,
+            InternedSubject,
             InternedNamedNode,
             InternedTerm,
             InternedGraphName,
@@ -483,13 +483,13 @@ impl Dataset {
         &mut self,
         quad: QuadRef<'_>,
     ) -> (
-        InternedNamedOrBlankNode,
+        InternedSubject,
         InternedNamedNode,
         InternedTerm,
         InternedGraphName,
     ) {
         (
-            InternedNamedOrBlankNode::encoded_into(quad.subject, &mut self.interner),
+            InternedSubject::encoded_into(quad.subject, &mut self.interner),
             InternedNamedNode::encoded_into(quad.predicate, &mut self.interner),
             InternedTerm::encoded_into(quad.object, &mut self.interner),
             InternedGraphName::encoded_into(quad.graph_name, &mut self.interner),
@@ -500,13 +500,13 @@ impl Dataset {
         &self,
         quad: QuadRef<'_>,
     ) -> Option<(
-        InternedNamedOrBlankNode,
+        InternedSubject,
         InternedNamedNode,
         InternedTerm,
         InternedGraphName,
     )> {
         Some((
-            self.encoded_named_or_blank_node(quad.subject)?,
+            self.encoded_subject(quad.subject)?,
             self.encoded_named_node(quad.predicate)?,
             self.encoded_term(quad.object)?,
             self.encoded_graph_name(quad.graph_name)?,
@@ -520,11 +520,11 @@ impl Dataset {
         InternedNamedNode::encoded_from(node.into(), &self.interner)
     }
 
-    pub(super) fn encoded_named_or_blank_node<'a>(
+    pub(super) fn encoded_subject<'a>(
         &self,
-        node: impl Into<NamedOrBlankNodeRef<'a>>,
-    ) -> Option<InternedNamedOrBlankNode> {
-        InternedNamedOrBlankNode::encoded_from(node.into(), &self.interner)
+        node: impl Into<SubjectRef<'a>>,
+    ) -> Option<InternedSubject> {
+        InternedSubject::encoded_from(node.into(), &self.interner)
     }
 
     pub(super) fn encoded_term<'a>(&self, term: impl Into<TermRef<'a>>) -> Option<InternedTerm> {
@@ -541,7 +541,7 @@ impl Dataset {
     fn decode_spog(
         &self,
         quad: (
-            InternedNamedOrBlankNode,
+            InternedSubject,
             InternedNamedNode,
             InternedTerm,
             InternedGraphName,
@@ -597,7 +597,7 @@ impl Dataset {
     fn blank_nodes(&self) -> HashSet<InternedBlankNode> {
         let mut bnodes = HashSet::new();
         for (g, s, _, o) in &self.gspo {
-            if let InternedNamedOrBlankNode::BlankNode(bnode) = s {
+            if let InternedSubject::BlankNode(bnode) = s {
                 bnodes.insert(*bnode);
             }
             if let InternedTerm::BlankNode(bnode) = o {
@@ -625,7 +625,7 @@ impl Dataset {
             let mut new_hashes = HashMap::new();
             for (bnode, old_hash) in &hashes {
                 for (_, p, o, g) in
-                    self.interned_quads_for_subject(InternedNamedOrBlankNode::BlankNode(*bnode))
+                    self.interned_quads_for_subject(InternedSubject::BlankNode(*bnode))
                 {
                     to_hash.push((
                         self.hash_named_node(p),
@@ -637,7 +637,7 @@ impl Dataset {
                 for (s, p, _, g) in self.interned_quads_for_object(InternedTerm::BlankNode(*bnode))
                 {
                     to_hash.push((
-                        self.hash_named_or_blank_node(s, &hashes),
+                        self.hash_subject(s, &hashes),
                         self.hash_named_node(p),
                         self.hash_graph_name(g, &hashes),
                         1,
@@ -647,7 +647,7 @@ impl Dataset {
                     self.interned_quads_for_graph_name(InternedGraphName::BlankNode(*bnode))
                 {
                     to_hash.push((
-                        self.hash_named_or_blank_node(s, &hashes),
+                        self.hash_subject(s, &hashes),
                         self.hash_named_node(p),
                         self.hash_term(o, &hashes),
                         2,
@@ -674,12 +674,12 @@ impl Dataset {
         self.hash_tuple(node.decode_from(&self.interner))
     }
 
-    fn hash_named_or_blank_node(
+    fn hash_subject(
         &self,
-        node: InternedNamedOrBlankNode,
+        node: InternedSubject,
         bnodes_hash: &HashMap<InternedBlankNode, u64>,
     ) -> u64 {
-        if let InternedNamedOrBlankNode::BlankNode(bnode) = node {
+        if let InternedSubject::BlankNode(bnode) = node {
             *bnodes_hash.get(&bnode).unwrap()
         } else {
             self.hash_tuple(node.decode_from(&self.interner))
@@ -717,7 +717,7 @@ impl Dataset {
         hash: &HashMap<InternedBlankNode, u64>,
         partition: &[(u64, Vec<InternedBlankNode>)],
     ) -> Vec<(
-        InternedNamedOrBlankNode,
+        InternedSubject,
         InternedNamedNode,
         InternedTerm,
         InternedGraphName,
@@ -755,7 +755,7 @@ impl Dataset {
         &mut self,
         hashes: &HashMap<InternedBlankNode, u64>,
     ) -> Vec<(
-        InternedNamedOrBlankNode,
+        InternedSubject,
         InternedNamedNode,
         InternedTerm,
         InternedGraphName,
@@ -765,8 +765,8 @@ impl Dataset {
             .into_iter()
             .map(|(s, p, o, g)| {
                 (
-                    if let InternedNamedOrBlankNode::BlankNode(bnode) = s {
-                        InternedNamedOrBlankNode::BlankNode(self.map_bnode(bnode, hashes))
+                    if let InternedSubject::BlankNode(bnode) = s {
+                        InternedSubject::BlankNode(self.map_bnode(bnode, hashes))
                     } else {
                         s
                     },
@@ -894,13 +894,13 @@ impl<'a> GraphView<'a> {
         let iter = self.dataset.gspo.range(
             &(
                 self.graph_name,
-                InternedNamedOrBlankNode::first(),
+                InternedSubject::first(),
                 InternedNamedNode::first(),
                 InternedTerm::first(),
             )
                 ..&(
                     self.graph_name.next(),
-                    InternedNamedOrBlankNode::first(),
+                    InternedSubject::first(),
                     InternedNamedNode::first(),
                     InternedTerm::first(),
                 ),
@@ -913,16 +913,16 @@ impl<'a> GraphView<'a> {
 
     pub fn triples_for_subject<'b>(
         self,
-        subject: impl Into<NamedOrBlankNodeRef<'b>>,
+        subject: impl Into<SubjectRef<'b>>,
     ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
-        self.triples_for_interned_subject(self.dataset.encoded_named_or_blank_node(subject))
+        self.triples_for_interned_subject(self.dataset.encoded_subject(subject))
     }
 
     pub(super) fn triples_for_interned_subject(
         self,
-        subject: Option<InternedNamedOrBlankNode>,
+        subject: Option<InternedSubject>,
     ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
-        let subject = subject.unwrap_or_else(InternedNamedOrBlankNode::impossible);
+        let subject = subject.unwrap_or_else(InternedSubject::impossible);
         self.dataset
             .gspo
             .range(
@@ -944,21 +944,21 @@ impl<'a> GraphView<'a> {
 
     pub fn objects_for_subject_predicate<'b>(
         self,
-        subject: impl Into<NamedOrBlankNodeRef<'b>>,
+        subject: impl Into<SubjectRef<'b>>,
         predicate: impl Into<NamedNodeRef<'b>>,
     ) -> impl Iterator<Item = TermRef<'a>> + 'a {
         self.objects_for_interned_subject_predicate(
-            self.dataset.encoded_named_or_blank_node(subject),
+            self.dataset.encoded_subject(subject),
             self.dataset.encoded_named_node(predicate),
         )
     }
 
     pub fn objects_for_interned_subject_predicate(
         self,
-        subject: Option<InternedNamedOrBlankNode>,
+        subject: Option<InternedSubject>,
         predicate: Option<InternedNamedNode>,
     ) -> impl Iterator<Item = TermRef<'a>> + 'a {
-        let subject = subject.unwrap_or_else(InternedNamedOrBlankNode::impossible);
+        let subject = subject.unwrap_or_else(InternedSubject::impossible);
         let predicate = predicate.unwrap_or_else(InternedNamedNode::impossible);
         self.dataset
             .gspo
@@ -976,7 +976,7 @@ impl<'a> GraphView<'a> {
 
     pub fn object_for_subject_predicate<'b>(
         self,
-        subject: impl Into<NamedOrBlankNodeRef<'b>>,
+        subject: impl Into<SubjectRef<'b>>,
         predicate: impl Into<NamedNodeRef<'b>>,
     ) -> Option<TermRef<'a>> {
         self.objects_for_subject_predicate(subject, predicate)
@@ -985,21 +985,21 @@ impl<'a> GraphView<'a> {
 
     pub fn predicates_for_subject_object<'b>(
         self,
-        subject: impl Into<NamedOrBlankNodeRef<'b>>,
+        subject: impl Into<SubjectRef<'b>>,
         object: impl Into<TermRef<'b>>,
     ) -> impl Iterator<Item = NamedNodeRef<'a>> + 'a {
         self.predicates_for_interned_subject_object(
-            self.dataset.encoded_named_or_blank_node(subject),
+            self.dataset.encoded_subject(subject),
             self.dataset.encoded_term(object),
         )
     }
 
     pub(super) fn predicates_for_interned_subject_object(
         self,
-        subject: Option<InternedNamedOrBlankNode>,
+        subject: Option<InternedSubject>,
         object: Option<InternedTerm>,
     ) -> impl Iterator<Item = NamedNodeRef<'a>> + 'a {
-        let subject = subject.unwrap_or_else(InternedNamedOrBlankNode::impossible);
+        let subject = subject.unwrap_or_else(InternedSubject::impossible);
         let object = object.unwrap_or_else(InternedTerm::impossible);
         self.dataset
             .gosp
@@ -1034,13 +1034,13 @@ impl<'a> GraphView<'a> {
                     self.graph_name,
                     predicate,
                     InternedTerm::first(),
-                    InternedNamedOrBlankNode::first(),
+                    InternedSubject::first(),
                 )
                     ..&(
                         self.graph_name,
                         predicate.next(),
                         InternedTerm::first(),
-                        InternedNamedOrBlankNode::first(),
+                        InternedSubject::first(),
                     ),
             )
             .map(move |q| self.decode_gpos(*q))
@@ -1050,7 +1050,7 @@ impl<'a> GraphView<'a> {
         self,
         predicate: impl Into<NamedNodeRef<'b>>,
         object: impl Into<TermRef<'b>>,
-    ) -> impl Iterator<Item = NamedOrBlankNodeRef<'a>> + 'a {
+    ) -> impl Iterator<Item = SubjectRef<'a>> + 'a {
         self.subjects_for_interned_predicate_object(
             self.dataset.encoded_named_node(predicate),
             self.dataset.encoded_term(object),
@@ -1061,23 +1061,18 @@ impl<'a> GraphView<'a> {
         self,
         predicate: Option<InternedNamedNode>,
         object: Option<InternedTerm>,
-    ) -> impl Iterator<Item = NamedOrBlankNodeRef<'a>> + 'a {
+    ) -> impl Iterator<Item = SubjectRef<'a>> + 'a {
         let predicate = predicate.unwrap_or_else(InternedNamedNode::impossible);
         let object = object.unwrap_or_else(InternedTerm::impossible);
         self.dataset
             .gpos
             .range(
-                &(
-                    self.graph_name,
-                    predicate,
-                    object,
-                    InternedNamedOrBlankNode::first(),
-                )
+                &(self.graph_name, predicate, object, InternedSubject::first())
                     ..&(
                         self.graph_name,
                         predicate,
                         object.next(),
-                        InternedNamedOrBlankNode::first(),
+                        InternedSubject::first(),
                     ),
             )
             .map(move |q| q.3.decode_from(&self.dataset.interner))
@@ -1087,7 +1082,7 @@ impl<'a> GraphView<'a> {
         self,
         predicate: impl Into<NamedNodeRef<'b>>,
         object: impl Into<TermRef<'b>>,
-    ) -> Option<NamedOrBlankNodeRef<'a>> {
+    ) -> Option<SubjectRef<'a>> {
         self.subjects_for_predicate_object(predicate, object).next()
     }
 
@@ -1109,13 +1104,13 @@ impl<'a> GraphView<'a> {
                 &(
                     self.graph_name,
                     object,
-                    InternedNamedOrBlankNode::first(),
+                    InternedSubject::first(),
                     InternedNamedNode::first(),
                 )
                     ..&(
                         self.graph_name,
                         object.next(),
-                        InternedNamedOrBlankNode::first(),
+                        InternedSubject::first(),
                         InternedNamedNode::first(),
                     ),
             )
@@ -1169,9 +1164,9 @@ impl<'a> GraphView<'a> {
     fn encoded_triple(
         &self,
         triple: TripleRef<'_>,
-    ) -> Option<(InternedNamedOrBlankNode, InternedNamedNode, InternedTerm)> {
+    ) -> Option<(InternedSubject, InternedNamedNode, InternedTerm)> {
         Some((
-            self.dataset.encoded_named_or_blank_node(triple.subject)?,
+            self.dataset.encoded_subject(triple.subject)?,
             self.dataset.encoded_named_node(triple.predicate)?,
             self.dataset.encoded_term(triple.object)?,
         ))
@@ -1181,7 +1176,7 @@ impl<'a> GraphView<'a> {
         self,
         quad: (
             InternedGraphName,
-            InternedNamedOrBlankNode,
+            InternedSubject,
             InternedNamedNode,
             InternedTerm,
         ),
@@ -1199,7 +1194,7 @@ impl<'a> GraphView<'a> {
             InternedGraphName,
             InternedNamedNode,
             InternedTerm,
-            InternedNamedOrBlankNode,
+            InternedSubject,
         ),
     ) -> TripleRef<'a> {
         self.decode_gspo((quad.0, quad.3, quad.1, quad.2))
@@ -1210,7 +1205,7 @@ impl<'a> GraphView<'a> {
         quad: (
             InternedGraphName,
             InternedTerm,
-            InternedNamedOrBlankNode,
+            InternedSubject,
             InternedNamedNode,
         ),
     ) -> TripleRef<'a> {
@@ -1344,9 +1339,9 @@ impl<'a> GraphViewMut<'a> {
     fn encode_triple(
         &mut self,
         triple: TripleRef<'_>,
-    ) -> (InternedNamedOrBlankNode, InternedNamedNode, InternedTerm) {
+    ) -> (InternedSubject, InternedNamedNode, InternedTerm) {
         (
-            InternedNamedOrBlankNode::encoded_into(triple.subject, &mut self.dataset.interner),
+            InternedSubject::encoded_into(triple.subject, &mut self.dataset.interner),
             InternedNamedNode::encoded_into(triple.predicate, &mut self.dataset.interner),
             InternedTerm::encoded_into(triple.object, &mut self.dataset.interner),
         )
@@ -1359,26 +1354,26 @@ impl<'a> GraphViewMut<'a> {
 
     pub fn triples_for_subject<'b>(
         &'a self,
-        subject: impl Into<NamedOrBlankNodeRef<'b>>,
+        subject: impl Into<SubjectRef<'b>>,
     ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
         self.read()
-            .triples_for_interned_subject(self.dataset.encoded_named_or_blank_node(subject))
+            .triples_for_interned_subject(self.dataset.encoded_subject(subject))
     }
 
     pub fn objects_for_subject_predicate<'b>(
         &'a self,
-        subject: impl Into<NamedOrBlankNodeRef<'b>>,
+        subject: impl Into<SubjectRef<'b>>,
         predicate: impl Into<NamedNodeRef<'b>>,
     ) -> impl Iterator<Item = TermRef<'a>> + 'a {
         self.read().objects_for_interned_subject_predicate(
-            self.dataset.encoded_named_or_blank_node(subject),
+            self.dataset.encoded_subject(subject),
             self.dataset.encoded_named_node(predicate),
         )
     }
 
     pub fn object_for_subject_predicate<'b>(
         &'a self,
-        subject: impl Into<NamedOrBlankNodeRef<'b>>,
+        subject: impl Into<SubjectRef<'b>>,
         predicate: impl Into<NamedNodeRef<'b>>,
     ) -> Option<TermRef<'a>> {
         self.read().object_for_subject_predicate(subject, predicate)
@@ -1386,11 +1381,11 @@ impl<'a> GraphViewMut<'a> {
 
     pub fn predicates_for_subject_object<'b>(
         &'a self,
-        subject: impl Into<NamedOrBlankNodeRef<'b>>,
+        subject: impl Into<SubjectRef<'b>>,
         object: impl Into<TermRef<'b>>,
     ) -> impl Iterator<Item = NamedNodeRef<'a>> + 'a {
         self.read().predicates_for_interned_subject_object(
-            self.dataset.encoded_named_or_blank_node(subject),
+            self.dataset.encoded_subject(subject),
             self.dataset.encoded_term(object),
         )
     }
@@ -1407,7 +1402,7 @@ impl<'a> GraphViewMut<'a> {
         &'a self,
         predicate: impl Into<NamedNodeRef<'b>>,
         object: impl Into<TermRef<'b>>,
-    ) -> impl Iterator<Item = NamedOrBlankNodeRef<'a>> + 'a {
+    ) -> impl Iterator<Item = SubjectRef<'a>> + 'a {
         self.read().subjects_for_interned_predicate_object(
             self.dataset.encoded_named_node(predicate),
             self.dataset.encoded_term(object),
@@ -1418,7 +1413,7 @@ impl<'a> GraphViewMut<'a> {
         &'a self,
         predicate: impl Into<NamedNodeRef<'b>>,
         object: impl Into<TermRef<'b>>,
-    ) -> Option<NamedOrBlankNodeRef<'a>> {
+    ) -> Option<SubjectRef<'a>> {
         self.read().subject_for_predicate_object(predicate, object)
     }
 
@@ -1509,7 +1504,7 @@ pub struct Iter<'a> {
     inner: std::collections::btree_set::Iter<
         'a,
         (
-            InternedNamedOrBlankNode,
+            InternedSubject,
             InternedNamedNode,
             InternedTerm,
             InternedGraphName,
@@ -1532,7 +1527,7 @@ pub struct GraphViewIter<'a> {
         'a,
         (
             InternedGraphName,
-            InternedNamedOrBlankNode,
+            InternedSubject,
             InternedNamedNode,
             InternedTerm,
         ),

@@ -161,7 +161,7 @@ impl Iterator for TestManifest {
                                 TermRef::BlankNode(g) => Some(g.into()),
                                 _ => None,
                             })
-                            .filter_map(|g: NamedOrBlankNodeRef<'_>| {
+                            .filter_map(|g: SubjectRef<'_>| {
                                 if let (
                                     Some(TermRef::NamedNode(endpoint)),
                                     Some(TermRef::NamedNode(data)),
@@ -246,8 +246,7 @@ impl Iterator for TestManifest {
             None => {
                 match self.manifests_to_do.pop() {
                     Some(url) => {
-                        let manifest =
-                            NamedOrBlankNodeRef::from(NamedNodeRef::new(url.as_str()).unwrap());
+                        let manifest = SubjectRef::from(NamedNodeRef::new(url.as_str()).unwrap());
                         if let Err(error) = load_to_graph(&url, &mut self.graph) {
                             return Some(Err(error));
                         }
@@ -296,11 +295,11 @@ impl Iterator for TestManifest {
 
 struct RdfListIterator<'a> {
     graph: &'a Graph,
-    current_node: Option<NamedOrBlankNodeRef<'a>>,
+    current_node: Option<SubjectRef<'a>>,
 }
 
 impl<'a> RdfListIterator<'a> {
-    fn iter(graph: &'a Graph, root: NamedOrBlankNodeRef<'a>) -> RdfListIterator<'a> {
+    fn iter(graph: &'a Graph, root: SubjectRef<'a>) -> RdfListIterator<'a> {
         RdfListIterator {
             graph,
             current_node: Some(root),

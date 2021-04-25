@@ -166,38 +166,38 @@ impl InternedLiteral {
 }
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
-pub enum InternedNamedOrBlankNode {
+pub enum InternedSubject {
     NamedNode(InternedNamedNode),
     BlankNode(InternedBlankNode),
 }
 
-impl InternedNamedOrBlankNode {
-    pub fn encoded_into(node: NamedOrBlankNodeRef<'_>, interner: &mut Rodeo) -> Self {
+impl InternedSubject {
+    pub fn encoded_into(node: SubjectRef<'_>, interner: &mut Rodeo) -> Self {
         match node {
-            NamedOrBlankNodeRef::NamedNode(node) => {
+            SubjectRef::NamedNode(node) => {
                 Self::NamedNode(InternedNamedNode::encoded_into(node, interner))
             }
-            NamedOrBlankNodeRef::BlankNode(node) => {
+            SubjectRef::BlankNode(node) => {
                 Self::BlankNode(InternedBlankNode::encoded_into(node, interner))
             }
         }
     }
 
-    pub fn encoded_from(node: NamedOrBlankNodeRef<'_>, interner: &Rodeo) -> Option<Self> {
+    pub fn encoded_from(node: SubjectRef<'_>, interner: &Rodeo) -> Option<Self> {
         Some(match node {
-            NamedOrBlankNodeRef::NamedNode(node) => {
+            SubjectRef::NamedNode(node) => {
                 Self::NamedNode(InternedNamedNode::encoded_from(node, interner)?)
             }
-            NamedOrBlankNodeRef::BlankNode(node) => {
+            SubjectRef::BlankNode(node) => {
                 Self::BlankNode(InternedBlankNode::encoded_from(node, interner)?)
             }
         })
     }
 
-    pub fn decode_from<'a>(&self, interner: &'a Rodeo) -> NamedOrBlankNodeRef<'a> {
+    pub fn decode_from<'a>(&self, interner: &'a Rodeo) -> SubjectRef<'a> {
         match self {
-            Self::NamedNode(node) => NamedOrBlankNodeRef::NamedNode(node.decode_from(interner)),
-            Self::BlankNode(node) => NamedOrBlankNodeRef::BlankNode(node.decode_from(interner)),
+            Self::NamedNode(node) => SubjectRef::NamedNode(node.decode_from(interner)),
+            Self::BlankNode(node) => SubjectRef::BlankNode(node.decode_from(interner)),
         }
     }
 

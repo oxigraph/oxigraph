@@ -609,10 +609,10 @@ pub(crate) fn get_encoded_literal(literal: LiteralRef<'_>) -> EncodedTerm {
     }
 }
 
-pub(crate) fn get_encoded_named_or_blank_node(term: NamedOrBlankNodeRef<'_>) -> EncodedTerm {
+pub(crate) fn get_encoded_subject(term: SubjectRef<'_>) -> EncodedTerm {
     match term {
-        NamedOrBlankNodeRef::NamedNode(named_node) => get_encoded_named_node(named_node),
-        NamedOrBlankNodeRef::BlankNode(blank_node) => get_encoded_blank_node(blank_node),
+        SubjectRef::NamedNode(named_node) => get_encoded_named_node(named_node),
+        SubjectRef::BlankNode(blank_node) => get_encoded_blank_node(blank_node),
     }
 }
 
@@ -634,7 +634,7 @@ pub(crate) fn get_encoded_graph_name(name: GraphNameRef<'_>) -> EncodedTerm {
 
 pub(crate) fn get_encoded_quad(quad: QuadRef<'_>) -> EncodedQuad {
     EncodedQuad {
-        subject: get_encoded_named_or_blank_node(quad.subject),
+        subject: get_encoded_subject(quad.subject),
         predicate: get_encoded_named_node(quad.predicate),
         object: get_encoded_term(quad.object),
         graph_name: get_encoded_graph_name(quad.graph_name),
@@ -666,13 +666,10 @@ pub(crate) trait WriteEncoder: StrContainer {
         self.encode_rio_literal(literal.into())
     }
 
-    fn encode_named_or_blank_node(
-        &self,
-        term: NamedOrBlankNodeRef<'_>,
-    ) -> Result<EncodedTerm, Self::Error> {
+    fn encode_subject(&self, term: SubjectRef<'_>) -> Result<EncodedTerm, Self::Error> {
         match term {
-            NamedOrBlankNodeRef::NamedNode(named_node) => self.encode_named_node(named_node),
-            NamedOrBlankNodeRef::BlankNode(blank_node) => self.encode_blank_node(blank_node),
+            SubjectRef::NamedNode(named_node) => self.encode_named_node(named_node),
+            SubjectRef::BlankNode(blank_node) => self.encode_blank_node(blank_node),
         }
     }
 
@@ -694,7 +691,7 @@ pub(crate) trait WriteEncoder: StrContainer {
 
     fn encode_quad(&self, quad: QuadRef<'_>) -> Result<EncodedQuad, Self::Error> {
         Ok(EncodedQuad {
-            subject: self.encode_named_or_blank_node(quad.subject)?,
+            subject: self.encode_subject(quad.subject)?,
             predicate: self.encode_named_node(quad.predicate)?,
             object: self.encode_term(quad.object)?,
             graph_name: self.encode_graph_name(quad.graph_name)?,
@@ -707,7 +704,7 @@ pub(crate) trait WriteEncoder: StrContainer {
         graph_name: EncodedTerm,
     ) -> Result<EncodedQuad, Self::Error> {
         Ok(EncodedQuad {
-            subject: self.encode_named_or_blank_node(triple.subject)?,
+            subject: self.encode_subject(triple.subject)?,
             predicate: self.encode_named_node(triple.predicate)?,
             object: self.encode_term(triple.object)?,
             graph_name,
@@ -838,7 +835,7 @@ pub(crate) trait WriteEncoder: StrContainer {
         })
     }
 
-    fn encode_rio_named_or_blank_node(
+    fn encode_rio_subject(
         &self,
         term: rio::NamedOrBlankNode<'_>,
         bnodes_map: &mut HashMap<String, u128>,
@@ -869,11 +866,11 @@ pub(crate) trait WriteEncoder: StrContainer {
         bnodes_map: &mut HashMap<String, u128>,
     ) -> Result<EncodedQuad, Self::Error> {
         Ok(EncodedQuad {
-            subject: self.encode_rio_named_or_blank_node(quad.subject, bnodes_map)?,
+            subject: self.encode_rio_subject(quad.subject, bnodes_map)?,
             predicate: self.encode_rio_named_node(quad.predicate)?,
             object: self.encode_rio_term(quad.object, bnodes_map)?,
             graph_name: match quad.graph_name {
-                Some(graph_name) => self.encode_rio_named_or_blank_node(graph_name, bnodes_map)?,
+                Some(graph_name) => self.encode_rio_subject(graph_name, bnodes_map)?,
                 None => EncodedTerm::DefaultGraph,
             },
         })
@@ -886,7 +883,7 @@ pub(crate) trait WriteEncoder: StrContainer {
         bnodes_map: &mut HashMap<String, u128>,
     ) -> Result<EncodedQuad, Self::Error> {
         Ok(EncodedQuad {
-            subject: self.encode_rio_named_or_blank_node(triple.subject, bnodes_map)?,
+            subject: self.encode_rio_subject(triple.subject, bnodes_map)?,
             predicate: self.encode_rio_named_node(triple.predicate)?,
             object: self.encode_rio_term(triple.object, bnodes_map)?,
             graph_name,
@@ -978,10 +975,7 @@ pub fn parse_day_time_duration_str(value: &str) -> Option<EncodedTerm> {
 pub(crate) trait Decoder: StrLookup {
     fn decode_term(&self, encoded: &EncodedTerm) -> Result<Term, DecoderError<Self::Error>>;
 
-    fn decode_named_or_blank_node(
-        &self,
-        encoded: &EncodedTerm,
-    ) -> Result<NamedOrBlankNode, DecoderError<Self::Error>> {
+    fn decode_subject(&self, encoded: &EncodedTerm) -> Result<Subject, DecoderError<Self::Error>> {
         match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node.into()),
             Term::BlankNode(blank_node) => Ok(blank_node.into()),
@@ -1008,12 +1002,12 @@ pub(crate) trait Decoder: StrLookup {
 
     fn decode_quad(&self, encoded: &EncodedQuad) -> Result<Quad, DecoderError<Self::Error>> {
         Ok(Quad::new(
-            self.decode_named_or_blank_node(&encoded.subject)?,
+            self.decode_subject(&encoded.subject)?,
             self.decode_named_node(&encoded.predicate)?,
             self.decode_term(&encoded.object)?,
             match &encoded.graph_name {
                 EncodedTerm::DefaultGraph => None,
-                graph_name => Some(self.decode_named_or_blank_node(graph_name)?),
+                graph_name => Some(self.decode_subject(graph_name)?),
             },
         ))
     }

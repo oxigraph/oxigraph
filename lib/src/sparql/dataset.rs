@@ -1,8 +1,8 @@
 use crate::sparql::algebra::QueryDataset;
 use crate::sparql::EvaluationError;
 use crate::storage::numeric_encoder::{
-    get_encoded_graph_name, get_encoded_named_or_blank_node, EncodedQuad, EncodedTerm,
-    StrContainer, StrHash, StrLookup,
+    get_encoded_graph_name, get_encoded_subject, EncodedQuad, EncodedTerm, StrContainer, StrHash,
+    StrLookup,
 };
 use crate::storage::Storage;
 use std::cell::RefCell;
@@ -28,7 +28,7 @@ impl DatasetView {
             named: dataset.available_named_graphs().map(|graphs| {
                 graphs
                     .iter()
-                    .map(|g| get_encoded_named_or_blank_node(g.as_ref()))
+                    .map(|g| get_encoded_subject(g.as_ref()))
                     .collect::<Vec<_>>()
             }),
         };

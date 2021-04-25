@@ -22,8 +22,7 @@ pub use self::literal::{Literal, LiteralRef};
 pub use self::named_node::{NamedNode, NamedNodeRef};
 pub use self::parser::TermParseError;
 pub use self::triple::{
-    GraphName, GraphNameRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad, QuadRef, Term, TermRef,
-    Triple, TripleRef,
+    GraphName, GraphNameRef, Quad, QuadRef, Subject, SubjectRef, Term, TermRef, Triple, TripleRef,
 };
 pub use oxilangtag::LanguageTagParseError;
 pub use oxiri::IriParseError;

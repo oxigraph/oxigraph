@@ -19,8 +19,8 @@ use oxiri::Iri;
 use spargebra::algebra::{GraphPattern, GraphTarget};
 use spargebra::term::{
     BlankNode, GraphName, GraphNamePattern, GroundQuad, GroundQuadPattern, GroundTerm,
-    GroundTermPattern, Literal, NamedNode, NamedNodePattern, NamedOrBlankNode, Quad, QuadPattern,
-    Term, TermPattern, Variable,
+    GroundTermPattern, Literal, NamedNode, NamedNodePattern, Quad, QuadPattern, Subject, Term,
+    TermPattern, Variable,
 };
 use spargebra::GraphUpdateOperation;
 use std::collections::HashMap;
@@ -301,10 +301,8 @@ impl<'a> SimpleUpdateEvaluator<'a> {
     ) -> Result<Option<EncodedQuad>, EvaluationError> {
         Ok(Some(EncodedQuad {
             subject: match &quad.subject {
-                NamedOrBlankNode::NamedNode(subject) => {
-                    self.encode_named_node_for_insertion(subject)?
-                }
-                NamedOrBlankNode::BlankNode(subject) => self
+                Subject::NamedNode(subject) => self.encode_named_node_for_insertion(subject)?,
+                Subject::BlankNode(subject) => self
                     .storage
                     .encode_blank_node(bnodes.entry(subject.clone()).or_default().as_ref())?,
             },

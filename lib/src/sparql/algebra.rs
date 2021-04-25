@@ -171,7 +171,7 @@ impl<'a> TryFrom<&'a String> for Update {
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct QueryDataset {
     default: Option<Vec<GraphName>>,
-    named: Option<Vec<NamedOrBlankNode>>,
+    named: Option<Vec<Subject>>,
 }
 
 impl QueryDataset {
@@ -255,7 +255,7 @@ impl QueryDataset {
     }
 
     /// Returns the list of the available named graphs for the query or `None` if all graphs are available
-    pub fn available_named_graphs(&self) -> Option<&[NamedOrBlankNode]> {
+    pub fn available_named_graphs(&self) -> Option<&[Subject]> {
         self.named.as_deref()
     }
 
@@ -272,7 +272,7 @@ impl QueryDataset {
     ///
     /// # Result::Ok::<_, Box<dyn std::error::Error>>(())
     /// ```
-    pub fn set_available_named_graphs(&mut self, named_graphs: Vec<NamedOrBlankNode>) {
+    pub fn set_available_named_graphs(&mut self, named_graphs: Vec<Subject>) {
         self.named = Some(named_graphs);
     }
 }

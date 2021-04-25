@@ -21,7 +21,7 @@ use http_types::{
     StatusCode,
 };
 use oxigraph::io::{DatasetFormat, GraphFormat};
-use oxigraph::model::{GraphName, GraphNameRef, NamedNode, NamedOrBlankNode};
+use oxigraph::model::{GraphName, GraphNameRef, NamedNode, Subject};
 use oxigraph::sparql::{Query, QueryResults, QueryResultsFormat, Update};
 use oxigraph::store::Store;
 use oxiri::Iri;
@@ -407,7 +407,7 @@ fn evaluate_sparql_query(
     let named_graph_uris = named_graph_uris
         .into_iter()
         .map(|e| Ok(NamedNode::new(e)?.into()))
-        .collect::<Result<Vec<NamedOrBlankNode>>>()
+        .collect::<Result<Vec<Subject>>>()
         .map_err(bad_request)?;
 
     if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
@@ -490,7 +490,7 @@ fn evaluate_sparql_update(
     let named_graph_uris = named_graph_uris
         .into_iter()
         .map(|e| Ok(NamedNode::new(e)?.into()))
-        .collect::<Result<Vec<NamedOrBlankNode>>>()
+        .collect::<Result<Vec<Subject>>>()
         .map_err(bad_request)?;
     if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
         for using in update.using_datasets_mut() {

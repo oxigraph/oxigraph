@@ -1,8 +1,7 @@
 //! This crate provides implementation of [Sophia](https://docs.rs/sophia/) traits for the `store` module.
 
 use crate::model::{
-    BlankNodeRef, GraphNameRef, LiteralRef, NamedNodeRef, NamedOrBlankNodeRef, Quad, QuadRef, Term,
-    TermRef,
+    BlankNodeRef, GraphNameRef, LiteralRef, NamedNodeRef, Quad, QuadRef, SubjectRef, Term, TermRef,
 };
 use crate::sparql::{EvaluationError, QueryResults};
 use crate::store::Store;
@@ -449,7 +448,7 @@ fn io_err_map(err: EvaluationError) -> Error {
     }
 }
 
-fn convert_subject<'a, T>(term: &'a T, buffer: &'a mut String) -> Option<NamedOrBlankNodeRef<'a>>
+fn convert_subject<'a, T>(term: &'a T, buffer: &'a mut String) -> Option<SubjectRef<'a>>
 where
     T: TTerm + ?Sized + 'a,
 {

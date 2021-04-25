@@ -50,7 +50,7 @@ pub fn parse_query(
         query.dataset_mut().set_available_named_graphs(
             named_graphs
                 .iter()?
-                .map(|graph| Ok(graph?.extract::<PyNamedOrBlankNode>()?.into()))
+                .map(|graph| Ok(graph?.extract::<PySubject>()?.into()))
                 .collect::<PyResult<_>>()?,
         )
     }

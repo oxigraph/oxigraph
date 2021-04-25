@@ -2668,7 +2668,7 @@ fn decode_triple<D: Decoder>(
     object: &EncodedTerm,
 ) -> Result<Triple, EvaluationError> {
     Ok(Triple::new(
-        decoder.decode_named_or_blank_node(subject)?,
+        decoder.decode_subject(subject)?,
         decoder.decode_named_node(predicate)?,
         decoder.decode_term(object)?,
     ))

@@ -123,29 +123,29 @@ impl fmt::Display for Literal {
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum NamedOrBlankNode {
+pub enum Subject {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
 }
 
-impl fmt::Display for NamedOrBlankNode {
+impl fmt::Display for Subject {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            NamedOrBlankNode::NamedNode(node) => node.fmt(f),
-            NamedOrBlankNode::BlankNode(node) => node.fmt(f),
+            Subject::NamedNode(node) => node.fmt(f),
+            Subject::BlankNode(node) => node.fmt(f),
         }
     }
 }
 
-impl From<NamedNode> for NamedOrBlankNode {
+impl From<NamedNode> for Subject {
     #[inline]
     fn from(node: NamedNode) -> Self {
         Self::NamedNode(node)
     }
 }
 
-impl From<BlankNode> for NamedOrBlankNode {
+impl From<BlankNode> for Subject {
     #[inline]
     fn from(node: BlankNode) -> Self {
         Self::BlankNode(node)
@@ -196,12 +196,12 @@ impl From<Literal> for Term {
     }
 }
 
-impl From<NamedOrBlankNode> for Term {
+impl From<Subject> for Term {
     #[inline]
-    fn from(resource: NamedOrBlankNode) -> Self {
+    fn from(resource: Subject) -> Self {
         match resource {
-            NamedOrBlankNode::NamedNode(node) => Self::NamedNode(node),
-            NamedOrBlankNode::BlankNode(node) => Self::BlankNode(node),
+            Subject::NamedNode(node) => Self::NamedNode(node),
+            Subject::BlankNode(node) => Self::BlankNode(node),
         }
     }
 }
@@ -285,7 +285,7 @@ impl From<NamedNode> for GraphName {
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Quad {
-    pub subject: NamedOrBlankNode,
+    pub subject: Subject,
     pub predicate: NamedNode,
     pub object: Term,
     pub graph_name: GraphName,

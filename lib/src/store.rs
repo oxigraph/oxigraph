@@ -37,8 +37,8 @@ use crate::sparql::{
 };
 use crate::storage::io::{dump_dataset, dump_graph, load_dataset, load_graph};
 use crate::storage::numeric_encoder::{
-    get_encoded_graph_name, get_encoded_named_node, get_encoded_named_or_blank_node,
-    get_encoded_quad, get_encoded_term, Decoder, WriteEncoder,
+    get_encoded_graph_name, get_encoded_named_node, get_encoded_quad, get_encoded_subject,
+    get_encoded_term, Decoder, WriteEncoder,
 };
 pub use crate::storage::ConflictableTransactionError;
 pub use crate::storage::TransactionError;
@@ -164,14 +164,14 @@ impl Store {
     /// ```
     pub fn quads_for_pattern(
         &self,
-        subject: Option<NamedOrBlankNodeRef<'_>>,
+        subject: Option<SubjectRef<'_>>,
         predicate: Option<NamedNodeRef<'_>>,
         object: Option<TermRef<'_>>,
         graph_name: Option<GraphNameRef<'_>>,
     ) -> QuadIter {
         QuadIter {
             iter: self.storage.quads_for_pattern(
-                subject.map(get_encoded_named_or_blank_node).as_ref(),
+                subject.map(get_encoded_subject).as_ref(),
                 predicate.map(get_encoded_named_node).as_ref(),
                 object.map(get_encoded_term).as_ref(),
                 graph_name.map(get_encoded_graph_name).as_ref(),
@@ -441,13 +441,13 @@ impl Store {
     /// Usage example:
     /// ```
     /// use oxigraph::store::Store;
-    /// use oxigraph::model::{NamedNode, QuadRef, NamedOrBlankNode};
+    /// use oxigraph::model::{NamedNode, QuadRef, Subject};
     ///
     /// let ex = NamedNode::new("http://example.com")?;
     /// let store = Store::new()?;
     /// store.insert(QuadRef::new(&ex, &ex, &ex, &ex))?;
     /// store.insert(QuadRef::new(&ex, &ex, &ex, None))?;
-    /// assert_eq!(vec![NamedOrBlankNode::from(ex)], store.named_graphs().collect::<Result<Vec<_>,_>>()?);
+    /// assert_eq!(vec![Subject::from(ex)], store.named_graphs().collect::<Result<Vec<_>,_>>()?);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn named_graphs(&self) -> GraphNameIter {
@@ -472,9 +472,9 @@ impl Store {
     /// ```
     pub fn contains_named_graph<'a>(
         &self,
-        graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
+        graph_name: impl Into<SubjectRef<'a>>,
     ) -> Result<bool, io::Error> {
-        let graph_name = get_encoded_named_or_blank_node(graph_name.into());
+        let graph_name = get_encoded_subject(graph_name.into());
         self.storage.contains_named_graph(&graph_name)
     }
 
@@ -495,9 +495,9 @@ impl Store {
     /// ```
     pub fn insert_named_graph<'a>(
         &self,
-        graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
+        graph_name: impl Into<SubjectRef<'a>>,
     ) -> Result<bool, io::Error> {
-        let graph_name = self.storage.encode_named_or_blank_node(graph_name.into())?;
+        let graph_name = self.storage.encode_subject(graph_name.into())?;
         self.storage.insert_named_graph(&graph_name)
     }
 
@@ -549,9 +549,9 @@ impl Store {
     /// ```
     pub fn remove_named_graph<'a>(
         &self,
-        graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
+        graph_name: impl Into<SubjectRef<'a>>,
     ) -> Result<bool, io::Error> {
-        let graph_name = get_encoded_named_or_blank_node(graph_name.into());
+        let graph_name = get_encoded_subject(graph_name.into());
         self.storage.remove_named_graph(&graph_name)
     }
 
@@ -714,9 +714,9 @@ impl Transaction<'_> {
     /// Returns `true` if the graph was not already in the store.
     pub fn insert_named_graph<'a>(
         &self,
-        graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
+        graph_name: impl Into<SubjectRef<'a>>,
     ) -> Result<bool, UnabortableTransactionError> {
-        let graph_name = self.storage.encode_named_or_blank_node(graph_name.into())?;
+        let graph_name = self.storage.encode_subject(graph_name.into())?;
         self.storage.insert_named_graph(&graph_name)
     }
 }
@@ -745,13 +745,13 @@ pub struct GraphNameIter {
 }
 
 impl Iterator for GraphNameIter {
-    type Item = Result<NamedOrBlankNode, io::Error>;
+    type Item = Result<Subject, io::Error>;
 
-    fn next(&mut self) -> Option<Result<NamedOrBlankNode, io::Error>> {
+    fn next(&mut self) -> Option<Result<Subject, io::Error>> {
         Some(
-            self.iter.next()?.and_then(|graph_name| {
-                Ok(self.store.storage.decode_named_or_blank_node(&graph_name)?)
-            }),
+            self.iter
+                .next()?
+                .and_then(|graph_name| Ok(self.store.storage.decode_subject(&graph_name)?)),
         )
     }
 
@@ -764,7 +764,7 @@ impl Iterator for GraphNameIter {
 fn store() -> Result<(), io::Error> {
     use crate::model::*;
 
-    let main_s = NamedOrBlankNode::from(BlankNode::default());
+    let main_s = Subject::from(BlankNode::default());
     let main_p = NamedNode::new("http://example.com").unwrap();
     let main_o = Term::from(Literal::from(1));
     let main_g = GraphName::from(BlankNode::default());

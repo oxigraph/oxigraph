@@ -104,7 +104,7 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
                         }
                     }
                     for graph_name in query.dataset().available_named_graphs().unwrap_or(&[]) {
-                        if let NamedOrBlankNode::NamedNode(graph_name) = graph_name {
+                        if let Subject::NamedNode(graph_name) = graph_name {
                             load_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
                         } else {
                             return Err(anyhow!(

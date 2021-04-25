@@ -7,12 +7,12 @@ use std::fmt;
 
 /// The owned union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum NamedOrBlankNode {
+pub enum Subject {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
 }
 
-impl NamedOrBlankNode {
+impl Subject {
     #[inline]
     pub fn is_named_node(&self) -> bool {
         self.as_ref().is_named_node()
@@ -24,43 +24,43 @@ impl NamedOrBlankNode {
     }
 
     #[inline]
-    pub fn as_ref(&self) -> NamedOrBlankNodeRef<'_> {
+    pub fn as_ref(&self) -> SubjectRef<'_> {
         match self {
-            Self::NamedNode(node) => NamedOrBlankNodeRef::NamedNode(node.as_ref()),
-            Self::BlankNode(node) => NamedOrBlankNodeRef::BlankNode(node.as_ref()),
+            Self::NamedNode(node) => SubjectRef::NamedNode(node.as_ref()),
+            Self::BlankNode(node) => SubjectRef::BlankNode(node.as_ref()),
         }
     }
 }
 
-impl fmt::Display for NamedOrBlankNode {
+impl fmt::Display for Subject {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
     }
 }
 
-impl From<NamedNode> for NamedOrBlankNode {
+impl From<NamedNode> for Subject {
     #[inline]
     fn from(node: NamedNode) -> Self {
         Self::NamedNode(node)
     }
 }
 
-impl From<NamedNodeRef<'_>> for NamedOrBlankNode {
+impl From<NamedNodeRef<'_>> for Subject {
     #[inline]
     fn from(node: NamedNodeRef<'_>) -> Self {
         node.into_owned().into()
     }
 }
 
-impl From<BlankNode> for NamedOrBlankNode {
+impl From<BlankNode> for Subject {
     #[inline]
     fn from(node: BlankNode) -> Self {
         Self::BlankNode(node)
     }
 }
 
-impl From<BlankNodeRef<'_>> for NamedOrBlankNode {
+impl From<BlankNodeRef<'_>> for Subject {
     #[inline]
     fn from(node: BlankNodeRef<'_>) -> Self {
         node.into_owned().into()
@@ -69,12 +69,12 @@ impl From<BlankNodeRef<'_>> for NamedOrBlankNode {
 
 /// The borrowed union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
-pub enum NamedOrBlankNodeRef<'a> {
+pub enum SubjectRef<'a> {
     NamedNode(NamedNodeRef<'a>),
     BlankNode(BlankNodeRef<'a>),
 }
 
-impl<'a> NamedOrBlankNodeRef<'a> {
+impl<'a> SubjectRef<'a> {
     #[inline]
     pub fn is_named_node(&self) -> bool {
         match self {
@@ -92,15 +92,15 @@ impl<'a> NamedOrBlankNodeRef<'a> {
     }
 
     #[inline]
-    pub fn into_owned(self) -> NamedOrBlankNode {
+    pub fn into_owned(self) -> Subject {
         match self {
-            Self::NamedNode(node) => NamedOrBlankNode::NamedNode(node.into_owned()),
-            Self::BlankNode(node) => NamedOrBlankNode::BlankNode(node.into_owned()),
+            Self::NamedNode(node) => Subject::NamedNode(node.into_owned()),
+            Self::BlankNode(node) => Subject::BlankNode(node.into_owned()),
         }
     }
 }
 
-impl fmt::Display for NamedOrBlankNodeRef<'_> {
+impl fmt::Display for SubjectRef<'_> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -110,54 +110,54 @@ impl fmt::Display for NamedOrBlankNodeRef<'_> {
     }
 }
 
-impl<'a> From<NamedNodeRef<'a>> for NamedOrBlankNodeRef<'a> {
+impl<'a> From<NamedNodeRef<'a>> for SubjectRef<'a> {
     #[inline]
     fn from(node: NamedNodeRef<'a>) -> Self {
         Self::NamedNode(node)
     }
 }
 
-impl<'a> From<&'a NamedNode> for NamedOrBlankNodeRef<'a> {
+impl<'a> From<&'a NamedNode> for SubjectRef<'a> {
     #[inline]
     fn from(node: &'a NamedNode) -> Self {
         node.as_ref().into()
     }
 }
 
-impl<'a> From<BlankNodeRef<'a>> for NamedOrBlankNodeRef<'a> {
+impl<'a> From<BlankNodeRef<'a>> for SubjectRef<'a> {
     #[inline]
     fn from(node: BlankNodeRef<'a>) -> Self {
         Self::BlankNode(node)
     }
 }
 
-impl<'a> From<&'a BlankNode> for NamedOrBlankNodeRef<'a> {
+impl<'a> From<&'a BlankNode> for SubjectRef<'a> {
     #[inline]
     fn from(node: &'a BlankNode) -> Self {
         node.as_ref().into()
     }
 }
 
-impl<'a> From<&'a NamedOrBlankNode> for NamedOrBlankNodeRef<'a> {
+impl<'a> From<&'a Subject> for SubjectRef<'a> {
     #[inline]
-    fn from(node: &'a NamedOrBlankNode) -> Self {
+    fn from(node: &'a Subject) -> Self {
         node.as_ref()
     }
 }
 
-impl<'a> From<NamedOrBlankNodeRef<'a>> for NamedOrBlankNode {
+impl<'a> From<SubjectRef<'a>> for Subject {
     #[inline]
-    fn from(node: NamedOrBlankNodeRef<'a>) -> Self {
+    fn from(node: SubjectRef<'a>) -> Self {
         node.into_owned()
     }
 }
 
-impl<'a> From<NamedOrBlankNodeRef<'a>> for rio::NamedOrBlankNode<'a> {
+impl<'a> From<SubjectRef<'a>> for rio::NamedOrBlankNode<'a> {
     #[inline]
-    fn from(node: NamedOrBlankNodeRef<'a>) -> Self {
+    fn from(node: SubjectRef<'a>) -> Self {
         match node {
-            NamedOrBlankNodeRef::NamedNode(node) => rio::NamedNode::from(node).into(),
-            NamedOrBlankNodeRef::BlankNode(node) => rio::BlankNode::from(node).into(),
+            SubjectRef::NamedNode(node) => rio::NamedNode::from(node).into(),
+            SubjectRef::BlankNode(node) => rio::BlankNode::from(node).into(),
         }
     }
 }
@@ -246,19 +246,19 @@ impl From<LiteralRef<'_>> for Term {
     }
 }
 
-impl From<NamedOrBlankNode> for Term {
+impl From<Subject> for Term {
     #[inline]
-    fn from(node: NamedOrBlankNode) -> Self {
+    fn from(node: Subject) -> Self {
         match node {
-            NamedOrBlankNode::NamedNode(node) => node.into(),
-            NamedOrBlankNode::BlankNode(node) => node.into(),
+            Subject::NamedNode(node) => node.into(),
+            Subject::BlankNode(node) => node.into(),
         }
     }
 }
 
-impl From<NamedOrBlankNodeRef<'_>> for Term {
+impl From<SubjectRef<'_>> for Term {
     #[inline]
-    fn from(node: NamedOrBlankNodeRef<'_>) -> Self {
+    fn from(node: SubjectRef<'_>) -> Self {
         node.into_owned().into()
     }
 }
@@ -351,19 +351,19 @@ impl<'a> From<&'a Literal> for TermRef<'a> {
     }
 }
 
-impl<'a> From<NamedOrBlankNodeRef<'a>> for TermRef<'a> {
+impl<'a> From<SubjectRef<'a>> for TermRef<'a> {
     #[inline]
-    fn from(node: NamedOrBlankNodeRef<'a>) -> Self {
+    fn from(node: SubjectRef<'a>) -> Self {
         match node {
-            NamedOrBlankNodeRef::NamedNode(node) => node.into(),
-            NamedOrBlankNodeRef::BlankNode(node) => node.into(),
+            SubjectRef::NamedNode(node) => node.into(),
+            SubjectRef::BlankNode(node) => node.into(),
         }
     }
 }
 
-impl<'a> From<&'a NamedOrBlankNode> for TermRef<'a> {
+impl<'a> From<&'a Subject> for TermRef<'a> {
     #[inline]
-    fn from(node: &'a NamedOrBlankNode) -> Self {
+    fn from(node: &'a Subject) -> Self {
         node.as_ref().into()
     }
 }
@@ -397,7 +397,7 @@ impl<'a> From<TermRef<'a>> for rio::Term<'a> {
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Triple {
     /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
-    pub subject: NamedOrBlankNode,
+    pub subject: Subject,
 
     /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
     pub predicate: NamedNode,
@@ -410,7 +410,7 @@ impl Triple {
     /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple)
     #[inline]
     pub fn new(
-        subject: impl Into<NamedOrBlankNode>,
+        subject: impl Into<Subject>,
         predicate: impl Into<NamedNode>,
         object: impl Into<Term>,
     ) -> Self {
@@ -453,7 +453,7 @@ impl fmt::Display for Triple {
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct TripleRef<'a> {
     /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
-    pub subject: NamedOrBlankNodeRef<'a>,
+    pub subject: SubjectRef<'a>,
 
     /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
     pub predicate: NamedNodeRef<'a>,
@@ -466,7 +466,7 @@ impl<'a> TripleRef<'a> {
     /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple)
     #[inline]
     pub fn new(
-        subject: impl Into<NamedOrBlankNodeRef<'a>>,
+        subject: impl Into<SubjectRef<'a>>,
         predicate: impl Into<NamedNodeRef<'a>>,
         object: impl Into<TermRef<'a>>,
     ) -> Self {
@@ -600,26 +600,26 @@ impl From<BlankNodeRef<'_>> for GraphName {
     }
 }
 
-impl From<NamedOrBlankNode> for GraphName {
+impl From<Subject> for GraphName {
     #[inline]
-    fn from(node: NamedOrBlankNode) -> Self {
+    fn from(node: Subject) -> Self {
         match node {
-            NamedOrBlankNode::NamedNode(node) => node.into(),
-            NamedOrBlankNode::BlankNode(node) => node.into(),
+            Subject::NamedNode(node) => node.into(),
+            Subject::BlankNode(node) => node.into(),
         }
     }
 }
 
-impl From<NamedOrBlankNodeRef<'_>> for GraphName {
+impl From<SubjectRef<'_>> for GraphName {
     #[inline]
-    fn from(node: NamedOrBlankNodeRef<'_>) -> Self {
+    fn from(node: SubjectRef<'_>) -> Self {
         node.into_owned().into()
     }
 }
 
-impl From<Option<NamedOrBlankNode>> for GraphName {
+impl From<Option<Subject>> for GraphName {
     #[inline]
-    fn from(name: Option<NamedOrBlankNode>) -> Self {
+    fn from(name: Option<Subject>) -> Self {
         if let Some(node) = name {
             node.into()
         } else {
@@ -628,7 +628,7 @@ impl From<Option<NamedOrBlankNode>> for GraphName {
     }
 }
 
-impl From<GraphName> for Option<NamedOrBlankNode> {
+impl From<GraphName> for Option<Subject> {
     #[inline]
     fn from(name: GraphName) -> Self {
         match name {
@@ -713,19 +713,19 @@ impl<'a> From<&'a BlankNode> for GraphNameRef<'a> {
     }
 }
 
-impl<'a> From<NamedOrBlankNodeRef<'a>> for GraphNameRef<'a> {
+impl<'a> From<SubjectRef<'a>> for GraphNameRef<'a> {
     #[inline]
-    fn from(node: NamedOrBlankNodeRef<'a>) -> Self {
+    fn from(node: SubjectRef<'a>) -> Self {
         match node {
-            NamedOrBlankNodeRef::NamedNode(node) => node.into(),
-            NamedOrBlankNodeRef::BlankNode(node) => node.into(),
+            SubjectRef::NamedNode(node) => node.into(),
+            SubjectRef::BlankNode(node) => node.into(),
         }
     }
 }
 
-impl<'a> From<&'a NamedOrBlankNode> for GraphNameRef<'a> {
+impl<'a> From<&'a Subject> for GraphNameRef<'a> {
     #[inline]
-    fn from(node: &'a NamedOrBlankNode) -> Self {
+    fn from(node: &'a Subject) -> Self {
         node.as_ref().into()
     }
 }
@@ -744,9 +744,9 @@ impl<'a> From<GraphNameRef<'a>> for GraphName {
     }
 }
 
-impl<'a> From<Option<NamedOrBlankNodeRef<'a>>> for GraphNameRef<'a> {
+impl<'a> From<Option<SubjectRef<'a>>> for GraphNameRef<'a> {
     #[inline]
-    fn from(name: Option<NamedOrBlankNodeRef<'a>>) -> Self {
+    fn from(name: Option<SubjectRef<'a>>) -> Self {
         if let Some(node) = name {
             node.into()
         } else {
@@ -755,7 +755,7 @@ impl<'a> From<Option<NamedOrBlankNodeRef<'a>>> for GraphNameRef<'a> {
     }
 }
 
-impl<'a> From<GraphNameRef<'a>> for Option<NamedOrBlankNodeRef<'a>> {
+impl<'a> From<GraphNameRef<'a>> for Option<SubjectRef<'a>> {
     #[inline]
     fn from(name: GraphNameRef<'a>) -> Self {
         match name {
@@ -781,7 +781,7 @@ impl<'a> From<GraphNameRef<'a>> for Option<rio::NamedOrBlankNode<'a>> {
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Quad {
     /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
-    pub subject: NamedOrBlankNode,
+    pub subject: Subject,
 
     /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
     pub predicate: NamedNode,
@@ -797,7 +797,7 @@ impl Quad {
     /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
     #[inline]
     pub fn new(
-        subject: impl Into<NamedOrBlankNode>,
+        subject: impl Into<Subject>,
         predicate: impl Into<NamedNode>,
         object: impl Into<Term>,
         graph_name: impl Into<GraphName>,
@@ -843,7 +843,7 @@ impl From<Quad> for Triple {
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct QuadRef<'a> {
     /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
-    pub subject: NamedOrBlankNodeRef<'a>,
+    pub subject: SubjectRef<'a>,
 
     /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
     pub predicate: NamedNodeRef<'a>,
@@ -859,7 +859,7 @@ impl<'a> QuadRef<'a> {
     /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
     #[inline]
     pub fn new(
-        subject: impl Into<NamedOrBlankNodeRef<'a>>,
+        subject: impl Into<SubjectRef<'a>>,
         predicate: impl Into<NamedNodeRef<'a>>,
         object: impl Into<TermRef<'a>>,
         graph_name: impl Into<GraphNameRef<'a>>,
