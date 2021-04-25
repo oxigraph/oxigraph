@@ -5,38 +5,6 @@ use crate::term::*;
 use std::collections::BTreeSet;
 use std::fmt;
 
-/// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern)
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct TriplePattern {
-    pub subject: TermOrVariable,
-    pub predicate: NamedNodeOrVariable,
-    pub object: TermOrVariable,
-}
-
-impl TriplePattern {
-    pub(crate) fn new(
-        subject: impl Into<TermOrVariable>,
-        predicate: impl Into<NamedNodeOrVariable>,
-        object: impl Into<TermOrVariable>,
-    ) -> Self {
-        Self {
-            subject: subject.into(),
-            predicate: predicate.into(),
-            object: object.into(),
-        }
-    }
-}
-
-impl fmt::Display for TriplePattern {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "(triple {} {} {})",
-            self.subject, self.predicate, self.object
-        )
-    }
-}
-
 pub(crate) struct SparqlTriplePattern<'a>(pub(crate) &'a TriplePattern);
 
 impl<'a> fmt::Display for SparqlTriplePattern<'a> {
@@ -49,81 +17,11 @@ impl<'a> fmt::Display for SparqlTriplePattern<'a> {
     }
 }
 
-/// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) in a specific graph
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct QuadPattern {
-    pub subject: TermOrVariable,
-    pub predicate: NamedNodeOrVariable,
-    pub object: TermOrVariable,
-    pub graph_name: GraphNameOrVariable,
-}
-
-impl QuadPattern {
-    pub(crate) fn new(
-        subject: impl Into<TermOrVariable>,
-        predicate: impl Into<NamedNodeOrVariable>,
-        object: impl Into<TermOrVariable>,
-        graph_name: impl Into<GraphNameOrVariable>,
-    ) -> Self {
-        Self {
-            subject: subject.into(),
-            predicate: predicate.into(),
-            object: object.into(),
-            graph_name: graph_name.into(),
-        }
-    }
-}
-
-impl fmt::Display for QuadPattern {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.graph_name == GraphNameOrVariable::DefaultGraph {
-            write!(
-                f,
-                "(triple {} {} {})",
-                self.subject, self.predicate, self.object
-            )
-        } else {
-            write!(
-                f,
-                "(graph {} (triple {} {} {}))",
-                self.graph_name, self.subject, self.predicate, self.object
-            )
-        }
-    }
-}
-
-/// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) in a specific graph without blank nodes
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct GroundQuadPattern {
-    pub subject: GroundTermOrVariable,
-    pub predicate: NamedNodeOrVariable,
-    pub object: GroundTermOrVariable,
-    pub graph_name: GraphNameOrVariable,
-}
-
-impl fmt::Display for GroundQuadPattern {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.graph_name == GraphNameOrVariable::DefaultGraph {
-            write!(
-                f,
-                "(triple {} {} {})",
-                self.subject, self.predicate, self.object
-            )
-        } else {
-            write!(
-                f,
-                "(graph {} (triple {} {} {}))",
-                self.graph_name, self.subject, self.predicate, self.object
-            )
-        }
-    }
-}
-
 pub(crate) struct SparqlQuadPattern<'a>(pub(crate) &'a QuadPattern);
 
 impl<'a> fmt::Display for SparqlQuadPattern<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.0.graph_name == GraphNameOrVariable::DefaultGraph {
+        if self.0.graph_name == GraphNamePattern::DefaultGraph {
             write!(
                 f,
                 "{} {} {} .",
@@ -143,7 +41,7 @@ pub(crate) struct SparqlGroundQuadPattern<'a>(pub(crate) &'a GroundQuadPattern);
 
 impl<'a> fmt::Display for SparqlGroundQuadPattern<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.0.graph_name == GraphNameOrVariable::DefaultGraph {
+        if self.0.graph_name == GraphNamePattern::DefaultGraph {
             write!(
                 f,
                 "{} {} {} .",
@@ -570,9 +468,9 @@ pub enum GraphPattern {
     Bgp(Vec<TriplePattern>),
     /// A [property path pattern](https://www.w3.org/TR/sparql11-query/#defn_evalPP_predicate)
     Path {
-        subject: TermOrVariable,
+        subject: TermPattern,
         path: PropertyPathExpression,
-        object: TermOrVariable,
+        object: TermPattern,
     },
     /// [Join](https://www.w3.org/TR/sparql11-query/#defn_algJoin)
     Join {
@@ -596,7 +494,7 @@ pub enum GraphPattern {
         right: Box<GraphPattern>,
     },
     Graph {
-        graph_name: NamedNodeOrVariable,
+        graph_name: NamedNodePattern,
         inner: Box<GraphPattern>,
     },
     /// [Extend](https://www.w3.org/TR/sparql11-query/#defn_extend)
@@ -643,7 +541,7 @@ pub enum GraphPattern {
     },
     /// [Service](https://www.w3.org/TR/sparql11-federated-query/#defn_evalService)
     Service {
-        name: NamedNodeOrVariable,
+        name: NamedNodePattern,
         pattern: Box<GraphPattern>,
         silent: bool,
     },
@@ -783,13 +681,13 @@ impl GraphPattern {
         match self {
             GraphPattern::Bgp(p) => {
                 for pattern in p {
-                    if let TermOrVariable::Variable(s) = &pattern.subject {
+                    if let TermPattern::Variable(s) = &pattern.subject {
                         vars.insert(s);
                     }
-                    if let NamedNodeOrVariable::Variable(p) = &pattern.predicate {
+                    if let NamedNodePattern::Variable(p) = &pattern.predicate {
                         vars.insert(p);
                     }
-                    if let TermOrVariable::Variable(o) = &pattern.object {
+                    if let TermPattern::Variable(o) = &pattern.object {
                         vars.insert(o);
                     }
                 }
@@ -797,10 +695,10 @@ impl GraphPattern {
             GraphPattern::Path {
                 subject, object, ..
             } => {
-                if let TermOrVariable::Variable(s) = subject {
+                if let TermPattern::Variable(s) = subject {
                     vars.insert(s);
                 }
-                if let TermOrVariable::Variable(o) = object {
+                if let TermPattern::Variable(o) = object {
                     vars.insert(o);
                 }
             }
@@ -812,7 +710,7 @@ impl GraphPattern {
             }
             GraphPattern::Filter { inner, .. } => inner.add_visible_variables(vars),
             GraphPattern::Graph { graph_name, inner } => {
-                if let NamedNodeOrVariable::Variable(ref g) = graph_name {
+                if let NamedNodePattern::Variable(ref g) = graph_name {
                     vars.insert(g);
                 }
                 inner.add_visible_variables(vars);

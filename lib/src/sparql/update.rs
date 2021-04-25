@@ -16,11 +16,11 @@ use crate::storage::Storage;
 use http::header::{ACCEPT, CONTENT_TYPE, USER_AGENT};
 use http::{Method, Request, StatusCode};
 use oxiri::Iri;
-use spargebra::algebra::{GraphPattern, GraphTarget, GroundQuadPattern, QuadPattern};
+use spargebra::algebra::{GraphPattern, GraphTarget};
 use spargebra::term::{
-    BlankNode, GraphName, GraphNameOrVariable, GroundQuad, GroundTerm, GroundTermOrVariable,
-    Literal, NamedNode, NamedNodeOrVariable, NamedOrBlankNode, Quad, Term, TermOrVariable,
-    Variable,
+    BlankNode, GraphName, GraphNamePattern, GroundQuad, GroundQuadPattern, GroundTerm,
+    GroundTermPattern, Literal, NamedNode, NamedNodePattern, NamedOrBlankNode, Quad, QuadPattern,
+    Term, TermPattern, Variable,
 };
 use spargebra::GraphUpdateOperation;
 use std::collections::HashMap;
@@ -376,36 +376,32 @@ impl<'a> SimpleUpdateEvaluator<'a> {
 
     fn encode_term_or_var_for_insertion(
         &mut self,
-        term: &TermOrVariable,
+        term: &TermPattern,
         variables: &[Variable],
         values: &[Option<EncodedTerm>],
         bnodes: &mut HashMap<BlankNode, OxBlankNode>,
         validate: impl FnOnce(&EncodedTerm) -> bool,
     ) -> Result<Option<EncodedTerm>, EvaluationError> {
         Ok(match term {
-            TermOrVariable::NamedNode(term) => Some(self.encode_named_node_for_insertion(term)?),
-            TermOrVariable::BlankNode(bnode) => Some(
+            TermPattern::NamedNode(term) => Some(self.encode_named_node_for_insertion(term)?),
+            TermPattern::BlankNode(bnode) => Some(
                 self.storage
                     .encode_blank_node(bnodes.entry(bnode.clone()).or_default().as_ref())?,
             ),
-            TermOrVariable::Literal(term) => Some(self.encode_literal_for_insertion(term)?),
-            TermOrVariable::Variable(v) => {
-                self.lookup_variable(v, variables, values).filter(validate)
-            }
+            TermPattern::Literal(term) => Some(self.encode_literal_for_insertion(term)?),
+            TermPattern::Variable(v) => self.lookup_variable(v, variables, values).filter(validate),
         })
     }
 
     fn encode_named_node_or_var_for_insertion(
         &mut self,
-        term: &NamedNodeOrVariable,
+        term: &NamedNodePattern,
         variables: &[Variable],
         values: &[Option<EncodedTerm>],
     ) -> Result<Option<EncodedTerm>, EvaluationError> {
         Ok(match term {
-            NamedNodeOrVariable::NamedNode(term) => {
-                Some(self.encode_named_node_for_insertion(term)?)
-            }
-            NamedNodeOrVariable::Variable(v) => self
+            NamedNodePattern::NamedNode(term) => Some(self.encode_named_node_for_insertion(term)?),
+            NamedNodePattern::Variable(v) => self
                 .lookup_variable(v, variables, values)
                 .filter(|value| value.is_named_node()),
         })
@@ -413,16 +409,14 @@ impl<'a> SimpleUpdateEvaluator<'a> {
 
     fn encode_graph_name_or_var_for_insertion(
         &mut self,
-        term: &GraphNameOrVariable,
+        term: &GraphNamePattern,
         variables: &[Variable],
         values: &[Option<EncodedTerm>],
     ) -> Result<Option<EncodedTerm>, EvaluationError> {
         Ok(match term {
-            GraphNameOrVariable::NamedNode(term) => {
-                Some(self.encode_named_node_for_insertion(term)?)
-            }
-            GraphNameOrVariable::DefaultGraph => Some(EncodedTerm::DefaultGraph),
-            GraphNameOrVariable::Variable(v) => self
+            GraphNamePattern::NamedNode(term) => Some(self.encode_named_node_for_insertion(term)?),
+            GraphNamePattern::DefaultGraph => Some(EncodedTerm::DefaultGraph),
+            GraphNamePattern::Variable(v) => self
                 .lookup_variable(v, variables, values)
                 .filter(|value| value.is_named_node()),
         })
@@ -510,28 +504,26 @@ impl<'a> SimpleUpdateEvaluator<'a> {
 
     fn encode_term_or_var_for_deletion(
         &self,
-        term: &GroundTermOrVariable,
+        term: &GroundTermPattern,
         variables: &[Variable],
         values: &[Option<EncodedTerm>],
     ) -> Option<EncodedTerm> {
         match term {
-            GroundTermOrVariable::NamedNode(term) => {
-                Some(self.encode_named_node_for_deletion(term))
-            }
-            GroundTermOrVariable::Literal(term) => Some(self.encode_literal_for_deletion(term)),
-            GroundTermOrVariable::Variable(v) => self.lookup_variable(v, variables, values),
+            GroundTermPattern::NamedNode(term) => Some(self.encode_named_node_for_deletion(term)),
+            GroundTermPattern::Literal(term) => Some(self.encode_literal_for_deletion(term)),
+            GroundTermPattern::Variable(v) => self.lookup_variable(v, variables, values),
         }
     }
 
     fn encode_named_node_or_var_for_deletion(
         &self,
-        term: &NamedNodeOrVariable,
+        term: &NamedNodePattern,
         variables: &[Variable],
         values: &[Option<EncodedTerm>],
     ) -> Option<EncodedTerm> {
         match term {
-            NamedNodeOrVariable::NamedNode(term) => Some(self.encode_named_node_for_deletion(term)),
-            NamedNodeOrVariable::Variable(v) => self
+            NamedNodePattern::NamedNode(term) => Some(self.encode_named_node_for_deletion(term)),
+            NamedNodePattern::Variable(v) => self
                 .lookup_variable(v, variables, values)
                 .filter(|v| v.is_named_node()),
         }
@@ -539,14 +531,14 @@ impl<'a> SimpleUpdateEvaluator<'a> {
 
     fn encode_graph_name_or_var_for_deletion(
         &self,
-        graph_name: &GraphNameOrVariable,
+        graph_name: &GraphNamePattern,
         variables: &[Variable],
         values: &[Option<EncodedTerm>],
     ) -> Option<EncodedTerm> {
         match graph_name {
-            GraphNameOrVariable::NamedNode(term) => Some(self.encode_named_node_for_deletion(term)),
-            GraphNameOrVariable::DefaultGraph => Some(EncodedTerm::DefaultGraph),
-            GraphNameOrVariable::Variable(v) => self
+            GraphNamePattern::NamedNode(term) => Some(self.encode_named_node_for_deletion(term)),
+            GraphNamePattern::DefaultGraph => Some(EncodedTerm::DefaultGraph),
+            GraphNamePattern::Variable(v) => self
                 .lookup_variable(v, variables, values)
                 .filter(|v| v.is_named_node()),
         }

@@ -119,28 +119,6 @@ impl fmt::Display for Literal {
     }
 }
 
-/// A [SPARQL query variable](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
-///
-/// ```
-/// use spargebra::term::Variable;
-///
-/// assert_eq!(
-///     "?foo",
-///     Variable { name: "foo".into() }.to_string()
-/// );
-/// ```
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
-pub struct Variable {
-    pub name: String,
-}
-
-impl fmt::Display for Variable {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "?{}", self.name)
-    }
-}
-
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
@@ -171,39 +149,6 @@ impl From<BlankNode> for NamedOrBlankNode {
     #[inline]
     fn from(node: BlankNode) -> Self {
         Self::BlankNode(node)
-    }
-}
-
-/// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
-///
-/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum GroundTerm {
-    NamedNode(NamedNode),
-    Literal(Literal),
-}
-
-impl fmt::Display for GroundTerm {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            GroundTerm::NamedNode(node) => node.fmt(f),
-            GroundTerm::Literal(literal) => literal.fmt(f),
-        }
-    }
-}
-
-impl From<NamedNode> for GroundTerm {
-    #[inline]
-    fn from(node: NamedNode) -> Self {
-        Self::NamedNode(node)
-    }
-}
-
-impl From<Literal> for GroundTerm {
-    #[inline]
-    fn from(literal: Literal) -> Self {
-        Self::Literal(literal)
     }
 }
 
@@ -261,8 +206,42 @@ impl From<NamedOrBlankNode> for Term {
     }
 }
 
+/// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
+///
+/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub enum GroundTerm {
+    NamedNode(NamedNode),
+    Literal(Literal),
+}
+
+impl fmt::Display for GroundTerm {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GroundTerm::NamedNode(node) => node.fmt(f),
+            GroundTerm::Literal(literal) => literal.fmt(f),
+        }
+    }
+}
+
+impl From<NamedNode> for GroundTerm {
+    #[inline]
+    fn from(node: NamedNode) -> Self {
+        Self::NamedNode(node)
+    }
+}
+
+impl From<Literal> for GroundTerm {
+    #[inline]
+    fn from(literal: Literal) -> Self {
+        Self::Literal(literal)
+    }
+}
+
 /// A possible graph name.
-/// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
+///
+/// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GraphName {
     NamedNode(NamedNode),
@@ -368,29 +347,54 @@ impl fmt::Display for GroundQuad {
     }
 }
 
+/// A [SPARQL query variable](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
+///
+/// ```
+/// use spargebra::term::Variable;
+///
+/// assert_eq!(
+///     "?foo",
+///     Variable { name: "foo".into() }.to_string()
+/// );
+/// ```
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+pub struct Variable {
+    pub name: String,
+}
+
+impl fmt::Display for Variable {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "?{}", self.name)
+    }
+}
+
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum NamedNodeOrVariable {
+pub enum NamedNodePattern {
     NamedNode(NamedNode),
     Variable(Variable),
 }
 
-impl fmt::Display for NamedNodeOrVariable {
+impl fmt::Display for NamedNodePattern {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            NamedNodeOrVariable::NamedNode(node) => node.fmt(f),
-            NamedNodeOrVariable::Variable(var) => var.fmt(f),
+            NamedNodePattern::NamedNode(node) => node.fmt(f),
+            NamedNodePattern::Variable(var) => var.fmt(f),
         }
     }
 }
 
-impl From<NamedNode> for NamedNodeOrVariable {
+impl From<NamedNode> for NamedNodePattern {
+    #[inline]
     fn from(node: NamedNode) -> Self {
         Self::NamedNode(node)
     }
 }
 
-impl From<Variable> for NamedNodeOrVariable {
+impl From<Variable> for NamedNodePattern {
+    #[inline]
     fn from(var: Variable) -> Self {
         Self::Variable(var)
     }
@@ -398,103 +402,54 @@ impl From<Variable> for NamedNodeOrVariable {
 
 /// The union of [terms](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum GroundTermOrVariable {
-    NamedNode(NamedNode),
-    Literal(Literal),
-    Variable(Variable),
-}
-
-impl fmt::Display for GroundTermOrVariable {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            GroundTermOrVariable::NamedNode(term) => term.fmt(f),
-            GroundTermOrVariable::Literal(term) => term.fmt(f),
-            GroundTermOrVariable::Variable(var) => var.fmt(f),
-        }
-    }
-}
-
-impl From<NamedNode> for GroundTermOrVariable {
-    fn from(node: NamedNode) -> Self {
-        Self::NamedNode(node)
-    }
-}
-
-impl From<Literal> for GroundTermOrVariable {
-    fn from(literal: Literal) -> Self {
-        Self::Literal(literal)
-    }
-}
-
-impl From<Variable> for GroundTermOrVariable {
-    fn from(var: Variable) -> Self {
-        Self::Variable(var)
-    }
-}
-
-impl From<GroundTerm> for GroundTermOrVariable {
-    fn from(term: GroundTerm) -> Self {
-        match term {
-            GroundTerm::NamedNode(node) => Self::NamedNode(node),
-            GroundTerm::Literal(literal) => Self::Literal(literal),
-        }
-    }
-}
-
-impl From<NamedNodeOrVariable> for GroundTermOrVariable {
-    fn from(element: NamedNodeOrVariable) -> Self {
-        match element {
-            NamedNodeOrVariable::NamedNode(node) => Self::NamedNode(node),
-            NamedNodeOrVariable::Variable(var) => Self::Variable(var),
-        }
-    }
-}
-
-/// The union of [terms](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum TermOrVariable {
+pub enum TermPattern {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
     Literal(Literal),
     Variable(Variable),
 }
 
-impl fmt::Display for TermOrVariable {
+impl fmt::Display for TermPattern {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TermOrVariable::NamedNode(term) => term.fmt(f),
-            TermOrVariable::BlankNode(term) => term.fmt(f),
-            TermOrVariable::Literal(term) => term.fmt(f),
-            TermOrVariable::Variable(var) => var.fmt(f),
+            TermPattern::NamedNode(term) => term.fmt(f),
+            TermPattern::BlankNode(term) => term.fmt(f),
+            TermPattern::Literal(term) => term.fmt(f),
+            TermPattern::Variable(var) => var.fmt(f),
         }
     }
 }
 
-impl From<NamedNode> for TermOrVariable {
+impl From<NamedNode> for TermPattern {
+    #[inline]
     fn from(node: NamedNode) -> Self {
         Self::NamedNode(node)
     }
 }
 
-impl From<BlankNode> for TermOrVariable {
+impl From<BlankNode> for TermPattern {
+    #[inline]
     fn from(node: BlankNode) -> Self {
         Self::BlankNode(node)
     }
 }
 
-impl From<Literal> for TermOrVariable {
+impl From<Literal> for TermPattern {
+    #[inline]
     fn from(literal: Literal) -> Self {
         Self::Literal(literal)
     }
 }
 
-impl From<Variable> for TermOrVariable {
+impl From<Variable> for TermPattern {
     fn from(var: Variable) -> Self {
         Self::Variable(var)
     }
 }
 
-impl From<Term> for TermOrVariable {
+impl From<Term> for TermPattern {
+    #[inline]
     fn from(term: Term) -> Self {
         match term {
             Term::NamedNode(node) => Self::NamedNode(node),
@@ -504,46 +459,111 @@ impl From<Term> for TermOrVariable {
     }
 }
 
-impl From<NamedNodeOrVariable> for TermOrVariable {
-    fn from(element: NamedNodeOrVariable) -> Self {
+impl From<NamedNodePattern> for TermPattern {
+    #[inline]
+    fn from(element: NamedNodePattern) -> Self {
         match element {
-            NamedNodeOrVariable::NamedNode(node) => Self::NamedNode(node),
-            NamedNodeOrVariable::Variable(var) => Self::Variable(var),
+            NamedNodePattern::NamedNode(node) => Self::NamedNode(node),
+            NamedNodePattern::Variable(var) => Self::Variable(var),
+        }
+    }
+}
+
+/// The union of [terms](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables) without blank nodes.
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub enum GroundTermPattern {
+    NamedNode(NamedNode),
+    Literal(Literal),
+    Variable(Variable),
+}
+
+impl fmt::Display for GroundTermPattern {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GroundTermPattern::NamedNode(term) => term.fmt(f),
+            GroundTermPattern::Literal(term) => term.fmt(f),
+            GroundTermPattern::Variable(var) => var.fmt(f),
+        }
+    }
+}
+
+impl From<NamedNode> for GroundTermPattern {
+    #[inline]
+    fn from(node: NamedNode) -> Self {
+        Self::NamedNode(node)
+    }
+}
+
+impl From<Literal> for GroundTermPattern {
+    #[inline]
+    fn from(literal: Literal) -> Self {
+        Self::Literal(literal)
+    }
+}
+
+impl From<Variable> for GroundTermPattern {
+    #[inline]
+    fn from(var: Variable) -> Self {
+        Self::Variable(var)
+    }
+}
+
+impl From<GroundTerm> for GroundTermPattern {
+    #[inline]
+    fn from(term: GroundTerm) -> Self {
+        match term {
+            GroundTerm::NamedNode(node) => Self::NamedNode(node),
+            GroundTerm::Literal(literal) => Self::Literal(literal),
+        }
+    }
+}
+
+impl From<NamedNodePattern> for GroundTermPattern {
+    #[inline]
+    fn from(element: NamedNodePattern) -> Self {
+        match element {
+            NamedNodePattern::NamedNode(node) => Self::NamedNode(node),
+            NamedNodePattern::Variable(var) => Self::Variable(var),
         }
     }
 }
 
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum GraphNameOrVariable {
+pub enum GraphNamePattern {
     NamedNode(NamedNode),
     DefaultGraph,
     Variable(Variable),
 }
 
-impl fmt::Display for GraphNameOrVariable {
+impl fmt::Display for GraphNamePattern {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GraphNameOrVariable::NamedNode(node) => node.fmt(f),
-            GraphNameOrVariable::DefaultGraph => f.write_str("DEFAULT"),
-            GraphNameOrVariable::Variable(var) => var.fmt(f),
+            GraphNamePattern::NamedNode(node) => node.fmt(f),
+            GraphNamePattern::DefaultGraph => f.write_str("DEFAULT"),
+            GraphNamePattern::Variable(var) => var.fmt(f),
         }
     }
 }
 
-impl From<NamedNode> for GraphNameOrVariable {
+impl From<NamedNode> for GraphNamePattern {
+    #[inline]
     fn from(node: NamedNode) -> Self {
         Self::NamedNode(node)
     }
 }
 
-impl From<Variable> for GraphNameOrVariable {
+impl From<Variable> for GraphNamePattern {
+    #[inline]
     fn from(var: Variable) -> Self {
         Self::Variable(var)
     }
 }
 
-impl From<GraphName> for GraphNameOrVariable {
+impl From<GraphName> for GraphNamePattern {
+    #[inline]
     fn from(graph_name: GraphName) -> Self {
         match graph_name {
             GraphName::NamedNode(node) => Self::NamedNode(node),
@@ -552,11 +572,117 @@ impl From<GraphName> for GraphNameOrVariable {
     }
 }
 
-impl From<NamedNodeOrVariable> for GraphNameOrVariable {
-    fn from(graph_name: NamedNodeOrVariable) -> Self {
+impl From<NamedNodePattern> for GraphNamePattern {
+    #[inline]
+    fn from(graph_name: NamedNodePattern) -> Self {
         match graph_name {
-            NamedNodeOrVariable::NamedNode(node) => Self::NamedNode(node),
-            NamedNodeOrVariable::Variable(var) => Self::Variable(var),
+            NamedNodePattern::NamedNode(node) => Self::NamedNode(node),
+            NamedNodePattern::Variable(var) => Self::Variable(var),
+        }
+    }
+}
+
+/// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern)
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct TriplePattern {
+    pub subject: TermPattern,
+    pub predicate: NamedNodePattern,
+    pub object: TermPattern,
+}
+
+impl TriplePattern {
+    pub(crate) fn new(
+        subject: impl Into<TermPattern>,
+        predicate: impl Into<NamedNodePattern>,
+        object: impl Into<TermPattern>,
+    ) -> Self {
+        Self {
+            subject: subject.into(),
+            predicate: predicate.into(),
+            object: object.into(),
+        }
+    }
+}
+
+impl fmt::Display for TriplePattern {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "(triple {} {} {})",
+            self.subject, self.predicate, self.object
+        )
+    }
+}
+
+/// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) in a specific graph
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct QuadPattern {
+    pub subject: TermPattern,
+    pub predicate: NamedNodePattern,
+    pub object: TermPattern,
+    pub graph_name: GraphNamePattern,
+}
+
+impl QuadPattern {
+    pub(crate) fn new(
+        subject: impl Into<TermPattern>,
+        predicate: impl Into<NamedNodePattern>,
+        object: impl Into<TermPattern>,
+        graph_name: impl Into<GraphNamePattern>,
+    ) -> Self {
+        Self {
+            subject: subject.into(),
+            predicate: predicate.into(),
+            object: object.into(),
+            graph_name: graph_name.into(),
+        }
+    }
+}
+
+impl fmt::Display for QuadPattern {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.graph_name == GraphNamePattern::DefaultGraph {
+            write!(
+                f,
+                "(triple {} {} {})",
+                self.subject, self.predicate, self.object
+            )
+        } else {
+            write!(
+                f,
+                "(graph {} (triple {} {} {}))",
+                self.graph_name, self.subject, self.predicate, self.object
+            )
+        }
+    }
+}
+
+/// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) in a specific graph without blank nodes
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct GroundQuadPattern {
+    pub subject: GroundTermPattern,
+    pub predicate: NamedNodePattern,
+    pub object: GroundTermPattern,
+    pub graph_name: GraphNamePattern,
+}
+
+impl fmt::Display for GroundQuadPattern {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.graph_name == GraphNamePattern::DefaultGraph {
+            write!(
+                f,
+                "(triple {} {} {})",
+                self.subject, self.predicate, self.object
+            )
+        } else {
+            write!(
+                f,
+                "(graph {} (triple {} {} {}))",
+                self.graph_name, self.subject, self.predicate, self.object
+            )
         }
     }
 }

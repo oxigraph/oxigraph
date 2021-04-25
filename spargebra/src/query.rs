@@ -1,5 +1,6 @@
 use crate::algebra::*;
 use crate::parser::{parse_query, ParseError};
+use crate::term::*;
 use oxiri::Iri;
 use std::convert::TryFrom;
 use std::fmt;

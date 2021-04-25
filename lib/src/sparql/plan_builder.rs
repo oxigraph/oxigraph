@@ -768,15 +768,15 @@ impl<'a> PlanBuilder<'a> {
 
     fn pattern_value_from_term_or_variable(
         &mut self,
-        term_or_variable: &TermOrVariable,
+        term_or_variable: &TermPattern,
         variables: &mut Vec<Variable>,
     ) -> Result<PatternValue, EvaluationError> {
         Ok(match term_or_variable {
-            TermOrVariable::Variable(variable) => {
+            TermPattern::Variable(variable) => {
                 PatternValue::Variable(variable_key(variables, variable))
             }
-            TermOrVariable::NamedNode(node) => PatternValue::Constant(self.build_named_node(node)?),
-            TermOrVariable::BlankNode(bnode) => {
+            TermPattern::NamedNode(node) => PatternValue::Constant(self.build_named_node(node)?),
+            TermPattern::BlankNode(bnode) => {
                 PatternValue::Variable(variable_key(
                     variables,
                     &Variable {
@@ -785,22 +785,20 @@ impl<'a> PlanBuilder<'a> {
                 ))
                 //TODO: very bad hack to convert bnode to variable
             }
-            TermOrVariable::Literal(literal) => {
-                PatternValue::Constant(self.build_literal(literal)?)
-            }
+            TermPattern::Literal(literal) => PatternValue::Constant(self.build_literal(literal)?),
         })
     }
 
     fn pattern_value_from_named_node_or_variable(
         &mut self,
-        named_node_or_variable: &NamedNodeOrVariable,
+        named_node_or_variable: &NamedNodePattern,
         variables: &mut Vec<Variable>,
     ) -> Result<PatternValue, EvaluationError> {
         Ok(match named_node_or_variable {
-            NamedNodeOrVariable::NamedNode(named_node) => {
+            NamedNodePattern::NamedNode(named_node) => {
                 PatternValue::Constant(self.build_named_node(named_node)?)
             }
-            NamedNodeOrVariable::Variable(variable) => {
+            NamedNodePattern::Variable(variable) => {
                 PatternValue::Variable(variable_key(variables, variable))
             }
         })
@@ -921,21 +919,21 @@ impl<'a> PlanBuilder<'a> {
 
     fn template_value_from_term_or_variable(
         &mut self,
-        term_or_variable: &TermOrVariable,
+        term_or_variable: &TermPattern,
         variables: &mut Vec<Variable>,
         bnodes: &mut Vec<BlankNode>,
     ) -> Result<TripleTemplateValue, EvaluationError> {
         Ok(match term_or_variable {
-            TermOrVariable::Variable(variable) => {
+            TermPattern::Variable(variable) => {
                 TripleTemplateValue::Variable(variable_key(variables, variable))
             }
-            TermOrVariable::NamedNode(node) => {
+            TermPattern::NamedNode(node) => {
                 TripleTemplateValue::Constant(self.build_named_node(node)?)
             }
-            TermOrVariable::BlankNode(bnode) => {
+            TermPattern::BlankNode(bnode) => {
                 TripleTemplateValue::BlankNode(bnode_key(bnodes, bnode))
             }
-            TermOrVariable::Literal(literal) => {
+            TermPattern::Literal(literal) => {
                 TripleTemplateValue::Constant(self.build_literal(literal)?)
             }
         })
@@ -943,14 +941,14 @@ impl<'a> PlanBuilder<'a> {
 
     fn template_value_from_named_node_or_variable(
         &mut self,
-        named_node_or_variable: &NamedNodeOrVariable,
+        named_node_or_variable: &NamedNodePattern,
         variables: &mut Vec<Variable>,
     ) -> Result<TripleTemplateValue, EvaluationError> {
         Ok(match named_node_or_variable {
-            NamedNodeOrVariable::Variable(variable) => {
+            NamedNodePattern::Variable(variable) => {
                 TripleTemplateValue::Variable(variable_key(variables, variable))
             }
-            NamedNodeOrVariable::NamedNode(term) => {
+            NamedNodePattern::NamedNode(term) => {
                 TripleTemplateValue::Constant(self.build_named_node(term)?)
             }
         })
@@ -1126,29 +1124,29 @@ fn count_pattern_binds(
     assigned_blank_nodes: &HashSet<&BlankNode>,
 ) -> u8 {
     let mut count = 12;
-    if let TermOrVariable::Variable(v) = &pattern.subject {
+    if let TermPattern::Variable(v) = &pattern.subject {
         if !assigned_variables.contains(v) {
             count -= 4;
         }
-    } else if let TermOrVariable::BlankNode(bnode) = &pattern.subject {
+    } else if let TermPattern::BlankNode(bnode) = &pattern.subject {
         if !assigned_blank_nodes.contains(bnode) {
             count -= 4;
         }
     } else {
         count -= 1;
     }
-    if let NamedNodeOrVariable::Variable(v) = &pattern.predicate {
+    if let NamedNodePattern::Variable(v) = &pattern.predicate {
         if !assigned_variables.contains(v) {
             count -= 4;
         }
     } else {
         count -= 1;
     }
-    if let TermOrVariable::Variable(v) = &pattern.object {
+    if let TermPattern::Variable(v) = &pattern.object {
         if !assigned_variables.contains(v) {
             count -= 4;
         }
-    } else if let TermOrVariable::BlankNode(bnode) = &pattern.object {
+    } else if let TermPattern::BlankNode(bnode) = &pattern.object {
         if !assigned_blank_nodes.contains(bnode) {
             count -= 4;
         }
@@ -1163,17 +1161,17 @@ fn add_pattern_variables<'a>(
     variables: &mut HashSet<&'a Variable>,
     blank_nodes: &mut HashSet<&'a BlankNode>,
 ) {
-    if let TermOrVariable::Variable(v) = &pattern.subject {
+    if let TermPattern::Variable(v) = &pattern.subject {
         variables.insert(v);
-    } else if let TermOrVariable::BlankNode(bnode) = &pattern.subject {
+    } else if let TermPattern::BlankNode(bnode) = &pattern.subject {
         blank_nodes.insert(bnode);
     }
-    if let NamedNodeOrVariable::Variable(v) = &pattern.predicate {
+    if let NamedNodePattern::Variable(v) = &pattern.predicate {
         variables.insert(v);
     }
-    if let TermOrVariable::Variable(v) = &pattern.object {
+    if let TermPattern::Variable(v) = &pattern.object {
         variables.insert(v);
-    } else if let TermOrVariable::BlankNode(bnode) = &pattern.object {
+    } else if let TermPattern::BlankNode(bnode) = &pattern.object {
         blank_nodes.insert(bnode);
     }
 }

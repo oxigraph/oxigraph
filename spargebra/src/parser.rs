@@ -139,9 +139,9 @@ impl From<PropertyPathExpression> for VariableOrPropertyPath {
 }
 
 fn add_to_triple_or_path_patterns(
-    subject: TermOrVariable,
+    subject: TermPattern,
     predicate: impl Into<VariableOrPropertyPath>,
-    object: TermOrVariable,
+    object: TermPattern,
     patterns: &mut Vec<TripleOrPathPattern>,
 ) {
     match predicate.into() {
@@ -199,9 +199,9 @@ fn build_bgp(patterns: Vec<TripleOrPathPattern>) -> GraphPattern {
 enum TripleOrPathPattern {
     Triple(TriplePattern),
     Path {
-        subject: TermOrVariable,
+        subject: TermPattern,
         path: PropertyPathExpression,
-        object: TermOrVariable,
+        object: TermPattern,
     },
 }
 
@@ -454,10 +454,7 @@ fn build_select(
     m
 }
 
-fn copy_graph(
-    from: impl Into<GraphName>,
-    to: impl Into<GraphNameOrVariable>,
-) -> GraphUpdateOperation {
+fn copy_graph(from: impl Into<GraphName>, to: impl Into<GraphNamePattern>) -> GraphUpdateOperation {
     let bgp = GraphPattern::Bgp(vec![TriplePattern::new(
         Variable { name: "s".into() },
         Variable { name: "p".into() },
@@ -840,14 +837,14 @@ parser! {
                     pattern: build_select(Selection {
                         option: SelectionOption::Default,
                         variables: Some(p.into_iter().map(|var_or_iri| match var_or_iri {
-                            NamedNodeOrVariable::NamedNode(n) => SelectionMember::Expression(n.into(), variable()),
-                            NamedNodeOrVariable::Variable(v) => SelectionMember::Variable(v)
+                            NamedNodePattern::NamedNode(n) => SelectionMember::Expression(n.into(), variable()),
+                            NamedNodePattern::Variable(v) => SelectionMember::Variable(v)
                         }).collect())
                     }, w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state),
                     base_iri: state.base_iri.clone()
                 }
             }
-        rule DescribeQuery_item() -> NamedNodeOrVariable = i:VarOrIri() _ { i }
+        rule DescribeQuery_item() -> NamedNodePattern = i:VarOrIri() _ { i }
 
         //[12]
         rule AskQuery() -> Query = i("ASK") _ d:DatasetClauses() w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
@@ -1037,24 +1034,24 @@ parser! {
                         let pattern = d.iter().map(|q| {
                 let bgp = GraphPattern::Bgp(vec![TriplePattern::new(q.subject.clone(), q.predicate.clone(), q.object.clone())]);
                 match &q.graph_name {
-                    GraphNameOrVariable::NamedNode(graph_name) => GraphPattern::Graph { graph_name: graph_name.clone().into(), inner: Box::new(bgp) },
-                    GraphNameOrVariable::DefaultGraph => bgp,
-                    GraphNameOrVariable::Variable(graph_name) => GraphPattern::Graph { graph_name: graph_name.clone().into(), inner: Box::new(bgp) },
+                    GraphNamePattern::NamedNode(graph_name) => GraphPattern::Graph { graph_name: graph_name.clone().into(), inner: Box::new(bgp) },
+                    GraphNamePattern::DefaultGraph => bgp,
+                    GraphNamePattern::Variable(graph_name) => GraphPattern::Graph { graph_name: graph_name.clone().into(), inner: Box::new(bgp) },
                 }
             }).fold(GraphPattern::Bgp(Vec::new()), new_join);
             let delete = d.into_iter().map(|q| Ok(GroundQuadPattern {
                 subject: match q.subject {
-                    TermOrVariable::NamedNode(subject) => subject.into(),
-                    TermOrVariable::BlankNode(_) => return Err("Blank nodes are not allowed in DELETE WHERE"),
-                    TermOrVariable::Literal(subject) => subject.into(),
-                    TermOrVariable::Variable(subject) => subject.into(),
+                    TermPattern::NamedNode(subject) => subject.into(),
+                    TermPattern::BlankNode(_) => return Err("Blank nodes are not allowed in DELETE WHERE"),
+                    TermPattern::Literal(subject) => subject.into(),
+                    TermPattern::Variable(subject) => subject.into(),
                 },
                 predicate: q.predicate,
                 object: match q.object {
-                    TermOrVariable::NamedNode(object) => object.into(),
-                    TermOrVariable::BlankNode(_) => return Err("Blank nodes are not allowed in DELETE WHERE"),
-                    TermOrVariable::Literal(object) => object.into(),
-                    TermOrVariable::Variable(object) => object.into(),
+                    TermPattern::NamedNode(object) => object.into(),
+                    TermPattern::BlankNode(_) => return Err("Blank nodes are not allowed in DELETE WHERE"),
+                    TermPattern::Literal(object) => object.into(),
+                    TermPattern::Variable(object) => object.into(),
                 },
                 graph_name: q.graph_name
             })).collect::<Result<Vec<_>,_>>()?;
@@ -1091,7 +1088,7 @@ parser! {
 
             if let Some(with) = with {
                 // We inject WITH everywhere
-                delete = delete.into_iter().map(|q| if q.graph_name == GraphNameOrVariable::DefaultGraph {
+                delete = delete.into_iter().map(|q| if q.graph_name == GraphNamePattern::DefaultGraph {
                     GroundQuadPattern {
                         subject: q.subject,
                         predicate: q.predicate,
@@ -1101,7 +1098,7 @@ parser! {
                 } else {
                     q
                 }).collect();
-                insert = insert.into_iter().map(|q| if q.graph_name == GraphNameOrVariable::DefaultGraph {
+                insert = insert.into_iter().map(|q| if q.graph_name == GraphNamePattern::DefaultGraph {
                     QuadPattern {
                         subject: q.subject,
                         predicate: q.predicate,
@@ -1138,17 +1135,17 @@ parser! {
         rule DeleteClause() -> Vec<GroundQuadPattern> = i("DELETE") _ q:QuadPattern() {?
             q.into_iter().map(|q| Ok(GroundQuadPattern {
                 subject: match q.subject {
-                    TermOrVariable::NamedNode(subject) => subject.into(),
-                    TermOrVariable::BlankNode(_) => return Err("Blank nodes are not allowed in DELETE WHERE"),
-                    TermOrVariable::Literal(subject) => subject.into(),
-                    TermOrVariable::Variable(subject) => subject.into(),
+                    TermPattern::NamedNode(subject) => subject.into(),
+                    TermPattern::BlankNode(_) => return Err("Blank nodes are not allowed in DELETE WHERE"),
+                    TermPattern::Literal(subject) => subject.into(),
+                    TermPattern::Variable(subject) => subject.into(),
                 },
                 predicate: q.predicate,
                 object: match q.object {
-                    TermOrVariable::NamedNode(object) => object.into(),
-                    TermOrVariable::BlankNode(_) => return Err("Blank nodes are not allowed in DELETE WHERE"),
-                    TermOrVariable::Literal(object) => object.into(),
-                    TermOrVariable::Variable(object) => object.into(),
+                    TermPattern::NamedNode(object) => object.into(),
+                    TermPattern::BlankNode(_) => return Err("Blank nodes are not allowed in DELETE WHERE"),
+                    TermPattern::Literal(object) => object.into(),
+                    TermPattern::Variable(object) => object.into(),
                 },
                 graph_name: q.graph_name
             })).collect::<Result<Vec<_>,_>>()
@@ -1189,49 +1186,49 @@ parser! {
         rule QuadData() -> Vec<Quad> = "{" _ q:Quads() _ "}" {?
             q.into_iter().map(|q| Ok(Quad {
                 subject: match q.subject {
-                    TermOrVariable::NamedNode(t) => t.into(),
-                    TermOrVariable::BlankNode(t) => t.into(),
-                    TermOrVariable::Literal(_) | TermOrVariable::Variable(_) => return Err(())
+                    TermPattern::NamedNode(t) => t.into(),
+                    TermPattern::BlankNode(t) => t.into(),
+                    TermPattern::Literal(_) | TermPattern::Variable(_) => return Err(())
                 },
-                predicate: if let NamedNodeOrVariable::NamedNode(t) = q.predicate {
+                predicate: if let NamedNodePattern::NamedNode(t) = q.predicate {
                     t
                 } else {
                     return Err(())
                 },
                 object: match q.object {
-                    TermOrVariable::NamedNode(t) => t.into(),
-                    TermOrVariable::BlankNode(t) => t.into(),
-                    TermOrVariable::Literal(t) => t.into(),
-                    TermOrVariable::Variable(_) => return Err(())
+                    TermPattern::NamedNode(t) => t.into(),
+                    TermPattern::BlankNode(t) => t.into(),
+                    TermPattern::Literal(t) => t.into(),
+                    TermPattern::Variable(_) => return Err(())
                 },
                 graph_name: match q.graph_name {
-                    GraphNameOrVariable::NamedNode(t) => t.into(),
-                    GraphNameOrVariable::DefaultGraph => GraphName::DefaultGraph,
-                    GraphNameOrVariable::Variable(_) => return Err(())
+                    GraphNamePattern::NamedNode(t) => t.into(),
+                    GraphNamePattern::DefaultGraph => GraphName::DefaultGraph,
+                    GraphNamePattern::Variable(_) => return Err(())
                 }
             })).collect::<Result<Vec<_>, ()>>().map_err(|_| "Variables are not allowed in INSERT DATA and DELETE DATA")
         }
         rule GroundQuadData() -> Vec<GroundQuad> = "{" _ q:Quads() _ "}" {?
             q.into_iter().map(|q| Ok(GroundQuad {
-                subject: if let TermOrVariable::NamedNode(t) = q.subject {
+                subject: if let TermPattern::NamedNode(t) = q.subject {
                     t
                 } else {
                     return Err(())
                 },
-                predicate: if let NamedNodeOrVariable::NamedNode(t) = q.predicate {
+                predicate: if let NamedNodePattern::NamedNode(t) = q.predicate {
                     t
                 } else {
                     return Err(())
                 },
                 object: match q.object {
-                    TermOrVariable::NamedNode(t) => t.into(),
-                    TermOrVariable::Literal(t) => t.into(),
-                    TermOrVariable::BlankNode(_) | TermOrVariable::Variable(_) => return Err(())
+                    TermPattern::NamedNode(t) => t.into(),
+                    TermPattern::Literal(t) => t.into(),
+                    TermPattern::BlankNode(_) | TermPattern::Variable(_) => return Err(())
                 },
                 graph_name: match q.graph_name {
-                    GraphNameOrVariable::NamedNode(t) => t.into(),
-                    GraphNameOrVariable::DefaultGraph => GraphName::DefaultGraph,
-                    GraphNameOrVariable::Variable(_) => return Err(())
+                    GraphNamePattern::NamedNode(t) => t.into(),
+                    GraphNamePattern::DefaultGraph => GraphName::DefaultGraph,
+                    GraphNamePattern::Variable(_) => return Err(())
                 }
             })).collect::<Result<Vec<_>, ()>>().map_err(|_| "Variables are not allowed in INSERT DATA and DELETE DATA")
         }
@@ -1241,7 +1238,7 @@ parser! {
             q.into_iter().flatten().collect()
         }
         rule Quads_TriplesTemplate() -> Vec<QuadPattern> = t:TriplesTemplate() {
-            t.into_iter().map(|t| QuadPattern::new(t.subject, t.predicate, t.object, GraphNameOrVariable::DefaultGraph)).collect()
+            t.into_iter().map(|t| QuadPattern::new(t.subject, t.predicate, t.object, GraphNamePattern::DefaultGraph)).collect()
         } //TODO: return iter?
         rule Quads_QuadsNotTriples() -> Vec<QuadPattern> = q:QuadsNotTriples() _ "."? { q }
 
@@ -1452,19 +1449,19 @@ parser! {
             }
 
         //[76]
-        rule PropertyList() -> FocusedTriplePattern<Vec<(NamedNodeOrVariable,Vec<TermOrVariable>)>> =
+        rule PropertyList() -> FocusedTriplePattern<Vec<(NamedNodePattern,Vec<TermPattern>)>> =
             PropertyListNotEmpty() /
             { FocusedTriplePattern::default() }
 
         //[77]
-        rule PropertyListNotEmpty() -> FocusedTriplePattern<Vec<(NamedNodeOrVariable,Vec<TermOrVariable>)>> = l:PropertyListNotEmpty_item() **<1,> (";" _) {
-            l.into_iter().fold(FocusedTriplePattern::<Vec<(NamedNodeOrVariable,Vec<TermOrVariable>)>>::default(), |mut a, b| {
+        rule PropertyListNotEmpty() -> FocusedTriplePattern<Vec<(NamedNodePattern,Vec<TermPattern>)>> = l:PropertyListNotEmpty_item() **<1,> (";" _) {
+            l.into_iter().fold(FocusedTriplePattern::<Vec<(NamedNodePattern,Vec<TermPattern>)>>::default(), |mut a, b| {
                 a.focus.push(b.focus);
                 a.patterns.extend(b.patterns);
                 a
             })
         }
-        rule PropertyListNotEmpty_item() -> FocusedTriplePattern<(NamedNodeOrVariable,Vec<TermOrVariable>)> = p:Verb() _ o:ObjectList() _ {
+        rule PropertyListNotEmpty_item() -> FocusedTriplePattern<(NamedNodePattern,Vec<TermPattern>)> = p:Verb() _ o:ObjectList() _ {
             FocusedTriplePattern {
                 focus: (p, o.focus),
                 patterns: o.patterns
@@ -1472,20 +1469,20 @@ parser! {
         }
 
         //[78]
-        rule Verb() -> NamedNodeOrVariable = VarOrIri() / "a" { iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").into() }
+        rule Verb() -> NamedNodePattern = VarOrIri() / "a" { iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").into() }
 
         //[79]
-        rule ObjectList() -> FocusedTriplePattern<Vec<TermOrVariable>> = o:ObjectList_item() **<1,> ("," _) {
-            o.into_iter().fold(FocusedTriplePattern::<Vec<TermOrVariable>>::default(), |mut a, b| {
+        rule ObjectList() -> FocusedTriplePattern<Vec<TermPattern>> = o:ObjectList_item() **<1,> ("," _) {
+            o.into_iter().fold(FocusedTriplePattern::<Vec<TermPattern>>::default(), |mut a, b| {
                 a.focus.push(b.focus);
                 a.patterns.extend_from_slice(&b.patterns);
                 a
             })
         }
-        rule ObjectList_item() -> FocusedTriplePattern<TermOrVariable> = o:Object() _ { o }
+        rule ObjectList_item() -> FocusedTriplePattern<TermPattern> = o:Object() _ { o }
 
         //[80]
-        rule Object() -> FocusedTriplePattern<TermOrVariable> = GraphNode()
+        rule Object() -> FocusedTriplePattern<TermPattern> = GraphNode()
 
         //[81]
         rule TriplesSameSubjectPath() -> Vec<TripleOrPathPattern> =
@@ -1510,12 +1507,12 @@ parser! {
             }
 
         //[82]
-        rule PropertyListPath() -> FocusedTripleOrPathPattern<Vec<(VariableOrPropertyPath,Vec<TermOrVariable>)>> =
+        rule PropertyListPath() -> FocusedTripleOrPathPattern<Vec<(VariableOrPropertyPath,Vec<TermPattern>)>> =
             PropertyListPathNotEmpty() /
             { FocusedTripleOrPathPattern::default() }
 
         //[83]
-        rule PropertyListPathNotEmpty() -> FocusedTripleOrPathPattern<Vec<(VariableOrPropertyPath,Vec<TermOrVariable>)>> = hp:(VerbPath() / VerbSimple()) _ ho:ObjectListPath() _ t:PropertyListPathNotEmpty_item()* {
+        rule PropertyListPathNotEmpty() -> FocusedTripleOrPathPattern<Vec<(VariableOrPropertyPath,Vec<TermPattern>)>> = hp:(VerbPath() / VerbSimple()) _ ho:ObjectListPath() _ t:PropertyListPathNotEmpty_item()* {
                 t.into_iter().flat_map(|e| e.into_iter()).fold(FocusedTripleOrPathPattern {
                     focus: vec![(hp, ho.focus)],
                     patterns: ho.patterns
@@ -1525,10 +1522,10 @@ parser! {
                     a
                 })
         }
-        rule PropertyListPathNotEmpty_item() -> Option<FocusedTriplePattern<(VariableOrPropertyPath,Vec<TermOrVariable>)>> = ";" _ c:PropertyListPathNotEmpty_item_content()? {
+        rule PropertyListPathNotEmpty_item() -> Option<FocusedTriplePattern<(VariableOrPropertyPath,Vec<TermPattern>)>> = ";" _ c:PropertyListPathNotEmpty_item_content()? {
             c
         }
-        rule PropertyListPathNotEmpty_item_content() -> FocusedTriplePattern<(VariableOrPropertyPath,Vec<TermOrVariable>)> = p:(VerbPath() / VerbSimple()) _ o:ObjectList() _ {
+        rule PropertyListPathNotEmpty_item_content() -> FocusedTriplePattern<(VariableOrPropertyPath,Vec<TermPattern>)> = p:(VerbPath() / VerbSimple()) _ o:ObjectList() _ {
             FocusedTriplePattern {
                 focus: (p, o.focus),
                 patterns: o.patterns
@@ -1546,17 +1543,17 @@ parser! {
         }
 
         //[86]
-        rule ObjectListPath() -> FocusedTripleOrPathPattern<Vec<TermOrVariable>> = o:ObjectPath_item() **<1,> ("," _) {
-            o.into_iter().fold(FocusedTripleOrPathPattern::<Vec<TermOrVariable>>::default(), |mut a, b| {
+        rule ObjectListPath() -> FocusedTripleOrPathPattern<Vec<TermPattern>> = o:ObjectPath_item() **<1,> ("," _) {
+            o.into_iter().fold(FocusedTripleOrPathPattern::<Vec<TermPattern>>::default(), |mut a, b| {
                 a.focus.push(b.focus);
                 a.patterns.extend(b.patterns);
                 a
             })
         }
-        rule ObjectPath_item() -> FocusedTripleOrPathPattern<TermOrVariable> = o:ObjectPath() _ { o }
+        rule ObjectPath_item() -> FocusedTripleOrPathPattern<TermPattern> = o:ObjectPath() _ { o }
 
         //[87]
-        rule ObjectPath() -> FocusedTripleOrPathPattern<TermOrVariable> = GraphNodePath()
+        rule ObjectPath() -> FocusedTripleOrPathPattern<TermPattern> = GraphNodePath()
 
         //[88]
         rule Path() -> PropertyPathExpression = PathAlternative()
@@ -1634,12 +1631,12 @@ parser! {
             "a" { Either::Left(iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")) }
 
         //[98]
-        rule TriplesNode() -> FocusedTriplePattern<TermOrVariable> = Collection() / BlankNodePropertyList()
+        rule TriplesNode() -> FocusedTriplePattern<TermPattern> = Collection() / BlankNodePropertyList()
 
         //[99]
-        rule BlankNodePropertyList() -> FocusedTriplePattern<TermOrVariable> = "[" _ po:PropertyListNotEmpty() _ "]" {
+        rule BlankNodePropertyList() -> FocusedTriplePattern<TermPattern> = "[" _ po:PropertyListNotEmpty() _ "]" {
             let mut patterns: Vec<TriplePattern> = Vec::default();
-            let mut bnode = TermOrVariable::from(bnode());
+            let mut bnode = TermPattern::from(bnode());
             for (p, os) in po.focus {
                 for o in os {
                     patterns.push(TriplePattern::new(bnode.clone(), p.clone(), o));
@@ -1652,12 +1649,12 @@ parser! {
         }
 
         //[100]
-        rule TriplesNodePath() -> FocusedTripleOrPathPattern<TermOrVariable> = CollectionPath() / BlankNodePropertyListPath()
+        rule TriplesNodePath() -> FocusedTripleOrPathPattern<TermPattern> = CollectionPath() / BlankNodePropertyListPath()
 
         //[101]
-        rule BlankNodePropertyListPath() -> FocusedTripleOrPathPattern<TermOrVariable> = "[" _ po:PropertyListPathNotEmpty() _ "]" {
+        rule BlankNodePropertyListPath() -> FocusedTripleOrPathPattern<TermPattern> = "[" _ po:PropertyListPathNotEmpty() _ "]" {
             let mut patterns: Vec<TripleOrPathPattern> = Vec::default();
-            let mut bnode = TermOrVariable::from(bnode());
+            let mut bnode = TermPattern::from(bnode());
             for (p, os) in po.focus {
                 for o in os {
                     add_to_triple_or_path_patterns(bnode.clone(), p.clone(), o, &mut patterns);
@@ -1670,11 +1667,11 @@ parser! {
         }
 
         //[102]
-        rule Collection() -> FocusedTriplePattern<TermOrVariable> = "(" _ o:Collection_item()+ ")" {
+        rule Collection() -> FocusedTriplePattern<TermPattern> = "(" _ o:Collection_item()+ ")" {
             let mut patterns: Vec<TriplePattern> = Vec::default();
-            let mut current_list_node = TermOrVariable::from(iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"));
+            let mut current_list_node = TermPattern::from(iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"));
             for objWithPatterns in o.into_iter().rev() {
-                let new_blank_node = TermOrVariable::from(bnode());
+                let new_blank_node = TermPattern::from(bnode());
                 patterns.push(TriplePattern::new(new_blank_node.clone(), iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#first"), objWithPatterns.focus.clone()));
                 patterns.push(TriplePattern::new(new_blank_node.clone(), iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"), current_list_node));
                 current_list_node = new_blank_node;
@@ -1685,14 +1682,14 @@ parser! {
                 patterns
             }
         }
-        rule Collection_item() -> FocusedTriplePattern<TermOrVariable> = o:GraphNode() _ { o }
+        rule Collection_item() -> FocusedTriplePattern<TermPattern> = o:GraphNode() _ { o }
 
         //[103]
-        rule CollectionPath() -> FocusedTripleOrPathPattern<TermOrVariable> = "(" _ o:CollectionPath_item()+ _ ")" {
+        rule CollectionPath() -> FocusedTripleOrPathPattern<TermPattern> = "(" _ o:CollectionPath_item()+ _ ")" {
             let mut patterns: Vec<TripleOrPathPattern> = Vec::default();
-            let mut current_list_node = TermOrVariable::from(iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"));
+            let mut current_list_node = TermPattern::from(iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"));
             for objWithPatterns in o.into_iter().rev() {
-                let new_blank_node = TermOrVariable::from(bnode());
+                let new_blank_node = TermPattern::from(bnode());
                 patterns.push(TriplePattern::new(new_blank_node.clone(), iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#first"), objWithPatterns.focus.clone()).into());
                 patterns.push(TriplePattern::new(new_blank_node.clone(), iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"), current_list_node).into());
                 current_list_node = new_blank_node;
@@ -1703,25 +1700,25 @@ parser! {
                 patterns
             }
         }
-        rule CollectionPath_item() -> FocusedTripleOrPathPattern<TermOrVariable> = p:GraphNodePath() _ { p }
+        rule CollectionPath_item() -> FocusedTripleOrPathPattern<TermPattern> = p:GraphNodePath() _ { p }
 
         //[104]
-        rule GraphNode() -> FocusedTriplePattern<TermOrVariable> =
+        rule GraphNode() -> FocusedTriplePattern<TermPattern> =
             t:VarOrTerm() { FocusedTriplePattern::new(t) } /
             TriplesNode()
 
         //[105]
-        rule GraphNodePath() -> FocusedTripleOrPathPattern<TermOrVariable> =
+        rule GraphNodePath() -> FocusedTripleOrPathPattern<TermPattern> =
             t:VarOrTerm() { FocusedTripleOrPathPattern::new(t) } /
             TriplesNodePath()
 
         //[106]
-        rule VarOrTerm() -> TermOrVariable =
+        rule VarOrTerm() -> TermPattern =
             v:Var() { v.into() } /
             t:GraphTerm() { t.into() }
 
         //[107]
-        rule VarOrIri() -> NamedNodeOrVariable =
+        rule VarOrIri() -> NamedNodePattern =
             v:Var() { v.into() } /
             i:iri() { i.into() }
 
