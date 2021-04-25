@@ -165,7 +165,7 @@ impl InternedLiteral {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum InternedSubject {
     NamedNode(InternedNamedNode),
     BlankNode(InternedBlankNode),
@@ -217,7 +217,7 @@ impl InternedSubject {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum InternedGraphName {
     DefaultGraph,
     NamedNode(InternedNamedNode),
@@ -274,7 +274,7 @@ impl InternedGraphName {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum InternedTerm {
     NamedNode(InternedNamedNode),
     BlankNode(InternedBlankNode),

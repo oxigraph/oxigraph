@@ -182,25 +182,25 @@ impl Dataset {
         let subject = self
             .encoded_subject(subject)
             .unwrap_or_else(InternedSubject::impossible);
-        self.interned_quads_for_subject(subject)
+        self.interned_quads_for_subject(&subject)
             .map(move |q| self.decode_spog(q))
     }
 
     fn interned_quads_for_subject(
         &self,
-        subject: InternedSubject,
+        subject: &InternedSubject,
     ) -> impl Iterator<
         Item = (
-            InternedSubject,
-            InternedNamedNode,
-            InternedTerm,
-            InternedGraphName,
+            &InternedSubject,
+            &InternedNamedNode,
+            &InternedTerm,
+            &InternedGraphName,
         ),
     > + '_ {
         self.spog
             .range(
                 &(
-                    subject,
+                    subject.clone(),
                     InternedNamedNode::first(),
                     InternedTerm::first(),
                     InternedGraphName::first(),
@@ -212,7 +212,7 @@ impl Dataset {
                         InternedGraphName::first(),
                     ),
             )
-            .copied()
+            .map(|(s, p, o, g)| (s, p, o, g))
     }
 
     pub fn quads_for_predicate<'a, 'b>(
@@ -222,25 +222,25 @@ impl Dataset {
         let predicate = self
             .encoded_named_node(predicate)
             .unwrap_or_else(InternedNamedNode::impossible);
-        self.interned_quads_for_predicate(predicate)
+        self.interned_quads_for_predicate(&predicate)
             .map(move |q| self.decode_spog(q))
     }
 
     fn interned_quads_for_predicate(
         &self,
-        predicate: InternedNamedNode,
+        predicate: &InternedNamedNode,
     ) -> impl Iterator<
         Item = (
-            InternedSubject,
-            InternedNamedNode,
-            InternedTerm,
-            InternedGraphName,
+            &InternedSubject,
+            &InternedNamedNode,
+            &InternedTerm,
+            &InternedGraphName,
         ),
     > + '_ {
         self.posg
             .range(
                 &(
-                    predicate,
+                    *predicate,
                     InternedTerm::first(),
                     InternedSubject::first(),
                     InternedGraphName::first(),
@@ -252,7 +252,6 @@ impl Dataset {
                         InternedGraphName::first(),
                     ),
             )
-            .copied()
             .map(|(p, o, s, g)| (s, p, o, g))
     }
 
@@ -264,25 +263,25 @@ impl Dataset {
             .encoded_term(object)
             .unwrap_or_else(InternedTerm::impossible);
 
-        self.interned_quads_for_object(object)
+        self.interned_quads_for_object(&object)
             .map(move |q| self.decode_spog(q))
     }
 
     fn interned_quads_for_object(
         &self,
-        object: InternedTerm,
+        object: &InternedTerm,
     ) -> impl Iterator<
         Item = (
-            InternedSubject,
-            InternedNamedNode,
-            InternedTerm,
-            InternedGraphName,
+            &InternedSubject,
+            &InternedNamedNode,
+            &InternedTerm,
+            &InternedGraphName,
         ),
     > + '_ {
         self.ospg
             .range(
                 &(
-                    object,
+                    object.clone(),
                     InternedSubject::first(),
                     InternedNamedNode::first(),
                     InternedGraphName::first(),
@@ -294,25 +293,24 @@ impl Dataset {
                         InternedGraphName::first(),
                     ),
             )
-            .copied()
             .map(|(o, s, p, g)| (s, p, o, g))
     }
 
     fn interned_quads_for_graph_name(
         &self,
-        graph_name: InternedGraphName,
+        graph_name: &InternedGraphName,
     ) -> impl Iterator<
         Item = (
-            InternedSubject,
-            InternedNamedNode,
-            InternedTerm,
-            InternedGraphName,
+            &InternedSubject,
+            &InternedNamedNode,
+            &InternedTerm,
+            &InternedGraphName,
         ),
     > + '_ {
         self.gspo
             .range(
                 &(
-                    graph_name,
+                    graph_name.clone(),
                     InternedSubject::first(),
                     InternedNamedNode::first(),
                     InternedTerm::first(),
@@ -324,7 +322,6 @@ impl Dataset {
                         InternedTerm::first(),
                     ),
             )
-            .copied()
             .map(|(g, s, p, o)| (s, p, o, g))
     }
 
@@ -363,11 +360,11 @@ impl Dataset {
         ),
     ) -> bool {
         let (s, p, o, g) = quad;
-        self.gspo.insert((g, s, p, o));
-        self.gpos.insert((g, p, o, s));
-        self.gosp.insert((g, o, s, p));
-        self.spog.insert((s, p, o, g));
-        self.posg.insert((p, o, s, g));
+        self.gspo.insert((g.clone(), s.clone(), p, o.clone()));
+        self.gpos.insert((g.clone(), p, o.clone(), s.clone()));
+        self.gosp.insert((g.clone(), o.clone(), s.clone(), p));
+        self.spog.insert((s.clone(), p, o.clone(), g.clone()));
+        self.posg.insert((p, o.clone(), s.clone(), g.clone()));
         self.ospg.insert((o, s, p, g))
     }
 
@@ -390,11 +387,11 @@ impl Dataset {
         ),
     ) -> bool {
         let (s, p, o, g) = quad;
-        self.gspo.remove(&(g, s, p, o));
-        self.gpos.remove(&(g, p, o, s));
-        self.gosp.remove(&(g, o, s, p));
-        self.spog.remove(&(s, p, o, g));
-        self.posg.remove(&(p, o, s, g));
+        self.gspo.remove(&(g.clone(), s.clone(), p, o.clone()));
+        self.gpos.remove(&(g.clone(), p, o.clone(), s.clone()));
+        self.gosp.remove(&(g.clone(), o.clone(), s.clone(), p));
+        self.spog.remove(&(s.clone(), p, o.clone(), g.clone()));
+        self.posg.remove(&(p, o.clone(), s.clone(), g.clone()));
         self.ospg.remove(&(o, s, p, g))
     }
 
@@ -541,10 +538,10 @@ impl Dataset {
     fn decode_spog(
         &self,
         quad: (
-            InternedSubject,
-            InternedNamedNode,
-            InternedTerm,
-            InternedGraphName,
+            &InternedSubject,
+            &InternedNamedNode,
+            &InternedTerm,
+            &InternedGraphName,
         ),
     ) -> QuadRef<'_> {
         QuadRef {
@@ -636,7 +633,7 @@ impl Dataset {
             let mut new_hashes = HashMap::new();
             for (bnode, old_hash) in &hashes {
                 for (_, p, o, g) in
-                    self.interned_quads_for_subject(InternedSubject::BlankNode(*bnode))
+                    self.interned_quads_for_subject(&InternedSubject::BlankNode(*bnode))
                 {
                     to_hash.push((
                         self.hash_named_node(p),
@@ -645,7 +642,7 @@ impl Dataset {
                         0,
                     ));
                 }
-                for (s, p, _, g) in self.interned_quads_for_object(InternedTerm::BlankNode(*bnode))
+                for (s, p, _, g) in self.interned_quads_for_object(&InternedTerm::BlankNode(*bnode))
                 {
                     to_hash.push((
                         self.hash_subject(s, &hashes),
@@ -655,7 +652,7 @@ impl Dataset {
                     ));
                 }
                 for (s, p, o, _) in
-                    self.interned_quads_for_graph_name(InternedGraphName::BlankNode(*bnode))
+                    self.interned_quads_for_graph_name(&InternedGraphName::BlankNode(*bnode))
                 {
                     to_hash.push((
                         self.hash_subject(s, &hashes),
@@ -681,25 +678,25 @@ impl Dataset {
         }
     }
 
-    fn hash_named_node(&self, node: InternedNamedNode) -> u64 {
+    fn hash_named_node(&self, node: &InternedNamedNode) -> u64 {
         self.hash_tuple(node.decode_from(&self.interner))
     }
 
     fn hash_subject(
         &self,
-        node: InternedSubject,
+        node: &InternedSubject,
         bnodes_hash: &HashMap<InternedBlankNode, u64>,
     ) -> u64 {
         if let InternedSubject::BlankNode(bnode) = node {
-            *bnodes_hash.get(&bnode).unwrap()
+            *bnodes_hash.get(bnode).unwrap()
         } else {
             self.hash_tuple(node.decode_from(&self.interner))
         }
     }
 
-    fn hash_term(&self, term: InternedTerm, bnodes_hash: &HashMap<InternedBlankNode, u64>) -> u64 {
+    fn hash_term(&self, term: &InternedTerm, bnodes_hash: &HashMap<InternedBlankNode, u64>) -> u64 {
         if let InternedTerm::BlankNode(bnode) = term {
-            *bnodes_hash.get(&bnode).unwrap()
+            *bnodes_hash.get(bnode).unwrap()
         } else {
             self.hash_tuple(term.decode_from(&self.interner))
         }
@@ -707,11 +704,11 @@ impl Dataset {
 
     fn hash_graph_name(
         &self,
-        graph_name: InternedGraphName,
+        graph_name: &InternedGraphName,
         bnodes_hash: &HashMap<InternedBlankNode, u64>,
     ) -> u64 {
         if let InternedGraphName::BlankNode(bnode) = graph_name {
-            *bnodes_hash.get(&bnode).unwrap()
+            *bnodes_hash.get(bnode).unwrap()
         } else {
             self.hash_tuple(graph_name.decode_from(&self.interner))
         }
@@ -771,24 +768,24 @@ impl Dataset {
         InternedTerm,
         InternedGraphName,
     )> {
-        let old_quads: Vec<_> = self.spog.iter().copied().collect();
+        let old_quads: Vec<_> = self.spog.iter().cloned().collect();
         let mut quads: Vec<_> = old_quads
             .into_iter()
             .map(|(s, p, o, g)| {
                 (
                     if let InternedSubject::BlankNode(bnode) = s {
-                        InternedSubject::BlankNode(self.map_bnode(bnode, hashes))
+                        InternedSubject::BlankNode(self.map_bnode(&bnode, hashes))
                     } else {
                         s
                     },
                     p,
                     if let InternedTerm::BlankNode(bnode) = o {
-                        InternedTerm::BlankNode(self.map_bnode(bnode, hashes))
+                        InternedTerm::BlankNode(self.map_bnode(&bnode, hashes))
                     } else {
                         o
                     },
                     if let InternedGraphName::BlankNode(bnode) = g {
-                        InternedGraphName::BlankNode(self.map_bnode(bnode, hashes))
+                        InternedGraphName::BlankNode(self.map_bnode(&bnode, hashes))
                     } else {
                         g
                     },
@@ -801,11 +798,11 @@ impl Dataset {
 
     fn map_bnode(
         &mut self,
-        old_bnode: InternedBlankNode,
+        old_bnode: &InternedBlankNode,
         hashes: &HashMap<InternedBlankNode, u64>,
     ) -> InternedBlankNode {
         InternedBlankNode::encoded_into(
-            BlankNode::new_from_unique_id(*hashes.get(&old_bnode).unwrap()).as_ref(),
+            BlankNode::new_from_unique_id(*hashes.get(old_bnode).unwrap()).as_ref(),
             &mut self.interner,
         )
     }
@@ -904,7 +901,7 @@ impl<'a> GraphView<'a> {
     pub fn iter(&self) -> GraphViewIter<'a> {
         let iter = self.dataset.gspo.range(
             &(
-                self.graph_name,
+                self.graph_name.clone(),
                 InternedSubject::first(),
                 InternedNamedNode::first(),
                 InternedTerm::first(),
@@ -939,13 +936,13 @@ impl<'a> GraphView<'a> {
             .gspo
             .range(
                 &(
-                    self.graph_name,
-                    subject,
+                    self.graph_name.clone(),
+                    subject.clone(),
                     InternedNamedNode::first(),
                     InternedTerm::first(),
                 )
                     ..&(
-                        self.graph_name,
+                        self.graph_name.clone(),
                         subject.next(),
                         InternedNamedNode::first(),
                         InternedTerm::first(),
@@ -979,9 +976,14 @@ impl<'a> GraphView<'a> {
         self.dataset
             .gspo
             .range(
-                &(self.graph_name, subject, predicate, InternedTerm::first())
+                &(
+                    self.graph_name.clone(),
+                    subject.clone(),
+                    predicate,
+                    InternedTerm::first(),
+                )
                     ..&(
-                        self.graph_name,
+                        self.graph_name.clone(),
                         subject,
                         predicate.next(),
                         InternedTerm::first(),
@@ -1021,9 +1023,14 @@ impl<'a> GraphView<'a> {
         self.dataset
             .gosp
             .range(
-                &(self.graph_name, object, subject, InternedNamedNode::first())
+                &(
+                    self.graph_name.clone(),
+                    object.clone(),
+                    subject.clone(),
+                    InternedNamedNode::first(),
+                )
                     ..&(
-                        self.graph_name,
+                        self.graph_name.clone(),
                         object,
                         subject.next(),
                         InternedNamedNode::first(),
@@ -1049,22 +1056,19 @@ impl<'a> GraphView<'a> {
             .gpos
             .range(
                 &(
-                    self.graph_name,
+                    self.graph_name.clone(),
                     predicate,
                     InternedTerm::first(),
                     InternedSubject::first(),
                 )
                     ..&(
-                        self.graph_name,
+                        self.graph_name.clone(),
                         predicate.next(),
                         InternedTerm::first(),
                         InternedSubject::first(),
                     ),
             )
-            .map(move |q| {
-                let (_, p, o, s) = q;
-                ds.decode_spo((s, p, o))
-            })
+            .map(move |(_, p, o, s)| ds.decode_spo((s, p, o)))
     }
 
     pub fn subjects_for_predicate_object<'b>(
@@ -1089,9 +1093,14 @@ impl<'a> GraphView<'a> {
         self.dataset
             .gpos
             .range(
-                &(self.graph_name, predicate, object, InternedSubject::first())
+                &(
+                    self.graph_name.clone(),
+                    predicate,
+                    object.clone(),
+                    InternedSubject::first(),
+                )
                     ..&(
-                        self.graph_name,
+                        self.graph_name.clone(),
                         predicate,
                         object.next(),
                         InternedSubject::first(),
@@ -1125,28 +1134,27 @@ impl<'a> GraphView<'a> {
             .gosp
             .range(
                 &(
-                    self.graph_name,
-                    object,
+                    self.graph_name.clone(),
+                    object.clone(),
                     InternedSubject::first(),
                     InternedNamedNode::first(),
                 )
                     ..&(
-                        self.graph_name,
+                        self.graph_name.clone(),
                         object.next(),
                         InternedSubject::first(),
                         InternedNamedNode::first(),
                     ),
             )
-            .map(move |q| {
-                let (_, o, s, p) = q;
-                ds.decode_spo((s, p, o))
-            })
+            .map(move |(_, o, s, p)| ds.decode_spo((s, p, o)))
     }
 
     /// Checks if the graph contains the given triple
     pub fn contains<'b>(&self, triple: impl Into<TripleRef<'b>>) -> bool {
         if let Some((s, p, o)) = self.encoded_triple(triple.into()) {
-            self.dataset.gspo.contains(&(self.graph_name, s, p, o))
+            self.dataset
+                .gspo
+                .contains(&(self.graph_name.clone(), s, p, o))
         } else {
             false
         }
@@ -1260,20 +1268,22 @@ impl<'a> GraphViewMut<'a> {
     fn read(&self) -> GraphView<'_> {
         GraphView {
             dataset: self.dataset,
-            graph_name: self.graph_name,
+            graph_name: self.graph_name.clone(),
         }
     }
 
     /// Adds a triple to the graph
     pub fn insert<'b>(&mut self, triple: impl Into<TripleRef<'b>>) -> bool {
         let (s, p, o) = self.encode_triple(triple.into());
-        self.dataset.insert_encoded((s, p, o, self.graph_name))
+        self.dataset
+            .insert_encoded((s, p, o, self.graph_name.clone()))
     }
 
     /// Removes a concrete triple from the graph
     pub fn remove<'b>(&mut self, triple: impl Into<TripleRef<'b>>) -> bool {
         if let Some((s, p, o)) = self.read().encoded_triple(triple.into()) {
-            self.dataset.remove_encoded((s, p, o, self.graph_name))
+            self.dataset
+                .remove_encoded((s, p, o, self.graph_name.clone()))
         } else {
             false
         }
@@ -1502,7 +1512,9 @@ impl<'a> Iterator for Iter<'a> {
     type Item = QuadRef<'a>;
 
     fn next(&mut self) -> Option<QuadRef<'a>> {
-        self.inner.next().map(|q| self.dataset.decode_spog(*q))
+        self.inner
+            .next()
+            .map(|(s, p, o, g)| self.dataset.decode_spog((s, p, o, g)))
     }
 }
 
@@ -1524,9 +1536,8 @@ impl<'a> Iterator for GraphViewIter<'a> {
     type Item = TripleRef<'a>;
 
     fn next(&mut self) -> Option<TripleRef<'a>> {
-        self.inner.next().map(|q| {
-            let (_, s, p, o) = q;
-            self.dataset.decode_spo((s, p, o))
-        })
+        self.inner
+            .next()
+            .map(|(_, s, p, o)| self.dataset.decode_spo((s, p, o)))
     }
 }
