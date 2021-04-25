@@ -555,6 +555,17 @@ impl Dataset {
         }
     }
 
+    fn decode_spo(
+        &self,
+        triple: (&InternedSubject, &InternedNamedNode, &InternedTerm),
+    ) -> TripleRef<'_> {
+        TripleRef {
+            subject: triple.0.decode_from(&self.interner),
+            predicate: triple.1.decode_from(&self.interner),
+            object: triple.2.decode_from(&self.interner),
+        }
+    }
+
     /// Applies on the dataset the canonicalization process described in
     /// [Canonical Forms for Isomorphic and Equivalent RDF Graphs: Algorithms for Leaning and Labelling Blank Nodes, Aidan Hogan, 2017](http://aidanhogan.com/docs/rdf-canonicalisation.pdf)
     ///
@@ -882,7 +893,7 @@ impl fmt::Display for Dataset {
 /// assert_eq!(vec![TripleRef::new(ex, ex, ex)], results);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct GraphView<'a> {
     dataset: &'a Dataset,
     graph_name: InternedGraphName,
@@ -890,7 +901,7 @@ pub struct GraphView<'a> {
 
 impl<'a> GraphView<'a> {
     /// Returns all the triples contained by the graph
-    pub fn iter(self) -> GraphViewIter<'a> {
+    pub fn iter(&self) -> GraphViewIter<'a> {
         let iter = self.dataset.gspo.range(
             &(
                 self.graph_name,
@@ -906,23 +917,24 @@ impl<'a> GraphView<'a> {
                 ),
         );
         GraphViewIter {
-            graph: self,
+            dataset: self.dataset,
             inner: iter,
         }
     }
 
     pub fn triples_for_subject<'b>(
-        self,
+        &self,
         subject: impl Into<SubjectRef<'b>>,
     ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
         self.triples_for_interned_subject(self.dataset.encoded_subject(subject))
     }
 
     pub(super) fn triples_for_interned_subject(
-        self,
+        &self,
         subject: Option<InternedSubject>,
     ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
         let subject = subject.unwrap_or_else(InternedSubject::impossible);
+        let ds = self.dataset;
         self.dataset
             .gspo
             .range(
@@ -939,11 +951,14 @@ impl<'a> GraphView<'a> {
                         InternedTerm::first(),
                     ),
             )
-            .map(move |q| self.decode_gspo(*q))
+            .map(move |q| {
+                let (_, s, p, o) = q;
+                ds.decode_spo((s, p, o))
+            })
     }
 
     pub fn objects_for_subject_predicate<'b>(
-        self,
+        &self,
         subject: impl Into<SubjectRef<'b>>,
         predicate: impl Into<NamedNodeRef<'b>>,
     ) -> impl Iterator<Item = TermRef<'a>> + 'a {
@@ -954,12 +969,13 @@ impl<'a> GraphView<'a> {
     }
 
     pub fn objects_for_interned_subject_predicate(
-        self,
+        &self,
         subject: Option<InternedSubject>,
         predicate: Option<InternedNamedNode>,
     ) -> impl Iterator<Item = TermRef<'a>> + 'a {
         let subject = subject.unwrap_or_else(InternedSubject::impossible);
         let predicate = predicate.unwrap_or_else(InternedNamedNode::impossible);
+        let ds = self.dataset;
         self.dataset
             .gspo
             .range(
@@ -971,11 +987,11 @@ impl<'a> GraphView<'a> {
                         InternedTerm::first(),
                     ),
             )
-            .map(move |q| q.3.decode_from(&self.dataset.interner))
+            .map(move |q| q.3.decode_from(&ds.interner))
     }
 
     pub fn object_for_subject_predicate<'b>(
-        self,
+        &self,
         subject: impl Into<SubjectRef<'b>>,
         predicate: impl Into<NamedNodeRef<'b>>,
     ) -> Option<TermRef<'a>> {
@@ -984,7 +1000,7 @@ impl<'a> GraphView<'a> {
     }
 
     pub fn predicates_for_subject_object<'b>(
-        self,
+        &self,
         subject: impl Into<SubjectRef<'b>>,
         object: impl Into<TermRef<'b>>,
     ) -> impl Iterator<Item = NamedNodeRef<'a>> + 'a {
@@ -995,12 +1011,13 @@ impl<'a> GraphView<'a> {
     }
 
     pub(super) fn predicates_for_interned_subject_object(
-        self,
+        &self,
         subject: Option<InternedSubject>,
         object: Option<InternedTerm>,
     ) -> impl Iterator<Item = NamedNodeRef<'a>> + 'a {
         let subject = subject.unwrap_or_else(InternedSubject::impossible);
         let object = object.unwrap_or_else(InternedTerm::impossible);
+        let ds = self.dataset;
         self.dataset
             .gosp
             .range(
@@ -1012,21 +1029,22 @@ impl<'a> GraphView<'a> {
                         InternedNamedNode::first(),
                     ),
             )
-            .map(move |q| q.3.decode_from(&self.dataset.interner))
+            .map(move |q| q.3.decode_from(&ds.interner))
     }
 
     pub fn triples_for_predicate<'b>(
-        self,
+        &self,
         predicate: impl Into<NamedNodeRef<'b>>,
     ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
         self.triples_for_interned_predicate(self.dataset.encoded_named_node(predicate))
     }
 
     pub(super) fn triples_for_interned_predicate(
-        self,
+        &self,
         predicate: Option<InternedNamedNode>,
     ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
         let predicate = predicate.unwrap_or_else(InternedNamedNode::impossible);
+        let ds = self.dataset;
         self.dataset
             .gpos
             .range(
@@ -1043,11 +1061,14 @@ impl<'a> GraphView<'a> {
                         InternedSubject::first(),
                     ),
             )
-            .map(move |q| self.decode_gpos(*q))
+            .map(move |q| {
+                let (_, p, o, s) = q;
+                ds.decode_spo((s, p, o))
+            })
     }
 
     pub fn subjects_for_predicate_object<'b>(
-        self,
+        &self,
         predicate: impl Into<NamedNodeRef<'b>>,
         object: impl Into<TermRef<'b>>,
     ) -> impl Iterator<Item = SubjectRef<'a>> + 'a {
@@ -1058,12 +1079,13 @@ impl<'a> GraphView<'a> {
     }
 
     pub(super) fn subjects_for_interned_predicate_object(
-        self,
+        &self,
         predicate: Option<InternedNamedNode>,
         object: Option<InternedTerm>,
     ) -> impl Iterator<Item = SubjectRef<'a>> + 'a {
         let predicate = predicate.unwrap_or_else(InternedNamedNode::impossible);
         let object = object.unwrap_or_else(InternedTerm::impossible);
+        let ds = self.dataset;
         self.dataset
             .gpos
             .range(
@@ -1075,11 +1097,11 @@ impl<'a> GraphView<'a> {
                         InternedSubject::first(),
                     ),
             )
-            .map(move |q| q.3.decode_from(&self.dataset.interner))
+            .map(move |q| q.3.decode_from(&ds.interner))
     }
 
     pub fn subject_for_predicate_object<'b>(
-        self,
+        &self,
         predicate: impl Into<NamedNodeRef<'b>>,
         object: impl Into<TermRef<'b>>,
     ) -> Option<SubjectRef<'a>> {
@@ -1087,17 +1109,18 @@ impl<'a> GraphView<'a> {
     }
 
     pub fn triples_for_object<'b>(
-        self,
+        &self,
         object: impl Into<TermRef<'b>>,
     ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
         self.triples_for_interned_object(self.dataset.encoded_term(object))
     }
 
     pub fn triples_for_interned_object(
-        self,
+        &self,
         object: Option<InternedTerm>,
     ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
         let object = object.unwrap_or_else(InternedTerm::impossible);
+        let ds = self.dataset;
         self.dataset
             .gosp
             .range(
@@ -1114,7 +1137,10 @@ impl<'a> GraphView<'a> {
                         InternedNamedNode::first(),
                     ),
             )
-            .map(move |q| self.decode_gosp(*q))
+            .map(move |q| {
+                let (_, o, s, p) = q;
+                ds.decode_spo((s, p, o))
+            })
     }
 
     /// Checks if the graph contains the given triple
@@ -1153,7 +1179,7 @@ impl<'a> GraphView<'a> {
     /// assert_eq!(file, buffer.as_slice());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn dump(self, writer: impl Write, format: GraphFormat) -> Result<(), io::Error> {
+    pub fn dump(&self, writer: impl Write, format: GraphFormat) -> Result<(), io::Error> {
         let mut writer = GraphSerializer::from_format(format).triple_writer(writer)?;
         for t in self {
             writer.write(t)?;
@@ -1170,46 +1196,6 @@ impl<'a> GraphView<'a> {
             self.dataset.encoded_named_node(triple.predicate)?,
             self.dataset.encoded_term(triple.object)?,
         ))
-    }
-
-    fn decode_gspo(
-        self,
-        quad: (
-            InternedGraphName,
-            InternedSubject,
-            InternedNamedNode,
-            InternedTerm,
-        ),
-    ) -> TripleRef<'a> {
-        TripleRef {
-            subject: quad.1.decode_from(&self.dataset.interner),
-            predicate: quad.2.decode_from(&self.dataset.interner),
-            object: quad.3.decode_from(&self.dataset.interner),
-        }
-    }
-
-    fn decode_gpos(
-        self,
-        quad: (
-            InternedGraphName,
-            InternedNamedNode,
-            InternedTerm,
-            InternedSubject,
-        ),
-    ) -> TripleRef<'a> {
-        self.decode_gspo((quad.0, quad.3, quad.1, quad.2))
-    }
-
-    fn decode_gosp(
-        self,
-        quad: (
-            InternedGraphName,
-            InternedTerm,
-            InternedSubject,
-            InternedNamedNode,
-        ),
-    ) -> TripleRef<'a> {
-        self.decode_gspo((quad.0, quad.2, quad.3, quad.1))
     }
 }
 
@@ -1522,7 +1508,7 @@ impl<'a> Iterator for Iter<'a> {
 
 /// Iterator returned by [`GraphView::iter`]
 pub struct GraphViewIter<'a> {
-    graph: GraphView<'a>,
+    dataset: &'a Dataset,
     inner: std::collections::btree_set::Range<
         'a,
         (
@@ -1538,6 +1524,9 @@ impl<'a> Iterator for GraphViewIter<'a> {
     type Item = TripleRef<'a>;
 
     fn next(&mut self) -> Option<TripleRef<'a>> {
-        self.inner.next().map(|t| self.graph.decode_gspo(*t))
+        self.inner.next().map(|q| {
+            let (_, s, p, o) = q;
+            self.dataset.decode_spo((s, p, o))
+        })
     }
 }
