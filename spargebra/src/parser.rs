@@ -1872,7 +1872,12 @@ parser! {
             i("isNUMERIC") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsNumeric, vec![e]) } /
             RegexExpression() /
             ExistsFunc() /
-            NotExistsFunc()
+            NotExistsFunc() /
+            i("TRIPLE") "(" _ s:Expression() _ "," _ p:Expression() "," _ o:Expression() ")" { Expression::FunctionCall(Function::Triple, vec![s, p, o]) } /
+            i("SUBJECT") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Subject, vec![e]) } /
+            i("PREDICATE") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Predicate, vec![e]) } /
+            i("OBJECT") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Object, vec![e]) } /
+            i("isTriple") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsTriple, vec![e]) }
 
         //[122]
         rule RegexExpression() -> Expression =

@@ -613,6 +613,27 @@ impl<'a> PlanBuilder<'a> {
                         None => None,
                     },
                 ),
+                Function::Triple => PlanExpression::Triple(
+                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[2], variables, graph_name)?),
+                ),
+                Function::Subject => PlanExpression::Subject(Box::new(self.build_for_expression(
+                    &parameters[0],
+                    variables,
+                    graph_name,
+                )?)),
+                Function::Predicate => PlanExpression::Predicate(Box::new(
+                    self.build_for_expression(&parameters[0], variables, graph_name)?,
+                )),
+                Function::Object => PlanExpression::Object(Box::new(self.build_for_expression(
+                    &parameters[0],
+                    variables,
+                    graph_name,
+                )?)),
+                Function::IsTriple => PlanExpression::IsTriple(Box::new(
+                    self.build_for_expression(&parameters[0], variables, graph_name)?,
+                )),
                 Function::Custom(name) => {
                     if name.iri == "http://www.w3.org/2001/XMLSchema#boolean" {
                         self.build_cast(

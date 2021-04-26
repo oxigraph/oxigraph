@@ -295,6 +295,15 @@ pub enum PlanExpression {
         Box<PlanExpression>,
         Option<Box<PlanExpression>>,
     ),
+    Triple(
+        Box<PlanExpression>,
+        Box<PlanExpression>,
+        Box<PlanExpression>,
+    ),
+    Subject(Box<PlanExpression>),
+    Predicate(Box<PlanExpression>),
+    Object(Box<PlanExpression>),
+    IsTriple(Box<PlanExpression>),
     BooleanCast(Box<PlanExpression>),
     DoubleCast(Box<PlanExpression>),
     FloatCast(Box<PlanExpression>),
@@ -354,6 +363,10 @@ impl PlanExpression {
             | PlanExpression::IsBlank(e)
             | PlanExpression::IsLiteral(e)
             | PlanExpression::IsNumeric(e)
+            | PlanExpression::IsTriple(e)
+            | PlanExpression::Subject(e)
+            | PlanExpression::Predicate(e)
+            | PlanExpression::Object(e)
             | PlanExpression::BooleanCast(e)
             | PlanExpression::DoubleCast(e)
             | PlanExpression::FloatCast(e)
@@ -394,7 +407,8 @@ impl PlanExpression {
             PlanExpression::If(a, b, c)
             | PlanExpression::SubStr(a, b, Some(c))
             | PlanExpression::Regex(a, b, Some(c))
-            | PlanExpression::Replace(a, b, c, None) => {
+            | PlanExpression::Replace(a, b, c, None)
+            | PlanExpression::Triple(a, b, c) => {
                 a.add_maybe_bound_variables(set);
                 b.add_maybe_bound_variables(set);
                 c.add_maybe_bound_variables(set);

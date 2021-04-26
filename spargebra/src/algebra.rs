@@ -404,6 +404,11 @@ pub enum Function {
     IsLiteral,
     IsNumeric,
     Regex,
+    Triple,
+    Subject,
+    Predicate,
+    Object,
+    IsTriple,
     Custom(NamedNode),
 }
 
@@ -456,6 +461,11 @@ impl fmt::Display for Function {
             Function::IsLiteral => write!(f, "isLITERAL"),
             Function::IsNumeric => write!(f, "isNUMERIC"),
             Function::Regex => write!(f, "REGEX"),
+            Function::Triple => write!(f, "TRIPLE"),
+            Function::Subject => write!(f, "SUBJECT"),
+            Function::Predicate => write!(f, "PREDICATE"),
+            Function::Object => write!(f, "OBJECT"),
+            Function::IsTriple => write!(f, "isTRIPLE"),
             Function::Custom(iri) => iri.fmt(f),
         }
     }

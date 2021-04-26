@@ -1438,6 +1438,42 @@ impl SimpleEvaluator {
                 let text = self.to_string(&self.eval_expression(text, tuple)?)?;
                 Some(regex.is_match(&text).into())
             }
+            PlanExpression::Triple(s, p, o) => {
+                let s = self.eval_expression(s, tuple)?;
+                let p = self.eval_expression(p, tuple)?;
+                let o = self.eval_expression(o, tuple)?;
+                if !s.is_literal()
+                    && !s.is_default_graph()
+                    && p.is_named_node()
+                    && !o.is_default_graph()
+                {
+                    Some(EncodedTriple::new(s, p, o).into())
+                } else {
+                    None
+                }
+            }
+            PlanExpression::Subject(e) => {
+                if let EncodedTerm::Triple(t) = self.eval_expression(e, tuple)? {
+                    Some(t.subject.clone())
+                } else {
+                    None
+                }
+            }
+            PlanExpression::Predicate(e) => {
+                if let EncodedTerm::Triple(t) = self.eval_expression(e, tuple)? {
+                    Some(t.predicate.clone())
+                } else {
+                    None
+                }
+            }
+            PlanExpression::Object(e) => {
+                if let EncodedTerm::Triple(t) = self.eval_expression(e, tuple)? {
+                    Some(t.object.clone())
+                } else {
+                    None
+                }
+            }
+            PlanExpression::IsTriple(e) => Some(self.eval_expression(e, tuple)?.is_triple().into()),
             PlanExpression::BooleanCast(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::BooleanLiteral(value) => Some(value.into()),
                 EncodedTerm::FloatLiteral(value) => Some((value != 0. && !value.is_nan()).into()),

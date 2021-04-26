@@ -340,6 +340,10 @@ impl EncodedTerm {
         matches!(self, Self::DefaultGraph)
     }
 
+    pub fn is_triple(&self) -> bool {
+        matches!(self, Self::Triple { .. })
+    }
+
     pub fn on_each_id<E>(
         &self,
         callback: &mut impl FnMut(&StrHash) -> Result<(), E>,
@@ -482,6 +486,16 @@ pub struct EncodedTriple {
     pub subject: EncodedTerm,
     pub predicate: EncodedTerm,
     pub object: EncodedTerm,
+}
+
+impl EncodedTriple {
+    pub fn new(subject: EncodedTerm, predicate: EncodedTerm, object: EncodedTerm) -> Self {
+        Self {
+            subject,
+            predicate,
+            object,
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
