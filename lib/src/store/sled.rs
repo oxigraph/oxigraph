@@ -664,6 +664,28 @@ impl SledStore {
         (&mut this).clear()
     }
 
+    /// Flushes all buffers and ensures that all writes are saved on disk.
+    ///
+    /// Flushes are automatically done for most platform using background threads.
+    /// However, calling this method explicitly is still required for Windows and Android.
+    ///
+    /// An [async version](SledStore::flush_async) is also available.
+    pub fn flush(&self) -> Result<(), io::Error> {
+        self.default.flush()?;
+        Ok(())
+    }
+
+    /// Asynchronously flushes all buffers and ensures that all writes are saved on disk.
+    ///
+    /// Flushes are automatically done for most platform using background threads.
+    /// However, calling this method explicitly is still required for Windows and Android.
+    ///
+    /// A [sync version](SledStore::flush) is also available.
+    pub async fn flush_async(&self) -> Result<(), io::Error> {
+        self.default.flush_async().await?;
+        Ok(())
+    }
+
     fn contains_encoded(&self, quad: &EncodedQuad) -> Result<bool, io::Error> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
         if quad.graph_name.is_default_graph() {
