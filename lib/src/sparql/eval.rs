@@ -2699,7 +2699,7 @@ fn get_triple_template_value<'a>(
         TripleTemplateValue::Variable(v) => tuple.get(*v),
         TripleTemplateValue::BlankNode(id) => {
             if *id >= bnodes.len() {
-                bnodes.resize_with(*id, new_bnode)
+                bnodes.resize_with(*id + 1, new_bnode)
             }
             Some(&bnodes[*id])
         }
