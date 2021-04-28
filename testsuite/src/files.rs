@@ -22,6 +22,8 @@ pub fn read_file(url: &str) -> Result<impl BufRead> {
             "http://www.w3.org/2009/sparql/docs/tests/",
             "rdf-tests/sparql11/",
         ))
+    } else if url.starts_with("https://w3c.github.io/rdf-star/") {
+        Ok(url.replace("https://w3c.github.io/", ""))
     } else if url.starts_with("https://github.com/oxigraph/oxigraph/tests/") {
         Ok(url.replace(
             "https://github.com/oxigraph/oxigraph/tests/",

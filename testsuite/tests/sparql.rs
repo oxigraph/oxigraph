@@ -128,3 +128,48 @@ fn sparql11_tsv_w3c_evaluation_testsuite() -> Result<()> {
         ],
     )
 }
+
+#[test]
+fn sparql_star_query_syntax_testsuite() -> Result<()> {
+    run_testsuite(
+        "https://w3c.github.io/rdf-star/tests/sparql/syntax/manifest.ttl",
+        vec![
+            // SPARQL* is not implemented yet
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-1",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-2",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-3",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-4",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-5",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-6",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-7",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-ann-01",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-ann-02",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-ann-03",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-ann-04",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-ann-05",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-ann-06",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-ann-07",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-ann-08",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-ann-09",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-bnode-1",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-bnode-2",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-bnode-3",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-compound-1",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-expr-1",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-expr-2",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-expr-6",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-inside-1",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-inside-2",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-nested-1",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-nested-2",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-update-1",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-update-2",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-update-3",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-update-4",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-update-5",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-update-6",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-update-7",
+            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-update-8",
+        ],
+    )
+}

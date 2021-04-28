@@ -1,6 +1,9 @@
 [submodule "testsuite/rdf-tests"]
 	path = testsuite/rdf-tests
 	url = https://github.com/w3c/rdf-tests.git
+[submodule "testsuite/rdf-star"]
+	path = testsuite/rdf-star
+	url = https://github.com/w3c/rdf-star.git
 [submodule "bench/bsbm-tools"]
 	path = bench/bsbm-tools
 	url = https://github.com/Tpt/bsbm-tools.git
