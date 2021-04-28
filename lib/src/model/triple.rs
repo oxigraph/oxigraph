@@ -129,11 +129,7 @@ impl fmt::Display for SubjectRef<'_> {
         match self {
             Self::NamedNode(node) => node.fmt(f),
             Self::BlankNode(node) => node.fmt(f),
-            Self::Triple(triple) => write!(
-                f,
-                "<<{} {} {}>>",
-                triple.subject, triple.predicate, triple.object
-            ),
+            Self::Triple(triple) => write!(f, "<<{}>>", triple),
         }
     }
 }
@@ -371,11 +367,7 @@ impl fmt::Display for TermRef<'_> {
             Self::BlankNode(node) => node.fmt(f),
             Self::Literal(literal) => literal.fmt(f),
             Self::Triple(triple) => {
-                write!(
-                    f,
-                    "<<{} {} {}>>",
-                    triple.subject, triple.predicate, triple.object
-                )
+                write!(f, "<<{}>>", triple)
             }
         }
     }
@@ -583,7 +575,7 @@ impl<'a> TripleRef<'a> {
 impl fmt::Display for TripleRef<'_> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        rio::Triple::from(*self).fmt(f)
+        write!(f, "{} {} {}", self.subject, self.predicate, self.object)
     }
 }
 
@@ -890,7 +882,7 @@ impl<'a> QuadRef<'a> {
 impl fmt::Display for QuadRef<'_> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        rio::Quad::from(*self).fmt(f)
+        write!(f, "{} {} {}", self.subject, self.predicate, self.object)
     }
 }
 

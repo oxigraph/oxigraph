@@ -10,7 +10,8 @@ use crate::sparql::plan_builder::PlanBuilder;
 use crate::sparql::{EvaluationError, UpdateOptions};
 use crate::storage::io::load_graph;
 use crate::storage::numeric_encoder::{
-    get_encoded_literal, get_encoded_named_node, EncodedQuad, EncodedTerm, StrLookup, WriteEncoder,
+    get_encoded_literal, get_encoded_named_node, EncodedQuad, EncodedTerm, EncodedTriple,
+    StrLookup, WriteEncoder,
 };
 use crate::storage::Storage;
 use http::header::{ACCEPT, CONTENT_TYPE, USER_AGENT};
@@ -18,9 +19,10 @@ use http::{Method, Request, StatusCode};
 use oxiri::Iri;
 use spargebra::algebra::{GraphPattern, GraphTarget};
 use spargebra::term::{
-    BlankNode, GraphName, GraphNamePattern, GroundQuad, GroundQuadPattern, GroundTerm,
-    GroundTermPattern, Literal, NamedNode, NamedNodePattern, Quad, QuadPattern, Subject, Term,
-    TermPattern, Variable,
+    BlankNode, GraphName, GraphNamePattern, GroundQuad, GroundQuadPattern, GroundSubject,
+    GroundTerm, GroundTermPattern, GroundTriple, GroundTriplePattern, Literal, NamedNode,
+    NamedNodePattern, Quad, QuadPattern, Subject, Term, TermPattern, Triple, TriplePattern,
+    Variable,
 };
 use spargebra::GraphUpdateOperation;
 use std::collections::HashMap;
@@ -93,9 +95,8 @@ impl<'a> SimpleUpdateEvaluator<'a> {
     fn eval_insert_data(&mut self, data: &[Quad]) -> Result<(), EvaluationError> {
         let mut bnodes = HashMap::new();
         for quad in data {
-            if let Some(quad) = self.encode_quad_for_insertion(quad, &mut bnodes)? {
-                self.storage.insert(&quad)?;
-            }
+            let quad = self.encode_quad_for_insertion(quad, &mut bnodes)?;
+            self.storage.insert(&quad)?;
         }
         Ok(())
     }
@@ -298,13 +299,16 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         &mut self,
         quad: &Quad,
         bnodes: &mut HashMap<BlankNode, OxBlankNode>,
-    ) -> Result<Option<EncodedQuad>, EvaluationError> {
-        Ok(Some(EncodedQuad {
+    ) -> Result<EncodedQuad, EvaluationError> {
+        Ok(EncodedQuad {
             subject: match &quad.subject {
                 Subject::NamedNode(subject) => self.encode_named_node_for_insertion(subject)?,
                 Subject::BlankNode(subject) => self
                     .storage
                     .encode_blank_node(bnodes.entry(subject.clone()).or_default().as_ref())?,
+                Subject::Triple(subject) => {
+                    self.encode_triple_for_insertion(subject, bnodes)?.into()
+                }
             },
             predicate: self
                 .storage
@@ -315,6 +319,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                     .storage
                     .encode_blank_node(bnodes.entry(object.clone()).or_default().as_ref())?,
                 Term::Literal(object) => self.encode_literal_for_insertion(object)?,
+                Term::Triple(subject) => self.encode_triple_for_insertion(subject, bnodes)?.into(),
             },
             graph_name: match &quad.graph_name {
                 GraphName::NamedNode(graph_name) => {
@@ -322,7 +327,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                 }
                 GraphName::DefaultGraph => EncodedTerm::DefaultGraph,
             },
-        }))
+        })
     }
 
     fn encode_quad_pattern_for_insertion(
@@ -387,6 +392,9 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                     .encode_blank_node(bnodes.entry(bnode.clone()).or_default().as_ref())?,
             ),
             TermPattern::Literal(term) => Some(self.encode_literal_for_insertion(term)?),
+            TermPattern::Triple(triple) => self
+                .encode_triple_pattern_for_insertion(triple, variables, values, bnodes)?
+                .map(EncodedTerm::from),
             TermPattern::Variable(v) => self.lookup_variable(v, variables, values).filter(validate),
         })
     }
@@ -420,6 +428,46 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         })
     }
 
+    fn encode_triple_pattern_for_insertion(
+        &mut self,
+        triple: &TriplePattern,
+        variables: &[Variable],
+        values: &[Option<EncodedTerm>],
+        bnodes: &mut HashMap<BlankNode, OxBlankNode>,
+    ) -> Result<Option<EncodedTriple>, EvaluationError> {
+        Ok(Some(EncodedTriple {
+            subject: if let Some(subject) = self.encode_term_or_var_for_insertion(
+                &triple.subject,
+                variables,
+                values,
+                bnodes,
+                |t| t.is_named_node() || t.is_blank_node(),
+            )? {
+                subject
+            } else {
+                return Ok(None);
+            },
+            predicate: if let Some(predicate) =
+                self.encode_named_node_or_var_for_insertion(&triple.predicate, variables, values)?
+            {
+                predicate
+            } else {
+                return Ok(None);
+            },
+            object: if let Some(object) = self.encode_term_or_var_for_insertion(
+                &triple.object,
+                variables,
+                values,
+                bnodes,
+                |t| !t.is_default_graph(),
+            )? {
+                object
+            } else {
+                return Ok(None);
+            },
+        }))
+    }
+
     fn lookup_variable(
         &self,
         v: &Variable,
@@ -448,6 +496,35 @@ impl<'a> SimpleUpdateEvaluator<'a> {
             .encode_named_node(NamedNodeRef::new_unchecked(&term.iri))?)
     }
 
+    fn encode_triple_for_insertion(
+        &mut self,
+        triple: &Triple,
+        bnodes: &mut HashMap<BlankNode, OxBlankNode>,
+    ) -> Result<EncodedTriple, EvaluationError> {
+        Ok(EncodedTriple {
+            subject: match &triple.subject {
+                Subject::NamedNode(subject) => self.encode_named_node_for_insertion(subject)?,
+                Subject::BlankNode(subject) => self
+                    .storage
+                    .encode_blank_node(bnodes.entry(subject.clone()).or_default().as_ref())?,
+                Subject::Triple(subject) => {
+                    self.encode_triple_for_insertion(subject, bnodes)?.into()
+                }
+            },
+            predicate: self
+                .storage
+                .encode_named_node(NamedNodeRef::new_unchecked(&triple.predicate.iri))?,
+            object: match &triple.object {
+                Term::NamedNode(object) => self.encode_named_node_for_insertion(object)?,
+                Term::BlankNode(object) => self
+                    .storage
+                    .encode_blank_node(bnodes.entry(object.clone()).or_default().as_ref())?,
+                Term::Literal(object) => self.encode_literal_for_insertion(object)?,
+                Term::Triple(object) => self.encode_triple_for_insertion(object, bnodes)?.into(),
+            },
+        })
+    }
+
     fn encode_literal_for_insertion(
         &mut self,
         term: &Literal,
@@ -465,11 +542,15 @@ impl<'a> SimpleUpdateEvaluator<'a> {
 
     fn encode_quad_for_deletion(&mut self, quad: &GroundQuad) -> EncodedQuad {
         EncodedQuad {
-            subject: self.encode_named_node_for_deletion(&quad.subject),
+            subject: match &quad.subject {
+                GroundSubject::NamedNode(subject) => self.encode_named_node_for_deletion(subject),
+                GroundSubject::Triple(subject) => self.encode_triple_for_deletion(subject),
+            },
             predicate: self.encode_named_node_for_deletion(&quad.predicate),
             object: match &quad.object {
                 GroundTerm::NamedNode(object) => self.encode_named_node_for_deletion(object),
                 GroundTerm::Literal(object) => self.encode_literal_for_deletion(object),
+                GroundTerm::Triple(object) => self.encode_triple_for_deletion(object),
             },
             graph_name: match &quad.graph_name {
                 GraphName::NamedNode(graph_name) => self.encode_named_node_for_deletion(graph_name),
@@ -510,6 +591,10 @@ impl<'a> SimpleUpdateEvaluator<'a> {
             GroundTermPattern::NamedNode(term) => Some(self.encode_named_node_for_deletion(term)),
             GroundTermPattern::Literal(term) => Some(self.encode_literal_for_deletion(term)),
             GroundTermPattern::Variable(v) => self.lookup_variable(v, variables, values),
+            GroundTermPattern::Triple(triple) => Some(
+                self.encode_triple_pattern_for_deletion(triple, variables, values)?
+                    .into(),
+            ),
         }
     }
 
@@ -542,6 +627,23 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         }
     }
 
+    fn encode_triple_pattern_for_deletion(
+        &self,
+        triple: &GroundTriplePattern,
+        variables: &[Variable],
+        values: &[Option<EncodedTerm>],
+    ) -> Option<EncodedTriple> {
+        Some(EncodedTriple {
+            subject: self.encode_term_or_var_for_deletion(&triple.subject, variables, values)?,
+            predicate: self.encode_named_node_or_var_for_deletion(
+                &triple.predicate,
+                variables,
+                values,
+            )?,
+            object: self.encode_term_or_var_for_deletion(&triple.object, variables, values)?,
+        })
+    }
+
     fn encode_named_node_for_deletion(&self, term: &NamedNode) -> EncodedTerm {
         get_encoded_named_node(NamedNodeRef::new_unchecked(&term.iri))
     }
@@ -556,5 +658,21 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                 LiteralRef::new_typed_literal(value, NamedNodeRef::new_unchecked(&datatype.iri))
             }
         })
+    }
+
+    fn encode_triple_for_deletion(&self, triple: &GroundTriple) -> EncodedTerm {
+        EncodedTriple::new(
+            match &triple.subject {
+                GroundSubject::NamedNode(subject) => self.encode_named_node_for_deletion(subject),
+                GroundSubject::Triple(subject) => self.encode_triple_for_deletion(subject),
+            },
+            self.encode_named_node_for_deletion(&triple.predicate),
+            match &triple.object {
+                GroundTerm::NamedNode(object) => self.encode_named_node_for_deletion(object),
+                GroundTerm::Literal(object) => self.encode_literal_for_deletion(object),
+                GroundTerm::Triple(object) => self.encode_triple_for_deletion(object),
+            },
+        )
+        .into()
     }
 }

@@ -5,58 +5,6 @@ use crate::term::*;
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub(crate) struct SparqlTriplePattern<'a>(pub(crate) &'a TriplePattern);
-
-impl<'a> fmt::Display for SparqlTriplePattern<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} {} {} .",
-            self.0.subject, self.0.predicate, self.0.object
-        )
-    }
-}
-
-pub(crate) struct SparqlQuadPattern<'a>(pub(crate) &'a QuadPattern);
-
-impl<'a> fmt::Display for SparqlQuadPattern<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.0.graph_name == GraphNamePattern::DefaultGraph {
-            write!(
-                f,
-                "{} {} {} .",
-                self.0.subject, self.0.predicate, self.0.object
-            )
-        } else {
-            write!(
-                f,
-                "GRAPH {} {{ {} {} {} }}",
-                self.0.graph_name, self.0.subject, self.0.predicate, self.0.object
-            )
-        }
-    }
-}
-
-pub(crate) struct SparqlGroundQuadPattern<'a>(pub(crate) &'a GroundQuadPattern);
-
-impl<'a> fmt::Display for SparqlGroundQuadPattern<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.0.graph_name == GraphNamePattern::DefaultGraph {
-            write!(
-                f,
-                "{} {} {} .",
-                self.0.subject, self.0.predicate, self.0.object
-            )
-        } else {
-            write!(
-                f,
-                "GRAPH {} {{ {} {} {} }}",
-                self.0.graph_name, self.0.subject, self.0.predicate, self.0.object
-            )
-        }
-    }
-}
-
 /// A [property path expression](https://www.w3.org/TR/sparql11-query/#defn_PropertyPathExpr)
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum PropertyPathExpression {
@@ -563,7 +511,7 @@ impl fmt::Display for GraphPattern {
             GraphPattern::Bgp(p) => {
                 write!(f, "(bgp")?;
                 for pattern in p {
-                    write!(f, " {}", pattern)?;
+                    write!(f, " {} .", pattern)?;
                 }
                 write!(f, ")")
             }
@@ -754,7 +702,7 @@ impl<'a> fmt::Display for SparqlGraphPattern<'a> {
         match self.0 {
             GraphPattern::Bgp(p) => {
                 for pattern in p {
-                    write!(f, "{}", SparqlTriplePattern(pattern))?
+                    write!(f, "{} .", pattern)?
                 }
                 Ok(())
             }

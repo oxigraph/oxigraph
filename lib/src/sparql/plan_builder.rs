@@ -3,7 +3,7 @@ use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::model::Variable as OxVariable;
 use crate::sparql::plan::*;
-use crate::storage::numeric_encoder::{EncodedTerm, WriteEncoder};
+use crate::storage::numeric_encoder::{EncodedTerm, EncodedTriple, WriteEncoder};
 use rand::random;
 use spargebra::algebra::*;
 use spargebra::term::*;
@@ -807,6 +807,7 @@ impl<'a> PlanBuilder<'a> {
                 //TODO: very bad hack to convert bnode to variable
             }
             TermPattern::Literal(literal) => PatternValue::Constant(self.build_literal(literal)?),
+            TermPattern::Triple(_) => unimplemented!(),
         })
     }
 
@@ -845,6 +846,7 @@ impl<'a> PlanBuilder<'a> {
                             match term {
                                 GroundTerm::NamedNode(node) => self.build_named_node(node),
                                 GroundTerm::Literal(literal) => self.build_literal(literal),
+                                GroundTerm::Triple(triple) => self.build_triple(triple),
                             }?,
                         );
                     }
@@ -957,6 +959,7 @@ impl<'a> PlanBuilder<'a> {
             TermPattern::Literal(literal) => {
                 TripleTemplateValue::Constant(self.build_literal(literal)?)
             }
+            TermPattern::Triple(_) => unimplemented!(),
         })
     }
 
@@ -1090,6 +1093,22 @@ impl<'a> PlanBuilder<'a> {
                 NamedNodeRef::new_unchecked(datatype.iri.as_str()),
             ),
         })
+    }
+
+    fn build_triple(&mut self, triple: &GroundTriple) -> Result<EncodedTerm, EvaluationError> {
+        Ok(EncodedTriple::new(
+            match &triple.subject {
+                GroundSubject::NamedNode(node) => self.build_named_node(node)?,
+                GroundSubject::Triple(triple) => self.build_triple(triple)?,
+            },
+            self.build_named_node(&triple.predicate)?,
+            match &triple.object {
+                GroundTerm::NamedNode(node) => self.build_named_node(node)?,
+                GroundTerm::Literal(literal) => self.build_literal(literal)?,
+                GroundTerm::Triple(triple) => self.build_triple(triple)?,
+            },
+        )
+        .into())
     }
 }
 

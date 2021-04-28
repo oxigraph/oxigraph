@@ -10,7 +10,7 @@
 //! use spargebra::Query;
 //!
 //! let query_str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
-//! let mut query = Query::parse(query_str, None)?;
+//! let query = Query::parse(query_str, None)?;
 //! assert_eq!(query.to_string(), query_str);
 //! # Result::Ok::<_, spargebra::ParseError>(())
 //! ```
@@ -24,6 +24,7 @@
     unsafe_code,
     unused_qualifications
 )]
+#![doc(test(attr(deny(warnings))))]
 
 pub mod algebra;
 mod parser;

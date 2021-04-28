@@ -12,7 +12,7 @@ use std::str::FromStr;
 /// use spargebra::Query;
 ///
 /// let query_str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
-/// let mut query = Query::parse(query_str, None)?;
+/// let query = Query::parse(query_str, None)?;
 /// assert_eq!(query.to_string(), query_str);
 /// # Result::Ok::<_, spargebra::ParseError>(())
 /// ```
@@ -96,7 +96,7 @@ impl fmt::Display for Query {
                 }
                 write!(f, "CONSTRUCT {{ ")?;
                 for triple in template.iter() {
-                    write!(f, "{} ", SparqlTriplePattern(triple))?;
+                    write!(f, "{} . ", triple)?;
                 }
                 write!(f, "}}")?;
                 if let Some(dataset) = dataset {

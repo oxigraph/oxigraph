@@ -9,7 +9,7 @@ Spargebra
 
 Spargebra is a [SPARQL](https://www.w3.org/TR/sparql11-overview/) parser.
 
-It supports both [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/) and [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/).
+It supports [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/), [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/) and [SPARQL-star](https://w3c.github.io/rdf-star/cg-spec/).
 
 This crate is intended to be a building piece for SPARQL implementations in Rust like [Oxigraph](https://oxigraph.org).
 

@@ -1,5 +1,6 @@
 //! Data structures for [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/) like IRI, literal or triples.
 
+use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use std::fmt::Write;
 
@@ -25,6 +26,18 @@ impl fmt::Display for NamedNode {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "<{}>", self.iri)
+    }
+}
+
+impl TryFrom<NamedNodePattern> for NamedNode {
+    type Error = ();
+
+    #[inline]
+    fn try_from(pattern: NamedNodePattern) -> Result<Self, ()> {
+        match pattern {
+            NamedNodePattern::NamedNode(t) => Ok(t),
+            NamedNodePattern::Variable(_) => Err(()),
+        }
     }
 }
 
@@ -126,14 +139,20 @@ impl fmt::Display for Literal {
 pub enum Subject {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
+    Triple(Box<Triple>),
 }
 
 impl fmt::Display for Subject {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Subject::NamedNode(node) => node.fmt(f),
-            Subject::BlankNode(node) => node.fmt(f),
+            Self::NamedNode(node) => node.fmt(f),
+            Self::BlankNode(node) => node.fmt(f),
+            Self::Triple(triple) => write!(
+                f,
+                "<<{} {} {}>>",
+                triple.subject, triple.predicate, triple.object
+            ),
         }
     }
 }
@@ -152,6 +171,104 @@ impl From<BlankNode> for Subject {
     }
 }
 
+impl From<Triple> for Subject {
+    #[inline]
+    fn from(triple: Triple) -> Self {
+        Self::Triple(Box::new(triple))
+    }
+}
+
+impl From<Box<Triple>> for Subject {
+    #[inline]
+    fn from(triple: Box<Triple>) -> Self {
+        Self::Triple(triple)
+    }
+}
+
+impl TryFrom<TermPattern> for Subject {
+    type Error = ();
+
+    #[inline]
+    fn try_from(term: TermPattern) -> Result<Self, ()> {
+        match term {
+            TermPattern::NamedNode(t) => Ok(t.into()),
+            TermPattern::BlankNode(t) => Ok(t.into()),
+            TermPattern::Triple(t) => Ok(Triple::try_from(t)?.into()),
+            TermPattern::Literal(_) | TermPattern::Variable(_) => Err(()),
+        }
+    }
+}
+
+/// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
+///
+/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub enum GroundSubject {
+    NamedNode(NamedNode),
+    Triple(Box<GroundTriple>),
+}
+
+impl fmt::Display for GroundSubject {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NamedNode(node) => node.fmt(f),
+            Self::Triple(triple) => write!(
+                f,
+                "<<{} {} {}>>",
+                triple.subject, triple.predicate, triple.object
+            ),
+        }
+    }
+}
+
+impl From<NamedNode> for GroundSubject {
+    #[inline]
+    fn from(node: NamedNode) -> Self {
+        Self::NamedNode(node)
+    }
+}
+
+impl From<GroundTriple> for GroundSubject {
+    #[inline]
+    fn from(triple: GroundTriple) -> Self {
+        Self::Triple(Box::new(triple))
+    }
+}
+
+impl From<Box<GroundTriple>> for GroundSubject {
+    #[inline]
+    fn from(triple: Box<GroundTriple>) -> Self {
+        Self::Triple(triple)
+    }
+}
+
+impl TryFrom<Subject> for GroundSubject {
+    type Error = ();
+
+    #[inline]
+    fn try_from(subject: Subject) -> Result<Self, ()> {
+        match subject {
+            Subject::NamedNode(t) => Ok(t.into()),
+            Subject::BlankNode(_) => Err(()),
+            Subject::Triple(t) => Ok(GroundTriple::try_from(t)?.into()),
+        }
+    }
+}
+
+impl TryFrom<GroundTerm> for GroundSubject {
+    type Error = ();
+
+    #[inline]
+    fn try_from(term: GroundTerm) -> Result<Self, ()> {
+        match term {
+            GroundTerm::NamedNode(t) => Ok(t.into()),
+            GroundTerm::Literal(_) => Err(()),
+            GroundTerm::Triple(t) => Ok(t.into()),
+        }
+    }
+}
+
 /// An RDF [term](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term).
 ///
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) and [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
@@ -162,15 +279,21 @@ pub enum Term {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
     Literal(Literal),
+    Triple(Box<Triple>),
 }
 
 impl fmt::Display for Term {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Term::NamedNode(node) => node.fmt(f),
-            Term::BlankNode(node) => node.fmt(f),
-            Term::Literal(literal) => literal.fmt(f),
+            Self::NamedNode(node) => node.fmt(f),
+            Self::BlankNode(node) => node.fmt(f),
+            Self::Literal(literal) => literal.fmt(f),
+            Self::Triple(triple) => write!(
+                f,
+                "<<{} {} {}>>",
+                triple.subject, triple.predicate, triple.object
+            ),
         }
     }
 }
@@ -196,31 +319,67 @@ impl From<Literal> for Term {
     }
 }
 
+impl From<Triple> for Term {
+    #[inline]
+    fn from(triple: Triple) -> Self {
+        Self::Triple(Box::new(triple))
+    }
+}
+
+impl From<Box<Triple>> for Term {
+    #[inline]
+    fn from(triple: Box<Triple>) -> Self {
+        Self::Triple(triple)
+    }
+}
+
 impl From<Subject> for Term {
     #[inline]
     fn from(resource: Subject) -> Self {
         match resource {
-            Subject::NamedNode(node) => Self::NamedNode(node),
-            Subject::BlankNode(node) => Self::BlankNode(node),
+            Subject::NamedNode(node) => node.into(),
+            Subject::BlankNode(node) => node.into(),
+            Subject::Triple(t) => t.into(),
         }
     }
 }
 
-/// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
+impl TryFrom<TermPattern> for Term {
+    type Error = ();
+
+    #[inline]
+    fn try_from(pattern: TermPattern) -> Result<Self, ()> {
+        match pattern {
+            TermPattern::NamedNode(t) => Ok(t.into()),
+            TermPattern::BlankNode(t) => Ok(t.into()),
+            TermPattern::Literal(t) => Ok(t.into()),
+            TermPattern::Triple(t) => Ok(Triple::try_from(t)?.into()),
+            TermPattern::Variable(_) => Err(()),
+        }
+    }
+}
+
+/// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GroundTerm {
     NamedNode(NamedNode),
     Literal(Literal),
+    Triple(Box<GroundTriple>),
 }
 
 impl fmt::Display for GroundTerm {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GroundTerm::NamedNode(node) => node.fmt(f),
-            GroundTerm::Literal(literal) => literal.fmt(f),
+            Self::NamedNode(node) => node.fmt(f),
+            Self::Literal(literal) => literal.fmt(f),
+            Self::Triple(triple) => write!(
+                f,
+                "<<{} {} {}>>",
+                triple.subject, triple.predicate, triple.object
+            ),
         }
     }
 }
@@ -239,6 +398,148 @@ impl From<Literal> for GroundTerm {
     }
 }
 
+impl From<GroundTriple> for GroundTerm {
+    #[inline]
+    fn from(triple: GroundTriple) -> Self {
+        Self::Triple(Box::new(triple))
+    }
+}
+
+impl From<Box<GroundTriple>> for GroundTerm {
+    #[inline]
+    fn from(triple: Box<GroundTriple>) -> Self {
+        Self::Triple(triple)
+    }
+}
+
+impl TryFrom<Term> for GroundTerm {
+    type Error = ();
+
+    #[inline]
+    fn try_from(term: Term) -> Result<Self, ()> {
+        match term {
+            Term::NamedNode(t) => Ok(t.into()),
+            Term::BlankNode(_) => Err(()),
+            Term::Literal(t) => Ok(t.into()),
+            Term::Triple(t) => Ok(GroundTriple::try_from(t)?.into()),
+        }
+    }
+}
+
+/// A [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
+///
+/// The default string formatter is returning a N-Quads representation.
+///
+/// ```
+/// use spargebra::term::NamedNode;
+/// use spargebra::term::Triple;
+///
+/// assert_eq!(
+///     "<http://example.com/foo> <http://schema.org/sameAs> <http://example.com/foo>",
+///     Triple {
+///         subject: NamedNode { iri: "http://example.com/foo".into() }.into(),
+///         predicate: NamedNode { iri: "http://schema.org/sameAs".into() },
+///         object: NamedNode { iri: "http://example.com/foo".into() }.into(),
+///     }.to_string()
+/// )
+/// ```
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct Triple {
+    pub subject: Subject,
+    pub predicate: NamedNode,
+    pub object: Term,
+}
+
+impl fmt::Display for Triple {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {} {}", self.subject, self.predicate, self.object)
+    }
+}
+
+impl TryFrom<TriplePattern> for Triple {
+    type Error = ();
+
+    #[inline]
+    fn try_from(triple: TriplePattern) -> Result<Self, ()> {
+        Ok(Self {
+            subject: triple.subject.try_into()?,
+            predicate: triple.predicate.try_into()?,
+            object: triple.object.try_into()?,
+        })
+    }
+}
+
+impl TryFrom<Box<TriplePattern>> for Triple {
+    type Error = ();
+
+    #[inline]
+    fn try_from(triple: Box<TriplePattern>) -> Result<Self, ()> {
+        Ok(Self {
+            subject: triple.subject.try_into()?,
+            predicate: triple.predicate.try_into()?,
+            object: triple.object.try_into()?,
+        })
+    }
+}
+
+/// A [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) without blank nodes.
+///
+/// The default string formatter is returning a N-Quads representation.
+///
+/// ```
+/// use spargebra::term::NamedNode;
+/// use spargebra::term::GroundTriple;
+///
+/// assert_eq!(
+///     "<http://example.com/foo> <http://schema.org/sameAs> <http://example.com/foo>",
+///     GroundTriple {
+///         subject: NamedNode { iri: "http://example.com/foo".into() }.into(),
+///         predicate: NamedNode { iri: "http://schema.org/sameAs".into() },
+///         object: NamedNode { iri: "http://example.com/foo".into() }.into(),
+///     }.to_string()
+/// )
+/// ```
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct GroundTriple {
+    pub subject: GroundSubject,
+    pub predicate: NamedNode,
+    pub object: GroundTerm,
+}
+
+impl fmt::Display for GroundTriple {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {} {}", self.subject, self.predicate, self.object)
+    }
+}
+
+impl TryFrom<Triple> for GroundTriple {
+    type Error = ();
+
+    #[inline]
+    fn try_from(triple: Triple) -> Result<Self, ()> {
+        Ok(Self {
+            subject: triple.subject.try_into()?,
+            predicate: triple.predicate,
+            object: triple.object.try_into()?,
+        })
+    }
+}
+
+impl TryFrom<Box<Triple>> for GroundTriple {
+    type Error = ();
+
+    #[inline]
+    fn try_from(triple: Box<Triple>) -> Result<Self, ()> {
+        Ok(Self {
+            subject: triple.subject.try_into()?,
+            predicate: triple.predicate,
+            object: triple.object.try_into()?,
+        })
+    }
+}
+
 /// A possible graph name.
 ///
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
@@ -252,8 +553,8 @@ impl fmt::Display for GraphName {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GraphName::NamedNode(node) => node.fmt(f),
-            GraphName::DefaultGraph => write!(f, "DEFAULT"),
+            Self::NamedNode(node) => node.fmt(f),
+            Self::DefaultGraph => write!(f, "DEFAULT"),
         }
     }
 }
@@ -262,6 +563,19 @@ impl From<NamedNode> for GraphName {
     #[inline]
     fn from(node: NamedNode) -> Self {
         Self::NamedNode(node)
+    }
+}
+
+impl TryFrom<GraphNamePattern> for GraphName {
+    type Error = ();
+
+    #[inline]
+    fn try_from(pattern: GraphNamePattern) -> Result<Self, ()> {
+        match pattern {
+            GraphNamePattern::NamedNode(t) => Ok(t.into()),
+            GraphNamePattern::DefaultGraph => Ok(GraphName::DefaultGraph),
+            GraphNamePattern::Variable(_) => Err(()),
+        }
     }
 }
 
@@ -274,7 +588,7 @@ impl From<NamedNode> for GraphName {
 /// use spargebra::term::Quad;
 ///
 /// assert_eq!(
-///     "<http://example.com/foo> <http://schema.org/sameAs> <http://example.com/foo> <http://example.com/> .",
+///     "<http://example.com/foo> <http://schema.org/sameAs> <http://example.com/foo> <http://example.com/>",
 ///     Quad {
 ///         subject: NamedNode { iri: "http://example.com/foo".into() }.into(),
 ///         predicate: NamedNode { iri: "http://schema.org/sameAs".into() },
@@ -295,14 +609,28 @@ impl fmt::Display for Quad {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.graph_name == GraphName::DefaultGraph {
-            write!(f, "{} {} {} .", self.subject, self.predicate, self.object)
+            write!(f, "{} {} {}", self.subject, self.predicate, self.object)
         } else {
             write!(
                 f,
-                "{} {} {} {} .",
+                "{} {} {} {}",
                 self.subject, self.predicate, self.object, self.graph_name
             )
         }
+    }
+}
+
+impl TryFrom<QuadPattern> for Quad {
+    type Error = ();
+
+    #[inline]
+    fn try_from(quad: QuadPattern) -> Result<Self, ()> {
+        Ok(Self {
+            subject: quad.subject.try_into()?,
+            predicate: quad.predicate.try_into()?,
+            object: quad.object.try_into()?,
+            graph_name: quad.graph_name.try_into()?,
+        })
     }
 }
 
@@ -315,7 +643,7 @@ impl fmt::Display for Quad {
 /// use spargebra::term::GroundQuad;
 ///
 /// assert_eq!(
-///     "<http://example.com/foo> <http://schema.org/sameAs> <http://example.com/foo> <http://example.com/> .",
+///     "<http://example.com/foo> <http://schema.org/sameAs> <http://example.com/foo> <http://example.com/>",
 ///     GroundQuad {
 ///         subject: NamedNode { iri: "http://example.com/foo".into() }.into(),
 ///         predicate: NamedNode { iri: "http://schema.org/sameAs".into() },
@@ -326,7 +654,7 @@ impl fmt::Display for Quad {
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct GroundQuad {
-    pub subject: NamedNode,
+    pub subject: GroundSubject,
     pub predicate: NamedNode,
     pub object: GroundTerm,
     pub graph_name: GraphName,
@@ -336,14 +664,28 @@ impl fmt::Display for GroundQuad {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.graph_name == GraphName::DefaultGraph {
-            write!(f, "{} {} {} .", self.subject, self.predicate, self.object)
+            write!(f, "{} {} {}", self.subject, self.predicate, self.object)
         } else {
             write!(
                 f,
-                "{} {} {} {} .",
+                "{} {} {} {}",
                 self.subject, self.predicate, self.object, self.graph_name
             )
         }
+    }
+}
+
+impl TryFrom<Quad> for GroundQuad {
+    type Error = ();
+
+    #[inline]
+    fn try_from(quad: Quad) -> Result<Self, ()> {
+        Ok(Self {
+            subject: quad.subject.try_into()?,
+            predicate: quad.predicate,
+            object: quad.object.try_into()?,
+            graph_name: quad.graph_name,
+        })
     }
 }
 
@@ -380,8 +722,8 @@ impl fmt::Display for NamedNodePattern {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            NamedNodePattern::NamedNode(node) => node.fmt(f),
-            NamedNodePattern::Variable(var) => var.fmt(f),
+            Self::NamedNode(node) => node.fmt(f),
+            Self::Variable(var) => var.fmt(f),
         }
     }
 }
@@ -406,6 +748,7 @@ pub enum TermPattern {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
     Literal(Literal),
+    Triple(Box<TriplePattern>),
     Variable(Variable),
 }
 
@@ -413,10 +756,11 @@ impl fmt::Display for TermPattern {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TermPattern::NamedNode(term) => term.fmt(f),
-            TermPattern::BlankNode(term) => term.fmt(f),
-            TermPattern::Literal(term) => term.fmt(f),
-            TermPattern::Variable(var) => var.fmt(f),
+            Self::NamedNode(term) => term.fmt(f),
+            Self::BlankNode(term) => term.fmt(f),
+            Self::Literal(term) => term.fmt(f),
+            Self::Triple(triple) => write!(f, "<<{}>>", triple),
+            Self::Variable(var) => var.fmt(f),
         }
     }
 }
@@ -442,9 +786,34 @@ impl From<Literal> for TermPattern {
     }
 }
 
+impl From<TriplePattern> for TermPattern {
+    #[inline]
+    fn from(triple: TriplePattern) -> Self {
+        Self::Triple(Box::new(triple))
+    }
+}
+
+impl From<Box<TriplePattern>> for TermPattern {
+    #[inline]
+    fn from(triple: Box<TriplePattern>) -> Self {
+        Self::Triple(triple)
+    }
+}
+
 impl From<Variable> for TermPattern {
     fn from(var: Variable) -> Self {
         Self::Variable(var)
+    }
+}
+
+impl From<Subject> for TermPattern {
+    #[inline]
+    fn from(subject: Subject) -> Self {
+        match subject {
+            Subject::NamedNode(node) => node.into(),
+            Subject::BlankNode(node) => node.into(),
+            Subject::Triple(t) => TriplePattern::from(t).into(),
+        }
     }
 }
 
@@ -452,9 +821,10 @@ impl From<Term> for TermPattern {
     #[inline]
     fn from(term: Term) -> Self {
         match term {
-            Term::NamedNode(node) => Self::NamedNode(node),
-            Term::BlankNode(node) => Self::BlankNode(node),
-            Term::Literal(literal) => Self::Literal(literal),
+            Term::NamedNode(node) => node.into(),
+            Term::BlankNode(node) => node.into(),
+            Term::Literal(literal) => literal.into(),
+            Term::Triple(t) => TriplePattern::from(t).into(),
         }
     }
 }
@@ -463,8 +833,8 @@ impl From<NamedNodePattern> for TermPattern {
     #[inline]
     fn from(element: NamedNodePattern) -> Self {
         match element {
-            NamedNodePattern::NamedNode(node) => Self::NamedNode(node),
-            NamedNodePattern::Variable(var) => Self::Variable(var),
+            NamedNodePattern::NamedNode(node) => node.into(),
+            NamedNodePattern::Variable(var) => var.into(),
         }
     }
 }
@@ -475,15 +845,17 @@ pub enum GroundTermPattern {
     NamedNode(NamedNode),
     Literal(Literal),
     Variable(Variable),
+    Triple(Box<GroundTriplePattern>),
 }
 
 impl fmt::Display for GroundTermPattern {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GroundTermPattern::NamedNode(term) => term.fmt(f),
-            GroundTermPattern::Literal(term) => term.fmt(f),
-            GroundTermPattern::Variable(var) => var.fmt(f),
+            Self::NamedNode(term) => term.fmt(f),
+            Self::Literal(term) => term.fmt(f),
+            Self::Variable(var) => var.fmt(f),
+            Self::Triple(triple) => write!(f, "<<{}>>", triple),
         }
     }
 }
@@ -502,6 +874,20 @@ impl From<Literal> for GroundTermPattern {
     }
 }
 
+impl From<GroundTriplePattern> for GroundTermPattern {
+    #[inline]
+    fn from(triple: GroundTriplePattern) -> Self {
+        Self::Triple(Box::new(triple))
+    }
+}
+
+impl From<Box<GroundTriplePattern>> for GroundTermPattern {
+    #[inline]
+    fn from(triple: Box<GroundTriplePattern>) -> Self {
+        Self::Triple(triple)
+    }
+}
+
 impl From<Variable> for GroundTermPattern {
     #[inline]
     fn from(var: Variable) -> Self {
@@ -509,12 +895,22 @@ impl From<Variable> for GroundTermPattern {
     }
 }
 
+impl From<GroundSubject> for GroundTermPattern {
+    #[inline]
+    fn from(term: GroundSubject) -> Self {
+        match term {
+            GroundSubject::NamedNode(node) => node.into(),
+            GroundSubject::Triple(triple) => GroundTriplePattern::from(triple).into(),
+        }
+    }
+}
 impl From<GroundTerm> for GroundTermPattern {
     #[inline]
     fn from(term: GroundTerm) -> Self {
         match term {
-            GroundTerm::NamedNode(node) => Self::NamedNode(node),
-            GroundTerm::Literal(literal) => Self::Literal(literal),
+            GroundTerm::NamedNode(node) => node.into(),
+            GroundTerm::Literal(literal) => literal.into(),
+            GroundTerm::Triple(triple) => GroundTriplePattern::from(triple).into(),
         }
     }
 }
@@ -523,9 +919,24 @@ impl From<NamedNodePattern> for GroundTermPattern {
     #[inline]
     fn from(element: NamedNodePattern) -> Self {
         match element {
-            NamedNodePattern::NamedNode(node) => Self::NamedNode(node),
-            NamedNodePattern::Variable(var) => Self::Variable(var),
+            NamedNodePattern::NamedNode(node) => node.into(),
+            NamedNodePattern::Variable(var) => var.into(),
         }
+    }
+}
+
+impl TryFrom<TermPattern> for GroundTermPattern {
+    type Error = ();
+
+    #[inline]
+    fn try_from(pattern: TermPattern) -> Result<Self, ()> {
+        Ok(match pattern {
+            TermPattern::NamedNode(named_node) => named_node.into(),
+            TermPattern::BlankNode(_) => return Err(()),
+            TermPattern::Literal(literal) => literal.into(),
+            TermPattern::Triple(triple) => GroundTriplePattern::try_from(triple)?.into(),
+            TermPattern::Variable(variable) => variable.into(),
+        })
     }
 }
 
@@ -541,9 +952,9 @@ impl fmt::Display for GraphNamePattern {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GraphNamePattern::NamedNode(node) => node.fmt(f),
-            GraphNamePattern::DefaultGraph => f.write_str("DEFAULT"),
-            GraphNamePattern::Variable(var) => var.fmt(f),
+            Self::NamedNode(node) => node.fmt(f),
+            Self::DefaultGraph => f.write_str("DEFAULT"),
+            Self::Variable(var) => var.fmt(f),
         }
     }
 }
@@ -566,7 +977,7 @@ impl From<GraphName> for GraphNamePattern {
     #[inline]
     fn from(graph_name: GraphName) -> Self {
         match graph_name {
-            GraphName::NamedNode(node) => Self::NamedNode(node),
+            GraphName::NamedNode(node) => node.into(),
             GraphName::DefaultGraph => Self::DefaultGraph,
         }
     }
@@ -576,8 +987,8 @@ impl From<NamedNodePattern> for GraphNamePattern {
     #[inline]
     fn from(graph_name: NamedNodePattern) -> Self {
         match graph_name {
-            NamedNodePattern::NamedNode(node) => Self::NamedNode(node),
-            NamedNodePattern::Variable(var) => Self::Variable(var),
+            NamedNodePattern::NamedNode(node) => node.into(),
+            NamedNodePattern::Variable(var) => var.into(),
         }
     }
 }
@@ -607,11 +1018,92 @@ impl TriplePattern {
 impl fmt::Display for TriplePattern {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "(triple {} {} {})",
-            self.subject, self.predicate, self.object
-        )
+        write!(f, "{} {} {}", self.subject, self.predicate, self.object)
+    }
+}
+
+impl From<Triple> for TriplePattern {
+    #[inline]
+    fn from(triple: Triple) -> Self {
+        Self {
+            subject: triple.subject.into(),
+            predicate: triple.predicate.into(),
+            object: triple.object.into(),
+        }
+    }
+}
+
+impl From<Box<Triple>> for TriplePattern {
+    #[inline]
+    fn from(triple: Box<Triple>) -> Self {
+        Self {
+            subject: triple.subject.into(),
+            predicate: triple.predicate.into(),
+            object: triple.object.into(),
+        }
+    }
+}
+
+/// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) without blank nodes
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct GroundTriplePattern {
+    pub subject: GroundTermPattern,
+    pub predicate: NamedNodePattern,
+    pub object: GroundTermPattern,
+}
+
+impl fmt::Display for GroundTriplePattern {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {} {}", self.subject, self.predicate, self.object)
+    }
+}
+
+impl From<GroundTriple> for GroundTriplePattern {
+    #[inline]
+    fn from(triple: GroundTriple) -> Self {
+        Self {
+            subject: triple.subject.into(),
+            predicate: triple.predicate.into(),
+            object: triple.object.into(),
+        }
+    }
+}
+
+impl From<Box<GroundTriple>> for GroundTriplePattern {
+    #[inline]
+    fn from(triple: Box<GroundTriple>) -> Self {
+        Self {
+            subject: triple.subject.into(),
+            predicate: triple.predicate.into(),
+            object: triple.object.into(),
+        }
+    }
+}
+
+impl TryFrom<TriplePattern> for GroundTriplePattern {
+    type Error = ();
+
+    #[inline]
+    fn try_from(triple: TriplePattern) -> Result<Self, Self::Error> {
+        Ok(Self {
+            subject: triple.subject.try_into()?,
+            predicate: triple.predicate,
+            object: triple.object.try_into()?,
+        })
+    }
+}
+
+impl TryFrom<Box<TriplePattern>> for GroundTriplePattern {
+    type Error = ();
+
+    #[inline]
+    fn try_from(triple: Box<TriplePattern>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            subject: triple.subject.try_into()?,
+            predicate: triple.predicate,
+            object: triple.object.try_into()?,
+        })
     }
 }
 
@@ -644,15 +1136,11 @@ impl fmt::Display for QuadPattern {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.graph_name == GraphNamePattern::DefaultGraph {
-            write!(
-                f,
-                "(triple {} {} {})",
-                self.subject, self.predicate, self.object
-            )
+            write!(f, "{} {} {}", self.subject, self.predicate, self.object)
         } else {
             write!(
                 f,
-                "(graph {} (triple {} {} {}))",
+                "GRAPH {} {{ {} {} {} }}",
                 self.graph_name, self.subject, self.predicate, self.object
             )
         }
@@ -672,18 +1160,28 @@ impl fmt::Display for GroundQuadPattern {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.graph_name == GraphNamePattern::DefaultGraph {
-            write!(
-                f,
-                "(triple {} {} {})",
-                self.subject, self.predicate, self.object
-            )
+            write!(f, "{} {} {}", self.subject, self.predicate, self.object)
         } else {
             write!(
                 f,
-                "(graph {} (triple {} {} {}))",
+                "GRAPH {} {{ {} {} {} }}",
                 self.graph_name, self.subject, self.predicate, self.object
             )
         }
+    }
+}
+
+impl TryFrom<QuadPattern> for GroundQuadPattern {
+    type Error = ();
+
+    #[inline]
+    fn try_from(pattern: QuadPattern) -> Result<Self, ()> {
+        Ok(GroundQuadPattern {
+            subject: pattern.subject.try_into()?,
+            predicate: pattern.predicate,
+            object: pattern.object.try_into()?,
+            graph_name: pattern.graph_name,
+        })
     }
 }
 

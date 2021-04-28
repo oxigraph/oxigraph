@@ -117,14 +117,14 @@ impl fmt::Display for GraphUpdateOperation {
                 if !delete.is_empty() {
                     writeln!(f, "DELETE {{")?;
                     for quad in delete {
-                        writeln!(f, "\t{}", SparqlGroundQuadPattern(quad))?;
+                        writeln!(f, "\t{} .", quad)?;
                     }
                     writeln!(f, "}}")?;
                 }
                 if !insert.is_empty() {
                     writeln!(f, "INSERT {{")?;
                     for quad in insert {
-                        writeln!(f, "\t{}", SparqlQuadPattern(quad))?;
+                        writeln!(f, "\t{} .", quad)?;
                     }
                     writeln!(f, "}}")?;
                 }

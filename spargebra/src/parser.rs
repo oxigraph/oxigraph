@@ -9,6 +9,7 @@ use peg::str::LineCol;
 use rand::random;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 use std::str::Chars;
 use std::str::FromStr;
@@ -1039,22 +1040,7 @@ parser! {
                     GraphNamePattern::Variable(graph_name) => GraphPattern::Graph { graph_name: graph_name.clone().into(), inner: Box::new(bgp) },
                 }
             }).fold(GraphPattern::Bgp(Vec::new()), new_join);
-            let delete = d.into_iter().map(|q| Ok(GroundQuadPattern {
-                subject: match q.subject {
-                    TermPattern::NamedNode(subject) => subject.into(),
-                    TermPattern::BlankNode(_) => return Err("Blank nodes are not allowed in DELETE WHERE"),
-                    TermPattern::Literal(subject) => subject.into(),
-                    TermPattern::Variable(subject) => subject.into(),
-                },
-                predicate: q.predicate,
-                object: match q.object {
-                    TermPattern::NamedNode(object) => object.into(),
-                    TermPattern::BlankNode(_) => return Err("Blank nodes are not allowed in DELETE WHERE"),
-                    TermPattern::Literal(object) => object.into(),
-                    TermPattern::Variable(object) => object.into(),
-                },
-                graph_name: q.graph_name
-            })).collect::<Result<Vec<_>,_>>()?;
+            let delete = d.into_iter().map(GroundQuadPattern::try_from).collect::<Result<Vec<_>,_>>().map_err(|_| "Blank nodes are not allowed in DELETE WHERE")?;
             Ok(vec![GraphUpdateOperation::DeleteInsert {
                 delete,
                 insert: Vec::new(),
@@ -1133,22 +1119,7 @@ parser! {
 
         //[42]
         rule DeleteClause() -> Vec<GroundQuadPattern> = i("DELETE") _ q:QuadPattern() {?
-            q.into_iter().map(|q| Ok(GroundQuadPattern {
-                subject: match q.subject {
-                    TermPattern::NamedNode(subject) => subject.into(),
-                    TermPattern::BlankNode(_) => return Err("Blank nodes are not allowed in DELETE WHERE"),
-                    TermPattern::Literal(subject) => subject.into(),
-                    TermPattern::Variable(subject) => subject.into(),
-                },
-                predicate: q.predicate,
-                object: match q.object {
-                    TermPattern::NamedNode(object) => object.into(),
-                    TermPattern::BlankNode(_) => return Err("Blank nodes are not allowed in DELETE WHERE"),
-                    TermPattern::Literal(object) => object.into(),
-                    TermPattern::Variable(object) => object.into(),
-                },
-                graph_name: q.graph_name
-            })).collect::<Result<Vec<_>,_>>()
+            q.into_iter().map(GroundQuadPattern::try_from).collect::<Result<Vec<_>,_>>().map_err(|_| "Blank nodes are not allowed in DELETE WHERE")
         }
 
         //[43]
@@ -1184,53 +1155,10 @@ parser! {
 
         //[49]
         rule QuadData() -> Vec<Quad> = "{" _ q:Quads() _ "}" {?
-            q.into_iter().map(|q| Ok(Quad {
-                subject: match q.subject {
-                    TermPattern::NamedNode(t) => t.into(),
-                    TermPattern::BlankNode(t) => t.into(),
-                    TermPattern::Literal(_) | TermPattern::Variable(_) => return Err(())
-                },
-                predicate: if let NamedNodePattern::NamedNode(t) = q.predicate {
-                    t
-                } else {
-                    return Err(())
-                },
-                object: match q.object {
-                    TermPattern::NamedNode(t) => t.into(),
-                    TermPattern::BlankNode(t) => t.into(),
-                    TermPattern::Literal(t) => t.into(),
-                    TermPattern::Variable(_) => return Err(())
-                },
-                graph_name: match q.graph_name {
-                    GraphNamePattern::NamedNode(t) => t.into(),
-                    GraphNamePattern::DefaultGraph => GraphName::DefaultGraph,
-                    GraphNamePattern::Variable(_) => return Err(())
-                }
-            })).collect::<Result<Vec<_>, ()>>().map_err(|_| "Variables are not allowed in INSERT DATA and DELETE DATA")
+            q.into_iter().map(Quad::try_from).collect::<Result<Vec<_>, ()>>().map_err(|_| "Variables are not allowed in INSERT DATA")
         }
         rule GroundQuadData() -> Vec<GroundQuad> = "{" _ q:Quads() _ "}" {?
-            q.into_iter().map(|q| Ok(GroundQuad {
-                subject: if let TermPattern::NamedNode(t) = q.subject {
-                    t
-                } else {
-                    return Err(())
-                },
-                predicate: if let NamedNodePattern::NamedNode(t) = q.predicate {
-                    t
-                } else {
-                    return Err(())
-                },
-                object: match q.object {
-                    TermPattern::NamedNode(t) => t.into(),
-                    TermPattern::Literal(t) => t.into(),
-                    TermPattern::BlankNode(_) | TermPattern::Variable(_) => return Err(())
-                },
-                graph_name: match q.graph_name {
-                    GraphNamePattern::NamedNode(t) => t.into(),
-                    GraphNamePattern::DefaultGraph => GraphName::DefaultGraph,
-                    GraphNamePattern::Variable(_) => return Err(())
-                }
-            })).collect::<Result<Vec<_>, ()>>().map_err(|_| "Variables are not allowed in INSERT DATA and DELETE DATA")
+            q.into_iter().map(|q| GroundQuad::try_from(Quad::try_from(q)?)).collect::<Result<Vec<_>, ()>>().map_err(|_| "Variables and blank nodes are not allowed in DELETE DATA")
         }
 
         //[50]
@@ -1373,6 +1301,7 @@ parser! {
 
         //[65]
         rule DataBlockValue() -> Option<GroundTerm> =
+            t:EmbTriple() { Some(t.into()) } /
             i:iri() { Some(i.into()) } /
             l:RDFLiteral() { Some(l.into()) } /
             l:NumericLiteral() { Some(l.into()) } /
@@ -1428,7 +1357,7 @@ parser! {
 
         //[75]
         rule TriplesSameSubject() -> Vec<TriplePattern> =
-            s:VarOrTerm() _ po:PropertyListNotEmpty() {
+            s:VarOrTermOrEmbTP() _ po:PropertyListNotEmpty() {
                 let mut patterns = po.patterns;
                 for (p, os) in po.focus {
                     for o in os {
@@ -1486,7 +1415,7 @@ parser! {
 
         //[81]
         rule TriplesSameSubjectPath() -> Vec<TripleOrPathPattern> =
-            s:VarOrTerm() _ po:PropertyListPathNotEmpty() {
+            s:VarOrTermOrEmbTP() _ po:PropertyListPathNotEmpty() {
                 let mut patterns = po.patterns;
                 for (p, os) in po.focus {
                     for o in os {
@@ -1704,12 +1633,12 @@ parser! {
 
         //[104]
         rule GraphNode() -> FocusedTriplePattern<TermPattern> =
-            t:VarOrTerm() { FocusedTriplePattern::new(t) } /
+            t:VarOrTermOrEmbTP() { FocusedTriplePattern::new(t) } /
             TriplesNode()
 
         //[105]
         rule GraphNodePath() -> FocusedTripleOrPathPattern<TermPattern> =
-            t:VarOrTerm() { FocusedTripleOrPathPattern::new(t) } /
+            t:VarOrTermOrEmbTP() { FocusedTripleOrPathPattern::new(t) } /
             TriplesNodePath()
 
         //[106]
@@ -2127,6 +2056,43 @@ parser! {
 
         //[173]
         rule PN_LOCAL_ESC() = ['\\'] ['_' | '~' | '.' | '-' | '!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | ';' | '=' | '/' | '?' | '#' | '@' | '%'] //TODO: added '/' to make tests pass but is it valid?
+
+        //[174]
+        rule EmbTP() -> TriplePattern = "<<" _ s:EmbSubjectOrObject() _ p:Verb() _ o:EmbSubjectOrObject() _ ">>" {
+            TriplePattern { subject: s, predicate: p, object: o }
+        }
+
+        //[175]
+        rule EmbTriple() -> GroundTriple = "<<" _ s:DataValueTerm() _ p:EmbTriple_p() _ o:DataValueTerm() _ ">>" {?
+            Ok(GroundTriple {
+                subject: s.try_into().map_err(|_| "Literals are not allowed in subject position of nested patterns")?,
+                predicate: p,
+                object: o
+            })
+        }
+        rule EmbTriple_p() -> NamedNode = i: iri() { i } / "a" { iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type") }
+
+        //[176]
+        rule EmbSubjectOrObject() -> TermPattern = v:Var() { v.into() } /
+            b:BlankNode() { b.into() } /
+            i:iri() { i.into() } /
+            l:RDFLiteral() { l.into() } /
+            l:NumericLiteral() { l.into() } /
+            l:BooleanLiteral() { l.into() } /
+            t:EmbTP() { t.into() }
+
+        //[177]
+        rule DataValueTerm() -> GroundTerm = i:iri() { i.into() } /
+            l:RDFLiteral() { l.into() } /
+            l:NumericLiteral() { l.into() } /
+            l:BooleanLiteral() { l.into() } /
+            t:EmbTriple() { t.into() }
+
+        //[178]
+        rule VarOrTermOrEmbTP() -> TermPattern =
+            v:Var() { v.into() } /
+            t:GraphTerm() { t.into() } /
+            t:EmbTP() { t.into() }
 
         //space
         rule _() = quiet! { ([' ' | '\t' | '\n' | '\r'] / comment())* }
