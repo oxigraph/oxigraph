@@ -174,6 +174,11 @@ impl Graph {
         self.graph_mut().remove(triple)
     }
 
+    /// Clears the graph
+    pub fn clear(&mut self) {
+        self.dataset.clear()
+    }
+
     /// Loads a file into the graph.
     ///
     /// Usage example:

@@ -246,43 +246,50 @@ impl Iterator for TestManifest {
             None => {
                 match self.manifests_to_do.pop() {
                     Some(url) => {
-                        let manifest = SubjectRef::from(NamedNodeRef::new(url.as_str()).unwrap());
+                        self.graph.clear();
                         if let Err(error) = load_to_graph(&url, &mut self.graph) {
                             return Some(Err(error));
                         }
 
-                        // New manifests
-                        match self
+                        for manifest in self
                             .graph
-                            .object_for_subject_predicate(manifest, mf::INCLUDE)
+                            .subjects_for_predicate_object(rdf::TYPE, mf::MANIFEST)
                         {
-                            Some(TermRef::BlankNode(list)) => {
-                                self.manifests_to_do.extend(
-                                    RdfListIterator::iter(&self.graph, list.into()).filter_map(
-                                        |m| match m {
-                                            Term::NamedNode(nm) => Some(nm.into_string()),
-                                            _ => None,
-                                        },
-                                    ),
-                                );
+                            match self
+                                .graph
+                                .object_for_subject_predicate(manifest, mf::INCLUDE)
+                            {
+                                Some(TermRef::BlankNode(list)) => {
+                                    self.manifests_to_do.extend(
+                                        RdfListIterator::iter(&self.graph, list.into()).filter_map(
+                                            |m| match m {
+                                                Term::NamedNode(nm) => Some(nm.into_string()),
+                                                _ => None,
+                                            },
+                                        ),
+                                    );
+                                }
+                                Some(_) => return Some(Err(anyhow!("invalid tests list"))),
+                                None => (),
                             }
-                            Some(_) => return Some(Err(anyhow!("invalid tests list"))),
-                            None => (),
-                        }
 
-                        // New tests
-                        match self
-                            .graph
-                            .object_for_subject_predicate(manifest, mf::ENTRIES)
-                        {
-                            Some(TermRef::BlankNode(list)) => {
-                                self.tests_to_do
-                                    .extend(RdfListIterator::iter(&self.graph, list.into()));
+                            // New tests
+                            match self
+                                .graph
+                                .object_for_subject_predicate(manifest, mf::ENTRIES)
+                            {
+                                Some(TermRef::BlankNode(list)) => {
+                                    self.tests_to_do
+                                        .extend(RdfListIterator::iter(&self.graph, list.into()));
+                                }
+                                Some(term) => {
+                                    return Some(Err(anyhow!(
+                                        "Invalid tests list. Got term {}",
+                                        term
+                                    )));
+                                }
+                                None => (),
                             }
-                            Some(term) => {
-                                return Some(Err(anyhow!("Invalid tests list. Got term {}", term)));
-                            }
-                            None => (),
                         }
                     }
                     None => return None,
