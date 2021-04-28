@@ -131,7 +131,7 @@ impl fmt::Display for SubjectRef<'_> {
             Self::BlankNode(node) => node.fmt(f),
             Self::Triple(triple) => write!(
                 f,
-                "<< {} {} {} >>",
+                "<<{} {} {}>>",
                 triple.subject, triple.predicate, triple.object
             ),
         }
@@ -373,7 +373,7 @@ impl fmt::Display for TermRef<'_> {
             Self::Triple(triple) => {
                 write!(
                     f,
-                    "<< {} {} {} >>",
+                    "<<{} {} {}>>",
                     triple.subject, triple.predicate, triple.object
                 )
             }
