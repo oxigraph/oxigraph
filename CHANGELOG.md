@@ -1,3 +1,12 @@
+## [0.2.4] - 2021-04-28
+
+### Changed
+- The HTTP server allows to query the union of all graphs using the `union-default-graph` query parameter and to use the union graph for update `WHERE` clauses using the `using-union-graph` parameter.
+- Exposes Sled flush operation (useful for platforms without auto-flush like Windows or Android).
+- Fixes a possible out of bound panic in SPARQL query evaluation.
+- Upgrades RocksDB to 6.17.3.
+
+
 ## [0.2.3] - 2021-04-11
 
 ### Changed
