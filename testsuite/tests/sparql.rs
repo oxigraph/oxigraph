@@ -151,10 +151,6 @@ fn sparql_star_query_syntax_testsuite() -> Result<()> {
             "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-update-6",
             "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-update-7",
             "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-update-8",
-            // Not covered by grammar yet
-            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-expr-1",
-            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-expr-2",
-            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-expr-6",
         ],
     )
 }

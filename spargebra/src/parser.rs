@@ -1741,7 +1741,8 @@ parser! {
             l:RDFLiteral() { l.into() } /
             l:NumericLiteral() { l.into() } /
             l:BooleanLiteral() { l.into() } /
-            BuiltInCall()
+            BuiltInCall() /
+            TripleExpression()
 
         //[120]
         rule BrackettedExpression() -> Expression = "(" _ e:Expression() _ ")" { e }
@@ -2093,6 +2094,11 @@ parser! {
             v:Var() { v.into() } /
             t:GraphTerm() { t.into() } /
             t:EmbTP() { t.into() }
+
+        // Extra rule not yet in the spec
+        rule TripleExpression() -> Expression = "<<" _ s:Expression() _ p:Expression() _ o:Expression() _ ">>" {
+            Expression::FunctionCall(Function::Triple, vec![s, p, o])
+        }
 
         //space
         rule _() = quiet! { ([' ' | '\t' | '\n' | '\r'] / comment())* }
