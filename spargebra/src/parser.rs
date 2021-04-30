@@ -28,7 +28,7 @@ pub fn parse_query(query: &str, base_iri: Option<&str>) -> Result<Query, ParseEr
         namespaces: HashMap::default(),
         used_bnodes: HashSet::default(),
         currently_used_bnodes: HashSet::default(),
-        aggregates: Vec::default(),
+        aggregates: Vec::new(),
     };
 
     parser::QueryUnit(&unescape_unicode_codepoints(query), &mut state).map_err(|e| ParseError {
@@ -49,7 +49,7 @@ pub fn parse_update(update: &str, base_iri: Option<&str>) -> Result<Update, Pars
         namespaces: HashMap::default(),
         used_bnodes: HashSet::default(),
         currently_used_bnodes: HashSet::default(),
-        aggregates: Vec::default(),
+        aggregates: Vec::new(),
     };
 
     let operations =
@@ -89,6 +89,12 @@ impl fmt::Display for ParseError {
 
 impl Error for ParseError {}
 
+struct AnnotatedTerm {
+    term: TermPattern,
+    annotations: Vec<(NamedNodePattern, Vec<AnnotatedTerm>)>,
+}
+
+#[derive(Default)]
 struct FocusedTriplePattern<F> {
     focus: F,
     patterns: Vec<TriplePattern>,
@@ -98,16 +104,7 @@ impl<F> FocusedTriplePattern<F> {
     fn new(focus: F) -> Self {
         Self {
             focus,
-            patterns: Vec::default(),
-        }
-    }
-}
-
-impl<F: Default> Default for FocusedTriplePattern<F> {
-    fn default() -> Self {
-        Self {
-            focus: F::default(),
-            patterns: Vec::default(),
+            patterns: Vec::new(),
         }
     }
 }
@@ -133,41 +130,112 @@ impl From<Variable> for VariableOrPropertyPath {
     }
 }
 
+impl From<NamedNodePattern> for VariableOrPropertyPath {
+    fn from(pattern: NamedNodePattern) -> Self {
+        match pattern {
+            NamedNodePattern::NamedNode(node) => PropertyPathExpression::from(node).into(),
+            NamedNodePattern::Variable(v) => v.into(),
+        }
+    }
+}
+
 impl From<PropertyPathExpression> for VariableOrPropertyPath {
     fn from(path: PropertyPathExpression) -> Self {
         VariableOrPropertyPath::PropertyPath(path)
     }
 }
 
+fn add_to_triple_patterns(
+    subject: TermPattern,
+    predicate: NamedNodePattern,
+    object: AnnotatedTerm,
+    patterns: &mut Vec<TriplePattern>,
+) {
+    let triple = TriplePattern::new(subject, predicate, object.term);
+    for (p, os) in object.annotations {
+        for o in os {
+            add_to_triple_patterns(triple.clone().into(), p.clone(), o, patterns)
+        }
+    }
+    patterns.push(triple)
+}
+
 fn add_to_triple_or_path_patterns(
     subject: TermPattern,
     predicate: impl Into<VariableOrPropertyPath>,
-    object: TermPattern,
+    object: AnnotatedTermPath,
     patterns: &mut Vec<TripleOrPathPattern>,
-) {
+) -> Result<(), &'static str> {
     match predicate.into() {
         VariableOrPropertyPath::Variable(p) => {
-            patterns.push(TriplePattern::new(subject, p, object).into())
+            add_triple_to_triple_or_path_patterns(subject, p, object, patterns)?;
         }
         VariableOrPropertyPath::PropertyPath(p) => match p {
             PropertyPathExpression::NamedNode(p) => {
-                patterns.push(TriplePattern::new(subject, p, object).into())
+                add_triple_to_triple_or_path_patterns(subject, p, object, patterns)?;
             }
-            PropertyPathExpression::Reverse(p) => {
-                add_to_triple_or_path_patterns(object, *p, subject, patterns)
-            }
+            PropertyPathExpression::Reverse(p) => add_to_triple_or_path_patterns(
+                object.term,
+                *p,
+                AnnotatedTermPath {
+                    term: subject,
+                    annotations: object.annotations,
+                },
+                patterns,
+            )?,
             PropertyPathExpression::Sequence(a, b) => {
+                if !object.annotations.is_empty() {
+                    return Err("Annotations are not allowed on property paths");
+                }
                 let middle = bnode();
-                add_to_triple_or_path_patterns(subject, *a, middle.clone().into(), patterns);
-                add_to_triple_or_path_patterns(middle.into(), *b, object, patterns);
+                add_to_triple_or_path_patterns(
+                    subject,
+                    *a,
+                    AnnotatedTermPath {
+                        term: middle.clone().into(),
+                        annotations: Vec::new(),
+                    },
+                    patterns,
+                )?;
+                add_to_triple_or_path_patterns(
+                    middle.into(),
+                    *b,
+                    AnnotatedTermPath {
+                        term: object.term,
+                        annotations: Vec::new(),
+                    },
+                    patterns,
+                )?;
             }
-            path => patterns.push(TripleOrPathPattern::Path {
-                subject,
-                path,
-                object,
-            }),
+            path => {
+                if !object.annotations.is_empty() {
+                    return Err("Annotations are not allowed on property paths");
+                }
+                patterns.push(TripleOrPathPattern::Path {
+                    subject,
+                    path,
+                    object: object.term,
+                })
+            }
         },
     }
+    Ok(())
+}
+
+fn add_triple_to_triple_or_path_patterns(
+    subject: TermPattern,
+    predicate: impl Into<NamedNodePattern>,
+    object: AnnotatedTermPath,
+    patterns: &mut Vec<TripleOrPathPattern>,
+) -> Result<(), &'static str> {
+    let triple = TriplePattern::new(subject, predicate, object.term);
+    for (p, os) in object.annotations {
+        for o in os {
+            add_to_triple_or_path_patterns(triple.clone().into(), p.clone(), o, patterns)?
+        }
+    }
+    patterns.push(triple.into());
+    Ok(())
 }
 
 fn build_bgp(patterns: Vec<TripleOrPathPattern>) -> GraphPattern {
@@ -212,6 +280,30 @@ impl From<TriplePattern> for TripleOrPathPattern {
     }
 }
 
+struct AnnotatedTermPath {
+    term: TermPattern,
+    annotations: Vec<(VariableOrPropertyPath, Vec<AnnotatedTermPath>)>,
+}
+
+impl From<AnnotatedTerm> for AnnotatedTermPath {
+    fn from(term: AnnotatedTerm) -> Self {
+        Self {
+            term: term.term,
+            annotations: term
+                .annotations
+                .into_iter()
+                .map(|(p, o)| {
+                    (
+                        p.into(),
+                        o.into_iter().map(AnnotatedTermPath::from).collect(),
+                    )
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Default)]
 struct FocusedTripleOrPathPattern<F> {
     focus: F,
     patterns: Vec<TripleOrPathPattern>,
@@ -221,16 +313,7 @@ impl<F> FocusedTripleOrPathPattern<F> {
     fn new(focus: F) -> Self {
         Self {
             focus,
-            patterns: Vec::default(),
-        }
-    }
-}
-
-impl<F: Default> Default for FocusedTripleOrPathPattern<F> {
-    fn default() -> Self {
-        Self {
-            focus: F::default(),
-            patterns: Vec::default(),
+            patterns: Vec::new(),
         }
     }
 }
@@ -398,7 +481,7 @@ fn build_select(
     }
 
     //SELECT
-    let mut pv: Vec<Variable> = Vec::default();
+    let mut pv: Vec<Variable> = Vec::new();
     match select.variables {
         Some(sel_items) => {
             for sel_item in sel_items {
@@ -785,7 +868,7 @@ parser! {
             }
         }
         rule Selection_init() = {
-            state.aggregates.push(Vec::default())
+            state.aggregates.push(Vec::new())
         }
         rule SelectClause_option() -> SelectionOption =
             i("DISTINCT") { SelectionOption::Distinct } /
@@ -821,7 +904,7 @@ parser! {
                 }
             }
 
-        rule ConstructQuery_optional_triple_template() -> Vec<TriplePattern> = TriplesTemplate() / { Vec::default() }
+        rule ConstructQuery_optional_triple_template() -> Vec<TriplePattern> = TriplesTemplate() / { Vec::new() }
 
         //[11]
         rule DescribeQuery() -> Query =
@@ -897,7 +980,7 @@ parser! {
 
         //[19]
         rule GroupClause() -> (Vec<Variable>, Vec<(Expression,Variable)>) = i("GROUP") _ i("BY") _ c:GroupCondition_item()+ {
-            let mut projections: Vec<(Expression,Variable)> = Vec::default();
+            let mut projections: Vec<(Expression,Variable)> = Vec::new();
             let clauses = c.into_iter().map(|(e, vo)| {
                 if let Expression::Variable(v) = e {
                     v
@@ -1343,7 +1426,7 @@ parser! {
         //[72]
         rule ExpressionList() -> Vec<Expression> =
             "(" _ e:ExpressionList_item() **<1,> ("," _) ")" { e } /
-            NIL() { Vec::default() }
+            NIL() { Vec::new() }
         rule ExpressionList_item() -> Expression = e:Expression() _ { e }
 
         //[73]
@@ -1361,7 +1444,7 @@ parser! {
                 let mut patterns = po.patterns;
                 for (p, os) in po.focus {
                     for o in os {
-                        patterns.push(TriplePattern::new(s.clone(), p.clone(), o))
+                        add_to_triple_patterns(s.clone(), p.clone(), o, &mut patterns)
                     }
                 }
                 patterns
@@ -1371,26 +1454,26 @@ parser! {
                 patterns.extend(po.patterns);
                 for (p, os) in po.focus {
                     for o in os {
-                        patterns.push(TriplePattern::new(s.focus.clone(), p.clone(), o))
+                        add_to_triple_patterns(s.focus.clone(), p.clone(), o, &mut patterns)
                     }
                 }
                 patterns
             }
 
         //[76]
-        rule PropertyList() -> FocusedTriplePattern<Vec<(NamedNodePattern,Vec<TermPattern>)>> =
+        rule PropertyList() -> FocusedTriplePattern<Vec<(NamedNodePattern,Vec<AnnotatedTerm>)>> =
             PropertyListNotEmpty() /
             { FocusedTriplePattern::default() }
 
         //[77]
-        rule PropertyListNotEmpty() -> FocusedTriplePattern<Vec<(NamedNodePattern,Vec<TermPattern>)>> = l:PropertyListNotEmpty_item() **<1,> (";" _) {
-            l.into_iter().fold(FocusedTriplePattern::<Vec<(NamedNodePattern,Vec<TermPattern>)>>::default(), |mut a, b| {
+        rule PropertyListNotEmpty() -> FocusedTriplePattern<Vec<(NamedNodePattern,Vec<AnnotatedTerm>)>> = l:PropertyListNotEmpty_item() **<1,> (";" _) {
+            l.into_iter().fold(FocusedTriplePattern::<Vec<(NamedNodePattern,Vec<AnnotatedTerm>)>>::default(), |mut a, b| {
                 a.focus.push(b.focus);
                 a.patterns.extend(b.patterns);
                 a
             })
         }
-        rule PropertyListNotEmpty_item() -> FocusedTriplePattern<(NamedNodePattern,Vec<TermPattern>)> = p:Verb() _ o:ObjectList() _ {
+        rule PropertyListNotEmpty_item() -> FocusedTriplePattern<(NamedNodePattern,Vec<AnnotatedTerm>)> = p:Verb() _ o:ObjectList() _ {
             FocusedTriplePattern {
                 focus: (p, o.focus),
                 patterns: o.patterns
@@ -1401,47 +1484,67 @@ parser! {
         rule Verb() -> NamedNodePattern = VarOrIri() / "a" { iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").into() }
 
         //[79]
-        rule ObjectList() -> FocusedTriplePattern<Vec<TermPattern>> = o:ObjectList_item() **<1,> ("," _) {
-            o.into_iter().fold(FocusedTriplePattern::<Vec<TermPattern>>::default(), |mut a, b| {
+        rule ObjectList() -> FocusedTriplePattern<Vec<AnnotatedTerm>> = o:ObjectList_item() **<1,> ("," _) {
+            o.into_iter().fold(FocusedTriplePattern::<Vec<AnnotatedTerm>>::default(), |mut a, b| {
                 a.focus.push(b.focus);
                 a.patterns.extend_from_slice(&b.patterns);
                 a
             })
         }
-        rule ObjectList_item() -> FocusedTriplePattern<TermPattern> = o:Object() _ { o }
+        rule ObjectList_item() -> FocusedTriplePattern<AnnotatedTerm> = o:Object() _ { o }
 
         //[80]
-        rule Object() -> FocusedTriplePattern<TermPattern> = GraphNode()
+        rule Object() -> FocusedTriplePattern<AnnotatedTerm> = g:GraphNode() _ a:AnnotationPattern()? {
+            if let Some(a) = a {
+                let mut patterns = g.patterns;
+                patterns.extend(a.patterns);
+                FocusedTriplePattern {
+                    focus: AnnotatedTerm {
+                        term: g.focus,
+                        annotations: a.focus
+                    },
+                    patterns
+                }
+            } else {
+                FocusedTriplePattern {
+                    focus: AnnotatedTerm {
+                        term: g.focus,
+                        annotations: Vec::new()
+                    },
+                    patterns: g.patterns
+                }
+            }
+        }
 
         //[81]
         rule TriplesSameSubjectPath() -> Vec<TripleOrPathPattern> =
-            s:VarOrTermOrEmbTP() _ po:PropertyListPathNotEmpty() {
+            s:VarOrTermOrEmbTP() _ po:PropertyListPathNotEmpty() {?
                 let mut patterns = po.patterns;
                 for (p, os) in po.focus {
                     for o in os {
-                        add_to_triple_or_path_patterns(s.clone(), p.clone(), o, &mut patterns);
+                        add_to_triple_or_path_patterns(s.clone(), p.clone(), o, &mut patterns)?;
                     }
                 }
-                patterns
+                Ok(patterns)
             } /
-            s:TriplesNodePath() _ po:PropertyListPath() {
+            s:TriplesNodePath() _ po:PropertyListPath() {?
                 let mut patterns = s.patterns;
                     patterns.extend(po.patterns);
                 for (p, os) in po.focus {
                     for o in os {
-                        add_to_triple_or_path_patterns(s.focus.clone(), p.clone(), o, &mut patterns);
+                        add_to_triple_or_path_patterns(s.focus.clone(), p.clone(), o, &mut patterns)?;
                     }
                 }
-                patterns
+                Ok(patterns)
             }
 
         //[82]
-        rule PropertyListPath() -> FocusedTripleOrPathPattern<Vec<(VariableOrPropertyPath,Vec<TermPattern>)>> =
+        rule PropertyListPath() -> FocusedTripleOrPathPattern<Vec<(VariableOrPropertyPath,Vec<AnnotatedTermPath>)>> =
             PropertyListPathNotEmpty() /
             { FocusedTripleOrPathPattern::default() }
 
         //[83]
-        rule PropertyListPathNotEmpty() -> FocusedTripleOrPathPattern<Vec<(VariableOrPropertyPath,Vec<TermPattern>)>> = hp:(VerbPath() / VerbSimple()) _ ho:ObjectListPath() _ t:PropertyListPathNotEmpty_item()* {
+        rule PropertyListPathNotEmpty() -> FocusedTripleOrPathPattern<Vec<(VariableOrPropertyPath,Vec<AnnotatedTermPath>)>> = hp:(VerbPath() / VerbSimple()) _ ho:ObjectListPath() _ t:PropertyListPathNotEmpty_item()* {
                 t.into_iter().flat_map(|e| e.into_iter()).fold(FocusedTripleOrPathPattern {
                     focus: vec![(hp, ho.focus)],
                     patterns: ho.patterns
@@ -1451,12 +1554,12 @@ parser! {
                     a
                 })
         }
-        rule PropertyListPathNotEmpty_item() -> Option<FocusedTriplePattern<(VariableOrPropertyPath,Vec<TermPattern>)>> = ";" _ c:PropertyListPathNotEmpty_item_content()? {
+        rule PropertyListPathNotEmpty_item() -> Option<FocusedTriplePattern<(VariableOrPropertyPath,Vec<AnnotatedTermPath>)>> = ";" _ c:PropertyListPathNotEmpty_item_content()? {
             c
         }
-        rule PropertyListPathNotEmpty_item_content() -> FocusedTriplePattern<(VariableOrPropertyPath,Vec<TermPattern>)> = p:(VerbPath() / VerbSimple()) _ o:ObjectList() _ {
+        rule PropertyListPathNotEmpty_item_content() -> FocusedTriplePattern<(VariableOrPropertyPath,Vec<AnnotatedTermPath>)> = p:(VerbPath() / VerbSimple()) _ o:ObjectList() _ {
             FocusedTriplePattern {
-                focus: (p, o.focus),
+                focus: (p, o.focus.into_iter().map(AnnotatedTermPath::from).collect()),
                 patterns: o.patterns
             }
         }
@@ -1472,17 +1575,37 @@ parser! {
         }
 
         //[86]
-        rule ObjectListPath() -> FocusedTripleOrPathPattern<Vec<TermPattern>> = o:ObjectPath_item() **<1,> ("," _) {
-            o.into_iter().fold(FocusedTripleOrPathPattern::<Vec<TermPattern>>::default(), |mut a, b| {
+        rule ObjectListPath() -> FocusedTripleOrPathPattern<Vec<AnnotatedTermPath>> = o:ObjectListPath_item() **<1,> ("," _) {
+            o.into_iter().fold(FocusedTripleOrPathPattern::<Vec<AnnotatedTermPath>>::default(), |mut a, b| {
                 a.focus.push(b.focus);
                 a.patterns.extend(b.patterns);
                 a
             })
         }
-        rule ObjectPath_item() -> FocusedTripleOrPathPattern<TermPattern> = o:ObjectPath() _ { o }
+        rule ObjectListPath_item() -> FocusedTripleOrPathPattern<AnnotatedTermPath> = o:ObjectPath() _ { o }
 
         //[87]
-        rule ObjectPath() -> FocusedTripleOrPathPattern<TermPattern> = GraphNodePath()
+        rule ObjectPath() -> FocusedTripleOrPathPattern<AnnotatedTermPath> = g:GraphNodePath() _ a:AnnotationPatternPath()? {
+             if let Some(a) = a {
+                let mut patterns = g.patterns;
+                patterns.extend(a.patterns);
+                FocusedTripleOrPathPattern {
+                    focus: AnnotatedTermPath {
+                        term: g.focus,
+                        annotations: a.focus
+                    },
+                    patterns
+                }
+            } else {
+                FocusedTripleOrPathPattern {
+                    focus: AnnotatedTermPath {
+                        term: g.focus,
+                        annotations: Vec::new()
+                    },
+                    patterns: g.patterns
+                }
+            }
+        }
 
         //[88]
         rule Path() -> PropertyPathExpression = PathAlternative()
@@ -1525,8 +1648,8 @@ parser! {
         //[95]
         rule PathNegatedPropertySet() -> PropertyPathExpression =
             "(" _ p:PathNegatedPropertySet_item() **<1,> ("|" _) ")" {
-                let mut direct = Vec::default();
-                let mut inverse = Vec::default();
+                let mut direct = Vec::new();
+                let mut inverse = Vec::new();
                 for e in p {
                     match e {
                         Either::Left(a) => direct.push(a),
@@ -1564,11 +1687,11 @@ parser! {
 
         //[99]
         rule BlankNodePropertyList() -> FocusedTriplePattern<TermPattern> = "[" _ po:PropertyListNotEmpty() _ "]" {
-            let mut patterns: Vec<TriplePattern> = Vec::default();
+            let mut patterns = po.patterns;
             let mut bnode = TermPattern::from(bnode());
             for (p, os) in po.focus {
                 for o in os {
-                    patterns.push(TriplePattern::new(bnode.clone(), p.clone(), o));
+                    add_to_triple_patterns(bnode.clone(), p.clone(), o, &mut patterns)
                 }
             }
             FocusedTriplePattern {
@@ -1581,23 +1704,23 @@ parser! {
         rule TriplesNodePath() -> FocusedTripleOrPathPattern<TermPattern> = CollectionPath() / BlankNodePropertyListPath()
 
         //[101]
-        rule BlankNodePropertyListPath() -> FocusedTripleOrPathPattern<TermPattern> = "[" _ po:PropertyListPathNotEmpty() _ "]" {
-            let mut patterns: Vec<TripleOrPathPattern> = Vec::default();
+        rule BlankNodePropertyListPath() -> FocusedTripleOrPathPattern<TermPattern> = "[" _ po:PropertyListPathNotEmpty() _ "]" {?
+            let mut patterns: Vec<TripleOrPathPattern> = Vec::new();
             let mut bnode = TermPattern::from(bnode());
             for (p, os) in po.focus {
                 for o in os {
-                    add_to_triple_or_path_patterns(bnode.clone(), p.clone(), o, &mut patterns);
+                    add_to_triple_or_path_patterns(bnode.clone(), p.clone(), o, &mut patterns)?;
                 }
             }
-            FocusedTripleOrPathPattern {
+            Ok(FocusedTripleOrPathPattern {
                 focus: bnode,
                 patterns
-            }
+            })
         }
 
         //[102]
         rule Collection() -> FocusedTriplePattern<TermPattern> = "(" _ o:Collection_item()+ ")" {
-            let mut patterns: Vec<TriplePattern> = Vec::default();
+            let mut patterns: Vec<TriplePattern> = Vec::new();
             let mut current_list_node = TermPattern::from(iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"));
             for objWithPatterns in o.into_iter().rev() {
                 let new_blank_node = TermPattern::from(bnode());
@@ -1615,7 +1738,7 @@ parser! {
 
         //[103]
         rule CollectionPath() -> FocusedTripleOrPathPattern<TermPattern> = "(" _ o:CollectionPath_item()+ _ ")" {
-            let mut patterns: Vec<TripleOrPathPattern> = Vec::default();
+            let mut patterns: Vec<TripleOrPathPattern> = Vec::new();
             let mut current_list_node = TermPattern::from(iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"));
             for objWithPatterns in o.into_iter().rev() {
                 let new_blank_node = TermPattern::from(bnode());
@@ -2094,6 +2217,12 @@ parser! {
             v:Var() { v.into() } /
             t:GraphTerm() { t.into() } /
             t:EmbTP() { t.into() }
+
+        //[179]
+        rule AnnotationPattern() -> FocusedTriplePattern<Vec<(NamedNodePattern,Vec<AnnotatedTerm>)>> = "{|" _ a:PropertyListNotEmpty() _ "|}" { a }
+
+        //[180]
+        rule AnnotationPatternPath() -> FocusedTripleOrPathPattern<Vec<(VariableOrPropertyPath,Vec<AnnotatedTermPath>)>> = "{|" _ a: PropertyListPathNotEmpty() _ "|}" { a }
 
         // Extra rule not yet in the spec
         rule TripleExpression() -> Expression = "<<" _ s:Expression() _ p:Expression() _ o:Expression() _ ">>" {

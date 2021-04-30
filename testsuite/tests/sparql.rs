@@ -133,24 +133,6 @@ fn sparql11_tsv_w3c_evaluation_testsuite() -> Result<()> {
 fn sparql_star_query_syntax_testsuite() -> Result<()> {
     run_testsuite(
         "https://w3c.github.io/rdf-star/tests/sparql/syntax/manifest.ttl",
-        vec![
-            // Annotation syntax is not implemented yet
-            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-ann-01",
-            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-ann-02",
-            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-ann-03",
-            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-ann-04",
-            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-ann-05",
-            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-ann-06",
-            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-ann-07",
-            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-ann-08",
-            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-ann-09",
-            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-update-2",
-            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-update-3",
-            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-update-4",
-            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-update-5",
-            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-update-6",
-            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-update-7",
-            "https://w3c.github.io/rdf-star/tests/sparql/syntax#sparql-star-update-8",
-        ],
+        vec![],
     )
 }
