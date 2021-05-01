@@ -1148,8 +1148,8 @@ fn sort_bgp(p: &[TriplePattern]) -> Vec<&TriplePattern> {
 
     for i in 0..new_p.len() {
         (&mut new_p[i..]).sort_by(|p1, p2| {
-            count_pattern_binds(p2, &assigned_variables, &assigned_blank_nodes).cmp(
-                &count_pattern_binds(p1, &assigned_variables, &assigned_blank_nodes),
+            estimate_pattern_cost(p1, &assigned_variables, &assigned_blank_nodes).cmp(
+                &estimate_pattern_cost(p2, &assigned_variables, &assigned_blank_nodes),
             )
         });
         add_pattern_variables(new_p[i], &mut assigned_variables, &mut assigned_blank_nodes);
@@ -1158,40 +1158,50 @@ fn sort_bgp(p: &[TriplePattern]) -> Vec<&TriplePattern> {
     new_p
 }
 
-fn count_pattern_binds(
+fn estimate_pattern_cost(
     pattern: &TriplePattern,
     assigned_variables: &HashSet<&Variable>,
     assigned_blank_nodes: &HashSet<&BlankNode>,
-) -> u8 {
-    let mut count = 12;
-    if let TermPattern::Variable(v) = &pattern.subject {
-        if !assigned_variables.contains(v) {
-            count -= 4;
+) -> u32 {
+    let mut count = 0;
+    match &pattern.subject {
+        TermPattern::NamedNode(_) | TermPattern::Literal(_) => count += 1,
+        TermPattern::BlankNode(bnode) => {
+            if !assigned_blank_nodes.contains(bnode) {
+                count += 4;
+            }
         }
-    } else if let TermPattern::BlankNode(bnode) = &pattern.subject {
-        if !assigned_blank_nodes.contains(bnode) {
-            count -= 4;
+        TermPattern::Variable(v) => {
+            if !assigned_variables.contains(v) {
+                count += 4;
+            }
         }
-    } else {
-        count -= 1;
+        TermPattern::Triple(t) => {
+            count += estimate_pattern_cost(t, assigned_variables, assigned_blank_nodes)
+        }
     }
     if let NamedNodePattern::Variable(v) = &pattern.predicate {
         if !assigned_variables.contains(v) {
-            count -= 4;
+            count += 4;
         }
     } else {
-        count -= 1;
+        count += 1;
     }
-    if let TermPattern::Variable(v) = &pattern.object {
-        if !assigned_variables.contains(v) {
-            count -= 4;
+    match &pattern.object {
+        TermPattern::NamedNode(_) | TermPattern::Literal(_) => count += 1,
+        TermPattern::BlankNode(bnode) => {
+            if !assigned_blank_nodes.contains(bnode) {
+                count += 4;
+            }
         }
-    } else if let TermPattern::BlankNode(bnode) = &pattern.object {
-        if !assigned_blank_nodes.contains(bnode) {
-            count -= 4;
+        TermPattern::Variable(v) => {
+            if !assigned_variables.contains(v) {
+                count += 4;
+            }
         }
-    } else {
-        count -= 1;
+        TermPattern::Triple(t) => {
+            count += estimate_pattern_cost(t, assigned_variables, assigned_blank_nodes)
+        }
     }
     count
 }
@@ -1201,17 +1211,27 @@ fn add_pattern_variables<'a>(
     variables: &mut HashSet<&'a Variable>,
     blank_nodes: &mut HashSet<&'a BlankNode>,
 ) {
-    if let TermPattern::Variable(v) = &pattern.subject {
-        variables.insert(v);
-    } else if let TermPattern::BlankNode(bnode) = &pattern.subject {
-        blank_nodes.insert(bnode);
+    match &pattern.subject {
+        TermPattern::NamedNode(_) | TermPattern::Literal(_) => (),
+        TermPattern::BlankNode(bnode) => {
+            blank_nodes.insert(bnode);
+        }
+        TermPattern::Variable(v) => {
+            variables.insert(v);
+        }
+        TermPattern::Triple(t) => add_pattern_variables(t, variables, blank_nodes),
     }
     if let NamedNodePattern::Variable(v) = &pattern.predicate {
         variables.insert(v);
     }
-    if let TermPattern::Variable(v) = &pattern.object {
-        variables.insert(v);
-    } else if let TermPattern::BlankNode(bnode) = &pattern.object {
-        blank_nodes.insert(bnode);
+    match &pattern.object {
+        TermPattern::NamedNode(_) | TermPattern::Literal(_) => (),
+        TermPattern::BlankNode(bnode) => {
+            blank_nodes.insert(bnode);
+        }
+        TermPattern::Variable(v) => {
+            variables.insert(v);
+        }
+        TermPattern::Triple(t) => add_pattern_variables(t, variables, blank_nodes),
     }
 }
