@@ -141,64 +141,28 @@ impl SimpleEvaluator {
                 let object = object.clone();
                 let graph_name = graph_name.clone();
                 Box::new(self.eval_plan(child, from).flat_map_ok(move |tuple| {
-                    let mut iter: Box<dyn Iterator<Item = _>> =
-                        Box::new(eval.dataset.encoded_quads_for_pattern(
-                            get_pattern_value(&subject, &tuple),
-                            get_pattern_value(&predicate, &tuple),
-                            get_pattern_value(&object, &tuple),
-                            get_pattern_value(&graph_name, &tuple),
-                        ));
-                    if subject.is_var() && subject == predicate {
-                        iter = Box::new(iter.filter(|quad| match quad {
-                            Err(_) => true,
-                            Ok(quad) => quad.subject == quad.predicate,
-                        }))
-                    }
-                    if subject.is_var() && subject == object {
-                        iter = Box::new(iter.filter(|quad| match quad {
-                            Err(_) => true,
-                            Ok(quad) => quad.subject == quad.object,
-                        }))
-                    }
-                    if predicate.is_var() && predicate == object {
-                        iter = Box::new(iter.filter(|quad| match quad {
-                            Err(_) => true,
-                            Ok(quad) => quad.predicate == quad.object,
-                        }))
-                    }
-                    if graph_name.is_var() {
-                        if graph_name == subject {
-                            iter = Box::new(iter.filter(|quad| match quad {
-                                Err(_) => true,
-                                Ok(quad) => quad.graph_name == quad.subject,
-                            }))
-                        }
-                        if graph_name == predicate {
-                            iter = Box::new(iter.filter(|quad| match quad {
-                                Err(_) => true,
-                                Ok(quad) => quad.graph_name == quad.predicate,
-                            }))
-                        }
-                        if graph_name == object {
-                            iter = Box::new(iter.filter(|quad| match quad {
-                                Err(_) => true,
-                                Ok(quad) => quad.graph_name == quad.object,
-                            }))
-                        }
-                    }
+                    let iter = eval.dataset.encoded_quads_for_pattern(
+                        get_pattern_value(&subject, &tuple).as_ref(),
+                        get_pattern_value(&predicate, &tuple).as_ref(),
+                        get_pattern_value(&object, &tuple).as_ref(),
+                        get_pattern_value(&graph_name, &tuple).as_ref(),
+                    );
                     let subject = subject.clone();
                     let predicate = predicate.clone();
                     let object = object.clone();
                     let graph_name = graph_name.clone();
-                    let iter: EncodedTuplesIterator = Box::new(iter.map(move |quad| {
-                        let quad = quad?;
-                        let mut new_tuple = tuple.clone();
-                        put_pattern_value(&subject, quad.subject, &mut new_tuple);
-                        put_pattern_value(&predicate, quad.predicate, &mut new_tuple);
-                        put_pattern_value(&object, quad.object, &mut new_tuple);
-                        put_pattern_value(&graph_name, quad.graph_name, &mut new_tuple);
-                        Ok(new_tuple)
-                    }));
+                    let iter: EncodedTuplesIterator =
+                        Box::new(iter.filter_map(move |quad| match quad {
+                            Ok(quad) => {
+                                let mut new_tuple = tuple.clone();
+                                put_pattern_value(&subject, quad.subject, &mut new_tuple)?;
+                                put_pattern_value(&predicate, quad.predicate, &mut new_tuple)?;
+                                put_pattern_value(&object, quad.object, &mut new_tuple)?;
+                                put_pattern_value(&graph_name, quad.graph_name, &mut new_tuple)?;
+                                Some(Ok(new_tuple))
+                            }
+                            Err(error) => Some(Err(error)),
+                        }));
                     iter
                 }))
             }
@@ -228,54 +192,61 @@ impl SimpleEvaluator {
                             return result;
                         };
                     match (input_subject, input_object) {
-                        (Some(input_subject), Some(input_object)) => {
-                            let input_object = input_object.clone();
-                            Box::new(
-                                eval.eval_path_from(&path, input_subject, input_graph_name)
-                                    .filter_map(move |o| match o {
-                                        Ok(o) => {
-                                            if o == input_object {
-                                                Some(Ok(tuple.clone()))
-                                            } else {
-                                                None
-                                            }
+                        (Some(input_subject), Some(input_object)) => Box::new(
+                            eval.eval_path_from(&path, &input_subject, &input_graph_name)
+                                .filter_map(move |o| match o {
+                                    Ok(o) => {
+                                        if o == input_object {
+                                            Some(Ok(tuple.clone()))
+                                        } else {
+                                            None
                                         }
-                                        Err(error) => Some(Err(error)),
-                                    }),
-                            )
-                        }
+                                    }
+                                    Err(error) => Some(Err(error)),
+                                }),
+                        ),
                         (Some(input_subject), None) => {
                             let object = object.clone();
                             Box::new(
-                                eval.eval_path_from(&path, input_subject, input_graph_name)
-                                    .map(move |o| {
-                                        let mut new_tuple = tuple.clone();
-                                        put_pattern_value(&object, o?, &mut new_tuple);
-                                        Ok(new_tuple)
+                                eval.eval_path_from(&path, &input_subject, &input_graph_name)
+                                    .filter_map(move |o| match o {
+                                        Ok(o) => {
+                                            let mut new_tuple = tuple.clone();
+                                            put_pattern_value(&object, o, &mut new_tuple)?;
+                                            Some(Ok(new_tuple))
+                                        }
+                                        Err(error) => Some(Err(error)),
                                     }),
                             )
                         }
                         (None, Some(input_object)) => {
                             let subject = subject.clone();
                             Box::new(
-                                eval.eval_path_to(&path, input_object, input_graph_name)
-                                    .map(move |s| {
-                                        let mut new_tuple = tuple.clone();
-                                        put_pattern_value(&subject, s?, &mut new_tuple);
-                                        Ok(new_tuple)
+                                eval.eval_path_to(&path, &input_object, &input_graph_name)
+                                    .filter_map(move |s| match s {
+                                        Ok(s) => {
+                                            let mut new_tuple = tuple.clone();
+                                            put_pattern_value(&subject, s, &mut new_tuple)?;
+                                            Some(Ok(new_tuple))
+                                        }
+                                        Err(error) => Some(Err(error)),
                                     }),
                             )
                         }
                         (None, None) => {
                             let subject = subject.clone();
                             let object = object.clone();
-                            Box::new(eval.eval_open_path(&path, input_graph_name).map(move |so| {
-                                let mut new_tuple = tuple.clone();
-                                let (s, o) = so?;
-                                put_pattern_value(&subject, s, &mut new_tuple);
-                                put_pattern_value(&object, o, &mut new_tuple);
-                                Ok(new_tuple)
-                            }))
+                            Box::new(eval.eval_open_path(&path, &input_graph_name).filter_map(
+                                move |so| match so {
+                                    Ok((s, o)) => {
+                                        let mut new_tuple = tuple.clone();
+                                        put_pattern_value(&subject, s, &mut new_tuple)?;
+                                        put_pattern_value(&object, o, &mut new_tuple)?;
+                                        Some(Ok(new_tuple))
+                                    }
+                                    Err(error) => Some(Err(error)),
+                                },
+                            ))
                         }
                     }
                 }))
@@ -364,7 +335,7 @@ impl SimpleEvaluator {
                 Box::new(self.eval_plan(child, from).map(move |tuple| {
                     let mut tuple = tuple?;
                     if let Some(value) = eval.eval_expression(&expression, &tuple) {
-                        tuple.set(position, value)
+                        tuple.set(position, value);
                     }
                     Ok(tuple)
                 }))
@@ -419,7 +390,7 @@ impl SimpleEvaluator {
                             let mut output_tuple = EncodedTuple::with_capacity(from.capacity());
                             for (input_key, output_key) in mapping.iter() {
                                 if let Some(value) = tuple.get(*input_key) {
-                                    output_tuple.set(*output_key, value.clone())
+                                    output_tuple.set(*output_key, value.clone());
                                 }
                             }
                             Ok(output_tuple)
@@ -513,7 +484,7 @@ impl SimpleEvaluator {
         let service_name = get_pattern_value(service_name, from)
             .ok_or_else(|| EvaluationError::msg("The SERVICE name is not bound"))?;
         if let QueryResults::Solutions(iter) = self.service_handler.handle(
-            self.dataset.decode_named_node(service_name)?,
+            self.dataset.decode_named_node(&service_name)?,
             Query {
                 inner: spargebra::Query::Select {
                     dataset: None,
@@ -2425,17 +2396,49 @@ impl NumericBinaryOperands {
 fn get_pattern_value<'a>(
     selector: &'a PatternValue,
     tuple: &'a EncodedTuple,
-) -> Option<&'a EncodedTerm> {
+) -> Option<EncodedTerm> {
     match selector {
-        PatternValue::Constant(term) => Some(term),
-        PatternValue::Variable(v) => tuple.get(*v),
+        PatternValue::Constant(term) => Some(term.clone()),
+        PatternValue::Variable(v) => tuple.get(*v).cloned(),
+        PatternValue::Triple(triple) => Some(
+            EncodedTriple {
+                subject: get_pattern_value(&triple.subject, tuple)?,
+                predicate: get_pattern_value(&triple.predicate, tuple)?,
+                object: get_pattern_value(&triple.object, tuple)?,
+            }
+            .into(),
+        ),
     }
 }
 
-fn put_pattern_value(selector: &PatternValue, value: EncodedTerm, tuple: &mut EncodedTuple) {
+fn put_pattern_value(
+    selector: &PatternValue,
+    value: EncodedTerm,
+    tuple: &mut EncodedTuple,
+) -> Option<()> {
     match selector {
-        PatternValue::Constant(_) => (),
-        PatternValue::Variable(v) => tuple.set(*v, value),
+        PatternValue::Constant(_) => Some(()),
+        PatternValue::Variable(v) => {
+            if let Some(old) = tuple.get(*v) {
+                if value == *old {
+                    Some(())
+                } else {
+                    None
+                }
+            } else {
+                tuple.set(*v, value);
+                Some(())
+            }
+        }
+        PatternValue::Triple(triple) => {
+            if let EncodedTerm::Triple(value) = value {
+                put_pattern_value(&triple.subject, value.subject.clone(), tuple)?;
+                put_pattern_value(&triple.predicate, value.predicate.clone(), tuple)?;
+                put_pattern_value(&triple.object, value.object.clone(), tuple)
+            } else {
+                None
+            }
+        }
     }
 }
 
@@ -2669,17 +2672,15 @@ impl Iterator for ConstructIterator {
                 };
                 for template in &self.template {
                     if let (Some(subject), Some(predicate), Some(object)) = (
-                        get_triple_template_value(&template.subject, &tuple, &mut self.bnodes)
-                            .cloned(),
-                        get_triple_template_value(&template.predicate, &tuple, &mut self.bnodes)
-                            .cloned(),
+                        get_triple_template_value(&template.subject, &tuple, &mut self.bnodes),
+                        get_triple_template_value(&template.predicate, &tuple, &mut self.bnodes),
                         get_triple_template_value(&template.object, &tuple, &mut self.bnodes),
                     ) {
                         self.buffered_results.push(decode_triple(
                             &*self.eval.dataset,
                             &subject,
                             &predicate,
-                            object,
+                            &object,
                         ));
                     }
                 }
@@ -2693,16 +2694,24 @@ fn get_triple_template_value<'a>(
     selector: &'a TripleTemplateValue,
     tuple: &'a EncodedTuple,
     bnodes: &'a mut Vec<EncodedTerm>,
-) -> Option<&'a EncodedTerm> {
+) -> Option<EncodedTerm> {
     match selector {
-        TripleTemplateValue::Constant(term) => Some(term),
-        TripleTemplateValue::Variable(v) => tuple.get(*v),
+        TripleTemplateValue::Constant(term) => Some(term.clone()),
+        TripleTemplateValue::Variable(v) => tuple.get(*v).cloned(),
         TripleTemplateValue::BlankNode(id) => {
             if *id >= bnodes.len() {
                 bnodes.resize_with(*id + 1, new_bnode)
             }
-            Some(&bnodes[*id])
+            Some(bnodes[*id].clone())
         }
+        TripleTemplateValue::Triple(triple) => Some(
+            EncodedTriple {
+                subject: get_triple_template_value(&triple.subject, tuple, bnodes)?,
+                predicate: get_triple_template_value(&triple.subject, tuple, bnodes)?,
+                object: get_triple_template_value(&triple.subject, tuple, bnodes)?,
+            }
+            .into(),
+        ),
     }
 }
 

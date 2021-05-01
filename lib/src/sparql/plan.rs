@@ -197,15 +197,14 @@ impl PlanNode {
 pub enum PatternValue {
     Constant(EncodedTerm),
     Variable(usize),
+    Triple(Box<TriplePatternValue>),
 }
 
-impl PatternValue {
-    pub fn is_var(&self) -> bool {
-        match self {
-            PatternValue::Constant(_) => false,
-            PatternValue::Variable(_) => true,
-        }
-    }
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct TriplePatternValue {
+    pub subject: PatternValue,
+    pub predicate: PatternValue,
+    pub object: PatternValue,
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -486,6 +485,7 @@ pub enum TripleTemplateValue {
     Constant(EncodedTerm),
     BlankNode(usize),
     Variable(usize),
+    Triple(Box<TripleTemplate>),
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]

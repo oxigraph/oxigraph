@@ -807,7 +807,33 @@ impl<'a> PlanBuilder<'a> {
                 //TODO: very bad hack to convert bnode to variable
             }
             TermPattern::Literal(literal) => PatternValue::Constant(self.build_literal(literal)?),
-            TermPattern::Triple(_) => unimplemented!(),
+            TermPattern::Triple(triple) => {
+                match (
+                    self.pattern_value_from_term_or_variable(&triple.subject, variables)?,
+                    self.pattern_value_from_named_node_or_variable(&triple.predicate, variables)?,
+                    self.pattern_value_from_term_or_variable(&triple.object, variables)?,
+                ) {
+                    (
+                        PatternValue::Constant(subject),
+                        PatternValue::Constant(predicate),
+                        PatternValue::Constant(object),
+                    ) => PatternValue::Constant(
+                        EncodedTriple {
+                            subject,
+                            predicate,
+                            object,
+                        }
+                        .into(),
+                    ),
+                    (subject, predicate, object) => {
+                        PatternValue::Triple(Box::new(TriplePatternValue {
+                            subject,
+                            predicate,
+                            object,
+                        }))
+                    }
+                }
+            }
         })
     }
 
@@ -959,7 +985,31 @@ impl<'a> PlanBuilder<'a> {
             TermPattern::Literal(literal) => {
                 TripleTemplateValue::Constant(self.build_literal(literal)?)
             }
-            TermPattern::Triple(_) => unimplemented!(),
+            TermPattern::Triple(triple) => match (
+                self.template_value_from_term_or_variable(&triple.subject, variables, bnodes)?,
+                self.template_value_from_named_node_or_variable(&triple.predicate, variables)?,
+                self.template_value_from_term_or_variable(&triple.object, variables, bnodes)?,
+            ) {
+                (
+                    TripleTemplateValue::Constant(subject),
+                    TripleTemplateValue::Constant(predicate),
+                    TripleTemplateValue::Constant(object),
+                ) => TripleTemplateValue::Constant(
+                    EncodedTriple {
+                        subject,
+                        predicate,
+                        object,
+                    }
+                    .into(),
+                ),
+                (subject, predicate, object) => {
+                    TripleTemplateValue::Triple(Box::new(TripleTemplate {
+                        subject,
+                        predicate,
+                        object,
+                    }))
+                }
+            },
         })
     }
 
@@ -989,6 +1039,11 @@ impl<'a> PlanBuilder<'a> {
             PatternValue::Variable(from_id) => {
                 PatternValue::Variable(self.convert_variable_id(*from_id, from, to))
             }
+            PatternValue::Triple(triple) => PatternValue::Triple(Box::new(TriplePatternValue {
+                subject: self.convert_pattern_value_id(&triple.subject, from, to),
+                predicate: self.convert_pattern_value_id(&triple.predicate, from, to),
+                object: self.convert_pattern_value_id(&triple.object, from, to),
+            })),
         }
     }
 
