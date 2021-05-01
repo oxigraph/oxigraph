@@ -178,13 +178,6 @@ impl From<Triple> for Subject {
     }
 }
 
-impl From<Box<Triple>> for Subject {
-    #[inline]
-    fn from(triple: Box<Triple>) -> Self {
-        Self::Triple(triple)
-    }
-}
-
 impl TryFrom<TermPattern> for Subject {
     type Error = ();
 
@@ -193,7 +186,7 @@ impl TryFrom<TermPattern> for Subject {
         match term {
             TermPattern::NamedNode(t) => Ok(t.into()),
             TermPattern::BlankNode(t) => Ok(t.into()),
-            TermPattern::Triple(t) => Ok(Triple::try_from(t)?.into()),
+            TermPattern::Triple(t) => Ok(Triple::try_from(*t)?.into()),
             TermPattern::Literal(_) | TermPattern::Variable(_) => Err(()),
         }
     }
@@ -236,13 +229,6 @@ impl From<GroundTriple> for GroundSubject {
     }
 }
 
-impl From<Box<GroundTriple>> for GroundSubject {
-    #[inline]
-    fn from(triple: Box<GroundTriple>) -> Self {
-        Self::Triple(triple)
-    }
-}
-
 impl TryFrom<Subject> for GroundSubject {
     type Error = ();
 
@@ -251,7 +237,7 @@ impl TryFrom<Subject> for GroundSubject {
         match subject {
             Subject::NamedNode(t) => Ok(t.into()),
             Subject::BlankNode(_) => Err(()),
-            Subject::Triple(t) => Ok(GroundTriple::try_from(t)?.into()),
+            Subject::Triple(t) => Ok(GroundTriple::try_from(*t)?.into()),
         }
     }
 }
@@ -264,7 +250,7 @@ impl TryFrom<GroundTerm> for GroundSubject {
         match term {
             GroundTerm::NamedNode(t) => Ok(t.into()),
             GroundTerm::Literal(_) => Err(()),
-            GroundTerm::Triple(t) => Ok(t.into()),
+            GroundTerm::Triple(t) => Ok((*t).into()),
         }
     }
 }
@@ -326,20 +312,13 @@ impl From<Triple> for Term {
     }
 }
 
-impl From<Box<Triple>> for Term {
-    #[inline]
-    fn from(triple: Box<Triple>) -> Self {
-        Self::Triple(triple)
-    }
-}
-
 impl From<Subject> for Term {
     #[inline]
     fn from(resource: Subject) -> Self {
         match resource {
             Subject::NamedNode(node) => node.into(),
             Subject::BlankNode(node) => node.into(),
-            Subject::Triple(t) => t.into(),
+            Subject::Triple(t) => (*t).into(),
         }
     }
 }
@@ -353,7 +332,7 @@ impl TryFrom<TermPattern> for Term {
             TermPattern::NamedNode(t) => Ok(t.into()),
             TermPattern::BlankNode(t) => Ok(t.into()),
             TermPattern::Literal(t) => Ok(t.into()),
-            TermPattern::Triple(t) => Ok(Triple::try_from(t)?.into()),
+            TermPattern::Triple(t) => Ok(Triple::try_from(*t)?.into()),
             TermPattern::Variable(_) => Err(()),
         }
     }
@@ -405,13 +384,6 @@ impl From<GroundTriple> for GroundTerm {
     }
 }
 
-impl From<Box<GroundTriple>> for GroundTerm {
-    #[inline]
-    fn from(triple: Box<GroundTriple>) -> Self {
-        Self::Triple(triple)
-    }
-}
-
 impl TryFrom<Term> for GroundTerm {
     type Error = ();
 
@@ -421,7 +393,7 @@ impl TryFrom<Term> for GroundTerm {
             Term::NamedNode(t) => Ok(t.into()),
             Term::BlankNode(_) => Err(()),
             Term::Literal(t) => Ok(t.into()),
-            Term::Triple(t) => Ok(GroundTriple::try_from(t)?.into()),
+            Term::Triple(t) => Ok(GroundTriple::try_from(*t)?.into()),
         }
     }
 }
@@ -470,19 +442,6 @@ impl TryFrom<TriplePattern> for Triple {
     }
 }
 
-impl TryFrom<Box<TriplePattern>> for Triple {
-    type Error = ();
-
-    #[inline]
-    fn try_from(triple: Box<TriplePattern>) -> Result<Self, ()> {
-        Ok(Self {
-            subject: triple.subject.try_into()?,
-            predicate: triple.predicate.try_into()?,
-            object: triple.object.try_into()?,
-        })
-    }
-}
-
 /// A [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) without blank nodes.
 ///
 /// The default string formatter is returning a N-Quads representation.
@@ -519,19 +478,6 @@ impl TryFrom<Triple> for GroundTriple {
 
     #[inline]
     fn try_from(triple: Triple) -> Result<Self, ()> {
-        Ok(Self {
-            subject: triple.subject.try_into()?,
-            predicate: triple.predicate,
-            object: triple.object.try_into()?,
-        })
-    }
-}
-
-impl TryFrom<Box<Triple>> for GroundTriple {
-    type Error = ();
-
-    #[inline]
-    fn try_from(triple: Box<Triple>) -> Result<Self, ()> {
         Ok(Self {
             subject: triple.subject.try_into()?,
             predicate: triple.predicate,
@@ -793,13 +739,6 @@ impl From<TriplePattern> for TermPattern {
     }
 }
 
-impl From<Box<TriplePattern>> for TermPattern {
-    #[inline]
-    fn from(triple: Box<TriplePattern>) -> Self {
-        Self::Triple(triple)
-    }
-}
-
 impl From<Variable> for TermPattern {
     fn from(var: Variable) -> Self {
         Self::Variable(var)
@@ -812,7 +751,7 @@ impl From<Subject> for TermPattern {
         match subject {
             Subject::NamedNode(node) => node.into(),
             Subject::BlankNode(node) => node.into(),
-            Subject::Triple(t) => TriplePattern::from(t).into(),
+            Subject::Triple(t) => TriplePattern::from(*t).into(),
         }
     }
 }
@@ -824,7 +763,7 @@ impl From<Term> for TermPattern {
             Term::NamedNode(node) => node.into(),
             Term::BlankNode(node) => node.into(),
             Term::Literal(literal) => literal.into(),
-            Term::Triple(t) => TriplePattern::from(t).into(),
+            Term::Triple(t) => TriplePattern::from(*t).into(),
         }
     }
 }
@@ -881,13 +820,6 @@ impl From<GroundTriplePattern> for GroundTermPattern {
     }
 }
 
-impl From<Box<GroundTriplePattern>> for GroundTermPattern {
-    #[inline]
-    fn from(triple: Box<GroundTriplePattern>) -> Self {
-        Self::Triple(triple)
-    }
-}
-
 impl From<Variable> for GroundTermPattern {
     #[inline]
     fn from(var: Variable) -> Self {
@@ -900,7 +832,7 @@ impl From<GroundSubject> for GroundTermPattern {
     fn from(term: GroundSubject) -> Self {
         match term {
             GroundSubject::NamedNode(node) => node.into(),
-            GroundSubject::Triple(triple) => GroundTriplePattern::from(triple).into(),
+            GroundSubject::Triple(triple) => GroundTriplePattern::from(*triple).into(),
         }
     }
 }
@@ -910,7 +842,7 @@ impl From<GroundTerm> for GroundTermPattern {
         match term {
             GroundTerm::NamedNode(node) => node.into(),
             GroundTerm::Literal(literal) => literal.into(),
-            GroundTerm::Triple(triple) => GroundTriplePattern::from(triple).into(),
+            GroundTerm::Triple(triple) => GroundTriplePattern::from(*triple).into(),
         }
     }
 }
@@ -934,7 +866,7 @@ impl TryFrom<TermPattern> for GroundTermPattern {
             TermPattern::NamedNode(named_node) => named_node.into(),
             TermPattern::BlankNode(_) => return Err(()),
             TermPattern::Literal(literal) => literal.into(),
-            TermPattern::Triple(triple) => GroundTriplePattern::try_from(triple)?.into(),
+            TermPattern::Triple(triple) => GroundTriplePattern::try_from(*triple)?.into(),
             TermPattern::Variable(variable) => variable.into(),
         })
     }
@@ -1033,17 +965,6 @@ impl From<Triple> for TriplePattern {
     }
 }
 
-impl From<Box<Triple>> for TriplePattern {
-    #[inline]
-    fn from(triple: Box<Triple>) -> Self {
-        Self {
-            subject: triple.subject.into(),
-            predicate: triple.predicate.into(),
-            object: triple.object.into(),
-        }
-    }
-}
-
 /// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) without blank nodes
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct GroundTriplePattern {
@@ -1070,35 +991,11 @@ impl From<GroundTriple> for GroundTriplePattern {
     }
 }
 
-impl From<Box<GroundTriple>> for GroundTriplePattern {
-    #[inline]
-    fn from(triple: Box<GroundTriple>) -> Self {
-        Self {
-            subject: triple.subject.into(),
-            predicate: triple.predicate.into(),
-            object: triple.object.into(),
-        }
-    }
-}
-
 impl TryFrom<TriplePattern> for GroundTriplePattern {
     type Error = ();
 
     #[inline]
     fn try_from(triple: TriplePattern) -> Result<Self, Self::Error> {
-        Ok(Self {
-            subject: triple.subject.try_into()?,
-            predicate: triple.predicate,
-            object: triple.object.try_into()?,
-        })
-    }
-}
-
-impl TryFrom<Box<TriplePattern>> for GroundTriplePattern {
-    type Error = ();
-
-    #[inline]
-    fn try_from(triple: Box<TriplePattern>) -> Result<Self, Self::Error> {
         Ok(Self {
             subject: triple.subject.try_into()?,
             predicate: triple.predicate,
