@@ -130,7 +130,7 @@ class TestTriple(unittest.TestCase):
                     NamedNode("http://example.com/o"),
                 )
             ),
-            "<http://example.com/s> <http://example.com/p> <http://example.com/o> .",
+            "<http://example.com/s> <http://example.com/p> <http://example.com/o>",
         )
 
 
@@ -201,7 +201,7 @@ class TestQuad(unittest.TestCase):
                     NamedNode("http://example.com/o"),
                 )
             ),
-            "<http://example.com/s> <http://example.com/p> <http://example.com/o> .",
+            "<http://example.com/s> <http://example.com/p> <http://example.com/o>",
         )
 
 

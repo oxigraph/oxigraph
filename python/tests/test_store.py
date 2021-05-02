@@ -172,6 +172,12 @@ class TestStore(unittest.TestCase):
         store.update('LOAD <https://www.w3.org/1999/02/22-rdf-syntax-ns>')
         self.assertGreater(len(store), 100)
 
+    def test_update_star(self):
+        store = Store()
+        store.update('PREFIX : <http://www.example.org/> INSERT DATA { :alice :claims << :bob :age 23 >> }')
+        results = store.query('PREFIX : <http://www.example.org/> SELECT ?p ?a WHERE { ?p :claims << :bob :age ?a >> }')
+        self.assertEqual(len(list(results)), 1)
+
     def test_load_ntriples_to_default_graph(self):
         store = Store()
         store.load(
