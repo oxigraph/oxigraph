@@ -1,10 +1,13 @@
 use anyhow::Result;
+use oxigraph_testsuite::evaluator::TestEvaluator;
 use oxigraph_testsuite::manifest::TestManifest;
-use oxigraph_testsuite::parser_evaluator::evaluate_parser_tests;
+use oxigraph_testsuite::parser_evaluator::register_parser_tests;
 
 fn run_testsuite(manifest_url: &str) -> Result<()> {
+    let mut evaluator = TestEvaluator::default();
+    register_parser_tests(&mut evaluator);
     let manifest = TestManifest::new(vec![manifest_url]);
-    let results = evaluate_parser_tests(manifest)?;
+    let results = evaluator.evaluate(manifest)?;
 
     let mut errors = Vec::default();
     for result in results {

@@ -1,10 +1,13 @@
 use anyhow::Result;
+use oxigraph_testsuite::evaluator::TestEvaluator;
 use oxigraph_testsuite::manifest::TestManifest;
-use oxigraph_testsuite::sparql_evaluator::evaluate_sparql_tests;
+use oxigraph_testsuite::sparql_evaluator::register_sparql_tests;
 
 fn run_testsuite(manifest_url: &str, ignored_tests: Vec<&str>) -> Result<()> {
+    let mut evaluator = TestEvaluator::default();
+    register_sparql_tests(&mut evaluator);
     let manifest = TestManifest::new(vec![manifest_url]);
-    let results = evaluate_sparql_tests(manifest)?;
+    let results = evaluator.evaluate(manifest)?;
 
     let mut errors = Vec::default();
     for result in results {

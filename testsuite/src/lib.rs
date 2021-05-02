@@ -10,6 +10,7 @@
     unused_qualifications
 )]
 
+pub mod evaluator;
 pub mod files;
 pub mod manifest;
 pub mod parser_evaluator;
