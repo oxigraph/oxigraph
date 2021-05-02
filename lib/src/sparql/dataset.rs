@@ -1,9 +1,6 @@
 use crate::sparql::algebra::QueryDataset;
 use crate::sparql::EvaluationError;
-use crate::storage::numeric_encoder::{
-    get_encoded_graph_name, get_encoded_subject, EncodedQuad, EncodedTerm, StrContainer, StrHash,
-    StrLookup,
-};
+use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrContainer, StrHash, StrLookup};
 use crate::storage::Storage;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
@@ -19,18 +16,12 @@ pub(crate) struct DatasetView {
 impl DatasetView {
     pub fn new(storage: Storage, dataset: &QueryDataset) -> Result<Self, EvaluationError> {
         let dataset = EncodedDatasetSpec {
-            default: dataset.default_graph_graphs().map(|graphs| {
-                graphs
-                    .iter()
-                    .map(|g| get_encoded_graph_name(g.as_ref()))
-                    .collect::<Vec<_>>()
-            }),
-            named: dataset.available_named_graphs().map(|graphs| {
-                graphs
-                    .iter()
-                    .map(|g| get_encoded_subject(g.as_ref()))
-                    .collect::<Vec<_>>()
-            }),
+            default: dataset
+                .default_graph_graphs()
+                .map(|graphs| graphs.iter().map(|g| g.as_ref().into()).collect::<Vec<_>>()),
+            named: dataset
+                .available_named_graphs()
+                .map(|graphs| graphs.iter().map(|g| g.as_ref().into()).collect::<Vec<_>>()),
         };
         Ok(Self {
             storage,

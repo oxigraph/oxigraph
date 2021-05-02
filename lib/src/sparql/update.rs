@@ -10,8 +10,7 @@ use crate::sparql::plan_builder::PlanBuilder;
 use crate::sparql::{EvaluationError, UpdateOptions};
 use crate::storage::io::load_graph;
 use crate::storage::numeric_encoder::{
-    get_encoded_literal, get_encoded_named_node, EncodedQuad, EncodedTerm, EncodedTriple,
-    StrLookup, WriteEncoder,
+    EncodedQuad, EncodedTerm, EncodedTriple, StrLookup, WriteEncoder,
 };
 use crate::storage::Storage;
 use http::header::{ACCEPT, CONTENT_TYPE, USER_AGENT};
@@ -645,11 +644,11 @@ impl<'a> SimpleUpdateEvaluator<'a> {
     }
 
     fn encode_named_node_for_deletion(&self, term: &NamedNode) -> EncodedTerm {
-        get_encoded_named_node(NamedNodeRef::new_unchecked(&term.iri))
+        NamedNodeRef::new_unchecked(&term.iri).into()
     }
 
     fn encode_literal_for_deletion(&self, term: &Literal) -> EncodedTerm {
-        get_encoded_literal(match term {
+        match term {
             Literal::Simple { value } => LiteralRef::new_simple_literal(value),
             Literal::LanguageTaggedString { value, language } => {
                 LiteralRef::new_language_tagged_literal_unchecked(value, language)
@@ -657,7 +656,8 @@ impl<'a> SimpleUpdateEvaluator<'a> {
             Literal::Typed { value, datatype } => {
                 LiteralRef::new_typed_literal(value, NamedNodeRef::new_unchecked(&datatype.iri))
             }
-        })
+        }
+        .into()
     }
 
     fn encode_triple_for_deletion(&self, triple: &GroundTriple) -> EncodedTerm {

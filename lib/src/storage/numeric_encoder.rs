@@ -481,6 +481,163 @@ impl From<EncodedTriple> for EncodedTerm {
     }
 }
 
+impl From<NamedNodeRef<'_>> for EncodedTerm {
+    fn from(named_node: NamedNodeRef<'_>) -> Self {
+        Self::NamedNode {
+            iri_id: StrHash::new(named_node.as_str()),
+        }
+    }
+}
+
+impl From<BlankNodeRef<'_>> for EncodedTerm {
+    fn from(blank_node: BlankNodeRef<'_>) -> Self {
+        if let Some(id) = blank_node.id() {
+            Self::NumericalBlankNode { id }
+        } else {
+            let id = blank_node.as_str();
+            if let Ok(id) = id.try_into() {
+                Self::SmallBlankNode(id)
+            } else {
+                Self::BigBlankNode {
+                    id_id: StrHash::new(id),
+                }
+            }
+        }
+    }
+}
+
+impl From<LiteralRef<'_>> for EncodedTerm {
+    fn from(literal: LiteralRef<'_>) -> Self {
+        let value = literal.value();
+        let datatype = literal.datatype().as_str();
+        let native_encoding = match datatype {
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" => {
+                if let Some(language) = literal.language() {
+                    Some(if let Ok(value) = SmallString::try_from(value) {
+                        if let Ok(language) = SmallString::try_from(language) {
+                            EncodedTerm::SmallSmallLangStringLiteral { value, language }
+                        } else {
+                            EncodedTerm::SmallBigLangStringLiteral {
+                                value,
+                                language_id: StrHash::new(language),
+                            }
+                        }
+                    } else if let Ok(language) = SmallString::try_from(language) {
+                        EncodedTerm::BigSmallLangStringLiteral {
+                            value_id: StrHash::new(value),
+                            language,
+                        }
+                    } else {
+                        EncodedTerm::BigBigLangStringLiteral {
+                            value_id: StrHash::new(value),
+                            language_id: StrHash::new(language),
+                        }
+                    })
+                } else {
+                    None
+                }
+            }
+            "http://www.w3.org/2001/XMLSchema#boolean" => parse_boolean_str(value),
+            "http://www.w3.org/2001/XMLSchema#string" => {
+                let value = value;
+                Some(if let Ok(value) = SmallString::try_from(value) {
+                    EncodedTerm::SmallStringLiteral(value)
+                } else {
+                    EncodedTerm::BigStringLiteral {
+                        value_id: StrHash::new(value),
+                    }
+                })
+            }
+            "http://www.w3.org/2001/XMLSchema#float" => parse_float_str(value),
+            "http://www.w3.org/2001/XMLSchema#double" => parse_double_str(value),
+            "http://www.w3.org/2001/XMLSchema#integer"
+            | "http://www.w3.org/2001/XMLSchema#byte"
+            | "http://www.w3.org/2001/XMLSchema#short"
+            | "http://www.w3.org/2001/XMLSchema#int"
+            | "http://www.w3.org/2001/XMLSchema#long"
+            | "http://www.w3.org/2001/XMLSchema#unsignedByte"
+            | "http://www.w3.org/2001/XMLSchema#unsignedShort"
+            | "http://www.w3.org/2001/XMLSchema#unsignedInt"
+            | "http://www.w3.org/2001/XMLSchema#unsignedLong"
+            | "http://www.w3.org/2001/XMLSchema#positiveInteger"
+            | "http://www.w3.org/2001/XMLSchema#negativeInteger"
+            | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
+            | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => parse_integer_str(value),
+            "http://www.w3.org/2001/XMLSchema#decimal" => parse_decimal_str(value),
+            "http://www.w3.org/2001/XMLSchema#dateTime"
+            | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => parse_date_time_str(value),
+            "http://www.w3.org/2001/XMLSchema#time" => parse_time_str(value),
+            "http://www.w3.org/2001/XMLSchema#date" => parse_date_str(value),
+            "http://www.w3.org/2001/XMLSchema#gYearMonth" => parse_g_year_month_str(value),
+            "http://www.w3.org/2001/XMLSchema#gYear" => parse_g_year_str(value),
+            "http://www.w3.org/2001/XMLSchema#gMonthDay" => parse_g_month_day_str(value),
+            "http://www.w3.org/2001/XMLSchema#gDay" => parse_g_day_str(value),
+            "http://www.w3.org/2001/XMLSchema#gMonth" => parse_g_month_str(value),
+            "http://www.w3.org/2001/XMLSchema#duration" => parse_duration_str(value),
+            "http://www.w3.org/2001/XMLSchema#yearMonthDuration" => {
+                parse_year_month_duration_str(value)
+            }
+            "http://www.w3.org/2001/XMLSchema#dayTimeDuration" => {
+                parse_day_time_duration_str(value)
+            }
+            _ => None,
+        };
+        match native_encoding {
+            Some(term) => term,
+            None => {
+                if let Ok(value) = SmallString::try_from(value) {
+                    EncodedTerm::SmallTypedLiteral {
+                        value,
+                        datatype_id: StrHash::new(datatype),
+                    }
+                } else {
+                    EncodedTerm::BigTypedLiteral {
+                        value_id: StrHash::new(value),
+                        datatype_id: StrHash::new(datatype),
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl From<SubjectRef<'_>> for EncodedTerm {
+    fn from(term: SubjectRef<'_>) -> Self {
+        match term {
+            SubjectRef::NamedNode(named_node) => named_node.into(),
+            SubjectRef::BlankNode(blank_node) => blank_node.into(),
+            SubjectRef::Triple(triple) => triple.as_ref().into(),
+        }
+    }
+}
+
+impl From<TermRef<'_>> for EncodedTerm {
+    fn from(term: TermRef<'_>) -> Self {
+        match term {
+            TermRef::NamedNode(named_node) => named_node.into(),
+            TermRef::BlankNode(blank_node) => blank_node.into(),
+            TermRef::Literal(literal) => literal.into(),
+            TermRef::Triple(triple) => triple.as_ref().into(),
+        }
+    }
+}
+
+impl From<GraphNameRef<'_>> for EncodedTerm {
+    fn from(name: GraphNameRef<'_>) -> Self {
+        match name {
+            GraphNameRef::NamedNode(named_node) => named_node.into(),
+            GraphNameRef::BlankNode(blank_node) => blank_node.into(),
+            GraphNameRef::DefaultGraph => EncodedTerm::DefaultGraph,
+        }
+    }
+}
+
+impl From<TripleRef<'_>> for EncodedTerm {
+    fn from(triple: TripleRef<'_>) -> Self {
+        EncodedTerm::Triple(Rc::new(triple.into()))
+    }
+}
+
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct EncodedTriple {
     pub subject: EncodedTerm,
@@ -494,6 +651,16 @@ impl EncodedTriple {
             subject,
             predicate,
             object,
+        }
+    }
+}
+
+impl From<TripleRef<'_>> for EncodedTriple {
+    fn from(triple: TripleRef<'_>) -> Self {
+        EncodedTriple {
+            subject: triple.subject.into(),
+            predicate: triple.predicate.into(),
+            object: triple.object.into(),
         }
     }
 }
@@ -522,6 +689,17 @@ impl EncodedQuad {
     }
 }
 
+impl From<QuadRef<'_>> for EncodedQuad {
+    fn from(quad: QuadRef<'_>) -> Self {
+        EncodedQuad {
+            subject: quad.subject.into(),
+            predicate: quad.predicate.into(),
+            object: quad.object.into(),
+            graph_name: quad.graph_name.into(),
+        }
+    }
+}
+
 pub(crate) trait StrLookup {
     type Error: Error + Into<EvaluationError> + 'static;
 
@@ -532,163 +710,6 @@ pub(crate) trait StrLookup {
 
 pub(crate) trait StrContainer: StrLookup {
     fn insert_str(&self, key: &StrHash, value: &str) -> Result<bool, Self::Error>;
-}
-pub(crate) fn get_encoded_named_node(named_node: NamedNodeRef<'_>) -> EncodedTerm {
-    EncodedTerm::NamedNode {
-        iri_id: StrHash::new(named_node.as_str()),
-    }
-}
-
-pub(crate) fn get_encoded_blank_node(blank_node: BlankNodeRef<'_>) -> EncodedTerm {
-    if let Some(id) = blank_node.id() {
-        EncodedTerm::NumericalBlankNode { id }
-    } else {
-        let id = blank_node.as_str();
-        if let Ok(id) = id.try_into() {
-            EncodedTerm::SmallBlankNode(id)
-        } else {
-            EncodedTerm::BigBlankNode {
-                id_id: StrHash::new(id),
-            }
-        }
-    }
-}
-
-pub(crate) fn get_encoded_literal(literal: LiteralRef<'_>) -> EncodedTerm {
-    let value = literal.value();
-    let datatype = literal.datatype().as_str();
-    let native_encoding = match datatype {
-        "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" => {
-            if let Some(language) = literal.language() {
-                Some(if let Ok(value) = SmallString::try_from(value) {
-                    if let Ok(language) = SmallString::try_from(language) {
-                        EncodedTerm::SmallSmallLangStringLiteral { value, language }
-                    } else {
-                        EncodedTerm::SmallBigLangStringLiteral {
-                            value,
-                            language_id: StrHash::new(language),
-                        }
-                    }
-                } else if let Ok(language) = SmallString::try_from(language) {
-                    EncodedTerm::BigSmallLangStringLiteral {
-                        value_id: StrHash::new(value),
-                        language,
-                    }
-                } else {
-                    EncodedTerm::BigBigLangStringLiteral {
-                        value_id: StrHash::new(value),
-                        language_id: StrHash::new(language),
-                    }
-                })
-            } else {
-                None
-            }
-        }
-        "http://www.w3.org/2001/XMLSchema#boolean" => parse_boolean_str(value),
-        "http://www.w3.org/2001/XMLSchema#string" => {
-            let value = value;
-            Some(if let Ok(value) = SmallString::try_from(value) {
-                EncodedTerm::SmallStringLiteral(value)
-            } else {
-                EncodedTerm::BigStringLiteral {
-                    value_id: StrHash::new(value),
-                }
-            })
-        }
-        "http://www.w3.org/2001/XMLSchema#float" => parse_float_str(value),
-        "http://www.w3.org/2001/XMLSchema#double" => parse_double_str(value),
-        "http://www.w3.org/2001/XMLSchema#integer"
-        | "http://www.w3.org/2001/XMLSchema#byte"
-        | "http://www.w3.org/2001/XMLSchema#short"
-        | "http://www.w3.org/2001/XMLSchema#int"
-        | "http://www.w3.org/2001/XMLSchema#long"
-        | "http://www.w3.org/2001/XMLSchema#unsignedByte"
-        | "http://www.w3.org/2001/XMLSchema#unsignedShort"
-        | "http://www.w3.org/2001/XMLSchema#unsignedInt"
-        | "http://www.w3.org/2001/XMLSchema#unsignedLong"
-        | "http://www.w3.org/2001/XMLSchema#positiveInteger"
-        | "http://www.w3.org/2001/XMLSchema#negativeInteger"
-        | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
-        | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => parse_integer_str(value),
-        "http://www.w3.org/2001/XMLSchema#decimal" => parse_decimal_str(value),
-        "http://www.w3.org/2001/XMLSchema#dateTime"
-        | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => parse_date_time_str(value),
-        "http://www.w3.org/2001/XMLSchema#time" => parse_time_str(value),
-        "http://www.w3.org/2001/XMLSchema#date" => parse_date_str(value),
-        "http://www.w3.org/2001/XMLSchema#gYearMonth" => parse_g_year_month_str(value),
-        "http://www.w3.org/2001/XMLSchema#gYear" => parse_g_year_str(value),
-        "http://www.w3.org/2001/XMLSchema#gMonthDay" => parse_g_month_day_str(value),
-        "http://www.w3.org/2001/XMLSchema#gDay" => parse_g_day_str(value),
-        "http://www.w3.org/2001/XMLSchema#gMonth" => parse_g_month_str(value),
-        "http://www.w3.org/2001/XMLSchema#duration" => parse_duration_str(value),
-        "http://www.w3.org/2001/XMLSchema#yearMonthDuration" => {
-            parse_year_month_duration_str(value)
-        }
-        "http://www.w3.org/2001/XMLSchema#dayTimeDuration" => parse_day_time_duration_str(value),
-        _ => None,
-    };
-    match native_encoding {
-        Some(term) => term,
-        None => {
-            if let Ok(value) = SmallString::try_from(value) {
-                EncodedTerm::SmallTypedLiteral {
-                    value,
-                    datatype_id: StrHash::new(datatype),
-                }
-            } else {
-                EncodedTerm::BigTypedLiteral {
-                    value_id: StrHash::new(value),
-                    datatype_id: StrHash::new(datatype),
-                }
-            }
-        }
-    }
-}
-
-pub(crate) fn get_encoded_subject(term: SubjectRef<'_>) -> EncodedTerm {
-    match term {
-        SubjectRef::NamedNode(named_node) => get_encoded_named_node(named_node),
-        SubjectRef::BlankNode(blank_node) => get_encoded_blank_node(blank_node),
-        SubjectRef::Triple(triple) => {
-            EncodedTerm::Triple(Rc::new(get_encoded_triple(triple.as_ref())))
-        }
-    }
-}
-
-pub(crate) fn get_encoded_term(term: TermRef<'_>) -> EncodedTerm {
-    match term {
-        TermRef::NamedNode(named_node) => get_encoded_named_node(named_node),
-        TermRef::BlankNode(blank_node) => get_encoded_blank_node(blank_node),
-        TermRef::Literal(literal) => get_encoded_literal(literal),
-        TermRef::Triple(triple) => {
-            EncodedTerm::Triple(Rc::new(get_encoded_triple(triple.as_ref())))
-        }
-    }
-}
-
-pub(crate) fn get_encoded_graph_name(name: GraphNameRef<'_>) -> EncodedTerm {
-    match name {
-        GraphNameRef::NamedNode(named_node) => get_encoded_named_node(named_node),
-        GraphNameRef::BlankNode(blank_node) => get_encoded_blank_node(blank_node),
-        GraphNameRef::DefaultGraph => EncodedTerm::DefaultGraph,
-    }
-}
-
-pub(crate) fn get_encoded_triple(quad: TripleRef<'_>) -> EncodedTriple {
-    EncodedTriple {
-        subject: get_encoded_subject(quad.subject),
-        predicate: get_encoded_named_node(quad.predicate),
-        object: get_encoded_term(quad.object),
-    }
-}
-
-pub(crate) fn get_encoded_quad(quad: QuadRef<'_>) -> EncodedQuad {
-    EncodedQuad {
-        subject: get_encoded_subject(quad.subject),
-        predicate: get_encoded_named_node(quad.predicate),
-        object: get_encoded_term(quad.object),
-        graph_name: get_encoded_graph_name(quad.graph_name),
-    }
 }
 
 /// Encodes a term and insert strings if needed

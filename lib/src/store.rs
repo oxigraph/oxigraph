@@ -31,10 +31,7 @@ use crate::sparql::{
     UpdateOptions,
 };
 use crate::storage::io::{dump_dataset, dump_graph, load_dataset, load_graph};
-use crate::storage::numeric_encoder::{
-    get_encoded_graph_name, get_encoded_named_node, get_encoded_quad, get_encoded_subject,
-    get_encoded_term, Decoder, WriteEncoder,
-};
+use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm, WriteEncoder};
 pub use crate::storage::ConflictableTransactionError;
 pub use crate::storage::TransactionError;
 pub use crate::storage::UnabortableTransactionError;
@@ -166,10 +163,10 @@ impl Store {
     ) -> QuadIter {
         QuadIter {
             iter: self.storage.quads_for_pattern(
-                subject.map(get_encoded_subject).as_ref(),
-                predicate.map(get_encoded_named_node).as_ref(),
-                object.map(get_encoded_term).as_ref(),
-                graph_name.map(get_encoded_graph_name).as_ref(),
+                subject.map(EncodedTerm::from).as_ref(),
+                predicate.map(EncodedTerm::from).as_ref(),
+                object.map(EncodedTerm::from).as_ref(),
+                graph_name.map(EncodedTerm::from).as_ref(),
             ),
             storage: self.storage.clone(),
         }
@@ -182,7 +179,7 @@ impl Store {
 
     /// Checks if this store contains a given quad
     pub fn contains<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, io::Error> {
-        let quad = get_encoded_quad(quad.into());
+        let quad = EncodedQuad::from(quad.into());
         self.storage.contains(&quad)
     }
 
@@ -375,7 +372,7 @@ impl Store {
     /// It might leave the store in a bad state if a crash happens during the removal.
     /// Use a (memory greedy) [transaction](Store::transaction()) if you do not want that.
     pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, io::Error> {
-        let quad = get_encoded_quad(quad.into());
+        let quad = EncodedQuad::from(quad.into());
         self.storage.remove(&quad)
     }
 
@@ -469,7 +466,7 @@ impl Store {
         &self,
         graph_name: impl Into<SubjectRef<'a>>,
     ) -> Result<bool, io::Error> {
-        let graph_name = get_encoded_subject(graph_name.into());
+        let graph_name = EncodedTerm::from(graph_name.into());
         self.storage.contains_named_graph(&graph_name)
     }
 
@@ -518,7 +515,7 @@ impl Store {
         &self,
         graph_name: impl Into<GraphNameRef<'a>>,
     ) -> Result<(), io::Error> {
-        let graph_name = get_encoded_graph_name(graph_name.into());
+        let graph_name = EncodedTerm::from(graph_name.into());
         self.storage.clear_graph(&graph_name)
     }
 
@@ -546,7 +543,7 @@ impl Store {
         &self,
         graph_name: impl Into<SubjectRef<'a>>,
     ) -> Result<bool, io::Error> {
-        let graph_name = get_encoded_subject(graph_name.into());
+        let graph_name = EncodedTerm::from(graph_name.into());
         self.storage.remove_named_graph(&graph_name)
     }
 
@@ -700,7 +697,7 @@ impl Transaction<'_> {
         &self,
         quad: impl Into<QuadRef<'a>>,
     ) -> Result<bool, UnabortableTransactionError> {
-        let quad = get_encoded_quad(quad.into());
+        let quad = EncodedQuad::from(quad.into());
         self.storage.remove(&quad)
     }
 
