@@ -181,7 +181,7 @@ fn test_backward_compatibility() -> io::Result<()> {
         }
         assert!(store.contains_named_graph(graph_name)?);
         assert_eq!(
-            vec![Subject::from(graph_name)],
+            vec![NamedOrBlankNode::from(graph_name)],
             store.named_graphs().collect::<io::Result<Vec<_>>>()?
         );
     };

@@ -39,6 +39,12 @@ impl From<PyNamedNode> for NamedNode {
     }
 }
 
+impl From<PyNamedNode> for NamedOrBlankNode {
+    fn from(node: PyNamedNode) -> Self {
+        node.inner.into()
+    }
+}
+
 impl From<PyNamedNode> for Subject {
     fn from(node: PyNamedNode) -> Self {
         node.inner.into()
@@ -135,6 +141,12 @@ impl From<BlankNode> for PyBlankNode {
 impl From<PyBlankNode> for BlankNode {
     fn from(node: PyBlankNode) -> Self {
         node.inner
+    }
+}
+
+impl From<PyBlankNode> for NamedOrBlankNode {
+    fn from(node: PyBlankNode) -> Self {
+        node.inner.into()
     }
 }
 
@@ -405,6 +417,39 @@ impl PyObjectProtocol for PyDefaultGraph {
 }
 
 #[derive(FromPyObject)]
+pub enum PyNamedOrBlankNode {
+    NamedNode(PyNamedNode),
+    BlankNode(PyBlankNode),
+}
+
+impl From<PyNamedOrBlankNode> for NamedOrBlankNode {
+    fn from(node: PyNamedOrBlankNode) -> Self {
+        match node {
+            PyNamedOrBlankNode::NamedNode(node) => node.into(),
+            PyNamedOrBlankNode::BlankNode(node) => node.into(),
+        }
+    }
+}
+
+impl From<NamedOrBlankNode> for PyNamedOrBlankNode {
+    fn from(node: NamedOrBlankNode) -> Self {
+        match node {
+            NamedOrBlankNode::NamedNode(node) => Self::NamedNode(node.into()),
+            NamedOrBlankNode::BlankNode(node) => Self::BlankNode(node.into()),
+        }
+    }
+}
+
+impl IntoPy<PyObject> for PyNamedOrBlankNode {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        match self {
+            Self::NamedNode(node) => node.into_py(py),
+            Self::BlankNode(node) => node.into_py(py),
+        }
+    }
+}
+
+#[derive(FromPyObject)]
 pub enum PySubject {
     NamedNode(PyNamedNode),
     BlankNode(PyBlankNode),
@@ -424,9 +469,9 @@ impl From<PySubject> for Subject {
 impl From<Subject> for PySubject {
     fn from(node: Subject) -> Self {
         match node {
-            Subject::NamedNode(node) => PySubject::NamedNode(node.into()),
-            Subject::BlankNode(node) => PySubject::BlankNode(node.into()),
-            Subject::Triple(triple) => PySubject::Triple(triple.as_ref().clone().into()),
+            Subject::NamedNode(node) => Self::NamedNode(node.into()),
+            Subject::BlankNode(node) => Self::BlankNode(node.into()),
+            Subject::Triple(triple) => Self::Triple(triple.as_ref().clone().into()),
         }
     }
 }
@@ -434,9 +479,9 @@ impl From<Subject> for PySubject {
 impl IntoPy<PyObject> for PySubject {
     fn into_py(self, py: Python<'_>) -> PyObject {
         match self {
-            PySubject::NamedNode(node) => node.into_py(py),
-            PySubject::BlankNode(node) => node.into_py(py),
-            PySubject::Triple(triple) => triple.into_py(py),
+            Self::NamedNode(node) => node.into_py(py),
+            Self::BlankNode(node) => node.into_py(py),
+            Self::Triple(triple) => triple.into_py(py),
         }
     }
 }
@@ -463,10 +508,10 @@ impl From<PyTerm> for Term {
 impl From<Term> for PyTerm {
     fn from(term: Term) -> Self {
         match term {
-            Term::NamedNode(node) => PyTerm::NamedNode(node.into()),
-            Term::BlankNode(node) => PyTerm::BlankNode(node.into()),
-            Term::Literal(literal) => PyTerm::Literal(literal.into()),
-            Term::Triple(triple) => PyTerm::Triple(triple.as_ref().clone().into()),
+            Term::NamedNode(node) => Self::NamedNode(node.into()),
+            Term::BlankNode(node) => Self::BlankNode(node.into()),
+            Term::Literal(literal) => Self::Literal(literal.into()),
+            Term::Triple(triple) => Self::Triple(triple.as_ref().clone().into()),
         }
     }
 }
@@ -474,10 +519,10 @@ impl From<Term> for PyTerm {
 impl IntoPy<PyObject> for PyTerm {
     fn into_py(self, py: Python<'_>) -> PyObject {
         match self {
-            PyTerm::NamedNode(node) => node.into_py(py),
-            PyTerm::BlankNode(node) => node.into_py(py),
-            PyTerm::Literal(literal) => literal.into_py(py),
-            PyTerm::Triple(triple) => triple.into_py(py),
+            Self::NamedNode(node) => node.into_py(py),
+            Self::BlankNode(node) => node.into_py(py),
+            Self::Literal(literal) => literal.into_py(py),
+            Self::Triple(triple) => triple.into_py(py),
         }
     }
 }
@@ -645,9 +690,9 @@ impl From<PyGraphName> for GraphName {
 impl From<GraphName> for PyGraphName {
     fn from(graph_name: GraphName) -> Self {
         match graph_name {
-            GraphName::NamedNode(node) => PyGraphName::NamedNode(node.into()),
-            GraphName::BlankNode(node) => PyGraphName::BlankNode(node.into()),
-            GraphName::DefaultGraph => PyGraphName::DefaultGraph(PyDefaultGraph::new()),
+            GraphName::NamedNode(node) => Self::NamedNode(node.into()),
+            GraphName::BlankNode(node) => Self::BlankNode(node.into()),
+            GraphName::DefaultGraph => Self::DefaultGraph(PyDefaultGraph::new()),
         }
     }
 }
@@ -655,9 +700,9 @@ impl From<GraphName> for PyGraphName {
 impl IntoPy<PyObject> for PyGraphName {
     fn into_py(self, py: Python<'_>) -> PyObject {
         match self {
-            PyGraphName::NamedNode(node) => node.into_py(py),
-            PyGraphName::BlankNode(node) => node.into_py(py),
-            PyGraphName::DefaultGraph(node) => node.into_py(py),
+            Self::NamedNode(node) => node.into_py(py),
+            Self::BlankNode(node) => node.into_py(py),
+            Self::DefaultGraph(node) => node.into_py(py),
         }
     }
 }
@@ -943,21 +988,21 @@ impl<'a> TryFrom<&'a PyAny> for PyNamedNodeRef<'a> {
     }
 }
 
-pub enum PySubjectRef<'a> {
+pub enum PyNamedOrBlankNodeRef<'a> {
     NamedNode(PyRef<'a, PyNamedNode>),
     BlankNode(PyRef<'a, PyBlankNode>),
 }
 
-impl<'a> From<&'a PySubjectRef<'a>> for SubjectRef<'a> {
-    fn from(value: &'a PySubjectRef<'a>) -> Self {
+impl<'a> From<&'a PyNamedOrBlankNodeRef<'a>> for NamedOrBlankNodeRef<'a> {
+    fn from(value: &'a PyNamedOrBlankNodeRef<'a>) -> Self {
         match value {
-            PySubjectRef::NamedNode(value) => value.inner.as_ref().into(),
-            PySubjectRef::BlankNode(value) => value.inner.as_ref().into(),
+            PyNamedOrBlankNodeRef::NamedNode(value) => value.inner.as_ref().into(),
+            PyNamedOrBlankNodeRef::BlankNode(value) => value.inner.as_ref().into(),
         }
     }
 }
 
-impl<'a> TryFrom<&'a PyAny> for PySubjectRef<'a> {
+impl<'a> TryFrom<&'a PyAny> for PyNamedOrBlankNodeRef<'a> {
     type Error = PyErr;
 
     fn try_from(value: &'a PyAny) -> PyResult<Self> {
@@ -974,10 +1019,46 @@ impl<'a> TryFrom<&'a PyAny> for PySubjectRef<'a> {
     }
 }
 
+pub enum PySubjectRef<'a> {
+    NamedNode(PyRef<'a, PyNamedNode>),
+    BlankNode(PyRef<'a, PyBlankNode>),
+    Triple(PyRef<'a, PyTriple>),
+}
+
+impl<'a> From<&'a PySubjectRef<'a>> for SubjectRef<'a> {
+    fn from(value: &'a PySubjectRef<'a>) -> Self {
+        match value {
+            PySubjectRef::NamedNode(value) => value.inner.as_ref().into(),
+            PySubjectRef::BlankNode(value) => value.inner.as_ref().into(),
+            PySubjectRef::Triple(value) => (&value.inner).into(),
+        }
+    }
+}
+
+impl<'a> TryFrom<&'a PyAny> for PySubjectRef<'a> {
+    type Error = PyErr;
+
+    fn try_from(value: &'a PyAny) -> PyResult<Self> {
+        if let Ok(node) = value.downcast::<PyCell<PyNamedNode>>() {
+            Ok(Self::NamedNode(node.borrow()))
+        } else if let Ok(node) = value.downcast::<PyCell<PyBlankNode>>() {
+            Ok(Self::BlankNode(node.borrow()))
+        } else if let Ok(node) = value.downcast::<PyCell<PyTriple>>() {
+            Ok(Self::Triple(node.borrow()))
+        } else {
+            Err(PyTypeError::new_err(format!(
+                "{} is not an RDF named or blank node",
+                value.get_type().name()?,
+            )))
+        }
+    }
+}
+
 pub enum PyTermRef<'a> {
     NamedNode(PyRef<'a, PyNamedNode>),
     BlankNode(PyRef<'a, PyBlankNode>),
     Literal(PyRef<'a, PyLiteral>),
+    Triple(PyRef<'a, PyTriple>),
 }
 
 impl<'a> From<&'a PyTermRef<'a>> for TermRef<'a> {
@@ -986,6 +1067,7 @@ impl<'a> From<&'a PyTermRef<'a>> for TermRef<'a> {
             PyTermRef::NamedNode(value) => value.inner.as_ref().into(),
             PyTermRef::BlankNode(value) => value.inner.as_ref().into(),
             PyTermRef::Literal(value) => value.inner.as_ref().into(),
+            PyTermRef::Triple(value) => (&value.inner).into(),
         }
     }
 }
@@ -1006,6 +1088,8 @@ impl<'a> TryFrom<&'a PyAny> for PyTermRef<'a> {
             Ok(Self::BlankNode(node.borrow()))
         } else if let Ok(node) = value.downcast::<PyCell<PyLiteral>>() {
             Ok(Self::Literal(node.borrow()))
+        } else if let Ok(node) = value.downcast::<PyCell<PyTriple>>() {
+            Ok(Self::Triple(node.borrow()))
         } else {
             Err(PyTypeError::new_err(format!(
                 "{} is not an RDF term",

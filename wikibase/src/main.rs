@@ -21,7 +21,7 @@ use http_types::{
     StatusCode,
 };
 use oxigraph::io::GraphFormat;
-use oxigraph::model::{GraphName, NamedNode, Subject};
+use oxigraph::model::{GraphName, NamedNode, NamedOrBlankNode};
 use oxigraph::sparql::{Query, QueryResults, QueryResultsFormat};
 use oxigraph::store::Store;
 use std::str::FromStr;
@@ -202,7 +202,7 @@ fn evaluate_sparql_query(
     let named_graph_uris = named_graph_uris
         .into_iter()
         .map(|e| Ok(NamedNode::new(e)?.into()))
-        .collect::<Result<Vec<Subject>>>()
+        .collect::<Result<Vec<NamedOrBlankNode>>>()
         .map_err(bad_request)?;
 
     if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {

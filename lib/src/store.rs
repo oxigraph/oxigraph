@@ -439,7 +439,7 @@ impl Store {
     /// let store = Store::new()?;
     /// store.insert(QuadRef::new(&ex, &ex, &ex, &ex))?;
     /// store.insert(QuadRef::new(&ex, &ex, &ex, GraphNameRef::DefaultGraph))?;
-    /// assert_eq!(vec![Subject::from(ex)], store.named_graphs().collect::<Result<Vec<_>,_>>()?);
+    /// assert_eq!(vec![NamedOrBlankNode::from(ex)], store.named_graphs().collect::<Result<Vec<_>,_>>()?);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn named_graphs(&self) -> GraphNameIter {
@@ -464,7 +464,7 @@ impl Store {
     /// ```
     pub fn contains_named_graph<'a>(
         &self,
-        graph_name: impl Into<SubjectRef<'a>>,
+        graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool, io::Error> {
         let graph_name = EncodedTerm::from(graph_name.into());
         self.storage.contains_named_graph(&graph_name)
@@ -487,9 +487,9 @@ impl Store {
     /// ```
     pub fn insert_named_graph<'a>(
         &self,
-        graph_name: impl Into<SubjectRef<'a>>,
+        graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool, io::Error> {
-        let graph_name = self.storage.encode_subject(graph_name.into())?;
+        let graph_name = self.storage.encode_named_or_blank_node(graph_name.into())?;
         self.storage.insert_named_graph(&graph_name)
     }
 
@@ -541,7 +541,7 @@ impl Store {
     /// ```
     pub fn remove_named_graph<'a>(
         &self,
-        graph_name: impl Into<SubjectRef<'a>>,
+        graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool, io::Error> {
         let graph_name = EncodedTerm::from(graph_name.into());
         self.storage.remove_named_graph(&graph_name)
@@ -706,9 +706,9 @@ impl Transaction<'_> {
     /// Returns `true` if the graph was not already in the store.
     pub fn insert_named_graph<'a>(
         &self,
-        graph_name: impl Into<SubjectRef<'a>>,
+        graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool, UnabortableTransactionError> {
-        let graph_name = self.storage.encode_subject(graph_name.into())?;
+        let graph_name = self.storage.encode_named_or_blank_node(graph_name.into())?;
         self.storage.insert_named_graph(&graph_name)
     }
 }
@@ -737,13 +737,13 @@ pub struct GraphNameIter {
 }
 
 impl Iterator for GraphNameIter {
-    type Item = Result<Subject, io::Error>;
+    type Item = Result<NamedOrBlankNode, io::Error>;
 
-    fn next(&mut self) -> Option<Result<Subject, io::Error>> {
+    fn next(&mut self) -> Option<Result<NamedOrBlankNode, io::Error>> {
         Some(
-            self.iter
-                .next()?
-                .and_then(|graph_name| Ok(self.store.storage.decode_subject(&graph_name)?)),
+            self.iter.next()?.and_then(|graph_name| {
+                Ok(self.store.storage.decode_named_or_blank_node(&graph_name)?)
+            }),
         )
     }
 

@@ -6,6 +6,163 @@ use rio_api::model as rio;
 use std::fmt;
 use std::sync::Arc;
 
+/// The owned union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub enum NamedOrBlankNode {
+    NamedNode(NamedNode),
+    BlankNode(BlankNode),
+}
+
+impl NamedOrBlankNode {
+    #[inline]
+    pub fn is_named_node(&self) -> bool {
+        self.as_ref().is_named_node()
+    }
+
+    #[inline]
+    pub fn is_blank_node(&self) -> bool {
+        self.as_ref().is_blank_node()
+    }
+
+    #[inline]
+    pub fn as_ref(&self) -> NamedOrBlankNodeRef<'_> {
+        match self {
+            Self::NamedNode(node) => NamedOrBlankNodeRef::NamedNode(node.as_ref()),
+            Self::BlankNode(node) => NamedOrBlankNodeRef::BlankNode(node.as_ref()),
+        }
+    }
+}
+
+impl fmt::Display for NamedOrBlankNode {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.as_ref().fmt(f)
+    }
+}
+
+impl From<NamedNode> for NamedOrBlankNode {
+    #[inline]
+    fn from(node: NamedNode) -> Self {
+        Self::NamedNode(node)
+    }
+}
+
+impl From<NamedNodeRef<'_>> for NamedOrBlankNode {
+    #[inline]
+    fn from(node: NamedNodeRef<'_>) -> Self {
+        node.into_owned().into()
+    }
+}
+
+impl From<BlankNode> for NamedOrBlankNode {
+    #[inline]
+    fn from(node: BlankNode) -> Self {
+        Self::BlankNode(node)
+    }
+}
+
+impl From<BlankNodeRef<'_>> for NamedOrBlankNode {
+    #[inline]
+    fn from(node: BlankNodeRef<'_>) -> Self {
+        node.into_owned().into()
+    }
+}
+
+/// The borrowed union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+pub enum NamedOrBlankNodeRef<'a> {
+    NamedNode(NamedNodeRef<'a>),
+    BlankNode(BlankNodeRef<'a>),
+}
+
+impl<'a> NamedOrBlankNodeRef<'a> {
+    #[inline]
+    pub fn is_named_node(&self) -> bool {
+        match self {
+            Self::NamedNode(_) => true,
+            Self::BlankNode(_) => false,
+        }
+    }
+
+    #[inline]
+    pub fn is_blank_node(&self) -> bool {
+        match self {
+            Self::NamedNode(_) => false,
+            Self::BlankNode(_) => true,
+        }
+    }
+
+    #[inline]
+    pub fn into_owned(self) -> NamedOrBlankNode {
+        match self {
+            Self::NamedNode(node) => NamedOrBlankNode::NamedNode(node.into_owned()),
+            Self::BlankNode(node) => NamedOrBlankNode::BlankNode(node.into_owned()),
+        }
+    }
+}
+
+impl fmt::Display for NamedOrBlankNodeRef<'_> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NamedNode(node) => node.fmt(f),
+            Self::BlankNode(node) => node.fmt(f),
+        }
+    }
+}
+
+impl<'a> From<NamedNodeRef<'a>> for NamedOrBlankNodeRef<'a> {
+    #[inline]
+    fn from(node: NamedNodeRef<'a>) -> Self {
+        Self::NamedNode(node)
+    }
+}
+
+impl<'a> From<&'a NamedNode> for NamedOrBlankNodeRef<'a> {
+    #[inline]
+    fn from(node: &'a NamedNode) -> Self {
+        node.as_ref().into()
+    }
+}
+
+impl<'a> From<BlankNodeRef<'a>> for NamedOrBlankNodeRef<'a> {
+    #[inline]
+    fn from(node: BlankNodeRef<'a>) -> Self {
+        Self::BlankNode(node)
+    }
+}
+
+impl<'a> From<&'a BlankNode> for NamedOrBlankNodeRef<'a> {
+    #[inline]
+    fn from(node: &'a BlankNode) -> Self {
+        node.as_ref().into()
+    }
+}
+
+impl<'a> From<&'a NamedOrBlankNode> for NamedOrBlankNodeRef<'a> {
+    #[inline]
+    fn from(node: &'a NamedOrBlankNode) -> Self {
+        node.as_ref()
+    }
+}
+
+impl<'a> From<NamedOrBlankNodeRef<'a>> for NamedOrBlankNode {
+    #[inline]
+    fn from(node: NamedOrBlankNodeRef<'a>) -> Self {
+        node.into_owned()
+    }
+}
+
+impl<'a> From<NamedOrBlankNodeRef<'a>> for rio::NamedOrBlankNode<'a> {
+    #[inline]
+    fn from(node: NamedOrBlankNodeRef<'a>) -> Self {
+        match node {
+            NamedOrBlankNodeRef::NamedNode(node) => rio::NamedNode::from(node).into(),
+            NamedOrBlankNodeRef::BlankNode(node) => rio::BlankNode::from(node).into(),
+        }
+    }
+}
+
 /// The owned union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node)  and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Subject {
@@ -85,6 +242,23 @@ impl From<Triple> for Subject {
 impl From<TripleRef<'_>> for Subject {
     #[inline]
     fn from(node: TripleRef<'_>) -> Self {
+        node.into_owned().into()
+    }
+}
+
+impl From<NamedOrBlankNode> for Subject {
+    #[inline]
+    fn from(node: NamedOrBlankNode) -> Self {
+        match node {
+            NamedOrBlankNode::NamedNode(node) => node.into(),
+            NamedOrBlankNode::BlankNode(node) => node.into(),
+        }
+    }
+}
+
+impl From<NamedOrBlankNodeRef<'_>> for Subject {
+    #[inline]
+    fn from(node: NamedOrBlankNodeRef<'_>) -> Self {
         node.into_owned().into()
     }
 }
@@ -180,6 +354,23 @@ impl<'a> From<SubjectRef<'a>> for Subject {
     #[inline]
     fn from(node: SubjectRef<'a>) -> Self {
         node.into_owned()
+    }
+}
+
+impl<'a> From<NamedOrBlankNodeRef<'a>> for SubjectRef<'a> {
+    #[inline]
+    fn from(node: NamedOrBlankNodeRef<'a>) -> Self {
+        match node {
+            NamedOrBlankNodeRef::NamedNode(node) => node.into(),
+            NamedOrBlankNodeRef::BlankNode(node) => node.into(),
+        }
+    }
+}
+
+impl<'a> From<&'a NamedOrBlankNode> for SubjectRef<'a> {
+    #[inline]
+    fn from(node: &'a NamedOrBlankNode) -> Self {
+        node.as_ref().into()
     }
 }
 
@@ -296,6 +487,23 @@ impl From<TripleRef<'_>> for Term {
     #[inline]
     fn from(triple: TripleRef<'_>) -> Self {
         triple.into_owned().into()
+    }
+}
+
+impl From<NamedOrBlankNode> for Term {
+    #[inline]
+    fn from(node: NamedOrBlankNode) -> Self {
+        match node {
+            NamedOrBlankNode::NamedNode(node) => node.into(),
+            NamedOrBlankNode::BlankNode(node) => node.into(),
+        }
+    }
+}
+
+impl From<NamedOrBlankNodeRef<'_>> for Term {
+    #[inline]
+    fn from(node: NamedOrBlankNodeRef<'_>) -> Self {
+        node.into_owned().into()
     }
 }
 
@@ -419,6 +627,23 @@ impl<'a> From<&'a Triple> for TermRef<'a> {
     #[inline]
     fn from(node: &'a Triple) -> Self {
         Self::Triple(node)
+    }
+}
+
+impl<'a> From<NamedOrBlankNodeRef<'a>> for TermRef<'a> {
+    #[inline]
+    fn from(node: NamedOrBlankNodeRef<'a>) -> Self {
+        match node {
+            NamedOrBlankNodeRef::NamedNode(node) => node.into(),
+            NamedOrBlankNodeRef::BlankNode(node) => node.into(),
+        }
+    }
+}
+
+impl<'a> From<&'a NamedOrBlankNode> for TermRef<'a> {
+    #[inline]
+    fn from(node: &'a NamedOrBlankNode) -> Self {
+        node.as_ref().into()
     }
 }
 

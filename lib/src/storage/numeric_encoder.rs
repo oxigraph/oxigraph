@@ -601,6 +601,15 @@ impl From<LiteralRef<'_>> for EncodedTerm {
     }
 }
 
+impl From<NamedOrBlankNodeRef<'_>> for EncodedTerm {
+    fn from(term: NamedOrBlankNodeRef<'_>) -> Self {
+        match term {
+            NamedOrBlankNodeRef::NamedNode(named_node) => named_node.into(),
+            NamedOrBlankNodeRef::BlankNode(blank_node) => blank_node.into(),
+        }
+    }
+}
+
 impl From<SubjectRef<'_>> for EncodedTerm {
     fn from(term: SubjectRef<'_>) -> Self {
         match term {
@@ -735,6 +744,16 @@ pub(crate) trait WriteEncoder: StrContainer {
 
     fn encode_literal(&self, literal: LiteralRef<'_>) -> Result<EncodedTerm, Self::Error> {
         self.encode_rio_literal(literal.into())
+    }
+
+    fn encode_named_or_blank_node(
+        &self,
+        term: NamedOrBlankNodeRef<'_>,
+    ) -> Result<EncodedTerm, Self::Error> {
+        match term {
+            NamedOrBlankNodeRef::NamedNode(named_node) => self.encode_named_node(named_node),
+            NamedOrBlankNodeRef::BlankNode(blank_node) => self.encode_blank_node(blank_node),
+        }
     }
 
     fn encode_subject(&self, term: SubjectRef<'_>) -> Result<EncodedTerm, Self::Error> {
@@ -1065,10 +1084,24 @@ pub(crate) trait Decoder: StrLookup {
             Term::NamedNode(named_node) => Ok(named_node.into()),
             Term::BlankNode(blank_node) => Ok(blank_node.into()),
             Term::Literal(_) => Err(DecoderError::Decoder {
-                msg: "A literal has been found instead of a named node".to_owned(),
+                msg: "A literal has been found instead of a subject node".to_owned(),
+            }),
+            Term::Triple(triple) => Ok(Subject::Triple(triple)),
+        }
+    }
+
+    fn decode_named_or_blank_node(
+        &self,
+        encoded: &EncodedTerm,
+    ) -> Result<NamedOrBlankNode, DecoderError<Self::Error>> {
+        match self.decode_term(encoded)? {
+            Term::NamedNode(named_node) => Ok(named_node.into()),
+            Term::BlankNode(blank_node) => Ok(blank_node.into()),
+            Term::Literal(_) => Err(DecoderError::Decoder {
+                msg: "A literal has been found instead of a named or blank node".to_owned(),
             }),
             Term::Triple(_) => Err(DecoderError::Decoder {
-                msg: "A triple has been found instead of a named node".to_owned(),
+                msg: "A triple has been found instead of a named or blank node".to_owned(),
             }),
         }
     }
