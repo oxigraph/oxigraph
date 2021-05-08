@@ -1,7 +1,5 @@
-use crate::model::blank_node::{BlankNode, BlankNodeIdParseError};
-use crate::model::named_node::NamedNode;
 use crate::model::vocab::xsd;
-use crate::model::{Literal, Term};
+use crate::model::{BlankNode, BlankNodeIdParseError, Literal, NamedNode, Subject, Term, Triple};
 use crate::sparql::{Variable, VariableNameParseError};
 use oxilangtag::LanguageTagParseError;
 use oxiri::IriParseError;
@@ -22,17 +20,13 @@ impl FromStr for NamedNode {
     /// assert_eq!(NamedNode::from_str("<http://example.com>").unwrap(), NamedNode::new("http://example.com").unwrap())
     /// ```
     fn from_str(s: &str) -> Result<Self, TermParseError> {
-        if !s.starts_with('<') || !s.ends_with('>') {
+        let (term, left) = read_named_node(s)?;
+        if !left.is_empty() {
             return Err(TermParseError::msg(
-                "Named node serialization should be enclosed between < and >",
+                "Named node serialization should end with a >",
             ));
         }
-        NamedNode::new(&s[1..s.len() - 1]).map_err(|error| TermParseError {
-            kind: TermParseErrorKind::Iri {
-                value: s.to_owned(),
-                error,
-            },
-        })
+        Ok(term)
     }
 }
 
@@ -48,17 +42,13 @@ impl FromStr for BlankNode {
     /// assert_eq!(BlankNode::from_str("_:ex").unwrap(), BlankNode::new("ex").unwrap())
     /// ```
     fn from_str(s: &str) -> Result<Self, TermParseError> {
-        if !s.starts_with("_:") {
+        let (term, left) = read_blank_node(s)?;
+        if !left.is_empty() {
             return Err(TermParseError::msg(
-                "Blank node serialization should start with '_:'",
+                "Blank node serialization should not contain whitespaces",
             ));
         }
-        BlankNode::new(&s[2..]).map_err(|error| TermParseError {
-            kind: TermParseErrorKind::BlankNode {
-                value: s.to_owned(),
-                error,
-            },
-        })
+        Ok(term)
     }
 }
 
@@ -80,148 +70,12 @@ impl FromStr for Literal {
     /// assert_eq!(Literal::from_str("-122e+1").unwrap(), Literal::new_typed_literal("-122e+1", xsd::DOUBLE));
     /// ```
     fn from_str(s: &str) -> Result<Self, TermParseError> {
-        if let Some(s) = s.strip_prefix('"') {
-            let mut value = String::with_capacity(s.len() - 1);
-            let mut chars = s.chars();
-            while let Some(c) = chars.next() {
-                match c {
-                    '"' => {
-                        let remain = chars.as_str();
-                        return if remain.is_empty() {
-                            Ok(Literal::new_simple_literal(value))
-                        } else if let Some(language) = remain.strip_prefix('@') {
-                            Literal::new_language_tagged_literal(value, &remain[1..]).map_err(
-                                |error| TermParseError {
-                                    kind: TermParseErrorKind::LanguageTag {
-                                        value: language.to_owned(),
-                                        error,
-                                    },
-                                },
-                            )
-                        } else if let Some(datatype) = remain.strip_prefix("^^") {
-                            Ok(Literal::new_typed_literal(
-                                value,
-                                NamedNode::from_str(datatype)?,
-                            ))
-                        } else {
-                            Err(TermParseError::msg("Unexpected characters after a literal"))
-                        };
-                    }
-                    '\\' => {
-                        if let Some(c) = chars.next() {
-                            value.push(match c {
-                                't' => '\t',
-                                'b' => '\u{8}',
-                                'n' => '\n',
-                                'r' => '\r',
-                                'f' => '\u{C}',
-                                '"' => '"',
-                                '\'' => '\'',
-                                '\\' => '\\',
-                                'u' => read_hexa_char(&mut chars, 4)?,
-                                'U' => read_hexa_char(&mut chars, 8)?,
-                                _ => return Err(TermParseError::msg("Unexpected escaped char")),
-                            })
-                        } else {
-                            return Err(TermParseError::msg("Unexpected literal end"));
-                        }
-                    }
-                    c => value.push(c),
-                }
-            }
-            Err(TermParseError::msg("Unexpected literal end"))
-        } else if s == "true" {
-            Ok(Literal::new_typed_literal("true", xsd::BOOLEAN))
-        } else if s == "false" {
-            Ok(Literal::new_typed_literal("false", xsd::BOOLEAN))
-        } else {
-            let input = s.as_bytes();
-            if input.is_empty() {
-                return Err(TermParseError::msg("Empty term serialization"));
-            }
-
-            let mut cursor = match input.get(0) {
-                Some(b'+') | Some(b'-') => 1,
-                _ => 0,
-            };
-
-            let mut count_before: usize = 0;
-            while cursor < input.len() && b'0' <= input[cursor] && input[cursor] <= b'9' {
-                count_before += 1;
-                cursor += 1;
-            }
-
-            if cursor == input.len() {
-                return if count_before > 0 {
-                    Ok(Literal::new_typed_literal(s, xsd::INTEGER))
-                } else {
-                    Err(TermParseError::msg("Empty integer serialization"))
-                };
-            }
-
-            let mut count_after: usize = 0;
-            if input[cursor] == b'.' {
-                cursor += 1;
-                while cursor < input.len() && b'0' <= input[cursor] && input[cursor] <= b'9' {
-                    count_after += 1;
-                    cursor += 1;
-                }
-            }
-
-            if cursor == input.len() {
-                return if count_after > 0 {
-                    Ok(Literal::new_typed_literal(s, xsd::DECIMAL))
-                } else {
-                    Err(TermParseError::msg(
-                        "Decimal serialization without floating part",
-                    ))
-                };
-            }
-
-            if input[cursor] != b'e' && input[cursor] != b'E' {
-                return Err(TermParseError::msg("Double serialization without exponent"));
-            }
-            cursor += 1;
-            cursor += match input.get(cursor) {
-                Some(b'+') | Some(b'-') => 1,
-                _ => 0,
-            };
-            let mut count_exponent = 0;
-            while cursor < input.len() && b'0' <= input[cursor] && input[cursor] <= b'9' {
-                count_exponent += 1;
-                cursor += 1;
-            }
-            if cursor == input.len() && count_exponent > 0 {
-                Ok(Literal::new_typed_literal(s, xsd::DOUBLE))
-            } else {
-                Err(TermParseError::msg(
-                    "Double serialization with an invalid exponent",
-                ))
-            }
+        let (term, left) = read_literal(s)?;
+        if !left.is_empty() {
+            return Err(TermParseError::msg("Invalid literal serialization"));
         }
+        Ok(term)
     }
-}
-
-fn read_hexa_char(input: &mut Chars<'_>, len: usize) -> Result<char, TermParseError> {
-    let mut value = 0;
-    for _ in 0..len {
-        if let Some(c) = input.next() {
-            value = value * 16
-                + match c {
-                    '0'..='9' => u32::from(c) - u32::from('0'),
-                    'a'..='f' => u32::from(c) - u32::from('a') + 10,
-                    'A'..='F' => u32::from(c) - u32::from('A') + 10,
-                    _ => {
-                        return Err(TermParseError::msg(
-                            "Unexpected character in a unicode escape",
-                        ))
-                    }
-                }
-        } else {
-            return Err(TermParseError::msg("Unexpected literal string end"));
-        }
-    }
-    char::from_u32(value).ok_or_else(|| TermParseError::msg("Invalid encoded unicode code point"))
 }
 
 impl FromStr for Term {
@@ -230,19 +84,22 @@ impl FromStr for Term {
     /// Parses a term from its NTriples or Turtle serialization
     ///
     /// ```
-    /// use oxigraph::model::{Literal, Term};
+    /// use oxigraph::model::*;
     /// use std::str::FromStr;
     ///
-    /// assert_eq!(Term::from_str("\"ex\"").unwrap(), Literal::new_simple_literal("ex").into())
+    /// assert_eq!(Term::from_str("\"ex\"").unwrap(), Literal::new_simple_literal("ex").into());
+    /// assert_eq!(Term::from_str("<< _:s <http://example.com/p> \"o\" >>").unwrap(), Triple::new(
+    ///     BlankNode::new("s").unwrap(),
+    ///     NamedNode::new("http://example.com/p").unwrap(),
+    ///     Literal::new_simple_literal("o")
+    /// ).into());
     /// ```
     fn from_str(s: &str) -> Result<Self, TermParseError> {
-        Ok(if s.starts_with('<') {
-            NamedNode::from_str(s)?.into()
-        } else if s.starts_with('_') {
-            BlankNode::from_str(s)?.into()
-        } else {
-            Literal::from_str(s)?.into()
-        })
+        let (term, left) = read_term(s)?;
+        if !left.is_empty() {
+            return Err(TermParseError::msg("Invalid term serialization"));
+        }
+        Ok(term)
     }
 }
 
@@ -270,6 +127,235 @@ impl FromStr for Variable {
             },
         })
     }
+}
+
+fn read_named_node(s: &str) -> Result<(NamedNode, &str), TermParseError> {
+    let s = s.trim();
+    if let Some(remain) = s.strip_prefix('<') {
+        let end = remain
+            .find('>')
+            .ok_or_else(|| TermParseError::msg("Named node serialization should end with a >"))?;
+        let (value, remain) = remain.split_at(end);
+        let remain = &remain[1..];
+        let term = NamedNode::new(value).map_err(|error| TermParseError {
+            kind: TermParseErrorKind::Iri {
+                value: value.to_owned(),
+                error,
+            },
+        })?;
+        Ok((term, remain))
+    } else {
+        Err(TermParseError::msg(
+            "Named node serialization should start with a <",
+        ))
+    }
+}
+
+fn read_blank_node(s: &str) -> Result<(BlankNode, &str), TermParseError> {
+    let s = s.trim();
+    if let Some(remain) = s.strip_prefix("_:") {
+        let end = remain
+            .find(|v: char| v.is_whitespace() || matches!(v, '<' | '_' | '?' | '$' | '"' | '\''))
+            .unwrap_or_else(|| remain.len());
+        let (value, remain) = remain.split_at(end);
+        let term = BlankNode::new(value).map_err(|error| TermParseError {
+            kind: TermParseErrorKind::BlankNode {
+                value: value.to_owned(),
+                error,
+            },
+        })?;
+        Ok((term, remain))
+    } else {
+        Err(TermParseError::msg(
+            "Blank node serialization should start with '_:'",
+        ))
+    }
+}
+
+fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
+    let s = s.trim();
+    if let Some(s) = s.strip_prefix('"') {
+        let mut value = String::with_capacity(s.len() - 1);
+        let mut chars = s.chars();
+        while let Some(c) = chars.next() {
+            match c {
+                '"' => {
+                    let remain = chars.as_str();
+                    return if let Some(remain) = remain.strip_prefix('@') {
+                        let end = remain
+                            .find(|v| !matches!(v, 'a'..='z' | 'A'..='Z' | '-'))
+                            .unwrap_or_else(|| remain.len());
+                        let (language, remain) = remain.split_at(end);
+                        Ok((
+                            Literal::new_language_tagged_literal(value, language).map_err(
+                                |error| TermParseError {
+                                    kind: TermParseErrorKind::LanguageTag {
+                                        value: language.to_owned(),
+                                        error,
+                                    },
+                                },
+                            )?,
+                            remain,
+                        ))
+                    } else if let Some(remain) = remain.strip_prefix("^^") {
+                        let (datatype, remain) = read_named_node(remain)?;
+                        Ok((Literal::new_typed_literal(value, datatype), remain))
+                    } else {
+                        Ok((Literal::new_simple_literal(value), remain))
+                    };
+                }
+                '\\' => {
+                    if let Some(c) = chars.next() {
+                        value.push(match c {
+                            't' => '\t',
+                            'b' => '\u{8}',
+                            'n' => '\n',
+                            'r' => '\r',
+                            'f' => '\u{C}',
+                            '"' => '"',
+                            '\'' => '\'',
+                            '\\' => '\\',
+                            'u' => read_hexa_char(&mut chars, 4)?,
+                            'U' => read_hexa_char(&mut chars, 8)?,
+                            _ => return Err(TermParseError::msg("Unexpected escaped char")),
+                        })
+                    } else {
+                        return Err(TermParseError::msg("Unexpected literal end"));
+                    }
+                }
+                c => value.push(c),
+            }
+        }
+        Err(TermParseError::msg("Unexpected literal end"))
+    } else if let Some(remain) = s.strip_prefix("true") {
+        Ok((Literal::new_typed_literal("true", xsd::BOOLEAN), remain))
+    } else if let Some(remain) = s.strip_prefix("false") {
+        Ok((Literal::new_typed_literal("false", xsd::BOOLEAN), remain))
+    } else {
+        let input = s.as_bytes();
+        if input.is_empty() {
+            return Err(TermParseError::msg("Empty term serialization"));
+        }
+
+        let mut cursor = match input.get(0) {
+            Some(b'+') | Some(b'-') => 1,
+            _ => 0,
+        };
+        let mut with_dot = false;
+
+        let mut count_before: usize = 0;
+        while cursor < input.len() && b'0' <= input[cursor] && input[cursor] <= b'9' {
+            count_before += 1;
+            cursor += 1;
+        }
+
+        let mut count_after: usize = 0;
+        if cursor < input.len() && input[cursor] == b'.' {
+            with_dot = true;
+            cursor += 1;
+            while cursor < input.len() && b'0' <= input[cursor] && input[cursor] <= b'9' {
+                count_after += 1;
+                cursor += 1;
+            }
+        }
+
+        if cursor < input.len() && (input[cursor] == b'e' || input[cursor] == b'E') {
+            cursor += 1;
+            cursor += match input.get(cursor) {
+                Some(b'+') | Some(b'-') => 1,
+                _ => 0,
+            };
+            let mut count_exponent = 0;
+            while cursor < input.len() && b'0' <= input[cursor] && input[cursor] <= b'9' {
+                count_exponent += 1;
+                cursor += 1;
+            }
+            if count_exponent > 0 {
+                Ok((Literal::new_typed_literal(s, xsd::DOUBLE), &s[cursor..]))
+            } else {
+                Err(TermParseError::msg(
+                    "Double serialization with an invalid exponent",
+                ))
+            }
+        } else if with_dot {
+            if count_after > 0 {
+                Ok((Literal::new_typed_literal(s, xsd::DECIMAL), &s[cursor..]))
+            } else {
+                Err(TermParseError::msg(
+                    "Decimal serialization without floating part",
+                ))
+            }
+        } else if count_before > 0 {
+            Ok((Literal::new_typed_literal(s, xsd::INTEGER), &s[cursor..]))
+        } else {
+            Err(TermParseError::msg("Empty integer serialization"))
+        }
+    }
+}
+
+fn read_term(s: &str) -> Result<(Term, &str), TermParseError> {
+    let s = s.trim();
+    if let Some(remain) = s.strip_prefix("<<") {
+        let (subject, remain) = read_term(remain)?;
+        let (predicate, remain) = read_named_node(remain)?;
+        let (object, remain) = read_term(remain)?;
+        let remain = remain.trim_start();
+        if let Some(remain) = remain.strip_prefix(">>") {
+            Ok((
+                Triple {
+                    subject: match subject {
+                        Term::NamedNode(s) => s.into(),
+                        Term::BlankNode(s) => s.into(),
+                        Term::Literal(_) => {
+                            return Err(TermParseError::msg(
+                                "Literals are not allowed in subject position",
+                            ))
+                        }
+                        Term::Triple(s) => Subject::Triple(s),
+                    },
+                    predicate,
+                    object,
+                }
+                .into(),
+                remain,
+            ))
+        } else {
+            Err(TermParseError::msg(
+                "Nested triple serialization should be enclosed between << and >>",
+            ))
+        }
+    } else if s.starts_with('<') {
+        let (term, remain) = read_named_node(s)?;
+        Ok((term.into(), remain))
+    } else if s.starts_with('_') {
+        let (term, remain) = read_blank_node(s)?;
+        Ok((term.into(), remain))
+    } else {
+        let (term, remain) = read_literal(s)?;
+        Ok((term.into(), remain))
+    }
+}
+
+fn read_hexa_char(input: &mut Chars<'_>, len: usize) -> Result<char, TermParseError> {
+    let mut value = 0;
+    for _ in 0..len {
+        if let Some(c) = input.next() {
+            value = value * 16
+                + match c {
+                    '0'..='9' => u32::from(c) - u32::from('0'),
+                    'a'..='f' => u32::from(c) - u32::from('a') + 10,
+                    'A'..='F' => u32::from(c) - u32::from('A') + 10,
+                    _ => {
+                        return Err(TermParseError::msg(
+                            "Unexpected character in a unicode escape",
+                        ))
+                    }
+                }
+        } else {
+            return Err(TermParseError::msg("Unexpected literal string end"));
+        }
+    }
+    char::from_u32(value).ok_or_else(|| TermParseError::msg("Invalid encoded unicode code point"))
 }
 
 /// An error raised during term serialization parsing.
@@ -324,7 +410,7 @@ impl fmt::Display for TermParseError {
             TermParseErrorKind::Variable { error, value } => {
                 write!(f, "Error while parsing the variable '{}': {}", value, error)
             }
-            TermParseErrorKind::Msg { msg } => write!(f, "{}", msg),
+            TermParseErrorKind::Msg { msg } => f.write_str(msg),
         }
     }
 }
