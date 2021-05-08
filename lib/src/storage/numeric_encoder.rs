@@ -40,7 +40,7 @@ impl StrHash {
     }
 
     #[inline]
-    pub fn to_be_bytes(&self) -> [u8; 16] {
+    pub fn to_be_bytes(self) -> [u8; 16] {
         self.hash.to_be_bytes()
     }
 }
@@ -512,8 +512,8 @@ impl From<LiteralRef<'_>> for EncodedTerm {
         let datatype = literal.datatype().as_str();
         let native_encoding = match datatype {
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" => {
-                if let Some(language) = literal.language() {
-                    Some(if let Ok(value) = SmallString::try_from(value) {
+                literal.language().map(|language| {
+                    if let Ok(value) = SmallString::try_from(value) {
                         if let Ok(language) = SmallString::try_from(language) {
                             EncodedTerm::SmallSmallLangStringLiteral { value, language }
                         } else {
@@ -532,10 +532,8 @@ impl From<LiteralRef<'_>> for EncodedTerm {
                             value_id: StrHash::new(value),
                             language_id: StrHash::new(language),
                         }
-                    })
-                } else {
-                    None
-                }
+                    }
+                })
             }
             "http://www.w3.org/2001/XMLSchema#boolean" => parse_boolean_str(value),
             "http://www.w3.org/2001/XMLSchema#string" => {

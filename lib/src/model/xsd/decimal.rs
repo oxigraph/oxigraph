@@ -39,7 +39,7 @@ impl Decimal {
     }
 
     #[inline]
-    pub fn to_be_bytes(&self) -> [u8; 16] {
+    pub fn to_be_bytes(self) -> [u8; 16] {
         self.value.to_be_bytes()
     }
 
@@ -159,7 +159,7 @@ impl Decimal {
     /// Creates a `f32` from a `Decimal` without taking care of precision
     #[inline]
     #[allow(clippy::cast_possible_truncation)]
-    pub fn to_f32(&self) -> f32 {
+    pub fn to_f32(self) -> f32 {
         self.to_f64() as f32
     }
 
@@ -175,7 +175,7 @@ impl Decimal {
     /// Creates a `f64` from a `Decimal` without taking care of precision
     #[inline]
     #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
-    pub fn to_f64(&self) -> f64 {
+    pub fn to_f64(self) -> f64 {
         (self.value as f64) / (DECIMAL_PART_POW as f64)
     }
 

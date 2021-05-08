@@ -812,15 +812,15 @@ fn store() -> Result<(), io::Error> {
 
     let result: Result<_, TransactionError<io::Error>> = store.transaction(|t| {
         assert!(t.remove(&default_quad)?);
-        assert_eq!(t.remove(&default_quad)?, false);
+        assert!(!t.remove(&default_quad)?);
         assert!(t.insert(&named_quad)?);
-        assert_eq!(t.insert(&named_quad)?, false);
+        assert!(!t.insert(&named_quad)?);
         assert!(t.insert(&default_quad)?);
-        assert_eq!(t.insert(&default_quad)?, false);
+        assert!(!t.insert(&default_quad)?);
         Ok(())
     });
     result?;
-    assert_eq!(store.insert(&default_quad)?, false);
+    assert!(!store.insert(&default_quad)?);
 
     assert_eq!(store.len(), 4);
     assert_eq!(store.iter().collect::<Result<Vec<_>, _>>()?, all_quads);

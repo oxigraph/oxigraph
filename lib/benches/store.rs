@@ -2,7 +2,6 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Through
 use oxigraph::model::{Dataset, Graph, GraphName, NamedNode, Quad, Triple};
 use oxigraph::store::Store;
 use rand::random;
-use std::iter::FromIterator;
 
 criterion_group!(
     store_load,
@@ -21,9 +20,7 @@ fn graph_load_bench(c: &mut Criterion) {
         group.throughput(Throughput::Elements(*size as u64));
         let triples: Vec<_> = create_quads(*size).into_iter().map(Triple::from).collect();
         group.bench_function(BenchmarkId::from_parameter(size), |b| {
-            b.iter(|| {
-                Graph::from_iter(triples.iter());
-            });
+            b.iter(|| triples.iter().collect::<Graph>());
         });
     }
     group.finish();
@@ -37,9 +34,7 @@ fn dataset_load_bench(c: &mut Criterion) {
         group.throughput(Throughput::Elements(*size as u64));
         let quads = create_quads(*size);
         group.bench_function(BenchmarkId::from_parameter(size), |b| {
-            b.iter(|| {
-                Dataset::from_iter(quads.iter());
-            });
+            b.iter(|| quads.iter().collect::<Dataset>());
         });
     }
     group.finish();
