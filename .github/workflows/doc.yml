@@ -9,7 +9,7 @@ jobs:
   python:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v2.3.4
       - run: rustup update
       - uses: actions/setup-python@v2
         with:
@@ -22,7 +22,7 @@ jobs:
         working-directory: ./python/docs
       - run: source ../venv/bin/activate && sphinx-build -M html . build
         working-directory: ./python/docs
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v2.3.4
         with:
           repository: oxigraph/oxigraph.github.io
           path: website
