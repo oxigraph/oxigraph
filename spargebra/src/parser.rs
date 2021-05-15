@@ -1865,7 +1865,7 @@ parser! {
             l:NumericLiteral() { l.into() } /
             l:BooleanLiteral() { l.into() } /
             BuiltInCall() /
-            TripleExpression()
+            ExprEmbTP()
 
         //[120]
         rule BrackettedExpression() -> Expression = "(" _ e:Expression() _ ")" { e }
@@ -2224,10 +2224,19 @@ parser! {
         //[180]
         rule AnnotationPatternPath() -> FocusedTripleOrPathPattern<Vec<(VariableOrPropertyPath,Vec<AnnotatedTermPath>)>> = "{|" _ a: PropertyListPathNotEmpty() _ "|}" { a }
 
-        // Extra rule not yet in the spec
-        rule TripleExpression() -> Expression = "<<" _ s:Expression() _ p:Expression() _ o:Expression() _ ">>" {
-            Expression::FunctionCall(Function::Triple, vec![s, p, o])
+        //[181]
+        rule ExprEmbTP() -> Expression = "<<" _ s:ExprVarOrTerm() _ p:Verb() _ o:ExprVarOrTerm() _ ">>" {
+            Expression::FunctionCall(Function::Triple, vec![s, p.into(), o])
         }
+
+        //[182]
+        rule ExprVarOrTerm() -> Expression =
+            i:iri() { i.into() } /
+            l:RDFLiteral() { l.into() } /
+            l:NumericLiteral() { l.into() } /
+            l:BooleanLiteral() { l.into() } /
+            v:Var() { v.into() } /
+            ExprEmbTP()
 
         //space
         rule _() = quiet! { ([' ' | '\t' | '\n' | '\r'] / comment())* }

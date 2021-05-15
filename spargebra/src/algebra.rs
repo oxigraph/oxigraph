@@ -194,6 +194,15 @@ impl From<Variable> for Expression {
     }
 }
 
+impl From<NamedNodePattern> for Expression {
+    fn from(p: NamedNodePattern) -> Self {
+        match p {
+            NamedNodePattern::NamedNode(p) => p.into(),
+            NamedNodePattern::Variable(p) => p.into(),
+        }
+    }
+}
+
 struct SparqlExpression<'a>(&'a Expression);
 
 impl<'a> fmt::Display for SparqlExpression<'a> {
