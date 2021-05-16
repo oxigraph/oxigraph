@@ -257,9 +257,10 @@ pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResults, 
                             Rc::new(variables.into_iter().map(Variable::new).collect::<Result<Vec<_>,_>>().map_err(invalid_data_error)?),
                             Box::new(ResultsIterator {
                                 reader,
-                                buffer: Vec::default(),
+                                buffer,
                                 namespace_buffer,
                                 mapping,
+                                stack: Vec::new()
                             }),
                         )));
                     } else if event.name() != b"link" && event.name() != b"results" && event.name() != b"boolean" {
@@ -327,11 +328,26 @@ pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResults, 
     }
 }
 
+enum State {
+    Start,
+    Result,
+    Binding,
+    Uri,
+    BNode,
+    Literal,
+    Triple,
+    Subject,
+    Predicate,
+    Object,
+    End,
+}
+
 struct ResultsIterator<R: BufRead> {
     reader: Reader<R>,
     buffer: Vec<u8>,
     namespace_buffer: Vec<u8>,
     mapping: BTreeMap<Vec<u8>, usize>,
+    stack: Vec<State>,
 }
 
 impl<R: BufRead> Iterator for ResultsIterator<R> {
@@ -344,15 +360,6 @@ impl<R: BufRead> Iterator for ResultsIterator<R> {
 
 impl<R: BufRead> ResultsIterator<R> {
     fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, EvaluationError> {
-        enum State {
-            Start,
-            Result,
-            Binding,
-            Uri,
-            BNode,
-            Literal,
-            End,
-        }
         let mut state = State::Start;
 
         let mut new_bindings = Vec::default();
@@ -362,6 +369,9 @@ impl<R: BufRead> ResultsIterator<R> {
         let mut term: Option<Term> = None;
         let mut lang = None;
         let mut datatype = None;
+        let mut subject = None;
+        let mut predicate = None;
+        let mut object = None;
         loop {
             let (ns, event) = self
                 .reader
@@ -417,13 +427,14 @@ impl<R: BufRead> ResultsIterator<R> {
                             .into());
                         }
                     }
-                    State::Binding => {
+                    State::Binding | State::Subject | State::Predicate | State::Object => {
                         if term.is_some() {
                             return Err(invalid_data_error(
                                 "There is already a value for the current binding",
                             )
                             .into());
                         }
+                        self.stack.push(state);
                         if event.name() == b"uri" {
                             state = State::Uri;
                         } else if event.name() == b"bnode" {
@@ -448,9 +459,26 @@ impl<R: BufRead> ResultsIterator<R> {
                                 }
                             }
                             state = State::Literal;
+                        } else if event.name() == b"triple" {
+                            state = State::Triple;
                         } else {
                             return Err(invalid_data_error(format!(
                                 "Expecting <uri>, <bnode> or <literal> found {}",
+                                self.reader.decode(event.name()).map_err(map_xml_error)?
+                            ))
+                            .into());
+                        }
+                    }
+                    State::Triple => {
+                        if event.name() == b"subject" {
+                            state = State::Subject
+                        } else if event.name() == b"predicate" {
+                            state = State::Predicate
+                        } else if event.name() == b"object" {
+                            state = State::Object
+                        } else {
+                            return Err(invalid_data_error(format!(
+                                "Expecting <subject>, <predicate> or <object> found {}",
                                 self.reader.decode(event.name()).map_err(map_xml_error)?
                             ))
                             .into());
@@ -511,22 +539,68 @@ impl<R: BufRead> ResultsIterator<R> {
                     State::Result => return Ok(Some(new_bindings)),
                     State::Binding => {
                         if let Some(var) = &current_var {
-                            new_bindings[self.mapping[var]] = term.clone()
+                            new_bindings[self.mapping[var]] = term.take()
                         } else {
                             return Err(
                                 invalid_data_error("No name found for <binding> tag").into()
                             );
                         }
-                        term = None;
                         state = State::Result;
                     }
-                    State::Uri | State::BNode => state = State::Binding,
+                    State::Subject => {
+                        subject = term.take();
+                        state = State::Triple;
+                    }
+                    State::Predicate => {
+                        predicate = term.take();
+                        state = State::Triple;
+                    }
+                    State::Object => {
+                        object = term.take();
+                        state = State::Triple;
+                    }
+                    State::Uri | State::BNode => state = self.stack.pop().unwrap(),
                     State::Literal => {
                         if term.is_none() {
                             //We default to the empty literal
                             term = Some(build_literal("", lang.take(), datatype.take())?.into())
                         }
-                        state = State::Binding;
+                        state = self.stack.pop().unwrap();
+                    }
+                    State::Triple => {
+                        if let (Some(subject), Some(predicate), Some(object)) =
+                            (subject.take(), predicate.take(), object.take())
+                        {
+                            term =
+                                Some(
+                                    Triple::new(
+                                        match subject {
+                                            Term::NamedNode(subject) => subject.into(),
+                                            Term::BlankNode(subject) => subject.into(),
+                                            Term::Triple(subject) => Subject::Triple(subject),
+                                            Term::Literal(_) => return Err(invalid_data_error(
+                                                "The <predicate> value should not be a <literal>",
+                                            )
+                                            .into()),
+                                        },
+                                        match predicate {
+                                            Term::NamedNode(predicate) => predicate,
+                                            _ => {
+                                                return Err(invalid_data_error(
+                                                    "The <predicate> value should be an <uri>",
+                                                )
+                                                .into())
+                                            }
+                                        },
+                                        object,
+                                    )
+                                    .into(),
+                                )
+                        } else {
+                            return Err(
+                                invalid_data_error("A <triple> should contain a <subject>, a <predicate> and an <object>").into()
+                            );
+                        }
                     }
                     _ => (),
                 },
