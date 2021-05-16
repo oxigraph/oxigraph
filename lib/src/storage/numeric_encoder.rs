@@ -84,8 +84,8 @@ pub enum EncodedTerm {
         datatype_id: StrHash,
     },
     BooleanLiteral(bool),
-    FloatLiteral(f32),
-    DoubleLiteral(f64),
+    FloatLiteral(Float),
+    DoubleLiteral(Double),
     IntegerLiteral(i64),
     DecimalLiteral(Decimal),
     DateTimeLiteral(DateTime),
@@ -186,20 +186,8 @@ impl PartialEq for EncodedTerm {
                 },
             ) => value_id_a == value_id_b && datatype_id_a == datatype_id_b,
             (Self::BooleanLiteral(a), Self::BooleanLiteral(b)) => a == b,
-            (Self::FloatLiteral(a), Self::FloatLiteral(b)) => {
-                if a.is_nan() {
-                    b.is_nan()
-                } else {
-                    a == b
-                }
-            }
-            (Self::DoubleLiteral(a), Self::DoubleLiteral(b)) => {
-                if a.is_nan() {
-                    b.is_nan()
-                } else {
-                    a == b
-                }
-            }
+            (Self::FloatLiteral(a), Self::FloatLiteral(b)) => a == b,
+            (Self::DoubleLiteral(a), Self::DoubleLiteral(b)) => a == b,
             (Self::IntegerLiteral(a), Self::IntegerLiteral(b)) => a == b,
             (Self::DecimalLiteral(a), Self::DecimalLiteral(b)) => a == b,
             (Self::DateTimeLiteral(a), Self::DateTimeLiteral(b)) => a.is_identical_with(b),
@@ -262,8 +250,8 @@ impl Hash for EncodedTerm {
                 datatype_id.hash(state);
             }
             Self::BooleanLiteral(value) => value.hash(state),
-            Self::FloatLiteral(value) => state.write(&value.to_ne_bytes()),
-            Self::DoubleLiteral(value) => state.write(&value.to_ne_bytes()),
+            Self::FloatLiteral(value) => value.hash(state),
+            Self::DoubleLiteral(value) => value.hash(state),
             Self::IntegerLiteral(value) => value.hash(state),
             Self::DecimalLiteral(value) => value.hash(state),
             Self::DateTimeLiteral(value) => value.hash(state),
@@ -371,14 +359,27 @@ impl From<u8> for EncodedTerm {
         Self::IntegerLiteral(value.into())
     }
 }
+
 impl From<f32> for EncodedTerm {
     fn from(value: f32) -> Self {
+        Self::FloatLiteral(value.into())
+    }
+}
+
+impl From<Float> for EncodedTerm {
+    fn from(value: Float) -> Self {
         Self::FloatLiteral(value)
     }
 }
 
 impl From<f64> for EncodedTerm {
     fn from(value: f64) -> Self {
+        Self::DoubleLiteral(value.into())
+    }
+}
+
+impl From<Double> for EncodedTerm {
+    fn from(value: Double) -> Self {
         Self::DoubleLiteral(value)
     }
 }

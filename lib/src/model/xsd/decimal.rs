@@ -1,3 +1,5 @@
+use crate::model::xsd::double::Double;
+use crate::model::xsd::Float;
 use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 use std::fmt;
@@ -85,12 +87,14 @@ impl Decimal {
     }
 
     /// TODO: XSD? is well defined for not integer
+    #[inline]
     pub fn checked_rem(&self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
             value: self.value.checked_rem(rhs.into().value)?,
         })
     }
 
+    #[inline]
     pub fn checked_rem_euclid(&self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
             value: self.value.checked_rem_euclid(rhs.into().value)?,
@@ -142,59 +146,64 @@ impl Decimal {
         }
     }
 
+    #[inline]
     pub const fn is_negative(&self) -> bool {
         self.value < 0
     }
 
+    #[inline]
     pub const fn is_positive(&self) -> bool {
         self.value > 0
     }
 
-    /// Creates a `Decimal` from a `f32` without taking care of precision
+    /// Creates a `Decimal` from a `Float` without taking care of precision
     #[inline]
-    pub(crate) fn from_f32(v: f32) -> Self {
-        Self::from_f64(v.into())
+    pub(crate) fn from_float(v: Float) -> Self {
+        Self::from_double(v.into())
     }
 
-    /// Creates a `f32` from a `Decimal` without taking care of precision
+    /// Creates a `Float` from a `Decimal` without taking care of precision
     #[inline]
     #[allow(clippy::cast_possible_truncation)]
-    pub fn to_f32(self) -> f32 {
-        self.to_f64() as f32
+    pub fn to_float(self) -> Float {
+        (f64::from(self.to_double()) as f32).into()
     }
 
-    /// Creates a `Decimal` from a `f64` without taking care of precision
+    /// Creates a `Decimal` from a `Double` without taking care of precision
     #[inline]
     #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
-    pub(crate) fn from_f64(v: f64) -> Self {
+    pub(crate) fn from_double(v: Double) -> Self {
         Self {
-            value: (v * (DECIMAL_PART_POW as f64)) as i128,
+            value: (f64::from(v) * (DECIMAL_PART_POW as f64)) as i128,
         }
     }
 
-    /// Creates a `f64` from a `Decimal` without taking care of precision
+    /// Creates a `Double` from a `Decimal` without taking care of precision
     #[inline]
     #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
-    pub fn to_f64(self) -> f64 {
-        (self.value as f64) / (DECIMAL_PART_POW as f64)
+    pub fn to_double(self) -> Double {
+        ((self.value as f64) / (DECIMAL_PART_POW as f64)).into()
     }
 
+    /// Creates a `bool` from a `Decimal` according to xsd:boolean cast constraints
+    #[inline]
+    pub fn to_bool(self) -> bool {
+        self.value != 0
+    }
+
+    #[inline]
     pub(super) const fn as_i128(&self) -> i128 {
         self.value / DECIMAL_PART_POW
     }
 
     #[cfg(test)]
     pub(super) const fn min_value() -> Self {
-        Self {
-            value: i128::min_value(),
-        }
+        Self { value: i128::MIN }
     }
 
     #[cfg(test)]
     pub(super) const fn max_value() -> Self {
-        Self {
-            value: i128::max_value(),
-        }
+        Self { value: i128::MAX }
     }
 
     #[cfg(test)]
@@ -211,49 +220,63 @@ impl From<i8> for Decimal {
         }
     }
 }
+
 impl From<i16> for Decimal {
+    #[inline]
     fn from(value: i16) -> Self {
         Self {
             value: i128::from(value) * DECIMAL_PART_POW,
         }
     }
 }
+
 impl From<i32> for Decimal {
+    #[inline]
     fn from(value: i32) -> Self {
         Self {
             value: i128::from(value) * DECIMAL_PART_POW,
         }
     }
 }
+
 impl From<i64> for Decimal {
+    #[inline]
     fn from(value: i64) -> Self {
         Self {
             value: i128::from(value) * DECIMAL_PART_POW,
         }
     }
 }
+
 impl From<u8> for Decimal {
+    #[inline]
     fn from(value: u8) -> Self {
         Self {
             value: i128::from(value) * DECIMAL_PART_POW,
         }
     }
 }
+
 impl From<u16> for Decimal {
+    #[inline]
     fn from(value: u16) -> Self {
         Self {
             value: i128::from(value) * DECIMAL_PART_POW,
         }
     }
 }
+
 impl From<u32> for Decimal {
+    #[inline]
     fn from(value: u32) -> Self {
         Self {
             value: i128::from(value) * DECIMAL_PART_POW,
         }
     }
 }
+
 impl From<u64> for Decimal {
+    #[inline]
     fn from(value: u64) -> Self {
         Self {
             value: i128::from(value) * DECIMAL_PART_POW,
@@ -264,6 +287,7 @@ impl From<u64> for Decimal {
 impl TryFrom<i128> for Decimal {
     type Error = DecimalOverflowError;
 
+    #[inline]
     fn try_from(value: i128) -> Result<Self, DecimalOverflowError> {
         Ok(Self {
             value: value
@@ -276,6 +300,7 @@ impl TryFrom<i128> for Decimal {
 impl TryFrom<u128> for Decimal {
     type Error = DecimalOverflowError;
 
+    #[inline]
     fn try_from(value: u128) -> Result<Self, DecimalOverflowError> {
         Ok(Self {
             value: i128::try_from(value)

@@ -315,12 +315,12 @@ impl<R: Read> TermReader for R {
             TYPE_FLOAT_LITERAL => {
                 let mut buffer = [0; 4];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::FloatLiteral(f32::from_be_bytes(buffer)))
+                Ok(EncodedTerm::FloatLiteral(Float::from_be_bytes(buffer)))
             }
             TYPE_DOUBLE_LITERAL => {
                 let mut buffer = [0; 8];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::DoubleLiteral(f64::from_be_bytes(buffer)))
+                Ok(EncodedTerm::DoubleLiteral(Double::from_be_bytes(buffer)))
             }
             TYPE_INTEGER_LITERAL => {
                 let mut buffer = [0; 8];

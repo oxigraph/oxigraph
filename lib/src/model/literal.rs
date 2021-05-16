@@ -265,6 +265,13 @@ impl From<u16> for Literal {
 impl From<f32> for Literal {
     #[inline]
     fn from(value: f32) -> Self {
+        Float::from(value).into()
+    }
+}
+
+impl From<Float> for Literal {
+    #[inline]
+    fn from(value: Float) -> Self {
         Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::FLOAT.into(),
@@ -275,6 +282,13 @@ impl From<f32> for Literal {
 impl From<f64> for Literal {
     #[inline]
     fn from(value: f64) -> Self {
+        Double::from(value).into()
+    }
+}
+
+impl From<Double> for Literal {
+    #[inline]
+    fn from(value: Double) -> Self {
         Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::DOUBLE.into(),
@@ -620,5 +634,15 @@ mod tests {
             LiteralRef::new_simple_literal("foo"),
             LiteralRef::new_typed_literal("foo", xsd::STRING)
         );
+    }
+
+    #[test]
+    fn test_float_format() {
+        assert_eq!("INF", Literal::from(f32::INFINITY).value());
+        assert_eq!("INF", Literal::from(f64::INFINITY).value());
+        assert_eq!("-INF", Literal::from(f32::NEG_INFINITY).value());
+        assert_eq!("-INF", Literal::from(f64::NEG_INFINITY).value());
+        assert_eq!("NaN", Literal::from(f32::NAN).value());
+        assert_eq!("NaN", Literal::from(f64::NAN).value());
     }
 }
