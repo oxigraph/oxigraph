@@ -11,6 +11,7 @@
     :describe
     :describe_where
     :group_concat_with_null
+    :single_not_exists
     ) .
 
 :describe rdf:type mf:QueryEvaluationTest ;
@@ -34,3 +35,10 @@
          [ qt:query  <group_concat_with_null.rq> ;
            qt:data   <group_concat_with_null.ttl> ] ;
     mf:result  <group_concat_with_null.srx> .
+
+:single_not_exists rdf:type mf:QueryEvaluationTest ;
+    mf:name "query with only a FILTER NOT EXISTS" ;
+    mf:action
+         [ qt:query  <single_not_exists.rq> ;
+           qt:data   <describe_input.ttl> ] ;
+    mf:result  <single_not_exists.srx> .
