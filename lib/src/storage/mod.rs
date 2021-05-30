@@ -603,6 +603,16 @@ impl Storage {
         Ok(())
     }
 
+    pub fn flush(&self) -> Result<(), std::io::Error> {
+        self.default.flush()?;
+        Ok(())
+    }
+
+    pub async fn flush_async(&self) -> Result<(), std::io::Error> {
+        self.default.flush_async().await?;
+        Ok(())
+    }
+
     pub fn get_str(&self, key: &StrHash) -> Result<Option<String>, std::io::Error> {
         self.id2str
             .get(key.to_be_bytes())?

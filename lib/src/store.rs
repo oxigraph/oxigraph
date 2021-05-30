@@ -567,6 +567,26 @@ impl Store {
     pub fn clear(&self) -> Result<(), io::Error> {
         self.storage.clear()
     }
+
+    /// Flushes all buffers and ensures that all writes are saved on disk.
+    ///
+    /// Flushes are automatically done for most platform using background threads.
+    /// However, calling this method explicitly is still required for Windows and Android.
+    ///
+    /// An [async version](SledStore::flush_async) is also available.
+    pub fn flush(&self) -> Result<(), io::Error> {
+        self.storage.flush()
+    }
+
+    /// Asynchronously flushes all buffers and ensures that all writes are saved on disk.
+    ///
+    /// Flushes are automatically done for most platform using background threads.
+    /// However, calling this method explicitly is still required for Windows and Android.
+    ///
+    /// A [sync version](SledStore::flush) is also available.
+    pub async fn flush_async(&self) -> Result<(), io::Error> {
+        self.storage.flush_async().await
+    }
 }
 
 impl fmt::Display for Store {

@@ -362,8 +362,7 @@ impl<R: BufRead> ResultsIterator<R> {
     fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, EvaluationError> {
         let mut state = State::Start;
 
-        let mut new_bindings = Vec::default();
-        new_bindings.resize(self.mapping.len(), None);
+        let mut new_bindings = vec![None; self.mapping.len()];
 
         let mut current_var = None;
         let mut term: Option<Term> = None;
@@ -568,34 +567,37 @@ impl<R: BufRead> ResultsIterator<R> {
                         state = self.stack.pop().unwrap();
                     }
                     State::Triple => {
+                        println!("foo");
                         if let (Some(subject), Some(predicate), Some(object)) =
                             (subject.take(), predicate.take(), object.take())
                         {
-                            term =
-                                Some(
-                                    Triple::new(
-                                        match subject {
-                                            Term::NamedNode(subject) => subject.into(),
-                                            Term::BlankNode(subject) => subject.into(),
-                                            Term::Triple(subject) => Subject::Triple(subject),
-                                            Term::Literal(_) => return Err(invalid_data_error(
-                                                "The <predicate> value should not be a <literal>",
+                            term = Some(
+                                Triple::new(
+                                    match subject {
+                                        Term::NamedNode(subject) => subject.into(),
+                                        Term::BlankNode(subject) => subject.into(),
+                                        Term::Triple(subject) => Subject::Triple(subject),
+                                        Term::Literal(_) => {
+                                            return Err(invalid_data_error(
+                                                "The <subject> value should not be a <literal>",
                                             )
-                                            .into()),
-                                        },
-                                        match predicate {
-                                            Term::NamedNode(predicate) => predicate,
-                                            _ => {
-                                                return Err(invalid_data_error(
-                                                    "The <predicate> value should be an <uri>",
-                                                )
-                                                .into())
-                                            }
-                                        },
-                                        object,
-                                    )
-                                    .into(),
+                                            .into())
+                                        }
+                                    },
+                                    match predicate {
+                                        Term::NamedNode(predicate) => predicate,
+                                        _ => {
+                                            return Err(invalid_data_error(
+                                                "The <predicate> value should be an <uri>",
+                                            )
+                                            .into())
+                                        }
+                                    },
+                                    object,
                                 )
+                                .into(),
+                            );
+                            state = self.stack.pop().unwrap();
                         } else {
                             return Err(
                                 invalid_data_error("A <triple> should contain a <subject>, a <predicate> and an <object>").into()
