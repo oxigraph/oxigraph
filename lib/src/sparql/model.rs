@@ -4,7 +4,7 @@ use crate::io::GraphSerializer;
 use crate::model::*;
 use crate::sparql::csv_results::{read_tsv_results, write_csv_results, write_tsv_results};
 use crate::sparql::error::EvaluationError;
-use crate::sparql::json_results::write_json_results;
+use crate::sparql::json_results::{read_json_results, write_json_results};
 use crate::sparql::xml_results::{read_xml_results, write_xml_results};
 use rand::random;
 use std::error::Error;
@@ -30,11 +30,9 @@ impl QueryResults {
     ) -> Result<Self, io::Error> {
         match format {
             QueryResultsFormat::Xml => read_xml_results(reader),
-            QueryResultsFormat::Json => Err(invalid_input_error(
-                "JSON SPARQL results format parsing has not been implemented yet",
-            )), //TODO: implement
+            QueryResultsFormat::Json => read_json_results(reader),
             QueryResultsFormat::Csv => Err(invalid_input_error(
-                "CSV and TSV SPARQL results format parsing is not implemented",
+                "CSV SPARQL results format parsing is not implemented",
             )),
             QueryResultsFormat::Tsv => read_tsv_results(reader),
         }
@@ -520,3 +518,73 @@ impl fmt::Display for VariableNameParseError {
 }
 
 impl Error for VariableNameParseError {}
+
+#[test]
+fn test_serialization_rountrip() -> Result<(), EvaluationError> {
+    use std::io::Cursor;
+    use std::str;
+
+    for format in &[
+        QueryResultsFormat::Xml,
+        QueryResultsFormat::Json,
+        QueryResultsFormat::Tsv,
+    ] {
+        let results = vec![
+            QueryResults::Boolean(true),
+            QueryResults::Boolean(false),
+            QueryResults::Solutions(QuerySolutionIter::new(
+                Rc::new(vec![
+                    Variable::new_unchecked("foo"),
+                    Variable::new_unchecked("bar"),
+                ]),
+                Box::new(
+                    vec![
+                        Ok(vec![None, None]),
+                        Ok(vec![
+                            Some(NamedNode::new_unchecked("http://example.com").into()),
+                            None,
+                        ]),
+                        Ok(vec![
+                            None,
+                            Some(NamedNode::new_unchecked("http://example.com").into()),
+                        ]),
+                        Ok(vec![
+                            Some(BlankNode::new_unchecked("foo").into()),
+                            Some(BlankNode::new_unchecked("bar").into()),
+                        ]),
+                        Ok(vec![Some(Literal::new_simple_literal("foo").into()), None]),
+                        Ok(vec![
+                            Some(
+                                Literal::new_language_tagged_literal_unchecked("foo", "fr").into(),
+                            ),
+                            None,
+                        ]),
+                        Ok(vec![
+                            Some(Literal::from(1).into()),
+                            Some(Literal::from(true).into()),
+                        ]),
+                        Ok(vec![
+                            Some(Literal::from(1.33).into()),
+                            Some(Literal::from(false).into()),
+                        ]),
+                    ]
+                    .into_iter(),
+                ),
+            )),
+        ];
+
+        for ex in results {
+            let mut buffer = Vec::new();
+            ex.write(&mut buffer, *format)?;
+            let ex2 = QueryResults::read(Cursor::new(buffer.clone()), *format)?;
+            let mut buffer2 = Vec::new();
+            ex2.write(&mut buffer2, *format)?;
+            assert_eq!(
+                str::from_utf8(&buffer).unwrap(),
+                str::from_utf8(&buffer2).unwrap()
+            );
+        }
+    }
+
+    Ok(())
+}

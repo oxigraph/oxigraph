@@ -45,6 +45,7 @@ sophia_api = { version = "0.6.2", optional = true }
 http = "0.2"
 httparse = { version = "1", optional = true }
 native-tls = { version = "0.2", optional = true }
+json-event-parser = "0.1"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"

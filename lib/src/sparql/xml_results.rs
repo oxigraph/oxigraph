@@ -318,8 +318,7 @@ impl<R: BufRead> ResultsIterator<R> {
         }
         let mut state = State::Start;
 
-        let mut new_bindings = Vec::default();
-        new_bindings.resize(self.mapping.len(), None);
+        let mut new_bindings = vec![None; self.mapping.len()];
 
         let mut current_var = None;
         let mut term: Option<Term> = None;
@@ -474,13 +473,12 @@ impl<R: BufRead> ResultsIterator<R> {
                     State::Result => return Ok(Some(new_bindings)),
                     State::Binding => {
                         if let Some(var) = &current_var {
-                            new_bindings[self.mapping[var]] = term.clone()
+                            new_bindings[self.mapping[var]] = term.take()
                         } else {
                             return Err(
                                 invalid_data_error("No name found for <binding> tag").into()
                             );
                         }
-                        term = None;
                         state = State::Result;
                     }
                     State::Uri | State::BNode => state = State::Binding,
