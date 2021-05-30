@@ -349,7 +349,7 @@ fn base_url(request: &Request) -> Result<String> {
     }
     url.set_query(None);
     url.set_fragment(None);
-    Ok(url.into_string())
+    Ok(url.into())
 }
 
 fn resolve_with_base(request: &Request, url: &str) -> Result<NamedNode> {
