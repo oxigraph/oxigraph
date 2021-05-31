@@ -63,7 +63,7 @@ pub enum QuadEncoding {
 }
 
 impl QuadEncoding {
-    pub fn decode(self, buffer: &[u8]) -> Result<EncodedQuad, io::Error> {
+    pub fn decode(self, buffer: &[u8]) -> io::Result<EncodedQuad> {
         let mut cursor = Cursor::new(&buffer);
         match self {
             QuadEncoding::Spog => cursor.read_spog_quad(),
@@ -79,14 +79,14 @@ impl QuadEncoding {
     }
 }
 
-pub fn decode_term(buffer: &[u8]) -> Result<EncodedTerm, io::Error> {
+pub fn decode_term(buffer: &[u8]) -> io::Result<EncodedTerm> {
     Cursor::new(&buffer).read_term()
 }
 
 pub trait TermReader {
-    fn read_term(&mut self) -> Result<EncodedTerm, io::Error>;
+    fn read_term(&mut self) -> io::Result<EncodedTerm>;
 
-    fn read_spog_quad(&mut self) -> Result<EncodedQuad, io::Error> {
+    fn read_spog_quad(&mut self) -> io::Result<EncodedQuad> {
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
         let object = self.read_term()?;
@@ -99,7 +99,7 @@ pub trait TermReader {
         })
     }
 
-    fn read_posg_quad(&mut self) -> Result<EncodedQuad, io::Error> {
+    fn read_posg_quad(&mut self) -> io::Result<EncodedQuad> {
         let predicate = self.read_term()?;
         let object = self.read_term()?;
         let subject = self.read_term()?;
@@ -112,7 +112,7 @@ pub trait TermReader {
         })
     }
 
-    fn read_ospg_quad(&mut self) -> Result<EncodedQuad, io::Error> {
+    fn read_ospg_quad(&mut self) -> io::Result<EncodedQuad> {
         let object = self.read_term()?;
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
@@ -125,7 +125,7 @@ pub trait TermReader {
         })
     }
 
-    fn read_gspo_quad(&mut self) -> Result<EncodedQuad, io::Error> {
+    fn read_gspo_quad(&mut self) -> io::Result<EncodedQuad> {
         let graph_name = self.read_term()?;
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
@@ -138,7 +138,7 @@ pub trait TermReader {
         })
     }
 
-    fn read_gpos_quad(&mut self) -> Result<EncodedQuad, io::Error> {
+    fn read_gpos_quad(&mut self) -> io::Result<EncodedQuad> {
         let graph_name = self.read_term()?;
         let predicate = self.read_term()?;
         let object = self.read_term()?;
@@ -151,7 +151,7 @@ pub trait TermReader {
         })
     }
 
-    fn read_gosp_quad(&mut self) -> Result<EncodedQuad, io::Error> {
+    fn read_gosp_quad(&mut self) -> io::Result<EncodedQuad> {
         let graph_name = self.read_term()?;
         let object = self.read_term()?;
         let subject = self.read_term()?;
@@ -164,7 +164,7 @@ pub trait TermReader {
         })
     }
 
-    fn read_dspo_quad(&mut self) -> Result<EncodedQuad, io::Error> {
+    fn read_dspo_quad(&mut self) -> io::Result<EncodedQuad> {
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
         let object = self.read_term()?;
@@ -176,7 +176,7 @@ pub trait TermReader {
         })
     }
 
-    fn read_dpos_quad(&mut self) -> Result<EncodedQuad, io::Error> {
+    fn read_dpos_quad(&mut self) -> io::Result<EncodedQuad> {
         let predicate = self.read_term()?;
         let object = self.read_term()?;
         let subject = self.read_term()?;
@@ -188,7 +188,7 @@ pub trait TermReader {
         })
     }
 
-    fn read_dosp_quad(&mut self) -> Result<EncodedQuad, io::Error> {
+    fn read_dosp_quad(&mut self) -> io::Result<EncodedQuad> {
         let object = self.read_term()?;
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
@@ -202,7 +202,7 @@ pub trait TermReader {
 }
 
 impl<R: Read> TermReader for R {
-    fn read_term(&mut self) -> Result<EncodedTerm, io::Error> {
+    fn read_term(&mut self) -> io::Result<EncodedTerm> {
         let mut type_buffer = [0];
         self.read_exact(&mut type_buffer)?;
         match type_buffer[0] {

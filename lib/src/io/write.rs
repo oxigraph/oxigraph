@@ -43,7 +43,7 @@ impl GraphSerializer {
     }
 
     /// Returns a `TripleWriter` allowing writing triples into the given [`Write`](std::io::Write) implementation
-    pub fn triple_writer<W: Write>(&self, writer: W) -> Result<TripleWriter<W>, io::Error> {
+    pub fn triple_writer<W: Write>(&self, writer: W) -> io::Result<TripleWriter<W>> {
         Ok(TripleWriter {
             formatter: match self.format {
                 GraphFormat::NTriples => TripleWriterKind::NTriples(NTriplesFormatter::new(writer)),
@@ -88,7 +88,7 @@ enum TripleWriterKind<W: Write> {
 
 impl<W: Write> TripleWriter<W> {
     /// Writes a triple
-    pub fn write<'a>(&mut self, triple: impl Into<TripleRef<'a>>) -> Result<(), io::Error> {
+    pub fn write<'a>(&mut self, triple: impl Into<TripleRef<'a>>) -> io::Result<()> {
         let triple = triple.into();
         match &mut self.formatter {
             TripleWriterKind::NTriples(formatter) => formatter.format(&triple.into())?,
@@ -99,7 +99,7 @@ impl<W: Write> TripleWriter<W> {
     }
 
     /// Writes the last bytes of the file
-    pub fn finish(self) -> Result<(), io::Error> {
+    pub fn finish(self) -> io::Result<()> {
         match self.formatter {
             TripleWriterKind::NTriples(formatter) => formatter.finish(),
             TripleWriterKind::Turtle(formatter) => formatter.finish()?,
@@ -144,7 +144,7 @@ impl DatasetSerializer {
     }
 
     /// Returns a `QuadWriter` allowing writing triples into the given [`Write`](std::io::Write) implementation
-    pub fn quad_writer<W: Write>(&self, writer: W) -> Result<QuadWriter<W>, io::Error> {
+    pub fn quad_writer<W: Write>(&self, writer: W) -> io::Result<QuadWriter<W>> {
         Ok(QuadWriter {
             formatter: match self.format {
                 DatasetFormat::NQuads => QuadWriterKind::NQuads(NQuadsFormatter::new(writer)),
@@ -188,7 +188,7 @@ enum QuadWriterKind<W: Write> {
 
 impl<W: Write> QuadWriter<W> {
     /// Writes a quad
-    pub fn write<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> Result<(), io::Error> {
+    pub fn write<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> io::Result<()> {
         let quad = quad.into();
         match &mut self.formatter {
             QuadWriterKind::NQuads(formatter) => formatter.format(&quad.into())?,
@@ -198,7 +198,7 @@ impl<W: Write> QuadWriter<W> {
     }
 
     /// Writes the last bytes of the file
-    pub fn finish(self) -> Result<(), io::Error> {
+    pub fn finish(self) -> io::Result<()> {
         match self.formatter {
             QuadWriterKind::NQuads(formatter) => formatter.finish(),
             QuadWriterKind::TriG(formatter) => formatter.finish()?,

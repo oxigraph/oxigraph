@@ -178,7 +178,7 @@ fn write_tsv_term<'a>(term: impl Into<TermRef<'a>>, sink: &mut impl Write) -> io
     }
 }
 
-pub fn read_tsv_results(mut source: impl BufRead + 'static) -> Result<QueryResults, io::Error> {
+pub fn read_tsv_results(mut source: impl BufRead + 'static) -> io::Result<QueryResults> {
     let mut buffer = String::new();
 
     // We read the header
@@ -192,7 +192,7 @@ pub fn read_tsv_results(mut source: impl BufRead + 'static) -> Result<QueryResul
     let variables = buffer
         .split('\t')
         .map(|v| Variable::from_str(v.trim()).map_err(invalid_data_error))
-        .collect::<Result<Vec<_>, io::Error>>()?;
+        .collect::<io::Result<Vec<_>>>()?;
 
     Ok(QueryResults::Solutions(QuerySolutionIter::new(
         Rc::new(variables),

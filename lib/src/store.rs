@@ -86,14 +86,14 @@ pub struct Store {
 
 impl Store {
     /// Creates a temporary [`Store`]() that will be deleted after drop.
-    pub fn new() -> Result<Self, io::Error> {
+    pub fn new() -> io::Result<Self> {
         Ok(Self {
             storage: Storage::new()?,
         })
     }
 
     /// Opens a [`Store`]() and creates it if it does not exist yet.
-    pub fn open(path: impl AsRef<Path>) -> Result<Self, io::Error> {
+    pub fn open(path: impl AsRef<Path>) -> io::Result<Self> {
         Ok(Self {
             storage: Storage::open(path.as_ref())?,
         })
@@ -178,7 +178,7 @@ impl Store {
     }
 
     /// Checks if this store contains a given quad
-    pub fn contains<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, io::Error> {
+    pub fn contains<'a>(&self, quad: impl Into<QuadRef<'a>>) -> io::Result<bool> {
         let quad = EncodedQuad::from(quad.into());
         self.storage.contains(&quad)
     }
@@ -303,7 +303,7 @@ impl Store {
         format: GraphFormat,
         to_graph_name: impl Into<GraphNameRef<'a>>,
         base_iri: Option<&str>,
-    ) -> Result<(), io::Error> {
+    ) -> io::Result<()> {
         load_graph(
             &self.storage,
             reader,
@@ -347,7 +347,7 @@ impl Store {
         reader: impl BufRead,
         format: DatasetFormat,
         base_iri: Option<&str>,
-    ) -> Result<(), io::Error> {
+    ) -> io::Result<()> {
         load_dataset(&self.storage, reader, format, base_iri)?;
         Ok(())
     }
@@ -359,7 +359,7 @@ impl Store {
     /// This method is optimized for performances and is not atomic.
     /// It might leave the store in a bad state if a crash happens during the insertion.
     /// Use a (memory greedy) [transaction](Store::transaction()) if you do not want that.
-    pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, io::Error> {
+    pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> io::Result<bool> {
         let quad = self.storage.encode_quad(quad.into())?;
         self.storage.insert(&quad)
     }
@@ -371,7 +371,7 @@ impl Store {
     /// This method is optimized for performances and is not atomic.
     /// It might leave the store in a bad state if a crash happens during the removal.
     /// Use a (memory greedy) [transaction](Store::transaction()) if you do not want that.
-    pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, io::Error> {
+    pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> io::Result<bool> {
         let quad = EncodedQuad::from(quad.into());
         self.storage.remove(&quad)
     }
@@ -399,7 +399,7 @@ impl Store {
         writer: impl Write,
         format: GraphFormat,
         from_graph_name: impl Into<GraphNameRef<'a>>,
-    ) -> Result<(), io::Error> {
+    ) -> io::Result<()> {
         dump_graph(
             self.quads_for_pattern(None, None, None, Some(from_graph_name.into()))
                 .map(|q| Ok(q?.into())),
@@ -424,7 +424,7 @@ impl Store {
     /// assert_eq!(file, buffer.as_slice());
     /// # std::io::Result::Ok(())
     /// ```
-    pub fn dump_dataset(&self, writer: impl Write, format: DatasetFormat) -> Result<(), io::Error> {
+    pub fn dump_dataset(&self, writer: impl Write, format: DatasetFormat) -> io::Result<()> {
         dump_dataset(self.iter(), writer, format)
     }
 
@@ -465,7 +465,7 @@ impl Store {
     pub fn contains_named_graph<'a>(
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
-    ) -> Result<bool, io::Error> {
+    ) -> io::Result<bool> {
         let graph_name = EncodedTerm::from(graph_name.into());
         self.storage.contains_named_graph(&graph_name)
     }
@@ -488,7 +488,7 @@ impl Store {
     pub fn insert_named_graph<'a>(
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
-    ) -> Result<bool, io::Error> {
+    ) -> io::Result<bool> {
         let graph_name = self.storage.encode_named_or_blank_node(graph_name.into())?;
         self.storage.insert_named_graph(&graph_name)
     }
@@ -511,10 +511,7 @@ impl Store {
     /// assert_eq!(1, store.named_graphs().count());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn clear_graph<'a>(
-        &self,
-        graph_name: impl Into<GraphNameRef<'a>>,
-    ) -> Result<(), io::Error> {
+    pub fn clear_graph<'a>(&self, graph_name: impl Into<GraphNameRef<'a>>) -> io::Result<()> {
         let graph_name = EncodedTerm::from(graph_name.into());
         self.storage.clear_graph(&graph_name)
     }
@@ -542,7 +539,7 @@ impl Store {
     pub fn remove_named_graph<'a>(
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
-    ) -> Result<bool, io::Error> {
+    ) -> io::Result<bool> {
         let graph_name = EncodedTerm::from(graph_name.into());
         self.storage.remove_named_graph(&graph_name)
     }
@@ -564,7 +561,7 @@ impl Store {
     /// assert!(store.is_empty());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn clear(&self) -> Result<(), io::Error> {
+    pub fn clear(&self) -> io::Result<()> {
         self.storage.clear()
     }
 
@@ -574,7 +571,7 @@ impl Store {
     /// However, calling this method explicitly is still required for Windows and Android.
     ///
     /// An [async version](SledStore::flush_async) is also available.
-    pub fn flush(&self) -> Result<(), io::Error> {
+    pub fn flush(&self) -> io::Result<()> {
         self.storage.flush()
     }
 
@@ -584,7 +581,7 @@ impl Store {
     /// However, calling this method explicitly is still required for Windows and Android.
     ///
     /// A [sync version](SledStore::flush) is also available.
-    pub async fn flush_async(&self) -> Result<(), io::Error> {
+    pub async fn flush_async(&self) -> io::Result<()> {
         self.storage.flush_async().await
     }
 }
@@ -740,9 +737,9 @@ pub struct QuadIter {
 }
 
 impl Iterator for QuadIter {
-    type Item = Result<Quad, io::Error>;
+    type Item = io::Result<Quad>;
 
-    fn next(&mut self) -> Option<Result<Quad, io::Error>> {
+    fn next(&mut self) -> Option<io::Result<Quad>> {
         Some(match self.iter.next()? {
             Ok(quad) => self.storage.decode_quad(&quad).map_err(|e| e.into()),
             Err(error) => Err(error),
@@ -757,9 +754,9 @@ pub struct GraphNameIter {
 }
 
 impl Iterator for GraphNameIter {
-    type Item = Result<NamedOrBlankNode, io::Error>;
+    type Item = io::Result<NamedOrBlankNode>;
 
-    fn next(&mut self) -> Option<Result<NamedOrBlankNode, io::Error>> {
+    fn next(&mut self) -> Option<io::Result<NamedOrBlankNode>> {
         Some(
             self.iter.next()?.and_then(|graph_name| {
                 Ok(self.store.storage.decode_named_or_blank_node(&graph_name)?)
@@ -773,7 +770,7 @@ impl Iterator for GraphNameIter {
 }
 
 #[test]
-fn store() -> Result<(), io::Error> {
+fn store() -> io::Result<()> {
     use crate::model::*;
 
     let main_s = Subject::from(BlankNode::default());

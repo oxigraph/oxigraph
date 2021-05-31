@@ -115,7 +115,7 @@ fn write_json_term(
     Ok(())
 }
 
-pub fn read_json_results(source: impl BufRead + 'static) -> Result<QueryResults, io::Error> {
+pub fn read_json_results(source: impl BufRead + 'static) -> io::Result<QueryResults> {
     let mut reader = JsonReader::from_reader(source);
     let mut buffer = Vec::default();
     let mut variables = None;
@@ -423,8 +423,7 @@ impl<R: BufRead> ResultsIterator<R> {
                                     Term::Literal(_) => {
                                         return Err(invalid_data_error(
                                             "The 'subject' value should not be a literal",
-                                        )
-                                        .into())
+                                        ))
                                     }
                                 },
                                 match predicate.ok_or_else(|| {
@@ -436,8 +435,7 @@ impl<R: BufRead> ResultsIterator<R> {
                                     _ => {
                                         return Err(invalid_data_error(
                                             "The 'predicate' value should be a uri",
-                                        )
-                                        .into())
+                                        ))
                                     }
                                 },
                                 object.ok_or_else(|| {

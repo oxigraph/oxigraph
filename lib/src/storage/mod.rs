@@ -43,15 +43,15 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub fn new() -> Result<Self, std::io::Error> {
+    pub fn new() -> std::io::Result<Self> {
         Self::do_open(&Config::new().temporary(true))
     }
 
-    pub fn open(path: &Path) -> Result<Self, std::io::Error> {
+    pub fn open(path: &Path) -> std::io::Result<Self> {
         Self::do_open(&Config::new().path(path))
     }
 
-    fn do_open(config: &Config) -> Result<Self, std::io::Error> {
+    fn do_open(config: &Config) -> std::io::Result<Self> {
         let db = config.open()?;
         let this = Self {
             default: db.clone(),
@@ -95,7 +95,7 @@ impl Storage {
         }
     }
 
-    fn ensure_version(&self) -> Result<u64, std::io::Error> {
+    fn ensure_version(&self) -> std::io::Result<u64> {
         Ok(if let Some(version) = self.default.get("oxversion")? {
             let mut buffer = [0; 8];
             buffer.copy_from_slice(&version);
@@ -106,7 +106,7 @@ impl Storage {
         })
     }
 
-    fn set_version(&self, version: u64) -> Result<(), std::io::Error> {
+    fn set_version(&self, version: u64) -> std::io::Result<()> {
         self.default.insert("oxversion", &version.to_be_bytes())?;
         Ok(())
     }
@@ -155,7 +155,7 @@ impl Storage {
         self.gspo.is_empty() && self.dspo.is_empty()
     }
 
-    pub fn contains(&self, quad: &EncodedQuad) -> Result<bool, std::io::Error> {
+    pub fn contains(&self, quad: &EncodedQuad) -> std::io::Result<bool> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
         if quad.graph_name.is_default_graph() {
             write_spo_quad(&mut buffer, quad);
@@ -405,7 +405,7 @@ impl Storage {
         }
     }
 
-    pub fn contains_named_graph(&self, graph_name: &EncodedTerm) -> Result<bool, std::io::Error> {
+    pub fn contains_named_graph(&self, graph_name: &EncodedTerm) -> std::io::Result<bool> {
         Ok(self.graphs.contains_key(&encode_term(graph_name))?)
     }
 
@@ -457,7 +457,7 @@ impl Storage {
         }
     }
 
-    pub fn insert(&self, quad: &EncodedQuad) -> Result<bool, std::io::Error> {
+    pub fn insert(&self, quad: &EncodedQuad) -> std::io::Result<bool> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
 
         if quad.graph_name.is_default_graph() {
@@ -512,7 +512,7 @@ impl Storage {
         }
     }
 
-    pub fn remove(&self, quad: &EncodedQuad) -> Result<bool, std::io::Error> {
+    pub fn remove(&self, quad: &EncodedQuad) -> std::io::Result<bool> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
 
         if quad.graph_name.is_default_graph() {
@@ -564,11 +564,11 @@ impl Storage {
         }
     }
 
-    pub fn insert_named_graph(&self, graph_name: &EncodedTerm) -> Result<bool, std::io::Error> {
+    pub fn insert_named_graph(&self, graph_name: &EncodedTerm) -> std::io::Result<bool> {
         Ok(self.graphs.insert(&encode_term(graph_name), &[])?.is_none())
     }
 
-    pub fn clear_graph(&self, graph_name: &EncodedTerm) -> Result<(), std::io::Error> {
+    pub fn clear_graph(&self, graph_name: &EncodedTerm) -> std::io::Result<()> {
         if graph_name.is_default_graph() {
             self.dspo.clear()?;
             self.dpos.clear()?;
@@ -581,14 +581,14 @@ impl Storage {
         Ok(())
     }
 
-    pub fn remove_named_graph(&self, graph_name: &EncodedTerm) -> Result<bool, std::io::Error> {
+    pub fn remove_named_graph(&self, graph_name: &EncodedTerm) -> std::io::Result<bool> {
         for quad in self.quads_for_graph(graph_name) {
             self.remove(&quad?)?;
         }
         Ok(self.graphs.remove(&encode_term(graph_name))?.is_some())
     }
 
-    pub fn clear(&self) -> Result<(), std::io::Error> {
+    pub fn clear(&self) -> std::io::Result<()> {
         self.dspo.clear()?;
         self.dpos.clear()?;
         self.dosp.clear()?;
@@ -603,17 +603,17 @@ impl Storage {
         Ok(())
     }
 
-    pub fn flush(&self) -> Result<(), std::io::Error> {
+    pub fn flush(&self) -> std::io::Result<()> {
         self.default.flush()?;
         Ok(())
     }
 
-    pub async fn flush_async(&self) -> Result<(), std::io::Error> {
+    pub async fn flush_async(&self) -> std::io::Result<()> {
         self.default.flush_async().await?;
         Ok(())
     }
 
-    pub fn get_str(&self, key: &StrHash) -> Result<Option<String>, std::io::Error> {
+    pub fn get_str(&self, key: &StrHash) -> std::io::Result<Option<String>> {
         self.id2str
             .get(key.to_be_bytes())?
             .map(|v| String::from_utf8(v.to_vec()))
@@ -621,11 +621,11 @@ impl Storage {
             .map_err(invalid_data_error)
     }
 
-    pub fn contains_str(&self, key: &StrHash) -> Result<bool, std::io::Error> {
+    pub fn contains_str(&self, key: &StrHash) -> std::io::Result<bool> {
         Ok(self.id2str.contains_key(key.to_be_bytes())?)
     }
 
-    pub fn insert_str(&self, key: &StrHash, value: &str) -> Result<bool, std::io::Error> {
+    pub fn insert_str(&self, key: &StrHash, value: &str) -> std::io::Result<bool> {
         Ok(self.id2str.insert(key.to_be_bytes(), value)?.is_none())
     }
 }
@@ -652,9 +652,9 @@ impl ChainedDecodingQuadIterator {
 }
 
 impl Iterator for ChainedDecodingQuadIterator {
-    type Item = Result<EncodedQuad, std::io::Error>;
+    type Item = std::io::Result<EncodedQuad>;
 
-    fn next(&mut self) -> Option<Result<EncodedQuad, std::io::Error>> {
+    fn next(&mut self) -> Option<std::io::Result<EncodedQuad>> {
         if let Some(result) = self.first.next() {
             Some(result)
         } else if let Some(second) = self.second.as_mut() {
@@ -671,9 +671,9 @@ pub struct DecodingQuadIterator {
 }
 
 impl Iterator for DecodingQuadIterator {
-    type Item = Result<EncodedQuad, std::io::Error>;
+    type Item = std::io::Result<EncodedQuad>;
 
-    fn next(&mut self) -> Option<Result<EncodedQuad, std::io::Error>> {
+    fn next(&mut self) -> Option<std::io::Result<EncodedQuad>> {
         Some(match self.iter.next()? {
             Ok((encoded, _)) => self.encoding.decode(&encoded),
             Err(error) => Err(error.into()),
@@ -686,9 +686,9 @@ pub struct DecodingGraphIterator {
 }
 
 impl Iterator for DecodingGraphIterator {
-    type Item = Result<EncodedTerm, std::io::Error>;
+    type Item = std::io::Result<EncodedTerm>;
 
-    fn next(&mut self) -> Option<Result<EncodedTerm, std::io::Error>> {
+    fn next(&mut self) -> Option<std::io::Result<EncodedTerm>> {
         Some(match self.iter.next()? {
             Ok((encoded, _)) => decode_term(&encoded),
             Err(error) => Err(error.into()),
@@ -1002,17 +1002,17 @@ impl<T> From<ConflictableTransactionError<T>> for Sled2ConflictableTransactionEr
 impl StrLookup for Storage {
     type Error = std::io::Error;
 
-    fn get_str(&self, key: &StrHash) -> Result<Option<String>, std::io::Error> {
+    fn get_str(&self, key: &StrHash) -> std::io::Result<Option<String>> {
         self.get_str(key)
     }
 
-    fn contains_str(&self, key: &StrHash) -> Result<bool, std::io::Error> {
+    fn contains_str(&self, key: &StrHash) -> std::io::Result<bool> {
         self.contains_str(key)
     }
 }
 
 impl StrContainer for Storage {
-    fn insert_str(&self, key: &StrHash, value: &str) -> Result<bool, std::io::Error> {
+    fn insert_str(&self, key: &StrHash, value: &str) -> std::io::Result<bool> {
         self.insert_str(key, value)
     }
 }

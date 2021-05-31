@@ -183,7 +183,7 @@ fn write_xml_term(
     Ok(())
 }
 
-pub fn read_xml_results(source: impl BufRead + 'static) -> Result<QueryResults, io::Error> {
+pub fn read_xml_results(source: impl BufRead + 'static) -> io::Result<QueryResults> {
     enum State {
         Start,
         Sparql,

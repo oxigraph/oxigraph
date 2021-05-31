@@ -23,10 +23,7 @@ pub enum QueryResults {
 
 impl QueryResults {
     /// Reads a SPARQL query results serialization
-    pub fn read(
-        reader: impl BufRead + 'static,
-        format: QueryResultsFormat,
-    ) -> Result<Self, io::Error> {
+    pub fn read(reader: impl BufRead + 'static, format: QueryResultsFormat) -> io::Result<Self> {
         match format {
             QueryResultsFormat::Xml => read_xml_results(reader),
             QueryResultsFormat::Json => read_json_results(reader),

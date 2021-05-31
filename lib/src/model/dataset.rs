@@ -436,7 +436,7 @@ impl Dataset {
         reader: impl BufRead,
         format: DatasetFormat,
         base_iri: Option<&str>,
-    ) -> Result<(), io::Error> {
+    ) -> io::Result<()> {
         let mut parser = DatasetParser::from_format(format);
         if let Some(base_iri) = base_iri {
             parser = parser
@@ -468,7 +468,7 @@ impl Dataset {
     /// assert_eq!(file, buffer.as_slice());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn dump(&self, writer: impl Write, format: DatasetFormat) -> Result<(), io::Error> {
+    pub fn dump(&self, writer: impl Write, format: DatasetFormat) -> io::Result<()> {
         let mut writer = DatasetSerializer::from_format(format).quad_writer(writer)?;
         for t in self {
             writer.write(t)?;
@@ -1265,7 +1265,7 @@ impl<'a> GraphView<'a> {
     /// assert_eq!(file, buffer.as_slice());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn dump(&self, writer: impl Write, format: GraphFormat) -> Result<(), io::Error> {
+    pub fn dump(&self, writer: impl Write, format: GraphFormat) -> io::Result<()> {
         let mut writer = GraphSerializer::from_format(format).triple_writer(writer)?;
         for t in self {
             writer.write(t)?;
@@ -1402,7 +1402,7 @@ impl<'a> GraphViewMut<'a> {
         reader: impl BufRead,
         format: GraphFormat,
         base_iri: Option<&str>,
-    ) -> Result<(), io::Error> {
+    ) -> io::Result<()> {
         let mut parser = GraphParser::from_format(format);
         if let Some(base_iri) = base_iri {
             parser = parser
@@ -1538,7 +1538,7 @@ impl<'a> GraphViewMut<'a> {
     /// assert_eq!(file, buffer.as_slice());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn dump(self, writer: impl Write, format: GraphFormat) -> Result<(), io::Error> {
+    pub fn dump(self, writer: impl Write, format: GraphFormat) -> io::Result<()> {
         self.read().dump(writer, format)
     }
 }

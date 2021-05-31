@@ -208,7 +208,7 @@ impl Graph {
         reader: impl BufRead,
         format: GraphFormat,
         base_iri: Option<&str>,
-    ) -> Result<(), io::Error> {
+    ) -> io::Result<()> {
         self.graph_mut().load(reader, format, base_iri)
     }
 
@@ -229,7 +229,7 @@ impl Graph {
     /// assert_eq!(file, buffer.as_slice());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn dump(&self, writer: impl Write, format: GraphFormat) -> Result<(), io::Error> {
+    pub fn dump(&self, writer: impl Write, format: GraphFormat) -> io::Result<()> {
         self.graph().dump(writer, format)
     }
 

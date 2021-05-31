@@ -60,10 +60,10 @@ where
 }
 
 pub fn dump_graph(
-    triples: impl Iterator<Item = Result<Triple, io::Error>>,
+    triples: impl Iterator<Item = io::Result<Triple>>,
     writer: impl Write,
     format: GraphFormat,
-) -> Result<(), io::Error> {
+) -> io::Result<()> {
     let mut writer = GraphSerializer::from_format(format).triple_writer(writer)?;
     for triple in triples {
         writer.write(&triple?)?;
@@ -106,10 +106,10 @@ where
 }
 
 pub fn dump_dataset(
-    quads: impl Iterator<Item = Result<Quad, io::Error>>,
+    quads: impl Iterator<Item = io::Result<Quad>>,
     writer: impl Write,
     format: DatasetFormat,
-) -> Result<(), io::Error> {
+) -> io::Result<()> {
     let mut writer = DatasetSerializer::from_format(format).quad_writer(writer)?;
     for quad in quads {
         writer.write(&quad?)?;

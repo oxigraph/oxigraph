@@ -66,7 +66,7 @@ impl GraphParser {
     }
 
     /// Executes the parsing itself on a [`BufRead`](std::io::BufRead) implementation and returns an iterator of triples
-    pub fn read_triples<R: BufRead>(&self, reader: R) -> Result<TripleReader<R>, io::Error> {
+    pub fn read_triples<R: BufRead>(&self, reader: R) -> io::Result<TripleReader<R>> {
         Ok(TripleReader {
             mapper: RioMapper::default(),
             parser: match self.format {
@@ -113,9 +113,9 @@ enum TripleReaderKind<R: BufRead> {
 }
 
 impl<R: BufRead> Iterator for TripleReader<R> {
-    type Item = Result<Triple, io::Error>;
+    type Item = io::Result<Triple>;
 
-    fn next(&mut self) -> Option<Result<Triple, io::Error>> {
+    fn next(&mut self) -> Option<io::Result<Triple>> {
         loop {
             if let Some(r) = self.buffer.pop() {
                 return Some(Ok(r));
@@ -143,7 +143,7 @@ impl<R: BufRead> TripleReader<R> {
         parser: &mut P,
         buffer: &mut Vec<Triple>,
         mapper: &mut RioMapper,
-    ) -> Option<Result<(), io::Error>>
+    ) -> Option<io::Result<()>>
     where
         io::Error: From<P::Error>,
     {
@@ -214,7 +214,7 @@ impl DatasetParser {
     }
 
     /// Executes the parsing itself on a [`BufRead`](std::io::BufRead) implementation and returns an iterator of quads
-    pub fn read_quads<R: BufRead>(&self, reader: R) -> Result<QuadReader<R>, io::Error> {
+    pub fn read_quads<R: BufRead>(&self, reader: R) -> io::Result<QuadReader<R>> {
         Ok(QuadReader {
             mapper: RioMapper::default(),
             parser: match self.format {
@@ -257,9 +257,9 @@ enum QuadReaderKind<R: BufRead> {
 }
 
 impl<R: BufRead> Iterator for QuadReader<R> {
-    type Item = Result<Quad, io::Error>;
+    type Item = io::Result<Quad>;
 
-    fn next(&mut self) -> Option<Result<Quad, io::Error>> {
+    fn next(&mut self) -> Option<io::Result<Quad>> {
         loop {
             if let Some(r) = self.buffer.pop() {
                 return Some(Ok(r));
@@ -284,7 +284,7 @@ impl<R: BufRead> QuadReader<R> {
         parser: &mut P,
         buffer: &mut Vec<Quad>,
         mapper: &mut RioMapper,
-    ) -> Option<Result<(), io::Error>>
+    ) -> Option<io::Result<()>>
     where
         io::Error: From<P::Error>,
     {
