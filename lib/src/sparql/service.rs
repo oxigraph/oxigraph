@@ -118,7 +118,10 @@ impl ServiceHandler for SimpleServiceHandler {
             .method(Method::POST)
             .uri(service_name.as_str())
             .header(CONTENT_TYPE, "application/sparql-query")
-            .header(ACCEPT, QueryResultsFormat::Xml.media_type())
+            .header(
+                ACCEPT,
+                "application/sparql-results+json, application/sparql-results+xml",
+            )
             .header(USER_AGENT, concat!("Oxigraph/", env!("CARGO_PKG_VERSION")))
             .body(Some(query.to_string().into_bytes()))
             .map_err(invalid_input_error)?;
