@@ -2,10 +2,11 @@
 
 use crate::error::invalid_input_error;
 use crate::io::{DatasetFormat, DatasetSerializer, GraphFormat, GraphSerializer};
-use crate::model::{GraphNameRef, Quad, Triple};
+use crate::model::{BlankNode, GraphNameRef, LiteralRef, NamedNodeRef, Quad, QuadRef, Triple};
 use crate::storage::numeric_encoder::WriteEncoder;
 use crate::storage::StorageLike;
 use oxiri::Iri;
+use rio_api::model as rio;
 use rio_api::parser::{QuadsParser, TriplesParser};
 use rio_turtle::{NQuadsParser, NTriplesParser, TriGParser, TurtleError, TurtleParser};
 use rio_xml::{RdfXmlError, RdfXmlParser};
@@ -47,16 +48,49 @@ where
     StoreOrParseError<S::Error>: From<P::Error>,
 {
     let mut bnode_map = HashMap::default();
-    let to_graph_name = storage
-        .encode_graph_name(to_graph_name)
-        .map_err(StoreOrParseError::Store)?;
     parser.parse_all(&mut move |t| {
         let quad = storage
-            .encode_rio_triple_in_graph(t, to_graph_name.clone(), &mut bnode_map)
+            .encode_quad(quad_from_rio_triple(&t, to_graph_name, &mut bnode_map))
             .map_err(StoreOrParseError::Store)?;
         storage.insert(&quad).map_err(StoreOrParseError::Store)?;
         Ok(())
     })
+}
+
+fn quad_from_rio_triple<'a>(
+    triple: &rio::Triple<'a>,
+    graph_name: GraphNameRef<'a>,
+    bnode_map: &'a mut HashMap<String, BlankNode>,
+) -> QuadRef<'a> {
+    // we insert the blank nodes
+    if let rio::NamedOrBlankNode::BlankNode(node) = triple.subject {
+        bnode_map.entry(node.id.to_owned()).or_default();
+    }
+    if let rio::Term::BlankNode(node) = triple.object {
+        bnode_map.entry(node.id.to_owned()).or_default();
+    }
+    QuadRef {
+        subject: match triple.subject {
+            rio::NamedOrBlankNode::NamedNode(node) => NamedNodeRef::new_unchecked(node.iri).into(),
+            rio::NamedOrBlankNode::BlankNode(node) => bnode_map[node.id].as_ref().into(),
+        },
+        predicate: NamedNodeRef::new_unchecked(triple.predicate.iri),
+        object: match triple.object {
+            rio::Term::NamedNode(node) => NamedNodeRef::new_unchecked(node.iri).into(),
+            rio::Term::BlankNode(node) => bnode_map[node.id].as_ref().into(),
+            rio::Term::Literal(literal) => match literal {
+                rio::Literal::Simple { value } => LiteralRef::new_simple_literal(value),
+                rio::Literal::LanguageTaggedString { value, language } => {
+                    LiteralRef::new_language_tagged_literal_unchecked(value, language)
+                }
+                rio::Literal::Typed { value, datatype } => {
+                    LiteralRef::new_typed_literal(value, NamedNodeRef::new_unchecked(datatype.iri))
+                }
+            }
+            .into(),
+        },
+        graph_name,
+    }
 }
 
 pub fn dump_graph(
@@ -98,11 +132,55 @@ where
     let mut bnode_map = HashMap::default();
     parser.parse_all(&mut move |q| {
         let quad = store
-            .encode_rio_quad(q, &mut bnode_map)
+            .encode_quad(quad_from_rio(&q, &mut bnode_map))
             .map_err(StoreOrParseError::Store)?;
         store.insert(&quad).map_err(StoreOrParseError::Store)?;
         Ok(())
     })
+}
+
+fn quad_from_rio<'a>(
+    quad: &rio::Quad<'a>,
+    bnode_map: &'a mut HashMap<String, BlankNode>,
+) -> QuadRef<'a> {
+    // we insert the blank nodes
+    if let rio::NamedOrBlankNode::BlankNode(node) = quad.subject {
+        bnode_map.entry(node.id.to_owned()).or_default();
+    }
+    if let rio::Term::BlankNode(node) = quad.object {
+        bnode_map.entry(node.id.to_owned()).or_default();
+    }
+    if let Some(rio::NamedOrBlankNode::BlankNode(node)) = quad.graph_name {
+        bnode_map.entry(node.id.to_owned()).or_default();
+    }
+    QuadRef {
+        subject: match quad.subject {
+            rio::NamedOrBlankNode::NamedNode(node) => NamedNodeRef::new_unchecked(node.iri).into(),
+            rio::NamedOrBlankNode::BlankNode(node) => bnode_map[node.id].as_ref().into(),
+        },
+        predicate: NamedNodeRef::new_unchecked(quad.predicate.iri),
+        object: match quad.object {
+            rio::Term::NamedNode(node) => NamedNodeRef::new_unchecked(node.iri).into(),
+            rio::Term::BlankNode(node) => bnode_map[node.id].as_ref().into(),
+            rio::Term::Literal(literal) => match literal {
+                rio::Literal::Simple { value } => LiteralRef::new_simple_literal(value),
+                rio::Literal::LanguageTaggedString { value, language } => {
+                    LiteralRef::new_language_tagged_literal_unchecked(value, language)
+                }
+                rio::Literal::Typed { value, datatype } => {
+                    LiteralRef::new_typed_literal(value, NamedNodeRef::new_unchecked(datatype.iri))
+                }
+            }
+            .into(),
+        },
+        graph_name: match quad.graph_name {
+            Some(rio::NamedOrBlankNode::NamedNode(node)) => {
+                NamedNodeRef::new_unchecked(node.iri).into()
+            }
+            Some(rio::NamedOrBlankNode::BlankNode(node)) => bnode_map[node.id].as_ref().into(),
+            None => GraphNameRef::DefaultGraph,
+        },
+    }
 }
 
 pub fn dump_dataset(

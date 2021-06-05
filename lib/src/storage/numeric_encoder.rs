@@ -5,10 +5,7 @@ use crate::model::xsd::*;
 use crate::model::*;
 use crate::sparql::EvaluationError;
 use crate::storage::small_string::SmallString;
-use rand::random;
-use rio_api::model as rio;
 use siphasher::sip128::{Hasher128, SipHasher24};
-use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 use std::fmt::Debug;
@@ -897,106 +894,6 @@ pub(crate) trait WriteEncoder: StrContainer {
             predicate: self.encode_named_node(quad.predicate)?,
             object: self.encode_term(quad.object)?,
             graph_name: self.encode_graph_name(quad.graph_name)?,
-        })
-    }
-
-    fn encode_triple_in_graph(
-        &self,
-        triple: TripleRef<'_>,
-        graph_name: EncodedTerm,
-    ) -> Result<EncodedQuad, Self::Error> {
-        Ok(EncodedQuad {
-            subject: self.encode_subject(triple.subject)?,
-            predicate: self.encode_named_node(triple.predicate)?,
-            object: self.encode_term(triple.object)?,
-            graph_name,
-        })
-    }
-
-    fn encode_rio_named_node(
-        &self,
-        named_node: rio::NamedNode<'_>,
-    ) -> Result<EncodedTerm, Self::Error> {
-        self.encode_named_node(NamedNodeRef::new_unchecked(named_node.iri))
-    }
-
-    fn encode_rio_blank_node(
-        &self,
-        blank_node: rio::BlankNode<'_>,
-        bnodes_map: &mut HashMap<String, u128>,
-    ) -> Result<EncodedTerm, Self::Error> {
-        Ok(if let Some(id) = bnodes_map.get(blank_node.id) {
-            EncodedTerm::NumericalBlankNode { id: *id }
-        } else {
-            let id = random::<u128>();
-            bnodes_map.insert(blank_node.id.to_owned(), id);
-            EncodedTerm::NumericalBlankNode { id }
-        })
-    }
-    fn encode_rio_literal(&self, literal: rio::Literal<'_>) -> Result<EncodedTerm, Self::Error> {
-        self.encode_literal(match literal {
-            rio::Literal::Simple { value } => LiteralRef::new_simple_literal(value),
-            rio::Literal::LanguageTaggedString { value, language } => {
-                LiteralRef::new_language_tagged_literal_unchecked(value, language)
-            }
-            rio::Literal::Typed { value, datatype } => {
-                LiteralRef::new_typed_literal(value, NamedNodeRef::new_unchecked(datatype.iri))
-            }
-        })
-    }
-
-    fn encode_rio_subject(
-        &self,
-        term: rio::NamedOrBlankNode<'_>,
-        bnodes_map: &mut HashMap<String, u128>,
-    ) -> Result<EncodedTerm, Self::Error> {
-        match term {
-            rio::NamedOrBlankNode::NamedNode(named_node) => self.encode_rio_named_node(named_node),
-            rio::NamedOrBlankNode::BlankNode(blank_node) => {
-                self.encode_rio_blank_node(blank_node, bnodes_map)
-            }
-        }
-    }
-
-    fn encode_rio_term(
-        &self,
-        term: rio::Term<'_>,
-        bnodes_map: &mut HashMap<String, u128>,
-    ) -> Result<EncodedTerm, Self::Error> {
-        match term {
-            rio::Term::NamedNode(named_node) => self.encode_rio_named_node(named_node),
-            rio::Term::BlankNode(blank_node) => self.encode_rio_blank_node(blank_node, bnodes_map),
-            rio::Term::Literal(literal) => self.encode_rio_literal(literal),
-        }
-    }
-
-    fn encode_rio_quad(
-        &self,
-        quad: rio::Quad<'_>,
-        bnodes_map: &mut HashMap<String, u128>,
-    ) -> Result<EncodedQuad, Self::Error> {
-        Ok(EncodedQuad {
-            subject: self.encode_rio_subject(quad.subject, bnodes_map)?,
-            predicate: self.encode_rio_named_node(quad.predicate)?,
-            object: self.encode_rio_term(quad.object, bnodes_map)?,
-            graph_name: match quad.graph_name {
-                Some(graph_name) => self.encode_rio_subject(graph_name, bnodes_map)?,
-                None => EncodedTerm::DefaultGraph,
-            },
-        })
-    }
-
-    fn encode_rio_triple_in_graph(
-        &self,
-        triple: rio::Triple<'_>,
-        graph_name: EncodedTerm,
-        bnodes_map: &mut HashMap<String, u128>,
-    ) -> Result<EncodedQuad, Self::Error> {
-        Ok(EncodedQuad {
-            subject: self.encode_rio_subject(triple.subject, bnodes_map)?,
-            predicate: self.encode_rio_named_node(triple.predicate)?,
-            object: self.encode_rio_term(triple.object, bnodes_map)?,
-            graph_name,
         })
     }
 
