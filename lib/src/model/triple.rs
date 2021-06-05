@@ -2,7 +2,6 @@ use crate::model::blank_node::BlankNode;
 use crate::model::literal::Literal;
 use crate::model::named_node::NamedNode;
 use crate::model::{BlankNodeRef, LiteralRef, NamedNodeRef};
-use rio_api::model as rio;
 use std::fmt;
 use std::sync::Arc;
 
@@ -150,16 +149,6 @@ impl<'a> From<NamedOrBlankNodeRef<'a>> for NamedOrBlankNode {
     #[inline]
     fn from(node: NamedOrBlankNodeRef<'a>) -> Self {
         node.into_owned()
-    }
-}
-
-impl<'a> From<NamedOrBlankNodeRef<'a>> for rio::NamedOrBlankNode<'a> {
-    #[inline]
-    fn from(node: NamedOrBlankNodeRef<'a>) -> Self {
-        match node {
-            NamedOrBlankNodeRef::NamedNode(node) => rio::NamedNode::from(node).into(),
-            NamedOrBlankNodeRef::BlankNode(node) => rio::BlankNode::from(node).into(),
-        }
     }
 }
 
@@ -371,18 +360,6 @@ impl<'a> From<&'a NamedOrBlankNode> for SubjectRef<'a> {
     #[inline]
     fn from(node: &'a NamedOrBlankNode) -> Self {
         node.as_ref().into()
-    }
-}
-
-#[allow(clippy::unimplemented, clippy::fallible_impl_from)]
-impl<'a> From<SubjectRef<'a>> for rio::NamedOrBlankNode<'a> {
-    #[inline]
-    fn from(node: SubjectRef<'a>) -> Self {
-        match node {
-            SubjectRef::NamedNode(node) => rio::NamedNode::from(node).into(),
-            SubjectRef::BlankNode(node) => rio::BlankNode::from(node).into(),
-            SubjectRef::Triple(_) => unimplemented!("Rio library does not support RDF* yet"),
-        }
     }
 }
 
@@ -679,19 +656,6 @@ impl<'a> From<TermRef<'a>> for Term {
     }
 }
 
-#[allow(clippy::unimplemented, clippy::fallible_impl_from)]
-impl<'a> From<TermRef<'a>> for rio::Term<'a> {
-    #[inline]
-    fn from(node: TermRef<'a>) -> Self {
-        match node {
-            TermRef::NamedNode(node) => rio::NamedNode::from(node).into(),
-            TermRef::BlankNode(node) => rio::BlankNode::from(node).into(),
-            TermRef::Literal(node) => rio::Literal::from(node).into(),
-            TermRef::Triple(_) => unimplemented!("Rio library does not support RDF* yet"),
-        }
-    }
-}
-
 /// An owned [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple)
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Triple {
@@ -815,17 +779,6 @@ impl<'a> From<TripleRef<'a>> for Triple {
     #[inline]
     fn from(triple: TripleRef<'a>) -> Self {
         triple.into_owned()
-    }
-}
-
-impl<'a> From<TripleRef<'a>> for rio::Triple<'a> {
-    #[inline]
-    fn from(triple: TripleRef<'a>) -> Self {
-        rio::Triple {
-            subject: triple.subject.into(),
-            predicate: triple.predicate.into(),
-            object: triple.object.into(),
-        }
     }
 }
 
@@ -987,17 +940,6 @@ impl<'a> From<GraphNameRef<'a>> for GraphName {
     }
 }
 
-impl<'a> From<GraphNameRef<'a>> for Option<rio::NamedOrBlankNode<'a>> {
-    #[inline]
-    fn from(name: GraphNameRef<'a>) -> Self {
-        match name {
-            GraphNameRef::NamedNode(node) => Some(rio::NamedNode::from(node).into()),
-            GraphNameRef::BlankNode(node) => Some(rio::BlankNode::from(node).into()),
-            GraphNameRef::DefaultGraph => None,
-        }
-    }
-}
-
 /// An owned [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Quad {
@@ -1133,17 +1075,5 @@ impl<'a> From<QuadRef<'a>> for Quad {
     #[inline]
     fn from(quad: QuadRef<'a>) -> Self {
         quad.into_owned()
-    }
-}
-
-impl<'a> From<QuadRef<'a>> for rio::Quad<'a> {
-    #[inline]
-    fn from(quad: QuadRef<'a>) -> Self {
-        rio::Quad {
-            subject: quad.subject.into(),
-            predicate: quad.predicate.into(),
-            object: quad.object.into(),
-            graph_name: quad.graph_name.into(),
-        }
     }
 }

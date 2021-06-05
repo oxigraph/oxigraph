@@ -547,7 +547,19 @@ impl<'a> LiteralRef<'a> {
 impl fmt::Display for LiteralRef<'_> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        rio::Literal::from(*self).fmt(f)
+        match self.0 {
+            LiteralRefContent::String(value) => rio::Literal::Simple { value },
+            LiteralRefContent::LanguageTaggedString { value, language } => {
+                rio::Literal::LanguageTaggedString { value, language }
+            }
+            LiteralRefContent::TypedLiteral { value, datatype } => rio::Literal::Typed {
+                value,
+                datatype: rio::NamedNode {
+                    iri: datatype.as_str(),
+                },
+            },
+        }
+        .fmt(f)
     }
 }
 
@@ -562,22 +574,6 @@ impl<'a> From<LiteralRef<'a>> for Literal {
     #[inline]
     fn from(node: LiteralRef<'a>) -> Self {
         node.into_owned()
-    }
-}
-
-impl<'a> From<LiteralRef<'a>> for rio::Literal<'a> {
-    #[inline]
-    fn from(literal: LiteralRef<'a>) -> Self {
-        match literal.0 {
-            LiteralRefContent::String(value) => rio::Literal::Simple { value },
-            LiteralRefContent::LanguageTaggedString { value, language } => {
-                rio::Literal::LanguageTaggedString { value, language }
-            }
-            LiteralRefContent::TypedLiteral { value, datatype } => rio::Literal::Typed {
-                value,
-                datatype: datatype.into(),
-            },
-        }
     }
 }
 

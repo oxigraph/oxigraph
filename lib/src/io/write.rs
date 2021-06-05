@@ -1,8 +1,10 @@
 //! Utilities to write RDF graphs and datasets
 
+use crate::error::invalid_input_error;
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use rio_api::formatter::{QuadsFormatter, TriplesFormatter};
+use rio_api::model as rio;
 use rio_turtle::{NQuadsFormatter, NTriplesFormatter, TriGFormatter, TurtleFormatter};
 use rio_xml::RdfXmlFormatter;
 use std::io;
@@ -90,10 +92,53 @@ impl<W: Write> TripleWriter<W> {
     /// Writes a triple
     pub fn write<'a>(&mut self, triple: impl Into<TripleRef<'a>>) -> io::Result<()> {
         let triple = triple.into();
+        let triple = rio::Triple {
+            subject: match triple.subject {
+                SubjectRef::NamedNode(node) => rio::NamedNode { iri: node.as_str() }.into(),
+                SubjectRef::BlankNode(node) => rio::BlankNode { id: node.as_str() }.into(),
+                SubjectRef::Triple(_) => {
+                    return Err(invalid_input_error(
+                        "Rio library does not support RDF-star yet",
+                    ))
+                }
+            },
+            predicate: rio::NamedNode {
+                iri: triple.predicate.as_str(),
+            },
+            object: match triple.object {
+                TermRef::NamedNode(node) => rio::NamedNode { iri: node.as_str() }.into(),
+                TermRef::BlankNode(node) => rio::BlankNode { id: node.as_str() }.into(),
+                TermRef::Literal(literal) => if literal.is_plain() {
+                    if let Some(language) = literal.language() {
+                        rio::Literal::LanguageTaggedString {
+                            value: literal.value(),
+                            language,
+                        }
+                    } else {
+                        rio::Literal::Simple {
+                            value: literal.value(),
+                        }
+                    }
+                } else {
+                    rio::Literal::Typed {
+                        value: literal.value(),
+                        datatype: rio::NamedNode {
+                            iri: literal.datatype().as_str(),
+                        },
+                    }
+                }
+                .into(),
+                TermRef::Triple(_) => {
+                    return Err(invalid_input_error(
+                        "Rio library does not support RDF-star yet",
+                    ))
+                }
+            },
+        };
         match &mut self.formatter {
-            TripleWriterKind::NTriples(formatter) => formatter.format(&triple.into())?,
-            TripleWriterKind::Turtle(formatter) => formatter.format(&triple.into())?,
-            TripleWriterKind::RdfXml(formatter) => formatter.format(&triple.into())?,
+            TripleWriterKind::NTriples(formatter) => formatter.format(&triple)?,
+            TripleWriterKind::Turtle(formatter) => formatter.format(&triple)?,
+            TripleWriterKind::RdfXml(formatter) => formatter.format(&triple)?,
         }
         Ok(())
     }
@@ -190,9 +235,57 @@ impl<W: Write> QuadWriter<W> {
     /// Writes a quad
     pub fn write<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> io::Result<()> {
         let quad = quad.into();
+        let quad = rio::Quad {
+            subject: match quad.subject {
+                SubjectRef::NamedNode(node) => rio::NamedNode { iri: node.as_str() }.into(),
+                SubjectRef::BlankNode(node) => rio::BlankNode { id: node.as_str() }.into(),
+                SubjectRef::Triple(_) => {
+                    return Err(invalid_input_error(
+                        "Rio library does not support RDF-star yet",
+                    ))
+                }
+            },
+            predicate: rio::NamedNode {
+                iri: quad.predicate.as_str(),
+            },
+            object: match quad.object {
+                TermRef::NamedNode(node) => rio::NamedNode { iri: node.as_str() }.into(),
+                TermRef::BlankNode(node) => rio::BlankNode { id: node.as_str() }.into(),
+                TermRef::Literal(literal) => if literal.is_plain() {
+                    if let Some(language) = literal.language() {
+                        rio::Literal::LanguageTaggedString {
+                            value: literal.value(),
+                            language,
+                        }
+                    } else {
+                        rio::Literal::Simple {
+                            value: literal.value(),
+                        }
+                    }
+                } else {
+                    rio::Literal::Typed {
+                        value: literal.value(),
+                        datatype: rio::NamedNode {
+                            iri: literal.datatype().as_str(),
+                        },
+                    }
+                }
+                .into(),
+                TermRef::Triple(_) => {
+                    return Err(invalid_input_error(
+                        "Rio library does not support RDF-star yet",
+                    ))
+                }
+            },
+            graph_name: match quad.graph_name {
+                GraphNameRef::NamedNode(node) => Some(rio::NamedNode { iri: node.as_str() }.into()),
+                GraphNameRef::BlankNode(node) => Some(rio::BlankNode { id: node.as_str() }.into()),
+                GraphNameRef::DefaultGraph => None,
+            },
+        };
         match &mut self.formatter {
-            QuadWriterKind::NQuads(formatter) => formatter.format(&quad.into())?,
-            QuadWriterKind::TriG(formatter) => formatter.format(&quad.into())?,
+            QuadWriterKind::NQuads(formatter) => formatter.format(&quad)?,
+            QuadWriterKind::TriG(formatter) => formatter.format(&quad)?,
         }
         Ok(())
     }

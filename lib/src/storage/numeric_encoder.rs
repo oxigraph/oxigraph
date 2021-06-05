@@ -722,7 +722,9 @@ pub(crate) trait StrContainer: StrLookup {
 /// Encodes a term and insert strings if needed
 pub(crate) trait WriteEncoder: StrContainer {
     fn encode_named_node(&self, named_node: NamedNodeRef<'_>) -> Result<EncodedTerm, Self::Error> {
-        self.encode_rio_named_node(named_node.into())
+        Ok(EncodedTerm::NamedNode {
+            iri_id: self.encode_str(named_node.as_str())?,
+        })
     }
 
     fn encode_blank_node(&self, blank_node: BlankNodeRef<'_>) -> Result<EncodedTerm, Self::Error> {
@@ -741,7 +743,105 @@ pub(crate) trait WriteEncoder: StrContainer {
     }
 
     fn encode_literal(&self, literal: LiteralRef<'_>) -> Result<EncodedTerm, Self::Error> {
-        self.encode_rio_literal(literal.into())
+        Ok(if literal.is_plain() {
+            if let Some(language) = literal.language() {
+                if let Ok(value) = SmallString::try_from(literal.value()) {
+                    if let Ok(language) = SmallString::try_from(language) {
+                        EncodedTerm::SmallSmallLangStringLiteral { value, language }
+                    } else {
+                        EncodedTerm::SmallBigLangStringLiteral {
+                            value,
+                            language_id: self.encode_str(language)?,
+                        }
+                    }
+                } else if let Ok(language) = SmallString::try_from(language) {
+                    EncodedTerm::BigSmallLangStringLiteral {
+                        value_id: self.encode_str(literal.value())?,
+                        language,
+                    }
+                } else {
+                    EncodedTerm::BigBigLangStringLiteral {
+                        value_id: self.encode_str(literal.value())?,
+                        language_id: self.encode_str(language)?,
+                    }
+                }
+            } else if let Ok(value) = SmallString::try_from(literal.value()) {
+                EncodedTerm::SmallStringLiteral(value)
+            } else {
+                EncodedTerm::BigStringLiteral {
+                    value_id: self.encode_str(literal.value())?,
+                }
+            }
+        } else {
+            match match literal.datatype().as_str() {
+                "http://www.w3.org/2001/XMLSchema#boolean" => parse_boolean_str(literal.value()),
+                "http://www.w3.org/2001/XMLSchema#string" => {
+                    Some(if let Ok(value) = SmallString::try_from(literal.value()) {
+                        EncodedTerm::SmallStringLiteral(value)
+                    } else {
+                        EncodedTerm::BigStringLiteral {
+                            value_id: self.encode_str(literal.value())?,
+                        }
+                    })
+                }
+                "http://www.w3.org/2001/XMLSchema#float" => parse_float_str(literal.value()),
+                "http://www.w3.org/2001/XMLSchema#double" => parse_double_str(literal.value()),
+                "http://www.w3.org/2001/XMLSchema#integer"
+                | "http://www.w3.org/2001/XMLSchema#byte"
+                | "http://www.w3.org/2001/XMLSchema#short"
+                | "http://www.w3.org/2001/XMLSchema#int"
+                | "http://www.w3.org/2001/XMLSchema#long"
+                | "http://www.w3.org/2001/XMLSchema#unsignedByte"
+                | "http://www.w3.org/2001/XMLSchema#unsignedShort"
+                | "http://www.w3.org/2001/XMLSchema#unsignedInt"
+                | "http://www.w3.org/2001/XMLSchema#unsignedLong"
+                | "http://www.w3.org/2001/XMLSchema#positiveInteger"
+                | "http://www.w3.org/2001/XMLSchema#negativeInteger"
+                | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
+                | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => {
+                    parse_integer_str(literal.value())
+                }
+                "http://www.w3.org/2001/XMLSchema#decimal" => parse_decimal_str(literal.value()),
+                "http://www.w3.org/2001/XMLSchema#dateTime"
+                | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => {
+                    parse_date_time_str(literal.value())
+                }
+                "http://www.w3.org/2001/XMLSchema#time" => parse_time_str(literal.value()),
+                "http://www.w3.org/2001/XMLSchema#date" => parse_date_str(literal.value()),
+                "http://www.w3.org/2001/XMLSchema#gYearMonth" => {
+                    parse_g_year_month_str(literal.value())
+                }
+                "http://www.w3.org/2001/XMLSchema#gYear" => parse_g_year_str(literal.value()),
+                "http://www.w3.org/2001/XMLSchema#gMonthDay" => {
+                    parse_g_month_day_str(literal.value())
+                }
+                "http://www.w3.org/2001/XMLSchema#gDay" => parse_g_day_str(literal.value()),
+                "http://www.w3.org/2001/XMLSchema#gMonth" => parse_g_month_str(literal.value()),
+                "http://www.w3.org/2001/XMLSchema#duration" => parse_duration_str(literal.value()),
+                "http://www.w3.org/2001/XMLSchema#yearMonthDuration" => {
+                    parse_year_month_duration_str(literal.value())
+                }
+                "http://www.w3.org/2001/XMLSchema#dayTimeDuration" => {
+                    parse_day_time_duration_str(literal.value())
+                }
+                _ => None,
+            } {
+                Some(v) => v,
+                None => {
+                    if let Ok(value) = SmallString::try_from(literal.value()) {
+                        EncodedTerm::SmallTypedLiteral {
+                            value,
+                            datatype_id: self.encode_str(literal.datatype().as_str())?,
+                        }
+                    } else {
+                        EncodedTerm::BigTypedLiteral {
+                            value_id: self.encode_str(literal.value())?,
+                            datatype_id: self.encode_str(literal.datatype().as_str())?,
+                        }
+                    }
+                }
+            }
+        })
     }
 
     fn encode_named_or_blank_node(
@@ -817,9 +917,7 @@ pub(crate) trait WriteEncoder: StrContainer {
         &self,
         named_node: rio::NamedNode<'_>,
     ) -> Result<EncodedTerm, Self::Error> {
-        Ok(EncodedTerm::NamedNode {
-            iri_id: self.encode_str(named_node.iri)?,
-        })
+        self.encode_named_node(NamedNodeRef::new_unchecked(named_node.iri))
     }
 
     fn encode_rio_blank_node(
@@ -836,103 +934,13 @@ pub(crate) trait WriteEncoder: StrContainer {
         })
     }
     fn encode_rio_literal(&self, literal: rio::Literal<'_>) -> Result<EncodedTerm, Self::Error> {
-        Ok(match literal {
-            rio::Literal::Simple { value } => {
-                if let Ok(value) = SmallString::try_from(value) {
-                    EncodedTerm::SmallStringLiteral(value)
-                } else {
-                    EncodedTerm::BigStringLiteral {
-                        value_id: self.encode_str(value)?,
-                    }
-                }
-            }
+        self.encode_literal(match literal {
+            rio::Literal::Simple { value } => LiteralRef::new_simple_literal(value),
             rio::Literal::LanguageTaggedString { value, language } => {
-                if let Ok(value) = SmallString::try_from(value) {
-                    if let Ok(language) = SmallString::try_from(language) {
-                        EncodedTerm::SmallSmallLangStringLiteral { value, language }
-                    } else {
-                        EncodedTerm::SmallBigLangStringLiteral {
-                            value,
-                            language_id: self.encode_str(language)?,
-                        }
-                    }
-                } else if let Ok(language) = SmallString::try_from(language) {
-                    EncodedTerm::BigSmallLangStringLiteral {
-                        value_id: self.encode_str(value)?,
-                        language,
-                    }
-                } else {
-                    EncodedTerm::BigBigLangStringLiteral {
-                        value_id: self.encode_str(value)?,
-                        language_id: self.encode_str(language)?,
-                    }
-                }
+                LiteralRef::new_language_tagged_literal_unchecked(value, language)
             }
             rio::Literal::Typed { value, datatype } => {
-                match match datatype.iri {
-                    "http://www.w3.org/2001/XMLSchema#boolean" => parse_boolean_str(value),
-                    "http://www.w3.org/2001/XMLSchema#string" => {
-                        Some(if let Ok(value) = SmallString::try_from(value) {
-                            EncodedTerm::SmallStringLiteral(value)
-                        } else {
-                            EncodedTerm::BigStringLiteral {
-                                value_id: self.encode_str(value)?,
-                            }
-                        })
-                    }
-                    "http://www.w3.org/2001/XMLSchema#float" => parse_float_str(value),
-                    "http://www.w3.org/2001/XMLSchema#double" => parse_double_str(value),
-                    "http://www.w3.org/2001/XMLSchema#integer"
-                    | "http://www.w3.org/2001/XMLSchema#byte"
-                    | "http://www.w3.org/2001/XMLSchema#short"
-                    | "http://www.w3.org/2001/XMLSchema#int"
-                    | "http://www.w3.org/2001/XMLSchema#long"
-                    | "http://www.w3.org/2001/XMLSchema#unsignedByte"
-                    | "http://www.w3.org/2001/XMLSchema#unsignedShort"
-                    | "http://www.w3.org/2001/XMLSchema#unsignedInt"
-                    | "http://www.w3.org/2001/XMLSchema#unsignedLong"
-                    | "http://www.w3.org/2001/XMLSchema#positiveInteger"
-                    | "http://www.w3.org/2001/XMLSchema#negativeInteger"
-                    | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
-                    | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => {
-                        parse_integer_str(value)
-                    }
-                    "http://www.w3.org/2001/XMLSchema#decimal" => parse_decimal_str(value),
-                    "http://www.w3.org/2001/XMLSchema#dateTime"
-                    | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => {
-                        parse_date_time_str(value)
-                    }
-                    "http://www.w3.org/2001/XMLSchema#time" => parse_time_str(value),
-                    "http://www.w3.org/2001/XMLSchema#date" => parse_date_str(value),
-                    "http://www.w3.org/2001/XMLSchema#gYearMonth" => parse_g_year_month_str(value),
-                    "http://www.w3.org/2001/XMLSchema#gYear" => parse_g_year_str(value),
-                    "http://www.w3.org/2001/XMLSchema#gMonthDay" => parse_g_month_day_str(value),
-                    "http://www.w3.org/2001/XMLSchema#gDay" => parse_g_day_str(value),
-                    "http://www.w3.org/2001/XMLSchema#gMonth" => parse_g_month_str(value),
-                    "http://www.w3.org/2001/XMLSchema#duration" => parse_duration_str(value),
-                    "http://www.w3.org/2001/XMLSchema#yearMonthDuration" => {
-                        parse_year_month_duration_str(value)
-                    }
-                    "http://www.w3.org/2001/XMLSchema#dayTimeDuration" => {
-                        parse_day_time_duration_str(value)
-                    }
-                    _ => None,
-                } {
-                    Some(v) => v,
-                    None => {
-                        if let Ok(value) = SmallString::try_from(value) {
-                            EncodedTerm::SmallTypedLiteral {
-                                value,
-                                datatype_id: self.encode_str(datatype.iri)?,
-                            }
-                        } else {
-                            EncodedTerm::BigTypedLiteral {
-                                value_id: self.encode_str(value)?,
-                                datatype_id: self.encode_str(datatype.iri)?,
-                            }
-                        }
-                    }
-                }
+                LiteralRef::new_typed_literal(value, NamedNodeRef::new_unchecked(datatype.iri))
             }
         })
     }

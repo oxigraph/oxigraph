@@ -203,7 +203,7 @@ impl<'a> BlankNodeRef<'a> {
 impl fmt::Display for BlankNodeRef<'_> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        rio::BlankNode::from(*self).fmt(f)
+        rio::BlankNode { id: self.as_str() }.fmt(f)
     }
 }
 
@@ -218,13 +218,6 @@ impl<'a> From<BlankNodeRef<'a>> for BlankNode {
     #[inline]
     fn from(node: BlankNodeRef<'a>) -> Self {
         node.into_owned()
-    }
-}
-
-impl<'a> From<BlankNodeRef<'a>> for rio::BlankNode<'a> {
-    #[inline]
-    fn from(node: BlankNodeRef<'a>) -> Self {
-        rio::BlankNode { id: node.as_str() }
     }
 }
 

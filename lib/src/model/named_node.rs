@@ -143,7 +143,7 @@ impl<'a> NamedNodeRef<'a> {
 impl fmt::Display for NamedNodeRef<'_> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        rio::NamedNode::from(*self).fmt(f)
+        rio::NamedNode { iri: self.as_str() }.fmt(f)
     }
 }
 
@@ -157,13 +157,6 @@ impl From<NamedNodeRef<'_>> for NamedNode {
 impl<'a> From<&'a NamedNode> for NamedNodeRef<'a> {
     fn from(node: &'a NamedNode) -> Self {
         node.as_ref()
-    }
-}
-
-impl<'a> From<NamedNodeRef<'a>> for rio::NamedNode<'a> {
-    #[inline]
-    fn from(node: NamedNodeRef<'a>) -> Self {
-        rio::NamedNode { iri: node.as_str() }
     }
 }
 
