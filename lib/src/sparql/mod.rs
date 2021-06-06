@@ -80,7 +80,7 @@ pub(crate) fn evaluate_query(
             ..
         } => {
             let (plan, variables) = PlanBuilder::build(&dataset, &pattern)?;
-            let construct = PlanBuilder::build_graph_template(&dataset, &template, variables)?;
+            let construct = PlanBuilder::build_graph_template(&dataset, &template, variables);
             SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),

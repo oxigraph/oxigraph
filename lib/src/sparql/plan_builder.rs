@@ -3,7 +3,7 @@ use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::model::Variable as OxVariable;
 use crate::sparql::plan::*;
-use crate::storage::numeric_encoder::{EncodedTerm, EncodedTriple, WriteEncoder};
+use crate::storage::numeric_encoder::{EncodedTerm, EncodedTriple};
 use rand::random;
 use spargebra::algebra::*;
 use spargebra::term::*;
@@ -32,7 +32,7 @@ impl<'a> PlanBuilder<'a> {
         dataset: &'a DatasetView,
         template: &[TriplePattern],
         mut variables: Vec<Variable>,
-    ) -> Result<Vec<TripleTemplate>, EvaluationError> {
+    ) -> Vec<TripleTemplate> {
         PlanBuilder { dataset }.build_for_graph_template(template, &mut variables)
     }
 
@@ -43,16 +43,16 @@ impl<'a> PlanBuilder<'a> {
         graph_name: &PatternValue,
     ) -> Result<PlanNode, EvaluationError> {
         Ok(match pattern {
-            GraphPattern::Bgp(p) => self.build_for_bgp(p, variables, graph_name)?,
+            GraphPattern::Bgp(p) => self.build_for_bgp(p, variables, graph_name),
             GraphPattern::Path {
                 subject,
                 path,
                 object,
             } => PlanNode::PathPatternJoin {
                 child: Rc::new(PlanNode::Init),
-                subject: self.pattern_value_from_term_or_variable(subject, variables)?,
-                path: Rc::new(self.build_for_path(path)?),
-                object: self.pattern_value_from_term_or_variable(object, variables)?,
+                subject: self.pattern_value_from_term_or_variable(subject, variables),
+                path: Rc::new(self.build_for_path(path)),
+                object: self.pattern_value_from_term_or_variable(object, variables),
                 graph_name: graph_name.clone(),
             },
             GraphPattern::Join { left, right } => {
@@ -66,9 +66,9 @@ impl<'a> PlanBuilder<'a> {
                     let left = self.build_for_graph_pattern(left, variables, graph_name)?;
                     PlanNode::PathPatternJoin {
                         child: Rc::new(left),
-                        subject: self.pattern_value_from_term_or_variable(subject, variables)?,
-                        path: Rc::new(self.build_for_path(path)?),
-                        object: self.pattern_value_from_term_or_variable(object, variables)?,
+                        subject: self.pattern_value_from_term_or_variable(subject, variables),
+                        path: Rc::new(self.build_for_path(path)),
+                        object: self.pattern_value_from_term_or_variable(object, variables),
                         graph_name: graph_name.clone(),
                     }
                 } else {
@@ -127,7 +127,7 @@ impl<'a> PlanBuilder<'a> {
             }
             GraphPattern::Graph { graph_name, inner } => {
                 let graph_name =
-                    self.pattern_value_from_named_node_or_variable(graph_name, variables)?;
+                    self.pattern_value_from_named_node_or_variable(graph_name, variables);
                 self.build_for_graph_pattern(inner, variables, &graph_name)?
             }
             GraphPattern::Extend { inner, var, expr } => PlanNode::Extend {
@@ -146,8 +146,7 @@ impl<'a> PlanBuilder<'a> {
             } => {
                 // Child building should be at the begging in order for `variables` to be filled
                 let child = self.build_for_graph_pattern(pattern, variables, graph_name)?;
-                let service_name =
-                    self.pattern_value_from_named_node_or_variable(name, variables)?;
+                let service_name = self.pattern_value_from_named_node_or_variable(name, variables);
                 PlanNode::Service {
                     service_name,
                     variables: Rc::new(
@@ -203,7 +202,7 @@ impl<'a> PlanBuilder<'a> {
                 variables: table_variables,
                 rows,
             } => PlanNode::StaticBindings {
-                tuples: self.encode_bindings(table_variables, rows, variables)?,
+                tuples: self.encode_bindings(table_variables, rows, variables),
             },
             GraphPattern::OrderBy { inner, condition } => {
                 let condition: Result<Vec<_>, EvaluationError> = condition
@@ -277,57 +276,50 @@ impl<'a> PlanBuilder<'a> {
         p: &[TriplePattern],
         variables: &mut Vec<Variable>,
         graph_name: &PatternValue,
-    ) -> Result<PlanNode, EvaluationError> {
+    ) -> PlanNode {
         let mut plan = PlanNode::Init;
         for pattern in sort_bgp(p) {
             plan = PlanNode::QuadPatternJoin {
                 child: Rc::new(plan),
-                subject: self.pattern_value_from_term_or_variable(&pattern.subject, variables)?,
+                subject: self.pattern_value_from_term_or_variable(&pattern.subject, variables),
                 predicate: self
-                    .pattern_value_from_named_node_or_variable(&pattern.predicate, variables)?,
-                object: self.pattern_value_from_term_or_variable(&pattern.object, variables)?,
+                    .pattern_value_from_named_node_or_variable(&pattern.predicate, variables),
+                object: self.pattern_value_from_term_or_variable(&pattern.object, variables),
                 graph_name: graph_name.clone(),
             }
         }
-        Ok(plan)
+        plan
     }
 
-    fn build_for_path(
-        &mut self,
-        path: &PropertyPathExpression,
-    ) -> Result<PlanPropertyPath, EvaluationError> {
-        Ok(match path {
+    fn build_for_path(&mut self, path: &PropertyPathExpression) -> PlanPropertyPath {
+        match path {
             PropertyPathExpression::NamedNode(p) => {
-                PlanPropertyPath::Path(self.build_named_node(p)?)
+                PlanPropertyPath::Path(self.build_named_node(p))
             }
             PropertyPathExpression::Reverse(p) => {
-                PlanPropertyPath::Reverse(Rc::new(self.build_for_path(p)?))
+                PlanPropertyPath::Reverse(Rc::new(self.build_for_path(p)))
             }
             PropertyPathExpression::Alternative(a, b) => PlanPropertyPath::Alternative(
-                Rc::new(self.build_for_path(a)?),
-                Rc::new(self.build_for_path(b)?),
+                Rc::new(self.build_for_path(a)),
+                Rc::new(self.build_for_path(b)),
             ),
             PropertyPathExpression::Sequence(a, b) => PlanPropertyPath::Sequence(
-                Rc::new(self.build_for_path(a)?),
-                Rc::new(self.build_for_path(b)?),
+                Rc::new(self.build_for_path(a)),
+                Rc::new(self.build_for_path(b)),
             ),
             PropertyPathExpression::ZeroOrMore(p) => {
-                PlanPropertyPath::ZeroOrMore(Rc::new(self.build_for_path(p)?))
+                PlanPropertyPath::ZeroOrMore(Rc::new(self.build_for_path(p)))
             }
             PropertyPathExpression::OneOrMore(p) => {
-                PlanPropertyPath::OneOrMore(Rc::new(self.build_for_path(p)?))
+                PlanPropertyPath::OneOrMore(Rc::new(self.build_for_path(p)))
             }
             PropertyPathExpression::ZeroOrOne(p) => {
-                PlanPropertyPath::ZeroOrOne(Rc::new(self.build_for_path(p)?))
+                PlanPropertyPath::ZeroOrOne(Rc::new(self.build_for_path(p)))
             }
-            PropertyPathExpression::NegatedPropertySet(p) => {
-                PlanPropertyPath::NegatedPropertySet(Rc::new(
-                    p.iter()
-                        .map(|p| self.build_named_node(p))
-                        .collect::<Result<Vec<_>, _>>()?,
-                ))
-            }
-        })
+            PropertyPathExpression::NegatedPropertySet(p) => PlanPropertyPath::NegatedPropertySet(
+                Rc::new(p.iter().map(|p| self.build_named_node(p)).collect()),
+            ),
+        }
     }
 
     fn build_for_expression(
@@ -337,8 +329,8 @@ impl<'a> PlanBuilder<'a> {
         graph_name: &PatternValue,
     ) -> Result<PlanExpression, EvaluationError> {
         Ok(match expression {
-            Expression::NamedNode(node) => PlanExpression::Constant(self.build_named_node(node)?),
-            Expression::Literal(l) => PlanExpression::Constant(self.build_literal(l)?),
+            Expression::NamedNode(node) => PlanExpression::Constant(self.build_named_node(node)),
+            Expression::Literal(l) => PlanExpression::Constant(self.build_literal(l)),
             Expression::Variable(v) => PlanExpression::Variable(variable_key(variables, v)),
             Expression::Or(a, b) => PlanExpression::Or(
                 Box::new(self.build_for_expression(a, variables, graph_name)?),
@@ -791,12 +783,12 @@ impl<'a> PlanBuilder<'a> {
         &mut self,
         term_or_variable: &TermPattern,
         variables: &mut Vec<Variable>,
-    ) -> Result<PatternValue, EvaluationError> {
-        Ok(match term_or_variable {
+    ) -> PatternValue {
+        match term_or_variable {
             TermPattern::Variable(variable) => {
                 PatternValue::Variable(variable_key(variables, variable))
             }
-            TermPattern::NamedNode(node) => PatternValue::Constant(self.build_named_node(node)?),
+            TermPattern::NamedNode(node) => PatternValue::Constant(self.build_named_node(node)),
             TermPattern::BlankNode(bnode) => {
                 PatternValue::Variable(variable_key(
                     variables,
@@ -806,12 +798,12 @@ impl<'a> PlanBuilder<'a> {
                 ))
                 //TODO: very bad hack to convert bnode to variable
             }
-            TermPattern::Literal(literal) => PatternValue::Constant(self.build_literal(literal)?),
+            TermPattern::Literal(literal) => PatternValue::Constant(self.build_literal(literal)),
             TermPattern::Triple(triple) => {
                 match (
-                    self.pattern_value_from_term_or_variable(&triple.subject, variables)?,
-                    self.pattern_value_from_named_node_or_variable(&triple.predicate, variables)?,
-                    self.pattern_value_from_term_or_variable(&triple.object, variables)?,
+                    self.pattern_value_from_term_or_variable(&triple.subject, variables),
+                    self.pattern_value_from_named_node_or_variable(&triple.predicate, variables),
+                    self.pattern_value_from_term_or_variable(&triple.object, variables),
                 ) {
                     (
                         PatternValue::Constant(subject),
@@ -834,22 +826,22 @@ impl<'a> PlanBuilder<'a> {
                     }
                 }
             }
-        })
+        }
     }
 
     fn pattern_value_from_named_node_or_variable(
         &mut self,
         named_node_or_variable: &NamedNodePattern,
         variables: &mut Vec<Variable>,
-    ) -> Result<PatternValue, EvaluationError> {
-        Ok(match named_node_or_variable {
+    ) -> PatternValue {
+        match named_node_or_variable {
             NamedNodePattern::NamedNode(named_node) => {
-                PatternValue::Constant(self.build_named_node(named_node)?)
+                PatternValue::Constant(self.build_named_node(named_node))
             }
             NamedNodePattern::Variable(variable) => {
                 PatternValue::Variable(variable_key(variables, variable))
             }
-        })
+        }
     }
 
     fn encode_bindings(
@@ -857,7 +849,7 @@ impl<'a> PlanBuilder<'a> {
         table_variables: &[Variable],
         rows: &[Vec<Option<GroundTerm>>],
         variables: &mut Vec<Variable>,
-    ) -> Result<Vec<EncodedTuple>, EvaluationError> {
+    ) -> Vec<EncodedTuple> {
         let bindings_variables_keys = table_variables
             .iter()
             .map(|v| variable_key(variables, v))
@@ -873,11 +865,11 @@ impl<'a> PlanBuilder<'a> {
                                 GroundTerm::NamedNode(node) => self.build_named_node(node),
                                 GroundTerm::Literal(literal) => self.build_literal(literal),
                                 GroundTerm::Triple(triple) => self.build_triple(triple),
-                            }?,
+                            },
                         );
                     }
                 }
-                Ok(result)
+                result
             })
             .collect()
     }
@@ -943,25 +935,23 @@ impl<'a> PlanBuilder<'a> {
         &mut self,
         template: &[TriplePattern],
         variables: &mut Vec<Variable>,
-    ) -> Result<Vec<TripleTemplate>, EvaluationError> {
+    ) -> Vec<TripleTemplate> {
         let mut bnodes = Vec::default();
         template
             .iter()
-            .map(|triple| {
-                Ok(TripleTemplate {
-                    subject: self.template_value_from_term_or_variable(
-                        &triple.subject,
-                        variables,
-                        &mut bnodes,
-                    )?,
-                    predicate: self
-                        .template_value_from_named_node_or_variable(&triple.predicate, variables)?,
-                    object: self.template_value_from_term_or_variable(
-                        &triple.object,
-                        variables,
-                        &mut bnodes,
-                    )?,
-                })
+            .map(|triple| TripleTemplate {
+                subject: self.template_value_from_term_or_variable(
+                    &triple.subject,
+                    variables,
+                    &mut bnodes,
+                ),
+                predicate: self
+                    .template_value_from_named_node_or_variable(&triple.predicate, variables),
+                object: self.template_value_from_term_or_variable(
+                    &triple.object,
+                    variables,
+                    &mut bnodes,
+                ),
             })
             .collect()
     }
@@ -971,24 +961,24 @@ impl<'a> PlanBuilder<'a> {
         term_or_variable: &TermPattern,
         variables: &mut Vec<Variable>,
         bnodes: &mut Vec<BlankNode>,
-    ) -> Result<TripleTemplateValue, EvaluationError> {
-        Ok(match term_or_variable {
+    ) -> TripleTemplateValue {
+        match term_or_variable {
             TermPattern::Variable(variable) => {
                 TripleTemplateValue::Variable(variable_key(variables, variable))
             }
             TermPattern::NamedNode(node) => {
-                TripleTemplateValue::Constant(self.build_named_node(node)?)
+                TripleTemplateValue::Constant(self.build_named_node(node))
             }
             TermPattern::BlankNode(bnode) => {
                 TripleTemplateValue::BlankNode(bnode_key(bnodes, bnode))
             }
             TermPattern::Literal(literal) => {
-                TripleTemplateValue::Constant(self.build_literal(literal)?)
+                TripleTemplateValue::Constant(self.build_literal(literal))
             }
             TermPattern::Triple(triple) => match (
-                self.template_value_from_term_or_variable(&triple.subject, variables, bnodes)?,
-                self.template_value_from_named_node_or_variable(&triple.predicate, variables)?,
-                self.template_value_from_term_or_variable(&triple.object, variables, bnodes)?,
+                self.template_value_from_term_or_variable(&triple.subject, variables, bnodes),
+                self.template_value_from_named_node_or_variable(&triple.predicate, variables),
+                self.template_value_from_term_or_variable(&triple.object, variables, bnodes),
             ) {
                 (
                     TripleTemplateValue::Constant(subject),
@@ -1010,22 +1000,22 @@ impl<'a> PlanBuilder<'a> {
                     }))
                 }
             },
-        })
+        }
     }
 
     fn template_value_from_named_node_or_variable(
         &mut self,
         named_node_or_variable: &NamedNodePattern,
         variables: &mut Vec<Variable>,
-    ) -> Result<TripleTemplateValue, EvaluationError> {
-        Ok(match named_node_or_variable {
+    ) -> TripleTemplateValue {
+        match named_node_or_variable {
             NamedNodePattern::Variable(variable) => {
                 TripleTemplateValue::Variable(variable_key(variables, variable))
             }
             NamedNodePattern::NamedNode(term) => {
-                TripleTemplateValue::Constant(self.build_named_node(term)?)
+                TripleTemplateValue::Constant(self.build_named_node(term))
             }
-        })
+        }
     }
 
     fn convert_pattern_value_id(
@@ -1132,13 +1122,13 @@ impl<'a> PlanBuilder<'a> {
         }
     }
 
-    fn build_named_node(&mut self, node: &NamedNode) -> Result<EncodedTerm, EvaluationError> {
+    fn build_named_node(&mut self, node: &NamedNode) -> EncodedTerm {
         self.dataset
-            .encode_named_node(NamedNodeRef::new_unchecked(node.iri.as_str()))
+            .encode_term(NamedNodeRef::new_unchecked(node.iri.as_str()))
     }
 
-    fn build_literal(&mut self, literal: &Literal) -> Result<EncodedTerm, EvaluationError> {
-        self.dataset.encode_literal(match literal {
+    fn build_literal(&mut self, literal: &Literal) -> EncodedTerm {
+        self.dataset.encode_term(match literal {
             Literal::Simple { value } => LiteralRef::new_simple_literal(value),
             Literal::LanguageTaggedString { value, language } => {
                 LiteralRef::new_language_tagged_literal_unchecked(value, language.as_str())
@@ -1150,20 +1140,20 @@ impl<'a> PlanBuilder<'a> {
         })
     }
 
-    fn build_triple(&mut self, triple: &GroundTriple) -> Result<EncodedTerm, EvaluationError> {
-        Ok(EncodedTriple::new(
+    fn build_triple(&mut self, triple: &GroundTriple) -> EncodedTerm {
+        EncodedTriple::new(
             match &triple.subject {
-                GroundSubject::NamedNode(node) => self.build_named_node(node)?,
-                GroundSubject::Triple(triple) => self.build_triple(triple)?,
+                GroundSubject::NamedNode(node) => self.build_named_node(node),
+                GroundSubject::Triple(triple) => self.build_triple(triple),
             },
-            self.build_named_node(&triple.predicate)?,
+            self.build_named_node(&triple.predicate),
             match &triple.object {
-                GroundTerm::NamedNode(node) => self.build_named_node(node)?,
-                GroundTerm::Literal(literal) => self.build_literal(literal)?,
-                GroundTerm::Triple(triple) => self.build_triple(triple)?,
+                GroundTerm::NamedNode(node) => self.build_named_node(node),
+                GroundTerm::Literal(literal) => self.build_literal(literal),
+                GroundTerm::Triple(triple) => self.build_triple(triple),
             },
         )
-        .into())
+        .into()
     }
 }
 

@@ -998,7 +998,7 @@ impl SimpleEvaluator {
                 | EncodedTerm::BigBigLangStringLiteral { language_id, .. } => {
                     Some(self.build_string_literal_from_id(language_id.into()))
                 }
-                e if e.is_literal() => self.build_string_literal(""),
+                e if e.is_literal() => Some(self.build_string_literal("")),
                 _ => None,
             },
             PlanExpression::LangMatches(language_tag, language_range) => {
@@ -1033,14 +1033,16 @@ impl SimpleEvaluator {
                     Some(e)
                 } else {
                     let iri = self.to_simple_string(&e)?;
-                    self.build_named_node(
-                        &if let Some(base_iri) = &self.base_iri {
-                            base_iri.resolve(&iri)
-                        } else {
-                            Iri::parse(iri)
-                        }
-                        .ok()?
-                        .into_inner(),
+                    Some(
+                        self.build_named_node(
+                            &if let Some(base_iri) = &self.base_iri {
+                                base_iri.resolve(&iri)
+                            } else {
+                                Iri::parse(iri)
+                            }
+                            .ok()?
+                            .into_inner(),
+                        ),
                     )
                 }
             }
@@ -1049,12 +1051,7 @@ impl SimpleEvaluator {
                     let bnode =
                         BlankNode::new(self.to_simple_string(&self.eval_expression(id, tuple)?)?)
                             .ok()?;
-                    Some(
-                        self.dataset
-                            .as_ref()
-                            .encode_blank_node(bnode.as_ref())
-                            .ok()?,
-                    )
+                    Some(self.dataset.encode_term(bnode.as_ref()))
                 }
                 None => Some(EncodedTerm::NumericalBlankNode {
                     id: random::<u128>(),
@@ -1104,7 +1101,7 @@ impl SimpleEvaluator {
                     }
                     result += &value
                 }
-                self.build_plain_literal(&result, language.and_then(|v| v))
+                Some(self.build_plain_literal(&result, language.and_then(|v| v)))
             }
             PlanExpression::SubStr(source, starting_loc, length) => {
                 let (source, language) =
@@ -1146,7 +1143,7 @@ impl SimpleEvaluator {
                 } else {
                     ""
                 };
-                self.build_plain_literal(result, language)
+                Some(self.build_plain_literal(result, language))
             }
             PlanExpression::StrLen(arg) => Some(
                 (self
@@ -1168,17 +1165,22 @@ impl SimpleEvaluator {
                     self.to_string_and_language(&self.eval_expression(arg, tuple)?)?;
                 let replacement =
                     self.to_simple_string(&self.eval_expression(replacement, tuple)?)?;
-                self.build_plain_literal(&regex.replace_all(&text, replacement.as_str()), language)
+                Some(
+                    self.build_plain_literal(
+                        &regex.replace_all(&text, replacement.as_str()),
+                        language,
+                    ),
+                )
             }
             PlanExpression::UCase(e) => {
                 let (value, language) =
                     self.to_string_and_language(&self.eval_expression(e, tuple)?)?;
-                self.build_plain_literal(&value.to_uppercase(), language)
+                Some(self.build_plain_literal(&value.to_uppercase(), language))
             }
             PlanExpression::LCase(e) => {
                 let (value, language) =
                     self.to_string_and_language(&self.eval_expression(e, tuple)?)?;
-                self.build_plain_literal(&value.to_lowercase(), language)
+                Some(self.build_plain_literal(&value.to_lowercase(), language))
             }
             PlanExpression::StrStarts(arg1, arg2) => {
                 let (arg1, arg2, _) = self.to_argument_compatible_strings(
@@ -1212,7 +1214,7 @@ impl SimpleEvaluator {
                         }
                     }
                 }
-                self.build_string_literal(str::from_utf8(&result).ok()?)
+                Some(self.build_string_literal(str::from_utf8(&result).ok()?))
             }
             PlanExpression::StrEnds(arg1, arg2) => {
                 let (arg1, arg2, _) = self.to_argument_compatible_strings(
@@ -1233,22 +1235,22 @@ impl SimpleEvaluator {
                     &self.eval_expression(arg1, tuple)?,
                     &self.eval_expression(arg2, tuple)?,
                 )?;
-                if let Some(position) = (&arg1).find(arg2.as_str()) {
+                Some(if let Some(position) = (&arg1).find(arg2.as_str()) {
                     self.build_plain_literal(&arg1[..position], language)
                 } else {
                     self.build_string_literal("")
-                }
+                })
             }
             PlanExpression::StrAfter(arg1, arg2) => {
                 let (arg1, arg2, language) = self.to_argument_compatible_strings(
                     &self.eval_expression(arg1, tuple)?,
                     &self.eval_expression(arg2, tuple)?,
                 )?;
-                if let Some(position) = (&arg1).find(arg2.as_str()) {
+                Some(if let Some(position) = (&arg1).find(arg2.as_str()) {
                     self.build_plain_literal(&arg1[position + arg2.len()..], language)
                 } else {
                     self.build_string_literal("")
-                }
+                })
             }
             PlanExpression::Year(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.year().into()),
@@ -1313,24 +1315,24 @@ impl SimpleEvaluator {
                     EncodedTerm::GMonthLiteral(month) => month.timezone_offset(),
                     _ => return None,
                 };
-                match timezone_offset {
+                Some(match timezone_offset {
                     Some(timezone_offset) => {
                         self.build_string_literal(&timezone_offset.to_string())
                     }
                     None => self.build_string_literal(""),
-                }
+                })
             }
             PlanExpression::Now => Some(self.now.into()),
             PlanExpression::Uuid => {
                 let mut buffer = String::with_capacity(44);
                 buffer.push_str("urn:uuid:");
                 generate_uuid(&mut buffer);
-                self.build_named_node(&buffer)
+                Some(self.build_named_node(&buffer))
             }
             PlanExpression::StrUuid => {
                 let mut buffer = String::with_capacity(36);
                 generate_uuid(&mut buffer);
-                self.build_string_literal(&buffer)
+                Some(self.build_string_literal(&buffer))
             }
             PlanExpression::Md5(arg) => self.hash::<Md5>(arg, tuple),
             PlanExpression::Sha1(arg) => self.hash::<Sha1>(arg, tuple),
@@ -1367,13 +1369,10 @@ impl SimpleEvaluator {
                 } else {
                     None
                 }?;
-                let encoder = self.dataset.as_ref();
-                encoder
-                    .encode_literal(LiteralRef::new_typed_literal(
-                        &value,
-                        NamedNodeRef::new_unchecked(&datatype),
-                    ))
-                    .ok()
+                Some(self.dataset.encode_term(LiteralRef::new_typed_literal(
+                    &value,
+                    NamedNodeRef::new_unchecked(&datatype),
+                )))
             }
             PlanExpression::SameTerm(a, b) => {
                 Some((self.eval_expression(a, tuple)? == self.eval_expression(b, tuple)?).into())
@@ -1608,25 +1607,27 @@ impl SimpleEvaluator {
             | EncodedTerm::BigBigLangStringLiteral { value_id, .. }
             | EncodedTerm::BigTypedLiteral { value_id, .. } => Some((*value_id).into()),
             EncodedTerm::BooleanLiteral(value) => {
-                self.build_string_id(if *value { "true" } else { "false" })
+                Some(self.build_string_id(if *value { "true" } else { "false" }))
             }
-            EncodedTerm::FloatLiteral(value) => self.build_string_id(&value.to_string()),
-            EncodedTerm::DoubleLiteral(value) => self.build_string_id(&value.to_string()),
-            EncodedTerm::IntegerLiteral(value) => self.build_string_id(&value.to_string()),
-            EncodedTerm::DecimalLiteral(value) => self.build_string_id(&value.to_string()),
-            EncodedTerm::DateTimeLiteral(value) => self.build_string_id(&value.to_string()),
-            EncodedTerm::TimeLiteral(value) => self.build_string_id(&value.to_string()),
-            EncodedTerm::DateLiteral(value) => self.build_string_id(&value.to_string()),
-            EncodedTerm::GYearMonthLiteral(value) => self.build_string_id(&value.to_string()),
-            EncodedTerm::GYearLiteral(value) => self.build_string_id(&value.to_string()),
-            EncodedTerm::GMonthDayLiteral(value) => self.build_string_id(&value.to_string()),
-            EncodedTerm::GDayLiteral(value) => self.build_string_id(&value.to_string()),
-            EncodedTerm::GMonthLiteral(value) => self.build_string_id(&value.to_string()),
-            EncodedTerm::DurationLiteral(value) => self.build_string_id(&value.to_string()),
+            EncodedTerm::FloatLiteral(value) => Some(self.build_string_id(&value.to_string())),
+            EncodedTerm::DoubleLiteral(value) => Some(self.build_string_id(&value.to_string())),
+            EncodedTerm::IntegerLiteral(value) => Some(self.build_string_id(&value.to_string())),
+            EncodedTerm::DecimalLiteral(value) => Some(self.build_string_id(&value.to_string())),
+            EncodedTerm::DateTimeLiteral(value) => Some(self.build_string_id(&value.to_string())),
+            EncodedTerm::TimeLiteral(value) => Some(self.build_string_id(&value.to_string())),
+            EncodedTerm::DateLiteral(value) => Some(self.build_string_id(&value.to_string())),
+            EncodedTerm::GYearMonthLiteral(value) => Some(self.build_string_id(&value.to_string())),
+            EncodedTerm::GYearLiteral(value) => Some(self.build_string_id(&value.to_string())),
+            EncodedTerm::GMonthDayLiteral(value) => Some(self.build_string_id(&value.to_string())),
+            EncodedTerm::GDayLiteral(value) => Some(self.build_string_id(&value.to_string())),
+            EncodedTerm::GMonthLiteral(value) => Some(self.build_string_id(&value.to_string())),
+            EncodedTerm::DurationLiteral(value) => Some(self.build_string_id(&value.to_string())),
             EncodedTerm::YearMonthDurationLiteral(value) => {
-                self.build_string_id(&value.to_string())
+                Some(self.build_string_id(&value.to_string()))
             }
-            EncodedTerm::DayTimeDurationLiteral(value) => self.build_string_id(&value.to_string()),
+            EncodedTerm::DayTimeDurationLiteral(value) => {
+                Some(self.build_string_id(&value.to_string()))
+            }
         }
     }
 
@@ -1690,14 +1691,16 @@ impl SimpleEvaluator {
         }
     }
 
-    fn build_named_node(&self, iri: &str) -> Option<EncodedTerm> {
-        Some(EncodedTerm::NamedNode {
-            iri_id: self.dataset.as_ref().encode_str(iri).ok()?,
-        })
+    fn build_named_node(&self, iri: &str) -> EncodedTerm {
+        self.dataset.encode_term(NamedNodeRef::new_unchecked(iri))
     }
 
-    fn build_string_literal(&self, value: &str) -> Option<EncodedTerm> {
-        Some(self.build_string_literal_from_id(self.build_string_id(value)?))
+    fn encode_named_node(&self, node: NamedNodeRef<'_>) -> EncodedTerm {
+        self.dataset.encode_term(node)
+    }
+
+    fn build_string_literal(&self, value: &str) -> EncodedTerm {
+        self.build_string_literal_from_id(self.build_string_id(value))
     }
 
     fn build_string_literal_from_id(&self, id: SmallStringOrId) -> EncodedTerm {
@@ -1707,12 +1710,8 @@ impl SimpleEvaluator {
         }
     }
 
-    fn build_lang_string_literal(
-        &self,
-        value: &str,
-        language_id: SmallStringOrId,
-    ) -> Option<EncodedTerm> {
-        Some(self.build_lang_string_literal_from_id(self.build_string_id(value)?, language_id))
+    fn build_lang_string_literal(&self, value: &str, language_id: SmallStringOrId) -> EncodedTerm {
+        self.build_lang_string_literal_from_id(self.build_string_id(value), language_id)
     }
 
     fn build_lang_string_literal_from_id(
@@ -1739,11 +1738,7 @@ impl SimpleEvaluator {
         }
     }
 
-    fn build_plain_literal(
-        &self,
-        value: &str,
-        language: Option<SmallStringOrId>,
-    ) -> Option<EncodedTerm> {
+    fn build_plain_literal(&self, value: &str, language: Option<SmallStringOrId>) -> EncodedTerm {
         if let Some(language_id) = language {
             self.build_lang_string_literal(value, language_id)
         } else {
@@ -1751,18 +1746,20 @@ impl SimpleEvaluator {
         }
     }
 
-    fn build_string_id(&self, value: &str) -> Option<SmallStringOrId> {
-        Some(if let Ok(value) = SmallString::try_from(value) {
+    fn build_string_id(&self, value: &str) -> SmallStringOrId {
+        if let Ok(value) = SmallString::try_from(value) {
             value.into()
         } else {
-            self.dataset.as_ref().encode_str(value).ok()?.into()
-        })
+            let id = StrHash::new(value);
+            self.dataset.insert_str(&id, value);
+            SmallStringOrId::Big(id)
+        }
     }
 
     fn build_language_id(&self, value: &EncodedTerm) -> Option<SmallStringOrId> {
         let mut language = self.to_simple_string(value)?;
         language.make_ascii_lowercase();
-        self.build_string_id(LanguageTag::parse(language).ok()?.as_str())
+        Some(self.build_string_id(LanguageTag::parse(language).ok()?.as_str()))
     }
 
     fn to_argument_compatible_strings(
@@ -1849,13 +1846,12 @@ impl SimpleEvaluator {
     ) -> EncodedTuplesIterator {
         let eval = self.clone();
         Box::new(iter.map(move |solution| {
-            let encoder = eval.dataset.as_ref();
             let mut encoded_terms = EncodedTuple::with_capacity(variables.len());
             for (variable, term) in solution?.iter() {
                 put_variable_value(
                     variable,
                     &variables,
-                    encoder.encode_term(term.as_ref())?,
+                    eval.dataset.encode_term(term.as_ref()),
                     &mut encoded_terms,
                 )
             }
@@ -2203,7 +2199,7 @@ impl SimpleEvaluator {
     fn hash<H: Digest>(&self, arg: &PlanExpression, tuple: &EncodedTuple) -> Option<EncodedTerm> {
         let input = self.to_simple_string(&self.eval_expression(arg, tuple)?)?;
         let hash = hex::encode(H::new().chain(input.as_str()).finalize());
-        self.build_string_literal(&hash)
+        Some(self.build_string_literal(&hash))
     }
 
     fn datatype(&self, value: &EncodedTerm) -> Option<EncodedTerm> {
@@ -2216,37 +2212,37 @@ impl SimpleEvaluator {
             | EncodedTerm::DefaultGraph
             | EncodedTerm::Triple(_) => None,
             EncodedTerm::SmallStringLiteral(_) | EncodedTerm::BigStringLiteral { .. } => {
-                self.build_named_node(xsd::STRING.as_str())
+                Some(self.encode_named_node(xsd::STRING))
             }
             EncodedTerm::SmallSmallLangStringLiteral { .. }
             | EncodedTerm::SmallBigLangStringLiteral { .. }
             | EncodedTerm::BigSmallLangStringLiteral { .. }
             | EncodedTerm::BigBigLangStringLiteral { .. } => {
-                self.build_named_node(rdf::LANG_STRING.as_str())
+                Some(self.encode_named_node(rdf::LANG_STRING))
             }
             EncodedTerm::SmallTypedLiteral { datatype_id, .. }
             | EncodedTerm::BigTypedLiteral { datatype_id, .. } => Some(EncodedTerm::NamedNode {
                 iri_id: *datatype_id,
             }),
-            EncodedTerm::BooleanLiteral(..) => self.build_named_node(xsd::BOOLEAN.as_str()),
-            EncodedTerm::FloatLiteral(..) => self.build_named_node(xsd::FLOAT.as_str()),
-            EncodedTerm::DoubleLiteral(..) => self.build_named_node(xsd::DOUBLE.as_str()),
-            EncodedTerm::IntegerLiteral(..) => self.build_named_node(xsd::INTEGER.as_str()),
-            EncodedTerm::DecimalLiteral(..) => self.build_named_node(xsd::DECIMAL.as_str()),
-            EncodedTerm::DateTimeLiteral(..) => self.build_named_node(xsd::DATE_TIME.as_str()),
-            EncodedTerm::TimeLiteral(..) => self.build_named_node(xsd::TIME.as_str()),
-            EncodedTerm::DateLiteral(..) => self.build_named_node(xsd::DATE.as_str()),
-            EncodedTerm::GYearMonthLiteral(..) => self.build_named_node(xsd::G_YEAR_MONTH.as_str()),
-            EncodedTerm::GYearLiteral(..) => self.build_named_node(xsd::G_YEAR.as_str()),
-            EncodedTerm::GMonthDayLiteral(..) => self.build_named_node(xsd::G_MONTH_DAY.as_str()),
-            EncodedTerm::GDayLiteral(..) => self.build_named_node(xsd::G_DAY.as_str()),
-            EncodedTerm::GMonthLiteral(..) => self.build_named_node(xsd::G_MONTH.as_str()),
-            EncodedTerm::DurationLiteral(..) => self.build_named_node(xsd::DURATION.as_str()),
+            EncodedTerm::BooleanLiteral(..) => Some(self.encode_named_node(xsd::BOOLEAN)),
+            EncodedTerm::FloatLiteral(..) => Some(self.encode_named_node(xsd::FLOAT)),
+            EncodedTerm::DoubleLiteral(..) => Some(self.encode_named_node(xsd::DOUBLE)),
+            EncodedTerm::IntegerLiteral(..) => Some(self.encode_named_node(xsd::INTEGER)),
+            EncodedTerm::DecimalLiteral(..) => Some(self.encode_named_node(xsd::DECIMAL)),
+            EncodedTerm::DateTimeLiteral(..) => Some(self.encode_named_node(xsd::DATE_TIME)),
+            EncodedTerm::TimeLiteral(..) => Some(self.encode_named_node(xsd::TIME)),
+            EncodedTerm::DateLiteral(..) => Some(self.encode_named_node(xsd::DATE)),
+            EncodedTerm::GYearMonthLiteral(..) => Some(self.encode_named_node(xsd::G_YEAR_MONTH)),
+            EncodedTerm::GYearLiteral(..) => Some(self.encode_named_node(xsd::G_YEAR)),
+            EncodedTerm::GMonthDayLiteral(..) => Some(self.encode_named_node(xsd::G_MONTH_DAY)),
+            EncodedTerm::GDayLiteral(..) => Some(self.encode_named_node(xsd::G_DAY)),
+            EncodedTerm::GMonthLiteral(..) => Some(self.encode_named_node(xsd::G_MONTH)),
+            EncodedTerm::DurationLiteral(..) => Some(self.encode_named_node(xsd::DURATION)),
             EncodedTerm::YearMonthDurationLiteral(..) => {
-                self.build_named_node(xsd::YEAR_MONTH_DURATION.as_str())
+                Some(self.encode_named_node(xsd::YEAR_MONTH_DURATION))
             }
             EncodedTerm::DayTimeDurationLiteral(..) => {
-                self.build_named_node(xsd::DAY_TIME_DURATION.as_str())
+                Some(self.encode_named_node(xsd::DAY_TIME_DURATION))
             }
         }
     }
@@ -3165,7 +3161,7 @@ impl Accumulator for GroupConcatAccumulator {
     }
 
     fn state(&self) -> Option<EncodedTerm> {
-        self.concat.as_ref().and_then(|result| {
+        self.concat.as_ref().map(|result| {
             self.eval
                 .build_plain_literal(result, self.language.and_then(|v| v))
         })

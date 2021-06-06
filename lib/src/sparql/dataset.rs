@@ -1,9 +1,9 @@
+use crate::model::TermRef;
 use crate::sparql::algebra::QueryDataset;
 use crate::sparql::EvaluationError;
-use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrContainer, StrHash, StrLookup};
+use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash, StrLookup};
 use crate::storage::Storage;
 use std::cell::RefCell;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::iter::empty;
 
@@ -135,6 +135,82 @@ impl DatasetView {
             )
         }
     }
+
+    pub fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm {
+        let term = term.into();
+        let encoded = term.into();
+        self.insert_term_values(term, &encoded);
+        encoded
+    }
+
+    fn insert_term_values(&self, term: TermRef<'_>, encoded: &EncodedTerm) {
+        match (term, encoded) {
+            (TermRef::NamedNode(node), EncodedTerm::NamedNode { iri_id }) => {
+                self.insert_str(iri_id, node.as_str());
+            }
+            (TermRef::BlankNode(node), EncodedTerm::BigBlankNode { id_id }) => {
+                self.insert_str(id_id, node.as_str());
+            }
+            (TermRef::Literal(literal), EncodedTerm::BigStringLiteral { value_id }) => {
+                self.insert_str(value_id, literal.value());
+            }
+            (
+                TermRef::Literal(literal),
+                EncodedTerm::SmallBigLangStringLiteral { language_id, .. },
+            ) => {
+                if let Some(language) = literal.language() {
+                    self.insert_str(language_id, language)
+                }
+            }
+            (
+                TermRef::Literal(literal),
+                EncodedTerm::BigSmallLangStringLiteral { value_id, .. },
+            ) => {
+                self.insert_str(value_id, literal.value());
+            }
+            (
+                TermRef::Literal(literal),
+                EncodedTerm::BigBigLangStringLiteral {
+                    value_id,
+                    language_id,
+                },
+            ) => {
+                self.insert_str(value_id, literal.value());
+                if let Some(language) = literal.language() {
+                    self.insert_str(language_id, language)
+                }
+            }
+            (TermRef::Literal(literal), EncodedTerm::SmallTypedLiteral { datatype_id, .. }) => {
+                self.insert_str(datatype_id, literal.datatype().as_str());
+            }
+            (
+                TermRef::Literal(literal),
+                EncodedTerm::BigTypedLiteral {
+                    value_id,
+                    datatype_id,
+                },
+            ) => {
+                self.insert_str(value_id, literal.value());
+                self.insert_str(datatype_id, literal.datatype().as_str());
+            }
+            (TermRef::Triple(triple), EncodedTerm::Triple(encoded)) => {
+                self.insert_term_values(triple.subject.as_ref().into(), &encoded.subject);
+                self.insert_term_values(triple.predicate.as_ref().into(), &encoded.predicate);
+                self.insert_term_values(triple.object.as_ref(), &encoded.object);
+            }
+            _ => (),
+        }
+    }
+
+    pub fn insert_str(&self, key: &StrHash, value: &str) {
+        if matches!(self.storage.contains_str(key), Ok(true)) {
+            return;
+        }
+        self.extra
+            .borrow_mut()
+            .entry(*key)
+            .or_insert_with(|| value.to_owned());
+    }
 }
 
 impl StrLookup for DatasetView {
@@ -150,22 +226,6 @@ impl StrLookup for DatasetView {
 
     fn contains_str(&self, key: &StrHash) -> Result<bool, EvaluationError> {
         Ok(self.extra.borrow().contains_key(key) || self.storage.contains_str(key)?)
-    }
-}
-
-impl StrContainer for DatasetView {
-    fn insert_str(&self, key: &StrHash, value: &str) -> Result<bool, EvaluationError> {
-        if self.storage.contains_str(key)? {
-            Ok(false)
-        } else {
-            match self.extra.borrow_mut().entry(*key) {
-                Entry::Occupied(_) => Ok(false),
-                Entry::Vacant(entry) => {
-                    entry.insert(value.to_owned());
-                    Ok(true)
-                }
-            }
-        }
     }
 }
 
