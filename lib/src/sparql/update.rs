@@ -1,6 +1,9 @@
 use crate::error::{invalid_data_error, invalid_input_error};
 use crate::io::GraphFormat;
-use crate::model::{BlankNode as OxBlankNode, GraphNameRef, LiteralRef, NamedNodeRef};
+use crate::model::{
+    BlankNode as OxBlankNode, GraphName as OxGraphName, GraphNameRef, Literal as OxLiteral,
+    NamedNode as OxNamedNode, NamedNodeRef, Quad as OxQuad, Term as OxTerm, Triple as OxTriple,
+};
 use crate::sparql::algebra::QueryDataset;
 use crate::sparql::dataset::DatasetView;
 use crate::sparql::eval::SimpleEvaluator;
@@ -9,9 +12,7 @@ use crate::sparql::plan::EncodedTuple;
 use crate::sparql::plan_builder::PlanBuilder;
 use crate::sparql::{EvaluationError, UpdateOptions};
 use crate::storage::io::load_graph;
-use crate::storage::numeric_encoder::{
-    EncodedQuad, EncodedTerm, EncodedTriple, StrLookup, WriteEncoder,
-};
+use crate::storage::numeric_encoder::{Decoder, EncodedTerm, WriteEncoder};
 use crate::storage::Storage;
 use http::header::{ACCEPT, CONTENT_TYPE, USER_AGENT};
 use http::{Method, Request, StatusCode};
@@ -94,7 +95,8 @@ impl<'a> SimpleUpdateEvaluator<'a> {
     fn eval_insert_data(&mut self, data: &[Quad]) -> Result<(), EvaluationError> {
         let mut bnodes = HashMap::new();
         for quad in data {
-            let quad = self.encode_quad_for_insertion(quad, &mut bnodes)?;
+            let quad = self.convert_quad(quad, &mut bnodes);
+            let quad = self.storage.encode_quad(quad.as_ref())?;
             self.storage.insert(&quad)?;
         }
         Ok(())
@@ -102,8 +104,8 @@ impl<'a> SimpleUpdateEvaluator<'a> {
 
     fn eval_delete_data(&mut self, data: &[GroundQuad]) -> Result<(), EvaluationError> {
         for quad in data {
-            let quad = self.encode_quad_for_deletion(quad);
-            self.storage.remove(&quad)?;
+            let quad = self.convert_ground_quad(quad);
+            self.storage.remove(&quad.as_ref().into())?;
         }
         Ok(())
     }
@@ -124,38 +126,19 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         );
         let mut bnodes = HashMap::new();
         for tuple in evaluator.eval_plan(&plan, EncodedTuple::with_capacity(variables.len())) {
-            // We map the tuple to only get store strings
-            let tuple = tuple?
-                .into_iter()
-                .map(|t| {
-                    Ok(if let Some(t) = t {
-                        let r: Result<_, EvaluationError> = t.on_each_id(&mut |id| {
-                            self.storage.insert_str(
-                                id,
-                                &dataset.get_str(id)?.ok_or_else(|| {
-                                    EvaluationError::msg("String not stored in the string store")
-                                })?,
-                            )?;
-                            Ok(())
-                        });
-                        r?;
-                        Some(t)
-                    } else {
-                        None
-                    })
-                })
-                .collect::<Result<Vec<_>, EvaluationError>>()?;
-
+            let tuple = tuple?;
             for quad in delete {
-                if let Some(quad) = self.encode_quad_pattern_for_deletion(quad, &variables, &tuple)
+                if let Some(quad) =
+                    self.convert_ground_quad_pattern(quad, &variables, &tuple, &dataset)?
                 {
-                    self.storage.remove(&quad)?;
+                    self.storage.remove(&quad.as_ref().into())?;
                 }
             }
             for quad in insert {
                 if let Some(quad) =
-                    self.encode_quad_pattern_for_insertion(quad, &variables, &tuple, &mut bnodes)?
+                    self.convert_quad_pattern(quad, &variables, &tuple, &dataset, &mut bnodes)?
                 {
+                    let quad = self.storage.encode_quad(quad.as_ref())?;
                     self.storage.insert(&quad)?;
                 }
             }
@@ -212,15 +195,17 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         Ok(())
     }
 
-    fn eval_create(&mut self, graph: &NamedNode, silent: bool) -> Result<(), EvaluationError> {
-        let encoded_graph_name = self.encode_named_node_for_insertion(graph)?;
+    fn eval_create(&mut self, graph_name: &NamedNode, silent: bool) -> Result<(), EvaluationError> {
+        let encoded_graph_name = self
+            .storage
+            .encode_named_node(NamedNodeRef::new_unchecked(&graph_name.iri))?;
         if self.storage.contains_named_graph(&encoded_graph_name)? {
             if silent {
                 Ok(())
             } else {
                 Err(EvaluationError::msg(format!(
                     "The graph {} already exists",
-                    graph
+                    graph_name
                 )))
             }
         } else {
@@ -232,9 +217,11 @@ impl<'a> SimpleUpdateEvaluator<'a> {
     fn eval_clear(&mut self, graph: &GraphTarget, silent: bool) -> Result<(), EvaluationError> {
         match graph {
             GraphTarget::NamedNode(graph_name) => {
-                let graph_name = self.encode_named_node_for_deletion(graph_name);
-                if self.storage.contains_named_graph(&graph_name)? {
-                    Ok(self.storage.clear_graph(&graph_name)?)
+                let encoded_graph_name = self
+                    .storage
+                    .encode_named_node(NamedNodeRef::new_unchecked(&graph_name.iri))?;
+                if self.storage.contains_named_graph(&encoded_graph_name)? {
+                    Ok(self.storage.clear_graph(&encoded_graph_name)?)
                 } else if silent {
                     Ok(())
                 } else {
@@ -267,9 +254,11 @@ impl<'a> SimpleUpdateEvaluator<'a> {
     fn eval_drop(&mut self, graph: &GraphTarget, silent: bool) -> Result<(), EvaluationError> {
         match graph {
             GraphTarget::NamedNode(graph_name) => {
-                let graph_name = self.encode_named_node_for_deletion(graph_name);
-                if self.storage.contains_named_graph(&graph_name)? {
-                    self.storage.remove_named_graph(&graph_name)?;
+                let encoded_graph_name = self
+                    .storage
+                    .encode_named_node(NamedNodeRef::new_unchecked(&graph_name.iri))?;
+                if self.storage.contains_named_graph(&encoded_graph_name)? {
+                    self.storage.remove_named_graph(&encoded_graph_name)?;
                     Ok(())
                 } else if silent {
                     Ok(())
@@ -294,80 +283,143 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         }
     }
 
-    fn encode_quad_for_insertion(
-        &mut self,
-        quad: &Quad,
-        bnodes: &mut HashMap<BlankNode, OxBlankNode>,
-    ) -> Result<EncodedQuad, EvaluationError> {
-        Ok(EncodedQuad {
+    fn convert_quad(&self, quad: &Quad, bnodes: &mut HashMap<BlankNode, OxBlankNode>) -> OxQuad {
+        OxQuad {
             subject: match &quad.subject {
-                Subject::NamedNode(subject) => self.encode_named_node_for_insertion(subject)?,
-                Subject::BlankNode(subject) => self
-                    .storage
-                    .encode_blank_node(bnodes.entry(subject.clone()).or_default().as_ref())?,
-                Subject::Triple(subject) => {
-                    self.encode_triple_for_insertion(subject, bnodes)?.into()
-                }
+                Subject::NamedNode(subject) => self.convert_named_node(subject).into(),
+                Subject::BlankNode(subject) => self.convert_blank_node(subject, bnodes).into(),
+                Subject::Triple(subject) => self.convert_triple(subject, bnodes).into(),
             },
-            predicate: self
-                .storage
-                .encode_named_node(NamedNodeRef::new_unchecked(&quad.predicate.iri))?,
+            predicate: self.convert_named_node(&quad.predicate),
             object: match &quad.object {
-                Term::NamedNode(object) => self.encode_named_node_for_insertion(object)?,
-                Term::BlankNode(object) => self
-                    .storage
-                    .encode_blank_node(bnodes.entry(object.clone()).or_default().as_ref())?,
-                Term::Literal(object) => self.encode_literal_for_insertion(object)?,
-                Term::Triple(subject) => self.encode_triple_for_insertion(subject, bnodes)?.into(),
+                Term::NamedNode(object) => self.convert_named_node(object).into(),
+                Term::BlankNode(object) => self.convert_blank_node(object, bnodes).into(),
+                Term::Literal(object) => self.convert_literal(object).into(),
+                Term::Triple(subject) => self.convert_triple(subject, bnodes).into(),
             },
             graph_name: match &quad.graph_name {
-                GraphName::NamedNode(graph_name) => {
-                    self.encode_named_node_for_insertion(graph_name)?
-                }
-                GraphName::DefaultGraph => EncodedTerm::DefaultGraph,
+                GraphName::NamedNode(graph_name) => self.convert_named_node(graph_name).into(),
+                GraphName::DefaultGraph => OxGraphName::DefaultGraph,
             },
-        })
+        }
     }
 
-    fn encode_quad_pattern_for_insertion(
-        &mut self,
+    fn convert_triple(
+        &self,
+        triple: &Triple,
+        bnodes: &mut HashMap<BlankNode, OxBlankNode>,
+    ) -> OxTriple {
+        OxTriple {
+            subject: match &triple.subject {
+                Subject::NamedNode(subject) => self.convert_named_node(subject).into(),
+                Subject::BlankNode(subject) => self.convert_blank_node(subject, bnodes).into(),
+                Subject::Triple(subject) => self.convert_triple(subject, bnodes).into(),
+            },
+            predicate: self.convert_named_node(&triple.predicate),
+            object: match &triple.object {
+                Term::NamedNode(object) => self.convert_named_node(object).into(),
+                Term::BlankNode(object) => self.convert_blank_node(object, bnodes).into(),
+                Term::Literal(object) => self.convert_literal(object).into(),
+                Term::Triple(subject) => self.convert_triple(subject, bnodes).into(),
+            },
+        }
+    }
+
+    fn convert_named_node(&self, node: &NamedNode) -> OxNamedNode {
+        OxNamedNode::new_unchecked(&node.iri)
+    }
+
+    fn convert_blank_node(
+        &self,
+        node: &BlankNode,
+        bnodes: &mut HashMap<BlankNode, OxBlankNode>,
+    ) -> OxBlankNode {
+        bnodes.entry(node.clone()).or_default().clone()
+    }
+
+    fn convert_literal(&self, literal: &Literal) -> OxLiteral {
+        match literal {
+            Literal::Simple { value } => OxLiteral::new_simple_literal(value),
+            Literal::LanguageTaggedString { value, language } => {
+                OxLiteral::new_language_tagged_literal_unchecked(value, language)
+            }
+            Literal::Typed { value, datatype } => {
+                OxLiteral::new_typed_literal(value, NamedNodeRef::new_unchecked(&datatype.iri))
+            }
+        }
+    }
+
+    fn convert_ground_quad(&self, quad: &GroundQuad) -> OxQuad {
+        OxQuad {
+            subject: match &quad.subject {
+                GroundSubject::NamedNode(subject) => self.convert_named_node(subject).into(),
+                GroundSubject::Triple(subject) => self.convert_ground_triple(subject).into(),
+            },
+            predicate: self.convert_named_node(&quad.predicate),
+            object: match &quad.object {
+                GroundTerm::NamedNode(object) => self.convert_named_node(object).into(),
+                GroundTerm::Literal(object) => self.convert_literal(object).into(),
+                GroundTerm::Triple(subject) => self.convert_ground_triple(subject).into(),
+            },
+            graph_name: match &quad.graph_name {
+                GraphName::NamedNode(graph_name) => self.convert_named_node(graph_name).into(),
+                GraphName::DefaultGraph => OxGraphName::DefaultGraph,
+            },
+        }
+    }
+
+    fn convert_ground_triple(&self, triple: &GroundTriple) -> OxTriple {
+        OxTriple {
+            subject: match &triple.subject {
+                GroundSubject::NamedNode(subject) => self.convert_named_node(subject).into(),
+                GroundSubject::Triple(subject) => self.convert_ground_triple(subject).into(),
+            },
+            predicate: self.convert_named_node(&triple.predicate),
+            object: match &triple.object {
+                GroundTerm::NamedNode(object) => self.convert_named_node(object).into(),
+                GroundTerm::Literal(object) => self.convert_literal(object).into(),
+                GroundTerm::Triple(subject) => self.convert_ground_triple(subject).into(),
+            },
+        }
+    }
+
+    fn convert_quad_pattern(
+        &self,
         quad: &QuadPattern,
         variables: &[Variable],
-        values: &[Option<EncodedTerm>],
+        values: &EncodedTuple,
+        dataset: &DatasetView,
         bnodes: &mut HashMap<BlankNode, OxBlankNode>,
-    ) -> Result<Option<EncodedQuad>, EvaluationError> {
-        Ok(Some(EncodedQuad {
-            subject: if let Some(subject) = self.encode_term_or_var_for_insertion(
+    ) -> Result<Option<OxQuad>, EvaluationError> {
+        Ok(Some(OxQuad {
+            subject: match self.convert_term_or_var(
                 &quad.subject,
                 variables,
                 values,
+                dataset,
                 bnodes,
-                |t| t.is_named_node() || t.is_blank_node(),
             )? {
-                subject
-            } else {
-                return Ok(None);
+                Some(OxTerm::NamedNode(node)) => node.into(),
+                Some(OxTerm::BlankNode(node)) => node.into(),
+                Some(OxTerm::Triple(triple)) => triple.into(),
+                Some(OxTerm::Literal(_)) | None => return Ok(None),
             },
             predicate: if let Some(predicate) =
-                self.encode_named_node_or_var_for_insertion(&quad.predicate, variables, values)?
+                self.convert_named_node_or_var(&quad.predicate, variables, values, dataset)?
             {
                 predicate
             } else {
                 return Ok(None);
             },
-            object: if let Some(object) = self.encode_term_or_var_for_insertion(
-                &quad.object,
-                variables,
-                values,
-                bnodes,
-                |t| !t.is_default_graph(),
-            )? {
+            object: if let Some(object) =
+                self.convert_term_or_var(&quad.object, variables, values, dataset, bnodes)?
+            {
                 object
             } else {
                 return Ok(None);
             },
             graph_name: if let Some(graph_name) =
-                self.encode_graph_name_or_var_for_insertion(&quad.graph_name, variables, values)?
+                self.convert_graph_name_or_var(&quad.graph_name, variables, values, dataset)?
             {
                 graph_name
             } else {
@@ -376,90 +428,197 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         }))
     }
 
-    fn encode_term_or_var_for_insertion(
-        &mut self,
+    fn convert_term_or_var(
+        &self,
         term: &TermPattern,
         variables: &[Variable],
-        values: &[Option<EncodedTerm>],
+        values: &EncodedTuple,
+        dataset: &DatasetView,
         bnodes: &mut HashMap<BlankNode, OxBlankNode>,
-        validate: impl FnOnce(&EncodedTerm) -> bool,
-    ) -> Result<Option<EncodedTerm>, EvaluationError> {
+    ) -> Result<Option<OxTerm>, EvaluationError> {
         Ok(match term {
-            TermPattern::NamedNode(term) => Some(self.encode_named_node_for_insertion(term)?),
-            TermPattern::BlankNode(bnode) => Some(
-                self.storage
-                    .encode_blank_node(bnodes.entry(bnode.clone()).or_default().as_ref())?,
-            ),
-            TermPattern::Literal(term) => Some(self.encode_literal_for_insertion(term)?),
+            TermPattern::NamedNode(term) => Some(self.convert_named_node(term).into()),
+            TermPattern::BlankNode(bnode) => Some(self.convert_blank_node(bnode, bnodes).into()),
+            TermPattern::Literal(term) => Some(self.convert_literal(term).into()),
             TermPattern::Triple(triple) => self
-                .encode_triple_pattern_for_insertion(triple, variables, values, bnodes)?
-                .map(EncodedTerm::from),
-            TermPattern::Variable(v) => self.lookup_variable(v, variables, values).filter(validate),
+                .convert_triple_pattern(triple, variables, values, dataset, bnodes)?
+                .map(|t| t.into()),
+            TermPattern::Variable(v) => self
+                .lookup_variable(v, variables, values)
+                .map(|node| dataset.decode_term(&node))
+                .transpose()?,
         })
     }
 
-    fn encode_named_node_or_var_for_insertion(
-        &mut self,
+    fn convert_named_node_or_var(
+        &self,
         term: &NamedNodePattern,
         variables: &[Variable],
-        values: &[Option<EncodedTerm>],
-    ) -> Result<Option<EncodedTerm>, EvaluationError> {
+        values: &EncodedTuple,
+        dataset: &DatasetView,
+    ) -> Result<Option<OxNamedNode>, EvaluationError> {
         Ok(match term {
-            NamedNodePattern::NamedNode(term) => Some(self.encode_named_node_for_insertion(term)?),
+            NamedNodePattern::NamedNode(term) => Some(self.convert_named_node(term)),
             NamedNodePattern::Variable(v) => self
                 .lookup_variable(v, variables, values)
-                .filter(|value| value.is_named_node()),
+                .map(|node| dataset.decode_named_node(&node))
+                .transpose()?,
         })
     }
 
-    fn encode_graph_name_or_var_for_insertion(
-        &mut self,
+    fn convert_graph_name_or_var(
+        &self,
         term: &GraphNamePattern,
         variables: &[Variable],
-        values: &[Option<EncodedTerm>],
-    ) -> Result<Option<EncodedTerm>, EvaluationError> {
-        Ok(match term {
-            GraphNamePattern::NamedNode(term) => Some(self.encode_named_node_for_insertion(term)?),
-            GraphNamePattern::DefaultGraph => Some(EncodedTerm::DefaultGraph),
+        values: &EncodedTuple,
+        dataset: &DatasetView,
+    ) -> Result<Option<OxGraphName>, EvaluationError> {
+        match term {
+            GraphNamePattern::NamedNode(term) => Ok(Some(self.convert_named_node(term).into())),
+            GraphNamePattern::DefaultGraph => Ok(Some(OxGraphName::DefaultGraph)),
             GraphNamePattern::Variable(v) => self
                 .lookup_variable(v, variables, values)
-                .filter(|value| value.is_named_node()),
-        })
+                .map(|node| {
+                    Ok(if node == EncodedTerm::DefaultGraph {
+                        OxGraphName::DefaultGraph
+                    } else {
+                        dataset.decode_named_node(&node)?.into()
+                    })
+                })
+                .transpose(),
+        }
     }
 
-    fn encode_triple_pattern_for_insertion(
-        &mut self,
+    fn convert_triple_pattern(
+        &self,
         triple: &TriplePattern,
         variables: &[Variable],
-        values: &[Option<EncodedTerm>],
+        values: &EncodedTuple,
+        dataset: &DatasetView,
         bnodes: &mut HashMap<BlankNode, OxBlankNode>,
-    ) -> Result<Option<EncodedTriple>, EvaluationError> {
-        Ok(Some(EncodedTriple {
-            subject: if let Some(subject) = self.encode_term_or_var_for_insertion(
+    ) -> Result<Option<OxTriple>, EvaluationError> {
+        Ok(Some(OxTriple {
+            subject: match self.convert_term_or_var(
                 &triple.subject,
                 variables,
                 values,
+                dataset,
                 bnodes,
-                |t| t.is_named_node() || t.is_blank_node(),
             )? {
-                subject
-            } else {
-                return Ok(None);
+                Some(OxTerm::NamedNode(node)) => node.into(),
+                Some(OxTerm::BlankNode(node)) => node.into(),
+                Some(OxTerm::Triple(triple)) => triple.into(),
+                Some(OxTerm::Literal(_)) | None => return Ok(None),
             },
             predicate: if let Some(predicate) =
-                self.encode_named_node_or_var_for_insertion(&triple.predicate, variables, values)?
+                self.convert_named_node_or_var(&triple.predicate, variables, values, dataset)?
             {
                 predicate
             } else {
                 return Ok(None);
             },
-            object: if let Some(object) = self.encode_term_or_var_for_insertion(
-                &triple.object,
+            object: if let Some(object) =
+                self.convert_term_or_var(&triple.object, variables, values, dataset, bnodes)?
+            {
+                object
+            } else {
+                return Ok(None);
+            },
+        }))
+    }
+
+    fn convert_ground_quad_pattern(
+        &self,
+        quad: &GroundQuadPattern,
+        variables: &[Variable],
+        values: &EncodedTuple,
+        dataset: &DatasetView,
+    ) -> Result<Option<OxQuad>, EvaluationError> {
+        Ok(Some(OxQuad {
+            subject: match self.convert_ground_term_or_var(
+                &quad.subject,
                 variables,
                 values,
-                bnodes,
-                |t| !t.is_default_graph(),
+                dataset,
             )? {
+                Some(OxTerm::NamedNode(node)) => node.into(),
+                Some(OxTerm::BlankNode(node)) => node.into(),
+                Some(OxTerm::Triple(triple)) => triple.into(),
+                Some(OxTerm::Literal(_)) | None => return Ok(None),
+            },
+            predicate: if let Some(predicate) =
+                self.convert_named_node_or_var(&quad.predicate, variables, values, dataset)?
+            {
+                predicate
+            } else {
+                return Ok(None);
+            },
+            object: if let Some(object) =
+                self.convert_ground_term_or_var(&quad.object, variables, values, dataset)?
+            {
+                object
+            } else {
+                return Ok(None);
+            },
+            graph_name: if let Some(graph_name) =
+                self.convert_graph_name_or_var(&quad.graph_name, variables, values, dataset)?
+            {
+                graph_name
+            } else {
+                return Ok(None);
+            },
+        }))
+    }
+
+    fn convert_ground_term_or_var(
+        &self,
+        term: &GroundTermPattern,
+        variables: &[Variable],
+        values: &EncodedTuple,
+        dataset: &DatasetView,
+    ) -> Result<Option<OxTerm>, EvaluationError> {
+        Ok(match term {
+            GroundTermPattern::NamedNode(term) => Some(self.convert_named_node(term).into()),
+            GroundTermPattern::Literal(term) => Some(self.convert_literal(term).into()),
+            GroundTermPattern::Triple(triple) => self
+                .convert_ground_triple_pattern(triple, variables, values, dataset)?
+                .map(|t| t.into()),
+            GroundTermPattern::Variable(v) => self
+                .lookup_variable(v, variables, values)
+                .map(|node| dataset.decode_term(&node))
+                .transpose()?,
+        })
+    }
+
+    fn convert_ground_triple_pattern(
+        &self,
+        triple: &GroundTriplePattern,
+        variables: &[Variable],
+        values: &EncodedTuple,
+        dataset: &DatasetView,
+    ) -> Result<Option<OxTriple>, EvaluationError> {
+        Ok(Some(OxTriple {
+            subject: match self.convert_ground_term_or_var(
+                &triple.subject,
+                variables,
+                values,
+                dataset,
+            )? {
+                Some(OxTerm::NamedNode(node)) => node.into(),
+                Some(OxTerm::BlankNode(node)) => node.into(),
+                Some(OxTerm::Triple(triple)) => triple.into(),
+                Some(OxTerm::Literal(_)) | None => return Ok(None),
+            },
+            predicate: if let Some(predicate) =
+                self.convert_named_node_or_var(&triple.predicate, variables, values, dataset)?
+            {
+                predicate
+            } else {
+                return Ok(None);
+            },
+            object: if let Some(object) =
+                self.convert_ground_term_or_var(&triple.object, variables, values, dataset)?
+            {
                 object
             } else {
                 return Ok(None);
@@ -471,208 +630,12 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         &self,
         v: &Variable,
         variables: &[Variable],
-        values: &[Option<EncodedTerm>],
+        values: &EncodedTuple,
     ) -> Option<EncodedTerm> {
-        {
-            if let Some(Some(term)) = variables
-                .iter()
-                .position(|v2| v == v2)
-                .and_then(|i| values.get(i))
-            {
-                Some(term.clone())
-            } else {
-                None
-            }
-        }
-    }
-
-    fn encode_named_node_for_insertion(
-        &mut self,
-        term: &NamedNode,
-    ) -> Result<EncodedTerm, EvaluationError> {
-        Ok(self
-            .storage
-            .encode_named_node(NamedNodeRef::new_unchecked(&term.iri))?)
-    }
-
-    fn encode_triple_for_insertion(
-        &mut self,
-        triple: &Triple,
-        bnodes: &mut HashMap<BlankNode, OxBlankNode>,
-    ) -> Result<EncodedTriple, EvaluationError> {
-        Ok(EncodedTriple {
-            subject: match &triple.subject {
-                Subject::NamedNode(subject) => self.encode_named_node_for_insertion(subject)?,
-                Subject::BlankNode(subject) => self
-                    .storage
-                    .encode_blank_node(bnodes.entry(subject.clone()).or_default().as_ref())?,
-                Subject::Triple(subject) => {
-                    self.encode_triple_for_insertion(subject, bnodes)?.into()
-                }
-            },
-            predicate: self
-                .storage
-                .encode_named_node(NamedNodeRef::new_unchecked(&triple.predicate.iri))?,
-            object: match &triple.object {
-                Term::NamedNode(object) => self.encode_named_node_for_insertion(object)?,
-                Term::BlankNode(object) => self
-                    .storage
-                    .encode_blank_node(bnodes.entry(object.clone()).or_default().as_ref())?,
-                Term::Literal(object) => self.encode_literal_for_insertion(object)?,
-                Term::Triple(object) => self.encode_triple_for_insertion(object, bnodes)?.into(),
-            },
-        })
-    }
-
-    fn encode_literal_for_insertion(
-        &mut self,
-        term: &Literal,
-    ) -> Result<EncodedTerm, EvaluationError> {
-        Ok(self.storage.encode_literal(match term {
-            Literal::Simple { value } => LiteralRef::new_simple_literal(value),
-            Literal::LanguageTaggedString { value, language } => {
-                LiteralRef::new_language_tagged_literal_unchecked(value, language)
-            }
-            Literal::Typed { value, datatype } => {
-                LiteralRef::new_typed_literal(value, NamedNodeRef::new_unchecked(&datatype.iri))
-            }
-        })?)
-    }
-
-    fn encode_quad_for_deletion(&mut self, quad: &GroundQuad) -> EncodedQuad {
-        EncodedQuad {
-            subject: match &quad.subject {
-                GroundSubject::NamedNode(subject) => self.encode_named_node_for_deletion(subject),
-                GroundSubject::Triple(subject) => self.encode_triple_for_deletion(subject),
-            },
-            predicate: self.encode_named_node_for_deletion(&quad.predicate),
-            object: match &quad.object {
-                GroundTerm::NamedNode(object) => self.encode_named_node_for_deletion(object),
-                GroundTerm::Literal(object) => self.encode_literal_for_deletion(object),
-                GroundTerm::Triple(object) => self.encode_triple_for_deletion(object),
-            },
-            graph_name: match &quad.graph_name {
-                GraphName::NamedNode(graph_name) => self.encode_named_node_for_deletion(graph_name),
-                GraphName::DefaultGraph => EncodedTerm::DefaultGraph,
-            },
-        }
-    }
-
-    fn encode_quad_pattern_for_deletion(
-        &self,
-        quad: &GroundQuadPattern,
-        variables: &[Variable],
-        values: &[Option<EncodedTerm>],
-    ) -> Option<EncodedQuad> {
-        Some(EncodedQuad {
-            subject: self.encode_term_or_var_for_deletion(&quad.subject, variables, values)?,
-            predicate: self.encode_named_node_or_var_for_deletion(
-                &quad.predicate,
-                variables,
-                values,
-            )?,
-            object: self.encode_term_or_var_for_deletion(&quad.object, variables, values)?,
-            graph_name: self.encode_graph_name_or_var_for_deletion(
-                &quad.graph_name,
-                variables,
-                values,
-            )?,
-        })
-    }
-
-    fn encode_term_or_var_for_deletion(
-        &self,
-        term: &GroundTermPattern,
-        variables: &[Variable],
-        values: &[Option<EncodedTerm>],
-    ) -> Option<EncodedTerm> {
-        match term {
-            GroundTermPattern::NamedNode(term) => Some(self.encode_named_node_for_deletion(term)),
-            GroundTermPattern::Literal(term) => Some(self.encode_literal_for_deletion(term)),
-            GroundTermPattern::Variable(v) => self.lookup_variable(v, variables, values),
-            GroundTermPattern::Triple(triple) => Some(
-                self.encode_triple_pattern_for_deletion(triple, variables, values)?
-                    .into(),
-            ),
-        }
-    }
-
-    fn encode_named_node_or_var_for_deletion(
-        &self,
-        term: &NamedNodePattern,
-        variables: &[Variable],
-        values: &[Option<EncodedTerm>],
-    ) -> Option<EncodedTerm> {
-        match term {
-            NamedNodePattern::NamedNode(term) => Some(self.encode_named_node_for_deletion(term)),
-            NamedNodePattern::Variable(v) => self
-                .lookup_variable(v, variables, values)
-                .filter(|v| v.is_named_node()),
-        }
-    }
-
-    fn encode_graph_name_or_var_for_deletion(
-        &self,
-        graph_name: &GraphNamePattern,
-        variables: &[Variable],
-        values: &[Option<EncodedTerm>],
-    ) -> Option<EncodedTerm> {
-        match graph_name {
-            GraphNamePattern::NamedNode(term) => Some(self.encode_named_node_for_deletion(term)),
-            GraphNamePattern::DefaultGraph => Some(EncodedTerm::DefaultGraph),
-            GraphNamePattern::Variable(v) => self
-                .lookup_variable(v, variables, values)
-                .filter(|v| v.is_named_node()),
-        }
-    }
-
-    fn encode_triple_pattern_for_deletion(
-        &self,
-        triple: &GroundTriplePattern,
-        variables: &[Variable],
-        values: &[Option<EncodedTerm>],
-    ) -> Option<EncodedTriple> {
-        Some(EncodedTriple {
-            subject: self.encode_term_or_var_for_deletion(&triple.subject, variables, values)?,
-            predicate: self.encode_named_node_or_var_for_deletion(
-                &triple.predicate,
-                variables,
-                values,
-            )?,
-            object: self.encode_term_or_var_for_deletion(&triple.object, variables, values)?,
-        })
-    }
-
-    fn encode_named_node_for_deletion(&self, term: &NamedNode) -> EncodedTerm {
-        NamedNodeRef::new_unchecked(&term.iri).into()
-    }
-
-    fn encode_literal_for_deletion(&self, term: &Literal) -> EncodedTerm {
-        match term {
-            Literal::Simple { value } => LiteralRef::new_simple_literal(value),
-            Literal::LanguageTaggedString { value, language } => {
-                LiteralRef::new_language_tagged_literal_unchecked(value, language)
-            }
-            Literal::Typed { value, datatype } => {
-                LiteralRef::new_typed_literal(value, NamedNodeRef::new_unchecked(&datatype.iri))
-            }
-        }
-        .into()
-    }
-
-    fn encode_triple_for_deletion(&self, triple: &GroundTriple) -> EncodedTerm {
-        EncodedTriple::new(
-            match &triple.subject {
-                GroundSubject::NamedNode(subject) => self.encode_named_node_for_deletion(subject),
-                GroundSubject::Triple(subject) => self.encode_triple_for_deletion(subject),
-            },
-            self.encode_named_node_for_deletion(&triple.predicate),
-            match &triple.object {
-                GroundTerm::NamedNode(object) => self.encode_named_node_for_deletion(object),
-                GroundTerm::Literal(object) => self.encode_literal_for_deletion(object),
-                GroundTerm::Triple(object) => self.encode_triple_for_deletion(object),
-            },
-        )
-        .into()
+        variables
+            .iter()
+            .position(|v2| v == v2)
+            .and_then(|i| values.get(i))
+            .cloned()
     }
 }

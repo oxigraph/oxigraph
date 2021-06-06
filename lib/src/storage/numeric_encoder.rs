@@ -340,53 +340,6 @@ impl EncodedTerm {
     pub fn is_triple(&self) -> bool {
         matches!(self, Self::Triple { .. })
     }
-
-    pub fn on_each_id<E>(
-        &self,
-        callback: &mut impl FnMut(&StrHash) -> Result<(), E>,
-    ) -> Result<(), E> {
-        match self {
-            Self::NamedNode { iri_id } => {
-                callback(iri_id)?;
-            }
-            Self::BigBlankNode { id_id } => {
-                callback(id_id)?;
-            }
-            Self::BigStringLiteral { value_id } => {
-                callback(value_id)?;
-            }
-            Self::SmallBigLangStringLiteral { language_id, .. } => {
-                callback(language_id)?;
-            }
-            Self::BigSmallLangStringLiteral { value_id, .. } => {
-                callback(value_id)?;
-            }
-            Self::BigBigLangStringLiteral {
-                value_id,
-                language_id,
-            } => {
-                callback(value_id)?;
-                callback(language_id)?;
-            }
-            Self::SmallTypedLiteral { datatype_id, .. } => {
-                callback(datatype_id)?;
-            }
-            Self::BigTypedLiteral {
-                value_id,
-                datatype_id,
-            } => {
-                callback(value_id)?;
-                callback(datatype_id)?;
-            }
-            Self::Triple(triple) => {
-                triple.subject.on_each_id(callback)?;
-                triple.predicate.on_each_id(callback)?;
-                triple.object.on_each_id(callback)?;
-            }
-            _ => (),
-        }
-        Ok(())
-    }
 }
 
 impl From<bool> for EncodedTerm {

@@ -228,6 +228,20 @@ impl From<Triple> for Subject {
     }
 }
 
+impl From<Arc<Triple>> for Subject {
+    #[inline]
+    fn from(node: Arc<Triple>) -> Self {
+        Self::Triple(node)
+    }
+}
+
+impl From<Box<Triple>> for Subject {
+    #[inline]
+    fn from(node: Box<Triple>) -> Self {
+        Self::Triple(node.into())
+    }
+}
+
 impl From<TripleRef<'_>> for Subject {
     #[inline]
     fn from(node: TripleRef<'_>) -> Self {
@@ -453,10 +467,25 @@ impl From<LiteralRef<'_>> for Term {
         literal.into_owned().into()
     }
 }
+
 impl From<Triple> for Term {
     #[inline]
     fn from(triple: Triple) -> Self {
         Self::Triple(Arc::new(triple))
+    }
+}
+
+impl From<Arc<Triple>> for Term {
+    #[inline]
+    fn from(node: Arc<Triple>) -> Self {
+        Self::Triple(node)
+    }
+}
+
+impl From<Box<Triple>> for Term {
+    #[inline]
+    fn from(node: Box<Triple>) -> Self {
+        Self::Triple(node.into())
     }
 }
 
