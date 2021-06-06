@@ -10,6 +10,7 @@ use sled::transaction::{
 use sled::{Config, Db, Iter, Transactional, Tree};
 
 use crate::error::invalid_data_error;
+use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef};
 use crate::sparql::EvaluationError;
 use crate::storage::binary_encoder::{
     decode_term, encode_term, encode_term_pair, encode_term_quad, encode_term_triple,
@@ -18,7 +19,9 @@ use crate::storage::binary_encoder::{
     LATEST_STORAGE_VERSION, WRITTEN_TERM_MAX_SIZE,
 };
 use crate::storage::io::StoreOrParseError;
-use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrContainer, StrHash, StrLookup};
+use crate::storage::numeric_encoder::{
+    EncodedQuad, EncodedTerm, StrContainer, StrHash, StrLookup, WriteEncoder,
+};
 
 mod binary_encoder;
 pub(crate) mod io;
@@ -74,7 +77,7 @@ impl Storage {
             for quad in this.quads() {
                 let quad = quad?;
                 if !quad.graph_name.is_default_graph() {
-                    this.insert_named_graph(&quad.graph_name)?;
+                    this.insert_encoded_named_graph(&quad.graph_name)?;
                 }
             }
             version = 1;
@@ -457,49 +460,50 @@ impl Storage {
         }
     }
 
-    pub fn insert(&self, quad: &EncodedQuad) -> std::io::Result<bool> {
+    pub fn insert(&self, quad: QuadRef<'_>) -> std::io::Result<bool> {
+        let quad = self.encode_quad(quad)?;
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
 
         if quad.graph_name.is_default_graph() {
-            write_spo_quad(&mut buffer, quad);
+            write_spo_quad(&mut buffer, &quad);
             let is_new = self.dspo.insert(buffer.as_slice(), &[])?.is_none();
 
             if is_new {
                 buffer.clear();
 
-                write_pos_quad(&mut buffer, quad);
+                write_pos_quad(&mut buffer, &quad);
                 self.dpos.insert(buffer.as_slice(), &[])?;
                 buffer.clear();
 
-                write_osp_quad(&mut buffer, quad);
+                write_osp_quad(&mut buffer, &quad);
                 self.dosp.insert(buffer.as_slice(), &[])?;
                 buffer.clear();
             }
 
             Ok(is_new)
         } else {
-            write_spog_quad(&mut buffer, quad);
+            write_spog_quad(&mut buffer, &quad);
             let is_new = self.spog.insert(buffer.as_slice(), &[])?.is_none();
             if is_new {
                 buffer.clear();
 
-                write_posg_quad(&mut buffer, quad);
+                write_posg_quad(&mut buffer, &quad);
                 self.posg.insert(buffer.as_slice(), &[])?;
                 buffer.clear();
 
-                write_ospg_quad(&mut buffer, quad);
+                write_ospg_quad(&mut buffer, &quad);
                 self.ospg.insert(buffer.as_slice(), &[])?;
                 buffer.clear();
 
-                write_gspo_quad(&mut buffer, quad);
+                write_gspo_quad(&mut buffer, &quad);
                 self.gspo.insert(buffer.as_slice(), &[])?;
                 buffer.clear();
 
-                write_gpos_quad(&mut buffer, quad);
+                write_gpos_quad(&mut buffer, &quad);
                 self.gpos.insert(buffer.as_slice(), &[])?;
                 buffer.clear();
 
-                write_gosp_quad(&mut buffer, quad);
+                write_gosp_quad(&mut buffer, &quad);
                 self.gosp.insert(buffer.as_slice(), &[])?;
                 buffer.clear();
 
@@ -512,7 +516,11 @@ impl Storage {
         }
     }
 
-    pub fn remove(&self, quad: &EncodedQuad) -> std::io::Result<bool> {
+    pub fn remove(&self, quad: QuadRef<'_>) -> std::io::Result<bool> {
+        self.remove_encoded(&quad.into())
+    }
+
+    fn remove_encoded(&self, quad: &EncodedQuad) -> std::io::Result<bool> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
 
         if quad.graph_name.is_default_graph() {
@@ -564,28 +572,67 @@ impl Storage {
         }
     }
 
-    pub fn insert_named_graph(&self, graph_name: &EncodedTerm) -> std::io::Result<bool> {
+    pub fn insert_named_graph(&self, graph_name: NamedOrBlankNodeRef<'_>) -> std::io::Result<bool> {
+        self.insert_encoded_named_graph(&graph_name.into())
+    }
+
+    fn insert_encoded_named_graph(&self, graph_name: &EncodedTerm) -> std::io::Result<bool> {
         Ok(self.graphs.insert(&encode_term(graph_name), &[])?.is_none())
     }
 
-    pub fn clear_graph(&self, graph_name: &EncodedTerm) -> std::io::Result<()> {
+    pub fn clear_graph(&self, graph_name: GraphNameRef<'_>) -> std::io::Result<()> {
         if graph_name.is_default_graph() {
             self.dspo.clear()?;
             self.dpos.clear()?;
             self.dosp.clear()?;
         } else {
-            for quad in self.quads_for_graph(graph_name) {
-                self.remove(&quad?)?;
+            for quad in self.quads_for_graph(&graph_name.into()) {
+                self.remove_encoded(&quad?)?;
             }
         }
         Ok(())
     }
 
-    pub fn remove_named_graph(&self, graph_name: &EncodedTerm) -> std::io::Result<bool> {
+    pub fn clear_all_named_graphs(&self) -> std::io::Result<()> {
+        self.gspo.clear()?;
+        self.gpos.clear()?;
+        self.gosp.clear()?;
+        self.spog.clear()?;
+        self.posg.clear()?;
+        self.ospg.clear()?;
+        Ok(())
+    }
+
+    pub fn clear_all_graphs(&self) -> std::io::Result<()> {
+        self.dspo.clear()?;
+        self.dpos.clear()?;
+        self.dosp.clear()?;
+        self.gspo.clear()?;
+        self.gpos.clear()?;
+        self.gosp.clear()?;
+        self.spog.clear()?;
+        self.posg.clear()?;
+        self.ospg.clear()?;
+        Ok(())
+    }
+
+    pub fn remove_named_graph(&self, graph_name: NamedOrBlankNodeRef<'_>) -> std::io::Result<bool> {
+        let graph_name = &graph_name.into();
         for quad in self.quads_for_graph(graph_name) {
-            self.remove(&quad?)?;
+            self.remove_encoded(&quad?)?;
         }
         Ok(self.graphs.remove(&encode_term(graph_name))?.is_some())
+    }
+
+    pub fn remove_all_named_graphs(&self) -> std::io::Result<()> {
+        self.gspo.clear()?;
+        self.gpos.clear()?;
+        self.gosp.clear()?;
+        self.spog.clear()?;
+        self.posg.clear()?;
+        self.ospg.clear()?;
+        self.graphs.clear()?;
+        Ok(())
     }
 
     pub fn clear(&self) -> std::io::Result<()> {
@@ -711,50 +758,51 @@ pub struct StorageTransaction<'a> {
 }
 
 impl<'a> StorageTransaction<'a> {
-    pub fn insert(&self, quad: &EncodedQuad) -> Result<bool, UnabortableTransactionError> {
+    pub fn insert(&self, quad: QuadRef<'_>) -> Result<bool, UnabortableTransactionError> {
+        let quad = self.encode_quad(quad)?;
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
 
         if quad.graph_name.is_default_graph() {
-            write_spo_quad(&mut buffer, quad);
+            write_spo_quad(&mut buffer, &quad);
             let is_new = self.dspo.insert(buffer.as_slice(), &[])?.is_none();
 
             if is_new {
                 buffer.clear();
 
-                write_pos_quad(&mut buffer, quad);
+                write_pos_quad(&mut buffer, &quad);
                 self.dpos.insert(buffer.as_slice(), &[])?;
                 buffer.clear();
 
-                write_osp_quad(&mut buffer, quad);
+                write_osp_quad(&mut buffer, &quad);
                 self.dosp.insert(buffer.as_slice(), &[])?;
                 buffer.clear();
             }
 
             Ok(is_new)
         } else {
-            write_spog_quad(&mut buffer, quad);
+            write_spog_quad(&mut buffer, &quad);
             let is_new = self.spog.insert(buffer.as_slice(), &[])?.is_none();
 
             if is_new {
                 buffer.clear();
 
-                write_posg_quad(&mut buffer, quad);
+                write_posg_quad(&mut buffer, &quad);
                 self.posg.insert(buffer.as_slice(), &[])?;
                 buffer.clear();
 
-                write_ospg_quad(&mut buffer, quad);
+                write_ospg_quad(&mut buffer, &quad);
                 self.ospg.insert(buffer.as_slice(), &[])?;
                 buffer.clear();
 
-                write_gspo_quad(&mut buffer, quad);
+                write_gspo_quad(&mut buffer, &quad);
                 self.gspo.insert(buffer.as_slice(), &[])?;
                 buffer.clear();
 
-                write_gpos_quad(&mut buffer, quad);
+                write_gpos_quad(&mut buffer, &quad);
                 self.gpos.insert(buffer.as_slice(), &[])?;
                 buffer.clear();
 
-                write_gosp_quad(&mut buffer, quad);
+                write_gosp_quad(&mut buffer, &quad);
                 self.gosp.insert(buffer.as_slice(), &[])?;
                 buffer.clear();
 
@@ -767,50 +815,51 @@ impl<'a> StorageTransaction<'a> {
         }
     }
 
-    pub fn remove(&self, quad: &EncodedQuad) -> Result<bool, UnabortableTransactionError> {
+    pub fn remove(&self, quad: QuadRef<'_>) -> Result<bool, UnabortableTransactionError> {
+        let quad = EncodedQuad::from(quad);
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
 
         if quad.graph_name.is_default_graph() {
-            write_spo_quad(&mut buffer, quad);
+            write_spo_quad(&mut buffer, &quad);
             let is_present = self.dspo.remove(buffer.as_slice())?.is_some();
 
             if is_present {
                 buffer.clear();
 
-                write_pos_quad(&mut buffer, quad);
+                write_pos_quad(&mut buffer, &quad);
                 self.dpos.remove(buffer.as_slice())?;
                 buffer.clear();
 
-                write_osp_quad(&mut buffer, quad);
+                write_osp_quad(&mut buffer, &quad);
                 self.dosp.remove(buffer.as_slice())?;
                 buffer.clear();
             }
 
             Ok(is_present)
         } else {
-            write_spog_quad(&mut buffer, quad);
+            write_spog_quad(&mut buffer, &quad);
             let is_present = self.spog.remove(buffer.as_slice())?.is_some();
 
             if is_present {
                 buffer.clear();
 
-                write_posg_quad(&mut buffer, quad);
+                write_posg_quad(&mut buffer, &quad);
                 self.posg.remove(buffer.as_slice())?;
                 buffer.clear();
 
-                write_ospg_quad(&mut buffer, quad);
+                write_ospg_quad(&mut buffer, &quad);
                 self.ospg.remove(buffer.as_slice())?;
                 buffer.clear();
 
-                write_gspo_quad(&mut buffer, quad);
+                write_gspo_quad(&mut buffer, &quad);
                 self.gspo.remove(buffer.as_slice())?;
                 buffer.clear();
 
-                write_gpos_quad(&mut buffer, quad);
+                write_gpos_quad(&mut buffer, &quad);
                 self.gpos.remove(buffer.as_slice())?;
                 buffer.clear();
 
-                write_gosp_quad(&mut buffer, quad);
+                write_gosp_quad(&mut buffer, &quad);
                 self.gosp.remove(buffer.as_slice())?;
                 buffer.clear();
             }
@@ -821,9 +870,10 @@ impl<'a> StorageTransaction<'a> {
 
     pub fn insert_named_graph(
         &self,
-        graph_name: &EncodedTerm,
+        graph_name: NamedOrBlankNodeRef<'_>,
     ) -> Result<bool, UnabortableTransactionError> {
-        Ok(self.graphs.insert(encode_term(graph_name), &[])?.is_none())
+        let graph_name = self.encode_named_or_blank_node(graph_name)?;
+        Ok(self.graphs.insert(encode_term(&graph_name), &[])?.is_none())
     }
 
     pub fn get_str(&self, key: &StrHash) -> Result<Option<String>, UnabortableTransactionError> {
@@ -1036,27 +1086,27 @@ impl<'a> StrContainer for StorageTransaction<'a> {
 }
 
 pub(crate) trait StorageLike: StrLookup + StrContainer {
-    fn insert(&self, quad: &EncodedQuad) -> Result<bool, Self::Error>;
+    fn insert(&self, quad: QuadRef<'_>) -> Result<bool, Self::Error>;
 
-    fn remove(&self, quad: &EncodedQuad) -> Result<bool, Self::Error>;
+    fn remove(&self, quad: QuadRef<'_>) -> Result<bool, Self::Error>;
 }
 
 impl StorageLike for Storage {
-    fn insert(&self, quad: &EncodedQuad) -> Result<bool, Self::Error> {
+    fn insert(&self, quad: QuadRef<'_>) -> Result<bool, Self::Error> {
         self.insert(quad)
     }
 
-    fn remove(&self, quad: &EncodedQuad) -> Result<bool, Self::Error> {
+    fn remove(&self, quad: QuadRef<'_>) -> Result<bool, Self::Error> {
         self.remove(quad)
     }
 }
 
 impl<'a> StorageLike for StorageTransaction<'a> {
-    fn insert(&self, quad: &EncodedQuad) -> Result<bool, Self::Error> {
+    fn insert(&self, quad: QuadRef<'_>) -> Result<bool, Self::Error> {
         self.insert(quad)
     }
 
-    fn remove(&self, quad: &EncodedQuad) -> Result<bool, Self::Error> {
+    fn remove(&self, quad: QuadRef<'_>) -> Result<bool, Self::Error> {
         self.remove(quad)
     }
 }

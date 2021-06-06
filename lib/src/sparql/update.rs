@@ -12,7 +12,7 @@ use crate::sparql::plan::EncodedTuple;
 use crate::sparql::plan_builder::PlanBuilder;
 use crate::sparql::{EvaluationError, UpdateOptions};
 use crate::storage::io::load_graph;
-use crate::storage::numeric_encoder::{Decoder, EncodedTerm, WriteEncoder};
+use crate::storage::numeric_encoder::{Decoder, EncodedTerm};
 use crate::storage::Storage;
 use http::header::{ACCEPT, CONTENT_TYPE, USER_AGENT};
 use http::{Method, Request, StatusCode};
@@ -96,8 +96,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         let mut bnodes = HashMap::new();
         for quad in data {
             let quad = self.convert_quad(quad, &mut bnodes);
-            let quad = self.storage.encode_quad(quad.as_ref())?;
-            self.storage.insert(&quad)?;
+            self.storage.insert(quad.as_ref())?;
         }
         Ok(())
     }
@@ -105,7 +104,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
     fn eval_delete_data(&mut self, data: &[GroundQuad]) -> Result<(), EvaluationError> {
         for quad in data {
             let quad = self.convert_ground_quad(quad);
-            self.storage.remove(&quad.as_ref().into())?;
+            self.storage.remove(quad.as_ref())?;
         }
         Ok(())
     }
@@ -131,15 +130,14 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                 if let Some(quad) =
                     self.convert_ground_quad_pattern(quad, &variables, &tuple, &dataset)?
                 {
-                    self.storage.remove(&quad.as_ref().into())?;
+                    self.storage.remove(quad.as_ref())?;
                 }
             }
             for quad in insert {
                 if let Some(quad) =
                     self.convert_quad_pattern(quad, &variables, &tuple, &dataset, &mut bnodes)?
                 {
-                    let quad = self.storage.encode_quad(quad.as_ref())?;
-                    self.storage.insert(&quad)?;
+                    self.storage.insert(quad.as_ref())?;
                 }
             }
             bnodes.clear();
@@ -196,32 +194,23 @@ impl<'a> SimpleUpdateEvaluator<'a> {
     }
 
     fn eval_create(&mut self, graph_name: &NamedNode, silent: bool) -> Result<(), EvaluationError> {
-        let encoded_graph_name = self
-            .storage
-            .encode_named_node(NamedNodeRef::new_unchecked(&graph_name.iri))?;
-        if self.storage.contains_named_graph(&encoded_graph_name)? {
-            if silent {
-                Ok(())
-            } else {
-                Err(EvaluationError::msg(format!(
-                    "The graph {} already exists",
-                    graph_name
-                )))
-            }
-        } else {
-            self.storage.insert_named_graph(&encoded_graph_name)?;
+        let graph_name = NamedNodeRef::new_unchecked(&graph_name.iri);
+        if self.storage.insert_named_graph(graph_name.into())? || silent {
             Ok(())
+        } else {
+            Err(EvaluationError::msg(format!(
+                "The graph {} already exists",
+                graph_name
+            )))
         }
     }
 
     fn eval_clear(&mut self, graph: &GraphTarget, silent: bool) -> Result<(), EvaluationError> {
         match graph {
             GraphTarget::NamedNode(graph_name) => {
-                let encoded_graph_name = self
-                    .storage
-                    .encode_named_node(NamedNodeRef::new_unchecked(&graph_name.iri))?;
-                if self.storage.contains_named_graph(&encoded_graph_name)? {
-                    Ok(self.storage.clear_graph(&encoded_graph_name)?)
+                let graph_name = NamedNodeRef::new_unchecked(&graph_name.iri);
+                if self.storage.contains_named_graph(&graph_name.into())? {
+                    Ok(self.storage.clear_graph(graph_name.into())?)
                 } else if silent {
                     Ok(())
                 } else {
@@ -232,53 +221,31 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                 }
             }
             GraphTarget::DefaultGraph => {
-                Ok(self.storage.clear_graph(&EncodedTerm::DefaultGraph)?)
-            }
-            GraphTarget::NamedGraphs => {
-                // TODO: optimize?
-                for graph in self.storage.named_graphs() {
-                    self.storage.clear_graph(&graph?)?;
-                }
+                self.storage.clear_graph(GraphNameRef::DefaultGraph)?;
                 Ok(())
             }
-            GraphTarget::AllGraphs => {
-                // TODO: optimize?
-                for graph in self.storage.named_graphs() {
-                    self.storage.clear_graph(&graph?)?;
-                }
-                Ok(self.storage.clear_graph(&EncodedTerm::DefaultGraph)?)
-            }
+            GraphTarget::NamedGraphs => Ok(self.storage.clear_all_named_graphs()?),
+            GraphTarget::AllGraphs => Ok(self.storage.clear_all_graphs()?),
         }
     }
 
     fn eval_drop(&mut self, graph: &GraphTarget, silent: bool) -> Result<(), EvaluationError> {
         match graph {
             GraphTarget::NamedNode(graph_name) => {
-                let encoded_graph_name = self
-                    .storage
-                    .encode_named_node(NamedNodeRef::new_unchecked(&graph_name.iri))?;
-                if self.storage.contains_named_graph(&encoded_graph_name)? {
-                    self.storage.remove_named_graph(&encoded_graph_name)?;
-                    Ok(())
-                } else if silent {
+                let graph_name = NamedNodeRef::new_unchecked(&graph_name.iri);
+                if self.storage.remove_named_graph(graph_name.into())? || silent {
                     Ok(())
                 } else {
                     Err(EvaluationError::msg(format!(
                         "The graph {} does not exists",
-                        graph
+                        graph_name
                     )))
                 }
             }
             GraphTarget::DefaultGraph => {
-                Ok(self.storage.clear_graph(&EncodedTerm::DefaultGraph)?)
+                Ok(self.storage.clear_graph(GraphNameRef::DefaultGraph)?)
             }
-            GraphTarget::NamedGraphs => {
-                // TODO: optimize?
-                for graph in self.storage.named_graphs() {
-                    self.storage.remove_named_graph(&graph?)?;
-                }
-                Ok(())
-            }
+            GraphTarget::NamedGraphs => Ok(self.storage.remove_all_named_graphs()?),
             GraphTarget::AllGraphs => Ok(self.storage.clear()?),
         }
     }

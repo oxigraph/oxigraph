@@ -31,7 +31,7 @@ use crate::sparql::{
     UpdateOptions,
 };
 use crate::storage::io::{dump_dataset, dump_graph, load_dataset, load_graph};
-use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm, WriteEncoder};
+use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
 pub use crate::storage::ConflictableTransactionError;
 pub use crate::storage::TransactionError;
 pub use crate::storage::UnabortableTransactionError;
@@ -360,8 +360,7 @@ impl Store {
     /// It might leave the store in a bad state if a crash happens during the insertion.
     /// Use a (memory greedy) [transaction](Store::transaction()) if you do not want that.
     pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> io::Result<bool> {
-        let quad = self.storage.encode_quad(quad.into())?;
-        self.storage.insert(&quad)
+        self.storage.insert(quad.into())
     }
 
     /// Removes a quad from this store.
@@ -372,8 +371,7 @@ impl Store {
     /// It might leave the store in a bad state if a crash happens during the removal.
     /// Use a (memory greedy) [transaction](Store::transaction()) if you do not want that.
     pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> io::Result<bool> {
-        let quad = EncodedQuad::from(quad.into());
-        self.storage.remove(&quad)
+        self.storage.remove(quad.into())
     }
 
     /// Dumps a store graph into a file.
@@ -489,8 +487,7 @@ impl Store {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> io::Result<bool> {
-        let graph_name = self.storage.encode_named_or_blank_node(graph_name.into())?;
-        self.storage.insert_named_graph(&graph_name)
+        self.storage.insert_named_graph(graph_name.into())
     }
 
     /// Clears a graph from this store.
@@ -512,8 +509,7 @@ impl Store {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn clear_graph<'a>(&self, graph_name: impl Into<GraphNameRef<'a>>) -> io::Result<()> {
-        let graph_name = EncodedTerm::from(graph_name.into());
-        self.storage.clear_graph(&graph_name)
+        self.storage.clear_graph(graph_name.into())
     }
 
     /// Removes a graph from this store.
@@ -540,8 +536,7 @@ impl Store {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> io::Result<bool> {
-        let graph_name = EncodedTerm::from(graph_name.into());
-        self.storage.remove_named_graph(&graph_name)
+        self.storage.remove_named_graph(graph_name.into())
     }
 
     /// Clears the store.
@@ -703,8 +698,7 @@ impl Transaction<'_> {
         &self,
         quad: impl Into<QuadRef<'a>>,
     ) -> Result<bool, UnabortableTransactionError> {
-        let quad = self.storage.encode_quad(quad.into())?;
-        self.storage.insert(&quad)
+        self.storage.insert(quad.into())
     }
 
     /// Removes a quad from this store during the transaction.
@@ -714,8 +708,7 @@ impl Transaction<'_> {
         &self,
         quad: impl Into<QuadRef<'a>>,
     ) -> Result<bool, UnabortableTransactionError> {
-        let quad = EncodedQuad::from(quad.into());
-        self.storage.remove(&quad)
+        self.storage.remove(quad.into())
     }
 
     /// Inserts a graph into this store during the transaction
@@ -725,8 +718,7 @@ impl Transaction<'_> {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool, UnabortableTransactionError> {
-        let graph_name = self.storage.encode_named_or_blank_node(graph_name.into())?;
-        self.storage.insert_named_graph(&graph_name)
+        self.storage.insert_named_graph(graph_name.into())
     }
 }
 

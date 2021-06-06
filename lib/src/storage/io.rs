@@ -3,7 +3,6 @@
 use crate::error::invalid_input_error;
 use crate::io::{DatasetFormat, DatasetSerializer, GraphFormat, GraphSerializer};
 use crate::model::{BlankNode, GraphNameRef, LiteralRef, NamedNodeRef, Quad, QuadRef, Triple};
-use crate::storage::numeric_encoder::WriteEncoder;
 use crate::storage::StorageLike;
 use oxiri::Iri;
 use rio_api::model as rio;
@@ -49,10 +48,9 @@ where
 {
     let mut bnode_map = HashMap::default();
     parser.parse_all(&mut move |t| {
-        let quad = storage
-            .encode_quad(quad_from_rio_triple(&t, to_graph_name, &mut bnode_map))
+        storage
+            .insert(quad_from_rio_triple(&t, to_graph_name, &mut bnode_map))
             .map_err(StoreOrParseError::Store)?;
-        storage.insert(&quad).map_err(StoreOrParseError::Store)?;
         Ok(())
     })
 }
@@ -131,10 +129,9 @@ where
 {
     let mut bnode_map = HashMap::default();
     parser.parse_all(&mut move |q| {
-        let quad = store
-            .encode_quad(quad_from_rio(&q, &mut bnode_map))
+        store
+            .insert(quad_from_rio(&q, &mut bnode_map))
             .map_err(StoreOrParseError::Store)?;
-        store.insert(&quad).map_err(StoreOrParseError::Store)?;
         Ok(())
     })
 }
