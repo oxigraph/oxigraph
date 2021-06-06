@@ -643,7 +643,6 @@ mod tests {
     use super::*;
     use crate::storage::numeric_encoder::*;
     use std::cell::RefCell;
-    use std::collections::hash_map::Entry;
     use std::collections::HashMap;
     use std::convert::Infallible;
 
@@ -664,15 +663,15 @@ mod tests {
         }
     }
 
-    impl StrContainer for MemoryStrStore {
-        fn insert_str(&self, key: &StrHash, value: &str) -> Result<bool, Infallible> {
-            match self.id2str.borrow_mut().entry(*key) {
-                Entry::Occupied(_) => Ok(false),
-                Entry::Vacant(entry) => {
-                    entry.insert(value.to_owned());
-                    Ok(true)
-                }
-            }
+    impl TermEncoder for MemoryStrStore {
+        type Error = Infallible;
+
+        fn insert_str(&self, key: &StrHash, value: &str) -> Result<(), Infallible> {
+            self.id2str
+                .borrow_mut()
+                .entry(*key)
+                .or_insert_with(|| value.to_owned());
+            Ok(())
         }
     }
 

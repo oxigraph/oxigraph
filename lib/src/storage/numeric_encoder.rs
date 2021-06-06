@@ -657,7 +657,7 @@ impl From<QuadRef<'_>> for EncodedQuad {
     }
 }
 
-pub(crate) trait StrLookup {
+pub trait StrLookup {
     type Error: Error + Into<EvaluationError> + 'static;
 
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, Self::Error>;
@@ -665,200 +665,92 @@ pub(crate) trait StrLookup {
     fn contains_str(&self, key: &StrHash) -> Result<bool, Self::Error>;
 }
 
-pub(crate) trait StrContainer: StrLookup {
-    fn insert_str(&self, key: &StrHash, value: &str) -> Result<bool, Self::Error>;
-}
+pub(super) trait TermEncoder {
+    type Error;
 
-/// Encodes a term and insert strings if needed
-pub(crate) trait WriteEncoder: StrContainer {
-    fn encode_named_node(&self, named_node: NamedNodeRef<'_>) -> Result<EncodedTerm, Self::Error> {
-        Ok(EncodedTerm::NamedNode {
-            iri_id: self.encode_str(named_node.as_str())?,
-        })
-    }
+    fn insert_str(&self, key: &StrHash, value: &str) -> Result<(), Self::Error>;
 
-    fn encode_blank_node(&self, blank_node: BlankNodeRef<'_>) -> Result<EncodedTerm, Self::Error> {
-        Ok(if let Some(id) = blank_node.id() {
-            EncodedTerm::NumericalBlankNode { id }
-        } else {
-            let id = blank_node.as_str();
-            if let Ok(id) = id.try_into() {
-                EncodedTerm::SmallBlankNode(id)
-            } else {
-                EncodedTerm::BigBlankNode {
-                    id_id: self.encode_str(id)?,
-                }
-            }
-        })
-    }
-
-    fn encode_literal(&self, literal: LiteralRef<'_>) -> Result<EncodedTerm, Self::Error> {
-        Ok(if literal.is_plain() {
-            if let Some(language) = literal.language() {
-                if let Ok(value) = SmallString::try_from(literal.value()) {
-                    if let Ok(language) = SmallString::try_from(language) {
-                        EncodedTerm::SmallSmallLangStringLiteral { value, language }
-                    } else {
-                        EncodedTerm::SmallBigLangStringLiteral {
-                            value,
-                            language_id: self.encode_str(language)?,
-                        }
-                    }
-                } else if let Ok(language) = SmallString::try_from(language) {
-                    EncodedTerm::BigSmallLangStringLiteral {
-                        value_id: self.encode_str(literal.value())?,
-                        language,
-                    }
-                } else {
-                    EncodedTerm::BigBigLangStringLiteral {
-                        value_id: self.encode_str(literal.value())?,
-                        language_id: self.encode_str(language)?,
-                    }
-                }
-            } else if let Ok(value) = SmallString::try_from(literal.value()) {
-                EncodedTerm::SmallStringLiteral(value)
-            } else {
-                EncodedTerm::BigStringLiteral {
-                    value_id: self.encode_str(literal.value())?,
-                }
-            }
-        } else {
-            match match literal.datatype().as_str() {
-                "http://www.w3.org/2001/XMLSchema#boolean" => parse_boolean_str(literal.value()),
-                "http://www.w3.org/2001/XMLSchema#string" => {
-                    Some(if let Ok(value) = SmallString::try_from(literal.value()) {
-                        EncodedTerm::SmallStringLiteral(value)
-                    } else {
-                        EncodedTerm::BigStringLiteral {
-                            value_id: self.encode_str(literal.value())?,
-                        }
-                    })
-                }
-                "http://www.w3.org/2001/XMLSchema#float" => parse_float_str(literal.value()),
-                "http://www.w3.org/2001/XMLSchema#double" => parse_double_str(literal.value()),
-                "http://www.w3.org/2001/XMLSchema#integer"
-                | "http://www.w3.org/2001/XMLSchema#byte"
-                | "http://www.w3.org/2001/XMLSchema#short"
-                | "http://www.w3.org/2001/XMLSchema#int"
-                | "http://www.w3.org/2001/XMLSchema#long"
-                | "http://www.w3.org/2001/XMLSchema#unsignedByte"
-                | "http://www.w3.org/2001/XMLSchema#unsignedShort"
-                | "http://www.w3.org/2001/XMLSchema#unsignedInt"
-                | "http://www.w3.org/2001/XMLSchema#unsignedLong"
-                | "http://www.w3.org/2001/XMLSchema#positiveInteger"
-                | "http://www.w3.org/2001/XMLSchema#negativeInteger"
-                | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
-                | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => {
-                    parse_integer_str(literal.value())
-                }
-                "http://www.w3.org/2001/XMLSchema#decimal" => parse_decimal_str(literal.value()),
-                "http://www.w3.org/2001/XMLSchema#dateTime"
-                | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => {
-                    parse_date_time_str(literal.value())
-                }
-                "http://www.w3.org/2001/XMLSchema#time" => parse_time_str(literal.value()),
-                "http://www.w3.org/2001/XMLSchema#date" => parse_date_str(literal.value()),
-                "http://www.w3.org/2001/XMLSchema#gYearMonth" => {
-                    parse_g_year_month_str(literal.value())
-                }
-                "http://www.w3.org/2001/XMLSchema#gYear" => parse_g_year_str(literal.value()),
-                "http://www.w3.org/2001/XMLSchema#gMonthDay" => {
-                    parse_g_month_day_str(literal.value())
-                }
-                "http://www.w3.org/2001/XMLSchema#gDay" => parse_g_day_str(literal.value()),
-                "http://www.w3.org/2001/XMLSchema#gMonth" => parse_g_month_str(literal.value()),
-                "http://www.w3.org/2001/XMLSchema#duration" => parse_duration_str(literal.value()),
-                "http://www.w3.org/2001/XMLSchema#yearMonthDuration" => {
-                    parse_year_month_duration_str(literal.value())
-                }
-                "http://www.w3.org/2001/XMLSchema#dayTimeDuration" => {
-                    parse_day_time_duration_str(literal.value())
-                }
-                _ => None,
-            } {
-                Some(v) => v,
-                None => {
-                    if let Ok(value) = SmallString::try_from(literal.value()) {
-                        EncodedTerm::SmallTypedLiteral {
-                            value,
-                            datatype_id: self.encode_str(literal.datatype().as_str())?,
-                        }
-                    } else {
-                        EncodedTerm::BigTypedLiteral {
-                            value_id: self.encode_str(literal.value())?,
-                            datatype_id: self.encode_str(literal.datatype().as_str())?,
-                        }
-                    }
-                }
-            }
-        })
-    }
-
-    fn encode_named_or_blank_node(
-        &self,
-        term: NamedOrBlankNodeRef<'_>,
-    ) -> Result<EncodedTerm, Self::Error> {
-        match term {
-            NamedOrBlankNodeRef::NamedNode(named_node) => self.encode_named_node(named_node),
-            NamedOrBlankNodeRef::BlankNode(blank_node) => self.encode_blank_node(blank_node),
-        }
-    }
-
-    fn encode_subject(&self, term: SubjectRef<'_>) -> Result<EncodedTerm, Self::Error> {
-        match term {
-            SubjectRef::NamedNode(named_node) => self.encode_named_node(named_node),
-            SubjectRef::BlankNode(blank_node) => self.encode_blank_node(blank_node),
-            SubjectRef::Triple(triple) => Ok(EncodedTerm::Triple(Rc::new(
-                self.encode_triple(triple.as_ref())?,
-            ))),
-        }
-    }
-
-    fn encode_term(&self, term: TermRef<'_>) -> Result<EncodedTerm, Self::Error> {
-        match term {
-            TermRef::NamedNode(named_node) => self.encode_named_node(named_node),
-            TermRef::BlankNode(blank_node) => self.encode_blank_node(blank_node),
-            TermRef::Literal(literal) => self.encode_literal(literal),
-            TermRef::Triple(triple) => Ok(EncodedTerm::Triple(Rc::new(
-                self.encode_triple(triple.as_ref())?,
-            ))),
-        }
-    }
-
-    fn encode_graph_name(&self, name: GraphNameRef<'_>) -> Result<EncodedTerm, Self::Error> {
-        match name {
-            GraphNameRef::NamedNode(named_node) => self.encode_named_node(named_node),
-            GraphNameRef::BlankNode(blank_node) => self.encode_blank_node(blank_node),
-            GraphNameRef::DefaultGraph => Ok(EncodedTerm::DefaultGraph),
-        }
-    }
-
-    fn encode_triple(&self, quad: TripleRef<'_>) -> Result<EncodedTriple, Self::Error> {
-        Ok(EncodedTriple {
-            subject: self.encode_subject(quad.subject)?,
-            predicate: self.encode_named_node(quad.predicate)?,
-            object: self.encode_term(quad.object)?,
-        })
+    fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> Result<EncodedTerm, Self::Error> {
+        let term = term.into();
+        let encoded = term.into();
+        insert_term_values(term, &encoded, |key, value| self.insert_str(key, value))?;
+        Ok(encoded)
     }
 
     fn encode_quad(&self, quad: QuadRef<'_>) -> Result<EncodedQuad, Self::Error> {
         Ok(EncodedQuad {
-            subject: self.encode_subject(quad.subject)?,
-            predicate: self.encode_named_node(quad.predicate)?,
+            subject: self.encode_term(quad.subject)?,
+            predicate: self.encode_term(quad.predicate)?,
             object: self.encode_term(quad.object)?,
-            graph_name: self.encode_graph_name(quad.graph_name)?,
+            graph_name: match quad.graph_name {
+                GraphNameRef::NamedNode(graph_name) => self.encode_term(graph_name)?,
+                GraphNameRef::BlankNode(graph_name) => self.encode_term(graph_name)?,
+                GraphNameRef::DefaultGraph => EncodedTerm::DefaultGraph,
+            },
         })
     }
-
-    fn encode_str(&self, value: &str) -> Result<StrHash, Self::Error>;
 }
 
-impl<S: StrContainer> WriteEncoder for S {
-    fn encode_str(&self, value: &str) -> Result<StrHash, Self::Error> {
-        let key = StrHash::new(value);
-        self.insert_str(&key, value)?;
-        Ok(key)
+pub fn insert_term_values<E, F: Fn(&StrHash, &str) -> Result<(), E> + Copy>(
+    term: TermRef<'_>,
+    encoded: &EncodedTerm,
+    insert_str: F,
+) -> Result<(), E> {
+    match (term, encoded) {
+        (TermRef::NamedNode(node), EncodedTerm::NamedNode { iri_id }) => {
+            insert_str(iri_id, node.as_str())?;
+        }
+        (TermRef::BlankNode(node), EncodedTerm::BigBlankNode { id_id }) => {
+            insert_str(id_id, node.as_str())?;
+        }
+        (TermRef::Literal(literal), EncodedTerm::BigStringLiteral { value_id }) => {
+            insert_str(value_id, literal.value())?;
+        }
+        (TermRef::Literal(literal), EncodedTerm::SmallBigLangStringLiteral { language_id, .. }) => {
+            if let Some(language) = literal.language() {
+                insert_str(language_id, language)?;
+            }
+        }
+        (TermRef::Literal(literal), EncodedTerm::BigSmallLangStringLiteral { value_id, .. }) => {
+            insert_str(value_id, literal.value())?;
+        }
+        (
+            TermRef::Literal(literal),
+            EncodedTerm::BigBigLangStringLiteral {
+                value_id,
+                language_id,
+            },
+        ) => {
+            insert_str(value_id, literal.value())?;
+            if let Some(language) = literal.language() {
+                insert_str(language_id, language)?
+            }
+        }
+        (TermRef::Literal(literal), EncodedTerm::SmallTypedLiteral { datatype_id, .. }) => {
+            insert_str(datatype_id, literal.datatype().as_str())?;
+        }
+        (
+            TermRef::Literal(literal),
+            EncodedTerm::BigTypedLiteral {
+                value_id,
+                datatype_id,
+            },
+        ) => {
+            insert_str(value_id, literal.value())?;
+            insert_str(datatype_id, literal.datatype().as_str())?;
+        }
+        (TermRef::Triple(triple), EncodedTerm::Triple(encoded)) => {
+            insert_term_values(triple.subject.as_ref().into(), &encoded.subject, insert_str)?;
+            insert_term_values(
+                triple.predicate.as_ref().into(),
+                &encoded.predicate,
+                insert_str,
+            )?;
+            insert_term_values(triple.object.as_ref(), &encoded.object, insert_str)?;
+        }
+        _ => (),
     }
+    Ok(())
 }
 
 pub fn parse_boolean_str(value: &str) -> Option<EncodedTerm> {
@@ -932,7 +824,7 @@ pub fn parse_day_time_duration_str(value: &str) -> Option<EncodedTerm> {
     value.parse().map(EncodedTerm::DayTimeDurationLiteral).ok()
 }
 
-pub(crate) trait Decoder: StrLookup {
+pub trait Decoder: StrLookup {
     fn decode_term(&self, encoded: &EncodedTerm) -> Result<Term, DecoderError<Self::Error>>;
 
     fn decode_subject(&self, encoded: &EncodedTerm) -> Result<Subject, DecoderError<Self::Error>> {
@@ -1112,7 +1004,7 @@ fn get_required_str<L: StrLookup>(
 }
 
 #[derive(Debug)]
-pub(crate) enum DecoderError<E> {
+pub enum DecoderError<E> {
     Store(E),
     Decoder { msg: String },
 }

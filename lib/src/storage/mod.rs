@@ -19,9 +19,7 @@ use crate::storage::binary_encoder::{
     LATEST_STORAGE_VERSION, WRITTEN_TERM_MAX_SIZE,
 };
 use crate::storage::io::StoreOrParseError;
-use crate::storage::numeric_encoder::{
-    EncodedQuad, EncodedTerm, StrContainer, StrHash, StrLookup, WriteEncoder,
-};
+use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash, StrLookup, TermEncoder};
 
 mod binary_encoder;
 pub(crate) mod io;
@@ -671,10 +669,6 @@ impl Storage {
     pub fn contains_str(&self, key: &StrHash) -> std::io::Result<bool> {
         Ok(self.id2str.contains_key(key.to_be_bytes())?)
     }
-
-    pub fn insert_str(&self, key: &StrHash, value: &str) -> std::io::Result<bool> {
-        Ok(self.id2str.insert(key.to_be_bytes(), value)?.is_none())
-    }
 }
 
 pub struct ChainedDecodingQuadIterator {
@@ -872,7 +866,7 @@ impl<'a> StorageTransaction<'a> {
         &self,
         graph_name: NamedOrBlankNodeRef<'_>,
     ) -> Result<bool, UnabortableTransactionError> {
-        let graph_name = self.encode_named_or_blank_node(graph_name)?;
+        let graph_name = self.encode_term(graph_name)?;
         Ok(self.graphs.insert(encode_term(&graph_name), &[])?.is_none())
     }
 
@@ -886,14 +880,6 @@ impl<'a> StorageTransaction<'a> {
 
     pub fn contains_str(&self, key: &StrHash) -> Result<bool, UnabortableTransactionError> {
         Ok(self.id2str.get(key.to_be_bytes())?.is_some())
-    }
-
-    pub fn insert_str(
-        &self,
-        key: &StrHash,
-        value: &str,
-    ) -> Result<bool, UnabortableTransactionError> {
-        Ok(self.id2str.insert(&key.to_be_bytes(), value)?.is_none())
     }
 }
 
@@ -1061,12 +1047,6 @@ impl StrLookup for Storage {
     }
 }
 
-impl StrContainer for Storage {
-    fn insert_str(&self, key: &StrHash, value: &str) -> std::io::Result<bool> {
-        self.insert_str(key, value)
-    }
-}
-
 impl<'a> StrLookup for StorageTransaction<'a> {
     type Error = UnabortableTransactionError;
 
@@ -1079,34 +1059,46 @@ impl<'a> StrLookup for StorageTransaction<'a> {
     }
 }
 
-impl<'a> StrContainer for StorageTransaction<'a> {
-    fn insert_str(&self, key: &StrHash, value: &str) -> Result<bool, UnabortableTransactionError> {
-        self.insert_str(key, value)
+impl TermEncoder for Storage {
+    type Error = std::io::Error;
+
+    fn insert_str(&self, key: &StrHash, value: &str) -> std::io::Result<()> {
+        self.id2str.insert(key.to_be_bytes(), value)?;
+        Ok(())
     }
 }
 
-pub(crate) trait StorageLike: StrLookup + StrContainer {
+impl<'a> TermEncoder for StorageTransaction<'a> {
+    type Error = UnabortableTransactionError;
+
+    fn insert_str(&self, key: &StrHash, value: &str) -> Result<(), UnabortableTransactionError> {
+        self.id2str.insert(&key.to_be_bytes(), value)?;
+        Ok(())
+    }
+}
+
+pub(crate) trait StorageLike: StrLookup {
     fn insert(&self, quad: QuadRef<'_>) -> Result<bool, Self::Error>;
 
     fn remove(&self, quad: QuadRef<'_>) -> Result<bool, Self::Error>;
 }
 
 impl StorageLike for Storage {
-    fn insert(&self, quad: QuadRef<'_>) -> Result<bool, Self::Error> {
+    fn insert(&self, quad: QuadRef<'_>) -> std::io::Result<bool> {
         self.insert(quad)
     }
 
-    fn remove(&self, quad: QuadRef<'_>) -> Result<bool, Self::Error> {
+    fn remove(&self, quad: QuadRef<'_>) -> std::io::Result<bool> {
         self.remove(quad)
     }
 }
 
 impl<'a> StorageLike for StorageTransaction<'a> {
-    fn insert(&self, quad: QuadRef<'_>) -> Result<bool, Self::Error> {
+    fn insert(&self, quad: QuadRef<'_>) -> Result<bool, UnabortableTransactionError> {
         self.insert(quad)
     }
 
-    fn remove(&self, quad: QuadRef<'_>) -> Result<bool, Self::Error> {
+    fn remove(&self, quad: QuadRef<'_>) -> Result<bool, UnabortableTransactionError> {
         self.remove(quad)
     }
 }

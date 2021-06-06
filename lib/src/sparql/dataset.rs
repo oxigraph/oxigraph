@@ -1,10 +1,13 @@
 use crate::model::TermRef;
 use crate::sparql::algebra::QueryDataset;
 use crate::sparql::EvaluationError;
-use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash, StrLookup};
+use crate::storage::numeric_encoder::{
+    insert_term_values, EncodedQuad, EncodedTerm, StrHash, StrLookup,
+};
 use crate::storage::Storage;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::iter::empty;
 
 pub(crate) struct DatasetView {
@@ -139,67 +142,12 @@ impl DatasetView {
     pub fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm {
         let term = term.into();
         let encoded = term.into();
-        self.insert_term_values(term, &encoded);
+        insert_term_values::<Infallible, _>(term, &encoded, |key, value| {
+            self.insert_str(key, value);
+            Ok(())
+        })
+        .unwrap(); // Can not fail
         encoded
-    }
-
-    fn insert_term_values(&self, term: TermRef<'_>, encoded: &EncodedTerm) {
-        match (term, encoded) {
-            (TermRef::NamedNode(node), EncodedTerm::NamedNode { iri_id }) => {
-                self.insert_str(iri_id, node.as_str());
-            }
-            (TermRef::BlankNode(node), EncodedTerm::BigBlankNode { id_id }) => {
-                self.insert_str(id_id, node.as_str());
-            }
-            (TermRef::Literal(literal), EncodedTerm::BigStringLiteral { value_id }) => {
-                self.insert_str(value_id, literal.value());
-            }
-            (
-                TermRef::Literal(literal),
-                EncodedTerm::SmallBigLangStringLiteral { language_id, .. },
-            ) => {
-                if let Some(language) = literal.language() {
-                    self.insert_str(language_id, language)
-                }
-            }
-            (
-                TermRef::Literal(literal),
-                EncodedTerm::BigSmallLangStringLiteral { value_id, .. },
-            ) => {
-                self.insert_str(value_id, literal.value());
-            }
-            (
-                TermRef::Literal(literal),
-                EncodedTerm::BigBigLangStringLiteral {
-                    value_id,
-                    language_id,
-                },
-            ) => {
-                self.insert_str(value_id, literal.value());
-                if let Some(language) = literal.language() {
-                    self.insert_str(language_id, language)
-                }
-            }
-            (TermRef::Literal(literal), EncodedTerm::SmallTypedLiteral { datatype_id, .. }) => {
-                self.insert_str(datatype_id, literal.datatype().as_str());
-            }
-            (
-                TermRef::Literal(literal),
-                EncodedTerm::BigTypedLiteral {
-                    value_id,
-                    datatype_id,
-                },
-            ) => {
-                self.insert_str(value_id, literal.value());
-                self.insert_str(datatype_id, literal.datatype().as_str());
-            }
-            (TermRef::Triple(triple), EncodedTerm::Triple(encoded)) => {
-                self.insert_term_values(triple.subject.as_ref().into(), &encoded.subject);
-                self.insert_term_values(triple.predicate.as_ref().into(), &encoded.predicate);
-                self.insert_term_values(triple.object.as_ref(), &encoded.object);
-            }
-            _ => (),
-        }
     }
 
     pub fn insert_str(&self, key: &StrHash, value: &str) {
