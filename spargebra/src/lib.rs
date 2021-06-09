@@ -5,6 +5,8 @@
 //!
 //! This crate is intended to be a building piece for SPARQL implementations in Rust like [Oxigraph](https://oxigraph.org).
 //!
+//! Support for [SPARQL-star](https://w3c.github.io/rdf-star/cg-spec/) is available behind the `rdf-star` feature.
+//!
 //! Usage example:
 //! ```
 //! use spargebra::Query;

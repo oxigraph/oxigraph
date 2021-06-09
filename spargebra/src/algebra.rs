@@ -361,10 +361,15 @@ pub enum Function {
     IsLiteral,
     IsNumeric,
     Regex,
+    #[cfg(feature = "rdf-star")]
     Triple,
+    #[cfg(feature = "rdf-star")]
     Subject,
+    #[cfg(feature = "rdf-star")]
     Predicate,
+    #[cfg(feature = "rdf-star")]
     Object,
+    #[cfg(feature = "rdf-star")]
     IsTriple,
     Custom(NamedNode),
 }
@@ -418,10 +423,15 @@ impl fmt::Display for Function {
             Function::IsLiteral => write!(f, "isLITERAL"),
             Function::IsNumeric => write!(f, "isNUMERIC"),
             Function::Regex => write!(f, "REGEX"),
+            #[cfg(feature = "rdf-star")]
             Function::Triple => write!(f, "TRIPLE"),
+            #[cfg(feature = "rdf-star")]
             Function::Subject => write!(f, "SUBJECT"),
+            #[cfg(feature = "rdf-star")]
             Function::Predicate => write!(f, "PREDICATE"),
+            #[cfg(feature = "rdf-star")]
             Function::Object => write!(f, "OBJECT"),
+            #[cfg(feature = "rdf-star")]
             Function::IsTriple => write!(f, "isTRIPLE"),
             Function::Custom(iri) => iri.fmt(f),
         }
@@ -656,12 +666,16 @@ impl GraphPattern {
             } => {
                 if let TermPattern::Variable(s) = subject {
                     vars.insert(s);
-                } else if let TermPattern::Triple(s) = subject {
+                }
+                #[cfg(feature = "rdf-star")]
+                if let TermPattern::Triple(s) = subject {
                     add_triple_pattern_variables(s, vars)
                 }
                 if let TermPattern::Variable(o) = object {
                     vars.insert(o);
-                } else if let TermPattern::Triple(o) = object {
+                }
+                #[cfg(feature = "rdf-star")]
+                if let TermPattern::Triple(o) = object {
                     add_triple_pattern_variables(o, vars)
                 }
             }
@@ -703,7 +717,9 @@ impl GraphPattern {
 fn add_triple_pattern_variables<'a>(pattern: &'a TriplePattern, vars: &mut BTreeSet<&'a Variable>) {
     if let TermPattern::Variable(s) = &pattern.subject {
         vars.insert(s);
-    } else if let TermPattern::Triple(s) = &pattern.subject {
+    }
+    #[cfg(feature = "rdf-star")]
+    if let TermPattern::Triple(s) = &pattern.subject {
         add_triple_pattern_variables(s, vars)
     }
     if let NamedNodePattern::Variable(p) = &pattern.predicate {
@@ -711,7 +727,9 @@ fn add_triple_pattern_variables<'a>(pattern: &'a TriplePattern, vars: &mut BTree
     }
     if let TermPattern::Variable(o) = &pattern.object {
         vars.insert(o);
-    } else if let TermPattern::Triple(o) = &pattern.object {
+    }
+    #[cfg(feature = "rdf-star")]
+    if let TermPattern::Triple(o) = &pattern.object {
         add_triple_pattern_variables(o, vars)
     }
 }

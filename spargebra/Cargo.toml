@@ -12,8 +12,15 @@ A SPARQL parser
 """
 edition = "2018"
 
+[features]
+default = []
+rdf-star = []
+
 [dependencies]
 peg = "0.7"
 rand = "0.8"
 oxiri = "0.1"
 oxilangtag = "0.1"
+
+[package.metadata.docs.rs]
+all-features = true

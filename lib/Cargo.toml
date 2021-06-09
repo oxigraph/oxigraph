@@ -44,7 +44,7 @@ http = "0.2"
 httparse = { version = "1", optional = true }
 native-tls = { version = "0.2", optional = true }
 json-event-parser = "0.1"
-spargebra = { version = "0.1", path="../spargebra" }
+spargebra = { version = "0.1", path="../spargebra", features = ["rdf-star"] }
 
 
 [dev-dependencies]
