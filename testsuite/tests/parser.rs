@@ -44,3 +44,28 @@ fn trig_w3c_testsuite() -> Result<()> {
 fn rdf_xml_w3c_testsuite() -> Result<()> {
     run_testsuite("http://www.w3.org/2013/RDFXMLTests/manifest.ttl")
 }
+
+#[test]
+fn ntriples_star_w3c_testsuite() -> Result<()> {
+    run_testsuite("https://w3c.github.io/rdf-star/tests/nt/syntax/manifest.ttl")
+}
+
+#[test]
+fn turtle_star_syntax_w3c_testsuite() -> Result<()> {
+    run_testsuite("https://w3c.github.io/rdf-star/tests/turtle/syntax/manifest.ttl")
+}
+
+#[test]
+fn turtle_star_eval_w3c_testsuite() -> Result<()> {
+    run_testsuite("https://w3c.github.io/rdf-star/tests/turtle/eval/manifest.ttl")
+}
+
+#[test]
+fn trig_star_syntax_w3c_testsuite() -> Result<()> {
+    run_testsuite("https://w3c.github.io/rdf-star/tests/trig/syntax/manifest.ttl")
+}
+
+#[test]
+fn trig_star_eval_w3c_testsuite() -> Result<()> {
+    run_testsuite("https://w3c.github.io/rdf-star/tests/trig/eval/manifest.ttl")
+}

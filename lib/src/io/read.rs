@@ -330,10 +330,12 @@ impl<'a> RioMapper {
         }
     }
 
-    fn subject(&mut self, node: rio::NamedOrBlankNode<'a>) -> Subject {
+    fn subject(&mut self, node: rio::Subject<'a>) -> Subject {
         match node {
-            rio::NamedOrBlankNode::NamedNode(node) => self.named_node(node).into(),
-            rio::NamedOrBlankNode::BlankNode(node) => self.blank_node(node).into(),
+            rio::Subject::NamedNode(node) => self.named_node(node).into(),
+            rio::Subject::BlankNode(node) => self.blank_node(node).into(),
+            rio::Subject::Triple(triple) => self.triple(triple).into(),
+            _ => unreachable!(),
         }
     }
 
@@ -342,6 +344,8 @@ impl<'a> RioMapper {
             rio::Term::NamedNode(node) => self.named_node(node).into(),
             rio::Term::BlankNode(node) => self.blank_node(node).into(),
             rio::Term::Literal(literal) => self.literal(literal).into(),
+            rio::Term::Triple(triple) => self.triple(triple).into(),
+            _ => unreachable!(),
         }
     }
 
@@ -353,10 +357,10 @@ impl<'a> RioMapper {
         }
     }
 
-    fn graph_name(&mut self, graph_name: Option<rio::NamedOrBlankNode<'a>>) -> GraphName {
+    fn graph_name(&mut self, graph_name: Option<rio::GraphName<'a>>) -> GraphName {
         match graph_name {
-            Some(rio::NamedOrBlankNode::NamedNode(node)) => self.named_node(node).into(),
-            Some(rio::NamedOrBlankNode::BlankNode(node)) => self.blank_node(node).into(),
+            Some(rio::GraphName::NamedNode(node)) => self.named_node(node).into(),
+            Some(rio::GraphName::BlankNode(node)) => self.blank_node(node).into(),
             None => GraphName::DefaultGraph,
         }
     }

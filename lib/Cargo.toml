@@ -32,9 +32,9 @@ digest = "0.9"
 regex = "1"
 oxilangtag = "0.1"
 oxiri = "0.1"
-rio_api = "0.5"
-rio_turtle = "0.5"
-rio_xml = "0.5"
+rio_api = { git = "https://github.com/oxigraph/rio", branch = "rdf-star", features = ["star"] }
+rio_turtle = { git = "https://github.com/oxigraph/rio", branch = "rdf-star", features = ["star"] }
+rio_xml = { git = "https://github.com/oxigraph/rio", branch = "rdf-star" }
 hex = "0.4"
 nom = "6"
 siphasher = "0.3"
