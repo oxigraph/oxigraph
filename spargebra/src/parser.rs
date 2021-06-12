@@ -1858,14 +1858,14 @@ parser! {
 
         //[119]
         rule PrimaryExpression() -> Expression =
-            BrackettedExpression() /
+            BrackettedExpression()  /
+            ExprEmbTP() /
             iriOrFunction() /
             v:Var() { v.into() } /
             l:RDFLiteral() { l.into() } /
             l:NumericLiteral() { l.into() } /
             l:BooleanLiteral() { l.into() } /
-            BuiltInCall() /
-            ExprEmbTP()
+            BuiltInCall()
 
         //[120]
         rule BrackettedExpression() -> Expression = "(" _ e:Expression() _ ")" { e }
@@ -2197,13 +2197,14 @@ parser! {
         rule EmbTriple_p() -> NamedNode = i: iri() { i } / "a" { iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type") }
 
         //[176]
-        rule EmbSubjectOrObject() -> TermPattern = v:Var() { v.into() } /
+        rule EmbSubjectOrObject() -> TermPattern =
+            t:EmbTP() { t.into() } /
+            v:Var() { v.into() } /
             b:BlankNode() { b.into() } /
             i:iri() { i.into() } /
             l:RDFLiteral() { l.into() } /
             l:NumericLiteral() { l.into() } /
-            l:BooleanLiteral() { l.into() } /
-            t:EmbTP() { t.into() }
+            l:BooleanLiteral() { l.into() }
 
         //[177]
         rule DataValueTerm() -> GroundTerm = i:iri() { i.into() } /
@@ -2214,9 +2215,9 @@ parser! {
 
         //[178]
         rule VarOrTermOrEmbTP() -> TermPattern =
+            t:EmbTP() { t.into() } /
             v:Var() { v.into() } /
-            t:GraphTerm() { t.into() } /
-            t:EmbTP() { t.into() }
+            t:GraphTerm() { t.into() }
 
         //[179]
         rule AnnotationPattern() -> FocusedTriplePattern<Vec<(NamedNodePattern,Vec<AnnotatedTerm>)>> = "{|" _ a:PropertyListNotEmpty() _ "|}" { a }
@@ -2231,12 +2232,12 @@ parser! {
 
         //[182]
         rule ExprVarOrTerm() -> Expression =
+            ExprEmbTP() /
             i:iri() { i.into() } /
             l:RDFLiteral() { l.into() } /
             l:NumericLiteral() { l.into() } /
             l:BooleanLiteral() { l.into() } /
-            v:Var() { v.into() } /
-            ExprEmbTP()
+            v:Var() { v.into() }
 
         //space
         rule _() = quiet! { ([' ' | '\t' | '\n' | '\r'] / comment())* }
