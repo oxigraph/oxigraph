@@ -2703,8 +2703,8 @@ fn get_triple_template_value<'a>(
         TripleTemplateValue::Triple(triple) => Some(
             EncodedTriple {
                 subject: get_triple_template_value(&triple.subject, tuple, bnodes)?,
-                predicate: get_triple_template_value(&triple.subject, tuple, bnodes)?,
-                object: get_triple_template_value(&triple.subject, tuple, bnodes)?,
+                predicate: get_triple_template_value(&triple.predicate, tuple, bnodes)?,
+                object: get_triple_template_value(&triple.object, tuple, bnodes)?,
             }
             .into(),
         ),

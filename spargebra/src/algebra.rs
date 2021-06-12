@@ -648,15 +648,7 @@ impl GraphPattern {
         match self {
             GraphPattern::Bgp(p) => {
                 for pattern in p {
-                    if let TermPattern::Variable(s) = &pattern.subject {
-                        vars.insert(s);
-                    }
-                    if let NamedNodePattern::Variable(p) = &pattern.predicate {
-                        vars.insert(p);
-                    }
-                    if let TermPattern::Variable(o) = &pattern.object {
-                        vars.insert(o);
-                    }
+                    add_triple_pattern_variables(pattern, vars)
                 }
             }
             GraphPattern::Path {
@@ -664,9 +656,13 @@ impl GraphPattern {
             } => {
                 if let TermPattern::Variable(s) = subject {
                     vars.insert(s);
+                } else if let TermPattern::Triple(s) = subject {
+                    add_triple_pattern_variables(s, vars)
                 }
                 if let TermPattern::Variable(o) = object {
                     vars.insert(o);
+                } else if let TermPattern::Triple(o) = object {
+                    add_triple_pattern_variables(o, vars)
                 }
             }
             GraphPattern::Join { left, right }
@@ -701,6 +697,22 @@ impl GraphPattern {
             | GraphPattern::Reduced { inner }
             | GraphPattern::Slice { inner, .. } => inner.add_visible_variables(vars),
         }
+    }
+}
+
+fn add_triple_pattern_variables<'a>(pattern: &'a TriplePattern, vars: &mut BTreeSet<&'a Variable>) {
+    if let TermPattern::Variable(s) = &pattern.subject {
+        vars.insert(s);
+    } else if let TermPattern::Triple(s) = &pattern.subject {
+        add_triple_pattern_variables(s, vars)
+    }
+    if let NamedNodePattern::Variable(p) = &pattern.predicate {
+        vars.insert(p);
+    }
+    if let TermPattern::Variable(o) = &pattern.object {
+        vars.insert(o);
+    } else if let TermPattern::Triple(o) = &pattern.object {
+        add_triple_pattern_variables(o, vars)
     }
 }
 
