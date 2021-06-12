@@ -138,9 +138,17 @@ fn sparql11_tsv_w3c_evaluation_testsuite() -> Result<()> {
 }
 
 #[test]
-fn sparql_star_query_syntax_testsuite() -> Result<()> {
+fn sparql_star_syntax_testsuite() -> Result<()> {
     run_testsuite(
         "https://w3c.github.io/rdf-star/tests/sparql/syntax/manifest.ttl",
+        vec![],
+    )
+}
+
+#[test]
+fn sparql_star_eval_testsuite() -> Result<()> {
+    run_testsuite(
+        "https://w3c.github.io/rdf-star/tests/sparql/eval/manifest.ttl",
         vec![],
     )
 }
