@@ -260,7 +260,10 @@ pub fn read_xml_results(source: impl BufRead + 'static) -> io::Result<QueryResul
                                 buffer,
                                 namespace_buffer,
                                 mapping,
-                                stack: Vec::new()
+                                stack: Vec::new(),
+                                subject_stack: Vec::new(),
+                                predicate_stack: Vec::new(),
+                                object_stack:Vec::new(),
                             }),
                         )));
                     } else if event.name() != b"link" && event.name() != b"results" && event.name() != b"boolean" {
@@ -348,6 +351,9 @@ struct ResultsIterator<R: BufRead> {
     namespace_buffer: Vec<u8>,
     mapping: BTreeMap<Vec<u8>, usize>,
     stack: Vec<State>,
+    subject_stack: Vec<Term>,
+    predicate_stack: Vec<Term>,
+    object_stack: Vec<Term>,
 }
 
 impl<R: BufRead> Iterator for ResultsIterator<R> {
@@ -368,9 +374,6 @@ impl<R: BufRead> ResultsIterator<R> {
         let mut term: Option<Term> = None;
         let mut lang = None;
         let mut datatype = None;
-        let mut subject = None;
-        let mut predicate = None;
-        let mut object = None;
         loop {
             let (ns, event) = self
                 .reader
@@ -547,15 +550,21 @@ impl<R: BufRead> ResultsIterator<R> {
                         state = State::Result;
                     }
                     State::Subject => {
-                        subject = term.take();
+                        if let Some(subject) = term.take() {
+                            self.subject_stack.push(subject)
+                        }
                         state = State::Triple;
                     }
                     State::Predicate => {
-                        predicate = term.take();
+                        if let Some(predicate) = term.take() {
+                            self.predicate_stack.push(predicate)
+                        }
                         state = State::Triple;
                     }
                     State::Object => {
-                        object = term.take();
+                        if let Some(object) = term.take() {
+                            self.object_stack.push(object)
+                        }
                         state = State::Triple;
                     }
                     State::Uri | State::BNode => state = self.stack.pop().unwrap(),
@@ -567,10 +576,11 @@ impl<R: BufRead> ResultsIterator<R> {
                         state = self.stack.pop().unwrap();
                     }
                     State::Triple => {
-                        println!("foo");
-                        if let (Some(subject), Some(predicate), Some(object)) =
-                            (subject.take(), predicate.take(), object.take())
-                        {
+                        if let (Some(subject), Some(predicate), Some(object)) = (
+                            self.subject_stack.pop(),
+                            self.predicate_stack.pop(),
+                            self.object_stack.pop(),
+                        ) {
                             term = Some(
                                 Triple::new(
                                     match subject {

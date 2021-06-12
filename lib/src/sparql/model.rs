@@ -516,8 +516,8 @@ fn test_serialization_rountrip() -> Result<(), EvaluationError> {
     use std::str;
 
     for format in &[
-        QueryResultsFormat::Xml,
         QueryResultsFormat::Json,
+        QueryResultsFormat::Xml,
         QueryResultsFormat::Tsv,
     ] {
         let results = vec![
@@ -563,7 +563,11 @@ fn test_serialization_rountrip() -> Result<(), EvaluationError> {
                                 Triple::new(
                                     NamedNode::new_unchecked("http://example.com/s"),
                                     NamedNode::new_unchecked("http://example.com/p"),
-                                    NamedNode::new_unchecked("http://example.com/o"),
+                                    Triple::new(
+                                        NamedNode::new_unchecked("http://example.com/os"),
+                                        NamedNode::new_unchecked("http://example.com/op"),
+                                        NamedNode::new_unchecked("http://example.com/oo"),
+                                    ),
                                 )
                                 .into(),
                             ),
