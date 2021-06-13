@@ -416,14 +416,37 @@ fn compare_solutions(expected: &[(Variable, Term)], actual: &[(Variable, Term)])
     expected.iter().zip(actual).all(
         move |((expected_variable, expected_value), (actual_variable, actual_value))| {
             expected_variable == actual_variable
-                && expected_value
-                    == if let Term::BlankNode(actual_value) = actual_value {
-                        bnode_map.entry(actual_value).or_insert(expected_value)
-                    } else {
-                        actual_value
-                    }
+                && compare_terms(
+                    expected_value.as_ref(),
+                    actual_value.as_ref(),
+                    &mut bnode_map,
+                )
         },
     )
+}
+
+fn compare_terms<'a>(
+    expected: TermRef<'a>,
+    actual: TermRef<'a>,
+    bnode_map: &mut HashMap<BlankNodeRef<'a>, BlankNodeRef<'a>>,
+) -> bool {
+    match (expected, actual) {
+        (TermRef::BlankNode(expected), TermRef::BlankNode(actual)) => {
+            expected == *bnode_map.entry(actual).or_insert(expected)
+        }
+        (TermRef::Triple(expected), TermRef::Triple(actual)) => {
+            compare_terms(
+                expected.subject.as_ref().into(),
+                actual.subject.as_ref().into(),
+                bnode_map,
+            ) && compare_terms(
+                expected.predicate.as_ref().into(),
+                actual.predicate.as_ref().into(),
+                bnode_map,
+            ) && compare_terms(expected.object.as_ref(), actual.object.as_ref(), bnode_map)
+        }
+        (expected, actual) => expected == actual,
+    }
 }
 
 enum StaticQueryResults {

@@ -822,14 +822,14 @@ impl SimpleEvaluator {
                 self.equals(&a, &b).map(|v| v.into())
             }
             PlanExpression::Greater(a, b) => Some(
-                (self.partial_cmp_literals(
+                (self.partial_cmp(
                     &self.eval_expression(a, tuple)?,
                     &self.eval_expression(b, tuple)?,
                 )? == Ordering::Greater)
                     .into(),
             ),
             PlanExpression::GreaterOrEqual(a, b) => Some(
-                match self.partial_cmp_literals(
+                match self.partial_cmp(
                     &self.eval_expression(a, tuple)?,
                     &self.eval_expression(b, tuple)?,
                 )? {
@@ -839,14 +839,14 @@ impl SimpleEvaluator {
                 .into(),
             ),
             PlanExpression::Less(a, b) => Some(
-                (self.partial_cmp_literals(
+                (self.partial_cmp(
                     &self.eval_expression(a, tuple)?,
                     &self.eval_expression(b, tuple)?,
                 )? == Ordering::Less)
                     .into(),
             ),
             PlanExpression::LessOrEqual(a, b) => Some(
-                match self.partial_cmp_literals(
+                match self.partial_cmp(
                     &self.eval_expression(a, tuple)?,
                     &self.eval_expression(b, tuple)?,
                 )? {
@@ -2049,14 +2049,51 @@ impl SimpleEvaluator {
                     _ if b.is_blank_node() => Ordering::Greater,
                     _ => Ordering::Less,
                 },
+                EncodedTerm::Triple(a) => match b {
+                    EncodedTerm::Triple(b) => {
+                        match self.cmp_terms(Some(&a.subject), Some(&b.subject)) {
+                            Ordering::Equal => {
+                                match self.cmp_terms(Some(&a.predicate), Some(&b.predicate)) {
+                                    Ordering::Equal => {
+                                        self.cmp_terms(Some(&a.object), Some(&b.object))
+                                    }
+                                    o => o,
+                                }
+                            }
+                            o => o,
+                        }
+                    }
+                    _ => Ordering::Greater,
+                },
                 a => match b {
                     _ if b.is_named_node() || b.is_blank_node() => Ordering::Greater,
+                    _ if b.is_triple() => Ordering::Less,
                     b => self.partial_cmp_literals(a, b).unwrap_or(Ordering::Equal),
                 },
             },
             (Some(_), None) => Ordering::Greater,
             (None, Some(_)) => Ordering::Less,
             (None, None) => Ordering::Equal,
+        }
+    }
+
+    fn partial_cmp(&self, a: &EncodedTerm, b: &EncodedTerm) -> Option<Ordering> {
+        if a == b {
+            return Some(Ordering::Equal);
+        } else if let EncodedTerm::Triple(a) = a {
+            if let EncodedTerm::Triple(b) = b {
+                match self.partial_cmp(&a.subject, &b.subject) {
+                    Some(Ordering::Equal) => match self.partial_cmp(&a.predicate, &b.predicate) {
+                        Some(Ordering::Equal) => self.partial_cmp(&a.object, &b.object),
+                        o => o,
+                    },
+                    o => o,
+                }
+            } else {
+                None
+            }
+        } else {
+            self.partial_cmp_literals(a, b)
         }
     }
 
