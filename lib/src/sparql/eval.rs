@@ -2079,7 +2079,7 @@ impl SimpleEvaluator {
 
     fn partial_cmp(&self, a: &EncodedTerm, b: &EncodedTerm) -> Option<Ordering> {
         if a == b {
-            return Some(Ordering::Equal);
+            Some(Ordering::Equal)
         } else if let EncodedTerm::Triple(a) = a {
             if let EncodedTerm::Triple(b) = b {
                 match self.partial_cmp(&a.subject, &b.subject) {
