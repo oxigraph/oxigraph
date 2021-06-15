@@ -670,24 +670,44 @@ pub(super) trait TermEncoder {
 
     fn insert_str(&self, key: &StrHash, value: &str) -> Result<(), Self::Error>;
 
-    fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> Result<EncodedTerm, Self::Error> {
-        let term = term.into();
-        let encoded = term.into();
-        insert_term_values(term, &encoded, |key, value| self.insert_str(key, value))?;
-        Ok(encoded)
+    fn insert_term(&self, term: TermRef<'_>, encoded: &EncodedTerm) -> Result<(), Self::Error> {
+        insert_term_values(term, encoded, |key, value| self.insert_str(key, value))
     }
 
-    fn encode_quad(&self, quad: QuadRef<'_>) -> Result<EncodedQuad, Self::Error> {
-        Ok(EncodedQuad {
-            subject: self.encode_term(quad.subject)?,
-            predicate: self.encode_term(quad.predicate)?,
-            object: self.encode_term(quad.object)?,
-            graph_name: match quad.graph_name {
-                GraphNameRef::NamedNode(graph_name) => self.encode_term(graph_name)?,
-                GraphNameRef::BlankNode(graph_name) => self.encode_term(graph_name)?,
-                GraphNameRef::DefaultGraph => EncodedTerm::DefaultGraph,
-            },
-        })
+    fn insert_graph_name(
+        &self,
+        graph_name: GraphNameRef<'_>,
+        encoded: &EncodedTerm,
+    ) -> Result<(), Self::Error> {
+        match graph_name {
+            GraphNameRef::NamedNode(graph_name) => self.insert_term(graph_name.into(), encoded),
+            GraphNameRef::BlankNode(graph_name) => self.insert_term(graph_name.into(), encoded),
+            GraphNameRef::DefaultGraph => Ok(()),
+        }
+    }
+
+    fn insert_quad_triple(
+        &self,
+        quad: QuadRef<'_>,
+        encoded: &EncodedQuad,
+    ) -> Result<(), Self::Error> {
+        self.insert_term(quad.subject.into(), &encoded.subject)?;
+        self.insert_term(quad.predicate.into(), &encoded.predicate)?;
+        self.insert_term(quad.object, &encoded.object)?;
+        Ok(())
+    }
+
+    fn remove_str(&self, key: &StrHash) -> Result<(), Self::Error>;
+
+    fn remove_term(&self, encoded: &EncodedTerm) -> Result<(), Self::Error> {
+        remove_term_values(encoded, |key| self.remove_str(key))
+    }
+
+    fn remove_quad_triple(&self, encoded: &EncodedQuad) -> Result<(), Self::Error> {
+        self.remove_term(&encoded.subject)?;
+        self.remove_term(&encoded.predicate)?;
+        self.remove_term(&encoded.object)?;
+        Ok(())
     }
 }
 
@@ -747,6 +767,53 @@ pub fn insert_term_values<E, F: Fn(&StrHash, &str) -> Result<(), E> + Copy>(
                 insert_str,
             )?;
             insert_term_values(triple.object.as_ref(), &encoded.object, insert_str)?;
+        }
+        _ => (),
+    }
+    Ok(())
+}
+
+pub fn remove_term_values<E, F: Fn(&StrHash) -> Result<(), E> + Copy>(
+    encoded: &EncodedTerm,
+    remove_str: F,
+) -> Result<(), E> {
+    match encoded {
+        EncodedTerm::NamedNode { iri_id } => {
+            remove_str(iri_id)?;
+        }
+        EncodedTerm::BigBlankNode { id_id } => {
+            remove_str(id_id)?;
+        }
+        EncodedTerm::BigStringLiteral { value_id } => {
+            remove_str(value_id)?;
+        }
+        EncodedTerm::SmallBigLangStringLiteral { language_id, .. } => {
+            remove_str(language_id)?;
+        }
+        EncodedTerm::BigSmallLangStringLiteral { value_id, .. } => {
+            remove_str(value_id)?;
+        }
+        EncodedTerm::BigBigLangStringLiteral {
+            value_id,
+            language_id,
+        } => {
+            remove_str(value_id)?;
+            remove_str(language_id)?;
+        }
+        EncodedTerm::SmallTypedLiteral { datatype_id, .. } => {
+            remove_str(datatype_id)?;
+        }
+        EncodedTerm::BigTypedLiteral {
+            value_id,
+            datatype_id,
+        } => {
+            remove_str(value_id)?;
+            remove_str(datatype_id)?;
+        }
+        EncodedTerm::Triple(encoded) => {
+            remove_term_values(&encoded.subject, remove_str)?;
+            remove_term_values(&encoded.predicate, remove_str)?;
+            remove_term_values(&encoded.object, remove_str)?;
         }
         _ => (),
     }

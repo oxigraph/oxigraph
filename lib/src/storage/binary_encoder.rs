@@ -7,7 +7,7 @@ use std::io::{Cursor, Read};
 use std::mem::size_of;
 use std::rc::Rc;
 
-pub const LATEST_STORAGE_VERSION: u64 = 1;
+pub const LATEST_STORAGE_VERSION: u64 = 2;
 pub const WRITTEN_TERM_MAX_SIZE: usize = size_of::<u8>() + 2 * size_of::<StrHash>();
 
 // Encoded term type blocks
@@ -673,6 +673,11 @@ mod tests {
                 .or_insert_with(|| value.to_owned());
             Ok(())
         }
+
+        fn remove_str(&self, key: &StrHash) -> Result<(), Self::Error> {
+            self.id2str.borrow_mut().remove(key);
+            Ok(())
+        }
     }
 
     #[test]
@@ -736,7 +741,8 @@ mod tests {
             .into(),
         ];
         for term in terms {
-            let encoded = store.encode_term(term.as_ref()).unwrap();
+            let encoded = term.as_ref().into();
+            store.insert_term(term.as_ref(), &encoded).unwrap();
             assert_eq!(encoded, term.as_ref().into());
             assert_eq!(term, store.decode_term(&encoded).unwrap());
 

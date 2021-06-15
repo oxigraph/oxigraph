@@ -131,6 +131,10 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                     self.convert_ground_quad_pattern(quad, &variables, &tuple, &dataset)?
                 {
                     self.storage.remove(quad.as_ref())?;
+                    // Hack to make sure the triple terms are still available for an insert
+                    dataset.encode_term(quad.subject.as_ref());
+                    dataset.encode_term(quad.predicate.as_ref());
+                    dataset.encode_term(quad.object.as_ref());
                 }
             }
             for quad in insert {
