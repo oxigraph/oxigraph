@@ -792,6 +792,7 @@ impl Dataset {
         }
     }
 
+    #[allow(clippy::needless_collect)]
     fn label(
         &mut self,
         hashes: &HashMap<InternedBlankNode, u64>,

@@ -28,7 +28,7 @@ fn sparql_w3c_syntax_bench(c: &mut Criterion) {
     c.bench_function("query parser", |b| {
         b.iter(|| {
             for (query, base) in &queries {
-                Query::parse(query, Some(&base)).unwrap();
+                Query::parse(query, Some(base)).unwrap();
             }
         })
     });

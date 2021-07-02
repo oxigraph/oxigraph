@@ -2079,7 +2079,7 @@ impl SimpleEvaluator {
 
     fn partial_cmp(&self, a: &EncodedTerm, b: &EncodedTerm) -> Option<Ordering> {
         if a == b {
-            return Some(Ordering::Equal);
+            Some(Ordering::Equal)
         } else if let EncodedTerm::Triple(a) = a {
             if let EncodedTerm::Triple(b) = b {
                 match self.partial_cmp(&a.subject, &b.subject) {
@@ -2616,7 +2616,7 @@ impl Iterator for BadLeftJoinIterator {
     type Item = Result<EncodedTuple, EvaluationError>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
-        while let Some(right_tuple) = self.current_right.next() {
+        for right_tuple in &mut self.current_right {
             match right_tuple {
                 Ok(right_tuple) => {
                     if let Some(combined) = combine_tuples(
@@ -2635,7 +2635,7 @@ impl Iterator for BadLeftJoinIterator {
                 let mut filtered_left = left_tuple.clone();
                 unbind_variables(&mut filtered_left, &self.problem_vars);
                 self.current_right = self.eval.eval_plan(&self.right_plan, filtered_left);
-                while let Some(right_tuple) = self.current_right.next() {
+                for right_tuple in &mut self.current_right {
                     match right_tuple {
                         Ok(right_tuple) => {
                             if let Some(combined) =

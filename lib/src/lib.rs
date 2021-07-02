@@ -67,7 +67,7 @@
     clippy::explicit_iter_loop,
     clippy::expl_impl_clone_on_copy,
     clippy::fallible_impl_from,
-    clippy::filter_map,
+    clippy::manual_filter_map,
     clippy::filter_map_next,
     clippy::manual_find_map,
     clippy::get_unwrap,
@@ -93,7 +93,6 @@
     // clippy::panic, does not work well with tests
     clippy::path_buf_push_overwrite,
     clippy::print_stdout,
-    clippy::pub_enum_variant_names,
     //TODO clippy::redundant_closure_for_method_calls,
     // clippy::shadow_reuse,
     // clippy::shadow_same,
@@ -107,8 +106,7 @@
     clippy::unimplemented,
     clippy::unseparated_literal_suffix,
     clippy::used_underscore_binding,
-    clippy::wildcard_dependencies,
-    clippy::wrong_pub_self_convention,
+    clippy::wildcard_dependencies
 )]
 #![doc(test(attr(deny(warnings))))]
 
