@@ -4,7 +4,7 @@
   "private": true,
   "devDependencies": {
     "mocha": "^9.0.0",
-    "@rdfjs/data-model": "1.1.2",
+    "@rdfjs/data-model": "1.3.2",
     "standard": "^16.0.0"
   },
   "scripts": {
