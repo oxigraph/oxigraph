@@ -335,7 +335,6 @@ impl<'a> RioMapper {
             rio::Subject::NamedNode(node) => self.named_node(node).into(),
             rio::Subject::BlankNode(node) => self.blank_node(node).into(),
             rio::Subject::Triple(triple) => self.triple(triple).into(),
-            _ => unreachable!(),
         }
     }
 
@@ -345,7 +344,6 @@ impl<'a> RioMapper {
             rio::Term::BlankNode(node) => self.blank_node(node).into(),
             rio::Term::Literal(literal) => self.literal(literal).into(),
             rio::Term::Triple(triple) => self.triple(triple).into(),
-            _ => unreachable!(),
         }
     }
 
