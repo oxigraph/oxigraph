@@ -1078,7 +1078,15 @@ impl<'a> QuadRef<'a> {
 impl fmt::Display for QuadRef<'_> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {} {}", self.subject, self.predicate, self.object)
+        if self.graph_name == GraphNameRef::DefaultGraph {
+            write!(f, "{} {} {}", self.subject, self.predicate, self.object)
+        } else {
+            write!(
+                f,
+                "{} {} {} {}",
+                self.subject, self.predicate, self.object, self.graph_name
+            )
+        }
     }
 }
 
