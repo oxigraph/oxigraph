@@ -13,7 +13,7 @@ publish = false
 
 [dependencies]
 anyhow = "1"
-argh = "0.1"
+clap = "2"
 chrono = "0.4"
 oxigraph = { version = "0.3.0-dev", path="../lib" }
 text-diff = "0.4"

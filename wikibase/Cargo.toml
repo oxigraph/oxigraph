@@ -11,7 +11,7 @@ SPARQL server based on Oxigraph for Wikibase instances
 edition = "2018"
 
 [dependencies]
-argh = "0.1"
+clap = "2"
 async-std = { version = "1", features = ["attributes"] }
 async-h1 = "2"
 chrono = "0.4"

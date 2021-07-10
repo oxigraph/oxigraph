@@ -15,6 +15,7 @@ edition = "2018"
 argh = "0.1"
 async-std = { version = "1", features = ["attributes"] }
 async-h1 = "2"
+clap = "2"
 http-types = "2"
 oxigraph = { version = "0.3.0-dev", path="../lib", features = ["http_client"] }
 rand = "0.8"

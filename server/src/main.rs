@@ -9,12 +9,12 @@
     unused_qualifications
 )]
 
-use argh::FromArgs;
 use async_std::future::Future;
 use async_std::io::Read;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::task::{block_on, spawn};
+use clap::{App, Arg};
 use http_types::content::ContentType;
 use http_types::{
     bail_status, format_err_status, headers, Error, Method, Mime, Request, Response, Result,
@@ -35,28 +35,35 @@ const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
 const LOGO: &str = include_str!("../logo.svg");
 const SERVER: &str = concat!("Oxigraph/", env!("CARGO_PKG_VERSION"));
 
-#[derive(FromArgs)]
-/// Oxigraph SPARQL server
-struct Args {
-    /// specify a server socket to bind using the format $(HOST):$(PORT)
-    #[argh(option, short = 'b', default = "\"localhost:7878\".to_string()")]
-    bind: String,
-
-    /// directory in which persist the data
-    #[argh(option, short = 'f')]
-    file: String,
-}
-
 #[async_std::main]
 pub async fn main() -> Result<()> {
-    let args: Args = argh::from_env();
-    let store = Store::open(args.file)?;
+    let matches = App::new("Oxigraph SPARQL server")
+        .arg(
+            Arg::with_name("bind")
+                .short("b")
+                .long("bind")
+                .help("Sets a custom config file")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("file")
+                .short("f")
+                .long("file")
+                .help("directory in which persist the data")
+                .takes_value(true),
+        )
+        .get_matches();
+    let bind = matches.value_of("bind").unwrap_or("localhost:7878");
+    let file = matches.value_of("file");
 
-    println!("Listening for requests at http://{}", &args.bind);
-    http_server(&args.bind, move |request| {
-        handle_request(request, store.clone())
-    })
-    .await
+    let store = if let Some(file) = file {
+        Store::open(file)
+    } else {
+        Store::new()
+    }?;
+
+    println!("Listening for requests at http://{}", &bind);
+    http_server(&bind, move |request| handle_request(request, store.clone())).await
 }
 
 async fn handle_request(request: Request, store: Store) -> Result<Response> {
