@@ -25,7 +25,7 @@ use std::io::BufReader;
 /// '<http://example.com> <http://example.com/p> "1" <http://example.com/g> .\n'
 #[pyclass(name = "MemoryStore", module = "oxigraph")]
 #[derive(Eq, PartialEq, Clone)]
-#[text_signature = "()"]
+#[pyo3(text_signature = "()")]
 pub struct PyMemoryStore {
     inner: MemoryStore,
 }
@@ -48,7 +48,7 @@ impl PyMemoryStore {
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[text_signature = "($self, quad)"]
+    #[pyo3(text_signature = "($self, quad)")]
     fn add(&self, quad: PyQuad) {
         self.inner.insert(quad)
     }
@@ -64,7 +64,7 @@ impl PyMemoryStore {
     /// >>> store.remove(quad)
     /// >>> list(store)
     /// []
-    #[text_signature = "($self, quad)"]
+    #[pyo3(text_signature = "($self, quad)")]
     fn remove(&self, quad: &PyQuad) {
         self.inner.remove(quad)
     }
@@ -86,7 +86,7 @@ impl PyMemoryStore {
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     /// >>> list(store.quads_for_pattern(NamedNode('http://example.com'), None, None, None))
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[text_signature = "($self, subject, predicate, object, graph_name = None)"]
+    #[pyo3(text_signature = "($self, subject, predicate, object, graph_name = None)")]
     fn quads_for_pattern(
         &self,
         subject: &PyAny,
@@ -140,7 +140,9 @@ impl PyMemoryStore {
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
     /// >>> store.query('ASK { ?s ?p ?o }')
     /// True
-    #[text_signature = "($self, query, *, use_default_graph_as_union, default_graph, named_graphs)"]
+    #[pyo3(
+        text_signature = "($self, query, *, use_default_graph_as_union, default_graph, named_graphs)"
+    )]
     #[args(
         query,
         "*",
@@ -197,7 +199,7 @@ impl PyMemoryStore {
     /// >>> store.update('DELETE WHERE { <http://example.com> ?p ?o }')
     /// >>> list(store)
     /// []
-    #[text_signature = "($self, update)"]
+    #[pyo3(text_signature = "($self, update)")]
     fn update(&self, update: &str) -> PyResult<()> {
         self.inner.update(update).map_err(map_evaluation_error)
     }
@@ -231,7 +233,7 @@ impl PyMemoryStore {
     /// >>> store.load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[text_signature = "($self, input, /, mime_type, *, base_iri = None, to_graph = None)"]
+    #[pyo3(text_signature = "($self, input, /, mime_type, *, base_iri = None, to_graph = None)")]
     #[args(input, mime_type, "*", base_iri = "None", to_graph = "None")]
     fn load(
         &self,
@@ -300,7 +302,7 @@ impl PyMemoryStore {
     /// >>> store.dump(output, "text/turtle", from_graph=NamedNode("http://example.com/g"))
     /// >>> output.getvalue()
     /// b'<http://example.com> <http://example.com/p> "1" .\n'
-    #[text_signature = "($self, output, /, mime_type, *, from_graph = None)"]
+    #[pyo3(text_signature = "($self, output, /, mime_type, *, from_graph = None)")]
     #[args(output, mime_type, "*", from_graph = "None")]
     fn dump(&self, output: PyObject, mime_type: &str, from_graph: Option<&PyAny>) -> PyResult<()> {
         let from_graph_name = if let Some(graph_name) = from_graph {
@@ -343,7 +345,7 @@ impl PyMemoryStore {
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     /// >>> list(store.named_graphs())
     /// [<NamedNode value=http://example.com/g>]
-    #[text_signature = "($self)"]
+    #[pyo3(text_signature = "($self)")]
     fn named_graphs(&self) -> GraphNameIter {
         GraphNameIter {
             inner: self.inner.named_graphs(),
@@ -359,7 +361,7 @@ impl PyMemoryStore {
     /// >>> store.add_graph(NamedNode('http://example.com/g'))
     /// >>> list(store.named_graphs())
     /// [<NamedNode value=http://example.com/g>]
-    #[text_signature = "($self, graph_name)"]
+    #[pyo3(text_signature = "($self, graph_name)")]
     fn add_graph(&self, graph_name: PyGraphName) {
         match graph_name {
             PyGraphName::DefaultGraph(_) => (),
@@ -380,7 +382,7 @@ impl PyMemoryStore {
     /// >>> store.remove_graph(NamedNode('http://example.com/g'))
     /// >>> list(store)
     /// []
-    #[text_signature = "($self, graph_name)"]
+    #[pyo3(text_signature = "($self, graph_name)")]
     fn remove_graph(&self, graph_name: &PyAny) -> PyResult<()> {
         match PyGraphNameRef::try_from(graph_name)? {
             PyGraphNameRef::DefaultGraph => self.inner.clear_graph(GraphNameRef::DefaultGraph),
