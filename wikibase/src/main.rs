@@ -10,11 +10,11 @@
 )]
 
 use crate::loader::WikibaseLoader;
-use argh::FromArgs;
 use async_std::future::Future;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::task::spawn;
+use clap::{App, Arg};
 use http_types::content::ContentType;
 use http_types::{
     bail_status, format_err_status, headers, Error, Method, Mime, Request, Response, Result,
@@ -33,43 +33,57 @@ mod loader;
 const MAX_SPARQL_BODY_SIZE: u64 = 1_048_576;
 const SERVER: &str = concat!("Oxigraph/", env!("CARGO_PKG_VERSION"));
 
-#[derive(FromArgs)]
-/// Oxigraph SPARQL server for Wikibase
-struct Args {
-    /// specify a server socket to bind using the format $(HOST):$(PORT)
-    #[argh(option, short = 'b', default = "\"localhost:7878\".to_string()")]
-    bind: String,
-
-    /// directory in which persist the data
-    #[argh(option, short = 'f')]
-    file: String,
-
-    #[argh(option)]
-    /// base URL of the MediaWiki API like https://www.wikidata.org/w/api.php
-    mediawiki_api: String,
-
-    #[argh(option)]
-    /// base URL of MediaWiki like https://www.wikidata.org/wiki/
-    mediawiki_base_url: String,
-
-    #[argh(option)]
-    /// namespaces ids to load like "0,120"
-    namespaces: Option<String>,
-
-    #[argh(option)]
-    /// slot to load like "mediainfo". Could not be use with namespaces
-    slot: Option<String>,
-}
-
 #[async_std::main]
 pub async fn main() -> Result<()> {
-    let args: Args = argh::from_env();
-
-    let store = RocksDbStore::open(args.file)?;
-    let mediawiki_api = args.mediawiki_api.clone();
-    let mediawiki_base_url = args.mediawiki_base_url.clone();
-    let namespaces = args
-        .namespaces
+    let matches = App::new("Oxigraph SPARQL server for Wikibase")
+        .arg(
+            Arg::with_name("bind")
+                .short("b")
+                .long("bind")
+                .help("Sets a custom config file")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("file")
+                .short("f")
+                .long("file")
+                .help("directory in which persist the data")
+                .takes_value(true)
+                .required(true),
+        )
+        .arg(
+            Arg::with_name("mediawiki_api")
+                .long("mediawiki_api")
+                .help("base URL of the MediaWiki API like https://www.wikidata.org/w/api.php")
+                .takes_value(true)
+                .required(true),
+        )
+        .arg(
+            Arg::with_name("mediawiki_base_url")
+                .long("mediawiki_base_url")
+                .help("base URL of MediaWiki like https://www.wikidata.org/wiki/")
+                .takes_value(true)
+                .required(true),
+        )
+        .arg(
+            Arg::with_name("namespaces")
+                .long("namespaces")
+                .help("namespaces ids to load like '0,120'")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("slot")
+                .long("slot")
+                .help("slot to load like 'mediainfo'. Could not be use with namespaces")
+                .takes_value(true),
+        )
+        .get_matches();
+    let bind = matches.value_of("bind").unwrap_or("localhost:7878");
+    let file = matches.value_of("file").unwrap();
+    let mediawiki_api = matches.value_of("mediawiki_api").unwrap();
+    let mediawiki_base_url = matches.value_of("mediawiki_base_url").unwrap();
+    let namespaces = matches
+        .value_of("namespaces")
         .as_deref()
         .unwrap_or("")
         .split(',')
@@ -82,7 +96,9 @@ pub async fn main() -> Result<()> {
             }
         })
         .collect::<Vec<_>>();
-    let slot = args.slot.clone();
+    let slot = matches.value_of("slot");
+
+    let store = RocksDbStore::open(file)?;
     let repo = store.clone();
     let mut loader = WikibaseLoader::new(
         repo,
@@ -98,12 +114,9 @@ pub async fn main() -> Result<()> {
         loader.update_loop();
     });
 
-    println!("Listening for requests at http://{}", &args.bind);
+    println!("Listening for requests at http://{}", &bind);
 
-    http_server(&args.bind, move |request| {
-        handle_request(request, store.clone())
-    })
-    .await
+    http_server(&bind, move |request| handle_request(request, store.clone())).await
 }
 
 async fn handle_request(request: Request, store: RocksDbStore) -> Result<Response> {
