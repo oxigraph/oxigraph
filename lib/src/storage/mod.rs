@@ -571,7 +571,8 @@ impl Storage {
     }
 
     pub fn insert_named_graph(&self, graph_name: NamedOrBlankNodeRef<'_>) -> std::io::Result<bool> {
-        self.insert_encoded_named_graph(&graph_name.into())
+        let graph_name = self.encode_term(graph_name)?;
+        self.insert_encoded_named_graph(&graph_name)
     }
 
     fn insert_encoded_named_graph(&self, graph_name: &EncodedTerm) -> std::io::Result<bool> {

@@ -359,6 +359,21 @@ impl Store {
     /// This method is optimized for performances and is not atomic.
     /// It might leave the store in a bad state if a crash happens during the insertion.
     /// Use a (memory greedy) [transaction](Store::transaction()) if you do not want that.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::store::Store;
+    /// use oxigraph::model::*;
+    ///
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
+    ///
+    /// let store = Store::new()?;
+    /// store.insert(quad)?;
+    ///
+    /// assert!(store.contains(quad)?);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
     pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> io::Result<bool> {
         self.storage.insert(quad.into())
     }
@@ -370,6 +385,22 @@ impl Store {
     /// This method is optimized for performances and is not atomic.
     /// It might leave the store in a bad state if a crash happens during the removal.
     /// Use a (memory greedy) [transaction](Store::transaction()) if you do not want that.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::store::Store;
+    /// use oxigraph::model::*;
+    ///
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
+    ///
+    /// let store = Store::new()?;
+    /// store.insert(quad)?;
+    /// store.remove(quad)?;
+    ///
+    /// assert!(!store.contains(quad)?);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
     pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> io::Result<bool> {
         self.storage.remove(quad.into())
     }
@@ -480,7 +511,8 @@ impl Store {
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let store = Store::new()?;
     /// store.insert_named_graph(ex)?;
-    /// assert_eq!(store.named_graphs().count(), 1);
+    ///
+    /// assert_eq!(store.named_graphs().collect::<Result<Vec<_>,_>>()?, vec![ex.into_owned().into()]);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn insert_named_graph<'a>(
@@ -694,6 +726,24 @@ impl Transaction<'_> {
     /// Adds a quad to this store during the transaction.
     ///
     /// Returns `true` if the quad was not already in the store.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::store::{Store, ConflictableTransactionError};
+    /// use oxigraph::model::*;
+    ///
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
+    ///
+    /// let store = Store::new()?;
+    /// store.transaction(|transaction| {
+    ///     transaction.insert(quad)?;
+    ///     Ok(()) as Result<(),ConflictableTransactionError<std::io::Error>>
+    /// })?;
+    ///
+    /// assert!(store.contains(quad)?);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
     pub fn insert<'a>(
         &self,
         quad: impl Into<QuadRef<'a>>,
@@ -704,6 +754,26 @@ impl Transaction<'_> {
     /// Removes a quad from this store during the transaction.
     ///
     /// Returns `true` if the quad was in the store and has been removed.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::store::{Store, ConflictableTransactionError};
+    /// use oxigraph::model::*;
+    ///
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
+    ///
+    /// let store = Store::new()?;
+    /// store.insert(quad)?;
+    ///
+    /// store.transaction(|transaction| {
+    ///     transaction.remove(quad)?;
+    ///     Ok(()) as Result<(),ConflictableTransactionError<std::io::Error>>
+    /// })?;
+    ///
+    /// assert!(!store.contains(quad)?);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
     pub fn remove<'a>(
         &self,
         quad: impl Into<QuadRef<'a>>,
@@ -714,6 +784,23 @@ impl Transaction<'_> {
     /// Inserts a graph into this store during the transaction
     ///
     /// Returns `true` if the graph was not already in the store.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::store::{Store, ConflictableTransactionError};
+    /// use oxigraph::model::*;
+    ///
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    ///
+    /// let store = Store::new()?;
+    /// store.transaction(|transaction| {
+    ///     transaction.insert_named_graph(ex)?;
+    ///     Ok(()) as Result<(),ConflictableTransactionError<std::io::Error>>
+    /// })?;
+    ///
+    /// assert_eq!(store.named_graphs().collect::<Result<Vec<_>,_>>()?, vec![ex.into_owned().into()]);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
     pub fn insert_named_graph<'a>(
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
