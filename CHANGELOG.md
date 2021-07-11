@@ -1,3 +1,15 @@
+## [0.2.5] - 2021-07-11
+
+## Added
+- [SPARQL 1.1 Query Results JSON Format](http://www.w3.org/TR/sparql11-results-json/) parser.
+- Python wheels for macOS are now universal2 binaries.
+
+### Changed
+- The `Cargo.lock` file is now provided with releases to avoid compilation failures because of changes in dependencies.
+- Uses clap instead of argh for the server arguments parsing.
+- Upgrades PyO3 to v0.14.
+
+
 ## [0.2.4] - 2021-04-28
 
 ### Changed
