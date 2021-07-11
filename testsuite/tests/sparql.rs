@@ -115,6 +115,14 @@ fn sparql11_update_w3c_evaluation_testsuite() -> Result<()> {
 }
 
 #[test]
+fn sparql11_json_w3c_evaluation_testsuite() -> Result<()> {
+    run_testsuite(
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/json-res/manifest.ttl",
+        vec![],
+    )
+}
+
+#[test]
 fn sparql11_tsv_w3c_evaluation_testsuite() -> Result<()> {
     run_testsuite(
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/csv-tsv-res/manifest.ttl",
