@@ -74,7 +74,7 @@ impl Duration {
         self.day_time.all_seconds()
     }
 
-    pub fn to_be_bytes(&self) -> [u8; 24] {
+    pub fn to_be_bytes(self) -> [u8; 24] {
         let mut bytes = [0; 24];
         bytes[0..8].copy_from_slice(&self.year_month.to_be_bytes());
         bytes[8..24].copy_from_slice(&self.day_time.to_be_bytes());
@@ -273,7 +273,7 @@ impl YearMonthDuration {
         self.months
     }
 
-    pub fn to_be_bytes(&self) -> [u8; 8] {
+    pub fn to_be_bytes(self) -> [u8; 8] {
         self.months.to_be_bytes()
     }
 
@@ -425,7 +425,7 @@ impl DayTimeDuration {
         self.seconds
     }
 
-    pub fn to_be_bytes(&self) -> [u8; 16] {
+    pub fn to_be_bytes(self) -> [u8; 16] {
         self.seconds.to_be_bytes()
     }
 

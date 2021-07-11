@@ -1049,7 +1049,6 @@ impl<'a> WritableEncodedStore for &'a SledStore {
 
             write_osp_quad(&mut buffer, quad);
             self.dosp.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
         } else {
             write_spog_quad(&mut buffer, quad);
             self.spog.insert(buffer.as_slice(), &[])?;
@@ -1077,7 +1076,6 @@ impl<'a> WritableEncodedStore for &'a SledStore {
 
             write_term(&mut buffer, quad.graph_name);
             self.graphs.insert(&buffer, &[])?;
-            buffer.clear();
         }
 
         Ok(())
@@ -1097,7 +1095,6 @@ impl<'a> WritableEncodedStore for &'a SledStore {
 
             write_osp_quad(&mut buffer, quad);
             self.dosp.remove(buffer.as_slice())?;
-            buffer.clear();
         } else {
             write_spog_quad(&mut buffer, quad);
             self.spog.remove(buffer.as_slice())?;
@@ -1121,7 +1118,6 @@ impl<'a> WritableEncodedStore for &'a SledStore {
 
             write_gosp_quad(&mut buffer, quad);
             self.gosp.remove(buffer.as_slice())?;
-            buffer.clear();
         }
 
         Ok(())
@@ -1352,7 +1348,6 @@ impl<'a> WritableEncodedStore for &'a SledTransaction<'a> {
 
             write_osp_quad(&mut buffer, quad);
             self.dosp.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
         } else {
             write_spog_quad(&mut buffer, quad);
             self.spog.insert(buffer.as_slice(), &[])?;
@@ -1380,8 +1375,8 @@ impl<'a> WritableEncodedStore for &'a SledTransaction<'a> {
 
             write_term(&mut buffer, quad.graph_name);
             self.graphs.insert(buffer.as_slice(), &[])?;
-            buffer.clear();
         }
+        buffer.clear();
 
         Ok(())
     }
@@ -1403,7 +1398,6 @@ impl<'a> WritableEncodedStore for &'a SledTransaction<'a> {
 
             write_osp_quad(&mut buffer, quad);
             self.dosp.remove(buffer.as_slice())?;
-            buffer.clear();
         } else {
             write_spog_quad(&mut buffer, quad);
             self.spog.remove(buffer.as_slice())?;
@@ -1427,8 +1421,8 @@ impl<'a> WritableEncodedStore for &'a SledTransaction<'a> {
 
             write_gosp_quad(&mut buffer, quad);
             self.gosp.remove(buffer.as_slice())?;
-            buffer.clear();
         }
+        buffer.clear();
 
         Ok(())
     }

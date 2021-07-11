@@ -957,7 +957,6 @@ impl WritableEncodedStore for AutoBatchWriter<'_> {
 
             write_osp_quad(&mut self.buffer, quad);
             self.batch.put_cf(self.store.dosp_cf(), &self.buffer, &[]);
-            self.buffer.clear();
         } else {
             write_spog_quad(&mut self.buffer, quad);
             self.batch.put_cf(self.store.spog_cf(), &self.buffer, &[]);
@@ -985,8 +984,8 @@ impl WritableEncodedStore for AutoBatchWriter<'_> {
 
             write_term(&mut self.buffer, quad.graph_name);
             self.batch.put_cf(self.store.graphs_cf(), &self.buffer, &[]);
-            self.buffer.clear();
         }
+        self.buffer.clear();
 
         self.apply_if_big()
     }
@@ -1003,7 +1002,6 @@ impl WritableEncodedStore for AutoBatchWriter<'_> {
 
             write_osp_quad(&mut self.buffer, quad);
             self.batch.delete_cf(self.store.dosp_cf(), &self.buffer);
-            self.buffer.clear();
         } else {
             write_spog_quad(&mut self.buffer, quad);
             self.batch.delete_cf(self.store.spog_cf(), &self.buffer);
@@ -1027,8 +1025,8 @@ impl WritableEncodedStore for AutoBatchWriter<'_> {
 
             write_gosp_quad(&mut self.buffer, quad);
             self.batch.delete_cf(self.store.gosp_cf(), &self.buffer);
-            self.buffer.clear();
         }
+        self.buffer.clear();
 
         self.apply_if_big()
     }
@@ -1212,7 +1210,6 @@ impl WritableEncodedStore for RocksDbTransaction<'_> {
 
             write_osp_quad(&mut self.buffer, quad);
             self.batch.put_cf(self.store.dosp_cf(), &self.buffer, &[]);
-            self.buffer.clear();
         } else {
             write_spog_quad(&mut self.buffer, quad);
             self.batch.put_cf(self.store.spog_cf(), &self.buffer, &[]);
@@ -1240,8 +1237,8 @@ impl WritableEncodedStore for RocksDbTransaction<'_> {
 
             write_term(&mut self.buffer, quad.graph_name);
             self.batch.put_cf(self.store.graphs_cf(), &self.buffer, &[]);
-            self.buffer.clear();
         }
+        self.buffer.clear();
 
         Ok(())
     }
@@ -1258,7 +1255,6 @@ impl WritableEncodedStore for RocksDbTransaction<'_> {
 
             write_osp_quad(&mut self.buffer, quad);
             self.batch.delete_cf(self.store.dosp_cf(), &self.buffer);
-            self.buffer.clear();
         } else {
             write_spog_quad(&mut self.buffer, quad);
             self.batch.delete_cf(self.store.spog_cf(), &self.buffer);
@@ -1282,8 +1278,8 @@ impl WritableEncodedStore for RocksDbTransaction<'_> {
 
             write_gosp_quad(&mut self.buffer, quad);
             self.batch.delete_cf(self.store.gosp_cf(), &self.buffer);
-            self.buffer.clear();
         }
+        self.buffer.clear();
 
         Ok(())
     }

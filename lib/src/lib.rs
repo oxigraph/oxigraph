@@ -76,7 +76,6 @@
     clippy::explicit_iter_loop,
     clippy::expl_impl_clone_on_copy,
     clippy::fallible_impl_from,
-    clippy::filter_map,
     clippy::filter_map_next,
     clippy::manual_find_map,
     clippy::get_unwrap,

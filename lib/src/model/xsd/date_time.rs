@@ -104,7 +104,7 @@ impl DateTime {
         }
     }
 
-    pub fn to_be_bytes(&self) -> [u8; 18] {
+    pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
@@ -283,7 +283,7 @@ impl Time {
         self.timestamp.timezone_offset()
     }
 
-    pub fn to_be_bytes(&self) -> [u8; 18] {
+    pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
@@ -435,7 +435,7 @@ impl Date {
         self.timestamp.timezone_offset()
     }
 
-    pub fn to_be_bytes(&self) -> [u8; 18] {
+    pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
@@ -576,7 +576,7 @@ impl GYearMonth {
         self.timestamp.timezone_offset()
     }
 
-    pub fn to_be_bytes(&self) -> [u8; 18] {
+    pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
@@ -671,7 +671,7 @@ impl GYear {
         self.timestamp.timezone_offset()
     }
 
-    pub fn to_be_bytes(&self) -> [u8; 18] {
+    pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
@@ -775,7 +775,7 @@ impl GMonthDay {
         self.timestamp.timezone_offset()
     }
 
-    pub fn to_be_bytes(&self) -> [u8; 18] {
+    pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
@@ -866,7 +866,7 @@ impl GMonth {
         self.timestamp.timezone_offset()
     }
 
-    pub fn to_be_bytes(&self) -> [u8; 18] {
+    pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
@@ -969,7 +969,7 @@ impl GDay {
         self.timestamp.timezone_offset()
     }
 
-    pub fn to_be_bytes(&self) -> [u8; 18] {
+    pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
@@ -1326,7 +1326,7 @@ impl Timestamp {
         })
     }
 
-    fn to_be_bytes(&self) -> [u8; 18] {
+    fn to_be_bytes(self) -> [u8; 18] {
         let mut bytes = [0; 18];
         bytes[0..16].copy_from_slice(&self.value.to_be_bytes());
         bytes[16..18].copy_from_slice(&match &self.timezone_offset {

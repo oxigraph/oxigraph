@@ -74,7 +74,7 @@ impl StrHash {
     }
 
     #[inline]
-    pub fn to_be_bytes(&self) -> [u8; 16] {
+    pub fn to_be_bytes(self) -> [u8; 16] {
         self.hash.to_be_bytes()
     }
 }
