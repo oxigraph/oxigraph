@@ -92,6 +92,7 @@ jobs:
     needs: publish_lib_crate
     steps:
       - uses: actions/checkout@v2
+      - run: rustup update && rustup target add aarch64-apple-darwin
       - uses: actions/setup-python@v2
         with:
           python-version: 3.6
