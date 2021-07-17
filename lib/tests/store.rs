@@ -1,6 +1,7 @@
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
+#[cfg(not(target_arch = "wasm32"))]
 use oxigraph::store::ConflictableTransactionError;
 use oxigraph::store::Store;
 use std::io;
@@ -137,6 +138,7 @@ fn test_dump_dataset() -> io::Result<()> {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn test_transaction_load_graph() -> io::Result<()> {
     let store = Store::new()?;
     store.transaction(|t| {
@@ -155,6 +157,7 @@ fn test_transaction_load_graph() -> io::Result<()> {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn test_transaction_load_dataset() -> io::Result<()> {
     let store = Store::new()?;
     store.transaction(|t| {
@@ -168,6 +171,7 @@ fn test_transaction_load_dataset() -> io::Result<()> {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn test_backward_compatibility() -> io::Result<()> {
     {
         let store = Store::open("tests/sled_bc_data")?;

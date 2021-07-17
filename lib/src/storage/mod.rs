@@ -2,12 +2,12 @@ use std::error::Error;
 use std::fmt;
 use std::path::Path;
 
+#[cfg(not(target_arch = "wasm32"))]
 use sled::transaction::{
     ConflictableTransactionError as Sled2ConflictableTransactionError,
     TransactionError as Sled2TransactionError, TransactionalTree,
     UnabortableTransactionError as Sled2UnabortableTransactionError,
 };
-use sled::{Config, Db, Iter, Transactional, Tree};
 
 use crate::error::invalid_data_error;
 use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef};
@@ -20,11 +20,19 @@ use crate::storage::binary_encoder::{
 };
 use crate::storage::io::StoreOrParseError;
 use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash, StrLookup, TermEncoder};
+#[cfg(target_arch = "wasm32")]
+use fallback_backend::{Db, Iter, Tree};
+#[cfg(not(target_arch = "wasm32"))]
+use sled_backend::{Db, Iter, Tree};
 use std::convert::TryInto;
 
 mod binary_encoder;
+#[cfg(target_arch = "wasm32")]
+mod fallback_backend;
 pub mod io;
 pub mod numeric_encoder;
+#[cfg(not(target_arch = "wasm32"))]
+mod sled_backend;
 pub mod small_string;
 
 /// Low level storage primitives
@@ -46,18 +54,20 @@ pub struct Storage {
 
 impl Storage {
     pub fn new() -> std::io::Result<Self> {
-        Self::do_open(&Config::new().temporary(true))
+        Self::setup(Db::new()?)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn open(path: &Path) -> std::io::Result<Self> {
-        Self::do_open(&Config::new().path(path))
+        Self::setup(Db::open(path)?)
     }
 
-    fn do_open(config: &Config) -> std::io::Result<Self> {
-        let db = config.open()?;
+    fn setup(db: Db) -> std::io::Result<Self> {
+        let mut id2str = db.open_tree("id2str")?;
+        id2str.set_merge_operator(id2str_merge);
+
         let this = Self {
-            default: db.clone(),
-            id2str: db.open_tree("id2str")?,
+            id2str,
             spog: db.open_tree("spog")?,
             posg: db.open_tree("posg")?,
             ospg: db.open_tree("ospg")?,
@@ -68,8 +78,8 @@ impl Storage {
             dpos: db.open_tree("dpos")?,
             dosp: db.open_tree("dosp")?,
             graphs: db.open_tree("graphs")?,
+            default: db,
         };
-        this.id2str.set_merge_operator(id2str_merge);
 
         let mut version = this.ensure_version()?;
         if version == 0 {
@@ -82,7 +92,7 @@ impl Storage {
             }
             version = 1;
             this.set_version(version)?;
-            this.graphs.flush()?;
+            this.default.flush()?;
         }
         if version == 1 {
             // We migrate to v2
@@ -91,7 +101,7 @@ impl Storage {
                 let mut new_value = Vec::with_capacity(value.len() + 4);
                 new_value.extend_from_slice(&u32::MAX.to_be_bytes());
                 new_value.extend_from_slice(&value);
-                this.id2str.insert(key, new_value)?;
+                this.id2str.insert(&key, new_value)?;
             }
             version = 2;
             this.set_version(version)?;
@@ -112,7 +122,7 @@ impl Storage {
     }
 
     fn ensure_version(&self) -> std::io::Result<u64> {
-        Ok(if let Some(version) = self.default.get("oxversion")? {
+        Ok(if let Some(version) = self.default.get(b"oxversion")? {
             let mut buffer = [0; 8];
             buffer.copy_from_slice(&version);
             u64::from_be_bytes(buffer)
@@ -123,26 +133,30 @@ impl Storage {
     }
 
     fn set_version(&self, version: u64) -> std::io::Result<()> {
-        self.default.insert("oxversion", &version.to_be_bytes())?;
+        self.default
+            .insert(b"oxversion", version.to_be_bytes().to_vec())?;
         Ok(())
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn transaction<T, E>(
         &self,
         f: impl Fn(StorageTransaction<'_>) -> Result<T, ConflictableTransactionError<E>>,
     ) -> Result<T, TransactionError<E>> {
+        use sled::Transactional;
+
         Ok((
-            &self.id2str,
-            &self.spog,
-            &self.posg,
-            &self.ospg,
-            &self.gspo,
-            &self.gpos,
-            &self.gosp,
-            &self.dspo,
-            &self.dpos,
-            &self.dosp,
-            &self.graphs,
+            self.id2str.as_sled(),
+            self.spog.as_sled(),
+            self.posg.as_sled(),
+            self.ospg.as_sled(),
+            self.gspo.as_sled(),
+            self.gpos.as_sled(),
+            self.gosp.as_sled(),
+            self.dspo.as_sled(),
+            self.dpos.as_sled(),
+            self.dosp.as_sled(),
+            self.graphs.as_sled(),
         )
             .transaction(
                 move |(id2str, spog, posg, ospg, gspo, gpos, gosp, dspo, dpos, dosp, graphs)| {
@@ -175,10 +189,10 @@ impl Storage {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
         if quad.graph_name.is_default_graph() {
             write_spo_quad(&mut buffer, quad);
-            Ok(self.dspo.contains_key(buffer)?)
+            Ok(self.dspo.contains_key(&buffer)?)
         } else {
             write_gspo_quad(&mut buffer, quad);
-            Ok(self.gspo.contains_key(buffer)?)
+            Ok(self.gspo.contains_key(&buffer)?)
         }
     }
 
@@ -246,20 +260,17 @@ impl Storage {
     }
 
     pub fn quads(&self) -> ChainedDecodingQuadIterator {
-        ChainedDecodingQuadIterator::pair(
-            self.dspo_quads(Vec::default()),
-            self.gspo_quads(Vec::default()),
-        )
+        ChainedDecodingQuadIterator::pair(self.dspo_quads(&[]), self.gspo_quads(&[]))
     }
 
     fn quads_in_named_graph(&self) -> DecodingQuadIterator {
-        self.gspo_quads(Vec::default())
+        self.gspo_quads(&[])
     }
 
     fn quads_for_subject(&self, subject: &EncodedTerm) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::pair(
-            self.dspo_quads(encode_term(subject)),
-            self.spog_quads(encode_term(subject)),
+            self.dspo_quads(&encode_term(subject)),
+            self.spog_quads(&encode_term(subject)),
         )
     }
 
@@ -269,8 +280,8 @@ impl Storage {
         predicate: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::pair(
-            self.dspo_quads(encode_term_pair(subject, predicate)),
-            self.spog_quads(encode_term_pair(subject, predicate)),
+            self.dspo_quads(&encode_term_pair(subject, predicate)),
+            self.spog_quads(&encode_term_pair(subject, predicate)),
         )
     }
 
@@ -281,8 +292,8 @@ impl Storage {
         object: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::pair(
-            self.dspo_quads(encode_term_triple(subject, predicate, object)),
-            self.spog_quads(encode_term_triple(subject, predicate, object)),
+            self.dspo_quads(&encode_term_triple(subject, predicate, object)),
+            self.spog_quads(&encode_term_triple(subject, predicate, object)),
         )
     }
 
@@ -292,15 +303,15 @@ impl Storage {
         object: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::pair(
-            self.dosp_quads(encode_term_pair(object, subject)),
-            self.ospg_quads(encode_term_pair(object, subject)),
+            self.dosp_quads(&encode_term_pair(object, subject)),
+            self.ospg_quads(&encode_term_pair(object, subject)),
         )
     }
 
     fn quads_for_predicate(&self, predicate: &EncodedTerm) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::pair(
-            self.dpos_quads(encode_term(predicate)),
-            self.posg_quads(encode_term(predicate)),
+            self.dpos_quads(&encode_term(predicate)),
+            self.posg_quads(&encode_term(predicate)),
         )
     }
 
@@ -310,23 +321,23 @@ impl Storage {
         object: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::pair(
-            self.dpos_quads(encode_term_pair(predicate, object)),
-            self.posg_quads(encode_term_pair(predicate, object)),
+            self.dpos_quads(&encode_term_pair(predicate, object)),
+            self.posg_quads(&encode_term_pair(predicate, object)),
         )
     }
 
     fn quads_for_object(&self, object: &EncodedTerm) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::pair(
-            self.dosp_quads(encode_term(object)),
-            self.ospg_quads(encode_term(object)),
+            self.dosp_quads(&encode_term(object)),
+            self.ospg_quads(&encode_term(object)),
         )
     }
 
     fn quads_for_graph(&self, graph_name: &EncodedTerm) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
-            self.dspo_quads(Vec::default())
+            self.dspo_quads(&Vec::default())
         } else {
-            self.gspo_quads(encode_term(graph_name))
+            self.gspo_quads(&encode_term(graph_name))
         })
     }
 
@@ -336,9 +347,9 @@ impl Storage {
         graph_name: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
-            self.dspo_quads(encode_term(subject))
+            self.dspo_quads(&encode_term(subject))
         } else {
-            self.gspo_quads(encode_term_pair(graph_name, subject))
+            self.gspo_quads(&encode_term_pair(graph_name, subject))
         })
     }
 
@@ -349,9 +360,9 @@ impl Storage {
         graph_name: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
-            self.dspo_quads(encode_term_pair(subject, predicate))
+            self.dspo_quads(&encode_term_pair(subject, predicate))
         } else {
-            self.gspo_quads(encode_term_triple(graph_name, subject, predicate))
+            self.gspo_quads(&encode_term_triple(graph_name, subject, predicate))
         })
     }
 
@@ -363,9 +374,9 @@ impl Storage {
         graph_name: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
-            self.dspo_quads(encode_term_triple(subject, predicate, object))
+            self.dspo_quads(&encode_term_triple(subject, predicate, object))
         } else {
-            self.gspo_quads(encode_term_quad(graph_name, subject, predicate, object))
+            self.gspo_quads(&encode_term_quad(graph_name, subject, predicate, object))
         })
     }
 
@@ -376,9 +387,9 @@ impl Storage {
         graph_name: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
-            self.dosp_quads(encode_term_pair(object, subject))
+            self.dosp_quads(&encode_term_pair(object, subject))
         } else {
-            self.gosp_quads(encode_term_triple(graph_name, object, subject))
+            self.gosp_quads(&encode_term_triple(graph_name, object, subject))
         })
     }
 
@@ -388,9 +399,9 @@ impl Storage {
         graph_name: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
-            self.dpos_quads(encode_term(predicate))
+            self.dpos_quads(&encode_term(predicate))
         } else {
-            self.gpos_quads(encode_term_pair(graph_name, predicate))
+            self.gpos_quads(&encode_term_pair(graph_name, predicate))
         })
     }
 
@@ -401,9 +412,9 @@ impl Storage {
         graph_name: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
-            self.dpos_quads(encode_term_pair(predicate, object))
+            self.dpos_quads(&encode_term_pair(predicate, object))
         } else {
-            self.gpos_quads(encode_term_triple(graph_name, predicate, object))
+            self.gpos_quads(&encode_term_triple(graph_name, predicate, object))
         })
     }
 
@@ -413,9 +424,9 @@ impl Storage {
         graph_name: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         ChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
-            self.dosp_quads(encode_term(object))
+            self.dosp_quads(&encode_term(object))
         } else {
-            self.gosp_quads(encode_term_pair(graph_name, object))
+            self.gosp_quads(&encode_term_pair(graph_name, object))
         })
     }
 
@@ -426,50 +437,46 @@ impl Storage {
     }
 
     pub fn contains_named_graph(&self, graph_name: &EncodedTerm) -> std::io::Result<bool> {
-        Ok(self.graphs.contains_key(&encode_term(graph_name))?)
+        self.graphs.contains_key(&encode_term(graph_name))
     }
 
-    fn spog_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
+    fn spog_quads(&self, prefix: &[u8]) -> DecodingQuadIterator {
         Self::inner_quads(&self.spog, prefix, QuadEncoding::Spog)
     }
 
-    fn posg_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
+    fn posg_quads(&self, prefix: &[u8]) -> DecodingQuadIterator {
         Self::inner_quads(&self.posg, prefix, QuadEncoding::Posg)
     }
 
-    fn ospg_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
+    fn ospg_quads(&self, prefix: &[u8]) -> DecodingQuadIterator {
         Self::inner_quads(&self.ospg, prefix, QuadEncoding::Ospg)
     }
 
-    fn gspo_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
+    fn gspo_quads(&self, prefix: &[u8]) -> DecodingQuadIterator {
         Self::inner_quads(&self.gspo, prefix, QuadEncoding::Gspo)
     }
 
-    fn gpos_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
+    fn gpos_quads(&self, prefix: &[u8]) -> DecodingQuadIterator {
         Self::inner_quads(&self.gpos, prefix, QuadEncoding::Gpos)
     }
 
-    fn gosp_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
+    fn gosp_quads(&self, prefix: &[u8]) -> DecodingQuadIterator {
         Self::inner_quads(&self.gosp, prefix, QuadEncoding::Gosp)
     }
 
-    fn dspo_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
+    fn dspo_quads(&self, prefix: &[u8]) -> DecodingQuadIterator {
         Self::inner_quads(&self.dspo, prefix, QuadEncoding::Dspo)
     }
 
-    fn dpos_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
+    fn dpos_quads(&self, prefix: &[u8]) -> DecodingQuadIterator {
         Self::inner_quads(&self.dpos, prefix, QuadEncoding::Dpos)
     }
 
-    fn dosp_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
+    fn dosp_quads(&self, prefix: &[u8]) -> DecodingQuadIterator {
         Self::inner_quads(&self.dosp, prefix, QuadEncoding::Dosp)
     }
 
-    fn inner_quads(
-        tree: &Tree,
-        prefix: impl AsRef<[u8]>,
-        encoding: QuadEncoding,
-    ) -> DecodingQuadIterator {
+    fn inner_quads(tree: &Tree, prefix: &[u8], encoding: QuadEncoding) -> DecodingQuadIterator {
         DecodingQuadIterator {
             iter: tree.scan_prefix(prefix),
             encoding,
@@ -482,51 +489,51 @@ impl Storage {
 
         if quad.graph_name.is_default_graph() {
             write_spo_quad(&mut buffer, &encoded);
-            let is_new = self.dspo.insert(buffer.as_slice(), &[])?.is_none();
+            let is_new = self.dspo.insert_empty(buffer.as_slice())?;
 
             if is_new {
                 buffer.clear();
                 self.insert_quad_triple(quad, &encoded)?;
 
                 write_pos_quad(&mut buffer, &encoded);
-                self.dpos.insert(buffer.as_slice(), &[])?;
+                self.dpos.insert_empty(buffer.as_slice())?;
                 buffer.clear();
 
                 write_osp_quad(&mut buffer, &encoded);
-                self.dosp.insert(buffer.as_slice(), &[])?;
+                self.dosp.insert_empty(buffer.as_slice())?;
                 buffer.clear();
             }
 
             Ok(is_new)
         } else {
             write_spog_quad(&mut buffer, &encoded);
-            let is_new = self.spog.insert(buffer.as_slice(), &[])?.is_none();
+            let is_new = self.spog.insert_empty(buffer.as_slice())?;
             if is_new {
                 buffer.clear();
                 self.insert_quad_triple(quad, &encoded)?;
 
                 write_posg_quad(&mut buffer, &encoded);
-                self.posg.insert(buffer.as_slice(), &[])?;
+                self.posg.insert_empty(buffer.as_slice())?;
                 buffer.clear();
 
                 write_ospg_quad(&mut buffer, &encoded);
-                self.ospg.insert(buffer.as_slice(), &[])?;
+                self.ospg.insert_empty(buffer.as_slice())?;
                 buffer.clear();
 
                 write_gspo_quad(&mut buffer, &encoded);
-                self.gspo.insert(buffer.as_slice(), &[])?;
+                self.gspo.insert_empty(buffer.as_slice())?;
                 buffer.clear();
 
                 write_gpos_quad(&mut buffer, &encoded);
-                self.gpos.insert(buffer.as_slice(), &[])?;
+                self.gpos.insert_empty(buffer.as_slice())?;
                 buffer.clear();
 
                 write_gosp_quad(&mut buffer, &encoded);
-                self.gosp.insert(buffer.as_slice(), &[])?;
+                self.gosp.insert_empty(buffer.as_slice())?;
                 buffer.clear();
 
                 write_term(&mut buffer, &encoded.graph_name);
-                if self.graphs.insert(&buffer, &[])?.is_none() {
+                if self.graphs.insert_empty(&buffer)? {
                     self.insert_graph_name(quad.graph_name, &encoded.graph_name)?;
                 }
                 buffer.clear();
@@ -545,7 +552,7 @@ impl Storage {
 
         if quad.graph_name.is_default_graph() {
             write_spo_quad(&mut buffer, quad);
-            let is_present = self.dspo.remove(buffer.as_slice())?.is_some();
+            let is_present = self.dspo.remove(buffer.as_slice())?;
 
             if is_present {
                 buffer.clear();
@@ -564,7 +571,7 @@ impl Storage {
             Ok(is_present)
         } else {
             write_spog_quad(&mut buffer, quad);
-            let is_present = self.spog.remove(buffer.as_slice())?.is_some();
+            let is_present = self.spog.remove(buffer.as_slice())?;
 
             if is_present {
                 buffer.clear();
@@ -607,7 +614,7 @@ impl Storage {
     }
 
     fn insert_encoded_named_graph(&self, graph_name: &EncodedTerm) -> std::io::Result<bool> {
-        Ok(self.graphs.insert(&encode_term(graph_name), &[])?.is_none())
+        self.graphs.insert_empty(&encode_term(graph_name))
     }
 
     pub fn clear_graph(&self, graph_name: GraphNameRef<'_>) -> std::io::Result<()> {
@@ -636,14 +643,12 @@ impl Storage {
         for quad in self.quads_for_graph(&graph_name) {
             self.remove_encoded(&quad?)?;
         }
-        Ok(
-            if self.graphs.remove(&encode_term(&graph_name))?.is_some() {
-                self.remove_term(&graph_name)?;
-                true
-            } else {
-                false
-            },
-        )
+        Ok(if self.graphs.remove(&encode_term(&graph_name))? {
+            self.remove_term(&graph_name)?;
+            true
+        } else {
+            false
+        })
     }
 
     pub fn remove_all_named_graphs(&self) -> std::io::Result<()> {
@@ -672,11 +677,13 @@ impl Storage {
         Ok(())
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn flush(&self) -> std::io::Result<()> {
         self.default.flush()?;
         Ok(())
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn flush_async(&self) -> std::io::Result<()> {
         self.default.flush_async().await?;
         Ok(())
@@ -684,14 +691,14 @@ impl Storage {
 
     pub fn get_str(&self, key: &StrHash) -> std::io::Result<Option<String>> {
         self.id2str
-            .get(key.to_be_bytes())?
+            .get(&key.to_be_bytes())?
             .map(|v| String::from_utf8(v[4..].to_vec()))
             .transpose()
             .map_err(invalid_data_error)
     }
 
     pub fn contains_str(&self, key: &StrHash) -> std::io::Result<bool> {
-        Ok(self.id2str.contains_key(key.to_be_bytes())?)
+        self.id2str.contains_key(&key.to_be_bytes())
     }
 }
 
@@ -761,6 +768,7 @@ impl Iterator for DecodingGraphIterator {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub struct StorageTransaction<'a> {
     id2str: &'a TransactionalTree,
     spog: &'a TransactionalTree,
@@ -775,6 +783,7 @@ pub struct StorageTransaction<'a> {
     graphs: &'a TransactionalTree,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<'a> StorageTransaction<'a> {
     pub fn insert(&self, quad: QuadRef<'_>) -> Result<bool, UnabortableTransactionError> {
         let encoded = quad.into();
@@ -923,6 +932,7 @@ impl<'a> StorageTransaction<'a> {
 }
 
 /// Error returned by a Sled transaction
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug)]
 pub enum TransactionError<T> {
     /// A failure returned by the API user that have aborted the transaction
@@ -931,6 +941,7 @@ pub enum TransactionError<T> {
     Storage(std::io::Error),
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<T: fmt::Display> fmt::Display for TransactionError<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -940,6 +951,7 @@ impl<T: fmt::Display> fmt::Display for TransactionError<T> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<T: Error + 'static> Error for TransactionError<T> {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
@@ -949,6 +961,7 @@ impl<T: Error + 'static> Error for TransactionError<T> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<T> From<Sled2TransactionError<T>> for TransactionError<T> {
     fn from(e: Sled2TransactionError<T>) -> Self {
         match e {
@@ -958,6 +971,7 @@ impl<T> From<Sled2TransactionError<T>> for TransactionError<T> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<T: Into<Self>> From<TransactionError<T>> for std::io::Error {
     fn from(e: TransactionError<T>) -> Self {
         match e {
@@ -969,6 +983,7 @@ impl<T: Into<Self>> From<TransactionError<T>> for std::io::Error {
 
 /// An error returned from the transaction methods.
 /// Should be returned as it is
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug)]
 pub enum UnabortableTransactionError {
     #[doc(hidden)]
@@ -977,6 +992,7 @@ pub enum UnabortableTransactionError {
     Storage(std::io::Error),
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl fmt::Display for UnabortableTransactionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -986,6 +1002,7 @@ impl fmt::Display for UnabortableTransactionError {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Error for UnabortableTransactionError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
@@ -995,6 +1012,7 @@ impl Error for UnabortableTransactionError {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl From<UnabortableTransactionError> for EvaluationError {
     fn from(e: UnabortableTransactionError) -> Self {
         match e {
@@ -1004,6 +1022,7 @@ impl From<UnabortableTransactionError> for EvaluationError {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl From<StoreOrParseError<Self>> for UnabortableTransactionError {
     fn from(e: StoreOrParseError<Self>) -> Self {
         match e {
@@ -1013,6 +1032,7 @@ impl From<StoreOrParseError<Self>> for UnabortableTransactionError {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl From<Sled2UnabortableTransactionError> for UnabortableTransactionError {
     fn from(e: Sled2UnabortableTransactionError) -> Self {
         match e {
@@ -1023,6 +1043,7 @@ impl From<Sled2UnabortableTransactionError> for UnabortableTransactionError {
 }
 
 /// An error returned from the transaction closure
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug)]
 pub enum ConflictableTransactionError<T> {
     /// A failure returned by the user that will abort the transaction
@@ -1033,6 +1054,7 @@ pub enum ConflictableTransactionError<T> {
     Storage(std::io::Error),
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<T: fmt::Display> fmt::Display for ConflictableTransactionError<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -1043,6 +1065,7 @@ impl<T: fmt::Display> fmt::Display for ConflictableTransactionError<T> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<T: Error + 'static> Error for ConflictableTransactionError<T> {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
@@ -1053,6 +1076,7 @@ impl<T: Error + 'static> Error for ConflictableTransactionError<T> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<T> From<UnabortableTransactionError> for ConflictableTransactionError<T> {
     fn from(e: UnabortableTransactionError) -> Self {
         match e {
@@ -1062,6 +1086,7 @@ impl<T> From<UnabortableTransactionError> for ConflictableTransactionError<T> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<T> From<ConflictableTransactionError<T>> for Sled2ConflictableTransactionError<T> {
     fn from(e: ConflictableTransactionError<T>) -> Self {
         match e {
@@ -1084,6 +1109,7 @@ impl StrLookup for Storage {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<'a> StrLookup for StorageTransaction<'a> {
     type Error = UnabortableTransactionError;
 
@@ -1100,12 +1126,12 @@ impl TermEncoder for Storage {
     type Error = std::io::Error;
 
     fn insert_str(&self, key: &StrHash, value: &str) -> std::io::Result<()> {
-        self.id2str.merge(key.to_be_bytes(), value)?;
+        self.id2str.merge(&key.to_be_bytes(), value.as_bytes())?;
         Ok(())
     }
 
     fn remove_str(&self, key: &StrHash) -> std::io::Result<()> {
-        self.id2str.update_and_fetch(key.to_be_bytes(), |old| {
+        self.id2str.update_and_fetch(&key.to_be_bytes(), |old| {
             let old = old?;
             match u32::from_be_bytes(old[..4].try_into().ok()?) {
                 0 | 1 => None,
@@ -1121,6 +1147,7 @@ impl TermEncoder for Storage {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<'a> TermEncoder for StorageTransaction<'a> {
     type Error = UnabortableTransactionError;
 
@@ -1176,6 +1203,7 @@ impl StorageLike for Storage {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<'a> StorageLike for StorageTransaction<'a> {
     fn insert(&self, quad: QuadRef<'_>) -> Result<bool, UnabortableTransactionError> {
         self.insert(quad)
@@ -1258,6 +1286,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_arch = "wasm32"))]
     fn test_strings_removal_in_transaction() -> std::io::Result<()> {
         let quad = QuadRef::new(
             NamedNodeRef::new_unchecked("http://example.com/s"),
@@ -1301,6 +1330,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn transac<T>(
         storage: &Storage,
         f: impl Fn(StorageTransaction<'_>) -> Result<T, UnabortableTransactionError>,

@@ -32,11 +32,12 @@ use crate::sparql::{
 };
 use crate::storage::io::{dump_dataset, dump_graph, load_dataset, load_graph};
 use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
-pub use crate::storage::ConflictableTransactionError;
-pub use crate::storage::TransactionError;
-pub use crate::storage::UnabortableTransactionError;
-use crate::storage::{
-    ChainedDecodingQuadIterator, DecodingGraphIterator, Storage, StorageTransaction,
+#[cfg(not(target_arch = "wasm32"))]
+use crate::storage::StorageTransaction;
+use crate::storage::{ChainedDecodingQuadIterator, DecodingGraphIterator, Storage};
+#[cfg(not(target_arch = "wasm32"))]
+pub use crate::storage::{
+    ConflictableTransactionError, TransactionError, UnabortableTransactionError,
 };
 use std::convert::TryInto;
 use std::io::{BufRead, Write};
@@ -93,6 +94,7 @@ impl Store {
     }
 
     /// Opens a [`Store`]() and creates it if it does not exist yet.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn open(path: impl AsRef<Path>) -> io::Result<Self> {
         Ok(Self {
             storage: Storage::open(path.as_ref())?,
@@ -261,6 +263,7 @@ impl Store {
     /// assert!(store.contains_named_graph(ex)?);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn transaction<T, E>(
         &self,
         f: impl Fn(Transaction<'_>) -> Result<T, ConflictableTransactionError<E>>,
@@ -598,6 +601,7 @@ impl Store {
     /// However, calling this method explicitly is still required for Windows and Android.
     ///
     /// An [async version](SledStore::flush_async) is also available.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn flush(&self) -> io::Result<()> {
         self.storage.flush()
     }
@@ -608,6 +612,7 @@ impl Store {
     /// However, calling this method explicitly is still required for Windows and Android.
     ///
     /// A [sync version](SledStore::flush) is also available.
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn flush_async(&self) -> io::Result<()> {
         self.storage.flush_async().await
     }
@@ -623,10 +628,12 @@ impl fmt::Display for Store {
 }
 
 /// Allows inserting and deleting quads during an ACID transaction with the [`Store`].
+#[cfg(not(target_arch = "wasm32"))]
 pub struct Transaction<'a> {
     storage: StorageTransaction<'a>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Transaction<'_> {
     /// Loads a graph file (i.e. triples) into the store during the transaction.
     ///
@@ -705,7 +712,7 @@ impl Transaction<'_> {
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
-    /// ```    
+    /// ```
     ///
     /// If the file parsing fails in the middle of the file, the quads read before are still
     /// considered by the transaction. Rollback the transaction by making the transaction closure
@@ -849,6 +856,7 @@ impl Iterator for GraphNameIter {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn store() -> io::Result<()> {
     use crate::model::*;
 

@@ -22,7 +22,6 @@ sophia = ["sophia_api"]
 http_client = ["httparse", "native-tls"]
 
 [dependencies]
-sled = "0.34"
 quick-xml = "0.22"
 rand = "0.8"
 md-5 = "0.9"
@@ -46,11 +45,20 @@ native-tls = { version = "0.2", optional = true }
 json-event-parser = "0.1"
 spargebra = { version = "0.1", path="../spargebra", features = ["rdf-star"] }
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+sled = "0.34"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+getrandom = {version="0.2", features=["js"]}
 
 [dev-dependencies]
 rayon = "1"
 criterion = "0.3"
 sophia_api = { version = "0.7", features = ["test_macro"] }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
 
 [[bench]]
 name = "store"

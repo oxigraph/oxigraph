@@ -42,6 +42,15 @@ jobs:
       env:
         RUST_BACKTRACE: 1
 
+  test_wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: rustup update
+      - run: cargo install wasm-pack
+      - run: wasm-pack test --node
+        working-directory: ./lib
+
   python:
     runs-on: ubuntu-latest
     steps:
