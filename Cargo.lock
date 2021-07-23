@@ -2390,12 +2390,13 @@ dependencies = [
 
 [[package]]
 name = "sophia_api"
-version = "0.6.2"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6709ffef59ae501289e7c4b9cff5c42a9571687d0a0e5358ed3636351abc883b"
+checksum = "acd999315a30142ca47a790fbad5dc646900a281b5607704bd8832f3711a1d18"
 dependencies = [
  "lazy_static",
  "mownstr",
+ "regex",
  "resiter",
  "sophia_iri",
  "thiserror",
@@ -2403,9 +2404,9 @@ dependencies = [
 
 [[package]]
 name = "sophia_iri"
-version = "0.6.2"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cf616688b714ead8dde2e0d39170a90135159c57f75b63bc5679ef1c8455c50"
+checksum = "6211a37cce10cac8d690a8bf2e8c1eef14963acd6f872df1cd527e7852278fa8"
 dependencies = [
  "lazy_static",
  "mownstr",
