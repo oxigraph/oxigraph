@@ -22,7 +22,7 @@ sophia = ["sophia_api"]
 http_client = ["httparse", "native-tls"]
 
 [dependencies]
-rocksdb = { version = "0.16", optional = true }
+rocksdb = { version = ">=0.15,<0.18", optional = true }
 sled = { version = "0.34", optional = true }
 quick-xml = "0.22"
 rand = "0.8"
