@@ -102,8 +102,8 @@ pub async fn main() -> Result<()> {
     let repo = store.clone();
     let mut loader = WikibaseLoader::new(
         repo,
-        &mediawiki_api,
-        &mediawiki_base_url,
+        mediawiki_api,
+        mediawiki_base_url,
         &namespaces,
         slot.as_deref(),
         Duration::new(10, 0),
@@ -116,7 +116,7 @@ pub async fn main() -> Result<()> {
 
     println!("Listening for requests at http://{}", &bind);
 
-    http_server(&bind, move |request| handle_request(request, store.clone())).await
+    http_server(bind, move |request| handle_request(request, store.clone())).await
 }
 
 async fn handle_request(request: Request, store: RocksDbStore) -> Result<Response> {

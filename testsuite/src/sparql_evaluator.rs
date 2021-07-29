@@ -38,7 +38,7 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
             .action
             .as_deref()
             .ok_or_else(|| anyhow!("No action found for test {}", test))?;
-        match Query::parse(&read_file_to_string(&query_file)?, Some(&query_file)) {
+        match Query::parse(&read_file_to_string(query_file)?, Some(query_file)) {
             Err(error) => Err(anyhow!("Not able to parse {} with error: {}", test, error)),
             Ok(query) => match Query::parse(&query.to_string(), None) {
                 Ok(_) => Ok(()),
@@ -160,7 +160,7 @@ fn evaluate_sparql_test(test: &Test) -> Result<()> {
             .action
             .as_deref()
             .ok_or_else(|| anyhow!("No action found for test {}", test))?;
-        match Update::parse(&read_file_to_string(&update_file)?, Some(&update_file)) {
+        match Update::parse(&read_file_to_string(update_file)?, Some(update_file)) {
             Err(error) => Err(anyhow!("Not able to parse {} with error: {}", test, error)),
             Ok(update) => match Update::parse(&update.to_string(), None) {
                 Ok(_) => Ok(()),
@@ -277,7 +277,7 @@ impl StaticServiceHandler {
                     .map(|(name, data)| {
                         let name = NamedNode::new(name)?;
                         let store = MemoryStore::new();
-                        load_to_store(&data, &store, &GraphName::DefaultGraph)?;
+                        load_to_store(data, &store, &GraphName::DefaultGraph)?;
                         Ok((name, store))
                     })
                     .collect::<Result<_>>()?,
@@ -423,7 +423,7 @@ fn are_query_results_isomorphic(
             expected == actual
         }
         (StaticQueryResults::Graph(expected), StaticQueryResults::Graph(actual)) => {
-            expected.is_isomorphic(&actual)
+            expected.is_isomorphic(actual)
         }
         _ => false,
     }
@@ -544,7 +544,7 @@ impl StaticQueryResults {
                                             }
                                         })
                                         .collect::<Vec<_>>();
-                                bindings.sort_by(|(a, _), (b, _)| a.cmp(&b));
+                                bindings.sort_by(|(a, _), (b, _)| a.cmp(b));
                                 let index =
                                     object_for_subject_predicate(&dataset, &solution, rs::INDEX)
                                         .and_then(|object| {

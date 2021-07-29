@@ -63,7 +63,7 @@ pub async fn main() -> Result<()> {
 
     let store = Store::open(file)?;
     println!("Listening for requests at http://{}", &bind);
-    http_server(&bind, move |request| handle_request(request, store.clone())).await
+    http_server(bind, move |request| handle_request(request, store.clone())).await
 }
 
 async fn handle_request(request: Request, store: Store) -> Result<Response> {

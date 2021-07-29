@@ -149,7 +149,7 @@ impl JsMemoryStore {
             None
         } else if base_iri.is_string() {
             base_iri.as_string()
-        } else if let JsTerm::NamedNode(base_iri) = self.from_js.to_term(&base_iri)? {
+        } else if let JsTerm::NamedNode(base_iri) = self.from_js.to_term(base_iri)? {
             Some(base_iri.value())
         } else {
             return Err(format_err!(

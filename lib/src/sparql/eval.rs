@@ -2562,7 +2562,7 @@ where
     type Item = Result<EncodedTuple<S::StrId>, EvaluationError>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple<S::StrId>, EvaluationError>> {
-        while let Some(right_tuple) = self.current_right.next() {
+        for right_tuple in &mut self.current_right {
             match right_tuple {
                 Ok(right_tuple) => {
                     if let Some(combined) = combine_tuples(
@@ -2581,7 +2581,7 @@ where
                 let mut filtered_left = left_tuple.clone();
                 unbind_variables(&mut filtered_left, &self.problem_vars);
                 self.current_right = self.eval.eval_plan(&self.right_plan, filtered_left);
-                while let Some(right_tuple) = self.current_right.next() {
+                for right_tuple in &mut self.current_right {
                     match right_tuple {
                         Ok(right_tuple) => {
                             if let Some(combined) =

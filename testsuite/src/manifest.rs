@@ -309,9 +309,9 @@ impl<'a> Iterator for RdfListIterator<'a> {
     fn next(&mut self) -> Option<Term> {
         match self.current_node.clone() {
             Some(current) => {
-                let result = object_for_subject_predicate(&self.graph, &current, rdf::FIRST);
+                let result = object_for_subject_predicate(self.graph, &current, rdf::FIRST);
                 self.current_node =
-                    match object_for_subject_predicate(&self.graph, &current, rdf::REST) {
+                    match object_for_subject_predicate(self.graph, &current, rdf::REST) {
                         Some(Term::NamedNode(n)) if n == rdf::NIL => None,
                         Some(Term::NamedNode(n)) => Some(n.into()),
                         Some(Term::BlankNode(n)) => Some(n.into()),

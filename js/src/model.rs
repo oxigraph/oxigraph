@@ -87,7 +87,7 @@ impl JsDataFactory {
             graph_name: if graph.is_undefined() || graph.is_null() {
                 JsTerm::DefaultGraph(JsDefaultGraph {})
             } else {
-                self.from_js.to_term(&graph)?
+                self.from_js.to_term(graph)?
             },
         })
     }
@@ -123,7 +123,7 @@ impl JsNamedNode {
 
     pub fn equals(&self, other: &JsValue) -> bool {
         if let Ok(Some(JsTerm::NamedNode(other))) =
-            FromJsConverter::default().to_optional_term(&other)
+            FromJsConverter::default().to_optional_term(other)
         {
             self == &other
         } else {
@@ -182,7 +182,7 @@ impl JsBlankNode {
 
     pub fn equals(&self, other: &JsValue) -> bool {
         if let Ok(Some(JsTerm::BlankNode(other))) =
-            FromJsConverter::default().to_optional_term(&other)
+            FromJsConverter::default().to_optional_term(other)
         {
             self == &other
         } else {
@@ -250,8 +250,7 @@ impl JsLiteral {
     }
 
     pub fn equals(&self, other: &JsValue) -> bool {
-        if let Ok(Some(JsTerm::Literal(other))) =
-            FromJsConverter::default().to_optional_term(&other)
+        if let Ok(Some(JsTerm::Literal(other))) = FromJsConverter::default().to_optional_term(other)
         {
             self == &other
         } else {
@@ -296,7 +295,7 @@ impl JsDefaultGraph {
 
     pub fn equals(&self, other: &JsValue) -> bool {
         if let Ok(Some(JsTerm::DefaultGraph(other))) =
-            FromJsConverter::default().to_optional_term(&other)
+            FromJsConverter::default().to_optional_term(other)
         {
             self == &other
         } else {
@@ -472,7 +471,7 @@ impl JsQuad {
 
     pub fn equals(&self, other: &JsValue) -> bool {
         FromJsConverter::default()
-            .to_quad(&other)
+            .to_quad(other)
             .map_or(false, |other| self == &other)
     }
 }
@@ -529,18 +528,18 @@ impl Default for FromJsConverter {
 
 impl FromJsConverter {
     pub fn to_term(&self, value: &JsValue) -> Result<JsTerm, JsValue> {
-        let term_type = Reflect::get(&value, &self.term_type)?;
+        let term_type = Reflect::get(value, &self.term_type)?;
         if let Some(term_type) = term_type.as_string() {
             match term_type.as_str() {
                 "NamedNode" => Ok(NamedNode::new(
-                    Reflect::get(&value, &self.value)?
+                    Reflect::get(value, &self.value)?
                         .as_string()
                         .ok_or_else(|| format_err!("NamedNode should have a string value"))?,
                 )
                 .map_err(|v| UriError::new(&v.to_string()))?
                 .into()),
                 "BlankNode" => Ok(BlankNode::new(
-                    &Reflect::get(&value, &self.value)?
+                    &Reflect::get(value, &self.value)?
                         .as_string()
                         .ok_or_else(|| format_err!("BlankNode should have a string value"))?,
                 )
@@ -548,15 +547,15 @@ impl FromJsConverter {
                 .into()),
                 "Literal" => {
                     if let JsTerm::NamedNode(datatype) =
-                        self.to_term(&Reflect::get(&value, &self.datatype)?)?
+                        self.to_term(&Reflect::get(value, &self.datatype)?)?
                     {
                         let datatype = NamedNode::from(datatype);
-                        let literal_value = Reflect::get(&value, &self.value)?
+                        let literal_value = Reflect::get(value, &self.value)?
                             .as_string()
                             .ok_or_else(|| format_err!("Literal should have a string value"))?;
                         Ok(match datatype.as_str() {
                                     "http://www.w3.org/2001/XMLSchema#string" => Literal::new_simple_literal(literal_value),
-                                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" => Literal::new_language_tagged_literal(literal_value, Reflect::get(&value, &self.language)?.as_string().ok_or_else(
+                                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" => Literal::new_language_tagged_literal(literal_value, Reflect::get(value, &self.language)?.as_string().ok_or_else(
                                         || format_err!("Literal with rdf:langString datatype should have a language"),
                                     )?).map_err(to_err)?,
                                     _ => Literal::new_typed_literal(literal_value, datatype)
@@ -588,10 +587,10 @@ impl FromJsConverter {
 
     pub fn to_quad(&self, value: &JsValue) -> Result<JsQuad, JsValue> {
         Ok(JsQuad {
-            subject: self.to_term(&Reflect::get(&value, &self.subject)?)?,
-            predicate: self.to_term(&Reflect::get(&value, &self.predicate)?)?,
-            object: self.to_term(&Reflect::get(&value, &self.object)?)?,
-            graph_name: self.to_term(&Reflect::get(&value, &self.graph)?)?,
+            subject: self.to_term(&Reflect::get(value, &self.subject)?)?,
+            predicate: self.to_term(&Reflect::get(value, &self.predicate)?)?,
+            object: self.to_term(&Reflect::get(value, &self.object)?)?,
+            graph_name: self.to_term(&Reflect::get(value, &self.graph)?)?,
         })
     }
 }
