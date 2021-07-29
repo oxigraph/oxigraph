@@ -33,7 +33,7 @@ jobs:
         submodules: true
     - run: rustup update
     - run: cargo build
-    - run: cargo test --verbose --all --all-features --exclude pyoxigraph
+    - run: cargo test --verbose --all --all-features
       env:
         RUST_BACKTRACE: 1
 
