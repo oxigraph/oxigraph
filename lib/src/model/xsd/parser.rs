@@ -106,7 +106,7 @@ impl ParseError<&str> for XsdParseError {
 
 impl From<ParseIntError> for XsdParseError {
     fn from(error: ParseIntError) -> Self {
-        XsdParseError {
+        Self {
             kind: XsdParseErrorKind::ParseInt(error),
         }
     }
@@ -114,7 +114,7 @@ impl From<ParseIntError> for XsdParseError {
 
 impl From<ParseDecimalError> for XsdParseError {
     fn from(error: ParseDecimalError) -> Self {
-        XsdParseError {
+        Self {
             kind: XsdParseErrorKind::ParseDecimal(error),
         }
     }
@@ -122,16 +122,16 @@ impl From<ParseDecimalError> for XsdParseError {
 
 impl From<DateTimeError> for XsdParseError {
     fn from(error: DateTimeError) -> Self {
-        XsdParseError {
+        Self {
             kind: XsdParseErrorKind::DateTime(error),
         }
     }
 }
 
-impl From<Err<XsdParseError>> for XsdParseError {
-    fn from(err: Err<XsdParseError>) -> Self {
+impl From<Err<Self>> for XsdParseError {
+    fn from(err: Err<Self>) -> Self {
         match err {
-            Err::Incomplete(needed) => XsdParseError {
+            Err::Incomplete(needed) => Self {
                 kind: XsdParseErrorKind::MissingData(needed),
             },
             Err::Error(e) | Err::Failure(e) => e,

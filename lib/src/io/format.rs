@@ -74,11 +74,9 @@ impl GraphFormat {
     pub fn from_media_type(media_type: &str) -> Option<Self> {
         if let Some(base_type) = media_type.split(';').next() {
             match base_type.trim() {
-                "application/n-triples" | "text/plain" => Some(GraphFormat::NTriples),
-                "text/turtle" | "application/turtle" | "application/x-turtle" => {
-                    Some(GraphFormat::Turtle)
-                }
-                "application/rdf+xml" | "application/xml" | "text/xml" => Some(GraphFormat::RdfXml),
+                "application/n-triples" | "text/plain" => Some(Self::NTriples),
+                "text/turtle" | "application/turtle" | "application/x-turtle" => Some(Self::Turtle),
+                "application/rdf+xml" | "application/xml" | "text/xml" => Some(Self::RdfXml),
                 _ => None,
             }
         } else {
@@ -158,9 +156,9 @@ impl DatasetFormat {
         if let Some(base_type) = media_type.split(';').next() {
             match base_type.trim() {
                 "application/n-quads" | "text/x-nquads" | "text/nquads" => {
-                    Some(DatasetFormat::NQuads)
+                    Some(Self::NQuads)
                 }
-                "application/trig" | "application/x-trig" => Some(DatasetFormat::TriG),
+                "application/trig" | "application/x-trig" => Some(Self::TriG),
                 _ => None,
             }
         } else {

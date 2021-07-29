@@ -126,7 +126,7 @@ enum VariableOrPropertyPath {
 
 impl From<Variable> for VariableOrPropertyPath {
     fn from(var: Variable) -> Self {
-        VariableOrPropertyPath::Variable(var)
+        Self::Variable(var)
     }
 }
 
@@ -141,7 +141,7 @@ impl From<NamedNodePattern> for VariableOrPropertyPath {
 
 impl From<PropertyPathExpression> for VariableOrPropertyPath {
     fn from(path: PropertyPathExpression) -> Self {
-        VariableOrPropertyPath::PropertyPath(path)
+        Self::PropertyPath(path)
     }
 }
 
@@ -287,7 +287,7 @@ enum TripleOrPathPattern {
 
 impl From<TriplePattern> for TripleOrPathPattern {
     fn from(tp: TriplePattern) -> Self {
-        TripleOrPathPattern::Triple(tp)
+        Self::Triple(tp)
     }
 }
 
@@ -306,7 +306,7 @@ impl From<AnnotatedTerm> for AnnotatedTermPath {
                 .map(|(p, o)| {
                     (
                         p.into(),
-                        o.into_iter().map(AnnotatedTermPath::from).collect(),
+                        o.into_iter().map(Self::from).collect(),
                     )
                 })
                 .collect(),

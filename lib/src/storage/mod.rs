@@ -23,9 +23,9 @@ use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash, StrLook
 use std::convert::TryInto;
 
 mod binary_encoder;
-pub(crate) mod io;
-pub(crate) mod numeric_encoder;
-pub(crate) mod small_string;
+pub mod io;
+pub mod numeric_encoder;
+pub mod small_string;
 
 /// Low level storage primitives
 #[derive(Clone)]
@@ -430,43 +430,42 @@ impl Storage {
     }
 
     fn spog_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
-        self.inner_quads(&self.spog, prefix, QuadEncoding::Spog)
+        Self::inner_quads(&self.spog, prefix, QuadEncoding::Spog)
     }
 
     fn posg_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
-        self.inner_quads(&self.posg, prefix, QuadEncoding::Posg)
+        Self::inner_quads(&self.posg, prefix, QuadEncoding::Posg)
     }
 
     fn ospg_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
-        self.inner_quads(&self.ospg, prefix, QuadEncoding::Ospg)
+        Self::inner_quads(&self.ospg, prefix, QuadEncoding::Ospg)
     }
 
     fn gspo_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
-        self.inner_quads(&self.gspo, prefix, QuadEncoding::Gspo)
+        Self::inner_quads(&self.gspo, prefix, QuadEncoding::Gspo)
     }
 
     fn gpos_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
-        self.inner_quads(&self.gpos, prefix, QuadEncoding::Gpos)
+        Self::inner_quads(&self.gpos, prefix, QuadEncoding::Gpos)
     }
 
     fn gosp_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
-        self.inner_quads(&self.gosp, prefix, QuadEncoding::Gosp)
+        Self::inner_quads(&self.gosp, prefix, QuadEncoding::Gosp)
     }
 
     fn dspo_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
-        self.inner_quads(&self.dspo, prefix, QuadEncoding::Dspo)
+        Self::inner_quads(&self.dspo, prefix, QuadEncoding::Dspo)
     }
 
     fn dpos_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
-        self.inner_quads(&self.dpos, prefix, QuadEncoding::Dpos)
+        Self::inner_quads(&self.dpos, prefix, QuadEncoding::Dpos)
     }
 
     fn dosp_quads(&self, prefix: Vec<u8>) -> DecodingQuadIterator {
-        self.inner_quads(&self.dosp, prefix, QuadEncoding::Dosp)
+        Self::inner_quads(&self.dosp, prefix, QuadEncoding::Dosp)
     }
 
     fn inner_quads(
-        &self,
         tree: &Tree,
         prefix: impl AsRef<[u8]>,
         encoding: QuadEncoding,
@@ -959,7 +958,7 @@ impl<T> From<Sled2TransactionError<T>> for TransactionError<T> {
     }
 }
 
-impl<T: Into<std::io::Error>> From<TransactionError<T>> for std::io::Error {
+impl<T: Into<Self>> From<TransactionError<T>> for std::io::Error {
     fn from(e: TransactionError<T>) -> Self {
         match e {
             TransactionError::Abort(e) => e.into(),
@@ -1005,8 +1004,8 @@ impl From<UnabortableTransactionError> for EvaluationError {
     }
 }
 
-impl From<StoreOrParseError<UnabortableTransactionError>> for UnabortableTransactionError {
-    fn from(e: StoreOrParseError<UnabortableTransactionError>) -> Self {
+impl From<StoreOrParseError<Self>> for UnabortableTransactionError {
+    fn from(e: StoreOrParseError<Self>) -> Self {
         match e {
             StoreOrParseError::Store(e) => e,
             StoreOrParseError::Parse(e) => Self::Storage(e),
@@ -1066,11 +1065,9 @@ impl<T> From<UnabortableTransactionError> for ConflictableTransactionError<T> {
 impl<T> From<ConflictableTransactionError<T>> for Sled2ConflictableTransactionError<T> {
     fn from(e: ConflictableTransactionError<T>) -> Self {
         match e {
-            ConflictableTransactionError::Abort(e) => Sled2ConflictableTransactionError::Abort(e),
-            ConflictableTransactionError::Conflict => Sled2ConflictableTransactionError::Conflict,
-            ConflictableTransactionError::Storage(e) => {
-                Sled2ConflictableTransactionError::Storage(e.into())
-            }
+            ConflictableTransactionError::Abort(e) => Self::Abort(e),
+            ConflictableTransactionError::Conflict => Self::Conflict,
+            ConflictableTransactionError::Storage(e) => Self::Storage(e.into()),
         }
     }
 }
@@ -1163,7 +1160,7 @@ impl<'a> TermEncoder for StorageTransaction<'a> {
     }
 }
 
-pub(crate) trait StorageLike: StrLookup {
+pub trait StorageLike: StrLookup {
     fn insert(&self, quad: QuadRef<'_>) -> Result<bool, Self::Error>;
 
     fn remove(&self, quad: QuadRef<'_>) -> Result<bool, Self::Error>;

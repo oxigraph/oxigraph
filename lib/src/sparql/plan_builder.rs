@@ -10,7 +10,7 @@ use spargebra::term::*;
 use std::collections::{BTreeSet, HashSet};
 use std::rc::Rc;
 
-pub(crate) struct PlanBuilder<'a> {
+pub struct PlanBuilder<'a> {
     dataset: &'a DatasetView,
 }
 
@@ -920,7 +920,7 @@ impl<'a> PlanBuilder<'a> {
                 separator,
             } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::GroupConcat {
-                    separator: Rc::new(separator.clone().unwrap_or_else(|| " ".to_string())),
+                    separator: Rc::new(separator.clone().unwrap_or_else(|| " ".to_owned())),
                 },
                 parameter: Some(self.build_for_expression(expr, variables, graph_name)?),
                 distinct: *distinct,
@@ -1027,7 +1027,7 @@ impl<'a> PlanBuilder<'a> {
         match from_value {
             PatternValue::Constant(v) => PatternValue::Constant(v.clone()),
             PatternValue::Variable(from_id) => {
-                PatternValue::Variable(self.convert_variable_id(*from_id, from, to))
+                PatternValue::Variable(Self::convert_variable_id(*from_id, from, to))
             }
             PatternValue::Triple(triple) => PatternValue::Triple(Box::new(TriplePatternValue {
                 subject: self.convert_pattern_value_id(&triple.subject, from, to),
@@ -1037,12 +1037,7 @@ impl<'a> PlanBuilder<'a> {
         }
     }
 
-    fn convert_variable_id(
-        &self,
-        from_id: usize,
-        from: &[Variable],
-        to: &mut Vec<Variable>,
-    ) -> usize {
+    fn convert_variable_id(from_id: usize, from: &[Variable], to: &mut Vec<Variable>) -> usize {
         if let Some(to_id) = to.iter().enumerate().find_map(|(to_id, var)| {
             if *var == from[from_id] {
                 Some(to_id)

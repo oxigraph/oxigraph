@@ -537,7 +537,7 @@ impl TryFrom<GraphNamePattern> for GraphName {
     fn try_from(pattern: GraphNamePattern) -> Result<Self, ()> {
         match pattern {
             GraphNamePattern::NamedNode(t) => Ok(t.into()),
-            GraphNamePattern::DefaultGraph => Ok(GraphName::DefaultGraph),
+            GraphNamePattern::DefaultGraph => Ok(Self::DefaultGraph),
             GraphNamePattern::Variable(_) => Err(()),
         }
     }
@@ -1099,7 +1099,7 @@ impl TryFrom<QuadPattern> for GroundQuadPattern {
 
     #[inline]
     fn try_from(pattern: QuadPattern) -> Result<Self, ()> {
-        Ok(GroundQuadPattern {
+        Ok(Self {
             subject: pattern.subject.try_into()?,
             predicate: pattern.predicate,
             object: pattern.object.try_into()?,

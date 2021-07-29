@@ -106,7 +106,7 @@ impl From<io::Error> for EvaluationError {
     }
 }
 
-impl<E: Into<EvaluationError>> From<DecoderError<E>> for EvaluationError {
+impl<E: Into<Self>> From<DecoderError<E>> for EvaluationError {
     fn from(error: DecoderError<E>) -> Self {
         match error {
             DecoderError::Store(error) => error.into(),

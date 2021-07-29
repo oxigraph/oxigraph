@@ -285,7 +285,7 @@ impl<'a> IntoIterator for &'a Graph {
 
 impl FromIterator<Triple> for Graph {
     fn from_iter<I: IntoIterator<Item = Triple>>(iter: I) -> Self {
-        let mut g = Graph::new();
+        let mut g = Self::new();
         g.extend(iter);
         g
     }
@@ -293,7 +293,7 @@ impl FromIterator<Triple> for Graph {
 
 impl<'a, T: Into<TripleRef<'a>>> FromIterator<T> for Graph {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-        let mut g = Graph::new();
+        let mut g = Self::new();
         g.extend(iter);
         g
     }

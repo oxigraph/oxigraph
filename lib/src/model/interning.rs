@@ -37,7 +37,7 @@ impl InternedNamedNode {
         Self { id: fist_spur() }
     }
 
-    pub fn next(&self) -> Self {
+    pub fn next(self) -> Self {
         Self {
             id: next_spur(self.id),
         }
@@ -72,7 +72,7 @@ impl InternedBlankNode {
         BlankNodeRef::new_unchecked(interner.strings.resolve(&self.id))
     }
 
-    pub fn next(&self) -> Self {
+    pub fn next(self) -> Self {
         Self {
             id: next_spur(self.id),
         }

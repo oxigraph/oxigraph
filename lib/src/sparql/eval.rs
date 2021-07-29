@@ -33,7 +33,7 @@ const REGEX_SIZE_LIMIT: usize = 1_000_000;
 type EncodedTuplesIterator = Box<dyn Iterator<Item = Result<EncodedTuple, EvaluationError>>>;
 
 #[derive(Clone)]
-pub(crate) struct SimpleEvaluator {
+pub struct SimpleEvaluator {
     dataset: Rc<DatasetView>,
     base_iri: Option<Rc<Iri<String>>>,
     now: DateTime,
@@ -58,11 +58,9 @@ impl SimpleEvaluator {
         &self,
         plan: &PlanNode,
         variables: Rc<Vec<Variable>>,
-    ) -> Result<QueryResults, EvaluationError> {
+    ) -> QueryResults {
         let iter = self.eval_plan(plan, EncodedTuple::with_capacity(variables.len()));
-        Ok(QueryResults::Solutions(
-            self.decode_bindings(iter, variables),
-        ))
+        QueryResults::Solutions(self.decode_bindings(iter, variables))
     }
 
     pub fn evaluate_ask_plan(&self, plan: &PlanNode) -> Result<QueryResults, EvaluationError> {
@@ -78,9 +76,9 @@ impl SimpleEvaluator {
         &self,
         plan: &PlanNode,
         template: Vec<TripleTemplate>,
-    ) -> Result<QueryResults, EvaluationError> {
+    ) -> QueryResults {
         let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
-        Ok(QueryResults::Graph(QueryTripleIter {
+        QueryResults::Graph(QueryTripleIter {
             iter: Box::new(ConstructIterator {
                 eval: self.clone(),
                 iter: self.eval_plan(plan, from),
@@ -88,18 +86,18 @@ impl SimpleEvaluator {
                 buffered_results: Vec::default(),
                 bnodes: Vec::default(),
             }),
-        }))
+        })
     }
 
-    pub fn evaluate_describe_plan(&self, plan: &PlanNode) -> Result<QueryResults, EvaluationError> {
+    pub fn evaluate_describe_plan(&self, plan: &PlanNode) -> QueryResults {
         let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
-        Ok(QueryResults::Graph(QueryTripleIter {
+        QueryResults::Graph(QueryTripleIter {
             iter: Box::new(DescribeIterator {
                 eval: self.clone(),
                 iter: self.eval_plan(plan, from),
                 quads: Box::new(empty()),
             }),
-        }))
+        })
     }
 
     pub fn eval_plan(&self, node: &PlanNode, from: EncodedTuple) -> EncodedTuplesIterator {
@@ -114,7 +112,7 @@ impl SimpleEvaluator {
                 ..
             } => {
                 match self.evaluate_service(service_name, graph_pattern, variables.clone(), &from) {
-                    Ok(result) => Box::new(result.flat_map(move |binding| {
+                    Ok(result) => Box::new(result.filter_map(move |binding| {
                         binding
                             .map(|binding| binding.combine_with(&from))
                             .transpose()
@@ -274,7 +272,7 @@ impl SimpleEvaluator {
                 //TODO: dumb implementation
                 let right: Vec<_> = self
                     .eval_plan(right, from.clone())
-                    .filter_map(|result| result.ok())
+                    .filter_map(std::result::Result::ok)
                     .collect();
                 Box::new(AntiJoinIterator {
                     left_iter: self.eval_plan(left, from),
@@ -986,17 +984,19 @@ impl SimpleEvaluator {
             PlanExpression::Not(e) => self
                 .to_bool(&self.eval_expression(e, tuple)?)
                 .map(|v| (!v).into()),
-            PlanExpression::Str(e) => Some(self.build_string_literal_from_id(
-                self.to_string_id(&self.eval_expression(e, tuple)?)?,
-            )),
+            PlanExpression::Str(e) | PlanExpression::StringCast(e) => {
+                Some(Self::build_string_literal_from_id(
+                    self.to_string_id(&self.eval_expression(e, tuple)?)?,
+                ))
+            }
             PlanExpression::Lang(e) => match self.eval_expression(e, tuple)? {
                 EncodedTerm::SmallSmallLangStringLiteral { language, .. }
                 | EncodedTerm::BigSmallLangStringLiteral { language, .. } => {
-                    Some(self.build_string_literal_from_id(language.into()))
+                    Some(Self::build_string_literal_from_id(language.into()))
                 }
                 EncodedTerm::SmallBigLangStringLiteral { language_id, .. }
                 | EncodedTerm::BigBigLangStringLiteral { language_id, .. } => {
-                    Some(self.build_string_literal_from_id(language_id.into()))
+                    Some(Self::build_string_literal_from_id(language_id.into()))
                 }
                 e if e.is_literal() => Some(self.build_string_literal("")),
                 _ => None,
@@ -1129,7 +1129,7 @@ impl SimpleEvaluator {
                     .char_indices()
                     .skip(starting_location.checked_sub(1)?)
                     .peekable();
-                let result = if let Some((start_position, _)) = start_iter.peek().cloned() {
+                let result = if let Some((start_position, _)) = start_iter.peek().copied() {
                     if let Some(length) = length {
                         let mut end_iter = start_iter.skip(length).peekable();
                         if let Some((end_position, _)) = end_iter.peek() {
@@ -1355,8 +1355,8 @@ impl SimpleEvaluator {
                 }
             }
             PlanExpression::StrLang(lexical_form, lang_tag) => {
-                Some(self.build_lang_string_literal_from_id(
-                    self.to_simple_string_id(&self.eval_expression(lexical_form, tuple)?)?,
+                Some(Self::build_lang_string_literal_from_id(
+                    Self::to_simple_string_id(&self.eval_expression(lexical_form, tuple)?)?,
                     self.build_language_id(&self.eval_expression(lang_tag, tuple)?)?,
                 ))
             }
@@ -1569,9 +1569,6 @@ impl SimpleEvaluator {
                 }
                 _ => None,
             },
-            PlanExpression::StringCast(e) => Some(self.build_string_literal_from_id(
-                self.to_string_id(&self.eval_expression(e, tuple)?)?,
-            )),
         }
     }
 
@@ -1592,9 +1589,9 @@ impl SimpleEvaluator {
 
     fn to_string_id(&self, term: &EncodedTerm) -> Option<SmallStringOrId> {
         match term {
-            EncodedTerm::DefaultGraph => None,
             EncodedTerm::NamedNode { iri_id } => Some((*iri_id).into()),
-            EncodedTerm::NumericalBlankNode { .. }
+            EncodedTerm::DefaultGraph
+            | EncodedTerm::NumericalBlankNode { .. }
             | EncodedTerm::SmallBlankNode { .. }
             | EncodedTerm::BigBlankNode { .. }
             | EncodedTerm::Triple(_) => None,
@@ -1639,7 +1636,7 @@ impl SimpleEvaluator {
         }
     }
 
-    fn to_simple_string_id(&self, term: &EncodedTerm) -> Option<SmallStringOrId> {
+    fn to_simple_string_id(term: &EncodedTerm) -> Option<SmallStringOrId> {
         match term {
             EncodedTerm::SmallStringLiteral(value) => Some((*value).into()),
             EncodedTerm::BigStringLiteral { value_id } => Some((*value_id).into()),
@@ -1700,10 +1697,10 @@ impl SimpleEvaluator {
     }
 
     fn build_string_literal(&self, value: &str) -> EncodedTerm {
-        self.build_string_literal_from_id(self.build_string_id(value))
+        Self::build_string_literal_from_id(self.build_string_id(value))
     }
 
-    fn build_string_literal_from_id(&self, id: SmallStringOrId) -> EncodedTerm {
+    fn build_string_literal_from_id(id: SmallStringOrId) -> EncodedTerm {
         match id {
             SmallStringOrId::Small(value) => EncodedTerm::SmallStringLiteral(value),
             SmallStringOrId::Big(value_id) => EncodedTerm::BigStringLiteral { value_id },
@@ -1711,11 +1708,10 @@ impl SimpleEvaluator {
     }
 
     fn build_lang_string_literal(&self, value: &str, language_id: SmallStringOrId) -> EncodedTerm {
-        self.build_lang_string_literal_from_id(self.build_string_id(value), language_id)
+        Self::build_lang_string_literal_from_id(self.build_string_id(value), language_id)
     }
 
     fn build_lang_string_literal_from_id(
-        &self,
         value_id: SmallStringOrId,
         language_id: SmallStringOrId,
     ) -> EncodedTerm {
@@ -1797,8 +1793,7 @@ impl SimpleEvaluator {
                     'x' => {
                         regex_builder.ignore_whitespace(true);
                     }
-                    'q' => (), //TODO: implement
-                    _ => (),
+                    _ => (), //TODO: implement q
                 }
             }
         }
@@ -2311,115 +2306,115 @@ impl NumericBinaryOperands {
     fn new(a: &EncodedTerm, b: &EncodedTerm) -> Option<Self> {
         match (a, b) {
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(NumericBinaryOperands::Float(*v1, *v2))
+                Some(Self::Float(*v1, *v2))
             }
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double((*v1).into(), *v2))
+                Some(Self::Double((*v1).into(), *v2))
             }
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
-                Some(NumericBinaryOperands::Float(*v1, *v2 as f32))
+                Some(Self::Float(*v1, *v2 as f32))
             }
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
-                Some(NumericBinaryOperands::Float(*v1, v2.to_f32()))
+                Some(Self::Float(*v1, v2.to_f32()))
             }
             (EncodedTerm::DoubleLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(*v1, (*v2).into()))
+                Some(Self::Double(*v1, (*v2).into()))
             }
             (EncodedTerm::DoubleLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(*v1, *v2))
+                Some(Self::Double(*v1, *v2))
             }
             (EncodedTerm::DoubleLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(*v1, *v2 as f64))
+                Some(Self::Double(*v1, *v2 as f64))
             }
             (EncodedTerm::DoubleLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(*v1, v2.to_f64()))
+                Some(Self::Double(*v1, v2.to_f64()))
             }
             (EncodedTerm::IntegerLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(NumericBinaryOperands::Float(*v1 as f32, *v2))
+                Some(Self::Float(*v1 as f32, *v2))
             }
             (EncodedTerm::IntegerLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(*v1 as f64, *v2))
+                Some(Self::Double(*v1 as f64, *v2))
             }
             (EncodedTerm::IntegerLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
-                Some(NumericBinaryOperands::Integer(*v1, *v2))
+                Some(Self::Integer(*v1, *v2))
             }
             (EncodedTerm::IntegerLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
-                Some(NumericBinaryOperands::Decimal(Decimal::from(*v1), *v2))
+                Some(Self::Decimal(Decimal::from(*v1), *v2))
             }
             (EncodedTerm::DecimalLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(NumericBinaryOperands::Float(v1.to_f32(), *v2))
+                Some(Self::Float(v1.to_f32(), *v2))
             }
             (EncodedTerm::DecimalLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
-                Some(NumericBinaryOperands::Double(v1.to_f64(), *v2))
+                Some(Self::Double(v1.to_f64(), *v2))
             }
             (EncodedTerm::DecimalLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
-                Some(NumericBinaryOperands::Decimal(*v1, Decimal::from(*v2)))
+                Some(Self::Decimal(*v1, Decimal::from(*v2)))
             }
             (EncodedTerm::DecimalLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
-                Some(NumericBinaryOperands::Decimal(*v1, *v2))
+                Some(Self::Decimal(*v1, *v2))
             }
             (EncodedTerm::DurationLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::Duration(*v1, *v2))
+                Some(Self::Duration(*v1, *v2))
             }
             (EncodedTerm::DurationLiteral(v1), EncodedTerm::YearMonthDurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::Duration(*v1, (*v2).into()))
+                Some(Self::Duration(*v1, (*v2).into()))
             }
             (EncodedTerm::DurationLiteral(v1), EncodedTerm::DayTimeDurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::Duration(*v1, (*v2).into()))
+                Some(Self::Duration(*v1, (*v2).into()))
             }
             (EncodedTerm::YearMonthDurationLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::Duration((*v1).into(), *v2))
+                Some(Self::Duration((*v1).into(), *v2))
             }
             (
                 EncodedTerm::YearMonthDurationLiteral(v1),
                 EncodedTerm::YearMonthDurationLiteral(v2),
-            ) => Some(NumericBinaryOperands::YearMonthDuration(*v1, *v2)),
+            ) => Some(Self::YearMonthDuration(*v1, *v2)),
             (
                 EncodedTerm::YearMonthDurationLiteral(v1),
                 EncodedTerm::DayTimeDurationLiteral(v2),
-            ) => Some(NumericBinaryOperands::Duration((*v1).into(), (*v2).into())),
+            ) => Some(Self::Duration((*v1).into(), (*v2).into())),
             (EncodedTerm::DayTimeDurationLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::Duration((*v1).into(), *v2))
+                Some(Self::Duration((*v1).into(), *v2))
             }
             (
                 EncodedTerm::DayTimeDurationLiteral(v1),
                 EncodedTerm::YearMonthDurationLiteral(v2),
-            ) => Some(NumericBinaryOperands::Duration((*v1).into(), (*v2).into())),
+            ) => Some(Self::Duration((*v1).into(), (*v2).into())),
             (EncodedTerm::DayTimeDurationLiteral(v1), EncodedTerm::DayTimeDurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::DayTimeDuration(*v1, *v2))
+                Some(Self::DayTimeDuration(*v1, *v2))
             }
             (EncodedTerm::DateTimeLiteral(v1), EncodedTerm::DateTimeLiteral(v2)) => {
-                Some(NumericBinaryOperands::DateTime(*v1, *v2))
+                Some(Self::DateTime(*v1, *v2))
             }
             (EncodedTerm::DateLiteral(v1), EncodedTerm::DateLiteral(v2)) => {
-                Some(NumericBinaryOperands::Date(*v1, *v2))
+                Some(Self::Date(*v1, *v2))
             }
             (EncodedTerm::TimeLiteral(v1), EncodedTerm::TimeLiteral(v2)) => {
-                Some(NumericBinaryOperands::Time(*v1, *v2))
+                Some(Self::Time(*v1, *v2))
             }
             (EncodedTerm::DateTimeLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::DateTimeDuration(*v1, *v2))
+                Some(Self::DateTimeDuration(*v1, *v2))
             }
             (EncodedTerm::DateTimeLiteral(v1), EncodedTerm::YearMonthDurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::DateTimeYearMonthDuration(*v1, *v2))
+                Some(Self::DateTimeYearMonthDuration(*v1, *v2))
             }
             (EncodedTerm::DateTimeLiteral(v1), EncodedTerm::DayTimeDurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::DateTimeDayTimeDuration(*v1, *v2))
+                Some(Self::DateTimeDayTimeDuration(*v1, *v2))
             }
             (EncodedTerm::DateLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::DateDuration(*v1, *v2))
+                Some(Self::DateDuration(*v1, *v2))
             }
             (EncodedTerm::DateLiteral(v1), EncodedTerm::YearMonthDurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::DateYearMonthDuration(*v1, *v2))
+                Some(Self::DateYearMonthDuration(*v1, *v2))
             }
             (EncodedTerm::DateLiteral(v1), EncodedTerm::DayTimeDurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::DateDayTimeDuration(*v1, *v2))
+                Some(Self::DateDayTimeDuration(*v1, *v2))
             }
             (EncodedTerm::TimeLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::TimeDuration(*v1, *v2))
+                Some(Self::TimeDuration(*v1, *v2))
             }
             (EncodedTerm::TimeLiteral(v1), EncodedTerm::DayTimeDurationLiteral(v2)) => {
-                Some(NumericBinaryOperands::TimeDayTimeDuration(*v1, *v2))
+                Some(Self::TimeDayTimeDuration(*v1, *v2))
             }
             _ => None,
         }

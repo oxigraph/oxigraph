@@ -120,7 +120,7 @@ impl FromStr for Variable {
                 "Variable serialization should start with ? or $",
             ));
         }
-        Variable::new(&s[1..]).map_err(|error| TermParseError {
+        Self::new(&s[1..]).map_err(|error| TermParseError {
             kind: TermParseErrorKind::Variable {
                 value: s.to_owned(),
                 error,
@@ -238,7 +238,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
         }
 
         let mut cursor = match input.get(0) {
-            Some(b'+') | Some(b'-') => 1,
+            Some(b'+' | b'-') => 1,
             _ => 0,
         };
         let mut with_dot = false;
@@ -262,7 +262,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
         if cursor < input.len() && (input[cursor] == b'e' || input[cursor] == b'E') {
             cursor += 1;
             cursor += match input.get(cursor) {
-                Some(b'+') | Some(b'-') => 1,
+                Some(b'+' | b'-') => 1,
                 _ => 0,
             };
             let mut count_exponent = 0;

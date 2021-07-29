@@ -109,7 +109,7 @@ impl QueryResults {
 impl From<QuerySolutionIter> for QueryResults {
     #[inline]
     fn from(value: QuerySolutionIter) -> Self {
-        QueryResults::Solutions(value)
+        Self::Solutions(value)
     }
 }
 
@@ -193,13 +193,13 @@ impl QueryResultsFormat {
         if let Some(base_type) = media_type.split(';').next() {
             match base_type {
                 "application/sparql-results+xml" | "application/xml" | "text/xml" => {
-                    Some(QueryResultsFormat::Xml)
+                    Some(Self::Xml)
                 }
                 "application/sparql-results+json" | "application/json" | "text/json" => {
-                    Some(QueryResultsFormat::Json)
+                    Some(Self::Json)
                 }
-                "text/csv" => Some(QueryResultsFormat::Csv),
-                "text/tab-separated-values" | "text/tsv" => Some(QueryResultsFormat::Tsv),
+                "text/csv" => Some(Self::Csv),
+                "text/tab-separated-values" | "text/tsv" => Some(Self::Tsv),
                 _ => None,
             }
         } else {
@@ -287,7 +287,7 @@ impl QuerySolution {
     /// ```
     #[inline]
     pub fn get(&self, index: impl VariableSolutionIndex) -> Option<&Term> {
-        self.values.get(index.index(self)?).and_then(|e| e.as_ref())
+        self.values.get(index.index(self)?).and_then(std::option::Option::as_ref)
     }
 
     /// The number of variables which could be bound
@@ -314,7 +314,7 @@ impl QuerySolution {
     /// Returns an iterator over all values, bound or not
     #[inline]
     pub fn values(&self) -> impl Iterator<Item = Option<&Term>> {
-        self.values.iter().map(|v| v.as_ref())
+        self.values.iter().map(std::option::Option::as_ref)
     }
 }
 
@@ -425,7 +425,7 @@ impl Variable {
     /// [`Variable::new()`] is a safe version of this constructor and should be used for untrusted data.
     #[inline]
     pub fn new_unchecked(name: impl Into<String>) -> Self {
-        Variable { name: name.into() }
+        Self { name: name.into() }
     }
 
     #[inline]

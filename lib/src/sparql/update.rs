@@ -29,7 +29,7 @@ use std::collections::HashMap;
 use std::io;
 use std::rc::Rc;
 
-pub(crate) struct SimpleUpdateEvaluator<'a> {
+pub struct SimpleUpdateEvaluator<'a> {
     storage: &'a Storage,
     base_iri: Option<Rc<Iri<String>>>,
     options: UpdateOptions,
@@ -95,7 +95,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
     fn eval_insert_data(&mut self, data: &[Quad]) -> Result<(), EvaluationError> {
         let mut bnodes = HashMap::new();
         for quad in data {
-            let quad = self.convert_quad(quad, &mut bnodes);
+            let quad = Self::convert_quad(quad, &mut bnodes);
             self.storage.insert(quad.as_ref())?;
         }
         Ok(())
@@ -103,7 +103,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
 
     fn eval_delete_data(&mut self, data: &[GroundQuad]) -> Result<(), EvaluationError> {
         for quad in data {
-            let quad = self.convert_ground_quad(quad);
+            let quad = Self::convert_ground_quad(quad);
             self.storage.remove(quad.as_ref())?;
         }
         Ok(())
@@ -116,7 +116,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         using: &QueryDataset,
         algebra: &GraphPattern,
     ) -> Result<(), EvaluationError> {
-        let dataset = Rc::new(DatasetView::new(self.storage.clone(), using)?);
+        let dataset = Rc::new(DatasetView::new(self.storage.clone(), using));
         let (plan, variables) = PlanBuilder::build(dataset.as_ref(), algebra)?;
         let evaluator = SimpleEvaluator::new(
             dataset.clone(),
@@ -128,7 +128,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
             let tuple = tuple?;
             for quad in delete {
                 if let Some(quad) =
-                    self.convert_ground_quad_pattern(quad, &variables, &tuple, &dataset)?
+                    Self::convert_ground_quad_pattern(quad, &variables, &tuple, &dataset)?
                 {
                     self.storage.remove(quad.as_ref())?;
                     // Hack to make sure the triple terms are still available for an insert
@@ -139,7 +139,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
             }
             for quad in insert {
                 if let Some(quad) =
-                    self.convert_quad_pattern(quad, &variables, &tuple, &dataset, &mut bnodes)?
+                    Self::convert_quad_pattern(quad, &variables, &tuple, &dataset, &mut bnodes)?
                 {
                     self.storage.insert(quad.as_ref())?;
                 }
@@ -254,61 +254,56 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         }
     }
 
-    fn convert_quad(&self, quad: &Quad, bnodes: &mut HashMap<BlankNode, OxBlankNode>) -> OxQuad {
+    fn convert_quad(quad: &Quad, bnodes: &mut HashMap<BlankNode, OxBlankNode>) -> OxQuad {
         OxQuad {
             subject: match &quad.subject {
-                Subject::NamedNode(subject) => self.convert_named_node(subject).into(),
-                Subject::BlankNode(subject) => self.convert_blank_node(subject, bnodes).into(),
-                Subject::Triple(subject) => self.convert_triple(subject, bnodes).into(),
+                Subject::NamedNode(subject) => Self::convert_named_node(subject).into(),
+                Subject::BlankNode(subject) => Self::convert_blank_node(subject, bnodes).into(),
+                Subject::Triple(subject) => Self::convert_triple(subject, bnodes).into(),
             },
-            predicate: self.convert_named_node(&quad.predicate),
+            predicate: Self::convert_named_node(&quad.predicate),
             object: match &quad.object {
-                Term::NamedNode(object) => self.convert_named_node(object).into(),
-                Term::BlankNode(object) => self.convert_blank_node(object, bnodes).into(),
-                Term::Literal(object) => self.convert_literal(object).into(),
-                Term::Triple(subject) => self.convert_triple(subject, bnodes).into(),
+                Term::NamedNode(object) => Self::convert_named_node(object).into(),
+                Term::BlankNode(object) => Self::convert_blank_node(object, bnodes).into(),
+                Term::Literal(object) => Self::convert_literal(object).into(),
+                Term::Triple(subject) => Self::convert_triple(subject, bnodes).into(),
             },
             graph_name: match &quad.graph_name {
-                GraphName::NamedNode(graph_name) => self.convert_named_node(graph_name).into(),
+                GraphName::NamedNode(graph_name) => Self::convert_named_node(graph_name).into(),
                 GraphName::DefaultGraph => OxGraphName::DefaultGraph,
             },
         }
     }
 
-    fn convert_triple(
-        &self,
-        triple: &Triple,
-        bnodes: &mut HashMap<BlankNode, OxBlankNode>,
-    ) -> OxTriple {
+    fn convert_triple(triple: &Triple, bnodes: &mut HashMap<BlankNode, OxBlankNode>) -> OxTriple {
         OxTriple {
             subject: match &triple.subject {
-                Subject::NamedNode(subject) => self.convert_named_node(subject).into(),
-                Subject::BlankNode(subject) => self.convert_blank_node(subject, bnodes).into(),
-                Subject::Triple(subject) => self.convert_triple(subject, bnodes).into(),
+                Subject::NamedNode(subject) => Self::convert_named_node(subject).into(),
+                Subject::BlankNode(subject) => Self::convert_blank_node(subject, bnodes).into(),
+                Subject::Triple(subject) => Self::convert_triple(subject, bnodes).into(),
             },
-            predicate: self.convert_named_node(&triple.predicate),
+            predicate: Self::convert_named_node(&triple.predicate),
             object: match &triple.object {
-                Term::NamedNode(object) => self.convert_named_node(object).into(),
-                Term::BlankNode(object) => self.convert_blank_node(object, bnodes).into(),
-                Term::Literal(object) => self.convert_literal(object).into(),
-                Term::Triple(subject) => self.convert_triple(subject, bnodes).into(),
+                Term::NamedNode(object) => Self::convert_named_node(object).into(),
+                Term::BlankNode(object) => Self::convert_blank_node(object, bnodes).into(),
+                Term::Literal(object) => Self::convert_literal(object).into(),
+                Term::Triple(subject) => Self::convert_triple(subject, bnodes).into(),
             },
         }
     }
 
-    fn convert_named_node(&self, node: &NamedNode) -> OxNamedNode {
+    fn convert_named_node(node: &NamedNode) -> OxNamedNode {
         OxNamedNode::new_unchecked(&node.iri)
     }
 
     fn convert_blank_node(
-        &self,
         node: &BlankNode,
         bnodes: &mut HashMap<BlankNode, OxBlankNode>,
     ) -> OxBlankNode {
         bnodes.entry(node.clone()).or_default().clone()
     }
 
-    fn convert_literal(&self, literal: &Literal) -> OxLiteral {
+    fn convert_literal(literal: &Literal) -> OxLiteral {
         match literal {
             Literal::Simple { value } => OxLiteral::new_simple_literal(value),
             Literal::LanguageTaggedString { value, language } => {
@@ -320,42 +315,41 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         }
     }
 
-    fn convert_ground_quad(&self, quad: &GroundQuad) -> OxQuad {
+    fn convert_ground_quad(quad: &GroundQuad) -> OxQuad {
         OxQuad {
             subject: match &quad.subject {
-                GroundSubject::NamedNode(subject) => self.convert_named_node(subject).into(),
-                GroundSubject::Triple(subject) => self.convert_ground_triple(subject).into(),
+                GroundSubject::NamedNode(subject) => Self::convert_named_node(subject).into(),
+                GroundSubject::Triple(subject) => Self::convert_ground_triple(subject).into(),
             },
-            predicate: self.convert_named_node(&quad.predicate),
+            predicate: Self::convert_named_node(&quad.predicate),
             object: match &quad.object {
-                GroundTerm::NamedNode(object) => self.convert_named_node(object).into(),
-                GroundTerm::Literal(object) => self.convert_literal(object).into(),
-                GroundTerm::Triple(subject) => self.convert_ground_triple(subject).into(),
+                GroundTerm::NamedNode(object) => Self::convert_named_node(object).into(),
+                GroundTerm::Literal(object) => Self::convert_literal(object).into(),
+                GroundTerm::Triple(subject) => Self::convert_ground_triple(subject).into(),
             },
             graph_name: match &quad.graph_name {
-                GraphName::NamedNode(graph_name) => self.convert_named_node(graph_name).into(),
+                GraphName::NamedNode(graph_name) => Self::convert_named_node(graph_name).into(),
                 GraphName::DefaultGraph => OxGraphName::DefaultGraph,
             },
         }
     }
 
-    fn convert_ground_triple(&self, triple: &GroundTriple) -> OxTriple {
+    fn convert_ground_triple(triple: &GroundTriple) -> OxTriple {
         OxTriple {
             subject: match &triple.subject {
-                GroundSubject::NamedNode(subject) => self.convert_named_node(subject).into(),
-                GroundSubject::Triple(subject) => self.convert_ground_triple(subject).into(),
+                GroundSubject::NamedNode(subject) => Self::convert_named_node(subject).into(),
+                GroundSubject::Triple(subject) => Self::convert_ground_triple(subject).into(),
             },
-            predicate: self.convert_named_node(&triple.predicate),
+            predicate: Self::convert_named_node(&triple.predicate),
             object: match &triple.object {
-                GroundTerm::NamedNode(object) => self.convert_named_node(object).into(),
-                GroundTerm::Literal(object) => self.convert_literal(object).into(),
-                GroundTerm::Triple(subject) => self.convert_ground_triple(subject).into(),
+                GroundTerm::NamedNode(object) => Self::convert_named_node(object).into(),
+                GroundTerm::Literal(object) => Self::convert_literal(object).into(),
+                GroundTerm::Triple(subject) => Self::convert_ground_triple(subject).into(),
             },
         }
     }
 
     fn convert_quad_pattern(
-        &self,
         quad: &QuadPattern,
         variables: &[Variable],
         values: &EncodedTuple,
@@ -363,7 +357,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         bnodes: &mut HashMap<BlankNode, OxBlankNode>,
     ) -> Result<Option<OxQuad>, EvaluationError> {
         Ok(Some(OxQuad {
-            subject: match self.convert_term_or_var(
+            subject: match Self::convert_term_or_var(
                 &quad.subject,
                 variables,
                 values,
@@ -376,21 +370,21 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                 Some(OxTerm::Literal(_)) | None => return Ok(None),
             },
             predicate: if let Some(predicate) =
-                self.convert_named_node_or_var(&quad.predicate, variables, values, dataset)?
+                Self::convert_named_node_or_var(&quad.predicate, variables, values, dataset)?
             {
                 predicate
             } else {
                 return Ok(None);
             },
             object: if let Some(object) =
-                self.convert_term_or_var(&quad.object, variables, values, dataset, bnodes)?
+                Self::convert_term_or_var(&quad.object, variables, values, dataset, bnodes)?
             {
                 object
             } else {
                 return Ok(None);
             },
             graph_name: if let Some(graph_name) =
-                self.convert_graph_name_or_var(&quad.graph_name, variables, values, dataset)?
+                Self::convert_graph_name_or_var(&quad.graph_name, variables, values, dataset)?
             {
                 graph_name
             } else {
@@ -400,7 +394,6 @@ impl<'a> SimpleUpdateEvaluator<'a> {
     }
 
     fn convert_term_or_var(
-        &self,
         term: &TermPattern,
         variables: &[Variable],
         values: &EncodedTuple,
@@ -408,47 +401,43 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         bnodes: &mut HashMap<BlankNode, OxBlankNode>,
     ) -> Result<Option<OxTerm>, EvaluationError> {
         Ok(match term {
-            TermPattern::NamedNode(term) => Some(self.convert_named_node(term).into()),
-            TermPattern::BlankNode(bnode) => Some(self.convert_blank_node(bnode, bnodes).into()),
-            TermPattern::Literal(term) => Some(self.convert_literal(term).into()),
-            TermPattern::Triple(triple) => self
-                .convert_triple_pattern(triple, variables, values, dataset, bnodes)?
-                .map(|t| t.into()),
-            TermPattern::Variable(v) => self
-                .lookup_variable(v, variables, values)
+            TermPattern::NamedNode(term) => Some(Self::convert_named_node(term).into()),
+            TermPattern::BlankNode(bnode) => Some(Self::convert_blank_node(bnode, bnodes).into()),
+            TermPattern::Literal(term) => Some(Self::convert_literal(term).into()),
+            TermPattern::Triple(triple) => {
+                Self::convert_triple_pattern(triple, variables, values, dataset, bnodes)?
+                    .map(|t| t.into())
+            }
+            TermPattern::Variable(v) => Self::lookup_variable(v, variables, values)
                 .map(|node| dataset.decode_term(&node))
                 .transpose()?,
         })
     }
 
     fn convert_named_node_or_var(
-        &self,
         term: &NamedNodePattern,
         variables: &[Variable],
         values: &EncodedTuple,
         dataset: &DatasetView,
     ) -> Result<Option<OxNamedNode>, EvaluationError> {
         Ok(match term {
-            NamedNodePattern::NamedNode(term) => Some(self.convert_named_node(term)),
-            NamedNodePattern::Variable(v) => self
-                .lookup_variable(v, variables, values)
+            NamedNodePattern::NamedNode(term) => Some(Self::convert_named_node(term)),
+            NamedNodePattern::Variable(v) => Self::lookup_variable(v, variables, values)
                 .map(|node| dataset.decode_named_node(&node))
                 .transpose()?,
         })
     }
 
     fn convert_graph_name_or_var(
-        &self,
         term: &GraphNamePattern,
         variables: &[Variable],
         values: &EncodedTuple,
         dataset: &DatasetView,
     ) -> Result<Option<OxGraphName>, EvaluationError> {
         match term {
-            GraphNamePattern::NamedNode(term) => Ok(Some(self.convert_named_node(term).into())),
+            GraphNamePattern::NamedNode(term) => Ok(Some(Self::convert_named_node(term).into())),
             GraphNamePattern::DefaultGraph => Ok(Some(OxGraphName::DefaultGraph)),
-            GraphNamePattern::Variable(v) => self
-                .lookup_variable(v, variables, values)
+            GraphNamePattern::Variable(v) => Self::lookup_variable(v, variables, values)
                 .map(|node| {
                     Ok(if node == EncodedTerm::DefaultGraph {
                         OxGraphName::DefaultGraph
@@ -461,7 +450,6 @@ impl<'a> SimpleUpdateEvaluator<'a> {
     }
 
     fn convert_triple_pattern(
-        &self,
         triple: &TriplePattern,
         variables: &[Variable],
         values: &EncodedTuple,
@@ -469,7 +457,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         bnodes: &mut HashMap<BlankNode, OxBlankNode>,
     ) -> Result<Option<OxTriple>, EvaluationError> {
         Ok(Some(OxTriple {
-            subject: match self.convert_term_or_var(
+            subject: match Self::convert_term_or_var(
                 &triple.subject,
                 variables,
                 values,
@@ -482,14 +470,14 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                 Some(OxTerm::Literal(_)) | None => return Ok(None),
             },
             predicate: if let Some(predicate) =
-                self.convert_named_node_or_var(&triple.predicate, variables, values, dataset)?
+                Self::convert_named_node_or_var(&triple.predicate, variables, values, dataset)?
             {
                 predicate
             } else {
                 return Ok(None);
             },
             object: if let Some(object) =
-                self.convert_term_or_var(&triple.object, variables, values, dataset, bnodes)?
+                Self::convert_term_or_var(&triple.object, variables, values, dataset, bnodes)?
             {
                 object
             } else {
@@ -499,14 +487,13 @@ impl<'a> SimpleUpdateEvaluator<'a> {
     }
 
     fn convert_ground_quad_pattern(
-        &self,
         quad: &GroundQuadPattern,
         variables: &[Variable],
         values: &EncodedTuple,
         dataset: &DatasetView,
     ) -> Result<Option<OxQuad>, EvaluationError> {
         Ok(Some(OxQuad {
-            subject: match self.convert_ground_term_or_var(
+            subject: match Self::convert_ground_term_or_var(
                 &quad.subject,
                 variables,
                 values,
@@ -518,21 +505,21 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                 Some(OxTerm::Literal(_)) | None => return Ok(None),
             },
             predicate: if let Some(predicate) =
-                self.convert_named_node_or_var(&quad.predicate, variables, values, dataset)?
+                Self::convert_named_node_or_var(&quad.predicate, variables, values, dataset)?
             {
                 predicate
             } else {
                 return Ok(None);
             },
             object: if let Some(object) =
-                self.convert_ground_term_or_var(&quad.object, variables, values, dataset)?
+                Self::convert_ground_term_or_var(&quad.object, variables, values, dataset)?
             {
                 object
             } else {
                 return Ok(None);
             },
             graph_name: if let Some(graph_name) =
-                self.convert_graph_name_or_var(&quad.graph_name, variables, values, dataset)?
+                Self::convert_graph_name_or_var(&quad.graph_name, variables, values, dataset)?
             {
                 graph_name
             } else {
@@ -542,34 +529,32 @@ impl<'a> SimpleUpdateEvaluator<'a> {
     }
 
     fn convert_ground_term_or_var(
-        &self,
         term: &GroundTermPattern,
         variables: &[Variable],
         values: &EncodedTuple,
         dataset: &DatasetView,
     ) -> Result<Option<OxTerm>, EvaluationError> {
         Ok(match term {
-            GroundTermPattern::NamedNode(term) => Some(self.convert_named_node(term).into()),
-            GroundTermPattern::Literal(term) => Some(self.convert_literal(term).into()),
-            GroundTermPattern::Triple(triple) => self
-                .convert_ground_triple_pattern(triple, variables, values, dataset)?
-                .map(|t| t.into()),
-            GroundTermPattern::Variable(v) => self
-                .lookup_variable(v, variables, values)
+            GroundTermPattern::NamedNode(term) => Some(Self::convert_named_node(term).into()),
+            GroundTermPattern::Literal(term) => Some(Self::convert_literal(term).into()),
+            GroundTermPattern::Triple(triple) => {
+                Self::convert_ground_triple_pattern(triple, variables, values, dataset)?
+                    .map(|t| t.into())
+            }
+            GroundTermPattern::Variable(v) => Self::lookup_variable(v, variables, values)
                 .map(|node| dataset.decode_term(&node))
                 .transpose()?,
         })
     }
 
     fn convert_ground_triple_pattern(
-        &self,
         triple: &GroundTriplePattern,
         variables: &[Variable],
         values: &EncodedTuple,
         dataset: &DatasetView,
     ) -> Result<Option<OxTriple>, EvaluationError> {
         Ok(Some(OxTriple {
-            subject: match self.convert_ground_term_or_var(
+            subject: match Self::convert_ground_term_or_var(
                 &triple.subject,
                 variables,
                 values,
@@ -581,14 +566,14 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                 Some(OxTerm::Literal(_)) | None => return Ok(None),
             },
             predicate: if let Some(predicate) =
-                self.convert_named_node_or_var(&triple.predicate, variables, values, dataset)?
+                Self::convert_named_node_or_var(&triple.predicate, variables, values, dataset)?
             {
                 predicate
             } else {
                 return Ok(None);
             },
             object: if let Some(object) =
-                self.convert_ground_term_or_var(&triple.object, variables, values, dataset)?
+                Self::convert_ground_term_or_var(&triple.object, variables, values, dataset)?
             {
                 object
             } else {
@@ -598,7 +583,6 @@ impl<'a> SimpleUpdateEvaluator<'a> {
     }
 
     fn lookup_variable(
-        &self,
         v: &Variable,
         variables: &[Variable],
         values: &EncodedTuple,

@@ -39,10 +39,10 @@ impl Query {
         let query = spargebra::Query::parse(query, base_iri)?;
         Ok(Self {
             dataset: QueryDataset::from_algebra(match &query {
-                spargebra::Query::Select { dataset, .. } => dataset,
-                spargebra::Query::Construct { dataset, .. } => dataset,
-                spargebra::Query::Describe { dataset, .. } => dataset,
-                spargebra::Query::Ask { dataset, .. } => dataset,
+                spargebra::Query::Select { dataset, .. }
+                | spargebra::Query::Construct { dataset, .. }
+                | spargebra::Query::Describe { dataset, .. }
+                | spargebra::Query::Ask { dataset, .. } => dataset,
             }),
             inner: query,
         })
@@ -128,12 +128,16 @@ impl Update {
 
     /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset) in [DELETE/INSERT operations](https://www.w3.org/TR/sparql11-update/#deleteInsert).
     pub fn using_datasets(&self) -> impl Iterator<Item = &QueryDataset> {
-        self.using_datasets.iter().filter_map(|q| q.as_ref())
+        self.using_datasets
+            .iter()
+            .filter_map(std::option::Option::as_ref)
     }
 
     /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset) in [DELETE/INSERT operations](https://www.w3.org/TR/sparql11-update/#deleteInsert).
     pub fn using_datasets_mut(&mut self) -> impl Iterator<Item = &mut QueryDataset> {
-        self.using_datasets.iter_mut().filter_map(|q| q.as_mut())
+        self.using_datasets
+            .iter_mut()
+            .filter_map(std::option::Option::as_mut)
     }
 }
 

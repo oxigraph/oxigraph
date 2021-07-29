@@ -66,6 +66,7 @@ impl GraphParser {
     }
 
     /// Executes the parsing itself on a [`BufRead`](std::io::BufRead) implementation and returns an iterator of triples
+    #[allow(clippy::unnecessary_wraps)]
     pub fn read_triples<R: BufRead>(&self, reader: R) -> io::Result<TripleReader<R>> {
         Ok(TripleReader {
             mapper: RioMapper::default(),
@@ -214,6 +215,7 @@ impl DatasetParser {
     }
 
     /// Executes the parsing itself on a [`BufRead`](std::io::BufRead) implementation and returns an iterator of quads
+    #[allow(clippy::unnecessary_wraps)]
     pub fn read_quads<R: BufRead>(&self, reader: R) -> io::Result<QuadReader<R>> {
         Ok(QuadReader {
             mapper: RioMapper::default(),
@@ -307,7 +309,7 @@ struct RioMapper {
 }
 
 impl<'a> RioMapper {
-    fn named_node(&self, node: rio::NamedNode<'a>) -> NamedNode {
+    fn named_node(node: rio::NamedNode<'a>) -> NamedNode {
         NamedNode::new_unchecked(node.iri)
     }
 
@@ -318,21 +320,21 @@ impl<'a> RioMapper {
             .clone()
     }
 
-    fn literal(&self, literal: rio::Literal<'a>) -> Literal {
+    fn literal(literal: rio::Literal<'a>) -> Literal {
         match literal {
             rio::Literal::Simple { value } => Literal::new_simple_literal(value),
             rio::Literal::LanguageTaggedString { value, language } => {
                 Literal::new_language_tagged_literal_unchecked(value, language)
             }
             rio::Literal::Typed { value, datatype } => {
-                Literal::new_typed_literal(value, self.named_node(datatype))
+                Literal::new_typed_literal(value, Self::named_node(datatype))
             }
         }
     }
 
     fn subject(&mut self, node: rio::Subject<'a>) -> Subject {
         match node {
-            rio::Subject::NamedNode(node) => self.named_node(node).into(),
+            rio::Subject::NamedNode(node) => Self::named_node(node).into(),
             rio::Subject::BlankNode(node) => self.blank_node(node).into(),
             rio::Subject::Triple(triple) => self.triple(triple).into(),
         }
@@ -340,9 +342,9 @@ impl<'a> RioMapper {
 
     fn term(&mut self, node: rio::Term<'a>) -> Term {
         match node {
-            rio::Term::NamedNode(node) => self.named_node(node).into(),
+            rio::Term::NamedNode(node) => Self::named_node(node).into(),
             rio::Term::BlankNode(node) => self.blank_node(node).into(),
-            rio::Term::Literal(literal) => self.literal(literal).into(),
+            rio::Term::Literal(literal) => Self::literal(literal).into(),
             rio::Term::Triple(triple) => self.triple(triple).into(),
         }
     }
@@ -350,14 +352,14 @@ impl<'a> RioMapper {
     fn triple(&mut self, triple: &rio::Triple<'a>) -> Triple {
         Triple {
             subject: self.subject(triple.subject),
-            predicate: self.named_node(triple.predicate),
+            predicate: Self::named_node(triple.predicate),
             object: self.term(triple.object),
         }
     }
 
     fn graph_name(&mut self, graph_name: Option<rio::GraphName<'a>>) -> GraphName {
         match graph_name {
-            Some(rio::GraphName::NamedNode(node)) => self.named_node(node).into(),
+            Some(rio::GraphName::NamedNode(node)) => Self::named_node(node).into(),
             Some(rio::GraphName::BlankNode(node)) => self.blank_node(node).into(),
             None => GraphName::DefaultGraph,
         }
@@ -366,7 +368,7 @@ impl<'a> RioMapper {
     fn quad(&mut self, quad: &rio::Quad<'a>) -> Quad {
         Quad {
             subject: self.subject(quad.subject),
-            predicate: self.named_node(quad.predicate),
+            predicate: Self::named_node(quad.predicate),
             object: self.term(quad.object),
             graph_name: self.graph_name(quad.graph_name),
         }

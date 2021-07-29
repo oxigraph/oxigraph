@@ -230,7 +230,7 @@ impl Store {
     ) -> Result<(), EvaluationError> {
         evaluate_update(
             &self.storage,
-            update.try_into().map_err(|e| e.into())?,
+            update.try_into().map_err(std::convert::Into::into)?,
             options,
         )
     }
@@ -880,7 +880,7 @@ fn store() -> io::Result<()> {
         Quad::new(
             main_s.clone(),
             main_p.clone(),
-            Literal::from(200000000),
+            Literal::from(200_000_000),
             GraphName::DefaultGraph,
         ),
     ];
@@ -895,7 +895,7 @@ fn store() -> io::Result<()> {
         Quad::new(
             main_s.clone(),
             main_p.clone(),
-            Literal::from(200000000),
+            Literal::from(200_000_000),
             GraphName::DefaultGraph,
         ),
         named_quad.clone(),

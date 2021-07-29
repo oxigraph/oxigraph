@@ -222,13 +222,13 @@ impl Dataset {
         let predicate = self
             .encoded_named_node(predicate)
             .unwrap_or_else(InternedNamedNode::impossible);
-        self.interned_quads_for_predicate(&predicate)
+        self.interned_quads_for_predicate(predicate)
             .map(move |q| self.decode_spog(q))
     }
 
     fn interned_quads_for_predicate(
         &self,
-        predicate: &InternedNamedNode,
+        predicate: InternedNamedNode,
     ) -> impl Iterator<
         Item = (
             &InternedSubject,
@@ -240,7 +240,7 @@ impl Dataset {
         self.posg
             .range(
                 &(
-                    *predicate,
+                    predicate,
                     InternedTerm::first(),
                     InternedSubject::first(),
                     InternedGraphName::first(),
@@ -653,7 +653,7 @@ impl Dataset {
                     self.interned_quads_for_subject(&InternedSubject::BlankNode(*bnode))
                 {
                     to_hash.push((
-                        self.hash_named_node(p),
+                        self.hash_named_node(*p),
                         self.hash_term(o, &hashes),
                         self.hash_graph_name(g, &hashes),
                         0,
@@ -663,7 +663,7 @@ impl Dataset {
                 {
                     to_hash.push((
                         self.hash_subject(s, &hashes),
-                        self.hash_named_node(p),
+                        self.hash_named_node(*p),
                         self.hash_graph_name(g, &hashes),
                         1,
                     ));
@@ -673,13 +673,13 @@ impl Dataset {
                 {
                     to_hash.push((
                         self.hash_subject(s, &hashes),
-                        self.hash_named_node(p),
+                        self.hash_named_node(*p),
                         self.hash_term(o, &hashes),
                         2,
                     ));
                 }
                 to_hash.sort_unstable();
-                let hash = self.hash_tuple((old_hash, &to_hash));
+                let hash = Self::hash_tuple((old_hash, &to_hash));
                 to_hash.clear();
                 new_hashes.insert(*bnode, hash);
                 partition.entry(hash).or_default().push(*bnode);
@@ -695,8 +695,8 @@ impl Dataset {
         }
     }
 
-    fn hash_named_node(&self, node: &InternedNamedNode) -> u64 {
-        self.hash_tuple(node.decode_from(&self.interner))
+    fn hash_named_node(&self, node: InternedNamedNode) -> u64 {
+        Self::hash_tuple(node.decode_from(&self.interner))
     }
 
     fn hash_subject(
@@ -709,7 +709,7 @@ impl Dataset {
         } else if let InternedSubject::Triple(triple) = node {
             self.hash_triple(triple, bnodes_hash)
         } else {
-            self.hash_tuple(node.decode_from(&self.interner))
+            Self::hash_tuple(node.decode_from(&self.interner))
         }
     }
 
@@ -719,7 +719,7 @@ impl Dataset {
         } else if let InternedTerm::Triple(triple) = term {
             self.hash_triple(triple, bnodes_hash)
         } else {
-            self.hash_tuple(term.decode_from(&self.interner))
+            Self::hash_tuple(term.decode_from(&self.interner))
         }
     }
 
@@ -731,7 +731,7 @@ impl Dataset {
         if let InternedGraphName::BlankNode(bnode) = graph_name {
             bnodes_hash[bnode]
         } else {
-            self.hash_tuple(graph_name.decode_from(&self.interner))
+            Self::hash_tuple(graph_name.decode_from(&self.interner))
         }
     }
 
@@ -740,14 +740,14 @@ impl Dataset {
         triple: &InternedTriple,
         bnodes_hash: &HashMap<InternedBlankNode, u64>,
     ) -> u64 {
-        self.hash_tuple((
+        Self::hash_tuple((
             self.hash_subject(&triple.subject, bnodes_hash),
-            self.hash_named_node(&triple.predicate),
+            self.hash_named_node(triple.predicate),
             self.hash_term(&triple.object, bnodes_hash),
         ))
     }
 
-    fn hash_tuple(&self, v: impl Hash) -> u64 {
+    fn hash_tuple(v: impl Hash) -> u64 {
         let mut hasher = DefaultHasher::new();
         v.hash(&mut hasher);
         hasher.finish()
@@ -771,7 +771,7 @@ impl Dataset {
                 .iter()
                 .map(|b| {
                     let mut hash_prime = hash.clone();
-                    hash_prime.insert(*b, self.hash_tuple((hash_prime[b], 22)));
+                    hash_prime.insert(*b, Self::hash_tuple((hash_prime[b], 22)));
                     let (hash_prime_prime, partition_prime) = self.hash_bnodes(hash_prime);
                     self.distinguish(&hash_prime_prime, &partition_prime)
                 })
@@ -808,7 +808,7 @@ impl Dataset {
             .map(|(s, p, o, g)| {
                 (
                     if let InternedSubject::BlankNode(bnode) = s {
-                        InternedSubject::BlankNode(self.map_bnode(&bnode, hashes))
+                        InternedSubject::BlankNode(self.map_bnode(bnode, hashes))
                     } else if let InternedSubject::Triple(triple) = s {
                         InternedSubject::Triple(Box::new(InternedTriple::encoded_into(
                             self.label_triple(&triple, hashes).as_ref(),
@@ -819,7 +819,7 @@ impl Dataset {
                     },
                     p,
                     if let InternedTerm::BlankNode(bnode) = o {
-                        InternedTerm::BlankNode(self.map_bnode(&bnode, hashes))
+                        InternedTerm::BlankNode(self.map_bnode(bnode, hashes))
                     } else if let InternedTerm::Triple(triple) = o {
                         InternedTerm::Triple(Box::new(InternedTriple::encoded_into(
                             self.label_triple(&triple, hashes).as_ref(),
@@ -829,7 +829,7 @@ impl Dataset {
                         o
                     },
                     if let InternedGraphName::BlankNode(bnode) = g {
-                        InternedGraphName::BlankNode(self.map_bnode(&bnode, hashes))
+                        InternedGraphName::BlankNode(self.map_bnode(bnode, hashes))
                     } else {
                         g
                     },
@@ -847,7 +847,7 @@ impl Dataset {
     ) -> Triple {
         Triple {
             subject: if let InternedSubject::BlankNode(bnode) = &triple.subject {
-                self.gen_bnode(bnode, hashes).into()
+                Self::gen_bnode(*bnode, hashes).into()
             } else if let InternedSubject::Triple(t) = &triple.subject {
                 self.label_triple(t, hashes).into()
             } else {
@@ -855,7 +855,7 @@ impl Dataset {
             },
             predicate: triple.predicate.decode_from(&self.interner).into_owned(),
             object: if let InternedTerm::BlankNode(bnode) = &triple.object {
-                self.gen_bnode(bnode, hashes).into()
+                Self::gen_bnode(*bnode, hashes).into()
             } else if let InternedTerm::Triple(t) = &triple.object {
                 self.label_triple(t, hashes).into()
             } else {
@@ -866,21 +866,20 @@ impl Dataset {
 
     fn map_bnode(
         &mut self,
-        old_bnode: &InternedBlankNode,
+        old_bnode: InternedBlankNode,
         hashes: &HashMap<InternedBlankNode, u64>,
     ) -> InternedBlankNode {
         InternedBlankNode::encoded_into(
-            self.gen_bnode(old_bnode, hashes).as_ref(),
+            Self::gen_bnode(old_bnode, hashes).as_ref(),
             &mut self.interner,
         )
     }
 
     fn gen_bnode(
-        &self,
-        old_bnode: &InternedBlankNode,
+        old_bnode: InternedBlankNode,
         hashes: &HashMap<InternedBlankNode, u64>,
     ) -> BlankNode {
-        BlankNode::new_from_unique_id(hashes[old_bnode])
+        BlankNode::new_from_unique_id(hashes[&old_bnode])
     }
 }
 
@@ -911,7 +910,7 @@ impl<'a> IntoIterator for &'a Dataset {
 
 impl FromIterator<Quad> for Dataset {
     fn from_iter<I: IntoIterator<Item = Quad>>(iter: I) -> Self {
-        let mut g = Dataset::new();
+        let mut g = Self::new();
         g.extend(iter);
         g
     }
@@ -919,7 +918,7 @@ impl FromIterator<Quad> for Dataset {
 
 impl<'a, T: Into<QuadRef<'a>>> FromIterator<T> for Dataset {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-        let mut g = Dataset::new();
+        let mut g = Self::new();
         g.extend(iter);
         g
     }

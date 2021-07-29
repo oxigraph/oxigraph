@@ -6,7 +6,7 @@ use crate::model::{
 use crate::sparql::{EvaluationError, QueryResults};
 use crate::store::Store;
 use sophia_api::dataset::{
-    CollectibleDataset, DQuadSource, DResultTermSet, DTerm, Dataset, MDResult, MutableDataset,
+    CollectibleDataset, DQuadSource, DResultTermSet, DTerm, Dataset, MdResult, MutableDataset,
 };
 use sophia_api::quad::stream::{QuadSource, StreamResult};
 use sophia_api::quad::streaming_mode::{ByValue, StreamedQuad};
@@ -380,7 +380,7 @@ impl MutableDataset for Store {
         p: &TP,
         o: &TO,
         g: Option<&TG>,
-    ) -> MDResult<Self, bool>
+    ) -> MdResult<Self, bool>
     where
         TS: TTerm + ?Sized,
         TP: TTerm + ?Sized,
@@ -396,7 +396,7 @@ impl MutableDataset for Store {
                 Some(quad) => quad,
                 None => return Ok(false),
             };
-        Store::insert(self, quadref).map(|_| true)
+        Self::insert(self, quadref).map(|_| true)
     }
 
     fn remove<TS, TP, TO, TG>(
@@ -405,7 +405,7 @@ impl MutableDataset for Store {
         p: &TP,
         o: &TO,
         g: Option<&TG>,
-    ) -> MDResult<Self, bool>
+    ) -> MdResult<Self, bool>
     where
         TS: TTerm + ?Sized,
         TP: TTerm + ?Sized,
@@ -421,13 +421,13 @@ impl MutableDataset for Store {
                 Some(quad) => quad,
                 None => return Ok(false),
             };
-        Store::remove(self, quadref).map(|_| true)
+        Self::remove(self, quadref).map(|_| true)
     }
 }
 
 impl CollectibleDataset for Store {
     fn from_quad_source<QS: QuadSource>(quads: QS) -> StreamResult<Self, QS::Error, Self::Error> {
-        let mut d = Store::new().map_err(sophia_api::quad::stream::StreamError::SinkError)?;
+        let mut d = Self::new().map_err(sophia_api::quad::stream::StreamError::SinkError)?;
         d.insert_all(quads)?;
         Ok(d)
     }
@@ -488,7 +488,7 @@ where
             };
             Some(lit.into())
         }
-        _ => None,
+        TermKind::Variable => None,
     }
 }
 
@@ -569,7 +569,7 @@ where
     Some(QuadRef::new(s, p, o, g))
 }
 
-/// Execute a SPARQL query in a store, and return the result as a HashSet,
+/// Execute a SPARQL query in a store, and return the result as a `HashSet`,
 /// mapping the error (if any) through the given function.
 ///
 /// # Precondition

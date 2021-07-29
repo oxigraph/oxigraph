@@ -47,7 +47,7 @@ impl Literal {
     /// Builds an RDF [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal)
     #[inline]
     pub fn new_simple_literal(value: impl Into<String>) -> Self {
-        Literal(LiteralContent::String(value.into()))
+        Self(LiteralContent::String(value.into()))
     }
 
     /// Builds an RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) with a [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri)
@@ -55,7 +55,7 @@ impl Literal {
     pub fn new_typed_literal(value: impl Into<String>, datatype: impl Into<NamedNode>) -> Self {
         let value = value.into();
         let datatype = datatype.into();
-        Literal(if datatype == xsd::STRING {
+        Self(if datatype == xsd::STRING {
             LiteralContent::String(value)
         } else {
             LiteralContent::TypedLiteral { value, datatype }
@@ -88,7 +88,7 @@ impl Literal {
         value: impl Into<String>,
         language: impl Into<String>,
     ) -> Self {
-        Literal(LiteralContent::LanguageTaggedString {
+        Self(LiteralContent::LanguageTaggedString {
             value: value.into(),
             language: language.into(),
         })
@@ -164,28 +164,28 @@ impl fmt::Display for Literal {
 impl<'a> From<&'a str> for Literal {
     #[inline]
     fn from(value: &'a str) -> Self {
-        Literal(LiteralContent::String(value.into()))
+        Self(LiteralContent::String(value.into()))
     }
 }
 
 impl From<String> for Literal {
     #[inline]
     fn from(value: String) -> Self {
-        Literal(LiteralContent::String(value))
+        Self(LiteralContent::String(value))
     }
 }
 
 impl<'a> From<Cow<'a, str>> for Literal {
     #[inline]
     fn from(value: Cow<'a, str>) -> Self {
-        Literal(LiteralContent::String(value.into()))
+        Self(LiteralContent::String(value.into()))
     }
 }
 
 impl From<bool> for Literal {
     #[inline]
     fn from(value: bool) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::BOOLEAN.into(),
         })
@@ -195,7 +195,7 @@ impl From<bool> for Literal {
 impl From<i128> for Literal {
     #[inline]
     fn from(value: i128) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::INTEGER.into(),
         })
@@ -205,7 +205,7 @@ impl From<i128> for Literal {
 impl From<i64> for Literal {
     #[inline]
     fn from(value: i64) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::INTEGER.into(),
         })
@@ -215,7 +215,7 @@ impl From<i64> for Literal {
 impl From<i32> for Literal {
     #[inline]
     fn from(value: i32) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::INTEGER.into(),
         })
@@ -225,7 +225,7 @@ impl From<i32> for Literal {
 impl From<i16> for Literal {
     #[inline]
     fn from(value: i16) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::INTEGER.into(),
         })
@@ -235,7 +235,7 @@ impl From<i16> for Literal {
 impl From<u64> for Literal {
     #[inline]
     fn from(value: u64) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::INTEGER.into(),
         })
@@ -245,7 +245,7 @@ impl From<u64> for Literal {
 impl From<u32> for Literal {
     #[inline]
     fn from(value: u32) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::INTEGER.into(),
         })
@@ -255,7 +255,7 @@ impl From<u32> for Literal {
 impl From<u16> for Literal {
     #[inline]
     fn from(value: u16) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::INTEGER.into(),
         })
@@ -265,7 +265,7 @@ impl From<u16> for Literal {
 impl From<f32> for Literal {
     #[inline]
     fn from(value: f32) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::FLOAT.into(),
         })
@@ -275,7 +275,7 @@ impl From<f32> for Literal {
 impl From<f64> for Literal {
     #[inline]
     fn from(value: f64) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::DOUBLE.into(),
         })
@@ -285,7 +285,7 @@ impl From<f64> for Literal {
 impl From<Decimal> for Literal {
     #[inline]
     fn from(value: Decimal) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::DECIMAL.into(),
         })
@@ -295,7 +295,7 @@ impl From<Decimal> for Literal {
 impl From<DateTime> for Literal {
     #[inline]
     fn from(value: DateTime) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::DATE_TIME.into(),
         })
@@ -305,7 +305,7 @@ impl From<DateTime> for Literal {
 impl From<Time> for Literal {
     #[inline]
     fn from(value: Time) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::TIME.into(),
         })
@@ -315,7 +315,7 @@ impl From<Time> for Literal {
 impl From<Date> for Literal {
     #[inline]
     fn from(value: Date) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::DATE.into(),
         })
@@ -325,7 +325,7 @@ impl From<Date> for Literal {
 impl From<GYearMonth> for Literal {
     #[inline]
     fn from(value: GYearMonth) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::G_YEAR_MONTH.into(),
         })
@@ -335,7 +335,7 @@ impl From<GYearMonth> for Literal {
 impl From<GYear> for Literal {
     #[inline]
     fn from(value: GYear) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::G_YEAR.into(),
         })
@@ -345,7 +345,7 @@ impl From<GYear> for Literal {
 impl From<GMonthDay> for Literal {
     #[inline]
     fn from(value: GMonthDay) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::G_MONTH_DAY.into(),
         })
@@ -355,7 +355,7 @@ impl From<GMonthDay> for Literal {
 impl From<GMonth> for Literal {
     #[inline]
     fn from(value: GMonth) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::G_MONTH.into(),
         })
@@ -365,7 +365,7 @@ impl From<GMonth> for Literal {
 impl From<GDay> for Literal {
     #[inline]
     fn from(value: GDay) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::G_DAY.into(),
         })
@@ -375,7 +375,7 @@ impl From<GDay> for Literal {
 impl From<Duration> for Literal {
     #[inline]
     fn from(value: Duration) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::DURATION.into(),
         })
@@ -385,7 +385,7 @@ impl From<Duration> for Literal {
 impl From<YearMonthDuration> for Literal {
     #[inline]
     fn from(value: YearMonthDuration) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::YEAR_MONTH_DURATION.into(),
         })
@@ -395,7 +395,7 @@ impl From<YearMonthDuration> for Literal {
 impl From<DayTimeDuration> for Literal {
     #[inline]
     fn from(value: DayTimeDuration) -> Self {
-        Literal(LiteralContent::TypedLiteral {
+        Self(LiteralContent::TypedLiteral {
             value: value.to_string(),
             datatype: xsd::DAY_TIME_DURATION.into(),
         })

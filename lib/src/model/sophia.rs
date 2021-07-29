@@ -26,7 +26,7 @@ impl TryCopyTerm for BlankNode {
         T: TTerm + ?Sized,
     {
         match other.kind() {
-            TermKind::BlankNode => Ok(BlankNode::new_unchecked(other.value_raw().0)),
+            TermKind::BlankNode => Ok(Self::new_unchecked(other.value_raw().0)),
             _ => Err(SophiaToOxigraphConversionError),
         }
     }
@@ -52,18 +52,18 @@ impl TTerm for Literal {
     }
 
     fn value_raw(&self) -> RawValue<'_> {
-        Literal::value(self).into()
+        Self::value(self).into()
     }
 
     fn datatype(&self) -> Option<SimpleIri<'_>> {
         Some(SimpleIri::new_unchecked(
-            Literal::datatype(self).as_str(),
+            Self::datatype(self).as_str(),
             None,
         ))
     }
 
     fn language(&self) -> Option<&str> {
-        Literal::language(self)
+        Self::language(self)
     }
 
     fn as_dyn(&self) -> &dyn TTerm {
@@ -80,11 +80,11 @@ impl TryCopyTerm for Literal {
     {
         match other.kind() {
             TermKind::Literal => match other.language() {
-                Some(tag) => Ok(Literal::new_language_tagged_literal_unchecked(
+                Some(tag) => Ok(Self::new_language_tagged_literal_unchecked(
                     other.value_raw().0,
                     tag,
                 )),
-                None => Ok(Literal::new_typed_literal(
+                None => Ok(Self::new_typed_literal(
                     other.value_raw().0,
                     other.datatype().unwrap(),
                 )),
@@ -141,7 +141,7 @@ impl TryCopyTerm for NamedNode {
         T: TTerm + ?Sized,
     {
         match other.kind() {
-            TermKind::Iri => Ok(NamedNode::new_unchecked(other.value())),
+            TermKind::Iri => Ok(Self::new_unchecked(other.value())),
             _ => Err(SophiaToOxigraphConversionError),
         }
     }
@@ -149,7 +149,7 @@ impl TryCopyTerm for NamedNode {
 
 impl<'a> From<SimpleIri<'a>> for NamedNode {
     fn from(other: SimpleIri<'a>) -> Self {
-        NamedNode::new_unchecked(other.value())
+        Self::new_unchecked(other.value())
     }
 }
 
@@ -169,22 +169,20 @@ impl<'a> TTerm for NamedNodeRef<'a> {
 
 impl From<GraphName> for Option<Term> {
     fn from(other: GraphName) -> Self {
-        use GraphName::*;
         match other {
-            NamedNode(n) => Some(n.into()),
-            BlankNode(n) => Some(n.into()),
-            DefaultGraph => None,
+            GraphName::NamedNode(n) => Some(n.into()),
+            GraphName::BlankNode(n) => Some(n.into()),
+            GraphName::DefaultGraph => None,
         }
     }
 }
 
 impl<'a> From<GraphNameRef<'a>> for Option<TermRef<'a>> {
     fn from(other: GraphNameRef<'a>) -> Self {
-        use GraphNameRef::*;
         match other {
-            NamedNode(n) => Some(n.into()),
-            BlankNode(n) => Some(n.into()),
-            DefaultGraph => None,
+            GraphNameRef::NamedNode(n) => Some(n.into()),
+            GraphNameRef::BlankNode(n) => Some(n.into()),
+            GraphNameRef::DefaultGraph => None,
         }
     }
 }
@@ -312,7 +310,7 @@ impl TryCopyTerm for Term {
             TermKind::Iri => Ok(NamedNode::try_copy(other).unwrap().into()),
             TermKind::BlankNode => Ok(BlankNode::try_copy(other).unwrap().into()),
             TermKind::Literal => Ok(Literal::try_copy(other).unwrap().into()),
-            _ => Err(SophiaToOxigraphConversionError),
+            TermKind::Variable => Err(SophiaToOxigraphConversionError),
         }
     }
 }
@@ -323,15 +321,6 @@ impl<'a> TTerm for TermRef<'a> {
             Self::NamedNode(_) => TermKind::Iri,
             Self::BlankNode(_) => TermKind::BlankNode,
             Self::Literal(_) => TermKind::Literal,
-            Self::Triple(_) => panic!("RDF-star is not supported yet by Sophia"),
-        }
-    }
-
-    fn value_raw(&self) -> RawValue<'_> {
-        match self {
-            Self::NamedNode(n) => n.value_raw(),
-            Self::BlankNode(n) => n.value_raw(),
-            Self::Literal(l) => l.value_raw(),
             Self::Triple(_) => panic!("RDF-star is not supported yet by Sophia"),
         }
     }
@@ -349,6 +338,15 @@ impl<'a> TTerm for TermRef<'a> {
             TTerm::language(l)
         } else {
             None
+        }
+    }
+
+    fn value_raw(&self) -> RawValue<'_> {
+        match self {
+            Self::NamedNode(n) => n.value_raw(),
+            Self::BlankNode(n) => n.value_raw(),
+            Self::Literal(l) => l.value_raw(),
+            Self::Triple(_) => panic!("RDF-star is not supported yet by Sophia"),
         }
     }
 

@@ -856,7 +856,7 @@ impl fmt::Display for GraphName {
 impl From<NamedNode> for GraphName {
     #[inline]
     fn from(node: NamedNode) -> Self {
-        GraphName::NamedNode(node)
+        Self::NamedNode(node)
     }
 }
 
@@ -870,7 +870,7 @@ impl From<NamedNodeRef<'_>> for GraphName {
 impl From<BlankNode> for GraphName {
     #[inline]
     fn from(node: BlankNode) -> Self {
-        GraphName::BlankNode(node)
+        Self::BlankNode(node)
     }
 }
 

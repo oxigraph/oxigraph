@@ -465,20 +465,20 @@ impl From<LiteralRef<'_>> for EncodedTerm {
                 literal.language().map(|language| {
                     if let Ok(value) = SmallString::try_from(value) {
                         if let Ok(language) = SmallString::try_from(language) {
-                            EncodedTerm::SmallSmallLangStringLiteral { value, language }
+                            Self::SmallSmallLangStringLiteral { value, language }
                         } else {
-                            EncodedTerm::SmallBigLangStringLiteral {
+                            Self::SmallBigLangStringLiteral {
                                 value,
                                 language_id: StrHash::new(language),
                             }
                         }
                     } else if let Ok(language) = SmallString::try_from(language) {
-                        EncodedTerm::BigSmallLangStringLiteral {
+                        Self::BigSmallLangStringLiteral {
                             value_id: StrHash::new(value),
                             language,
                         }
                     } else {
-                        EncodedTerm::BigBigLangStringLiteral {
+                        Self::BigBigLangStringLiteral {
                             value_id: StrHash::new(value),
                             language_id: StrHash::new(language),
                         }
@@ -489,9 +489,9 @@ impl From<LiteralRef<'_>> for EncodedTerm {
             "http://www.w3.org/2001/XMLSchema#string" => {
                 let value = value;
                 Some(if let Ok(value) = SmallString::try_from(value) {
-                    EncodedTerm::SmallStringLiteral(value)
+                    Self::SmallStringLiteral(value)
                 } else {
-                    EncodedTerm::BigStringLiteral {
+                    Self::BigStringLiteral {
                         value_id: StrHash::new(value),
                     }
                 })
@@ -534,12 +534,12 @@ impl From<LiteralRef<'_>> for EncodedTerm {
             Some(term) => term,
             None => {
                 if let Ok(value) = SmallString::try_from(value) {
-                    EncodedTerm::SmallTypedLiteral {
+                    Self::SmallTypedLiteral {
                         value,
                         datatype_id: StrHash::new(datatype),
                     }
                 } else {
-                    EncodedTerm::BigTypedLiteral {
+                    Self::BigTypedLiteral {
                         value_id: StrHash::new(value),
                         datatype_id: StrHash::new(datatype),
                     }
@@ -584,14 +584,14 @@ impl From<GraphNameRef<'_>> for EncodedTerm {
         match name {
             GraphNameRef::NamedNode(named_node) => named_node.into(),
             GraphNameRef::BlankNode(blank_node) => blank_node.into(),
-            GraphNameRef::DefaultGraph => EncodedTerm::DefaultGraph,
+            GraphNameRef::DefaultGraph => Self::DefaultGraph,
         }
     }
 }
 
 impl From<TripleRef<'_>> for EncodedTerm {
     fn from(triple: TripleRef<'_>) -> Self {
-        EncodedTerm::Triple(Rc::new(triple.into()))
+        Self::Triple(Rc::new(triple.into()))
     }
 }
 
@@ -614,7 +614,7 @@ impl EncodedTriple {
 
 impl From<TripleRef<'_>> for EncodedTriple {
     fn from(triple: TripleRef<'_>) -> Self {
-        EncodedTriple {
+        Self {
             subject: triple.subject.into(),
             predicate: triple.predicate.into(),
             object: triple.object.into(),
@@ -648,7 +648,7 @@ impl EncodedQuad {
 
 impl From<QuadRef<'_>> for EncodedQuad {
     fn from(quad: QuadRef<'_>) -> Self {
-        EncodedQuad {
+        Self {
             subject: quad.subject.into(),
             predicate: quad.predicate.into(),
             object: quad.object.into(),
@@ -723,15 +723,16 @@ pub fn insert_term_values<E, F: Fn(&StrHash, &str) -> Result<(), E> + Copy>(
         (TermRef::BlankNode(node), EncodedTerm::BigBlankNode { id_id }) => {
             insert_str(id_id, node.as_str())?;
         }
-        (TermRef::Literal(literal), EncodedTerm::BigStringLiteral { value_id }) => {
-            insert_str(value_id, literal.value())?;
-        }
         (TermRef::Literal(literal), EncodedTerm::SmallBigLangStringLiteral { language_id, .. }) => {
             if let Some(language) = literal.language() {
                 insert_str(language_id, language)?;
             }
         }
-        (TermRef::Literal(literal), EncodedTerm::BigSmallLangStringLiteral { value_id, .. }) => {
+        (
+            TermRef::Literal(literal),
+            EncodedTerm::BigSmallLangStringLiteral { value_id, .. }
+            | EncodedTerm::BigStringLiteral { value_id },
+        ) => {
             insert_str(value_id, literal.value())?;
         }
         (
@@ -784,14 +785,12 @@ pub fn remove_term_values<E, F: Fn(&StrHash) -> Result<(), E> + Copy>(
         EncodedTerm::BigBlankNode { id_id } => {
             remove_str(id_id)?;
         }
-        EncodedTerm::BigStringLiteral { value_id } => {
+        EncodedTerm::BigStringLiteral { value_id }
+        | EncodedTerm::BigSmallLangStringLiteral { value_id, .. } => {
             remove_str(value_id)?;
         }
         EncodedTerm::SmallBigLangStringLiteral { language_id, .. } => {
             remove_str(language_id)?;
-        }
-        EncodedTerm::BigSmallLangStringLiteral { value_id, .. } => {
-            remove_str(value_id)?;
         }
         EncodedTerm::BigBigLangStringLiteral {
             value_id,
@@ -1094,7 +1093,7 @@ impl<E: Error + 'static> Error for DecoderError<E> {
     }
 }
 
-impl<E: Into<io::Error>> From<DecoderError<E>> for io::Error {
+impl<E: Into<Self>> From<DecoderError<E>> for io::Error {
     fn from(e: DecoderError<E>) -> Self {
         match e {
             DecoderError::Store(e) => e.into(),

@@ -9,7 +9,7 @@ use crate::storage::StorageLike;
 use std::io;
 use std::io::{BufRead, Write};
 
-pub(crate) fn load_graph<S: StorageLike>(
+pub fn load_graph<S: StorageLike>(
     store: &S,
     reader: impl BufRead,
     format: GraphFormat,
@@ -49,7 +49,7 @@ pub fn dump_graph(
     writer.finish()
 }
 
-pub(crate) fn load_dataset<S: StorageLike>(
+pub fn load_dataset<S: StorageLike>(
     store: &S,
     reader: impl BufRead,
     format: DatasetFormat,
@@ -89,11 +89,10 @@ pub enum StoreOrParseError<S> {
     Parse(io::Error),
 }
 
-impl From<StoreOrParseError<io::Error>> for io::Error {
-    fn from(error: StoreOrParseError<io::Error>) -> Self {
+impl From<StoreOrParseError<Self>> for io::Error {
+    fn from(error: StoreOrParseError<Self>) -> Self {
         match error {
-            StoreOrParseError::Store(error) => error,
-            StoreOrParseError::Parse(error) => error,
+            StoreOrParseError::Store(error) | StoreOrParseError::Parse(error) => error,
         }
     }
 }

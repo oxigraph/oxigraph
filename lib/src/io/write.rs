@@ -183,6 +183,7 @@ impl DatasetSerializer {
     }
 
     /// Returns a `QuadWriter` allowing writing triples into the given [`Write`](std::io::Write) implementation
+    #[allow(clippy::unnecessary_wraps)]
     pub fn quad_writer<W: Write>(&self, writer: W) -> io::Result<QuadWriter<W>> {
         Ok(QuadWriter {
             formatter: match self.format {
@@ -250,6 +251,7 @@ impl<W: Write> QuadWriter<W> {
     }
 
     /// Writes the last bytes of the file
+    #[allow(clippy::unused_self, clippy::unnecessary_wraps)]
     pub fn finish(self) -> io::Result<()> {
         Ok(())
     }

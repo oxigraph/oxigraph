@@ -69,7 +69,7 @@ pub mod rdfs {
     /// The class of RDF containers.
     pub const CONTAINER: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/2000/01/rdf-schema#Container");
-    /// The class of container membership properties, rdf:_1, rdf:_2, ..., all of which are sub-properties of 'member'.
+    /// The class of container membership properties, `rdf:_1`, `rdf:_2`, ..., all of which are sub-properties of `member`.
     pub const CONTAINER_MEMBERSHIP_PROPERTY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked(
         "http://www.w3.org/2000/01/rdf-schema#ContainerMembershipProperty",
     );

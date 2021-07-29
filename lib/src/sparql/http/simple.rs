@@ -18,6 +18,7 @@ impl Client {
         Self {}
     }
 
+    #[allow(clippy::unused_self)]
     pub fn request(
         &self,
         request: &Request<Option<Vec<u8>>>,
@@ -48,8 +49,8 @@ impl Client {
         match scheme {
             "http" => {
                 let mut stream = TcpStream::connect((host, port))?;
-                self.encode(request, &mut stream)?;
-                self.decode(stream)
+                Self::encode(request, &mut stream)?;
+                Self::decode(stream)
             }
             "https" => {
                 let connector =
@@ -58,8 +59,8 @@ impl Client {
                 let mut stream = connector
                     .connect(host, stream)
                     .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-                self.encode(request, &mut stream)?;
-                self.decode(stream)
+                Self::encode(request, &mut stream)?;
+                Self::decode(stream)
             }
             _ => Err(invalid_input_error(format!(
                 "Not supported URL scheme: {}",
@@ -68,11 +69,7 @@ impl Client {
         }
     }
 
-    fn encode(
-        &self,
-        request: &Request<Option<Vec<u8>>>,
-        mut writer: &mut impl Write,
-    ) -> io::Result<()> {
+    fn encode(request: &Request<Option<Vec<u8>>>, mut writer: &mut impl Write) -> io::Result<()> {
         if request.headers().contains_key(CONTENT_LENGTH) {
             return Err(invalid_input_error(
                 "content-length header is set by the client library",
@@ -136,7 +133,7 @@ impl Client {
         Ok(())
     }
 
-    fn decode<'a>(&self, reader: impl Read + 'a) -> io::Result<Response<Box<dyn BufRead + 'a>>> {
+    fn decode<'a>(reader: impl Read + 'a) -> io::Result<Response<Box<dyn BufRead + 'a>>> {
         let mut reader = BufReader::new(reader);
 
         // Let's read the headers
@@ -313,7 +310,7 @@ mod tests {
     #[test]
     fn encode_get_request() -> io::Result<()> {
         let mut buffer = Vec::new();
-        Client::new().encode(
+        Client::encode(
             &Request::builder()
                 .method(Method::GET)
                 .uri("http://example.com/foo/bar?query#fragment")
@@ -332,7 +329,7 @@ mod tests {
     #[test]
     fn encode_post_request() -> io::Result<()> {
         let mut buffer = Vec::new();
-        Client::new().encode(
+        Client::encode(
             &Request::builder()
                 .method(Method::POST)
                 .uri("http://example.com/foo/bar?query#fragment")
@@ -350,9 +347,7 @@ mod tests {
 
     #[test]
     fn decode_response_without_payload() -> io::Result<()> {
-        let response = Client::new()
-            .decode(Cursor::new("HTTP/1.1 404 Not Found\r\n\r\n"))
-            .unwrap();
+        let response = Client::decode(Cursor::new("HTTP/1.1 404 Not Found\r\n\r\n")).unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         let mut buf = String::new();
         response.into_body().read_to_string(&mut buf)?;
@@ -362,7 +357,7 @@ mod tests {
 
     #[test]
     fn decode_response_with_fixed_payload() -> io::Result<()> {
-        let response = Client::new().decode(Cursor::new(
+        let response = Client::decode(Cursor::new(
             "HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\ncontent-length:8\r\n\r\ntestbody",
         ))?;
         assert_eq!(response.status(), StatusCode::OK);
@@ -383,7 +378,7 @@ mod tests {
 
     #[test]
     fn decode_response_with_chunked_payload() -> io::Result<()> {
-        let response = Client::new().decode(Cursor::new(
+        let response = Client::decode(Cursor::new(
             "HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\ntransfer-encoding:chunked\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\nE\r\n in\r\n\r\nchunks.\r\n0\r\n\r\n",
         ))?;
         assert_eq!(response.status(), StatusCode::OK);
@@ -404,7 +399,7 @@ mod tests {
 
     #[test]
     fn decode_response_with_trailer() -> io::Result<()> {
-        let response = Client::new().decode(Cursor::new(
+        let response = Client::decode(Cursor::new(
             "HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\ntransfer-encoding:chunked\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\nE\r\n in\r\n\r\nchunks.\r\n0\r\ntest: foo\r\n\r\n",
         ))?;
         assert_eq!(response.status(), StatusCode::OK);

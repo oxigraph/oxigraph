@@ -235,7 +235,7 @@ pub fn read_xml_results(source: impl BufRead + 'static) -> io::Result<QueryResul
                 State::Head => {
                     if event.name() == b"variable" {
                         let name = event.attributes()
-                            .filter_map(|attr| attr.ok())
+                            .filter_map(std::result::Result::ok)
                             .find(|attr| attr.key == b"name")
                             .ok_or_else(|| invalid_data_error("No name attribute found for the <variable> tag"))?;
                         variables.push(name.unescape_and_decode_value(&reader).map_err(map_xml_error)?);
@@ -283,7 +283,7 @@ pub fn read_xml_results(source: impl BufRead + 'static) -> io::Result<QueryResul
                 State::Head => {
                     if event.name() == b"variable" {
                         let name = event.attributes()
-                            .filter_map(|v| v.ok())
+                            .filter_map(std::result::Result::ok)
                             .find(|attr| attr.key == b"name")
                             .ok_or_else(|| invalid_data_error("No name attribute found for the <variable> tag"))?;
                         variables.push(name.unescape_and_decode_value(&reader).map_err(map_xml_error)?);
@@ -405,7 +405,7 @@ impl<R: BufRead> ResultsIterator<R> {
                         if event.name() == b"binding" {
                             match event
                                 .attributes()
-                                .filter_map(|v| v.ok())
+                                .filter_map(std::result::Result::ok)
                                 .find(|attr| attr.key == b"name")
                             {
                                 Some(attr) => {
@@ -614,7 +614,7 @@ impl<R: BufRead> ResultsIterator<R> {
                             );
                         }
                     }
-                    _ => (),
+                    State::End => (),
                 },
                 Event::Eof => return Ok(None),
                 _ => (),

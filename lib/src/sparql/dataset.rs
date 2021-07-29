@@ -10,14 +10,14 @@ use std::collections::HashMap;
 use std::convert::Infallible;
 use std::iter::empty;
 
-pub(crate) struct DatasetView {
+pub struct DatasetView {
     storage: Storage,
     extra: RefCell<HashMap<StrHash, String>>,
     dataset: EncodedDatasetSpec,
 }
 
 impl DatasetView {
-    pub fn new(storage: Storage, dataset: &QueryDataset) -> Result<Self, EvaluationError> {
+    pub fn new(storage: Storage, dataset: &QueryDataset) -> Self {
         let dataset = EncodedDatasetSpec {
             default: dataset
                 .default_graph_graphs()
@@ -26,11 +26,11 @@ impl DatasetView {
                 .available_named_graphs()
                 .map(|graphs| graphs.iter().map(|g| g.as_ref().into()).collect::<Vec<_>>()),
         };
-        Ok(Self {
+        Self {
             storage,
             extra: RefCell::new(HashMap::default()),
             dataset,
-        })
+        }
     }
 
     fn store_encoded_quads_for_pattern(

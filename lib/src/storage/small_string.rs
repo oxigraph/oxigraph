@@ -23,12 +23,12 @@ impl SmallString {
     }
 
     #[inline]
-    pub fn from_utf8(bytes: &[u8]) -> Result<SmallString, BadSmallStringError> {
+    pub fn from_utf8(bytes: &[u8]) -> Result<Self, BadSmallStringError> {
         Self::from_str(str::from_utf8(bytes).map_err(BadSmallStringError::BadUtf8)?)
     }
 
     #[inline]
-    pub fn from_be_bytes(bytes: [u8; 16]) -> Result<SmallString, BadSmallStringError> {
+    pub fn from_be_bytes(bytes: [u8; 16]) -> Result<Self, BadSmallStringError> {
         // We check that it is valid UTF-8
         str::from_utf8(&bytes.as_ref()[..bytes[15].into()])
             .map_err(BadSmallStringError::BadUtf8)?;
@@ -105,7 +105,7 @@ impl fmt::Display for SmallString {
 impl PartialEq for SmallString {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.as_str().eq(other.deref())
+        self.as_str().eq(&**other)
     }
 }
 

@@ -9,12 +9,12 @@ use std::fmt;
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum PropertyPathExpression {
     NamedNode(NamedNode),
-    Reverse(Box<PropertyPathExpression>),
-    Sequence(Box<PropertyPathExpression>, Box<PropertyPathExpression>),
-    Alternative(Box<PropertyPathExpression>, Box<PropertyPathExpression>),
-    ZeroOrMore(Box<PropertyPathExpression>),
-    OneOrMore(Box<PropertyPathExpression>),
-    ZeroOrOne(Box<PropertyPathExpression>),
+    Reverse(Box<Self>),
+    Sequence(Box<Self>, Box<Self>),
+    Alternative(Box<Self>, Box<Self>),
+    ZeroOrMore(Box<Self>),
+    OneOrMore(Box<Self>),
+    ZeroOrOne(Box<Self>),
     NegatedPropertySet(Vec<NamedNode>),
 }
 
@@ -75,7 +75,7 @@ impl<'a> fmt::Display for SparqlPropertyPath<'a> {
 
 impl From<NamedNode> for PropertyPathExpression {
     fn from(p: NamedNode) -> Self {
-        PropertyPathExpression::NamedNode(p)
+        Self::NamedNode(p)
     }
 }
 
@@ -86,45 +86,45 @@ pub enum Expression {
     Literal(Literal),
     Variable(Variable),
     /// [Logical-or](https://www.w3.org/TR/sparql11-query/#func-logical-or)
-    Or(Box<Expression>, Box<Expression>),
+    Or(Box<Self>, Box<Self>),
     /// [Logical-and](https://www.w3.org/TR/sparql11-query/#func-logical-and)
-    And(Box<Expression>, Box<Expression>),
+    And(Box<Self>, Box<Self>),
     /// [RDFterm-equal](https://www.w3.org/TR/sparql11-query/#func-RDFterm-equal) and all the XSD equalities
-    Equal(Box<Expression>, Box<Expression>),
+    Equal(Box<Self>, Box<Self>),
     /// [sameTerm](https://www.w3.org/TR/sparql11-query/#func-sameTerm)
-    SameTerm(Box<Expression>, Box<Expression>),
+    SameTerm(Box<Self>, Box<Self>),
     /// [op:numeric-greater-than](https://www.w3.org/TR/xpath-functions/#func-numeric-greater-than) and other XSD greater than operators
-    Greater(Box<Expression>, Box<Expression>),
-    GreaterOrEqual(Box<Expression>, Box<Expression>),
+    Greater(Box<Self>, Box<Self>),
+    GreaterOrEqual(Box<Self>, Box<Self>),
     /// [op:numeric-less-than](https://www.w3.org/TR/xpath-functions/#func-numeric-less-than) and other XSD greater than operators
-    Less(Box<Expression>, Box<Expression>),
-    LessOrEqual(Box<Expression>, Box<Expression>),
+    Less(Box<Self>, Box<Self>),
+    LessOrEqual(Box<Self>, Box<Self>),
     /// [IN](https://www.w3.org/TR/sparql11-query/#func-in)
-    In(Box<Expression>, Vec<Expression>),
+    In(Box<Self>, Vec<Self>),
     /// [op:numeric-add](https://www.w3.org/TR/xpath-functions/#func-numeric-add) and other XSD additions
-    Add(Box<Expression>, Box<Expression>),
+    Add(Box<Self>, Box<Self>),
     /// [op:numeric-subtract](https://www.w3.org/TR/xpath-functions/#func-numeric-subtract) and other XSD subtractions
-    Subtract(Box<Expression>, Box<Expression>),
+    Subtract(Box<Self>, Box<Self>),
     /// [op:numeric-multiply](https://www.w3.org/TR/xpath-functions/#func-numeric-multiply) and other XSD multiplications
-    Multiply(Box<Expression>, Box<Expression>),
+    Multiply(Box<Self>, Box<Self>),
     /// [op:numeric-divide](https://www.w3.org/TR/xpath-functions/#func-numeric-divide) and other XSD divides
-    Divide(Box<Expression>, Box<Expression>),
+    Divide(Box<Self>, Box<Self>),
     /// [op:numeric-unary-plus](https://www.w3.org/TR/xpath-functions/#func-numeric-unary-plus) and other XSD unary plus
-    UnaryPlus(Box<Expression>),
+    UnaryPlus(Box<Self>),
     /// [op:numeric-unary-minus](https://www.w3.org/TR/xpath-functions/#func-numeric-unary-minus) and other XSD unary minus
-    UnaryMinus(Box<Expression>),
+    UnaryMinus(Box<Self>),
     /// [fn:not](https://www.w3.org/TR/xpath-functions/#func-not)
-    Not(Box<Expression>),
+    Not(Box<Self>),
     /// [EXISTS](https://www.w3.org/TR/sparql11-query/#func-filter-exists)
     Exists(Box<GraphPattern>),
     /// [BOUND](https://www.w3.org/TR/sparql11-query/#func-bound)
     Bound(Variable),
     /// [IF](https://www.w3.org/TR/sparql11-query/#func-if)
-    If(Box<Expression>, Box<Expression>, Box<Expression>),
+    If(Box<Self>, Box<Self>, Box<Self>),
     /// [COALESCE](https://www.w3.org/TR/sparql11-query/#func-coalesce)
-    Coalesce(Vec<Expression>),
+    Coalesce(Vec<Self>),
     /// A regular function call
-    FunctionCall(Function, Vec<Expression>),
+    FunctionCall(Function, Vec<Self>),
 }
 
 impl fmt::Display for Expression {
@@ -178,19 +178,19 @@ impl fmt::Display for Expression {
 
 impl From<NamedNode> for Expression {
     fn from(p: NamedNode) -> Self {
-        Expression::NamedNode(p)
+        Self::NamedNode(p)
     }
 }
 
 impl From<Literal> for Expression {
     fn from(p: Literal) -> Self {
-        Expression::Literal(p)
+        Self::Literal(p)
     }
 }
 
 impl From<Variable> for Expression {
     fn from(v: Variable) -> Self {
-        Expression::Variable(v)
+        Self::Variable(v)
     }
 }
 
@@ -450,41 +450,29 @@ pub enum GraphPattern {
         object: TermPattern,
     },
     /// [Join](https://www.w3.org/TR/sparql11-query/#defn_algJoin)
-    Join {
-        left: Box<GraphPattern>,
-        right: Box<GraphPattern>,
-    },
+    Join { left: Box<Self>, right: Box<Self> },
     /// [LeftJoin](https://www.w3.org/TR/sparql11-query/#defn_algLeftJoin)
     LeftJoin {
-        left: Box<GraphPattern>,
-        right: Box<GraphPattern>,
+        left: Box<Self>,
+        right: Box<Self>,
         expr: Option<Expression>,
     },
     /// [Filter](https://www.w3.org/TR/sparql11-query/#defn_algFilter)
-    Filter {
-        expr: Expression,
-        inner: Box<GraphPattern>,
-    },
+    Filter { expr: Expression, inner: Box<Self> },
     /// [Union](https://www.w3.org/TR/sparql11-query/#defn_algUnion)
-    Union {
-        left: Box<GraphPattern>,
-        right: Box<GraphPattern>,
-    },
+    Union { left: Box<Self>, right: Box<Self> },
     Graph {
         graph_name: NamedNodePattern,
-        inner: Box<GraphPattern>,
+        inner: Box<Self>,
     },
     /// [Extend](https://www.w3.org/TR/sparql11-query/#defn_extend)
     Extend {
-        inner: Box<GraphPattern>,
+        inner: Box<Self>,
         var: Variable,
         expr: Expression,
     },
     /// [Minus](https://www.w3.org/TR/sparql11-query/#defn_algMinus)
-    Minus {
-        left: Box<GraphPattern>,
-        right: Box<GraphPattern>,
-    },
+    Minus { left: Box<Self>, right: Box<Self> },
     /// A table used to provide inline values
     Table {
         variables: Vec<Variable>,
@@ -492,34 +480,34 @@ pub enum GraphPattern {
     },
     /// [OrderBy](https://www.w3.org/TR/sparql11-query/#defn_algOrdered)
     OrderBy {
-        inner: Box<GraphPattern>,
+        inner: Box<Self>,
         condition: Vec<OrderComparator>,
     },
     /// [Project](https://www.w3.org/TR/sparql11-query/#defn_algProjection)
     Project {
-        inner: Box<GraphPattern>,
+        inner: Box<Self>,
         projection: Vec<Variable>,
     },
     /// [Distinct](https://www.w3.org/TR/sparql11-query/#defn_algDistinct)
-    Distinct { inner: Box<GraphPattern> },
+    Distinct { inner: Box<Self> },
     /// [Reduced](https://www.w3.org/TR/sparql11-query/#defn_algReduced)
-    Reduced { inner: Box<GraphPattern> },
+    Reduced { inner: Box<Self> },
     /// [Slice](https://www.w3.org/TR/sparql11-query/#defn_algSlice)
     Slice {
-        inner: Box<GraphPattern>,
+        inner: Box<Self>,
         start: usize,
         length: Option<usize>,
     },
     /// [Group](https://www.w3.org/TR/sparql11-federated-query/#aggregateAlgebra)
     Group {
-        inner: Box<GraphPattern>,
+        inner: Box<Self>,
         by: Vec<Variable>,
         aggregates: Vec<(Variable, AggregationFunction)>,
     },
     /// [Service](https://www.w3.org/TR/sparql11-federated-query/#defn_evalService)
     Service {
         name: NamedNodePattern,
-        pattern: Box<GraphPattern>,
+        pattern: Box<Self>,
         silent: bool,
     },
 }
@@ -643,7 +631,7 @@ impl fmt::Display for GraphPattern {
 
 impl Default for GraphPattern {
     fn default() -> Self {
-        GraphPattern::Bgp(Vec::default())
+        Self::Bgp(Vec::default())
     }
 }
 
@@ -685,7 +673,6 @@ impl GraphPattern {
                 left.add_visible_variables(vars);
                 right.add_visible_variables(vars);
             }
-            GraphPattern::Filter { inner, .. } => inner.add_visible_variables(vars),
             GraphPattern::Graph { graph_name, inner } => {
                 if let NamedNodePattern::Variable(ref g) = graph_name {
                     vars.insert(g);
@@ -706,7 +693,8 @@ impl GraphPattern {
             }
             GraphPattern::Table { variables, .. } => vars.extend(variables),
             GraphPattern::Project { projection, .. } => vars.extend(projection.iter()),
-            GraphPattern::OrderBy { inner, .. }
+            GraphPattern::Filter { inner, .. }
+            | GraphPattern::OrderBy { inner, .. }
             | GraphPattern::Distinct { inner }
             | GraphPattern::Reduced { inner }
             | GraphPattern::Slice { inner, .. } => inner.add_visible_variables(vars),

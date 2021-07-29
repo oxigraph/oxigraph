@@ -182,7 +182,7 @@ impl TryFrom<Date> for DateTime {
     type Error = DateTimeError;
 
     fn try_from(date: Date) -> Result<Self, DateTimeError> {
-        DateTime::new(
+        Self::new(
             date.year(),
             date.month(),
             date.day(),
@@ -347,7 +347,7 @@ impl TryFrom<DateTime> for Time {
     type Error = DateTimeError;
 
     fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
-        Time::new(
+        Self::new(
             date_time.hour(),
             date_time.minute(),
             date_time.second(),
@@ -499,7 +499,7 @@ impl TryFrom<DateTime> for Date {
     type Error = DateTimeError;
 
     fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
-        Date::new(
+        Self::new(
             date_time.year(),
             date_time.month(),
             date_time.day(),
@@ -591,7 +591,7 @@ impl TryFrom<DateTime> for GYearMonth {
     type Error = DateTimeError;
 
     fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
-        GYearMonth::new(
+        Self::new(
             date_time.year(),
             date_time.month(),
             date_time.timezone_offset(),
@@ -604,7 +604,7 @@ impl TryFrom<Date> for GYearMonth {
     type Error = DateTimeError;
 
     fn try_from(date: Date) -> Result<Self, DateTimeError> {
-        GYearMonth::new(date.year(), date.month(), date.timezone_offset())
+        Self::new(date.year(), date.month(), date.timezone_offset())
     }
 }
 
@@ -686,7 +686,7 @@ impl TryFrom<DateTime> for GYear {
     type Error = DateTimeError;
 
     fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
-        GYear::new(date_time.year(), date_time.timezone_offset())
+        Self::new(date_time.year(), date_time.timezone_offset())
     }
 }
 
@@ -695,7 +695,7 @@ impl TryFrom<Date> for GYear {
     type Error = DateTimeError;
 
     fn try_from(date: Date) -> Result<Self, DateTimeError> {
-        GYear::new(date.year(), date.timezone_offset())
+        Self::new(date.year(), date.timezone_offset())
     }
 }
 
@@ -703,7 +703,7 @@ impl TryFrom<GYearMonth> for GYear {
     type Error = DateTimeError;
 
     fn try_from(year_month: GYearMonth) -> Result<Self, DateTimeError> {
-        GYear::new(year_month.year(), year_month.timezone_offset())
+        Self::new(year_month.year(), year_month.timezone_offset())
     }
 }
 
@@ -790,7 +790,7 @@ impl TryFrom<DateTime> for GMonthDay {
     type Error = DateTimeError;
 
     fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
-        GMonthDay::new(
+        Self::new(
             date_time.month(),
             date_time.day(),
             date_time.timezone_offset(),
@@ -803,7 +803,7 @@ impl TryFrom<Date> for GMonthDay {
     type Error = DateTimeError;
 
     fn try_from(date: Date) -> Result<Self, DateTimeError> {
-        GMonthDay::new(date.month(), date.day(), date.timezone_offset())
+        Self::new(date.month(), date.day(), date.timezone_offset())
     }
 }
 
@@ -881,7 +881,7 @@ impl TryFrom<DateTime> for GMonth {
     type Error = DateTimeError;
 
     fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
-        GMonth::new(date_time.month(), date_time.timezone_offset())
+        Self::new(date_time.month(), date_time.timezone_offset())
     }
 }
 
@@ -890,7 +890,7 @@ impl TryFrom<Date> for GMonth {
     type Error = DateTimeError;
 
     fn try_from(date: Date) -> Result<Self, DateTimeError> {
-        GMonth::new(date.month(), date.timezone_offset())
+        Self::new(date.month(), date.timezone_offset())
     }
 }
 
@@ -898,7 +898,7 @@ impl TryFrom<GYearMonth> for GMonth {
     type Error = DateTimeError;
 
     fn try_from(year_month: GYearMonth) -> Result<Self, DateTimeError> {
-        GMonth::new(year_month.month(), year_month.timezone_offset())
+        Self::new(year_month.month(), year_month.timezone_offset())
     }
 }
 
@@ -906,7 +906,7 @@ impl TryFrom<GMonthDay> for GMonth {
     type Error = DateTimeError;
 
     fn try_from(month_day: GMonthDay) -> Result<Self, DateTimeError> {
-        GMonth::new(month_day.month(), month_day.timezone_offset())
+        Self::new(month_day.month(), month_day.timezone_offset())
     }
 }
 
@@ -984,7 +984,7 @@ impl TryFrom<DateTime> for GDay {
     type Error = DateTimeError;
 
     fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
-        GDay::new(date_time.day(), date_time.timezone_offset())
+        Self::new(date_time.day(), date_time.timezone_offset())
     }
 }
 
@@ -993,7 +993,7 @@ impl TryFrom<Date> for GDay {
     type Error = DateTimeError;
 
     fn try_from(date: Date) -> Result<Self, DateTimeError> {
-        GDay::new(date.day(), date.timezone_offset())
+        Self::new(date.day(), date.timezone_offset())
     }
 }
 
@@ -1001,7 +1001,7 @@ impl TryFrom<GMonthDay> for GDay {
     type Error = DateTimeError;
 
     fn try_from(month_day: GMonthDay) -> Result<Self, DateTimeError> {
-        GDay::new(month_day.day(), month_day.timezone_offset())
+        Self::new(month_day.day(), month_day.timezone_offset())
     }
 }
 
@@ -1039,7 +1039,7 @@ impl TimezoneOffset {
     }
 
     pub fn from_be_bytes(bytes: [u8; 2]) -> Self {
-        TimezoneOffset {
+        Self {
             offset: i16::from_be_bytes(bytes),
         }
     }
@@ -1051,13 +1051,13 @@ impl TimezoneOffset {
 
 impl From<i16> for TimezoneOffset {
     fn from(offset: i16) -> Self {
-        TimezoneOffset { offset }
+        Self { offset }
     }
 }
 
 impl From<TimezoneOffset> for DayTimeDuration {
     fn from(value: TimezoneOffset) -> Self {
-        DayTimeDuration::new(i32::from(value.offset) * 60)
+        Self::new(i32::from(value.offset) * 60)
     }
 }
 
@@ -1163,7 +1163,7 @@ impl Timestamp {
     }
 
     fn now() -> Result<Self, DateTimeError> {
-        Timestamp::new(
+        Self::new(
             &date_time_plus_duration(
                 since_unix_epoch()?,
                 &DateTimeSevenPropertyModel {
@@ -1311,7 +1311,7 @@ impl Timestamp {
         })
     }
 
-    fn checked_sub(&self, rhs: Timestamp) -> Option<Duration> {
+    fn checked_sub(&self, rhs: Self) -> Option<Duration> {
         match (self.timezone_offset, rhs.timezone_offset) {
             (Some(_), Some(_)) | (None, None) => {
                 Some(Duration::new(0, self.value.checked_sub(rhs.value)?))

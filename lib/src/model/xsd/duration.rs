@@ -240,36 +240,40 @@ impl YearMonthDuration {
     }
 
     /// [fn:years-from-duration](https://www.w3.org/TR/xpath-functions/#func-years-from-duration)
-    pub fn years(&self) -> i64 {
+    pub fn years(self) -> i64 {
         self.months / 12
     }
 
     /// [fn:months-from-duration](https://www.w3.org/TR/xpath-functions/#func-months-from-duration)
-    pub fn months(&self) -> i64 {
+    pub fn months(self) -> i64 {
         self.months % 12
     }
 
     /// [fn:days-from-duration](https://www.w3.org/TR/xpath-functions/#func-days-from-duration)
-    pub fn days(&self) -> i64 {
+    #[allow(clippy::unused_self)]
+    pub fn days(self) -> i64 {
         0
     }
 
     /// [fn:hours-from-duration](https://www.w3.org/TR/xpath-functions/#func-hours-from-duration)
-    pub fn hours(&self) -> i64 {
+    #[allow(clippy::unused_self)]
+    pub fn hours(self) -> i64 {
         0
     }
 
     /// [fn:minutes-from-duration](https://www.w3.org/TR/xpath-functions/#func-minutes-from-duration)
-    pub fn minutes(&self) -> i64 {
+    #[allow(clippy::unused_self)]
+    pub fn minutes(self) -> i64 {
         0
     }
 
     /// [fn:seconds-from-duration](https://www.w3.org/TR/xpath-functions/#func-seconds-from-duration)
-    pub fn seconds(&self) -> Decimal {
+    #[allow(clippy::unused_self)]
+    pub fn seconds(self) -> Decimal {
         Decimal::default()
     }
 
-    pub(super) const fn all_months(&self) -> i64 {
+    pub(super) const fn all_months(self) -> i64 {
         self.months
     }
 
@@ -278,7 +282,7 @@ impl YearMonthDuration {
     }
 
     /// [op:add-yearMonthDurations](https://www.w3.org/TR/xpath-functions/#func-add-yearMonthDurations)
-    pub fn checked_add(&self, rhs: impl Into<Self>) -> Option<Self> {
+    pub fn checked_add(self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
             months: self.months.checked_add(rhs.months)?,
@@ -286,7 +290,7 @@ impl YearMonthDuration {
     }
 
     /// [op:subtract-yearMonthDurations](https://www.w3.org/TR/xpath-functions/#func-subtract-yearMonthDurations)
-    pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<Self> {
+    pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
             months: self.months.checked_sub(rhs.months)?,
@@ -341,7 +345,7 @@ impl PartialEq<Duration> for YearMonthDuration {
 
 impl PartialEq<YearMonthDuration> for Duration {
     fn eq(&self, other: &YearMonthDuration) -> bool {
-        self.eq(&Duration::from(*other))
+        self.eq(&Self::from(*other))
     }
 }
 
@@ -353,7 +357,7 @@ impl PartialOrd<Duration> for YearMonthDuration {
 
 impl PartialOrd<YearMonthDuration> for Duration {
     fn partial_cmp(&self, other: &YearMonthDuration) -> Option<Ordering> {
-        self.partial_cmp(&Duration::from(*other))
+        self.partial_cmp(&Self::from(*other))
     }
 }
 
@@ -389,11 +393,13 @@ impl DayTimeDuration {
     }
 
     /// [fn:years-from-duration](https://www.w3.org/TR/xpath-functions/#func-years-from-duration)
+    #[allow(clippy::unused_self)]
     pub fn years(&self) -> i64 {
         0
     }
 
     /// [fn:months-from-duration](https://www.w3.org/TR/xpath-functions/#func-months-from-duration)
+    #[allow(clippy::unused_self)]
     pub fn months(&self) -> i64 {
         0
     }
@@ -502,7 +508,7 @@ impl PartialEq<Duration> for DayTimeDuration {
 
 impl PartialEq<DayTimeDuration> for Duration {
     fn eq(&self, other: &DayTimeDuration) -> bool {
-        self.eq(&Duration::from(*other))
+        self.eq(&Self::from(*other))
     }
 }
 
@@ -526,7 +532,7 @@ impl PartialOrd<Duration> for DayTimeDuration {
 
 impl PartialOrd<DayTimeDuration> for Duration {
     fn partial_cmp(&self, other: &DayTimeDuration) -> Option<Ordering> {
-        self.partial_cmp(&Duration::from(*other))
+        self.partial_cmp(&Self::from(*other))
     }
 }
 

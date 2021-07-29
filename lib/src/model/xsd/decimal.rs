@@ -99,7 +99,7 @@ impl Decimal {
 
     /// [fn:abs](https://www.w3.org/TR/xpath-functions/#func-abs)
     #[inline]
-    pub const fn abs(&self) -> Decimal {
+    pub const fn abs(&self) -> Self {
         Self {
             value: self.value.abs(),
         }
@@ -107,7 +107,7 @@ impl Decimal {
 
     /// [fn:round](https://www.w3.org/TR/xpath-functions/#func-round)
     #[inline]
-    pub fn round(&self) -> Decimal {
+    pub fn round(&self) -> Self {
         let value = self.value / DECIMAL_PART_POW_MINUS_ONE;
         Self {
             value: if value >= 0 {
@@ -120,7 +120,7 @@ impl Decimal {
 
     /// [fn:ceiling](https://www.w3.org/TR/xpath-functions/#func-ceiling)
     #[inline]
-    pub fn ceil(&self) -> Decimal {
+    pub fn ceil(&self) -> Self {
         Self {
             value: if self.value >= 0 && self.value % DECIMAL_PART_POW != 0 {
                 (self.value / DECIMAL_PART_POW + 1) * DECIMAL_PART_POW
@@ -132,7 +132,7 @@ impl Decimal {
 
     /// [fn:floor](https://www.w3.org/TR/xpath-functions/#func-floor)
     #[inline]
-    pub fn floor(&self) -> Decimal {
+    pub fn floor(&self) -> Self {
         Self {
             value: if self.value >= 0 || self.value % DECIMAL_PART_POW == 0 {
                 (self.value / DECIMAL_PART_POW) * DECIMAL_PART_POW
@@ -184,21 +184,21 @@ impl Decimal {
     }
 
     #[cfg(test)]
-    pub(super) const fn min_value() -> Decimal {
+    pub(super) const fn min_value() -> Self {
         Self {
             value: i128::min_value(),
         }
     }
 
     #[cfg(test)]
-    pub(super) const fn max_value() -> Decimal {
+    pub(super) const fn max_value() -> Self {
         Self {
             value: i128::max_value(),
         }
     }
 
     #[cfg(test)]
-    pub(super) const fn step() -> Decimal {
+    pub(super) const fn step() -> Self {
         Self { value: 1 }
     }
 }
@@ -445,7 +445,7 @@ impl fmt::Display for Decimal {
         let last_non_zero = i - 1;
         let first_non_zero = digits
             .iter()
-            .cloned()
+            .copied()
             .enumerate()
             .find_map(|(i, v)| if v == b'0' { None } else { Some(i) })
             .unwrap_or(40);
@@ -503,7 +503,7 @@ impl Neg for Decimal {
 impl TryFrom<Decimal> for i64 {
     type Error = DecimalOverflowError;
 
-    fn try_from(value: Decimal) -> Result<i64, DecimalOverflowError> {
+    fn try_from(value: Decimal) -> Result<Self, DecimalOverflowError> {
         value
             .value
             .checked_div(DECIMAL_PART_POW)

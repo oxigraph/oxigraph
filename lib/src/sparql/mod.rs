@@ -40,14 +40,14 @@ pub(crate) fn evaluate_query(
     query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
     options: QueryOptions,
 ) -> Result<QueryResults, EvaluationError> {
-    let query = query.try_into().map_err(|e| e.into())?;
-    let dataset = DatasetView::new(storage, &query.dataset)?;
+    let query = query.try_into().map_err(std::convert::Into::into)?;
+    let dataset = DatasetView::new(storage, &query.dataset);
     match query.inner {
         spargebra::Query::Select {
             pattern, base_iri, ..
         } => {
             let (plan, variables) = PlanBuilder::build(&dataset, &pattern)?;
-            SimpleEvaluator::new(
+            Ok(SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
                 options.service_handler,
@@ -60,7 +60,7 @@ pub(crate) fn evaluate_query(
                         .map(|v| Variable::new_unchecked(v.name))
                         .collect(),
                 ),
-            )
+            ))
         }
         spargebra::Query::Ask {
             pattern, base_iri, ..
@@ -81,23 +81,23 @@ pub(crate) fn evaluate_query(
         } => {
             let (plan, variables) = PlanBuilder::build(&dataset, &pattern)?;
             let construct = PlanBuilder::build_graph_template(&dataset, &template, variables);
-            SimpleEvaluator::new(
+            Ok(SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
                 options.service_handler,
             )
-            .evaluate_construct_plan(&plan, construct)
+            .evaluate_construct_plan(&plan, construct))
         }
         spargebra::Query::Describe {
             pattern, base_iri, ..
         } => {
             let (plan, _) = PlanBuilder::build(&dataset, &pattern)?;
-            SimpleEvaluator::new(
+            Ok(SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
                 options.service_handler,
             )
-            .evaluate_describe_plan(&plan)
+            .evaluate_describe_plan(&plan))
         }
     }
 }
