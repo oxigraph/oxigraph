@@ -3,5 +3,7 @@
 Cargo.lock
 .idea
 *.iml
+js/node_modules
+lib/tests/rockdb_bc_data
 lib/tests/sled_bc_data
 venv

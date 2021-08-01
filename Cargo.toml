@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "js",
     "lib",
     "python",
     "server",

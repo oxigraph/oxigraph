@@ -51,6 +51,17 @@ jobs:
       - run: wasm-pack test --node
         working-directory: ./lib
 
+  js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: rustup update
+      - run: cargo install wasm-pack
+      - run: npm install
+        working-directory: ./js
+      - run: npm test
+        working-directory: ./js
+
   python:
     runs-on: ubuntu-latest
     steps:

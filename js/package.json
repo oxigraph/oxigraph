@@ -1,0 +1,15 @@
+{
+  "name": "oxigraph_tests",
+  "description": "Oxigraph JS build and tests",
+  "private": true,
+  "devDependencies": {
+    "mocha": "^8.0.1",
+    "@rdfjs/data-model": "1.1.2",
+    "standard": "^16.0.0"
+  },
+  "scripts": {
+    "test": "standard test/*.js && wasm-pack build --dev --target nodejs && mocha",
+    "build": "wasm-pack build --release --target nodejs && sed -i 's/oxigraph_js/oxigraph/g' pkg/package.json",
+    "release": "wasm-pack pack && wasm-pack publish"
+  }
+}
