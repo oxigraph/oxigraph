@@ -438,8 +438,9 @@ fn build_select(
     offset_limit: Option<(usize, Option<usize>)>,
     values: Option<GraphPattern>,
     state: &mut ParserState,
-) -> GraphPattern {
+) -> Result<GraphPattern, &'static str> {
     let mut p = wher;
+    let mut with_aggregate = false;
 
     //GROUP BY
     let aggregates = state.aggregates.pop().unwrap_or_else(Vec::default);
@@ -471,6 +472,7 @@ fn build_select(
             by: clauses,
             aggregates,
         };
+        with_aggregate = true;
     }
 
     //HAVING
@@ -487,31 +489,54 @@ fn build_select(
     }
 
     //SELECT
-    let mut pv: Vec<Variable> = Vec::new();
+    let mut pv = Vec::new();
     match select.variables {
         Some(sel_items) => {
+            let visible: HashSet<_> = p.visible_variables().into_iter().cloned().collect();
             for sel_item in sel_items {
-                match sel_item {
-                    SelectionMember::Variable(v) => pv.push(v),
-                    SelectionMember::Expression(expr, v) => {
-                        if pv.contains(&v) {
-                            //TODO: fail
-                        } else {
-                            p = GraphPattern::Extend {
-                                inner: Box::new(p),
-                                var: v.clone(),
-                                expr,
-                            };
-                            pv.push(v);
+                let v = match sel_item {
+                    SelectionMember::Variable(v) => {
+                        if with_aggregate && !visible.contains(&v) {
+                            // We validate projection variables if there is an aggregate
+                            return Err("The SELECT contains a variable that is unbound");
                         }
+                        v
                     }
+                    SelectionMember::Expression(expr, v) => {
+                        if visible.contains(&v) {
+                            // We disallow to override an existing variable with an expression
+                            return Err(
+                                "The SELECT overrides an existing variable using an expression",
+                            );
+                        }
+                        if with_aggregate && !are_variables_bound(&expr, &visible) {
+                            // We validate projection variables if there is an aggregate
+                            return Err(
+                                "The SELECT contains an exprssion with a variable that is unbound",
+                            );
+                        }
+                        p = GraphPattern::Extend {
+                            inner: Box::new(p),
+                            var: v.clone(),
+                            expr,
+                        };
+                        v
+                    }
+                };
+                if pv.contains(&v) {
+                    return Err("Duplicated variable name in SELECT");
                 }
+                pv.push(v)
             }
         }
         None => {
+            if with_aggregate {
+                return Err("SELECT * is not authorized with GROUP BY");
+            }
             pv.extend(p.visible_variables().into_iter().cloned()) //TODO: is it really useful to do a projection?
         }
     }
+
     let mut m = p;
 
     //ORDER BY
@@ -541,7 +566,47 @@ fn build_select(
             length,
         }
     }
-    m
+    Ok(m)
+}
+
+fn are_variables_bound(expression: &Expression, variables: &HashSet<Variable>) -> bool {
+    match expression {
+        Expression::NamedNode(_)
+        | Expression::Literal(_)
+        | Expression::Bound(_)
+        | Expression::Coalesce(_)
+        | Expression::Exists(_) => true,
+        Expression::Variable(var) => variables.contains(var),
+        Expression::UnaryPlus(e) | Expression::UnaryMinus(e) | Expression::Not(e) => {
+            are_variables_bound(&e, variables)
+        }
+        Expression::Or(a, b)
+        | Expression::And(a, b)
+        | Expression::Equal(a, b)
+        | Expression::SameTerm(a, b)
+        | Expression::Greater(a, b)
+        | Expression::GreaterOrEqual(a, b)
+        | Expression::Less(a, b)
+        | Expression::LessOrEqual(a, b)
+        | Expression::Add(a, b)
+        | Expression::Subtract(a, b)
+        | Expression::Multiply(a, b)
+        | Expression::Divide(a, b) => {
+            are_variables_bound(&a, variables) && are_variables_bound(&b, variables)
+        }
+        Expression::In(a, b) => {
+            are_variables_bound(&a, variables)
+                && b.iter().all(|b| are_variables_bound(b, variables))
+        }
+        Expression::FunctionCall(_, parameters) => {
+            parameters.iter().all(|p| are_variables_bound(p, variables))
+        }
+        Expression::If(a, b, c) => {
+            are_variables_bound(&a, variables)
+                && are_variables_bound(&b, variables)
+                && are_variables_bound(&c, variables)
+        }
+    }
 }
 
 fn copy_graph(from: impl Into<GraphName>, to: impl Into<GraphNamePattern>) -> GraphUpdateOperation {
@@ -853,16 +918,16 @@ parser! {
         }
 
         //[7]
-        rule SelectQuery() -> Query = s:SelectClause() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
-            Query::Select {
+        rule SelectQuery() -> Query = s:SelectClause() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
+            Ok(Query::Select {
                 dataset: d,
-                pattern: build_select(s, w, g, h, o, l, v, state),
+                pattern: build_select(s, w, g, h, o, l, v, state)?,
                 base_iri: state.base_iri.clone()
-            }
+            })
         }
 
         //[8]
-        rule SubSelect() -> GraphPattern = s:SelectClause() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
+        rule SubSelect() -> GraphPattern = s:SelectClause() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
             build_select(s, w, g, h, o, l, v, state)
         }
 
@@ -889,40 +954,40 @@ parser! {
 
         //[10]
         rule ConstructQuery() -> Query =
-            i("CONSTRUCT") _ c:ConstructTemplate() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
-                Query::Construct {
+            i("CONSTRUCT") _ c:ConstructTemplate() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
+                Ok(Query::Construct {
                     template: c,
                     dataset: d,
-                    pattern: build_select(Selection::default(), w, g, h, o, l, v, state),
+                    pattern: build_select(Selection::default(), w, g, h, o, l, v, state)?,
                     base_iri: state.base_iri.clone()
-                }
+                })
             } /
-            i("CONSTRUCT") _ d:DatasetClauses() _ i("WHERE") _ "{" _ c:ConstructQuery_optional_triple_template() _ "}" _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
-                Query::Construct {
+            i("CONSTRUCT") _ d:DatasetClauses() _ i("WHERE") _ "{" _ c:ConstructQuery_optional_triple_template() _ "}" _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
+                Ok(Query::Construct {
                     template: c.clone(),
                     dataset: d,
                     pattern: build_select(
                         Selection::default(),
                         GraphPattern::Bgp(c),
                         g, h, o, l, v, state
-                    ),
+                    )?,
                     base_iri: state.base_iri.clone()
-                }
+                })
             }
 
         rule ConstructQuery_optional_triple_template() -> Vec<TriplePattern> = TriplesTemplate() / { Vec::new() }
 
         //[11]
         rule DescribeQuery() -> Query =
-            i("DESCRIBE") _ "*" _ d:DatasetClauses() w:WhereClause()? _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
-                Query::Describe {
+            i("DESCRIBE") _ "*" _ d:DatasetClauses() w:WhereClause()? _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
+                Ok(Query::Describe {
                     dataset: d,
-                    pattern: build_select(Selection::default(), w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state),
+                    pattern: build_select(Selection::default(), w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state)?,
                     base_iri: state.base_iri.clone()
-                }
+                })
             } /
-            i("DESCRIBE") _ p:DescribeQuery_item()+ _ d:DatasetClauses() w:WhereClause()? _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
-                Query::Describe {
+            i("DESCRIBE") _ p:DescribeQuery_item()+ _ d:DatasetClauses() w:WhereClause()? _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
+                Ok(Query::Describe {
                     dataset: d,
                     pattern: build_select(Selection {
                         option: SelectionOption::Default,
@@ -930,19 +995,19 @@ parser! {
                             NamedNodePattern::NamedNode(n) => SelectionMember::Expression(n.into(), variable()),
                             NamedNodePattern::Variable(v) => SelectionMember::Variable(v)
                         }).collect())
-                    }, w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state),
+                    }, w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state)?,
                     base_iri: state.base_iri.clone()
-                }
+                })
             }
         rule DescribeQuery_item() -> NamedNodePattern = i:VarOrIri() _ { i }
 
         //[12]
-        rule AskQuery() -> Query = i("ASK") _ d:DatasetClauses() w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {
-            Query::Ask {
+        rule AskQuery() -> Query = i("ASK") _ d:DatasetClauses() w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
+            Ok(Query::Ask {
                 dataset: d,
-                pattern: build_select(Selection::default(), w, g, h, o, l, v, state),
+                pattern: build_select(Selection::default(), w, g, h, o, l, v, state)?,
                 base_iri: state.base_iri.clone()
-            }
+            })
         }
 
         //[13]

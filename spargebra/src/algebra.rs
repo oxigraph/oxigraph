@@ -636,6 +636,7 @@ impl Default for GraphPattern {
 }
 
 impl GraphPattern {
+    /// Returns the list of [in-scope variables](https://www.w3.org/TR/sparql11-query/#variableScope)
     pub fn visible_variables(&self) -> BTreeSet<&Variable> {
         let mut vars = BTreeSet::default();
         self.add_visible_variables(&mut vars);

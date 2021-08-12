@@ -70,21 +70,9 @@ fn sparql11_query_w3c_evaluation_testsuite() -> Result<()> {
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/manifest-sparql11-query.ttl",
         vec![
             //Bad SPARQL query that should be rejected by the parser
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg08",
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg09",
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg10",
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg11",
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg12",
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/grouping/manifest#group07",
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/grouping/manifest#group06",
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/grouping/manifest#group07",
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest#test_43",
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest#test_44",
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest#test_45",
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest#test_60",
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest#test_61a",
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest#test_62a",
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest#test_65",
             //BNODE() scope is currently wrong
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#bnode01",
             //Property path with unbound graph name are not supported yet
