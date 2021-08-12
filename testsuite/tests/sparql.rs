@@ -27,8 +27,6 @@ fn sparql10_w3c_query_syntax_testsuite() -> Result<()> {
     run_testsuite(
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/manifest-syntax.ttl",
         vec![
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql4/manifest#syn-bad-38", // bnode scope
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql4/manifest#syn-bad-34", // bnode scope
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql3/manifest#syn-bad-26", // tokenizer
         ],
     )

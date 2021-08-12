@@ -303,12 +303,7 @@ impl From<AnnotatedTerm> for AnnotatedTermPath {
             annotations: term
                 .annotations
                 .into_iter()
-                .map(|(p, o)| {
-                    (
-                        p.into(),
-                        o.into_iter().map(Self::from).collect(),
-                    )
-                })
+                .map(|(p, o)| (p.into(), o.into_iter().map(Self::from).collect()))
                 .collect(),
         }
     }
@@ -1283,8 +1278,13 @@ parser! {
 
         //[53]
         rule GroupGraphPattern() -> GraphPattern =
-            "{" _ p:GroupGraphPatternSub() _ "}" { p } /
-            "{" _ p:SubSelect() _ "}" { p }
+            "{" _ GroupGraphPattern_clear() p:GroupGraphPatternSub() GroupGraphPattern_clear() _ "}" { p } /
+            "{" _ GroupGraphPattern_clear() p:SubSelect() GroupGraphPattern_clear() _ "}" { p }
+        rule GroupGraphPattern_clear() = {
+             // We deal with blank nodes aliases rule
+            state.used_bnodes.extend(state.currently_used_bnodes.iter().cloned());
+            state.currently_used_bnodes.clear();
+        }
 
         //[54]
         rule GroupGraphPatternSub() -> GraphPattern = a:TriplesBlock()? _ b:GroupGraphPatternSub_item()* {
@@ -1313,10 +1313,6 @@ parser! {
                     PartialGraphPattern::Other(e) => g = new_join(g, e),
                 }
             }
-
-            // We deal with blank nodes aliases rule (TODO: partial for now)
-            state.used_bnodes.extend(state.currently_used_bnodes.iter().cloned());
-            state.currently_used_bnodes.clear();
 
             if let Some(expr) = filter {
                 GraphPattern::Filter { expr, inner: Box::new(g) }
