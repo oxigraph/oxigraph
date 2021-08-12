@@ -1,2 +1,2 @@
-const { Store } = require('../pkg/oxigraph.js')
-require('../node_modules/@rdfjs/data-model/test/index.js')((new Store()).dataFactory)
+const oxigraph = require('../pkg/oxigraph.js')
+require('../node_modules/@rdfjs/data-model/test/index.js')(oxigraph)

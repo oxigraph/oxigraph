@@ -28,12 +28,11 @@ const oxigraph = require('oxigraph');
 
 Insert the triple `<http://example/> <http://schema.org/name> "example"` and log the name of `<http://example/>` in SPARQL:
 ```js
-const { MemoryStore } = require('oxigraph');
-const store = new MemoryStore();
-const dataFactory = store.dataFactory;
-const ex = dataFactory.namedNode("http://example/");
-const schemaName = dataFactory.namedNode("http://schema.org/name");
-store.add(dataFactory.triple(ex, schemaName, dataFactory.literal("example")));
+const oxigraph = require('oxigraph');
+const store = new oxigraph.Store();
+const ex = oxigraph.namedNode("http://example/");
+const schemaName = oxigraph.namedNode("http://schema.org/name");
+store.add(oxigraph.triple(ex, schemaName, oxigraph.literal("example")));
 for (binding of store.query("SELECT ?name WHERE { <http://example/> <http://schema.org/name> ?name }")) {
     console.log(binding.get("name").value);
 }
@@ -42,38 +41,44 @@ for (binding of store.query("SELECT ?name WHERE { <http://example/> <http://sche
 ## API
 
 Oxigraph currently provides a simple JS API.
-It is centered around the `MemoryStore` class.
 
-The `NamedNode`, `BlankNode`, `Literal`, `DefaultGraph`, `Variable`, `Quad` and `DataFactory` types
-are following the [RDF/JS datamodel specification](https://rdf.js.org/data-model-spec/).
+### RDF data model
 
-To import `MemoryStore` using Node:
-```js
-const { MemoryStore } = require('oxigraph');
-```
+Oxigraph implements the [RDF/JS datamodel specification](https://rdf.js.org/data-model-spec/).
 
-### `MemoryStore`
-
-#### `MemoryStore(optional sequence<Quad>? quads)` (constructor)
-```js
-const store = new MemoryStore();
-```
-
-If provided, the `MemoryStore` will be initialized with a sequence of quads.
-
-#### `MemoryStore.dataFactory`
-Returns a `DataFactory` following [RDF/JS datamodel specification](https://rdf.js.org/data-model-spec/).
+For that, the `oxigraph` module implements the [RDF/JS `DataFactory` interface](http://rdf.js.org/data-model-spec/#datafactory-interface).
 
 Example:
 ```js
-const store = new MemoryStore();
-const ex = store.dataFactory.namedNode("http://example.com");
-const blank = store.dataFactory.blankNode();
-const foo = store.dataFactory.literal("foo");
-const quad = store.dataFactory.quad(blank, ex, foo);
+const oxigraph = require('oxigraph');
+const ex = oxigraph.namedNode("http://example.com");
+const blank = oxigraph.blankNode();
+const foo = oxigraph.literal("foo");
+const quad = oxigraph.quad(blank, ex, foo);
 ```
 
-#### `MemoryStore.prototype.add(Quad quad)`
+### `Store`
+
+Oxigraph API is centered around the `Store` class.
+
+A store contains an [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) and allows to query and update them using SPARQL.
+
+#### `Store(optional sequence<Quad>? quads)` (constructor)
+Creates a new store.
+
+```js
+const oxigraph = require('oxigraph');
+const store = new oxigraph.Store();
+```
+
+If provided, the `Store` will be initialized with a sequence of quads.
+
+```js
+const oxigraph = require('oxigraph');
+const store = new oxigraph.Store([oxigraph.quad(blank, ex, foo)]);
+```
+
+#### `Store.prototype.add(Quad quad)`
 Inserts a quad in the store.
 
 Example:
@@ -81,7 +86,7 @@ Example:
 store.add(quad);
 ```
 
-#### `MemoryStore.prototype.delete(Quad quad)`
+#### `Store.prototype.delete(Quad quad)`
 Removes a quad from the store.
 
 Example:
@@ -89,7 +94,7 @@ Example:
 store.delete(quad);
 ```
 
-#### `MemoryStore.prototype.has(Quad quad)`
+#### `Store.prototype.has(Quad quad)`
 Returns a boolean stating if the store contains the quad.
 
 Example:
@@ -97,12 +102,12 @@ Example:
 store.has(quad);
 ```
 
-#### `MemoryStore.prototype.match(optional Term? subject, optional Term? predicate, optional Term? object, optional Term? graph)`
+#### `Store.prototype.match(optional Term? subject, optional Term? predicate, optional Term? object, optional Term? graph)`
 Returns an array with all the quads matching a given quad pattern.
 
 Example to get all quads in the default graph with `ex` for subject:
 ```js
-store.match(ex, null, null, store.dataFactory.defaultGraph());
+store.match(ex, null, null, oxigraph.defaultGraph());
 ```
 
 Example to get all quads:
@@ -110,7 +115,7 @@ Example to get all quads:
 store.match();
 ```
 
-#### `MemoryStore.prototype.query(String query)`
+#### `Store.prototype.query(String query)`
 Executes a [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/).
 For `SELECT` queries the return type is an array of `Map` which keys are the bound variables and values are the values the result is bound to.
 For `CONSTRUCT` and `ÐESCRIBE` queries the return type is an array of `Quad`.
@@ -125,7 +130,7 @@ for (binding of store.query("SELECT DISTINCT ?s WHERE { ?s ?p ?o }")) {
 
 Example of CONSTRUCT query:
 ```js
-const filteredStore = new MemoryStore(store.query("CONSTRUCT { <http:/example.com/> ?p ?o } WHERE { <http:/example.com/> ?p ?o }"));
+const filteredStore = new oxigraph.Store(store.query("CONSTRUCT { <http:/example.com/> ?p ?o } WHERE { <http:/example.com/> ?p ?o }"));
 ```
 
 Example of ASK query:
@@ -135,7 +140,7 @@ if (store.query("ASK { ?s ?s ?s }")) {
 }
 ```
 
-#### `MemoryStore.prototype.update(String query)`
+#### `Store.prototype.update(String query)`
 Executes a [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/).
 The [`LOAD` operation](https://www.w3.org/TR/sparql11-update/#load) is not supported yet.
 
@@ -144,7 +149,7 @@ Example of update:
 store.update("DELETE WHERE { <http://example.com/s> ?p ?o }")
 ```
 
-### `MemoryStore.prototype.load(String data, String mimeType, NamedNode|String? baseIRI, NamedNode|BlankNode|DefaultGraph? toNamedGraph)`
+#### `Store.prototype.load(String data, String mimeType, NamedNode|String? baseIRI, NamedNode|BlankNode|DefaultGraph? toNamedGraph)`
 
 Loads serialized RDF triples or quad into the store.
 The method arguments are:
@@ -162,11 +167,10 @@ The available formats are:
 
 Example of loading a Turtle file into the named graph `<http://example.com/graph>` with the base IRI `http://example.com`:
 ```js
-store.load("<http://example.com> <http://example.com> <> .", "text/turtle", "http://example.com", store.dataFactory.namedNode("http://example.com/graph"));
+store.load("<http://example.com> <http://example.com> <> .", "text/turtle", "http://example.com", oxigraph.namedNode("http://example.com/graph"));
 ```
 
-
-### `MemoryStore.prototype.dump(String mimeType, NamedNode|BlankNode|DefaultGraph? fromNamedGraph)`
+#### `Store.prototype.dump(String mimeType, NamedNode|BlankNode|DefaultGraph? fromNamedGraph)`
 
 Returns serialized RDF triples or quad from the store.
 The method arguments are:
@@ -182,7 +186,7 @@ The available formats are:
 
 Example of building a Turtle file from the named graph `<http://example.com/graph>`:
 ```js
-store.dump("text/turtle", store.dataFactory.namedNode("http://example.com/graph"));
+store.dump("text/turtle", oxigraph.namedNode("http://example.com/graph"));
 ```
 
 ## How to contribute

@@ -7,104 +7,91 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen(js_name = DataFactory)]
-#[derive(Default)]
-pub struct JsDataFactory {
-    from_js: FromJsConverter,
+thread_local! {
+    pub static FROM_JS: FromJsConverter = FromJsConverter::default();
 }
 
-#[wasm_bindgen(js_class = DataFactory)]
-impl JsDataFactory {
-    #[wasm_bindgen(js_name = namedNode)]
-    pub fn named_node(&self, value: String) -> Result<JsNamedNode, JsValue> {
-        NamedNode::new(value)
-            .map(|v| v.into())
-            .map_err(|v| UriError::new(&v.to_string()).into())
-    }
+#[wasm_bindgen(js_name = namedNode)]
+pub fn named_node(value: String) -> Result<JsNamedNode, JsValue> {
+    NamedNode::new(value)
+        .map(|v| v.into())
+        .map_err(|v| UriError::new(&v.to_string()).into())
+}
 
-    #[wasm_bindgen(js_name = blankNode)]
-    pub fn blank_node(&self, value: Option<String>) -> Result<JsBlankNode, JsValue> {
-        Ok(if let Some(value) = value {
-            BlankNode::new(value).map_err(to_err)?
-        } else {
-            BlankNode::default()
-        }
+#[wasm_bindgen(js_name = blankNode)]
+pub fn blank_node(value: Option<String>) -> Result<JsBlankNode, JsValue> {
+    Ok(if let Some(value) = value {
+        BlankNode::new(value).map_err(to_err)?
+    } else {
+        BlankNode::default()
+    }
+    .into())
+}
+
+#[wasm_bindgen]
+pub fn literal(
+    value: Option<String>,
+    language_or_datatype: &JsValue,
+) -> Result<JsLiteral, JsValue> {
+    if language_or_datatype.is_null() || language_or_datatype.is_undefined() {
+        Ok(Literal::new_simple_literal(value.unwrap_or_else(String::new)).into())
+    } else if language_or_datatype.is_string() {
+        Ok(Literal::new_language_tagged_literal(
+            value.unwrap_or_else(String::new),
+            language_or_datatype.as_string().unwrap_or_else(String::new),
+        )
+        .map_err(to_err)?
         .into())
+    } else if let JsTerm::NamedNode(datatype) = FROM_JS.with(|c| c.to_term(language_or_datatype))? {
+        Ok(Literal::new_typed_literal(value.unwrap_or_else(String::new), datatype).into())
+    } else {
+        Err(format_err!("The literal datatype should be a NamedNode"))
     }
+}
 
-    #[wasm_bindgen]
-    pub fn literal(
-        &self,
-        value: Option<String>,
-        language_or_datatype: &JsValue,
-    ) -> Result<JsLiteral, JsValue> {
-        if language_or_datatype.is_null() || language_or_datatype.is_undefined() {
-            Ok(Literal::new_simple_literal(value.unwrap_or_else(String::new)).into())
-        } else if language_or_datatype.is_string() {
-            Ok(Literal::new_language_tagged_literal(
-                value.unwrap_or_else(String::new),
-                language_or_datatype.as_string().unwrap_or_else(String::new),
-            )
-            .map_err(to_err)?
-            .into())
-        } else if let JsTerm::NamedNode(datatype) = self.from_js.to_term(language_or_datatype)? {
-            Ok(Literal::new_typed_literal(value.unwrap_or_else(String::new), datatype).into())
-        } else {
-            Err(format_err!("The literal datatype should be a NamedNode"))
-        }
-    }
+#[wasm_bindgen(js_name = defaultGraph)]
+pub fn default_graph() -> JsDefaultGraph {
+    JsDefaultGraph {}
+}
 
-    #[wasm_bindgen(js_name = defaultGraph)]
-    pub fn default_graph(&self) -> JsDefaultGraph {
-        JsDefaultGraph {}
-    }
+#[wasm_bindgen(js_name = variable)]
+pub fn variable(value: String) -> Result<JsVariable, JsValue> {
+    Ok(Variable::new(value).map_err(to_err)?.into())
+}
 
-    #[wasm_bindgen(js_name = variable)]
-    pub fn variable(&self, value: String) -> Result<JsVariable, JsValue> {
-        Ok(Variable::new(value).map_err(to_err)?.into())
-    }
+#[wasm_bindgen(js_name = triple)]
+pub fn triple(subject: &JsValue, predicate: &JsValue, object: &JsValue) -> Result<JsQuad, JsValue> {
+    quad(subject, predicate, object, &JsValue::UNDEFINED)
+}
 
-    #[wasm_bindgen(js_name = triple)]
-    pub fn triple(
-        &self,
-        subject: &JsValue,
-        predicate: &JsValue,
-        object: &JsValue,
-    ) -> Result<JsQuad, JsValue> {
-        self.quad(subject, predicate, object, &JsValue::UNDEFINED)
-    }
+#[wasm_bindgen(js_name = quad)]
+pub fn quad(
+    subject: &JsValue,
+    predicate: &JsValue,
+    object: &JsValue,
+    graph: &JsValue,
+) -> Result<JsQuad, JsValue> {
+    Ok(FROM_JS
+        .with(|c| c.to_quad_from_parts(subject, predicate, object, graph))?
+        .into())
+}
 
-    #[wasm_bindgen(js_name = quad)]
-    pub fn quad(
-        &self,
-        subject: &JsValue,
-        predicate: &JsValue,
-        object: &JsValue,
-        graph: &JsValue,
-    ) -> Result<JsQuad, JsValue> {
-        Ok(self
-            .from_js
-            .to_quad_from_parts(subject, predicate, object, graph)?
-            .into())
-    }
+#[wasm_bindgen(js_name = fromTerm)]
+pub fn from_term(original: &JsValue) -> Result<JsValue, JsValue> {
+    Ok(if original.is_null() {
+        JsValue::NULL
+    } else {
+        FROM_JS.with(|c| c.to_term(original))?.into()
+    })
+}
 
-    #[wasm_bindgen(js_name = fromTerm)]
-    pub fn convert_term(&self, original: &JsValue) -> Result<JsValue, JsValue> {
-        Ok(if original.is_null() {
-            JsValue::NULL
-        } else {
-            self.from_js.to_term(original)?.into()
-        })
-    }
-
-    #[wasm_bindgen(js_name = fromQuad)]
-    pub fn convert_quad(&self, original: &JsValue) -> Result<JsValue, JsValue> {
-        Ok(if original.is_null() {
-            JsValue::NULL
-        } else {
-            JsQuad::from(self.from_js.to_quad(original)?).into()
-        })
-    }
+#[wasm_bindgen(js_name = fromQuad)]
+pub fn from_quad(original: &JsValue) -> Result<JsValue, JsValue> {
+    Ok(if original.is_null() {
+        JsValue::NULL
+    } else {
+        JsQuad::from(FROM_JS.with(|c| c.to_quad(original))?).into()
+    })
 }
 
 #[wasm_bindgen(js_name = NamedNode)]
@@ -340,7 +327,7 @@ impl JsVariable {
 
     pub fn equals(&self, other: &JsValue) -> bool {
         if let Ok(Some(JsTerm::Variable(other))) =
-            FromJsConverter::default().to_optional_term(&other)
+            FromJsConverter::default().to_optional_term(other)
         {
             self == &other
         } else {
@@ -400,7 +387,7 @@ impl JsQuad {
     }
 
     pub fn equals(&self, other: &JsValue) -> bool {
-        if let Ok(Some(JsTerm::Quad(other))) = FromJsConverter::default().to_optional_term(&other) {
+        if let Ok(Some(JsTerm::Quad(other))) = FromJsConverter::default().to_optional_term(other) {
             self == &other
         } else {
             false
@@ -724,7 +711,7 @@ impl FromJsConverter {
                 }
                 "DefaultGraph" => Ok(JsTerm::DefaultGraph(JsDefaultGraph {})),
                 "Variable" => Ok(Variable::new(
-                    &Reflect::get(&value, &self.value)?
+                    &Reflect::get(value, &self.value)?
                         .as_string()
                         .ok_or_else(|| format_err!("Variable should have a string value"))?,
                 )
@@ -763,10 +750,10 @@ impl FromJsConverter {
 
     pub fn to_quad(&self, value: &JsValue) -> Result<Quad, JsValue> {
         self.to_quad_from_parts(
-            &Reflect::get(&value, &self.subject)?,
-            &Reflect::get(&value, &self.predicate)?,
-            &Reflect::get(&value, &self.object)?,
-            &Reflect::get(&value, &self.graph)?,
+            &Reflect::get(value, &self.subject)?,
+            &Reflect::get(value, &self.predicate)?,
+            &Reflect::get(value, &self.object)?,
+            &Reflect::get(value, &self.graph)?,
         )
     }
 
@@ -784,7 +771,7 @@ impl FromJsConverter {
             graph_name: if graph_name.is_undefined() {
                 GraphName::DefaultGraph
             } else {
-                GraphName::try_from(self.to_term(&graph_name)?)?
+                GraphName::try_from(self.to_term(graph_name)?)?
             },
         })
     }

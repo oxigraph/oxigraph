@@ -13,7 +13,6 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen(js_name = Store)]
 pub struct JsStore {
     store: Store,
-    from_js: FromJsConverter,
 }
 
 #[wasm_bindgen(js_class = Store)]
@@ -24,7 +23,6 @@ impl JsStore {
 
         let store = Self {
             store: Store::new().map_err(to_err)?,
-            from_js: FromJsConverter::default(),
         };
         if let Some(quads) = quads {
             for quad in quads.iter() {
@@ -34,28 +32,23 @@ impl JsStore {
         Ok(store)
     }
 
-    #[wasm_bindgen(js_name = dataFactory, getter)]
-    pub fn data_factory(&self) -> JsDataFactory {
-        JsDataFactory::default()
-    }
-
     pub fn add(&self, quad: &JsValue) -> Result<(), JsValue> {
         self.store
-            .insert(&self.from_js.to_quad(quad)?.into())
+            .insert(&FROM_JS.with(|c| c.to_quad(quad))?)
             .map_err(to_err)?;
         Ok(())
     }
 
     pub fn delete(&self, quad: &JsValue) -> Result<(), JsValue> {
         self.store
-            .remove(&self.from_js.to_quad(quad)?)
+            .remove(&FROM_JS.with(|c| c.to_quad(quad))?)
             .map_err(to_err)?;
         Ok(())
     }
 
     pub fn has(&self, quad: &JsValue) -> Result<bool, JsValue> {
         self.store
-            .contains(&self.from_js.to_quad(quad)?)
+            .contains(&FROM_JS.with(|c| c.to_quad(quad))?)
             .map_err(to_err)
     }
 
@@ -75,28 +68,28 @@ impl JsStore {
         Ok(self
             .store
             .quads_for_pattern(
-                if let Some(subject) = self.from_js.to_optional_term(subject)? {
+                if let Some(subject) = FROM_JS.with(|c| c.to_optional_term(subject))? {
                     Some(subject.try_into()?)
                 } else {
                     None
                 }
                 .as_ref()
                 .map(|t: &NamedOrBlankNode| t.into()),
-                if let Some(predicate) = self.from_js.to_optional_term(predicate)? {
+                if let Some(predicate) = FROM_JS.with(|c| c.to_optional_term(predicate))? {
                     Some(NamedNode::try_from(predicate)?)
                 } else {
                     None
                 }
                 .as_ref()
                 .map(|t: &NamedNode| t.into()),
-                if let Some(object) = self.from_js.to_optional_term(object)? {
+                if let Some(object) = FROM_JS.with(|c| c.to_optional_term(object))? {
                     Some(object.try_into()?)
                 } else {
                     None
                 }
                 .as_ref()
                 .map(|t: &Term| t.into()),
-                if let Some(graph_name) = self.from_js.to_optional_term(graph_name)? {
+                if let Some(graph_name) = FROM_JS.with(|c| c.to_optional_term(graph_name))? {
                     Some(graph_name.try_into()?)
                 } else {
                     None
@@ -158,7 +151,7 @@ impl JsStore {
             None
         } else if base_iri.is_string() {
             base_iri.as_string()
-        } else if let JsTerm::NamedNode(base_iri) = self.from_js.to_term(base_iri)? {
+        } else if let JsTerm::NamedNode(base_iri) = FROM_JS.with(|c| c.to_term(base_iri))? {
             Some(base_iri.value())
         } else {
             return Err(format_err!(
@@ -167,7 +160,7 @@ impl JsStore {
         };
 
         let to_graph_name =
-            if let Some(graph_name) = self.from_js.to_optional_term(to_graph_name)? {
+            if let Some(graph_name) = FROM_JS.with(|c| c.to_optional_term(to_graph_name))? {
                 Some(graph_name.try_into()?)
             } else {
                 None
@@ -198,7 +191,7 @@ impl JsStore {
 
     pub fn dump(&self, mime_type: &str, from_graph_name: &JsValue) -> Result<String, JsValue> {
         let from_graph_name =
-            if let Some(graph_name) = self.from_js.to_optional_term(from_graph_name)? {
+            if let Some(graph_name) = FROM_JS.with(|c| c.to_optional_term(from_graph_name))? {
                 Some(graph_name.try_into()?)
             } else {
                 None
