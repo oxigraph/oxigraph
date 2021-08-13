@@ -578,7 +578,7 @@ fn are_variables_bound(expression: &Expression, variables: &HashSet<Variable>) -
         | Expression::Exists(_) => true,
         Expression::Variable(var) => variables.contains(var),
         Expression::UnaryPlus(e) | Expression::UnaryMinus(e) | Expression::Not(e) => {
-            are_variables_bound(&e, variables)
+            are_variables_bound(e, variables)
         }
         Expression::Or(a, b)
         | Expression::And(a, b)
@@ -592,19 +592,18 @@ fn are_variables_bound(expression: &Expression, variables: &HashSet<Variable>) -
         | Expression::Subtract(a, b)
         | Expression::Multiply(a, b)
         | Expression::Divide(a, b) => {
-            are_variables_bound(&a, variables) && are_variables_bound(&b, variables)
+            are_variables_bound(a, variables) && are_variables_bound(b, variables)
         }
         Expression::In(a, b) => {
-            are_variables_bound(&a, variables)
-                && b.iter().all(|b| are_variables_bound(b, variables))
+            are_variables_bound(a, variables) && b.iter().all(|b| are_variables_bound(b, variables))
         }
         Expression::FunctionCall(_, parameters) => {
             parameters.iter().all(|p| are_variables_bound(p, variables))
         }
         Expression::If(a, b, c) => {
-            are_variables_bound(&a, variables)
-                && are_variables_bound(&b, variables)
-                && are_variables_bound(&c, variables)
+            are_variables_bound(a, variables)
+                && are_variables_bound(b, variables)
+                && are_variables_bound(c, variables)
         }
     }
 }

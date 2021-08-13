@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::format_err;
 use crate::utils::to_err;
 use js_sys::{Reflect, UriError};
