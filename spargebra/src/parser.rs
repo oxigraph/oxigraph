@@ -1352,14 +1352,10 @@ parser! {
         }
 
         //[54]
-        rule GroupGraphPatternSub() -> GraphPattern = a:TriplesBlock()? _ b:GroupGraphPatternSub_item()* {
-            let mut p = a.map_or_else(Vec::default, |v| vec![PartialGraphPattern::Other(build_bgp(v))]);
-            for v in b {
-                p.extend(v)
-            }
+        rule GroupGraphPatternSub() -> GraphPattern = a:TriplesBlock()? _ b:GroupGraphPatternSub_item()* {?
             let mut filter: Option<Expression> = None;
-            let mut g = GraphPattern::default();
-            for e in p {
+            let mut g = a.map_or_else(GraphPattern::default, build_bgp);
+            for e in b.into_iter().flatten() {
                 match e {
                     PartialGraphPattern::Optional(p, f) => {
                         g = GraphPattern::LeftJoin { left: Box::new(g), right: Box::new(p), expr: f }
@@ -1368,6 +1364,9 @@ parser! {
                         g = GraphPattern::Minus { left: Box::new(g), right: Box::new(p) }
                     }
                     PartialGraphPattern::Bind(expr, var) => {
+                        if g.visible_variables().contains(&var) {
+                            return Err("BIND is overriding an existing variable")
+                        }
                         g = GraphPattern::Extend { inner: Box::new(g), var, expr }
                     }
                     PartialGraphPattern::Filter(expr) => filter = Some(if let Some(f) = filter {
@@ -1379,11 +1378,11 @@ parser! {
                 }
             }
 
-            if let Some(expr) = filter {
+            Ok(if let Some(expr) = filter {
                 GraphPattern::Filter { expr, inner: Box::new(g) }
             } else {
                 g
-            }
+            })
         }
         rule GroupGraphPatternSub_item() -> Vec<PartialGraphPattern> = a:GraphPatternNotTriples() _ ("." _)? b:TriplesBlock()? _ {
             let mut result = vec![a];

@@ -739,12 +739,30 @@ impl<'a> fmt::Display for SparqlGraphPattern<'a> {
                 path,
                 object,
             } => write!(f, "{} {} {} .", subject, SparqlPropertyPath(path), object),
-            GraphPattern::Join { left, right } => write!(
-                f,
-                "{} {}",
-                SparqlGraphPattern(&*left),
-                SparqlGraphPattern(&*right)
-            ),
+            GraphPattern::Join { left, right } => {
+                if matches!(
+                    right.as_ref(),
+                    GraphPattern::LeftJoin { .. }
+                        | GraphPattern::Minus { .. }
+                        | GraphPattern::Extend { .. }
+                        | GraphPattern::Filter { .. }
+                ) {
+                    // The second block might be considered as a modification of the first one.
+                    write!(
+                        f,
+                        "{} {{ {} }}",
+                        SparqlGraphPattern(&*left),
+                        SparqlGraphPattern(&*right)
+                    )
+                } else {
+                    write!(
+                        f,
+                        "{} {}",
+                        SparqlGraphPattern(&*left),
+                        SparqlGraphPattern(&*right)
+                    )
+                }
+            }
             GraphPattern::LeftJoin { left, right, expr } => {
                 if let Some(expr) = expr {
                     write!(

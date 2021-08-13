@@ -69,10 +69,6 @@ fn sparql11_query_w3c_evaluation_testsuite() -> Result<()> {
     run_testsuite(
         "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/manifest-sparql11-query.ttl",
         vec![
-            //Bad SPARQL query that should be rejected by the parser
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest#test_60",
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest#test_61a",
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest#test_62a",
             //BNODE() scope is currently wrong
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#bnode01",
             //Property path with unbound graph name are not supported yet
