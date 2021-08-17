@@ -14,7 +14,7 @@ use async_std::future::Future;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::task::spawn;
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use http_types::content::ContentType;
 use http_types::{
     bail_status, format_err_status, headers, Error, Method, Mime, Request, Response, Result,
@@ -36,11 +36,13 @@ const SERVER: &str = concat!("Oxigraph/", env!("CARGO_PKG_VERSION"));
 #[async_std::main]
 pub async fn main() -> Result<()> {
     let matches = App::new("Oxigraph SPARQL server for Wikibase")
+        .version(crate_version!())
         .arg(
             Arg::with_name("bind")
                 .short("b")
                 .long("bind")
-                .help("Sets a custom config file")
+                .help("Host and port to listen to")
+                .default_value("localhost:7878")
                 .takes_value(true),
         )
         .arg(
@@ -75,11 +77,12 @@ pub async fn main() -> Result<()> {
             Arg::with_name("slot")
                 .long("slot")
                 .help("slot to load like 'mediainfo'. Could not be use with namespaces")
-                .takes_value(true),
+                .takes_value(true)
+                .conflicts_with("namespaces"),
         )
         .get_matches();
-    let bind = matches.value_of("bind").unwrap_or("localhost:7878");
-    let file = matches.value_of("file").unwrap();
+    let bind = matches.value_of("bind").unwrap();
+    let file = matches.value_of_os("file").unwrap();
     let mediawiki_api = matches.value_of("mediawiki_api").unwrap();
     let mediawiki_base_url = matches.value_of("mediawiki_base_url").unwrap();
     let namespaces = matches
