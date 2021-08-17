@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 # Most of the metadata are in Cargo.toml and injected by maturin
 name = "pyoxigraph"
-classifier = [
+classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
@@ -22,9 +22,8 @@ classifier = [
 requires-python = ">=3.6"
 
 [project.urls]
-changelog = "https://github.com/oxigraph/oxigraph/blob/master/CHANGELOG.md"
-documentation = "https://oxigraph.org/pyoxigraph/"
-homepage = "https://oxigraph.org/pyoxigraph/"
-repository = "https://github.com/oxigraph/oxigraph/tree/master/python"
-source = "https://github.com/oxigraph/oxigraph/tree/master/python"
-tracker = "https://github.com/oxigraph/oxigraph/issues"
+Changelog = "https://github.com/oxigraph/oxigraph/blob/master/CHANGELOG.md"
+Documentation = "https://oxigraph.org/pyoxigraph/"
+Homepage = "https://oxigraph.org/pyoxigraph/"
+Source = "https://github.com/oxigraph/oxigraph/tree/master/python"
+Tracker = "https://github.com/oxigraph/oxigraph/issues"
