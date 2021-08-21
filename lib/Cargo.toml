@@ -35,7 +35,7 @@ rio_api = "0.6"
 rio_turtle = "0.6"
 rio_xml = "0.6"
 hex = "0.4"
-nom = "6"
+nom = "7"
 siphasher = "0.3"
 lasso = "0.5"
 sophia_api = { version = "0.7", optional = true }
