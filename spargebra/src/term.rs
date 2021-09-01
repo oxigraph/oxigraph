@@ -16,10 +16,17 @@ use std::fmt::Write;
 ///     NamedNode { iri: "http://example.com/foo".into() }.to_string()
 /// )
 /// ```
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Hash)]
 pub struct NamedNode {
     /// The [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) itself.
     pub iri: String,
+}
+
+impl fmt::Debug for NamedNode {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<{}>", self.iri)
+    }
 }
 
 impl fmt::Display for NamedNode {
@@ -54,10 +61,17 @@ impl TryFrom<NamedNodePattern> for NamedNode {
 ///     BlankNode { id: "a1".into() }.to_string()
 /// )
 /// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub struct BlankNode {
     /// The [blank node identifier](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node-identifier).
     pub id: String,
+}
+
+impl fmt::Debug for BlankNode {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "_:{}", self.id)
+    }
 }
 
 impl fmt::Display for BlankNode {
@@ -92,7 +106,7 @@ impl fmt::Display for BlankNode {
 ///     Literal::LanguageTaggedString { value: "foo".into(), language: "en".into() }.to_string()
 /// );
 /// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub enum Literal {
     /// A [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal) without datatype or language form.
     Simple {
@@ -115,6 +129,23 @@ pub enum Literal {
     },
 }
 
+impl fmt::Debug for Literal {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Literal::Simple { value } => print_quoted_str(value, f),
+            Literal::LanguageTaggedString { value, language } => {
+                print_quoted_str(value, f)?;
+                write!(f, "@{}", language)
+            }
+            Literal::Typed { value, datatype } => {
+                print_quoted_str(value, f)?;
+                write!(f, "^^{}", datatype)
+            }
+        }
+    }
+}
+
 impl fmt::Display for Literal {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -135,12 +166,24 @@ impl fmt::Display for Literal {
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub enum Subject {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
     #[cfg(feature = "rdf-star")]
     Triple(Box<Triple>),
+}
+
+impl fmt::Debug for Subject {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NamedNode(node) => node.fmt(f),
+            Self::BlankNode(node) => node.fmt(f),
+            #[cfg(feature = "rdf-star")]
+            Self::Triple(triple) => triple.fmt(f),
+        }
+    }
 }
 
 impl fmt::Display for Subject {
@@ -199,11 +242,22 @@ impl TryFrom<TermPattern> for Subject {
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub enum GroundSubject {
     NamedNode(NamedNode),
     #[cfg(feature = "rdf-star")]
     Triple(Box<GroundTriple>),
+}
+
+impl fmt::Debug for GroundSubject {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NamedNode(node) => node.fmt(f),
+            #[cfg(feature = "rdf-star")]
+            Self::Triple(triple) => triple.fmt(f),
+        }
+    }
 }
 
 impl fmt::Display for GroundSubject {
@@ -269,13 +323,26 @@ impl TryFrom<GroundTerm> for GroundSubject {
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) and [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub enum Term {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
     Literal(Literal),
     #[cfg(feature = "rdf-star")]
     Triple(Box<Triple>),
+}
+
+impl fmt::Debug for Term {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NamedNode(node) => node.fmt(f),
+            Self::BlankNode(node) => node.fmt(f),
+            Self::Literal(literal) => literal.fmt(f),
+            #[cfg(feature = "rdf-star")]
+            Self::Triple(triple) => triple.fmt(f),
+        }
+    }
 }
 
 impl fmt::Display for Term {
@@ -355,12 +422,24 @@ impl TryFrom<TermPattern> for Term {
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub enum GroundTerm {
     NamedNode(NamedNode),
     Literal(Literal),
     #[cfg(feature = "rdf-star")]
     Triple(Box<GroundTriple>),
+}
+
+impl fmt::Debug for GroundTerm {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NamedNode(node) => node.fmt(f),
+            Self::Literal(literal) => literal.fmt(f),
+            #[cfg(feature = "rdf-star")]
+            Self::Triple(triple) => triple.fmt(f),
+        }
+    }
 }
 
 impl fmt::Display for GroundTerm {
@@ -433,11 +512,22 @@ impl TryFrom<Term> for GroundTerm {
 ///     }.to_string()
 /// )
 /// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub struct Triple {
     pub subject: Subject,
     pub predicate: NamedNode,
     pub object: Term,
+}
+
+impl fmt::Debug for Triple {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "(triple {:?} {:?} {:?})",
+            self.subject, self.predicate, self.object
+        )
+    }
 }
 
 impl fmt::Display for Triple {
@@ -477,11 +567,22 @@ impl TryFrom<TriplePattern> for Triple {
 ///     }.to_string()
 /// )
 /// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub struct GroundTriple {
     pub subject: GroundSubject,
     pub predicate: NamedNode,
     pub object: GroundTerm,
+}
+
+impl fmt::Debug for GroundTriple {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "(triple {:?} {:?} {:?})",
+            self.subject, self.predicate, self.object
+        )
+    }
 }
 
 impl fmt::Display for GroundTriple {
@@ -507,10 +608,20 @@ impl TryFrom<Triple> for GroundTriple {
 /// A possible graph name.
 ///
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub enum GraphName {
     NamedNode(NamedNode),
     DefaultGraph,
+}
+
+impl fmt::Debug for GraphName {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NamedNode(node) => node.fmt(f),
+            Self::DefaultGraph => write!(f, "default"),
+        }
+    }
 }
 
 impl fmt::Display for GraphName {
@@ -561,12 +672,31 @@ impl TryFrom<GraphNamePattern> for GraphName {
 ///     }.to_string()
 /// )
 /// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub struct Quad {
     pub subject: Subject,
     pub predicate: NamedNode,
     pub object: Term,
     pub graph_name: GraphName,
+}
+
+impl fmt::Debug for Quad {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.graph_name == GraphName::DefaultGraph {
+            write!(
+                f,
+                "(triple {:?} {:?} {:?})",
+                self.subject, self.predicate, self.object
+            )
+        } else {
+            write!(
+                f,
+                "(graph {:?} ((triple {:?} {:?} {:?})))",
+                self.graph_name, self.subject, self.predicate, self.object
+            )
+        }
+    }
 }
 
 impl fmt::Display for Quad {
@@ -616,12 +746,31 @@ impl TryFrom<QuadPattern> for Quad {
 ///     }.to_string()
 /// )
 /// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub struct GroundQuad {
     pub subject: GroundSubject,
     pub predicate: NamedNode,
     pub object: GroundTerm,
     pub graph_name: GraphName,
+}
+
+impl fmt::Debug for GroundQuad {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.graph_name == GraphName::DefaultGraph {
+            write!(
+                f,
+                "(triple {:?} {:?} {:?})",
+                self.subject, self.predicate, self.object
+            )
+        } else {
+            write!(
+                f,
+                "(graph {:?} ((triple {:?} {:?} {:?})))",
+                self.graph_name, self.subject, self.predicate, self.object
+            )
+        }
+    }
 }
 
 impl fmt::Display for GroundQuad {
@@ -663,9 +812,16 @@ impl TryFrom<Quad> for GroundQuad {
 ///     Variable { name: "foo".into() }.to_string()
 /// );
 /// ```
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Hash)]
 pub struct Variable {
     pub name: String,
+}
+
+impl fmt::Debug for Variable {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "?{}", self.name)
+    }
 }
 
 impl fmt::Display for Variable {
@@ -676,10 +832,20 @@ impl fmt::Display for Variable {
 }
 
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub enum NamedNodePattern {
     NamedNode(NamedNode),
     Variable(Variable),
+}
+
+impl fmt::Debug for NamedNodePattern {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NamedNode(node) => node.fmt(f),
+            Self::Variable(var) => var.fmt(f),
+        }
+    }
 }
 
 impl fmt::Display for NamedNodePattern {
@@ -707,7 +873,7 @@ impl From<Variable> for NamedNodePattern {
 }
 
 /// The union of [terms](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub enum TermPattern {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
@@ -715,6 +881,20 @@ pub enum TermPattern {
     #[cfg(feature = "rdf-star")]
     Triple(Box<TriplePattern>),
     Variable(Variable),
+}
+
+impl fmt::Debug for TermPattern {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NamedNode(term) => term.fmt(f),
+            Self::BlankNode(term) => term.fmt(f),
+            Self::Literal(term) => term.fmt(f),
+            #[cfg(feature = "rdf-star")]
+            Self::Triple(triple) => triple.fmt(f),
+            Self::Variable(var) => var.fmt(f),
+        }
+    }
 }
 
 impl fmt::Display for TermPattern {
@@ -802,12 +982,24 @@ impl From<NamedNodePattern> for TermPattern {
 }
 
 /// The union of [terms](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables) without blank nodes.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub enum GroundTermPattern {
     NamedNode(NamedNode),
     Literal(Literal),
     Variable(Variable),
     Triple(Box<GroundTriplePattern>),
+}
+
+impl fmt::Debug for GroundTermPattern {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NamedNode(term) => term.fmt(f),
+            Self::Literal(term) => term.fmt(f),
+            Self::Variable(var) => var.fmt(f),
+            Self::Triple(triple) => write!(f, "<<{}>>", triple),
+        }
+    }
 }
 
 impl fmt::Display for GroundTermPattern {
@@ -899,11 +1091,22 @@ impl TryFrom<TermPattern> for GroundTermPattern {
 }
 
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub enum GraphNamePattern {
     NamedNode(NamedNode),
     DefaultGraph,
     Variable(Variable),
+}
+
+impl fmt::Debug for GraphNamePattern {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NamedNode(node) => node.fmt(f),
+            Self::DefaultGraph => write!(f, "default"),
+            Self::Variable(var) => var.fmt(f),
+        }
+    }
 }
 
 impl fmt::Display for GraphNamePattern {
@@ -911,7 +1114,7 @@ impl fmt::Display for GraphNamePattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NamedNode(node) => node.fmt(f),
-            Self::DefaultGraph => f.write_str("DEFAULT"),
+            Self::DefaultGraph => write!(f, "DEFAULT"),
             Self::Variable(var) => var.fmt(f),
         }
     }
@@ -952,7 +1155,7 @@ impl From<NamedNodePattern> for GraphNamePattern {
 }
 
 /// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern)
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub struct TriplePattern {
     pub subject: TermPattern,
     pub predicate: NamedNodePattern,
@@ -970,6 +1173,17 @@ impl TriplePattern {
             predicate: predicate.into(),
             object: object.into(),
         }
+    }
+}
+
+impl fmt::Debug for TriplePattern {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "(triple {:?} {:?} {:?})",
+            self.subject, self.predicate, self.object
+        )
     }
 }
 
@@ -992,11 +1206,22 @@ impl From<Triple> for TriplePattern {
 }
 
 /// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) without blank nodes
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub struct GroundTriplePattern {
     pub subject: GroundTermPattern,
     pub predicate: NamedNodePattern,
     pub object: GroundTermPattern,
+}
+
+impl fmt::Debug for GroundTriplePattern {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "(triple {:?} {:?} {:?})",
+            self.subject, self.predicate, self.object
+        )
+    }
 }
 
 impl fmt::Display for GroundTriplePattern {
@@ -1031,7 +1256,7 @@ impl TryFrom<TriplePattern> for GroundTriplePattern {
 }
 
 /// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) in a specific graph
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub struct QuadPattern {
     pub subject: TermPattern,
     pub predicate: NamedNodePattern,
@@ -1055,6 +1280,25 @@ impl QuadPattern {
     }
 }
 
+impl fmt::Debug for QuadPattern {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.graph_name == GraphNamePattern::DefaultGraph {
+            write!(
+                f,
+                "(triple {:?} {:?} {:?})",
+                self.subject, self.predicate, self.object
+            )
+        } else {
+            write!(
+                f,
+                "(graph {:?} ((triple {:?} {:?} {:?})))",
+                self.graph_name, self.subject, self.predicate, self.object
+            )
+        }
+    }
+}
+
 impl fmt::Display for QuadPattern {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -1071,12 +1315,31 @@ impl fmt::Display for QuadPattern {
 }
 
 /// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) in a specific graph without blank nodes
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub struct GroundQuadPattern {
     pub subject: GroundTermPattern,
     pub predicate: NamedNodePattern,
     pub object: GroundTermPattern,
     pub graph_name: GraphNamePattern,
+}
+
+impl fmt::Debug for GroundQuadPattern {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.graph_name == GraphNamePattern::DefaultGraph {
+            write!(
+                f,
+                "(triple {:?} {:?} {:?})",
+                self.subject, self.predicate, self.object
+            )
+        } else {
+            write!(
+                f,
+                "(graph {:?} ((triple {:?} {:?} {:?})))",
+                self.graph_name, self.subject, self.predicate, self.object
+            )
+        }
+    }
 }
 
 impl fmt::Display for GroundQuadPattern {

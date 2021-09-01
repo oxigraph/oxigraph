@@ -16,7 +16,7 @@ use std::str::FromStr;
 /// assert_eq!(update.to_string().trim(), update_str);
 /// # Result::Ok::<_, spargebra::ParseError>(())
 /// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub struct Update {
     /// The update base IRI
     pub base_iri: Option<Iri<String>>,
@@ -28,6 +28,23 @@ impl Update {
     /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query
     pub fn parse(update: &str, base_iri: Option<&str>) -> Result<Self, ParseError> {
         parse_update(update, base_iri)
+    }
+}
+
+impl fmt::Debug for Update {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(base_iri) = &self.base_iri {
+            write!(f, "(base <{}> ", base_iri)?;
+        }
+        write!(f, "(update")?;
+        for op in &self.operations {
+            write!(f, " {:?}", op)?;
+        }
+        write!(f, ")")?;
+        if self.base_iri.is_some() {
+            write!(f, ")")?;
+        }
+        Ok(())
     }
 }
 
@@ -68,7 +85,7 @@ impl<'a> TryFrom<&'a String> for Update {
 }
 
 /// The [graph update operations](https://www.w3.org/TR/sparql11-update/#formalModelGraphUpdate)
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub enum GraphUpdateOperation {
     /// [insert data](https://www.w3.org/TR/sparql11-update/#defn_insertDataOperation)
     InsertData { data: Vec<Quad> },
@@ -93,6 +110,97 @@ pub enum GraphUpdateOperation {
     Create { silent: bool, graph: NamedNode },
     /// [drop](https://www.w3.org/TR/sparql11-update/#defn_dropOperation)
     Drop { silent: bool, graph: GraphTarget },
+}
+
+impl fmt::Debug for GraphUpdateOperation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GraphUpdateOperation::InsertData { data } => {
+                write!(f, "(insertData (")?;
+                for (i, t) in data.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " ")?;
+                    }
+                    write!(f, "{:?}", t)?;
+                }
+                write!(f, "))")
+            }
+            GraphUpdateOperation::DeleteData { data } => {
+                write!(f, "(deleteData (")?;
+                for (i, t) in data.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " ")?;
+                    }
+                    write!(f, "{:?}", t)?;
+                }
+                write!(f, "))")
+            }
+            GraphUpdateOperation::DeleteInsert {
+                delete,
+                insert,
+                using,
+                pattern,
+            } => {
+                write!(f, "(modify")?;
+                if let Some(using) = using {
+                    write!(f, " (using {:?}", using)?;
+                }
+                write!(f, " {:?}", pattern)?;
+                if using.is_some() {
+                    write!(f, ")")?;
+                }
+                if !delete.is_empty() {
+                    write!(f, " (delete (")?;
+                    for (i, t) in delete.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, " ")?;
+                        }
+                        write!(f, "{:?}", t)?;
+                    }
+                    write!(f, "))")?;
+                }
+                if !insert.is_empty() {
+                    write!(f, " (insert (")?;
+                    for (i, t) in insert.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, " ")?;
+                        }
+                        write!(f, "{:?}", t)?;
+                    }
+                    write!(f, "))")?;
+                }
+                write!(f, ")")
+            }
+            GraphUpdateOperation::Load { silent, from, to } => {
+                write!(f, "(load")?;
+                if *silent {
+                    write!(f, " silent")?;
+                }
+                write!(f, " {:?} {:?}", from, to)
+            }
+            GraphUpdateOperation::Clear { silent, graph } => {
+                write!(f, "(clear")?;
+                if *silent {
+                    write!(f, " silent")?;
+                }
+                write!(f, " {:?})", graph)
+            }
+            GraphUpdateOperation::Create { silent, graph } => {
+                write!(f, "(create")?;
+                if *silent {
+                    write!(f, " silent")?;
+                }
+                write!(f, " {:?})", graph)
+            }
+            GraphUpdateOperation::Drop { silent, graph } => {
+                write!(f, "(drop")?;
+                if *silent {
+                    write!(f, " silent")?;
+                }
+                write!(f, " {:?})", graph)
+            }
+        }
+    }
 }
 
 impl fmt::Display for GraphUpdateOperation {

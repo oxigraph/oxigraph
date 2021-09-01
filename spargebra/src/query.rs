@@ -16,7 +16,7 @@ use std::str::FromStr;
 /// assert_eq!(query.to_string(), query_str);
 /// # Result::Ok::<_, spargebra::ParseError>(())
 /// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub enum Query {
     /// [SELECT](https://www.w3.org/TR/sparql11-query/#select)
     Select {
@@ -62,6 +62,107 @@ impl Query {
     /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query
     pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self, ParseError> {
         parse_query(query, base_iri)
+    }
+}
+
+impl fmt::Debug for Query {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Query::Select {
+                dataset,
+                pattern,
+                base_iri,
+            } => {
+                if let Some(base_iri) = base_iri {
+                    write!(f, "(base <{}> ", base_iri)?;
+                }
+                if let Some(dataset) = dataset {
+                    write!(f, "(dataset {:?} ", dataset)?;
+                }
+                write!(f, "{:?}", pattern)?;
+                if dataset.is_some() {
+                    write!(f, ")")?;
+                }
+                if base_iri.is_some() {
+                    write!(f, ")")?;
+                }
+                Ok(())
+            }
+            Query::Construct {
+                template,
+                dataset,
+                pattern,
+                base_iri,
+            } => {
+                if let Some(base_iri) = base_iri {
+                    write!(f, "(base <{}> ", base_iri)?;
+                }
+                write!(f, "(construct (")?;
+                for (i, t) in template.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " ")?;
+                    }
+                    write!(f, "{:?}", t)?;
+                }
+                write!(f, ") ")?;
+                if let Some(dataset) = dataset {
+                    write!(f, "(dataset {:?} ", dataset)?;
+                }
+                write!(f, "{:?}", pattern)?;
+                if dataset.is_some() {
+                    write!(f, ")")?;
+                }
+                write!(f, ")")?;
+                if base_iri.is_some() {
+                    write!(f, ")")?;
+                }
+                Ok(())
+            }
+            Query::Describe {
+                dataset,
+                pattern,
+                base_iri,
+            } => {
+                if let Some(base_iri) = base_iri {
+                    write!(f, "(base <{}> ", base_iri)?;
+                }
+                write!(f, "(describe ")?;
+                if let Some(dataset) = dataset {
+                    write!(f, "(dataset {:?} ", dataset)?;
+                }
+                write!(f, "{:?}", pattern)?;
+                if dataset.is_some() {
+                    write!(f, ")")?;
+                }
+                write!(f, ")")?;
+                if base_iri.is_some() {
+                    write!(f, ")")?;
+                }
+                Ok(())
+            }
+            Query::Ask {
+                dataset,
+                pattern,
+                base_iri,
+            } => {
+                if let Some(base_iri) = base_iri {
+                    write!(f, "(base <{}> ", base_iri)?;
+                }
+                write!(f, "(ask ")?;
+                if let Some(dataset) = dataset {
+                    write!(f, "(dataset {:?} ", dataset)?;
+                }
+                write!(f, "{:?}", pattern)?;
+                if dataset.is_some() {
+                    write!(f, ")")?;
+                }
+                write!(f, ")")?;
+                if base_iri.is_some() {
+                    write!(f, ")")?;
+                }
+                Ok(())
+            }
+        }
     }
 }
 
