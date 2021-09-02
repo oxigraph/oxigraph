@@ -40,7 +40,7 @@ hex = "0.4"
 nom = "7"
 peg = "0.7"
 siphasher = "0.3"
-lasso = {version="0.5", features=["multi-threaded", "inline-more"]}
+lasso = {version="0.6", features=["multi-threaded", "inline-more"]}
 sophia_api = { version = ">=0.6,<0.8", optional = true }
 http = "0.2"
 httparse = { version = "1", optional = true }
