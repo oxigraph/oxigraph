@@ -93,9 +93,9 @@ checksum = "28ae2b3dec75a406790005a200b1bd89785afc02517a00ca99ecfe093ee9e6cf"
 
 [[package]]
 name = "argh"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e7317a549bc17c5278d9e72bb6e62c6aa801ac2567048e39ebc1c194249323e"
+checksum = "f023c76cd7975f9969f8e29f0e461decbdc7f51048ce43427107a3d192f1c9bf"
 dependencies = [
  "argh_derive",
  "argh_shared",
@@ -103,9 +103,9 @@ dependencies = [
 
 [[package]]
 name = "argh_derive"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60949c42375351e9442e354434b0cba2ac402c1237edf673cac3a4bf983b8d3c"
+checksum = "48ad219abc0c06ca788aface2e3a1970587e3413ab70acd20e54b6ec524c1f8f"
 dependencies = [
  "argh_shared",
  "heck",
@@ -116,9 +116,9 @@ dependencies = [
 
 [[package]]
 name = "argh_shared"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a61eb019cb8f415d162cb9f12130ee6bbe9168b7d953c17f4ad049e4051ca00"
+checksum = "38de00daab4eac7d753e97697066238d67ce9d7e2d823ab4f72fe14af29f3f33"
 
 [[package]]
 name = "arrayvec"
