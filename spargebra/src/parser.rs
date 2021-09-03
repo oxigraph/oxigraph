@@ -342,7 +342,7 @@ impl<F, T: From<F>> From<FocusedTriplePattern<F>> for FocusedTripleOrPathPattern
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 enum PartialGraphPattern {
     Optional(GraphPattern, Option<Expression>),
     Minus(GraphPattern),
@@ -2171,10 +2171,10 @@ parser! {
         }
 
         //[146]
-        rule INTEGER() = ['0'..='9']+ {}
+        rule INTEGER() = ['0'..='9']+
 
         //[147]
-        rule DECIMAL() = (['0'..='9']+ "." ['0'..='9']* / ['0'..='9']* "." ['0'..='9']+)
+        rule DECIMAL() = ['0'..='9']+ "." ['0'..='9']* / ['0'..='9']* "." ['0'..='9']+
 
         //[148]
         rule DOUBLE() = (['0'..='9']+ "." ['0'..='9']* / "." ['0'..='9']+ / ['0'..='9']+) EXPONENT()
@@ -2198,7 +2198,7 @@ parser! {
         rule DOUBLE_NEGATIVE() = "-" _ DOUBLE()
 
         //[155]
-        rule EXPONENT() = [eE] ['+' | '-']? ['0'..='9']+
+        rule EXPONENT() = ['e' | 'E'] ['+' | '-']? ['0'..='9']+
 
         //[156]
         rule STRING_LITERAL1() -> String = "'" l:$((STRING_LITERAL1_simple_char() / ECHAR())*) "'" {
