@@ -415,16 +415,22 @@ enum SelectionMember {
     Expression(Expression, Variable),
 }
 
-struct Selection {
-    pub option: SelectionOption,
-    pub variables: Option<Vec<SelectionMember>>,
+enum SelectionVariables {
+    Explicit(Vec<SelectionMember>),
+    Star,
+    Everything,
 }
 
-impl Default for Selection {
-    fn default() -> Self {
+struct Selection {
+    pub option: SelectionOption,
+    pub variables: SelectionVariables,
+}
+
+impl Selection {
+    fn no_op() -> Self {
         Self {
             option: SelectionOption::Default,
-            variables: None,
+            variables: SelectionVariables::Everything,
         }
     }
 }
@@ -490,8 +496,8 @@ fn build_select(
 
     //SELECT
     let mut pv = Vec::new();
-    match select.variables {
-        Some(sel_items) => {
+    let with_project = match select.variables {
+        SelectionVariables::Explicit(sel_items) => {
             let visible: HashSet<_> = p.visible_variables().into_iter().cloned().collect();
             for sel_item in sel_items {
                 let v = match sel_item {
@@ -528,14 +534,17 @@ fn build_select(
                 }
                 pv.push(v)
             }
+            true
         }
-        None => {
+        SelectionVariables::Star => {
             if with_aggregate {
                 return Err("SELECT * is not authorized with GROUP BY");
             }
-            pv.extend(p.visible_variables().into_iter().cloned()) //TODO: is it really useful to do a projection?
+            pv.extend(p.visible_variables().into_iter().cloned()); //TODO: is it really useful to do a projection?
+            true
         }
-    }
+        SelectionVariables::Everything => false,
+    };
 
     let mut m = p;
 
@@ -548,10 +557,12 @@ fn build_select(
     }
 
     //PROJECT
-    m = GraphPattern::Project {
-        inner: Box::new(m),
-        projection: pv,
-    };
+    if with_project {
+        m = GraphPattern::Project {
+            inner: Box::new(m),
+            projection: pv,
+        };
+    }
     match select.option {
         SelectionOption::Distinct => m = GraphPattern::Distinct { inner: Box::new(m) },
         SelectionOption::Reduced => m = GraphPattern::Reduced { inner: Box::new(m) },
@@ -944,9 +955,9 @@ parser! {
             i("DISTINCT") { SelectionOption::Distinct } /
             i("REDUCED") { SelectionOption::Reduced } /
             { SelectionOption::Default }
-        rule SelectClause_variables() -> Option<Vec<SelectionMember>> =
-            "*" { None } /
-            p:SelectClause_member()+ { Some(p) }
+        rule SelectClause_variables() -> SelectionVariables =
+            "*" { SelectionVariables::Star } /
+            p:SelectClause_member()+ { SelectionVariables::Explicit(p) }
         rule SelectClause_member() -> SelectionMember =
             v:Var() _ { SelectionMember::Variable(v) } /
             "(" _ e:Expression() _ i("AS") _ v:Var() _ ")" _ { SelectionMember::Expression(e, v) }
@@ -957,7 +968,7 @@ parser! {
                 Ok(Query::Construct {
                     template: c,
                     dataset: d,
-                    pattern: build_select(Selection::default(), w, g, h, o, l, v, state)?,
+                    pattern: build_select(Selection::no_op(), w, g, h, o, l, v, state)?,
                     base_iri: state.base_iri.clone()
                 })
             } /
@@ -966,7 +977,7 @@ parser! {
                     template: c.clone(),
                     dataset: d,
                     pattern: build_select(
-                        Selection::default(),
+                        Selection::no_op(),
                         GraphPattern::Bgp(c),
                         g, h, o, l, v, state
                     )?,
@@ -981,7 +992,7 @@ parser! {
             i("DESCRIBE") _ "*" _ d:DatasetClauses() w:WhereClause()? _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
                 Ok(Query::Describe {
                     dataset: d,
-                    pattern: build_select(Selection::default(), w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state)?,
+                    pattern: build_select(Selection::no_op(), w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state)?,
                     base_iri: state.base_iri.clone()
                 })
             } /
@@ -990,7 +1001,7 @@ parser! {
                     dataset: d,
                     pattern: build_select(Selection {
                         option: SelectionOption::Default,
-                        variables: Some(p.into_iter().map(|var_or_iri| match var_or_iri {
+                        variables: SelectionVariables::Explicit(p.into_iter().map(|var_or_iri| match var_or_iri {
                             NamedNodePattern::NamedNode(n) => SelectionMember::Expression(n.into(), variable()),
                             NamedNodePattern::Variable(v) => SelectionMember::Variable(v)
                         }).collect())
@@ -1004,7 +1015,7 @@ parser! {
         rule AskQuery() -> Query = i("ASK") _ d:DatasetClauses() w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
             Ok(Query::Ask {
                 dataset: d,
-                pattern: build_select(Selection::default(), w, g, h, o, l, v, state)?,
+                pattern: build_select(Selection::no_op(), w, g, h, o, l, v, state)?,
                 base_iri: state.base_iri.clone()
             })
         }
