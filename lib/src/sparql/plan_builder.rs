@@ -737,9 +737,14 @@ impl<'a> PlanBuilder<'a> {
                 Box::new(self.build_for_expression(b, variables, graph_name)?),
                 Box::new(self.build_for_expression(c, variables, graph_name)?),
             ),
-            Expression::Exists(n) => PlanExpression::Exists(Rc::new(
-                self.build_for_graph_pattern(n, variables, graph_name)?,
-            )),
+            Expression::Exists(n) => {
+                let mut variables = variables.clone(); // Do not expose the exists variables outside
+                PlanExpression::Exists(Rc::new(self.build_for_graph_pattern(
+                    n,
+                    &mut variables,
+                    graph_name,
+                )?))
+            }
             Expression::Coalesce(parameters) => {
                 PlanExpression::Coalesce(self.expression_list(parameters, variables, graph_name)?)
             }
