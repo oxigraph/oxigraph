@@ -451,18 +451,7 @@ fn build_select(
     //GROUP BY
     let aggregates = state.aggregates.pop().unwrap_or_else(Vec::default);
     if group.is_none() && !aggregates.is_empty() {
-        let const_variable = variable();
-        group = Some((
-            vec![const_variable.clone()],
-            vec![(
-                Literal::Typed {
-                    value: "1".into(),
-                    datatype: iri("http://www.w3.org/2001/XMLSchema#integer"),
-                }
-                .into(),
-                const_variable,
-            )],
-        ));
+        group = Some((vec![], vec![]));
     }
 
     if let Some((clauses, binds)) = group {

@@ -729,16 +729,19 @@ impl fmt::Display for GraphPattern {
                 by,
                 aggregates,
             } => {
-                write!(f, "{{ SELECT")?;
+                write!(f, "{{SELECT")?;
                 for (a, v) in aggregates {
                     write!(f, " ({} AS {})", v, a)?;
                 }
                 for b in by {
                     write!(f, " {}", b)?;
                 }
-                write!(f, " WHERE {{ {} }} GROUP BY", inner)?;
-                for v in by {
-                    write!(f, " {}", v)?;
+                write!(f, " WHERE {{ {} }}", inner)?;
+                if !by.is_empty() {
+                    write!(f, " GROUP BY")?;
+                    for v in by {
+                        write!(f, " {}", v)?;
+                    }
                 }
                 write!(f, "}}")
             }
