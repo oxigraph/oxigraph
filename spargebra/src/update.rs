@@ -8,12 +8,16 @@ use std::str::FromStr;
 
 /// A parsed [SPARQL update](https://www.w3.org/TR/sparql11-update/)
 ///
+/// The `Display` trait prints a serialization of the update using SPARQL syntax and
+/// `Debug` prints the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+///
 /// ```
 /// use spargebra::Update;
 ///
 /// let update_str = "CLEAR ALL ;";
 /// let update = Update::parse(update_str, None)?;
 /// assert_eq!(update.to_string().trim(), update_str);
+/// assert_eq!(format!("{:?}", update), "(update (clear all))");
 /// # Result::Ok::<_, spargebra::ParseError>(())
 /// ```
 #[derive(Eq, PartialEq, Clone, Hash)]

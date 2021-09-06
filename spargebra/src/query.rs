@@ -8,12 +8,16 @@ use std::str::FromStr;
 
 /// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/)
 ///
+/// The `Display` trait prints a serialization of the query using SPARQL syntax and
+/// `Debug` prints the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+///
 /// ```
 /// use spargebra::Query;
 ///
 /// let query_str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
 /// let query = Query::parse(query_str, None)?;
 /// assert_eq!(query.to_string(), query_str);
+/// assert_eq!(format!("{:?}", query), "(project (?s ?p ?o) (bgp (triple ?s ?p ?o)))");
 /// # Result::Ok::<_, spargebra::ParseError>(())
 /// ```
 #[derive(Eq, PartialEq, Clone, Hash)]
