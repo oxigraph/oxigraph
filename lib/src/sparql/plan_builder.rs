@@ -43,41 +43,13 @@ impl<'a> PlanBuilder<'a> {
         graph_name: &PatternValue,
     ) -> Result<PlanNode, EvaluationError> {
         Ok(match pattern {
-            GraphPattern::Bgp(p) => self.build_for_bgp(p, variables, graph_name),
-            GraphPattern::Path {
-                subject,
-                path,
-                object,
-            } => PlanNode::PathPatternJoin {
-                child: Rc::new(PlanNode::Init),
-                subject: self.pattern_value_from_term_or_variable(subject, variables),
-                path: Rc::new(self.build_for_path(path)),
-                object: self.pattern_value_from_term_or_variable(object, variables),
-                graph_name: graph_name.clone(),
-            },
-            GraphPattern::Join { left, right } => {
-                //TODO: improve
-                if let GraphPattern::Path {
-                    subject,
-                    path,
-                    object,
-                } = right.as_ref()
-                {
-                    let left = self.build_for_graph_pattern(left, variables, graph_name)?;
-                    PlanNode::PathPatternJoin {
-                        child: Rc::new(left),
-                        subject: self.pattern_value_from_term_or_variable(subject, variables),
-                        path: Rc::new(self.build_for_path(path)),
-                        object: self.pattern_value_from_term_or_variable(object, variables),
-                        graph_name: graph_name.clone(),
-                    }
-                } else {
-                    PlanNode::Join {
-                        left: Rc::new(self.build_for_graph_pattern(left, variables, graph_name)?),
-                        right: Rc::new(self.build_for_graph_pattern(right, variables, graph_name)?),
-                    }
-                }
+            GraphPattern::Bgp(_) | GraphPattern::Path { .. } | GraphPattern::Sequence { .. } => {
+                self.build_sequence(PlanNode::Init, pattern, variables, graph_name)?
             }
+            GraphPattern::Join { left, right } => PlanNode::Join {
+                left: Rc::new(self.build_for_graph_pattern(left, variables, graph_name)?),
+                right: Rc::new(self.build_for_graph_pattern(right, variables, graph_name)?),
+            },
             GraphPattern::LeftJoin { left, right, expr } => {
                 let left = self.build_for_graph_pattern(left, variables, graph_name)?;
                 let right = self.build_for_graph_pattern(right, variables, graph_name)?;
@@ -271,24 +243,53 @@ impl<'a> PlanBuilder<'a> {
         })
     }
 
-    fn build_for_bgp(
+    fn build_sequence(
         &mut self,
-        p: &[TriplePattern],
+        mut plan: PlanNode,
+        pattern: &GraphPattern,
         variables: &mut Vec<Variable>,
         graph_name: &PatternValue,
-    ) -> PlanNode {
-        let mut plan = PlanNode::Init;
-        for pattern in sort_bgp(p) {
-            plan = PlanNode::QuadPatternJoin {
-                child: Rc::new(plan),
-                subject: self.pattern_value_from_term_or_variable(&pattern.subject, variables),
-                predicate: self
-                    .pattern_value_from_named_node_or_variable(&pattern.predicate, variables),
-                object: self.pattern_value_from_term_or_variable(&pattern.object, variables),
-                graph_name: graph_name.clone(),
+    ) -> Result<PlanNode, EvaluationError> {
+        match pattern {
+            GraphPattern::Bgp(p) => {
+                for triple in sort_bgp(p) {
+                    plan = PlanNode::QuadPatternJoin {
+                        child: Rc::new(plan),
+                        subject: self
+                            .pattern_value_from_term_or_variable(&triple.subject, variables),
+                        predicate: self.pattern_value_from_named_node_or_variable(
+                            &triple.predicate,
+                            variables,
+                        ),
+                        object: self.pattern_value_from_term_or_variable(&triple.object, variables),
+                        graph_name: graph_name.clone(),
+                    }
+                }
+                Ok(plan)
             }
+            GraphPattern::Path {
+                subject,
+                path,
+                object,
+            } => Ok(PlanNode::PathPatternJoin {
+                child: Rc::new(plan),
+                subject: self.pattern_value_from_term_or_variable(subject, variables),
+                path: Rc::new(self.build_for_path(path)),
+                object: self.pattern_value_from_term_or_variable(object, variables),
+                graph_name: graph_name.clone(),
+            }),
+            GraphPattern::Graph { inner, graph_name } => {
+                let graph_name =
+                    self.pattern_value_from_named_node_or_variable(graph_name, variables);
+                self.build_sequence(plan, inner, variables, &graph_name)
+            }
+            GraphPattern::Sequence(elements) => elements.iter().fold(Ok(plan), |plan, element| {
+                self.build_sequence(plan?, element, variables, graph_name)
+            }),
+            _ => Err(EvaluationError::msg(
+                "Unexpected element in a sequence: {:?}.",
+            )),
         }
-        plan
     }
 
     fn build_for_path(&mut self, path: &PropertyPathExpression) -> PlanPropertyPath {

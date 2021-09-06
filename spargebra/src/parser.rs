@@ -11,6 +11,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::error::Error;
+use std::mem::take;
 use std::str::Chars;
 use std::str::FromStr;
 use std::{char, fmt};
@@ -250,8 +251,8 @@ fn add_triple_to_triple_or_path_patterns(
 }
 
 fn build_bgp(patterns: Vec<TripleOrPathPattern>) -> GraphPattern {
-    let mut bgp = Vec::with_capacity(patterns.len());
-    let mut paths = Vec::with_capacity(patterns.len());
+    let mut bgp = Vec::new();
+    let mut elements = Vec::with_capacity(patterns.len());
     for pattern in patterns {
         match pattern {
             TripleOrPathPattern::Triple(t) => bgp.push(t),
@@ -259,21 +260,22 @@ fn build_bgp(patterns: Vec<TripleOrPathPattern>) -> GraphPattern {
                 subject,
                 path,
                 object,
-            } => paths.push((subject, path, object)),
+            } => {
+                if !bgp.is_empty() {
+                    elements.push(GraphPattern::Bgp(take(&mut bgp)));
+                }
+                elements.push(GraphPattern::Path {
+                    subject,
+                    path,
+                    object,
+                })
+            }
         }
     }
-    let mut graph_pattern = GraphPattern::Bgp(bgp);
-    for (subject, path, object) in paths {
-        graph_pattern = new_join(
-            graph_pattern,
-            GraphPattern::Path {
-                subject,
-                path,
-                object,
-            },
-        )
+    if !bgp.is_empty() {
+        elements.push(GraphPattern::Bgp(bgp));
     }
-    graph_pattern
+    new_sequence(elements)
 }
 
 enum TripleOrPathPattern {
@@ -364,11 +366,28 @@ fn new_join(l: GraphPattern, r: GraphPattern) -> GraphPattern {
         }
     }
 
-    //Merge BGPs
+    // Some optimizations
+    // TODO: move to a specific optimizer pass
     match (l, r) {
         (GraphPattern::Bgp(mut pl), GraphPattern::Bgp(pr)) => {
             pl.extend(pr);
             GraphPattern::Bgp(pl)
+        }
+        (GraphPattern::Sequence(mut e1), GraphPattern::Sequence(e2)) => {
+            e1.extend_from_slice(&e2);
+            GraphPattern::Sequence(e1)
+        }
+        (GraphPattern::Sequence(mut e), r)
+            if matches!(r, GraphPattern::Bgp(_) | GraphPattern::Path { .. }) =>
+        {
+            e.push(r);
+            GraphPattern::Sequence(e)
+        }
+        (l, GraphPattern::Sequence(mut e))
+            if matches!(l, GraphPattern::Bgp(_) | GraphPattern::Path { .. }) =>
+        {
+            e.insert(0, l);
+            GraphPattern::Sequence(e)
         }
         (
             GraphPattern::Graph {
@@ -390,6 +409,14 @@ fn new_join(l: GraphPattern, r: GraphPattern) -> GraphPattern {
             left: Box::new(l),
             right: Box::new(r),
         },
+    }
+}
+
+fn new_sequence(elements: Vec<GraphPattern>) -> GraphPattern {
+    match elements.len() {
+        0 => GraphPattern::Bgp(vec![]),
+        1 => elements.into_iter().next().unwrap(),
+        _ => GraphPattern::Sequence(elements),
     }
 }
 
@@ -1185,14 +1212,14 @@ parser! {
 
         //[40]
         rule DeleteWhere() -> Vec<GraphUpdateOperation> = i("DELETE") _ i("WHERE") _ d:QuadPattern() {?
-            let pattern = d.iter().map(|q| {
+            let pattern = new_sequence(d.iter().map(|q| {
                 let bgp = GraphPattern::Bgp(vec![TriplePattern::new(q.subject.clone(), q.predicate.clone(), q.object.clone())]);
                 match &q.graph_name {
                     GraphNamePattern::NamedNode(graph_name) => GraphPattern::Graph { graph_name: graph_name.clone().into(), inner: Box::new(bgp) },
                     GraphNamePattern::DefaultGraph => bgp,
                     GraphNamePattern::Variable(graph_name) => GraphPattern::Graph { graph_name: graph_name.clone().into(), inner: Box::new(bgp) },
                 }
-            }).fold(GraphPattern::Bgp(Vec::new()), new_join);
+            }).collect());
             let delete = d.into_iter().map(GroundQuadPattern::try_from).collect::<Result<Vec<_>,_>>().map_err(|_| "Blank nodes are not allowed in DELETE WHERE")?;
             Ok(vec![GraphUpdateOperation::DeleteInsert {
                 delete,
