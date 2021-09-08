@@ -780,95 +780,106 @@ impl Default for GraphPattern {
 }
 
 impl GraphPattern {
-    /// Returns the list of [in-scope variables](https://www.w3.org/TR/sparql11-query/#variableScope)
-    pub fn visible_variables(&self) -> BTreeSet<&Variable> {
-        let mut vars = BTreeSet::default();
-        self.add_visible_variables(&mut vars);
-        vars
+    /// Calls `callback` on each [in-scope variable](https://www.w3.org/TR/sparql11-query/#variableScope) occurrence
+    pub fn on_in_scope_variable<'a>(&'a self, mut callback: impl FnMut(&'a Variable)) {
+        self.lookup_in_scope_variables(&mut callback)
     }
 
-    fn add_visible_variables<'a>(&'a self, vars: &mut BTreeSet<&'a Variable>) {
+    fn lookup_in_scope_variables<'a>(&'a self, callback: &mut impl FnMut(&'a Variable)) {
         match self {
             Self::Bgp(p) => {
                 for pattern in p {
-                    add_triple_pattern_variables(pattern, vars)
+                    lookup_triple_pattern_variables(pattern, callback)
                 }
             }
             Self::Path {
                 subject, object, ..
             } => {
                 if let TermPattern::Variable(s) = subject {
-                    vars.insert(s);
+                    callback(s);
                 }
                 #[cfg(feature = "rdf-star")]
                 if let TermPattern::Triple(s) = subject {
-                    add_triple_pattern_variables(s, vars)
+                    lookup_triple_pattern_variables(s, callback)
                 }
                 if let TermPattern::Variable(o) = object {
-                    vars.insert(o);
+                    callback(o);
                 }
                 #[cfg(feature = "rdf-star")]
                 if let TermPattern::Triple(o) = object {
-                    add_triple_pattern_variables(o, vars)
+                    lookup_triple_pattern_variables(o, callback)
                 }
             }
             Self::Sequence(elements) => {
                 for e in elements {
-                    e.add_visible_variables(vars);
+                    e.lookup_in_scope_variables(callback);
                 }
             }
             Self::Join { left, right }
             | Self::LeftJoin { left, right, .. }
             | Self::Union { left, right } => {
-                left.add_visible_variables(vars);
-                right.add_visible_variables(vars);
+                left.lookup_in_scope_variables(callback);
+                right.lookup_in_scope_variables(callback);
             }
             Self::Graph { graph_name, inner } => {
                 if let NamedNodePattern::Variable(ref g) = graph_name {
-                    vars.insert(g);
+                    callback(g);
                 }
-                inner.add_visible_variables(vars);
+                inner.lookup_in_scope_variables(callback);
             }
             Self::Extend { inner, var, .. } => {
-                vars.insert(var);
-                inner.add_visible_variables(vars);
+                callback(var);
+                inner.lookup_in_scope_variables(callback);
             }
-            Self::Minus { left, .. } => left.add_visible_variables(vars),
-            Self::Service { pattern, .. } => pattern.add_visible_variables(vars),
+            Self::Minus { left, .. } => left.lookup_in_scope_variables(callback),
+            Self::Service { pattern, .. } => pattern.lookup_in_scope_variables(callback),
             Self::Group { by, aggregates, .. } => {
-                vars.extend(by);
+                for v in by {
+                    callback(v);
+                }
                 for (v, _) in aggregates {
-                    vars.insert(v);
+                    callback(v);
                 }
             }
-            Self::Table { variables, .. } => vars.extend(variables),
-            Self::Project { projection, .. } => vars.extend(projection.iter()),
+            Self::Table { variables, .. } => {
+                for v in variables {
+                    callback(v);
+                }
+            }
+            Self::Project { projection, .. } => {
+                for v in projection {
+                    callback(v);
+                }
+            }
             Self::Filter { inner, .. }
             | Self::OrderBy { inner, .. }
             | Self::Distinct { inner }
             | Self::Reduced { inner }
-            | Self::Slice { inner, .. } => inner.add_visible_variables(vars),
+            | Self::Slice { inner, .. } => inner.lookup_in_scope_variables(callback),
         }
     }
 }
 
-fn add_triple_pattern_variables<'a>(pattern: &'a TriplePattern, vars: &mut BTreeSet<&'a Variable>) {
+fn lookup_triple_pattern_variables<'a>(
+    pattern: &'a TriplePattern,
+    callback: &mut impl FnMut(&'a Variable),
+) {
     if let TermPattern::Variable(s) = &pattern.subject {
-        vars.insert(s);
+        callback(s);
     }
     #[cfg(feature = "rdf-star")]
     if let TermPattern::Triple(s) = &pattern.subject {
-        add_triple_pattern_variables(s, vars)
+        lookup_triple_pattern_variables(s, callback)
     }
     if let NamedNodePattern::Variable(p) = &pattern.predicate {
-        vars.insert(p);
+        callback(p);
     }
     if let TermPattern::Variable(o) = &pattern.object {
-        vars.insert(o);
+        callback(o);
     }
     #[cfg(feature = "rdf-star")]
     if let TermPattern::Triple(o) = &pattern.object {
-        add_triple_pattern_variables(o, vars)
+        lookup_triple_pattern_variables(o, callback)
     }
 }
 

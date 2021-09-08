@@ -514,7 +514,10 @@ fn build_select(
     let mut pv = Vec::new();
     let with_project = match select.variables {
         SelectionVariables::Explicit(sel_items) => {
-            let visible: HashSet<_> = p.visible_variables().into_iter().cloned().collect();
+            let mut visible = HashSet::default();
+            p.on_in_scope_variable(|v| {
+                visible.insert(v.clone());
+            });
             for sel_item in sel_items {
                 let v = match sel_item {
                     SelectionMember::Variable(v) => {
@@ -556,7 +559,13 @@ fn build_select(
             if with_aggregate {
                 return Err("SELECT * is not authorized with GROUP BY");
             }
-            pv.extend(p.visible_variables().into_iter().cloned()); //TODO: is it really useful to do a projection?
+            //TODO: is it really useful to do a projection?
+            p.on_in_scope_variable(|v| {
+                if !pv.contains(v) {
+                    pv.push(v.clone());
+                }
+            });
+            pv.sort();
             true
         }
         SelectionVariables::Everything => false,
@@ -1390,7 +1399,13 @@ parser! {
                         g = GraphPattern::Minus { left: Box::new(g), right: Box::new(p) }
                     }
                     PartialGraphPattern::Bind(expr, var) => {
-                        if g.visible_variables().contains(&var) {
+                        let mut contains = false;
+                        g.on_in_scope_variable(|v| {
+                            if *v == var {
+                                contains = true;
+                            }
+                        });
+                        if contains {
                             return Err("BIND is overriding an existing variable")
                         }
                         g = GraphPattern::Extend { inner: Box::new(g), var, expr }
