@@ -2,7 +2,6 @@
 
 use crate::term::print_quoted_str;
 use crate::term::*;
-use std::collections::BTreeSet;
 use std::fmt;
 
 /// A [property path expression](https://www.w3.org/TR/sparql11-query/#defn_PropertyPathExpr)

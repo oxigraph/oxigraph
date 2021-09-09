@@ -60,7 +60,7 @@ impl SimpleEvaluator {
         variables: Rc<Vec<Variable>>,
     ) -> QueryResults {
         let iter = self.eval_plan(plan, EncodedTuple::with_capacity(variables.len()));
-        QueryResults::Solutions(self.decode_bindings(iter, variables))
+        QueryResults::Solutions(decode_bindings(self.dataset.clone(), iter, variables))
     }
 
     pub fn evaluate_ask_plan(&self, plan: &PlanNode) -> Result<QueryResults, EvaluationError> {
@@ -303,13 +303,11 @@ impl SimpleEvaluator {
                 }
             }
             PlanNode::Filter { child, expression } => {
-                let eval = self.clone();
-                let expression = expression.clone();
+                let expression = self.expression_evaluator(expression);
                 Box::new(self.eval_plan(child, from).filter(move |tuple| {
                     match tuple {
-                        Ok(tuple) => eval
-                            .eval_expression(&expression, tuple)
-                            .and_then(|term| eval.to_bool(&term))
+                        Ok(tuple) => expression(tuple)
+                            .and_then(|term| to_bool(&term))
                             .unwrap_or(false),
                         Err(_) => true,
                     }
@@ -327,12 +325,11 @@ impl SimpleEvaluator {
                 position,
                 expression,
             } => {
-                let eval = self.clone();
                 let position = *position;
-                let expression = expression.clone();
+                let expression = self.expression_evaluator(expression);
                 Box::new(self.eval_plan(child, from).map(move |tuple| {
                     let mut tuple = tuple?;
-                    if let Some(value) = eval.eval_expression(&expression, &tuple) {
+                    if let Some(value) = expression(&tuple) {
                         tuple.set(position, value);
                     }
                     Ok(tuple)
@@ -350,18 +347,37 @@ impl SimpleEvaluator {
                         }
                     })
                     .collect::<Vec<_>>();
+                let by: Vec<_> = by
+                    .iter()
+                    .map(|comp| match comp {
+                        Comparator::Asc(expression) => {
+                            ComparatorFunction::Asc(self.expression_evaluator(expression))
+                        }
+                        Comparator::Desc(expression) => {
+                            ComparatorFunction::Desc(self.expression_evaluator(expression))
+                        }
+                    })
+                    .collect();
                 values.sort_unstable_by(|a, b| {
-                    for comp in by {
+                    for comp in &by {
                         match comp {
-                            Comparator::Asc(expression) => {
-                                match self.cmp_according_to_expression(a, b, expression) {
+                            ComparatorFunction::Asc(expression) => {
+                                match cmp_terms(
+                                    &self.dataset,
+                                    expression(a).as_ref(),
+                                    expression(b).as_ref(),
+                                ) {
                                     Ordering::Greater => return Ordering::Greater,
                                     Ordering::Less => return Ordering::Less,
                                     Ordering::Equal => (),
                                 }
                             }
-                            Comparator::Desc(expression) => {
-                                match self.cmp_according_to_expression(a, b, expression) {
+                            ComparatorFunction::Desc(expression) => {
+                                match cmp_terms(
+                                    &self.dataset,
+                                    expression(a).as_ref(),
+                                    expression(b).as_ref(),
+                                ) {
                                     Ordering::Greater => return Ordering::Less,
                                     Ordering::Less => return Ordering::Greater,
                                     Ordering::Equal => (),
@@ -402,6 +418,15 @@ impl SimpleEvaluator {
             } => {
                 let tuple_size = from.capacity(); //TODO: not nice
                 let key_mapping = key_mapping.clone();
+                let aggregate_input_expressions: Vec<_> = aggregates
+                    .iter()
+                    .map(|(aggregate, _)| {
+                        aggregate
+                            .parameter
+                            .as_ref()
+                            .map(|p| self.expression_evaluator(p))
+                    })
+                    .collect();
                 let aggregates = aggregates.clone();
                 let mut errors = Vec::default();
                 let mut accumulators_for_group =
@@ -433,13 +458,14 @@ impl SimpleEvaluator {
                                     })
                                     .collect::<Vec<_>>()
                             });
-                        for (i, accumulator) in key_accumulators.iter_mut().enumerate() {
-                            let (aggregate, _) = &aggregates[i];
+                        for (accumulator, input_expression) in key_accumulators
+                            .iter_mut()
+                            .zip(&aggregate_input_expressions)
+                        {
                             accumulator.add(
-                                aggregate
-                                    .parameter
+                                input_expression
                                     .as_ref()
-                                    .and_then(|parameter| self.eval_expression(parameter, &tuple)),
+                                    .and_then(|parameter| parameter(&tuple)),
                             );
                         }
                     });
@@ -492,7 +518,7 @@ impl SimpleEvaluator {
                 dataset: QueryDataset::new(),
             },
         )? {
-            Ok(self.encode_bindings(variables, iter))
+            Ok(encode_bindings(self.dataset.clone(), variables, iter))
         } else {
             Err(EvaluationError::msg(
                 "The service call has not returned a set of solutions",
@@ -520,8 +546,8 @@ impl SimpleEvaluator {
                     Box::new(SumAccumulator::default())
                 }
             }
-            PlanAggregationFunction::Min => Box::new(MinAccumulator::new(self.clone())), // DISTINCT does not make sense with min
-            PlanAggregationFunction::Max => Box::new(MaxAccumulator::new(self.clone())), // DISTINCT does not make sense with max
+            PlanAggregationFunction::Min => Box::new(MinAccumulator::new(self.dataset.clone())), // DISTINCT does not make sense with min
+            PlanAggregationFunction::Max => Box::new(MaxAccumulator::new(self.dataset.clone())), // DISTINCT does not make sense with max
             PlanAggregationFunction::Avg => {
                 if distinct {
                     Box::new(DistinctAccumulator::new(AvgAccumulator::default()))
@@ -533,11 +559,14 @@ impl SimpleEvaluator {
             PlanAggregationFunction::GroupConcat { separator } => {
                 if distinct {
                     Box::new(DistinctAccumulator::new(GroupConcatAccumulator::new(
-                        self.clone(),
+                        self.dataset.clone(),
                         separator.clone(),
                     )))
                 } else {
-                    Box::new(GroupConcatAccumulator::new(self.clone(), separator.clone()))
+                    Box::new(GroupConcatAccumulator::new(
+                        self.dataset.clone(),
+                        separator.clone(),
+                    ))
                 }
             }
         }
@@ -765,1517 +794,1797 @@ impl SimpleEvaluator {
     }
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
-    fn eval_expression(
+    fn expression_evaluator(
         &self,
         expression: &PlanExpression,
-        tuple: &EncodedTuple,
-    ) -> Option<EncodedTerm> {
+    ) -> Box<dyn Fn(&EncodedTuple) -> Option<EncodedTerm>> {
         match expression {
-            PlanExpression::Constant(t) => Some(t.clone()),
-            PlanExpression::Variable(v) => tuple.get(*v).cloned(),
-            PlanExpression::Exists(node) => {
-                Some(self.eval_plan(node, tuple.clone()).next().is_some().into())
+            PlanExpression::Constant(t) => {
+                let t = t.clone();
+                Box::new(move |_| Some(t.clone()))
+            }
+            PlanExpression::Variable(v) => {
+                let v = *v;
+                Box::new(move |tuple| tuple.get(v).cloned())
+            }
+            PlanExpression::Exists(plan) => {
+                let plan = plan.clone();
+                let eval = self.clone();
+                Box::new(move |tuple| {
+                    Some(eval.eval_plan(&plan, tuple.clone()).next().is_some().into())
+                })
             }
             PlanExpression::Or(a, b) => {
-                match self
-                    .eval_expression(a, tuple)
-                    .and_then(|v| self.to_bool(&v))
-                {
+                let a = self.expression_evaluator(a);
+                let b = self.expression_evaluator(b);
+                Box::new(move |tuple| match a(tuple).and_then(|v| to_bool(&v)) {
                     Some(true) => Some(true.into()),
-                    Some(false) => self.eval_expression(b, tuple),
+                    Some(false) => b(tuple),
                     None => {
-                        if Some(true)
-                            == self
-                                .eval_expression(b, tuple)
-                                .and_then(|v| self.to_bool(&v))
-                        {
+                        if Some(true) == a(tuple).and_then(|v| to_bool(&v)) {
                             Some(true.into())
                         } else {
                             None
                         }
                     }
-                }
+                })
             }
-            PlanExpression::And(a, b) => match self
-                .eval_expression(a, tuple)
-                .and_then(|v| self.to_bool(&v))
-            {
-                Some(true) => self.eval_expression(b, tuple),
-                Some(false) => Some(false.into()),
-                None => {
-                    if Some(false)
-                        == self
-                            .eval_expression(b, tuple)
-                            .and_then(|v| self.to_bool(&v))
-                    {
-                        Some(false.into())
-                    } else {
-                        None
-                    }
-                }
-            },
-            PlanExpression::Equal(a, b) => {
-                let a = self.eval_expression(a, tuple)?;
-                let b = self.eval_expression(b, tuple)?;
-                self.equals(&a, &b).map(|v| v.into())
-            }
-            PlanExpression::Greater(a, b) => Some(
-                (self.partial_cmp(
-                    &self.eval_expression(a, tuple)?,
-                    &self.eval_expression(b, tuple)?,
-                )? == Ordering::Greater)
-                    .into(),
-            ),
-            PlanExpression::GreaterOrEqual(a, b) => Some(
-                match self.partial_cmp(
-                    &self.eval_expression(a, tuple)?,
-                    &self.eval_expression(b, tuple)?,
-                )? {
-                    Ordering::Greater | Ordering::Equal => true,
-                    Ordering::Less => false,
-                }
-                .into(),
-            ),
-            PlanExpression::Less(a, b) => Some(
-                (self.partial_cmp(
-                    &self.eval_expression(a, tuple)?,
-                    &self.eval_expression(b, tuple)?,
-                )? == Ordering::Less)
-                    .into(),
-            ),
-            PlanExpression::LessOrEqual(a, b) => Some(
-                match self.partial_cmp(
-                    &self.eval_expression(a, tuple)?,
-                    &self.eval_expression(b, tuple)?,
-                )? {
-                    Ordering::Less | Ordering::Equal => true,
-                    Ordering::Greater => false,
-                }
-                .into(),
-            ),
-            PlanExpression::In(e, l) => {
-                let needed = self.eval_expression(e, tuple)?;
-                let mut error = false;
-                for possible in l {
-                    if let Some(possible) = self.eval_expression(possible, tuple) {
-                        if Some(true) == self.equals(&needed, &possible) {
-                            return Some(true.into());
+            PlanExpression::And(a, b) => {
+                let a = self.expression_evaluator(a);
+                let b = self.expression_evaluator(b);
+                Box::new(move |tuple| match a(tuple).and_then(|v| to_bool(&v)) {
+                    Some(true) => b(tuple),
+                    Some(false) => Some(false.into()),
+                    None => {
+                        if Some(false) == b(tuple).and_then(|v| to_bool(&v)) {
+                            Some(false.into())
+                        } else {
+                            None
                         }
-                    } else {
-                        error = true;
-                    }
-                }
-                if error {
-                    None
-                } else {
-                    Some(false.into())
-                }
-            }
-            PlanExpression::Add(a, b) => match self.parse_numeric_operands(a, b, tuple)? {
-                NumericBinaryOperands::Float(v1, v2) => Some((v1 + v2).into()),
-                NumericBinaryOperands::Double(v1, v2) => Some((v1 + v2).into()),
-                NumericBinaryOperands::Integer(v1, v2) => Some(v1.checked_add(v2)?.into()),
-                NumericBinaryOperands::Decimal(v1, v2) => Some(v1.checked_add(v2)?.into()),
-                NumericBinaryOperands::Duration(v1, v2) => Some(v1.checked_add(v2)?.into()),
-                NumericBinaryOperands::YearMonthDuration(v1, v2) => {
-                    Some(v1.checked_add(v2)?.into())
-                }
-                NumericBinaryOperands::DayTimeDuration(v1, v2) => Some(v1.checked_add(v2)?.into()),
-                NumericBinaryOperands::DateTimeDuration(v1, v2) => {
-                    Some(v1.checked_add_duration(v2)?.into())
-                }
-                NumericBinaryOperands::DateTimeYearMonthDuration(v1, v2) => {
-                    Some(v1.checked_add_year_month_duration(v2)?.into())
-                }
-                NumericBinaryOperands::DateTimeDayTimeDuration(v1, v2) => {
-                    Some(v1.checked_add_day_time_duration(v2)?.into())
-                }
-                NumericBinaryOperands::DateDuration(v1, v2) => {
-                    Some(v1.checked_add_duration(v2)?.into())
-                }
-                NumericBinaryOperands::DateYearMonthDuration(v1, v2) => {
-                    Some(v1.checked_add_year_month_duration(v2)?.into())
-                }
-                NumericBinaryOperands::DateDayTimeDuration(v1, v2) => {
-                    Some(v1.checked_add_day_time_duration(v2)?.into())
-                }
-                NumericBinaryOperands::TimeDuration(v1, v2) => {
-                    Some(v1.checked_add_duration(v2)?.into())
-                }
-                NumericBinaryOperands::TimeDayTimeDuration(v1, v2) => {
-                    Some(v1.checked_add_day_time_duration(v2)?.into())
-                }
-                _ => None,
-            },
-            PlanExpression::Subtract(a, b) => {
-                Some(match self.parse_numeric_operands(a, b, tuple)? {
-                    NumericBinaryOperands::Float(v1, v2) => (v1 - v2).into(),
-                    NumericBinaryOperands::Double(v1, v2) => (v1 - v2).into(),
-                    NumericBinaryOperands::Integer(v1, v2) => v1.checked_sub(v2)?.into(),
-                    NumericBinaryOperands::Decimal(v1, v2) => v1.checked_sub(v2)?.into(),
-                    NumericBinaryOperands::DateTime(v1, v2) => v1.checked_sub(v2)?.into(),
-                    NumericBinaryOperands::Date(v1, v2) => v1.checked_sub(v2)?.into(),
-                    NumericBinaryOperands::Time(v1, v2) => v1.checked_sub(v2)?.into(),
-                    NumericBinaryOperands::Duration(v1, v2) => v1.checked_sub(v2)?.into(),
-                    NumericBinaryOperands::YearMonthDuration(v1, v2) => v1.checked_sub(v2)?.into(),
-                    NumericBinaryOperands::DayTimeDuration(v1, v2) => v1.checked_sub(v2)?.into(),
-                    NumericBinaryOperands::DateTimeDuration(v1, v2) => {
-                        v1.checked_sub_duration(v2)?.into()
-                    }
-                    NumericBinaryOperands::DateTimeYearMonthDuration(v1, v2) => {
-                        v1.checked_sub_year_month_duration(v2)?.into()
-                    }
-                    NumericBinaryOperands::DateTimeDayTimeDuration(v1, v2) => {
-                        v1.checked_sub_day_time_duration(v2)?.into()
-                    }
-                    NumericBinaryOperands::DateDuration(v1, v2) => {
-                        v1.checked_sub_duration(v2)?.into()
-                    }
-                    NumericBinaryOperands::DateYearMonthDuration(v1, v2) => {
-                        v1.checked_sub_year_month_duration(v2)?.into()
-                    }
-                    NumericBinaryOperands::DateDayTimeDuration(v1, v2) => {
-                        v1.checked_sub_day_time_duration(v2)?.into()
-                    }
-                    NumericBinaryOperands::TimeDuration(v1, v2) => {
-                        v1.checked_sub_duration(v2)?.into()
-                    }
-                    NumericBinaryOperands::TimeDayTimeDuration(v1, v2) => {
-                        v1.checked_sub_day_time_duration(v2)?.into()
                     }
                 })
             }
-            PlanExpression::Multiply(a, b) => match self.parse_numeric_operands(a, b, tuple)? {
-                NumericBinaryOperands::Float(v1, v2) => Some((v1 * v2).into()),
-                NumericBinaryOperands::Double(v1, v2) => Some((v1 * v2).into()),
-                NumericBinaryOperands::Integer(v1, v2) => Some(v1.checked_mul(v2)?.into()),
-                NumericBinaryOperands::Decimal(v1, v2) => Some(v1.checked_mul(v2)?.into()),
-                _ => None,
-            },
-            PlanExpression::Divide(a, b) => match self.parse_numeric_operands(a, b, tuple)? {
-                NumericBinaryOperands::Float(v1, v2) => Some((v1 / v2).into()),
-                NumericBinaryOperands::Double(v1, v2) => Some((v1 / v2).into()),
-                NumericBinaryOperands::Integer(v1, v2) => {
-                    Some(Decimal::from(v1).checked_div(v2)?.into())
-                }
-                NumericBinaryOperands::Decimal(v1, v2) => Some(v1.checked_div(v2)?.into()),
-                _ => None,
-            },
-            PlanExpression::UnaryPlus(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::FloatLiteral(value) => Some(value.into()),
-                EncodedTerm::DoubleLiteral(value) => Some(value.into()),
-                EncodedTerm::IntegerLiteral(value) => Some(value.into()),
-                EncodedTerm::DecimalLiteral(value) => Some(value.into()),
-                EncodedTerm::DurationLiteral(value) => Some(value.into()),
-                EncodedTerm::YearMonthDurationLiteral(value) => Some(value.into()),
-                EncodedTerm::DayTimeDurationLiteral(value) => Some(value.into()),
-                _ => None,
-            },
-            PlanExpression::UnaryMinus(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::FloatLiteral(value) => Some((-value).into()),
-                EncodedTerm::DoubleLiteral(value) => Some((-value).into()),
-                EncodedTerm::IntegerLiteral(value) => Some((-value).into()),
-                EncodedTerm::DecimalLiteral(value) => Some((-value).into()),
-                EncodedTerm::DurationLiteral(value) => Some((-value).into()),
-                EncodedTerm::YearMonthDurationLiteral(value) => Some((-value).into()),
-                EncodedTerm::DayTimeDurationLiteral(value) => Some((-value).into()),
-                _ => None,
-            },
-            PlanExpression::Not(e) => self
-                .to_bool(&self.eval_expression(e, tuple)?)
-                .map(|v| (!v).into()),
-            PlanExpression::Str(e) | PlanExpression::StringCast(e) => {
-                Some(Self::build_string_literal_from_id(
-                    self.to_string_id(&self.eval_expression(e, tuple)?)?,
-                ))
+            PlanExpression::Equal(a, b) => {
+                let a = self.expression_evaluator(a);
+                let b = self.expression_evaluator(b);
+                Box::new(move |tuple| equals(&a(tuple)?, &b(tuple)?).map(|v| v.into()))
             }
-            PlanExpression::Lang(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::SmallSmallLangStringLiteral { language, .. }
-                | EncodedTerm::BigSmallLangStringLiteral { language, .. } => {
-                    Some(Self::build_string_literal_from_id(language.into()))
-                }
-                EncodedTerm::SmallBigLangStringLiteral { language_id, .. }
-                | EncodedTerm::BigBigLangStringLiteral { language_id, .. } => {
-                    Some(Self::build_string_literal_from_id(language_id.into()))
-                }
-                e if e.is_literal() => Some(self.build_string_literal("")),
-                _ => None,
-            },
-            PlanExpression::LangMatches(language_tag, language_range) => {
-                let mut language_tag =
-                    self.to_simple_string(&self.eval_expression(language_tag, tuple)?)?;
-                language_tag.make_ascii_lowercase();
-                let mut language_range =
-                    self.to_simple_string(&self.eval_expression(language_range, tuple)?)?;
-                language_range.make_ascii_lowercase();
-                Some(
-                    if &*language_range == "*" {
-                        !language_tag.is_empty()
-                    } else {
-                        !ZipLongest::new(language_range.split('-'), language_tag.split('-')).any(
-                            |parts| match parts {
-                                (Some(range_subtag), Some(language_subtag)) => {
-                                    range_subtag != language_subtag
-                                }
-                                (Some(_), None) => true,
-                                (None, _) => false,
-                            },
-                        )
+            PlanExpression::Greater(a, b) => {
+                let a = self.expression_evaluator(a);
+                let b = self.expression_evaluator(b);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    Some(
+                        (partial_cmp(&dataset, &a(tuple)?, &b(tuple)?)? == Ordering::Greater)
+                            .into(),
+                    )
+                })
+            }
+            PlanExpression::GreaterOrEqual(a, b) => {
+                let a = self.expression_evaluator(a);
+                let b = self.expression_evaluator(b);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    Some(
+                        match partial_cmp(&dataset, &a(tuple)?, &b(tuple)?)? {
+                            Ordering::Greater | Ordering::Equal => true,
+                            Ordering::Less => false,
+                        }
+                        .into(),
+                    )
+                })
+            }
+            PlanExpression::Less(a, b) => {
+                let a = self.expression_evaluator(a);
+                let b = self.expression_evaluator(b);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    Some((partial_cmp(&dataset, &a(tuple)?, &b(tuple)?)? == Ordering::Less).into())
+                })
+            }
+            PlanExpression::LessOrEqual(a, b) => {
+                let a = self.expression_evaluator(a);
+                let b = self.expression_evaluator(b);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    Some(
+                        match partial_cmp(&dataset, &a(tuple)?, &b(tuple)?)? {
+                            Ordering::Less | Ordering::Equal => true,
+                            Ordering::Greater => false,
+                        }
+                        .into(),
+                    )
+                })
+            }
+            PlanExpression::In(e, l) => {
+                let e = self.expression_evaluator(e);
+                let l: Vec<_> = l
+                    .iter()
+                    .map(|possible| self.expression_evaluator(possible))
+                    .collect();
+                Box::new(move |tuple| {
+                    let needed = e(tuple)?;
+                    let mut error = false;
+                    for possible in &l {
+                        if let Some(possible) = possible(tuple) {
+                            if Some(true) == equals(&needed, &possible) {
+                                return Some(true.into());
+                            }
+                        } else {
+                            error = true;
+                        }
                     }
-                    .into(),
+                    if error {
+                        None
+                    } else {
+                        Some(false.into())
+                    }
+                })
+            }
+            PlanExpression::Add(a, b) => {
+                let a = self.expression_evaluator(a);
+                let b = self.expression_evaluator(b);
+                Box::new(
+                    move |tuple| match NumericBinaryOperands::new(a(tuple)?, b(tuple)?)? {
+                        NumericBinaryOperands::Float(v1, v2) => Some((v1 + v2).into()),
+                        NumericBinaryOperands::Double(v1, v2) => Some((v1 + v2).into()),
+                        NumericBinaryOperands::Integer(v1, v2) => Some(v1.checked_add(v2)?.into()),
+                        NumericBinaryOperands::Decimal(v1, v2) => Some(v1.checked_add(v2)?.into()),
+                        NumericBinaryOperands::Duration(v1, v2) => Some(v1.checked_add(v2)?.into()),
+                        NumericBinaryOperands::YearMonthDuration(v1, v2) => {
+                            Some(v1.checked_add(v2)?.into())
+                        }
+                        NumericBinaryOperands::DayTimeDuration(v1, v2) => {
+                            Some(v1.checked_add(v2)?.into())
+                        }
+                        NumericBinaryOperands::DateTimeDuration(v1, v2) => {
+                            Some(v1.checked_add_duration(v2)?.into())
+                        }
+                        NumericBinaryOperands::DateTimeYearMonthDuration(v1, v2) => {
+                            Some(v1.checked_add_year_month_duration(v2)?.into())
+                        }
+                        NumericBinaryOperands::DateTimeDayTimeDuration(v1, v2) => {
+                            Some(v1.checked_add_day_time_duration(v2)?.into())
+                        }
+                        NumericBinaryOperands::DateDuration(v1, v2) => {
+                            Some(v1.checked_add_duration(v2)?.into())
+                        }
+                        NumericBinaryOperands::DateYearMonthDuration(v1, v2) => {
+                            Some(v1.checked_add_year_month_duration(v2)?.into())
+                        }
+                        NumericBinaryOperands::DateDayTimeDuration(v1, v2) => {
+                            Some(v1.checked_add_day_time_duration(v2)?.into())
+                        }
+                        NumericBinaryOperands::TimeDuration(v1, v2) => {
+                            Some(v1.checked_add_duration(v2)?.into())
+                        }
+                        NumericBinaryOperands::TimeDayTimeDuration(v1, v2) => {
+                            Some(v1.checked_add_day_time_duration(v2)?.into())
+                        }
+                        _ => None,
+                    },
                 )
             }
-            PlanExpression::Datatype(e) => self.datatype(&self.eval_expression(e, tuple)?),
-            PlanExpression::Bound(v) => Some(tuple.contains(*v).into()),
-            PlanExpression::Iri(e) => {
-                let e = self.eval_expression(e, tuple)?;
-                if e.is_named_node() {
-                    Some(e)
-                } else {
-                    let iri = self.to_simple_string(&e)?;
+            PlanExpression::Subtract(a, b) => {
+                let a = self.expression_evaluator(a);
+                let b = self.expression_evaluator(b);
+                Box::new(move |tuple| {
+                    Some(match NumericBinaryOperands::new(a(tuple)?, b(tuple)?)? {
+                        NumericBinaryOperands::Float(v1, v2) => (v1 - v2).into(),
+                        NumericBinaryOperands::Double(v1, v2) => (v1 - v2).into(),
+                        NumericBinaryOperands::Integer(v1, v2) => v1.checked_sub(v2)?.into(),
+                        NumericBinaryOperands::Decimal(v1, v2) => v1.checked_sub(v2)?.into(),
+                        NumericBinaryOperands::DateTime(v1, v2) => v1.checked_sub(v2)?.into(),
+                        NumericBinaryOperands::Date(v1, v2) => v1.checked_sub(v2)?.into(),
+                        NumericBinaryOperands::Time(v1, v2) => v1.checked_sub(v2)?.into(),
+                        NumericBinaryOperands::Duration(v1, v2) => v1.checked_sub(v2)?.into(),
+                        NumericBinaryOperands::YearMonthDuration(v1, v2) => {
+                            v1.checked_sub(v2)?.into()
+                        }
+                        NumericBinaryOperands::DayTimeDuration(v1, v2) => {
+                            v1.checked_sub(v2)?.into()
+                        }
+                        NumericBinaryOperands::DateTimeDuration(v1, v2) => {
+                            v1.checked_sub_duration(v2)?.into()
+                        }
+                        NumericBinaryOperands::DateTimeYearMonthDuration(v1, v2) => {
+                            v1.checked_sub_year_month_duration(v2)?.into()
+                        }
+                        NumericBinaryOperands::DateTimeDayTimeDuration(v1, v2) => {
+                            v1.checked_sub_day_time_duration(v2)?.into()
+                        }
+                        NumericBinaryOperands::DateDuration(v1, v2) => {
+                            v1.checked_sub_duration(v2)?.into()
+                        }
+                        NumericBinaryOperands::DateYearMonthDuration(v1, v2) => {
+                            v1.checked_sub_year_month_duration(v2)?.into()
+                        }
+                        NumericBinaryOperands::DateDayTimeDuration(v1, v2) => {
+                            v1.checked_sub_day_time_duration(v2)?.into()
+                        }
+                        NumericBinaryOperands::TimeDuration(v1, v2) => {
+                            v1.checked_sub_duration(v2)?.into()
+                        }
+                        NumericBinaryOperands::TimeDayTimeDuration(v1, v2) => {
+                            v1.checked_sub_day_time_duration(v2)?.into()
+                        }
+                    })
+                })
+            }
+            PlanExpression::Multiply(a, b) => {
+                let a = self.expression_evaluator(a);
+                let b = self.expression_evaluator(b);
+                Box::new(
+                    move |tuple| match NumericBinaryOperands::new(a(tuple)?, b(tuple)?)? {
+                        NumericBinaryOperands::Float(v1, v2) => Some((v1 * v2).into()),
+                        NumericBinaryOperands::Double(v1, v2) => Some((v1 * v2).into()),
+                        NumericBinaryOperands::Integer(v1, v2) => Some(v1.checked_mul(v2)?.into()),
+                        NumericBinaryOperands::Decimal(v1, v2) => Some(v1.checked_mul(v2)?.into()),
+                        _ => None,
+                    },
+                )
+            }
+            PlanExpression::Divide(a, b) => {
+                let a = self.expression_evaluator(a);
+                let b = self.expression_evaluator(b);
+                Box::new(
+                    move |tuple| match NumericBinaryOperands::new(a(tuple)?, b(tuple)?)? {
+                        NumericBinaryOperands::Float(v1, v2) => Some((v1 / v2).into()),
+                        NumericBinaryOperands::Double(v1, v2) => Some((v1 / v2).into()),
+                        NumericBinaryOperands::Integer(v1, v2) => {
+                            Some(Decimal::from(v1).checked_div(v2)?.into())
+                        }
+                        NumericBinaryOperands::Decimal(v1, v2) => Some(v1.checked_div(v2)?.into()),
+                        _ => None,
+                    },
+                )
+            }
+            PlanExpression::UnaryPlus(e) => {
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::FloatLiteral(value) => Some(value.into()),
+                    EncodedTerm::DoubleLiteral(value) => Some(value.into()),
+                    EncodedTerm::IntegerLiteral(value) => Some(value.into()),
+                    EncodedTerm::DecimalLiteral(value) => Some(value.into()),
+                    EncodedTerm::DurationLiteral(value) => Some(value.into()),
+                    EncodedTerm::YearMonthDurationLiteral(value) => Some(value.into()),
+                    EncodedTerm::DayTimeDurationLiteral(value) => Some(value.into()),
+                    _ => None,
+                })
+            }
+            PlanExpression::UnaryMinus(e) => {
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::FloatLiteral(value) => Some((-value).into()),
+                    EncodedTerm::DoubleLiteral(value) => Some((-value).into()),
+                    EncodedTerm::IntegerLiteral(value) => Some((-value).into()),
+                    EncodedTerm::DecimalLiteral(value) => Some((-value).into()),
+                    EncodedTerm::DurationLiteral(value) => Some((-value).into()),
+                    EncodedTerm::YearMonthDurationLiteral(value) => Some((-value).into()),
+                    EncodedTerm::DayTimeDurationLiteral(value) => Some((-value).into()),
+                    _ => None,
+                })
+            }
+            PlanExpression::Not(e) => {
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| to_bool(&e(tuple)?).map(|v| (!v).into()))
+            }
+            PlanExpression::Str(e) | PlanExpression::StringCast(e) => {
+                let e = self.expression_evaluator(e);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    Some(build_string_literal_from_id(to_string_id(
+                        &dataset,
+                        &e(tuple)?,
+                    )?))
+                })
+            }
+            PlanExpression::Lang(e) => {
+                let e = self.expression_evaluator(e);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::SmallSmallLangStringLiteral { language, .. }
+                    | EncodedTerm::BigSmallLangStringLiteral { language, .. } => {
+                        Some(build_string_literal_from_id(language.into()))
+                    }
+                    EncodedTerm::SmallBigLangStringLiteral { language_id, .. }
+                    | EncodedTerm::BigBigLangStringLiteral { language_id, .. } => {
+                        Some(build_string_literal_from_id(language_id.into()))
+                    }
+                    e if e.is_literal() => Some(build_string_literal(&dataset, "")),
+                    _ => None,
+                })
+            }
+            PlanExpression::LangMatches(language_tag, language_range) => {
+                let language_tag = self.expression_evaluator(language_tag);
+                let language_range = self.expression_evaluator(language_range);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    let mut language_tag = to_simple_string(&dataset, &language_tag(tuple)?)?;
+                    language_tag.make_ascii_lowercase();
+                    let mut language_range = to_simple_string(&dataset, &language_range(tuple)?)?;
+                    language_range.make_ascii_lowercase();
                     Some(
-                        self.build_named_node(
-                            &if let Some(base_iri) = &self.base_iri {
+                        if &*language_range == "*" {
+                            !language_tag.is_empty()
+                        } else {
+                            !ZipLongest::new(language_range.split('-'), language_tag.split('-'))
+                                .any(|parts| match parts {
+                                    (Some(range_subtag), Some(language_subtag)) => {
+                                        range_subtag != language_subtag
+                                    }
+                                    (Some(_), None) => true,
+                                    (None, _) => false,
+                                })
+                        }
+                        .into(),
+                    )
+                })
+            }
+            PlanExpression::Datatype(e) => {
+                let e = self.expression_evaluator(e);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| datatype(&dataset, &e(tuple)?))
+            }
+            PlanExpression::Bound(v) => {
+                let v = *v;
+                Box::new(move |tuple| Some(tuple.contains(v).into()))
+            }
+            PlanExpression::Iri(e) => {
+                let e = self.expression_evaluator(e);
+                let dataset = self.dataset.clone();
+                let base_iri = self.base_iri.clone();
+                Box::new(move |tuple| {
+                    let e = e(tuple)?;
+                    if e.is_named_node() {
+                        Some(e)
+                    } else {
+                        let iri = to_simple_string(&dataset, &e)?;
+                        Some(build_named_node(
+                            &dataset,
+                            &if let Some(base_iri) = &base_iri {
                                 base_iri.resolve(&iri)
                             } else {
                                 Iri::parse(iri)
                             }
                             .ok()?
                             .into_inner(),
-                        ),
-                    )
-                }
+                        ))
+                    }
+                })
             }
             PlanExpression::BNode(id) => match id {
                 Some(id) => {
-                    let bnode =
-                        BlankNode::new(self.to_simple_string(&self.eval_expression(id, tuple)?)?)
-                            .ok()?;
-                    Some(self.dataset.encode_term(bnode.as_ref()))
+                    let id = self.expression_evaluator(id);
+                    let dataset = self.dataset.clone();
+                    Box::new(move |tuple| {
+                        Some(
+                            dataset.encode_term(
+                                BlankNode::new(to_simple_string(&dataset, &id(tuple)?)?)
+                                    .ok()?
+                                    .as_ref(),
+                            ),
+                        )
+                    })
                 }
-                None => Some(EncodedTerm::NumericalBlankNode {
-                    id: random::<u128>(),
+                None => Box::new(|_| {
+                    Some(EncodedTerm::NumericalBlankNode {
+                        id: random::<u128>(),
+                    })
                 }),
             },
-            PlanExpression::Rand => Some(random::<f64>().into()),
-            PlanExpression::Abs(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::IntegerLiteral(value) => Some(value.checked_abs()?.into()),
-                EncodedTerm::DecimalLiteral(value) => Some(value.abs().into()),
-                EncodedTerm::FloatLiteral(value) => Some(value.abs().into()),
-                EncodedTerm::DoubleLiteral(value) => Some(value.abs().into()),
-                _ => None,
-            },
-            PlanExpression::Ceil(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::IntegerLiteral(value) => Some(value.into()),
-                EncodedTerm::DecimalLiteral(value) => Some(value.ceil().into()),
-                EncodedTerm::FloatLiteral(value) => Some(value.ceil().into()),
-                EncodedTerm::DoubleLiteral(value) => Some(value.ceil().into()),
-                _ => None,
-            },
-            PlanExpression::Floor(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::IntegerLiteral(value) => Some(value.into()),
-                EncodedTerm::DecimalLiteral(value) => Some(value.floor().into()),
-                EncodedTerm::FloatLiteral(value) => Some(value.floor().into()),
-                EncodedTerm::DoubleLiteral(value) => Some(value.floor().into()),
-                _ => None,
-            },
-            PlanExpression::Round(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::IntegerLiteral(value) => Some(value.into()),
-                EncodedTerm::DecimalLiteral(value) => Some(value.round().into()),
-                EncodedTerm::FloatLiteral(value) => Some(value.round().into()),
-                EncodedTerm::DoubleLiteral(value) => Some(value.round().into()),
-                _ => None,
-            },
+            PlanExpression::Rand => Box::new(|_| Some(random::<f64>().into())),
+            PlanExpression::Abs(e) => {
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::IntegerLiteral(value) => Some(value.checked_abs()?.into()),
+                    EncodedTerm::DecimalLiteral(value) => Some(value.abs().into()),
+                    EncodedTerm::FloatLiteral(value) => Some(value.abs().into()),
+                    EncodedTerm::DoubleLiteral(value) => Some(value.abs().into()),
+                    _ => None,
+                })
+            }
+            PlanExpression::Ceil(e) => {
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::IntegerLiteral(value) => Some(value.into()),
+                    EncodedTerm::DecimalLiteral(value) => Some(value.ceil().into()),
+                    EncodedTerm::FloatLiteral(value) => Some(value.ceil().into()),
+                    EncodedTerm::DoubleLiteral(value) => Some(value.ceil().into()),
+                    _ => None,
+                })
+            }
+            PlanExpression::Floor(e) => {
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::IntegerLiteral(value) => Some(value.into()),
+                    EncodedTerm::DecimalLiteral(value) => Some(value.floor().into()),
+                    EncodedTerm::FloatLiteral(value) => Some(value.floor().into()),
+                    EncodedTerm::DoubleLiteral(value) => Some(value.floor().into()),
+                    _ => None,
+                })
+            }
+            PlanExpression::Round(e) => {
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::IntegerLiteral(value) => Some(value.into()),
+                    EncodedTerm::DecimalLiteral(value) => Some(value.round().into()),
+                    EncodedTerm::FloatLiteral(value) => Some(value.round().into()),
+                    EncodedTerm::DoubleLiteral(value) => Some(value.round().into()),
+                    _ => None,
+                })
+            }
             PlanExpression::Concat(l) => {
-                let mut result = String::default();
-                let mut language = None;
-                for e in l {
-                    let (value, e_language) =
-                        self.to_string_and_language(&self.eval_expression(e, tuple)?)?;
-                    if let Some(lang) = language {
-                        if lang != e_language {
-                            language = Some(None)
+                let l: Vec<_> = l.iter().map(|e| self.expression_evaluator(e)).collect();
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    let mut result = String::default();
+                    let mut language = None;
+                    for e in &l {
+                        let (value, e_language) = to_string_and_language(&dataset, &e(tuple)?)?;
+                        if let Some(lang) = language {
+                            if lang != e_language {
+                                language = Some(None)
+                            }
+                        } else {
+                            language = Some(e_language)
                         }
-                    } else {
-                        language = Some(e_language)
+                        result += &value
                     }
-                    result += &value
-                }
-                Some(self.build_plain_literal(&result, language.and_then(|v| v)))
+                    Some(build_plain_literal(
+                        &dataset,
+                        &result,
+                        language.and_then(|v| v),
+                    ))
+                })
             }
             PlanExpression::SubStr(source, starting_loc, length) => {
-                let (source, language) =
-                    self.to_string_and_language(&self.eval_expression(source, tuple)?)?;
+                let source = self.expression_evaluator(source);
+                let starting_loc = self.expression_evaluator(starting_loc);
+                let length = length.as_ref().map(|l| self.expression_evaluator(l));
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    let (source, language) = to_string_and_language(&dataset, &source(tuple)?)?;
 
-                let starting_location: usize = if let EncodedTerm::IntegerLiteral(v) =
-                    self.eval_expression(starting_loc, tuple)?
-                {
-                    v.try_into().ok()?
-                } else {
-                    return None;
-                };
-                let length: Option<usize> = if let Some(length) = length {
-                    if let EncodedTerm::IntegerLiteral(v) = self.eval_expression(length, tuple)? {
-                        Some(v.try_into().ok()?)
+                    let starting_location: usize =
+                        if let EncodedTerm::IntegerLiteral(v) = starting_loc(tuple)? {
+                            v.try_into().ok()?
+                        } else {
+                            return None;
+                        };
+                    let length: Option<usize> = if let Some(length) = &length {
+                        if let EncodedTerm::IntegerLiteral(v) = length(tuple)? {
+                            Some(v.try_into().ok()?)
+                        } else {
+                            return None;
+                        }
                     } else {
-                        return None;
-                    }
-                } else {
-                    None
-                };
+                        None
+                    };
 
-                // We want to slice on char indices, not byte indices
-                let mut start_iter = source
-                    .char_indices()
-                    .skip(starting_location.checked_sub(1)?)
-                    .peekable();
-                let result = if let Some((start_position, _)) = start_iter.peek().copied() {
-                    if let Some(length) = length {
-                        let mut end_iter = start_iter.skip(length).peekable();
-                        if let Some((end_position, _)) = end_iter.peek() {
-                            &source[start_position..*end_position]
+                    // We want to slice on char indices, not byte indices
+                    let mut start_iter = source
+                        .char_indices()
+                        .skip(starting_location.checked_sub(1)?)
+                        .peekable();
+                    let result = if let Some((start_position, _)) = start_iter.peek().copied() {
+                        if let Some(length) = length {
+                            let mut end_iter = start_iter.skip(length).peekable();
+                            if let Some((end_position, _)) = end_iter.peek() {
+                                &source[start_position..*end_position]
+                            } else {
+                                &source[start_position..]
+                            }
                         } else {
                             &source[start_position..]
                         }
                     } else {
-                        &source[start_position..]
-                    }
-                } else {
-                    ""
-                };
-                Some(self.build_plain_literal(result, language))
+                        ""
+                    };
+                    Some(build_plain_literal(&dataset, result, language))
+                })
             }
-            PlanExpression::StrLen(arg) => Some(
-                (self
-                    .to_string(&self.eval_expression(arg, tuple)?)?
-                    .chars()
-                    .count() as i64)
-                    .into(),
-            ),
+            PlanExpression::StrLen(arg) => {
+                let arg = self.expression_evaluator(arg);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    Some((to_string(&dataset, &arg(tuple)?)?.chars().count() as i64).into())
+                })
+            }
             PlanExpression::Replace(arg, pattern, replacement, flags) => {
-                let regex = self.compile_pattern(
-                    &self.eval_expression(pattern, tuple)?,
-                    if let Some(flags) = flags {
-                        Some(self.eval_expression(flags, tuple)?)
-                    } else {
-                        None
-                    },
-                )?;
-                let (text, language) =
-                    self.to_string_and_language(&self.eval_expression(arg, tuple)?)?;
-                let replacement =
-                    self.to_simple_string(&self.eval_expression(replacement, tuple)?)?;
-                Some(
-                    self.build_plain_literal(
+                let arg = self.expression_evaluator(arg);
+                let pattern = self.expression_evaluator(pattern);
+                let replacement = self.expression_evaluator(replacement);
+                let flags = flags.as_ref().map(|flags| self.expression_evaluator(flags));
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    let regex = compile_pattern(
+                        &dataset,
+                        &pattern(tuple)?,
+                        if let Some(flags) = &flags {
+                            Some(flags(tuple)?)
+                        } else {
+                            None
+                        },
+                    )?;
+                    let (text, language) = to_string_and_language(&dataset, &arg(tuple)?)?;
+                    let replacement = to_simple_string(&dataset, &replacement(tuple)?)?;
+                    Some(build_plain_literal(
+                        &dataset,
                         &regex.replace_all(&text, replacement.as_str()),
                         language,
-                    ),
-                )
+                    ))
+                })
             }
             PlanExpression::UCase(e) => {
-                let (value, language) =
-                    self.to_string_and_language(&self.eval_expression(e, tuple)?)?;
-                Some(self.build_plain_literal(&value.to_uppercase(), language))
+                let e = self.expression_evaluator(e);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    let (value, language) = to_string_and_language(&dataset, &e(tuple)?)?;
+                    Some(build_plain_literal(
+                        &dataset,
+                        &value.to_uppercase(),
+                        language,
+                    ))
+                })
             }
             PlanExpression::LCase(e) => {
-                let (value, language) =
-                    self.to_string_and_language(&self.eval_expression(e, tuple)?)?;
-                Some(self.build_plain_literal(&value.to_lowercase(), language))
+                let e = self.expression_evaluator(e);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    let (value, language) = to_string_and_language(&dataset, &e(tuple)?)?;
+                    Some(build_plain_literal(
+                        &dataset,
+                        &value.to_lowercase(),
+                        language,
+                    ))
+                })
             }
             PlanExpression::StrStarts(arg1, arg2) => {
-                let (arg1, arg2, _) = self.to_argument_compatible_strings(
-                    &self.eval_expression(arg1, tuple)?,
-                    &self.eval_expression(arg2, tuple)?,
-                )?;
-                Some((&arg1).starts_with(arg2.as_str()).into())
+                let arg1 = self.expression_evaluator(arg1);
+                let arg2 = self.expression_evaluator(arg2);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    let (arg1, arg2, _) =
+                        to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
+                    Some((&arg1).starts_with(arg2.as_str()).into())
+                })
             }
             PlanExpression::EncodeForUri(ltrl) => {
-                let ltlr = self.to_string(&self.eval_expression(ltrl, tuple)?)?;
-                let mut result = Vec::with_capacity(ltlr.len());
-                for c in ltlr.bytes() {
-                    match c {
-                        b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                            result.push(c)
-                        }
-                        _ => {
-                            result.push(b'%');
-                            let hight = c / 16;
-                            let low = c % 16;
-                            result.push(if hight < 10 {
-                                b'0' + hight
-                            } else {
-                                b'A' + (hight - 10)
-                            });
-                            result.push(if low < 10 {
-                                b'0' + low
-                            } else {
-                                b'A' + (low - 10)
-                            });
+                let ltrl = self.expression_evaluator(ltrl);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    let ltlr = to_string(&dataset, &ltrl(tuple)?)?;
+                    let mut result = Vec::with_capacity(ltlr.len());
+                    for c in ltlr.bytes() {
+                        match c {
+                            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                                result.push(c)
+                            }
+                            _ => {
+                                result.push(b'%');
+                                let hight = c / 16;
+                                let low = c % 16;
+                                result.push(if hight < 10 {
+                                    b'0' + hight
+                                } else {
+                                    b'A' + (hight - 10)
+                                });
+                                result.push(if low < 10 {
+                                    b'0' + low
+                                } else {
+                                    b'A' + (low - 10)
+                                });
+                            }
                         }
                     }
-                }
-                Some(self.build_string_literal(str::from_utf8(&result).ok()?))
+                    Some(build_string_literal(
+                        &dataset,
+                        str::from_utf8(&result).ok()?,
+                    ))
+                })
             }
             PlanExpression::StrEnds(arg1, arg2) => {
-                let (arg1, arg2, _) = self.to_argument_compatible_strings(
-                    &self.eval_expression(arg1, tuple)?,
-                    &self.eval_expression(arg2, tuple)?,
-                )?;
-                Some((&arg1).ends_with(arg2.as_str()).into())
+                let arg1 = self.expression_evaluator(arg1);
+                let arg2 = self.expression_evaluator(arg2);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    let (arg1, arg2, _) =
+                        to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
+                    Some((&arg1).ends_with(arg2.as_str()).into())
+                })
             }
             PlanExpression::Contains(arg1, arg2) => {
-                let (arg1, arg2, _) = self.to_argument_compatible_strings(
-                    &self.eval_expression(arg1, tuple)?,
-                    &self.eval_expression(arg2, tuple)?,
-                )?;
-                Some((&arg1).contains(arg2.as_str()).into())
+                let arg1 = self.expression_evaluator(arg1);
+                let arg2 = self.expression_evaluator(arg2);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    let (arg1, arg2, _) =
+                        to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
+                    Some((&arg1).contains(arg2.as_str()).into())
+                })
             }
             PlanExpression::StrBefore(arg1, arg2) => {
-                let (arg1, arg2, language) = self.to_argument_compatible_strings(
-                    &self.eval_expression(arg1, tuple)?,
-                    &self.eval_expression(arg2, tuple)?,
-                )?;
-                Some(if let Some(position) = (&arg1).find(arg2.as_str()) {
-                    self.build_plain_literal(&arg1[..position], language)
-                } else {
-                    self.build_string_literal("")
+                let arg1 = self.expression_evaluator(arg1);
+                let arg2 = self.expression_evaluator(arg2);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    let (arg1, arg2, language) =
+                        to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
+                    Some(if let Some(position) = (&arg1).find(arg2.as_str()) {
+                        build_plain_literal(&dataset, &arg1[..position], language)
+                    } else {
+                        build_string_literal(&dataset, "")
+                    })
                 })
             }
             PlanExpression::StrAfter(arg1, arg2) => {
-                let (arg1, arg2, language) = self.to_argument_compatible_strings(
-                    &self.eval_expression(arg1, tuple)?,
-                    &self.eval_expression(arg2, tuple)?,
-                )?;
-                Some(if let Some(position) = (&arg1).find(arg2.as_str()) {
-                    self.build_plain_literal(&arg1[position + arg2.len()..], language)
-                } else {
-                    self.build_string_literal("")
+                let arg1 = self.expression_evaluator(arg1);
+                let arg2 = self.expression_evaluator(arg2);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    let (arg1, arg2, language) =
+                        to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
+                    Some(if let Some(position) = (&arg1).find(arg2.as_str()) {
+                        build_plain_literal(&dataset, &arg1[position + arg2.len()..], language)
+                    } else {
+                        build_string_literal(&dataset, "")
+                    })
                 })
             }
-            PlanExpression::Year(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.year().into()),
-                EncodedTerm::DateLiteral(date) => Some(date.year().into()),
-                EncodedTerm::GYearMonthLiteral(year_month) => Some(year_month.year().into()),
-                EncodedTerm::GYearLiteral(year) => Some(year.year().into()),
-                _ => None,
-            },
-            PlanExpression::Month(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.month().into()),
-                EncodedTerm::DateLiteral(date) => Some(date.month().into()),
-                EncodedTerm::GYearMonthLiteral(year_month) => Some(year_month.month().into()),
-                EncodedTerm::GMonthDayLiteral(month_day) => Some(month_day.month().into()),
-                EncodedTerm::GMonthLiteral(month) => Some(month.month().into()),
-                _ => None,
-            },
-            PlanExpression::Day(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.day().into()),
-                EncodedTerm::DateLiteral(date) => Some(date.day().into()),
-                EncodedTerm::GMonthDayLiteral(month_day) => Some(month_day.day().into()),
-                EncodedTerm::GDayLiteral(day) => Some(day.day().into()),
-                _ => None,
-            },
-            PlanExpression::Hours(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.hour().into()),
-                EncodedTerm::TimeLiteral(time) => Some(time.hour().into()),
-                _ => None,
-            },
-            PlanExpression::Minutes(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.minute().into()),
-                EncodedTerm::TimeLiteral(time) => Some(time.minute().into()),
-                _ => None,
-            },
-            PlanExpression::Seconds(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.second().into()),
-                EncodedTerm::TimeLiteral(time) => Some(time.second().into()),
-                _ => None,
-            },
-            PlanExpression::Timezone(e) => Some(
-                match self.eval_expression(e, tuple)? {
-                    EncodedTerm::DateTimeLiteral(date_time) => date_time.timezone(),
-                    EncodedTerm::TimeLiteral(time) => time.timezone(),
-                    EncodedTerm::DateLiteral(date) => date.timezone(),
-                    EncodedTerm::GYearMonthLiteral(year_month) => year_month.timezone(),
-                    EncodedTerm::GYearLiteral(year) => year.timezone(),
-                    EncodedTerm::GMonthDayLiteral(month_day) => month_day.timezone(),
-                    EncodedTerm::GDayLiteral(day) => day.timezone(),
-                    EncodedTerm::GMonthLiteral(month) => month.timezone(),
+            PlanExpression::Year(e) => {
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.year().into()),
+                    EncodedTerm::DateLiteral(date) => Some(date.year().into()),
+                    EncodedTerm::GYearMonthLiteral(year_month) => Some(year_month.year().into()),
+                    EncodedTerm::GYearLiteral(year) => Some(year.year().into()),
                     _ => None,
-                }?
-                .into(),
-            ),
-            PlanExpression::Tz(e) => {
-                let timezone_offset = match self.eval_expression(e, tuple)? {
-                    EncodedTerm::DateTimeLiteral(date_time) => date_time.timezone_offset(),
-                    EncodedTerm::TimeLiteral(time) => time.timezone_offset(),
-                    EncodedTerm::DateLiteral(date) => date.timezone_offset(),
-                    EncodedTerm::GYearMonthLiteral(year_month) => year_month.timezone_offset(),
-                    EncodedTerm::GYearLiteral(year) => year.timezone_offset(),
-                    EncodedTerm::GMonthDayLiteral(month_day) => month_day.timezone_offset(),
-                    EncodedTerm::GDayLiteral(day) => day.timezone_offset(),
-                    EncodedTerm::GMonthLiteral(month) => month.timezone_offset(),
-                    _ => return None,
-                };
-                Some(match timezone_offset {
-                    Some(timezone_offset) => {
-                        self.build_string_literal(&timezone_offset.to_string())
-                    }
-                    None => self.build_string_literal(""),
                 })
             }
-            PlanExpression::Now => Some(self.now.into()),
+            PlanExpression::Month(e) => {
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.month().into()),
+                    EncodedTerm::DateLiteral(date) => Some(date.month().into()),
+                    EncodedTerm::GYearMonthLiteral(year_month) => Some(year_month.month().into()),
+                    EncodedTerm::GMonthDayLiteral(month_day) => Some(month_day.month().into()),
+                    EncodedTerm::GMonthLiteral(month) => Some(month.month().into()),
+                    _ => None,
+                })
+            }
+            PlanExpression::Day(e) => {
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.day().into()),
+                    EncodedTerm::DateLiteral(date) => Some(date.day().into()),
+                    EncodedTerm::GMonthDayLiteral(month_day) => Some(month_day.day().into()),
+                    EncodedTerm::GDayLiteral(day) => Some(day.day().into()),
+                    _ => None,
+                })
+            }
+            PlanExpression::Hours(e) => {
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.hour().into()),
+                    EncodedTerm::TimeLiteral(time) => Some(time.hour().into()),
+                    _ => None,
+                })
+            }
+            PlanExpression::Minutes(e) => {
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.minute().into()),
+                    EncodedTerm::TimeLiteral(time) => Some(time.minute().into()),
+                    _ => None,
+                })
+            }
+            PlanExpression::Seconds(e) => {
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.second().into()),
+                    EncodedTerm::TimeLiteral(time) => Some(time.second().into()),
+                    _ => None,
+                })
+            }
+            PlanExpression::Timezone(e) => {
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| {
+                    Some(
+                        match e(tuple)? {
+                            EncodedTerm::DateTimeLiteral(date_time) => date_time.timezone(),
+                            EncodedTerm::TimeLiteral(time) => time.timezone(),
+                            EncodedTerm::DateLiteral(date) => date.timezone(),
+                            EncodedTerm::GYearMonthLiteral(year_month) => year_month.timezone(),
+                            EncodedTerm::GYearLiteral(year) => year.timezone(),
+                            EncodedTerm::GMonthDayLiteral(month_day) => month_day.timezone(),
+                            EncodedTerm::GDayLiteral(day) => day.timezone(),
+                            EncodedTerm::GMonthLiteral(month) => month.timezone(),
+                            _ => None,
+                        }?
+                        .into(),
+                    )
+                })
+            }
+            PlanExpression::Tz(e) => {
+                let e = self.expression_evaluator(e);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    let timezone_offset = match e(tuple)? {
+                        EncodedTerm::DateTimeLiteral(date_time) => date_time.timezone_offset(),
+                        EncodedTerm::TimeLiteral(time) => time.timezone_offset(),
+                        EncodedTerm::DateLiteral(date) => date.timezone_offset(),
+                        EncodedTerm::GYearMonthLiteral(year_month) => year_month.timezone_offset(),
+                        EncodedTerm::GYearLiteral(year) => year.timezone_offset(),
+                        EncodedTerm::GMonthDayLiteral(month_day) => month_day.timezone_offset(),
+                        EncodedTerm::GDayLiteral(day) => day.timezone_offset(),
+                        EncodedTerm::GMonthLiteral(month) => month.timezone_offset(),
+                        _ => return None,
+                    };
+                    Some(match timezone_offset {
+                        Some(timezone_offset) => {
+                            build_string_literal(&dataset, &timezone_offset.to_string())
+                        }
+                        None => build_string_literal(&dataset, ""),
+                    })
+                })
+            }
+            PlanExpression::Now => {
+                let now = self.now;
+                Box::new(move |_| Some(now.into()))
+            }
             PlanExpression::Uuid => {
-                let mut buffer = String::with_capacity(44);
-                buffer.push_str("urn:uuid:");
-                generate_uuid(&mut buffer);
-                Some(self.build_named_node(&buffer))
+                let dataset = self.dataset.clone();
+                Box::new(move |_| {
+                    let mut buffer = String::with_capacity(44);
+                    buffer.push_str("urn:uuid:");
+                    generate_uuid(&mut buffer);
+                    Some(build_named_node(&dataset, &buffer))
+                })
             }
             PlanExpression::StrUuid => {
-                let mut buffer = String::with_capacity(36);
-                generate_uuid(&mut buffer);
-                Some(self.build_string_literal(&buffer))
+                let dataset = self.dataset.clone();
+                Box::new(move |_| {
+                    let mut buffer = String::with_capacity(36);
+                    generate_uuid(&mut buffer);
+                    Some(build_string_literal(&dataset, &buffer))
+                })
             }
-            PlanExpression::Md5(arg) => self.hash::<Md5>(arg, tuple),
-            PlanExpression::Sha1(arg) => self.hash::<Sha1>(arg, tuple),
-            PlanExpression::Sha256(arg) => self.hash::<Sha256>(arg, tuple),
-            PlanExpression::Sha384(arg) => self.hash::<Sha384>(arg, tuple),
-            PlanExpression::Sha512(arg) => self.hash::<Sha512>(arg, tuple),
+            PlanExpression::Md5(arg) => self.hash::<Md5>(arg),
+            PlanExpression::Sha1(arg) => self.hash::<Sha1>(arg),
+            PlanExpression::Sha256(arg) => self.hash::<Sha256>(arg),
+            PlanExpression::Sha384(arg) => self.hash::<Sha384>(arg),
+            PlanExpression::Sha512(arg) => self.hash::<Sha512>(arg),
             PlanExpression::Coalesce(l) => {
-                for e in l {
-                    if let Some(result) = self.eval_expression(e, tuple) {
-                        return Some(result);
+                let l: Vec<_> = l.iter().map(|e| self.expression_evaluator(e)).collect();
+                Box::new(move |tuple| {
+                    for e in &l {
+                        if let Some(result) = e(tuple) {
+                            return Some(result);
+                        }
                     }
-                }
-                None
+                    None
+                })
             }
             PlanExpression::If(a, b, c) => {
-                if self.to_bool(&self.eval_expression(a, tuple)?)? {
-                    self.eval_expression(b, tuple)
-                } else {
-                    self.eval_expression(c, tuple)
-                }
+                let a = self.expression_evaluator(a);
+                let b = self.expression_evaluator(b);
+                let c = self.expression_evaluator(c);
+                Box::new(move |tuple| {
+                    if to_bool(&a(tuple)?)? {
+                        b(tuple)
+                    } else {
+                        c(tuple)
+                    }
+                })
             }
             PlanExpression::StrLang(lexical_form, lang_tag) => {
-                Some(Self::build_lang_string_literal_from_id(
-                    Self::to_simple_string_id(&self.eval_expression(lexical_form, tuple)?)?,
-                    self.build_language_id(&self.eval_expression(lang_tag, tuple)?)?,
-                ))
+                let lexical_form = self.expression_evaluator(lexical_form);
+                let lang_tag = self.expression_evaluator(lang_tag);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    Some(build_lang_string_literal_from_id(
+                        to_simple_string_id(&lexical_form(tuple)?)?,
+                        build_language_id(&dataset, &lang_tag(tuple)?)?,
+                    ))
+                })
             }
             PlanExpression::StrDt(lexical_form, datatype) => {
-                let value = self.to_simple_string(&self.eval_expression(lexical_form, tuple)?)?;
-                let datatype = if let EncodedTerm::NamedNode { iri_id } =
-                    self.eval_expression(datatype, tuple)?
-                {
-                    self.dataset.get_str(&iri_id).ok()?
-                } else {
-                    None
-                }?;
-                Some(self.dataset.encode_term(LiteralRef::new_typed_literal(
-                    &value,
-                    NamedNodeRef::new_unchecked(&datatype),
-                )))
-            }
-            PlanExpression::SameTerm(a, b) => {
-                Some((self.eval_expression(a, tuple)? == self.eval_expression(b, tuple)?).into())
-            }
-            PlanExpression::IsIri(e) => {
-                Some(self.eval_expression(e, tuple)?.is_named_node().into())
-            }
-            PlanExpression::IsBlank(e) => {
-                Some(self.eval_expression(e, tuple)?.is_blank_node().into())
-            }
-            PlanExpression::IsLiteral(e) => {
-                Some(self.eval_expression(e, tuple)?.is_literal().into())
-            }
-            PlanExpression::IsNumeric(e) => Some(
-                matches!(
-                    self.eval_expression(e, tuple)?,
-                    EncodedTerm::FloatLiteral(_)
-                        | EncodedTerm::DoubleLiteral(_)
-                        | EncodedTerm::IntegerLiteral(_)
-                        | EncodedTerm::DecimalLiteral(_)
-                )
-                .into(),
-            ),
-            PlanExpression::Regex(text, pattern, flags) => {
-                let regex = self.compile_pattern(
-                    &self.eval_expression(pattern, tuple)?,
-                    if let Some(flags) = flags {
-                        Some(self.eval_expression(flags, tuple)?)
+                let lexical_form = self.expression_evaluator(lexical_form);
+                let datatype = self.expression_evaluator(datatype);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    let value = to_simple_string(&dataset, &lexical_form(tuple)?)?;
+                    let datatype = if let EncodedTerm::NamedNode { iri_id } = datatype(tuple)? {
+                        dataset.get_str(&iri_id).ok()?
                     } else {
                         None
-                    },
-                )?;
-                let text = self.to_string(&self.eval_expression(text, tuple)?)?;
-                Some(regex.is_match(&text).into())
+                    }?;
+                    Some(dataset.encode_term(LiteralRef::new_typed_literal(
+                        &value,
+                        NamedNodeRef::new_unchecked(&datatype),
+                    )))
+                })
+            }
+            PlanExpression::SameTerm(a, b) => {
+                let a = self.expression_evaluator(a);
+                let b = self.expression_evaluator(b);
+                Box::new(move |tuple| Some((a(tuple)? == b(tuple)?).into()))
+            }
+            PlanExpression::IsIri(e) => {
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| Some(e(tuple)?.is_named_node().into()))
+            }
+            PlanExpression::IsBlank(e) => {
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| Some(e(tuple)?.is_blank_node().into()))
+            }
+            PlanExpression::IsLiteral(e) => {
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| Some(e(tuple)?.is_literal().into()))
+            }
+            PlanExpression::IsNumeric(e) => {
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| {
+                    Some(
+                        matches!(
+                            e(tuple)?,
+                            EncodedTerm::FloatLiteral(_)
+                                | EncodedTerm::DoubleLiteral(_)
+                                | EncodedTerm::IntegerLiteral(_)
+                                | EncodedTerm::DecimalLiteral(_)
+                        )
+                        .into(),
+                    )
+                })
+            }
+            PlanExpression::Regex(text, pattern, flags) => {
+                let text = self.expression_evaluator(text);
+                let pattern = self.expression_evaluator(pattern);
+                let flags = flags.as_ref().map(|flags| self.expression_evaluator(flags));
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| {
+                    let regex = compile_pattern(
+                        &dataset,
+                        &pattern(tuple)?,
+                        if let Some(flags) = &flags {
+                            Some(flags(tuple)?)
+                        } else {
+                            None
+                        },
+                    )?;
+                    let text = to_string(&dataset, &text(tuple)?)?;
+                    Some(regex.is_match(&text).into())
+                })
             }
             PlanExpression::Triple(s, p, o) => {
-                let s = self.eval_expression(s, tuple)?;
-                let p = self.eval_expression(p, tuple)?;
-                let o = self.eval_expression(o, tuple)?;
-                if !s.is_literal()
-                    && !s.is_default_graph()
-                    && p.is_named_node()
-                    && !o.is_default_graph()
-                {
-                    Some(EncodedTriple::new(s, p, o).into())
-                } else {
-                    None
-                }
+                let s = self.expression_evaluator(s);
+                let p = self.expression_evaluator(p);
+                let o = self.expression_evaluator(o);
+                Box::new(move |tuple| {
+                    let s = s(tuple)?;
+                    let p = p(tuple)?;
+                    let o = o(tuple)?;
+                    if !s.is_literal()
+                        && !s.is_default_graph()
+                        && p.is_named_node()
+                        && !o.is_default_graph()
+                    {
+                        Some(EncodedTriple::new(s, p, o).into())
+                    } else {
+                        None
+                    }
+                })
             }
             PlanExpression::Subject(e) => {
-                if let EncodedTerm::Triple(t) = self.eval_expression(e, tuple)? {
-                    Some(t.subject.clone())
-                } else {
-                    None
-                }
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| {
+                    if let EncodedTerm::Triple(t) = e(tuple)? {
+                        Some(t.subject.clone())
+                    } else {
+                        None
+                    }
+                })
             }
             PlanExpression::Predicate(e) => {
-                if let EncodedTerm::Triple(t) = self.eval_expression(e, tuple)? {
-                    Some(t.predicate.clone())
-                } else {
-                    None
-                }
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| {
+                    if let EncodedTerm::Triple(t) = e(tuple)? {
+                        Some(t.predicate.clone())
+                    } else {
+                        None
+                    }
+                })
             }
             PlanExpression::Object(e) => {
-                if let EncodedTerm::Triple(t) = self.eval_expression(e, tuple)? {
-                    Some(t.object.clone())
-                } else {
-                    None
-                }
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| {
+                    if let EncodedTerm::Triple(t) = e(tuple)? {
+                        Some(t.object.clone())
+                    } else {
+                        None
+                    }
+                })
             }
-            PlanExpression::IsTriple(e) => Some(self.eval_expression(e, tuple)?.is_triple().into()),
-            PlanExpression::BooleanCast(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::BooleanLiteral(value) => Some(value.into()),
-                EncodedTerm::FloatLiteral(value) => Some(value.to_bool().into()),
-                EncodedTerm::DoubleLiteral(value) => Some(value.to_bool().into()),
-                EncodedTerm::IntegerLiteral(value) => Some((value != 0).into()),
-                EncodedTerm::DecimalLiteral(value) => Some(value.to_bool().into()),
-                EncodedTerm::SmallStringLiteral(value) => parse_boolean_str(&value),
-                EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_boolean_str(&*self.dataset.get_str(&value_id).ok()??)
-                }
-                _ => None,
-            },
-            PlanExpression::DoubleCast(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::FloatLiteral(value) => Some(f64::from(value).into()),
-                EncodedTerm::DoubleLiteral(value) => Some(value.into()),
-                EncodedTerm::IntegerLiteral(value) => Some((value as f64).into()),
-                EncodedTerm::DecimalLiteral(value) => Some(value.to_double().into()),
-                EncodedTerm::BooleanLiteral(value) => {
-                    Some(if value { 1_f64 } else { 0_f64 }.into())
-                }
-                EncodedTerm::SmallStringLiteral(value) => parse_double_str(&value),
-                EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_double_str(&*self.dataset.get_str(&value_id).ok()??)
-                }
-                _ => None,
-            },
-            PlanExpression::FloatCast(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::FloatLiteral(value) => Some(value.into()),
-                EncodedTerm::DoubleLiteral(value) => Some(value.to_f32().into()),
-                EncodedTerm::IntegerLiteral(value) => Some((value as f32).into()),
-                EncodedTerm::DecimalLiteral(value) => Some(value.to_float().into()),
-                EncodedTerm::BooleanLiteral(value) => {
-                    Some(if value { 1_f32 } else { 0_f32 }.into())
-                }
-                EncodedTerm::SmallStringLiteral(value) => parse_float_str(&value),
-                EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_float_str(&*self.dataset.get_str(&value_id).ok()??)
-                }
-                _ => None,
-            },
-            PlanExpression::IntegerCast(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::FloatLiteral(value) => Some(value.to_i64().into()),
-                EncodedTerm::DoubleLiteral(value) => Some(value.to_i64().into()),
-                EncodedTerm::IntegerLiteral(value) => Some(value.into()),
-                EncodedTerm::DecimalLiteral(value) => Some(i64::try_from(value).ok()?.into()),
-                EncodedTerm::BooleanLiteral(value) => Some(if value { 1 } else { 0 }.into()),
-                EncodedTerm::SmallStringLiteral(value) => parse_integer_str(&value),
-                EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_integer_str(&*self.dataset.get_str(&value_id).ok()??)
-                }
-                _ => None,
-            },
-            PlanExpression::DecimalCast(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::FloatLiteral(value) => Some(Decimal::from_float(value).into()),
-                EncodedTerm::DoubleLiteral(value) => Some(Decimal::from_double(value).into()),
-                EncodedTerm::IntegerLiteral(value) => Some(Decimal::from(value).into()),
-                EncodedTerm::DecimalLiteral(value) => Some(value.into()),
-                EncodedTerm::BooleanLiteral(value) => {
-                    Some(Decimal::from(if value { 1 } else { 0 }).into())
-                }
-                EncodedTerm::SmallStringLiteral(value) => parse_decimal_str(&value),
-                EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_decimal_str(&*self.dataset.get_str(&value_id).ok()??)
-                }
-                _ => None,
-            },
-            PlanExpression::DateCast(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::DateLiteral(value) => Some(value.into()),
-                EncodedTerm::DateTimeLiteral(value) => Some(Date::try_from(value).ok()?.into()),
-                EncodedTerm::SmallStringLiteral(value) => parse_date_str(&value),
-                EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_date_str(&*self.dataset.get_str(&value_id).ok()??)
-                }
-                _ => None,
-            },
-            PlanExpression::TimeCast(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::TimeLiteral(value) => Some(value.into()),
-                EncodedTerm::DateTimeLiteral(value) => Some(Time::try_from(value).ok()?.into()),
-                EncodedTerm::SmallStringLiteral(value) => parse_time_str(&value),
-                EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_time_str(&*self.dataset.get_str(&value_id).ok()??)
-                }
-                _ => None,
-            },
-            PlanExpression::DateTimeCast(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::DateTimeLiteral(value) => Some(value.into()),
-                EncodedTerm::DateLiteral(value) => Some(DateTime::try_from(value).ok()?.into()),
-                EncodedTerm::SmallStringLiteral(value) => parse_date_time_str(&value),
-                EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_date_time_str(&*self.dataset.get_str(&value_id).ok()??)
-                }
-                _ => None,
-            },
-            PlanExpression::DurationCast(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::DurationLiteral(value) => Some(value.into()),
-                EncodedTerm::YearMonthDurationLiteral(value) => Some(Duration::from(value).into()),
-                EncodedTerm::DayTimeDurationLiteral(value) => Some(Duration::from(value).into()),
-                EncodedTerm::SmallStringLiteral(value) => parse_duration_str(&value),
-                EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_duration_str(&*self.dataset.get_str(&value_id).ok()??)
-                }
-                _ => None,
-            },
-            PlanExpression::YearMonthDurationCast(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::DurationLiteral(value) => {
-                    Some(YearMonthDuration::try_from(value).ok()?.into())
-                }
-                EncodedTerm::YearMonthDurationLiteral(value) => Some(value.into()),
-                EncodedTerm::SmallStringLiteral(value) => parse_year_month_duration_str(&value),
-                EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_year_month_duration_str(&*self.dataset.get_str(&value_id).ok()??)
-                }
-                _ => None,
-            },
-            PlanExpression::DayTimeDurationCast(e) => match self.eval_expression(e, tuple)? {
-                EncodedTerm::DurationLiteral(value) => {
-                    Some(DayTimeDuration::try_from(value).ok()?.into())
-                }
-                EncodedTerm::DayTimeDurationLiteral(value) => Some(value.into()),
-                EncodedTerm::SmallStringLiteral(value) => parse_day_time_duration_str(&value),
-                EncodedTerm::BigStringLiteral { value_id } => {
-                    parse_day_time_duration_str(&*self.dataset.get_str(&value_id).ok()??)
-                }
-                _ => None,
-            },
-        }
-    }
-
-    fn to_bool(&self, term: &EncodedTerm) -> Option<bool> {
-        match term {
-            EncodedTerm::BooleanLiteral(value) => Some(*value),
-            EncodedTerm::SmallStringLiteral(value) => Some(!value.is_empty()),
-            EncodedTerm::BigStringLiteral { value_id } => {
-                Some(!self.dataset.get_str(value_id).ok()??.is_empty())
+            PlanExpression::IsTriple(e) => {
+                let e = self.expression_evaluator(e);
+                Box::new(move |tuple| Some(e(tuple)?.is_triple().into()))
             }
-            EncodedTerm::FloatLiteral(value) => Some(*value != Float::default()),
-            EncodedTerm::DoubleLiteral(value) => Some(*value != Double::default()),
-            EncodedTerm::IntegerLiteral(value) => Some(*value != 0),
-            EncodedTerm::DecimalLiteral(value) => Some(*value != Decimal::default()),
-            _ => None,
-        }
-    }
-
-    fn to_string_id(&self, term: &EncodedTerm) -> Option<SmallStringOrId> {
-        match term {
-            EncodedTerm::NamedNode { iri_id } => Some((*iri_id).into()),
-            EncodedTerm::DefaultGraph
-            | EncodedTerm::NumericalBlankNode { .. }
-            | EncodedTerm::SmallBlankNode { .. }
-            | EncodedTerm::BigBlankNode { .. }
-            | EncodedTerm::Triple(_) => None,
-            EncodedTerm::SmallStringLiteral(value)
-            | EncodedTerm::SmallSmallLangStringLiteral { value, .. }
-            | EncodedTerm::SmallBigLangStringLiteral { value, .. }
-            | EncodedTerm::SmallTypedLiteral { value, .. } => Some((*value).into()),
-            EncodedTerm::BigStringLiteral { value_id }
-            | EncodedTerm::BigSmallLangStringLiteral { value_id, .. }
-            | EncodedTerm::BigBigLangStringLiteral { value_id, .. }
-            | EncodedTerm::BigTypedLiteral { value_id, .. } => Some((*value_id).into()),
-            EncodedTerm::BooleanLiteral(value) => {
-                Some(self.build_string_id(if *value { "true" } else { "false" }))
+            PlanExpression::BooleanCast(e) => {
+                let e = self.expression_evaluator(e);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::BooleanLiteral(value) => Some(value.into()),
+                    EncodedTerm::FloatLiteral(value) => Some(value.to_bool().into()),
+                    EncodedTerm::DoubleLiteral(value) => Some(value.to_bool().into()),
+                    EncodedTerm::IntegerLiteral(value) => Some((value != 0).into()),
+                    EncodedTerm::DecimalLiteral(value) => Some(value.to_bool().into()),
+                    EncodedTerm::SmallStringLiteral(value) => parse_boolean_str(&value),
+                    EncodedTerm::BigStringLiteral { value_id } => {
+                        parse_boolean_str(&*dataset.get_str(&value_id).ok()??)
+                    }
+                    _ => None,
+                })
             }
-            EncodedTerm::FloatLiteral(value) => Some(self.build_string_id(&value.to_string())),
-            EncodedTerm::DoubleLiteral(value) => Some(self.build_string_id(&value.to_string())),
-            EncodedTerm::IntegerLiteral(value) => Some(self.build_string_id(&value.to_string())),
-            EncodedTerm::DecimalLiteral(value) => Some(self.build_string_id(&value.to_string())),
-            EncodedTerm::DateTimeLiteral(value) => Some(self.build_string_id(&value.to_string())),
-            EncodedTerm::TimeLiteral(value) => Some(self.build_string_id(&value.to_string())),
-            EncodedTerm::DateLiteral(value) => Some(self.build_string_id(&value.to_string())),
-            EncodedTerm::GYearMonthLiteral(value) => Some(self.build_string_id(&value.to_string())),
-            EncodedTerm::GYearLiteral(value) => Some(self.build_string_id(&value.to_string())),
-            EncodedTerm::GMonthDayLiteral(value) => Some(self.build_string_id(&value.to_string())),
-            EncodedTerm::GDayLiteral(value) => Some(self.build_string_id(&value.to_string())),
-            EncodedTerm::GMonthLiteral(value) => Some(self.build_string_id(&value.to_string())),
-            EncodedTerm::DurationLiteral(value) => Some(self.build_string_id(&value.to_string())),
-            EncodedTerm::YearMonthDurationLiteral(value) => {
-                Some(self.build_string_id(&value.to_string()))
+            PlanExpression::DoubleCast(e) => {
+                let e = self.expression_evaluator(e);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::FloatLiteral(value) => Some(f64::from(value).into()),
+                    EncodedTerm::DoubleLiteral(value) => Some(value.into()),
+                    EncodedTerm::IntegerLiteral(value) => Some((value as f64).into()),
+                    EncodedTerm::DecimalLiteral(value) => Some(value.to_double().into()),
+                    EncodedTerm::BooleanLiteral(value) => {
+                        Some(if value { 1_f64 } else { 0_f64 }.into())
+                    }
+                    EncodedTerm::SmallStringLiteral(value) => parse_double_str(&value),
+                    EncodedTerm::BigStringLiteral { value_id } => {
+                        parse_double_str(&*dataset.get_str(&value_id).ok()??)
+                    }
+                    _ => None,
+                })
             }
-            EncodedTerm::DayTimeDurationLiteral(value) => {
-                Some(self.build_string_id(&value.to_string()))
+            PlanExpression::FloatCast(e) => {
+                let e = self.expression_evaluator(e);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::FloatLiteral(value) => Some(value.into()),
+                    EncodedTerm::DoubleLiteral(value) => Some(value.to_f32().into()),
+                    EncodedTerm::IntegerLiteral(value) => Some((value as f32).into()),
+                    EncodedTerm::DecimalLiteral(value) => Some(value.to_float().into()),
+                    EncodedTerm::BooleanLiteral(value) => {
+                        Some(if value { 1_f32 } else { 0_f32 }.into())
+                    }
+                    EncodedTerm::SmallStringLiteral(value) => parse_float_str(&value),
+                    EncodedTerm::BigStringLiteral { value_id } => {
+                        parse_float_str(&*dataset.get_str(&value_id).ok()??)
+                    }
+                    _ => None,
+                })
+            }
+            PlanExpression::IntegerCast(e) => {
+                let e = self.expression_evaluator(e);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::FloatLiteral(value) => Some(value.to_i64().into()),
+                    EncodedTerm::DoubleLiteral(value) => Some(value.to_i64().into()),
+                    EncodedTerm::IntegerLiteral(value) => Some(value.into()),
+                    EncodedTerm::DecimalLiteral(value) => Some(i64::try_from(value).ok()?.into()),
+                    EncodedTerm::BooleanLiteral(value) => Some(if value { 1 } else { 0 }.into()),
+                    EncodedTerm::SmallStringLiteral(value) => parse_integer_str(&value),
+                    EncodedTerm::BigStringLiteral { value_id } => {
+                        parse_integer_str(&*dataset.get_str(&value_id).ok()??)
+                    }
+                    _ => None,
+                })
+            }
+            PlanExpression::DecimalCast(e) => {
+                let e = self.expression_evaluator(e);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::FloatLiteral(value) => Some(Decimal::from_float(value).into()),
+                    EncodedTerm::DoubleLiteral(value) => Some(Decimal::from_double(value).into()),
+                    EncodedTerm::IntegerLiteral(value) => Some(Decimal::from(value).into()),
+                    EncodedTerm::DecimalLiteral(value) => Some(value.into()),
+                    EncodedTerm::BooleanLiteral(value) => {
+                        Some(Decimal::from(if value { 1 } else { 0 }).into())
+                    }
+                    EncodedTerm::SmallStringLiteral(value) => parse_decimal_str(&value),
+                    EncodedTerm::BigStringLiteral { value_id } => {
+                        parse_decimal_str(&*dataset.get_str(&value_id).ok()??)
+                    }
+                    _ => None,
+                })
+            }
+            PlanExpression::DateCast(e) => {
+                let e = self.expression_evaluator(e);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::DateLiteral(value) => Some(value.into()),
+                    EncodedTerm::DateTimeLiteral(value) => Some(Date::try_from(value).ok()?.into()),
+                    EncodedTerm::SmallStringLiteral(value) => parse_date_str(&value),
+                    EncodedTerm::BigStringLiteral { value_id } => {
+                        parse_date_str(&*dataset.get_str(&value_id).ok()??)
+                    }
+                    _ => None,
+                })
+            }
+            PlanExpression::TimeCast(e) => {
+                let e = self.expression_evaluator(e);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::TimeLiteral(value) => Some(value.into()),
+                    EncodedTerm::DateTimeLiteral(value) => Some(Time::try_from(value).ok()?.into()),
+                    EncodedTerm::SmallStringLiteral(value) => parse_time_str(&value),
+                    EncodedTerm::BigStringLiteral { value_id } => {
+                        parse_time_str(&*dataset.get_str(&value_id).ok()??)
+                    }
+                    _ => None,
+                })
+            }
+            PlanExpression::DateTimeCast(e) => {
+                let e = self.expression_evaluator(e);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::DateTimeLiteral(value) => Some(value.into()),
+                    EncodedTerm::DateLiteral(value) => Some(DateTime::try_from(value).ok()?.into()),
+                    EncodedTerm::SmallStringLiteral(value) => parse_date_time_str(&value),
+                    EncodedTerm::BigStringLiteral { value_id } => {
+                        parse_date_time_str(&*dataset.get_str(&value_id).ok()??)
+                    }
+                    _ => None,
+                })
+            }
+            PlanExpression::DurationCast(e) => {
+                let e = self.expression_evaluator(e);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::DurationLiteral(value) => Some(value.into()),
+                    EncodedTerm::YearMonthDurationLiteral(value) => {
+                        Some(Duration::from(value).into())
+                    }
+                    EncodedTerm::DayTimeDurationLiteral(value) => {
+                        Some(Duration::from(value).into())
+                    }
+                    EncodedTerm::SmallStringLiteral(value) => parse_duration_str(&value),
+                    EncodedTerm::BigStringLiteral { value_id } => {
+                        parse_duration_str(&*dataset.get_str(&value_id).ok()??)
+                    }
+                    _ => None,
+                })
+            }
+            PlanExpression::YearMonthDurationCast(e) => {
+                let e = self.expression_evaluator(e);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::DurationLiteral(value) => {
+                        Some(YearMonthDuration::try_from(value).ok()?.into())
+                    }
+                    EncodedTerm::YearMonthDurationLiteral(value) => Some(value.into()),
+                    EncodedTerm::SmallStringLiteral(value) => parse_year_month_duration_str(&value),
+                    EncodedTerm::BigStringLiteral { value_id } => {
+                        parse_year_month_duration_str(&*dataset.get_str(&value_id).ok()??)
+                    }
+                    _ => None,
+                })
+            }
+            PlanExpression::DayTimeDurationCast(e) => {
+                let e = self.expression_evaluator(e);
+                let dataset = self.dataset.clone();
+                Box::new(move |tuple| match e(tuple)? {
+                    EncodedTerm::DurationLiteral(value) => {
+                        Some(DayTimeDuration::try_from(value).ok()?.into())
+                    }
+                    EncodedTerm::DayTimeDurationLiteral(value) => Some(value.into()),
+                    EncodedTerm::SmallStringLiteral(value) => parse_day_time_duration_str(&value),
+                    EncodedTerm::BigStringLiteral { value_id } => {
+                        parse_day_time_duration_str(&*dataset.get_str(&value_id).ok()??)
+                    }
+                    _ => None,
+                })
             }
         }
     }
 
-    fn to_simple_string(&self, term: &EncodedTerm) -> Option<String> {
-        match term {
-            EncodedTerm::SmallStringLiteral(value) => Some((*value).into()),
-            EncodedTerm::BigStringLiteral { value_id } => self.dataset.get_str(value_id).ok()?,
-            _ => None,
-        }
-    }
-
-    fn to_simple_string_id(term: &EncodedTerm) -> Option<SmallStringOrId> {
-        match term {
-            EncodedTerm::SmallStringLiteral(value) => Some((*value).into()),
-            EncodedTerm::BigStringLiteral { value_id } => Some((*value_id).into()),
-            _ => None,
-        }
-    }
-
-    fn to_string(&self, term: &EncodedTerm) -> Option<String> {
-        match term {
-            EncodedTerm::SmallStringLiteral(value)
-            | EncodedTerm::SmallSmallLangStringLiteral { value, .. }
-            | EncodedTerm::SmallBigLangStringLiteral { value, .. } => Some((*value).into()),
-            EncodedTerm::BigStringLiteral { value_id }
-            | EncodedTerm::BigSmallLangStringLiteral { value_id, .. }
-            | EncodedTerm::BigBigLangStringLiteral { value_id, .. } => {
-                self.dataset.get_str(value_id).ok()?
-            }
-            _ => None,
-        }
-    }
-
-    fn to_string_and_language(
+    fn hash<H: Digest>(
         &self,
-        term: &EncodedTerm,
-    ) -> Option<(String, Option<SmallStringOrId>)> {
-        match term {
-            EncodedTerm::SmallStringLiteral(value) => Some(((*value).into(), None)),
-            EncodedTerm::BigStringLiteral { value_id } => {
-                Some((self.dataset.get_str(value_id).ok()??, None))
-            }
-            EncodedTerm::SmallSmallLangStringLiteral { value, language } => {
-                Some(((*value).into(), Some((*language).into())))
-            }
-            EncodedTerm::SmallBigLangStringLiteral { value, language_id } => {
-                Some(((*value).into(), Some((*language_id).into())))
-            }
-            EncodedTerm::BigSmallLangStringLiteral { value_id, language } => Some((
-                self.dataset.get_str(value_id).ok()??,
-                Some((*language).into()),
-            )),
+        arg: &PlanExpression,
+    ) -> Box<dyn Fn(&EncodedTuple) -> Option<EncodedTerm>> {
+        let arg = self.expression_evaluator(arg);
+        let dataset = self.dataset.clone();
+        Box::new(move |tuple| {
+            let input = to_simple_string(&dataset, &arg(tuple)?)?;
+            let hash = hex::encode(H::new().chain(input.as_str()).finalize());
+            Some(build_string_literal(&dataset, &hash))
+        })
+    }
+}
+
+fn to_bool(term: &EncodedTerm) -> Option<bool> {
+    match term {
+        EncodedTerm::BooleanLiteral(value) => Some(*value),
+        EncodedTerm::SmallStringLiteral(value) => Some(!value.is_empty()),
+        EncodedTerm::BigStringLiteral { .. } => {
+            Some(false) // A big literal can't be empty
+        }
+        EncodedTerm::FloatLiteral(value) => Some(*value != Float::default()),
+        EncodedTerm::DoubleLiteral(value) => Some(*value != Double::default()),
+        EncodedTerm::IntegerLiteral(value) => Some(*value != 0),
+        EncodedTerm::DecimalLiteral(value) => Some(*value != Decimal::default()),
+        _ => None,
+    }
+}
+
+fn to_string_id(dataset: &DatasetView, term: &EncodedTerm) -> Option<SmallStringOrId> {
+    match term {
+        EncodedTerm::NamedNode { iri_id } => Some((*iri_id).into()),
+        EncodedTerm::DefaultGraph
+        | EncodedTerm::NumericalBlankNode { .. }
+        | EncodedTerm::SmallBlankNode { .. }
+        | EncodedTerm::BigBlankNode { .. }
+        | EncodedTerm::Triple(_) => None,
+        EncodedTerm::SmallStringLiteral(value)
+        | EncodedTerm::SmallSmallLangStringLiteral { value, .. }
+        | EncodedTerm::SmallBigLangStringLiteral { value, .. }
+        | EncodedTerm::SmallTypedLiteral { value, .. } => Some((*value).into()),
+        EncodedTerm::BigStringLiteral { value_id }
+        | EncodedTerm::BigSmallLangStringLiteral { value_id, .. }
+        | EncodedTerm::BigBigLangStringLiteral { value_id, .. }
+        | EncodedTerm::BigTypedLiteral { value_id, .. } => Some((*value_id).into()),
+        EncodedTerm::BooleanLiteral(value) => Some(build_string_id(
+            dataset,
+            if *value { "true" } else { "false" },
+        )),
+        EncodedTerm::FloatLiteral(value) => Some(build_string_id(dataset, &value.to_string())),
+        EncodedTerm::DoubleLiteral(value) => Some(build_string_id(dataset, &value.to_string())),
+        EncodedTerm::IntegerLiteral(value) => Some(build_string_id(dataset, &value.to_string())),
+        EncodedTerm::DecimalLiteral(value) => Some(build_string_id(dataset, &value.to_string())),
+        EncodedTerm::DateTimeLiteral(value) => Some(build_string_id(dataset, &value.to_string())),
+        EncodedTerm::TimeLiteral(value) => Some(build_string_id(dataset, &value.to_string())),
+        EncodedTerm::DateLiteral(value) => Some(build_string_id(dataset, &value.to_string())),
+        EncodedTerm::GYearMonthLiteral(value) => Some(build_string_id(dataset, &value.to_string())),
+        EncodedTerm::GYearLiteral(value) => Some(build_string_id(dataset, &value.to_string())),
+        EncodedTerm::GMonthDayLiteral(value) => Some(build_string_id(dataset, &value.to_string())),
+        EncodedTerm::GDayLiteral(value) => Some(build_string_id(dataset, &value.to_string())),
+        EncodedTerm::GMonthLiteral(value) => Some(build_string_id(dataset, &value.to_string())),
+        EncodedTerm::DurationLiteral(value) => Some(build_string_id(dataset, &value.to_string())),
+        EncodedTerm::YearMonthDurationLiteral(value) => {
+            Some(build_string_id(dataset, &value.to_string()))
+        }
+        EncodedTerm::DayTimeDurationLiteral(value) => {
+            Some(build_string_id(dataset, &value.to_string()))
+        }
+    }
+}
+
+fn to_simple_string(dataset: &DatasetView, term: &EncodedTerm) -> Option<String> {
+    match term {
+        EncodedTerm::SmallStringLiteral(value) => Some((*value).into()),
+        EncodedTerm::BigStringLiteral { value_id } => dataset.get_str(value_id).ok()?,
+        _ => None,
+    }
+}
+
+fn to_simple_string_id(term: &EncodedTerm) -> Option<SmallStringOrId> {
+    match term {
+        EncodedTerm::SmallStringLiteral(value) => Some((*value).into()),
+        EncodedTerm::BigStringLiteral { value_id } => Some((*value_id).into()),
+        _ => None,
+    }
+}
+
+fn to_string(dataset: &DatasetView, term: &EncodedTerm) -> Option<String> {
+    match term {
+        EncodedTerm::SmallStringLiteral(value)
+        | EncodedTerm::SmallSmallLangStringLiteral { value, .. }
+        | EncodedTerm::SmallBigLangStringLiteral { value, .. } => Some((*value).into()),
+        EncodedTerm::BigStringLiteral { value_id }
+        | EncodedTerm::BigSmallLangStringLiteral { value_id, .. }
+        | EncodedTerm::BigBigLangStringLiteral { value_id, .. } => {
+            dataset.get_str(value_id).ok()?
+        }
+        _ => None,
+    }
+}
+
+fn to_string_and_language(
+    dataset: &DatasetView,
+    term: &EncodedTerm,
+) -> Option<(String, Option<SmallStringOrId>)> {
+    match term {
+        EncodedTerm::SmallStringLiteral(value) => Some(((*value).into(), None)),
+        EncodedTerm::BigStringLiteral { value_id } => {
+            Some((dataset.get_str(value_id).ok()??, None))
+        }
+        EncodedTerm::SmallSmallLangStringLiteral { value, language } => {
+            Some(((*value).into(), Some((*language).into())))
+        }
+        EncodedTerm::SmallBigLangStringLiteral { value, language_id } => {
+            Some(((*value).into(), Some((*language_id).into())))
+        }
+        EncodedTerm::BigSmallLangStringLiteral { value_id, language } => {
+            Some((dataset.get_str(value_id).ok()??, Some((*language).into())))
+        }
+        EncodedTerm::BigBigLangStringLiteral {
+            value_id,
+            language_id,
+        } => Some((
+            dataset.get_str(value_id).ok()??,
+            Some((*language_id).into()),
+        )),
+        _ => None,
+    }
+}
+
+fn build_named_node(dataset: &DatasetView, iri: &str) -> EncodedTerm {
+    dataset.encode_term(NamedNodeRef::new_unchecked(iri))
+}
+
+fn encode_named_node(dataset: &DatasetView, node: NamedNodeRef<'_>) -> EncodedTerm {
+    dataset.encode_term(node)
+}
+
+fn build_string_literal(dataset: &DatasetView, value: &str) -> EncodedTerm {
+    build_string_literal_from_id(build_string_id(dataset, value))
+}
+
+fn build_string_literal_from_id(id: SmallStringOrId) -> EncodedTerm {
+    match id {
+        SmallStringOrId::Small(value) => EncodedTerm::SmallStringLiteral(value),
+        SmallStringOrId::Big(value_id) => EncodedTerm::BigStringLiteral { value_id },
+    }
+}
+
+fn build_lang_string_literal(
+    dataset: &DatasetView,
+    value: &str,
+    language_id: SmallStringOrId,
+) -> EncodedTerm {
+    build_lang_string_literal_from_id(build_string_id(dataset, value), language_id)
+}
+
+fn build_lang_string_literal_from_id(
+    value_id: SmallStringOrId,
+    language_id: SmallStringOrId,
+) -> EncodedTerm {
+    match (value_id, language_id) {
+        (SmallStringOrId::Small(value), SmallStringOrId::Small(language)) => {
+            EncodedTerm::SmallSmallLangStringLiteral { value, language }
+        }
+        (SmallStringOrId::Small(value), SmallStringOrId::Big(language_id)) => {
+            EncodedTerm::SmallBigLangStringLiteral { value, language_id }
+        }
+        (SmallStringOrId::Big(value_id), SmallStringOrId::Small(language)) => {
+            EncodedTerm::BigSmallLangStringLiteral { value_id, language }
+        }
+        (SmallStringOrId::Big(value_id), SmallStringOrId::Big(language_id)) => {
             EncodedTerm::BigBigLangStringLiteral {
                 value_id,
                 language_id,
-            } => Some((
-                self.dataset.get_str(value_id).ok()??,
-                Some((*language_id).into()),
-            )),
-            _ => None,
+            }
         }
     }
+}
 
-    fn build_named_node(&self, iri: &str) -> EncodedTerm {
-        self.dataset.encode_term(NamedNodeRef::new_unchecked(iri))
+fn build_plain_literal(
+    dataset: &DatasetView,
+    value: &str,
+    language: Option<SmallStringOrId>,
+) -> EncodedTerm {
+    if let Some(language_id) = language {
+        build_lang_string_literal(dataset, value, language_id)
+    } else {
+        build_string_literal(dataset, value)
     }
+}
 
-    fn encode_named_node(&self, node: NamedNodeRef<'_>) -> EncodedTerm {
-        self.dataset.encode_term(node)
+fn build_string_id(dataset: &DatasetView, value: &str) -> SmallStringOrId {
+    if let Ok(value) = SmallString::try_from(value) {
+        value.into()
+    } else {
+        let id = StrHash::new(value);
+        dataset.insert_str(&id, value);
+        SmallStringOrId::Big(id)
     }
+}
 
-    fn build_string_literal(&self, value: &str) -> EncodedTerm {
-        Self::build_string_literal_from_id(self.build_string_id(value))
+fn build_language_id(dataset: &DatasetView, value: &EncodedTerm) -> Option<SmallStringOrId> {
+    let mut language = to_simple_string(dataset, value)?;
+    language.make_ascii_lowercase();
+    Some(build_string_id(
+        dataset,
+        LanguageTag::parse(language).ok()?.as_str(),
+    ))
+}
+
+fn to_argument_compatible_strings(
+    dataset: &DatasetView,
+    arg1: &EncodedTerm,
+    arg2: &EncodedTerm,
+) -> Option<(String, String, Option<SmallStringOrId>)> {
+    let (value1, language1) = to_string_and_language(dataset, arg1)?;
+    let (value2, language2) = to_string_and_language(dataset, arg2)?;
+    if language2.is_none() || language1 == language2 {
+        Some((value1, value2, language1))
+    } else {
+        None
     }
+}
 
-    fn build_string_literal_from_id(id: SmallStringOrId) -> EncodedTerm {
-        match id {
-            SmallStringOrId::Small(value) => EncodedTerm::SmallStringLiteral(value),
-            SmallStringOrId::Big(value_id) => EncodedTerm::BigStringLiteral { value_id },
+fn compile_pattern(
+    dataset: &DatasetView,
+    pattern: &EncodedTerm,
+    flags: Option<EncodedTerm>,
+) -> Option<Regex> {
+    // TODO Avoid to compile the regex each time
+    let pattern = to_simple_string(dataset, pattern)?;
+    let mut regex_builder = RegexBuilder::new(&pattern);
+    regex_builder.size_limit(REGEX_SIZE_LIMIT);
+    if let Some(flags) = flags {
+        let flags = to_simple_string(dataset, &flags)?;
+        for flag in flags.chars() {
+            match flag {
+                's' => {
+                    regex_builder.dot_matches_new_line(true);
+                }
+                'm' => {
+                    regex_builder.multi_line(true);
+                }
+                'i' => {
+                    regex_builder.case_insensitive(true);
+                }
+                'x' => {
+                    regex_builder.ignore_whitespace(true);
+                }
+                _ => (), //TODO: implement q
+            }
         }
     }
+    regex_builder.build().ok()
+}
 
-    fn build_lang_string_literal(&self, value: &str, language_id: SmallStringOrId) -> EncodedTerm {
-        Self::build_lang_string_literal_from_id(self.build_string_id(value), language_id)
-    }
-
-    fn build_lang_string_literal_from_id(
-        value_id: SmallStringOrId,
-        language_id: SmallStringOrId,
-    ) -> EncodedTerm {
-        match (value_id, language_id) {
-            (SmallStringOrId::Small(value), SmallStringOrId::Small(language)) => {
-                EncodedTerm::SmallSmallLangStringLiteral { value, language }
-            }
-            (SmallStringOrId::Small(value), SmallStringOrId::Big(language_id)) => {
-                EncodedTerm::SmallBigLangStringLiteral { value, language_id }
-            }
-            (SmallStringOrId::Big(value_id), SmallStringOrId::Small(language)) => {
-                EncodedTerm::BigSmallLangStringLiteral { value_id, language }
-            }
-            (SmallStringOrId::Big(value_id), SmallStringOrId::Big(language_id)) => {
-                EncodedTerm::BigBigLangStringLiteral {
-                    value_id,
-                    language_id,
+fn decode_bindings(
+    dataset: Rc<DatasetView>,
+    iter: EncodedTuplesIterator,
+    variables: Rc<Vec<Variable>>,
+) -> QuerySolutionIter {
+    let tuple_size = variables.len();
+    QuerySolutionIter::new(
+        variables,
+        Box::new(iter.map(move |values| {
+            let mut result = vec![None; tuple_size];
+            for (i, value) in values?.iter().enumerate() {
+                if let Some(term) = value {
+                    result[i] = Some(dataset.decode_term(&term)?)
                 }
             }
+            Ok(result)
+        })),
+    )
+}
+
+// this is used to encode results from a BindingIterator into an EncodedTuplesIterator. This happens when SERVICE clauses are evaluated
+fn encode_bindings(
+    dataset: Rc<DatasetView>,
+    variables: Rc<Vec<Variable>>,
+    iter: QuerySolutionIter,
+) -> EncodedTuplesIterator {
+    Box::new(iter.map(move |solution| {
+        let mut encoded_terms = EncodedTuple::with_capacity(variables.len());
+        for (variable, term) in solution?.iter() {
+            put_variable_value(
+                variable,
+                &variables,
+                dataset.encode_term(term.as_ref()),
+                &mut encoded_terms,
+            )
         }
-    }
+        Ok(encoded_terms)
+    }))
+}
 
-    fn build_plain_literal(&self, value: &str, language: Option<SmallStringOrId>) -> EncodedTerm {
-        if let Some(language_id) = language {
-            self.build_lang_string_literal(value, language_id)
-        } else {
-            self.build_string_literal(value)
-        }
-    }
-
-    fn build_string_id(&self, value: &str) -> SmallStringOrId {
-        if let Ok(value) = SmallString::try_from(value) {
-            value.into()
-        } else {
-            let id = StrHash::new(value);
-            self.dataset.insert_str(&id, value);
-            SmallStringOrId::Big(id)
-        }
-    }
-
-    fn build_language_id(&self, value: &EncodedTerm) -> Option<SmallStringOrId> {
-        let mut language = self.to_simple_string(value)?;
-        language.make_ascii_lowercase();
-        Some(self.build_string_id(LanguageTag::parse(language).ok()?.as_str()))
-    }
-
-    fn to_argument_compatible_strings(
-        &self,
-        arg1: &EncodedTerm,
-        arg2: &EncodedTerm,
-    ) -> Option<(String, String, Option<SmallStringOrId>)> {
-        let (value1, language1) = self.to_string_and_language(arg1)?;
-        let (value2, language2) = self.to_string_and_language(arg2)?;
-        if language2.is_none() || language1 == language2 {
-            Some((value1, value2, language1))
-        } else {
-            None
-        }
-    }
-
-    fn compile_pattern(&self, pattern: &EncodedTerm, flags: Option<EncodedTerm>) -> Option<Regex> {
-        // TODO Avoid to compile the regex each time
-        let pattern = self.to_simple_string(pattern)?;
-        let mut regex_builder = RegexBuilder::new(&pattern);
-        regex_builder.size_limit(REGEX_SIZE_LIMIT);
-        if let Some(flags) = flags {
-            let flags = self.to_simple_string(&flags)?;
-            for flag in flags.chars() {
-                match flag {
-                    's' => {
-                        regex_builder.dot_matches_new_line(true);
-                    }
-                    'm' => {
-                        regex_builder.multi_line(true);
-                    }
-                    'i' => {
-                        regex_builder.case_insensitive(true);
-                    }
-                    'x' => {
-                        regex_builder.ignore_whitespace(true);
-                    }
-                    _ => (), //TODO: implement q
-                }
-            }
-        }
-        regex_builder.build().ok()
-    }
-
-    fn parse_numeric_operands(
-        &self,
-        e1: &PlanExpression,
-        e2: &PlanExpression,
-        tuple: &EncodedTuple,
-    ) -> Option<NumericBinaryOperands> {
-        NumericBinaryOperands::new(
-            &self.eval_expression(e1, tuple)?,
-            &self.eval_expression(e2, tuple)?,
-        )
-    }
-
-    fn decode_bindings(
-        &self,
-        iter: EncodedTuplesIterator,
-        variables: Rc<Vec<Variable>>,
-    ) -> QuerySolutionIter {
-        let eval = self.clone();
-        let tuple_size = variables.len();
-        QuerySolutionIter::new(
-            variables,
-            Box::new(iter.map(move |values| {
-                let mut result = vec![None; tuple_size];
-                for (i, value) in values?.iter().enumerate() {
-                    if let Some(term) = value {
-                        result[i] = Some(eval.dataset.decode_term(&term)?)
-                    }
-                }
-                Ok(result)
-            })),
-        )
-    }
-
-    // this is used to encode results from a BindingIterator into an EncodedTuplesIterator. This happens when SERVICE clauses are evaluated
-    fn encode_bindings(
-        &self,
-        variables: Rc<Vec<Variable>>,
-        iter: QuerySolutionIter,
-    ) -> EncodedTuplesIterator {
-        let eval = self.clone();
-        Box::new(iter.map(move |solution| {
-            let mut encoded_terms = EncodedTuple::with_capacity(variables.len());
-            for (variable, term) in solution?.iter() {
-                put_variable_value(
-                    variable,
-                    &variables,
-                    eval.dataset.encode_term(term.as_ref()),
-                    &mut encoded_terms,
-                )
-            }
-            Ok(encoded_terms)
-        }))
-    }
-
-    #[allow(
-        clippy::float_cmp,
-        clippy::cast_possible_truncation,
-        clippy::cast_precision_loss
-    )]
-    fn equals(&self, a: &EncodedTerm, b: &EncodedTerm) -> Option<bool> {
-        match a {
-            EncodedTerm::DefaultGraph
-            | EncodedTerm::NamedNode { .. }
+#[allow(
+    clippy::float_cmp,
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss
+)]
+fn equals(a: &EncodedTerm, b: &EncodedTerm) -> Option<bool> {
+    match a {
+        EncodedTerm::DefaultGraph
+        | EncodedTerm::NamedNode { .. }
+        | EncodedTerm::NumericalBlankNode { .. }
+        | EncodedTerm::SmallBlankNode { .. }
+        | EncodedTerm::BigBlankNode { .. }
+        | EncodedTerm::SmallSmallLangStringLiteral { .. }
+        | EncodedTerm::SmallBigLangStringLiteral { .. }
+        | EncodedTerm::BigSmallLangStringLiteral { .. }
+        | EncodedTerm::BigBigLangStringLiteral { .. } => Some(a == b),
+        EncodedTerm::SmallStringLiteral(a) => match b {
+            EncodedTerm::SmallStringLiteral(b) => Some(a == b),
+            EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+            _ => Some(false),
+        },
+        EncodedTerm::BigStringLiteral { value_id: a } => match b {
+            EncodedTerm::BigStringLiteral { value_id: b } => Some(a == b),
+            EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
+            _ => Some(false),
+        },
+        EncodedTerm::SmallTypedLiteral { .. } => match b {
+            EncodedTerm::SmallTypedLiteral { .. } if a == b => Some(true),
+            EncodedTerm::NamedNode { .. }
             | EncodedTerm::NumericalBlankNode { .. }
             | EncodedTerm::SmallBlankNode { .. }
             | EncodedTerm::BigBlankNode { .. }
             | EncodedTerm::SmallSmallLangStringLiteral { .. }
             | EncodedTerm::SmallBigLangStringLiteral { .. }
             | EncodedTerm::BigSmallLangStringLiteral { .. }
-            | EncodedTerm::BigBigLangStringLiteral { .. } => Some(a == b),
-            EncodedTerm::SmallStringLiteral(a) => match b {
-                EncodedTerm::SmallStringLiteral(b) => Some(a == b),
-                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
-                _ => Some(false),
-            },
-            EncodedTerm::BigStringLiteral { value_id: a } => match b {
-                EncodedTerm::BigStringLiteral { value_id: b } => Some(a == b),
-                EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
-                _ => Some(false),
-            },
-            EncodedTerm::SmallTypedLiteral { .. } => match b {
-                EncodedTerm::SmallTypedLiteral { .. } if a == b => Some(true),
-                EncodedTerm::NamedNode { .. }
-                | EncodedTerm::NumericalBlankNode { .. }
-                | EncodedTerm::SmallBlankNode { .. }
-                | EncodedTerm::BigBlankNode { .. }
-                | EncodedTerm::SmallSmallLangStringLiteral { .. }
-                | EncodedTerm::SmallBigLangStringLiteral { .. }
-                | EncodedTerm::BigSmallLangStringLiteral { .. }
-                | EncodedTerm::BigBigLangStringLiteral { .. }
-                | EncodedTerm::BigTypedLiteral { .. } => Some(false),
-                _ => None,
-            },
-            EncodedTerm::BigTypedLiteral { .. } => match b {
-                EncodedTerm::BigTypedLiteral { .. } if a == b => Some(true),
-                EncodedTerm::NamedNode { .. }
-                | EncodedTerm::NumericalBlankNode { .. }
-                | EncodedTerm::SmallBlankNode { .. }
-                | EncodedTerm::BigBlankNode { .. }
-                | EncodedTerm::SmallSmallLangStringLiteral { .. }
-                | EncodedTerm::SmallBigLangStringLiteral { .. }
-                | EncodedTerm::BigSmallLangStringLiteral { .. }
-                | EncodedTerm::BigBigLangStringLiteral { .. }
-                | EncodedTerm::SmallTypedLiteral { .. } => Some(false),
-                _ => None,
-            },
-            EncodedTerm::BooleanLiteral(a) => match b {
-                EncodedTerm::BooleanLiteral(b) => Some(a == b),
-                _ if b.is_unknown_typed_literal() => None,
-                _ => Some(false),
-            },
-            EncodedTerm::FloatLiteral(a) => match b {
-                EncodedTerm::FloatLiteral(b) => Some(a == b),
-                EncodedTerm::DoubleLiteral(b) => Some(Double::from(*a) == *b),
-                EncodedTerm::IntegerLiteral(b) => Some(*a == Float::from_i64(*b)),
-                EncodedTerm::DecimalLiteral(b) => Some(*a == b.to_float()),
-                _ if b.is_unknown_typed_literal() => None,
-                _ => Some(false),
-            },
-            EncodedTerm::DoubleLiteral(a) => match b {
-                EncodedTerm::FloatLiteral(b) => Some(*a == Double::from(*b)),
-                EncodedTerm::DoubleLiteral(b) => Some(a == b),
-                EncodedTerm::IntegerLiteral(b) => Some(*a == Double::from_i64(*b)),
-                EncodedTerm::DecimalLiteral(b) => Some(*a == b.to_double()),
-                _ if b.is_unknown_typed_literal() => None,
-                _ => Some(false),
-            },
-            EncodedTerm::IntegerLiteral(a) => match b {
-                EncodedTerm::FloatLiteral(b) => Some(Float::from_i64(*a) == *b),
-                EncodedTerm::DoubleLiteral(b) => Some(Double::from_i64(*a) == *b),
-                EncodedTerm::IntegerLiteral(b) => Some(a == b),
-                EncodedTerm::DecimalLiteral(b) => Some(Decimal::from(*a) == *b),
-                _ if b.is_unknown_typed_literal() => None,
-                _ => Some(false),
-            },
-            EncodedTerm::DecimalLiteral(a) => match b {
-                EncodedTerm::FloatLiteral(b) => Some(a.to_float() == *b),
-                EncodedTerm::DoubleLiteral(b) => Some(a.to_double() == *b),
-                EncodedTerm::IntegerLiteral(b) => Some(*a == Decimal::from(*b)),
-                EncodedTerm::DecimalLiteral(b) => Some(a == b),
-                _ if b.is_unknown_typed_literal() => None,
-                _ => Some(false),
-            },
-            EncodedTerm::DateTimeLiteral(a) => match b {
-                EncodedTerm::DateTimeLiteral(b) => Some(a == b),
-                _ if b.is_unknown_typed_literal() => None,
-                _ => Some(false),
-            },
-            EncodedTerm::TimeLiteral(a) => match b {
-                EncodedTerm::TimeLiteral(b) => Some(a == b),
-                _ if b.is_unknown_typed_literal() => None,
-                _ => Some(false),
-            },
-            EncodedTerm::DateLiteral(a) => match b {
-                EncodedTerm::DateLiteral(b) => Some(a == b),
-                _ if b.is_unknown_typed_literal() => None,
-                _ => Some(false),
-            },
-            EncodedTerm::GYearMonthLiteral(a) => match b {
-                EncodedTerm::GYearMonthLiteral(b) => Some(a == b),
-                _ if b.is_unknown_typed_literal() => None,
-                _ => Some(false),
-            },
-            EncodedTerm::GYearLiteral(a) => match b {
-                EncodedTerm::GYearLiteral(b) => Some(a == b),
-                _ if b.is_unknown_typed_literal() => None,
-                _ => Some(false),
-            },
-            EncodedTerm::GMonthDayLiteral(a) => match b {
-                EncodedTerm::GMonthDayLiteral(b) => Some(a == b),
-                _ if b.is_unknown_typed_literal() => None,
-                _ => Some(false),
-            },
-            EncodedTerm::GDayLiteral(a) => match b {
-                EncodedTerm::GDayLiteral(b) => Some(a == b),
-                _ if b.is_unknown_typed_literal() => None,
-                _ => Some(false),
-            },
-            EncodedTerm::GMonthLiteral(a) => match b {
-                EncodedTerm::GMonthLiteral(b) => Some(a == b),
-                _ if b.is_unknown_typed_literal() => None,
-                _ => Some(false),
-            },
-            EncodedTerm::DurationLiteral(a) => match b {
-                EncodedTerm::DurationLiteral(b) => Some(a == b),
-                EncodedTerm::YearMonthDurationLiteral(b) => Some(a == b),
-                EncodedTerm::DayTimeDurationLiteral(b) => Some(a == b),
-                _ if b.is_unknown_typed_literal() => None,
-                _ => Some(false),
-            },
-            EncodedTerm::YearMonthDurationLiteral(a) => match b {
-                EncodedTerm::DurationLiteral(b) => Some(a == b),
-                EncodedTerm::YearMonthDurationLiteral(b) => Some(a == b),
-                EncodedTerm::DayTimeDurationLiteral(b) => Some(a == b),
-                _ if b.is_unknown_typed_literal() => None,
-                _ => Some(false),
-            },
-            EncodedTerm::DayTimeDurationLiteral(a) => match b {
-                EncodedTerm::DurationLiteral(b) => Some(a == b),
-                EncodedTerm::YearMonthDurationLiteral(b) => Some(a == b),
-                EncodedTerm::DayTimeDurationLiteral(b) => Some(a == b),
-                _ if b.is_unknown_typed_literal() => None,
-                _ => Some(false),
-            },
-            EncodedTerm::Triple(a) => {
-                if let EncodedTerm::Triple(b) = b {
-                    Some(
-                        self.equals(&a.subject, &b.subject)?
-                            && self.equals(&a.predicate, &b.predicate)?
-                            && self.equals(&a.object, &b.object)?,
-                    )
-                } else {
-                    Some(false)
-                }
+            | EncodedTerm::BigBigLangStringLiteral { .. }
+            | EncodedTerm::BigTypedLiteral { .. } => Some(false),
+            _ => None,
+        },
+        EncodedTerm::BigTypedLiteral { .. } => match b {
+            EncodedTerm::BigTypedLiteral { .. } if a == b => Some(true),
+            EncodedTerm::NamedNode { .. }
+            | EncodedTerm::NumericalBlankNode { .. }
+            | EncodedTerm::SmallBlankNode { .. }
+            | EncodedTerm::BigBlankNode { .. }
+            | EncodedTerm::SmallSmallLangStringLiteral { .. }
+            | EncodedTerm::SmallBigLangStringLiteral { .. }
+            | EncodedTerm::BigSmallLangStringLiteral { .. }
+            | EncodedTerm::BigBigLangStringLiteral { .. }
+            | EncodedTerm::SmallTypedLiteral { .. } => Some(false),
+            _ => None,
+        },
+        EncodedTerm::BooleanLiteral(a) => match b {
+            EncodedTerm::BooleanLiteral(b) => Some(a == b),
+            _ if b.is_unknown_typed_literal() => None,
+            _ => Some(false),
+        },
+        EncodedTerm::FloatLiteral(a) => match b {
+            EncodedTerm::FloatLiteral(b) => Some(a == b),
+            EncodedTerm::DoubleLiteral(b) => Some(Double::from(*a) == *b),
+            EncodedTerm::IntegerLiteral(b) => Some(*a == Float::from_i64(*b)),
+            EncodedTerm::DecimalLiteral(b) => Some(*a == b.to_float()),
+            _ if b.is_unknown_typed_literal() => None,
+            _ => Some(false),
+        },
+        EncodedTerm::DoubleLiteral(a) => match b {
+            EncodedTerm::FloatLiteral(b) => Some(*a == Double::from(*b)),
+            EncodedTerm::DoubleLiteral(b) => Some(a == b),
+            EncodedTerm::IntegerLiteral(b) => Some(*a == Double::from_i64(*b)),
+            EncodedTerm::DecimalLiteral(b) => Some(*a == b.to_double()),
+            _ if b.is_unknown_typed_literal() => None,
+            _ => Some(false),
+        },
+        EncodedTerm::IntegerLiteral(a) => match b {
+            EncodedTerm::FloatLiteral(b) => Some(Float::from_i64(*a) == *b),
+            EncodedTerm::DoubleLiteral(b) => Some(Double::from_i64(*a) == *b),
+            EncodedTerm::IntegerLiteral(b) => Some(a == b),
+            EncodedTerm::DecimalLiteral(b) => Some(Decimal::from(*a) == *b),
+            _ if b.is_unknown_typed_literal() => None,
+            _ => Some(false),
+        },
+        EncodedTerm::DecimalLiteral(a) => match b {
+            EncodedTerm::FloatLiteral(b) => Some(a.to_float() == *b),
+            EncodedTerm::DoubleLiteral(b) => Some(a.to_double() == *b),
+            EncodedTerm::IntegerLiteral(b) => Some(*a == Decimal::from(*b)),
+            EncodedTerm::DecimalLiteral(b) => Some(a == b),
+            _ if b.is_unknown_typed_literal() => None,
+            _ => Some(false),
+        },
+        EncodedTerm::DateTimeLiteral(a) => match b {
+            EncodedTerm::DateTimeLiteral(b) => Some(a == b),
+            _ if b.is_unknown_typed_literal() => None,
+            _ => Some(false),
+        },
+        EncodedTerm::TimeLiteral(a) => match b {
+            EncodedTerm::TimeLiteral(b) => Some(a == b),
+            _ if b.is_unknown_typed_literal() => None,
+            _ => Some(false),
+        },
+        EncodedTerm::DateLiteral(a) => match b {
+            EncodedTerm::DateLiteral(b) => Some(a == b),
+            _ if b.is_unknown_typed_literal() => None,
+            _ => Some(false),
+        },
+        EncodedTerm::GYearMonthLiteral(a) => match b {
+            EncodedTerm::GYearMonthLiteral(b) => Some(a == b),
+            _ if b.is_unknown_typed_literal() => None,
+            _ => Some(false),
+        },
+        EncodedTerm::GYearLiteral(a) => match b {
+            EncodedTerm::GYearLiteral(b) => Some(a == b),
+            _ if b.is_unknown_typed_literal() => None,
+            _ => Some(false),
+        },
+        EncodedTerm::GMonthDayLiteral(a) => match b {
+            EncodedTerm::GMonthDayLiteral(b) => Some(a == b),
+            _ if b.is_unknown_typed_literal() => None,
+            _ => Some(false),
+        },
+        EncodedTerm::GDayLiteral(a) => match b {
+            EncodedTerm::GDayLiteral(b) => Some(a == b),
+            _ if b.is_unknown_typed_literal() => None,
+            _ => Some(false),
+        },
+        EncodedTerm::GMonthLiteral(a) => match b {
+            EncodedTerm::GMonthLiteral(b) => Some(a == b),
+            _ if b.is_unknown_typed_literal() => None,
+            _ => Some(false),
+        },
+        EncodedTerm::DurationLiteral(a) => match b {
+            EncodedTerm::DurationLiteral(b) => Some(a == b),
+            EncodedTerm::YearMonthDurationLiteral(b) => Some(a == b),
+            EncodedTerm::DayTimeDurationLiteral(b) => Some(a == b),
+            _ if b.is_unknown_typed_literal() => None,
+            _ => Some(false),
+        },
+        EncodedTerm::YearMonthDurationLiteral(a) => match b {
+            EncodedTerm::DurationLiteral(b) => Some(a == b),
+            EncodedTerm::YearMonthDurationLiteral(b) => Some(a == b),
+            EncodedTerm::DayTimeDurationLiteral(b) => Some(a == b),
+            _ if b.is_unknown_typed_literal() => None,
+            _ => Some(false),
+        },
+        EncodedTerm::DayTimeDurationLiteral(a) => match b {
+            EncodedTerm::DurationLiteral(b) => Some(a == b),
+            EncodedTerm::YearMonthDurationLiteral(b) => Some(a == b),
+            EncodedTerm::DayTimeDurationLiteral(b) => Some(a == b),
+            _ if b.is_unknown_typed_literal() => None,
+            _ => Some(false),
+        },
+        EncodedTerm::Triple(a) => {
+            if let EncodedTerm::Triple(b) = b {
+                Some(
+                    equals(&a.subject, &b.subject)?
+                        && equals(&a.predicate, &b.predicate)?
+                        && equals(&a.object, &b.object)?,
+                )
+            } else {
+                Some(false)
             }
         }
     }
+}
 
-    fn cmp_according_to_expression(
-        &self,
-        tuple_a: &EncodedTuple,
-        tuple_b: &EncodedTuple,
-        expression: &PlanExpression,
-    ) -> Ordering {
-        self.cmp_terms(
-            self.eval_expression(expression, tuple_a).as_ref(),
-            self.eval_expression(expression, tuple_b).as_ref(),
-        )
-    }
-
-    fn cmp_terms(&self, a: Option<&EncodedTerm>, b: Option<&EncodedTerm>) -> Ordering {
-        match (a, b) {
-            (Some(a), Some(b)) => match a {
-                _ if a.is_blank_node() => match b {
-                    _ if b.is_blank_node() => Ordering::Equal,
-                    _ => Ordering::Less,
-                },
-                EncodedTerm::NamedNode { iri_id: a } => match b {
-                    EncodedTerm::NamedNode { iri_id: b } => {
-                        self.compare_str_ids(a, b).unwrap_or(Ordering::Equal)
-                    }
-                    _ if b.is_blank_node() => Ordering::Greater,
-                    _ => Ordering::Less,
-                },
-                EncodedTerm::Triple(a) => match b {
-                    EncodedTerm::Triple(b) => {
-                        match self.cmp_terms(Some(&a.subject), Some(&b.subject)) {
-                            Ordering::Equal => {
-                                match self.cmp_terms(Some(&a.predicate), Some(&b.predicate)) {
-                                    Ordering::Equal => {
-                                        self.cmp_terms(Some(&a.object), Some(&b.object))
-                                    }
-                                    o => o,
-                                }
-                            }
-                            o => o,
-                        }
-                    }
-                    _ => Ordering::Greater,
-                },
-                a => match b {
-                    _ if b.is_named_node() || b.is_blank_node() => Ordering::Greater,
-                    _ if b.is_triple() => Ordering::Less,
-                    b => self.partial_cmp_literals(a, b).unwrap_or(Ordering::Equal),
-                },
+fn cmp_terms(dataset: &DatasetView, a: Option<&EncodedTerm>, b: Option<&EncodedTerm>) -> Ordering {
+    match (a, b) {
+        (Some(a), Some(b)) => match a {
+            _ if a.is_blank_node() => match b {
+                _ if b.is_blank_node() => Ordering::Equal,
+                _ => Ordering::Less,
             },
-            (Some(_), None) => Ordering::Greater,
-            (None, Some(_)) => Ordering::Less,
-            (None, None) => Ordering::Equal,
-        }
-    }
-
-    fn partial_cmp(&self, a: &EncodedTerm, b: &EncodedTerm) -> Option<Ordering> {
-        if a == b {
-            Some(Ordering::Equal)
-        } else if let EncodedTerm::Triple(a) = a {
-            if let EncodedTerm::Triple(b) = b {
-                match self.partial_cmp(&a.subject, &b.subject) {
-                    Some(Ordering::Equal) => match self.partial_cmp(&a.predicate, &b.predicate) {
-                        Some(Ordering::Equal) => self.partial_cmp(&a.object, &b.object),
-                        o => o,
-                    },
-                    o => o,
+            EncodedTerm::NamedNode { iri_id: a } => match b {
+                EncodedTerm::NamedNode { iri_id: b } => {
+                    compare_str_ids(dataset, a, b).unwrap_or(Ordering::Equal)
                 }
+                _ if b.is_blank_node() => Ordering::Greater,
+                _ => Ordering::Less,
+            },
+            EncodedTerm::Triple(a) => match b {
+                EncodedTerm::Triple(b) => {
+                    match cmp_terms(dataset, Some(&a.subject), Some(&b.subject)) {
+                        Ordering::Equal => {
+                            match cmp_terms(dataset, Some(&a.predicate), Some(&b.predicate)) {
+                                Ordering::Equal => {
+                                    cmp_terms(dataset, Some(&a.object), Some(&b.object))
+                                }
+                                o => o,
+                            }
+                        }
+                        o => o,
+                    }
+                }
+                _ => Ordering::Greater,
+            },
+            a => match b {
+                _ if b.is_named_node() || b.is_blank_node() => Ordering::Greater,
+                _ if b.is_triple() => Ordering::Less,
+                b => partial_cmp_literals(dataset, a, b).unwrap_or(Ordering::Equal),
+            },
+        },
+        (Some(_), None) => Ordering::Greater,
+        (None, Some(_)) => Ordering::Less,
+        (None, None) => Ordering::Equal,
+    }
+}
+
+fn partial_cmp(dataset: &DatasetView, a: &EncodedTerm, b: &EncodedTerm) -> Option<Ordering> {
+    if a == b {
+        Some(Ordering::Equal)
+    } else if let EncodedTerm::Triple(a) = a {
+        if let EncodedTerm::Triple(b) = b {
+            match partial_cmp(dataset, &a.subject, &b.subject) {
+                Some(Ordering::Equal) => match partial_cmp(dataset, &a.predicate, &b.predicate) {
+                    Some(Ordering::Equal) => partial_cmp(dataset, &a.object, &b.object),
+                    o => o,
+                },
+                o => o,
+            }
+        } else {
+            None
+        }
+    } else {
+        partial_cmp_literals(dataset, a, b)
+    }
+}
+
+#[allow(clippy::cast_precision_loss)]
+fn partial_cmp_literals(
+    dataset: &DatasetView,
+    a: &EncodedTerm,
+    b: &EncodedTerm,
+) -> Option<Ordering> {
+    match a {
+        EncodedTerm::SmallStringLiteral(a) => match b {
+            EncodedTerm::SmallStringLiteral(b) => a.partial_cmp(b),
+            EncodedTerm::BigStringLiteral { value_id: b } => compare_str_str_id(dataset, a, b),
+            _ => None,
+        },
+        EncodedTerm::BigStringLiteral { value_id: a } => match b {
+            EncodedTerm::SmallStringLiteral(b) => compare_str_id_str(dataset, a, b),
+            EncodedTerm::BigStringLiteral { value_id: b } => compare_str_ids(dataset, a, b),
+            _ => None,
+        },
+        EncodedTerm::FloatLiteral(a) => match b {
+            EncodedTerm::FloatLiteral(b) => a.partial_cmp(b),
+            EncodedTerm::DoubleLiteral(b) => Double::from(*a).partial_cmp(b),
+            EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&Float::from_i64(*b)),
+            EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&b.to_float()),
+            _ => None,
+        },
+        EncodedTerm::DoubleLiteral(a) => match b {
+            EncodedTerm::FloatLiteral(b) => a.partial_cmp(&(*b).into()),
+            EncodedTerm::DoubleLiteral(b) => a.partial_cmp(b),
+            EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&Double::from_i64(*b)),
+            EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&b.to_double()),
+            _ => None,
+        },
+        EncodedTerm::IntegerLiteral(a) => match b {
+            EncodedTerm::FloatLiteral(b) => Float::from_i64(*a).partial_cmp(b),
+            EncodedTerm::DoubleLiteral(b) => Double::from_i64(*a).partial_cmp(b),
+            EncodedTerm::IntegerLiteral(b) => a.partial_cmp(b),
+            EncodedTerm::DecimalLiteral(b) => Decimal::from(*a).partial_cmp(b),
+            _ => None,
+        },
+        EncodedTerm::DecimalLiteral(a) => match b {
+            EncodedTerm::FloatLiteral(b) => a.to_float().partial_cmp(b),
+            EncodedTerm::DoubleLiteral(b) => a.to_double().partial_cmp(b),
+            EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&Decimal::from(*b)),
+            EncodedTerm::DecimalLiteral(b) => a.partial_cmp(b),
+            _ => None,
+        },
+        EncodedTerm::DateTimeLiteral(a) => {
+            if let EncodedTerm::DateTimeLiteral(b) = b {
+                a.partial_cmp(b)
             } else {
                 None
             }
-        } else {
-            self.partial_cmp_literals(a, b)
         }
-    }
-
-    #[allow(clippy::cast_precision_loss)]
-    fn partial_cmp_literals(&self, a: &EncodedTerm, b: &EncodedTerm) -> Option<Ordering> {
-        match a {
-            EncodedTerm::SmallStringLiteral(a) => match b {
-                EncodedTerm::SmallStringLiteral(b) => a.partial_cmp(b),
-                EncodedTerm::BigStringLiteral { value_id: b } => self.compare_str_str_id(a, b),
-                _ => None,
-            },
-            EncodedTerm::BigStringLiteral { value_id: a } => match b {
-                EncodedTerm::SmallStringLiteral(b) => self.compare_str_id_str(a, b),
-                EncodedTerm::BigStringLiteral { value_id: b } => self.compare_str_ids(a, b),
-                _ => None,
-            },
-            EncodedTerm::FloatLiteral(a) => match b {
-                EncodedTerm::FloatLiteral(b) => a.partial_cmp(b),
-                EncodedTerm::DoubleLiteral(b) => Double::from(*a).partial_cmp(b),
-                EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&Float::from_i64(*b)),
-                EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&b.to_float()),
-                _ => None,
-            },
-            EncodedTerm::DoubleLiteral(a) => match b {
-                EncodedTerm::FloatLiteral(b) => a.partial_cmp(&(*b).into()),
-                EncodedTerm::DoubleLiteral(b) => a.partial_cmp(b),
-                EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&Double::from_i64(*b)),
-                EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&b.to_double()),
-                _ => None,
-            },
-            EncodedTerm::IntegerLiteral(a) => match b {
-                EncodedTerm::FloatLiteral(b) => Float::from_i64(*a).partial_cmp(b),
-                EncodedTerm::DoubleLiteral(b) => Double::from_i64(*a).partial_cmp(b),
-                EncodedTerm::IntegerLiteral(b) => a.partial_cmp(b),
-                EncodedTerm::DecimalLiteral(b) => Decimal::from(*a).partial_cmp(b),
-                _ => None,
-            },
-            EncodedTerm::DecimalLiteral(a) => match b {
-                EncodedTerm::FloatLiteral(b) => a.to_float().partial_cmp(b),
-                EncodedTerm::DoubleLiteral(b) => a.to_double().partial_cmp(b),
-                EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&Decimal::from(*b)),
-                EncodedTerm::DecimalLiteral(b) => a.partial_cmp(b),
-                _ => None,
-            },
-            EncodedTerm::DateTimeLiteral(a) => {
-                if let EncodedTerm::DateTimeLiteral(b) = b {
-                    a.partial_cmp(b)
-                } else {
-                    None
-                }
+        EncodedTerm::TimeLiteral(a) => {
+            if let EncodedTerm::TimeLiteral(b) = b {
+                a.partial_cmp(b)
+            } else {
+                None
             }
-            EncodedTerm::TimeLiteral(a) => {
-                if let EncodedTerm::TimeLiteral(b) = b {
-                    a.partial_cmp(b)
-                } else {
-                    None
-                }
+        }
+        EncodedTerm::DateLiteral(a) => {
+            if let EncodedTerm::DateLiteral(b) = b {
+                a.partial_cmp(b)
+            } else {
+                None
             }
-            EncodedTerm::DateLiteral(a) => {
-                if let EncodedTerm::DateLiteral(b) = b {
-                    a.partial_cmp(b)
-                } else {
-                    None
-                }
+        }
+        EncodedTerm::GYearMonthLiteral(a) => {
+            if let EncodedTerm::GYearMonthLiteral(b) = b {
+                a.partial_cmp(b)
+            } else {
+                None
             }
-            EncodedTerm::GYearMonthLiteral(a) => {
-                if let EncodedTerm::GYearMonthLiteral(b) = b {
-                    a.partial_cmp(b)
-                } else {
-                    None
-                }
+        }
+        EncodedTerm::GYearLiteral(a) => {
+            if let EncodedTerm::GYearLiteral(b) = b {
+                a.partial_cmp(b)
+            } else {
+                None
             }
-            EncodedTerm::GYearLiteral(a) => {
-                if let EncodedTerm::GYearLiteral(b) = b {
-                    a.partial_cmp(b)
-                } else {
-                    None
-                }
+        }
+        EncodedTerm::GMonthDayLiteral(a) => {
+            if let EncodedTerm::GMonthDayLiteral(b) = b {
+                a.partial_cmp(b)
+            } else {
+                None
             }
-            EncodedTerm::GMonthDayLiteral(a) => {
-                if let EncodedTerm::GMonthDayLiteral(b) = b {
-                    a.partial_cmp(b)
-                } else {
-                    None
-                }
+        }
+        EncodedTerm::GDayLiteral(a) => {
+            if let EncodedTerm::GDayLiteral(b) = b {
+                a.partial_cmp(b)
+            } else {
+                None
             }
-            EncodedTerm::GDayLiteral(a) => {
-                if let EncodedTerm::GDayLiteral(b) = b {
-                    a.partial_cmp(b)
-                } else {
-                    None
-                }
+        }
+        EncodedTerm::GMonthLiteral(a) => {
+            if let EncodedTerm::GMonthLiteral(b) = b {
+                a.partial_cmp(b)
+            } else {
+                None
             }
-            EncodedTerm::GMonthLiteral(a) => {
-                if let EncodedTerm::GMonthLiteral(b) = b {
-                    a.partial_cmp(b)
-                } else {
-                    None
-                }
-            }
-            EncodedTerm::DurationLiteral(a) => match b {
-                EncodedTerm::DurationLiteral(b) => a.partial_cmp(b),
-                EncodedTerm::YearMonthDurationLiteral(b) => a.partial_cmp(b),
-                EncodedTerm::DayTimeDurationLiteral(b) => a.partial_cmp(b),
-                _ => None,
-            },
-            EncodedTerm::YearMonthDurationLiteral(a) => match b {
-                EncodedTerm::DurationLiteral(b) => a.partial_cmp(b),
-                EncodedTerm::YearMonthDurationLiteral(b) => a.partial_cmp(b),
-                EncodedTerm::DayTimeDurationLiteral(b) => a.partial_cmp(b),
-                _ => None,
-            },
-            EncodedTerm::DayTimeDurationLiteral(a) => match b {
-                EncodedTerm::DurationLiteral(b) => a.partial_cmp(b),
-                EncodedTerm::YearMonthDurationLiteral(b) => a.partial_cmp(b),
-                EncodedTerm::DayTimeDurationLiteral(b) => a.partial_cmp(b),
-                _ => None,
-            },
+        }
+        EncodedTerm::DurationLiteral(a) => match b {
+            EncodedTerm::DurationLiteral(b) => a.partial_cmp(b),
+            EncodedTerm::YearMonthDurationLiteral(b) => a.partial_cmp(b),
+            EncodedTerm::DayTimeDurationLiteral(b) => a.partial_cmp(b),
             _ => None,
+        },
+        EncodedTerm::YearMonthDurationLiteral(a) => match b {
+            EncodedTerm::DurationLiteral(b) => a.partial_cmp(b),
+            EncodedTerm::YearMonthDurationLiteral(b) => a.partial_cmp(b),
+            EncodedTerm::DayTimeDurationLiteral(b) => a.partial_cmp(b),
+            _ => None,
+        },
+        EncodedTerm::DayTimeDurationLiteral(a) => match b {
+            EncodedTerm::DurationLiteral(b) => a.partial_cmp(b),
+            EncodedTerm::YearMonthDurationLiteral(b) => a.partial_cmp(b),
+            EncodedTerm::DayTimeDurationLiteral(b) => a.partial_cmp(b),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn compare_str_ids(dataset: &DatasetView, a: &StrHash, b: &StrHash) -> Option<Ordering> {
+    Some(dataset.get_str(a).ok()??.cmp(&dataset.get_str(b).ok()??))
+}
+
+fn compare_str_id_str(dataset: &DatasetView, a: &StrHash, b: &str) -> Option<Ordering> {
+    Some(dataset.get_str(a).ok()??.as_str().cmp(b))
+}
+
+fn compare_str_str_id(dataset: &DatasetView, a: &str, b: &StrHash) -> Option<Ordering> {
+    Some(a.cmp(dataset.get_str(b).ok()??.as_str()))
+}
+
+fn datatype(dataset: &DatasetView, value: &EncodedTerm) -> Option<EncodedTerm> {
+    //TODO: optimize?
+    match value {
+        EncodedTerm::NamedNode { .. }
+        | EncodedTerm::SmallBlankNode { .. }
+        | EncodedTerm::BigBlankNode { .. }
+        | EncodedTerm::NumericalBlankNode { .. }
+        | EncodedTerm::DefaultGraph
+        | EncodedTerm::Triple(_) => None,
+        EncodedTerm::SmallStringLiteral(_) | EncodedTerm::BigStringLiteral { .. } => {
+            Some(encode_named_node(dataset, xsd::STRING))
         }
-    }
-
-    fn compare_str_ids(&self, a: &StrHash, b: &StrHash) -> Option<Ordering> {
-        Some(
-            self.dataset
-                .get_str(a)
-                .ok()??
-                .cmp(&self.dataset.get_str(b).ok()??),
-        )
-    }
-
-    fn compare_str_id_str(&self, a: &StrHash, b: &str) -> Option<Ordering> {
-        Some(self.dataset.get_str(a).ok()??.as_str().cmp(b))
-    }
-
-    fn compare_str_str_id(&self, a: &str, b: &StrHash) -> Option<Ordering> {
-        Some(a.cmp(self.dataset.get_str(b).ok()??.as_str()))
-    }
-
-    fn hash<H: Digest>(&self, arg: &PlanExpression, tuple: &EncodedTuple) -> Option<EncodedTerm> {
-        let input = self.to_simple_string(&self.eval_expression(arg, tuple)?)?;
-        let hash = hex::encode(H::new().chain(input.as_str()).finalize());
-        Some(self.build_string_literal(&hash))
-    }
-
-    fn datatype(&self, value: &EncodedTerm) -> Option<EncodedTerm> {
-        //TODO: optimize?
-        match value {
-            EncodedTerm::NamedNode { .. }
-            | EncodedTerm::SmallBlankNode { .. }
-            | EncodedTerm::BigBlankNode { .. }
-            | EncodedTerm::NumericalBlankNode { .. }
-            | EncodedTerm::DefaultGraph
-            | EncodedTerm::Triple(_) => None,
-            EncodedTerm::SmallStringLiteral(_) | EncodedTerm::BigStringLiteral { .. } => {
-                Some(self.encode_named_node(xsd::STRING))
-            }
-            EncodedTerm::SmallSmallLangStringLiteral { .. }
-            | EncodedTerm::SmallBigLangStringLiteral { .. }
-            | EncodedTerm::BigSmallLangStringLiteral { .. }
-            | EncodedTerm::BigBigLangStringLiteral { .. } => {
-                Some(self.encode_named_node(rdf::LANG_STRING))
-            }
-            EncodedTerm::SmallTypedLiteral { datatype_id, .. }
-            | EncodedTerm::BigTypedLiteral { datatype_id, .. } => Some(EncodedTerm::NamedNode {
-                iri_id: *datatype_id,
-            }),
-            EncodedTerm::BooleanLiteral(..) => Some(self.encode_named_node(xsd::BOOLEAN)),
-            EncodedTerm::FloatLiteral(..) => Some(self.encode_named_node(xsd::FLOAT)),
-            EncodedTerm::DoubleLiteral(..) => Some(self.encode_named_node(xsd::DOUBLE)),
-            EncodedTerm::IntegerLiteral(..) => Some(self.encode_named_node(xsd::INTEGER)),
-            EncodedTerm::DecimalLiteral(..) => Some(self.encode_named_node(xsd::DECIMAL)),
-            EncodedTerm::DateTimeLiteral(..) => Some(self.encode_named_node(xsd::DATE_TIME)),
-            EncodedTerm::TimeLiteral(..) => Some(self.encode_named_node(xsd::TIME)),
-            EncodedTerm::DateLiteral(..) => Some(self.encode_named_node(xsd::DATE)),
-            EncodedTerm::GYearMonthLiteral(..) => Some(self.encode_named_node(xsd::G_YEAR_MONTH)),
-            EncodedTerm::GYearLiteral(..) => Some(self.encode_named_node(xsd::G_YEAR)),
-            EncodedTerm::GMonthDayLiteral(..) => Some(self.encode_named_node(xsd::G_MONTH_DAY)),
-            EncodedTerm::GDayLiteral(..) => Some(self.encode_named_node(xsd::G_DAY)),
-            EncodedTerm::GMonthLiteral(..) => Some(self.encode_named_node(xsd::G_MONTH)),
-            EncodedTerm::DurationLiteral(..) => Some(self.encode_named_node(xsd::DURATION)),
-            EncodedTerm::YearMonthDurationLiteral(..) => {
-                Some(self.encode_named_node(xsd::YEAR_MONTH_DURATION))
-            }
-            EncodedTerm::DayTimeDurationLiteral(..) => {
-                Some(self.encode_named_node(xsd::DAY_TIME_DURATION))
-            }
+        EncodedTerm::SmallSmallLangStringLiteral { .. }
+        | EncodedTerm::SmallBigLangStringLiteral { .. }
+        | EncodedTerm::BigSmallLangStringLiteral { .. }
+        | EncodedTerm::BigBigLangStringLiteral { .. } => {
+            Some(encode_named_node(dataset, rdf::LANG_STRING))
+        }
+        EncodedTerm::SmallTypedLiteral { datatype_id, .. }
+        | EncodedTerm::BigTypedLiteral { datatype_id, .. } => Some(EncodedTerm::NamedNode {
+            iri_id: *datatype_id,
+        }),
+        EncodedTerm::BooleanLiteral(..) => Some(encode_named_node(dataset, xsd::BOOLEAN)),
+        EncodedTerm::FloatLiteral(..) => Some(encode_named_node(dataset, xsd::FLOAT)),
+        EncodedTerm::DoubleLiteral(..) => Some(encode_named_node(dataset, xsd::DOUBLE)),
+        EncodedTerm::IntegerLiteral(..) => Some(encode_named_node(dataset, xsd::INTEGER)),
+        EncodedTerm::DecimalLiteral(..) => Some(encode_named_node(dataset, xsd::DECIMAL)),
+        EncodedTerm::DateTimeLiteral(..) => Some(encode_named_node(dataset, xsd::DATE_TIME)),
+        EncodedTerm::TimeLiteral(..) => Some(encode_named_node(dataset, xsd::TIME)),
+        EncodedTerm::DateLiteral(..) => Some(encode_named_node(dataset, xsd::DATE)),
+        EncodedTerm::GYearMonthLiteral(..) => Some(encode_named_node(dataset, xsd::G_YEAR_MONTH)),
+        EncodedTerm::GYearLiteral(..) => Some(encode_named_node(dataset, xsd::G_YEAR)),
+        EncodedTerm::GMonthDayLiteral(..) => Some(encode_named_node(dataset, xsd::G_MONTH_DAY)),
+        EncodedTerm::GDayLiteral(..) => Some(encode_named_node(dataset, xsd::G_DAY)),
+        EncodedTerm::GMonthLiteral(..) => Some(encode_named_node(dataset, xsd::G_MONTH)),
+        EncodedTerm::DurationLiteral(..) => Some(encode_named_node(dataset, xsd::DURATION)),
+        EncodedTerm::YearMonthDurationLiteral(..) => {
+            Some(encode_named_node(dataset, xsd::YEAR_MONTH_DURATION))
+        }
+        EncodedTerm::DayTimeDurationLiteral(..) => {
+            Some(encode_named_node(dataset, xsd::DAY_TIME_DURATION))
         }
     }
 }
@@ -2303,118 +2612,118 @@ enum NumericBinaryOperands {
 
 impl NumericBinaryOperands {
     #[allow(clippy::cast_precision_loss)]
-    fn new(a: &EncodedTerm, b: &EncodedTerm) -> Option<Self> {
+    fn new(a: EncodedTerm, b: EncodedTerm) -> Option<Self> {
         match (a, b) {
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(Self::Float(*v1, *v2))
+                Some(Self::Float(v1, v2))
             }
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
-                Some(Self::Double((*v1).into(), *v2))
+                Some(Self::Double(v1.into(), v2))
             }
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
-                Some(Self::Float(*v1, Float::from_i64(*v2)))
+                Some(Self::Float(v1, Float::from_i64(v2)))
             }
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
-                Some(Self::Float(*v1, v2.to_float()))
+                Some(Self::Float(v1, v2.to_float()))
             }
             (EncodedTerm::DoubleLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(Self::Double(*v1, (*v2).into()))
+                Some(Self::Double(v1, v2.into()))
             }
             (EncodedTerm::DoubleLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
-                Some(Self::Double(*v1, *v2))
+                Some(Self::Double(v1, v2))
             }
             (EncodedTerm::DoubleLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
-                Some(Self::Double(*v1, Double::from_i64(*v2)))
+                Some(Self::Double(v1, Double::from_i64(v2)))
             }
             (EncodedTerm::DoubleLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
-                Some(Self::Double(*v1, v2.to_double()))
+                Some(Self::Double(v1, v2.to_double()))
             }
             (EncodedTerm::IntegerLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(Self::Float(Float::from_i64(*v1), *v2))
+                Some(Self::Float(Float::from_i64(v1), v2))
             }
             (EncodedTerm::IntegerLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
-                Some(Self::Double(Double::from_i64(*v1), *v2))
+                Some(Self::Double(Double::from_i64(v1), v2))
             }
             (EncodedTerm::IntegerLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
-                Some(Self::Integer(*v1, *v2))
+                Some(Self::Integer(v1, v2))
             }
             (EncodedTerm::IntegerLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
-                Some(Self::Decimal(Decimal::from(*v1), *v2))
+                Some(Self::Decimal(Decimal::from(v1), v2))
             }
             (EncodedTerm::DecimalLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
-                Some(Self::Float(v1.to_float(), *v2))
+                Some(Self::Float(v1.to_float(), v2))
             }
             (EncodedTerm::DecimalLiteral(v1), EncodedTerm::DoubleLiteral(v2)) => {
-                Some(Self::Double(v1.to_double(), *v2))
+                Some(Self::Double(v1.to_double(), v2))
             }
             (EncodedTerm::DecimalLiteral(v1), EncodedTerm::IntegerLiteral(v2)) => {
-                Some(Self::Decimal(*v1, Decimal::from(*v2)))
+                Some(Self::Decimal(v1, Decimal::from(v2)))
             }
             (EncodedTerm::DecimalLiteral(v1), EncodedTerm::DecimalLiteral(v2)) => {
-                Some(Self::Decimal(*v1, *v2))
+                Some(Self::Decimal(v1, v2))
             }
             (EncodedTerm::DurationLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
-                Some(Self::Duration(*v1, *v2))
+                Some(Self::Duration(v1, v2))
             }
             (EncodedTerm::DurationLiteral(v1), EncodedTerm::YearMonthDurationLiteral(v2)) => {
-                Some(Self::Duration(*v1, (*v2).into()))
+                Some(Self::Duration(v1, (v2).into()))
             }
             (EncodedTerm::DurationLiteral(v1), EncodedTerm::DayTimeDurationLiteral(v2)) => {
-                Some(Self::Duration(*v1, (*v2).into()))
+                Some(Self::Duration(v1, (v2).into()))
             }
             (EncodedTerm::YearMonthDurationLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
-                Some(Self::Duration((*v1).into(), *v2))
+                Some(Self::Duration((v1).into(), v2))
             }
             (
                 EncodedTerm::YearMonthDurationLiteral(v1),
                 EncodedTerm::YearMonthDurationLiteral(v2),
-            ) => Some(Self::YearMonthDuration(*v1, *v2)),
+            ) => Some(Self::YearMonthDuration(v1, v2)),
             (
                 EncodedTerm::YearMonthDurationLiteral(v1),
                 EncodedTerm::DayTimeDurationLiteral(v2),
-            ) => Some(Self::Duration((*v1).into(), (*v2).into())),
+            ) => Some(Self::Duration((v1).into(), (v2).into())),
             (EncodedTerm::DayTimeDurationLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
-                Some(Self::Duration((*v1).into(), *v2))
+                Some(Self::Duration((v1).into(), v2))
             }
             (
                 EncodedTerm::DayTimeDurationLiteral(v1),
                 EncodedTerm::YearMonthDurationLiteral(v2),
-            ) => Some(Self::Duration((*v1).into(), (*v2).into())),
+            ) => Some(Self::Duration((v1).into(), (v2).into())),
             (EncodedTerm::DayTimeDurationLiteral(v1), EncodedTerm::DayTimeDurationLiteral(v2)) => {
-                Some(Self::DayTimeDuration(*v1, *v2))
+                Some(Self::DayTimeDuration(v1, v2))
             }
             (EncodedTerm::DateTimeLiteral(v1), EncodedTerm::DateTimeLiteral(v2)) => {
-                Some(Self::DateTime(*v1, *v2))
+                Some(Self::DateTime(v1, v2))
             }
             (EncodedTerm::DateLiteral(v1), EncodedTerm::DateLiteral(v2)) => {
-                Some(Self::Date(*v1, *v2))
+                Some(Self::Date(v1, v2))
             }
             (EncodedTerm::TimeLiteral(v1), EncodedTerm::TimeLiteral(v2)) => {
-                Some(Self::Time(*v1, *v2))
+                Some(Self::Time(v1, v2))
             }
             (EncodedTerm::DateTimeLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
-                Some(Self::DateTimeDuration(*v1, *v2))
+                Some(Self::DateTimeDuration(v1, v2))
             }
             (EncodedTerm::DateTimeLiteral(v1), EncodedTerm::YearMonthDurationLiteral(v2)) => {
-                Some(Self::DateTimeYearMonthDuration(*v1, *v2))
+                Some(Self::DateTimeYearMonthDuration(v1, v2))
             }
             (EncodedTerm::DateTimeLiteral(v1), EncodedTerm::DayTimeDurationLiteral(v2)) => {
-                Some(Self::DateTimeDayTimeDuration(*v1, *v2))
+                Some(Self::DateTimeDayTimeDuration(v1, v2))
             }
             (EncodedTerm::DateLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
-                Some(Self::DateDuration(*v1, *v2))
+                Some(Self::DateDuration(v1, v2))
             }
             (EncodedTerm::DateLiteral(v1), EncodedTerm::YearMonthDurationLiteral(v2)) => {
-                Some(Self::DateYearMonthDuration(*v1, *v2))
+                Some(Self::DateYearMonthDuration(v1, v2))
             }
             (EncodedTerm::DateLiteral(v1), EncodedTerm::DayTimeDurationLiteral(v2)) => {
-                Some(Self::DateDayTimeDuration(*v1, *v2))
+                Some(Self::DateDayTimeDuration(v1, v2))
             }
             (EncodedTerm::TimeLiteral(v1), EncodedTerm::DurationLiteral(v2)) => {
-                Some(Self::TimeDuration(*v1, *v2))
+                Some(Self::TimeDuration(v1, v2))
             }
             (EncodedTerm::TimeLiteral(v1), EncodedTerm::DayTimeDurationLiteral(v2)) => {
-                Some(Self::TimeDayTimeDuration(*v1, *v2))
+                Some(Self::TimeDayTimeDuration(v1, v2))
             }
             _ => None,
         }
@@ -3012,7 +3321,8 @@ impl Default for SumAccumulator {
 impl Accumulator for SumAccumulator {
     fn add(&mut self, element: Option<EncodedTerm>) {
         if let Some(sum) = &self.sum {
-            if let Some(operands) = element.and_then(|e| NumericBinaryOperands::new(sum, &e)) {
+            if let Some(operands) = element.and_then(|e| NumericBinaryOperands::new(sum.clone(), e))
+            {
                 //TODO: unify with addition?
                 self.sum = match operands {
                     NumericBinaryOperands::Float(v1, v2) => Some((v1 + v2).into()),
@@ -3062,7 +3372,7 @@ impl Accumulator for AvgAccumulator {
         } else {
             //TODO: deduplicate?
             //TODO: duration?
-            match NumericBinaryOperands::new(&sum, &count)? {
+            match NumericBinaryOperands::new(sum, count)? {
                 NumericBinaryOperands::Float(v1, v2) => Some((v1 / v2).into()),
                 NumericBinaryOperands::Double(v1, v2) => Some((v1 / v2).into()),
                 NumericBinaryOperands::Integer(v1, v2) => {
@@ -3077,20 +3387,20 @@ impl Accumulator for AvgAccumulator {
 
 #[allow(clippy::option_option)]
 struct MinAccumulator {
-    eval: SimpleEvaluator,
+    dataset: Rc<DatasetView>,
     min: Option<Option<EncodedTerm>>,
 }
 
 impl MinAccumulator {
-    fn new(eval: SimpleEvaluator) -> Self {
-        Self { eval, min: None }
+    fn new(dataset: Rc<DatasetView>) -> Self {
+        Self { dataset, min: None }
     }
 }
 
 impl Accumulator for MinAccumulator {
     fn add(&mut self, element: Option<EncodedTerm>) {
         if let Some(min) = &self.min {
-            if self.eval.cmp_terms(element.as_ref(), min.as_ref()) == Ordering::Less {
+            if cmp_terms(&self.dataset, element.as_ref(), min.as_ref()) == Ordering::Less {
                 self.min = Some(element)
             }
         } else {
@@ -3105,20 +3415,20 @@ impl Accumulator for MinAccumulator {
 
 #[allow(clippy::option_option)]
 struct MaxAccumulator {
-    eval: SimpleEvaluator,
+    dataset: Rc<DatasetView>,
     max: Option<Option<EncodedTerm>>,
 }
 
 impl MaxAccumulator {
-    fn new(eval: SimpleEvaluator) -> Self {
-        Self { eval, max: None }
+    fn new(dataset: Rc<DatasetView>) -> Self {
+        Self { dataset, max: None }
     }
 }
 
 impl Accumulator for MaxAccumulator {
     fn add(&mut self, element: Option<EncodedTerm>) {
         if let Some(max) = &self.max {
-            if self.eval.cmp_terms(element.as_ref(), max.as_ref()) == Ordering::Greater {
+            if cmp_terms(&self.dataset, element.as_ref(), max.as_ref()) == Ordering::Greater {
                 self.max = Some(element)
             }
         } else {
@@ -3156,16 +3466,16 @@ impl Accumulator for SampleAccumulator {
 
 #[allow(clippy::option_option)]
 struct GroupConcatAccumulator {
-    eval: SimpleEvaluator,
+    dataset: Rc<DatasetView>,
     concat: Option<String>,
     language: Option<Option<SmallStringOrId>>,
     separator: Rc<String>,
 }
 
 impl GroupConcatAccumulator {
-    fn new(eval: SimpleEvaluator, separator: Rc<String>) -> Self {
+    fn new(dataset: Rc<DatasetView>, separator: Rc<String>) -> Self {
         Self {
-            eval,
+            dataset,
             concat: Some("".to_owned()),
             language: None,
             separator,
@@ -3177,7 +3487,7 @@ impl Accumulator for GroupConcatAccumulator {
     fn add(&mut self, element: Option<EncodedTerm>) {
         if let Some(concat) = self.concat.as_mut() {
             if let Some(element) = element {
-                if let Some((value, e_language)) = self.eval.to_string_and_language(&element) {
+                if let Some((value, e_language)) = to_string_and_language(&self.dataset, &element) {
                     if let Some(lang) = self.language {
                         if lang != e_language {
                             self.language = Some(None)
@@ -3193,10 +3503,9 @@ impl Accumulator for GroupConcatAccumulator {
     }
 
     fn state(&self) -> Option<EncodedTerm> {
-        self.concat.as_ref().map(|result| {
-            self.eval
-                .build_plain_literal(result, self.language.and_then(|v| v))
-        })
+        self.concat
+            .as_ref()
+            .map(|result| build_plain_literal(&self.dataset, result, self.language.and_then(|v| v)))
     }
 }
 
@@ -3249,6 +3558,11 @@ impl From<StrHash> for SmallStringOrId {
     fn from(value: StrHash) -> Self {
         Self::Big(value)
     }
+}
+
+pub enum ComparatorFunction {
+    Asc(Box<dyn Fn(&EncodedTuple) -> Option<EncodedTerm>>),
+    Desc(Box<dyn Fn(&EncodedTuple) -> Option<EncodedTerm>>),
 }
 
 #[test]
