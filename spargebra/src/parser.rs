@@ -1665,15 +1665,15 @@ parser! {
                     patterns: ho.patterns
                 }, |mut a, b| {
                     a.focus.push(b.focus);
-                    a.patterns.extend(b.patterns.into_iter().map(|v| v.into()));
+                    a.patterns.extend(b.patterns);
                     a
                 })
         }
-        rule PropertyListPathNotEmpty_item() -> Option<FocusedTriplePattern<(VariableOrPropertyPath,Vec<AnnotatedTermPath>)>> = ";" _ c:PropertyListPathNotEmpty_item_content()? {
+        rule PropertyListPathNotEmpty_item() -> Option<FocusedTripleOrPathPattern<(VariableOrPropertyPath,Vec<AnnotatedTermPath>)>> = ";" _ c:PropertyListPathNotEmpty_item_content()? {
             c
         }
-        rule PropertyListPathNotEmpty_item_content() -> FocusedTriplePattern<(VariableOrPropertyPath,Vec<AnnotatedTermPath>)> = p:(VerbPath() / VerbSimple()) _ o:ObjectList() _ {
-            FocusedTriplePattern {
+        rule PropertyListPathNotEmpty_item_content() -> FocusedTripleOrPathPattern<(VariableOrPropertyPath,Vec<AnnotatedTermPath>)> = p:(VerbPath() / VerbSimple()) _ o:ObjectListPath() _ {
+            FocusedTripleOrPathPattern {
                 focus: (p, o.focus.into_iter().map(AnnotatedTermPath::from).collect()),
                 patterns: o.patterns
             }

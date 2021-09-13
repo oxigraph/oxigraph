@@ -12,6 +12,7 @@
     :describe_where
     :group_concat_with_null
     :single_not_exists
+    :property_list_path
     ) .
 
 :describe rdf:type mf:QueryEvaluationTest ;
@@ -42,3 +43,7 @@
          [ qt:query  <single_not_exists.rq> ;
            qt:data   <describe_input.ttl> ] ;
     mf:result  <single_not_exists.srx> .
+
+:property_list_path rdf:type mf:PositiveSyntaxTest ;
+    mf:name "PropertyListPathNotEmpty children should be ObjectListPath for consistency" ;
+    mf:action <property_list_path.rq> .
