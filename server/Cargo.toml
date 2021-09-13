@@ -12,7 +12,6 @@ SPARQL server based on Oxigraph
 edition = "2018"
 
 [dependencies]
-argh = "0.1"
 async-std = { version = "1", features = ["attributes"] }
 async-h1 = "2"
 clap = "2"
