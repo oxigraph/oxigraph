@@ -59,13 +59,13 @@ impl SimpleEvaluator {
         plan: &PlanNode,
         variables: Rc<Vec<Variable>>,
     ) -> QueryResults {
-        let iter = self.eval_plan(plan, EncodedTuple::with_capacity(variables.len()));
+        let iter = self.plan_evaluator(plan)(EncodedTuple::with_capacity(variables.len()));
         QueryResults::Solutions(decode_bindings(self.dataset.clone(), iter, variables))
     }
 
     pub fn evaluate_ask_plan(&self, plan: &PlanNode) -> Result<QueryResults, EvaluationError> {
         let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
-        match self.eval_plan(plan, from).next() {
+        match self.plan_evaluator(plan)(from).next() {
             Some(Ok(_)) => Ok(QueryResults::Boolean(true)),
             Some(Err(error)) => Err(error),
             None => Ok(QueryResults::Boolean(false)),
@@ -81,7 +81,7 @@ impl SimpleEvaluator {
         QueryResults::Graph(QueryTripleIter {
             iter: Box::new(ConstructIterator {
                 eval: self.clone(),
-                iter: self.eval_plan(plan, from),
+                iter: self.plan_evaluator(plan)(from),
                 template,
                 buffered_results: Vec::default(),
                 bnodes: Vec::default(),
@@ -94,16 +94,22 @@ impl SimpleEvaluator {
         QueryResults::Graph(QueryTripleIter {
             iter: Box::new(DescribeIterator {
                 eval: self.clone(),
-                iter: self.eval_plan(plan, from),
+                iter: self.plan_evaluator(plan)(from),
                 quads: Box::new(empty()),
             }),
         })
     }
 
-    pub fn eval_plan(&self, node: &PlanNode, from: EncodedTuple) -> EncodedTuplesIterator {
+    pub fn plan_evaluator(
+        &self,
+        node: &PlanNode,
+    ) -> Rc<dyn Fn(EncodedTuple) -> EncodedTuplesIterator> {
         match node {
-            PlanNode::Init => Box::new(once(Ok(from))),
-            PlanNode::StaticBindings { tuples } => Box::new(tuples.clone().into_iter().map(Ok)),
+            PlanNode::Init => Rc::new(move |from| Box::new(once(Ok(from)))),
+            PlanNode::StaticBindings { tuples } => {
+                let tuples = tuples.clone();
+                Rc::new(move |_| Box::new(tuples.clone().into_iter().map(Ok)))
+            }
             PlanNode::Service {
                 variables,
                 silent,
@@ -111,20 +117,32 @@ impl SimpleEvaluator {
                 graph_pattern,
                 ..
             } => {
-                match self.evaluate_service(service_name, graph_pattern, variables.clone(), &from) {
-                    Ok(result) => Box::new(result.filter_map(move |binding| {
-                        binding
-                            .map(|binding| binding.combine_with(&from))
-                            .transpose()
-                    })),
-                    Err(e) => {
-                        if *silent {
-                            Box::new(once(Ok(from)))
-                        } else {
-                            Box::new(once(Err(e)))
+                let variables = variables.clone();
+                let silent = *silent;
+                let service_name = service_name.clone();
+                let graph_pattern = graph_pattern.clone();
+                let eval = self.clone();
+                Rc::new(move |from| {
+                    match eval.evaluate_service(
+                        &service_name,
+                        &graph_pattern,
+                        variables.clone(),
+                        &from,
+                    ) {
+                        Ok(result) => Box::new(result.filter_map(move |binding| {
+                            binding
+                                .map(|binding| binding.combine_with(&from))
+                                .transpose()
+                        })),
+                        Err(e) => {
+                            if silent {
+                                Box::new(once(Ok(from)))
+                            } else {
+                                Box::new(once(Err(e)))
+                            }
                         }
                     }
-                }
+                })
             }
             PlanNode::QuadPatternJoin {
                 child,
@@ -133,36 +151,48 @@ impl SimpleEvaluator {
                 object,
                 graph_name,
             } => {
-                let eval = self.clone();
+                let child = self.plan_evaluator(child);
                 let subject = subject.clone();
                 let predicate = predicate.clone();
                 let object = object.clone();
                 let graph_name = graph_name.clone();
-                Box::new(self.eval_plan(child, from).flat_map_ok(move |tuple| {
-                    let iter = eval.dataset.encoded_quads_for_pattern(
-                        get_pattern_value(&subject, &tuple).as_ref(),
-                        get_pattern_value(&predicate, &tuple).as_ref(),
-                        get_pattern_value(&object, &tuple).as_ref(),
-                        get_pattern_value(&graph_name, &tuple).as_ref(),
-                    );
+                let dataset = self.dataset.clone();
+                Rc::new(move |from| {
                     let subject = subject.clone();
                     let predicate = predicate.clone();
                     let object = object.clone();
                     let graph_name = graph_name.clone();
-                    let iter: EncodedTuplesIterator =
-                        Box::new(iter.filter_map(move |quad| match quad {
-                            Ok(quad) => {
-                                let mut new_tuple = tuple.clone();
-                                put_pattern_value(&subject, quad.subject, &mut new_tuple)?;
-                                put_pattern_value(&predicate, quad.predicate, &mut new_tuple)?;
-                                put_pattern_value(&object, quad.object, &mut new_tuple)?;
-                                put_pattern_value(&graph_name, quad.graph_name, &mut new_tuple)?;
-                                Some(Ok(new_tuple))
-                            }
-                            Err(error) => Some(Err(error)),
-                        }));
-                    iter
-                }))
+                    let dataset = dataset.clone();
+                    Box::new(child(from).flat_map_ok(move |tuple| {
+                        let iter = dataset.encoded_quads_for_pattern(
+                            get_pattern_value(&subject, &tuple).as_ref(),
+                            get_pattern_value(&predicate, &tuple).as_ref(),
+                            get_pattern_value(&object, &tuple).as_ref(),
+                            get_pattern_value(&graph_name, &tuple).as_ref(),
+                        );
+                        let subject = subject.clone();
+                        let predicate = predicate.clone();
+                        let object = object.clone();
+                        let graph_name = graph_name.clone();
+                        let iter: EncodedTuplesIterator =
+                            Box::new(iter.filter_map(move |quad| match quad {
+                                Ok(quad) => {
+                                    let mut new_tuple = tuple.clone();
+                                    put_pattern_value(&subject, quad.subject, &mut new_tuple)?;
+                                    put_pattern_value(&predicate, quad.predicate, &mut new_tuple)?;
+                                    put_pattern_value(&object, quad.object, &mut new_tuple)?;
+                                    put_pattern_value(
+                                        &graph_name,
+                                        quad.graph_name,
+                                        &mut new_tuple,
+                                    )?;
+                                    Some(Ok(new_tuple))
+                                }
+                                Err(error) => Some(Err(error)),
+                            }));
+                        iter
+                    }))
+                })
             }
             PlanNode::PathPatternJoin {
                 child,
@@ -171,112 +201,126 @@ impl SimpleEvaluator {
                 object,
                 graph_name,
             } => {
+                let child = self.plan_evaluator(child);
                 let eval = self.clone();
                 let subject = subject.clone();
                 let path = path.clone();
                 let object = object.clone();
                 let graph_name = graph_name.clone();
-                Box::new(self.eval_plan(child, from).flat_map_ok(move |tuple| {
-                    let input_subject = get_pattern_value(&subject, &tuple);
-                    let input_object = get_pattern_value(&object, &tuple);
-                    let input_graph_name =
-                        if let Some(graph_name) = get_pattern_value(&graph_name, &tuple) {
-                            graph_name
-                        } else {
-                            let result: EncodedTuplesIterator =
-                            Box::new(once(Err(EvaluationError::msg(
-                                "Unknown graph name is not allowed when evaluating property path",
-                            ))));
-                            return result;
-                        };
-                    match (input_subject, input_object) {
-                        (Some(input_subject), Some(input_object)) => Box::new(
-                            eval.eval_path_from(&path, &input_subject, &input_graph_name)
-                                .filter_map(move |o| match o {
-                                    Ok(o) => {
-                                        if o == input_object {
-                                            Some(Ok(tuple.clone()))
-                                        } else {
-                                            None
-                                        }
-                                    }
-                                    Err(error) => Some(Err(error)),
-                                }),
-                        ),
-                        (Some(input_subject), None) => {
-                            let object = object.clone();
-                            Box::new(
+                Rc::new(move |from| {
+                    let eval = eval.clone();
+                    let subject = subject.clone();
+                    let path = path.clone();
+                    let object = object.clone();
+                    let graph_name = graph_name.clone();
+                    Box::new(child(from).flat_map_ok(move |tuple| {
+                        let input_subject = get_pattern_value(&subject, &tuple);
+                        let input_object = get_pattern_value(&object, &tuple);
+                        let input_graph_name =
+                            if let Some(graph_name) = get_pattern_value(&graph_name, &tuple) {
+                                graph_name
+                            } else {
+                                let result: EncodedTuplesIterator =
+                                    Box::new(once(Err(EvaluationError::msg(
+                                        "Unknown graph name is not allowed when evaluating property path",
+                                    ))));
+                                return result;
+                            };
+                        match (input_subject, input_object) {
+                            (Some(input_subject), Some(input_object)) => Box::new(
                                 eval.eval_path_from(&path, &input_subject, &input_graph_name)
                                     .filter_map(move |o| match o {
                                         Ok(o) => {
+                                            if o == input_object {
+                                                Some(Ok(tuple.clone()))
+                                            } else {
+                                                None
+                                            }
+                                        }
+                                        Err(error) => Some(Err(error)),
+                                    }),
+                            ),
+                            (Some(input_subject), None) => {
+                                let object = object.clone();
+                                Box::new(
+                                    eval.eval_path_from(&path, &input_subject, &input_graph_name)
+                                        .filter_map(move |o| match o {
+                                            Ok(o) => {
+                                                let mut new_tuple = tuple.clone();
+                                                put_pattern_value(&object, o, &mut new_tuple)?;
+                                                Some(Ok(new_tuple))
+                                            }
+                                            Err(error) => Some(Err(error)),
+                                        }),
+                                )
+                            }
+                            (None, Some(input_object)) => {
+                                let subject = subject.clone();
+                                Box::new(
+                                    eval.eval_path_to(&path, &input_object, &input_graph_name)
+                                        .filter_map(move |s| match s {
+                                            Ok(s) => {
+                                                let mut new_tuple = tuple.clone();
+                                                put_pattern_value(&subject, s, &mut new_tuple)?;
+                                                Some(Ok(new_tuple))
+                                            }
+                                            Err(error) => Some(Err(error)),
+                                        }),
+                                )
+                            }
+                            (None, None) => {
+                                let subject = subject.clone();
+                                let object = object.clone();
+                                Box::new(eval.eval_open_path(&path, &input_graph_name).filter_map(
+                                    move |so| match so {
+                                        Ok((s, o)) => {
                                             let mut new_tuple = tuple.clone();
+                                            put_pattern_value(&subject, s, &mut new_tuple)?;
                                             put_pattern_value(&object, o, &mut new_tuple)?;
                                             Some(Ok(new_tuple))
                                         }
                                         Err(error) => Some(Err(error)),
-                                    }),
-                            )
+                                    },
+                                ))
+                            }
                         }
-                        (None, Some(input_object)) => {
-                            let subject = subject.clone();
-                            Box::new(
-                                eval.eval_path_to(&path, &input_object, &input_graph_name)
-                                    .filter_map(move |s| match s {
-                                        Ok(s) => {
-                                            let mut new_tuple = tuple.clone();
-                                            put_pattern_value(&subject, s, &mut new_tuple)?;
-                                            Some(Ok(new_tuple))
-                                        }
-                                        Err(error) => Some(Err(error)),
-                                    }),
-                            )
-                        }
-                        (None, None) => {
-                            let subject = subject.clone();
-                            let object = object.clone();
-                            Box::new(eval.eval_open_path(&path, &input_graph_name).filter_map(
-                                move |so| match so {
-                                    Ok((s, o)) => {
-                                        let mut new_tuple = tuple.clone();
-                                        put_pattern_value(&subject, s, &mut new_tuple)?;
-                                        put_pattern_value(&object, o, &mut new_tuple)?;
-                                        Some(Ok(new_tuple))
-                                    }
-                                    Err(error) => Some(Err(error)),
-                                },
-                            ))
-                        }
-                    }
-                }))
+                    }))
+                })
             }
             PlanNode::Join { left, right } => {
-                //TODO: very dumb implementation
-                let mut errors = Vec::default();
-                let left_values = self
-                    .eval_plan(left, from.clone())
-                    .filter_map(|result| match result {
-                        Ok(result) => Some(result),
-                        Err(error) => {
-                            errors.push(Err(error));
-                            None
-                        }
+                let left = self.plan_evaluator(left);
+                let right = self.plan_evaluator(right);
+                Rc::new(move |from| {
+                    //TODO: very dumb implementation
+                    let mut errors = Vec::default();
+                    let left_values = left(from.clone())
+                        .filter_map(|result| match result {
+                            Ok(result) => Some(result),
+                            Err(error) => {
+                                errors.push(Err(error));
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    Box::new(JoinIterator {
+                        left: left_values,
+                        right_iter: right(from),
+                        buffered_results: errors,
                     })
-                    .collect::<Vec<_>>();
-                Box::new(JoinIterator {
-                    left: left_values,
-                    right_iter: self.eval_plan(right, from),
-                    buffered_results: errors,
                 })
             }
             PlanNode::AntiJoin { left, right } => {
-                //TODO: dumb implementation
-                let right: Vec<_> = self
-                    .eval_plan(right, from.clone())
-                    .filter_map(std::result::Result::ok)
-                    .collect();
-                Box::new(AntiJoinIterator {
-                    left_iter: self.eval_plan(left, from),
-                    right,
+                let left = self.plan_evaluator(left);
+                let right = self.plan_evaluator(right);
+                Rc::new(move |from| {
+                    //TODO: dumb implementation
+                    let right: Vec<_> = right(from.clone())
+                        .filter_map(std::result::Result::ok)
+                        .collect();
+                    Box::new(AntiJoinIterator {
+                        left_iter: left(from),
+                        right,
+                    })
                 })
             }
             PlanNode::LeftJoin {
@@ -284,69 +328,77 @@ impl SimpleEvaluator {
                 right,
                 possible_problem_vars,
             } => {
-                if possible_problem_vars.is_empty() {
-                    Box::new(LeftJoinIterator {
-                        eval: self.clone(),
-                        right_plan: right.clone(),
-                        left_iter: self.eval_plan(left, from),
-                        current_right: Box::new(empty()),
-                    })
-                } else {
-                    Box::new(BadLeftJoinIterator {
-                        eval: self.clone(),
-                        right_plan: right.clone(),
-                        left_iter: self.eval_plan(left, from),
-                        current_left: None,
-                        current_right: Box::new(empty()),
-                        problem_vars: possible_problem_vars.clone(),
-                    })
-                }
+                let left = self.plan_evaluator(left);
+                let right = self.plan_evaluator(right);
+                let possible_problem_vars = possible_problem_vars.clone();
+                Rc::new(move |from| {
+                    if possible_problem_vars.is_empty() {
+                        Box::new(LeftJoinIterator {
+                            right_evaluator: right.clone(),
+                            left_iter: left(from),
+                            current_right: Box::new(empty()),
+                        })
+                    } else {
+                        Box::new(BadLeftJoinIterator {
+                            right_evaluator: right.clone(),
+                            left_iter: left(from),
+                            current_left: None,
+                            current_right: Box::new(empty()),
+                            problem_vars: possible_problem_vars.clone(),
+                        })
+                    }
+                })
             }
             PlanNode::Filter { child, expression } => {
+                let child = self.plan_evaluator(child);
                 let expression = self.expression_evaluator(expression);
-                Box::new(self.eval_plan(child, from).filter(move |tuple| {
-                    match tuple {
-                        Ok(tuple) => expression(tuple)
-                            .and_then(|term| to_bool(&term))
-                            .unwrap_or(false),
-                        Err(_) => true,
-                    }
-                }))
+                Rc::new(move |from| {
+                    let expression = expression.clone();
+                    Box::new(child(from).filter(move |tuple| {
+                        match tuple {
+                            Ok(tuple) => expression(tuple)
+                                .and_then(|term| to_bool(&term))
+                                .unwrap_or(false),
+                            Err(_) => true,
+                        }
+                    }))
+                })
             }
-            PlanNode::Union { children } => Box::new(UnionIterator {
-                eval: self.clone(),
-                plans: children.clone(),
-                input: from,
-                current_iterator: Box::new(empty()),
-                current_plan: 0,
-            }),
+            PlanNode::Union { children } => {
+                let children: Vec<_> = children
+                    .iter()
+                    .map(|child| self.plan_evaluator(child))
+                    .collect();
+                Rc::new(move |from| {
+                    Box::new(UnionIterator {
+                        plans: children.clone(),
+                        input: from,
+                        current_iterator: Box::new(empty()),
+                        current_plan: 0,
+                    })
+                })
+            }
             PlanNode::Extend {
                 child,
                 position,
                 expression,
             } => {
+                let child = self.plan_evaluator(child);
                 let position = *position;
                 let expression = self.expression_evaluator(expression);
-                Box::new(self.eval_plan(child, from).map(move |tuple| {
-                    let mut tuple = tuple?;
-                    if let Some(value) = expression(&tuple) {
-                        tuple.set(position, value);
-                    }
-                    Ok(tuple)
-                }))
+                Rc::new(move |from| {
+                    let expression = expression.clone();
+                    Box::new(child(from).map(move |tuple| {
+                        let mut tuple = tuple?;
+                        if let Some(value) = expression(&tuple) {
+                            tuple.set(position, value);
+                        }
+                        Ok(tuple)
+                    }))
+                })
             }
             PlanNode::Sort { child, by } => {
-                let mut errors = Vec::default();
-                let mut values = self
-                    .eval_plan(child, from)
-                    .filter_map(|result| match result {
-                        Ok(result) => Some(result),
-                        Err(error) => {
-                            errors.push(Err(error));
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>();
+                let child = self.plan_evaluator(child);
                 let by: Vec<_> = by
                     .iter()
                     .map(|comp| match comp {
@@ -358,48 +410,71 @@ impl SimpleEvaluator {
                         }
                     })
                     .collect();
-                values.sort_unstable_by(|a, b| {
-                    for comp in &by {
-                        match comp {
-                            ComparatorFunction::Asc(expression) => {
-                                match cmp_terms(
-                                    &self.dataset,
-                                    expression(a).as_ref(),
-                                    expression(b).as_ref(),
-                                ) {
-                                    Ordering::Greater => return Ordering::Greater,
-                                    Ordering::Less => return Ordering::Less,
-                                    Ordering::Equal => (),
-                                }
+                let dataset = self.dataset.clone();
+                Rc::new(move |from| {
+                    let mut errors = Vec::default();
+                    let mut values = child(from)
+                        .filter_map(|result| match result {
+                            Ok(result) => Some(result),
+                            Err(error) => {
+                                errors.push(Err(error));
+                                None
                             }
-                            ComparatorFunction::Desc(expression) => {
-                                match cmp_terms(
-                                    &self.dataset,
-                                    expression(a).as_ref(),
-                                    expression(b).as_ref(),
-                                ) {
-                                    Ordering::Greater => return Ordering::Less,
-                                    Ordering::Less => return Ordering::Greater,
-                                    Ordering::Equal => (),
+                        })
+                        .collect::<Vec<_>>();
+                    values.sort_unstable_by(|a, b| {
+                        for comp in &by {
+                            match comp {
+                                ComparatorFunction::Asc(expression) => {
+                                    match cmp_terms(
+                                        &dataset,
+                                        expression(a).as_ref(),
+                                        expression(b).as_ref(),
+                                    ) {
+                                        Ordering::Greater => return Ordering::Greater,
+                                        Ordering::Less => return Ordering::Less,
+                                        Ordering::Equal => (),
+                                    }
+                                }
+                                ComparatorFunction::Desc(expression) => {
+                                    match cmp_terms(
+                                        &dataset,
+                                        expression(a).as_ref(),
+                                        expression(b).as_ref(),
+                                    ) {
+                                        Ordering::Greater => return Ordering::Less,
+                                        Ordering::Less => return Ordering::Greater,
+                                        Ordering::Equal => (),
+                                    }
                                 }
                             }
                         }
-                    }
-                    Ordering::Equal
-                });
-                Box::new(errors.into_iter().chain(values.into_iter().map(Ok)))
+                        Ordering::Equal
+                    });
+                    Box::new(errors.into_iter().chain(values.into_iter().map(Ok)))
+                })
             }
             PlanNode::HashDeduplicate { child } => {
-                Box::new(hash_deduplicate(self.eval_plan(child, from)))
+                let child = self.plan_evaluator(child);
+                Rc::new(move |from| Box::new(hash_deduplicate(child(from))))
             }
-            PlanNode::Skip { child, count } => Box::new(self.eval_plan(child, from).skip(*count)),
-            PlanNode::Limit { child, count } => Box::new(self.eval_plan(child, from).take(*count)),
+            PlanNode::Skip { child, count } => {
+                let child = self.plan_evaluator(child);
+                let count = *count;
+                Rc::new(move |from| Box::new(child(from).skip(count)))
+            }
+            PlanNode::Limit { child, count } => {
+                let child = self.plan_evaluator(child);
+                let count = *count;
+                Rc::new(move |from| Box::new(child(from).take(count)))
+            }
             PlanNode::Project { child, mapping } => {
-                //TODO: use from somewhere?
+                let child = self.plan_evaluator(child);
                 let mapping = mapping.clone();
-                Box::new(
-                    self.eval_plan(child, EncodedTuple::with_capacity(mapping.len()))
-                        .map(move |tuple| {
+                Rc::new(move |from| {
+                    let mapping = mapping.clone();
+                    Box::new(
+                        child(EncodedTuple::with_capacity(mapping.len())).map(move |tuple| {
                             let tuple = tuple?;
                             let mut output_tuple = EncodedTuple::with_capacity(from.capacity());
                             for (input_key, output_key) in mapping.iter() {
@@ -409,14 +484,15 @@ impl SimpleEvaluator {
                             }
                             Ok(output_tuple)
                         }),
-                )
+                    )
+                })
             }
             PlanNode::Aggregate {
                 child,
                 key_mapping,
                 aggregates,
             } => {
-                let tuple_size = from.capacity(); //TODO: not nice
+                let child = self.plan_evaluator(child);
                 let key_mapping = key_mapping.clone();
                 let aggregate_input_expressions: Vec<_> = aggregates
                     .iter()
@@ -427,73 +503,84 @@ impl SimpleEvaluator {
                             .map(|p| self.expression_evaluator(p))
                     })
                     .collect();
-                let aggregates = aggregates.clone();
-                let mut errors = Vec::default();
-                let mut accumulators_for_group =
-                    HashMap::<Vec<Option<EncodedTerm>>, Vec<Box<dyn Accumulator>>>::default();
-                self.eval_plan(child, from)
-                    .filter_map(|result| match result {
-                        Ok(result) => Some(result),
-                        Err(error) => {
-                            errors.push(error);
-                            None
-                        }
+                let accumulator_builders: Vec<_> = aggregates
+                    .iter()
+                    .map(|(aggregate, _)| {
+                        Self::accumulator_builder(
+                            &self.dataset,
+                            &aggregate.function,
+                            aggregate.distinct,
+                        )
                     })
-                    .for_each(|tuple| {
-                        //TODO avoid copy for key?
-                        let key = key_mapping
-                            .iter()
-                            .map(|(v, _)| tuple.get(*v).cloned())
-                            .collect();
+                    .collect();
+                let accumulator_variables: Vec<_> =
+                    aggregates.iter().map(|(_, var)| *var).collect();
+                Rc::new(move |from| {
+                    let tuple_size = from.capacity(); //TODO: not nice
+                    let key_mapping = key_mapping.clone();
+                    let mut errors = Vec::default();
+                    let mut accumulators_for_group =
+                        HashMap::<Vec<Option<EncodedTerm>>, Vec<Box<dyn Accumulator>>>::default();
+                    child(from)
+                        .filter_map(|result| match result {
+                            Ok(result) => Some(result),
+                            Err(error) => {
+                                errors.push(error);
+                                None
+                            }
+                        })
+                        .for_each(|tuple| {
+                            //TODO avoid copy for key?
+                            let key = key_mapping
+                                .iter()
+                                .map(|(v, _)| tuple.get(*v).cloned())
+                                .collect();
 
-                        let key_accumulators =
-                            accumulators_for_group.entry(key).or_insert_with(|| {
-                                aggregates
-                                    .iter()
-                                    .map(|(aggregate, _)| {
-                                        self.accumulator_for_aggregate(
-                                            &aggregate.function,
-                                            aggregate.distinct,
-                                        )
-                                    })
-                                    .collect::<Vec<_>>()
-                            });
-                        for (accumulator, input_expression) in key_accumulators
-                            .iter_mut()
-                            .zip(&aggregate_input_expressions)
-                        {
-                            accumulator.add(
-                                input_expression
-                                    .as_ref()
-                                    .and_then(|parameter| parameter(&tuple)),
-                            );
-                        }
-                    });
-                if accumulators_for_group.is_empty() {
-                    // There is always at least one group
-                    accumulators_for_group.insert(vec![None; key_mapping.len()], Vec::default());
-                }
-                Box::new(
-                    errors
-                        .into_iter()
-                        .map(Err)
-                        .chain(accumulators_for_group.into_iter().map(
-                            move |(key, accumulators)| {
-                                let mut result = EncodedTuple::with_capacity(tuple_size);
-                                for (from_position, to_position) in key_mapping.iter() {
-                                    if let Some(value) = &key[*from_position] {
-                                        result.set(*to_position, value.clone());
+                            let key_accumulators =
+                                accumulators_for_group.entry(key).or_insert_with(|| {
+                                    accumulator_builders.iter().map(|c| c()).collect::<Vec<_>>()
+                                });
+                            for (accumulator, input_expression) in key_accumulators
+                                .iter_mut()
+                                .zip(&aggregate_input_expressions)
+                            {
+                                accumulator.add(
+                                    input_expression
+                                        .as_ref()
+                                        .and_then(|parameter| parameter(&tuple)),
+                                );
+                            }
+                        });
+                    if accumulators_for_group.is_empty() {
+                        // There is always at least one group
+                        accumulators_for_group
+                            .insert(vec![None; key_mapping.len()], Vec::default());
+                    }
+                    let accumulator_variables = accumulator_variables.clone();
+                    Box::new(
+                        errors
+                            .into_iter()
+                            .map(Err)
+                            .chain(accumulators_for_group.into_iter().map(
+                                move |(key, accumulators)| {
+                                    let mut result = EncodedTuple::with_capacity(tuple_size);
+                                    for (from_position, to_position) in key_mapping.iter() {
+                                        if let Some(value) = &key[*from_position] {
+                                            result.set(*to_position, value.clone());
+                                        }
                                     }
-                                }
-                                for (i, accumulator) in accumulators.into_iter().enumerate() {
-                                    if let Some(value) = accumulator.state() {
-                                        result.set(aggregates[i].1, value);
+                                    for (accumulator, variable) in
+                                        accumulators.into_iter().zip(&accumulator_variables)
+                                    {
+                                        if let Some(value) = accumulator.state() {
+                                            result.set(*variable, value);
+                                        }
                                     }
-                                }
-                                Ok(result)
-                            },
-                        )),
-                )
+                                    Ok(result)
+                                },
+                            )),
+                    )
+                })
             }
         }
     }
@@ -526,47 +613,59 @@ impl SimpleEvaluator {
         }
     }
 
-    fn accumulator_for_aggregate(
-        &self,
+    fn accumulator_builder(
+        dataset: &Rc<DatasetView>,
         function: &PlanAggregationFunction,
         distinct: bool,
-    ) -> Box<dyn Accumulator + 'static> {
+    ) -> Box<dyn Fn() -> Box<dyn Accumulator>> {
         match function {
             PlanAggregationFunction::Count => {
                 if distinct {
-                    Box::new(DistinctAccumulator::new(CountAccumulator::default()))
+                    Box::new(|| Box::new(DistinctAccumulator::new(CountAccumulator::default())))
                 } else {
-                    Box::new(CountAccumulator::default())
+                    Box::new(|| Box::new(CountAccumulator::default()))
                 }
             }
             PlanAggregationFunction::Sum => {
                 if distinct {
-                    Box::new(DistinctAccumulator::new(SumAccumulator::default()))
+                    Box::new(|| Box::new(DistinctAccumulator::new(SumAccumulator::default())))
                 } else {
-                    Box::new(SumAccumulator::default())
+                    Box::new(|| Box::new(SumAccumulator::default()))
                 }
             }
-            PlanAggregationFunction::Min => Box::new(MinAccumulator::new(self.dataset.clone())), // DISTINCT does not make sense with min
-            PlanAggregationFunction::Max => Box::new(MaxAccumulator::new(self.dataset.clone())), // DISTINCT does not make sense with max
+            PlanAggregationFunction::Min => {
+                let dataset = dataset.clone();
+                Box::new(move || Box::new(MinAccumulator::new(dataset.clone())))
+            } // DISTINCT does not make sense with min
+            PlanAggregationFunction::Max => {
+                let dataset = dataset.clone();
+                Box::new(move || Box::new(MaxAccumulator::new(dataset.clone())))
+            } // DISTINCT does not make sense with max
             PlanAggregationFunction::Avg => {
                 if distinct {
-                    Box::new(DistinctAccumulator::new(AvgAccumulator::default()))
+                    Box::new(|| Box::new(DistinctAccumulator::new(AvgAccumulator::default())))
                 } else {
-                    Box::new(AvgAccumulator::default())
+                    Box::new(|| Box::new(AvgAccumulator::default()))
                 }
             }
-            PlanAggregationFunction::Sample => Box::new(SampleAccumulator::default()), // DISTINCT does not make sense with sample
+            PlanAggregationFunction::Sample => Box::new(|| Box::new(SampleAccumulator::default())), // DISTINCT does not make sense with sample
             PlanAggregationFunction::GroupConcat { separator } => {
+                let dataset = dataset.clone();
+                let separator = separator.clone();
                 if distinct {
-                    Box::new(DistinctAccumulator::new(GroupConcatAccumulator::new(
-                        self.dataset.clone(),
-                        separator.clone(),
-                    )))
+                    Box::new(move || {
+                        Box::new(DistinctAccumulator::new(GroupConcatAccumulator::new(
+                            dataset.clone(),
+                            separator.clone(),
+                        )))
+                    })
                 } else {
-                    Box::new(GroupConcatAccumulator::new(
-                        self.dataset.clone(),
-                        separator.clone(),
-                    ))
+                    Box::new(move || {
+                        Box::new(GroupConcatAccumulator::new(
+                            dataset.clone(),
+                            separator.clone(),
+                        ))
+                    })
                 }
             }
         }
@@ -797,27 +896,25 @@ impl SimpleEvaluator {
     fn expression_evaluator(
         &self,
         expression: &PlanExpression,
-    ) -> Box<dyn Fn(&EncodedTuple) -> Option<EncodedTerm>> {
+    ) -> Rc<dyn Fn(&EncodedTuple) -> Option<EncodedTerm>> {
         match expression {
             PlanExpression::Constant(t) => {
                 let t = t.clone();
-                Box::new(move |_| Some(t.clone()))
+                Rc::new(move |_| Some(t.clone()))
             }
             PlanExpression::Variable(v) => {
                 let v = *v;
-                Box::new(move |tuple| tuple.get(v).cloned())
+                Rc::new(move |tuple| tuple.get(v).cloned())
             }
             PlanExpression::Exists(plan) => {
                 let plan = plan.clone();
-                let eval = self.clone();
-                Box::new(move |tuple| {
-                    Some(eval.eval_plan(&plan, tuple.clone()).next().is_some().into())
-                })
+                let eval = self.plan_evaluator(&plan);
+                Rc::new(move |tuple| Some(eval(tuple.clone()).next().is_some().into()))
             }
             PlanExpression::Or(a, b) => {
                 let a = self.expression_evaluator(a);
                 let b = self.expression_evaluator(b);
-                Box::new(move |tuple| match a(tuple).and_then(|v| to_bool(&v)) {
+                Rc::new(move |tuple| match a(tuple).and_then(|v| to_bool(&v)) {
                     Some(true) => Some(true.into()),
                     Some(false) => b(tuple),
                     None => {
@@ -832,7 +929,7 @@ impl SimpleEvaluator {
             PlanExpression::And(a, b) => {
                 let a = self.expression_evaluator(a);
                 let b = self.expression_evaluator(b);
-                Box::new(move |tuple| match a(tuple).and_then(|v| to_bool(&v)) {
+                Rc::new(move |tuple| match a(tuple).and_then(|v| to_bool(&v)) {
                     Some(true) => b(tuple),
                     Some(false) => Some(false.into()),
                     None => {
@@ -847,13 +944,13 @@ impl SimpleEvaluator {
             PlanExpression::Equal(a, b) => {
                 let a = self.expression_evaluator(a);
                 let b = self.expression_evaluator(b);
-                Box::new(move |tuple| equals(&a(tuple)?, &b(tuple)?).map(|v| v.into()))
+                Rc::new(move |tuple| equals(&a(tuple)?, &b(tuple)?).map(|v| v.into()))
             }
             PlanExpression::Greater(a, b) => {
                 let a = self.expression_evaluator(a);
                 let b = self.expression_evaluator(b);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(
                         (partial_cmp(&dataset, &a(tuple)?, &b(tuple)?)? == Ordering::Greater)
                             .into(),
@@ -864,7 +961,7 @@ impl SimpleEvaluator {
                 let a = self.expression_evaluator(a);
                 let b = self.expression_evaluator(b);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(
                         match partial_cmp(&dataset, &a(tuple)?, &b(tuple)?)? {
                             Ordering::Greater | Ordering::Equal => true,
@@ -878,7 +975,7 @@ impl SimpleEvaluator {
                 let a = self.expression_evaluator(a);
                 let b = self.expression_evaluator(b);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some((partial_cmp(&dataset, &a(tuple)?, &b(tuple)?)? == Ordering::Less).into())
                 })
             }
@@ -886,7 +983,7 @@ impl SimpleEvaluator {
                 let a = self.expression_evaluator(a);
                 let b = self.expression_evaluator(b);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(
                         match partial_cmp(&dataset, &a(tuple)?, &b(tuple)?)? {
                             Ordering::Less | Ordering::Equal => true,
@@ -902,7 +999,7 @@ impl SimpleEvaluator {
                     .iter()
                     .map(|possible| self.expression_evaluator(possible))
                     .collect();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let needed = e(tuple)?;
                     let mut error = false;
                     for possible in &l {
@@ -924,7 +1021,7 @@ impl SimpleEvaluator {
             PlanExpression::Add(a, b) => {
                 let a = self.expression_evaluator(a);
                 let b = self.expression_evaluator(b);
-                Box::new(
+                Rc::new(
                     move |tuple| match NumericBinaryOperands::new(a(tuple)?, b(tuple)?)? {
                         NumericBinaryOperands::Float(v1, v2) => Some((v1 + v2).into()),
                         NumericBinaryOperands::Double(v1, v2) => Some((v1 + v2).into()),
@@ -968,7 +1065,7 @@ impl SimpleEvaluator {
             PlanExpression::Subtract(a, b) => {
                 let a = self.expression_evaluator(a);
                 let b = self.expression_evaluator(b);
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(match NumericBinaryOperands::new(a(tuple)?, b(tuple)?)? {
                         NumericBinaryOperands::Float(v1, v2) => (v1 - v2).into(),
                         NumericBinaryOperands::Double(v1, v2) => (v1 - v2).into(),
@@ -1014,7 +1111,7 @@ impl SimpleEvaluator {
             PlanExpression::Multiply(a, b) => {
                 let a = self.expression_evaluator(a);
                 let b = self.expression_evaluator(b);
-                Box::new(
+                Rc::new(
                     move |tuple| match NumericBinaryOperands::new(a(tuple)?, b(tuple)?)? {
                         NumericBinaryOperands::Float(v1, v2) => Some((v1 * v2).into()),
                         NumericBinaryOperands::Double(v1, v2) => Some((v1 * v2).into()),
@@ -1027,7 +1124,7 @@ impl SimpleEvaluator {
             PlanExpression::Divide(a, b) => {
                 let a = self.expression_evaluator(a);
                 let b = self.expression_evaluator(b);
-                Box::new(
+                Rc::new(
                     move |tuple| match NumericBinaryOperands::new(a(tuple)?, b(tuple)?)? {
                         NumericBinaryOperands::Float(v1, v2) => Some((v1 / v2).into()),
                         NumericBinaryOperands::Double(v1, v2) => Some((v1 / v2).into()),
@@ -1041,7 +1138,7 @@ impl SimpleEvaluator {
             }
             PlanExpression::UnaryPlus(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::FloatLiteral(value) => Some(value.into()),
                     EncodedTerm::DoubleLiteral(value) => Some(value.into()),
                     EncodedTerm::IntegerLiteral(value) => Some(value.into()),
@@ -1054,7 +1151,7 @@ impl SimpleEvaluator {
             }
             PlanExpression::UnaryMinus(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::FloatLiteral(value) => Some((-value).into()),
                     EncodedTerm::DoubleLiteral(value) => Some((-value).into()),
                     EncodedTerm::IntegerLiteral(value) => Some((-value).into()),
@@ -1067,12 +1164,12 @@ impl SimpleEvaluator {
             }
             PlanExpression::Not(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| to_bool(&e(tuple)?).map(|v| (!v).into()))
+                Rc::new(move |tuple| to_bool(&e(tuple)?).map(|v| (!v).into()))
             }
             PlanExpression::Str(e) | PlanExpression::StringCast(e) => {
                 let e = self.expression_evaluator(e);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(build_string_literal_from_id(to_string_id(
                         &dataset,
                         &e(tuple)?,
@@ -1082,7 +1179,7 @@ impl SimpleEvaluator {
             PlanExpression::Lang(e) => {
                 let e = self.expression_evaluator(e);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::SmallSmallLangStringLiteral { language, .. }
                     | EncodedTerm::BigSmallLangStringLiteral { language, .. } => {
                         Some(build_string_literal_from_id(language.into()))
@@ -1099,7 +1196,7 @@ impl SimpleEvaluator {
                 let language_tag = self.expression_evaluator(language_tag);
                 let language_range = self.expression_evaluator(language_range);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let mut language_tag = to_simple_string(&dataset, &language_tag(tuple)?)?;
                     language_tag.make_ascii_lowercase();
                     let mut language_range = to_simple_string(&dataset, &language_range(tuple)?)?;
@@ -1124,17 +1221,17 @@ impl SimpleEvaluator {
             PlanExpression::Datatype(e) => {
                 let e = self.expression_evaluator(e);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| datatype(&dataset, &e(tuple)?))
+                Rc::new(move |tuple| datatype(&dataset, &e(tuple)?))
             }
             PlanExpression::Bound(v) => {
                 let v = *v;
-                Box::new(move |tuple| Some(tuple.contains(v).into()))
+                Rc::new(move |tuple| Some(tuple.contains(v).into()))
             }
             PlanExpression::Iri(e) => {
                 let e = self.expression_evaluator(e);
                 let dataset = self.dataset.clone();
                 let base_iri = self.base_iri.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let e = e(tuple)?;
                     if e.is_named_node() {
                         Some(e)
@@ -1157,7 +1254,7 @@ impl SimpleEvaluator {
                 Some(id) => {
                     let id = self.expression_evaluator(id);
                     let dataset = self.dataset.clone();
-                    Box::new(move |tuple| {
+                    Rc::new(move |tuple| {
                         Some(
                             dataset.encode_term(
                                 BlankNode::new(to_simple_string(&dataset, &id(tuple)?)?)
@@ -1167,16 +1264,16 @@ impl SimpleEvaluator {
                         )
                     })
                 }
-                None => Box::new(|_| {
+                None => Rc::new(|_| {
                     Some(EncodedTerm::NumericalBlankNode {
                         id: random::<u128>(),
                     })
                 }),
             },
-            PlanExpression::Rand => Box::new(|_| Some(random::<f64>().into())),
+            PlanExpression::Rand => Rc::new(|_| Some(random::<f64>().into())),
             PlanExpression::Abs(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::IntegerLiteral(value) => Some(value.checked_abs()?.into()),
                     EncodedTerm::DecimalLiteral(value) => Some(value.abs().into()),
                     EncodedTerm::FloatLiteral(value) => Some(value.abs().into()),
@@ -1186,7 +1283,7 @@ impl SimpleEvaluator {
             }
             PlanExpression::Ceil(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::IntegerLiteral(value) => Some(value.into()),
                     EncodedTerm::DecimalLiteral(value) => Some(value.ceil().into()),
                     EncodedTerm::FloatLiteral(value) => Some(value.ceil().into()),
@@ -1196,7 +1293,7 @@ impl SimpleEvaluator {
             }
             PlanExpression::Floor(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::IntegerLiteral(value) => Some(value.into()),
                     EncodedTerm::DecimalLiteral(value) => Some(value.floor().into()),
                     EncodedTerm::FloatLiteral(value) => Some(value.floor().into()),
@@ -1206,7 +1303,7 @@ impl SimpleEvaluator {
             }
             PlanExpression::Round(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::IntegerLiteral(value) => Some(value.into()),
                     EncodedTerm::DecimalLiteral(value) => Some(value.round().into()),
                     EncodedTerm::FloatLiteral(value) => Some(value.round().into()),
@@ -1217,7 +1314,7 @@ impl SimpleEvaluator {
             PlanExpression::Concat(l) => {
                 let l: Vec<_> = l.iter().map(|e| self.expression_evaluator(e)).collect();
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let mut result = String::default();
                     let mut language = None;
                     for e in &l {
@@ -1243,7 +1340,7 @@ impl SimpleEvaluator {
                 let starting_loc = self.expression_evaluator(starting_loc);
                 let length = length.as_ref().map(|l| self.expression_evaluator(l));
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let (source, language) = to_string_and_language(&dataset, &source(tuple)?)?;
 
                     let starting_location: usize =
@@ -1287,7 +1384,7 @@ impl SimpleEvaluator {
             PlanExpression::StrLen(arg) => {
                 let arg = self.expression_evaluator(arg);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some((to_string(&dataset, &arg(tuple)?)?.chars().count() as i64).into())
                 })
             }
@@ -1297,7 +1394,7 @@ impl SimpleEvaluator {
                 let replacement = self.expression_evaluator(replacement);
                 let flags = flags.as_ref().map(|flags| self.expression_evaluator(flags));
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let regex = compile_pattern(
                         &dataset,
                         &pattern(tuple)?,
@@ -1319,7 +1416,7 @@ impl SimpleEvaluator {
             PlanExpression::UCase(e) => {
                 let e = self.expression_evaluator(e);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let (value, language) = to_string_and_language(&dataset, &e(tuple)?)?;
                     Some(build_plain_literal(
                         &dataset,
@@ -1331,7 +1428,7 @@ impl SimpleEvaluator {
             PlanExpression::LCase(e) => {
                 let e = self.expression_evaluator(e);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let (value, language) = to_string_and_language(&dataset, &e(tuple)?)?;
                     Some(build_plain_literal(
                         &dataset,
@@ -1344,7 +1441,7 @@ impl SimpleEvaluator {
                 let arg1 = self.expression_evaluator(arg1);
                 let arg2 = self.expression_evaluator(arg2);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let (arg1, arg2, _) =
                         to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
                     Some((&arg1).starts_with(arg2.as_str()).into())
@@ -1353,7 +1450,7 @@ impl SimpleEvaluator {
             PlanExpression::EncodeForUri(ltrl) => {
                 let ltrl = self.expression_evaluator(ltrl);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let ltlr = to_string(&dataset, &ltrl(tuple)?)?;
                     let mut result = Vec::with_capacity(ltlr.len());
                     for c in ltlr.bytes() {
@@ -1388,7 +1485,7 @@ impl SimpleEvaluator {
                 let arg1 = self.expression_evaluator(arg1);
                 let arg2 = self.expression_evaluator(arg2);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let (arg1, arg2, _) =
                         to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
                     Some((&arg1).ends_with(arg2.as_str()).into())
@@ -1398,7 +1495,7 @@ impl SimpleEvaluator {
                 let arg1 = self.expression_evaluator(arg1);
                 let arg2 = self.expression_evaluator(arg2);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let (arg1, arg2, _) =
                         to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
                     Some((&arg1).contains(arg2.as_str()).into())
@@ -1408,7 +1505,7 @@ impl SimpleEvaluator {
                 let arg1 = self.expression_evaluator(arg1);
                 let arg2 = self.expression_evaluator(arg2);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let (arg1, arg2, language) =
                         to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
                     Some(if let Some(position) = (&arg1).find(arg2.as_str()) {
@@ -1422,7 +1519,7 @@ impl SimpleEvaluator {
                 let arg1 = self.expression_evaluator(arg1);
                 let arg2 = self.expression_evaluator(arg2);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let (arg1, arg2, language) =
                         to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
                     Some(if let Some(position) = (&arg1).find(arg2.as_str()) {
@@ -1434,7 +1531,7 @@ impl SimpleEvaluator {
             }
             PlanExpression::Year(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.year().into()),
                     EncodedTerm::DateLiteral(date) => Some(date.year().into()),
                     EncodedTerm::GYearMonthLiteral(year_month) => Some(year_month.year().into()),
@@ -1444,7 +1541,7 @@ impl SimpleEvaluator {
             }
             PlanExpression::Month(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.month().into()),
                     EncodedTerm::DateLiteral(date) => Some(date.month().into()),
                     EncodedTerm::GYearMonthLiteral(year_month) => Some(year_month.month().into()),
@@ -1455,7 +1552,7 @@ impl SimpleEvaluator {
             }
             PlanExpression::Day(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.day().into()),
                     EncodedTerm::DateLiteral(date) => Some(date.day().into()),
                     EncodedTerm::GMonthDayLiteral(month_day) => Some(month_day.day().into()),
@@ -1465,7 +1562,7 @@ impl SimpleEvaluator {
             }
             PlanExpression::Hours(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.hour().into()),
                     EncodedTerm::TimeLiteral(time) => Some(time.hour().into()),
                     _ => None,
@@ -1473,7 +1570,7 @@ impl SimpleEvaluator {
             }
             PlanExpression::Minutes(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.minute().into()),
                     EncodedTerm::TimeLiteral(time) => Some(time.minute().into()),
                     _ => None,
@@ -1481,7 +1578,7 @@ impl SimpleEvaluator {
             }
             PlanExpression::Seconds(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.second().into()),
                     EncodedTerm::TimeLiteral(time) => Some(time.second().into()),
                     _ => None,
@@ -1489,7 +1586,7 @@ impl SimpleEvaluator {
             }
             PlanExpression::Timezone(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(
                         match e(tuple)? {
                             EncodedTerm::DateTimeLiteral(date_time) => date_time.timezone(),
@@ -1509,7 +1606,7 @@ impl SimpleEvaluator {
             PlanExpression::Tz(e) => {
                 let e = self.expression_evaluator(e);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let timezone_offset = match e(tuple)? {
                         EncodedTerm::DateTimeLiteral(date_time) => date_time.timezone_offset(),
                         EncodedTerm::TimeLiteral(time) => time.timezone_offset(),
@@ -1531,11 +1628,11 @@ impl SimpleEvaluator {
             }
             PlanExpression::Now => {
                 let now = self.now;
-                Box::new(move |_| Some(now.into()))
+                Rc::new(move |_| Some(now.into()))
             }
             PlanExpression::Uuid => {
                 let dataset = self.dataset.clone();
-                Box::new(move |_| {
+                Rc::new(move |_| {
                     let mut buffer = String::with_capacity(44);
                     buffer.push_str("urn:uuid:");
                     generate_uuid(&mut buffer);
@@ -1544,7 +1641,7 @@ impl SimpleEvaluator {
             }
             PlanExpression::StrUuid => {
                 let dataset = self.dataset.clone();
-                Box::new(move |_| {
+                Rc::new(move |_| {
                     let mut buffer = String::with_capacity(36);
                     generate_uuid(&mut buffer);
                     Some(build_string_literal(&dataset, &buffer))
@@ -1557,7 +1654,7 @@ impl SimpleEvaluator {
             PlanExpression::Sha512(arg) => self.hash::<Sha512>(arg),
             PlanExpression::Coalesce(l) => {
                 let l: Vec<_> = l.iter().map(|e| self.expression_evaluator(e)).collect();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     for e in &l {
                         if let Some(result) = e(tuple) {
                             return Some(result);
@@ -1570,7 +1667,7 @@ impl SimpleEvaluator {
                 let a = self.expression_evaluator(a);
                 let b = self.expression_evaluator(b);
                 let c = self.expression_evaluator(c);
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     if to_bool(&a(tuple)?)? {
                         b(tuple)
                     } else {
@@ -1582,7 +1679,7 @@ impl SimpleEvaluator {
                 let lexical_form = self.expression_evaluator(lexical_form);
                 let lang_tag = self.expression_evaluator(lang_tag);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(build_lang_string_literal_from_id(
                         to_simple_string_id(&lexical_form(tuple)?)?,
                         build_language_id(&dataset, &lang_tag(tuple)?)?,
@@ -1593,7 +1690,7 @@ impl SimpleEvaluator {
                 let lexical_form = self.expression_evaluator(lexical_form);
                 let datatype = self.expression_evaluator(datatype);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let value = to_simple_string(&dataset, &lexical_form(tuple)?)?;
                     let datatype = if let EncodedTerm::NamedNode { iri_id } = datatype(tuple)? {
                         dataset.get_str(&iri_id).ok()?
@@ -1609,23 +1706,23 @@ impl SimpleEvaluator {
             PlanExpression::SameTerm(a, b) => {
                 let a = self.expression_evaluator(a);
                 let b = self.expression_evaluator(b);
-                Box::new(move |tuple| Some((a(tuple)? == b(tuple)?).into()))
+                Rc::new(move |tuple| Some((a(tuple)? == b(tuple)?).into()))
             }
             PlanExpression::IsIri(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| Some(e(tuple)?.is_named_node().into()))
+                Rc::new(move |tuple| Some(e(tuple)?.is_named_node().into()))
             }
             PlanExpression::IsBlank(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| Some(e(tuple)?.is_blank_node().into()))
+                Rc::new(move |tuple| Some(e(tuple)?.is_blank_node().into()))
             }
             PlanExpression::IsLiteral(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| Some(e(tuple)?.is_literal().into()))
+                Rc::new(move |tuple| Some(e(tuple)?.is_literal().into()))
             }
             PlanExpression::IsNumeric(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(
                         matches!(
                             e(tuple)?,
@@ -1643,7 +1740,7 @@ impl SimpleEvaluator {
                 let pattern = self.expression_evaluator(pattern);
                 let flags = flags.as_ref().map(|flags| self.expression_evaluator(flags));
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let regex = compile_pattern(
                         &dataset,
                         &pattern(tuple)?,
@@ -1661,7 +1758,7 @@ impl SimpleEvaluator {
                 let s = self.expression_evaluator(s);
                 let p = self.expression_evaluator(p);
                 let o = self.expression_evaluator(o);
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let s = s(tuple)?;
                     let p = p(tuple)?;
                     let o = o(tuple)?;
@@ -1678,7 +1775,7 @@ impl SimpleEvaluator {
             }
             PlanExpression::Subject(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     if let EncodedTerm::Triple(t) = e(tuple)? {
                         Some(t.subject.clone())
                     } else {
@@ -1688,7 +1785,7 @@ impl SimpleEvaluator {
             }
             PlanExpression::Predicate(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     if let EncodedTerm::Triple(t) = e(tuple)? {
                         Some(t.predicate.clone())
                     } else {
@@ -1698,7 +1795,7 @@ impl SimpleEvaluator {
             }
             PlanExpression::Object(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| {
+                Rc::new(move |tuple| {
                     if let EncodedTerm::Triple(t) = e(tuple)? {
                         Some(t.object.clone())
                     } else {
@@ -1708,12 +1805,12 @@ impl SimpleEvaluator {
             }
             PlanExpression::IsTriple(e) => {
                 let e = self.expression_evaluator(e);
-                Box::new(move |tuple| Some(e(tuple)?.is_triple().into()))
+                Rc::new(move |tuple| Some(e(tuple)?.is_triple().into()))
             }
             PlanExpression::BooleanCast(e) => {
                 let e = self.expression_evaluator(e);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::BooleanLiteral(value) => Some(value.into()),
                     EncodedTerm::FloatLiteral(value) => Some(value.to_bool().into()),
                     EncodedTerm::DoubleLiteral(value) => Some(value.to_bool().into()),
@@ -1729,7 +1826,7 @@ impl SimpleEvaluator {
             PlanExpression::DoubleCast(e) => {
                 let e = self.expression_evaluator(e);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::FloatLiteral(value) => Some(f64::from(value).into()),
                     EncodedTerm::DoubleLiteral(value) => Some(value.into()),
                     EncodedTerm::IntegerLiteral(value) => Some((value as f64).into()),
@@ -1747,7 +1844,7 @@ impl SimpleEvaluator {
             PlanExpression::FloatCast(e) => {
                 let e = self.expression_evaluator(e);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::FloatLiteral(value) => Some(value.into()),
                     EncodedTerm::DoubleLiteral(value) => Some(value.to_f32().into()),
                     EncodedTerm::IntegerLiteral(value) => Some((value as f32).into()),
@@ -1765,7 +1862,7 @@ impl SimpleEvaluator {
             PlanExpression::IntegerCast(e) => {
                 let e = self.expression_evaluator(e);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::FloatLiteral(value) => Some(value.to_i64().into()),
                     EncodedTerm::DoubleLiteral(value) => Some(value.to_i64().into()),
                     EncodedTerm::IntegerLiteral(value) => Some(value.into()),
@@ -1781,7 +1878,7 @@ impl SimpleEvaluator {
             PlanExpression::DecimalCast(e) => {
                 let e = self.expression_evaluator(e);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::FloatLiteral(value) => Some(Decimal::from_float(value).into()),
                     EncodedTerm::DoubleLiteral(value) => Some(Decimal::from_double(value).into()),
                     EncodedTerm::IntegerLiteral(value) => Some(Decimal::from(value).into()),
@@ -1799,7 +1896,7 @@ impl SimpleEvaluator {
             PlanExpression::DateCast(e) => {
                 let e = self.expression_evaluator(e);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DateLiteral(value) => Some(value.into()),
                     EncodedTerm::DateTimeLiteral(value) => Some(Date::try_from(value).ok()?.into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_date_str(&value),
@@ -1812,7 +1909,7 @@ impl SimpleEvaluator {
             PlanExpression::TimeCast(e) => {
                 let e = self.expression_evaluator(e);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::TimeLiteral(value) => Some(value.into()),
                     EncodedTerm::DateTimeLiteral(value) => Some(Time::try_from(value).ok()?.into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_time_str(&value),
@@ -1825,7 +1922,7 @@ impl SimpleEvaluator {
             PlanExpression::DateTimeCast(e) => {
                 let e = self.expression_evaluator(e);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DateTimeLiteral(value) => Some(value.into()),
                     EncodedTerm::DateLiteral(value) => Some(DateTime::try_from(value).ok()?.into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_date_time_str(&value),
@@ -1838,7 +1935,7 @@ impl SimpleEvaluator {
             PlanExpression::DurationCast(e) => {
                 let e = self.expression_evaluator(e);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DurationLiteral(value) => Some(value.into()),
                     EncodedTerm::YearMonthDurationLiteral(value) => {
                         Some(Duration::from(value).into())
@@ -1856,7 +1953,7 @@ impl SimpleEvaluator {
             PlanExpression::YearMonthDurationCast(e) => {
                 let e = self.expression_evaluator(e);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DurationLiteral(value) => {
                         Some(YearMonthDuration::try_from(value).ok()?.into())
                     }
@@ -1871,7 +1968,7 @@ impl SimpleEvaluator {
             PlanExpression::DayTimeDurationCast(e) => {
                 let e = self.expression_evaluator(e);
                 let dataset = self.dataset.clone();
-                Box::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DurationLiteral(value) => {
                         Some(DayTimeDuration::try_from(value).ok()?.into())
                     }
@@ -1889,10 +1986,10 @@ impl SimpleEvaluator {
     fn hash<H: Digest>(
         &self,
         arg: &PlanExpression,
-    ) -> Box<dyn Fn(&EncodedTuple) -> Option<EncodedTerm>> {
+    ) -> Rc<dyn Fn(&EncodedTuple) -> Option<EncodedTerm>> {
         let arg = self.expression_evaluator(arg);
         let dataset = self.dataset.clone();
-        Box::new(move |tuple| {
+        Rc::new(move |tuple| {
             let input = to_simple_string(&dataset, &arg(tuple)?)?;
             let hash = hex::encode(H::new().chain(input.as_str()).finalize());
             Some(build_string_literal(&dataset, &hash))
@@ -2880,8 +2977,7 @@ impl Iterator for AntiJoinIterator {
 }
 
 struct LeftJoinIterator {
-    eval: SimpleEvaluator,
-    right_plan: Rc<PlanNode>,
+    right_evaluator: Rc<dyn Fn(EncodedTuple) -> EncodedTuplesIterator>,
     left_iter: EncodedTuplesIterator,
     current_right: EncodedTuplesIterator,
 }
@@ -2895,7 +2991,7 @@ impl Iterator for LeftJoinIterator {
         }
         match self.left_iter.next()? {
             Ok(left_tuple) => {
-                self.current_right = self.eval.eval_plan(&self.right_plan, left_tuple.clone());
+                self.current_right = (self.right_evaluator)(left_tuple.clone());
                 if let Some(right_tuple) = self.current_right.next() {
                     Some(right_tuple)
                 } else {
@@ -2908,8 +3004,7 @@ impl Iterator for LeftJoinIterator {
 }
 
 struct BadLeftJoinIterator {
-    eval: SimpleEvaluator,
-    right_plan: Rc<PlanNode>,
+    right_evaluator: Rc<dyn Fn(EncodedTuple) -> EncodedTuplesIterator>,
     left_iter: EncodedTuplesIterator,
     current_left: Option<EncodedTuple>,
     current_right: EncodedTuplesIterator,
@@ -2938,7 +3033,7 @@ impl Iterator for BadLeftJoinIterator {
             Ok(left_tuple) => {
                 let mut filtered_left = left_tuple.clone();
                 unbind_variables(&mut filtered_left, &self.problem_vars);
-                self.current_right = self.eval.eval_plan(&self.right_plan, filtered_left);
+                self.current_right = (self.right_evaluator)(filtered_left);
                 for right_tuple in &mut self.current_right {
                     match right_tuple {
                         Ok(right_tuple) => {
@@ -2960,8 +3055,7 @@ impl Iterator for BadLeftJoinIterator {
 }
 
 struct UnionIterator {
-    eval: SimpleEvaluator,
-    plans: Vec<Rc<PlanNode>>,
+    plans: Vec<Rc<dyn Fn(EncodedTuple) -> EncodedTuplesIterator>>,
     input: EncodedTuple,
     current_iterator: EncodedTuplesIterator,
     current_plan: usize,
@@ -2978,9 +3072,7 @@ impl Iterator for UnionIterator {
             if self.current_plan >= self.plans.len() {
                 return None;
             }
-            self.current_iterator = self
-                .eval
-                .eval_plan(&self.plans[self.current_plan], self.input.clone());
+            self.current_iterator = self.plans[self.current_plan](self.input.clone());
             self.current_plan += 1;
         }
     }
@@ -3561,8 +3653,8 @@ impl From<StrHash> for SmallStringOrId {
 }
 
 pub enum ComparatorFunction {
-    Asc(Box<dyn Fn(&EncodedTuple) -> Option<EncodedTerm>>),
-    Desc(Box<dyn Fn(&EncodedTuple) -> Option<EncodedTerm>>),
+    Asc(Rc<dyn Fn(&EncodedTuple) -> Option<EncodedTerm>>),
+    Desc(Rc<dyn Fn(&EncodedTuple) -> Option<EncodedTerm>>),
 }
 
 #[test]

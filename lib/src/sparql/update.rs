@@ -124,7 +124,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
             self.options.query_options.service_handler.clone(),
         );
         let mut bnodes = HashMap::new();
-        for tuple in evaluator.eval_plan(&plan, EncodedTuple::with_capacity(variables.len())) {
+        for tuple in evaluator.plan_evaluator(&plan)(EncodedTuple::with_capacity(variables.len())) {
             let tuple = tuple?;
             for quad in delete {
                 if let Some(quad) =
