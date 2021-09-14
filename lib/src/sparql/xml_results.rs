@@ -1,6 +1,7 @@
 //! Implementation of [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/)
 
 use crate::error::{invalid_data_error, invalid_input_error};
+use crate::model::vocab::rdf;
 use crate::model::*;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::model::*;
@@ -628,14 +629,26 @@ fn build_literal(
     lang: Option<String>,
     datatype: Option<NamedNode>,
 ) -> Result<Literal, EvaluationError> {
-    match datatype {
-        Some(datatype) => Ok(Literal::new_typed_literal(value, datatype)),
-        None => match lang {
-            Some(lang) => Literal::new_language_tagged_literal(value, &lang).map_err(|e| {
+    match lang {
+        Some(lang) => {
+            if let Some(datatype) = datatype {
+                if datatype.as_ref() != rdf::LANG_STRING {
+                    return Err(invalid_data_error(format!(
+                        "xml:lang value '{}' provided with the datatype {}",
+                        lang, datatype
+                    ))
+                    .into());
+                }
+            }
+            Literal::new_language_tagged_literal(value, &lang).map_err(|e| {
                 invalid_data_error(format!("Invalid xml:lang value '{}': {}", lang, e)).into()
-            }),
-            None => Ok(Literal::new_simple_literal(value)),
-        },
+            })
+        }
+        None => Ok(if let Some(datatype) = datatype {
+            Literal::new_typed_literal(value, datatype)
+        } else {
+            Literal::new_simple_literal(value)
+        }),
     }
 }
 

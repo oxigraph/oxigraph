@@ -1,6 +1,7 @@
 //! Implementation of [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/)
 
 use crate::error::{invalid_data_error, invalid_input_error};
+use crate::model::vocab::rdf;
 use crate::model::*;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::model::*;
@@ -351,7 +352,9 @@ impl<R: BufRead> ResultsIterator<R> {
                         state = None;
                     }
                     Some(State::Datatype) => {
-                        datatype = Some(s.to_owned());
+                        datatype = Some(NamedNode::new(s).map_err(|e| {
+                            invalid_data_error(format!("Invalid datatype value: {}", e))
+                        })?);
                         state = None;
                     }
                     _ => (), // impossible
@@ -386,28 +389,25 @@ impl<R: BufRead> ResultsIterator<R> {
                                         "uri serialization should have a 'value' key",
                                     )
                                 })?;
-                                Ok(match datatype {
-                                    Some(datatype) => Literal::new_typed_literal(
-                                        value,
-                                        NamedNode::new(datatype).map_err(|e| {
-                                            invalid_data_error(format!(
-                                                "Invalid datatype value: {}",
-                                                e
-                                            ))
-                                        })?,
-                                    ),
-                                    None => match lang {
-                                        Some(lang) => {
-                                            Literal::new_language_tagged_literal(value, lang)
-                                                .map_err(|e| {
-                                                    invalid_data_error(format!(
-                                                        "Invalid xml:lang value: {}",
-                                                        e
-                                                    ))
-                                                })?
+                                Ok(match lang {
+                                    Some(lang) => {
+                                        if let Some(datatype) = datatype {
+                                            if datatype.as_ref() != rdf::LANG_STRING {
+                                                return Err(invalid_data_error(format!(
+                                                    "xml:lang value '{}' provided with the datatype {}",
+                                                    lang, datatype
+                                                )))
+                                            }
                                         }
-                                        None => Literal::new_simple_literal(value),
-                                    },
+                                        Literal::new_language_tagged_literal(value, &lang).map_err(|e| {
+                                            invalid_data_error(format!("Invalid xml:lang value '{}': {}", lang, e))
+                                        })?
+                                    }
+                                    None => if let Some(datatype) = datatype {
+                                        Literal::new_typed_literal(value, datatype)
+                                    } else {
+                                        Literal::new_simple_literal(value)
+                                    }
                                 }
                                 .into())
                             }
