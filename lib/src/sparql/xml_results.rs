@@ -542,7 +542,13 @@ impl<R: BufRead> ResultsIterator<R> {
                     State::Result => return Ok(Some(new_bindings)),
                     State::Binding => {
                         if let Some(var) = &current_var {
-                            new_bindings[self.mapping[var]] = term.take()
+                            if let Some(var) = self.mapping.get(var) {
+                                new_bindings[*var] = term.take()
+                            } else {
+                                return Err(
+                                    invalid_data_error(format!("The variable '{}' is used in a binding but not declared in the variables list",  self.reader.decode(&var).map_err(map_xml_error)?)).into()
+                                );
+                            }
                         } else {
                             return Err(
                                 invalid_data_error("No name found for <binding> tag").into()
