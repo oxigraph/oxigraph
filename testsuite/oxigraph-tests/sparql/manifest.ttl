@@ -22,10 +22,10 @@
            qt:data   <describe_input.ttl> ] ;
     mf:result  <describe_output.ttl> .
 
-:describe rdf:type mf:QueryEvaluationTest ;
+:describe_where rdf:type mf:QueryEvaluationTest ;
     mf:name "Simple DESCRIBE request" ;
     mf:action
-         [ qt:query  <describe.rq> ;
+         [ qt:query  <describe_where.rq> ;
            qt:data   <describe_input.ttl> ] ;
     mf:result  <describe_output.ttl> .
 
