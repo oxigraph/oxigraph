@@ -386,7 +386,7 @@ impl<R: BufRead> ResultsIterator<R> {
                             Some(Type::Literal) => {
                                 let value = value.ok_or_else(|| {
                                     invalid_data_error(
-                                        "uri serialization should have a 'value' key",
+                                        "literal serialization should have a 'value' key",
                                     )
                                 })?;
                                 Ok(match lang {

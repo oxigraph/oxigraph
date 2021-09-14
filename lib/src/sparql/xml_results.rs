@@ -574,7 +574,14 @@ impl<R: BufRead> ResultsIterator<R> {
                         }
                         state = State::Triple;
                     }
-                    State::Uri | State::BNode => state = self.stack.pop().unwrap(),
+                    State::Uri => state = self.stack.pop().unwrap(),
+                    State::BNode => {
+                        if term.is_none() {
+                            //We default to a random bnode
+                            term = Some(BlankNode::default().into())
+                        }
+                        state = self.stack.pop().unwrap()
+                    }
                     State::Literal => {
                         if term.is_none() {
                             //We default to the empty literal
