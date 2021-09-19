@@ -1345,7 +1345,7 @@ impl Timestamp {
 fn since_unix_epoch() -> Result<Duration, DateTimeError> {
     Ok(Duration::new(
         0,
-        Decimal::from_f64(js_sys::Date::now() / 1000.),
+        Decimal::from_double((js_sys::Date::now() / 1000.).into()),
     ))
 }
 

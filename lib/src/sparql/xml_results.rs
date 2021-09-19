@@ -546,7 +546,7 @@ impl<R: BufRead> ResultsIterator<R> {
                                 new_bindings[*var] = term.take()
                             } else {
                                 return Err(
-                                    invalid_data_error(format!("The variable '{}' is used in a binding but not declared in the variables list",  self.reader.decode(&var).map_err(map_xml_error)?)).into()
+                                    invalid_data_error(format!("The variable '{}' is used in a binding but not declared in the variables list",  self.reader.decode(var).map_err(map_xml_error)?)).into()
                                 );
                             }
                         } else {

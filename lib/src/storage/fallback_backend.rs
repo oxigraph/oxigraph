@@ -1,7 +1,6 @@
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::io::Result;
-use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
 
 #[derive(Clone)]
