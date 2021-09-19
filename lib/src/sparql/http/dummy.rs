@@ -1,9 +1,8 @@
 //! Simple HTTP client
 
 use crate::error::invalid_input_error;
-use http::{Request, Response};
 use std::io;
-use std::io::BufRead;
+use std::io::{BufRead, Empty, Read, Result};
 
 pub struct Client {}
 
@@ -12,12 +11,21 @@ impl Client {
         Self {}
     }
 
-    pub fn request(
-        &self,
-        _request: &Request<Option<Vec<u8>>>,
-    ) -> io::Result<Response<Box<dyn BufRead>>> {
+    pub fn get(&self, _url: &str, _accept: &str) -> Result<(String, Empty)> {
         Err(invalid_input_error(
-            "HTTP client is not available. Enable the feature 'simple_http'",
+            "HTTP client is not available. Enable the feature 'http_client'",
+        ))
+    }
+
+    pub fn post(
+        &self,
+        _url: &str,
+        _payload: Vec<u8>,
+        _content_type: &str,
+        _accept: &str,
+    ) -> Result<(String, Empty)> {
+        Err(invalid_input_error(
+            "HTTP client is not available. Enable the feature 'http_client'",
         ))
     }
 }

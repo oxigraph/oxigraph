@@ -1,4 +1,3 @@
-use crate::error::{invalid_data_error, invalid_input_error};
 use crate::io::GraphFormat;
 use crate::model::{
     BlankNode as OxBlankNode, GraphName as OxGraphName, GraphNameRef, Literal as OxLiteral,
@@ -14,8 +13,6 @@ use crate::sparql::{EvaluationError, UpdateOptions};
 use crate::storage::io::load_graph;
 use crate::storage::numeric_encoder::{Decoder, EncodedTerm};
 use crate::storage::Storage;
-use http::header::{ACCEPT, CONTENT_TYPE, USER_AGENT};
-use http::{Method, Request, StatusCode};
 use oxiri::Iri;
 use spargebra::algebra::{GraphPattern, GraphTarget};
 use spargebra::term::{
@@ -27,6 +24,7 @@ use spargebra::term::{
 use spargebra::GraphUpdateOperation;
 use std::collections::HashMap;
 use std::io;
+use std::io::BufReader;
 use std::rc::Rc;
 
 pub struct SimpleUpdateEvaluator<'a> {
@@ -150,33 +148,11 @@ impl<'a> SimpleUpdateEvaluator<'a> {
     }
 
     fn eval_load(&mut self, from: &NamedNode, to: &GraphName) -> Result<(), EvaluationError> {
-        let request = Request::builder()
-            .method(Method::GET)
-            .uri(&from.iri)
-            .header(
-                ACCEPT,
-                "application/n-triples, text/turtle, application/rdf+xml",
-            )
-            .header(USER_AGENT, concat!("Oxigraph/", env!("CARGO_PKG_VERSION")))
-            .body(None)
-            .map_err(invalid_input_error)?;
-        let response = self.client.request(&request)?;
-        if response.status() != StatusCode::OK {
-            return Err(EvaluationError::msg(format!(
-                "HTTP error code {} returned when fetching {}",
-                response.status(),
-                from
-            )));
-        }
-        let content_type = response
-            .headers()
-            .get(CONTENT_TYPE)
-            .ok_or_else(|| {
-                EvaluationError::msg(format!("No Content-Type header returned by {}", from))
-            })?
-            .to_str()
-            .map_err(invalid_data_error)?;
-        let format = GraphFormat::from_media_type(content_type).ok_or_else(|| {
+        let (content_type, body) = self.client.get(
+            &from.iri,
+            "application/n-triples, text/turtle, application/rdf+xml",
+        )?;
+        let format = GraphFormat::from_media_type(&content_type).ok_or_else(|| {
             EvaluationError::msg(format!(
                 "Unsupported Content-Type returned by {}: {}",
                 from, content_type
@@ -188,7 +164,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         };
         load_graph(
             self.storage,
-            response.into_body(),
+            BufReader::new(body),
             format,
             to_graph_name,
             Some(&from.iri),

@@ -1,13 +1,11 @@
-use crate::error::{invalid_data_error, invalid_input_error};
 use crate::model::NamedNode;
 use crate::sparql::algebra::Query;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::http::Client;
 use crate::sparql::model::QueryResults;
 use crate::sparql::QueryResultsFormat;
-use http::header::{ACCEPT, CONTENT_TYPE, USER_AGENT};
-use http::{Method, Request, StatusCode};
 use std::error::Error;
+use std::io::BufReader;
 
 /// Handler for [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE.
 ///
@@ -113,42 +111,18 @@ impl ServiceHandler for SimpleServiceHandler {
         service_name: NamedNode,
         query: Query,
     ) -> Result<QueryResults, EvaluationError> {
-        let request = Request::builder()
-            .method(Method::POST)
-            .uri(service_name.as_str())
-            .header(CONTENT_TYPE, "application/sparql-query")
-            .header(
-                ACCEPT,
-                "application/sparql-results+json, application/sparql-results+xml",
-            )
-            .header(USER_AGENT, concat!("Oxigraph/", env!("CARGO_PKG_VERSION")))
-            .body(Some(query.to_string().into_bytes()))
-            .map_err(invalid_input_error)?;
-        let response = self.client.request(&request)?;
-        if response.status() != StatusCode::OK {
-            return Err(EvaluationError::msg(format!(
-                "HTTP error code {} returned when querying service {}",
-                response.status(),
-                service_name
-            )));
-        }
-        let content_type = response
-            .headers()
-            .get(CONTENT_TYPE)
-            .ok_or_else(|| {
-                EvaluationError::msg(format!(
-                    "No Content-Type header returned by {}",
-                    service_name
-                ))
-            })?
-            .to_str()
-            .map_err(invalid_data_error)?;
-        let format = QueryResultsFormat::from_media_type(content_type).ok_or_else(|| {
+        let (content_type, body) = self.client.post(
+            service_name.as_str(),
+            query.to_string().into_bytes(),
+            "application/sparql-query",
+            "application/sparql-results+json, application/sparql-results+xml",
+        )?;
+        let format = QueryResultsFormat::from_media_type(&content_type).ok_or_else(|| {
             EvaluationError::msg(format!(
                 "Unsupported Content-Type returned by {}: {}",
                 service_name, content_type
             ))
         })?;
-        Ok(QueryResults::read(response.into_body(), format)?)
+        Ok(QueryResults::read(BufReader::new(body), format)?)
     }
 }
