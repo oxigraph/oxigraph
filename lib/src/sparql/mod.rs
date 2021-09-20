@@ -34,7 +34,9 @@ use crate::storage::Storage;
 pub use spargebra::ParseError;
 use std::convert::TryInto;
 use std::rc::Rc;
+use std::time::Duration;
 
+#[allow(clippy::needless_pass_by_value)]
 pub(crate) fn evaluate_query(
     storage: Storage,
     query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
@@ -50,7 +52,7 @@ pub(crate) fn evaluate_query(
             Ok(SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
-                options.service_handler,
+                options.service_handler(),
             )
             .evaluate_select_plan(
                 &plan,
@@ -69,7 +71,7 @@ pub(crate) fn evaluate_query(
             SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
-                options.service_handler,
+                options.service_handler(),
             )
             .evaluate_ask_plan(&plan)
         }
@@ -84,7 +86,7 @@ pub(crate) fn evaluate_query(
             Ok(SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
-                options.service_handler,
+                options.service_handler(),
             )
             .evaluate_construct_plan(&plan, construct))
         }
@@ -95,7 +97,7 @@ pub(crate) fn evaluate_query(
             Ok(SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
-                options.service_handler,
+                options.service_handler(),
             )
             .evaluate_describe_plan(&plan))
         }
@@ -109,18 +111,16 @@ pub(crate) fn evaluate_query(
 /// a simple HTTP 1.1 client is used to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls.
 #[derive(Clone)]
 pub struct QueryOptions {
-    pub(crate) service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
+    pub(crate) service_handler: Option<Rc<dyn ServiceHandler<Error = EvaluationError>>>,
+    http_timeout: Option<Duration>,
 }
 
 impl Default for QueryOptions {
     #[inline]
     fn default() -> Self {
         Self {
-            service_handler: if cfg!(feature = "http_client") {
-                Rc::new(service::SimpleServiceHandler::new())
-            } else {
-                Rc::new(EmptyServiceHandler)
-            },
+            service_handler: None,
+            http_timeout: None,
         }
     }
 }
@@ -129,15 +129,34 @@ impl QueryOptions {
     /// Use a given [`ServiceHandler`] to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls.
     #[inline]
     pub fn with_service_handler(mut self, service_handler: impl ServiceHandler + 'static) -> Self {
-        self.service_handler = Rc::new(ErrorConversionServiceHandler::wrap(service_handler));
+        self.service_handler = Some(Rc::new(ErrorConversionServiceHandler::wrap(
+            service_handler,
+        )));
         self
     }
 
     /// Disables the `SERVICE` calls
     #[inline]
     pub fn without_service_handler(mut self) -> Self {
-        self.service_handler = Rc::new(EmptyServiceHandler);
+        self.service_handler = Some(Rc::new(EmptyServiceHandler));
         self
+    }
+
+    /// Sets a timeout for HTTP requests done during SPARQL evaluation
+    #[cfg(feature = "http_client")]
+    pub fn with_http_timeout(mut self, timeout: Duration) -> Self {
+        self.http_timeout = Some(timeout);
+        self
+    }
+
+    fn service_handler(&self) -> Rc<dyn ServiceHandler<Error = EvaluationError>> {
+        self.service_handler.clone().unwrap_or_else(|| {
+            if cfg!(feature = "http_client") {
+                Rc::new(service::SimpleServiceHandler::new(self.http_timeout))
+            } else {
+                Rc::new(EmptyServiceHandler)
+            }
+        })
     }
 }
 

@@ -40,11 +40,12 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         base_iri: Option<Rc<Iri<String>>>,
         options: UpdateOptions,
     ) -> Self {
+        let client = Client::new(options.query_options.http_timeout);
         Self {
             storage,
             base_iri,
             options,
-            client: Client::new(),
+            client,
         }
     }
 
@@ -119,7 +120,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         let evaluator = SimpleEvaluator::new(
             dataset.clone(),
             self.base_iri.clone(),
-            self.options.query_options.service_handler.clone(),
+            self.options.query_options.service_handler(),
         );
         let mut bnodes = HashMap::new();
         for tuple in evaluator.plan_evaluator(&plan)(EncodedTuple::with_capacity(variables.len())) {

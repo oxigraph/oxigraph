@@ -1,15 +1,19 @@
 use crate::error::{invalid_data_error, invalid_input_error};
 use oxhttp::model::{Body, HeaderName, Method, Request};
-use std::io::{Read, Result};
+use std::io::Result;
+use std::time::Duration;
 
-#[derive(Default)]
+const USER_AGENT: &str = concat!("Oxigraph/", env!("CARGO_PKG_VERSION"));
+
 pub struct Client {
     client: oxhttp::Client,
 }
 
 impl Client {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(timeout: Option<Duration>) -> Self {
+        let mut client = oxhttp::Client::new();
+        client.set_global_timeout(timeout);
+        Self { client }
     }
 
     pub fn get(&self, url: &str, accept: &str) -> Result<(String, Body)> {
@@ -20,9 +24,7 @@ impl Client {
         );
         request.headers_mut().append(
             HeaderName::USER_AGENT,
-            concat!("Oxigraph/", env!("CARGO_PKG_VERSION"))
-                .parse()
-                .map_err(invalid_input_error)?,
+            USER_AGENT.parse().map_err(invalid_input_error)?,
         );
         let response = self.client.request(request)?;
         let content_type = response
@@ -49,9 +51,7 @@ impl Client {
         );
         request.headers_mut().append(
             HeaderName::USER_AGENT,
-            concat!("Oxigraph/", env!("CARGO_PKG_VERSION"))
-                .parse()
-                .map_err(invalid_input_error)?,
+            USER_AGENT.parse().map_err(invalid_input_error)?,
         );
         request.headers_mut().append(
             HeaderName::CONTENT_TYPE,

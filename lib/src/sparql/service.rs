@@ -6,6 +6,7 @@ use crate::sparql::model::QueryResults;
 use crate::sparql::QueryResultsFormat;
 use std::error::Error;
 use std::io::BufReader;
+use std::time::Duration;
 
 /// Handler for [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE.
 ///
@@ -96,9 +97,9 @@ pub struct SimpleServiceHandler {
 }
 
 impl SimpleServiceHandler {
-    pub fn new() -> Self {
+    pub fn new(http_timeout: Option<Duration>) -> Self {
         Self {
-            client: Client::new(),
+            client: Client::new(http_timeout),
         }
     }
 }

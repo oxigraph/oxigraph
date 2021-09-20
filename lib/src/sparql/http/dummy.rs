@@ -3,11 +3,12 @@
 use crate::error::invalid_input_error;
 use std::io;
 use std::io::{BufRead, Empty, Read, Result};
+use std::time::Duration;
 
 pub struct Client {}
 
 impl Client {
-    pub fn new() -> Self {
+    pub fn new(_timeout: Option<Duration>) -> Self {
         Self {}
     }
 
