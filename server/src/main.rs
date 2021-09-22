@@ -9,34 +9,29 @@
     unused_qualifications
 )]
 
-use async_std::future::Future;
-use async_std::io::Read;
-use async_std::net::{TcpListener, TcpStream};
-use async_std::prelude::*;
-use async_std::task::{block_on, spawn};
 use clap::{App, Arg};
-use http_types::content::ContentType;
-use http_types::{
-    bail_status, format_err_status, headers, Error, Method, Mime, Request, Response, Result,
-    StatusCode,
-};
+use oxhttp::model::{HeaderName, HeaderValue, Request, Response, Status};
+use oxhttp::Server;
 use oxigraph::io::{DatasetFormat, GraphFormat};
-use oxigraph::model::{GraphName, GraphNameRef, NamedNode, NamedOrBlankNode};
+use oxigraph::model::{GraphName, GraphNameRef, IriParseError, NamedNode, NamedOrBlankNode};
 use oxigraph::sparql::{Query, QueryResults, QueryResultsFormat, Update};
 use oxigraph::store::Store;
 use oxiri::Iri;
 use rand::random;
-use std::io::BufReader;
+use std::cell::RefCell;
+use std::cmp::min;
+use std::io::{BufReader, Read, Write};
+use std::rc::Rc;
 use std::str::FromStr;
+use std::time::Duration;
 use url::form_urlencoded;
 
 const MAX_SPARQL_BODY_SIZE: u64 = 1_048_576;
+const HTTP_TIMEOUT: Duration = Duration::from_secs(60);
 const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
 const LOGO: &str = include_str!("../logo.svg");
-const SERVER: &str = concat!("Oxigraph/", env!("CARGO_PKG_VERSION"));
 
-#[async_std::main]
-pub async fn main() -> Result<()> {
+pub fn main() -> std::io::Result<()> {
     let matches = App::new("Oxigraph SPARQL server")
         .arg(
             Arg::with_name("bind")
@@ -62,292 +57,340 @@ pub async fn main() -> Result<()> {
         Store::new()
     }?;
 
+    let mut server = Server::new(move |request| handle_request(request, store.clone()));
+    server.set_global_timeout(HTTP_TIMEOUT);
+    server
+        .set_server_name(concat!("Oxigraph/", env!("CARGO_PKG_VERSION")))
+        .unwrap();
     println!("Listening for requests at http://{}", &bind);
-    http_server(bind, move |request| handle_request(request, store.clone())).await
+    server.listen(bind)
 }
 
-async fn handle_request(request: Request, store: Store) -> Result<Response> {
-    Ok(match (request.url().path(), request.method()) {
-        ("/", Method::Get) => {
-            let mut response = Response::new(StatusCode::Ok);
-            ContentType::new("text/html").apply(&mut response);
-            response.set_body(HTML_ROOT_PAGE);
-            response
+fn handle_request(request: &mut Request, store: Store) -> Response {
+    match (request.url().path(), request.method().as_ref()) {
+        ("/", "HEAD") => Response::builder(Status::OK)
+            .with_header(HeaderName::CONTENT_TYPE, "text_html")
+            .unwrap()
+            .build(),
+        ("/", "GET") => Response::builder(Status::OK)
+            .with_header(HeaderName::CONTENT_TYPE, "text_html")
+            .unwrap()
+            .with_body(HTML_ROOT_PAGE),
+        ("/logo.svg", "HEAD") => Response::builder(Status::OK)
+            .with_header(HeaderName::CONTENT_TYPE, "image/svg+xml")
+            .unwrap()
+            .build(),
+        ("/logo.svg", "GET") => Response::builder(Status::OK)
+            .with_header(HeaderName::CONTENT_TYPE, "image/svg+xml")
+            .unwrap()
+            .with_body(LOGO),
+        ("/query", "GET") => {
+            configure_and_evaluate_sparql_query(store, url_query(request), None, request)
         }
-        ("/logo.svg", Method::Get) => {
-            let mut response = Response::new(StatusCode::Ok);
-            ContentType::new("image/svg+xml").apply(&mut response);
-            response.set_body(LOGO);
-            response
-        }
-        ("/query", Method::Get) => {
-            configure_and_evaluate_sparql_query(store, url_query(&request), None, request)?
-        }
-        ("/query", Method::Post) => {
-            if let Some(content_type) = request.content_type() {
-                if content_type.essence() == "application/sparql-query" {
+        ("/query", "POST") => {
+            if let Some(content_type) = content_type(request) {
+                if content_type == "application/sparql-query" {
                     let mut buffer = String::new();
-                    let mut request = request;
-                    request
-                        .take_body()
+                    if let Err(e) = request
+                        .body_mut()
                         .take(MAX_SPARQL_BODY_SIZE)
                         .read_to_string(&mut buffer)
-                        .await?;
-                    configure_and_evaluate_sparql_query(
-                        store,
-                        url_query(&request),
-                        Some(buffer),
-                        request,
-                    )?
-                } else if content_type.essence() == "application/x-www-form-urlencoded" {
+                    {
+                        return bad_request(e);
+                    }
+                    let encoded = url_query(request);
+                    configure_and_evaluate_sparql_query(store, encoded, Some(buffer), request)
+                } else if content_type == "application/x-www-form-urlencoded" {
                     let mut buffer = Vec::new();
-                    let mut request = request;
-                    request
-                        .take_body()
+                    if let Err(e) = request
+                        .body_mut()
                         .take(MAX_SPARQL_BODY_SIZE)
                         .read_to_end(&mut buffer)
-                        .await?;
-                    configure_and_evaluate_sparql_query(store, buffer, None, request)?
+                    {
+                        return bad_request(e);
+                    }
+                    configure_and_evaluate_sparql_query(store, buffer, None, request)
                 } else {
-                    bail_status!(415, "Not supported Content-Type given: {}", content_type);
+                    unsupported_media_type(&content_type)
                 }
             } else {
-                bail_status!(400, "No Content-Type given");
+                bad_request("No Content-Type given")
             }
         }
-        ("/update", Method::Post) => {
-            if let Some(content_type) = request.content_type() {
-                if content_type.essence() == "application/sparql-update" {
+        ("/update", "POST") => {
+            if let Some(content_type) = content_type(request) {
+                if content_type == "application/sparql-update" {
                     let mut buffer = String::new();
-                    let mut request = request;
-                    request
-                        .take_body()
+                    if let Err(e) = request
+                        .body_mut()
                         .take(MAX_SPARQL_BODY_SIZE)
                         .read_to_string(&mut buffer)
-                        .await?;
+                    {
+                        return bad_request(e);
+                    }
                     configure_and_evaluate_sparql_update(
                         store,
-                        url_query(&request),
+                        url_query(request),
                         Some(buffer),
                         request,
-                    )?
-                } else if content_type.essence() == "application/x-www-form-urlencoded" {
+                    )
+                } else if content_type == "application/x-www-form-urlencoded" {
                     let mut buffer = Vec::new();
-                    let mut request = request;
-                    request
-                        .take_body()
+                    if let Err(e) = request
+                        .body_mut()
                         .take(MAX_SPARQL_BODY_SIZE)
                         .read_to_end(&mut buffer)
-                        .await?;
-                    configure_and_evaluate_sparql_update(store, buffer, None, request)?
+                    {
+                        return bad_request(e);
+                    }
+                    configure_and_evaluate_sparql_update(store, buffer, None, request)
                 } else {
-                    bail_status!(415, "Not supported Content-Type given: {}", content_type);
+                    unsupported_media_type(&content_type)
                 }
             } else {
-                bail_status!(400, "No Content-Type given");
+                bad_request("No Content-Type given")
             }
         }
-        (path, Method::Get) if path.starts_with("/store") => {
+        (path, "GET") if path.starts_with("/store") => {
             //TODO: stream
             let mut body = Vec::default();
-            let format = if let Some(target) = store_target(&request)? {
+            let format = if let Some(target) = match store_target(request) {
+                Ok(target) => target,
+                Err(error) => return error,
+            } {
                 if !match &target {
-                    GraphName::DefaultGraph => true,
-                    GraphName::NamedNode(target) => store.contains_named_graph(target)?,
-                    GraphName::BlankNode(target) => store.contains_named_graph(target)?,
+                    NamedGraphName::DefaultGraph => true,
+                    NamedGraphName::NamedNode(target) => match store.contains_named_graph(target) {
+                        Ok(r) => r,
+                        Err(e) => return internal_server_error(e),
+                    },
                 } {
-                    bail_status!(404, "The graph {} does not exists", target);
+                    return error(
+                        Status::NOT_FOUND,
+                        format!("The graph {} does not exists", GraphName::from(target)),
+                    );
                 }
-                let format = graph_content_negotiation(request)?;
-                store.dump_graph(&mut body, format, &target)?;
+                let format = match graph_content_negotiation(request) {
+                    Ok(format) => format,
+                    Err(response) => return response,
+                };
+                if let Err(e) =
+                    store.dump_graph(&mut body, format, GraphName::from(target).as_ref())
+                {
+                    return internal_server_error(e);
+                }
                 format.media_type()
             } else {
-                let format = dataset_content_negotiation(request)?;
-                store.dump_dataset(&mut body, format)?;
+                let format = match dataset_content_negotiation(request) {
+                    Ok(format) => format,
+                    Err(response) => return response,
+                };
+                if let Err(e) = store.dump_dataset(&mut body, format) {
+                    return internal_server_error(e);
+                }
                 format.media_type()
             };
-            let mut response = Response::from(body);
-            ContentType::new(format).apply(&mut response);
-            response
+            Response::builder(Status::OK)
+                .with_header(HeaderName::CONTENT_TYPE, format)
+                .unwrap()
+                .with_body(body)
         }
-        (path, Method::Put) if path.starts_with("/store") => {
-            if let Some(content_type) = request.content_type() {
-                if let Some(target) = store_target(&request)? {
-                    if let Some(format) = GraphFormat::from_media_type(content_type.essence()) {
+        (path, "PUT") if path.starts_with("/store") => {
+            if let Some(content_type) = content_type(request) {
+                if let Some(target) = match store_target(request) {
+                    Ok(target) => target,
+                    Err(error) => return error,
+                } {
+                    if let Some(format) = GraphFormat::from_media_type(&content_type) {
                         let new = !match &target {
-                            GraphName::NamedNode(target) => {
-                                if store.contains_named_graph(target)? {
-                                    store.clear_graph(target)?;
+                            NamedGraphName::NamedNode(target) => {
+                                if match store.contains_named_graph(target) {
+                                    Ok(r) => r,
+                                    Err(e) => return internal_server_error(e),
+                                } {
+                                    if let Err(e) = store.clear_graph(target) {
+                                        return internal_server_error(e);
+                                    }
                                     true
                                 } else {
-                                    store.insert_named_graph(target)?;
+                                    if let Err(e) = store.insert_named_graph(target) {
+                                        return internal_server_error(e);
+                                    }
                                     false
                                 }
                             }
-                            GraphName::BlankNode(target) => {
-                                if store.contains_named_graph(target)? {
-                                    store.clear_graph(target)?;
-                                    true
-                                } else {
-                                    store.insert_named_graph(target)?;
-                                    false
+                            NamedGraphName::DefaultGraph => {
+                                if let Err(e) = store.clear_graph(GraphNameRef::DefaultGraph) {
+                                    return internal_server_error(e);
                                 }
-                            }
-                            GraphName::DefaultGraph => {
-                                store.clear_graph(&target)?;
                                 true
                             }
                         };
-                        store
-                            .load_graph(
-                                BufReader::new(SyncAsyncReader::from(request)),
-                                format,
-                                &target,
-                                None,
-                            )
-                            .map_err(bad_request)?;
-                        Response::new(if new {
-                            StatusCode::Created
-                        } else {
-                            StatusCode::NoContent
-                        })
-                    } else {
-                        bail_status!(
-                            415,
-                            "No supported content Content-Type given: {}",
-                            content_type
-                        );
-                    }
-                } else if let Some(format) = DatasetFormat::from_media_type(content_type.essence())
-                {
-                    store.clear()?;
-                    store
-                        .load_dataset(BufReader::new(SyncAsyncReader::from(request)), format, None)
-                        .map_err(bad_request)?;
-                    Response::new(StatusCode::NoContent)
-                } else {
-                    bail_status!(
-                        415,
-                        "No supported content Content-Type given: {}",
-                        content_type
-                    );
-                }
-            } else {
-                bail_status!(400, "No Content-Type given");
-            }
-        }
-        (path, Method::Delete) if path.starts_with("/store") => {
-            if let Some(target) = store_target(&request)? {
-                match target {
-                    GraphName::DefaultGraph => store.clear_graph(GraphNameRef::DefaultGraph)?,
-                    GraphName::NamedNode(target) => {
-                        if store.contains_named_graph(&target)? {
-                            store.remove_named_graph(&target)?;
-                        } else {
-                            bail_status!(404, "The graph {} does not exists", target);
-                        }
-                    }
-                    GraphName::BlankNode(target) => {
-                        if store.contains_named_graph(&target)? {
-                            store.remove_named_graph(&target)?;
-                        } else {
-                            bail_status!(404, "The graph {} does not exists", target);
-                        }
-                    }
-                }
-            } else {
-                store.clear()?;
-            }
-            Response::new(StatusCode::NoContent)
-        }
-        (path, Method::Post) if path.starts_with("/store") => {
-            if let Some(content_type) = request.content_type() {
-                if let Some(target) = store_target(&request)? {
-                    if let Some(format) = GraphFormat::from_media_type(content_type.essence()) {
-                        let new = !match &target {
-                            GraphName::NamedNode(target) => store.contains_named_graph(target)?,
-                            GraphName::BlankNode(target) => store.contains_named_graph(target)?,
-                            GraphName::DefaultGraph => true,
-                        };
-                        store
-                            .load_graph(
-                                BufReader::new(SyncAsyncReader::from(request)),
-                                format,
-                                &target,
-                                None,
-                            )
-                            .map_err(bad_request)?;
-                        Response::new(if new {
-                            StatusCode::Created
-                        } else {
-                            StatusCode::NoContent
-                        })
-                    } else {
-                        bail_status!(
-                            415,
-                            "No supported content Content-Type given: {}",
-                            content_type
-                        );
-                    }
-                } else if let Some(format) = DatasetFormat::from_media_type(content_type.essence())
-                {
-                    store
-                        .load_dataset(BufReader::new(SyncAsyncReader::from(request)), format, None)
-                        .map_err(bad_request)?;
-                    Response::new(StatusCode::NoContent)
-                } else if let Some(format) = GraphFormat::from_media_type(content_type.essence()) {
-                    let graph =
-                        resolve_with_base(&request, &format!("/store/{:x}", random::<u128>()))?;
-                    store
-                        .load_graph(
-                            BufReader::new(SyncAsyncReader::from(request)),
+                        if let Err(e) = store.load_graph(
+                            BufReader::new(request.body_mut()),
                             format,
-                            &graph,
+                            GraphName::from(target).as_ref(),
                             None,
-                        )
-                        .map_err(bad_request)?;
-                    let mut response = Response::new(StatusCode::Created);
-                    response.insert_header(headers::LOCATION, graph.into_string());
-                    response
+                        ) {
+                            return bad_request(e);
+                        }
+                        Response::builder(if new {
+                            Status::CREATED
+                        } else {
+                            Status::NO_CONTENT
+                        })
+                        .build()
+                    } else {
+                        unsupported_media_type(&content_type)
+                    }
+                } else if let Some(format) = DatasetFormat::from_media_type(&content_type) {
+                    if let Err(e) = store.clear() {
+                        return internal_server_error(e);
+                    }
+                    if let Err(e) =
+                        store.load_dataset(BufReader::new(request.body_mut()), format, None)
+                    {
+                        return internal_server_error(e);
+                    }
+                    Response::builder(Status::NO_CONTENT).build()
                 } else {
-                    bail_status!(
-                        415,
-                        "No supported content Content-Type given: {}",
-                        content_type
+                    unsupported_media_type(&content_type)
+                }
+            } else {
+                bad_request("No Content-Type given")
+            }
+        }
+        (path, "DELETE") if path.starts_with("/store") => {
+            if let Some(target) = match store_target(request) {
+                Ok(target) => target,
+                Err(error) => return error,
+            } {
+                match target {
+                    NamedGraphName::DefaultGraph => {
+                        if let Err(e) = store.clear_graph(GraphNameRef::DefaultGraph) {
+                            return internal_server_error(e);
+                        }
+                    }
+                    NamedGraphName::NamedNode(target) => {
+                        if match store.contains_named_graph(&target) {
+                            Ok(r) => r,
+                            Err(e) => return internal_server_error(e),
+                        } {
+                            if let Err(e) = store.remove_named_graph(&target) {
+                                return internal_server_error(e);
+                            }
+                        } else {
+                            return error(
+                                Status::NOT_FOUND,
+                                format!("The graph {} does not exists", target),
+                            );
+                        }
+                    }
+                }
+            } else if let Err(e) = store.clear() {
+                return internal_server_error(e);
+            }
+            Response::builder(Status::NO_CONTENT).build()
+        }
+        (path, "POST") if path.starts_with("/store") => {
+            if let Some(content_type) = content_type(request) {
+                if let Some(target) = match store_target(request) {
+                    Ok(target) => target,
+                    Err(error) => return error,
+                } {
+                    if let Some(format) = GraphFormat::from_media_type(&content_type) {
+                        let new = !match &target {
+                            NamedGraphName::NamedNode(target) => {
+                                match store.contains_named_graph(target) {
+                                    Ok(r) => r,
+                                    Err(e) => return internal_server_error(e),
+                                }
+                            }
+                            NamedGraphName::DefaultGraph => true,
+                        };
+                        if let Err(e) = store.load_graph(
+                            BufReader::new(request.body_mut()),
+                            format,
+                            GraphName::from(target).as_ref(),
+                            None,
+                        ) {
+                            return bad_request(e);
+                        }
+                        Response::builder(if new {
+                            Status::CREATED
+                        } else {
+                            Status::NO_CONTENT
+                        })
+                        .build()
+                    } else {
+                        unsupported_media_type(&content_type)
+                    }
+                } else if let Some(format) = DatasetFormat::from_media_type(&content_type) {
+                    if let Err(e) =
+                        store.load_dataset(BufReader::new(request.body_mut()), format, None)
+                    {
+                        return bad_request(e);
+                    }
+                    Response::builder(Status::NO_CONTENT).build()
+                } else if let Some(format) = GraphFormat::from_media_type(&content_type) {
+                    let graph =
+                        match resolve_with_base(request, &format!("/store/{:x}", random::<u128>()))
+                        {
+                            Ok(graph) => graph,
+                            Err(e) => return e,
+                        };
+                    if let Err(e) =
+                        store.load_graph(BufReader::new(request.body_mut()), format, &graph, None)
+                    {
+                        return bad_request(e);
+                    }
+                    Response::builder(Status::CREATED)
+                        .with_header(HeaderName::LOCATION, graph.into_string())
+                        .unwrap()
+                        .build()
+                } else {
+                    unsupported_media_type(&content_type)
+                }
+            } else {
+                bad_request("No Content-Type given")
+            }
+        }
+        (path, "HEAD") if path.starts_with("/store") => {
+            if let Some(target) = match store_target(request) {
+                Ok(target) => target,
+                Err(error) => return error,
+            } {
+                if !match &target {
+                    NamedGraphName::DefaultGraph => true,
+                    NamedGraphName::NamedNode(target) => match store.contains_named_graph(target) {
+                        Ok(r) => r,
+                        Err(e) => return internal_server_error(e),
+                    },
+                } {
+                    return error(
+                        Status::NOT_FOUND,
+                        format!("The graph {} does not exists", GraphName::from(target)),
                     );
                 }
+                Response::builder(Status::OK).build()
             } else {
-                bail_status!(400, "No Content-Type given")
+                Response::builder(Status::OK).build()
             }
         }
-        (path, Method::Head) if path.starts_with("/store") => {
-            if let Some(target) = store_target(&request)? {
-                if !match &target {
-                    GraphName::DefaultGraph => true,
-                    GraphName::NamedNode(target) => store.contains_named_graph(target)?,
-                    GraphName::BlankNode(target) => store.contains_named_graph(target)?,
-                } {
-                    bail_status!(404, "The graph {} does not exists", target);
-                }
-                Response::new(StatusCode::Ok)
-            } else {
-                Response::new(StatusCode::Ok)
-            }
-        }
-        _ => {
-            bail_status!(
-                404,
+        _ => error(
+            Status::NOT_FOUND,
+            format!(
                 "{} {} is not supported by this server",
                 request.method(),
                 request.url().path()
-            );
-        }
-    })
+            ),
+        ),
+    }
 }
 
-fn base_url(request: &Request) -> Result<String> {
+fn base_url(request: &Request) -> Result<String, Response> {
     let mut url = request.url().clone();
-    if let Some(host) = request.host() {
+    if let Some(host) = request.url().host_str() {
         url.set_host(Some(host)).map_err(bad_request)?;
     }
     url.set_query(None);
@@ -355,7 +398,7 @@ fn base_url(request: &Request) -> Result<String> {
     Ok(url.into())
 }
 
-fn resolve_with_base(request: &Request, url: &str) -> Result<NamedNode> {
+fn resolve_with_base(request: &Request, url: &str) -> Result<NamedNode, Response> {
     Ok(NamedNode::new_unchecked(
         Iri::parse(base_url(request)?)
             .map_err(bad_request)?
@@ -373,8 +416,8 @@ fn configure_and_evaluate_sparql_query(
     store: Store,
     encoded: Vec<u8>,
     mut query: Option<String>,
-    request: Request,
-) -> Result<Response> {
+    request: &Request,
+) -> Response {
     let mut default_graph_uris = Vec::new();
     let mut named_graph_uris = Vec::new();
     let mut use_default_graph_as_union = false;
@@ -382,7 +425,7 @@ fn configure_and_evaluate_sparql_query(
         match k.as_ref() {
             "query" => {
                 if query.is_some() {
-                    bail_status!(400, "Multiple query parameters provided")
+                    return bad_request("Multiple query parameters provided");
                 }
                 query = Some(v.into_owned())
             }
@@ -402,7 +445,7 @@ fn configure_and_evaluate_sparql_query(
             request,
         )
     } else {
-        bail_status!(400, "You should set the 'query' parameter")
+        bad_request("You should set the 'query' parameter")
     }
 }
 
@@ -412,47 +455,66 @@ fn evaluate_sparql_query(
     use_default_graph_as_union: bool,
     default_graph_uris: Vec<String>,
     named_graph_uris: Vec<String>,
-    request: Request,
-) -> Result<Response> {
-    let mut query =
-        Query::parse(&query, Some(base_url(&request)?.as_str())).map_err(bad_request)?;
+    request: &Request,
+) -> Response {
+    let mut query = match Query::parse(
+        &query,
+        Some(&match base_url(request) {
+            Ok(url) => url,
+            Err(r) => return r,
+        }),
+    ) {
+        Ok(query) => query,
+        Err(e) => return bad_request(e),
+    };
 
     if use_default_graph_as_union {
         if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
-            bail_status!(
-                400,
+            return bad_request(
                 "default-graph-uri or named-graph-uri and union-default-graph should not be set at the same time"
             );
         }
         query.dataset_mut().set_default_graph_as_union()
     } else if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
         query.dataset_mut().set_default_graph(
-            default_graph_uris
+            match default_graph_uris
                 .into_iter()
                 .map(|e| Ok(NamedNode::new(e)?.into()))
-                .collect::<Result<_>>()
-                .map_err(bad_request)?,
+                .collect::<Result<Vec<GraphName>, IriParseError>>()
+            {
+                Ok(default_graph_uris) => default_graph_uris,
+                Err(e) => return bad_request(e),
+            },
         );
         query.dataset_mut().set_available_named_graphs(
-            named_graph_uris
+            match named_graph_uris
                 .into_iter()
                 .map(|e| Ok(NamedNode::new(e)?.into()))
-                .collect::<Result<_>>()
-                .map_err(bad_request)?,
+                .collect::<Result<Vec<NamedOrBlankNode>, IriParseError>>()
+            {
+                Ok(named_graph_uris) => named_graph_uris,
+                Err(e) => return bad_request(e),
+            },
         );
     }
 
-    let results = store.query(query)?;
+    let results = match store.query(query) {
+        Ok(results) => results,
+        Err(e) => return internal_server_error(e),
+    };
     //TODO: stream
-    if let QueryResults::Graph(_) = results {
-        let format = graph_content_negotiation(request)?;
-        let mut body = Vec::default();
-        results.write_graph(&mut body, format)?;
-        let mut response = Response::from(body);
-        ContentType::new(format.media_type()).apply(&mut response);
-        Ok(response)
+    let mut body = Vec::default();
+    let media_type = if let QueryResults::Graph(_) = results {
+        let format = match graph_content_negotiation(request) {
+            Ok(format) => format,
+            Err(response) => return response,
+        };
+        if let Err(e) = results.write_graph(&mut body, format) {
+            return internal_server_error(e);
+        }
+        format.media_type()
     } else {
-        let format = content_negotiation(
+        let format = match content_negotiation(
             request,
             &[
                 QueryResultsFormat::Xml.media_type(),
@@ -461,21 +523,27 @@ fn evaluate_sparql_query(
                 QueryResultsFormat::Tsv.media_type(),
             ],
             QueryResultsFormat::from_media_type,
-        )?;
-        let mut body = Vec::default();
-        results.write(&mut body, format)?;
-        let mut response = Response::from(body);
-        ContentType::new(format.media_type()).apply(&mut response);
-        Ok(response)
-    }
+        ) {
+            Ok(format) => format,
+            Err(response) => return response,
+        };
+        if let Err(e) = results.write(&mut body, format) {
+            return internal_server_error(e);
+        }
+        format.media_type()
+    };
+    Response::builder(Status::OK)
+        .with_header(HeaderName::CONTENT_TYPE, media_type)
+        .unwrap()
+        .with_body(body)
 }
 
 fn configure_and_evaluate_sparql_update(
     store: Store,
     encoded: Vec<u8>,
     mut update: Option<String>,
-    request: Request,
-) -> Result<Response> {
+    request: &Request,
+) -> Response {
     let mut use_default_graph_as_union = false;
     let mut default_graph_uris = Vec::new();
     let mut named_graph_uris = Vec::new();
@@ -483,7 +551,7 @@ fn configure_and_evaluate_sparql_update(
         match k.as_ref() {
             "update" => {
                 if update.is_some() {
-                    bail_status!(400, "Multiple update parameters provided")
+                    return bad_request("Multiple update parameters provided");
                 }
                 update = Some(v.into_owned())
             }
@@ -503,7 +571,7 @@ fn configure_and_evaluate_sparql_update(
             request,
         )
     } else {
-        bail_status!(400, "You should set the 'update' parameter")
+        bad_request("You should set the 'update' parameter")
     }
 }
 
@@ -513,42 +581,56 @@ fn evaluate_sparql_update(
     use_default_graph_as_union: bool,
     default_graph_uris: Vec<String>,
     named_graph_uris: Vec<String>,
-    request: Request,
-) -> Result<Response> {
-    let mut update =
-        Update::parse(&update, Some(base_url(&request)?.as_str())).map_err(bad_request)?;
+    request: &Request,
+) -> Response {
+    let mut update = match Update::parse(
+        &update,
+        Some(
+            match base_url(request) {
+                Ok(url) => url,
+                Err(e) => return e,
+            }
+            .as_str(),
+        ),
+    ) {
+        Ok(update) => update,
+        Err(e) => return bad_request(e),
+    };
 
     if use_default_graph_as_union {
         if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
-            bail_status!(
-                400,
+            return bad_request(
                 "using-graph-uri or using-named-graph-uri and using-union-graph should not be set at the same time"
             );
         }
         for using in update.using_datasets_mut() {
             if !using.is_default_dataset() {
-                bail_status!(
-                    400,
+                return bad_request(
                     "using-union-graph must not be used with a SPARQL UPDATE containing USING",
                 );
             }
             using.set_default_graph_as_union();
         }
     } else if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
-        let default_graph_uris = default_graph_uris
+        let default_graph_uris = match default_graph_uris
             .into_iter()
             .map(|e| Ok(NamedNode::new(e)?.into()))
-            .collect::<Result<Vec<GraphName>>>()
-            .map_err(bad_request)?;
-        let named_graph_uris = named_graph_uris
+            .collect::<Result<Vec<GraphName>, IriParseError>>()
+        {
+            Ok(default_graph_uris) => default_graph_uris,
+            Err(e) => return bad_request(e),
+        };
+        let named_graph_uris = match named_graph_uris
             .into_iter()
             .map(|e| Ok(NamedNode::new(e)?.into()))
-            .collect::<Result<Vec<NamedOrBlankNode>>>()
-            .map_err(bad_request)?;
+            .collect::<Result<Vec<NamedOrBlankNode>, IriParseError>>()
+        {
+            Ok(named_graph_uris) => named_graph_uris,
+            Err(e) => return bad_request(e),
+        };
         for using in update.using_datasets_mut() {
             if !using.is_default_dataset() {
-                bail_status!(
-                        400,
+                return bad_request(
                         "using-graph-uri and using-named-graph-uri must not be used with a SPARQL UPDATE containing USING",
                     );
             }
@@ -556,11 +638,13 @@ fn evaluate_sparql_update(
             using.set_available_named_graphs(named_graph_uris.clone());
         }
     }
-    store.update(update)?;
-    Ok(Response::new(StatusCode::NoContent))
+    if let Err(e) = store.update(update) {
+        return internal_server_error(e);
+    }
+    Response::builder(Status::NO_CONTENT).build()
 }
 
-fn store_target(request: &Request) -> Result<Option<GraphName>> {
+fn store_target(request: &Request) -> Result<Option<NamedGraphName>, Response> {
     if request.url().path() == "/store" {
         let mut graph = None;
         let mut default = false;
@@ -569,73 +653,48 @@ fn store_target(request: &Request) -> Result<Option<GraphName>> {
                 "graph" => graph = Some(v.into_owned()),
                 "default" => default = true,
                 _ => {
-                    bail_status!(400, "Unexpected parameter: {}", k);
+                    return Err(bad_request(format!("Unexpected parameter: {}", k)));
                 }
             }
         }
-        Ok(if let Some(graph) = graph {
+        if let Some(graph) = graph {
             if default {
-                bail_status!(
-                    400,
+                Err(bad_request(
                     "Both graph and default parameters should not be set at the same time",
-                );
+                ))
             } else {
-                Some(resolve_with_base(request, &graph)?.into())
+                Ok(Some(NamedGraphName::NamedNode(resolve_with_base(
+                    request, &graph,
+                )?)))
             }
         } else if default {
-            Some(GraphName::DefaultGraph)
+            Ok(Some(NamedGraphName::DefaultGraph))
         } else {
-            None
-        })
+            Ok(None)
+        }
     } else {
-        Ok(Some(resolve_with_base(request, "")?.into()))
+        Ok(Some(NamedGraphName::NamedNode(resolve_with_base(
+            request, "",
+        )?)))
     }
 }
 
-async fn http_server<
-    F: Clone + Send + Sync + 'static + Fn(Request) -> Fut,
-    Fut: Send + Future<Output = Result<Response>>,
->(
-    host: &str,
-    handle: F,
-) -> Result<()> {
-    async fn accept<F: Fn(Request) -> Fut, Fut: Future<Output = Result<Response>>>(
-        stream: TcpStream,
-        handle: F,
-    ) -> Result<()> {
-        async_h1::accept(stream, |request| async {
-            let mut response = match handle(request).await {
-                Ok(result) => result,
-                Err(error) => {
-                    if error.status().is_server_error() {
-                        eprintln!("{}", error);
-                    }
-                    let mut response = Response::new(error.status());
-                    response.set_body(error.to_string());
-                    response
-                }
-            };
-            response.append_header(headers::SERVER, SERVER);
-            Ok(response)
-        })
-        .await
-    }
-
-    let listener = TcpListener::bind(host).await?;
-    let mut incoming = listener.incoming();
-    while let Some(stream) = incoming.next().await {
-        let stream = stream?;
-        let handle = handle.clone();
-        spawn(async {
-            if let Err(error) = accept(stream, handle).await {
-                eprintln!("{}", error);
-            };
-        });
-    }
-    Ok(())
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+enum NamedGraphName {
+    NamedNode(NamedNode),
+    DefaultGraph,
 }
 
-fn graph_content_negotiation(request: Request) -> Result<GraphFormat> {
+impl From<NamedGraphName> for GraphName {
+    fn from(graph_name: NamedGraphName) -> Self {
+        match graph_name {
+            NamedGraphName::NamedNode(node) => node.into(),
+            NamedGraphName::DefaultGraph => Self::DefaultGraph,
+        }
+    }
+}
+
+fn graph_content_negotiation(request: &Request) -> Result<GraphFormat, Response> {
     content_negotiation(
         request,
         &[
@@ -647,7 +706,7 @@ fn graph_content_negotiation(request: Request) -> Result<GraphFormat> {
     )
 }
 
-fn dataset_content_negotiation(request: Request) -> Result<DatasetFormat> {
+fn dataset_content_negotiation(request: &Request) -> Result<DatasetFormat, Response> {
     content_negotiation(
         request,
         &[
@@ -659,39 +718,46 @@ fn dataset_content_negotiation(request: Request) -> Result<DatasetFormat> {
 }
 
 fn content_negotiation<F>(
-    request: Request,
+    request: &Request,
     supported: &[&str],
     parse: impl Fn(&str) -> Option<F>,
-) -> Result<F> {
+) -> Result<F, Response> {
+    let default = HeaderValue::default();
     let header = request
-        .header(headers::ACCEPT)
-        .map(|h| h.last().as_str().trim())
-        .unwrap_or("");
-    let supported_mime: Vec<Mime> = supported
-        .iter()
-        .map(|h| Mime::from_str(h).unwrap())
-        .collect();
+        .header(&HeaderName::ACCEPT)
+        .unwrap_or(&default)
+        .to_str()
+        .map_err(|_| bad_request("The Accept header should be a valid ASCII string"))?;
 
     if header.is_empty() {
         return parse(supported.first().unwrap())
-            .ok_or_else(|| Error::from_str(StatusCode::InternalServerError, "Unknown mime type"));
+            .ok_or_else(|| error(Status::INTERNAL_SERVER_ERROR, "Unknown mime type"));
     }
     let mut result = None;
     let mut result_score = 0f32;
 
     for possible in header.split(',') {
-        let possible = Mime::from_str(possible.trim())?;
-        let score = if let Some(q) = possible.param("q") {
-            f32::from_str(&q.to_string())?
-        } else {
-            1.
-        };
+        let (possible, parameters) = possible.split_once(';').unwrap_or((possible, ""));
+        let (possible_base, possible_sub) = possible.split_once('/').unwrap_or((possible, ""));
+        let possible_base = possible_base.trim();
+        let possible_sub = possible_sub.trim();
+
+        let mut score = 1.;
+        for parameter in parameters.split(';') {
+            let parameter = parameter.trim();
+            if let Some(s) = parameter.strip_prefix("q=") {
+                score = f32::from_str(s.trim())
+                    .map_err(|_| bad_request(format!("Invalid Accept media type score: {}", s)))?
+            }
+        }
         if score <= result_score {
             continue;
         }
-        for candidate in &supported_mime {
-            if (possible.basetype() == candidate.basetype() || possible.basetype() == "*")
-                && (possible.subtype() == candidate.subtype() || possible.subtype() == "*")
+        for candidate in supported {
+            let (candidate_base, candidate_sub) =
+                candidate.split_once('/').unwrap_or((candidate, ""));
+            if (possible_base == candidate_base || possible_base == "*")
+                && (possible_sub == candidate_sub || possible_sub == "*")
             {
                 result = Some(candidate);
                 result_score = score;
@@ -701,214 +767,297 @@ fn content_negotiation<F>(
     }
 
     let result = result.ok_or_else(|| {
-        format_err_status!(
-            406,
-            "The available Content-Types are {}",
-            supported.join(", ")
+        error(
+            Status::NOT_ACCEPTABLE,
+            format!("The available Content-Types are {}", supported.join(", "),),
         )
     })?;
 
-    parse(result.essence())
-        .ok_or_else(|| Error::from_str(StatusCode::InternalServerError, "Unknown mime type"))
+    parse(result).ok_or_else(|| error(Status::INTERNAL_SERVER_ERROR, "Unknown mime type"))
 }
 
-fn bad_request(e: impl Into<Error>) -> Error {
-    let mut e = e.into();
-    e.set_status(StatusCode::BadRequest);
-    e
+fn content_type(request: &Request) -> Option<String> {
+    let value = request.header(&HeaderName::CONTENT_TYPE)?.to_str().ok()?;
+    Some(
+        value
+            .split_once(';')
+            .map_or(value, |(b, _)| b)
+            .trim()
+            .to_ascii_lowercase(),
+    )
 }
 
-struct SyncAsyncReader<R: Unpin> {
-    inner: R,
+fn error(status: Status, message: impl ToString) -> Response {
+    Response::builder(status)
+        .with_header(HeaderName::CONTENT_TYPE, "text/plain")
+        .unwrap()
+        .with_body(message.to_string())
 }
 
-impl<R: Unpin> From<R> for SyncAsyncReader<R> {
-    fn from(inner: R) -> Self {
-        Self { inner }
+fn bad_request(message: impl ToString) -> Response {
+    error(Status::BAD_REQUEST, message)
+}
+
+fn unsupported_media_type(content_type: &str) -> Response {
+    error(
+        Status::UNSUPPORTED_MEDIA_TYPE,
+        format!("No supported content Content-Type given: {}", content_type),
+    )
+}
+
+fn internal_server_error(message: impl ToString) -> Response {
+    error(Status::INTERNAL_SERVER_ERROR, message)
+}
+
+/// Hacky tool to allow implementing read on top of a write loop
+struct ReadForWrite<U: (FnMut() -> std::io::Result<ReadForWriteState>)> {
+    buffer: Rc<RefCell<Vec<u8>>>,
+    position: usize,
+    write_operator: U,
+}
+
+impl<U: (FnMut() -> std::io::Result<ReadForWriteState>)> ReadForWrite<U> {
+    fn new(write_operator_builder: impl FnOnce(ReadForWriteWriter) -> U) -> Self {
+        let buffer = Rc::new(RefCell::new(Vec::new()));
+        Self {
+            buffer: buffer.clone(),
+            position: 0,
+            write_operator: write_operator_builder(ReadForWriteWriter { buffer }),
+        }
     }
 }
 
-impl<R: Read + Unpin> std::io::Read for SyncAsyncReader<R> {
+impl<U: (FnMut() -> std::io::Result<ReadForWriteState>)> Read for ReadForWrite<U> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        block_on(self.inner.read(buf))
+        while self.position == self.buffer.borrow().len() {
+            // We read more data
+            self.buffer.as_ref().borrow_mut().clear();
+            self.position = 0;
+            if (self.write_operator)()? == ReadForWriteState::End {
+                break;
+            }
+        }
+        let buffer = self.buffer.borrow();
+        let start = self.position;
+        let end = min(buffer.len() - self.position, buf.len());
+        let len = end - start;
+        buf[..len].copy_from_slice(&buffer[start..end]);
+        self.position = end;
+        Ok(len)
+    }
+}
+
+struct ReadForWriteWriter {
+    buffer: Rc<RefCell<Vec<u8>>>,
+}
+
+impl Write for ReadForWriteWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.buffer.as_ref().borrow_mut().write(buf)
     }
 
-    //TODO: implement other methods
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[derive(Eq, PartialEq, Copy, Clone)]
+enum ReadForWriteState {
+    Middle,
+    End,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handle_request;
-    use async_std::task::block_on;
-    use http_types::Url;
+    use oxhttp::model::Method;
     use tempfile::{tempdir, TempDir};
 
     #[test]
     fn get_ui() {
         ServerTest::new().test_status(
-            Request::new(Method::Get, Url::parse("http://localhost/").unwrap()),
-            StatusCode::Ok,
+            Request::builder(Method::GET, "http://localhost/".parse().unwrap()).build(),
+            Status::OK,
         )
     }
 
     #[test]
     fn post_dataset_file() {
-        let mut request = Request::new(Method::Post, Url::parse("http://localhost/store").unwrap());
-        request.insert_header("Content-Type", "application/trig");
-        request.set_body("<http://example.com> <http://example.com> <http://example.com> .");
-        ServerTest::new().test_status(request, StatusCode::NoContent)
+        let request = Request::builder(Method::POST, "http://localhost/store".parse().unwrap())
+            .with_header(HeaderName::CONTENT_TYPE, "application/trig")
+            .unwrap()
+            .with_body("<http://example.com> <http://example.com> <http://example.com> .");
+        ServerTest::new().test_status(request, Status::NO_CONTENT)
     }
 
     #[test]
     fn post_wrong_file() {
-        let mut request = Request::new(Method::Post, Url::parse("http://localhost/store").unwrap());
-        request.insert_header("Content-Type", "application/trig");
-        request.set_body("<http://example.com>");
-        ServerTest::new().test_status(request, StatusCode::BadRequest)
+        let request = Request::builder(Method::POST, "http://localhost/store".parse().unwrap())
+            .with_header(HeaderName::CONTENT_TYPE, "application/trig")
+            .unwrap()
+            .with_body("<http://example.com>");
+        ServerTest::new().test_status(request, Status::BAD_REQUEST)
     }
 
     #[test]
     fn post_unsupported_file() {
-        let mut request = Request::new(Method::Post, Url::parse("http://localhost/store").unwrap());
-        request.insert_header("Content-Type", "text/foo");
-        ServerTest::new().test_status(request, StatusCode::UnsupportedMediaType)
+        let request = Request::builder(Method::POST, "http://localhost/store".parse().unwrap())
+            .with_header(HeaderName::CONTENT_TYPE, "text/foo")
+            .unwrap()
+            .build();
+        ServerTest::new().test_status(request, Status::UNSUPPORTED_MEDIA_TYPE)
     }
 
     #[test]
     fn get_query() {
         ServerTest::new().test_status(
-            Request::new(
-                Method::Get,
-                Url::parse(
-                    "http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}",
-                )
-                .unwrap(),
-            ),
-            StatusCode::Ok,
+            Request::builder(
+                Method::GET,
+                "http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}"
+                    .parse()
+                    .unwrap(),
+            )
+            .build(),
+            Status::OK,
         );
     }
 
     #[test]
     fn get_query_accept_star() {
-        let mut request = Request::new(
-            Method::Get,
-            Url::parse("http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}")
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}"
+                .parse()
                 .unwrap(),
-        );
-        request.insert_header("Accept", "*/*");
-        ServerTest::new().test_status(request, StatusCode::Ok);
+        )
+        .with_header(HeaderName::ACCEPT, "*/*")
+        .unwrap()
+        .build();
+        ServerTest::new().test_status(request, Status::OK);
     }
 
     #[test]
     fn get_query_accept_good() {
-        let mut request = Request::new(
-            Method::Get,
-            Url::parse("http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}")
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}"
+                .parse()
                 .unwrap(),
-        );
-        request.insert_header("Accept", "application/sparql-results+json;charset=utf-8");
-        ServerTest::new().test_status(request, StatusCode::Ok);
+        )
+        .with_header(
+            HeaderName::ACCEPT,
+            "application/sparql-results+json;charset=utf-8",
+        )
+        .unwrap()
+        .build();
+        ServerTest::new().test_status(request, Status::OK);
     }
 
     #[test]
     fn get_query_accept_bad() {
-        let mut request = Request::new(
-            Method::Get,
-            Url::parse("http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}")
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}"
+                .parse()
                 .unwrap(),
-        );
-        request.insert_header("Accept", "application/foo");
-        ServerTest::new().test_status(request, StatusCode::NotAcceptable);
+        )
+        .with_header(HeaderName::ACCEPT, "application/foo")
+        .unwrap()
+        .build();
+        ServerTest::new().test_status(request, Status::NOT_ACCEPTABLE);
     }
 
     #[test]
     fn get_bad_query() {
         ServerTest::new().test_status(
-            Request::new(
-                Method::Get,
-                Url::parse("http://localhost/query?query=SELECT").unwrap(),
-            ),
-            StatusCode::BadRequest,
+            Request::builder(
+                Method::GET,
+                "http://localhost/query?query=SELECT".parse().unwrap(),
+            )
+            .build(),
+            Status::BAD_REQUEST,
         );
     }
 
     #[test]
     fn get_query_union_graph() {
-        ServerTest::new().test_status(Request::new(
-            Method::Get,
-            Url::parse("http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}&union-default-graph")
+        ServerTest::new().test_status(Request::builder(
+            Method::GET,
+            "http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}&union-default-graph".parse()
                 .unwrap(),
-        ), StatusCode::Ok);
+        ).build(), Status::OK);
     }
 
     #[test]
     fn get_query_union_graph_and_default_graph() {
-        ServerTest::new().test_status(Request::new(
-            Method::Get,
-            Url::parse("http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}&union-default-graph&default-graph-uri=http://example.com")
+        ServerTest::new().test_status(Request::builder(
+            Method::GET,
+            "http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}&union-default-graph&default-graph-uri=http://example.com".parse()
                 .unwrap(),
-        ), StatusCode::BadRequest);
+        ).build(), Status::BAD_REQUEST);
     }
 
     #[test]
     fn get_without_query() {
         ServerTest::new().test_status(
-            Request::new(Method::Get, Url::parse("http://localhost/query").unwrap()),
-            StatusCode::BadRequest,
+            Request::builder(Method::GET, "http://localhost/query".parse().unwrap()).build(),
+            Status::BAD_REQUEST,
         );
     }
 
     #[test]
     fn post_query() {
-        let mut request = Request::new(Method::Post, Url::parse("http://localhost/query").unwrap());
-        request.insert_header("Content-Type", "application/sparql-query");
-        request.set_body("SELECT * WHERE { ?s ?p ?o }");
-        ServerTest::new().test_status(request, StatusCode::Ok)
+        let request = Request::builder(Method::POST, "http://localhost/query".parse().unwrap())
+            .with_header(HeaderName::CONTENT_TYPE, "application/sparql-query")
+            .unwrap()
+            .with_body("SELECT * WHERE { ?s ?p ?o }");
+        ServerTest::new().test_status(request, Status::OK)
     }
 
     #[test]
     fn post_bad_query() {
-        let mut request = Request::new(Method::Post, Url::parse("http://localhost/query").unwrap());
-        request.insert_header("Content-Type", "application/sparql-query");
-        request.set_body("SELECT");
-        ServerTest::new().test_status(request, StatusCode::BadRequest)
+        let request = Request::builder(Method::POST, "http://localhost/query".parse().unwrap())
+            .with_header(HeaderName::CONTENT_TYPE, "application/sparql-query")
+            .unwrap()
+            .with_body("SELECT");
+        ServerTest::new().test_status(request, Status::BAD_REQUEST)
     }
 
     #[test]
     fn post_unknown_query() {
-        let mut request = Request::new(Method::Post, Url::parse("http://localhost/query").unwrap());
-        request.insert_header("Content-Type", "application/sparql-todo");
-        request.set_body("SELECT");
-        ServerTest::new().test_status(request, StatusCode::UnsupportedMediaType)
+        let request = Request::builder(Method::POST, "http://localhost/query".parse().unwrap())
+            .with_header(HeaderName::CONTENT_TYPE, "application/sparql-todo")
+            .unwrap()
+            .with_body("SELECT");
+        ServerTest::new().test_status(request, Status::UNSUPPORTED_MEDIA_TYPE)
     }
 
     #[test]
     fn post_federated_query() {
-        let mut request = Request::new(Method::Post, Url::parse("http://localhost/query").unwrap());
-        request.insert_header("Content-Type", "application/sparql-query");
-        request.set_body("SELECT * WHERE { SERVICE <https://query.wikidata.org/sparql> { <https://en.wikipedia.org/wiki/Paris> ?p ?o } }");
-        ServerTest::new().test_status(request, StatusCode::Ok)
+        let request = Request::builder(Method::POST, "http://localhost/query".parse().unwrap())
+            .with_header(HeaderName::CONTENT_TYPE, "application/sparql-query")
+            .unwrap().with_body("SELECT * WHERE { SERVICE <https://query.wikidata.org/sparql> { <https://en.wikipedia.org/wiki/Paris> ?p ?o } }");
+        ServerTest::new().test_status(request, Status::OK)
     }
 
     #[test]
     fn post_update() {
-        let mut request =
-            Request::new(Method::Post, Url::parse("http://localhost/update").unwrap());
-        request.insert_header("Content-Type", "application/sparql-update");
-        request.set_body(
-            "INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }",
-        );
-        ServerTest::new().test_status(request, StatusCode::NoContent)
+        let request = Request::builder(Method::POST, "http://localhost/update".parse().unwrap())
+            .with_header(HeaderName::CONTENT_TYPE, "application/sparql-update")
+            .unwrap()
+            .with_body(
+                "INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }",
+            );
+        ServerTest::new().test_status(request, Status::NO_CONTENT)
     }
 
     #[test]
     fn post_bad_update() {
-        let mut request =
-            Request::new(Method::Post, Url::parse("http://localhost/update").unwrap());
-        request.insert_header("Content-Type", "application/sparql-update");
-        request.set_body("INSERT");
-        ServerTest::new().test_status(request, StatusCode::BadRequest)
+        let request = Request::builder(Method::POST, "http://localhost/update".parse().unwrap())
+            .with_header(HeaderName::CONTENT_TYPE, "application/sparql-update")
+            .unwrap()
+            .with_body("INSERT");
+        ServerTest::new().test_status(request, Status::BAD_REQUEST)
     }
 
     #[test]
@@ -916,30 +1065,39 @@ mod tests {
         let server = ServerTest::new();
 
         // PUT
-        let mut request = Request::new(
-            Method::Put,
-            Url::parse("http://localhost/store?graph=http://example.com").unwrap(),
-        );
-        request.insert_header("Content-Type", "text/turtle");
-        request.set_body("<http://example.com> <http://example.com> <http://example.com> .");
-        server.test_status(request, StatusCode::Created);
+        let request = Request::builder(
+            Method::PUT,
+            "http://localhost/store?graph=http://example.com"
+                .parse()
+                .unwrap(),
+        )
+        .with_header(HeaderName::CONTENT_TYPE, "text/turtle")
+        .unwrap()
+        .with_body("<http://example.com> <http://example.com> <http://example.com> .");
+        server.test_status(request, Status::CREATED);
 
         // GET good URI
         server.test_status(
-            Request::new(
-                Method::Get,
-                Url::parse("http://localhost/store?graph=http://example.com").unwrap(),
-            ),
-            StatusCode::Ok,
+            Request::builder(
+                Method::GET,
+                "http://localhost/store?graph=http://example.com"
+                    .parse()
+                    .unwrap(),
+            )
+            .build(),
+            Status::OK,
         );
 
         // GET bad URI
         server.test_status(
-            Request::new(
-                Method::Get,
-                Url::parse("http://localhost/store?graph=http://example.com/").unwrap(),
-            ),
-            StatusCode::NotFound,
+            Request::builder(
+                Method::GET,
+                "http://localhost/store?graph=http://example.com/"
+                    .parse()
+                    .unwrap(),
+            )
+            .build(),
+            Status::NOT_FOUND,
         );
     }
 
@@ -950,12 +1108,13 @@ mod tests {
         let server = ServerTest::new();
 
         // PUT - Initial state
-        let mut request = Request::new(
-            Method::Put,
-            Url::parse("http://localhost/store/person/1.ttl").unwrap(),
-        );
-        request.insert_header("Content-Type", "text/turtle; charset=utf-8");
-        request.set_body(
+        let request = Request::builder(
+            Method::PUT,
+            "http://localhost/store/person/1.ttl".parse().unwrap(),
+        )
+        .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")
+        .unwrap()
+        .with_body(
             "
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 @prefix v: <http://www.w3.org/2006/vcard/ns#> .
@@ -967,41 +1126,48 @@ mod tests {
     ].
 ",
         );
-        server.test_status(request, StatusCode::Created);
+        server.test_status(request, Status::CREATED);
 
         // GET of PUT - Initial state
-        let mut request = Request::new(
-            Method::Get,
-            Url::parse("http://localhost/store?graph=/store/person/1.ttl").unwrap(),
-        );
-        request.insert_header("Accept", "text/turtle");
-        server.test_status(request, StatusCode::Ok);
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/store?graph=/store/person/1.ttl"
+                .parse()
+                .unwrap(),
+        )
+        .with_header(HeaderName::ACCEPT, "text/turtle")
+        .unwrap()
+        .build();
+        server.test_status(request, Status::OK);
 
         // HEAD on an existing graph
         server.test_status(
-            Request::new(
-                Method::Head,
-                Url::parse("http://localhost/store/person/1.ttl").unwrap(),
-            ),
-            StatusCode::Ok,
+            Request::builder(
+                Method::HEAD,
+                "http://localhost/store/person/1.ttl".parse().unwrap(),
+            )
+            .build(),
+            Status::OK,
         );
 
         // HEAD on a non-existing graph
         server.test_status(
-            Request::new(
-                Method::Head,
-                Url::parse("http://localhost/store/person/4.ttl").unwrap(),
-            ),
-            StatusCode::NotFound,
+            Request::builder(
+                Method::HEAD,
+                "http://localhost/store/person/4.ttl".parse().unwrap(),
+            )
+            .build(),
+            Status::NOT_FOUND,
         );
 
         // PUT - graph already in store
-        let mut request = Request::new(
-            Method::Put,
-            Url::parse("http://localhost/store/person/1.ttl").unwrap(),
-        );
-        request.insert_header("Content-Type", "text/turtle; charset=utf-8");
-        request.set_body(
+        let request = Request::builder(
+            Method::PUT,
+            "http://localhost/store/person/1.ttl".parse().unwrap(),
+        )
+        .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")
+        .unwrap()
+        .with_body(
             "
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 @prefix v: <http://www.w3.org/2006/vcard/ns#> .
@@ -1013,23 +1179,26 @@ mod tests {
     ].
 ",
         );
-        server.test_status(request, StatusCode::NoContent);
+        server.test_status(request, Status::NO_CONTENT);
 
         // GET of PUT - graph already in store
-        let mut request = Request::new(
-            Method::Get,
-            Url::parse("http://localhost/store/person/1.ttl").unwrap(),
-        );
-        request.insert_header("Accept", "text/turtle");
-        server.test_status(request, StatusCode::Ok);
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/store/person/1.ttl".parse().unwrap(),
+        )
+        .with_header(HeaderName::ACCEPT, "text/turtle")
+        .unwrap()
+        .build();
+        server.test_status(request, Status::OK);
 
         // PUT - default graph
-        let mut request = Request::new(
-            Method::Put,
-            Url::parse("http://localhost/store?default").unwrap(),
-        );
-        request.insert_header("Content-Type", "text/turtle; charset=utf-8");
-        request.set_body(
+        let request = Request::builder(
+            Method::PUT,
+            "http://localhost/store?default".parse().unwrap(),
+        )
+        .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")
+        .unwrap()
+        .with_body(
             "
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 @prefix v: <http://www.w3.org/2006/vcard/ns#> .
@@ -1041,48 +1210,56 @@ mod tests {
     ] .
 ",
         );
-        server.test_status(request, StatusCode::NoContent); // The default graph always exists in Oxigraph
+        server.test_status(request, Status::NO_CONTENT); // The default graph always exists in Oxigraph
 
         // GET of PUT - default graph
-        let mut request = Request::new(
-            Method::Get,
-            Url::parse("http://localhost/store?default").unwrap(),
-        );
-        request.insert_header("Accept", "text/turtle");
-        server.test_status(request, StatusCode::Ok);
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/store?default".parse().unwrap(),
+        )
+        .with_header(HeaderName::ACCEPT, "text/turtle")
+        .unwrap()
+        .build();
+        server.test_status(request, Status::OK);
 
         // PUT - mismatched payload
-        let mut request = Request::new(
-            Method::Put,
-            Url::parse("http://localhost/store/person/1.ttl").unwrap(),
-        );
-        request.insert_header("Content-Type", "text/turtle; charset=utf-8");
-        request.set_body("@prefix fo");
-        server.test_status(request, StatusCode::BadRequest);
+        let request = Request::builder(
+            Method::PUT,
+            "http://localhost/store/person/1.ttl".parse().unwrap(),
+        )
+        .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")
+        .unwrap()
+        .with_body("@prefix fo");
+        server.test_status(request, Status::BAD_REQUEST);
 
         // PUT - empty graph
-        let mut request = Request::new(
-            Method::Put,
-            Url::parse("http://localhost/store/person/2.ttl").unwrap(),
-        );
-        request.insert_header("Content-Type", "text/turtle; charset=utf-8");
-        server.test_status(request, StatusCode::Created);
+        let request = Request::builder(
+            Method::PUT,
+            "http://localhost/store/person/2.ttl".parse().unwrap(),
+        )
+        .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")
+        .unwrap()
+        .build();
+        server.test_status(request, Status::CREATED);
 
         // GET of PUT - empty graph
-        let mut request = Request::new(
-            Method::Get,
-            Url::parse("http://localhost/store/person/2.ttl").unwrap(),
-        );
-        request.insert_header("Accept", "text/turtle");
-        server.test_status(request, StatusCode::Ok);
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/store/person/2.ttl".parse().unwrap(),
+        )
+        .with_header(HeaderName::ACCEPT, "text/turtle")
+        .unwrap()
+        .build();
+        server.test_status(request, Status::OK);
 
         // PUT - replace empty graph
-        let mut request = Request::new(
-            Method::Put,
-            Url::parse("http://localhost/store/person/2.ttl").unwrap(),
-        );
-        request.insert_header("Content-Type", "text/turtle; charset=utf-8");
-        request.set_body(
+        let request = Request::builder(
+            Method::PUT,
+            "http://localhost/store/person/2.ttl".parse().unwrap(),
+        )
+        .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")
+        .unwrap()
+        .with_body(
             "
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 @prefix v: <http://www.w3.org/2006/vcard/ns#> .
@@ -1094,59 +1271,67 @@ mod tests {
     ] .
 ",
         );
-        server.test_status(request, StatusCode::NoContent);
+        server.test_status(request, Status::NO_CONTENT);
 
         // GET of replacement for empty graph
-        let mut request = Request::new(
-            Method::Get,
-            Url::parse("http://localhost/store/person/2.ttl").unwrap(),
-        );
-        request.insert_header("Accept", "text/turtle");
-        server.test_status(request, StatusCode::Ok);
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/store/person/2.ttl".parse().unwrap(),
+        )
+        .with_header(HeaderName::ACCEPT, "text/turtle")
+        .unwrap()
+        .build();
+        server.test_status(request, Status::OK);
 
         // DELETE - existing graph
         server.test_status(
-            Request::new(
-                Method::Delete,
-                Url::parse("http://localhost/store/person/2.ttl").unwrap(),
-            ),
-            StatusCode::NoContent,
+            Request::builder(
+                Method::DELETE,
+                "http://localhost/store/person/2.ttl".parse().unwrap(),
+            )
+            .build(),
+            Status::NO_CONTENT,
         );
 
         // GET of DELETE - existing graph
         server.test_status(
-            Request::new(
-                Method::Get,
-                Url::parse("http://localhost/store/person/2.ttl").unwrap(),
-            ),
-            StatusCode::NotFound,
+            Request::builder(
+                Method::GET,
+                "http://localhost/store/person/2.ttl".parse().unwrap(),
+            )
+            .build(),
+            Status::NOT_FOUND,
         );
 
         // DELETE - non-existent graph
         server.test_status(
-            Request::new(
-                Method::Delete,
-                Url::parse("http://localhost/store/person/2.ttl").unwrap(),
-            ),
-            StatusCode::NotFound,
+            Request::builder(
+                Method::DELETE,
+                "http://localhost/store/person/2.ttl".parse().unwrap(),
+            )
+            .build(),
+            Status::NOT_FOUND,
         );
 
         // POST - existing graph
-        let mut request = Request::new(
-            Method::Put,
-            Url::parse("http://localhost/store/person/1.ttl").unwrap(),
-        );
-        request.insert_header("Content-Type", "text/turtle; charset=utf-8");
-        server.test_status(request, StatusCode::NoContent);
+        let request = Request::builder(
+            Method::PUT,
+            "http://localhost/store/person/1.ttl".parse().unwrap(),
+        )
+        .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")
+        .unwrap()
+        .build();
+        server.test_status(request, Status::NO_CONTENT);
 
         // TODO: POST - multipart/form-data
         // TODO: GET of POST - multipart/form-data
 
         // POST - create new graph
-        let mut request = Request::new(Method::Post, Url::parse("http://localhost/store").unwrap());
-        request.insert_header("Content-Type", "text/turtle; charset=utf-8");
-        request.set_body(
-            "
+        let request = Request::builder(Method::POST, "http://localhost/store".parse().unwrap())
+            .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")
+            .unwrap()
+            .with_body(
+                "
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 @prefix v: <http://www.w3.org/2006/vcard/ns#> .
 
@@ -1156,25 +1341,35 @@ mod tests {
         v:given-name \"Alice\"
     ] .
 ",
-        );
+            );
         let response = server.exec(request);
-        assert_eq!(response.status(), StatusCode::Created);
-        let location = response.header("Location").unwrap().as_str();
+        assert_eq!(response.status(), Status::CREATED);
+        let location = response
+            .header(&HeaderName::LOCATION)
+            .unwrap()
+            .to_str()
+            .unwrap();
 
         // GET of POST - create new graph
-        let mut request = Request::new(Method::Get, Url::parse(location).unwrap());
-        request.insert_header("Accept", "text/turtle");
-        server.test_status(request, StatusCode::Ok);
+        let request = Request::builder(Method::GET, location.parse().unwrap())
+            .with_header(HeaderName::ACCEPT, "text/turtle")
+            .unwrap()
+            .build();
+        server.test_status(request, Status::OK);
 
         // POST - empty graph to existing graph
-        let mut request = Request::new(Method::Put, Url::parse(location).unwrap());
-        request.insert_header("Content-Type", "text/turtle; charset=utf-8");
-        server.test_status(request, StatusCode::NoContent);
+        let request = Request::builder(Method::PUT, location.parse().unwrap())
+            .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")
+            .unwrap()
+            .build();
+        server.test_status(request, Status::NO_CONTENT);
 
         // GET of POST - after noop
-        let mut request = Request::new(Method::Get, Url::parse(location).unwrap());
-        request.insert_header("Accept", "text/turtle");
-        server.test_status(request, StatusCode::Ok);
+        let request = Request::builder(Method::GET, location.parse().unwrap())
+            .with_header(HeaderName::ACCEPT, "text/turtle")
+            .unwrap()
+            .build();
+        server.test_status(request, Status::OK);
     }
 
     struct ServerTest {
@@ -1189,25 +1384,15 @@ mod tests {
             ServerTest { _path: path, store }
         }
 
-        fn exec(&self, request: Request) -> Response {
-            match block_on(handle_request(request, self.store.clone())) {
-                Ok(response) => response,
-                Err(e) => {
-                    let mut response = Response::new(e.status());
-                    response.set_body(e.to_string());
-                    response
-                }
-            }
+        fn exec(&self, mut request: Request) -> Response {
+            handle_request(&mut request, self.store.clone())
         }
 
-        fn test_status(&self, request: Request, expected_status: StatusCode) {
+        fn test_status(&self, request: Request, expected_status: Status) {
             let mut response = self.exec(request);
-            assert_eq!(
-                response.status(),
-                expected_status,
-                "Error message: {}",
-                block_on(response.body_string()).unwrap()
-            );
+            let mut buf = String::new();
+            response.body_mut().read_to_string(&mut buf).unwrap();
+            assert_eq!(response.status(), expected_status, "Error message: {}", buf);
         }
     }
 }

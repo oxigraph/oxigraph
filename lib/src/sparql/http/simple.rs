@@ -10,9 +10,11 @@ pub struct Client {
 impl Client {
     pub fn new(timeout: Option<Duration>) -> Self {
         let mut client = oxhttp::Client::new();
-        client.set_global_timeout(timeout);
+        if let Some(timeout) = timeout {
+            client.set_global_timeout(timeout);
+        }
         client
-            .set_user_agent(concat!("Oxigraph/", env!("CARGO_PKG_VERSION")).into())
+            .set_user_agent(concat!("Oxigraph/", env!("CARGO_PKG_VERSION")))
             .unwrap();
         Self { client }
     }
