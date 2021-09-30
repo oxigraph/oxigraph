@@ -74,8 +74,12 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                 pattern,
                 ..
             } => self.eval_delete_insert(delete, insert, using_dataset.as_ref().unwrap(), pattern),
-            GraphUpdateOperation::Load { silent, from, to } => {
-                if let Err(error) = self.eval_load(from, to) {
+            GraphUpdateOperation::Load {
+                silent,
+                source,
+                destination,
+            } => {
+                if let Err(error) = self.eval_load(source, destination) {
                     if *silent {
                         Ok(())
                     } else {

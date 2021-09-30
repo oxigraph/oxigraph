@@ -262,7 +262,9 @@ fn build_bgp(patterns: Vec<TripleOrPathPattern>) -> GraphPattern {
                 object,
             } => {
                 if !bgp.is_empty() {
-                    elements.push(GraphPattern::Bgp(take(&mut bgp)));
+                    elements.push(GraphPattern::Bgp {
+                        patterns: take(&mut bgp),
+                    });
                 }
                 elements.push(GraphPattern::Path {
                     subject,
@@ -273,7 +275,7 @@ fn build_bgp(patterns: Vec<TripleOrPathPattern>) -> GraphPattern {
         }
     }
     if !bgp.is_empty() {
-        elements.push(GraphPattern::Bgp(bgp));
+        elements.push(GraphPattern::Bgp { patterns: bgp });
     }
     new_sequence(elements)
 }
@@ -355,12 +357,12 @@ enum PartialGraphPattern {
 
 fn new_join(l: GraphPattern, r: GraphPattern) -> GraphPattern {
     //Avoid to output empty BGPs
-    if let GraphPattern::Bgp(pl) = &l {
+    if let GraphPattern::Bgp { patterns: pl } = &l {
         if pl.is_empty() {
             return r;
         }
     }
-    if let GraphPattern::Bgp(pr) = &r {
+    if let GraphPattern::Bgp { patterns: pr } = &r {
         if pr.is_empty() {
             return l;
         }
@@ -369,39 +371,33 @@ fn new_join(l: GraphPattern, r: GraphPattern) -> GraphPattern {
     // Some optimizations
     // TODO: move to a specific optimizer pass
     match (l, r) {
-        (GraphPattern::Bgp(mut pl), GraphPattern::Bgp(pr)) => {
+        (GraphPattern::Bgp { patterns: mut pl }, GraphPattern::Bgp { patterns: pr }) => {
             pl.extend(pr);
-            GraphPattern::Bgp(pl)
+            GraphPattern::Bgp { patterns: pl }
         }
         (GraphPattern::Sequence(mut e1), GraphPattern::Sequence(e2)) => {
             e1.extend_from_slice(&e2);
             GraphPattern::Sequence(e1)
         }
         (GraphPattern::Sequence(mut e), r)
-            if matches!(r, GraphPattern::Bgp(_) | GraphPattern::Path { .. }) =>
+            if matches!(r, GraphPattern::Bgp { .. } | GraphPattern::Path { .. }) =>
         {
             e.push(r);
             GraphPattern::Sequence(e)
         }
         (l, GraphPattern::Sequence(mut e))
-            if matches!(l, GraphPattern::Bgp(_) | GraphPattern::Path { .. }) =>
+            if matches!(l, GraphPattern::Bgp { .. } | GraphPattern::Path { .. }) =>
         {
             e.insert(0, l);
             GraphPattern::Sequence(e)
         }
         (
-            GraphPattern::Graph {
-                graph_name: g1,
-                inner: l,
-            },
-            GraphPattern::Graph {
-                graph_name: g2,
-                inner: r,
-            },
+            GraphPattern::Graph { name: g1, inner: l },
+            GraphPattern::Graph { name: g2, inner: r },
         ) if g1 == g2 => {
             // We merge identical graphs
             GraphPattern::Graph {
-                graph_name: g1,
+                name: g1,
                 inner: Box::new(new_join(*l, *r)),
             }
         }
@@ -414,7 +410,7 @@ fn new_join(l: GraphPattern, r: GraphPattern) -> GraphPattern {
 
 fn new_sequence(elements: Vec<GraphPattern>) -> GraphPattern {
     match elements.len() {
-        0 => GraphPattern::Bgp(vec![]),
+        0 => GraphPattern::default(),
         1 => elements.into_iter().next().unwrap(),
         _ => GraphPattern::Sequence(elements),
     }
@@ -467,7 +463,7 @@ fn build_select(
     wher: GraphPattern,
     mut group: Option<(Vec<Variable>, Vec<(Expression, Variable)>)>,
     having: Option<Expression>,
-    order_by: Option<Vec<OrderComparator>>,
+    order_by: Option<Vec<OrderExpression>>,
     offset_limit: Option<(usize, Option<usize>)>,
     values: Option<GraphPattern>,
     state: &mut ParserState,
@@ -482,16 +478,16 @@ fn build_select(
     }
 
     if let Some((clauses, binds)) = group {
-        for (expr, var) in binds {
+        for (expression, variable) in binds {
             p = GraphPattern::Extend {
                 inner: Box::new(p),
-                var,
-                expr,
+                variable,
+                expression,
             };
         }
         p = GraphPattern::Group {
             inner: Box::new(p),
-            by: clauses,
+            variables: clauses,
             aggregates,
         };
         with_aggregate = true;
@@ -527,14 +523,14 @@ fn build_select(
                         }
                         v
                     }
-                    SelectionMember::Expression(expr, v) => {
-                        if visible.contains(&v) {
+                    SelectionMember::Expression(expression, variable) => {
+                        if visible.contains(&variable) {
                             // We disallow to override an existing variable with an expression
                             return Err(
                                 "The SELECT overrides an existing variable using an expression",
                             );
                         }
-                        if with_aggregate && !are_variables_bound(&expr, &visible) {
+                        if with_aggregate && !are_variables_bound(&expression, &visible) {
                             // We validate projection variables if there is an aggregate
                             return Err(
                                 "The SELECT contains an exprssion with a variable that is unbound",
@@ -542,10 +538,10 @@ fn build_select(
                         }
                         p = GraphPattern::Extend {
                             inner: Box::new(p),
-                            var: v.clone(),
-                            expr,
+                            variable: variable.clone(),
+                            expression,
                         };
-                        v
+                        variable
                     }
                 };
                 if pv.contains(&v) {
@@ -574,10 +570,10 @@ fn build_select(
     let mut m = p;
 
     //ORDER BY
-    if let Some(condition) = order_by {
+    if let Some(expression) = order_by {
         m = GraphPattern::OrderBy {
             inner: Box::new(m),
-            condition,
+            expression,
         };
     }
 
@@ -585,7 +581,7 @@ fn build_select(
     if with_project {
         m = GraphPattern::Project {
             inner: Box::new(m),
-            projection: pv,
+            variables: pv,
         };
     }
     match select.option {
@@ -645,11 +641,13 @@ fn are_variables_bound(expression: &Expression, variables: &HashSet<Variable>) -
 }
 
 fn copy_graph(from: impl Into<GraphName>, to: impl Into<GraphNamePattern>) -> GraphUpdateOperation {
-    let bgp = GraphPattern::Bgp(vec![TriplePattern::new(
-        Variable { name: "s".into() },
-        Variable { name: "p".into() },
-        Variable { name: "o".into() },
-    )]);
+    let bgp = GraphPattern::Bgp {
+        patterns: vec![TriplePattern::new(
+            Variable { name: "s".into() },
+            Variable { name: "p".into() },
+            Variable { name: "o".into() },
+        )],
+    };
     GraphUpdateOperation::DeleteInsert {
         delete: Vec::new(),
         insert: vec![QuadPattern::new(
@@ -661,7 +659,7 @@ fn copy_graph(from: impl Into<GraphName>, to: impl Into<GraphNamePattern>) -> Gr
         using: None,
         pattern: Box::new(match from.into() {
             GraphName::NamedNode(from) => GraphPattern::Graph {
-                graph_name: from.into(),
+                name: from.into(),
                 inner: Box::new(bgp),
             },
             GraphName::DefaultGraph => bgp,
@@ -679,7 +677,7 @@ pub struct ParserState {
     namespaces: HashMap<String, String>,
     used_bnodes: HashSet<BlankNode>,
     currently_used_bnodes: HashSet<BlankNode>,
-    aggregates: Vec<Vec<(Variable, AggregationFunction)>>,
+    aggregates: Vec<Vec<(Variable, AggregateExpression)>>,
 }
 
 impl ParserState {
@@ -691,7 +689,7 @@ impl ParserState {
         }
     }
 
-    fn new_aggregation(&mut self, agg: AggregationFunction) -> Result<Variable, &'static str> {
+    fn new_aggregation(&mut self, agg: AggregateExpression) -> Result<Variable, &'static str> {
         let aggregates = self.aggregates.last_mut().ok_or("Unexpected aggregate")?;
         Ok(aggregates
             .iter()
@@ -1003,7 +1001,7 @@ parser! {
                     dataset: d,
                     pattern: build_select(
                         Selection::no_op(),
-                        GraphPattern::Bgp(c),
+                        GraphPattern::Bgp { patterns: c },
                         g, h, o, l, v, state
                     )?,
                     base_iri: state.base_iri.clone()
@@ -1117,15 +1115,15 @@ parser! {
         rule HavingCondition() -> Expression = Constraint()
 
         //[23]
-        rule OrderClause() -> Vec<OrderComparator> = i("ORDER") _ i("BY") _ c:OrderClause_item()+ { c }
-        rule OrderClause_item() -> OrderComparator = c:OrderCondition() _ { c }
+        rule OrderClause() -> Vec<OrderExpression> = i("ORDER") _ i("BY") _ c:OrderClause_item()+ { c }
+        rule OrderClause_item() -> OrderExpression = c:OrderCondition() _ { c }
 
         //[24]
-        rule OrderCondition() -> OrderComparator =
-            i("ASC") _ e: BrackettedExpression() { OrderComparator::Asc(e) } /
-            i("DESC") _ e: BrackettedExpression() { OrderComparator::Desc(e) } /
-            e: Constraint() { OrderComparator::Asc(e) } /
-            v: Var() { OrderComparator::Asc(Expression::from(v)) }
+        rule OrderCondition() -> OrderExpression =
+            i("ASC") _ e: BrackettedExpression() { OrderExpression::Asc(e) } /
+            i("DESC") _ e: BrackettedExpression() { OrderExpression::Desc(e) } /
+            e: Constraint() { OrderExpression::Asc(e) } /
+            v: Var() { OrderExpression::Asc(Expression::from(v)) }
 
         //[25]
         rule LimitOffsetClauses() -> (usize, Option<usize>) =
@@ -1156,8 +1154,8 @@ parser! {
         rule Update1_silent() -> bool = i("SILENT") { true } / { false }
 
         //[31]
-        rule Load() -> Vec<GraphUpdateOperation> = i("LOAD") _ silent:Update1_silent() _ from:iri() _ to:Load_to()? {
-            vec![GraphUpdateOperation::Load { silent, from, to: to.map_or(GraphName::DefaultGraph, GraphName::NamedNode) }]
+        rule Load() -> Vec<GraphUpdateOperation> = i("LOAD") _ silent:Update1_silent() _ source:iri() _ destination:Load_to()? {
+            vec![GraphUpdateOperation::Load { silent, source, destination: destination.map_or(GraphName::DefaultGraph, GraphName::NamedNode) }]
         }
         rule Load_to() -> NamedNode = i("INTO") _ g: GraphRef() { g }
 
@@ -1182,7 +1180,7 @@ parser! {
             if from == to {
                 Vec::new() // identity case
             } else {
-                let bgp = GraphPattern::Bgp(vec![TriplePattern::new(Variable { name: "s".into() }, Variable { name: "p".into() }, Variable { name: "o".into() })]);
+                let bgp = GraphPattern::Bgp { patterns: vec![TriplePattern::new(Variable { name: "s".into() }, Variable { name: "p".into() }, Variable { name: "o".into() })] };
                 vec![copy_graph(from, to)]
             }
         }
@@ -1193,7 +1191,7 @@ parser! {
             if from == to {
                 Vec::new() // identity case
             } else {
-                let bgp = GraphPattern::Bgp(vec![TriplePattern::new(Variable { name: "s".into() }, Variable { name: "p".into() }, Variable { name: "o".into() })]);
+                let bgp = GraphPattern::Bgp { patterns: vec![TriplePattern::new(Variable { name: "s".into() }, Variable { name: "p".into() }, Variable { name: "o".into() })] };
                 vec![GraphUpdateOperation::Drop { silent: true, graph: to.clone().into() }, copy_graph(from.clone(), to), GraphUpdateOperation::Drop { silent, graph: from.into() }]
             }
         }
@@ -1204,7 +1202,7 @@ parser! {
             if from == to {
                 Vec::new() // identity case
             } else {
-                let bgp = GraphPattern::Bgp(vec![TriplePattern::new(Variable { name: "s".into() }, Variable { name: "p".into() }, Variable{ name: "o".into() })]);
+                let bgp = GraphPattern::Bgp { patterns: vec![TriplePattern::new(Variable { name: "s".into() }, Variable { name: "p".into() }, Variable{ name: "o".into() })] };
                 vec![GraphUpdateOperation::Drop { silent: true, graph: to.clone().into() }, copy_graph(from, to)]
             }
         }
@@ -1222,11 +1220,11 @@ parser! {
         //[40]
         rule DeleteWhere() -> Vec<GraphUpdateOperation> = i("DELETE") _ i("WHERE") _ d:QuadPattern() {?
             let pattern = new_sequence(d.iter().map(|q| {
-                let bgp = GraphPattern::Bgp(vec![TriplePattern::new(q.subject.clone(), q.predicate.clone(), q.object.clone())]);
+                let bgp = GraphPattern::Bgp { patterns: vec![TriplePattern::new(q.subject.clone(), q.predicate.clone(), q.object.clone())] };
                 match &q.graph_name {
-                    GraphNamePattern::NamedNode(graph_name) => GraphPattern::Graph { graph_name: graph_name.clone().into(), inner: Box::new(bgp) },
+                    GraphNamePattern::NamedNode(graph_name) => GraphPattern::Graph { name: graph_name.clone().into(), inner: Box::new(bgp) },
                     GraphNamePattern::DefaultGraph => bgp,
-                    GraphNamePattern::Variable(graph_name) => GraphPattern::Graph { graph_name: graph_name.clone().into(), inner: Box::new(bgp) },
+                    GraphNamePattern::Variable(graph_name) => GraphPattern::Graph { name: graph_name.clone().into(), inner: Box::new(bgp) },
                 }
             }).collect());
             let delete = d.into_iter().map(GroundQuadPattern::try_from).collect::<Result<Vec<_>,_>>().map_err(|_| "Blank nodes are not allowed in DELETE WHERE")?;
@@ -1393,22 +1391,22 @@ parser! {
             for e in b.into_iter().flatten() {
                 match e {
                     PartialGraphPattern::Optional(p, f) => {
-                        g = GraphPattern::LeftJoin { left: Box::new(g), right: Box::new(p), expr: f }
+                        g = GraphPattern::LeftJoin { left: Box::new(g), right: Box::new(p), expression: f }
                     }
                     PartialGraphPattern::Minus(p) => {
                         g = GraphPattern::Minus { left: Box::new(g), right: Box::new(p) }
                     }
-                    PartialGraphPattern::Bind(expr, var) => {
+                    PartialGraphPattern::Bind(expression, variable) => {
                         let mut contains = false;
                         g.on_in_scope_variable(|v| {
-                            if *v == var {
+                            if *v == variable {
                                 contains = true;
                             }
                         });
                         if contains {
                             return Err("BIND is overriding an existing variable")
                         }
-                        g = GraphPattern::Extend { inner: Box::new(g), var, expr }
+                        g = GraphPattern::Extend { inner: Box::new(g), variable, expression }
                     }
                     PartialGraphPattern::Filter(expr) => filter = Some(if let Some(f) = filter {
                         Expression::And(Box::new(f), Box::new(expr))
@@ -1458,14 +1456,14 @@ parser! {
         }
 
         //[58]
-        rule GraphGraphPattern() -> PartialGraphPattern = i("GRAPH") _ graph_name:VarOrIri() _ p:GroupGraphPattern() {
-            PartialGraphPattern::Other(GraphPattern::Graph { graph_name, inner: Box::new(p) })
+        rule GraphGraphPattern() -> PartialGraphPattern = i("GRAPH") _ name:VarOrIri() _ p:GroupGraphPattern() {
+            PartialGraphPattern::Other(GraphPattern::Graph { name, inner: Box::new(p) })
         }
 
         //[59]
         rule ServiceGraphPattern() -> PartialGraphPattern =
-            i("SERVICE") _ i("SILENT") _ name:VarOrIri() _ p:GroupGraphPattern() { PartialGraphPattern::Other(GraphPattern::Service { name, pattern: Box::new(p), silent: true }) } /
-            i("SERVICE") _ name:VarOrIri() _ p:GroupGraphPattern() { PartialGraphPattern::Other(GraphPattern::Service{ name, pattern: Box::new(p), silent: true }) }
+            i("SERVICE") _ i("SILENT") _ name:VarOrIri() _ p:GroupGraphPattern() { PartialGraphPattern::Other(GraphPattern::Service { name, inner: Box::new(p), silent: true }) } /
+            i("SERVICE") _ name:VarOrIri() _ p:GroupGraphPattern() { PartialGraphPattern::Other(GraphPattern::Service{ name, inner: Box::new(p), silent: true }) }
 
         //[60]
         rule Bind() -> PartialGraphPattern = i("BIND") _ "(" _ e:Expression() _ i("AS") _ v:Var() _ ")" {
@@ -1477,7 +1475,7 @@ parser! {
 
         //[62]
         rule DataBlock() -> GraphPattern = l:(InlineDataOneVar() / InlineDataFull()) {
-            GraphPattern::Table { variables: l.0, rows: l.1 }
+            GraphPattern::Values { variables: l.0, bindings: l.1 }
         }
 
         //[63]
@@ -2085,27 +2083,27 @@ parser! {
         rule NotExistsFunc() -> Expression = i("NOT") _ i("EXISTS") _ p:GroupGraphPattern() { Expression::Not(Box::new(Expression::Exists(Box::new(p)))) }
 
         //[127]
-        rule Aggregate() -> AggregationFunction =
-            i("COUNT") _ "(" _ i("DISTINCT") _ "*" _ ")" { AggregationFunction::Count { expr: None, distinct: true } } /
-            i("COUNT") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregationFunction::Count { expr: Some(Box::new(e)), distinct: true } } /
-            i("COUNT") _ "(" _ "*" _ ")" { AggregationFunction::Count { expr: None, distinct: false } } /
-            i("COUNT") _ "(" _ e:Expression() _ ")" { AggregationFunction::Count { expr: Some(Box::new(e)), distinct: false } } /
-            i("SUM") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregationFunction::Sum { expr: Box::new(e), distinct: true } } /
-            i("SUM") _ "(" _ e:Expression() _ ")" { AggregationFunction::Sum { expr: Box::new(e), distinct: false } } /
-            i("MIN") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregationFunction::Min { expr: Box::new(e), distinct: true } } /
-            i("MIN") _ "(" _ e:Expression() _ ")" { AggregationFunction::Min { expr: Box::new(e), distinct: false } } /
-            i("MAX") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregationFunction::Max { expr: Box::new(e), distinct: true } } /
-            i("MAX") _ "(" _ e:Expression() _ ")" { AggregationFunction::Max { expr: Box::new(e), distinct: false } } /
-            i("AVG") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregationFunction::Avg { expr: Box::new(e), distinct: true } } /
-            i("AVG") _ "(" _ e:Expression() _ ")" { AggregationFunction::Avg { expr: Box::new(e), distinct: false } } /
-            i("SAMPLE") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregationFunction::Sample { expr: Box::new(e), distinct: true } } /
-            i("SAMPLE") _ "(" _ e:Expression() _ ")" { AggregationFunction::Sample { expr: Box::new(e), distinct: false } } /
-            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ e:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { AggregationFunction::GroupConcat { expr: Box::new(e), distinct: true, separator: Some(s) } } /
-            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregationFunction::GroupConcat { expr: Box::new(e), distinct: true, separator: None } } /
-            i("GROUP_CONCAT") _ "(" _ e:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { AggregationFunction::GroupConcat { expr: Box::new(e), distinct: true, separator: Some(s) } } /
-            i("GROUP_CONCAT") _ "(" _ e:Expression() _ ")" { AggregationFunction::GroupConcat { expr: Box::new(e), distinct: false, separator: None } } /
-            name:iri() _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregationFunction::Custom { name, expr: Box::new(e), distinct: true } } /
-            name:iri() _ "(" _ e:Expression() _ ")" { AggregationFunction::Custom { name, expr: Box::new(e), distinct: false } }
+        rule Aggregate() -> AggregateExpression =
+            i("COUNT") _ "(" _ i("DISTINCT") _ "*" _ ")" { AggregateExpression::Count { expr: None, distinct: true } } /
+            i("COUNT") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregateExpression::Count { expr: Some(Box::new(e)), distinct: true } } /
+            i("COUNT") _ "(" _ "*" _ ")" { AggregateExpression::Count { expr: None, distinct: false } } /
+            i("COUNT") _ "(" _ e:Expression() _ ")" { AggregateExpression::Count { expr: Some(Box::new(e)), distinct: false } } /
+            i("SUM") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregateExpression::Sum { expr: Box::new(e), distinct: true } } /
+            i("SUM") _ "(" _ e:Expression() _ ")" { AggregateExpression::Sum { expr: Box::new(e), distinct: false } } /
+            i("MIN") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregateExpression::Min { expr: Box::new(e), distinct: true } } /
+            i("MIN") _ "(" _ e:Expression() _ ")" { AggregateExpression::Min { expr: Box::new(e), distinct: false } } /
+            i("MAX") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregateExpression::Max { expr: Box::new(e), distinct: true } } /
+            i("MAX") _ "(" _ e:Expression() _ ")" { AggregateExpression::Max { expr: Box::new(e), distinct: false } } /
+            i("AVG") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregateExpression::Avg { expr: Box::new(e), distinct: true } } /
+            i("AVG") _ "(" _ e:Expression() _ ")" { AggregateExpression::Avg { expr: Box::new(e), distinct: false } } /
+            i("SAMPLE") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregateExpression::Sample { expr: Box::new(e), distinct: true } } /
+            i("SAMPLE") _ "(" _ e:Expression() _ ")" { AggregateExpression::Sample { expr: Box::new(e), distinct: false } } /
+            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ e:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { AggregateExpression::GroupConcat { expr: Box::new(e), distinct: true, separator: Some(s) } } /
+            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregateExpression::GroupConcat { expr: Box::new(e), distinct: true, separator: None } } /
+            i("GROUP_CONCAT") _ "(" _ e:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { AggregateExpression::GroupConcat { expr: Box::new(e), distinct: true, separator: Some(s) } } /
+            i("GROUP_CONCAT") _ "(" _ e:Expression() _ ")" { AggregateExpression::GroupConcat { expr: Box::new(e), distinct: false, separator: None } } /
+            name:iri() _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregateExpression::Custom { name, expr: Box::new(e), distinct: true } } /
+            name:iri() _ "(" _ e:Expression() _ ")" { AggregateExpression::Custom { name, expr: Box::new(e), distinct: false } }
 
         //[128]
         rule iriOrFunction() -> Expression = i: iri() _ a: ArgList()? {

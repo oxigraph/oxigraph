@@ -110,8 +110,8 @@ pub enum GraphUpdateOperation {
     /// [load](https://www.w3.org/TR/sparql11-update/#defn_loadOperation)
     Load {
         silent: bool,
-        from: NamedNode,
-        to: GraphName,
+        source: NamedNode,
+        destination: GraphName,
     },
     /// [clear](https://www.w3.org/TR/sparql11-update/#defn_clearOperation)
     Clear { silent: bool, graph: GraphTarget },
@@ -183,14 +183,18 @@ impl GraphUpdateOperation {
                 }
                 write!(f, ")")
             }
-            GraphUpdateOperation::Load { silent, from, to } => {
+            GraphUpdateOperation::Load {
+                silent,
+                source,
+                destination,
+            } => {
                 write!(f, "(load ")?;
                 if *silent {
                     write!(f, "silent ")?;
                 }
-                from.fmt_sse(f)?;
+                source.fmt_sse(f)?;
                 write!(f, " ")?;
-                to.fmt_sse(f)?;
+                destination.fmt_sse(f)?;
                 write!(f, ")")
             }
             GraphUpdateOperation::Clear { silent, graph } => {
@@ -273,14 +277,18 @@ impl fmt::Display for GraphUpdateOperation {
                     }
                 )
             }
-            GraphUpdateOperation::Load { silent, from, to } => {
+            GraphUpdateOperation::Load {
+                silent,
+                source,
+                destination,
+            } => {
                 write!(f, "LOAD ")?;
                 if *silent {
                     write!(f, "SILENT ")?;
                 }
-                write!(f, "{}", from)?;
-                if to != &GraphName::DefaultGraph {
-                    write!(f, " INTO GRAPH {}", to)?;
+                write!(f, "{}", source)?;
+                if destination != &GraphName::DefaultGraph {
+                    write!(f, " INTO GRAPH {}", destination)?;
                 }
                 Ok(())
             }

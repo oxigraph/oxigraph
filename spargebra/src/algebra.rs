@@ -515,7 +515,7 @@ impl fmt::Display for Function {
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GraphPattern {
     /// A [basic graph pattern](https://www.w3.org/TR/sparql11-query/#defn_BasicGraphPattern)
-    Bgp(Vec<TriplePattern>),
+    Bgp { patterns: Vec<TriplePattern> },
     /// A [property path pattern](https://www.w3.org/TR/sparql11-query/#defn_evalPP_predicate)
     Path {
         subject: TermPattern,
@@ -531,38 +531,38 @@ pub enum GraphPattern {
     LeftJoin {
         left: Box<Self>,
         right: Box<Self>,
-        expr: Option<Expression>,
+        expression: Option<Expression>,
     },
     /// [Filter](https://www.w3.org/TR/sparql11-query/#defn_algFilter)
     Filter { expr: Expression, inner: Box<Self> },
     /// [Union](https://www.w3.org/TR/sparql11-query/#defn_algUnion)
     Union { left: Box<Self>, right: Box<Self> },
     Graph {
-        graph_name: NamedNodePattern,
+        name: NamedNodePattern,
         inner: Box<Self>,
     },
     /// [Extend](https://www.w3.org/TR/sparql11-query/#defn_extend)
     Extend {
         inner: Box<Self>,
-        var: Variable,
-        expr: Expression,
+        variable: Variable,
+        expression: Expression,
     },
     /// [Minus](https://www.w3.org/TR/sparql11-query/#defn_algMinus)
     Minus { left: Box<Self>, right: Box<Self> },
     /// A table used to provide inline values
-    Table {
+    Values {
         variables: Vec<Variable>,
-        rows: Vec<Vec<Option<GroundTerm>>>,
+        bindings: Vec<Vec<Option<GroundTerm>>>,
     },
     /// [OrderBy](https://www.w3.org/TR/sparql11-query/#defn_algOrdered)
     OrderBy {
         inner: Box<Self>,
-        condition: Vec<OrderComparator>,
+        expression: Vec<OrderExpression>,
     },
     /// [Project](https://www.w3.org/TR/sparql11-query/#defn_algProjection)
     Project {
         inner: Box<Self>,
-        projection: Vec<Variable>,
+        variables: Vec<Variable>,
     },
     /// [Distinct](https://www.w3.org/TR/sparql11-query/#defn_algDistinct)
     Distinct { inner: Box<Self> },
@@ -577,13 +577,13 @@ pub enum GraphPattern {
     /// [Group](https://www.w3.org/TR/sparql11-federated-query/#aggregateAlgebra)
     Group {
         inner: Box<Self>,
-        by: Vec<Variable>,
-        aggregates: Vec<(Variable, AggregationFunction)>,
+        variables: Vec<Variable>,
+        aggregates: Vec<(Variable, AggregateExpression)>,
     },
     /// [Service](https://www.w3.org/TR/sparql11-federated-query/#defn_evalService)
     Service {
         name: NamedNodePattern,
-        pattern: Box<Self>,
+        inner: Box<Self>,
         silent: bool,
     },
 }
@@ -592,9 +592,9 @@ impl GraphPattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
-            Self::Bgp(p) => {
+            Self::Bgp { patterns } => {
                 write!(f, "(bgp")?;
-                for pattern in p {
+                for pattern in patterns {
                     write!(f, " ")?;
                     pattern.fmt_sse(f)?;
                 }
@@ -628,12 +628,16 @@ impl GraphPattern {
                 right.fmt_sse(f)?;
                 write!(f, ")")
             }
-            Self::LeftJoin { left, right, expr } => {
+            Self::LeftJoin {
+                left,
+                right,
+                expression,
+            } => {
                 write!(f, "(leftjoin ")?;
                 left.fmt_sse(f)?;
                 write!(f, " ")?;
                 right.fmt_sse(f)?;
-                if let Some(expr) = expr {
+                if let Some(expr) = expression {
                     write!(f, " ")?;
                     expr.fmt_sse(f)?;
                 }
@@ -653,18 +657,22 @@ impl GraphPattern {
                 right.fmt_sse(f)?;
                 write!(f, ")")
             }
-            Self::Graph { graph_name, inner } => {
+            Self::Graph { name, inner } => {
                 write!(f, "(graph ")?;
-                graph_name.fmt_sse(f)?;
+                name.fmt_sse(f)?;
                 write!(f, " ")?;
                 inner.fmt_sse(f)?;
                 write!(f, ")")
             }
-            Self::Extend { inner, var, expr } => {
+            Self::Extend {
+                inner,
+                variable,
+                expression,
+            } => {
                 write!(f, "(extend ((")?;
-                var.fmt_sse(f)?;
+                variable.fmt_sse(f)?;
                 write!(f, " ")?;
-                expr.fmt_sse(f)?;
+                expression.fmt_sse(f)?;
                 write!(f, ")) ")?;
                 inner.fmt_sse(f)?;
                 write!(f, ")")
@@ -678,7 +686,7 @@ impl GraphPattern {
             }
             Self::Service {
                 name,
-                pattern,
+                inner,
                 silent,
             } => {
                 write!(f, "(service ")?;
@@ -687,16 +695,16 @@ impl GraphPattern {
                 }
                 name.fmt_sse(f)?;
                 write!(f, " ")?;
-                pattern.fmt_sse(f)?;
+                inner.fmt_sse(f)?;
                 write!(f, ")")
             }
             Self::Group {
                 inner,
-                by,
+                variables,
                 aggregates,
             } => {
                 write!(f, "(group (")?;
-                for (i, v) in by.iter().enumerate() {
+                for (i, v) in variables.iter().enumerate() {
                     if i > 0 {
                         write!(f, " ")?;
                     }
@@ -717,14 +725,17 @@ impl GraphPattern {
                 inner.fmt_sse(f)?;
                 write!(f, ")")
             }
-            Self::Table { variables, rows } => {
+            Self::Values {
+                variables,
+                bindings,
+            } => {
                 write!(f, "(table (vars")?;
                 for var in variables {
                     write!(f, " ")?;
                     var.fmt_sse(f)?;
                 }
                 write!(f, ")")?;
-                for row in rows {
+                for row in bindings {
                     write!(f, " (row")?;
                     for (value, var) in row.iter().zip(variables) {
                         if let Some(value) = value {
@@ -739,9 +750,9 @@ impl GraphPattern {
                 }
                 write!(f, ")")
             }
-            Self::OrderBy { inner, condition } => {
+            Self::OrderBy { inner, expression } => {
                 write!(f, "(order (")?;
-                for (i, c) in condition.iter().enumerate() {
+                for (i, c) in expression.iter().enumerate() {
                     if i > 0 {
                         write!(f, " ")?;
                     }
@@ -751,9 +762,9 @@ impl GraphPattern {
                 inner.fmt_sse(f)?;
                 write!(f, ")")
             }
-            Self::Project { inner, projection } => {
+            Self::Project { inner, variables } => {
                 write!(f, "(project (")?;
-                for (i, v) in projection.iter().enumerate() {
+                for (i, v) in variables.iter().enumerate() {
                     if i > 0 {
                         write!(f, " ")?;
                     }
@@ -793,8 +804,8 @@ impl GraphPattern {
 impl fmt::Display for GraphPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Bgp(p) => {
-                for pattern in p {
+            Self::Bgp { patterns } => {
+                for pattern in patterns {
                     write!(f, "{} .", pattern)?
                 }
                 Ok(())
@@ -824,8 +835,12 @@ impl fmt::Display for GraphPattern {
                     write!(f, "{} {}", left, right)
                 }
             }
-            Self::LeftJoin { left, right, expr } => {
-                if let Some(expr) = expr {
+            Self::LeftJoin {
+                left,
+                right,
+                expression,
+            } => {
+                if let Some(expr) = expression {
                     write!(f, "{} OPTIONAL {{ {} FILTER({}) }}", left, right, expr)
                 } else {
                     write!(f, "{} OPTIONAL {{ {} }}", left, right)
@@ -835,29 +850,36 @@ impl fmt::Display for GraphPattern {
                 write!(f, "{} FILTER({})", inner, expr)
             }
             Self::Union { left, right } => write!(f, "{{ {} }} UNION {{ {} }}", left, right,),
-            Self::Graph { graph_name, inner } => {
-                write!(f, "GRAPH {} {{ {} }}", graph_name, inner)
+            Self::Graph { name, inner } => {
+                write!(f, "GRAPH {} {{ {} }}", name, inner)
             }
-            Self::Extend { inner, var, expr } => write!(f, "{} BIND({} AS {})", inner, expr, var),
+            Self::Extend {
+                inner,
+                variable,
+                expression,
+            } => write!(f, "{} BIND({} AS {})", inner, expression, variable),
             Self::Minus { left, right } => write!(f, "{} MINUS {{ {} }}", left, right),
             Self::Service {
                 name,
-                pattern,
+                inner,
                 silent,
             } => {
                 if *silent {
-                    write!(f, "SERVICE SILENT {} {{ {} }}", name, pattern)
+                    write!(f, "SERVICE SILENT {} {{ {} }}", name, inner)
                 } else {
-                    write!(f, "SERVICE {} {{ {} }}", name, pattern)
+                    write!(f, "SERVICE {} {{ {} }}", name, inner)
                 }
             }
-            Self::Table { variables, rows } => {
+            Self::Values {
+                variables,
+                bindings,
+            } => {
                 write!(f, "VALUES ( ")?;
                 for var in variables {
                     write!(f, "{} ", var)?;
                 }
                 write!(f, ") {{ ")?;
-                for row in rows {
+                for row in bindings {
                     write!(f, "( ")?;
                     for val in row {
                         match val {
@@ -871,20 +893,20 @@ impl fmt::Display for GraphPattern {
             }
             Self::Group {
                 inner,
-                by,
+                variables,
                 aggregates,
             } => {
                 write!(f, "{{SELECT")?;
                 for (a, v) in aggregates {
                     write!(f, " ({} AS {})", v, a)?;
                 }
-                for b in by {
+                for b in variables {
                     write!(f, " {}", b)?;
                 }
                 write!(f, " WHERE {{ {} }}", inner)?;
-                if !by.is_empty() {
+                if !variables.is_empty() {
                     write!(f, " GROUP BY")?;
-                    for v in by {
+                    for v in variables {
                         write!(f, " {}", v)?;
                     }
                 }
@@ -904,7 +926,9 @@ impl fmt::Display for GraphPattern {
 
 impl Default for GraphPattern {
     fn default() -> Self {
-        Self::Bgp(Vec::default())
+        Self::Bgp {
+            patterns: Vec::default(),
+        }
     }
 }
 
@@ -916,8 +940,8 @@ impl GraphPattern {
 
     fn lookup_in_scope_variables<'a>(&'a self, callback: &mut impl FnMut(&'a Variable)) {
         match self {
-            Self::Bgp(p) => {
-                for pattern in p {
+            Self::Bgp { patterns } => {
+                for pattern in patterns {
                     lookup_triple_pattern_variables(pattern, callback)
                 }
             }
@@ -950,33 +974,39 @@ impl GraphPattern {
                 left.lookup_in_scope_variables(callback);
                 right.lookup_in_scope_variables(callback);
             }
-            Self::Graph { graph_name, inner } => {
-                if let NamedNodePattern::Variable(ref g) = graph_name {
+            Self::Graph { name, inner } => {
+                if let NamedNodePattern::Variable(ref g) = name {
                     callback(g);
                 }
                 inner.lookup_in_scope_variables(callback);
             }
-            Self::Extend { inner, var, .. } => {
-                callback(var);
+            Self::Extend {
+                inner, variable, ..
+            } => {
+                callback(variable);
                 inner.lookup_in_scope_variables(callback);
             }
             Self::Minus { left, .. } => left.lookup_in_scope_variables(callback),
-            Self::Service { pattern, .. } => pattern.lookup_in_scope_variables(callback),
-            Self::Group { by, aggregates, .. } => {
-                for v in by {
+            Self::Service { inner, .. } => inner.lookup_in_scope_variables(callback),
+            Self::Group {
+                variables,
+                aggregates,
+                ..
+            } => {
+                for v in variables {
                     callback(v);
                 }
                 for (v, _) in aggregates {
                     callback(v);
                 }
             }
-            Self::Table { variables, .. } => {
+            Self::Values { variables, .. } => {
                 for v in variables {
                     callback(v);
                 }
             }
-            Self::Project { projection, .. } => {
-                for v in projection {
+            Self::Project { variables, .. } => {
+                for v in variables {
                     callback(v);
                 }
             }
@@ -1029,12 +1059,12 @@ impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
         let mut child = self.pattern;
         loop {
             match child {
-                GraphPattern::OrderBy { inner, condition } => {
-                    order = Some(condition);
+                GraphPattern::OrderBy { inner, expression } => {
+                    order = Some(expression);
                     child = &*inner;
                 }
-                GraphPattern::Project { inner, projection } if project.is_empty() => {
-                    project = projection;
+                GraphPattern::Project { inner, variables } if project.is_empty() => {
+                    project = variables;
                     child = &*inner;
                 }
                 GraphPattern::Distinct { inner } => {
@@ -1094,7 +1124,7 @@ impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
 
 /// A set function used in aggregates (c.f. [`GraphPattern::Group`])
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum AggregationFunction {
+pub enum AggregateExpression {
     /// [Count](https://www.w3.org/TR/sparql11-query/#defn_aggCount)
     Count {
         expr: Option<Box<Expression>>,
@@ -1139,7 +1169,7 @@ pub enum AggregationFunction {
     },
 }
 
-impl AggregationFunction {
+impl AggregateExpression {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
@@ -1228,7 +1258,7 @@ impl AggregationFunction {
     }
 }
 
-impl fmt::Display for AggregationFunction {
+impl fmt::Display for AggregateExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Count { expr, distinct } => {
@@ -1317,14 +1347,14 @@ impl fmt::Display for AggregationFunction {
 
 /// An ordering comparator used by [`GraphPattern::OrderBy`]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum OrderComparator {
+pub enum OrderExpression {
     /// Ascending order
     Asc(Expression),
     /// Descending order
     Desc(Expression),
 }
 
-impl OrderComparator {
+impl OrderExpression {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
@@ -1342,7 +1372,7 @@ impl OrderComparator {
     }
 }
 
-impl fmt::Display for OrderComparator {
+impl fmt::Display for OrderExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Asc(e) => write!(f, "ASC({})", e),

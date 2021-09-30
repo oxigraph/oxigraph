@@ -43,14 +43,20 @@ impl<'a> PlanBuilder<'a> {
         graph_name: &PatternValue,
     ) -> Result<PlanNode, EvaluationError> {
         Ok(match pattern {
-            GraphPattern::Bgp(_) | GraphPattern::Path { .. } | GraphPattern::Sequence { .. } => {
+            GraphPattern::Bgp { .. }
+            | GraphPattern::Path { .. }
+            | GraphPattern::Sequence { .. } => {
                 self.build_sequence(PlanNode::Init, pattern, variables, graph_name)?
             }
             GraphPattern::Join { left, right } => PlanNode::Join {
                 left: Rc::new(self.build_for_graph_pattern(left, variables, graph_name)?),
                 right: Rc::new(self.build_for_graph_pattern(right, variables, graph_name)?),
             },
-            GraphPattern::LeftJoin { left, right, expr } => {
+            GraphPattern::LeftJoin {
+                left,
+                right,
+                expression,
+            } => {
                 let left = self.build_for_graph_pattern(left, variables, graph_name)?;
                 let right = self.build_for_graph_pattern(right, variables, graph_name)?;
 
@@ -58,7 +64,7 @@ impl<'a> PlanBuilder<'a> {
                 self.add_left_join_problematic_variables(&right, &mut possible_problem_vars);
 
                 //We add the extra filter if needed
-                let right = if let Some(expr) = expr {
+                let right = if let Some(expr) = expression {
                     PlanNode::Filter {
                         child: Rc::new(right),
                         expression: Rc::new(
@@ -97,15 +103,18 @@ impl<'a> PlanBuilder<'a> {
                 }
                 PlanNode::Union { children }
             }
-            GraphPattern::Graph { graph_name, inner } => {
-                let graph_name =
-                    self.pattern_value_from_named_node_or_variable(graph_name, variables);
+            GraphPattern::Graph { name, inner } => {
+                let graph_name = self.pattern_value_from_named_node_or_variable(name, variables);
                 self.build_for_graph_pattern(inner, variables, &graph_name)?
             }
-            GraphPattern::Extend { inner, var, expr } => PlanNode::Extend {
+            GraphPattern::Extend {
+                inner,
+                variable,
+                expression,
+            } => PlanNode::Extend {
                 child: Rc::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
-                position: variable_key(variables, var),
-                expression: Rc::new(self.build_for_expression(expr, variables, graph_name)?),
+                position: variable_key(variables, variable),
+                expression: Rc::new(self.build_for_expression(expression, variables, graph_name)?),
             },
             GraphPattern::Minus { left, right } => PlanNode::AntiJoin {
                 left: Rc::new(self.build_for_graph_pattern(left, variables, graph_name)?),
@@ -113,11 +122,11 @@ impl<'a> PlanBuilder<'a> {
             },
             GraphPattern::Service {
                 name,
-                pattern,
+                inner,
                 silent,
             } => {
                 // Child building should be at the begging in order for `variables` to be filled
-                let child = self.build_for_graph_pattern(pattern, variables, graph_name)?;
+                let child = self.build_for_graph_pattern(inner, variables, graph_name)?;
                 let service_name = self.pattern_value_from_named_node_or_variable(name, variables);
                 PlanNode::Service {
                     service_name,
@@ -128,13 +137,13 @@ impl<'a> PlanBuilder<'a> {
                             .collect(),
                     ),
                     child: Rc::new(child),
-                    graph_pattern: Rc::new(*pattern.clone()),
+                    graph_pattern: Rc::new(inner.as_ref().clone()),
                     silent: *silent,
                 }
             }
             GraphPattern::Group {
                 inner,
-                by,
+                variables: by,
                 aggregates,
             } => {
                 let mut inner_variables = by.clone();
@@ -170,20 +179,20 @@ impl<'a> PlanBuilder<'a> {
                     ),
                 }
             }
-            GraphPattern::Table {
+            GraphPattern::Values {
                 variables: table_variables,
-                rows,
+                bindings,
             } => PlanNode::StaticBindings {
-                tuples: self.encode_bindings(table_variables, rows, variables),
+                tuples: self.encode_bindings(table_variables, bindings, variables),
             },
-            GraphPattern::OrderBy { inner, condition } => {
-                let condition: Result<Vec<_>, EvaluationError> = condition
+            GraphPattern::OrderBy { inner, expression } => {
+                let condition: Result<Vec<_>, EvaluationError> = expression
                     .iter()
                     .map(|comp| match comp {
-                        OrderComparator::Asc(e) => Ok(Comparator::Asc(
+                        OrderExpression::Asc(e) => Ok(Comparator::Asc(
                             self.build_for_expression(e, variables, graph_name)?,
                         )),
-                        OrderComparator::Desc(e) => Ok(Comparator::Desc(
+                        OrderExpression::Desc(e) => Ok(Comparator::Desc(
                             self.build_for_expression(e, variables, graph_name)?,
                         )),
                     })
@@ -193,7 +202,10 @@ impl<'a> PlanBuilder<'a> {
                     by: condition?,
                 }
             }
-            GraphPattern::Project { inner, projection } => {
+            GraphPattern::Project {
+                inner,
+                variables: projection,
+            } => {
                 let mut inner_variables = projection.clone();
                 let inner_graph_name =
                     self.convert_pattern_value_id(graph_name, variables, &mut inner_variables);
@@ -251,8 +263,8 @@ impl<'a> PlanBuilder<'a> {
         graph_name: &PatternValue,
     ) -> Result<PlanNode, EvaluationError> {
         match pattern {
-            GraphPattern::Bgp(p) => {
-                for triple in sort_bgp(p) {
+            GraphPattern::Bgp { patterns } => {
+                for triple in sort_bgp(patterns) {
                     plan = PlanNode::QuadPatternJoin {
                         child: Rc::new(plan),
                         subject: self
@@ -278,9 +290,8 @@ impl<'a> PlanBuilder<'a> {
                 object: self.pattern_value_from_term_or_variable(object, variables),
                 graph_name: graph_name.clone(),
             }),
-            GraphPattern::Graph { inner, graph_name } => {
-                let graph_name =
-                    self.pattern_value_from_named_node_or_variable(graph_name, variables);
+            GraphPattern::Graph { inner, name } => {
+                let graph_name = self.pattern_value_from_named_node_or_variable(name, variables);
                 self.build_sequence(plan, inner, variables, &graph_name)
             }
             GraphPattern::Sequence(elements) => elements.iter().fold(Ok(plan), |plan, element| {
@@ -882,12 +893,12 @@ impl<'a> PlanBuilder<'a> {
 
     fn build_for_aggregate(
         &mut self,
-        aggregate: &AggregationFunction,
+        aggregate: &AggregateExpression,
         variables: &mut Vec<Variable>,
         graph_name: &PatternValue,
     ) -> Result<PlanAggregation, EvaluationError> {
         match aggregate {
-            AggregationFunction::Count { expr, distinct } => Ok(PlanAggregation {
+            AggregateExpression::Count { expr, distinct } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::Count,
                 parameter: match expr {
                     Some(expr) => Some(self.build_for_expression(expr, variables, graph_name)?),
@@ -895,32 +906,32 @@ impl<'a> PlanBuilder<'a> {
                 },
                 distinct: *distinct,
             }),
-            AggregationFunction::Sum { expr, distinct } => Ok(PlanAggregation {
+            AggregateExpression::Sum { expr, distinct } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::Sum,
                 parameter: Some(self.build_for_expression(expr, variables, graph_name)?),
                 distinct: *distinct,
             }),
-            AggregationFunction::Min { expr, distinct } => Ok(PlanAggregation {
+            AggregateExpression::Min { expr, distinct } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::Min,
                 parameter: Some(self.build_for_expression(expr, variables, graph_name)?),
                 distinct: *distinct,
             }),
-            AggregationFunction::Max { expr, distinct } => Ok(PlanAggregation {
+            AggregateExpression::Max { expr, distinct } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::Max,
                 parameter: Some(self.build_for_expression(expr, variables, graph_name)?),
                 distinct: *distinct,
             }),
-            AggregationFunction::Avg { expr, distinct } => Ok(PlanAggregation {
+            AggregateExpression::Avg { expr, distinct } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::Avg,
                 parameter: Some(self.build_for_expression(expr, variables, graph_name)?),
                 distinct: *distinct,
             }),
-            AggregationFunction::Sample { expr, distinct } => Ok(PlanAggregation {
+            AggregateExpression::Sample { expr, distinct } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::Sample,
                 parameter: Some(self.build_for_expression(expr, variables, graph_name)?),
                 distinct: *distinct,
             }),
-            AggregationFunction::GroupConcat {
+            AggregateExpression::GroupConcat {
                 expr,
                 distinct,
                 separator,
@@ -931,7 +942,7 @@ impl<'a> PlanBuilder<'a> {
                 parameter: Some(self.build_for_expression(expr, variables, graph_name)?),
                 distinct: *distinct,
             }),
-            AggregationFunction::Custom { .. } => Err(EvaluationError::msg(
+            AggregateExpression::Custom { .. } => Err(EvaluationError::msg(
                 "Custom aggregation functions are not supported yet",
             )),
         }
