@@ -16,15 +16,15 @@ use std::fmt::Write;
 ///     NamedNode { iri: "http://example.com/foo".into() }.to_string()
 /// )
 /// ```
-#[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct NamedNode {
     /// The [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) itself.
     pub iri: String,
 }
 
-impl fmt::Debug for NamedNode {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl NamedNode {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         write!(f, "<{}>", self.iri)
     }
 }
@@ -61,15 +61,15 @@ impl TryFrom<NamedNodePattern> for NamedNode {
 ///     BlankNode { id: "a1".into() }.to_string()
 /// )
 /// ```
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct BlankNode {
     /// The [blank node identifier](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node-identifier).
     pub id: String,
 }
 
-impl fmt::Debug for BlankNode {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl BlankNode {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         write!(f, "_:{}", self.id)
     }
 }
@@ -106,7 +106,7 @@ impl fmt::Display for BlankNode {
 ///     Literal::LanguageTaggedString { value: "foo".into(), language: "en".into() }.to_string()
 /// );
 /// ```
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Literal {
     /// A [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal) without datatype or language form.
     Simple {
@@ -129,9 +129,9 @@ pub enum Literal {
     },
 }
 
-impl fmt::Debug for Literal {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Literal {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
             Literal::Simple { value } => print_quoted_str(value, f),
             Literal::LanguageTaggedString { value, language } => {
@@ -166,7 +166,7 @@ impl fmt::Display for Literal {
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Subject {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
@@ -174,14 +174,14 @@ pub enum Subject {
     Triple(Box<Triple>),
 }
 
-impl fmt::Debug for Subject {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Subject {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
-            Self::NamedNode(node) => node.fmt(f),
-            Self::BlankNode(node) => node.fmt(f),
+            Self::NamedNode(node) => node.fmt_sse(f),
+            Self::BlankNode(node) => node.fmt_sse(f),
             #[cfg(feature = "rdf-star")]
-            Self::Triple(triple) => triple.fmt(f),
+            Self::Triple(triple) => triple.fmt_sse(f),
         }
     }
 }
@@ -242,20 +242,20 @@ impl TryFrom<TermPattern> for Subject {
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GroundSubject {
     NamedNode(NamedNode),
     #[cfg(feature = "rdf-star")]
     Triple(Box<GroundTriple>),
 }
 
-impl fmt::Debug for GroundSubject {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl GroundSubject {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
-            Self::NamedNode(node) => node.fmt(f),
+            Self::NamedNode(node) => node.fmt_sse(f),
             #[cfg(feature = "rdf-star")]
-            Self::Triple(triple) => triple.fmt(f),
+            Self::Triple(triple) => triple.fmt_sse(f),
         }
     }
 }
@@ -323,7 +323,7 @@ impl TryFrom<GroundTerm> for GroundSubject {
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) and [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Term {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
@@ -332,15 +332,15 @@ pub enum Term {
     Triple(Box<Triple>),
 }
 
-impl fmt::Debug for Term {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Term {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
-            Self::NamedNode(node) => node.fmt(f),
-            Self::BlankNode(node) => node.fmt(f),
-            Self::Literal(literal) => literal.fmt(f),
+            Self::NamedNode(node) => node.fmt_sse(f),
+            Self::BlankNode(node) => node.fmt_sse(f),
+            Self::Literal(literal) => literal.fmt_sse(f),
             #[cfg(feature = "rdf-star")]
-            Self::Triple(triple) => triple.fmt(f),
+            Self::Triple(triple) => triple.fmt_sse(f),
         }
     }
 }
@@ -422,7 +422,7 @@ impl TryFrom<TermPattern> for Term {
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GroundTerm {
     NamedNode(NamedNode),
     Literal(Literal),
@@ -430,14 +430,14 @@ pub enum GroundTerm {
     Triple(Box<GroundTriple>),
 }
 
-impl fmt::Debug for GroundTerm {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl GroundTerm {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
-            Self::NamedNode(node) => node.fmt(f),
-            Self::Literal(literal) => literal.fmt(f),
+            Self::NamedNode(node) => node.fmt_sse(f),
+            Self::Literal(literal) => literal.fmt_sse(f),
             #[cfg(feature = "rdf-star")]
-            Self::Triple(triple) => triple.fmt(f),
+            Self::Triple(triple) => triple.fmt_sse(f),
         }
     }
 }
@@ -512,21 +512,23 @@ impl TryFrom<Term> for GroundTerm {
 ///     }.to_string()
 /// )
 /// ```
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Triple {
     pub subject: Subject,
     pub predicate: NamedNode,
     pub object: Term,
 }
 
-impl fmt::Debug for Triple {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "(triple {:?} {:?} {:?})",
-            self.subject, self.predicate, self.object
-        )
+impl Triple {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
+        write!(f, "(triple ")?;
+        self.subject.fmt_sse(f)?;
+        write!(f, " ")?;
+        self.predicate.fmt_sse(f)?;
+        write!(f, " ")?;
+        self.object.fmt_sse(f)?;
+        write!(f, ")")
     }
 }
 
@@ -567,21 +569,23 @@ impl TryFrom<TriplePattern> for Triple {
 ///     }.to_string()
 /// )
 /// ```
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct GroundTriple {
     pub subject: GroundSubject,
     pub predicate: NamedNode,
     pub object: GroundTerm,
 }
 
-impl fmt::Debug for GroundTriple {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "(triple {:?} {:?} {:?})",
-            self.subject, self.predicate, self.object
-        )
+impl GroundTriple {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
+        write!(f, "(triple ")?;
+        self.subject.fmt_sse(f)?;
+        write!(f, " ")?;
+        self.predicate.fmt_sse(f)?;
+        write!(f, " ")?;
+        self.object.fmt_sse(f)?;
+        write!(f, ")")
     }
 }
 
@@ -608,17 +612,17 @@ impl TryFrom<Triple> for GroundTriple {
 /// A possible graph name.
 ///
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GraphName {
     NamedNode(NamedNode),
     DefaultGraph,
 }
 
-impl fmt::Debug for GraphName {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl GraphName {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
-            Self::NamedNode(node) => node.fmt(f),
+            Self::NamedNode(node) => node.fmt_sse(f),
             Self::DefaultGraph => write!(f, "default"),
         }
     }
@@ -672,7 +676,7 @@ impl TryFrom<GraphNamePattern> for GraphName {
 ///     }.to_string()
 /// )
 /// ```
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Quad {
     pub subject: Subject,
     pub predicate: NamedNode,
@@ -680,22 +684,25 @@ pub struct Quad {
     pub graph_name: GraphName,
 }
 
-impl fmt::Debug for Quad {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.graph_name == GraphName::DefaultGraph {
-            write!(
-                f,
-                "(triple {:?} {:?} {:?})",
-                self.subject, self.predicate, self.object
-            )
-        } else {
-            write!(
-                f,
-                "(graph {:?} ((triple {:?} {:?} {:?})))",
-                self.graph_name, self.subject, self.predicate, self.object
-            )
+impl Quad {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
+        if self.graph_name != GraphName::DefaultGraph {
+            write!(f, "(graph ")?;
+            self.graph_name.fmt_sse(f)?;
+            write!(f, " (")?;
         }
+        write!(f, "(triple ")?;
+        self.subject.fmt_sse(f)?;
+        write!(f, " ")?;
+        self.predicate.fmt_sse(f)?;
+        write!(f, " ")?;
+        self.object.fmt_sse(f)?;
+        write!(f, ")")?;
+        if self.graph_name != GraphName::DefaultGraph {
+            write!(f, "))")?;
+        }
+        Ok(())
     }
 }
 
@@ -746,7 +753,7 @@ impl TryFrom<QuadPattern> for Quad {
 ///     }.to_string()
 /// )
 /// ```
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct GroundQuad {
     pub subject: GroundSubject,
     pub predicate: NamedNode,
@@ -754,22 +761,25 @@ pub struct GroundQuad {
     pub graph_name: GraphName,
 }
 
-impl fmt::Debug for GroundQuad {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.graph_name == GraphName::DefaultGraph {
-            write!(
-                f,
-                "(triple {:?} {:?} {:?})",
-                self.subject, self.predicate, self.object
-            )
-        } else {
-            write!(
-                f,
-                "(graph {:?} ((triple {:?} {:?} {:?})))",
-                self.graph_name, self.subject, self.predicate, self.object
-            )
+impl GroundQuad {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
+        if self.graph_name != GraphName::DefaultGraph {
+            write!(f, "(graph ")?;
+            self.graph_name.fmt_sse(f)?;
+            write!(f, " (")?;
         }
+        write!(f, "(triple ")?;
+        self.subject.fmt_sse(f)?;
+        write!(f, " ")?;
+        self.predicate.fmt_sse(f)?;
+        write!(f, " ")?;
+        self.object.fmt_sse(f)?;
+        write!(f, ")")?;
+        if self.graph_name != GraphName::DefaultGraph {
+            write!(f, "))")?;
+        }
+        Ok(())
     }
 }
 
@@ -812,14 +822,14 @@ impl TryFrom<Quad> for GroundQuad {
 ///     Variable { name: "foo".into() }.to_string()
 /// );
 /// ```
-#[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct Variable {
     pub name: String,
 }
 
-impl fmt::Debug for Variable {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Variable {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         write!(f, "?{}", self.name)
     }
 }
@@ -832,18 +842,18 @@ impl fmt::Display for Variable {
 }
 
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum NamedNodePattern {
     NamedNode(NamedNode),
     Variable(Variable),
 }
 
-impl fmt::Debug for NamedNodePattern {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl NamedNodePattern {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
-            Self::NamedNode(node) => node.fmt(f),
-            Self::Variable(var) => var.fmt(f),
+            Self::NamedNode(node) => node.fmt_sse(f),
+            Self::Variable(var) => var.fmt_sse(f),
         }
     }
 }
@@ -873,7 +883,7 @@ impl From<Variable> for NamedNodePattern {
 }
 
 /// The union of [terms](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum TermPattern {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
@@ -883,16 +893,16 @@ pub enum TermPattern {
     Variable(Variable),
 }
 
-impl fmt::Debug for TermPattern {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl TermPattern {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
-            Self::NamedNode(term) => term.fmt(f),
-            Self::BlankNode(term) => term.fmt(f),
-            Self::Literal(term) => term.fmt(f),
+            Self::NamedNode(term) => term.fmt_sse(f),
+            Self::BlankNode(term) => term.fmt_sse(f),
+            Self::Literal(term) => term.fmt_sse(f),
             #[cfg(feature = "rdf-star")]
-            Self::Triple(triple) => triple.fmt(f),
-            Self::Variable(var) => var.fmt(f),
+            Self::Triple(triple) => triple.fmt_sse(f),
+            Self::Variable(var) => var.fmt_sse(f),
         }
     }
 }
@@ -982,7 +992,7 @@ impl From<NamedNodePattern> for TermPattern {
 }
 
 /// The union of [terms](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables) without blank nodes.
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GroundTermPattern {
     NamedNode(NamedNode),
     Literal(Literal),
@@ -990,14 +1000,14 @@ pub enum GroundTermPattern {
     Triple(Box<GroundTriplePattern>),
 }
 
-impl fmt::Debug for GroundTermPattern {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl GroundTermPattern {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
-            Self::NamedNode(term) => term.fmt(f),
-            Self::Literal(term) => term.fmt(f),
-            Self::Variable(var) => var.fmt(f),
-            Self::Triple(triple) => write!(f, "<<{}>>", triple),
+            Self::NamedNode(term) => term.fmt_sse(f),
+            Self::Literal(term) => term.fmt_sse(f),
+            Self::Variable(var) => var.fmt_sse(f),
+            Self::Triple(triple) => triple.fmt_sse(f),
         }
     }
 }
@@ -1091,20 +1101,20 @@ impl TryFrom<TermPattern> for GroundTermPattern {
 }
 
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GraphNamePattern {
     NamedNode(NamedNode),
     DefaultGraph,
     Variable(Variable),
 }
 
-impl fmt::Debug for GraphNamePattern {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl GraphNamePattern {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
-            Self::NamedNode(node) => node.fmt(f),
+            Self::NamedNode(node) => node.fmt_sse(f),
             Self::DefaultGraph => write!(f, "default"),
-            Self::Variable(var) => var.fmt(f),
+            Self::Variable(var) => var.fmt_sse(f),
         }
     }
 }
@@ -1155,7 +1165,7 @@ impl From<NamedNodePattern> for GraphNamePattern {
 }
 
 /// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern)
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct TriplePattern {
     pub subject: TermPattern,
     pub predicate: NamedNodePattern,
@@ -1176,14 +1186,16 @@ impl TriplePattern {
     }
 }
 
-impl fmt::Debug for TriplePattern {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "(triple {:?} {:?} {:?})",
-            self.subject, self.predicate, self.object
-        )
+impl TriplePattern {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
+        write!(f, "(triple ")?;
+        self.subject.fmt_sse(f)?;
+        write!(f, " ")?;
+        self.predicate.fmt_sse(f)?;
+        write!(f, " ")?;
+        self.object.fmt_sse(f)?;
+        write!(f, ")")
     }
 }
 
@@ -1206,21 +1218,23 @@ impl From<Triple> for TriplePattern {
 }
 
 /// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) without blank nodes
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct GroundTriplePattern {
     pub subject: GroundTermPattern,
     pub predicate: NamedNodePattern,
     pub object: GroundTermPattern,
 }
 
-impl fmt::Debug for GroundTriplePattern {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "(triple {:?} {:?} {:?})",
-            self.subject, self.predicate, self.object
-        )
+impl GroundTriplePattern {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
+        write!(f, "(triple ")?;
+        self.subject.fmt_sse(f)?;
+        write!(f, " ")?;
+        self.predicate.fmt_sse(f)?;
+        write!(f, " ")?;
+        self.object.fmt_sse(f)?;
+        write!(f, ")")
     }
 }
 
@@ -1256,7 +1270,7 @@ impl TryFrom<TriplePattern> for GroundTriplePattern {
 }
 
 /// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) in a specific graph
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct QuadPattern {
     pub subject: TermPattern,
     pub predicate: NamedNodePattern,
@@ -1280,22 +1294,25 @@ impl QuadPattern {
     }
 }
 
-impl fmt::Debug for QuadPattern {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.graph_name == GraphNamePattern::DefaultGraph {
-            write!(
-                f,
-                "(triple {:?} {:?} {:?})",
-                self.subject, self.predicate, self.object
-            )
-        } else {
-            write!(
-                f,
-                "(graph {:?} ((triple {:?} {:?} {:?})))",
-                self.graph_name, self.subject, self.predicate, self.object
-            )
+impl QuadPattern {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
+        if self.graph_name != GraphNamePattern::DefaultGraph {
+            write!(f, "(graph ")?;
+            self.graph_name.fmt_sse(f)?;
+            write!(f, " (")?;
         }
+        write!(f, "(triple ")?;
+        self.subject.fmt_sse(f)?;
+        write!(f, " ")?;
+        self.predicate.fmt_sse(f)?;
+        write!(f, " ")?;
+        self.object.fmt_sse(f)?;
+        write!(f, ")")?;
+        if self.graph_name != GraphNamePattern::DefaultGraph {
+            write!(f, "))")?;
+        }
+        Ok(())
     }
 }
 
@@ -1315,7 +1332,7 @@ impl fmt::Display for QuadPattern {
 }
 
 /// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) in a specific graph without blank nodes
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct GroundQuadPattern {
     pub subject: GroundTermPattern,
     pub predicate: NamedNodePattern,
@@ -1323,22 +1340,25 @@ pub struct GroundQuadPattern {
     pub graph_name: GraphNamePattern,
 }
 
-impl fmt::Debug for GroundQuadPattern {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.graph_name == GraphNamePattern::DefaultGraph {
-            write!(
-                f,
-                "(triple {:?} {:?} {:?})",
-                self.subject, self.predicate, self.object
-            )
-        } else {
-            write!(
-                f,
-                "(graph {:?} ((triple {:?} {:?} {:?})))",
-                self.graph_name, self.subject, self.predicate, self.object
-            )
+impl GroundQuadPattern {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
+        if self.graph_name != GraphNamePattern::DefaultGraph {
+            write!(f, "(graph ")?;
+            self.graph_name.fmt_sse(f)?;
+            write!(f, " (")?;
         }
+        write!(f, "(triple ")?;
+        self.subject.fmt_sse(f)?;
+        write!(f, " ")?;
+        self.predicate.fmt_sse(f)?;
+        write!(f, " ")?;
+        self.object.fmt_sse(f)?;
+        write!(f, ")")?;
+        if self.graph_name != GraphNamePattern::DefaultGraph {
+            write!(f, "))")?;
+        }
+        Ok(())
     }
 }
 
@@ -1372,7 +1392,7 @@ impl TryFrom<QuadPattern> for GroundQuadPattern {
 }
 
 #[inline]
-pub(crate) fn print_quoted_str(string: &str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+pub(crate) fn print_quoted_str(string: &str, f: &mut impl Write) -> fmt::Result {
     f.write_char('"')?;
     for c in string.chars() {
         match c {

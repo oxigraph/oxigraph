@@ -5,7 +5,7 @@ use crate::term::*;
 use std::fmt;
 
 /// A [property path expression](https://www.w3.org/TR/sparql11-query/#defn_PropertyPathExpr)
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum PropertyPathExpression {
     NamedNode(NamedNode),
     Reverse(Box<Self>),
@@ -17,20 +17,50 @@ pub enum PropertyPathExpression {
     NegatedPropertySet(Vec<NamedNode>),
 }
 
-impl fmt::Debug for PropertyPathExpression {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl PropertyPathExpression {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
-            Self::NamedNode(p) => p.fmt(f),
-            Self::Reverse(p) => write!(f, "(reverse {:?})", p),
-            Self::Alternative(a, b) => write!(f, "(alt {:?} {:?})", a, b),
-            Self::Sequence(a, b) => write!(f, "(seq {:?} {:?})", a, b),
-            Self::ZeroOrMore(p) => write!(f, "(path* {:?})", p),
-            Self::OneOrMore(p) => write!(f, "(path+ {:?})", p),
-            Self::ZeroOrOne(p) => write!(f, "(path? {:?})", p),
+            Self::NamedNode(p) => p.fmt_sse(f),
+            Self::Reverse(p) => {
+                write!(f, "(reverse ")?;
+                p.fmt_sse(f)?;
+                write!(f, ")")
+            }
+            Self::Alternative(a, b) => {
+                write!(f, "(alt ")?;
+                a.fmt_sse(f)?;
+                write!(f, " ")?;
+                b.fmt_sse(f)?;
+                write!(f, ")")
+            }
+            Self::Sequence(a, b) => {
+                write!(f, "(seq ")?;
+                a.fmt_sse(f)?;
+                write!(f, " ")?;
+                b.fmt_sse(f)?;
+                write!(f, ")")
+            }
+            Self::ZeroOrMore(p) => {
+                write!(f, "(path* ")?;
+                p.fmt_sse(f)?;
+                write!(f, ")")
+            }
+            Self::OneOrMore(p) => {
+                write!(f, "(path+ ")?;
+                p.fmt_sse(f)?;
+                write!(f, ")")
+            }
+            Self::ZeroOrOne(p) => {
+                write!(f, "(path? ")?;
+                p.fmt_sse(f)?;
+                write!(f, ")")
+            }
             Self::NegatedPropertySet(p) => {
-                write!(f, "(notoneof ")?;
+                write!(f, "(notoneof")?;
                 for p in p {
-                    write!(f, " {:?}", p)?;
+                    write!(f, " ")?;
+                    p.fmt_sse(f)?;
                 }
                 write!(f, ")")
             }
@@ -69,7 +99,7 @@ impl From<NamedNode> for PropertyPathExpression {
 }
 
 /// An [expression](https://www.w3.org/TR/sparql11-query/#expressions)
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Expression {
     NamedNode(NamedNode),
     Literal(Literal),
@@ -116,48 +146,70 @@ pub enum Expression {
     FunctionCall(Function, Vec<Self>),
 }
 
-impl fmt::Debug for Expression {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Expression {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
-            Self::NamedNode(node) => node.fmt(f),
-            Self::Literal(l) => l.fmt(f),
-            Self::Variable(var) => var.fmt(f),
-            Self::Or(a, b) => write!(f, "(|| {:?} {:?})", a, b),
-            Self::And(a, b) => write!(f, "(&& {:?} {:?})", a, b),
-            Self::Equal(a, b) => write!(f, "(= {:?} {:?})", a, b),
-            Self::SameTerm(a, b) => write!(f, "(sameTerm {:?} {:?})", a, b),
-            Self::Greater(a, b) => write!(f, "(> {:?} {:?})", a, b),
-            Self::GreaterOrEqual(a, b) => write!(f, "(>= {:?} {:?})", a, b),
-            Self::Less(a, b) => write!(f, "(< {:?} {:?})", a, b),
-            Self::LessOrEqual(a, b) => write!(f, "(<= {:?} {:?})", a, b),
+            Self::NamedNode(node) => node.fmt_sse(f),
+            Self::Literal(l) => l.fmt_sse(f),
+            Self::Variable(var) => var.fmt_sse(f),
+            Self::Or(a, b) => fmt_sse_binary_expression(f, "||", a, b),
+            Self::And(a, b) => fmt_sse_binary_expression(f, "&&", a, b),
+            Self::Equal(a, b) => fmt_sse_binary_expression(f, "=", a, b),
+            Self::SameTerm(a, b) => fmt_sse_binary_expression(f, "sameTerm", a, b),
+            Self::Greater(a, b) => fmt_sse_binary_expression(f, ">", a, b),
+            Self::GreaterOrEqual(a, b) => fmt_sse_binary_expression(f, ">=", a, b),
+            Self::Less(a, b) => fmt_sse_binary_expression(f, "<", a, b),
+            Self::LessOrEqual(a, b) => fmt_sse_binary_expression(f, "<=", a, b),
             Self::In(a, b) => {
-                write!(f, "(in {:?}", a)?;
+                write!(f, "(in ")?;
+                a.fmt_sse(f)?;
                 for p in b {
-                    write!(f, " {:?}", p)?;
+                    write!(f, " ")?;
+                    p.fmt_sse(f)?;
                 }
                 write!(f, ")")
             }
-            Self::Add(a, b) => write!(f, "(+ {:?} {:?})", a, b),
-            Self::Subtract(a, b) => write!(f, "(- {:?} {:?})", a, b),
-            Self::Multiply(a, b) => write!(f, "(* {:?} {:?})", a, b),
-            Self::Divide(a, b) => write!(f, "(/ {:?} {:?})", a, b),
-            Self::UnaryPlus(e) => write!(f, "(+ {:?})", e),
-            Self::UnaryMinus(e) => write!(f, "(- {:?})", e),
-            Self::Not(e) => write!(f, "(! {:?})", e),
+            Self::Add(a, b) => fmt_sse_binary_expression(f, "+", a, b),
+            Self::Subtract(a, b) => fmt_sse_binary_expression(f, "-", a, b),
+            Self::Multiply(a, b) => fmt_sse_binary_expression(f, "*", a, b),
+            Self::Divide(a, b) => fmt_sse_binary_expression(f, "/", a, b),
+            Self::UnaryPlus(e) => fmt_sse_unary_expression(f, "+", e),
+            Self::UnaryMinus(e) => fmt_sse_unary_expression(f, "-", e),
+            Self::Not(e) => fmt_sse_unary_expression(f, "!", e),
             Self::FunctionCall(function, parameters) => {
-                write!(f, "({:?}", function)?;
+                write!(f, "( ")?;
+                function.fmt_sse(f)?;
                 for p in parameters {
-                    write!(f, " {:?}", p)?;
+                    write!(f, " ")?;
+                    p.fmt_sse(f)?;
                 }
                 write!(f, ")")
             }
-            Self::Exists(p) => write!(f, "(exists {:?})", p),
-            Self::Bound(v) => write!(f, "(bound {:?})", v),
-            Self::If(a, b, c) => write!(f, "(if {:?} {:?} {:?})", a, b, c),
+            Self::Exists(p) => {
+                write!(f, "(exists ")?;
+                p.fmt_sse(f)?;
+                write!(f, ")")
+            }
+            Self::Bound(v) => {
+                write!(f, "(bound ")?;
+                v.fmt_sse(f)?;
+                write!(f, ")")
+            }
+            Self::If(a, b, c) => {
+                write!(f, "(if ")?;
+                a.fmt_sse(f)?;
+                write!(f, " ")?;
+                b.fmt_sse(f)?;
+                write!(f, " ")?;
+                c.fmt_sse(f)?;
+                write!(f, ")")
+            }
             Self::Coalesce(parameters) => {
                 write!(f, "(coalesce")?;
                 for p in parameters {
-                    write!(f, " {:?}", p)?;
+                    write!(f, " ")?;
+                    p.fmt_sse(f)?;
                 }
                 write!(f, ")")
             }
@@ -269,7 +321,7 @@ fn write_arg_list(
 }
 
 /// A function name
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Function {
     Str,
     Lang,
@@ -330,8 +382,9 @@ pub enum Function {
     Custom(NamedNode),
 }
 
-impl fmt::Debug for Function {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Function {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
             Self::Str => write!(f, "str"),
             Self::Lang => write!(f, "lang"),
@@ -389,7 +442,7 @@ impl fmt::Debug for Function {
             Self::Object => write!(f, "object"),
             #[cfg(feature = "rdf-star")]
             Self::IsTriple => write!(f, "istriple"),
-            Self::Custom(iri) => iri.fmt(f),
+            Self::Custom(iri) => iri.fmt_sse(f),
         }
     }
 }
@@ -459,7 +512,7 @@ impl fmt::Display for Function {
 }
 
 /// A SPARQL query [graph pattern](https://www.w3.org/TR/sparql11-query/#sparqlQuery)
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GraphPattern {
     /// A [basic graph pattern](https://www.w3.org/TR/sparql11-query/#defn_BasicGraphPattern)
     Bgp(Vec<TriplePattern>),
@@ -535,13 +588,15 @@ pub enum GraphPattern {
     },
 }
 
-impl fmt::Debug for GraphPattern {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl GraphPattern {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
             Self::Bgp(p) => {
                 write!(f, "(bgp")?;
                 for pattern in p {
-                    write!(f, " {:?}", pattern)?;
+                    write!(f, " ")?;
+                    pattern.fmt_sse(f)?;
                 }
                 write!(f, ")")
             }
@@ -549,41 +604,91 @@ impl fmt::Debug for GraphPattern {
                 subject,
                 path,
                 object,
-            } => write!(f, "(path {:?} {:?} {:?})", subject, path, object),
+            } => {
+                write!(f, "(path ")?;
+                subject.fmt_sse(f)?;
+                write!(f, " ")?;
+                path.fmt_sse(f)?;
+                write!(f, " ")?;
+                object.fmt_sse(f)?;
+                write!(f, ")")
+            }
             Self::Sequence(elements) => {
                 write!(f, "(sequence")?;
                 for e in elements {
-                    write!(f, " {:?}", e)?;
+                    write!(f, " ")?;
+                    e.fmt_sse(f)?;
                 }
                 write!(f, ")")
             }
-            Self::Join { left, right } => write!(f, "(join {:?} {:?})", left, right),
-            Self::LeftJoin { left, right, expr } => {
-                if let Some(expr) = expr {
-                    write!(f, "(leftjoin {:?} {:?} {:?})", left, right, expr)
-                } else {
-                    write!(f, "(leftjoin {:?} {:?})", left, right)
-                }
+            Self::Join { left, right } => {
+                write!(f, "(join ")?;
+                left.fmt_sse(f)?;
+                write!(f, " ")?;
+                right.fmt_sse(f)?;
+                write!(f, ")")
             }
-            Self::Filter { expr, inner } => write!(f, "(filter {:?} {:?})", expr, inner),
-            Self::Union { left, right } => write!(f, "(union {:?} {:?})", left, right),
+            Self::LeftJoin { left, right, expr } => {
+                write!(f, "(leftjoin ")?;
+                left.fmt_sse(f)?;
+                write!(f, " ")?;
+                right.fmt_sse(f)?;
+                if let Some(expr) = expr {
+                    write!(f, " ")?;
+                    expr.fmt_sse(f)?;
+                }
+                write!(f, ")")
+            }
+            Self::Filter { expr, inner } => {
+                write!(f, "(filter ")?;
+                expr.fmt_sse(f)?;
+                write!(f, " ")?;
+                inner.fmt_sse(f)?;
+                write!(f, ")")
+            }
+            Self::Union { left, right } => {
+                write!(f, "(union ")?;
+                left.fmt_sse(f)?;
+                write!(f, " ")?;
+                right.fmt_sse(f)?;
+                write!(f, ")")
+            }
             Self::Graph { graph_name, inner } => {
-                write!(f, "(graph {:?} {:?})", graph_name, inner)
+                write!(f, "(graph ")?;
+                graph_name.fmt_sse(f)?;
+                write!(f, " ")?;
+                inner.fmt_sse(f)?;
+                write!(f, ")")
             }
             Self::Extend { inner, var, expr } => {
-                write!(f, "(extend (({:?} {:?})) {:?})", var, expr, inner)
+                write!(f, "(extend ((")?;
+                var.fmt_sse(f)?;
+                write!(f, " ")?;
+                expr.fmt_sse(f)?;
+                write!(f, ")) ")?;
+                inner.fmt_sse(f)?;
+                write!(f, ")")
             }
-            Self::Minus { left, right } => write!(f, "(minus {:?} {:?})", left, right),
+            Self::Minus { left, right } => {
+                write!(f, "(minus ")?;
+                left.fmt_sse(f)?;
+                write!(f, " ")?;
+                right.fmt_sse(f)?;
+                write!(f, ")")
+            }
             Self::Service {
                 name,
                 pattern,
                 silent,
             } => {
+                write!(f, "(service ")?;
                 if *silent {
-                    write!(f, "(service silent {:?} {:?})", name, pattern)
-                } else {
-                    write!(f, "(service {:?} {:?})", name, pattern)
+                    write!(f, "silent ")?;
                 }
+                name.fmt_sse(f)?;
+                write!(f, " ")?;
+                pattern.fmt_sse(f)?;
+                write!(f, ")")
             }
             Self::Group {
                 inner,
@@ -595,28 +700,39 @@ impl fmt::Debug for GraphPattern {
                     if i > 0 {
                         write!(f, " ")?;
                     }
-                    write!(f, "{:?}", v)?;
+                    v.fmt_sse(f)?;
                 }
                 write!(f, ") (")?;
                 for (i, (v, a)) in aggregates.iter().enumerate() {
                     if i > 0 {
                         write!(f, " ")?;
                     }
-                    write!(f, "({:?} {:?})", a, v)?;
+                    write!(f, "(")?;
+                    a.fmt_sse(f)?;
+                    write!(f, " ")?;
+                    v.fmt_sse(f)?;
+                    write!(f, ")")?;
                 }
-                write!(f, ") {:?})", inner)
+                write!(f, ") ")?;
+                inner.fmt_sse(f)?;
+                write!(f, ")")
             }
             Self::Table { variables, rows } => {
                 write!(f, "(table (vars")?;
                 for var in variables {
-                    write!(f, " {:?}", var)?;
+                    write!(f, " ")?;
+                    var.fmt_sse(f)?;
                 }
                 write!(f, ")")?;
                 for row in rows {
                     write!(f, " (row")?;
                     for (value, var) in row.iter().zip(variables) {
                         if let Some(value) = value {
-                            write!(f, " ({:?} {:?})", var, value)?;
+                            write!(f, " (")?;
+                            var.fmt_sse(f)?;
+                            write!(f, " ")?;
+                            value.fmt_sse(f)?;
+                            write!(f, ")")?;
                         }
                     }
                     write!(f, ")")?;
@@ -629,9 +745,11 @@ impl fmt::Debug for GraphPattern {
                     if i > 0 {
                         write!(f, " ")?;
                     }
-                    write!(f, "{:?}", c)?;
+                    c.fmt_sse(f)?;
                 }
-                write!(f, ") {:?})", inner)
+                write!(f, ") ")?;
+                inner.fmt_sse(f)?;
+                write!(f, ")")
             }
             Self::Project { inner, projection } => {
                 write!(f, "(project (")?;
@@ -639,22 +757,34 @@ impl fmt::Debug for GraphPattern {
                     if i > 0 {
                         write!(f, " ")?;
                     }
-                    write!(f, "{:?}", v)?;
+                    v.fmt_sse(f)?;
                 }
-                write!(f, ") {:?})", inner)
+                write!(f, ") ")?;
+                inner.fmt_sse(f)?;
+                write!(f, ")")
             }
-            Self::Distinct { inner } => write!(f, "(distinct {:?})", inner),
-            Self::Reduced { inner } => write!(f, "(reduced {:?})", inner),
+            Self::Distinct { inner } => {
+                write!(f, "(distinct ")?;
+                inner.fmt_sse(f)?;
+                write!(f, ")")
+            }
+            Self::Reduced { inner } => {
+                write!(f, "(reduced ")?;
+                inner.fmt_sse(f)?;
+                write!(f, ")")
+            }
             Self::Slice {
                 inner,
                 start,
                 length,
             } => {
                 if let Some(length) = length {
-                    write!(f, "(slice {:?} {:?} {:?})", start, length, inner)
+                    write!(f, "(slice {} {} ", start, length)?;
                 } else {
-                    write!(f, "(slice {:?} _ {:?})", start, inner)
+                    write!(f, "(slice {} _ ", start)?;
                 }
+                inner.fmt_sse(f)?;
+                write!(f, ")")
             }
         }
     }
@@ -963,7 +1093,7 @@ impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
 }
 
 /// A set function used in aggregates (c.f. [`GraphPattern::Group`])
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum AggregationFunction {
     /// [Count](https://www.w3.org/TR/sparql11-query/#defn_aggCount)
     Count {
@@ -1009,88 +1139,90 @@ pub enum AggregationFunction {
     },
 }
 
-impl fmt::Debug for AggregationFunction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl AggregationFunction {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
             Self::Count { expr, distinct } => {
+                write!(f, "(sum")?;
                 if *distinct {
-                    if let Some(expr) = expr {
-                        write!(f, "(count distinct {:?})", expr)
-                    } else {
-                        write!(f, "(count distinct)")
-                    }
-                } else if let Some(expr) = expr {
-                    write!(f, "(count {:?})", expr)
-                } else {
-                    write!(f, "(count)")
+                    write!(f, " distinct")?;
                 }
+                if let Some(expr) = expr {
+                    write!(f, " ")?;
+                    expr.fmt_sse(f)?;
+                }
+                write!(f, ")")
             }
             Self::Sum { expr, distinct } => {
+                write!(f, "(sum ")?;
                 if *distinct {
-                    write!(f, "(sum distinct {:?})", expr)
-                } else {
-                    write!(f, "(sum {:?})", expr)
+                    write!(f, "distinct ")?;
                 }
+                expr.fmt_sse(f)?;
+                write!(f, ")")
             }
             Self::Avg { expr, distinct } => {
+                write!(f, "(avg ")?;
                 if *distinct {
-                    write!(f, "(avg distinct {:?})", expr)
-                } else {
-                    write!(f, "(avg {:?})", expr)
+                    write!(f, "distinct ")?;
                 }
+                expr.fmt_sse(f)?;
+                write!(f, ")")
             }
             Self::Min { expr, distinct } => {
+                write!(f, "(min ")?;
                 if *distinct {
-                    write!(f, "(min distinct {:?})", expr)
-                } else {
-                    write!(f, "(min {:?})", expr)
+                    write!(f, "distinct ")?;
                 }
+                expr.fmt_sse(f)?;
+                write!(f, ")")
             }
             Self::Max { expr, distinct } => {
+                write!(f, "(max ")?;
                 if *distinct {
-                    write!(f, "(max distinct {:?})", expr)
-                } else {
-                    write!(f, "(max {:?})", expr)
+                    write!(f, "distinct ")?;
                 }
+                expr.fmt_sse(f)?;
+                write!(f, ")")
             }
             Self::Sample { expr, distinct } => {
+                write!(f, "(sample ")?;
                 if *distinct {
-                    write!(f, "(sample distinct {:?})", expr)
-                } else {
-                    write!(f, "(sample {:?})", expr)
+                    write!(f, "distinct ")?;
                 }
+                expr.fmt_sse(f)?;
+                write!(f, ")")
             }
             Self::GroupConcat {
                 expr,
                 distinct,
                 separator,
             } => {
+                write!(f, "(group_concat ")?;
                 if *distinct {
-                    if let Some(separator) = separator {
-                        write!(f, "(group_concat distinct {:?} ", expr)?;
-                        print_quoted_str(separator, f)?;
-                        write!(f, ")")
-                    } else {
-                        write!(f, "(group_concat distinct {:?})", expr)
-                    }
-                } else if let Some(separator) = separator {
-                    write!(f, "(group_concat {:?} ", expr)?;
-                    print_quoted_str(separator, f)?;
-                    write!(f, ")")
-                } else {
-                    write!(f, "(group_concat {:?})", expr)
+                    write!(f, "distinct ")?;
                 }
+                expr.fmt_sse(f)?;
+                if let Some(separator) = separator {
+                    write!(f, " ")?;
+                    print_quoted_str(separator, f)?;
+                }
+                write!(f, ")")
             }
             Self::Custom {
                 name,
                 expr,
                 distinct,
             } => {
+                write!(f, "(")?;
+                name.fmt_sse(f)?;
                 if *distinct {
-                    write!(f, "({:?} distinct {:?})", name, expr)
-                } else {
-                    write!(f, "({:?} {:?})", name, expr)
+                    write!(f, " distinct")?;
                 }
+                write!(f, " ")?;
+                expr.fmt_sse(f)?;
+                write!(f, ")")
             }
         }
     }
@@ -1184,7 +1316,7 @@ impl fmt::Display for AggregationFunction {
 }
 
 /// An ordering comparator used by [`GraphPattern::OrderBy`]
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum OrderComparator {
     /// Ascending order
     Asc(Expression),
@@ -1192,11 +1324,20 @@ pub enum OrderComparator {
     Desc(Expression),
 }
 
-impl fmt::Debug for OrderComparator {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl OrderComparator {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
-            Self::Asc(e) => write!(f, "(asc {:?})", e),
-            Self::Desc(e) => write!(f, "(desc {:?})", e),
+            Self::Asc(e) => {
+                write!(f, "(asc ")?;
+                e.fmt_sse(f)?;
+                write!(f, ")")
+            }
+            Self::Desc(e) => {
+                write!(f, "(desc ")?;
+                e.fmt_sse(f)?;
+                write!(f, ")")
+            }
         }
     }
 }
@@ -1211,27 +1352,30 @@ impl fmt::Display for OrderComparator {
 }
 
 /// A SPARQL query [dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset)
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct QueryDataset {
     pub default: Vec<NamedNode>,
     pub named: Option<Vec<NamedNode>>,
 }
 
-impl fmt::Debug for QueryDataset {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl QueryDataset {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         write!(f, "(")?;
         for (i, graph_name) in self.default.iter().enumerate() {
             if i > 0 {
                 write!(f, " ")?;
             }
-            write!(f, "{:?}", graph_name)?;
+            graph_name.fmt_sse(f)?;
         }
         if let Some(named) = &self.named {
             for (i, graph_name) in named.iter().enumerate() {
                 if !self.default.is_empty() || i > 0 {
                     write!(f, " ")?;
                 }
-                write!(f, "(named {:?})", graph_name)?;
+                write!(f, "(named ")?;
+                graph_name.fmt_sse(f)?;
+                write!(f, ")")?;
             }
         }
         write!(f, ")")
@@ -1255,7 +1399,7 @@ impl fmt::Display for QueryDataset {
 /// A target RDF graph for update operations
 ///
 /// Could be a specific graph, all named graphs or the complete dataset.
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GraphTarget {
     NamedNode(NamedNode),
     DefaultGraph,
@@ -1263,10 +1407,11 @@ pub enum GraphTarget {
     AllGraphs,
 }
 
-impl fmt::Debug for GraphTarget {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl GraphTarget {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
-            Self::NamedNode(node) => node.fmt(f),
+            Self::NamedNode(node) => node.fmt_sse(f),
             Self::DefaultGraph => write!(f, "default"),
             Self::NamedGraphs => write!(f, "named"),
             Self::AllGraphs => write!(f, "all"),
@@ -1298,4 +1443,25 @@ impl From<GraphName> for GraphTarget {
             GraphName::DefaultGraph => Self::DefaultGraph,
         }
     }
+}
+
+#[inline]
+fn fmt_sse_unary_expression(f: &mut impl fmt::Write, name: &str, e: &Expression) -> fmt::Result {
+    write!(f, "({} ", name)?;
+    e.fmt_sse(f)?;
+    write!(f, ")")
+}
+
+#[inline]
+fn fmt_sse_binary_expression(
+    f: &mut impl fmt::Write,
+    name: &str,
+    a: &Expression,
+    b: &Expression,
+) -> fmt::Result {
+    write!(f, "({} ", name)?;
+    a.fmt_sse(f)?;
+    write!(f, " ")?;
+    b.fmt_sse(f)?;
+    write!(f, ")")
 }

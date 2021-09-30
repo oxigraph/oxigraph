@@ -344,7 +344,7 @@ impl<F, T: From<F>> From<FocusedTriplePattern<F>> for FocusedTripleOrPathPattern
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 enum PartialGraphPattern {
     Optional(GraphPattern, Option<Expression>),
     Minus(GraphPattern),

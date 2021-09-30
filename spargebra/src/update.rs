@@ -8,19 +8,16 @@ use std::str::FromStr;
 
 /// A parsed [SPARQL update](https://www.w3.org/TR/sparql11-update/)
 ///
-/// The `Display` trait prints a serialization of the update using SPARQL syntax and
-/// `Debug` prints the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
-///
 /// ```
 /// use spargebra::Update;
 ///
 /// let update_str = "CLEAR ALL ;";
 /// let update = Update::parse(update_str, None)?;
 /// assert_eq!(update.to_string().trim(), update_str);
-/// assert_eq!(format!("{:?}", update), "(update (clear all))");
+/// assert_eq!(update.to_sse(), "(update (clear all))");
 /// # Result::Ok::<_, spargebra::ParseError>(())
 /// ```
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Update {
     /// The update base IRI
     pub base_iri: Option<Iri<String>>,
@@ -33,16 +30,24 @@ impl Update {
     pub fn parse(update: &str, base_iri: Option<&str>) -> Result<Self, ParseError> {
         parse_update(update, base_iri)
     }
-}
 
-impl fmt::Debug for Update {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub fn to_sse(&self) -> String {
+        let mut buffer = String::new();
+        self.fmt_sse(&mut buffer)
+            .expect("Unexpected error during SSE formatting");
+        buffer
+    }
+
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         if let Some(base_iri) = &self.base_iri {
             write!(f, "(base <{}> ", base_iri)?;
         }
         write!(f, "(update")?;
         for op in &self.operations {
-            write!(f, " {:?}", op)?;
+            write!(f, " ")?;
+            op.fmt_sse(f)?;
         }
         write!(f, ")")?;
         if self.base_iri.is_some() {
@@ -89,7 +94,7 @@ impl<'a> TryFrom<&'a String> for Update {
 }
 
 /// The [graph update operations](https://www.w3.org/TR/sparql11-update/#formalModelGraphUpdate)
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GraphUpdateOperation {
     /// [insert data](https://www.w3.org/TR/sparql11-update/#defn_insertDataOperation)
     InsertData { data: Vec<Quad> },
@@ -116,8 +121,9 @@ pub enum GraphUpdateOperation {
     Drop { silent: bool, graph: GraphTarget },
 }
 
-impl fmt::Debug for GraphUpdateOperation {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl GraphUpdateOperation {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
             GraphUpdateOperation::InsertData { data } => {
                 write!(f, "(insertData (")?;
@@ -125,7 +131,7 @@ impl fmt::Debug for GraphUpdateOperation {
                     if i > 0 {
                         write!(f, " ")?;
                     }
-                    write!(f, "{:?}", t)?;
+                    t.fmt_sse(f)?;
                 }
                 write!(f, "))")
             }
@@ -135,7 +141,7 @@ impl fmt::Debug for GraphUpdateOperation {
                     if i > 0 {
                         write!(f, " ")?;
                     }
-                    write!(f, "{:?}", t)?;
+                    t.fmt_sse(f)?;
                 }
                 write!(f, "))")
             }
@@ -145,13 +151,15 @@ impl fmt::Debug for GraphUpdateOperation {
                 using,
                 pattern,
             } => {
-                write!(f, "(modify")?;
+                write!(f, "(modify ")?;
                 if let Some(using) = using {
-                    write!(f, " (using {:?}", using)?;
-                }
-                write!(f, " {:?}", pattern)?;
-                if using.is_some() {
+                    write!(f, " (using ")?;
+                    using.fmt_sse(f)?;
+                    write!(f, " ")?;
+                    pattern.fmt_sse(f)?;
                     write!(f, ")")?;
+                } else {
+                    pattern.fmt_sse(f)?;
                 }
                 if !delete.is_empty() {
                     write!(f, " (delete (")?;
@@ -159,7 +167,7 @@ impl fmt::Debug for GraphUpdateOperation {
                         if i > 0 {
                             write!(f, " ")?;
                         }
-                        write!(f, "{:?}", t)?;
+                        t.fmt_sse(f)?;
                     }
                     write!(f, "))")?;
                 }
@@ -169,39 +177,45 @@ impl fmt::Debug for GraphUpdateOperation {
                         if i > 0 {
                             write!(f, " ")?;
                         }
-                        write!(f, "{:?}", t)?;
+                        t.fmt_sse(f)?;
                     }
                     write!(f, "))")?;
                 }
                 write!(f, ")")
             }
             GraphUpdateOperation::Load { silent, from, to } => {
-                write!(f, "(load")?;
+                write!(f, "(load ")?;
                 if *silent {
-                    write!(f, " silent")?;
+                    write!(f, "silent ")?;
                 }
-                write!(f, " {:?} {:?}", from, to)
+                from.fmt_sse(f)?;
+                write!(f, " ")?;
+                to.fmt_sse(f)?;
+                write!(f, ")")
             }
             GraphUpdateOperation::Clear { silent, graph } => {
-                write!(f, "(clear")?;
+                write!(f, "(clear ")?;
                 if *silent {
-                    write!(f, " silent")?;
+                    write!(f, "silent ")?;
                 }
-                write!(f, " {:?})", graph)
+                graph.fmt_sse(f)?;
+                write!(f, ")")
             }
             GraphUpdateOperation::Create { silent, graph } => {
-                write!(f, "(create")?;
+                write!(f, "(create ")?;
                 if *silent {
-                    write!(f, " silent")?;
+                    write!(f, "silent ")?;
                 }
-                write!(f, " {:?})", graph)
+                graph.fmt_sse(f)?;
+                write!(f, ")")
             }
             GraphUpdateOperation::Drop { silent, graph } => {
-                write!(f, "(drop")?;
+                write!(f, "(drop ")?;
                 if *silent {
-                    write!(f, " silent")?;
+                    write!(f, "silent ")?;
                 }
-                write!(f, " {:?})", graph)
+                graph.fmt_sse(f)?;
+                write!(f, ")")
             }
         }
     }
