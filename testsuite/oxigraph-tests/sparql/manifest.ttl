@@ -13,6 +13,9 @@
     :group_concat_with_null
     :single_not_exists
     :property_list_path
+    :values_in_filter_exists
+    :values_in_filter_not_exists
+    :subquery_in_filter_not_exists
     ) .
 
 :describe rdf:type mf:QueryEvaluationTest ;
@@ -47,3 +50,18 @@
 :property_list_path rdf:type mf:PositiveSyntaxTest ;
     mf:name "PropertyListPathNotEmpty children should be ObjectListPath for consistency" ;
     mf:action <property_list_path.rq> .
+
+:values_in_filter_exists rdf:type mf:QueryEvaluationTest ;
+    mf:name "VALUES inside of FILTER EXISTS" ;
+    mf:action [ qt:query <values_in_filter_exists.rq> ] ;
+    mf:result <values_in_filter_exists.srx> .
+
+:values_in_filter_not_exists rdf:type mf:QueryEvaluationTest ;
+    mf:name "VALUES inside of FILTER EXISTS" ;
+    mf:action [ qt:query <values_in_filter_not_exists.rq> ] ;
+    mf:result <values_in_filter_exists.srx> .
+
+:subquery_in_filter_not_exists rdf:type mf:QueryEvaluationTest ;
+    mf:name "VALUES inside of FILTER EXISTS" ;
+    mf:action [ qt:query <subquery_in_filter_not_exists.rq> ] ;
+    mf:result <values_in_filter_exists.srx> .

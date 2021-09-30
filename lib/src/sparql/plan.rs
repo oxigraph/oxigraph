@@ -240,18 +240,9 @@ pub enum PlanExpression {
     Floor(Box<Self>),
     Round(Box<Self>),
     Concat(Vec<Self>),
-    SubStr(
-        Box<Self>,
-        Box<Self>,
-        Option<Box<Self>>,
-    ),
+    SubStr(Box<Self>, Box<Self>, Option<Box<Self>>),
     StrLen(Box<Self>),
-    Replace(
-        Box<Self>,
-        Box<Self>,
-        Box<Self>,
-        Option<Box<Self>>,
-    ),
+    Replace(Box<Self>, Box<Self>, Box<Self>, Option<Box<Self>>),
     UCase(Box<Self>),
     LCase(Box<Self>),
     EncodeForUri(Box<Self>),
@@ -277,11 +268,7 @@ pub enum PlanExpression {
     Sha384(Box<Self>),
     Sha512(Box<Self>),
     Coalesce(Vec<Self>),
-    If(
-        Box<Self>,
-        Box<Self>,
-        Box<Self>,
-    ),
+    If(Box<Self>, Box<Self>, Box<Self>),
     StrLang(Box<Self>, Box<Self>),
     StrDt(Box<Self>, Box<Self>),
     SameTerm(Box<Self>, Box<Self>),
@@ -289,16 +276,8 @@ pub enum PlanExpression {
     IsBlank(Box<Self>),
     IsLiteral(Box<Self>),
     IsNumeric(Box<Self>),
-    Regex(
-        Box<Self>,
-        Box<Self>,
-        Option<Box<Self>>,
-    ),
-    Triple(
-        Box<Self>,
-        Box<Self>,
-        Box<Self>,
-    ),
+    Regex(Box<Self>, Box<Self>, Option<Box<Self>>),
+    Triple(Box<Self>, Box<Self>, Box<Self>),
     Subject(Box<Self>),
     Predicate(Box<Self>),
     Object(Box<Self>),
@@ -534,8 +513,8 @@ impl EncodedTuple {
             let mut result = other.inner.clone();
             for (key, self_value) in self.inner.iter().enumerate() {
                 if let Some(self_value) = self_value {
-                    match other.inner[key] {
-                        Some(ref other_value) => {
+                    match &other.inner[key] {
+                        Some(other_value) => {
                             if self_value != other_value {
                                 return None;
                             }
@@ -549,8 +528,8 @@ impl EncodedTuple {
             let mut result = self.inner.clone();
             for (key, other_value) in other.inner.iter().enumerate() {
                 if let Some(other_value) = other_value {
-                    match self.inner[key] {
-                        Some(ref self_value) => {
+                    match &self.inner[key] {
+                        Some(self_value) => {
                             if self_value != other_value {
                                 return None;
                             }

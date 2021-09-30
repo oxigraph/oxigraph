@@ -108,7 +108,15 @@ impl SimpleEvaluator {
             PlanNode::Init => Rc::new(move |from| Box::new(once(Ok(from)))),
             PlanNode::StaticBindings { tuples } => {
                 let tuples = tuples.clone();
-                Rc::new(move |_| Box::new(tuples.clone().into_iter().map(Ok)))
+                Rc::new(move |from| {
+                    Box::new(
+                        tuples
+                            .iter()
+                            .filter_map(move |t| Some(Ok(t.combine_with(&from)?)))
+                            .collect::<Vec<_>>()
+                            .into_iter(),
+                    )
+                })
             }
             PlanNode::Service {
                 variables,
@@ -473,18 +481,23 @@ impl SimpleEvaluator {
                 let mapping = mapping.clone();
                 Rc::new(move |from| {
                     let mapping = mapping.clone();
-                    Box::new(
-                        child(EncodedTuple::with_capacity(mapping.len())).map(move |tuple| {
-                            let tuple = tuple?;
-                            let mut output_tuple = EncodedTuple::with_capacity(from.capacity());
-                            for (input_key, output_key) in mapping.iter() {
-                                if let Some(value) = tuple.get(*input_key) {
-                                    output_tuple.set(*output_key, value.clone());
-                                }
+                    // We map forward the "from" values to make sure we join wit them
+                    let mut inner_from = EncodedTuple::with_capacity(mapping.len());
+                    for (input_key, output_key) in mapping.iter() {
+                        if let Some(value) = from.get(*output_key) {
+                            inner_from.set(*input_key, value.clone());
+                        }
+                    }
+                    Box::new(child(inner_from).map(move |tuple| {
+                        let tuple = tuple?;
+                        let mut output_tuple = from.clone();
+                        for (input_key, output_key) in mapping.iter() {
+                            if let Some(value) = tuple.get(*input_key) {
+                                output_tuple.set(*output_key, value.clone());
                             }
-                            Ok(output_tuple)
-                        }),
-                    )
+                        }
+                        Ok(output_tuple)
+                    }))
                 })
             }
             PlanNode::Aggregate {

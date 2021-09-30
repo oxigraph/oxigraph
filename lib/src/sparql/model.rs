@@ -287,7 +287,9 @@ impl QuerySolution {
     /// ```
     #[inline]
     pub fn get(&self, index: impl VariableSolutionIndex) -> Option<&Term> {
-        self.values.get(index.index(self)?).and_then(std::option::Option::as_ref)
+        self.values
+            .get(index.index(self)?)
+            .and_then(std::option::Option::as_ref)
     }
 
     /// The number of variables which could be bound
