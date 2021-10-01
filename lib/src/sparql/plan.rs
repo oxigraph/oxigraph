@@ -216,7 +216,6 @@ pub enum PlanExpression {
     GreaterOrEqual(Box<Self>, Box<Self>),
     Less(Box<Self>, Box<Self>),
     LessOrEqual(Box<Self>, Box<Self>),
-    In(Box<Self>, Vec<Self>),
     Add(Box<Self>, Box<Self>),
     Subtract(Box<Self>, Box<Self>),
     Multiply(Box<Self>, Box<Self>),
@@ -398,12 +397,6 @@ impl PlanExpression {
             PlanExpression::Concat(es) | PlanExpression::Coalesce(es) => {
                 for e in es {
                     e.add_maybe_bound_variables(set);
-                }
-            }
-            PlanExpression::In(a, bs) => {
-                a.add_maybe_bound_variables(set);
-                for b in bs {
-                    b.add_maybe_bound_variables(set);
                 }
             }
             PlanExpression::Exists(e) => {

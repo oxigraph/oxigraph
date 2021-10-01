@@ -992,31 +992,6 @@ impl SimpleEvaluator {
                     )
                 })
             }
-            PlanExpression::In(e, l) => {
-                let e = self.expression_evaluator(e);
-                let l: Vec<_> = l
-                    .iter()
-                    .map(|possible| self.expression_evaluator(possible))
-                    .collect();
-                Rc::new(move |tuple| {
-                    let needed = e(tuple)?;
-                    let mut error = false;
-                    for possible in &l {
-                        if let Some(possible) = possible(tuple) {
-                            if Some(true) == equals(&needed, &possible) {
-                                return Some(true.into());
-                            }
-                        } else {
-                            error = true;
-                        }
-                    }
-                    if error {
-                        None
-                    } else {
-                        Some(false.into())
-                    }
-                })
-            }
             PlanExpression::Add(a, b) => {
                 let a = self.expression_evaluator(a);
                 let b = self.expression_evaluator(b);

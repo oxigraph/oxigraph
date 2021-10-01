@@ -363,10 +363,20 @@ impl<'a> PlanBuilder<'a> {
                 Box::new(self.build_for_expression(a, variables, graph_name)?),
                 Box::new(self.build_for_expression(b, variables, graph_name)?),
             ),
-            Expression::In(e, l) => PlanExpression::In(
-                Box::new(self.build_for_expression(e, variables, graph_name)?),
-                self.expression_list(l, variables, graph_name)?,
-            ),
+            Expression::In(e, l) => {
+                let e = self.build_for_expression(e, variables, graph_name)?;
+                l.iter()
+                    .map(|v| {
+                        Ok(PlanExpression::Equal(
+                            Box::new(e.clone()),
+                            Box::new(self.build_for_expression(v, variables, graph_name)?),
+                        ))
+                    })
+                    .reduce(|a: Result<_, EvaluationError>, b| {
+                        Ok(PlanExpression::Or(Box::new(a?), Box::new(b?)))
+                    })
+                    .unwrap_or_else(|| Ok(PlanExpression::Constant(false.into())))?
+            }
             Expression::Add(a, b) => PlanExpression::Add(
                 Box::new(self.build_for_expression(a, variables, graph_name)?),
                 Box::new(self.build_for_expression(b, variables, graph_name)?),
