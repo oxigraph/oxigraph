@@ -105,7 +105,6 @@ impl SimpleEvaluator {
         node: &PlanNode,
     ) -> Rc<dyn Fn(EncodedTuple) -> EncodedTuplesIterator> {
         match node {
-            PlanNode::Init => Rc::new(move |from| Box::new(once(Ok(from)))),
             PlanNode::StaticBindings { tuples } => {
                 let tuples = tuples.clone();
                 Rc::new(move |from| {
@@ -152,150 +151,126 @@ impl SimpleEvaluator {
                     }
                 })
             }
-            PlanNode::QuadPatternJoin {
-                child,
+            PlanNode::QuadPattern {
                 subject,
                 predicate,
                 object,
                 graph_name,
             } => {
-                let child = self.plan_evaluator(child);
                 let subject = subject.clone();
                 let predicate = predicate.clone();
                 let object = object.clone();
                 let graph_name = graph_name.clone();
                 let dataset = self.dataset.clone();
                 Rc::new(move |from| {
+                    let iter = dataset.encoded_quads_for_pattern(
+                        get_pattern_value(&subject, &from).as_ref(),
+                        get_pattern_value(&predicate, &from).as_ref(),
+                        get_pattern_value(&object, &from).as_ref(),
+                        get_pattern_value(&graph_name, &from).as_ref(),
+                    );
                     let subject = subject.clone();
                     let predicate = predicate.clone();
                     let object = object.clone();
                     let graph_name = graph_name.clone();
-                    let dataset = dataset.clone();
-                    Box::new(child(from).flat_map_ok(move |tuple| {
-                        let iter = dataset.encoded_quads_for_pattern(
-                            get_pattern_value(&subject, &tuple).as_ref(),
-                            get_pattern_value(&predicate, &tuple).as_ref(),
-                            get_pattern_value(&object, &tuple).as_ref(),
-                            get_pattern_value(&graph_name, &tuple).as_ref(),
-                        );
-                        let subject = subject.clone();
-                        let predicate = predicate.clone();
-                        let object = object.clone();
-                        let graph_name = graph_name.clone();
-                        let iter: EncodedTuplesIterator =
-                            Box::new(iter.filter_map(move |quad| match quad {
-                                Ok(quad) => {
-                                    let mut new_tuple = tuple.clone();
-                                    put_pattern_value(&subject, quad.subject, &mut new_tuple)?;
-                                    put_pattern_value(&predicate, quad.predicate, &mut new_tuple)?;
-                                    put_pattern_value(&object, quad.object, &mut new_tuple)?;
-                                    put_pattern_value(
-                                        &graph_name,
-                                        quad.graph_name,
-                                        &mut new_tuple,
-                                    )?;
-                                    Some(Ok(new_tuple))
-                                }
-                                Err(error) => Some(Err(error)),
-                            }));
-                        iter
+                    Box::new(iter.filter_map(move |quad| match quad {
+                        Ok(quad) => {
+                            let mut new_tuple = from.clone();
+                            put_pattern_value(&subject, quad.subject, &mut new_tuple)?;
+                            put_pattern_value(&predicate, quad.predicate, &mut new_tuple)?;
+                            put_pattern_value(&object, quad.object, &mut new_tuple)?;
+                            put_pattern_value(&graph_name, quad.graph_name, &mut new_tuple)?;
+                            Some(Ok(new_tuple))
+                        }
+                        Err(error) => Some(Err(error)),
                     }))
                 })
             }
-            PlanNode::PathPatternJoin {
-                child,
+            PlanNode::PathPattern {
                 subject,
                 path,
                 object,
                 graph_name,
             } => {
-                let child = self.plan_evaluator(child);
                 let eval = self.clone();
                 let subject = subject.clone();
                 let path = path.clone();
                 let object = object.clone();
                 let graph_name = graph_name.clone();
                 Rc::new(move |from| {
-                    let eval = eval.clone();
-                    let subject = subject.clone();
-                    let path = path.clone();
-                    let object = object.clone();
-                    let graph_name = graph_name.clone();
-                    Box::new(child(from).flat_map_ok(move |tuple| {
-                        let input_subject = get_pattern_value(&subject, &tuple);
-                        let input_object = get_pattern_value(&object, &tuple);
-                        let input_graph_name =
-                            if let Some(graph_name) = get_pattern_value(&graph_name, &tuple) {
-                                graph_name
-                            } else {
-                                let result: EncodedTuplesIterator =
-                                    Box::new(once(Err(EvaluationError::msg(
-                                        "Unknown graph name is not allowed when evaluating property path",
-                                    ))));
-                                return result;
-                            };
-                        match (input_subject, input_object) {
-                            (Some(input_subject), Some(input_object)) => Box::new(
+                    let input_subject = get_pattern_value(&subject, &from);
+                    let input_object = get_pattern_value(&object, &from);
+                    let input_graph_name =
+                        if let Some(graph_name) = get_pattern_value(&graph_name, &from) {
+                            graph_name
+                        } else {
+                            let result: EncodedTuplesIterator =
+                            Box::new(once(Err(EvaluationError::msg(
+                                "Unknown graph name is not allowed when evaluating property path",
+                            ))));
+                            return result;
+                        };
+                    match (input_subject, input_object) {
+                        (Some(input_subject), Some(input_object)) => Box::new(
+                            eval.eval_path_from(&path, &input_subject, &input_graph_name)
+                                .filter_map(move |o| match o {
+                                    Ok(o) => {
+                                        if o == input_object {
+                                            Some(Ok(from.clone()))
+                                        } else {
+                                            None
+                                        }
+                                    }
+                                    Err(error) => Some(Err(error)),
+                                }),
+                        ),
+                        (Some(input_subject), None) => {
+                            let object = object.clone();
+                            Box::new(
                                 eval.eval_path_from(&path, &input_subject, &input_graph_name)
                                     .filter_map(move |o| match o {
                                         Ok(o) => {
-                                            if o == input_object {
-                                                Some(Ok(tuple.clone()))
-                                            } else {
-                                                None
-                                            }
-                                        }
-                                        Err(error) => Some(Err(error)),
-                                    }),
-                            ),
-                            (Some(input_subject), None) => {
-                                let object = object.clone();
-                                Box::new(
-                                    eval.eval_path_from(&path, &input_subject, &input_graph_name)
-                                        .filter_map(move |o| match o {
-                                            Ok(o) => {
-                                                let mut new_tuple = tuple.clone();
-                                                put_pattern_value(&object, o, &mut new_tuple)?;
-                                                Some(Ok(new_tuple))
-                                            }
-                                            Err(error) => Some(Err(error)),
-                                        }),
-                                )
-                            }
-                            (None, Some(input_object)) => {
-                                let subject = subject.clone();
-                                Box::new(
-                                    eval.eval_path_to(&path, &input_object, &input_graph_name)
-                                        .filter_map(move |s| match s {
-                                            Ok(s) => {
-                                                let mut new_tuple = tuple.clone();
-                                                put_pattern_value(&subject, s, &mut new_tuple)?;
-                                                Some(Ok(new_tuple))
-                                            }
-                                            Err(error) => Some(Err(error)),
-                                        }),
-                                )
-                            }
-                            (None, None) => {
-                                let subject = subject.clone();
-                                let object = object.clone();
-                                Box::new(eval.eval_open_path(&path, &input_graph_name).filter_map(
-                                    move |so| match so {
-                                        Ok((s, o)) => {
-                                            let mut new_tuple = tuple.clone();
-                                            put_pattern_value(&subject, s, &mut new_tuple)?;
+                                            let mut new_tuple = from.clone();
                                             put_pattern_value(&object, o, &mut new_tuple)?;
                                             Some(Ok(new_tuple))
                                         }
                                         Err(error) => Some(Err(error)),
-                                    },
-                                ))
-                            }
+                                    }),
+                            )
                         }
-                    }))
+                        (None, Some(input_object)) => {
+                            let subject = subject.clone();
+                            Box::new(
+                                eval.eval_path_to(&path, &input_object, &input_graph_name)
+                                    .filter_map(move |s| match s {
+                                        Ok(s) => {
+                                            let mut new_tuple = from.clone();
+                                            put_pattern_value(&subject, s, &mut new_tuple)?;
+                                            Some(Ok(new_tuple))
+                                        }
+                                        Err(error) => Some(Err(error)),
+                                    }),
+                            )
+                        }
+                        (None, None) => {
+                            let subject = subject.clone();
+                            let object = object.clone();
+                            Box::new(eval.eval_open_path(&path, &input_graph_name).filter_map(
+                                move |so| match so {
+                                    Ok((s, o)) => {
+                                        let mut new_tuple = from.clone();
+                                        put_pattern_value(&subject, s, &mut new_tuple)?;
+                                        put_pattern_value(&object, o, &mut new_tuple)?;
+                                        Some(Ok(new_tuple))
+                                    }
+                                    Err(error) => Some(Err(error)),
+                                },
+                            ))
+                        }
+                    }
                 })
             }
-            PlanNode::Join { left, right } => {
+            PlanNode::HashJoin { left, right } => {
                 let left = self.plan_evaluator(left);
                 let right = self.plan_evaluator(right);
                 Rc::new(move |from| {
@@ -315,6 +290,17 @@ impl SimpleEvaluator {
                         right_iter: right(from),
                         buffered_results: errors,
                     })
+                })
+            }
+            PlanNode::ForLoopJoin { left, right } => {
+                let left = self.plan_evaluator(left);
+                let right = self.plan_evaluator(right);
+                Rc::new(move |from| {
+                    let right = right.clone();
+                    Box::new(left(from).flat_map(move |t| match t {
+                        Ok(t) => right(t),
+                        Err(e) => Box::new(once(Err(e))),
+                    }))
                 })
             }
             PlanNode::AntiJoin { left, right } => {

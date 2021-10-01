@@ -6,7 +6,6 @@ use std::rc::Rc;
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum PlanNode {
-    Init,
     StaticBindings {
         tuples: Vec<EncodedTuple>,
     },
@@ -17,21 +16,23 @@ pub enum PlanNode {
         graph_pattern: Rc<GraphPattern>,
         silent: bool,
     },
-    QuadPatternJoin {
-        child: Rc<Self>,
+    QuadPattern {
         subject: PatternValue,
         predicate: PatternValue,
         object: PatternValue,
         graph_name: PatternValue,
     },
-    PathPatternJoin {
-        child: Rc<Self>,
+    PathPattern {
         subject: PatternValue,
         path: Rc<PlanPropertyPath>,
         object: PatternValue,
         graph_name: PatternValue,
     },
-    Join {
+    HashJoin {
+        left: Rc<Self>,
+        right: Rc<Self>,
+    },
+    ForLoopJoin {
         left: Rc<Self>,
         right: Rc<Self>,
     },
@@ -93,7 +94,6 @@ impl PlanNode {
 
     pub fn add_maybe_bound_variables(&self, set: &mut BTreeSet<usize>) {
         match self {
-            PlanNode::Init => (),
             PlanNode::StaticBindings { tuples } => {
                 for tuple in tuples {
                     for (key, value) in tuple.iter().enumerate() {
@@ -103,8 +103,7 @@ impl PlanNode {
                     }
                 }
             }
-            PlanNode::QuadPatternJoin {
-                child,
+            PlanNode::QuadPattern {
                 subject,
                 predicate,
                 object,
@@ -122,10 +121,8 @@ impl PlanNode {
                 if let PatternValue::Variable(var) = graph_name {
                     set.insert(*var);
                 }
-                child.add_maybe_bound_variables(set);
             }
-            PlanNode::PathPatternJoin {
-                child,
+            PlanNode::PathPattern {
                 subject,
                 object,
                 graph_name,
@@ -140,7 +137,6 @@ impl PlanNode {
                 if let PatternValue::Variable(var) = graph_name {
                     set.insert(*var);
                 }
-                child.add_maybe_bound_variables(set);
             }
             PlanNode::Filter { child, expression } => {
                 expression.add_maybe_bound_variables(set);
@@ -151,8 +147,9 @@ impl PlanNode {
                     child.add_maybe_bound_variables(set);
                 }
             }
-            PlanNode::Join { left, right, .. }
-            | PlanNode::AntiJoin { left, right, .. }
+            PlanNode::HashJoin { left, right }
+            | PlanNode::ForLoopJoin { left, right, .. }
+            | PlanNode::AntiJoin { left, right }
             | PlanNode::LeftJoin { left, right, .. } => {
                 left.add_maybe_bound_variables(set);
                 right.add_maybe_bound_variables(set);

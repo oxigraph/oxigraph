@@ -43,12 +43,47 @@ impl<'a> PlanBuilder<'a> {
         graph_name: &PatternValue,
     ) -> Result<PlanNode, EvaluationError> {
         Ok(match pattern {
-            GraphPattern::Bgp { .. }
-            | GraphPattern::Path { .. }
-            | GraphPattern::Sequence { .. } => {
-                self.build_sequence(PlanNode::Init, pattern, variables, graph_name)?
-            }
-            GraphPattern::Join { left, right } => PlanNode::Join {
+            GraphPattern::Bgp { patterns } => sort_bgp(patterns)
+                .iter()
+                .map(|triple| PlanNode::QuadPattern {
+                    subject: self.pattern_value_from_term_or_variable(&triple.subject, variables),
+                    predicate: self
+                        .pattern_value_from_named_node_or_variable(&triple.predicate, variables),
+                    object: self.pattern_value_from_term_or_variable(&triple.object, variables),
+                    graph_name: graph_name.clone(),
+                })
+                .reduce(|left, right| PlanNode::ForLoopJoin {
+                    left: Rc::new(left),
+                    right: Rc::new(right),
+                })
+                .unwrap_or_else(|| PlanNode::StaticBindings {
+                    tuples: vec![EncodedTuple::with_capacity(variables.len())],
+                }),
+            GraphPattern::Path {
+                subject,
+                path,
+                object,
+            } => PlanNode::PathPattern {
+                subject: self.pattern_value_from_term_or_variable(subject, variables),
+                path: Rc::new(self.build_for_path(path)),
+                object: self.pattern_value_from_term_or_variable(object, variables),
+                graph_name: graph_name.clone(),
+            },
+            GraphPattern::Sequence(elements) => elements
+                .iter()
+                .map(|e| self.build_for_graph_pattern(e, variables, graph_name))
+                .reduce(|left, right| {
+                    Ok(PlanNode::ForLoopJoin {
+                        left: Rc::new(left?),
+                        right: Rc::new(right?),
+                    })
+                })
+                .unwrap_or_else(|| {
+                    Ok(PlanNode::StaticBindings {
+                        tuples: vec![EncodedTuple::with_capacity(variables.len())],
+                    })
+                })?,
+            GraphPattern::Join { left, right } => PlanNode::HashJoin {
                 left: Rc::new(self.build_for_graph_pattern(left, variables, graph_name)?),
                 right: Rc::new(self.build_for_graph_pattern(right, variables, graph_name)?),
             },
@@ -253,54 +288,6 @@ impl<'a> PlanBuilder<'a> {
                 plan
             }
         })
-    }
-
-    fn build_sequence(
-        &mut self,
-        mut plan: PlanNode,
-        pattern: &GraphPattern,
-        variables: &mut Vec<Variable>,
-        graph_name: &PatternValue,
-    ) -> Result<PlanNode, EvaluationError> {
-        match pattern {
-            GraphPattern::Bgp { patterns } => {
-                for triple in sort_bgp(patterns) {
-                    plan = PlanNode::QuadPatternJoin {
-                        child: Rc::new(plan),
-                        subject: self
-                            .pattern_value_from_term_or_variable(&triple.subject, variables),
-                        predicate: self.pattern_value_from_named_node_or_variable(
-                            &triple.predicate,
-                            variables,
-                        ),
-                        object: self.pattern_value_from_term_or_variable(&triple.object, variables),
-                        graph_name: graph_name.clone(),
-                    }
-                }
-                Ok(plan)
-            }
-            GraphPattern::Path {
-                subject,
-                path,
-                object,
-            } => Ok(PlanNode::PathPatternJoin {
-                child: Rc::new(plan),
-                subject: self.pattern_value_from_term_or_variable(subject, variables),
-                path: Rc::new(self.build_for_path(path)),
-                object: self.pattern_value_from_term_or_variable(object, variables),
-                graph_name: graph_name.clone(),
-            }),
-            GraphPattern::Graph { inner, name } => {
-                let graph_name = self.pattern_value_from_named_node_or_variable(name, variables);
-                self.build_sequence(plan, inner, variables, &graph_name)
-            }
-            GraphPattern::Sequence(elements) => elements.iter().fold(Ok(plan), |plan, element| {
-                self.build_sequence(plan?, element, variables, graph_name)
-            }),
-            _ => Err(EvaluationError::msg(
-                "Unexpected element in a sequence: {:?}.",
-            )),
-        }
     }
 
     fn build_for_path(&mut self, path: &PropertyPathExpression) -> PlanPropertyPath {
@@ -1073,10 +1060,9 @@ impl<'a> PlanBuilder<'a> {
 
     fn add_left_join_problematic_variables(&self, node: &PlanNode, set: &mut BTreeSet<usize>) {
         match node {
-            PlanNode::Init
-            | PlanNode::StaticBindings { .. }
-            | PlanNode::QuadPatternJoin { .. }
-            | PlanNode::PathPatternJoin { .. } => (),
+            PlanNode::StaticBindings { .. }
+            | PlanNode::QuadPattern { .. }
+            | PlanNode::PathPattern { .. } => (),
             PlanNode::Filter { child, expression } => {
                 expression.add_maybe_bound_variables(set); //TODO: only if it is not already bound
                 self.add_left_join_problematic_variables(&*child, set);
@@ -1086,7 +1072,7 @@ impl<'a> PlanBuilder<'a> {
                     self.add_left_join_problematic_variables(child, set);
                 }
             }
-            PlanNode::Join { left, right, .. } => {
+            PlanNode::HashJoin { left, right } | PlanNode::ForLoopJoin { left, right } => {
                 self.add_left_join_problematic_variables(&*left, set);
                 self.add_left_join_problematic_variables(&*right, set);
             }
