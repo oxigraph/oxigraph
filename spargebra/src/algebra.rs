@@ -522,9 +522,6 @@ pub enum GraphPattern {
         path: PropertyPathExpression,
         object: TermPattern,
     },
-    /// A set of SPARQL patterns that can be evaluated sequentially
-    /// It is a safe case of [Join](https://www.w3.org/TR/sparql11-query/#defn_algJoin)
-    Sequence(Vec<GraphPattern>),
     /// [Join](https://www.w3.org/TR/sparql11-query/#defn_algJoin)
     Join { left: Box<Self>, right: Box<Self> },
     /// [LeftJoin](https://www.w3.org/TR/sparql11-query/#defn_algLeftJoin)
@@ -611,14 +608,6 @@ impl GraphPattern {
                 path.fmt_sse(f)?;
                 write!(f, " ")?;
                 object.fmt_sse(f)?;
-                write!(f, ")")
-            }
-            Self::Sequence(elements) => {
-                write!(f, "(sequence")?;
-                for e in elements {
-                    write!(f, " ")?;
-                    e.fmt_sse(f)?;
-                }
                 write!(f, ")")
             }
             Self::Join { left, right } => {
@@ -815,12 +804,6 @@ impl fmt::Display for GraphPattern {
                 path,
                 object,
             } => write!(f, "{} {} {} .", subject, path, object),
-            Self::Sequence(elements) => {
-                for e in elements {
-                    write!(f, "{} ", e)?;
-                }
-                Ok(())
-            }
             Self::Join { left, right } => {
                 if matches!(
                     right.as_ref(),
@@ -961,11 +944,6 @@ impl GraphPattern {
                 #[cfg(feature = "rdf-star")]
                 if let TermPattern::Triple(o) = object {
                     lookup_triple_pattern_variables(o, callback)
-                }
-            }
-            Self::Sequence(elements) => {
-                for e in elements {
-                    e.lookup_in_scope_variables(callback);
                 }
             }
             Self::Join { left, right }

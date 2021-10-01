@@ -277,7 +277,10 @@ fn build_bgp(patterns: Vec<TripleOrPathPattern>) -> GraphPattern {
     if !bgp.is_empty() {
         elements.push(GraphPattern::Bgp { patterns: bgp });
     }
-    new_sequence(elements)
+    elements
+        .into_iter()
+        .reduce(new_join)
+        .unwrap_or_else(GraphPattern::default)
 }
 
 enum TripleOrPathPattern {
@@ -368,51 +371,20 @@ fn new_join(l: GraphPattern, r: GraphPattern) -> GraphPattern {
         }
     }
 
-    // Some optimizations
-    // TODO: move to a specific optimizer pass
     match (l, r) {
         (GraphPattern::Bgp { patterns: mut pl }, GraphPattern::Bgp { patterns: pr }) => {
             pl.extend(pr);
             GraphPattern::Bgp { patterns: pl }
         }
-        (GraphPattern::Sequence(mut e1), GraphPattern::Sequence(e2)) => {
-            e1.extend_from_slice(&e2);
-            GraphPattern::Sequence(e1)
-        }
-        (GraphPattern::Sequence(mut e), r)
-            if matches!(r, GraphPattern::Bgp { .. } | GraphPattern::Path { .. }) =>
+        (GraphPattern::Bgp { patterns }, other) | (other, GraphPattern::Bgp { patterns })
+            if patterns.is_empty() =>
         {
-            e.push(r);
-            GraphPattern::Sequence(e)
-        }
-        (l, GraphPattern::Sequence(mut e))
-            if matches!(l, GraphPattern::Bgp { .. } | GraphPattern::Path { .. }) =>
-        {
-            e.insert(0, l);
-            GraphPattern::Sequence(e)
-        }
-        (
-            GraphPattern::Graph { name: g1, inner: l },
-            GraphPattern::Graph { name: g2, inner: r },
-        ) if g1 == g2 => {
-            // We merge identical graphs
-            GraphPattern::Graph {
-                name: g1,
-                inner: Box::new(new_join(*l, *r)),
-            }
+            other
         }
         (l, r) => GraphPattern::Join {
             left: Box::new(l),
             right: Box::new(r),
         },
-    }
-}
-
-fn new_sequence(elements: Vec<GraphPattern>) -> GraphPattern {
-    match elements.len() {
-        0 => GraphPattern::default(),
-        1 => elements.into_iter().next().unwrap(),
-        _ => GraphPattern::Sequence(elements),
     }
 }
 
@@ -1219,14 +1191,14 @@ parser! {
 
         //[40]
         rule DeleteWhere() -> Vec<GraphUpdateOperation> = i("DELETE") _ i("WHERE") _ d:QuadPattern() {?
-            let pattern = new_sequence(d.iter().map(|q| {
+            let pattern = d.iter().map(|q| {
                 let bgp = GraphPattern::Bgp { patterns: vec![TriplePattern::new(q.subject.clone(), q.predicate.clone(), q.object.clone())] };
                 match &q.graph_name {
                     GraphNamePattern::NamedNode(graph_name) => GraphPattern::Graph { name: graph_name.clone().into(), inner: Box::new(bgp) },
                     GraphNamePattern::DefaultGraph => bgp,
                     GraphNamePattern::Variable(graph_name) => GraphPattern::Graph { name: graph_name.clone().into(), inner: Box::new(bgp) },
                 }
-            }).collect());
+            }).reduce(new_join).unwrap_or_else(GraphPattern::default);
             let delete = d.into_iter().map(GroundQuadPattern::try_from).collect::<Result<Vec<_>,_>>().map_err(|_| "Blank nodes are not allowed in DELETE WHERE")?;
             Ok(vec![GraphUpdateOperation::DeleteInsert {
                 delete,

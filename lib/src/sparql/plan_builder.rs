@@ -69,20 +69,6 @@ impl<'a> PlanBuilder<'a> {
                 object: self.pattern_value_from_term_or_variable(object, variables),
                 graph_name: graph_name.clone(),
             },
-            GraphPattern::Sequence(elements) => elements
-                .iter()
-                .map(|e| self.build_for_graph_pattern(e, variables, graph_name))
-                .reduce(|left, right| {
-                    Ok(PlanNode::ForLoopJoin {
-                        left: Rc::new(left?),
-                        right: Rc::new(right?),
-                    })
-                })
-                .unwrap_or_else(|| {
-                    Ok(PlanNode::StaticBindings {
-                        tuples: vec![EncodedTuple::with_capacity(variables.len())],
-                    })
-                })?,
             GraphPattern::Join { left, right } => PlanNode::HashJoin {
                 left: Rc::new(self.build_for_graph_pattern(left, variables, graph_name)?),
                 right: Rc::new(self.build_for_graph_pattern(right, variables, graph_name)?),
