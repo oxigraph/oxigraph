@@ -1,8 +1,7 @@
 //! Simple HTTP client
 
 use crate::error::invalid_input_error;
-use std::io;
-use std::io::{BufRead, Empty, Read, Result};
+use std::io::{Empty, Result};
 use std::time::Duration;
 
 pub struct Client {}
