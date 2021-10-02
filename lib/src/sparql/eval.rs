@@ -64,7 +64,7 @@ impl SimpleEvaluator {
     }
 
     pub fn evaluate_ask_plan(&self, plan: &PlanNode) -> Result<QueryResults, EvaluationError> {
-        let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
+        let from = EncodedTuple::with_capacity(plan.used_variables().len());
         match self.plan_evaluator(plan)(from).next() {
             Some(Ok(_)) => Ok(QueryResults::Boolean(true)),
             Some(Err(error)) => Err(error),
@@ -77,7 +77,7 @@ impl SimpleEvaluator {
         plan: &PlanNode,
         template: Vec<TripleTemplate>,
     ) -> QueryResults {
-        let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
+        let from = EncodedTuple::with_capacity(plan.used_variables().len());
         QueryResults::Graph(QueryTripleIter {
             iter: Box::new(ConstructIterator {
                 eval: self.clone(),
@@ -90,7 +90,7 @@ impl SimpleEvaluator {
     }
 
     pub fn evaluate_describe_plan(&self, plan: &PlanNode) -> QueryResults {
-        let from = EncodedTuple::with_capacity(plan.maybe_bound_variables().len());
+        let from = EncodedTuple::with_capacity(plan.used_variables().len());
         QueryResults::Graph(QueryTripleIter {
             iter: Box::new(DescribeIterator {
                 eval: self.clone(),

@@ -1060,7 +1060,12 @@ impl<'a> PlanBuilder<'a> {
             | PlanNode::QuadPattern { .. }
             | PlanNode::PathPattern { .. } => (),
             PlanNode::Filter { child, expression } => {
-                expression.add_maybe_bound_variables(set); //TODO: only if it is not already bound
+                let always_already_bound = child.always_bound_variables();
+                expression.lookup_used_variables(&mut |v| {
+                    if !always_already_bound.contains(&v) {
+                        set.insert(v);
+                    }
+                });
                 self.add_left_join_problematic_variables(&*child, set);
             }
             PlanNode::Union { children } => {
@@ -1077,21 +1082,36 @@ impl<'a> PlanBuilder<'a> {
             }
             PlanNode::LeftJoin { left, right, .. } => {
                 self.add_left_join_problematic_variables(&*left, set);
-                right.add_maybe_bound_variables(set);
+                right.lookup_used_variables(&mut |v| {
+                    set.insert(v);
+                });
             }
             PlanNode::Extend {
                 child, expression, ..
             } => {
-                expression.add_maybe_bound_variables(set); //TODO: only if it is not already bound
+                let always_already_bound = child.always_bound_variables();
+                expression.lookup_used_variables(&mut |v| {
+                    if !always_already_bound.contains(&v) {
+                        set.insert(v);
+                    }
+                });
                 self.add_left_join_problematic_variables(&*child, set);
                 self.add_left_join_problematic_variables(&*child, set);
             }
-            PlanNode::Service { child, .. }
-            | PlanNode::Sort { child, .. }
+            PlanNode::Sort { child, .. }
             | PlanNode::HashDeduplicate { child }
             | PlanNode::Skip { child, .. }
             | PlanNode::Limit { child, .. } => {
                 self.add_left_join_problematic_variables(&*child, set)
+            }
+            PlanNode::Service { child, silent, .. } => {
+                if *silent {
+                    child.lookup_used_variables(&mut |v| {
+                        set.insert(v);
+                    });
+                } else {
+                    self.add_left_join_problematic_variables(&*child, set)
+                }
             }
             PlanNode::Project { mapping, child } => {
                 let mut child_bound = BTreeSet::new();

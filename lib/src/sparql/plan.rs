@@ -1,7 +1,9 @@
 use crate::sparql::model::Variable;
 use crate::storage::numeric_encoder::EncodedTerm;
 use spargebra::algebra::GraphPattern;
-use std::collections::BTreeSet;
+use std::cmp::max;
+use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -86,19 +88,21 @@ pub enum PlanNode {
 
 impl PlanNode {
     /// Returns variables that might be bound in the result set
-    pub fn maybe_bound_variables(&self) -> BTreeSet<usize> {
+    pub fn used_variables(&self) -> BTreeSet<usize> {
         let mut set = BTreeSet::default();
-        self.add_maybe_bound_variables(&mut set);
+        self.lookup_used_variables(&mut |v| {
+            set.insert(v);
+        });
         set
     }
 
-    pub fn add_maybe_bound_variables(&self, set: &mut BTreeSet<usize>) {
+    pub fn lookup_used_variables(&self, callback: &mut impl FnMut(usize)) {
         match self {
             PlanNode::StaticBindings { tuples } => {
                 for tuple in tuples {
                     for (key, value) in tuple.iter().enumerate() {
                         if value.is_some() {
-                            set.insert(key);
+                            callback(key);
                         }
                     }
                 }
@@ -110,16 +114,16 @@ impl PlanNode {
                 graph_name,
             } => {
                 if let PatternValue::Variable(var) = subject {
-                    set.insert(*var);
+                    callback(*var);
                 }
                 if let PatternValue::Variable(var) = predicate {
-                    set.insert(*var);
+                    callback(*var);
                 }
                 if let PatternValue::Variable(var) = object {
-                    set.insert(*var);
+                    callback(*var);
                 }
                 if let PatternValue::Variable(var) = graph_name {
-                    set.insert(*var);
+                    callback(*var);
                 }
             }
             PlanNode::PathPattern {
@@ -129,50 +133,59 @@ impl PlanNode {
                 ..
             } => {
                 if let PatternValue::Variable(var) = subject {
-                    set.insert(*var);
+                    callback(*var);
                 }
                 if let PatternValue::Variable(var) = object {
-                    set.insert(*var);
+                    callback(*var);
                 }
                 if let PatternValue::Variable(var) = graph_name {
-                    set.insert(*var);
+                    callback(*var);
                 }
             }
             PlanNode::Filter { child, expression } => {
-                expression.add_maybe_bound_variables(set);
-                child.add_maybe_bound_variables(set);
+                expression.lookup_used_variables(callback);
+                child.lookup_used_variables(callback);
             }
             PlanNode::Union { children } => {
                 for child in children.iter() {
-                    child.add_maybe_bound_variables(set);
+                    child.lookup_used_variables(callback);
                 }
             }
             PlanNode::HashJoin { left, right }
             | PlanNode::ForLoopJoin { left, right, .. }
             | PlanNode::AntiJoin { left, right }
             | PlanNode::LeftJoin { left, right, .. } => {
-                left.add_maybe_bound_variables(set);
-                right.add_maybe_bound_variables(set);
+                left.lookup_used_variables(callback);
+                right.lookup_used_variables(callback);
             }
             PlanNode::Extend {
                 child,
                 position,
                 expression,
             } => {
-                set.insert(*position);
-                expression.add_maybe_bound_variables(set);
-                child.add_maybe_bound_variables(set);
+                callback(*position);
+                expression.lookup_used_variables(callback);
+                child.lookup_used_variables(callback);
             }
-            PlanNode::Service { child, .. }
-            | PlanNode::Sort { child, .. }
+            PlanNode::Sort { child, .. }
             | PlanNode::HashDeduplicate { child }
             | PlanNode::Skip { child, .. }
-            | PlanNode::Limit { child, .. } => child.add_maybe_bound_variables(set),
+            | PlanNode::Limit { child, .. } => child.lookup_used_variables(callback),
+            PlanNode::Service {
+                child,
+                service_name,
+                ..
+            } => {
+                if let PatternValue::Variable(v) = service_name {
+                    callback(*v);
+                }
+                child.lookup_used_variables(callback);
+            }
             PlanNode::Project { mapping, child } => {
-                let child_bound = child.maybe_bound_variables();
+                let child_bound = child.used_variables();
                 for (child_i, output_i) in mapping.iter() {
                     if child_bound.contains(child_i) {
-                        set.insert(*output_i);
+                        callback(*output_i);
                     }
                 }
             }
@@ -181,10 +194,141 @@ impl PlanNode {
                 aggregates,
                 ..
             } => {
-                set.extend(key_mapping.iter().map(|(_, o)| o));
-                for (_, var) in aggregates.iter() {
-                    set.insert(*var);
+                for (_, o) in key_mapping.iter() {
+                    callback(*o);
                 }
+                for (_, var) in aggregates.iter() {
+                    callback(*var);
+                }
+            }
+        }
+    }
+
+    /// Returns subset of the set of variables that are always bound in the result set
+    ///
+    /// (subset because this function is not perfect yet)
+    pub fn always_bound_variables(&self) -> BTreeSet<usize> {
+        let mut set = BTreeSet::default();
+        self.lookup_always_bound_variables(&mut |v| {
+            set.insert(v);
+        });
+        set
+    }
+
+    pub fn lookup_always_bound_variables(&self, callback: &mut impl FnMut(usize)) {
+        match self {
+            PlanNode::StaticBindings { tuples } => {
+                let mut variables = BTreeMap::default(); // value true iff always bound
+                let max_tuple_length = tuples.iter().map(|t| t.capacity()).fold(0, max);
+                for tuple in tuples {
+                    for key in 0..max_tuple_length {
+                        match variables.entry(key) {
+                            Entry::Vacant(e) => {
+                                e.insert(tuple.contains(key));
+                            }
+                            Entry::Occupied(mut e) => {
+                                if !tuple.contains(key) {
+                                    e.insert(false);
+                                }
+                            }
+                        }
+                    }
+                }
+                for (k, v) in variables {
+                    if v {
+                        callback(k);
+                    }
+                }
+            }
+            PlanNode::QuadPattern {
+                subject,
+                predicate,
+                object,
+                graph_name,
+            } => {
+                if let PatternValue::Variable(var) = subject {
+                    callback(*var);
+                }
+                if let PatternValue::Variable(var) = predicate {
+                    callback(*var);
+                }
+                if let PatternValue::Variable(var) = object {
+                    callback(*var);
+                }
+                if let PatternValue::Variable(var) = graph_name {
+                    callback(*var);
+                }
+            }
+            PlanNode::PathPattern {
+                subject,
+                object,
+                graph_name,
+                ..
+            } => {
+                if let PatternValue::Variable(var) = subject {
+                    callback(*var);
+                }
+                if let PatternValue::Variable(var) = object {
+                    callback(*var);
+                }
+                if let PatternValue::Variable(var) = graph_name {
+                    callback(*var);
+                }
+            }
+            PlanNode::Filter { child, .. } => {
+                //TODO: have a look at the expression to know if it filters out unbound variables
+                child.lookup_always_bound_variables(callback);
+            }
+            PlanNode::Union { children } => {
+                if let Some(vars) = children
+                    .iter()
+                    .map(|c| c.always_bound_variables())
+                    .reduce(|a, b| a.intersection(&b).copied().collect())
+                {
+                    for v in vars {
+                        callback(v);
+                    }
+                }
+            }
+            PlanNode::HashJoin { left, right } | PlanNode::ForLoopJoin { left, right, .. } => {
+                left.lookup_always_bound_variables(callback);
+                right.lookup_always_bound_variables(callback);
+            }
+            PlanNode::AntiJoin { left, .. } | PlanNode::LeftJoin { left, .. } => {
+                left.lookup_always_bound_variables(callback);
+            }
+            PlanNode::Extend {
+                child,
+                position,
+                expression,
+            } => {
+                if matches!(expression.as_ref(), PlanExpression::Constant(_)) {
+                    // TODO: more cases?
+                    callback(*position);
+                }
+                child.lookup_always_bound_variables(callback);
+            }
+            PlanNode::Sort { child, .. }
+            | PlanNode::HashDeduplicate { child }
+            | PlanNode::Skip { child, .. }
+            | PlanNode::Limit { child, .. } => child.lookup_always_bound_variables(callback),
+            PlanNode::Service { child, silent, .. } => {
+                if *silent {
+                    // none, might return a null tuple
+                } else {
+                    child.lookup_always_bound_variables(callback)
+                }
+            }
+            PlanNode::Project { mapping, child } => {
+                let child_bound = child.always_bound_variables();
+                for (child_i, output_i) in mapping.iter() {
+                    if child_bound.contains(child_i) {
+                        callback(*output_i);
+                    }
+                }
+            }
+            PlanNode::Aggregate { .. } => {
+                //TODO
             }
         }
     }
@@ -293,10 +437,10 @@ pub enum PlanExpression {
 }
 
 impl PlanExpression {
-    pub fn add_maybe_bound_variables(&self, set: &mut BTreeSet<usize>) {
+    pub fn lookup_used_variables(&self, callback: &mut impl FnMut(usize)) {
         match self {
             PlanExpression::Variable(v) | PlanExpression::Bound(v) => {
-                set.insert(*v);
+                callback(*v);
             }
             PlanExpression::Constant(_)
             | PlanExpression::Rand
@@ -352,7 +496,7 @@ impl PlanExpression {
             | PlanExpression::DurationCast(e)
             | PlanExpression::YearMonthDurationCast(e)
             | PlanExpression::DayTimeDurationCast(e)
-            | PlanExpression::StringCast(e) => e.add_maybe_bound_variables(set),
+            | PlanExpression::StringCast(e) => e.lookup_used_variables(callback),
             PlanExpression::Or(a, b)
             | PlanExpression::And(a, b)
             | PlanExpression::Equal(a, b)
@@ -375,32 +519,32 @@ impl PlanExpression {
             | PlanExpression::SameTerm(a, b)
             | PlanExpression::SubStr(a, b, None)
             | PlanExpression::Regex(a, b, None) => {
-                a.add_maybe_bound_variables(set);
-                b.add_maybe_bound_variables(set);
+                a.lookup_used_variables(callback);
+                b.lookup_used_variables(callback);
             }
             PlanExpression::If(a, b, c)
             | PlanExpression::SubStr(a, b, Some(c))
             | PlanExpression::Regex(a, b, Some(c))
             | PlanExpression::Replace(a, b, c, None)
             | PlanExpression::Triple(a, b, c) => {
-                a.add_maybe_bound_variables(set);
-                b.add_maybe_bound_variables(set);
-                c.add_maybe_bound_variables(set);
+                a.lookup_used_variables(callback);
+                b.lookup_used_variables(callback);
+                c.lookup_used_variables(callback);
             }
             PlanExpression::Replace(a, b, c, Some(d)) => {
-                a.add_maybe_bound_variables(set);
-                b.add_maybe_bound_variables(set);
-                c.add_maybe_bound_variables(set);
-                d.add_maybe_bound_variables(set);
+                a.lookup_used_variables(callback);
+                b.lookup_used_variables(callback);
+                c.lookup_used_variables(callback);
+                d.lookup_used_variables(callback);
             }
 
             PlanExpression::Concat(es) | PlanExpression::Coalesce(es) => {
                 for e in es {
-                    e.add_maybe_bound_variables(set);
+                    e.lookup_used_variables(callback);
                 }
             }
             PlanExpression::Exists(e) => {
-                e.add_maybe_bound_variables(set);
+                e.lookup_used_variables(callback);
             }
         }
     }
