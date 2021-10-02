@@ -69,10 +69,28 @@ impl<'a> PlanBuilder<'a> {
                 object: self.pattern_value_from_term_or_variable(object, variables),
                 graph_name: graph_name.clone(),
             },
-            GraphPattern::Join { left, right } => PlanNode::HashJoin {
-                left: Rc::new(self.build_for_graph_pattern(left, variables, graph_name)?),
-                right: Rc::new(self.build_for_graph_pattern(right, variables, graph_name)?),
-            },
+            GraphPattern::Join { left, right } => {
+                let left = self.build_for_graph_pattern(left, variables, graph_name)?;
+                let right = self.build_for_graph_pattern(right, variables, graph_name)?;
+                if self.is_fit_for_for_loop_join(&left)
+                    && self.is_fit_for_for_loop_join(&right)
+                    && left
+                        .always_bound_variables()
+                        .intersection(&right.always_bound_variables())
+                        .next()
+                        .is_some()
+                {
+                    PlanNode::ForLoopJoin {
+                        left: Rc::new(left),
+                        right: Rc::new(right),
+                    }
+                } else {
+                    PlanNode::HashJoin {
+                        left: Rc::new(left),
+                        right: Rc::new(right),
+                    }
+                }
+            }
             GraphPattern::LeftJoin {
                 left,
                 right,
@@ -1133,6 +1151,34 @@ impl<'a> PlanBuilder<'a> {
                     set.insert(*var);
                 }
             }
+        }
+    }
+
+    fn is_fit_for_for_loop_join(&self, node: &PlanNode) -> bool {
+        //TODO: think more about it
+        match node {
+            PlanNode::StaticBindings { .. }
+            | PlanNode::QuadPattern { .. }
+            | PlanNode::PathPattern { .. }
+            | PlanNode::ForLoopJoin { .. } => true,
+            PlanNode::HashJoin { left, right } => {
+                self.is_fit_for_for_loop_join(left) && self.is_fit_for_for_loop_join(right)
+            }
+            PlanNode::Filter { child, .. } | PlanNode::Extend { child, .. } => {
+                self.is_fit_for_for_loop_join(child)
+            }
+            PlanNode::Union { children } => {
+                children.iter().all(|c| self.is_fit_for_for_loop_join(c))
+            }
+            PlanNode::AntiJoin { .. }
+            | PlanNode::LeftJoin { .. }
+            | PlanNode::Service { .. }
+            | PlanNode::Sort { .. }
+            | PlanNode::HashDeduplicate { .. }
+            | PlanNode::Skip { .. }
+            | PlanNode::Limit { .. }
+            | PlanNode::Project { .. }
+            | PlanNode::Aggregate { .. } => false,
         }
     }
 
