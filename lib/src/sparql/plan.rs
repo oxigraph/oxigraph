@@ -30,14 +30,17 @@ pub enum PlanNode {
         object: PatternValue,
         graph_name: PatternValue,
     },
+    /// Streams left and materializes right join
     HashJoin {
         left: Rc<Self>,
         right: Rc<Self>,
     },
+    /// Right nested in left loop
     ForLoopJoin {
         left: Rc<Self>,
         right: Rc<Self>,
     },
+    /// Streams left and materializes right anti join
     AntiJoin {
         left: Rc<Self>,
         right: Rc<Self>,
@@ -49,6 +52,7 @@ pub enum PlanNode {
     Union {
         children: Vec<Rc<Self>>,
     },
+    /// right nested in left loop
     LeftJoin {
         left: Rc<Self>,
         right: Rc<Self>,
