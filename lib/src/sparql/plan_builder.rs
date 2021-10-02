@@ -104,12 +104,10 @@ impl<'a> PlanBuilder<'a> {
 
                 //We add the extra filter if needed
                 let right = if let Some(expr) = expression {
-                    PlanNode::Filter {
-                        child: Box::new(right),
-                        expression: Box::new(
-                            self.build_for_expression(expr, variables, graph_name)?,
-                        ),
-                    }
+                    Self::push_filter(
+                        Box::new(right),
+                        Box::new(self.build_for_expression(expr, variables, graph_name)?),
+                    )
                 } else {
                     right
                 };
@@ -120,10 +118,10 @@ impl<'a> PlanBuilder<'a> {
                     possible_problem_vars: Rc::new(possible_problem_vars.into_iter().collect()),
                 }
             }
-            GraphPattern::Filter { expr, inner } => PlanNode::Filter {
-                child: Box::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
-                expression: Box::new(self.build_for_expression(expr, variables, graph_name)?),
-            },
+            GraphPattern::Filter { expr, inner } => Self::push_filter(
+                Box::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
+                Box::new(self.build_for_expression(expr, variables, graph_name)?),
+            ),
             GraphPattern::Union { left, right } => {
                 //We flatten the UNIONs
                 let mut stack: Vec<&GraphPattern> = vec![left, right];
@@ -1179,6 +1177,108 @@ impl<'a> PlanBuilder<'a> {
             | PlanNode::Limit { .. }
             | PlanNode::Project { .. }
             | PlanNode::Aggregate { .. } => false,
+        }
+    }
+
+    fn push_filter(node: Box<PlanNode>, filter: Box<PlanExpression>) -> PlanNode {
+        if let PlanExpression::And(f1, f2) = *filter {
+            return Self::push_filter(Box::new(Self::push_filter(node, f1)), f2);
+        }
+        let mut filter_variables = BTreeSet::new();
+        filter.lookup_used_variables(&mut |v| {
+            filter_variables.insert(v);
+        });
+        match *node {
+            PlanNode::HashJoin { left, right } => {
+                if filter_variables.iter().all(|v| left.is_variable_bound(*v)) {
+                    if filter_variables.iter().all(|v| right.is_variable_bound(*v)) {
+                        PlanNode::HashJoin {
+                            left: Box::new(Self::push_filter(left, filter.clone())),
+                            right: Box::new(Self::push_filter(right, filter)),
+                        }
+                    } else {
+                        PlanNode::HashJoin {
+                            left: Box::new(Self::push_filter(left, filter)),
+                            right,
+                        }
+                    }
+                } else if filter_variables.iter().all(|v| right.is_variable_bound(*v)) {
+                    PlanNode::HashJoin {
+                        left,
+                        right: Box::new(Self::push_filter(right, filter)),
+                    }
+                } else {
+                    PlanNode::Filter {
+                        child: Box::new(PlanNode::HashJoin { left, right }),
+                        expression: filter,
+                    }
+                }
+            }
+            PlanNode::ForLoopJoin { left, right } => {
+                if filter_variables.iter().all(|v| left.is_variable_bound(*v)) {
+                    PlanNode::ForLoopJoin {
+                        left: Box::new(Self::push_filter(left, filter)),
+                        right,
+                    }
+                } else if filter_variables.iter().all(|v| right.is_variable_bound(*v)) {
+                    PlanNode::ForLoopJoin {
+                        //TODO: should we do that always?
+                        left,
+                        right: Box::new(Self::push_filter(right, filter)),
+                    }
+                } else {
+                    PlanNode::Filter {
+                        child: Box::new(PlanNode::HashJoin { left, right }),
+                        expression: filter,
+                    }
+                }
+            }
+            PlanNode::Extend {
+                child,
+                expression,
+                position,
+            } => {
+                if filter_variables.iter().all(|v| child.is_variable_bound(*v)) {
+                    PlanNode::Extend {
+                        child: Box::new(Self::push_filter(child, filter)),
+                        expression,
+                        position,
+                    }
+                } else {
+                    PlanNode::Filter {
+                        child: Box::new(PlanNode::Extend {
+                            child,
+                            expression,
+                            position,
+                        }),
+                        expression: filter,
+                    }
+                }
+            }
+            PlanNode::Filter { child, expression } => {
+                if filter_variables.iter().all(|v| child.is_variable_bound(*v)) {
+                    PlanNode::Filter {
+                        child: Box::new(Self::push_filter(child, filter)),
+                        expression,
+                    }
+                } else {
+                    PlanNode::Filter {
+                        child,
+                        expression: Box::new(PlanExpression::And(expression, filter)),
+                    }
+                }
+            }
+            PlanNode::Union { children } => PlanNode::Union {
+                children: children
+                    .into_iter()
+                    .map(|c| Self::push_filter(Box::new(c), filter.clone()))
+                    .collect(),
+            },
+            node => PlanNode::Filter {
+                //TODO: more?
+                child: Box::new(node),
+                expression: filter,
+            },
         }
     }
 

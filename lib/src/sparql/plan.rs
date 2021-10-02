@@ -336,6 +336,16 @@ impl PlanNode {
             }
         }
     }
+
+    pub fn is_variable_bound(&self, variable: usize) -> bool {
+        let mut found = false;
+        self.lookup_always_bound_variables(&mut |v| {
+            if v == variable {
+                found = true;
+            }
+        });
+        found
+    }
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
