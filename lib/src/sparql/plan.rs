@@ -14,7 +14,7 @@ pub enum PlanNode {
     Service {
         service_name: PatternValue,
         variables: Rc<Vec<Variable>>,
-        child: Rc<Self>,
+        child: Box<Self>,
         graph_pattern: Rc<GraphPattern>,
         silent: bool,
     },
@@ -32,59 +32,59 @@ pub enum PlanNode {
     },
     /// Streams left and materializes right join
     HashJoin {
-        left: Rc<Self>,
-        right: Rc<Self>,
+        left: Box<Self>,
+        right: Box<Self>,
     },
     /// Right nested in left loop
     ForLoopJoin {
-        left: Rc<Self>,
-        right: Rc<Self>,
+        left: Box<Self>,
+        right: Box<Self>,
     },
     /// Streams left and materializes right anti join
     AntiJoin {
-        left: Rc<Self>,
-        right: Rc<Self>,
+        left: Box<Self>,
+        right: Box<Self>,
     },
     Filter {
-        child: Rc<Self>,
-        expression: Rc<PlanExpression>,
+        child: Box<Self>,
+        expression: Box<PlanExpression>,
     },
     Union {
-        children: Vec<Rc<Self>>,
+        children: Vec<Self>,
     },
     /// right nested in left loop
     LeftJoin {
-        left: Rc<Self>,
-        right: Rc<Self>,
+        left: Box<Self>,
+        right: Box<Self>,
         possible_problem_vars: Rc<Vec<usize>>, //Variables that should not be part of the entry of the left join
     },
     Extend {
-        child: Rc<Self>,
+        child: Box<Self>,
         position: usize,
-        expression: Rc<PlanExpression>,
+        expression: Box<PlanExpression>,
     },
     Sort {
-        child: Rc<Self>,
+        child: Box<Self>,
         by: Vec<Comparator>,
     },
     HashDeduplicate {
-        child: Rc<Self>,
+        child: Box<Self>,
     },
     Skip {
-        child: Rc<Self>,
+        child: Box<Self>,
         count: usize,
     },
     Limit {
-        child: Rc<Self>,
+        child: Box<Self>,
         count: usize,
     },
     Project {
-        child: Rc<Self>,
+        child: Box<Self>,
         mapping: Rc<Vec<(usize, usize)>>, // pairs of (variable key in child, variable key in output)
     },
     Aggregate {
         // By definition the group by key are the range 0..key_mapping.len()
-        child: Rc<Self>,
+        child: Box<Self>,
         key_mapping: Rc<Vec<(usize, usize)>>, // aggregate key pairs of (variable key in child, variable key in output)
         aggregates: Rc<Vec<(PlanAggregation, usize)>>,
     },

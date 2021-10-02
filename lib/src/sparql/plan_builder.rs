@@ -53,8 +53,8 @@ impl<'a> PlanBuilder<'a> {
                     graph_name: graph_name.clone(),
                 })
                 .reduce(|left, right| PlanNode::ForLoopJoin {
-                    left: Rc::new(left),
-                    right: Rc::new(right),
+                    left: Box::new(left),
+                    right: Box::new(right),
                 })
                 .unwrap_or_else(|| PlanNode::StaticBindings {
                     tuples: vec![EncodedTuple::with_capacity(variables.len())],
@@ -81,13 +81,13 @@ impl<'a> PlanBuilder<'a> {
                         .is_some()
                 {
                     PlanNode::ForLoopJoin {
-                        left: Rc::new(left),
-                        right: Rc::new(right),
+                        left: Box::new(left),
+                        right: Box::new(right),
                     }
                 } else {
                     PlanNode::HashJoin {
-                        left: Rc::new(left),
-                        right: Rc::new(right),
+                        left: Box::new(left),
+                        right: Box::new(right),
                     }
                 }
             }
@@ -105,8 +105,8 @@ impl<'a> PlanBuilder<'a> {
                 //We add the extra filter if needed
                 let right = if let Some(expr) = expression {
                     PlanNode::Filter {
-                        child: Rc::new(right),
-                        expression: Rc::new(
+                        child: Box::new(right),
+                        expression: Box::new(
                             self.build_for_expression(expr, variables, graph_name)?,
                         ),
                     }
@@ -115,14 +115,14 @@ impl<'a> PlanBuilder<'a> {
                 };
 
                 PlanNode::LeftJoin {
-                    left: Rc::new(left),
-                    right: Rc::new(right),
+                    left: Box::new(left),
+                    right: Box::new(right),
                     possible_problem_vars: Rc::new(possible_problem_vars.into_iter().collect()),
                 }
             }
             GraphPattern::Filter { expr, inner } => PlanNode::Filter {
-                child: Rc::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
-                expression: Rc::new(self.build_for_expression(expr, variables, graph_name)?),
+                child: Box::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
+                expression: Box::new(self.build_for_expression(expr, variables, graph_name)?),
             },
             GraphPattern::Union { left, right } => {
                 //We flatten the UNIONs
@@ -135,9 +135,9 @@ impl<'a> PlanBuilder<'a> {
                             stack.push(left);
                             stack.push(right);
                         }
-                        Some(p) => children.push(Rc::new(
-                            self.build_for_graph_pattern(p, variables, graph_name)?,
-                        )),
+                        Some(p) => {
+                            children.push(self.build_for_graph_pattern(p, variables, graph_name)?)
+                        }
                     }
                 }
                 PlanNode::Union { children }
@@ -151,13 +151,13 @@ impl<'a> PlanBuilder<'a> {
                 variable,
                 expression,
             } => PlanNode::Extend {
-                child: Rc::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
+                child: Box::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
                 position: variable_key(variables, variable),
-                expression: Rc::new(self.build_for_expression(expression, variables, graph_name)?),
+                expression: Box::new(self.build_for_expression(expression, variables, graph_name)?),
             },
             GraphPattern::Minus { left, right } => PlanNode::AntiJoin {
-                left: Rc::new(self.build_for_graph_pattern(left, variables, graph_name)?),
-                right: Rc::new(self.build_for_graph_pattern(right, variables, graph_name)?),
+                left: Box::new(self.build_for_graph_pattern(left, variables, graph_name)?),
+                right: Box::new(self.build_for_graph_pattern(right, variables, graph_name)?),
             },
             GraphPattern::Service {
                 name,
@@ -175,7 +175,7 @@ impl<'a> PlanBuilder<'a> {
                             .map(|v| OxVariable::new_unchecked(v.name.clone()))
                             .collect(),
                     ),
-                    child: Rc::new(child),
+                    child: Box::new(child),
                     graph_pattern: Rc::new(inner.as_ref().clone()),
                     silent: *silent,
                 }
@@ -190,7 +190,7 @@ impl<'a> PlanBuilder<'a> {
                     self.convert_pattern_value_id(graph_name, variables, &mut inner_variables);
 
                 PlanNode::Aggregate {
-                    child: Rc::new(self.build_for_graph_pattern(
+                    child: Box::new(self.build_for_graph_pattern(
                         inner,
                         &mut inner_variables,
                         &inner_graph_name,
@@ -237,7 +237,7 @@ impl<'a> PlanBuilder<'a> {
                     })
                     .collect();
                 PlanNode::Sort {
-                    child: Rc::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
+                    child: Box::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
                     by: condition?,
                 }
             }
@@ -249,7 +249,7 @@ impl<'a> PlanBuilder<'a> {
                 let inner_graph_name =
                     self.convert_pattern_value_id(graph_name, variables, &mut inner_variables);
                 PlanNode::Project {
-                    child: Rc::new(self.build_for_graph_pattern(
+                    child: Box::new(self.build_for_graph_pattern(
                         inner,
                         &mut inner_variables,
                         &inner_graph_name,
@@ -266,7 +266,7 @@ impl<'a> PlanBuilder<'a> {
                 }
             }
             GraphPattern::Distinct { inner } => PlanNode::HashDeduplicate {
-                child: Rc::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
+                child: Box::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
             },
             GraphPattern::Reduced { inner } => {
                 self.build_for_graph_pattern(inner, variables, graph_name)?
@@ -279,13 +279,13 @@ impl<'a> PlanBuilder<'a> {
                 let mut plan = self.build_for_graph_pattern(inner, variables, graph_name)?;
                 if *start > 0 {
                     plan = PlanNode::Skip {
-                        child: Rc::new(plan),
+                        child: Box::new(plan),
                         count: *start,
                     };
                 }
                 if let Some(length) = length {
                     plan = PlanNode::Limit {
-                        child: Rc::new(plan),
+                        child: Box::new(plan),
                         count: *length,
                     };
                 }
