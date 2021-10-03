@@ -52,10 +52,7 @@ impl<'a> PlanBuilder<'a> {
                     object: self.pattern_value_from_term_or_variable(&triple.object, variables),
                     graph_name: graph_name.clone(),
                 })
-                .reduce(|left, right| PlanNode::ForLoopJoin {
-                    left: Box::new(left),
-                    right: Box::new(right),
-                })
+                .reduce(Self::new_join)
                 .unwrap_or_else(|| PlanNode::StaticBindings {
                     tuples: vec![EncodedTuple::with_capacity(variables.len())],
                 }),
@@ -69,28 +66,10 @@ impl<'a> PlanBuilder<'a> {
                 object: self.pattern_value_from_term_or_variable(object, variables),
                 graph_name: graph_name.clone(),
             },
-            GraphPattern::Join { left, right } => {
-                let left = self.build_for_graph_pattern(left, variables, graph_name)?;
-                let right = self.build_for_graph_pattern(right, variables, graph_name)?;
-                if self.is_fit_for_for_loop_join(&left)
-                    && self.is_fit_for_for_loop_join(&right)
-                    && left
-                        .always_bound_variables()
-                        .intersection(&right.always_bound_variables())
-                        .next()
-                        .is_some()
-                {
-                    PlanNode::ForLoopJoin {
-                        left: Box::new(left),
-                        right: Box::new(right),
-                    }
-                } else {
-                    PlanNode::HashJoin {
-                        left: Box::new(left),
-                        right: Box::new(right),
-                    }
-                }
-            }
+            GraphPattern::Join { left, right } => Self::new_join(
+                self.build_for_graph_pattern(left, variables, graph_name)?,
+                self.build_for_graph_pattern(right, variables, graph_name)?,
+            ),
             GraphPattern::LeftJoin {
                 left,
                 right,
@@ -1152,7 +1131,28 @@ impl<'a> PlanBuilder<'a> {
         }
     }
 
-    fn is_fit_for_for_loop_join(&self, node: &PlanNode) -> bool {
+    fn new_join(left: PlanNode, right: PlanNode) -> PlanNode {
+        if Self::is_fit_for_for_loop_join(&left)
+            && Self::is_fit_for_for_loop_join(&right)
+            && left
+                .always_bound_variables()
+                .intersection(&right.always_bound_variables())
+                .next()
+                .is_some()
+        {
+            PlanNode::ForLoopJoin {
+                left: Box::new(left),
+                right: Box::new(right),
+            }
+        } else {
+            PlanNode::HashJoin {
+                left: Box::new(left),
+                right: Box::new(right),
+            }
+        }
+    }
+
+    fn is_fit_for_for_loop_join(node: &PlanNode) -> bool {
         //TODO: think more about it
         match node {
             PlanNode::StaticBindings { .. }
@@ -1160,13 +1160,13 @@ impl<'a> PlanBuilder<'a> {
             | PlanNode::PathPattern { .. }
             | PlanNode::ForLoopJoin { .. } => true,
             PlanNode::HashJoin { left, right } => {
-                self.is_fit_for_for_loop_join(left) && self.is_fit_for_for_loop_join(right)
+                Self::is_fit_for_for_loop_join(left) && Self::is_fit_for_for_loop_join(right)
             }
             PlanNode::Filter { child, .. } | PlanNode::Extend { child, .. } => {
-                self.is_fit_for_for_loop_join(child)
+                Self::is_fit_for_for_loop_join(child)
             }
             PlanNode::Union { children } => {
-                children.iter().all(|c| self.is_fit_for_for_loop_join(c))
+                children.iter().all(|c| Self::is_fit_for_for_loop_join(c))
             }
             PlanNode::AntiJoin { .. }
             | PlanNode::LeftJoin { .. }
