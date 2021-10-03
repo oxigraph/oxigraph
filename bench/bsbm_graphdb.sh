@@ -12,7 +12,7 @@ curl -f -X POST http://localhost:7200/rest/repositories -H 'Content-Type:applica
 '
 curl -f -X PUT -H 'Content-Type:application/n-triples' --data-binary "@explore-${DATASET_SIZE}.nt" http://localhost:7200/repositories/test/statements
 ./testdriver -mt ${PARALLELISM} -ucf usecases/explore/sparql.txt -o "../bsbm.explore.graphdb.${DATASET_SIZE}.${PARALLELISM}.9.3.3.xml" http://localhost:7200/repositories/test
-./testdriver -mt ${PARALLELISM} -ucf usecases/explore/sparql.txt -o "../bsbm.exploreAndUpdate.graphdb.${DATASET_SIZE}.${PARALLELISM}.9.3.3.xml" http://localhost:7200/repositories/test -u http://localhost:7200/repositories/test -udataset "explore-update-${DATASET_SIZE}.nt"
+./testdriver -mt ${PARALLELISM} -ucf usecases/exploreAndUpdate/sparql.txt -o "../bsbm.exploreAndUpdate.graphdb.${DATASET_SIZE}.${PARALLELISM}.9.3.3.xml" http://localhost:7200/repositories/test -u http://localhost:7200/repositories/test -udataset "explore-update-${DATASET_SIZE}.nt"
 #./testdriver -mt ${PARALLELISM} -ucf usecases/businessIntelligence/sparql.txt -o "../bsbm.businessIntelligence.graphdb.${DATASET_SIZE}.${PARALLELISM}.9.3.3.xml" http://localhost:7200/repositories/test
 kill $!
 sleep 5
