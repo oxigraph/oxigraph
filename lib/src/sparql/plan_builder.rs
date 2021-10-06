@@ -8,6 +8,7 @@ use rand::random;
 use spargebra::algebra::*;
 use spargebra::term::*;
 use std::collections::{BTreeSet, HashSet};
+use std::mem::swap;
 use std::rc::Rc;
 
 pub struct PlanBuilder<'a> {
@@ -1131,25 +1132,37 @@ impl<'a> PlanBuilder<'a> {
         }
     }
 
-    fn new_join(left: PlanNode, right: PlanNode) -> PlanNode {
+    fn new_join(mut left: PlanNode, mut right: PlanNode) -> PlanNode {
         if Self::is_fit_for_for_loop_join(&left)
             && Self::is_fit_for_for_loop_join(&right)
-            && left
-                .always_bound_variables()
-                .intersection(&right.always_bound_variables())
-                .next()
-                .is_some()
+            && Self::has_some_common_variables(&left, &right)
         {
+            // We first use VALUES to filter the following patterns evaluation
+            if matches!(right, PlanNode::StaticBindings { .. }) {
+                swap(&mut left, &mut right);
+            }
             PlanNode::ForLoopJoin {
                 left: Box::new(left),
                 right: Box::new(right),
             }
         } else {
+            // Let's avoid materializing right if left is already materialized
+            // TODO: be smarter and reuse already existing materialization
+            if matches!(left, PlanNode::StaticBindings { .. }) {
+                swap(&mut left, &mut right);
+            }
             PlanNode::HashJoin {
                 left: Box::new(left),
                 right: Box::new(right),
             }
         }
+    }
+
+    fn has_some_common_variables(left: &PlanNode, right: &PlanNode) -> bool {
+        left.always_bound_variables()
+            .intersection(&right.always_bound_variables())
+            .next()
+            .is_some()
     }
 
     fn is_fit_for_for_loop_join(node: &PlanNode) -> bool {
