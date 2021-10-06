@@ -12,7 +12,7 @@ SPARQL server based on Oxigraph
 edition = "2018"
 
 [dependencies]
-oxhttp = { git = "https://github.com/oxigraph/oxhttp", branch = "master" }
+oxhttp = "0.1"
 clap = "2"
 oxigraph = { version = "0.3.0-dev", path = "../lib", features = ["http_client"] }
 rand = "0.8"
