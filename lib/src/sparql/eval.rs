@@ -20,9 +20,10 @@ use sha1::Sha1;
 use sha2::{Sha256, Sha384, Sha512};
 use spargebra::algebra::GraphPattern;
 use std::cmp::Ordering;
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 use std::iter::Iterator;
 use std::iter::{empty, once};
 use std::rc::Rc;
@@ -301,27 +302,17 @@ impl SimpleEvaluator {
                     // Real hash join
                     Rc::new(move |from| {
                         let mut errors = Vec::default();
-                        let mut right_values = HashMap::new();
+                        let mut right_values = EncodedTupleSet::new(join_keys.clone());
                         for result in right(from.clone()) {
                             match result {
-                                Ok(result) => {
-                                    let key =
-                                        join_keys.iter().map(|k| result.get(*k).cloned()).collect();
-                                    right_values
-                                        .entry(key)
-                                        .or_insert_with(Vec::new)
-                                        .push(result);
-                                }
-                                Err(error) => {
-                                    errors.push(Err(error));
-                                }
+                                Ok(result) => right_values.insert(result),
+                                Err(error) => errors.push(Err(error)),
                             }
                         }
                         Box::new(HashJoinIterator {
                             left_iter: left(from),
                             right: right_values,
                             buffered_results: errors,
-                            join_keys: join_keys.clone(),
                         })
                     })
                 }
@@ -357,18 +348,13 @@ impl SimpleEvaluator {
                     })
                 } else {
                     Rc::new(move |from| {
-                        let mut right_values = HashMap::new();
+                        let mut right_values = EncodedTupleSet::new(join_keys.clone());
                         for result in right(from.clone()).filter_map(std::result::Result::ok) {
-                            let key = join_keys.iter().map(|k| result.get(*k).cloned()).collect();
-                            right_values
-                                .entry(key)
-                                .or_insert_with(Vec::new)
-                                .push(result);
+                            right_values.insert(result);
                         }
                         Box::new(HashAntiJoinIterator {
                             left_iter: left(from),
                             right: right_values,
-                            join_keys: join_keys.clone(),
                         })
                     })
                 }
@@ -2983,9 +2969,8 @@ impl Iterator for CartesianProductJoinIterator {
 
 struct HashJoinIterator {
     left_iter: EncodedTuplesIterator,
-    right: HashMap<Vec<Option<EncodedTerm>>, Vec<EncodedTuple>>,
+    right: EncodedTupleSet,
     buffered_results: Vec<Result<EncodedTuple, EvaluationError>>,
-    join_keys: Vec<usize>,
 }
 
 impl Iterator for HashJoinIterator {
@@ -3000,16 +2985,9 @@ impl Iterator for HashJoinIterator {
                 Ok(left_tuple) => left_tuple,
                 Err(error) => return Some(Err(error)),
             };
-            let key: Vec<_> = self
-                .join_keys
-                .iter()
-                .map(|k| left_tuple.get(*k).cloned())
-                .collect();
-            if let Some(right_tuples) = self.right.get(&key) {
-                for right_tuple in right_tuples {
-                    if let Some(result_tuple) = left_tuple.combine_with(right_tuple) {
-                        self.buffered_results.push(Ok(result_tuple))
-                    }
+            for right_tuple in self.right.get(&left_tuple) {
+                if let Some(result_tuple) = left_tuple.combine_with(right_tuple) {
+                    self.buffered_results.push(Ok(result_tuple))
                 }
             }
         }
@@ -3043,8 +3021,7 @@ impl Iterator for CartesianProductAntiJoinIterator {
 
 struct HashAntiJoinIterator {
     left_iter: EncodedTuplesIterator,
-    right: HashMap<Vec<Option<EncodedTerm>>, Vec<EncodedTuple>>,
-    join_keys: Vec<usize>,
+    right: EncodedTupleSet,
 }
 
 impl Iterator for HashAntiJoinIterator {
@@ -3054,16 +3031,10 @@ impl Iterator for HashAntiJoinIterator {
         loop {
             match self.left_iter.next()? {
                 Ok(left_tuple) => {
-                    let key: Vec<_> = self
-                        .join_keys
-                        .iter()
-                        .map(|k| left_tuple.get(*k).cloned())
-                        .collect();
-                    let exists_compatible_right = self.right.get(&key).map_or(false, |r| {
-                        r.iter().any(|right_tuple| {
+                    let exists_compatible_right =
+                        self.right.get(&left_tuple).iter().any(|right_tuple| {
                             are_compatible_and_not_disjointed(&left_tuple, right_tuple)
-                        })
-                    });
+                        });
                     if !exists_compatible_right {
                         return Some(Ok(left_tuple));
                     }
@@ -3753,6 +3724,40 @@ impl From<StrHash> for SmallStringOrId {
 pub enum ComparatorFunction {
     Asc(Rc<dyn Fn(&EncodedTuple) -> Option<EncodedTerm>>),
     Desc(Rc<dyn Fn(&EncodedTuple) -> Option<EncodedTerm>>),
+}
+
+struct EncodedTupleSet {
+    key: Vec<usize>,
+    map: HashMap<u64, Vec<EncodedTuple>>,
+}
+
+impl EncodedTupleSet {
+    fn new(key: Vec<usize>) -> Self {
+        Self {
+            key,
+            map: HashMap::new(),
+        }
+    }
+    fn insert(&mut self, tuple: EncodedTuple) {
+        self.map
+            .entry(self.tuple_key(&tuple))
+            .or_default()
+            .push(tuple);
+    }
+
+    fn get(&self, tuple: &EncodedTuple) -> &[EncodedTuple] {
+        self.map.get(&self.tuple_key(tuple)).map_or(&[], |v| v)
+    }
+
+    fn tuple_key(&self, tuple: &EncodedTuple) -> u64 {
+        let mut hasher = DefaultHasher::default();
+        for v in &self.key {
+            if let Some(val) = tuple.get(*v) {
+                val.hash(&mut hasher);
+            }
+        }
+        hasher.finish()
+    }
 }
 
 #[test]
