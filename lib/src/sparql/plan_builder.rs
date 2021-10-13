@@ -19,6 +19,7 @@ impl<'a> PlanBuilder<'a> {
     pub fn build(
         dataset: &'a DatasetView,
         pattern: &GraphPattern,
+        is_cardinality_meaningful: bool,
     ) -> Result<(PlanNode, Vec<Variable>), EvaluationError> {
         let mut variables = Vec::default();
         let plan = PlanBuilder { dataset }.build_for_graph_pattern(
@@ -26,6 +27,15 @@ impl<'a> PlanBuilder<'a> {
             &mut variables,
             &PatternValue::Constant(EncodedTerm::DefaultGraph),
         )?;
+        let plan = if is_cardinality_meaningful {
+            plan
+        } else {
+            // let's reduce downstream task.
+            // TODO: avoid if already REDUCED or DISTINCT
+            PlanNode::Reduced {
+                child: Box::new(plan),
+            }
+        };
         Ok((plan, variables))
     }
 
@@ -1253,6 +1263,7 @@ impl<'a> PlanBuilder<'a> {
                 expression,
                 position,
             } => {
+                //TODO: handle the case where the filter generates an expression variable
                 if filter_variables.iter().all(|v| child.is_variable_bound(*v)) {
                     PlanNode::Extend {
                         child: Box::new(Self::push_filter(child, filter)),

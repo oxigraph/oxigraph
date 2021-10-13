@@ -48,7 +48,7 @@ pub(crate) fn evaluate_query(
         spargebra::Query::Select {
             pattern, base_iri, ..
         } => {
-            let (plan, variables) = PlanBuilder::build(&dataset, &pattern)?;
+            let (plan, variables) = PlanBuilder::build(&dataset, &pattern, true)?;
             Ok(SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
@@ -67,7 +67,7 @@ pub(crate) fn evaluate_query(
         spargebra::Query::Ask {
             pattern, base_iri, ..
         } => {
-            let (plan, _) = PlanBuilder::build(&dataset, &pattern)?;
+            let (plan, _) = PlanBuilder::build(&dataset, &pattern, false)?;
             SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
@@ -81,7 +81,7 @@ pub(crate) fn evaluate_query(
             base_iri,
             ..
         } => {
-            let (plan, variables) = PlanBuilder::build(&dataset, &pattern)?;
+            let (plan, variables) = PlanBuilder::build(&dataset, &pattern, false)?;
             let construct = PlanBuilder::build_graph_template(&dataset, &template, variables);
             Ok(SimpleEvaluator::new(
                 Rc::new(dataset),
@@ -93,7 +93,7 @@ pub(crate) fn evaluate_query(
         spargebra::Query::Describe {
             pattern, base_iri, ..
         } => {
-            let (plan, _) = PlanBuilder::build(&dataset, &pattern)?;
+            let (plan, _) = PlanBuilder::build(&dataset, &pattern, false)?;
             Ok(SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),

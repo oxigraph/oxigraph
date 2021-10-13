@@ -120,7 +120,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         algebra: &GraphPattern,
     ) -> Result<(), EvaluationError> {
         let dataset = Rc::new(DatasetView::new(self.storage.clone(), using));
-        let (plan, variables) = PlanBuilder::build(dataset.as_ref(), algebra)?;
+        let (plan, variables) = PlanBuilder::build(dataset.as_ref(), algebra, false)?;
         let evaluator = SimpleEvaluator::new(
             dataset.clone(),
             self.base_iri.clone(),
