@@ -494,6 +494,15 @@ impl SimpleEvaluator {
                 let child = self.plan_evaluator(child);
                 Rc::new(move |from| Box::new(hash_deduplicate(child(from))))
             }
+            PlanNode::Reduced { child } => {
+                let child = self.plan_evaluator(child);
+                Rc::new(move |from| {
+                    Box::new(ConsecutiveDeduplication {
+                        inner: child(from),
+                        current: None,
+                    })
+                })
+            }
             PlanNode::Skip { child, count } => {
                 let child = self.plan_evaluator(child);
                 let count = *count;
@@ -3143,6 +3152,39 @@ impl Iterator for UnionIterator {
             }
             self.current_iterator = self.plans[self.current_plan](self.input.clone());
             self.current_plan += 1;
+        }
+    }
+}
+
+struct ConsecutiveDeduplication {
+    inner: EncodedTuplesIterator,
+    current: Option<EncodedTuple>,
+}
+
+impl Iterator for ConsecutiveDeduplication {
+    type Item = Result<EncodedTuple, EvaluationError>;
+
+    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
+        // Basic idea. We buffer the previous result and we only emit it when we kow the next one or it's the end
+        loop {
+            if let Some(next) = self.inner.next() {
+                match next {
+                    Ok(next) => match self.current.take() {
+                        Some(current) if current != next => {
+                            // We found a relevant value
+                            self.current = Some(next);
+                            return Some(Ok(current));
+                        }
+                        _ => {
+                            //  We discard the value and move to the next one
+                            self.current = Some(next);
+                        }
+                    },
+                    Err(error) => return Some(Err(error)), // We swap but it's fine. It's an error.
+                }
+            } else {
+                return self.current.take().map(Ok);
+            }
         }
     }
 }

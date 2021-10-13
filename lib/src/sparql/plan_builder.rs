@@ -246,9 +246,9 @@ impl<'a> PlanBuilder<'a> {
             GraphPattern::Distinct { inner } => PlanNode::HashDeduplicate {
                 child: Box::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
             },
-            GraphPattern::Reduced { inner } => {
-                self.build_for_graph_pattern(inner, variables, graph_name)?
-            }
+            GraphPattern::Reduced { inner } => PlanNode::Reduced {
+                child: Box::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
+            },
             GraphPattern::Slice {
                 inner,
                 start,
@@ -1096,6 +1096,7 @@ impl<'a> PlanBuilder<'a> {
             }
             PlanNode::Sort { child, .. }
             | PlanNode::HashDeduplicate { child }
+            | PlanNode::Reduced { child }
             | PlanNode::Skip { child, .. }
             | PlanNode::Limit { child, .. } => {
                 self.add_left_join_problematic_variables(&*child, set)
@@ -1186,6 +1187,7 @@ impl<'a> PlanBuilder<'a> {
             | PlanNode::Service { .. }
             | PlanNode::Sort { .. }
             | PlanNode::HashDeduplicate { .. }
+            | PlanNode::Reduced { .. }
             | PlanNode::Skip { .. }
             | PlanNode::Limit { .. }
             | PlanNode::Project { .. }

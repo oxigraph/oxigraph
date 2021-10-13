@@ -70,6 +70,10 @@ pub enum PlanNode {
     HashDeduplicate {
         child: Box<Self>,
     },
+    /// Removes duplicated consecutive elements
+    Reduced {
+        child: Box<Self>,
+    },
     Skip {
         child: Box<Self>,
         count: usize,
@@ -173,6 +177,7 @@ impl PlanNode {
             }
             PlanNode::Sort { child, .. }
             | PlanNode::HashDeduplicate { child }
+            | PlanNode::Reduced { child }
             | PlanNode::Skip { child, .. }
             | PlanNode::Limit { child, .. } => child.lookup_used_variables(callback),
             PlanNode::Service {
@@ -314,6 +319,7 @@ impl PlanNode {
             }
             PlanNode::Sort { child, .. }
             | PlanNode::HashDeduplicate { child }
+            | PlanNode::Reduced { child }
             | PlanNode::Skip { child, .. }
             | PlanNode::Limit { child, .. } => child.lookup_always_bound_variables(callback),
             PlanNode::Service { child, silent, .. } => {
