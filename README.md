@@ -10,7 +10,7 @@ Oxigraph
 
 Oxigraph is a graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
 
-Its goal is to provide a compliant, safe, and fast graph database based on the [Sled](https://sled.rs/) key-value store.
+Its goal is to provide a compliant, safe, and fast graph database based on the [RocksDB](https://rocksdb.org/) key-value store.
 It is written in Rust.
 It also provides a set of utility functions for reading, writing, and processing RDF files.
 

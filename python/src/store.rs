@@ -14,7 +14,7 @@ use std::io::BufReader;
 /// Disk-based RDF store.
 ///
 /// It encodes a `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_ and allows to query it using SPARQL.
-/// It is based on the `Sled <https://sled.rs/>`_ key-value database
+/// It is based on the `RocksDB <https://rocksdb.org/>`_ key-value database
 ///
 /// :param path: the path of the directory in which the store should read and write its data. If the directory does not exist, it is created. If no directory is provided a temporary one is created and removed when the Python garbage collector removes the store.
 /// :type path: str or None, optional

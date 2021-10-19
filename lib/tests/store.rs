@@ -1,8 +1,6 @@
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
-#[cfg(not(target_arch = "wasm32"))]
-use oxigraph::store::ConflictableTransactionError;
 use oxigraph::store::Store;
 use std::io;
 use std::io::Cursor;
@@ -139,42 +137,9 @@ fn test_dump_dataset() -> io::Result<()> {
 
 #[test]
 #[cfg(not(target_arch = "wasm32"))]
-fn test_transaction_load_graph() -> io::Result<()> {
-    let store = Store::new()?;
-    store.transaction(|t| {
-        t.load_graph(
-            Cursor::new(DATA),
-            GraphFormat::Turtle,
-            GraphNameRef::DefaultGraph,
-            None,
-        )?;
-        Ok(()) as Result<_, ConflictableTransactionError<io::Error>>
-    })?;
-    for q in quads(GraphNameRef::DefaultGraph) {
-        assert!(store.contains(q)?);
-    }
-    Ok(())
-}
-
-#[test]
-#[cfg(not(target_arch = "wasm32"))]
-fn test_transaction_load_dataset() -> io::Result<()> {
-    let store = Store::new()?;
-    store.transaction(|t| {
-        t.load_dataset(Cursor::new(DATA), DatasetFormat::TriG, None)?;
-        Ok(()) as Result<_, ConflictableTransactionError<io::Error>>
-    })?;
-    for q in quads(GraphNameRef::DefaultGraph) {
-        assert!(store.contains(q)?);
-    }
-    Ok(())
-}
-
-#[test]
-#[cfg(not(target_arch = "wasm32"))]
 fn test_backward_compatibility() -> io::Result<()> {
     {
-        let store = Store::open("tests/sled_bc_data")?;
+        let store = Store::open("tests/rocksdb_bc_data")?;
         for q in quads(GraphNameRef::DefaultGraph) {
             assert!(store.contains(q)?);
         }
@@ -189,7 +154,7 @@ fn test_backward_compatibility() -> io::Result<()> {
             store.named_graphs().collect::<io::Result<Vec<_>>>()?
         );
     };
-    reset_dir("tests/sled_bc_data")?;
+    reset_dir("tests/rocksdb_bc_data")?;
     Ok(())
 }
 

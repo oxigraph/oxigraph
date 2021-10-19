@@ -23,7 +23,6 @@
 //! };
 //! # Result::<_,Box<dyn std::error::Error>>::Ok(())
 //! ```
-
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use crate::sparql::{
@@ -32,22 +31,14 @@ use crate::sparql::{
 };
 use crate::storage::io::{dump_dataset, dump_graph, load_dataset, load_graph};
 use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
-#[cfg(not(target_arch = "wasm32"))]
-use crate::storage::StorageTransaction;
 use crate::storage::{ChainedDecodingQuadIterator, DecodingGraphIterator, Storage};
-#[cfg(not(target_arch = "wasm32"))]
-pub use crate::storage::{
-    ConflictableTransactionError, TransactionError, UnabortableTransactionError,
-};
 use std::io::{BufRead, Write};
 use std::path::Path;
 use std::{fmt, io, str};
 
 /// An on-on disk [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 /// Allows to query and update it using SPARQL.
-/// It is based on the [Sled](https://sled.rs/) key-value database.
-///
-/// Warning: Sled is not stable yet and might break its storage format.
+/// It is based on the [RocksDB](https://rocksdb.org/) key-value store.
 ///
 /// Usage example:
 /// ```
@@ -234,41 +225,6 @@ impl Store {
             update.try_into().map_err(std::convert::Into::into)?,
             options,
         )
-    }
-
-    /// Executes an ACID transaction.
-    ///
-    /// The transaction is executed if the given closure returns `Ok`.
-    /// The transaction is rollbacked if the closure returns `Err`.
-    ///
-    /// Usage example:
-    /// ```
-    /// use oxigraph::store::{ConflictableTransactionError, Store};
-    /// use oxigraph::model::*;
-    /// use std::convert::Infallible;
-    ///
-    /// let store = Store::new()?;
-    ///
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// let quad = QuadRef::new(ex, ex, ex, ex);
-    ///
-    /// // transaction
-    /// store.transaction(|transaction| {
-    ///     transaction.insert(quad)?;
-    ///     Ok(()) as Result<(),ConflictableTransactionError<Infallible>>
-    /// })?;
-    ///
-    /// assert!(store.contains(quad)?);
-    /// assert!(store.contains_named_graph(ex)?);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
-    /// ```
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn transaction<T, E>(
-        &self,
-        f: impl Fn(Transaction<'_>) -> Result<T, ConflictableTransactionError<E>>,
-    ) -> Result<T, TransactionError<E>> {
-        self.storage
-            .transaction(|storage| f(Transaction { storage }))
     }
 
     /// Loads a graph file (i.e. triples) into the store
@@ -604,17 +560,6 @@ impl Store {
     pub fn flush(&self) -> io::Result<()> {
         self.storage.flush()
     }
-
-    /// Asynchronously flushes all buffers and ensures that all writes are saved on disk.
-    ///
-    /// Flushes are automatically done for most platform using background threads.
-    /// However, calling this method explicitly is still required for Windows and Android.
-    ///
-    /// A [sync version](SledStore::flush) is also available.
-    #[cfg(not(target_arch = "wasm32"))]
-    pub async fn flush_async(&self) -> io::Result<()> {
-        self.storage.flush_async().await
-    }
 }
 
 impl fmt::Display for Store {
@@ -623,195 +568,6 @@ impl fmt::Display for Store {
             writeln!(f, "{}", t.map_err(|_| fmt::Error)?)?;
         }
         Ok(())
-    }
-}
-
-/// Allows inserting and deleting quads during an ACID transaction with the [`Store`].
-#[cfg(not(target_arch = "wasm32"))]
-pub struct Transaction<'a> {
-    storage: StorageTransaction<'a>,
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl Transaction<'_> {
-    /// Loads a graph file (i.e. triples) into the store during the transaction.
-    ///
-    /// Warning: Because the load happens during a transaction,
-    /// the full file content might be temporarily stored in main memory.
-    /// Do not use for big files.
-    ///
-    /// Usage example:
-    /// ```
-    /// use oxigraph::store::Store;
-    /// use oxigraph::io::GraphFormat;
-    /// use oxigraph::model::*;
-    /// use oxigraph::store::ConflictableTransactionError;
-    ///
-    /// let store = Store::new()?;
-    ///
-    /// // insertion
-    /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
-    /// store.transaction(|transaction| {
-    ///     transaction.load_graph(file.as_ref(), GraphFormat::NTriples, &GraphName::DefaultGraph, None)?;
-    ///     Ok(()) as Result<(),ConflictableTransactionError<std::io::Error>>
-    /// })?;
-    ///
-    /// // we inspect the store content
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
-    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
-    /// ```
-    ///
-    /// If the file parsing fails in the middle of the file, the triples read before are still
-    /// considered by the transaction. Rollback the transaction by making the transaction closure
-    /// return an error if you don't want that.
-    /// Moving up the parsing error through the transaction is enough to do that.
-    ///
-    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
-    pub fn load_graph<'a>(
-        &self,
-        reader: impl BufRead,
-        format: GraphFormat,
-        to_graph_name: impl Into<GraphNameRef<'a>>,
-        base_iri: Option<&str>,
-    ) -> Result<(), UnabortableTransactionError> {
-        load_graph(
-            &self.storage,
-            reader,
-            format,
-            to_graph_name.into(),
-            base_iri,
-        )?;
-        Ok(())
-    }
-
-    /// Loads a dataset file (i.e. quads) into the store. into the store during the transaction.
-    ///
-    /// Warning: Because the load happens during a transaction,
-    /// the full file content might be temporarily stored in main memory.
-    /// Do not use for big files.
-    ///
-    /// Usage example:
-    /// ```
-    /// use oxigraph::store::{Store, ConflictableTransactionError};
-    /// use oxigraph::io::DatasetFormat;
-    /// use oxigraph::model::*;
-    ///
-    /// let store = Store::new()?;
-    ///
-    /// // insertion
-    /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
-    /// store.transaction(|transaction| {
-    ///     transaction.load_dataset(file.as_ref(), DatasetFormat::NQuads, None)?;
-    ///     Ok(()) as Result<(),ConflictableTransactionError<std::io::Error>>
-    /// })?;
-    ///
-    /// // we inspect the store content
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
-    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
-    /// ```
-    ///
-    /// If the file parsing fails in the middle of the file, the quads read before are still
-    /// considered by the transaction. Rollback the transaction by making the transaction closure
-    /// return an error if you don't want that.
-    /// Moving up the parsing error through the transaction is enough to do that.
-    ///
-    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
-    pub fn load_dataset(
-        &self,
-        reader: impl BufRead,
-        format: DatasetFormat,
-        base_iri: Option<&str>,
-    ) -> Result<(), UnabortableTransactionError> {
-        Ok(load_dataset(&self.storage, reader, format, base_iri)?)
-    }
-
-    /// Adds a quad to this store during the transaction.
-    ///
-    /// Returns `true` if the quad was not already in the store.
-    ///
-    /// Usage example:
-    /// ```
-    /// use oxigraph::store::{Store, ConflictableTransactionError};
-    /// use oxigraph::model::*;
-    ///
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
-    ///
-    /// let store = Store::new()?;
-    /// store.transaction(|transaction| {
-    ///     transaction.insert(quad)?;
-    ///     Ok(()) as Result<(),ConflictableTransactionError<std::io::Error>>
-    /// })?;
-    ///
-    /// assert!(store.contains(quad)?);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
-    /// ```
-    pub fn insert<'a>(
-        &self,
-        quad: impl Into<QuadRef<'a>>,
-    ) -> Result<bool, UnabortableTransactionError> {
-        self.storage.insert(quad.into())
-    }
-
-    /// Removes a quad from this store during the transaction.
-    ///
-    /// Returns `true` if the quad was in the store and has been removed.
-    ///
-    /// Usage example:
-    /// ```
-    /// use oxigraph::store::{Store, ConflictableTransactionError};
-    /// use oxigraph::model::*;
-    ///
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
-    ///
-    /// let store = Store::new()?;
-    /// store.insert(quad)?;
-    ///
-    /// store.transaction(|transaction| {
-    ///     transaction.remove(quad)?;
-    ///     Ok(()) as Result<(),ConflictableTransactionError<std::io::Error>>
-    /// })?;
-    ///
-    /// assert!(!store.contains(quad)?);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
-    /// ```
-    pub fn remove<'a>(
-        &self,
-        quad: impl Into<QuadRef<'a>>,
-    ) -> Result<bool, UnabortableTransactionError> {
-        self.storage.remove(quad.into())
-    }
-
-    /// Inserts a graph into this store during the transaction
-    ///
-    /// Returns `true` if the graph was not already in the store.
-    ///
-    /// Usage example:
-    /// ```
-    /// use oxigraph::store::{Store, ConflictableTransactionError};
-    /// use oxigraph::model::*;
-    ///
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    ///
-    /// let store = Store::new()?;
-    /// store.transaction(|transaction| {
-    ///     transaction.insert_named_graph(ex)?;
-    ///     Ok(()) as Result<(),ConflictableTransactionError<std::io::Error>>
-    /// })?;
-    ///
-    /// assert_eq!(store.named_graphs().collect::<Result<Vec<_>,_>>()?, vec![ex.into_owned().into()]);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
-    /// ```
-    pub fn insert_named_graph<'a>(
-        &self,
-        graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
-    ) -> Result<bool, UnabortableTransactionError> {
-        self.storage.insert_named_graph(graph_name.into())
     }
 }
 
@@ -855,7 +611,6 @@ impl Iterator for GraphNameIter {
 }
 
 #[test]
-#[cfg(not(target_arch = "wasm32"))]
 fn store() -> io::Result<()> {
     use crate::model::*;
 
@@ -912,17 +667,13 @@ fn store() -> io::Result<()> {
     for t in &default_quads {
         assert!(store.insert(t)?);
     }
+    assert!(!store.insert(&default_quad)?);
 
-    let result: Result<_, TransactionError<io::Error>> = store.transaction(|t| {
-        assert!(t.remove(&default_quad)?);
-        assert!(!t.remove(&default_quad)?);
-        assert!(t.insert(&named_quad)?);
-        assert!(!t.insert(&named_quad)?);
-        assert!(t.insert(&default_quad)?);
-        assert!(!t.insert(&default_quad)?);
-        Ok(())
-    });
-    result?;
+    assert!(store.remove(&default_quad)?);
+    assert!(!store.remove(&default_quad)?);
+    assert!(store.insert(&named_quad)?);
+    assert!(!store.insert(&named_quad)?);
+    assert!(store.insert(&default_quad)?);
     assert!(!store.insert(&default_quad)?);
 
     assert_eq!(store.len(), 4);
