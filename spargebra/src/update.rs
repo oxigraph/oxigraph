@@ -2,7 +2,6 @@ use crate::algebra::*;
 use crate::parser::{parse_update, ParseError};
 use crate::term::*;
 use oxiri::Iri;
-use std::convert::TryFrom;
 use std::fmt;
 use std::str::FromStr;
 

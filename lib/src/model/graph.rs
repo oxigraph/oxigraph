@@ -23,7 +23,6 @@ use crate::io::GraphFormat;
 use crate::model::dataset::*;
 use crate::model::*;
 use std::io::{BufRead, Write};
-use std::iter::FromIterator;
 use std::{fmt, io};
 
 /// An in-memory [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-graph).

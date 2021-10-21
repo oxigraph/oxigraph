@@ -1,6 +1,5 @@
 //! Data structures for [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/) like IRI, literal or triples.
 
-use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use std::fmt::Write;
 

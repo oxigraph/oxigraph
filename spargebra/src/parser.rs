@@ -9,7 +9,6 @@ use peg::str::LineCol;
 use rand::random;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 use std::mem::take;
 use std::str::Chars;

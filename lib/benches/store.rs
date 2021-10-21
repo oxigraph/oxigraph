@@ -16,9 +16,9 @@ fn graph_load_bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("graph");
     group.nresamples(10);
     group.sample_size(10);
-    for size in [100, 1_000, 10_000].iter() {
-        group.throughput(Throughput::Elements(*size as u64));
-        let triples: Vec<_> = create_quads(*size).into_iter().map(Triple::from).collect();
+    for size in [100, 1_000, 10_000] {
+        group.throughput(Throughput::Elements(size as u64));
+        let triples: Vec<_> = create_quads(size).into_iter().map(Triple::from).collect();
         group.bench_function(BenchmarkId::from_parameter(size), |b| {
             b.iter(|| triples.iter().collect::<Graph>());
         });
@@ -30,9 +30,9 @@ fn dataset_load_bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("dataset");
     group.nresamples(10);
     group.sample_size(10);
-    for size in [100, 1_000, 10_000].iter() {
-        group.throughput(Throughput::Elements(*size as u64));
-        let quads = create_quads(*size);
+    for size in [100, 1_000, 10_000] {
+        group.throughput(Throughput::Elements(size as u64));
+        let quads = create_quads(size);
         group.bench_function(BenchmarkId::from_parameter(size), |b| {
             b.iter(|| quads.iter().collect::<Dataset>());
         });
@@ -44,9 +44,9 @@ fn sled_load_bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("sled");
     group.nresamples(10);
     group.sample_size(10);
-    for size in [100, 1_000, 10_000].iter() {
-        group.throughput(Throughput::Elements(*size as u64));
-        let quads = create_quads(*size);
+    for size in [100, 1_000, 10_000] {
+        group.throughput(Throughput::Elements(size as u64));
+        let quads = create_quads(size);
         group.bench_function(BenchmarkId::from_parameter(size), |b| {
             b.iter(|| {
                 let store = Store::new().unwrap();

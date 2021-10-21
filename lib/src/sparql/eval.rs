@@ -22,7 +22,6 @@ use spargebra::algebra::GraphPattern;
 use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
-use std::convert::{TryFrom, TryInto};
 use std::hash::{Hash, Hasher};
 use std::iter::Iterator;
 use std::iter::{empty, once};

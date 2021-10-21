@@ -32,7 +32,6 @@ use crate::sparql::service::{EmptyServiceHandler, ErrorConversionServiceHandler}
 use crate::sparql::update::SimpleUpdateEvaluator;
 use crate::storage::Storage;
 pub use spargebra::ParseError;
-use std::convert::TryInto;
 use std::rc::Rc;
 use std::time::Duration;
 

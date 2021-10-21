@@ -8,7 +8,7 @@ keywords = ["RDF", "SPARQL", "graph-database", "database"]
 repository = "https://github.com/oxigraph/oxigraph/tree/master/python"
 homepage = "https://oxigraph.org/pyoxigraph/"
 description = "Python bindings of Oxigraph, a SPARQL database and RDF toolkit"
-edition = "2018"
+edition = "2021"
 
 [lib]
 crate-type = ["cdylib"]

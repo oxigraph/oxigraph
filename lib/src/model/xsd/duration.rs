@@ -2,7 +2,6 @@ use super::decimal::DecimalOverflowError;
 use super::parser::*;
 use super::*;
 use std::cmp::Ordering;
-use std::convert::TryFrom;
 use std::fmt;
 use std::ops::Neg;
 use std::str::FromStr;

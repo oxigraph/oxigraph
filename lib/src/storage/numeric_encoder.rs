@@ -6,7 +6,6 @@ use crate::model::*;
 use crate::sparql::EvaluationError;
 use crate::storage::small_string::SmallString;
 use siphasher::sip128::{Hasher128, SipHasher24};
-use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 use std::fmt::Debug;
 use std::hash::Hash;

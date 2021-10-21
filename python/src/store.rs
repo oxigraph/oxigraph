@@ -9,7 +9,6 @@ use pyo3::prelude::{
     pyclass, pymethods, pyproto, Py, PyAny, PyObject, PyRef, PyRefMut, PyResult, Python,
 };
 use pyo3::{PyIterProtocol, PyObjectProtocol, PySequenceProtocol};
-use std::convert::{TryFrom, TryInto};
 use std::io::BufReader;
 
 /// Disk-based RDF store.

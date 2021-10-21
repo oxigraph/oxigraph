@@ -517,7 +517,7 @@ fn test_serialization_rountrip() -> Result<(), EvaluationError> {
     use std::io::Cursor;
     use std::str;
 
-    for format in &[
+    for format in [
         QueryResultsFormat::Json,
         QueryResultsFormat::Xml,
         QueryResultsFormat::Tsv,
@@ -583,10 +583,10 @@ fn test_serialization_rountrip() -> Result<(), EvaluationError> {
 
         for ex in results {
             let mut buffer = Vec::new();
-            ex.write(&mut buffer, *format)?;
-            let ex2 = QueryResults::read(Cursor::new(buffer.clone()), *format)?;
+            ex.write(&mut buffer, format)?;
+            let ex2 = QueryResults::read(Cursor::new(buffer.clone()), format)?;
             let mut buffer2 = Vec::new();
-            ex2.write(&mut buffer2, *format)?;
+            ex2.write(&mut buffer2, format)?;
             assert_eq!(
                 str::from_utf8(&buffer).unwrap(),
                 str::from_utf8(&buffer2).unwrap()

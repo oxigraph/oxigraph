@@ -6,7 +6,6 @@ use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::*;
 use oxigraph::sparql::QueryResults;
 use oxigraph::store::Store;
-use std::convert::{TryFrom, TryInto};
 use std::io::Cursor;
 use wasm_bindgen::prelude::*;
 

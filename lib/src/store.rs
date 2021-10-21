@@ -39,7 +39,6 @@ use crate::storage::{ChainedDecodingQuadIterator, DecodingGraphIterator, Storage
 pub use crate::storage::{
     ConflictableTransactionError, TransactionError, UnabortableTransactionError,
 };
-use std::convert::TryInto;
 use std::io::{BufRead, Write};
 use std::path::Path;
 use std::{fmt, io, str};

@@ -5,7 +5,6 @@ use crate::model::xsd::parser::{
     g_year_month_lexical_rep,
 };
 use std::cmp::{min, Ordering};
-use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 use std::fmt;
 use std::hash::{Hash, Hasher};

@@ -3,7 +3,6 @@
 use crate::model::*;
 use lasso::{Key, Rodeo, Spur};
 use std::collections::HashMap;
-use std::convert::TryInto;
 
 #[derive(Debug, Default)]
 pub struct Interner {

@@ -24,7 +24,6 @@ use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash, StrLook
 use fallback_backend::{Db, Iter, Tree};
 #[cfg(not(target_arch = "wasm32"))]
 use sled_backend::{Db, Iter, Tree};
-use std::convert::TryInto;
 
 mod binary_encoder;
 #[cfg(target_arch = "wasm32")]

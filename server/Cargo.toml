@@ -9,7 +9,7 @@ homepage = "https://oxigraph.org/server/"
 description = """
 SPARQL server based on Oxigraph
 """
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 oxhttp = "0.1"

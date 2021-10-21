@@ -8,7 +8,7 @@ repository = "https://github.com/oxigraph/oxigraph/tree/master/wikibase"
 description = """
 SPARQL server based on Oxigraph for Wikibase instances
 """
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 clap = "2"

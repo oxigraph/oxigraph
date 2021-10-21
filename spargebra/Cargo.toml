@@ -10,7 +10,7 @@ homepage = "https://oxigraph.org/"
 description = """
 A SPARQL parser
 """
-edition = "2018"
+edition = "2021"
 
 [features]
 default = []

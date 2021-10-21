@@ -5,7 +5,6 @@ use crate::utils::to_err;
 use js_sys::{Reflect, UriError};
 use oxigraph::model::*;
 use oxigraph::sparql::Variable;
-use std::convert::TryFrom;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 

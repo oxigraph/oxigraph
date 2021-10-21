@@ -7,7 +7,7 @@ readme = "README.md"
 keywords = ["RDF", "N-Triples", "Turtle", "RDF/XML", "SPARQL"]
 repository = "https://github.com/oxigraph/oxigraph/tree/master/js"
 description = "JavaScript bindings of Oxigraph"
-edition = "2018"
+edition = "2021"
 
 [lib]
 crate-type = ["cdylib"]

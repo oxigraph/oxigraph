@@ -1,6 +1,5 @@
 use crate::model::xsd::double::Double;
 use crate::model::xsd::Float;
-use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 use std::fmt;
 use std::fmt::Write;

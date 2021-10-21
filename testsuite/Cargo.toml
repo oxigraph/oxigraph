@@ -8,7 +8,7 @@ repository = "https://github.com/oxigraph/oxigraph"
 description = """
 Implementation of W3C testsuites for Oxigraph
 """
-edition = "2018"
+edition = "2021"
 publish = false
 
 [dependencies]

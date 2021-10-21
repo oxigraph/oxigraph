@@ -6,7 +6,6 @@
 
 use crate::model::*;
 use spargebra::GraphUpdateOperation;
-use std::convert::TryFrom;
 use std::fmt;
 use std::str::FromStr;
 

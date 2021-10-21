@@ -34,7 +34,6 @@ use std::collections::BTreeSet;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::io::{BufRead, Write};
-use std::iter::FromIterator;
 use std::{fmt, io};
 
 /// An in-memory [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).

@@ -5,7 +5,6 @@ use pyo3::exceptions::{PyIndexError, PyNotImplementedError, PyTypeError, PyValue
 use pyo3::prelude::*;
 use pyo3::{PyIterProtocol, PyMappingProtocol, PyObjectProtocol, PyTypeInfo};
 use std::collections::hash_map::DefaultHasher;
-use std::convert::TryFrom;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::vec::IntoIter;
