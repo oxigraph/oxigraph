@@ -1189,9 +1189,7 @@ impl<'a> PlanBuilder<'a> {
             PlanNode::Filter { child, .. } | PlanNode::Extend { child, .. } => {
                 Self::is_fit_for_for_loop_join(child)
             }
-            PlanNode::Union { children } => {
-                children.iter().all(|c| Self::is_fit_for_for_loop_join(c))
-            }
+            PlanNode::Union { children } => children.iter().all(Self::is_fit_for_for_loop_join),
             PlanNode::AntiJoin { .. }
             | PlanNode::LeftJoin { .. }
             | PlanNode::Service { .. }

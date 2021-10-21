@@ -66,7 +66,6 @@ use std::{fmt, io};
 #[derive(Debug, Default)]
 pub struct Dataset {
     interner: Interner,
-    triples: HashMap<InternedTriple, Triple>,
     gspo: BTreeSet<(
         InternedGraphName,
         InternedSubject,

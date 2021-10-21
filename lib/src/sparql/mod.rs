@@ -109,20 +109,10 @@ pub(crate) fn evaluate_query(
 ///
 /// If the `"http_client"` optional feature is enabled,
 /// a simple HTTP 1.1 client is used to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct QueryOptions {
     pub(crate) service_handler: Option<Rc<dyn ServiceHandler<Error = EvaluationError>>>,
     http_timeout: Option<Duration>,
-}
-
-impl Default for QueryOptions {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            service_handler: None,
-            http_timeout: None,
-        }
-    }
 }
 
 impl QueryOptions {
@@ -161,7 +151,7 @@ impl QueryOptions {
 }
 
 /// Options for SPARQL update evaluation
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct UpdateOptions {
     query_options: QueryOptions,
 }
@@ -177,15 +167,6 @@ impl UpdateOptions {
     #[inline]
     pub fn query_options_mut(&mut self) -> &mut QueryOptions {
         &mut self.query_options
-    }
-}
-
-impl Default for UpdateOptions {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            query_options: QueryOptions::default(),
-        }
     }
 }
 

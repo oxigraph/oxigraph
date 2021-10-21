@@ -277,10 +277,7 @@ fn build_bgp(patterns: Vec<TripleOrPathPattern>) -> GraphPattern {
     if !bgp.is_empty() {
         elements.push(GraphPattern::Bgp { patterns: bgp });
     }
-    elements
-        .into_iter()
-        .reduce(new_join)
-        .unwrap_or_else(GraphPattern::default)
+    elements.into_iter().reduce(new_join).unwrap_or_default()
 }
 
 enum TripleOrPathPattern {
@@ -444,7 +441,7 @@ fn build_select(
     let mut with_aggregate = false;
 
     //GROUP BY
-    let aggregates = state.aggregates.pop().unwrap_or_else(Vec::default);
+    let aggregates = state.aggregates.pop().unwrap_or_default();
     if group.is_none() && !aggregates.is_empty() {
         group = Some((vec![], vec![]));
     }
@@ -987,7 +984,7 @@ parser! {
             i("DESCRIBE") _ "*" _ d:DatasetClauses() w:WhereClause()? _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
                 Ok(Query::Describe {
                     dataset: d,
-                    pattern: build_select(Selection::no_op(), w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state)?,
+                    pattern: build_select(Selection::no_op(), w.unwrap_or_default(), g, h, o, l, v, state)?,
                     base_iri: state.base_iri.clone()
                 })
             } /
@@ -1000,7 +997,7 @@ parser! {
                             NamedNodePattern::NamedNode(n) => SelectionMember::Expression(n.into(), variable()),
                             NamedNodePattern::Variable(v) => SelectionMember::Variable(v)
                         }).collect())
-                    }, w.unwrap_or_else(GraphPattern::default), g, h, o, l, v, state)?,
+                    }, w.unwrap_or_default(), g, h, o, l, v, state)?,
                     base_iri: state.base_iri.clone()
                 })
             }
@@ -1198,7 +1195,7 @@ parser! {
                     GraphNamePattern::DefaultGraph => bgp,
                     GraphNamePattern::Variable(graph_name) => GraphPattern::Graph { name: graph_name.clone().into(), inner: Box::new(bgp) },
                 }
-            }).reduce(new_join).unwrap_or_else(GraphPattern::default);
+            }).reduce(new_join).unwrap_or_default();
             let delete = d.into_iter().map(GroundQuadPattern::try_from).collect::<Result<Vec<_>,_>>().map_err(|_| "Blank nodes are not allowed in DELETE WHERE")?;
             Ok(vec![GraphUpdateOperation::DeleteInsert {
                 delete,
@@ -1343,7 +1340,7 @@ parser! {
             triples
         }
         rule TriplesTemplate_tail() -> Vec<TriplePattern> = "." _ t:TriplesTemplate()? _ {
-            t.unwrap_or_else(Vec::default)
+            t.unwrap_or_default()
         }
 
         //[53]
@@ -1412,7 +1409,7 @@ parser! {
             triples
         }
         rule TriplesBlock_tail() -> Vec<TripleOrPathPattern> = "." _ t:TriplesBlock()? _ {
-            t.unwrap_or_else(Vec::default)
+            t.unwrap_or_default()
         }
 
         //[56]

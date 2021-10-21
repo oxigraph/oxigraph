@@ -449,6 +449,7 @@ fn compare_terms<'a>(
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 enum StaticQueryResults {
     Graph(Graph),
     Solutions {

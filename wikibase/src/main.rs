@@ -83,7 +83,6 @@ pub async fn main() -> Result<()> {
     let mediawiki_base_url = matches.value_of("mediawiki_base_url").unwrap();
     let namespaces = matches
         .value_of("namespaces")
-        .as_deref()
         .unwrap_or("")
         .split(',')
         .flat_map(|t| {
@@ -108,7 +107,7 @@ pub async fn main() -> Result<()> {
         mediawiki_api,
         mediawiki_base_url,
         &namespaces,
-        slot.as_deref(),
+        slot,
         Duration::new(10, 0),
     )
     .unwrap();

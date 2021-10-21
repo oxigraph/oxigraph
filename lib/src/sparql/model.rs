@@ -385,11 +385,11 @@ impl Iterator for QueryTripleIter {
     }
 
     #[inline]
-    fn fold<Acc, G>(self, init: Acc, mut g: G) -> Acc
+    fn fold<Acc, G>(self, init: Acc, g: G) -> Acc
     where
         G: FnMut(Acc, Self::Item) -> Acc,
     {
-        self.iter.fold(init, |acc, elt| g(acc, elt))
+        self.iter.fold(init, g)
     }
 }
 

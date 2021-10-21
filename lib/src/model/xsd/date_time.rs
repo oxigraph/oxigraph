@@ -1454,7 +1454,7 @@ fn date_time_plus_duration(
     let da = dt.day.unwrap_or(1);
     let hr = dt.hour.unwrap_or(0);
     let mi = dt.minute.unwrap_or(0);
-    let se = dt.second.unwrap_or_else(Decimal::default);
+    let se = dt.second.unwrap_or_default();
     let mo = i64::from(mo).checked_add(du.all_months())?;
     let (yr, mo) = normalize_month(yr, mo)?;
     let da = min(da, days_in_month(Some(yr), mo));
@@ -1488,7 +1488,7 @@ fn time_on_timeline(props: &DateTimeSevenPropertyModel) -> Option<Decimal> {
                 .unwrap_or_else(TimezoneOffset::utc)
                 .offset,
         );
-    let se = props.second.unwrap_or_else(Decimal::default);
+    let se = props.second.unwrap_or_default();
 
     Decimal::try_from(
         31_536_000 * i128::from(yr)

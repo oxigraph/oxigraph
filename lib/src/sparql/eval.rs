@@ -3350,7 +3350,7 @@ fn transitive_closure<T: Clone + Eq + Hash, NI: Iterator<Item = Result<T, Evalua
     while !current.is_empty() {
         current = current
             .into_iter()
-            .flat_map(|e| next(e))
+            .flat_map(&next)
             .filter_map(|e| match e {
                 Ok(e) => {
                     if all.contains(&e) {
@@ -3532,19 +3532,10 @@ impl Accumulator for SumAccumulator {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct AvgAccumulator {
     sum: SumAccumulator,
     count: CountAccumulator,
-}
-
-impl Default for AvgAccumulator {
-    fn default() -> Self {
-        Self {
-            sum: SumAccumulator::default(),
-            count: CountAccumulator::default(),
-        }
-    }
 }
 
 impl Accumulator for AvgAccumulator {
@@ -3630,15 +3621,9 @@ impl Accumulator for MaxAccumulator {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct SampleAccumulator {
     value: Option<EncodedTerm>,
-}
-
-impl Default for SampleAccumulator {
-    fn default() -> Self {
-        Self { value: None }
-    }
 }
 
 impl Accumulator for SampleAccumulator {

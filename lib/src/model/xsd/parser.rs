@@ -216,13 +216,13 @@ fn du_time_frag(input: &str) -> XsdResult<'_, Decimal> {
                 tuple((du_hour_frag, opt(du_minute_frag), opt(du_second_frag))),
                 |(h, m, s)| {
                     Decimal::from(3600 * h + 60 * m.unwrap_or(0))
-                        .checked_add(s.unwrap_or_else(Decimal::default))
+                        .checked_add(s.unwrap_or_default())
                         .ok_or(OVERFLOW_ERROR)
                 },
             ),
             map_res(tuple((du_minute_frag, opt(du_second_frag))), |(m, s)| {
                 Decimal::from(m * 60)
-                    .checked_add(s.unwrap_or_else(Decimal::default))
+                    .checked_add(s.unwrap_or_default())
                     .ok_or(OVERFLOW_ERROR)
             }),
             du_second_frag,
@@ -237,7 +237,7 @@ fn du_day_time_frag(input: &str) -> XsdResult<'_, Decimal> {
             Decimal::from(d)
                 .checked_mul(Decimal::from(86400))
                 .ok_or(OVERFLOW_ERROR)?
-                .checked_add(t.unwrap_or_else(Decimal::default))
+                .checked_add(t.unwrap_or_default())
                 .ok_or(OVERFLOW_ERROR)
         }),
         du_time_frag,
@@ -254,7 +254,7 @@ pub fn duration_lexical_rep(input: &str) -> XsdResult<'_, Duration> {
                 alt((
                     map(
                         tuple((du_year_month_frag, opt(du_day_time_frag))),
-                        |(y, d)| Duration::new(y, d.unwrap_or_else(Decimal::default)),
+                        |(y, d)| Duration::new(y, d.unwrap_or_default()),
                     ),
                     map(du_day_time_frag, |d| Duration::new(0, d)),
                 )),
@@ -410,7 +410,7 @@ pub fn day_time_duration_lexical_rep(input: &str) -> XsdResult<'_, DayTimeDurati
 
 // [46]   unsignedNoDecimalPtNumeral ::= digit+
 fn unsigned_no_decimal_pt_numeral(input: &str) -> XsdResult<'_, i64> {
-    map_res(digit1, |i| i64::from_str(i))(input)
+    map_res(digit1, i64::from_str)(input)
 }
 
 // [56]   yearFrag ::= '-'? (([1-9] digit digit digit+)) | ('0' digit digit digit))
