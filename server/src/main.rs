@@ -929,7 +929,6 @@ impl Write for ReadForWriteWriter {
 mod tests {
     use super::*;
     use oxhttp::model::Method;
-    use tempfile::{tempdir, TempDir};
 
     #[test]
     fn get_ui() {
@@ -1432,14 +1431,13 @@ mod tests {
 
     struct ServerTest {
         store: Store,
-        _path: TempDir,
     }
 
     impl ServerTest {
-        fn new() -> ServerTest {
-            let path = tempdir().unwrap();
-            let store = Store::open(path.path()).unwrap();
-            ServerTest { _path: path, store }
+        fn new() -> Self {
+            Self {
+                store: Store::new().unwrap(),
+            }
         }
 
         fn exec(&self, mut request: Request) -> Response {
