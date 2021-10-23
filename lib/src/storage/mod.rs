@@ -68,17 +68,17 @@ impl Storage {
 
     fn setup(db: Db) -> std::io::Result<Self> {
         let this = Self {
-            id2str: db.open_tree(ID2STR_CF),
-            spog: db.open_tree(SPOG_CF),
-            posg: db.open_tree(POSG_CF),
-            ospg: db.open_tree(OSPG_CF),
-            gspo: db.open_tree(GSPO_CF),
-            gpos: db.open_tree(GPOS_CF),
-            gosp: db.open_tree(GOSP_CF),
-            dspo: db.open_tree(DSPO_CF),
-            dpos: db.open_tree(DPOS_CF),
-            dosp: db.open_tree(DOSP_CF),
-            graphs: db.open_tree(GRAPHS_CF),
+            id2str: db.open_tree(ID2STR_CF)?,
+            spog: db.open_tree(SPOG_CF)?,
+            posg: db.open_tree(POSG_CF)?,
+            ospg: db.open_tree(OSPG_CF)?,
+            gspo: db.open_tree(GSPO_CF)?,
+            gpos: db.open_tree(GPOS_CF)?,
+            gosp: db.open_tree(GOSP_CF)?,
+            dspo: db.open_tree(DSPO_CF)?,
+            dpos: db.open_tree(DPOS_CF)?,
+            dosp: db.open_tree(DOSP_CF)?,
+            graphs: db.open_tree(GRAPHS_CF)?,
             default: db,
         };
 
@@ -105,6 +105,7 @@ impl Storage {
                 this.id2str.insert(key, &new_value)?;
                 iter.next();
             }
+            iter.status()?;
             version = 2;
             this.set_version(version)?;
             this.default.flush()?;
@@ -712,6 +713,9 @@ impl Iterator for DecodingQuadIterator {
     type Item = std::io::Result<EncodedQuad>;
 
     fn next(&mut self) -> Option<std::io::Result<EncodedQuad>> {
+        if let Err(e) = self.iter.status() {
+            return Some(Err(e));
+        }
         let term = self.encoding.decode(self.iter.key()?);
         self.iter.next();
         Some(term)
@@ -726,6 +730,9 @@ impl Iterator for DecodingGraphIterator {
     type Item = std::io::Result<EncodedTerm>;
 
     fn next(&mut self) -> Option<std::io::Result<EncodedTerm>> {
+        if let Err(e) = self.iter.status() {
+            return Some(Err(e));
+        }
         let term = decode_term(self.iter.key()?);
         self.iter.next();
         Some(term)

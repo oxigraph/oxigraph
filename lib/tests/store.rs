@@ -138,7 +138,8 @@ fn test_dump_dataset() -> io::Result<()> {
 #[test]
 #[cfg(not(target_arch = "wasm32"))]
 fn test_backward_compatibility() -> io::Result<()> {
-    {
+    // We run twice to check if data is properly saved and closed
+    for _ in 0..2 {
         let store = Store::open("tests/rocksdb_bc_data")?;
         for q in quads(GraphNameRef::DefaultGraph) {
             assert!(store.contains(q)?);
@@ -153,7 +154,7 @@ fn test_backward_compatibility() -> io::Result<()> {
             vec![NamedOrBlankNode::from(graph_name)],
             store.named_graphs().collect::<io::Result<Vec<_>>>()?
         );
-    };
+    }
     reset_dir("tests/rocksdb_bc_data")?;
     Ok(())
 }
