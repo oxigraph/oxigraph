@@ -1,3 +1,5 @@
+//! TODO: This storage is dramatically naive.
+
 use std::collections::BTreeMap;
 use std::io::Result;
 use std::sync::{Arc, Mutex, RwLock};
@@ -16,22 +18,15 @@ impl Db {
         })
     }
 
-    pub fn open_tree(&self, name: &'static str) -> Tree {
-        self.trees.lock().unwrap().entry(name).or_default().clone()
+    pub fn open_tree(&self, name: &'static str) -> Result<Tree> {
+        Ok(self.trees.lock().unwrap().entry(name).or_default().clone())
     }
 
     pub fn flush(&self) -> Result<()> {
         Ok(())
     }
-
-    pub fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        self.default.get(key)
-    }
-
-    pub fn insert(&self, key: &[u8], value: &[u8]) -> Result<()> {
-        self.default.insert(key, value)
-    }
 }
+
 #[derive(Clone, Default)]
 pub struct Tree {
     tree: Arc<RwLock<BTreeMap<Vec<u8>, Vec<u8>>>>,
@@ -107,5 +102,9 @@ impl Iter {
 
     pub fn next(&mut self) {
         self.current = self.iter.next();
+    }
+
+    pub fn status(&self) -> Result<()> {
+        Ok(())
     }
 }
