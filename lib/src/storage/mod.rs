@@ -33,6 +33,7 @@ const DSPO_CF: &str = "dspo";
 const DPOS_CF: &str = "dpos";
 const DOSP_CF: &str = "dosp";
 const GRAPHS_CF: &str = "graphs";
+const DEFAULT_CF: &str = "default";
 
 const COLUMN_FAMILIES: [&str; 11] = [
     ID2STR_CF, SPOG_CF, POSG_CF, OSPG_CF, GSPO_CF, GPOS_CF, GOSP_CF, DSPO_CF, DPOS_CF, DOSP_CF,
@@ -42,7 +43,8 @@ const COLUMN_FAMILIES: [&str; 11] = [
 /// Low level storage primitives
 #[derive(Clone)]
 pub struct Storage {
-    default: Db,
+    db: Db,
+    default: Tree,
     id2str: Tree,
     spog: Tree,
     posg: Tree,
@@ -68,6 +70,7 @@ impl Storage {
 
     fn setup(db: Db) -> std::io::Result<Self> {
         let this = Self {
+            default: db.open_tree(DEFAULT_CF)?,
             id2str: db.open_tree(ID2STR_CF)?,
             spog: db.open_tree(SPOG_CF)?,
             posg: db.open_tree(POSG_CF)?,
@@ -79,7 +82,7 @@ impl Storage {
             dpos: db.open_tree(DPOS_CF)?,
             dosp: db.open_tree(DOSP_CF)?,
             graphs: db.open_tree(GRAPHS_CF)?,
-            default: db,
+            db,
         };
 
         let mut version = this.ensure_version()?;
@@ -93,7 +96,7 @@ impl Storage {
             }
             version = 1;
             this.set_version(version)?;
-            this.default.flush()?;
+            this.db.flush()?;
         }
         if version == 1 {
             // We migrate to v2
@@ -108,7 +111,7 @@ impl Storage {
             iter.status()?;
             version = 2;
             this.set_version(version)?;
-            this.default.flush()?;
+            this.db.flush()?;
         }
 
         match version {
@@ -652,8 +655,7 @@ impl Storage {
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn flush(&self) -> std::io::Result<()> {
-        self.default.flush()?;
-        Ok(())
+        self.db.flush()
     }
 
     pub fn get_str(&self, key: &StrHash) -> std::io::Result<Option<String>> {

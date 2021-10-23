@@ -196,52 +196,6 @@ impl Db {
             r
         }
     }
-
-    pub fn get(&self, key: &[u8]) -> Result<Option<PinnableSlice<'_>>> {
-        unsafe {
-            let options = rocksdb_readoptions_create();
-            assert!(
-                !options.is_null(),
-                "rocksdb_readoptions_create returned null"
-            );
-            let r = ffi_result!(rocksdb_get_pinned(
-                self.0.db,
-                options,
-                key.as_ptr() as *const c_char,
-                key.len()
-            ));
-            rocksdb_readoptions_destroy(options);
-            let slice = r?;
-            Ok(if slice.is_null() {
-                None
-            } else {
-                Some(PinnableSlice {
-                    slice,
-                    lifetime: PhantomData::default(),
-                })
-            })
-        }
-    }
-
-    pub fn insert(&self, key: &[u8], value: &[u8]) -> Result<()> {
-        unsafe {
-            let options = rocksdb_writeoptions_create();
-            assert!(
-                !options.is_null(),
-                "rocksdb_writeoptions_create returned null"
-            );
-            let r = ffi_result!(rocksdb_put(
-                self.0.db,
-                options,
-                key.as_ptr() as *const c_char,
-                key.len(),
-                value.as_ptr() as *const c_char,
-                value.len(),
-            ));
-            rocksdb_writeoptions_destroy(options);
-            r
-        }
-    }
 }
 
 #[derive(Clone)]
