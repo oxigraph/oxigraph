@@ -52,8 +52,8 @@ impl JsStore {
     }
 
     #[wasm_bindgen(getter=size)]
-    pub fn size(&self) -> usize {
-        self.store.len()
+    pub fn size(&self) -> Result<usize, JsValue> {
+        self.store.len().map_err(to_err)
     }
 
     #[wasm_bindgen(js_name = match)]

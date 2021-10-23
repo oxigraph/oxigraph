@@ -178,12 +178,12 @@ impl Store {
     /// Returns the number of quads in the store
     ///
     /// Warning: this function executes a full scan
-    pub fn len(&self) -> usize {
+    pub fn len(&self) -> io::Result<usize> {
         self.storage.len()
     }
 
     /// Returns if the store is empty
-    pub fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> io::Result<bool> {
         self.storage.is_empty()
     }
 
@@ -491,10 +491,10 @@ impl Store {
     /// let quad = QuadRef::new(ex, ex, ex, ex);
     /// let store = Store::new()?;
     /// store.insert(quad)?;
-    /// assert_eq!(1, store.len());
+    /// assert_eq!(1, store.len()?);
     ///
     /// store.clear_graph(ex)?;
-    /// assert_eq!(0, store.len());
+    /// assert_eq!(store.is_empty()?);
     /// assert_eq!(1, store.named_graphs().count());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -515,10 +515,10 @@ impl Store {
     /// let quad = QuadRef::new(ex, ex, ex, ex);
     /// let store = Store::new()?;
     /// store.insert(quad)?;
-    /// assert_eq!(1, store.len());
+    /// assert_eq!(1, store.len()?);
     ///
     /// store.remove_named_graph(ex)?;
-    /// assert!(store.is_empty());
+    /// assert!(store.is_empty()?);
     /// assert_eq!(0, store.named_graphs().count());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -540,10 +540,10 @@ impl Store {
     /// let store = Store::new()?;
     /// store.insert(QuadRef::new(ex, ex, ex, ex))?;
     /// store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;    
-    /// assert_eq!(2, store.len());
+    /// assert_eq!(2, store.len()?);
     ///
     /// store.clear()?;
-    /// assert!(store.is_empty());
+    /// assert!(store.is_empty()?);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn clear(&self) -> io::Result<()> {
@@ -676,7 +676,7 @@ fn store() -> io::Result<()> {
     assert!(store.insert(&default_quad)?);
     assert!(!store.insert(&default_quad)?);
 
-    assert_eq!(store.len(), 4);
+    assert_eq!(store.len()?, 4);
     assert_eq!(store.iter().collect::<Result<Vec<_>, _>>()?, all_quads);
     assert_eq!(
         store

@@ -2,68 +2,97 @@
 
 use std::collections::BTreeMap;
 use std::io::Result;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
 #[derive(Clone)]
-pub struct Db {
-    trees: Arc<Mutex<BTreeMap<&'static str, Tree>>>,
-    default: Tree,
-}
+pub struct Db(Arc<RwLock<BTreeMap<ColumnFamily, BTreeMap<Vec<u8>, Vec<u8>>>>>);
 
 impl Db {
-    pub fn new(_column_families: &[&str]) -> Result<Self> {
-        Ok(Self {
-            trees: Arc::default(),
-            default: Tree::default(),
-        })
+    pub fn new(column_families: &'static [&'static str]) -> Result<Self> {
+        let mut trees = BTreeMap::new();
+        for cf in column_families {
+            trees.insert(ColumnFamily(*cf), BTreeMap::default());
+        }
+        trees.entry(ColumnFamily("default")).or_default(); // We make sure that "default" key exists.
+        Ok(Self(Arc::new(RwLock::new(trees))))
     }
 
-    pub fn open_tree(&self, name: &'static str) -> Result<Tree> {
-        Ok(self.trees.lock().unwrap().entry(name).or_default().clone())
+    pub fn column_family(&self, name: &'static str) -> Option<ColumnFamily> {
+        let name = ColumnFamily(name);
+        if self.0.read().unwrap().contains_key(&name) {
+            Some(name)
+        } else {
+            None
+        }
     }
 
     pub fn flush(&self) -> Result<()> {
         Ok(())
     }
-}
 
-#[derive(Clone, Default)]
-pub struct Tree {
-    tree: Arc<RwLock<BTreeMap<Vec<u8>, Vec<u8>>>>,
-}
-
-impl Tree {
-    pub fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        Ok(self.tree.read().unwrap().get(key).map(|v| v.to_vec()))
+    pub fn get(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        Ok(self
+            .0
+            .read()
+            .unwrap()
+            .get(column_family)
+            .unwrap()
+            .get(key)
+            .map(|v| v.to_vec()))
     }
 
-    pub fn contains_key(&self, key: &[u8]) -> Result<bool> {
-        Ok(self.tree.read().unwrap().contains_key(key.as_ref()))
+    pub fn contains_key(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<bool> {
+        Ok(self
+            .0
+            .read()
+            .unwrap()
+            .get(column_family)
+            .unwrap()
+            .contains_key(key.as_ref()))
     }
 
-    pub fn insert(&self, key: &[u8], value: &[u8]) -> Result<()> {
-        self.tree.write().unwrap().insert(key.into(), value.into());
+    pub fn insert(&self, column_family: &ColumnFamily, key: &[u8], value: &[u8]) -> Result<()> {
+        self.0
+            .write()
+            .unwrap()
+            .get_mut(column_family)
+            .unwrap()
+            .insert(key.into(), value.into());
         Ok(())
     }
 
-    pub fn insert_empty(&self, key: &[u8]) -> Result<()> {
-        self.insert(key, &[])
+    pub fn insert_empty(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<()> {
+        self.insert(column_family, key, &[])
     }
 
-    pub fn remove(&self, key: &[u8]) -> Result<bool> {
-        Ok(self.tree.write().unwrap().remove(key.as_ref()).is_some())
+    pub fn remove(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<bool> {
+        Ok(self
+            .0
+            .write()
+            .unwrap()
+            .get_mut(column_family)
+            .unwrap()
+            .remove(key.as_ref())
+            .is_some())
     }
 
-    pub fn clear(&self) -> Result<()> {
-        Ok(self.tree.write().unwrap().clear())
+    pub fn clear(&self, column_family: &ColumnFamily) -> Result<()> {
+        Ok(self
+            .0
+            .write()
+            .unwrap()
+            .get_mut(column_family)
+            .unwrap()
+            .clear())
     }
 
-    pub fn iter(&self) -> Iter {
-        self.scan_prefix(&[])
+    pub fn iter(&self, column_family: &ColumnFamily) -> Iter {
+        self.scan_prefix(column_family, &[])
     }
 
-    pub fn scan_prefix(&self, prefix: &[u8]) -> Iter {
-        let tree = self.tree.read().unwrap();
+    pub fn scan_prefix(&self, column_family: &ColumnFamily, prefix: &[u8]) -> Iter {
+        let trees = self.0.read().unwrap();
+        let tree = trees.get(column_family).unwrap();
         let data: Vec<_> = if prefix.is_empty() {
             tree.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
         } else {
@@ -77,14 +106,23 @@ impl Tree {
         Iter { iter, current }
     }
 
-    pub fn len(&self) -> usize {
-        self.tree.read().unwrap().len()
+    pub fn len(&self, column_family: &ColumnFamily) -> Result<usize> {
+        Ok(self.0.read().unwrap().get(column_family).unwrap().len())
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.tree.read().unwrap().is_empty()
+    pub fn is_empty(&self, column_family: &ColumnFamily) -> Result<bool> {
+        Ok(self
+            .0
+            .read()
+            .unwrap()
+            .get(column_family)
+            .unwrap()
+            .is_empty())
     }
 }
+
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
+pub struct ColumnFamily(&'static str);
 
 pub struct Iter {
     iter: std::vec::IntoIter<(Vec<u8>, Vec<u8>)>,

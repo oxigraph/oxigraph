@@ -169,19 +169,13 @@ impl Db {
         }
     }
 
-    pub fn open_tree(&self, name: &'static str) -> Result<Tree> {
+    pub fn column_family(&self, name: &'static str) -> Option<ColumnFamily> {
         for (cf_name, cf_handle) in self.0.column_families.iter().zip(&self.0.cf_handles) {
             if *cf_name == name {
-                return Ok(Tree {
-                    db: self.0.clone(),
-                    cf_handle: *cf_handle,
-                });
+                return Some(ColumnFamily(*cf_handle));
             }
         }
-        Err(other_error(format!(
-            "The column family {} does not exist",
-            name
-        )))
+        None
     }
 
     pub fn flush(&self) -> Result<()> {
@@ -196,19 +190,12 @@ impl Db {
             r
         }
     }
-}
 
-#[derive(Clone)]
-pub struct Tree {
-    db: Arc<DbHandler>,
-    cf_handle: *mut rocksdb_column_family_handle_t,
-}
-
-unsafe impl Send for Tree {}
-unsafe impl Sync for Tree {}
-
-impl Tree {
-    pub fn get(&self, key: &[u8]) -> Result<Option<PinnableSlice<'_>>> {
+    pub fn get(
+        &self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+    ) -> Result<Option<PinnableSlice<'_>>> {
         unsafe {
             let options = rocksdb_readoptions_create();
             assert!(
@@ -216,9 +203,9 @@ impl Tree {
                 "rocksdb_readoptions_create returned null"
             );
             let r = ffi_result!(rocksdb_get_pinned_cf(
-                self.db.db,
+                self.0.db,
                 options,
-                self.cf_handle,
+                column_family.0,
                 key.as_ptr() as *const c_char,
                 key.len()
             ));
@@ -235,11 +222,11 @@ impl Tree {
         }
     }
 
-    pub fn contains_key(&self, key: &[u8]) -> Result<bool> {
-        Ok(self.get(key)?.is_some()) //TODO: optimize
+    pub fn contains_key(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<bool> {
+        Ok(self.get(column_family, key)?.is_some()) //TODO: optimize
     }
 
-    pub fn insert(&self, key: &[u8], value: &[u8]) -> Result<()> {
+    pub fn insert(&self, column_family: &ColumnFamily, key: &[u8], value: &[u8]) -> Result<()> {
         unsafe {
             let options = rocksdb_writeoptions_create();
             assert!(
@@ -247,9 +234,9 @@ impl Tree {
                 "rocksdb_writeoptions_create returned null"
             );
             let r = ffi_result!(rocksdb_put_cf(
-                self.db.db,
+                self.0.db,
                 options,
-                self.cf_handle,
+                column_family.0,
                 key.as_ptr() as *const c_char,
                 key.len(),
                 value.as_ptr() as *const c_char,
@@ -260,11 +247,11 @@ impl Tree {
         }
     }
 
-    pub fn insert_empty(&self, key: &[u8]) -> Result<()> {
-        self.insert(key, &[])
+    pub fn insert_empty(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<()> {
+        self.insert(column_family, key, &[])
     }
 
-    pub fn remove(&self, key: &[u8]) -> Result<()> {
+    pub fn remove(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<()> {
         unsafe {
             let options = rocksdb_writeoptions_create();
             assert!(
@@ -272,9 +259,9 @@ impl Tree {
                 "rocksdb_writeoptions_create returned null"
             );
             let r = ffi_result!(rocksdb_delete_cf(
-                self.db.db,
+                self.0.db,
                 options,
-                self.cf_handle,
+                column_family.0,
                 key.as_ptr() as *const c_char,
                 key.len()
             ));
@@ -283,7 +270,7 @@ impl Tree {
         }
     }
 
-    pub fn clear(&self) -> Result<()> {
+    pub fn clear(&self, column_family: &ColumnFamily) -> Result<()> {
         unsafe {
             let options = rocksdb_writeoptions_create();
             assert!(
@@ -293,9 +280,9 @@ impl Tree {
             let start = [];
             let end = [c_char::MAX; 257];
             let r = ffi_result!(rocksdb_delete_range_cf(
-                self.db.db,
+                self.0.db,
                 options,
-                self.cf_handle,
+                column_family.0,
                 start.as_ptr(),
                 start.len(),
                 end.as_ptr(),
@@ -306,18 +293,18 @@ impl Tree {
         }
     }
 
-    pub fn iter(&self) -> Iter {
-        self.scan_prefix(&[])
+    pub fn iter(&self, column_family: &ColumnFamily) -> Iter {
+        self.scan_prefix(column_family, &[])
     }
 
-    pub fn scan_prefix(&self, prefix: &[u8]) -> Iter {
+    pub fn scan_prefix(&self, column_family: &ColumnFamily, prefix: &[u8]) -> Iter {
         unsafe {
             let options = rocksdb_readoptions_create();
             assert!(
                 !options.is_null(),
                 "rocksdb_readoptions_create returned null"
             );
-            let iter = rocksdb_create_iterator_cf(self.db.db, options, self.cf_handle);
+            let iter = rocksdb_create_iterator_cf(self.0.db, options, column_family.0);
             assert!(!options.is_null(), "rocksdb_create_iterator returned null");
             if prefix.is_empty() {
                 rocksdb_iter_seek_to_first(iter);
@@ -328,25 +315,36 @@ impl Tree {
                 iter,
                 _options: options,
                 prefix: prefix.to_vec(),
-                _db: self.db.clone(),
+                _db: self.0.clone(),
             }
         }
     }
 
-    pub fn len(&self) -> usize {
+    pub fn len(&self, column_family: &ColumnFamily) -> Result<usize> {
         let mut count = 0;
-        let mut iter = self.iter();
+        let mut iter = self.iter(column_family);
         while iter.is_valid() {
             count += 1;
             iter.next();
         }
-        count
+        iter.status()?; // We makes sure there is no read problem
+        Ok(count)
     }
 
-    pub fn is_empty(&self) -> bool {
-        !self.iter().is_valid()
+    pub fn is_empty(&self, column_family: &ColumnFamily) -> Result<bool> {
+        let iter = self.iter(column_family);
+        iter.status()?; // We makes sure there is no read problem
+        Ok(!iter.is_valid())
     }
 }
+
+// It is fine to not keep a lifetime: there is no way to use this type without the database being still in scope.
+// So, no use after free possible.
+#[derive(Clone)]
+pub struct ColumnFamily(*mut rocksdb_column_family_handle_t);
+
+unsafe impl Send for ColumnFamily {}
+unsafe impl Sync for ColumnFamily {}
 
 pub struct PinnableSlice<'a> {
     slice: *mut rocksdb_pinnableslice_t,

@@ -8,9 +8,10 @@ use crate::storage::binary_encoder::{
 };
 use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash, StrLookup, TermEncoder};
 #[cfg(target_arch = "wasm32")]
-use fallback_backend::{Db, Iter, Tree};
+use fallback_backend::{ColumnFamily, Db, Iter};
 #[cfg(not(target_arch = "wasm32"))]
-use rocksdb_backend::{Db, Iter, Tree};
+use rocksdb_backend::{ColumnFamily, Db, Iter};
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
 mod binary_encoder;
@@ -44,18 +45,18 @@ const COLUMN_FAMILIES: [&str; 11] = [
 #[derive(Clone)]
 pub struct Storage {
     db: Db,
-    default: Tree,
-    id2str: Tree,
-    spog: Tree,
-    posg: Tree,
-    ospg: Tree,
-    gspo: Tree,
-    gpos: Tree,
-    gosp: Tree,
-    dspo: Tree,
-    dpos: Tree,
-    dosp: Tree,
-    graphs: Tree,
+    default_cf: ColumnFamily,
+    id2str_cf: ColumnFamily,
+    spog_cf: ColumnFamily,
+    posg_cf: ColumnFamily,
+    ospg_cf: ColumnFamily,
+    gspo_cf: ColumnFamily,
+    gpos_cf: ColumnFamily,
+    gosp_cf: ColumnFamily,
+    dspo_cf: ColumnFamily,
+    dpos_cf: ColumnFamily,
+    dosp_cf: ColumnFamily,
+    graphs_cf: ColumnFamily,
 }
 
 impl Storage {
@@ -70,18 +71,18 @@ impl Storage {
 
     fn setup(db: Db) -> std::io::Result<Self> {
         let this = Self {
-            default: db.open_tree(DEFAULT_CF)?,
-            id2str: db.open_tree(ID2STR_CF)?,
-            spog: db.open_tree(SPOG_CF)?,
-            posg: db.open_tree(POSG_CF)?,
-            ospg: db.open_tree(OSPG_CF)?,
-            gspo: db.open_tree(GSPO_CF)?,
-            gpos: db.open_tree(GPOS_CF)?,
-            gosp: db.open_tree(GOSP_CF)?,
-            dspo: db.open_tree(DSPO_CF)?,
-            dpos: db.open_tree(DPOS_CF)?,
-            dosp: db.open_tree(DOSP_CF)?,
-            graphs: db.open_tree(GRAPHS_CF)?,
+            default_cf: db.column_family(DEFAULT_CF).unwrap(),
+            id2str_cf: db.column_family(ID2STR_CF).unwrap(),
+            spog_cf: db.column_family(SPOG_CF).unwrap(),
+            posg_cf: db.column_family(POSG_CF).unwrap(),
+            ospg_cf: db.column_family(OSPG_CF).unwrap(),
+            gspo_cf: db.column_family(GSPO_CF).unwrap(),
+            gpos_cf: db.column_family(GPOS_CF).unwrap(),
+            gosp_cf: db.column_family(GOSP_CF).unwrap(),
+            dspo_cf: db.column_family(DSPO_CF).unwrap(),
+            dpos_cf: db.column_family(DPOS_CF).unwrap(),
+            dosp_cf: db.column_family(DOSP_CF).unwrap(),
+            graphs_cf: db.column_family(GRAPHS_CF).unwrap(),
             db,
         };
 
@@ -91,7 +92,8 @@ impl Storage {
             for quad in this.quads() {
                 let quad = quad?;
                 if !quad.graph_name.is_default_graph() {
-                    this.graphs.insert_empty(&encode_term(&quad.graph_name))?;
+                    this.db
+                        .insert_empty(&this.graphs_cf, &encode_term(&quad.graph_name))?;
                 }
             }
             version = 1;
@@ -100,12 +102,12 @@ impl Storage {
         }
         if version == 1 {
             // We migrate to v2
-            let mut iter = this.id2str.iter();
+            let mut iter = this.db.iter(&this.id2str_cf);
             while let (Some(key), Some(value)) = (iter.key(), iter.value()) {
                 let mut new_value = Vec::with_capacity(value.len() + 4);
                 new_value.extend_from_slice(&u32::MAX.to_be_bytes());
                 new_value.extend_from_slice(value);
-                this.id2str.insert(key, &new_value)?;
+                this.db.insert(&this.id2str_cf, key, &new_value)?;
                 iter.next();
             }
             iter.status()?;
@@ -128,37 +130,40 @@ impl Storage {
     }
 
     fn ensure_version(&self) -> std::io::Result<u64> {
-        Ok(if let Some(version) = self.default.get(b"oxversion")? {
-            let mut buffer = [0; 8];
-            buffer.copy_from_slice(&version);
-            u64::from_be_bytes(buffer)
-        } else {
-            self.set_version(LATEST_STORAGE_VERSION)?;
-            LATEST_STORAGE_VERSION
-        })
+        Ok(
+            if let Some(version) = self.db.get(&self.default_cf, b"oxversion")? {
+                let mut buffer = [0; 8];
+                buffer.copy_from_slice(&version);
+                u64::from_be_bytes(buffer)
+            } else {
+                self.set_version(LATEST_STORAGE_VERSION)?;
+                LATEST_STORAGE_VERSION
+            },
+        )
     }
 
     fn set_version(&self, version: u64) -> std::io::Result<()> {
-        self.default.insert(b"oxversion", &version.to_be_bytes())?;
+        self.db
+            .insert(&self.default_cf, b"oxversion", &version.to_be_bytes())?;
         Ok(())
     }
 
-    pub fn len(&self) -> usize {
-        self.gspo.len() + self.dspo.len()
+    pub fn len(&self) -> std::io::Result<usize> {
+        Ok(self.db.len(&self.gspo_cf)? + self.db.len(&self.dspo_cf)?)
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.gspo.is_empty() && self.dspo.is_empty()
+    pub fn is_empty(&self) -> std::io::Result<bool> {
+        Ok(self.db.is_empty(&self.gspo_cf)? && self.db.is_empty(&self.dspo_cf)?)
     }
 
     pub fn contains(&self, quad: &EncodedQuad) -> std::io::Result<bool> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
         if quad.graph_name.is_default_graph() {
             write_spo_quad(&mut buffer, quad);
-            Ok(self.dspo.contains_key(&buffer)?)
+            Ok(self.db.contains_key(&self.dspo_cf, &buffer)?)
         } else {
             write_gspo_quad(&mut buffer, quad);
-            Ok(self.gspo.contains_key(&buffer)?)
+            Ok(self.db.contains_key(&self.gspo_cf, &buffer)?)
         }
     }
 
@@ -398,53 +403,59 @@ impl Storage {
 
     pub fn named_graphs(&self) -> DecodingGraphIterator {
         DecodingGraphIterator {
-            iter: self.graphs.iter(),
+            iter: self.db.iter(&self.graphs_cf),
         }
     }
 
     pub fn contains_named_graph(&self, graph_name: &EncodedTerm) -> std::io::Result<bool> {
-        self.graphs.contains_key(&encode_term(graph_name))
+        self.db
+            .contains_key(&self.graphs_cf, &encode_term(graph_name))
     }
 
     fn spog_quads(&self, prefix: &[u8]) -> DecodingQuadIterator {
-        Self::inner_quads(&self.spog, prefix, QuadEncoding::Spog)
+        self.inner_quads(&self.spog_cf, prefix, QuadEncoding::Spog)
     }
 
     fn posg_quads(&self, prefix: &[u8]) -> DecodingQuadIterator {
-        Self::inner_quads(&self.posg, prefix, QuadEncoding::Posg)
+        self.inner_quads(&self.posg_cf, prefix, QuadEncoding::Posg)
     }
 
     fn ospg_quads(&self, prefix: &[u8]) -> DecodingQuadIterator {
-        Self::inner_quads(&self.ospg, prefix, QuadEncoding::Ospg)
+        self.inner_quads(&self.ospg_cf, prefix, QuadEncoding::Ospg)
     }
 
     fn gspo_quads(&self, prefix: &[u8]) -> DecodingQuadIterator {
-        Self::inner_quads(&self.gspo, prefix, QuadEncoding::Gspo)
+        self.inner_quads(&self.gspo_cf, prefix, QuadEncoding::Gspo)
     }
 
     fn gpos_quads(&self, prefix: &[u8]) -> DecodingQuadIterator {
-        Self::inner_quads(&self.gpos, prefix, QuadEncoding::Gpos)
+        self.inner_quads(&self.gpos_cf, prefix, QuadEncoding::Gpos)
     }
 
     fn gosp_quads(&self, prefix: &[u8]) -> DecodingQuadIterator {
-        Self::inner_quads(&self.gosp, prefix, QuadEncoding::Gosp)
+        self.inner_quads(&self.gosp_cf, prefix, QuadEncoding::Gosp)
     }
 
     fn dspo_quads(&self, prefix: &[u8]) -> DecodingQuadIterator {
-        Self::inner_quads(&self.dspo, prefix, QuadEncoding::Dspo)
+        self.inner_quads(&self.dspo_cf, prefix, QuadEncoding::Dspo)
     }
 
     fn dpos_quads(&self, prefix: &[u8]) -> DecodingQuadIterator {
-        Self::inner_quads(&self.dpos, prefix, QuadEncoding::Dpos)
+        self.inner_quads(&self.dpos_cf, prefix, QuadEncoding::Dpos)
     }
 
     fn dosp_quads(&self, prefix: &[u8]) -> DecodingQuadIterator {
-        Self::inner_quads(&self.dosp, prefix, QuadEncoding::Dosp)
+        self.inner_quads(&self.dosp_cf, prefix, QuadEncoding::Dosp)
     }
 
-    fn inner_quads(tree: &Tree, prefix: &[u8], encoding: QuadEncoding) -> DecodingQuadIterator {
+    fn inner_quads(
+        &self,
+        column_family: &ColumnFamily,
+        prefix: &[u8],
+        encoding: QuadEncoding,
+    ) -> DecodingQuadIterator {
         DecodingQuadIterator {
-            iter: tree.scan_prefix(prefix),
+            iter: self.db.scan_prefix(column_family, prefix),
             encoding,
         }
     }
@@ -455,57 +466,57 @@ impl Storage {
 
         Ok(if quad.graph_name.is_default_graph() {
             write_spo_quad(&mut buffer, &encoded);
-            if self.dspo.contains_key(buffer.as_slice())? {
+            if self.db.contains_key(&self.dspo_cf, buffer.as_slice())? {
                 false
             } else {
                 self.insert_quad_triple(quad, &encoded)?;
 
-                self.dspo.insert_empty(buffer.as_slice())?;
+                self.db.insert_empty(&self.dspo_cf, buffer.as_slice())?;
                 buffer.clear();
 
                 write_pos_quad(&mut buffer, &encoded);
-                self.dpos.insert_empty(buffer.as_slice())?;
+                self.db.insert_empty(&self.dpos_cf, buffer.as_slice())?;
                 buffer.clear();
 
                 write_osp_quad(&mut buffer, &encoded);
-                self.dosp.insert_empty(buffer.as_slice())?;
+                self.db.insert_empty(&self.dosp_cf, buffer.as_slice())?;
                 buffer.clear();
 
                 true
             }
         } else {
             write_spog_quad(&mut buffer, &encoded);
-            if self.spog.contains_key(buffer.as_slice())? {
+            if self.db.contains_key(&self.spog_cf, buffer.as_slice())? {
                 false
             } else {
                 self.insert_quad_triple(quad, &encoded)?;
 
-                self.spog.insert_empty(buffer.as_slice())?;
+                self.db.insert_empty(&self.spog_cf, buffer.as_slice())?;
                 buffer.clear();
 
                 write_posg_quad(&mut buffer, &encoded);
-                self.posg.insert_empty(buffer.as_slice())?;
+                self.db.insert_empty(&self.posg_cf, buffer.as_slice())?;
                 buffer.clear();
 
                 write_ospg_quad(&mut buffer, &encoded);
-                self.ospg.insert_empty(buffer.as_slice())?;
+                self.db.insert_empty(&self.ospg_cf, buffer.as_slice())?;
                 buffer.clear();
 
                 write_gspo_quad(&mut buffer, &encoded);
-                self.gspo.insert_empty(buffer.as_slice())?;
+                self.db.insert_empty(&self.gspo_cf, buffer.as_slice())?;
                 buffer.clear();
 
                 write_gpos_quad(&mut buffer, &encoded);
-                self.gpos.insert_empty(buffer.as_slice())?;
+                self.db.insert_empty(&self.gpos_cf, buffer.as_slice())?;
                 buffer.clear();
 
                 write_gosp_quad(&mut buffer, &encoded);
-                self.gosp.insert_empty(buffer.as_slice())?;
+                self.db.insert_empty(&self.gosp_cf, buffer.as_slice())?;
                 buffer.clear();
 
                 write_term(&mut buffer, &encoded.graph_name);
-                if !self.graphs.contains_key(&buffer)? {
-                    self.graphs.insert_empty(&buffer)?;
+                if !self.db.contains_key(&self.graphs_cf, &buffer)? {
+                    self.db.insert_empty(&self.graphs_cf, &buffer)?;
                     self.insert_graph_name(quad.graph_name, &encoded.graph_name)?;
                 }
                 buffer.clear();
@@ -525,16 +536,16 @@ impl Storage {
         Ok(if quad.graph_name.is_default_graph() {
             write_spo_quad(&mut buffer, quad);
 
-            if self.dspo.contains_key(buffer.as_slice())? {
-                self.dspo.remove(buffer.as_slice())?;
+            if self.db.contains_key(&self.dspo_cf, buffer.as_slice())? {
+                self.db.remove(&self.dspo_cf, buffer.as_slice())?;
                 buffer.clear();
 
                 write_pos_quad(&mut buffer, quad);
-                self.dpos.remove(buffer.as_slice())?;
+                self.db.remove(&self.dpos_cf, buffer.as_slice())?;
                 buffer.clear();
 
                 write_osp_quad(&mut buffer, quad);
-                self.dosp.remove(buffer.as_slice())?;
+                self.db.remove(&self.dosp_cf, buffer.as_slice())?;
                 buffer.clear();
 
                 self.remove_quad_triple(quad)?;
@@ -546,28 +557,28 @@ impl Storage {
         } else {
             write_spog_quad(&mut buffer, quad);
 
-            if self.spog.contains_key(buffer.as_slice())? {
-                self.spog.remove(buffer.as_slice())?;
+            if self.db.contains_key(&self.spog_cf, buffer.as_slice())? {
+                self.db.remove(&self.spog_cf, buffer.as_slice())?;
                 buffer.clear();
 
                 write_posg_quad(&mut buffer, quad);
-                self.posg.remove(buffer.as_slice())?;
+                self.db.remove(&self.posg_cf, buffer.as_slice())?;
                 buffer.clear();
 
                 write_ospg_quad(&mut buffer, quad);
-                self.ospg.remove(buffer.as_slice())?;
+                self.db.remove(&self.ospg_cf, buffer.as_slice())?;
                 buffer.clear();
 
                 write_gspo_quad(&mut buffer, quad);
-                self.gspo.remove(buffer.as_slice())?;
+                self.db.remove(&self.gspo_cf, buffer.as_slice())?;
                 buffer.clear();
 
                 write_gpos_quad(&mut buffer, quad);
-                self.gpos.remove(buffer.as_slice())?;
+                self.db.remove(&self.gpos_cf, buffer.as_slice())?;
                 buffer.clear();
 
                 write_gosp_quad(&mut buffer, quad);
-                self.gosp.remove(buffer.as_slice())?;
+                self.db.remove(&self.gosp_cf, buffer.as_slice())?;
                 buffer.clear();
 
                 self.remove_quad_triple(quad)?;
@@ -582,10 +593,10 @@ impl Storage {
     pub fn insert_named_graph(&self, graph_name: NamedOrBlankNodeRef<'_>) -> std::io::Result<bool> {
         let encoded_graph_name = graph_name.into();
         let encoded = encode_term(&encoded_graph_name);
-        Ok(if self.graphs.contains_key(&encoded)? {
+        Ok(if self.db.contains_key(&self.graphs_cf, &encoded)? {
             false
         } else {
-            self.graphs.insert_empty(&encoded)?;
+            self.db.insert_empty(&self.graphs_cf, &encoded)?;
             self.insert_term(graph_name.into(), &encoded_graph_name)?;
             true
         })
@@ -618,8 +629,8 @@ impl Storage {
             self.remove_encoded(&quad?)?;
         }
         let encoded_graph = encode_term(&graph_name);
-        Ok(if self.graphs.contains_key(&encoded_graph)? {
-            self.graphs.remove(&encoded_graph)?;
+        Ok(if self.db.contains_key(&self.graphs_cf, &encoded_graph)? {
+            self.db.remove(&self.graphs_cf, &encoded_graph)?;
             self.remove_term(&graph_name)?;
             true
         } else {
@@ -628,28 +639,28 @@ impl Storage {
     }
 
     pub fn remove_all_named_graphs(&self) -> std::io::Result<()> {
-        self.gspo.clear()?;
-        self.gpos.clear()?;
-        self.gosp.clear()?;
-        self.spog.clear()?;
-        self.posg.clear()?;
-        self.ospg.clear()?;
-        self.graphs.clear()?;
+        self.db.clear(&self.gspo_cf)?;
+        self.db.clear(&self.gpos_cf)?;
+        self.db.clear(&self.gosp_cf)?;
+        self.db.clear(&self.spog_cf)?;
+        self.db.clear(&self.posg_cf)?;
+        self.db.clear(&self.ospg_cf)?;
+        self.db.clear(&self.graphs_cf)?;
         Ok(())
     }
 
     pub fn clear(&self) -> std::io::Result<()> {
-        self.dspo.clear()?;
-        self.dpos.clear()?;
-        self.dosp.clear()?;
-        self.gspo.clear()?;
-        self.gpos.clear()?;
-        self.gosp.clear()?;
-        self.spog.clear()?;
-        self.posg.clear()?;
-        self.ospg.clear()?;
-        self.graphs.clear()?;
-        self.id2str.clear()?;
+        self.db.clear(&self.dspo_cf)?;
+        self.db.clear(&self.dpos_cf)?;
+        self.db.clear(&self.dosp_cf)?;
+        self.db.clear(&self.gspo_cf)?;
+        self.db.clear(&self.gpos_cf)?;
+        self.db.clear(&self.gosp_cf)?;
+        self.db.clear(&self.spog_cf)?;
+        self.db.clear(&self.posg_cf)?;
+        self.db.clear(&self.ospg_cf)?;
+        self.db.clear(&self.graphs_cf)?;
+        self.db.clear(&self.id2str_cf)?;
         Ok(())
     }
 
@@ -659,15 +670,15 @@ impl Storage {
     }
 
     pub fn get_str(&self, key: &StrHash) -> std::io::Result<Option<String>> {
-        self.id2str
-            .get(&key.to_be_bytes())?
+        self.db
+            .get(&self.id2str_cf, &key.to_be_bytes())?
             .map(|v| String::from_utf8(v[4..].to_vec()))
             .transpose()
             .map_err(invalid_data_error)
     }
 
     pub fn contains_str(&self, key: &StrHash) -> std::io::Result<bool> {
-        self.id2str.contains_key(&key.to_be_bytes())
+        self.db.contains_key(&self.id2str_cf, &key.to_be_bytes())
     }
 }
 
@@ -745,31 +756,34 @@ impl TermEncoder for Storage {
     type Error = std::io::Error;
 
     fn insert_str(&self, key: &StrHash, value: &str) -> std::io::Result<()> {
-        if let Some(value) = self.id2str.get(&key.to_be_bytes())? {
+        if let Some(value) = self.db.get(&self.id2str_cf, &key.to_be_bytes())? {
             let mut value = value.to_vec();
             let number = u32::from_be_bytes(value[..4].try_into().map_err(invalid_data_error)?);
             let new_number = number.saturating_add(1);
             value[..4].copy_from_slice(&new_number.to_be_bytes());
-            self.id2str.insert(&key.to_be_bytes(), &value)?
+            self.db
+                .insert(&self.id2str_cf, &key.to_be_bytes(), &value)?
         } else {
             let mut buffer = Vec::with_capacity(value.len() + 4);
             buffer.extend_from_slice(&1_u32.to_be_bytes());
             buffer.extend_from_slice(value.as_bytes());
-            self.id2str.insert(&key.to_be_bytes(), &buffer)?;
+            self.db
+                .insert(&self.id2str_cf, &key.to_be_bytes(), &buffer)?;
         }
         Ok(())
     }
 
     fn remove_str(&self, key: &StrHash) -> std::io::Result<()> {
-        if let Some(value) = self.id2str.get(&key.to_be_bytes())? {
+        if let Some(value) = self.db.get(&self.id2str_cf, &key.to_be_bytes())? {
             let number = u32::from_be_bytes(value[..4].try_into().map_err(invalid_data_error)?);
             let new_number = number.saturating_sub(1);
             if new_number == 0 {
-                self.id2str.remove(&key.to_be_bytes())?;
+                self.db.remove(&self.id2str_cf, &key.to_be_bytes())?;
             } else {
                 let mut value = value.to_vec();
                 value[..4].copy_from_slice(&new_number.to_be_bytes());
-                self.id2str.insert(&key.to_be_bytes(), &value)?;
+                self.db
+                    .insert(&self.id2str_cf, &key.to_be_bytes(), &value)?;
             }
         }
         Ok(())
