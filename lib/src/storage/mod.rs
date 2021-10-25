@@ -624,14 +624,17 @@ impl Storage {
     }
 
     pub fn remove_named_graph(&self, graph_name: NamedOrBlankNodeRef<'_>) -> std::io::Result<bool> {
-        let graph_name = graph_name.into();
-        for quad in self.quads_for_graph(&graph_name) {
+        self.remove_encoded_named_graph(&graph_name.into())
+    }
+
+    fn remove_encoded_named_graph(&self, graph_name: &EncodedTerm) -> std::io::Result<bool> {
+        for quad in self.quads_for_graph(graph_name) {
             self.remove_encoded(&quad?)?;
         }
-        let encoded_graph = encode_term(&graph_name);
+        let encoded_graph = encode_term(graph_name);
         Ok(if self.db.contains_key(&self.graphs_cf, &encoded_graph)? {
             self.db.remove(&self.graphs_cf, &encoded_graph)?;
-            self.remove_term(&graph_name)?;
+            self.remove_term(graph_name)?;
             true
         } else {
             false
@@ -639,28 +642,19 @@ impl Storage {
     }
 
     pub fn remove_all_named_graphs(&self) -> std::io::Result<()> {
-        self.db.clear(&self.gspo_cf)?;
-        self.db.clear(&self.gpos_cf)?;
-        self.db.clear(&self.gosp_cf)?;
-        self.db.clear(&self.spog_cf)?;
-        self.db.clear(&self.posg_cf)?;
-        self.db.clear(&self.ospg_cf)?;
-        self.db.clear(&self.graphs_cf)?;
+        for graph_name in self.named_graphs() {
+            self.remove_encoded_named_graph(&graph_name?)?;
+        }
         Ok(())
     }
 
     pub fn clear(&self) -> std::io::Result<()> {
-        self.db.clear(&self.dspo_cf)?;
-        self.db.clear(&self.dpos_cf)?;
-        self.db.clear(&self.dosp_cf)?;
-        self.db.clear(&self.gspo_cf)?;
-        self.db.clear(&self.gpos_cf)?;
-        self.db.clear(&self.gosp_cf)?;
-        self.db.clear(&self.spog_cf)?;
-        self.db.clear(&self.posg_cf)?;
-        self.db.clear(&self.ospg_cf)?;
-        self.db.clear(&self.graphs_cf)?;
-        self.db.clear(&self.id2str_cf)?;
+        for graph_name in self.named_graphs() {
+            self.remove_encoded_named_graph(&graph_name?)?;
+        }
+        for quad in self.quads() {
+            self.remove_encoded(&quad?)?;
+        }
         Ok(())
     }
 

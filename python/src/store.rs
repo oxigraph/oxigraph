@@ -433,15 +433,15 @@ impl PyObjectProtocol for PyStore {
         self.inner.to_string()
     }
 
-    fn __bool__(&self) -> bool {
-        !self.inner.is_empty()
+    fn __bool__(&self) -> PyResult<bool> {
+        Ok(!self.inner.is_empty()?)
     }
 }
 
 #[pyproto]
 impl PySequenceProtocol for PyStore {
-    fn __len__(&self) -> usize {
-        self.inner.len()
+    fn __len__(&self) -> PyResult<usize> {
+        Ok(self.inner.len()?)
     }
 
     fn __contains__(&self, quad: PyQuad) -> PyResult<bool> {

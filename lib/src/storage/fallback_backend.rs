@@ -76,16 +76,6 @@ impl Db {
             .is_some())
     }
 
-    pub fn clear(&self, column_family: &ColumnFamily) -> Result<()> {
-        Ok(self
-            .0
-            .write()
-            .unwrap()
-            .get_mut(column_family)
-            .unwrap()
-            .clear())
-    }
-
     pub fn iter(&self, column_family: &ColumnFamily) -> Iter {
         self.scan_prefix(column_family, &[])
     }

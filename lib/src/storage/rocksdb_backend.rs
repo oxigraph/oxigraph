@@ -44,8 +44,9 @@ unsafe impl Send for Db {}
 unsafe impl Sync for Db {}
 
 struct DbHandler {
-    db: *mut rocksdb_t,
+    db: *mut rocksdb_transactiondb_t,
     options: *mut rocksdb_options_t,
+    txn_options: *mut rocksdb_transactiondb_options_t,
     env: Option<*mut rocksdb_env_t>,
     column_families: Vec<&'static str>,
     cf_handles: Vec<*mut rocksdb_column_family_handle_t>,
@@ -54,7 +55,11 @@ struct DbHandler {
 impl Drop for DbHandler {
     fn drop(&mut self) {
         unsafe {
-            rocksdb_close(self.db);
+            for cf_handle in &self.cf_handles {
+                rocksdb_column_family_handle_destroy(*cf_handle);
+            }
+            rocksdb_transactiondb_close(self.db);
+            rocksdb_transactiondb_options_destroy(self.txn_options);
             rocksdb_options_destroy(self.options);
             if let Some(env) = self.env {
                 rocksdb_env_destroy(env);
@@ -94,10 +99,18 @@ impl Db {
             assert!(!options.is_null(), "rocksdb_options_create returned null");
             rocksdb_options_set_create_if_missing(options, 1);
             rocksdb_options_set_create_missing_column_families(options, 1);
+
+            let txn_options = rocksdb_transactiondb_options_create();
+            assert!(
+                !txn_options.is_null(),
+                "rocksdb_transactiondb_options_create returned null"
+            );
+
             let env = if in_memory {
                 let env = rocksdb_create_mem_env();
                 if env.is_null() {
                     rocksdb_options_destroy(options);
+                    rocksdb_transactiondb_options_destroy(txn_options);
                     return Err(other_error("Not able to create an in-memory environment."));
                 }
                 rocksdb_options_set_env(options, env);
@@ -115,19 +128,13 @@ impl Db {
                 .map(|cf| CString::new(*cf))
                 .collect::<std::result::Result<Vec<_>, _>>()
                 .map_err(invalid_input_error)?;
-            let cf_options = column_families
-                .iter()
-                .map(|_| {
-                    let options: *const rocksdb_options_t = rocksdb_options_create();
-                    assert!(!options.is_null(), "rocksdb_options_create returned null");
-                    options
-                })
-                .collect::<Vec<_>>();
+            let cf_options: Vec<*const rocksdb_options_t> = vec![options; column_families.len()];
 
             let mut cf_handles: Vec<*mut rocksdb_column_family_handle_t> =
                 vec![ptr::null_mut(); column_families.len()];
-            let db = ffi_result!(rocksdb_open_column_families(
+            let db = ffi_result!(rocksdb_transactiondb_open_column_families(
                 options,
+                txn_options,
                 c_path.as_ptr(),
                 column_families.len().try_into().unwrap(),
                 c_column_families
@@ -140,6 +147,7 @@ impl Db {
             ))
             .map_err(|e| {
                 rocksdb_options_destroy(options);
+                rocksdb_transactiondb_options_destroy(txn_options);
                 if let Some(env) = env {
                     rocksdb_env_destroy(env);
                 }
@@ -148,8 +156,9 @@ impl Db {
             assert!(!db.is_null(), "rocksdb_create returned null");
             for handle in &cf_handles {
                 if handle.is_null() {
-                    rocksdb_close(db);
+                    rocksdb_transactiondb_close(db);
                     rocksdb_options_destroy(options);
+                    rocksdb_transactiondb_options_destroy(txn_options);
                     if let Some(env) = env {
                         rocksdb_env_destroy(env);
                     }
@@ -162,6 +171,7 @@ impl Db {
             Ok(DbHandler {
                 db,
                 options,
+                txn_options,
                 env,
                 column_families,
                 cf_handles,
@@ -185,7 +195,7 @@ impl Db {
                 !options.is_null(),
                 "rocksdb_flushoptions_create returned null"
             );
-            let r = ffi_result!(rocksdb_flush(self.0.db, options));
+            let r = ffi_result!(rocksdb_transactiondb_flush(self.0.db, options));
             rocksdb_flushoptions_destroy(options);
             r
         }
@@ -202,7 +212,7 @@ impl Db {
                 !options.is_null(),
                 "rocksdb_readoptions_create returned null"
             );
-            let r = ffi_result!(rocksdb_get_pinned_cf(
+            let r = ffi_result!(rocksdb_transactiondb_get_pinned_cf(
                 self.0.db,
                 options,
                 column_family.0,
@@ -233,7 +243,7 @@ impl Db {
                 !options.is_null(),
                 "rocksdb_writeoptions_create returned null"
             );
-            let r = ffi_result!(rocksdb_put_cf(
+            let r = ffi_result!(rocksdb_transactiondb_put_cf(
                 self.0.db,
                 options,
                 column_family.0,
@@ -258,35 +268,12 @@ impl Db {
                 !options.is_null(),
                 "rocksdb_writeoptions_create returned null"
             );
-            let r = ffi_result!(rocksdb_delete_cf(
+            let r = ffi_result!(rocksdb_transactiondb_delete_cf(
                 self.0.db,
                 options,
                 column_family.0,
                 key.as_ptr() as *const c_char,
                 key.len()
-            ));
-            rocksdb_writeoptions_destroy(options);
-            r
-        }
-    }
-
-    pub fn clear(&self, column_family: &ColumnFamily) -> Result<()> {
-        unsafe {
-            let options = rocksdb_writeoptions_create();
-            assert!(
-                !options.is_null(),
-                "rocksdb_writeoptions_create returned null"
-            );
-            let start = [];
-            let end = [c_char::MAX; 257];
-            let r = ffi_result!(rocksdb_delete_range_cf(
-                self.0.db,
-                options,
-                column_family.0,
-                start.as_ptr(),
-                start.len(),
-                end.as_ptr(),
-                end.len(),
             ));
             rocksdb_writeoptions_destroy(options);
             r
@@ -304,7 +291,8 @@ impl Db {
                 !options.is_null(),
                 "rocksdb_readoptions_create returned null"
             );
-            let iter = rocksdb_create_iterator_cf(self.0.db, options, column_family.0);
+            let iter =
+                rocksdb_transactiondb_create_iterator_cf(self.0.db, options, column_family.0);
             assert!(!options.is_null(), "rocksdb_create_iterator returned null");
             if prefix.is_empty() {
                 rocksdb_iter_seek_to_first(iter);
