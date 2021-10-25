@@ -7,3 +7,6 @@
 [submodule "bench/bsbm-tools"]
 	path = bench/bsbm-tools
 	url = https://github.com/Tpt/bsbm-tools.git
+[submodule "rocksdb-sys/rocksdb"]
+	path = rocksdb-sys/rocksdb
+	url = https://github.com/facebook/rocksdb/

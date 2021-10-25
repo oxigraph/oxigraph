@@ -44,7 +44,7 @@ spargebra = { version = "0.1", path="../spargebra", features = ["rdf-star"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 libc = "0.2"
-librocksdb-sys = { version = "6.20.3", default-features = false }
+oxrocksdb-sys = { version = "0.3.0-dev", path="../rocksdb-sys" }
 oxhttp = { version = "0.1", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

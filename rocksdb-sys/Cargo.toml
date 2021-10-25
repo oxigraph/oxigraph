@@ -1,0 +1,19 @@
+[package]
+name = "oxrocksdb-sys"
+version = "0.3.0-dev"
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "GPL-2.0 OR Apache-2.0"
+repository = "https://github.com/oxigraph/oxigraph/tree/v0.3/rocksdb-sys"
+description = """
+Rust bindings for RocksDB for Oxigraph usage.
+"""
+edition = "2021"
+build = "build.rs"
+links = "rocksdb"
+
+[dependencies]
+libc = "0.2"
+
+[build-dependencies]
+bindgen = "0.59"
+cc = { version = "1", features = ["parallel"] }

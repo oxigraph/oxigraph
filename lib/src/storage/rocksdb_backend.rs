@@ -4,7 +4,7 @@
 
 use crate::error::invalid_input_error;
 use libc::{self, c_char, c_void};
-use librocksdb_sys::*;
+use oxrocksdb_sys::*;
 use std::borrow::Borrow;
 use std::env::temp_dir;
 use std::ffi::{CStr, CString};

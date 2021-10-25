@@ -3,6 +3,7 @@ members = [
     "js",
     "lib",
     "python",
+    "rocksdb-sys",
     "server",
     "spargebra",
     "testsuite",
