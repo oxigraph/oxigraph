@@ -494,7 +494,7 @@ impl Store {
     /// assert_eq!(1, store.len()?);
     ///
     /// store.clear_graph(ex)?;
-    /// assert_eq!(store.is_empty()?);
+    /// assert!(store.is_empty()?);
     /// assert_eq!(1, store.named_graphs().count());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```

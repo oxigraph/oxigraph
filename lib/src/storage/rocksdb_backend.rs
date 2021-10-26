@@ -47,6 +47,9 @@ struct DbHandler {
     db: *mut rocksdb_transactiondb_t,
     options: *mut rocksdb_options_t,
     txn_options: *mut rocksdb_transactiondb_options_t,
+    read_options: *mut rocksdb_readoptions_t,
+    write_options: *mut rocksdb_writeoptions_t,
+    flush_options: *mut rocksdb_flushoptions_t,
     env: Option<*mut rocksdb_env_t>,
     column_families: Vec<&'static str>,
     cf_handles: Vec<*mut rocksdb_column_family_handle_t>,
@@ -59,6 +62,9 @@ impl Drop for DbHandler {
                 rocksdb_column_family_handle_destroy(*cf_handle);
             }
             rocksdb_transactiondb_close(self.db);
+            rocksdb_readoptions_destroy(self.read_options);
+            rocksdb_writeoptions_destroy(self.write_options);
+            rocksdb_flushoptions_destroy(self.flush_options);
             rocksdb_transactiondb_options_destroy(self.txn_options);
             rocksdb_options_destroy(self.options);
             if let Some(env) = self.env {
@@ -168,10 +174,32 @@ impl Db {
                 }
             }
 
+            let read_options = rocksdb_readoptions_create();
+            assert!(
+                !read_options.is_null(),
+                "rocksdb_readoptions_create returned null"
+            );
+            let write_options = rocksdb_writeoptions_create();
+            assert!(
+                !read_options.is_null(),
+                "rocksdb_writeoptions_create returned null"
+            );
+            if in_memory {
+                rocksdb_writeoptions_disable_WAL(write_options, 1); // No need for WAL
+            }
+            let flush_options = rocksdb_flushoptions_create();
+            assert!(
+                !options.is_null(),
+                "rocksdb_flushoptions_create returned null"
+            );
+
             Ok(DbHandler {
                 db,
                 options,
                 txn_options,
+                read_options,
+                write_options,
+                flush_options,
                 env,
                 column_families,
                 cf_handles,
@@ -189,16 +217,7 @@ impl Db {
     }
 
     pub fn flush(&self) -> Result<()> {
-        unsafe {
-            let options = rocksdb_flushoptions_create();
-            assert!(
-                !options.is_null(),
-                "rocksdb_flushoptions_create returned null"
-            );
-            let r = ffi_result!(rocksdb_transactiondb_flush(self.0.db, options));
-            rocksdb_flushoptions_destroy(options);
-            r
-        }
+        unsafe { ffi_result!(rocksdb_transactiondb_flush(self.0.db, self.0.flush_options)) }
     }
 
     pub fn get(
@@ -207,20 +226,13 @@ impl Db {
         key: &[u8],
     ) -> Result<Option<PinnableSlice<'_>>> {
         unsafe {
-            let options = rocksdb_readoptions_create();
-            assert!(
-                !options.is_null(),
-                "rocksdb_readoptions_create returned null"
-            );
-            let r = ffi_result!(rocksdb_transactiondb_get_pinned_cf(
+            let slice = ffi_result!(rocksdb_transactiondb_get_pinned_cf(
                 self.0.db,
-                options,
+                self.0.read_options,
                 column_family.0,
                 key.as_ptr() as *const c_char,
                 key.len()
-            ));
-            rocksdb_readoptions_destroy(options);
-            let slice = r?;
+            ))?;
             Ok(if slice.is_null() {
                 None
             } else {
@@ -238,22 +250,15 @@ impl Db {
 
     pub fn insert(&self, column_family: &ColumnFamily, key: &[u8], value: &[u8]) -> Result<()> {
         unsafe {
-            let options = rocksdb_writeoptions_create();
-            assert!(
-                !options.is_null(),
-                "rocksdb_writeoptions_create returned null"
-            );
-            let r = ffi_result!(rocksdb_transactiondb_put_cf(
+            ffi_result!(rocksdb_transactiondb_put_cf(
                 self.0.db,
-                options,
+                self.0.write_options,
                 column_family.0,
                 key.as_ptr() as *const c_char,
                 key.len(),
                 value.as_ptr() as *const c_char,
                 value.len(),
-            ));
-            rocksdb_writeoptions_destroy(options);
-            r
+            ))
         }
     }
 
@@ -263,20 +268,13 @@ impl Db {
 
     pub fn remove(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<()> {
         unsafe {
-            let options = rocksdb_writeoptions_create();
-            assert!(
-                !options.is_null(),
-                "rocksdb_writeoptions_create returned null"
-            );
-            let r = ffi_result!(rocksdb_transactiondb_delete_cf(
+            ffi_result!(rocksdb_transactiondb_delete_cf(
                 self.0.db,
-                options,
+                self.0.write_options,
                 column_family.0,
                 key.as_ptr() as *const c_char,
                 key.len()
-            ));
-            rocksdb_writeoptions_destroy(options);
-            r
+            ))
         }
     }
 
@@ -285,25 +283,52 @@ impl Db {
     }
 
     pub fn scan_prefix(&self, column_family: &ColumnFamily, prefix: &[u8]) -> Iter {
+        //We generate the upper bound
+        let upper_bound = {
+            let mut bound = prefix.to_vec();
+            let mut found = false;
+            for c in bound.iter_mut().rev() {
+                if *c < u8::MAX {
+                    *c += 1;
+                    found = true;
+                    break;
+                }
+            }
+            if found {
+                Some(bound)
+            } else {
+                None
+            }
+        };
+
         unsafe {
             let options = rocksdb_readoptions_create();
             assert!(
                 !options.is_null(),
                 "rocksdb_readoptions_create returned null"
             );
+            if let Some(upper_bound) = &upper_bound {
+                rocksdb_readoptions_set_iterate_upper_bound(
+                    options,
+                    upper_bound.as_ptr() as *const c_char,
+                    upper_bound.len(),
+                );
+            }
             let iter =
                 rocksdb_transactiondb_create_iterator_cf(self.0.db, options, column_family.0);
-            assert!(!options.is_null(), "rocksdb_create_iterator returned null");
+            assert!(!iter.is_null(), "rocksdb_create_iterator returned null");
             if prefix.is_empty() {
                 rocksdb_iter_seek_to_first(iter);
             } else {
                 rocksdb_iter_seek(iter, prefix.as_ptr() as *const c_char, prefix.len());
             }
+            let is_currently_valid = rocksdb_iter_valid(iter) != 0;
             Iter {
                 iter,
-                _options: options,
-                prefix: prefix.to_vec(),
+                options,
+                _upper_bound: upper_bound,
                 _db: self.0.clone(),
+                is_currently_valid,
             }
         }
     }
@@ -373,9 +398,19 @@ impl<'a> Borrow<[u8]> for PinnableSlice<'a> {
 
 pub struct Iter {
     iter: *mut rocksdb_iterator_t,
-    prefix: Vec<u8>,
+    is_currently_valid: bool,
+    _upper_bound: Option<Vec<u8>>,
     _db: Arc<DbHandler>, // needed to ensure that DB still lives while iter is used
-    _options: *mut rocksdb_readoptions_t, // needed to ensure that options still lives while iter is used
+    options: *mut rocksdb_readoptions_t, // needed to ensure that options still lives while iter is used
+}
+
+impl Drop for Iter {
+    fn drop(&mut self) {
+        unsafe {
+            rocksdb_iter_destroy(self.iter);
+            rocksdb_readoptions_destroy(self.options);
+        }
+    }
 }
 
 unsafe impl Send for Iter {}
@@ -383,14 +418,7 @@ unsafe impl Sync for Iter {}
 
 impl Iter {
     pub fn is_valid(&self) -> bool {
-        unsafe {
-            if rocksdb_iter_valid(self.iter) == 0 {
-                return false;
-            }
-            let mut len = 0;
-            let val = rocksdb_iter_key(self.iter, &mut len);
-            slice::from_raw_parts(val as *const u8, len).starts_with(&self.prefix)
-        }
+        self.is_currently_valid
     }
 
     pub fn status(&self) -> Result<()> {
@@ -400,6 +428,7 @@ impl Iter {
     pub fn next(&mut self) {
         unsafe {
             rocksdb_iter_next(self.iter);
+            self.is_currently_valid = rocksdb_iter_valid(self.iter) != 0;
         }
     }
 
