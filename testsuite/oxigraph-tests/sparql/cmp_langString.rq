@@ -1,0 +1,4 @@
+SELECT ?a ?b ?o WHERE {
+    VALUES (?a ?b) { ("a"@fr "b"@fr) ("a"@en "b"@fr) }
+    BIND(?a < ?b AS ?o)
+}

@@ -16,6 +16,7 @@
     :values_in_filter_exists
     :values_in_filter_not_exists
     :subquery_in_filter_not_exists
+    :cmp_langString
     ) .
 
 :describe rdf:type mf:QueryEvaluationTest ;
@@ -65,3 +66,8 @@
     mf:name "VALUES inside of FILTER EXISTS" ;
     mf:action [ qt:query <subquery_in_filter_not_exists.rq> ] ;
     mf:result <values_in_filter_exists.srx> .
+
+:cmp_langString rdf:type mf:QueryEvaluationTest ;
+    mf:name "rdf:langString with the same language are comparable" ;
+    mf:action [ qt:query <cmp_langString.rq> ] ;
+    mf:result <cmp_langString.srx> .

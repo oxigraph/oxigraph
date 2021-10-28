@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+  <head>
+    <variable name="a"/>
+    <variable name="b"/>
+    <variable name="o"/>
+  </head>
+  <results>
+    <result>
+      <binding name="a">
+        <literal xml:lang="fr">a</literal>
+      </binding>
+      <binding name="b">
+        <literal xml:lang="fr">b</literal>
+      </binding>
+      <binding name="o">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#boolean">true</literal>
+      </binding>
+    </result>
+    <result>
+      <binding name="a">
+        <literal xml:lang="en">a</literal>
+      </binding>
+      <binding name="b">
+        <literal xml:lang="fr">b</literal>
+      </binding>
+    </result>
+  </results>
+</sparql>

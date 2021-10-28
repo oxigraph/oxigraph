@@ -2559,6 +2559,63 @@ fn partial_cmp_literals(
             EncodedTerm::BigStringLiteral { value_id: b } => compare_str_ids(dataset, a, b),
             _ => None,
         },
+
+        EncodedTerm::SmallSmallLangStringLiteral {
+            value: a,
+            language: la,
+        } => match b {
+            EncodedTerm::SmallSmallLangStringLiteral {
+                value: b,
+                language: lb,
+            } if la == lb => a.partial_cmp(b),
+            EncodedTerm::BigSmallLangStringLiteral {
+                value_id: b,
+                language: lb,
+            } if la == lb => compare_str_str_id(dataset, a, b),
+            _ => None,
+        },
+        EncodedTerm::SmallBigLangStringLiteral {
+            value: a,
+            language_id: la,
+        } => match b {
+            EncodedTerm::SmallBigLangStringLiteral {
+                value: b,
+                language_id: lb,
+            } if la == lb => a.partial_cmp(b),
+            EncodedTerm::BigBigLangStringLiteral {
+                value_id: b,
+                language_id: lb,
+            } if la == lb => compare_str_str_id(dataset, a, b),
+            _ => None,
+        },
+        EncodedTerm::BigSmallLangStringLiteral {
+            value_id: a,
+            language: la,
+        } => match b {
+            EncodedTerm::SmallSmallLangStringLiteral {
+                value: b,
+                language: lb,
+            } if la == lb => compare_str_id_str(dataset, a, b),
+            EncodedTerm::BigSmallLangStringLiteral {
+                value_id: b,
+                language: lb,
+            } if la == lb => compare_str_ids(dataset, a, b),
+            _ => None,
+        },
+        EncodedTerm::BigBigLangStringLiteral {
+            value_id: a,
+            language_id: la,
+        } => match b {
+            EncodedTerm::SmallBigLangStringLiteral {
+                value: b,
+                language_id: lb,
+            } if la == lb => compare_str_id_str(dataset, a, b),
+            EncodedTerm::BigBigLangStringLiteral {
+                value_id: b,
+                language_id: lb,
+            } if la == lb => compare_str_ids(dataset, a, b),
+            _ => None,
+        },
         EncodedTerm::FloatLiteral(a) => match b {
             EncodedTerm::FloatLiteral(b) => a.partial_cmp(b),
             EncodedTerm::DoubleLiteral(b) => Double::from(*a).partial_cmp(b),
