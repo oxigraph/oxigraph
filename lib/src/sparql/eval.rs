@@ -2483,10 +2483,42 @@ fn equals(a: &EncodedTerm, b: &EncodedTerm) -> Option<bool> {
 fn cmp_terms(dataset: &DatasetView, a: Option<&EncodedTerm>, b: Option<&EncodedTerm>) -> Ordering {
     match (a, b) {
         (Some(a), Some(b)) => match a {
-            _ if a.is_blank_node() => match b {
-                _ if b.is_blank_node() => Ordering::Equal,
+            EncodedTerm::SmallBlankNode(a) => match b {
+                EncodedTerm::SmallBlankNode(b) => a.cmp(b),
+                EncodedTerm::BigBlankNode { id_id: b } => {
+                    compare_str_str_id(dataset, a, b).unwrap_or(Ordering::Equal)
+                }
+                EncodedTerm::NumericalBlankNode { id: b } => {
+                    a.as_str().cmp(BlankNode::new_from_unique_id(*b).as_str())
+                }
                 _ => Ordering::Less,
             },
+            EncodedTerm::BigBlankNode { id_id: a } => match b {
+                EncodedTerm::SmallBlankNode(b) => {
+                    compare_str_id_str(dataset, a, b).unwrap_or(Ordering::Equal)
+                }
+                EncodedTerm::BigBlankNode { id_id: b } => {
+                    compare_str_ids(dataset, a, b).unwrap_or(Ordering::Equal)
+                }
+                EncodedTerm::NumericalBlankNode { id: b } => {
+                    compare_str_id_str(dataset, a, BlankNode::new_from_unique_id(*b).as_str())
+                        .unwrap_or(Ordering::Equal)
+                }
+                _ => Ordering::Less,
+            },
+            EncodedTerm::NumericalBlankNode { id: a } => {
+                let a = BlankNode::new_from_unique_id(*a);
+                match b {
+                    EncodedTerm::SmallBlankNode(b) => a.as_str().cmp(b),
+                    EncodedTerm::BigBlankNode { id_id: b } => {
+                        compare_str_str_id(dataset, a.as_str(), b).unwrap_or(Ordering::Equal)
+                    }
+                    EncodedTerm::NumericalBlankNode { id: b } => {
+                        a.as_str().cmp(BlankNode::new_from_unique_id(*b).as_str())
+                    }
+                    _ => Ordering::Less,
+                }
+            }
             EncodedTerm::NamedNode { iri_id: a } => match b {
                 EncodedTerm::NamedNode { iri_id: b } => {
                     compare_str_ids(dataset, a, b).unwrap_or(Ordering::Equal)
@@ -2559,7 +2591,6 @@ fn partial_cmp_literals(
             EncodedTerm::BigStringLiteral { value_id: b } => compare_str_ids(dataset, a, b),
             _ => None,
         },
-
         EncodedTerm::SmallSmallLangStringLiteral {
             value: a,
             language: la,
