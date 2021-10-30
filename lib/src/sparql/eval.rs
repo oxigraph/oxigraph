@@ -2567,7 +2567,21 @@ fn cmp_terms(dataset: &DatasetView, a: Option<&EncodedTerm>, b: Option<&EncodedT
             a => match b {
                 _ if b.is_named_node() || b.is_blank_node() => Ordering::Greater,
                 _ if b.is_triple() => Ordering::Less,
-                b => partial_cmp_literals(dataset, a, b).unwrap_or(Ordering::Equal),
+                b => {
+                    if let Some(ord) = partial_cmp_literals(dataset, a, b) {
+                        ord
+                    } else if let (Ok(Term::Literal(a)), Ok(Term::Literal(b))) =
+                        (dataset.decode_term(a), dataset.decode_term(b))
+                    {
+                        (a.value(), a.datatype(), a.language()).cmp(&(
+                            b.value(),
+                            b.datatype(),
+                            b.language(),
+                        ))
+                    } else {
+                        Ordering::Equal // Should never happen
+                    }
+                }
             },
         },
         (Some(_), None) => Ordering::Greater,

@@ -1,0 +1,66 @@
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rs:      <http://www.w3.org/2001/sw/DataAccess/tests/result-set#> .
+
+[]  rdf:type    rs:ResultSet ;
+    rs:resultVariable
+                "o" ;
+    rs:solution [ rs:binding  [ rs:value    -1e3 ;
+                                rs:variable "o"
+                              ] ;
+                  rs:index  1
+                ] ;
+    rs:solution [ rs:binding  [ rs:value    1 ;
+                                rs:variable "o"
+                              ] ;
+                  rs:index  2
+                ] ;
+    rs:solution [ rs:binding  [ rs:value    "2020-30-29T00:00:00"^^<http://www.w3.org/2001/XMLSchema#dateTime> ;
+                                rs:variable "o"
+                              ] ;
+                  rs:index  3
+                ] ;
+    rs:solution [ rs:binding  [ rs:value    "2021-30-30"^^<http://www.w3.org/2001/XMLSchema#date> ;
+                                rs:variable "o"
+                              ] ;
+                  rs:index  4
+                ] ;
+    rs:solution [ rs:binding  [ rs:value    4.0 ;
+                                rs:variable "o"
+                              ] ;
+                  rs:index  5
+                ] ;
+    rs:solution [ rs:binding  [ rs:value    "a" ;
+                                rs:variable "o"
+                              ] ;
+                  rs:index  6
+                ] ;
+    rs:solution [ rs:binding  [ rs:value    "b" ;
+                                rs:variable "o"
+                              ] ;
+                  rs:index  7
+                ] ;
+    rs:solution [ rs:binding  [ rs:value    "c"@en ;
+                                rs:variable "o"
+                              ] ;
+                  rs:index  8
+                ] ;
+    rs:solution [ rs:binding  [ rs:value    "d"@de ;
+                                rs:variable "o"
+                              ] ;
+                  rs:index  9
+                ] ;
+    rs:solution [ rs:binding  [ rs:value    "foo"^^<http://example.com/h> ;
+                                rs:variable "o"
+                              ] ;
+                  rs:index  10
+                ] ;
+    rs:solution [ rs:binding  [ rs:value    "u"@en ;
+                                rs:variable "o"
+                              ] ;
+                  rs:index  11
+                ] ;
+    rs:solution [ rs:binding  [ rs:value    "v" ;
+                                rs:variable "o"
+                              ] ;
+                  rs:index  12
+                ] .

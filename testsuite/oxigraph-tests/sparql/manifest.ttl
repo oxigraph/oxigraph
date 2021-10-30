@@ -25,6 +25,7 @@
     :halloween_problem
     :nested_path
     :nested_expression
+    :order_terms
     ) .
 
 :small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
@@ -108,3 +109,8 @@
 :nested_expression rdf:type mf:PositiveSyntaxTest11 ;
     mf:name "A very nested expression" ;
     mf:action <nested_expression.rq> .
+
+:order_terms rdf:type mf:QueryEvaluationTest ;
+    mf:name "literals have an order for ORDER BY" ;
+    mf:action [ qt:query <order_terms.rq> ] ;
+    mf:result <order_terms.ttl> .
