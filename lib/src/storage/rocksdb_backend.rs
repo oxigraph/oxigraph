@@ -105,6 +105,12 @@ impl Db {
             assert!(!options.is_null(), "rocksdb_options_create returned null");
             rocksdb_options_set_create_if_missing(options, 1);
             rocksdb_options_set_create_missing_column_families(options, 1);
+            if !in_memory {
+                rocksdb_options_set_compression(
+                    options,
+                    rocksdb_lz4_compression.try_into().unwrap(),
+                );
+            }
 
             let txn_options = rocksdb_transactiondb_options_create();
             assert!(

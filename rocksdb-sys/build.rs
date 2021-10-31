@@ -39,7 +39,9 @@ fn build_rocksdb() {
         .include("rocksdb/include/")
         .include("rocksdb/")
         .file("api/c.cc")
-        .define("NDEBUG", Some("1"));
+        .define("NDEBUG", Some("1"))
+        .define("LZ4", Some("1"))
+        .include("lz4/lib/");
 
     let mut lib_sources = include_str!("rocksdb/src.mk")
         .split_once("LIB_SOURCES =")
@@ -169,8 +171,22 @@ fn build_rocksdb() {
     config.compile("rocksdb");
 }
 
+fn build_lz4() {
+    let mut config = cc::Build::new();
+    config
+        .file("lz4/lib/lz4.c")
+        .file("lz4/lib/lz4frame.c")
+        .file("lz4/lib/lz4hc.c")
+        .file("lz4/lib/xxhash.c");
+    if env::var("TARGET").unwrap() == "i686-pc-windows-gnu" {
+        config.flag("-fno-tree-vectorize");
+    }
+    config.compile("lz4");
+}
+
 fn main() {
     println!("cargo:rerun-if-changed=api/");
     bindgen_rocksdb();
+    build_lz4();
     build_rocksdb();
 }

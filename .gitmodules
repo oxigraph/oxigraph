@@ -10,3 +10,6 @@
 [submodule "rocksdb-sys/rocksdb"]
 	path = rocksdb-sys/rocksdb
 	url = https://github.com/facebook/rocksdb/
+[submodule "rocksdb-sys/lz4"]
+	path = rocksdb-sys/lz4
+	url = https://github.com/lz4/lz4/
