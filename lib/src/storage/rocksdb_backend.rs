@@ -111,6 +111,9 @@ impl Db {
             assert!(!options.is_null(), "rocksdb_options_create returned null");
             rocksdb_options_set_create_if_missing(options, 1);
             rocksdb_options_set_create_missing_column_families(options, 1);
+            rocksdb_options_set_info_log_level(options, 2); // We only log warnings
+            rocksdb_options_set_max_log_file_size(options, 1024 * 1024); // Only 1MB log size
+            rocksdb_options_set_recycle_log_file_num(options, 10); // We do not keep more than 10 log files
             rocksdb_options_set_compression(
                 options,
                 if in_memory {
