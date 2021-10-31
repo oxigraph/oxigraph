@@ -1,9 +1,11 @@
 //! Code inspired by [https://github.com/rust-rocksdb/rust-rocksdb][Rust RocksDB] under Apache License 2.0.
+//!
+//! TODO: still has some memory leaks if the database opening fails
 
 #![allow(unsafe_code)]
 
 use crate::error::invalid_input_error;
-use libc::{self, c_char, c_void};
+use libc::{self, c_char, c_int, c_uchar, c_void, size_t};
 use oxrocksdb_sys::*;
 use std::borrow::Borrow;
 use std::env::temp_dir;
@@ -39,6 +41,8 @@ macro_rules! ffi_result_impl {
 
 pub struct ColumnFamilyDefinition {
     pub name: &'static str,
+    pub merge_operator: Option<MergeOperator>,
+    pub compaction_filter: Option<CompactionFilter>,
 }
 
 #[derive(Clone)]
@@ -55,9 +59,12 @@ struct DbHandler {
     write_options: *mut rocksdb_writeoptions_t,
     low_priority_write_options: *mut rocksdb_writeoptions_t,
     flush_options: *mut rocksdb_flushoptions_t,
+    compaction_options: *mut rocksdb_compactoptions_t,
     env: Option<*mut rocksdb_env_t>,
-    column_families: Vec<ColumnFamilyDefinition>,
+    column_family_names: Vec<&'static str>,
     cf_handles: Vec<*mut rocksdb_column_family_handle_t>,
+    cf_options: Vec<*mut rocksdb_options_t>,
+    cf_compaction_filters: Vec<*mut rocksdb_compactionfilter_t>,
 }
 
 impl Drop for DbHandler {
@@ -67,14 +74,21 @@ impl Drop for DbHandler {
                 rocksdb_column_family_handle_destroy(*cf_handle);
             }
             rocksdb_transactiondb_close(self.db);
+            for cf_option in &self.cf_options {
+                rocksdb_options_destroy(*cf_option);
+            }
             rocksdb_readoptions_destroy(self.read_options);
             rocksdb_writeoptions_destroy(self.write_options);
             rocksdb_writeoptions_destroy(self.low_priority_write_options);
             rocksdb_flushoptions_destroy(self.flush_options);
+            rocksdb_compactoptions_destroy(self.compaction_options);
             rocksdb_transactiondb_options_destroy(self.txn_options);
             rocksdb_options_destroy(self.options);
             if let Some(env) = self.env {
                 rocksdb_env_destroy(env);
+            }
+            for cf_compact in &self.cf_compaction_filters {
+                rocksdb_compactionfilter_destroy(*cf_compact);
             }
         }
     }
@@ -145,47 +159,76 @@ impl Db {
             };
 
             if !column_families.iter().any(|c| c.name == "default") {
-                column_families.push(ColumnFamilyDefinition { name: "default" })
+                column_families.push(ColumnFamilyDefinition {
+                    name: "default",
+                    merge_operator: None,
+                    compaction_filter: None,
+                })
             }
-            let c_column_families = column_families
+            let column_family_names = column_families.iter().map(|c| c.name).collect::<Vec<_>>();
+            let c_column_families = column_family_names
                 .iter()
-                .map(|cf| CString::new(cf.name))
+                .map(|name| CString::new(*name))
                 .collect::<std::result::Result<Vec<_>, _>>()
                 .map_err(invalid_input_error)?;
-            let cf_options: Vec<*const rocksdb_options_t> = vec![options; column_families.len()];
+            let mut cf_compaction_filters = Vec::new();
+            let cf_options = column_families
+                .into_iter()
+                .map(|cf| {
+                    let options = rocksdb_options_create_copy(options);
+                    if let Some(merge) = cf.merge_operator {
+                        // mergeoperator delete is done automatically
+                        let merge = rocksdb_mergeoperator_create(
+                            Box::into_raw(Box::new(merge)) as *mut c_void,
+                            Some(merge_destructor),
+                            Some(merge_full),
+                            Some(merge_partial),
+                            Some(merge_delete_value),
+                            Some(merge_name),
+                        );
+                        assert!(
+                            !merge.is_null(),
+                            "rocksdb_mergeoperator_create returned null"
+                        );
+                        rocksdb_options_set_merge_operator(options, merge);
+                    }
+                    if let Some(compact) = cf.compaction_filter {
+                        let compact = rocksdb_compactionfilter_create(
+                            Box::into_raw(Box::new(compact)) as *mut c_void,
+                            Some(compactionfilter_destructor),
+                            Some(compactionfilter_filter),
+                            Some(compactionfilter_name),
+                        );
+                        assert!(
+                            !compact.is_null(),
+                            "rocksdb_compactionfilter_create returned null"
+                        );
+                        rocksdb_options_set_compaction_filter(options, compact);
+                        cf_compaction_filters.push(compact);
+                    }
+                    options
+                })
+                .collect::<Vec<_>>();
 
             let mut cf_handles: Vec<*mut rocksdb_column_family_handle_t> =
-                vec![ptr::null_mut(); column_families.len()];
+                vec![ptr::null_mut(); column_family_names.len()];
             let db = ffi_result!(rocksdb_transactiondb_open_column_families(
                 options,
                 txn_options,
                 c_path.as_ptr(),
-                column_families.len().try_into().unwrap(),
+                c_column_families.len().try_into().unwrap(),
                 c_column_families
                     .iter()
                     .map(|cf| cf.as_ptr())
                     .collect::<Vec<_>>()
                     .as_ptr(),
-                cf_options.as_ptr(),
+                cf_options.as_ptr() as *const *const rocksdb_options_t,
                 cf_handles.as_mut_ptr(),
-            ))
-            .map_err(|e| {
-                rocksdb_options_destroy(options);
-                rocksdb_transactiondb_options_destroy(txn_options);
-                if let Some(env) = env {
-                    rocksdb_env_destroy(env);
-                }
-                e
-            })?;
+            ))?;
             assert!(!db.is_null(), "rocksdb_create returned null");
             for handle in &cf_handles {
                 if handle.is_null() {
                     rocksdb_transactiondb_close(db);
-                    rocksdb_options_destroy(options);
-                    rocksdb_transactiondb_options_destroy(txn_options);
-                    if let Some(env) = env {
-                        rocksdb_env_destroy(env);
-                    }
                     return Err(other_error(
                         "Received null column family handle from RocksDB.",
                     ));
@@ -220,6 +263,12 @@ impl Db {
                 "rocksdb_flushoptions_create returned null"
             );
 
+            let compaction_options = rocksdb_compactoptions_create();
+            assert!(
+                !compaction_options.is_null(),
+                "rocksdb_compactoptions_create returned null"
+            );
+
             Ok(DbHandler {
                 db,
                 options,
@@ -228,24 +277,48 @@ impl Db {
                 write_options,
                 low_priority_write_options,
                 flush_options,
+                compaction_options,
                 env,
-                column_families,
+                column_family_names,
                 cf_handles,
+                cf_options,
+                cf_compaction_filters,
             })
         }
     }
 
     pub fn column_family(&self, name: &'static str) -> Option<ColumnFamily> {
-        for (cf, cf_handle) in self.0.column_families.iter().zip(&self.0.cf_handles) {
-            if cf.name == name {
+        for (cf, cf_handle) in self.0.column_family_names.iter().zip(&self.0.cf_handles) {
+            if *cf == name {
                 return Some(ColumnFamily(*cf_handle));
             }
         }
         None
     }
 
-    pub fn flush(&self) -> Result<()> {
-        unsafe { ffi_result!(rocksdb_transactiondb_flush(self.0.db, self.0.flush_options)) }
+    pub fn flush(&self, column_family: &ColumnFamily) -> Result<()> {
+        unsafe {
+            ffi_result!(rocksdb_transactiondb_flush_cf(
+                self.0.db,
+                self.0.flush_options,
+                column_family.0,
+            ))
+        }
+    }
+
+    #[cfg(test)]
+    pub fn compact(&self, column_family: &ColumnFamily) -> Result<()> {
+        unsafe {
+            ffi_result!(rocksdb_transactiondb_compact_range_cf_opt(
+                self.0.db,
+                column_family.0,
+                self.0.compaction_options,
+                ptr::null(),
+                0,
+                ptr::null(),
+                0
+            ))
+        }
     }
 
     pub fn get(
@@ -285,6 +358,30 @@ impl Db {
     ) -> Result<()> {
         unsafe {
             ffi_result!(rocksdb_transactiondb_put_cf(
+                self.0.db,
+                if low_priority {
+                    self.0.low_priority_write_options
+                } else {
+                    self.0.write_options
+                },
+                column_family.0,
+                key.as_ptr() as *const c_char,
+                key.len(),
+                value.as_ptr() as *const c_char,
+                value.len(),
+            ))
+        }
+    }
+
+    pub fn merge(
+        &self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+        value: &[u8],
+        low_priority: bool,
+    ) -> Result<()> {
+        unsafe {
+            ffi_result!(rocksdb_transactiondb_merge_cf(
                 self.0.db,
                 if low_priority {
                     self.0.low_priority_write_options
@@ -520,4 +617,162 @@ fn convert_error(ptr: *const c_char) -> Error {
 
 fn other_error(error: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Error {
     Error::new(ErrorKind::InvalidInput, error)
+}
+
+pub struct MergeOperator {
+    pub full: fn(&[u8], Option<&[u8]>, SlicesIterator<'_>) -> Vec<u8>,
+    pub partial: fn(&[u8], SlicesIterator<'_>) -> Vec<u8>,
+    pub name: CString,
+}
+
+unsafe extern "C" fn merge_destructor(operator: *mut c_void) {
+    Box::from_raw(operator as *mut MergeOperator);
+}
+
+unsafe extern "C" fn merge_full(
+    operator: *mut c_void,
+    key: *const c_char,
+    key_length: size_t,
+    existing_value: *const c_char,
+    existing_value_len: size_t,
+    operands_list: *const *const c_char,
+    operands_list_length: *const size_t,
+    num_operands: c_int,
+    success: *mut u8,
+    new_value_length: *mut size_t,
+) -> *mut c_char {
+    let operator = &*(operator as *const MergeOperator);
+    let num_operands = usize::try_from(num_operands).unwrap();
+    let result = (operator.full)(
+        slice::from_raw_parts(key as *const u8, key_length),
+        if existing_value.is_null() {
+            None
+        } else {
+            Some(slice::from_raw_parts(
+                existing_value as *const u8,
+                existing_value_len,
+            ))
+        },
+        SlicesIterator {
+            slices: slice::from_raw_parts(operands_list, num_operands),
+            lengths: slice::from_raw_parts(operands_list_length, num_operands),
+            cursor: 0,
+        },
+    );
+    *new_value_length = result.len();
+    *success = 1_u8;
+    Box::into_raw(result.into_boxed_slice()) as *mut c_char
+}
+
+pub unsafe extern "C" fn merge_partial(
+    operator: *mut c_void,
+    key: *const c_char,
+    key_length: size_t,
+    operands_list: *const *const c_char,
+    operands_list_length: *const size_t,
+    num_operands: c_int,
+    success: *mut u8,
+    new_value_length: *mut size_t,
+) -> *mut c_char {
+    let operator = &*(operator as *const MergeOperator);
+    let num_operands = usize::try_from(num_operands).unwrap();
+    let result = (operator.partial)(
+        slice::from_raw_parts(key as *const u8, key_length),
+        SlicesIterator {
+            slices: slice::from_raw_parts(operands_list, num_operands),
+            lengths: slice::from_raw_parts(operands_list_length, num_operands),
+            cursor: 0,
+        },
+    );
+    *new_value_length = result.len();
+    *success = 1_u8;
+    Box::into_raw(result.into_boxed_slice()) as *mut c_char
+}
+
+unsafe extern "C" fn merge_delete_value(
+    _operator: *mut c_void,
+    value: *const c_char,
+    value_length: size_t,
+) {
+    if !value.is_null() {
+        Box::from_raw(slice::from_raw_parts_mut(value as *mut u8, value_length));
+    }
+}
+
+unsafe extern "C" fn merge_name(operator: *mut c_void) -> *const c_char {
+    let operator = &*(operator as *const MergeOperator);
+    operator.name.as_ptr()
+}
+
+pub struct SlicesIterator<'a> {
+    slices: &'a [*const c_char],
+    lengths: &'a [size_t],
+    cursor: usize,
+}
+
+impl<'a> Iterator for SlicesIterator<'a> {
+    type Item = &'a [u8];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.cursor >= self.slices.len() {
+            None
+        } else {
+            let slice = unsafe {
+                slice::from_raw_parts(
+                    self.slices[self.cursor] as *const u8,
+                    self.lengths[self.cursor],
+                )
+            };
+            self.cursor += 1;
+            Some(slice)
+        }
+    }
+}
+
+pub struct CompactionFilter {
+    pub filter: fn(&[u8], &[u8]) -> CompactionAction,
+    pub name: CString,
+}
+
+#[allow(dead_code)]
+pub enum CompactionAction {
+    Keep,
+    Remove,
+    Replace(Vec<u8>),
+}
+
+unsafe extern "C" fn compactionfilter_destructor(filter: *mut c_void) {
+    Box::from_raw(filter as *mut CompactionFilter);
+}
+
+unsafe extern "C" fn compactionfilter_filter(
+    filter: *mut c_void,
+    _level: c_int,
+    key: *const c_char,
+    key_length: size_t,
+    existing_value: *const c_char,
+    value_length: size_t,
+    new_value: *mut *mut c_char,
+    new_value_length: *mut size_t,
+    value_changed: *mut c_uchar,
+) -> c_uchar {
+    let filter = &*(filter as *const CompactionFilter);
+    match (filter.filter)(
+        slice::from_raw_parts(key as *const u8, key_length),
+        slice::from_raw_parts(existing_value as *const u8, value_length),
+    ) {
+        CompactionAction::Keep => 0,
+        CompactionAction::Remove => 1,
+        CompactionAction::Replace(new_val) => {
+            *new_value_length = new_val.len();
+            *value_changed = 1_u8;
+            *new_value = Box::into_raw(new_val.into_boxed_slice()) as *mut c_char;
+            0
+        }
+    }
+}
+
+unsafe extern "C" fn compactionfilter_name(filter: *mut c_void) -> *const c_char {
+    let filter = &*(filter as *const CompactionFilter);
+    filter.name.as_ptr()
 }

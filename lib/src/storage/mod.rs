@@ -8,9 +8,16 @@ use crate::storage::binary_encoder::{
 };
 use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash, StrLookup, TermEncoder};
 #[cfg(target_arch = "wasm32")]
-use fallback_backend::{ColumnFamily, ColumnFamilyDefinition, Db, Iter};
+use fallback_backend::{
+    ColumnFamily, ColumnFamilyDefinition, CompactionAction, CompactionFilter, Db, Iter,
+    MergeOperator,
+};
 #[cfg(not(target_arch = "wasm32"))]
-use rocksdb_backend::{ColumnFamily, ColumnFamilyDefinition, Db, Iter};
+use rocksdb_backend::{
+    ColumnFamily, ColumnFamilyDefinition, CompactionAction, CompactionFilter, Db, Iter,
+    MergeOperator,
+};
+use std::ffi::CString;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
@@ -66,18 +73,102 @@ impl Storage {
 
     fn column_families() -> Vec<ColumnFamilyDefinition> {
         vec![
-            ColumnFamilyDefinition { name: ID2STR_CF },
-            ColumnFamilyDefinition { name: SPOG_CF },
-            ColumnFamilyDefinition { name: POSG_CF },
-            ColumnFamilyDefinition { name: OSPG_CF },
-            ColumnFamilyDefinition { name: GSPO_CF },
-            ColumnFamilyDefinition { name: GPOS_CF },
-            ColumnFamilyDefinition { name: GOSP_CF },
-            ColumnFamilyDefinition { name: DSPO_CF },
-            ColumnFamilyDefinition { name: DPOS_CF },
-            ColumnFamilyDefinition { name: DOSP_CF },
-            ColumnFamilyDefinition { name: GRAPHS_CF },
+            ColumnFamilyDefinition {
+                name: ID2STR_CF,
+                merge_operator: Some(Self::str2id_merge()),
+                compaction_filter: Some(Self::str2id_filter()),
+            },
+            ColumnFamilyDefinition {
+                name: SPOG_CF,
+                merge_operator: None,
+                compaction_filter: None,
+            },
+            ColumnFamilyDefinition {
+                name: POSG_CF,
+                merge_operator: None,
+                compaction_filter: None,
+            },
+            ColumnFamilyDefinition {
+                name: OSPG_CF,
+                merge_operator: None,
+                compaction_filter: None,
+            },
+            ColumnFamilyDefinition {
+                name: GSPO_CF,
+                merge_operator: None,
+                compaction_filter: None,
+            },
+            ColumnFamilyDefinition {
+                name: GPOS_CF,
+                merge_operator: None,
+                compaction_filter: None,
+            },
+            ColumnFamilyDefinition {
+                name: GOSP_CF,
+                merge_operator: None,
+                compaction_filter: None,
+            },
+            ColumnFamilyDefinition {
+                name: DSPO_CF,
+                merge_operator: None,
+                compaction_filter: None,
+            },
+            ColumnFamilyDefinition {
+                name: DPOS_CF,
+                merge_operator: None,
+                compaction_filter: None,
+            },
+            ColumnFamilyDefinition {
+                name: DOSP_CF,
+                merge_operator: None,
+                compaction_filter: None,
+            },
+            ColumnFamilyDefinition {
+                name: GRAPHS_CF,
+                merge_operator: None,
+                compaction_filter: None,
+            },
         ]
+    }
+
+    fn str2id_merge() -> MergeOperator {
+        fn merge_counted_values<'a>(values: impl Iterator<Item = &'a [u8]>) -> Vec<u8> {
+            let (counter, str) =
+                values.fold((0, [].as_ref()), |(prev_counter, prev_str), current| {
+                    (
+                        prev_counter + i32::from_be_bytes(current[..4].try_into().unwrap()),
+                        if prev_str.is_empty() {
+                            &current[4..]
+                        } else {
+                            prev_str
+                        },
+                    )
+                });
+            let mut buffer = Vec::with_capacity(str.len() + 4);
+            buffer.extend_from_slice(&counter.to_be_bytes());
+            buffer.extend_from_slice(str);
+            buffer
+        }
+
+        MergeOperator {
+            full: |_, previous, values| merge_counted_values(previous.into_iter().chain(values)),
+            partial: |_, values| merge_counted_values(values),
+            name: CString::new("id2str_merge").unwrap(),
+        }
+    }
+
+    fn str2id_filter() -> CompactionFilter {
+        CompactionFilter {
+            filter: |_, value| {
+                let counter = i32::from_be_bytes(value[..4].try_into().unwrap());
+                if counter > 0 {
+                    CompactionAction::Keep
+                } else {
+                    CompactionAction::Remove
+                }
+            },
+            name: CString::new("id2str_compaction_filter").unwrap(),
+        }
     }
 
     fn setup(db: Db) -> std::io::Result<Self> {
@@ -107,24 +198,26 @@ impl Storage {
                         .insert_empty(&this.graphs_cf, &encode_term(&quad.graph_name), false)?;
                 }
             }
+            this.db.flush(&this.graphs_cf)?;
             version = 1;
             this.set_version(version)?;
-            this.db.flush()?;
+            this.db.flush(&this.default_cf)?;
         }
         if version == 1 {
             // We migrate to v2
             let mut iter = this.db.iter(&this.id2str_cf);
             while let (Some(key), Some(value)) = (iter.key(), iter.value()) {
                 let mut new_value = Vec::with_capacity(value.len() + 4);
-                new_value.extend_from_slice(&u32::MAX.to_be_bytes());
+                new_value.extend_from_slice(&i32::MAX.to_be_bytes());
                 new_value.extend_from_slice(value);
                 this.db.insert(&this.id2str_cf, key, &new_value, false)?;
                 iter.next();
             }
             iter.status()?;
+            this.db.flush(&this.id2str_cf)?;
             version = 2;
             this.set_version(version)?;
-            this.db.flush()?;
+            this.db.flush(&this.default_cf)?;
         }
 
         match version {
@@ -684,13 +777,30 @@ impl Storage {
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn flush(&self) -> std::io::Result<()> {
-        self.db.flush()
+        self.db.flush(&self.default_cf)?;
+        self.db.flush(&self.gpos_cf)?;
+        self.db.flush(&self.gpos_cf)?;
+        self.db.flush(&self.gosp_cf)?;
+        self.db.flush(&self.spog_cf)?;
+        self.db.flush(&self.posg_cf)?;
+        self.db.flush(&self.ospg_cf)?;
+        self.db.flush(&self.dspo_cf)?;
+        self.db.flush(&self.dpos_cf)?;
+        self.db.flush(&self.dosp_cf)?;
+        self.db.flush(&self.id2str_cf)
     }
 
     pub fn get_str(&self, key: &StrHash) -> std::io::Result<Option<String>> {
         self.db
             .get(&self.id2str_cf, &key.to_be_bytes())?
-            .map(|v| String::from_utf8(v[4..].to_vec()))
+            .and_then(|v| {
+                let count = i32::from_be_bytes(v[..4].try_into().unwrap());
+                if count > 0 {
+                    Some(String::from_utf8(v[4..].to_vec()))
+                } else {
+                    None
+                }
+            })
             .transpose()
             .map_err(invalid_data_error)
     }
@@ -774,37 +884,20 @@ impl TermEncoder for Storage {
     type Error = std::io::Error;
 
     fn insert_str(&self, key: &StrHash, value: &str) -> std::io::Result<()> {
-        if let Some(value) = self.db.get(&self.id2str_cf, &key.to_be_bytes())? {
-            let mut value = value.to_vec();
-            let number = u32::from_be_bytes(value[..4].try_into().map_err(invalid_data_error)?);
-            let new_number = number.saturating_add(1);
-            value[..4].copy_from_slice(&new_number.to_be_bytes());
-            self.db
-                .insert(&self.id2str_cf, &key.to_be_bytes(), &value, true)?
-        } else {
-            let mut buffer = Vec::with_capacity(value.len() + 4);
-            buffer.extend_from_slice(&1_u32.to_be_bytes());
-            buffer.extend_from_slice(value.as_bytes());
-            self.db
-                .insert(&self.id2str_cf, &key.to_be_bytes(), &buffer, false)?;
-        }
-        Ok(())
+        let mut buffer = Vec::with_capacity(value.len() + 4);
+        buffer.extend_from_slice(&1_i32.to_be_bytes());
+        buffer.extend_from_slice(value.as_bytes());
+        self.db
+            .merge(&self.id2str_cf, &key.to_be_bytes(), &buffer, false)
     }
 
     fn remove_str(&self, key: &StrHash) -> std::io::Result<()> {
-        if let Some(value) = self.db.get(&self.id2str_cf, &key.to_be_bytes())? {
-            let number = u32::from_be_bytes(value[..4].try_into().map_err(invalid_data_error)?);
-            let new_number = number.saturating_sub(1);
-            if new_number == 0 {
-                self.db.remove(&self.id2str_cf, &key.to_be_bytes(), true)?;
-            } else {
-                let mut value = value.to_vec();
-                value[..4].copy_from_slice(&new_number.to_be_bytes());
-                self.db
-                    .insert(&self.id2str_cf, &key.to_be_bytes(), &value, true)?;
-            }
-        }
-        Ok(())
+        self.db.merge(
+            &self.id2str_cf,
+            &key.to_be_bytes(),
+            &(-1_i32).to_be_bytes(),
+            true,
+        )
     }
 }
 
@@ -860,6 +953,8 @@ mod tests {
         storage.insert(quad)?;
         storage.insert(quad2)?;
         storage.remove(quad2)?;
+        storage.flush()?;
+        storage.db.compact(&storage.id2str_cf)?;
         assert!(storage
             .get_str(&StrHash::new("http://example.com/s"))?
             .is_some());
