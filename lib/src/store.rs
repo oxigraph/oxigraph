@@ -33,6 +33,7 @@ use crate::storage::io::{dump_dataset, dump_graph, load_dataset, load_graph};
 use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
 use crate::storage::{ChainedDecodingQuadIterator, DecodingGraphIterator, Storage};
 use std::io::{BufRead, Write};
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 use std::{fmt, io, str};
 

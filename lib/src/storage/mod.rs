@@ -8,9 +8,9 @@ use crate::storage::binary_encoder::{
 };
 use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash, StrLookup, TermEncoder};
 #[cfg(target_arch = "wasm32")]
-use fallback_backend::{ColumnFamily, Db, Iter};
+use fallback_backend::{ColumnFamily, ColumnFamilyDefinition, Db, Iter};
 #[cfg(not(target_arch = "wasm32"))]
-use rocksdb_backend::{ColumnFamily, Db, Iter};
+use rocksdb_backend::{ColumnFamily, ColumnFamilyDefinition, Db, Iter};
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
@@ -36,11 +36,6 @@ const DOSP_CF: &str = "dosp";
 const GRAPHS_CF: &str = "graphs";
 const DEFAULT_CF: &str = "default";
 
-const COLUMN_FAMILIES: [&str; 11] = [
-    ID2STR_CF, SPOG_CF, POSG_CF, OSPG_CF, GSPO_CF, GPOS_CF, GOSP_CF, DSPO_CF, DPOS_CF, DOSP_CF,
-    GRAPHS_CF,
-];
-
 /// Low level storage primitives
 #[derive(Clone)]
 pub struct Storage {
@@ -61,12 +56,28 @@ pub struct Storage {
 
 impl Storage {
     pub fn new() -> std::io::Result<Self> {
-        Self::setup(Db::new(&COLUMN_FAMILIES)?)
+        Self::setup(Db::new(Self::column_families())?)
     }
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn open(path: &Path) -> std::io::Result<Self> {
-        Self::setup(Db::open(path, &COLUMN_FAMILIES)?)
+        Self::setup(Db::open(path, Self::column_families())?)
+    }
+
+    fn column_families() -> Vec<ColumnFamilyDefinition> {
+        vec![
+            ColumnFamilyDefinition { name: ID2STR_CF },
+            ColumnFamilyDefinition { name: SPOG_CF },
+            ColumnFamilyDefinition { name: POSG_CF },
+            ColumnFamilyDefinition { name: OSPG_CF },
+            ColumnFamilyDefinition { name: GSPO_CF },
+            ColumnFamilyDefinition { name: GPOS_CF },
+            ColumnFamilyDefinition { name: GOSP_CF },
+            ColumnFamilyDefinition { name: DSPO_CF },
+            ColumnFamilyDefinition { name: DPOS_CF },
+            ColumnFamilyDefinition { name: DOSP_CF },
+            ColumnFamilyDefinition { name: GRAPHS_CF },
+        ]
     }
 
     fn setup(db: Db) -> std::io::Result<Self> {

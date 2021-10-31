@@ -37,6 +37,10 @@ macro_rules! ffi_result_impl {
     }}
 }
 
+pub struct ColumnFamilyDefinition {
+    pub name: &'static str,
+}
+
 #[derive(Clone)]
 pub struct Db(Arc<DbHandler>);
 
@@ -52,7 +56,7 @@ struct DbHandler {
     low_priority_write_options: *mut rocksdb_writeoptions_t,
     flush_options: *mut rocksdb_flushoptions_t,
     env: Option<*mut rocksdb_env_t>,
-    column_families: Vec<&'static str>,
+    column_families: Vec<ColumnFamilyDefinition>,
     cf_handles: Vec<*mut rocksdb_column_family_handle_t>,
 }
 
@@ -77,7 +81,7 @@ impl Drop for DbHandler {
 }
 
 impl Db {
-    pub fn new(column_families: &'static [&'static str]) -> Result<Self> {
+    pub fn new(column_families: Vec<ColumnFamilyDefinition>) -> Result<Self> {
         let path = if cfg!(target_os = "linux") {
             "/dev/shm/".into()
         } else {
@@ -87,13 +91,13 @@ impl Db {
         Ok(Self(Arc::new(Self::do_open(&path, column_families, true)?)))
     }
 
-    pub fn open(path: &Path, column_families: &'static [&'static str]) -> Result<Self> {
+    pub fn open(path: &Path, column_families: Vec<ColumnFamilyDefinition>) -> Result<Self> {
         Ok(Self(Arc::new(Self::do_open(path, column_families, false)?)))
     }
 
     fn do_open(
         path: &Path,
-        column_families: &'static [&'static str],
+        mut column_families: Vec<ColumnFamilyDefinition>,
         in_memory: bool,
     ) -> Result<DbHandler> {
         let c_path = CString::new(
@@ -107,12 +111,16 @@ impl Db {
             assert!(!options.is_null(), "rocksdb_options_create returned null");
             rocksdb_options_set_create_if_missing(options, 1);
             rocksdb_options_set_create_missing_column_families(options, 1);
-            if !in_memory {
-                rocksdb_options_set_compression(
-                    options,
-                    rocksdb_lz4_compression.try_into().unwrap(),
-                );
-            }
+            rocksdb_options_set_compression(
+                options,
+                if in_memory {
+                    rocksdb_no_compression
+                } else {
+                    rocksdb_lz4_compression
+                }
+                .try_into()
+                .unwrap(),
+            );
 
             let txn_options = rocksdb_transactiondb_options_create();
             assert!(
@@ -133,13 +141,12 @@ impl Db {
                 None
             };
 
-            let mut column_families = column_families.to_vec();
-            if !column_families.contains(&"default") {
-                column_families.push("default")
+            if !column_families.iter().any(|c| c.name == "default") {
+                column_families.push(ColumnFamilyDefinition { name: "default" })
             }
             let c_column_families = column_families
                 .iter()
-                .map(|cf| CString::new(*cf))
+                .map(|cf| CString::new(cf.name))
                 .collect::<std::result::Result<Vec<_>, _>>()
                 .map_err(invalid_input_error)?;
             let cf_options: Vec<*const rocksdb_options_t> = vec![options; column_families.len()];
@@ -226,8 +233,8 @@ impl Db {
     }
 
     pub fn column_family(&self, name: &'static str) -> Option<ColumnFamily> {
-        for (cf_name, cf_handle) in self.0.column_families.iter().zip(&self.0.cf_handles) {
-            if *cf_name == name {
+        for (cf, cf_handle) in self.0.column_families.iter().zip(&self.0.cf_handles) {
+            if cf.name == name {
                 return Some(ColumnFamily(*cf_handle));
             }
         }

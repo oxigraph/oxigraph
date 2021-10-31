@@ -4,14 +4,18 @@ use std::collections::BTreeMap;
 use std::io::Result;
 use std::sync::{Arc, RwLock};
 
+pub struct ColumnFamilyDefinition {
+    pub name: &'static str,
+}
+
 #[derive(Clone)]
 pub struct Db(Arc<RwLock<BTreeMap<ColumnFamily, BTreeMap<Vec<u8>, Vec<u8>>>>>);
 
 impl Db {
-    pub fn new(column_families: &'static [&'static str]) -> Result<Self> {
+    pub fn new(column_families: Vec<ColumnFamilyDefinition>) -> Result<Self> {
         let mut trees = BTreeMap::new();
         for cf in column_families {
-            trees.insert(ColumnFamily(*cf), BTreeMap::default());
+            trees.insert(ColumnFamily(cf.name), BTreeMap::default());
         }
         trees.entry(ColumnFamily("default")).or_default(); // We make sure that "default" key exists.
         Ok(Self(Arc::new(RwLock::new(trees))))
