@@ -49,6 +49,7 @@ struct DbHandler {
     txn_options: *mut rocksdb_transactiondb_options_t,
     read_options: *mut rocksdb_readoptions_t,
     write_options: *mut rocksdb_writeoptions_t,
+    low_priority_write_options: *mut rocksdb_writeoptions_t,
     flush_options: *mut rocksdb_flushoptions_t,
     env: Option<*mut rocksdb_env_t>,
     column_families: Vec<&'static str>,
@@ -64,6 +65,7 @@ impl Drop for DbHandler {
             rocksdb_transactiondb_close(self.db);
             rocksdb_readoptions_destroy(self.read_options);
             rocksdb_writeoptions_destroy(self.write_options);
+            rocksdb_writeoptions_destroy(self.low_priority_write_options);
             rocksdb_flushoptions_destroy(self.flush_options);
             rocksdb_transactiondb_options_destroy(self.txn_options);
             rocksdb_options_destroy(self.options);
@@ -185,17 +187,26 @@ impl Db {
                 !read_options.is_null(),
                 "rocksdb_readoptions_create returned null"
             );
+
             let write_options = rocksdb_writeoptions_create();
             assert!(
-                !read_options.is_null(),
+                !write_options.is_null(),
                 "rocksdb_writeoptions_create returned null"
             );
             if in_memory {
                 rocksdb_writeoptions_disable_WAL(write_options, 1); // No need for WAL
             }
+
+            let low_priority_write_options = rocksdb_writeoptions_create_copy(write_options);
+            assert!(
+                !low_priority_write_options.is_null(),
+                "rocksdb_writeoptions_create_copy returned null"
+            );
+            rocksdb_writeoptions_set_low_pri(low_priority_write_options, 1);
+
             let flush_options = rocksdb_flushoptions_create();
             assert!(
-                !options.is_null(),
+                !flush_options.is_null(),
                 "rocksdb_flushoptions_create returned null"
             );
 
@@ -205,6 +216,7 @@ impl Db {
                 txn_options,
                 read_options,
                 write_options,
+                low_priority_write_options,
                 flush_options,
                 env,
                 column_families,
@@ -254,11 +266,21 @@ impl Db {
         Ok(self.get(column_family, key)?.is_some()) //TODO: optimize
     }
 
-    pub fn insert(&self, column_family: &ColumnFamily, key: &[u8], value: &[u8]) -> Result<()> {
+    pub fn insert(
+        &self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+        value: &[u8],
+        low_priority: bool,
+    ) -> Result<()> {
         unsafe {
             ffi_result!(rocksdb_transactiondb_put_cf(
                 self.0.db,
-                self.0.write_options,
+                if low_priority {
+                    self.0.low_priority_write_options
+                } else {
+                    self.0.write_options
+                },
                 column_family.0,
                 key.as_ptr() as *const c_char,
                 key.len(),
@@ -268,15 +290,29 @@ impl Db {
         }
     }
 
-    pub fn insert_empty(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<()> {
-        self.insert(column_family, key, &[])
+    pub fn insert_empty(
+        &self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+        low_priority: bool,
+    ) -> Result<()> {
+        self.insert(column_family, key, &[], low_priority)
     }
 
-    pub fn remove(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<()> {
+    pub fn remove(
+        &self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+        low_priority: bool,
+    ) -> Result<()> {
         unsafe {
             ffi_result!(rocksdb_transactiondb_delete_cf(
                 self.0.db,
-                self.0.write_options,
+                if low_priority {
+                    self.0.low_priority_write_options
+                } else {
+                    self.0.write_options
+                },
                 column_family.0,
                 key.as_ptr() as *const c_char,
                 key.len()

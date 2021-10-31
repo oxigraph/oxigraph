@@ -51,7 +51,13 @@ impl Db {
             .contains_key(key.as_ref()))
     }
 
-    pub fn insert(&self, column_family: &ColumnFamily, key: &[u8], value: &[u8]) -> Result<()> {
+    pub fn insert(
+        &self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+        value: &[u8],
+        _low_priority: bool,
+    ) -> Result<()> {
         self.0
             .write()
             .unwrap()
@@ -61,11 +67,21 @@ impl Db {
         Ok(())
     }
 
-    pub fn insert_empty(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<()> {
-        self.insert(column_family, key, &[])
+    pub fn insert_empty(
+        &self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+        low_priority: bool,
+    ) -> Result<()> {
+        self.insert(column_family, key, &[], low_priority)
     }
 
-    pub fn remove(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<bool> {
+    pub fn remove(
+        &self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+        _low_priority: bool,
+    ) -> Result<bool> {
         Ok(self
             .0
             .write()

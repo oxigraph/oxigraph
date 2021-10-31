@@ -15,6 +15,9 @@ extern ROCKSDB_LIBRARY_API rocksdb_pinnableslice_t* rocksdb_transactiondb_get_pi
 extern ROCKSDB_LIBRARY_API void rocksdb_transactiondb_flush(
         rocksdb_transactiondb_t* db, const rocksdb_flushoptions_t* options, char** errptr);
 
+extern ROCKSDB_LIBRARY_API rocksdb_writeoptions_t* rocksdb_writeoptions_create_copy(
+        rocksdb_writeoptions_t*);
+
 #ifdef __cplusplus
 }
 #endif

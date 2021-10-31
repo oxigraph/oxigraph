@@ -27,4 +27,8 @@ void rocksdb_transactiondb_flush(
     SaveError(errptr, db->rep->Flush(options->rep));
 }
 
+rocksdb_writeoptions_t* rocksdb_writeoptions_create_copy(rocksdb_writeoptions_t* options) {
+    return new rocksdb_writeoptions_t(*options);
+}
+
 }

@@ -93,7 +93,7 @@ impl Storage {
                 let quad = quad?;
                 if !quad.graph_name.is_default_graph() {
                     this.db
-                        .insert_empty(&this.graphs_cf, &encode_term(&quad.graph_name))?;
+                        .insert_empty(&this.graphs_cf, &encode_term(&quad.graph_name), false)?;
                 }
             }
             version = 1;
@@ -107,7 +107,7 @@ impl Storage {
                 let mut new_value = Vec::with_capacity(value.len() + 4);
                 new_value.extend_from_slice(&u32::MAX.to_be_bytes());
                 new_value.extend_from_slice(value);
-                this.db.insert(&this.id2str_cf, key, &new_value)?;
+                this.db.insert(&this.id2str_cf, key, &new_value, false)?;
                 iter.next();
             }
             iter.status()?;
@@ -143,8 +143,12 @@ impl Storage {
     }
 
     fn set_version(&self, version: u64) -> std::io::Result<()> {
-        self.db
-            .insert(&self.default_cf, b"oxversion", &version.to_be_bytes())?;
+        self.db.insert(
+            &self.default_cf,
+            b"oxversion",
+            &version.to_be_bytes(),
+            false,
+        )?;
         Ok(())
     }
 
@@ -471,15 +475,18 @@ impl Storage {
             } else {
                 self.insert_quad_triple(quad, &encoded)?;
 
-                self.db.insert_empty(&self.dspo_cf, buffer.as_slice())?;
+                self.db
+                    .insert_empty(&self.dspo_cf, buffer.as_slice(), false)?;
                 buffer.clear();
 
                 write_pos_quad(&mut buffer, &encoded);
-                self.db.insert_empty(&self.dpos_cf, buffer.as_slice())?;
+                self.db
+                    .insert_empty(&self.dpos_cf, buffer.as_slice(), false)?;
                 buffer.clear();
 
                 write_osp_quad(&mut buffer, &encoded);
-                self.db.insert_empty(&self.dosp_cf, buffer.as_slice())?;
+                self.db
+                    .insert_empty(&self.dosp_cf, buffer.as_slice(), false)?;
                 buffer.clear();
 
                 true
@@ -491,32 +498,38 @@ impl Storage {
             } else {
                 self.insert_quad_triple(quad, &encoded)?;
 
-                self.db.insert_empty(&self.spog_cf, buffer.as_slice())?;
+                self.db
+                    .insert_empty(&self.spog_cf, buffer.as_slice(), false)?;
                 buffer.clear();
 
                 write_posg_quad(&mut buffer, &encoded);
-                self.db.insert_empty(&self.posg_cf, buffer.as_slice())?;
+                self.db
+                    .insert_empty(&self.posg_cf, buffer.as_slice(), false)?;
                 buffer.clear();
 
                 write_ospg_quad(&mut buffer, &encoded);
-                self.db.insert_empty(&self.ospg_cf, buffer.as_slice())?;
+                self.db
+                    .insert_empty(&self.ospg_cf, buffer.as_slice(), false)?;
                 buffer.clear();
 
                 write_gspo_quad(&mut buffer, &encoded);
-                self.db.insert_empty(&self.gspo_cf, buffer.as_slice())?;
+                self.db
+                    .insert_empty(&self.gspo_cf, buffer.as_slice(), false)?;
                 buffer.clear();
 
                 write_gpos_quad(&mut buffer, &encoded);
-                self.db.insert_empty(&self.gpos_cf, buffer.as_slice())?;
+                self.db
+                    .insert_empty(&self.gpos_cf, buffer.as_slice(), false)?;
                 buffer.clear();
 
                 write_gosp_quad(&mut buffer, &encoded);
-                self.db.insert_empty(&self.gosp_cf, buffer.as_slice())?;
+                self.db
+                    .insert_empty(&self.gosp_cf, buffer.as_slice(), false)?;
                 buffer.clear();
 
                 write_term(&mut buffer, &encoded.graph_name);
                 if !self.db.contains_key(&self.graphs_cf, &buffer)? {
-                    self.db.insert_empty(&self.graphs_cf, &buffer)?;
+                    self.db.insert_empty(&self.graphs_cf, &buffer, false)?;
                     self.insert_graph_name(quad.graph_name, &encoded.graph_name)?;
                 }
                 buffer.clear();
@@ -537,15 +550,15 @@ impl Storage {
             write_spo_quad(&mut buffer, quad);
 
             if self.db.contains_key(&self.dspo_cf, buffer.as_slice())? {
-                self.db.remove(&self.dspo_cf, buffer.as_slice())?;
+                self.db.remove(&self.dspo_cf, buffer.as_slice(), false)?;
                 buffer.clear();
 
                 write_pos_quad(&mut buffer, quad);
-                self.db.remove(&self.dpos_cf, buffer.as_slice())?;
+                self.db.remove(&self.dpos_cf, buffer.as_slice(), false)?;
                 buffer.clear();
 
                 write_osp_quad(&mut buffer, quad);
-                self.db.remove(&self.dosp_cf, buffer.as_slice())?;
+                self.db.remove(&self.dosp_cf, buffer.as_slice(), false)?;
                 buffer.clear();
 
                 self.remove_quad_triple(quad)?;
@@ -558,27 +571,27 @@ impl Storage {
             write_spog_quad(&mut buffer, quad);
 
             if self.db.contains_key(&self.spog_cf, buffer.as_slice())? {
-                self.db.remove(&self.spog_cf, buffer.as_slice())?;
+                self.db.remove(&self.spog_cf, buffer.as_slice(), false)?;
                 buffer.clear();
 
                 write_posg_quad(&mut buffer, quad);
-                self.db.remove(&self.posg_cf, buffer.as_slice())?;
+                self.db.remove(&self.posg_cf, buffer.as_slice(), false)?;
                 buffer.clear();
 
                 write_ospg_quad(&mut buffer, quad);
-                self.db.remove(&self.ospg_cf, buffer.as_slice())?;
+                self.db.remove(&self.ospg_cf, buffer.as_slice(), false)?;
                 buffer.clear();
 
                 write_gspo_quad(&mut buffer, quad);
-                self.db.remove(&self.gspo_cf, buffer.as_slice())?;
+                self.db.remove(&self.gspo_cf, buffer.as_slice(), false)?;
                 buffer.clear();
 
                 write_gpos_quad(&mut buffer, quad);
-                self.db.remove(&self.gpos_cf, buffer.as_slice())?;
+                self.db.remove(&self.gpos_cf, buffer.as_slice(), false)?;
                 buffer.clear();
 
                 write_gosp_quad(&mut buffer, quad);
-                self.db.remove(&self.gosp_cf, buffer.as_slice())?;
+                self.db.remove(&self.gosp_cf, buffer.as_slice(), false)?;
                 buffer.clear();
 
                 self.remove_quad_triple(quad)?;
@@ -596,7 +609,7 @@ impl Storage {
         Ok(if self.db.contains_key(&self.graphs_cf, &encoded)? {
             false
         } else {
-            self.db.insert_empty(&self.graphs_cf, &encoded)?;
+            self.db.insert_empty(&self.graphs_cf, &encoded, false)?;
             self.insert_term(graph_name.into(), &encoded_graph_name)?;
             true
         })
@@ -633,7 +646,7 @@ impl Storage {
         }
         let encoded_graph = encode_term(graph_name);
         Ok(if self.db.contains_key(&self.graphs_cf, &encoded_graph)? {
-            self.db.remove(&self.graphs_cf, &encoded_graph)?;
+            self.db.remove(&self.graphs_cf, &encoded_graph, false)?;
             self.remove_term(graph_name)?;
             true
         } else {
@@ -756,13 +769,13 @@ impl TermEncoder for Storage {
             let new_number = number.saturating_add(1);
             value[..4].copy_from_slice(&new_number.to_be_bytes());
             self.db
-                .insert(&self.id2str_cf, &key.to_be_bytes(), &value)?
+                .insert(&self.id2str_cf, &key.to_be_bytes(), &value, true)?
         } else {
             let mut buffer = Vec::with_capacity(value.len() + 4);
             buffer.extend_from_slice(&1_u32.to_be_bytes());
             buffer.extend_from_slice(value.as_bytes());
             self.db
-                .insert(&self.id2str_cf, &key.to_be_bytes(), &buffer)?;
+                .insert(&self.id2str_cf, &key.to_be_bytes(), &buffer, false)?;
         }
         Ok(())
     }
@@ -772,12 +785,12 @@ impl TermEncoder for Storage {
             let number = u32::from_be_bytes(value[..4].try_into().map_err(invalid_data_error)?);
             let new_number = number.saturating_sub(1);
             if new_number == 0 {
-                self.db.remove(&self.id2str_cf, &key.to_be_bytes())?;
+                self.db.remove(&self.id2str_cf, &key.to_be_bytes(), true)?;
             } else {
                 let mut value = value.to_vec();
                 value[..4].copy_from_slice(&new_number.to_be_bytes());
                 self.db
-                    .insert(&self.id2str_cf, &key.to_be_bytes(), &value)?;
+                    .insert(&self.id2str_cf, &key.to_be_bytes(), &value, true)?;
             }
         }
         Ok(())
