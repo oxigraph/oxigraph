@@ -134,9 +134,14 @@ impl Storage {
     fn str2id_merge() -> MergeOperator {
         fn merge_counted_values<'a>(values: impl Iterator<Item = &'a [u8]>) -> Vec<u8> {
             let (counter, str) =
-                values.fold((0, [].as_ref()), |(prev_counter, prev_str), current| {
+                values.fold((0_i32, [].as_ref()), |(prev_counter, prev_str), current| {
+                    let new_counter = i32::from_be_bytes(current[..4].try_into().unwrap());
                     (
-                        prev_counter + i32::from_be_bytes(current[..4].try_into().unwrap()),
+                        if prev_counter == i32::MAX {
+                            i32::MAX // We keep to max, no counting
+                        } else {
+                            prev_counter.saturating_add(new_counter)
+                        },
                         if prev_str.is_empty() {
                             &current[4..]
                         } else {
