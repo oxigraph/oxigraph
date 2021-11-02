@@ -11,6 +11,7 @@ use std::borrow::Borrow;
 use std::env::temp_dir;
 use std::ffi::{CStr, CString};
 use std::io::{Error, ErrorKind, Result};
+use std::iter::Zip;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::path::Path;
@@ -642,7 +643,6 @@ unsafe extern "C" fn merge_full(
     new_value_length: *mut size_t,
 ) -> *mut c_char {
     let operator = &*(operator as *const MergeOperator);
-    let num_operands = usize::try_from(num_operands).unwrap();
     let result = (operator.full)(
         slice::from_raw_parts(key as *const u8, key_length),
         if existing_value.is_null() {
@@ -653,11 +653,7 @@ unsafe extern "C" fn merge_full(
                 existing_value_len,
             ))
         },
-        SlicesIterator {
-            slices: slice::from_raw_parts(operands_list, num_operands),
-            lengths: slice::from_raw_parts(operands_list_length, num_operands),
-            cursor: 0,
-        },
+        SlicesIterator::new(operands_list, operands_list_length, num_operands),
     );
     *new_value_length = result.len();
     *success = 1_u8;
@@ -675,14 +671,9 @@ pub unsafe extern "C" fn merge_partial(
     new_value_length: *mut size_t,
 ) -> *mut c_char {
     let operator = &*(operator as *const MergeOperator);
-    let num_operands = usize::try_from(num_operands).unwrap();
     let result = (operator.partial)(
         slice::from_raw_parts(key as *const u8, key_length),
-        SlicesIterator {
-            slices: slice::from_raw_parts(operands_list, num_operands),
-            lengths: slice::from_raw_parts(operands_list_length, num_operands),
-            cursor: 0,
-        },
+        SlicesIterator::new(operands_list, operands_list_length, num_operands),
     );
     *new_value_length = result.len();
     *success = 1_u8;
@@ -704,28 +695,31 @@ unsafe extern "C" fn merge_name(operator: *mut c_void) -> *const c_char {
     operator.name.as_ptr()
 }
 
-pub struct SlicesIterator<'a> {
-    slices: &'a [*const c_char],
-    lengths: &'a [size_t],
-    cursor: usize,
+pub struct SlicesIterator<'a>(
+    Zip<std::slice::Iter<'a, *const c_char>, std::slice::Iter<'a, size_t>>,
+);
+
+impl<'a> SlicesIterator<'a> {
+    unsafe fn new(
+        operands_list: *const *const c_char,
+        operands_list_length: *const size_t,
+        num_operands: c_int,
+    ) -> Self {
+        let num_operands = usize::try_from(num_operands).unwrap();
+        Self(
+            slice::from_raw_parts(operands_list, num_operands)
+                .iter()
+                .zip(slice::from_raw_parts(operands_list_length, num_operands)),
+        )
+    }
 }
 
 impl<'a> Iterator for SlicesIterator<'a> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.cursor >= self.slices.len() {
-            None
-        } else {
-            let slice = unsafe {
-                slice::from_raw_parts(
-                    self.slices[self.cursor] as *const u8,
-                    self.lengths[self.cursor],
-                )
-            };
-            self.cursor += 1;
-            Some(slice)
-        }
+        let (slice, len) = self.0.next()?;
+        Some(unsafe { slice::from_raw_parts(*slice as *const u8, *len) })
     }
 }
 
