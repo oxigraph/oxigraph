@@ -716,62 +716,86 @@ pub fn insert_term_values<E, F: Fn(&StrHash, &str) -> Result<(), E> + Copy>(
     encoded: &EncodedTerm,
     insert_str: F,
 ) -> Result<(), E> {
-    match (term, encoded) {
-        (TermRef::NamedNode(node), EncodedTerm::NamedNode { iri_id }) => {
-            insert_str(iri_id, node.as_str())?;
-        }
-        (TermRef::BlankNode(node), EncodedTerm::BigBlankNode { id_id }) => {
-            insert_str(id_id, node.as_str())?;
-        }
-        (TermRef::Literal(literal), EncodedTerm::SmallBigLangStringLiteral { language_id, .. }) => {
-            if let Some(language) = literal.language() {
-                insert_str(language_id, language)?;
+    match term {
+        TermRef::NamedNode(node) => {
+            if let EncodedTerm::NamedNode { iri_id } = encoded {
+                insert_str(iri_id, node.as_str())
+            } else {
+                unreachable!("Invalid term encoding {:?} for {}", encoded, term)
             }
         }
-        (
-            TermRef::Literal(literal),
-            EncodedTerm::BigSmallLangStringLiteral { value_id, .. }
-            | EncodedTerm::BigStringLiteral { value_id },
-        ) => {
-            insert_str(value_id, literal.value())?;
-        }
-        (
-            TermRef::Literal(literal),
+        TermRef::BlankNode(node) => match encoded {
+            EncodedTerm::BigBlankNode { id_id } => insert_str(id_id, node.as_str()),
+            EncodedTerm::SmallBlankNode(..) | EncodedTerm::NumericalBlankNode { .. } => Ok(()),
+            _ => unreachable!("Invalid term encoding {:?} for {}", encoded, term),
+        },
+        TermRef::Literal(literal) => match encoded {
+            EncodedTerm::SmallStringLiteral(..) => Ok(()),
+            EncodedTerm::BigStringLiteral { value_id } => insert_str(value_id, literal.value()),
+            EncodedTerm::SmallSmallLangStringLiteral { .. } => Ok(()),
+            EncodedTerm::SmallBigLangStringLiteral { language_id, .. } => {
+                if let Some(language) = literal.language() {
+                    insert_str(language_id, language)
+                } else {
+                    unreachable!("Invalid term encoding {:?} for {}", encoded, term)
+                }
+            }
+            EncodedTerm::BigSmallLangStringLiteral { value_id, .. } => {
+                insert_str(value_id, literal.value())
+            }
             EncodedTerm::BigBigLangStringLiteral {
                 value_id,
                 language_id,
-            },
-        ) => {
-            insert_str(value_id, literal.value())?;
-            if let Some(language) = literal.language() {
-                insert_str(language_id, language)?
+            } => {
+                insert_str(value_id, literal.value())?;
+                if let Some(language) = literal.language() {
+                    insert_str(language_id, language)
+                } else {
+                    unreachable!("Invalid term encoding {:?} for {}", encoded, term)
+                }
             }
-        }
-        (TermRef::Literal(literal), EncodedTerm::SmallTypedLiteral { datatype_id, .. }) => {
-            insert_str(datatype_id, literal.datatype().as_str())?;
-        }
-        (
-            TermRef::Literal(literal),
+            EncodedTerm::SmallTypedLiteral { datatype_id, .. } => {
+                insert_str(datatype_id, literal.datatype().as_str())
+            }
             EncodedTerm::BigTypedLiteral {
                 value_id,
                 datatype_id,
-            },
-        ) => {
-            insert_str(value_id, literal.value())?;
-            insert_str(datatype_id, literal.datatype().as_str())?;
+            } => {
+                insert_str(value_id, literal.value())?;
+                insert_str(datatype_id, literal.datatype().as_str())
+            }
+            EncodedTerm::BooleanLiteral(..) => Ok(()),
+            EncodedTerm::FloatLiteral(..) => Ok(()),
+            EncodedTerm::DoubleLiteral(..) => Ok(()),
+            EncodedTerm::IntegerLiteral(..) => Ok(()),
+            EncodedTerm::DecimalLiteral(..) => Ok(()),
+            EncodedTerm::DateTimeLiteral(..) => Ok(()),
+            EncodedTerm::TimeLiteral(..) => Ok(()),
+            EncodedTerm::DateLiteral(..) => Ok(()),
+            EncodedTerm::GYearMonthLiteral(..) => Ok(()),
+            EncodedTerm::GYearLiteral(..) => Ok(()),
+            EncodedTerm::GMonthDayLiteral(..) => Ok(()),
+            EncodedTerm::GDayLiteral(..) => Ok(()),
+            EncodedTerm::GMonthLiteral(..) => Ok(()),
+            EncodedTerm::DurationLiteral(..) => Ok(()),
+            EncodedTerm::YearMonthDurationLiteral(..) => Ok(()),
+            EncodedTerm::DayTimeDurationLiteral(..) => Ok(()),
+            _ => unreachable!("Invalid term encoding {:?} for {}", encoded, term),
+        },
+        TermRef::Triple(triple) => {
+            if let EncodedTerm::Triple(encoded) = encoded {
+                insert_term_values(triple.subject.as_ref().into(), &encoded.subject, insert_str)?;
+                insert_term_values(
+                    triple.predicate.as_ref().into(),
+                    &encoded.predicate,
+                    insert_str,
+                )?;
+                insert_term_values(triple.object.as_ref(), &encoded.object, insert_str)
+            } else {
+                unreachable!("Invalid term encoding {:?} for {}", encoded, term)
+            }
         }
-        (TermRef::Triple(triple), EncodedTerm::Triple(encoded)) => {
-            insert_term_values(triple.subject.as_ref().into(), &encoded.subject, insert_str)?;
-            insert_term_values(
-                triple.predicate.as_ref().into(),
-                &encoded.predicate,
-                insert_str,
-            )?;
-            insert_term_values(triple.object.as_ref(), &encoded.object, insert_str)?;
-        }
-        _ => (),
     }
-    Ok(())
 }
 
 pub fn remove_term_values<E, F: Fn(&StrHash) -> Result<(), E> + Copy>(
@@ -779,44 +803,33 @@ pub fn remove_term_values<E, F: Fn(&StrHash) -> Result<(), E> + Copy>(
     remove_str: F,
 ) -> Result<(), E> {
     match encoded {
-        EncodedTerm::NamedNode { iri_id } => {
-            remove_str(iri_id)?;
-        }
-        EncodedTerm::BigBlankNode { id_id } => {
-            remove_str(id_id)?;
-        }
+        EncodedTerm::NamedNode { iri_id } => remove_str(iri_id),
+        EncodedTerm::BigBlankNode { id_id } => remove_str(id_id),
         EncodedTerm::BigStringLiteral { value_id }
-        | EncodedTerm::BigSmallLangStringLiteral { value_id, .. } => {
-            remove_str(value_id)?;
-        }
-        EncodedTerm::SmallBigLangStringLiteral { language_id, .. } => {
-            remove_str(language_id)?;
-        }
+        | EncodedTerm::BigSmallLangStringLiteral { value_id, .. } => remove_str(value_id),
+        EncodedTerm::SmallBigLangStringLiteral { language_id, .. } => remove_str(language_id),
         EncodedTerm::BigBigLangStringLiteral {
             value_id,
             language_id,
         } => {
             remove_str(value_id)?;
-            remove_str(language_id)?;
+            remove_str(language_id)
         }
-        EncodedTerm::SmallTypedLiteral { datatype_id, .. } => {
-            remove_str(datatype_id)?;
-        }
+        EncodedTerm::SmallTypedLiteral { datatype_id, .. } => remove_str(datatype_id),
         EncodedTerm::BigTypedLiteral {
             value_id,
             datatype_id,
         } => {
             remove_str(value_id)?;
-            remove_str(datatype_id)?;
+            remove_str(datatype_id)
         }
         EncodedTerm::Triple(encoded) => {
             remove_term_values(&encoded.subject, remove_str)?;
             remove_term_values(&encoded.predicate, remove_str)?;
-            remove_term_values(&encoded.object, remove_str)?;
+            remove_term_values(&encoded.object, remove_str)
         }
-        _ => (),
+        _ => Ok(()),
     }
-    Ok(())
 }
 
 pub fn parse_boolean_str(value: &str) -> Option<EncodedTerm> {
