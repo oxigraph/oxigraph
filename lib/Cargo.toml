@@ -38,6 +38,7 @@ hex = "0.4"
 nom = "7"
 siphasher = "0.3"
 lasso = "0.5"
+lazy_static = "1"
 sophia_api = { version = "0.7", optional = true }
 json-event-parser = "0.1"
 num_cpus = "1"
