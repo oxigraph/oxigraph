@@ -730,18 +730,16 @@ pub fn insert_term_values<E, F: Fn(&StrHash, &str) -> Result<(), E> + Copy>(
             _ => unreachable!("Invalid term encoding {:?} for {}", encoded, term),
         },
         TermRef::Literal(literal) => match encoded {
-            EncodedTerm::SmallStringLiteral(..) => Ok(()),
-            EncodedTerm::BigStringLiteral { value_id } => insert_str(value_id, literal.value()),
-            EncodedTerm::SmallSmallLangStringLiteral { .. } => Ok(()),
+            EncodedTerm::BigStringLiteral { value_id }
+            | EncodedTerm::BigSmallLangStringLiteral { value_id, .. } => {
+                insert_str(value_id, literal.value())
+            }
             EncodedTerm::SmallBigLangStringLiteral { language_id, .. } => {
                 if let Some(language) = literal.language() {
                     insert_str(language_id, language)
                 } else {
                     unreachable!("Invalid term encoding {:?} for {}", encoded, term)
                 }
-            }
-            EncodedTerm::BigSmallLangStringLiteral { value_id, .. } => {
-                insert_str(value_id, literal.value())
             }
             EncodedTerm::BigBigLangStringLiteral {
                 value_id,
@@ -764,22 +762,24 @@ pub fn insert_term_values<E, F: Fn(&StrHash, &str) -> Result<(), E> + Copy>(
                 insert_str(value_id, literal.value())?;
                 insert_str(datatype_id, literal.datatype().as_str())
             }
-            EncodedTerm::BooleanLiteral(..) => Ok(()),
-            EncodedTerm::FloatLiteral(..) => Ok(()),
-            EncodedTerm::DoubleLiteral(..) => Ok(()),
-            EncodedTerm::IntegerLiteral(..) => Ok(()),
-            EncodedTerm::DecimalLiteral(..) => Ok(()),
-            EncodedTerm::DateTimeLiteral(..) => Ok(()),
-            EncodedTerm::TimeLiteral(..) => Ok(()),
-            EncodedTerm::DateLiteral(..) => Ok(()),
-            EncodedTerm::GYearMonthLiteral(..) => Ok(()),
-            EncodedTerm::GYearLiteral(..) => Ok(()),
-            EncodedTerm::GMonthDayLiteral(..) => Ok(()),
-            EncodedTerm::GDayLiteral(..) => Ok(()),
-            EncodedTerm::GMonthLiteral(..) => Ok(()),
-            EncodedTerm::DurationLiteral(..) => Ok(()),
-            EncodedTerm::YearMonthDurationLiteral(..) => Ok(()),
-            EncodedTerm::DayTimeDurationLiteral(..) => Ok(()),
+            EncodedTerm::SmallStringLiteral(..)
+            | EncodedTerm::SmallSmallLangStringLiteral { .. }
+            | EncodedTerm::BooleanLiteral(..)
+            | EncodedTerm::FloatLiteral(..)
+            | EncodedTerm::DoubleLiteral(..)
+            | EncodedTerm::IntegerLiteral(..)
+            | EncodedTerm::DecimalLiteral(..)
+            | EncodedTerm::DateTimeLiteral(..)
+            | EncodedTerm::TimeLiteral(..)
+            | EncodedTerm::DateLiteral(..)
+            | EncodedTerm::GYearMonthLiteral(..)
+            | EncodedTerm::GYearLiteral(..)
+            | EncodedTerm::GMonthDayLiteral(..)
+            | EncodedTerm::GDayLiteral(..)
+            | EncodedTerm::GMonthLiteral(..)
+            | EncodedTerm::DurationLiteral(..)
+            | EncodedTerm::YearMonthDurationLiteral(..)
+            | EncodedTerm::DayTimeDurationLiteral(..) => Ok(()),
             _ => unreachable!("Invalid term encoding {:?} for {}", encoded, term),
         },
         TermRef::Triple(triple) => {
