@@ -811,7 +811,12 @@ impl Storage {
     }
 
     pub fn contains_str(&self, key: &StrHash) -> std::io::Result<bool> {
-        self.db.contains_key(&self.id2str_cf, &key.to_be_bytes())
+        Ok(self
+            .db
+            .get(&self.id2str_cf, &key.to_be_bytes())?
+            .map_or(false, |v| {
+                i32::from_be_bytes(v[..4].try_into().unwrap()) > 0
+            }))
     }
 }
 

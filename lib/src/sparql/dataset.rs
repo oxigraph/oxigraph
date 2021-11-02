@@ -6,6 +6,7 @@ use crate::storage::numeric_encoder::{
 };
 use crate::storage::Storage;
 use std::cell::RefCell;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::iter::empty;
@@ -151,13 +152,11 @@ impl DatasetView {
     }
 
     pub fn insert_str(&self, key: &StrHash, value: &str) {
-        if matches!(self.storage.contains_str(key), Ok(true)) {
-            return;
+        if let Entry::Vacant(e) = self.extra.borrow_mut().entry(*key) {
+            if !matches!(self.storage.contains_str(key), Ok(true)) {
+                e.insert(value.to_owned());
+            }
         }
-        self.extra
-            .borrow_mut()
-            .entry(*key)
-            .or_insert_with(|| value.to_owned());
     }
 }
 
