@@ -15,4 +15,5 @@ kill $!
 rm blazegraph.jar
 rm blazegraph.jnl
 rm "explore-${DATASET_SIZE}.nt"
+rm "explore-update-${DATASET_SIZE}.nt"
 rm -r td_data

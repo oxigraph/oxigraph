@@ -51,9 +51,10 @@ js-sys = "0.3"
 getrandom = {version="0.2", features=["js"]}
 
 [dev-dependencies]
-rayon = "1"
 criterion = "0.3"
+oxhttp = { version = "^0.1.2", features = ["native-tls"] }
 sophia_api = { version = "0.7", features = ["test_macro"] }
+zstd = "0.9"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"

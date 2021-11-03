@@ -17,6 +17,7 @@ sleep 60
 #./testdriver -mt ${PARALLELISM} -ucf usecases/businessIntelligence/sparql.txt -o "../bsbm.businessIntelligence.jena.${DATASET_SIZE}.${PARALLELISM}.4.1.0.xml" http://localhost:3030/bsbm/query
 kill $!
 rm "explore-${DATASET_SIZE}.nt"
+rm "explore-update-${DATASET_SIZE}.nt"
 rm -r td_data
 rm -r run
 rm -r apache-jena-fuseki-4.1.0

@@ -14,4 +14,5 @@ curl -f -X POST -H 'Content-Type:application/n-triples' --data-binary "@explore-
 kill $!
 rm -r oxigraph_data
 rm "explore-${DATASET_SIZE}.nt"
+rm "explore-update-${DATASET_SIZE}.nt"
 rm -r td_data

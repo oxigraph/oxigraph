@@ -18,4 +18,5 @@ kill $!
 sleep 5
 rm -r ../graphdb-free-9.3.3/data
 rm "explore-${DATASET_SIZE}.nt"
+rm "explore-update-${DATASET_SIZE}.nt"
 rm -r td_data
