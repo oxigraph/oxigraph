@@ -129,6 +129,7 @@ impl Db {
             rocksdb_options_set_info_log_level(options, 2); // We only log warnings
             rocksdb_options_set_max_log_file_size(options, 1024 * 1024); // Only 1MB log size
             rocksdb_options_set_recycle_log_file_num(options, 10); // We do not keep more than 10 log files
+            rocksdb_options_set_max_successive_merges(options, 5); // merge are expensive, let's pay the price once
             rocksdb_options_set_compression(
                 options,
                 if in_memory {
