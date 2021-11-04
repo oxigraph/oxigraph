@@ -6,13 +6,13 @@
 
 use crate::error::invalid_input_error;
 use libc::{self, c_char, c_int, c_uchar, c_void, size_t};
+use num_cpus;
 use oxrocksdb_sys::*;
 use std::borrow::Borrow;
 use std::env::temp_dir;
 use std::ffi::{CStr, CString};
 use std::io::{Error, ErrorKind, Result};
 use std::iter::Zip;
-use std::marker::PhantomData;
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
@@ -44,6 +44,7 @@ pub struct ColumnFamilyDefinition {
     pub name: &'static str,
     pub merge_operator: Option<MergeOperator>,
     pub compaction_filter: Option<CompactionFilter>,
+    pub use_iter: bool,
 }
 
 #[derive(Clone)]
@@ -126,6 +127,8 @@ impl Db {
             assert!(!options.is_null(), "rocksdb_options_create returned null");
             rocksdb_options_set_create_if_missing(options, 1);
             rocksdb_options_set_create_missing_column_families(options, 1);
+            rocksdb_options_optimize_level_style_compaction(options, 512 * 1024 * 1024);
+            rocksdb_options_increase_parallelism(options, num_cpus::get().try_into().unwrap());
             rocksdb_options_set_info_log_level(options, 2); // We only log warnings
             rocksdb_options_set_max_log_file_size(options, 1024 * 1024); // Only 1MB log size
             rocksdb_options_set_recycle_log_file_num(options, 10); // We do not keep more than 10 log files
@@ -165,6 +168,7 @@ impl Db {
                     name: "default",
                     merge_operator: None,
                     compaction_filter: None,
+                    use_iter: true,
                 })
             }
             let column_family_names = column_families.iter().map(|c| c.name).collect::<Vec<_>>();
@@ -178,6 +182,9 @@ impl Db {
                 .into_iter()
                 .map(|cf| {
                     let options = rocksdb_options_create_copy(options);
+                    if !cf.use_iter {
+                        rocksdb_options_optimize_for_point_lookup(options, 128);
+                    }
                     if let Some(merge) = cf.merge_operator {
                         // mergeoperator delete is done automatically
                         let merge = rocksdb_mergeoperator_create(
@@ -323,11 +330,7 @@ impl Db {
         }
     }
 
-    pub fn get(
-        &self,
-        column_family: &ColumnFamily,
-        key: &[u8],
-    ) -> Result<Option<PinnableSlice<'_>>> {
+    pub fn get(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<Option<PinnableSlice>> {
         unsafe {
             let slice = ffi_result!(rocksdb_transactiondb_get_pinned_cf(
                 self.0.db,
@@ -339,10 +342,7 @@ impl Db {
             Ok(if slice.is_null() {
                 None
             } else {
-                Some(PinnableSlice {
-                    slice,
-                    lifetime: PhantomData::default(),
-                })
+                Some(PinnableSlice(slice))
             })
         }
     }
@@ -510,38 +510,35 @@ pub struct ColumnFamily(*mut rocksdb_column_family_handle_t);
 unsafe impl Send for ColumnFamily {}
 unsafe impl Sync for ColumnFamily {}
 
-pub struct PinnableSlice<'a> {
-    slice: *mut rocksdb_pinnableslice_t,
-    lifetime: PhantomData<&'a ()>,
-}
+pub struct PinnableSlice(*mut rocksdb_pinnableslice_t);
 
-impl<'a> Drop for PinnableSlice<'a> {
+impl Drop for PinnableSlice {
     fn drop(&mut self) {
         unsafe {
-            rocksdb_pinnableslice_destroy(self.slice);
+            rocksdb_pinnableslice_destroy(self.0);
         }
     }
 }
 
-impl<'a> Deref for PinnableSlice<'a> {
+impl Deref for PinnableSlice {
     type Target = [u8];
 
     fn deref(&self) -> &[u8] {
         unsafe {
             let mut len = 0;
-            let val = rocksdb_pinnableslice_value(self.slice, &mut len);
+            let val = rocksdb_pinnableslice_value(self.0, &mut len);
             slice::from_raw_parts(val as *const u8, len)
         }
     }
 }
 
-impl<'a> AsRef<[u8]> for PinnableSlice<'a> {
+impl AsRef<[u8]> for PinnableSlice {
     fn as_ref(&self) -> &[u8] {
         &*self
     }
 }
 
-impl<'a> Borrow<[u8]> for PinnableSlice<'a> {
+impl Borrow<[u8]> for PinnableSlice {
     fn borrow(&self) -> &[u8] {
         &*self
     }

@@ -77,56 +77,67 @@ impl Storage {
                 name: ID2STR_CF,
                 merge_operator: Some(Self::str2id_merge()),
                 compaction_filter: Some(Self::str2id_filter()),
+                use_iter: false,
             },
             ColumnFamilyDefinition {
                 name: SPOG_CF,
                 merge_operator: None,
                 compaction_filter: None,
+                use_iter: true,
             },
             ColumnFamilyDefinition {
                 name: POSG_CF,
                 merge_operator: None,
                 compaction_filter: None,
+                use_iter: true,
             },
             ColumnFamilyDefinition {
                 name: OSPG_CF,
                 merge_operator: None,
                 compaction_filter: None,
+                use_iter: true,
             },
             ColumnFamilyDefinition {
                 name: GSPO_CF,
                 merge_operator: None,
                 compaction_filter: None,
+                use_iter: true,
             },
             ColumnFamilyDefinition {
                 name: GPOS_CF,
                 merge_operator: None,
                 compaction_filter: None,
+                use_iter: true,
             },
             ColumnFamilyDefinition {
                 name: GOSP_CF,
                 merge_operator: None,
                 compaction_filter: None,
+                use_iter: true,
             },
             ColumnFamilyDefinition {
                 name: DSPO_CF,
                 merge_operator: None,
                 compaction_filter: None,
+                use_iter: true,
             },
             ColumnFamilyDefinition {
                 name: DPOS_CF,
                 merge_operator: None,
                 compaction_filter: None,
+                use_iter: true,
             },
             ColumnFamilyDefinition {
                 name: DOSP_CF,
                 merge_operator: None,
                 compaction_filter: None,
+                use_iter: true,
             },
             ColumnFamilyDefinition {
                 name: GRAPHS_CF,
                 merge_operator: None,
                 compaction_filter: None,
+                use_iter: true,
             },
         ]
     }
