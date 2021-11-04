@@ -1331,16 +1331,10 @@ parser! {
         }
 
         //[52]
-        rule TriplesTemplate() -> Vec<TriplePattern> =  h:TriplesSameSubject() _ t:TriplesTemplate_tail()? {
-            let mut triples = h;
-            if let Some(l) = t {
-                triples.extend(l)
-            }
-            triples
+        rule TriplesTemplate() -> Vec<TriplePattern> = ts:TriplesTemplate_inner() ++ (".") ("." _)? {
+            ts.into_iter().flatten().collect()
         }
-        rule TriplesTemplate_tail() -> Vec<TriplePattern> = "." _ t:TriplesTemplate()? _ {
-            t.unwrap_or_default()
-        }
+        rule TriplesTemplate_inner() -> Vec<TriplePattern> = _ t:TriplesSameSubject() _ { t }
 
         //[53]
         rule GroupGraphPattern() -> GraphPattern =
@@ -1400,16 +1394,10 @@ parser! {
         }
 
         //[55]
-        rule TriplesBlock() -> Vec<TripleOrPathPattern> = h:TriplesSameSubjectPath() _ t:TriplesBlock_tail()? {
-            let mut triples = h;
-            if let Some(l) = t {
-                triples.extend(l)
-            }
-            triples
+        rule TriplesBlock() -> Vec<TripleOrPathPattern> = hs:TriplesBlock_inner() ++ (".") ("." _)? {
+            hs.into_iter().flatten().collect()
         }
-        rule TriplesBlock_tail() -> Vec<TripleOrPathPattern> = "." _ t:TriplesBlock()? _ {
-            t.unwrap_or_default()
-        }
+        rule TriplesBlock_inner() -> Vec<TripleOrPathPattern> = _ h:TriplesSameSubjectPath() _ { h }
 
         //[56]
         rule GraphPatternNotTriples() -> PartialGraphPattern = GroupOrUnionGraphPattern() / OptionalGraphPattern() / MinusGraphPattern() / GraphGraphPattern() / ServiceGraphPattern() / Filter() / Bind() / InlineData()
