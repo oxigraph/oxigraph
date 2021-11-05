@@ -45,6 +45,7 @@ pub struct ColumnFamilyDefinition {
     pub merge_operator: Option<MergeOperator>,
     pub compaction_filter: Option<CompactionFilter>,
     pub use_iter: bool,
+    pub min_prefix_size: usize,
 }
 
 #[derive(Clone)]
@@ -169,6 +170,7 @@ impl Db {
                     merge_operator: None,
                     compaction_filter: None,
                     use_iter: true,
+                    min_prefix_size: 0,
                 })
             }
             let column_family_names = column_families.iter().map(|c| c.name).collect::<Vec<_>>();
@@ -184,6 +186,12 @@ impl Db {
                     let options = rocksdb_options_create_copy(options);
                     if !cf.use_iter {
                         rocksdb_options_optimize_for_point_lookup(options, 128);
+                    }
+                    if cf.min_prefix_size > 0 {
+                        rocksdb_options_set_prefix_extractor(
+                            options,
+                            rocksdb_slicetransform_create_fixed_prefix(cf.min_prefix_size),
+                        );
                     }
                     if let Some(merge) = cf.merge_operator {
                         // mergeoperator delete is done automatically

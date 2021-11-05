@@ -78,66 +78,77 @@ impl Storage {
                 merge_operator: Some(Self::str2id_merge()),
                 compaction_filter: Some(Self::str2id_filter()),
                 use_iter: false,
+                min_prefix_size: 0,
             },
             ColumnFamilyDefinition {
                 name: SPOG_CF,
                 merge_operator: None,
                 compaction_filter: None,
                 use_iter: true,
+                min_prefix_size: 17, // named or blank node start
             },
             ColumnFamilyDefinition {
                 name: POSG_CF,
                 merge_operator: None,
                 compaction_filter: None,
                 use_iter: true,
+                min_prefix_size: 17, // named node start
             },
             ColumnFamilyDefinition {
                 name: OSPG_CF,
                 merge_operator: None,
                 compaction_filter: None,
                 use_iter: true,
+                min_prefix_size: 0, // There are small literals...
             },
             ColumnFamilyDefinition {
                 name: GSPO_CF,
                 merge_operator: None,
                 compaction_filter: None,
                 use_iter: true,
+                min_prefix_size: 17, // named or blank node start
             },
             ColumnFamilyDefinition {
                 name: GPOS_CF,
                 merge_operator: None,
                 compaction_filter: None,
                 use_iter: true,
+                min_prefix_size: 17, // named or blank node start
             },
             ColumnFamilyDefinition {
                 name: GOSP_CF,
                 merge_operator: None,
                 compaction_filter: None,
                 use_iter: true,
+                min_prefix_size: 17, // named or blank node start
             },
             ColumnFamilyDefinition {
                 name: DSPO_CF,
                 merge_operator: None,
                 compaction_filter: None,
                 use_iter: true,
+                min_prefix_size: 17, // named or blank node start
             },
             ColumnFamilyDefinition {
                 name: DPOS_CF,
                 merge_operator: None,
                 compaction_filter: None,
                 use_iter: true,
+                min_prefix_size: 17, // named or blank node start
             },
             ColumnFamilyDefinition {
                 name: DOSP_CF,
                 merge_operator: None,
                 compaction_filter: None,
                 use_iter: true,
+                min_prefix_size: 0, // There are small literals...
             },
             ColumnFamilyDefinition {
                 name: GRAPHS_CF,
                 merge_operator: None,
                 compaction_filter: None,
                 use_iter: true,
+                min_prefix_size: 17, // named or blank node start
             },
         ]
     }

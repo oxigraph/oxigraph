@@ -11,6 +11,8 @@ pub struct ColumnFamilyDefinition {
     pub name: &'static str,
     pub merge_operator: Option<MergeOperator>,
     pub compaction_filter: Option<CompactionFilter>,
+    pub use_iter: bool,
+    pub min_prefix_size: usize,
 }
 
 #[derive(Clone)]
