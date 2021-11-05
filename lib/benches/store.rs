@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use oxhttp::model::{Method, Request, Status};
-use oxigraph::io::GraphFormat;
+use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::GraphNameRef;
 use oxigraph::sparql::{Query, QueryResults, Update};
 use oxigraph::store::Store;
@@ -30,6 +30,13 @@ fn store_load(c: &mut Criterion) {
             let path = TempDir::default();
             let store = Store::open(&path.0).unwrap();
             do_load(&store, &data);
+        })
+    });
+    group.bench_function("load BSBM explore 1000 in on disk with bulk load", |b| {
+        b.iter(|| {
+            let path = TempDir::default();
+            Store::create_from_dataset(&path.0, Cursor::new(&data), DatasetFormat::NQuads, None)
+                .unwrap();
         })
     });
 }

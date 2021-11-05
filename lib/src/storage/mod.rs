@@ -61,8 +61,8 @@ impl Storage {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn open(path: &Path) -> Result<Self> {
-        Self::setup(Db::open(path, Self::column_families())?)
+    pub fn open(path: &Path, for_bulk_load: bool) -> Result<Self> {
+        Self::setup(Db::open(path, Self::column_families(), for_bulk_load)?)
     }
 
     fn column_families() -> Vec<ColumnFamilyDefinition> {

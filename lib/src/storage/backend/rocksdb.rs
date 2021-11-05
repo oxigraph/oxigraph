@@ -95,17 +95,32 @@ impl Db {
             temp_dir()
         }
         .join("oxigraph-temp-rocksdb");
-        Ok(Self(Arc::new(Self::do_open(&path, column_families, true)?)))
+        Ok(Self(Arc::new(Self::do_open(
+            &path,
+            column_families,
+            true,
+            false,
+        )?)))
     }
 
-    pub fn open(path: &Path, column_families: Vec<ColumnFamilyDefinition>) -> Result<Self> {
-        Ok(Self(Arc::new(Self::do_open(path, column_families, false)?)))
+    pub fn open(
+        path: &Path,
+        column_families: Vec<ColumnFamilyDefinition>,
+        for_bulk_load: bool,
+    ) -> Result<Self> {
+        Ok(Self(Arc::new(Self::do_open(
+            path,
+            column_families,
+            false,
+            for_bulk_load,
+        )?)))
     }
 
     fn do_open(
         path: &Path,
         mut column_families: Vec<ColumnFamilyDefinition>,
         in_memory: bool,
+        for_bulk_load: bool,
     ) -> Result<DbHandler> {
         let c_path = CString::new(
             path.to_str()
@@ -134,6 +149,9 @@ impl Db {
                 .try_into()
                 .unwrap(),
             );
+            if for_bulk_load {
+                rocksdb_options_prepare_for_bulk_load(options);
+            }
 
             let env = if in_memory {
                 let env = rocksdb_create_mem_env();

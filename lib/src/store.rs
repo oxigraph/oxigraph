@@ -88,7 +88,7 @@ impl Store {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn open(path: impl AsRef<Path>) -> io::Result<Self> {
         Ok(Self {
-            storage: Storage::open(path.as_ref())?,
+            storage: Storage::open(path.as_ref(), false)?,
         })
     }
 
@@ -570,6 +570,45 @@ impl Store {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn optimize(&self) -> io::Result<()> {
         self.storage.compact()
+    }
+
+    /// Creates a store efficiently from a dataset file.
+    ///
+    /// Warning: This functions is optimized for performances and saves the triples in a not atomic way.
+    /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::store::Store;
+    /// use oxigraph::io::DatasetFormat;
+    /// use oxigraph::model::*;
+    ///
+    /// let store = Store::new()?;
+    ///
+    /// // insertion
+    /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
+    /// Store::create_from_dataset("example.db", file.as_ref(), DatasetFormat::NQuads, None)?;
+    ///
+    /// // we inspect the store contents
+    /// let store = Store::open("example.db")?;
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    ///
+    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
+    /// Errors related to data loading into the store use the other error kinds.
+    pub fn create_from_dataset(
+        path: &Path,
+        reader: impl BufRead,
+        format: DatasetFormat,
+        base_iri: Option<&str>,
+    ) -> io::Result<()> {
+        let storage = Storage::open(path.as_ref(), false)?;
+        load_dataset(&storage, reader, format, base_iri)?;
+        storage.flush()?;
+        storage.compact()
     }
 }
 
