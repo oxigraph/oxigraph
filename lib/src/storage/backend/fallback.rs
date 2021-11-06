@@ -1,19 +1,12 @@
 //! TODO: This storage is dramatically naive.
 
+use crate::storage::backend::{ColumnFamilyDefinition, CompactionAction, CompactionFilter};
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::io::Result;
 use std::iter::{once, Once};
 use std::sync::{Arc, RwLock};
-
-pub struct ColumnFamilyDefinition {
-    pub name: &'static str,
-    pub merge_operator: Option<MergeOperator>,
-    pub compaction_filter: Option<CompactionFilter>,
-    pub use_iter: bool,
-    pub min_prefix_size: usize,
-}
 
 #[derive(Clone)]
 pub struct Db(Arc<RwLock<BTreeMap<ColumnFamily, Tree>>>);
@@ -95,7 +88,6 @@ impl Db {
         match action {
             CompactionAction::Keep => tree.tree.insert(key.into(), value.into()),
             CompactionAction::Remove => tree.tree.remove(key),
-            CompactionAction::Replace(value) => tree.tree.insert(key.into(), value),
         };
         Ok(())
     }
@@ -152,9 +144,6 @@ impl Db {
                         e.insert(value);
                     }
                     CompactionAction::Remove => (),
-                    CompactionAction::Replace(value) => {
-                        e.insert(value);
-                    }
                 }
             }
             Entry::Occupied(mut e) => {
@@ -171,7 +160,6 @@ impl Db {
                 match action {
                     CompactionAction::Keep => e.insert(value),
                     CompactionAction::Remove => e.remove(),
-                    CompactionAction::Replace(value) => e.insert(value),
                 };
             }
         }
@@ -254,15 +242,3 @@ pub struct MergeOperator {
 }
 
 pub type SlicesIterator<'a> = Once<&'a [u8]>;
-
-pub struct CompactionFilter {
-    pub filter: fn(&[u8], &[u8]) -> CompactionAction,
-    pub name: CString,
-}
-
-#[allow(dead_code)]
-pub enum CompactionAction {
-    Keep,
-    Remove,
-    Replace(Vec<u8>),
-}

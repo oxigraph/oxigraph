@@ -9,13 +9,7 @@ use crate::storage::binary_encoder::{
 use crate::storage::numeric_encoder::{
     insert_term, remove_term, EncodedQuad, EncodedTerm, StrHash, StrLookup,
 };
-#[cfg(target_arch = "wasm32")]
-use fallback_backend::{
-    ColumnFamily, ColumnFamilyDefinition, CompactionAction, CompactionFilter, Db, Iter,
-    MergeOperator,
-};
-#[cfg(not(target_arch = "wasm32"))]
-use rocksdb_backend::{
+use backend::{
     ColumnFamily, ColumnFamilyDefinition, CompactionAction, CompactionFilter, Db, Iter,
     MergeOperator,
 };
@@ -24,13 +18,10 @@ use std::io::Result;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
+mod backend;
 mod binary_encoder;
-#[cfg(target_arch = "wasm32")]
-mod fallback_backend;
 pub mod io;
 pub mod numeric_encoder;
-#[cfg(not(target_arch = "wasm32"))]
-mod rocksdb_backend;
 pub mod small_string;
 
 const ID2STR_CF: &str = "id2str";

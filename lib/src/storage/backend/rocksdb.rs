@@ -5,6 +5,7 @@
 #![allow(unsafe_code)]
 
 use crate::error::invalid_input_error;
+use crate::storage::backend::{ColumnFamilyDefinition, CompactionAction, CompactionFilter};
 use libc::{self, c_char, c_int, c_uchar, c_void, size_t};
 use oxrocksdb_sys::*;
 use std::borrow::Borrow;
@@ -37,14 +38,6 @@ macro_rules! ffi_result_impl {
             Err(convert_error(err))
         }
     }}
-}
-
-pub struct ColumnFamilyDefinition {
-    pub name: &'static str,
-    pub merge_operator: Option<MergeOperator>,
-    pub compaction_filter: Option<CompactionFilter>,
-    pub use_iter: bool,
-    pub min_prefix_size: usize,
 }
 
 #[derive(Clone)]
@@ -728,18 +721,6 @@ impl<'a> Iterator for SlicesIterator<'a> {
     }
 }
 
-pub struct CompactionFilter {
-    pub filter: fn(&[u8], &[u8]) -> CompactionAction,
-    pub name: CString,
-}
-
-#[allow(dead_code)]
-pub enum CompactionAction {
-    Keep,
-    Remove,
-    Replace(Vec<u8>),
-}
-
 unsafe extern "C" fn compactionfilter_destructor(filter: *mut c_void) {
     Box::from_raw(filter as *mut CompactionFilter);
 }
@@ -751,9 +732,9 @@ unsafe extern "C" fn compactionfilter_filter(
     key_length: size_t,
     existing_value: *const c_char,
     value_length: size_t,
-    new_value: *mut *mut c_char,
-    new_value_length: *mut size_t,
-    value_changed: *mut c_uchar,
+    _new_value: *mut *mut c_char,
+    _new_value_length: *mut size_t,
+    _value_changed: *mut c_uchar,
 ) -> c_uchar {
     let filter = &*(filter as *const CompactionFilter);
     match (filter.filter)(
@@ -762,12 +743,6 @@ unsafe extern "C" fn compactionfilter_filter(
     ) {
         CompactionAction::Keep => 0,
         CompactionAction::Remove => 1,
-        CompactionAction::Replace(new_val) => {
-            *new_value_length = new_val.len();
-            *value_changed = 1_u8;
-            *new_value = Box::into_raw(new_val.into_boxed_slice()) as *mut c_char;
-            0
-        }
     }
 }
 
