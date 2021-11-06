@@ -6,7 +6,6 @@
 
 use crate::error::invalid_input_error;
 use libc::{self, c_char, c_int, c_uchar, c_void, size_t};
-use num_cpus;
 use oxrocksdb_sys::*;
 use std::borrow::Borrow;
 use std::env::temp_dir;

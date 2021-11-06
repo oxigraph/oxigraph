@@ -1,12 +1,14 @@
 use crate::error::invalid_data_error;
-use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef};
+use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef, TermRef};
 use crate::storage::binary_encoder::{
     decode_term, encode_term, encode_term_pair, encode_term_quad, encode_term_triple,
     write_gosp_quad, write_gpos_quad, write_gspo_quad, write_osp_quad, write_ospg_quad,
     write_pos_quad, write_posg_quad, write_spo_quad, write_spog_quad, write_term, QuadEncoding,
     LATEST_STORAGE_VERSION, WRITTEN_TERM_MAX_SIZE,
 };
-use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash, StrLookup, TermEncoder};
+use crate::storage::numeric_encoder::{
+    insert_term, remove_term, EncodedQuad, EncodedTerm, StrHash, StrLookup,
+};
 #[cfg(target_arch = "wasm32")]
 use fallback_backend::{
     ColumnFamily, ColumnFamilyDefinition, CompactionAction, CompactionFilter, Db, Iter,
@@ -18,6 +20,7 @@ use rocksdb_backend::{
     MergeOperator,
 };
 use std::ffi::CString;
+use std::io::Result;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
@@ -62,12 +65,12 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub fn new() -> std::io::Result<Self> {
+    pub fn new() -> Result<Self> {
         Self::setup(Db::new(Self::column_families())?)
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn open(path: &Path) -> std::io::Result<Self> {
+    pub fn open(path: &Path) -> Result<Self> {
         Self::setup(Db::open(path, Self::column_families())?)
     }
 
@@ -198,7 +201,7 @@ impl Storage {
         }
     }
 
-    fn setup(db: Db) -> std::io::Result<Self> {
+    fn setup(db: Db) -> Result<Self> {
         let this = Self {
             default_cf: db.column_family(DEFAULT_CF).unwrap(),
             id2str_cf: db.column_family(ID2STR_CF).unwrap(),
@@ -260,7 +263,7 @@ impl Storage {
         }
     }
 
-    fn ensure_version(&self) -> std::io::Result<u64> {
+    fn ensure_version(&self) -> Result<u64> {
         Ok(
             if let Some(version) = self.db.get(&self.default_cf, b"oxversion")? {
                 let mut buffer = [0; 8];
@@ -273,7 +276,7 @@ impl Storage {
         )
     }
 
-    fn set_version(&self, version: u64) -> std::io::Result<()> {
+    fn set_version(&self, version: u64) -> Result<()> {
         self.db.insert(
             &self.default_cf,
             b"oxversion",
@@ -283,15 +286,15 @@ impl Storage {
         Ok(())
     }
 
-    pub fn len(&self) -> std::io::Result<usize> {
+    pub fn len(&self) -> Result<usize> {
         Ok(self.db.len(&self.gspo_cf)? + self.db.len(&self.dspo_cf)?)
     }
 
-    pub fn is_empty(&self) -> std::io::Result<bool> {
+    pub fn is_empty(&self) -> Result<bool> {
         Ok(self.db.is_empty(&self.gspo_cf)? && self.db.is_empty(&self.dspo_cf)?)
     }
 
-    pub fn contains(&self, quad: &EncodedQuad) -> std::io::Result<bool> {
+    pub fn contains(&self, quad: &EncodedQuad) -> Result<bool> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
         if quad.graph_name.is_default_graph() {
             write_spo_quad(&mut buffer, quad);
@@ -542,7 +545,7 @@ impl Storage {
         }
     }
 
-    pub fn contains_named_graph(&self, graph_name: &EncodedTerm) -> std::io::Result<bool> {
+    pub fn contains_named_graph(&self, graph_name: &EncodedTerm) -> Result<bool> {
         self.db
             .contains_key(&self.graphs_cf, &encode_term(graph_name))
     }
@@ -595,7 +598,7 @@ impl Storage {
         }
     }
 
-    pub fn insert(&self, quad: QuadRef<'_>) -> std::io::Result<bool> {
+    pub fn insert(&self, quad: QuadRef<'_>) -> Result<bool> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
         let encoded = quad.into();
 
@@ -670,11 +673,11 @@ impl Storage {
         })
     }
 
-    pub fn remove(&self, quad: QuadRef<'_>) -> std::io::Result<bool> {
+    pub fn remove(&self, quad: QuadRef<'_>) -> Result<bool> {
         self.remove_encoded(&quad.into())
     }
 
-    fn remove_encoded(&self, quad: &EncodedQuad) -> std::io::Result<bool> {
+    fn remove_encoded(&self, quad: &EncodedQuad) -> Result<bool> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
 
         Ok(if quad.graph_name.is_default_graph() {
@@ -734,7 +737,7 @@ impl Storage {
         })
     }
 
-    pub fn insert_named_graph(&self, graph_name: NamedOrBlankNodeRef<'_>) -> std::io::Result<bool> {
+    pub fn insert_named_graph(&self, graph_name: NamedOrBlankNodeRef<'_>) -> Result<bool> {
         let encoded_graph_name = graph_name.into();
         let encoded = encode_term(&encoded_graph_name);
         Ok(if self.db.contains_key(&self.graphs_cf, &encoded)? {
@@ -746,32 +749,32 @@ impl Storage {
         })
     }
 
-    pub fn clear_graph(&self, graph_name: GraphNameRef<'_>) -> std::io::Result<()> {
+    pub fn clear_graph(&self, graph_name: GraphNameRef<'_>) -> Result<()> {
         for quad in self.quads_for_graph(&graph_name.into()) {
             self.remove_encoded(&quad?)?;
         }
         Ok(())
     }
 
-    pub fn clear_all_named_graphs(&self) -> std::io::Result<()> {
+    pub fn clear_all_named_graphs(&self) -> Result<()> {
         for quad in self.quads_in_named_graph() {
             self.remove_encoded(&quad?)?;
         }
         Ok(())
     }
 
-    pub fn clear_all_graphs(&self) -> std::io::Result<()> {
+    pub fn clear_all_graphs(&self) -> Result<()> {
         for quad in self.quads() {
             self.remove_encoded(&quad?)?;
         }
         Ok(())
     }
 
-    pub fn remove_named_graph(&self, graph_name: NamedOrBlankNodeRef<'_>) -> std::io::Result<bool> {
+    pub fn remove_named_graph(&self, graph_name: NamedOrBlankNodeRef<'_>) -> Result<bool> {
         self.remove_encoded_named_graph(&graph_name.into())
     }
 
-    fn remove_encoded_named_graph(&self, graph_name: &EncodedTerm) -> std::io::Result<bool> {
+    fn remove_encoded_named_graph(&self, graph_name: &EncodedTerm) -> Result<bool> {
         for quad in self.quads_for_graph(graph_name) {
             self.remove_encoded(&quad?)?;
         }
@@ -785,14 +788,14 @@ impl Storage {
         })
     }
 
-    pub fn remove_all_named_graphs(&self) -> std::io::Result<()> {
+    pub fn remove_all_named_graphs(&self) -> Result<()> {
         for graph_name in self.named_graphs() {
             self.remove_encoded_named_graph(&graph_name?)?;
         }
         Ok(())
     }
 
-    pub fn clear(&self) -> std::io::Result<()> {
+    pub fn clear(&self) -> Result<()> {
         for graph_name in self.named_graphs() {
             self.remove_encoded_named_graph(&graph_name?)?;
         }
@@ -802,8 +805,38 @@ impl Storage {
         Ok(())
     }
 
+    fn insert_term(&self, term: TermRef<'_>, encoded: &EncodedTerm) -> Result<()> {
+        insert_term(term, encoded, |key, value| self.insert_str(key, value))
+    }
+
+    fn insert_graph_name(&self, graph_name: GraphNameRef<'_>, encoded: &EncodedTerm) -> Result<()> {
+        match graph_name {
+            GraphNameRef::NamedNode(graph_name) => self.insert_term(graph_name.into(), encoded),
+            GraphNameRef::BlankNode(graph_name) => self.insert_term(graph_name.into(), encoded),
+            GraphNameRef::DefaultGraph => Ok(()),
+        }
+    }
+
+    fn insert_quad_triple(&self, quad: QuadRef<'_>, encoded: &EncodedQuad) -> Result<()> {
+        self.insert_term(quad.subject.into(), &encoded.subject)?;
+        self.insert_term(quad.predicate.into(), &encoded.predicate)?;
+        self.insert_term(quad.object, &encoded.object)?;
+        Ok(())
+    }
+
+    fn remove_term(&self, encoded: &EncodedTerm) -> Result<()> {
+        remove_term(encoded, |key| self.remove_str(key))
+    }
+
+    fn remove_quad_triple(&self, encoded: &EncodedQuad) -> Result<()> {
+        self.remove_term(&encoded.subject)?;
+        self.remove_term(&encoded.predicate)?;
+        self.remove_term(&encoded.object)?;
+        Ok(())
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn flush(&self) -> std::io::Result<()> {
+    pub fn flush(&self) -> Result<()> {
         self.db.flush(&self.default_cf)?;
         self.db.flush(&self.gpos_cf)?;
         self.db.flush(&self.gpos_cf)?;
@@ -817,7 +850,7 @@ impl Storage {
         self.db.flush(&self.id2str_cf)
     }
 
-    pub fn get_str(&self, key: &StrHash) -> std::io::Result<Option<String>> {
+    pub fn get_str(&self, key: &StrHash) -> Result<Option<String>> {
         self.db
             .get(&self.id2str_cf, &key.to_be_bytes())?
             .and_then(|v| {
@@ -832,13 +865,30 @@ impl Storage {
             .map_err(invalid_data_error)
     }
 
-    pub fn contains_str(&self, key: &StrHash) -> std::io::Result<bool> {
+    pub fn contains_str(&self, key: &StrHash) -> Result<bool> {
         Ok(self
             .db
             .get(&self.id2str_cf, &key.to_be_bytes())?
             .map_or(false, |v| {
                 i32::from_be_bytes(v[..4].try_into().unwrap()) > 0
             }))
+    }
+
+    fn insert_str(&self, key: &StrHash, value: &str) -> Result<()> {
+        let mut buffer = Vec::with_capacity(value.len() + 4);
+        buffer.extend_from_slice(&1_i32.to_be_bytes());
+        buffer.extend_from_slice(value.as_bytes());
+        self.db
+            .merge(&self.id2str_cf, &key.to_be_bytes(), &buffer, false)
+    }
+
+    fn remove_str(&self, key: &StrHash) -> Result<()> {
+        self.db.merge(
+            &self.id2str_cf,
+            &key.to_be_bytes(),
+            &(-1_i32).to_be_bytes(),
+            true,
+        )
     }
 }
 
@@ -864,9 +914,9 @@ impl ChainedDecodingQuadIterator {
 }
 
 impl Iterator for ChainedDecodingQuadIterator {
-    type Item = std::io::Result<EncodedQuad>;
+    type Item = Result<EncodedQuad>;
 
-    fn next(&mut self) -> Option<std::io::Result<EncodedQuad>> {
+    fn next(&mut self) -> Option<Result<EncodedQuad>> {
         if let Some(result) = self.first.next() {
             Some(result)
         } else if let Some(second) = self.second.as_mut() {
@@ -883,9 +933,9 @@ pub struct DecodingQuadIterator {
 }
 
 impl Iterator for DecodingQuadIterator {
-    type Item = std::io::Result<EncodedQuad>;
+    type Item = Result<EncodedQuad>;
 
-    fn next(&mut self) -> Option<std::io::Result<EncodedQuad>> {
+    fn next(&mut self) -> Option<Result<EncodedQuad>> {
         if let Err(e) = self.iter.status() {
             return Some(Err(e));
         }
@@ -900,9 +950,9 @@ pub struct DecodingGraphIterator {
 }
 
 impl Iterator for DecodingGraphIterator {
-    type Item = std::io::Result<EncodedTerm>;
+    type Item = Result<EncodedTerm>;
 
-    fn next(&mut self) -> Option<std::io::Result<EncodedTerm>> {
+    fn next(&mut self) -> Option<Result<EncodedTerm>> {
         if let Err(e) = self.iter.status() {
             return Some(Err(e));
         }
@@ -912,51 +962,30 @@ impl Iterator for DecodingGraphIterator {
     }
 }
 
-impl TermEncoder for Storage {
-    type Error = std::io::Error;
+pub trait StorageLike: StrLookup<Error = std::io::Error> {
+    fn insert(&self, quad: QuadRef<'_>) -> Result<bool>;
 
-    fn insert_str(&self, key: &StrHash, value: &str) -> std::io::Result<()> {
-        let mut buffer = Vec::with_capacity(value.len() + 4);
-        buffer.extend_from_slice(&1_i32.to_be_bytes());
-        buffer.extend_from_slice(value.as_bytes());
-        self.db
-            .merge(&self.id2str_cf, &key.to_be_bytes(), &buffer, false)
-    }
-
-    fn remove_str(&self, key: &StrHash) -> std::io::Result<()> {
-        self.db.merge(
-            &self.id2str_cf,
-            &key.to_be_bytes(),
-            &(-1_i32).to_be_bytes(),
-            true,
-        )
-    }
-}
-
-pub trait StorageLike: StrLookup {
-    fn insert(&self, quad: QuadRef<'_>) -> Result<bool, Self::Error>;
-
-    fn remove(&self, quad: QuadRef<'_>) -> Result<bool, Self::Error>;
+    fn remove(&self, quad: QuadRef<'_>) -> Result<bool>;
 }
 
 impl StrLookup for Storage {
     type Error = std::io::Error;
 
-    fn get_str(&self, key: &StrHash) -> std::io::Result<Option<String>> {
+    fn get_str(&self, key: &StrHash) -> Result<Option<String>> {
         self.get_str(key)
     }
 
-    fn contains_str(&self, key: &StrHash) -> std::io::Result<bool> {
+    fn contains_str(&self, key: &StrHash) -> Result<bool> {
         self.contains_str(key)
     }
 }
 
 impl StorageLike for Storage {
-    fn insert(&self, quad: QuadRef<'_>) -> std::io::Result<bool> {
+    fn insert(&self, quad: QuadRef<'_>) -> Result<bool> {
         self.insert(quad)
     }
 
-    fn remove(&self, quad: QuadRef<'_>) -> std::io::Result<bool> {
+    fn remove(&self, quad: QuadRef<'_>) -> Result<bool> {
         self.remove(quad)
     }
 }
@@ -967,7 +996,7 @@ mod tests {
     use crate::model::NamedNodeRef;
 
     #[test]
-    fn test_strings_removal() -> std::io::Result<()> {
+    fn test_strings_removal() -> Result<()> {
         let quad = QuadRef::new(
             NamedNodeRef::new_unchecked("http://example.com/s"),
             NamedNodeRef::new_unchecked("http://example.com/p"),

@@ -641,6 +641,7 @@ pub fn write_term(sink: &mut Vec<u8>, term: &EncodedTerm) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::TermRef;
     use crate::storage::numeric_encoder::*;
     use std::cell::RefCell;
     use std::collections::HashMap;
@@ -663,20 +664,21 @@ mod tests {
         }
     }
 
-    impl TermEncoder for MemoryStrStore {
-        type Error = Infallible;
+    impl MemoryStrStore {
+        fn insert_term(&self, term: TermRef<'_>, encoded: &EncodedTerm) {
+            insert_term(term, encoded, |h, v| {
+                self.insert_str(h, v);
+                let r: Result<(), Infallible> = Ok(());
+                r
+            })
+            .unwrap();
+        }
 
-        fn insert_str(&self, key: &StrHash, value: &str) -> Result<(), Infallible> {
+        fn insert_str(&self, key: &StrHash, value: &str) {
             self.id2str
                 .borrow_mut()
                 .entry(*key)
                 .or_insert_with(|| value.to_owned());
-            Ok(())
-        }
-
-        fn remove_str(&self, key: &StrHash) -> Result<(), Self::Error> {
-            self.id2str.borrow_mut().remove(key);
-            Ok(())
         }
     }
 
@@ -742,7 +744,7 @@ mod tests {
         ];
         for term in terms {
             let encoded = term.as_ref().into();
-            store.insert_term(term.as_ref(), &encoded).unwrap();
+            store.insert_term(term.as_ref(), &encoded);
             assert_eq!(encoded, term.as_ref().into());
             assert_eq!(term, store.decode_term(&encoded).unwrap());
 

@@ -665,53 +665,7 @@ pub trait StrLookup {
     fn contains_str(&self, key: &StrHash) -> Result<bool, Self::Error>;
 }
 
-pub(super) trait TermEncoder {
-    type Error;
-
-    fn insert_str(&self, key: &StrHash, value: &str) -> Result<(), Self::Error>;
-
-    fn insert_term(&self, term: TermRef<'_>, encoded: &EncodedTerm) -> Result<(), Self::Error> {
-        insert_term_values(term, encoded, |key, value| self.insert_str(key, value))
-    }
-
-    fn insert_graph_name(
-        &self,
-        graph_name: GraphNameRef<'_>,
-        encoded: &EncodedTerm,
-    ) -> Result<(), Self::Error> {
-        match graph_name {
-            GraphNameRef::NamedNode(graph_name) => self.insert_term(graph_name.into(), encoded),
-            GraphNameRef::BlankNode(graph_name) => self.insert_term(graph_name.into(), encoded),
-            GraphNameRef::DefaultGraph => Ok(()),
-        }
-    }
-
-    fn insert_quad_triple(
-        &self,
-        quad: QuadRef<'_>,
-        encoded: &EncodedQuad,
-    ) -> Result<(), Self::Error> {
-        self.insert_term(quad.subject.into(), &encoded.subject)?;
-        self.insert_term(quad.predicate.into(), &encoded.predicate)?;
-        self.insert_term(quad.object, &encoded.object)?;
-        Ok(())
-    }
-
-    fn remove_str(&self, key: &StrHash) -> Result<(), Self::Error>;
-
-    fn remove_term(&self, encoded: &EncodedTerm) -> Result<(), Self::Error> {
-        remove_term_values(encoded, |key| self.remove_str(key))
-    }
-
-    fn remove_quad_triple(&self, encoded: &EncodedQuad) -> Result<(), Self::Error> {
-        self.remove_term(&encoded.subject)?;
-        self.remove_term(&encoded.predicate)?;
-        self.remove_term(&encoded.object)?;
-        Ok(())
-    }
-}
-
-pub fn insert_term_values<E, F: Fn(&StrHash, &str) -> Result<(), E> + Copy>(
+pub fn insert_term<E, F: Fn(&StrHash, &str) -> Result<(), E> + Copy>(
     term: TermRef<'_>,
     encoded: &EncodedTerm,
     insert_str: F,
@@ -784,13 +738,13 @@ pub fn insert_term_values<E, F: Fn(&StrHash, &str) -> Result<(), E> + Copy>(
         },
         TermRef::Triple(triple) => {
             if let EncodedTerm::Triple(encoded) = encoded {
-                insert_term_values(triple.subject.as_ref().into(), &encoded.subject, insert_str)?;
-                insert_term_values(
+                insert_term(triple.subject.as_ref().into(), &encoded.subject, insert_str)?;
+                insert_term(
                     triple.predicate.as_ref().into(),
                     &encoded.predicate,
                     insert_str,
                 )?;
-                insert_term_values(triple.object.as_ref(), &encoded.object, insert_str)
+                insert_term(triple.object.as_ref(), &encoded.object, insert_str)
             } else {
                 unreachable!("Invalid term encoding {:?} for {}", encoded, term)
             }
@@ -798,7 +752,7 @@ pub fn insert_term_values<E, F: Fn(&StrHash, &str) -> Result<(), E> + Copy>(
     }
 }
 
-pub fn remove_term_values<E, F: Fn(&StrHash) -> Result<(), E> + Copy>(
+pub fn remove_term<E, F: Fn(&StrHash) -> Result<(), E> + Copy>(
     encoded: &EncodedTerm,
     remove_str: F,
 ) -> Result<(), E> {
@@ -824,9 +778,9 @@ pub fn remove_term_values<E, F: Fn(&StrHash) -> Result<(), E> + Copy>(
             remove_str(datatype_id)
         }
         EncodedTerm::Triple(encoded) => {
-            remove_term_values(&encoded.subject, remove_str)?;
-            remove_term_values(&encoded.predicate, remove_str)?;
-            remove_term_values(&encoded.object, remove_str)
+            remove_term(&encoded.subject, remove_str)?;
+            remove_term(&encoded.predicate, remove_str)?;
+            remove_term(&encoded.object, remove_str)
         }
         _ => Ok(()),
     }
