@@ -2,23 +2,19 @@
 //! RocksDB is available, if not in memory
 
 #[cfg(target_arch = "wasm32")]
-pub use fallback::{ColumnFamily, Db, Iter, MergeOperator};
+pub use fallback::{
+    ColumnFamily, ColumnFamilyDefinition, Db, Iter, MergeOperator, WriteBatchWithIndex,
+};
 #[cfg(not(target_arch = "wasm32"))]
-pub use rocksdb::{ColumnFamily, Db, Iter, MergeOperator};
+pub use rocksdb::{
+    ColumnFamily, ColumnFamilyDefinition, Db, Iter, MergeOperator, WriteBatchWithIndex,
+};
 use std::ffi::CString;
 
 #[cfg(target_arch = "wasm32")]
 mod fallback;
 #[cfg(not(target_arch = "wasm32"))]
 mod rocksdb;
-
-pub struct ColumnFamilyDefinition {
-    pub name: &'static str,
-    pub merge_operator: Option<MergeOperator>,
-    pub compaction_filter: Option<CompactionFilter>,
-    pub use_iter: bool,
-    pub min_prefix_size: usize,
-}
 
 pub struct CompactionFilter {
     pub filter: fn(&[u8], &[u8]) -> CompactionAction,

@@ -11,7 +11,7 @@ use crate::storage::numeric_encoder::{
 };
 use backend::{
     ColumnFamily, ColumnFamilyDefinition, CompactionAction, CompactionFilter, Db, Iter,
-    MergeOperator,
+    MergeOperator, WriteBatchWithIndex,
 };
 use std::ffi::CString;
 use std::io::Result;
@@ -36,6 +36,7 @@ const DPOS_CF: &str = "dpos";
 const DOSP_CF: &str = "dosp";
 const GRAPHS_CF: &str = "graphs";
 const DEFAULT_CF: &str = "default";
+const AUTO_WRITE_BATCH_THRESHOLD: usize = 1024;
 
 /// Low level storage primitives
 #[derive(Clone)]
@@ -211,34 +212,42 @@ impl Storage {
 
         let mut version = this.ensure_version()?;
         if version == 0 {
+            let mut batch = this.db.new_batch();
             // We migrate to v1
             for quad in this.quads() {
                 let quad = quad?;
                 if !quad.graph_name.is_default_graph() {
-                    this.db
-                        .insert_empty(&this.graphs_cf, &encode_term(&quad.graph_name), false)?;
+                    batch.insert_empty(&this.graphs_cf, &encode_term(&quad.graph_name));
+                    if batch.len() >= AUTO_WRITE_BATCH_THRESHOLD {
+                        this.db.write(&mut batch)?;
+                    }
                 }
             }
+            this.db.write(&mut batch)?;
             this.db.flush(&this.graphs_cf)?;
             version = 1;
-            this.set_version(version)?;
-            this.db.flush(&this.default_cf)?;
+            this.update_version(version)?;
         }
         if version == 1 {
             // We migrate to v2
+            let mut batch = this.db.new_batch();
             let mut iter = this.db.iter(&this.id2str_cf);
             while let (Some(key), Some(value)) = (iter.key(), iter.value()) {
                 let mut new_value = Vec::with_capacity(value.len() + 4);
                 new_value.extend_from_slice(&i32::MAX.to_be_bytes());
                 new_value.extend_from_slice(value);
-                this.db.insert(&this.id2str_cf, key, &new_value, false)?;
+                batch.insert(&this.id2str_cf, key, &new_value);
                 iter.next();
+                if batch.len() >= AUTO_WRITE_BATCH_THRESHOLD {
+                    this.db.write(&mut batch)?;
+                    batch.clear();
+                }
             }
+            this.db.write(&mut batch)?;
             iter.status()?;
             this.db.flush(&this.id2str_cf)?;
             version = 2;
-            this.set_version(version)?;
-            this.db.flush(&this.default_cf)?;
+            this.update_version(version)?;
         }
 
         match version {
@@ -261,20 +270,17 @@ impl Storage {
                 buffer.copy_from_slice(&version);
                 u64::from_be_bytes(buffer)
             } else {
-                self.set_version(LATEST_STORAGE_VERSION)?;
+                self.update_version(LATEST_STORAGE_VERSION)?;
                 LATEST_STORAGE_VERSION
             },
         )
     }
 
-    fn set_version(&self, version: u64) -> Result<()> {
-        self.db.insert(
-            &self.default_cf,
-            b"oxversion",
-            &version.to_be_bytes(),
-            false,
-        )?;
-        Ok(())
+    fn update_version(&self, version: u64) -> Result<()> {
+        let mut batch = self.db.new_batch();
+        batch.insert(&self.default_cf, b"oxversion", &version.to_be_bytes());
+        self.db.write(&mut batch)?;
+        self.db.flush(&self.default_cf)
     }
 
     pub fn len(&self) -> Result<usize> {
@@ -589,241 +595,22 @@ impl Storage {
         }
     }
 
-    pub fn insert(&self, quad: QuadRef<'_>) -> Result<bool> {
-        let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
-        let encoded = quad.into();
-
-        Ok(if quad.graph_name.is_default_graph() {
-            write_spo_quad(&mut buffer, &encoded);
-            if self.db.contains_key(&self.dspo_cf, buffer.as_slice())? {
-                false
-            } else {
-                self.insert_quad_triple(quad, &encoded)?;
-
-                self.db
-                    .insert_empty(&self.dspo_cf, buffer.as_slice(), false)?;
-                buffer.clear();
-
-                write_pos_quad(&mut buffer, &encoded);
-                self.db
-                    .insert_empty(&self.dpos_cf, buffer.as_slice(), false)?;
-                buffer.clear();
-
-                write_osp_quad(&mut buffer, &encoded);
-                self.db
-                    .insert_empty(&self.dosp_cf, buffer.as_slice(), false)?;
-                buffer.clear();
-
-                true
-            }
-        } else {
-            write_spog_quad(&mut buffer, &encoded);
-            if self.db.contains_key(&self.spog_cf, buffer.as_slice())? {
-                false
-            } else {
-                self.insert_quad_triple(quad, &encoded)?;
-
-                self.db
-                    .insert_empty(&self.spog_cf, buffer.as_slice(), false)?;
-                buffer.clear();
-
-                write_posg_quad(&mut buffer, &encoded);
-                self.db
-                    .insert_empty(&self.posg_cf, buffer.as_slice(), false)?;
-                buffer.clear();
-
-                write_ospg_quad(&mut buffer, &encoded);
-                self.db
-                    .insert_empty(&self.ospg_cf, buffer.as_slice(), false)?;
-                buffer.clear();
-
-                write_gspo_quad(&mut buffer, &encoded);
-                self.db
-                    .insert_empty(&self.gspo_cf, buffer.as_slice(), false)?;
-                buffer.clear();
-
-                write_gpos_quad(&mut buffer, &encoded);
-                self.db
-                    .insert_empty(&self.gpos_cf, buffer.as_slice(), false)?;
-                buffer.clear();
-
-                write_gosp_quad(&mut buffer, &encoded);
-                self.db
-                    .insert_empty(&self.gosp_cf, buffer.as_slice(), false)?;
-                buffer.clear();
-
-                write_term(&mut buffer, &encoded.graph_name);
-                if !self.db.contains_key(&self.graphs_cf, &buffer)? {
-                    self.db.insert_empty(&self.graphs_cf, &buffer, false)?;
-                    self.insert_graph_name(quad.graph_name, &encoded.graph_name)?;
-                }
-                buffer.clear();
-
-                true
-            }
-        })
-    }
-
-    pub fn remove(&self, quad: QuadRef<'_>) -> Result<bool> {
-        self.remove_encoded(&quad.into())
-    }
-
-    fn remove_encoded(&self, quad: &EncodedQuad) -> Result<bool> {
-        let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE + 1);
-
-        Ok(if quad.graph_name.is_default_graph() {
-            write_spo_quad(&mut buffer, quad);
-
-            if self.db.contains_key(&self.dspo_cf, buffer.as_slice())? {
-                self.db.remove(&self.dspo_cf, buffer.as_slice(), false)?;
-                buffer.clear();
-
-                write_pos_quad(&mut buffer, quad);
-                self.db.remove(&self.dpos_cf, buffer.as_slice(), false)?;
-                buffer.clear();
-
-                write_osp_quad(&mut buffer, quad);
-                self.db.remove(&self.dosp_cf, buffer.as_slice(), false)?;
-                buffer.clear();
-
-                self.remove_quad_triple(quad)?;
-
-                true
-            } else {
-                false
-            }
-        } else {
-            write_spog_quad(&mut buffer, quad);
-
-            if self.db.contains_key(&self.spog_cf, buffer.as_slice())? {
-                self.db.remove(&self.spog_cf, buffer.as_slice(), false)?;
-                buffer.clear();
-
-                write_posg_quad(&mut buffer, quad);
-                self.db.remove(&self.posg_cf, buffer.as_slice(), false)?;
-                buffer.clear();
-
-                write_ospg_quad(&mut buffer, quad);
-                self.db.remove(&self.ospg_cf, buffer.as_slice(), false)?;
-                buffer.clear();
-
-                write_gspo_quad(&mut buffer, quad);
-                self.db.remove(&self.gspo_cf, buffer.as_slice(), false)?;
-                buffer.clear();
-
-                write_gpos_quad(&mut buffer, quad);
-                self.db.remove(&self.gpos_cf, buffer.as_slice(), false)?;
-                buffer.clear();
-
-                write_gosp_quad(&mut buffer, quad);
-                self.db.remove(&self.gosp_cf, buffer.as_slice(), false)?;
-                buffer.clear();
-
-                self.remove_quad_triple(quad)?;
-
-                true
-            } else {
-                false
-            }
-        })
-    }
-
-    pub fn insert_named_graph(&self, graph_name: NamedOrBlankNodeRef<'_>) -> Result<bool> {
-        let encoded_graph_name = graph_name.into();
-        let encoded = encode_term(&encoded_graph_name);
-        Ok(if self.db.contains_key(&self.graphs_cf, &encoded)? {
-            false
-        } else {
-            self.db.insert_empty(&self.graphs_cf, &encoded, false)?;
-            self.insert_term(graph_name.into(), &encoded_graph_name)?;
-            true
-        })
-    }
-
-    pub fn clear_graph(&self, graph_name: GraphNameRef<'_>) -> Result<()> {
-        for quad in self.quads_for_graph(&graph_name.into()) {
-            self.remove_encoded(&quad?)?;
-        }
-        Ok(())
-    }
-
-    pub fn clear_all_named_graphs(&self) -> Result<()> {
-        for quad in self.quads_in_named_graph() {
-            self.remove_encoded(&quad?)?;
-        }
-        Ok(())
-    }
-
-    pub fn clear_all_graphs(&self) -> Result<()> {
-        for quad in self.quads() {
-            self.remove_encoded(&quad?)?;
-        }
-        Ok(())
-    }
-
-    pub fn remove_named_graph(&self, graph_name: NamedOrBlankNodeRef<'_>) -> Result<bool> {
-        self.remove_encoded_named_graph(&graph_name.into())
-    }
-
-    fn remove_encoded_named_graph(&self, graph_name: &EncodedTerm) -> Result<bool> {
-        for quad in self.quads_for_graph(graph_name) {
-            self.remove_encoded(&quad?)?;
-        }
-        let encoded_graph = encode_term(graph_name);
-        Ok(if self.db.contains_key(&self.graphs_cf, &encoded_graph)? {
-            self.db.remove(&self.graphs_cf, &encoded_graph, false)?;
-            self.remove_term(graph_name)?;
-            true
-        } else {
-            false
-        })
-    }
-
-    pub fn remove_all_named_graphs(&self) -> Result<()> {
-        for graph_name in self.named_graphs() {
-            self.remove_encoded_named_graph(&graph_name?)?;
-        }
-        Ok(())
-    }
-
-    pub fn clear(&self) -> Result<()> {
-        for graph_name in self.named_graphs() {
-            self.remove_encoded_named_graph(&graph_name?)?;
-        }
-        for quad in self.quads() {
-            self.remove_encoded(&quad?)?;
-        }
-        Ok(())
-    }
-
-    fn insert_term(&self, term: TermRef<'_>, encoded: &EncodedTerm) -> Result<()> {
-        insert_term(term, encoded, |key, value| self.insert_str(key, value))
-    }
-
-    fn insert_graph_name(&self, graph_name: GraphNameRef<'_>, encoded: &EncodedTerm) -> Result<()> {
-        match graph_name {
-            GraphNameRef::NamedNode(graph_name) => self.insert_term(graph_name.into(), encoded),
-            GraphNameRef::BlankNode(graph_name) => self.insert_term(graph_name.into(), encoded),
-            GraphNameRef::DefaultGraph => Ok(()),
+    pub fn atomic_writer(&self) -> StorageWriter {
+        StorageWriter {
+            buffer: Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE),
+            batch: self.db.new_batch(),
+            storage: self.clone(),
+            auto_commit: false,
         }
     }
 
-    fn insert_quad_triple(&self, quad: QuadRef<'_>, encoded: &EncodedQuad) -> Result<()> {
-        self.insert_term(quad.subject.into(), &encoded.subject)?;
-        self.insert_term(quad.predicate.into(), &encoded.predicate)?;
-        self.insert_term(quad.object, &encoded.object)?;
-        Ok(())
-    }
-
-    fn remove_term(&self, encoded: &EncodedTerm) -> Result<()> {
-        remove_term(encoded, |key| self.remove_str(key))
-    }
-
-    fn remove_quad_triple(&self, encoded: &EncodedQuad) -> Result<()> {
-        self.remove_term(&encoded.subject)?;
-        self.remove_term(&encoded.predicate)?;
-        self.remove_term(&encoded.object)?;
-        Ok(())
+    pub fn simple_writer(&self) -> StorageWriter {
+        StorageWriter {
+            buffer: Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE),
+            batch: self.db.new_batch(),
+            storage: self.clone(),
+            auto_commit: true,
+        }
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -878,23 +665,6 @@ impl Storage {
             .map_or(false, |v| {
                 i32::from_be_bytes(v[..4].try_into().unwrap()) > 0
             }))
-    }
-
-    fn insert_str(&self, key: &StrHash, value: &str) -> Result<()> {
-        let mut buffer = Vec::with_capacity(value.len() + 4);
-        buffer.extend_from_slice(&1_i32.to_be_bytes());
-        buffer.extend_from_slice(value.as_bytes());
-        self.db
-            .merge(&self.id2str_cf, &key.to_be_bytes(), &buffer, false)
-    }
-
-    fn remove_str(&self, key: &StrHash) -> Result<()> {
-        self.db.merge(
-            &self.id2str_cf,
-            &key.to_be_bytes(),
-            &(-1_i32).to_be_bytes(),
-            true,
-        )
     }
 }
 
@@ -968,12 +738,6 @@ impl Iterator for DecodingGraphIterator {
     }
 }
 
-pub trait StorageLike: StrLookup<Error = std::io::Error> {
-    fn insert(&self, quad: QuadRef<'_>) -> Result<bool>;
-
-    fn remove(&self, quad: QuadRef<'_>) -> Result<bool>;
-}
-
 impl StrLookup for Storage {
     type Error = std::io::Error;
 
@@ -986,13 +750,286 @@ impl StrLookup for Storage {
     }
 }
 
-impl StorageLike for Storage {
-    fn insert(&self, quad: QuadRef<'_>) -> Result<bool> {
-        self.insert(quad)
+pub struct StorageWriter {
+    buffer: Vec<u8>,
+    batch: WriteBatchWithIndex,
+    storage: Storage,
+    auto_commit: bool,
+}
+
+impl StorageWriter {
+    pub fn insert(&mut self, quad: QuadRef<'_>) -> Result<bool> {
+        let encoded = quad.into();
+        self.buffer.clear();
+        let result = if quad.graph_name.is_default_graph() {
+            write_spo_quad(&mut self.buffer, &encoded);
+            if self
+                .batch
+                .contains_key(&self.storage.dspo_cf, &self.buffer)?
+            {
+                false
+            } else {
+                self.batch.insert_empty(&self.storage.dspo_cf, &self.buffer);
+
+                self.buffer.clear();
+                write_pos_quad(&mut self.buffer, &encoded);
+                self.batch.insert_empty(&self.storage.dpos_cf, &self.buffer);
+
+                self.buffer.clear();
+                write_osp_quad(&mut self.buffer, &encoded);
+                self.batch.insert_empty(&self.storage.dosp_cf, &self.buffer);
+
+                self.insert_term(quad.subject.into(), &encoded.subject);
+                self.insert_term(quad.predicate.into(), &encoded.predicate);
+                self.insert_term(quad.object, &encoded.object);
+                true
+            }
+        } else {
+            write_spog_quad(&mut self.buffer, &encoded);
+            if self
+                .batch
+                .contains_key(&self.storage.spog_cf, &self.buffer)?
+            {
+                false
+            } else {
+                self.batch.insert_empty(&self.storage.spog_cf, &self.buffer);
+
+                self.buffer.clear();
+                write_posg_quad(&mut self.buffer, &encoded);
+                self.batch.insert_empty(&self.storage.posg_cf, &self.buffer);
+
+                self.buffer.clear();
+                write_ospg_quad(&mut self.buffer, &encoded);
+                self.batch.insert_empty(&self.storage.ospg_cf, &self.buffer);
+
+                self.buffer.clear();
+                write_gspo_quad(&mut self.buffer, &encoded);
+                self.batch.insert_empty(&self.storage.gspo_cf, &self.buffer);
+
+                self.buffer.clear();
+                write_gpos_quad(&mut self.buffer, &encoded);
+                self.batch.insert_empty(&self.storage.gpos_cf, &self.buffer);
+
+                self.buffer.clear();
+                write_gosp_quad(&mut self.buffer, &encoded);
+                self.batch.insert_empty(&self.storage.gosp_cf, &self.buffer);
+
+                self.insert_term(quad.subject.into(), &encoded.subject);
+                self.insert_term(quad.predicate.into(), &encoded.predicate);
+                self.insert_term(quad.object, &encoded.object);
+
+                self.buffer.clear();
+                write_term(&mut self.buffer, &encoded.graph_name);
+                if !self
+                    .batch
+                    .contains_key(&self.storage.graphs_cf, &self.buffer)?
+                {
+                    self.batch
+                        .insert_empty(&self.storage.graphs_cf, &self.buffer);
+                    self.insert_graph_name(quad.graph_name, &encoded.graph_name);
+                }
+                true
+            }
+        };
+        self.write_if_needed()?;
+        Ok(result)
     }
 
-    fn remove(&self, quad: QuadRef<'_>) -> Result<bool> {
-        self.remove(quad)
+    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) -> Result<bool> {
+        let encoded_graph_name = graph_name.into();
+
+        self.buffer.clear();
+        write_term(&mut self.buffer, &encoded_graph_name);
+        let result = if self
+            .batch
+            .contains_key(&self.storage.graphs_cf, &self.buffer)?
+        {
+            false
+        } else {
+            self.batch
+                .insert_empty(&self.storage.graphs_cf, &self.buffer);
+            self.insert_term(graph_name.into(), &encoded_graph_name);
+            true
+        };
+        self.write_if_needed()?;
+        Ok(result)
+    }
+
+    fn insert_term(&mut self, term: TermRef<'_>, encoded: &EncodedTerm) {
+        insert_term(term, encoded, &mut |key, value| self.insert_str(key, value))
+    }
+
+    fn insert_graph_name(&mut self, graph_name: GraphNameRef<'_>, encoded: &EncodedTerm) {
+        match graph_name {
+            GraphNameRef::NamedNode(graph_name) => self.insert_term(graph_name.into(), encoded),
+            GraphNameRef::BlankNode(graph_name) => self.insert_term(graph_name.into(), encoded),
+            GraphNameRef::DefaultGraph => (),
+        }
+    }
+
+    fn insert_str(&mut self, key: &StrHash, value: &str) {
+        self.buffer.clear();
+        self.buffer.extend_from_slice(&1_i32.to_be_bytes());
+        self.buffer.extend_from_slice(value.as_bytes());
+        self.batch
+            .merge(&self.storage.id2str_cf, &key.to_be_bytes(), &self.buffer);
+    }
+
+    pub fn remove(&mut self, quad: QuadRef<'_>) -> Result<bool> {
+        self.remove_encoded(&quad.into())
+    }
+
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<bool> {
+        self.buffer.clear();
+        let result = if quad.graph_name.is_default_graph() {
+            write_spo_quad(&mut self.buffer, quad);
+
+            if self
+                .batch
+                .contains_key(&self.storage.dspo_cf, &self.buffer)?
+            {
+                self.batch.remove(&self.storage.dspo_cf, &self.buffer);
+
+                self.buffer.clear();
+                write_pos_quad(&mut self.buffer, quad);
+                self.batch.remove(&self.storage.dpos_cf, &self.buffer);
+
+                self.buffer.clear();
+                write_osp_quad(&mut self.buffer, quad);
+                self.batch.remove(&self.storage.dosp_cf, &self.buffer);
+
+                self.remove_term(&quad.subject);
+                self.remove_term(&quad.predicate);
+                self.remove_term(&quad.object);
+                true
+            } else {
+                false
+            }
+        } else {
+            write_spog_quad(&mut self.buffer, quad);
+
+            if self
+                .batch
+                .contains_key(&self.storage.spog_cf, &self.buffer)?
+            {
+                self.batch.remove(&self.storage.spog_cf, &self.buffer);
+
+                self.buffer.clear();
+                write_posg_quad(&mut self.buffer, quad);
+                self.batch.remove(&self.storage.posg_cf, &self.buffer);
+
+                self.buffer.clear();
+                write_ospg_quad(&mut self.buffer, quad);
+                self.batch.remove(&self.storage.ospg_cf, &self.buffer);
+
+                self.buffer.clear();
+                write_gspo_quad(&mut self.buffer, quad);
+                self.batch.remove(&self.storage.gspo_cf, &self.buffer);
+
+                self.buffer.clear();
+                write_gpos_quad(&mut self.buffer, quad);
+                self.batch.remove(&self.storage.gpos_cf, &self.buffer);
+
+                self.buffer.clear();
+                write_gosp_quad(&mut self.buffer, quad);
+                self.batch.remove(&self.storage.gosp_cf, &self.buffer);
+
+                self.remove_term(&quad.subject);
+                self.remove_term(&quad.predicate);
+                self.remove_term(&quad.object);
+                true
+            } else {
+                false
+            }
+        };
+        self.write_if_needed()?;
+        Ok(result)
+    }
+
+    pub fn clear_graph(&mut self, graph_name: GraphNameRef<'_>) -> Result<()> {
+        for quad in self.storage.quads_for_graph(&graph_name.into()) {
+            self.remove_encoded(&quad?)?;
+        }
+        Ok(())
+    }
+
+    pub fn clear_all_named_graphs(&mut self) -> Result<()> {
+        for quad in self.storage.quads_in_named_graph() {
+            self.remove_encoded(&quad?)?;
+        }
+        Ok(())
+    }
+
+    pub fn clear_all_graphs(&mut self) -> Result<()> {
+        for quad in self.storage.quads() {
+            self.remove_encoded(&quad?)?;
+        }
+        Ok(())
+    }
+
+    pub fn remove_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) -> Result<bool> {
+        self.remove_encoded_named_graph(&graph_name.into())
+    }
+
+    fn remove_encoded_named_graph(&mut self, graph_name: &EncodedTerm) -> Result<bool> {
+        for quad in self.storage.quads_for_graph(graph_name) {
+            self.remove_encoded(&quad?)?;
+        }
+        self.buffer.clear();
+        write_term(&mut self.buffer, graph_name);
+        let result = if self
+            .batch
+            .contains_key(&self.storage.graphs_cf, &self.buffer)?
+        {
+            self.batch.remove(&self.storage.graphs_cf, &self.buffer);
+            self.remove_term(graph_name);
+            true
+        } else {
+            false
+        };
+        self.write_if_needed()?;
+        Ok(result)
+    }
+
+    pub fn remove_all_named_graphs(&mut self) -> Result<()> {
+        for graph_name in self.storage.named_graphs() {
+            self.remove_encoded_named_graph(&graph_name?)?;
+        }
+        Ok(())
+    }
+
+    pub fn clear(&mut self) -> Result<()> {
+        for graph_name in self.storage.named_graphs() {
+            self.remove_encoded_named_graph(&graph_name?)?;
+        }
+        for quad in self.storage.quads() {
+            self.remove_encoded(&quad?)?;
+        }
+        Ok(())
+    }
+
+    fn remove_term(&mut self, encoded: &EncodedTerm) {
+        remove_term(encoded, &mut |key| self.remove_str(key));
+    }
+
+    fn remove_str(&mut self, key: &StrHash) {
+        self.batch.merge(
+            &self.storage.id2str_cf,
+            &key.to_be_bytes(),
+            &(-1_i32).to_be_bytes(),
+        )
+    }
+
+    fn write_if_needed(&mut self) -> Result<()> {
+        if self.auto_commit && self.batch.len() > AUTO_WRITE_BATCH_THRESHOLD {
+            self.commit()?;
+        }
+        Ok(())
+    }
+
+    pub fn commit(&mut self) -> Result<()> {
+        self.storage.db.write(&mut self.batch)?;
+        Ok(())
     }
 }
 
@@ -1017,11 +1054,11 @@ mod tests {
         );
 
         let storage = Storage::new()?;
-        storage.insert(quad)?;
-        storage.insert(quad2)?;
-        storage.remove(quad2)?;
-        storage.flush()?;
-        storage.db.compact(&storage.id2str_cf)?;
+        let mut writer = storage.atomic_writer();
+        writer.insert(quad)?;
+        writer.insert(quad2)?;
+        writer.remove(quad2)?;
+        writer.commit()?;
         assert!(storage
             .get_str(&StrHash::new("http://example.com/s"))?
             .is_some());
@@ -1031,7 +1068,8 @@ mod tests {
         assert!(storage
             .get_str(&StrHash::new("http://example.com/o2"))?
             .is_none());
-        storage.clear_graph(NamedNodeRef::new_unchecked("http://example.com/g").into())?;
+        writer.clear_graph(NamedNodeRef::new_unchecked("http://example.com/g").into())?;
+        writer.commit()?;
         assert!(storage
             .get_str(&StrHash::new("http://example.com/s"))?
             .is_none());
@@ -1044,7 +1082,8 @@ mod tests {
         assert!(storage
             .get_str(&StrHash::new("http://example.com/g"))?
             .is_some());
-        storage.remove_named_graph(NamedNodeRef::new_unchecked("http://example.com/g").into())?;
+        writer.remove_named_graph(NamedNodeRef::new_unchecked("http://example.com/g").into())?;
+        writer.commit()?;
         assert!(storage
             .get_str(&StrHash::new("http://example.com/g"))?
             .is_none());

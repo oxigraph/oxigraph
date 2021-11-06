@@ -666,12 +666,7 @@ mod tests {
 
     impl MemoryStrStore {
         fn insert_term(&self, term: TermRef<'_>, encoded: &EncodedTerm) {
-            insert_term(term, encoded, |h, v| {
-                self.insert_str(h, v);
-                let r: Result<(), Infallible> = Ok(());
-                r
-            })
-            .unwrap();
+            insert_term(term, encoded, &mut |h, v| self.insert_str(h, v))
         }
 
         fn insert_str(&self, key: &StrHash, value: &str) {

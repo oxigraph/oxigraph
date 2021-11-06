@@ -6,7 +6,6 @@ use crate::storage::Storage;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::convert::Infallible;
 use std::iter::empty;
 
 pub struct DatasetView {
@@ -141,11 +140,9 @@ impl DatasetView {
     pub fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm {
         let term = term.into();
         let encoded = term.into();
-        insert_term::<Infallible, _>(term, &encoded, |key, value| {
-            self.insert_str(key, value);
-            Ok(())
-        })
-        .unwrap(); // Can not fail
+        insert_term(term, &encoded, &mut |key, value| {
+            self.insert_str(key, value)
+        });
         encoded
     }
 

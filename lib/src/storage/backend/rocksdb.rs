@@ -5,8 +5,8 @@
 #![allow(unsafe_code)]
 
 use crate::error::invalid_input_error;
-use crate::storage::backend::{ColumnFamilyDefinition, CompactionAction, CompactionFilter};
-use libc::{self, c_char, c_int, c_uchar, c_void, size_t};
+use crate::storage::backend::{CompactionAction, CompactionFilter};
+use libc::{self, c_char, c_int, c_uchar, c_void, free, size_t};
 use oxrocksdb_sys::*;
 use std::borrow::Borrow;
 use std::env::temp_dir;
@@ -40,6 +40,14 @@ macro_rules! ffi_result_impl {
     }}
 }
 
+pub struct ColumnFamilyDefinition {
+    pub name: &'static str,
+    pub merge_operator: Option<MergeOperator>,
+    pub compaction_filter: Option<CompactionFilter>,
+    pub use_iter: bool,
+    pub min_prefix_size: usize,
+}
+
 #[derive(Clone)]
 pub struct Db(Arc<DbHandler>);
 
@@ -51,7 +59,6 @@ struct DbHandler {
     options: *mut rocksdb_options_t,
     read_options: *mut rocksdb_readoptions_t,
     write_options: *mut rocksdb_writeoptions_t,
-    low_priority_write_options: *mut rocksdb_writeoptions_t,
     flush_options: *mut rocksdb_flushoptions_t,
     compaction_options: *mut rocksdb_compactoptions_t,
     env: Option<*mut rocksdb_env_t>,
@@ -73,7 +80,6 @@ impl Drop for DbHandler {
             }
             rocksdb_readoptions_destroy(self.read_options);
             rocksdb_writeoptions_destroy(self.write_options);
-            rocksdb_writeoptions_destroy(self.low_priority_write_options);
             rocksdb_flushoptions_destroy(self.flush_options);
             rocksdb_compactoptions_destroy(self.compaction_options);
             rocksdb_options_destroy(self.options);
@@ -267,13 +273,6 @@ impl Db {
                 rocksdb_writeoptions_disable_WAL(write_options, 1); // No need for WAL
             }
 
-            let low_priority_write_options = rocksdb_writeoptions_create_copy(write_options);
-            assert!(
-                !low_priority_write_options.is_null(),
-                "rocksdb_writeoptions_create_copy returned null"
-            );
-            rocksdb_writeoptions_set_low_pri(low_priority_write_options, 1);
-
             let flush_options = rocksdb_flushoptions_create();
             assert!(
                 !flush_options.is_null(),
@@ -291,7 +290,6 @@ impl Db {
                 options,
                 read_options,
                 write_options,
-                low_priority_write_options,
                 flush_options,
                 compaction_options,
                 env,
@@ -359,82 +357,27 @@ impl Db {
         Ok(self.get(column_family, key)?.is_some()) //TODO: optimize
     }
 
-    pub fn insert(
-        &self,
-        column_family: &ColumnFamily,
-        key: &[u8],
-        value: &[u8],
-        low_priority: bool,
-    ) -> Result<()> {
+    pub fn new_batch(&self) -> WriteBatchWithIndex {
         unsafe {
-            ffi_result!(rocksdb_put_cf(
-                self.0.db,
-                if low_priority {
-                    self.0.low_priority_write_options
-                } else {
-                    self.0.write_options
-                },
-                column_family.0,
-                key.as_ptr() as *const c_char,
-                key.len(),
-                value.as_ptr() as *const c_char,
-                value.len(),
-            ))
+            let batch = rocksdb_writebatch_wi_create(0, 0);
+            assert!(!batch.is_null(), "rocksdb_writebatch_create returned null");
+            WriteBatchWithIndex {
+                batch,
+                db: self.clone(),
+            }
         }
     }
 
-    pub fn merge(
-        &self,
-        column_family: &ColumnFamily,
-        key: &[u8],
-        value: &[u8],
-        low_priority: bool,
-    ) -> Result<()> {
+    pub fn write(&self, batch: &mut WriteBatchWithIndex) -> Result<()> {
         unsafe {
-            ffi_result!(rocksdb_merge_cf(
+            ffi_result!(rocksdb_write_writebatch_wi(
                 self.0.db,
-                if low_priority {
-                    self.0.low_priority_write_options
-                } else {
-                    self.0.write_options
-                },
-                column_family.0,
-                key.as_ptr() as *const c_char,
-                key.len(),
-                value.as_ptr() as *const c_char,
-                value.len(),
+                self.0.write_options,
+                batch.batch
             ))
-        }
-    }
-
-    pub fn insert_empty(
-        &self,
-        column_family: &ColumnFamily,
-        key: &[u8],
-        low_priority: bool,
-    ) -> Result<()> {
-        self.insert(column_family, key, &[], low_priority)
-    }
-
-    pub fn remove(
-        &self,
-        column_family: &ColumnFamily,
-        key: &[u8],
-        low_priority: bool,
-    ) -> Result<()> {
-        unsafe {
-            ffi_result!(rocksdb_delete_cf(
-                self.0.db,
-                if low_priority {
-                    self.0.low_priority_write_options
-                } else {
-                    self.0.write_options
-                },
-                column_family.0,
-                key.as_ptr() as *const c_char,
-                key.len()
-            ))
-        }
+        }?;
+        batch.clear();
+        Ok(())
     }
 
     pub fn iter(&self, column_family: &ColumnFamily) -> Iter {
@@ -517,6 +460,96 @@ pub struct ColumnFamily(*mut rocksdb_column_family_handle_t);
 unsafe impl Send for ColumnFamily {}
 unsafe impl Sync for ColumnFamily {}
 
+pub struct WriteBatchWithIndex {
+    batch: *mut rocksdb_writebatch_wi_t,
+    db: Db,
+}
+
+impl Drop for WriteBatchWithIndex {
+    fn drop(&mut self) {
+        unsafe { rocksdb_writebatch_wi_destroy(self.batch) }
+    }
+}
+
+impl WriteBatchWithIndex {
+    pub fn insert(&mut self, column_family: &ColumnFamily, key: &[u8], value: &[u8]) {
+        unsafe {
+            rocksdb_writebatch_wi_put_cf(
+                self.batch,
+                column_family.0,
+                key.as_ptr() as *const c_char,
+                key.len(),
+                value.as_ptr() as *const c_char,
+                value.len(),
+            )
+        }
+    }
+
+    pub fn insert_empty(&mut self, column_family: &ColumnFamily, key: &[u8]) {
+        self.insert(column_family, key, &[])
+    }
+
+    pub fn remove(&mut self, column_family: &ColumnFamily, key: &[u8]) {
+        unsafe {
+            rocksdb_writebatch_wi_delete_cf(
+                self.batch,
+                column_family.0,
+                key.as_ptr() as *const c_char,
+                key.len(),
+            )
+        }
+    }
+
+    pub fn merge(&mut self, column_family: &ColumnFamily, key: &[u8], value: &[u8]) {
+        unsafe {
+            rocksdb_writebatch_wi_merge_cf(
+                self.batch,
+                column_family.0,
+                key.as_ptr() as *const c_char,
+                key.len(),
+                value.as_ptr() as *const c_char,
+                value.len(),
+            )
+        }
+    }
+
+    pub fn get(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<Option<Buffer>> {
+        unsafe {
+            let mut len = 0;
+            let base = ffi_result!(rocksdb_writebatch_wi_get_from_batch_and_db_cf(
+                self.batch,
+                self.db.0.db,
+                self.db.0.read_options,
+                column_family.0,
+                key.as_ptr() as *const c_char,
+                key.len(),
+                &mut len
+            ))? as *mut u8;
+            Ok(if base.is_null() {
+                None
+            } else {
+                Some(Buffer { base, len })
+            })
+        }
+    }
+
+    pub fn contains_key(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<bool> {
+        Ok(self.get(column_family, key)?.is_some()) //TODO: optimize
+    }
+
+    pub fn clear(&mut self) {
+        unsafe {
+            rocksdb_writebatch_wi_clear(self.batch);
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        unsafe { rocksdb_writebatch_wi_count(self.batch) }
+            .try_into()
+            .unwrap()
+    }
+}
+
 pub struct PinnableSlice(*mut rocksdb_pinnableslice_t);
 
 impl Drop for PinnableSlice {
@@ -546,6 +579,39 @@ impl AsRef<[u8]> for PinnableSlice {
 }
 
 impl Borrow<[u8]> for PinnableSlice {
+    fn borrow(&self) -> &[u8] {
+        &*self
+    }
+}
+
+pub struct Buffer {
+    base: *mut u8,
+    len: usize,
+}
+
+impl Drop for Buffer {
+    fn drop(&mut self) {
+        unsafe {
+            free(self.base as *mut c_void);
+        }
+    }
+}
+
+impl Deref for Buffer {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts(self.base, self.len) }
+    }
+}
+
+impl AsRef<[u8]> for Buffer {
+    fn as_ref(&self) -> &[u8] {
+        &*self
+    }
+}
+
+impl Borrow<[u8]> for Buffer {
     fn borrow(&self) -> &[u8] {
         &*self
     }
@@ -615,7 +681,7 @@ impl Iter {
 fn convert_error(ptr: *const c_char) -> Error {
     let message = unsafe {
         let s = CStr::from_ptr(ptr).to_string_lossy().into_owned();
-        libc::free(ptr as *mut c_void);
+        free(ptr as *mut c_void);
         s
     };
     other_error(message)

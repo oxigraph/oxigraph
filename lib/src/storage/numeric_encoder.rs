@@ -665,11 +665,11 @@ pub trait StrLookup {
     fn contains_str(&self, key: &StrHash) -> Result<bool, Self::Error>;
 }
 
-pub fn insert_term<E, F: Fn(&StrHash, &str) -> Result<(), E> + Copy>(
+pub fn insert_term<F: FnMut(&StrHash, &str)>(
     term: TermRef<'_>,
     encoded: &EncodedTerm,
-    insert_str: F,
-) -> Result<(), E> {
+    insert_str: &mut F,
+) {
     match term {
         TermRef::NamedNode(node) => {
             if let EncodedTerm::NamedNode { iri_id } = encoded {
@@ -680,7 +680,7 @@ pub fn insert_term<E, F: Fn(&StrHash, &str) -> Result<(), E> + Copy>(
         }
         TermRef::BlankNode(node) => match encoded {
             EncodedTerm::BigBlankNode { id_id } => insert_str(id_id, node.as_str()),
-            EncodedTerm::SmallBlankNode(..) | EncodedTerm::NumericalBlankNode { .. } => Ok(()),
+            EncodedTerm::SmallBlankNode(..) | EncodedTerm::NumericalBlankNode { .. } => (),
             _ => unreachable!("Invalid term encoding {:?} for {}", encoded, term),
         },
         TermRef::Literal(literal) => match encoded {
@@ -699,7 +699,7 @@ pub fn insert_term<E, F: Fn(&StrHash, &str) -> Result<(), E> + Copy>(
                 value_id,
                 language_id,
             } => {
-                insert_str(value_id, literal.value())?;
+                insert_str(value_id, literal.value());
                 if let Some(language) = literal.language() {
                     insert_str(language_id, language)
                 } else {
@@ -713,7 +713,7 @@ pub fn insert_term<E, F: Fn(&StrHash, &str) -> Result<(), E> + Copy>(
                 value_id,
                 datatype_id,
             } => {
-                insert_str(value_id, literal.value())?;
+                insert_str(value_id, literal.value());
                 insert_str(datatype_id, literal.datatype().as_str())
             }
             EncodedTerm::SmallStringLiteral(..)
@@ -733,17 +733,17 @@ pub fn insert_term<E, F: Fn(&StrHash, &str) -> Result<(), E> + Copy>(
             | EncodedTerm::GMonthLiteral(..)
             | EncodedTerm::DurationLiteral(..)
             | EncodedTerm::YearMonthDurationLiteral(..)
-            | EncodedTerm::DayTimeDurationLiteral(..) => Ok(()),
+            | EncodedTerm::DayTimeDurationLiteral(..) => (),
             _ => unreachable!("Invalid term encoding {:?} for {}", encoded, term),
         },
         TermRef::Triple(triple) => {
             if let EncodedTerm::Triple(encoded) = encoded {
-                insert_term(triple.subject.as_ref().into(), &encoded.subject, insert_str)?;
+                insert_term(triple.subject.as_ref().into(), &encoded.subject, insert_str);
                 insert_term(
                     triple.predicate.as_ref().into(),
                     &encoded.predicate,
                     insert_str,
-                )?;
+                );
                 insert_term(triple.object.as_ref(), &encoded.object, insert_str)
             } else {
                 unreachable!("Invalid term encoding {:?} for {}", encoded, term)
@@ -752,10 +752,7 @@ pub fn insert_term<E, F: Fn(&StrHash, &str) -> Result<(), E> + Copy>(
     }
 }
 
-pub fn remove_term<E, F: Fn(&StrHash) -> Result<(), E> + Copy>(
-    encoded: &EncodedTerm,
-    remove_str: F,
-) -> Result<(), E> {
+pub fn remove_term<F: FnMut(&StrHash)>(encoded: &EncodedTerm, remove_str: &mut F) {
     match encoded {
         EncodedTerm::NamedNode { iri_id } => remove_str(iri_id),
         EncodedTerm::BigBlankNode { id_id } => remove_str(id_id),
@@ -766,7 +763,7 @@ pub fn remove_term<E, F: Fn(&StrHash) -> Result<(), E> + Copy>(
             value_id,
             language_id,
         } => {
-            remove_str(value_id)?;
+            remove_str(value_id);
             remove_str(language_id)
         }
         EncodedTerm::SmallTypedLiteral { datatype_id, .. } => remove_str(datatype_id),
@@ -774,15 +771,15 @@ pub fn remove_term<E, F: Fn(&StrHash) -> Result<(), E> + Copy>(
             value_id,
             datatype_id,
         } => {
-            remove_str(value_id)?;
+            remove_str(value_id);
             remove_str(datatype_id)
         }
         EncodedTerm::Triple(encoded) => {
-            remove_term(&encoded.subject, remove_str)?;
-            remove_term(&encoded.predicate, remove_str)?;
+            remove_term(&encoded.subject, remove_str);
+            remove_term(&encoded.predicate, remove_str);
             remove_term(&encoded.object, remove_str)
         }
-        _ => Ok(()),
+        _ => (),
     }
 }
 

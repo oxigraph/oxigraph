@@ -230,10 +230,8 @@ impl Store {
 
     /// Loads a graph file (i.e. triples) into the store
     ///
-    /// Warning: This functions saves the triples in a not atomic way.
-    /// If the parsing fails in the middle of the file only a part of it may be written to the store.
-    /// It might leave the store in a bad state if a crash happens during a triple insertion.
-    /// Use a (memory greedy) [transaction](Store::transaction()) if you do not want that.
+    /// Warning: This function is not atomic. If an error happens during the file parsing, only a
+    /// part of the file might be written to the store.
     ///
     /// Usage example:
     /// ```
@@ -263,22 +261,15 @@ impl Store {
         to_graph_name: impl Into<GraphNameRef<'a>>,
         base_iri: Option<&str>,
     ) -> io::Result<()> {
-        load_graph(
-            &self.storage,
-            reader,
-            format,
-            to_graph_name.into(),
-            base_iri,
-        )?;
-        Ok(())
+        let mut writer = self.storage.simple_writer();
+        load_graph(&mut writer, reader, format, to_graph_name.into(), base_iri)?;
+        writer.commit()
     }
 
     /// Loads a dataset file (i.e. quads) into the store.
     ///
-    /// Warning: This functions saves the triples in a not atomic way.
-    /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
-    /// It might leave the store in a bad state if a crash happens during a quad insertion.
-    /// Use a (memory greedy) [transaction](Store::transaction()) if you do not want that.
+    /// Warning: This function is not atomic. If an error happens during the file parsing, only a
+    /// part of the file might be written to the store.
     ///
     /// Usage example:
     /// ```
@@ -307,17 +298,14 @@ impl Store {
         format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> io::Result<()> {
-        load_dataset(&self.storage, reader, format, base_iri)?;
-        Ok(())
+        let mut writer = self.storage.simple_writer();
+        load_dataset(&mut writer, reader, format, base_iri)?;
+        writer.commit()
     }
 
     /// Adds a quad to this store.
     ///
     /// Returns `true` if the quad was not already in the store.
-    ///
-    /// This method is optimized for performances and is not atomic.
-    /// It might leave the store in a bad state if a crash happens during the insertion.
-    /// Use a (memory greedy) [transaction](Store::transaction()) if you do not want that.
     ///
     /// Usage example:
     /// ```
@@ -334,16 +322,15 @@ impl Store {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> io::Result<bool> {
-        self.storage.insert(quad.into())
+        let mut writer = self.storage.atomic_writer();
+        let result = writer.insert(quad.into())?;
+        writer.commit()?;
+        Ok(result)
     }
 
     /// Removes a quad from this store.
     ///
     /// Returns `true` if the quad was in the store and has been removed.
-    ///
-    /// This method is optimized for performances and is not atomic.
-    /// It might leave the store in a bad state if a crash happens during the removal.
-    /// Use a (memory greedy) [transaction](Store::transaction()) if you do not want that.
     ///
     /// Usage example:
     /// ```
@@ -361,7 +348,10 @@ impl Store {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> io::Result<bool> {
-        self.storage.remove(quad.into())
+        let mut writer = self.storage.atomic_writer();
+        let result = writer.remove(quad.into())?;
+        writer.commit()?;
+        Ok(result)
     }
 
     /// Dumps a store graph into a file.
@@ -478,7 +468,10 @@ impl Store {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> io::Result<bool> {
-        self.storage.insert_named_graph(graph_name.into())
+        let mut writer = self.storage.atomic_writer();
+        let result = writer.insert_named_graph(graph_name.into())?;
+        writer.commit()?;
+        Ok(result)
     }
 
     /// Clears a graph from this store.
@@ -500,7 +493,9 @@ impl Store {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn clear_graph<'a>(&self, graph_name: impl Into<GraphNameRef<'a>>) -> io::Result<()> {
-        self.storage.clear_graph(graph_name.into())
+        let mut writer = self.storage.simple_writer();
+        writer.clear_graph(graph_name.into())?;
+        writer.commit()
     }
 
     /// Removes a graph from this store.
@@ -527,7 +522,10 @@ impl Store {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> io::Result<bool> {
-        self.storage.remove_named_graph(graph_name.into())
+        let mut writer = self.storage.simple_writer();
+        let result = writer.remove_named_graph(graph_name.into())?;
+        writer.commit()?;
+        Ok(result)
     }
 
     /// Clears the store.
@@ -548,7 +546,9 @@ impl Store {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn clear(&self) -> io::Result<()> {
-        self.storage.clear()
+        let mut writer = self.storage.simple_writer();
+        writer.clear()?;
+        writer.commit()
     }
 
     /// Flushes all buffers and ensures that all writes are saved on disk.
@@ -599,14 +599,19 @@ impl Store {
     /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
     /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
     /// Errors related to data loading into the store use the other error kinds.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn create_from_dataset(
         path: &Path,
         reader: impl BufRead,
         format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> io::Result<()> {
-        let storage = Storage::open(path.as_ref(), false)?;
-        load_dataset(&storage, reader, format, base_iri)?;
+        let storage = Storage::open(path, false)?;
+        {
+            let mut writer = storage.simple_writer();
+            load_dataset(&mut writer, reader, format, base_iri)?;
+            writer.commit()?;
+        }
         storage.flush()?;
         storage.compact()
     }
