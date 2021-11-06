@@ -841,6 +841,21 @@ impl Storage {
         self.db.flush(&self.id2str_cf)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn compact(&self) -> Result<()> {
+        self.db.compact(&self.default_cf)?;
+        self.db.compact(&self.gpos_cf)?;
+        self.db.compact(&self.gpos_cf)?;
+        self.db.compact(&self.gosp_cf)?;
+        self.db.compact(&self.spog_cf)?;
+        self.db.compact(&self.posg_cf)?;
+        self.db.compact(&self.ospg_cf)?;
+        self.db.compact(&self.dspo_cf)?;
+        self.db.compact(&self.dpos_cf)?;
+        self.db.compact(&self.dosp_cf)?;
+        self.db.compact(&self.id2str_cf)
+    }
+
     pub fn get_str(&self, key: &StrHash) -> Result<Option<String>> {
         self.db
             .get(&self.id2str_cf, &key.to_be_bytes())?

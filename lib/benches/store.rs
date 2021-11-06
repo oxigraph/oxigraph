@@ -43,6 +43,7 @@ fn do_load(store: &Store, data: &[u8]) {
             None,
         )
         .unwrap();
+    store.optimize().unwrap();
 }
 
 fn store_query_and_update(c: &mut Criterion) {

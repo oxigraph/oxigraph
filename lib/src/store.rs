@@ -561,6 +561,16 @@ impl Store {
     pub fn flush(&self) -> io::Result<()> {
         self.storage.flush()
     }
+
+    /// Optimizes the database for future workload.
+    ///
+    /// Useful to call after a batch upload or an other similar operation.
+    ///
+    /// Warning: Can take hours on huge databases.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn optimize(&self) -> io::Result<()> {
+        self.storage.compact()
+    }
 }
 
 impl fmt::Display for Store {

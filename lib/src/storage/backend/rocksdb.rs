@@ -304,7 +304,6 @@ impl Db {
         }
     }
 
-    #[cfg(test)]
     #[allow(clippy::unnecessary_wraps)]
     pub fn compact(&self, column_family: &ColumnFamily) -> Result<()> {
         unsafe {
