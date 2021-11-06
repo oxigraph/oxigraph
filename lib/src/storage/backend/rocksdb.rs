@@ -47,9 +47,8 @@ unsafe impl Send for Db {}
 unsafe impl Sync for Db {}
 
 struct DbHandler {
-    db: *mut rocksdb_transactiondb_t,
+    db: *mut rocksdb_t,
     options: *mut rocksdb_options_t,
-    txn_options: *mut rocksdb_transactiondb_options_t,
     read_options: *mut rocksdb_readoptions_t,
     write_options: *mut rocksdb_writeoptions_t,
     low_priority_write_options: *mut rocksdb_writeoptions_t,
@@ -68,7 +67,7 @@ impl Drop for DbHandler {
             for cf_handle in &self.cf_handles {
                 rocksdb_column_family_handle_destroy(*cf_handle);
             }
-            rocksdb_transactiondb_close(self.db);
+            rocksdb_close(self.db);
             for cf_option in &self.cf_options {
                 rocksdb_options_destroy(*cf_option);
             }
@@ -77,7 +76,6 @@ impl Drop for DbHandler {
             rocksdb_writeoptions_destroy(self.low_priority_write_options);
             rocksdb_flushoptions_destroy(self.flush_options);
             rocksdb_compactoptions_destroy(self.compaction_options);
-            rocksdb_transactiondb_options_destroy(self.txn_options);
             rocksdb_options_destroy(self.options);
             if let Some(env) = self.env {
                 rocksdb_env_destroy(env);
@@ -137,17 +135,10 @@ impl Db {
                 .unwrap(),
             );
 
-            let txn_options = rocksdb_transactiondb_options_create();
-            assert!(
-                !txn_options.is_null(),
-                "rocksdb_transactiondb_options_create returned null"
-            );
-
             let env = if in_memory {
                 let env = rocksdb_create_mem_env();
                 if env.is_null() {
                     rocksdb_options_destroy(options);
-                    rocksdb_transactiondb_options_destroy(txn_options);
                     return Err(other_error("Not able to create an in-memory environment."));
                 }
                 rocksdb_options_set_env(options, env);
@@ -221,9 +212,8 @@ impl Db {
 
             let mut cf_handles: Vec<*mut rocksdb_column_family_handle_t> =
                 vec![ptr::null_mut(); column_family_names.len()];
-            let db = ffi_result!(rocksdb_transactiondb_open_column_families(
+            let db = ffi_result!(rocksdb_open_column_families(
                 options,
-                txn_options,
                 c_path.as_ptr(),
                 c_column_families.len().try_into().unwrap(),
                 c_column_families
@@ -237,7 +227,7 @@ impl Db {
             assert!(!db.is_null(), "rocksdb_create returned null");
             for handle in &cf_handles {
                 if handle.is_null() {
-                    rocksdb_transactiondb_close(db);
+                    rocksdb_close(db);
                     return Err(other_error(
                         "Received null column family handle from RocksDB.",
                     ));
@@ -281,7 +271,6 @@ impl Db {
             Ok(DbHandler {
                 db,
                 options,
-                txn_options,
                 read_options,
                 write_options,
                 low_priority_write_options,
@@ -307,7 +296,7 @@ impl Db {
 
     pub fn flush(&self, column_family: &ColumnFamily) -> Result<()> {
         unsafe {
-            ffi_result!(rocksdb_transactiondb_flush_cf(
+            ffi_result!(rocksdb_flush_cf(
                 self.0.db,
                 self.0.flush_options,
                 column_family.0,
@@ -316,23 +305,25 @@ impl Db {
     }
 
     #[cfg(test)]
+    #[allow(clippy::unnecessary_wraps)]
     pub fn compact(&self, column_family: &ColumnFamily) -> Result<()> {
         unsafe {
-            ffi_result!(rocksdb_transactiondb_compact_range_cf_opt(
+            rocksdb_compact_range_cf_opt(
                 self.0.db,
                 column_family.0,
                 self.0.compaction_options,
                 ptr::null(),
                 0,
                 ptr::null(),
-                0
-            ))
+                0,
+            );
         }
+        Ok(())
     }
 
     pub fn get(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<Option<PinnableSlice>> {
         unsafe {
-            let slice = ffi_result!(rocksdb_transactiondb_get_pinned_cf(
+            let slice = ffi_result!(rocksdb_get_pinned_cf(
                 self.0.db,
                 self.0.read_options,
                 column_family.0,
@@ -359,7 +350,7 @@ impl Db {
         low_priority: bool,
     ) -> Result<()> {
         unsafe {
-            ffi_result!(rocksdb_transactiondb_put_cf(
+            ffi_result!(rocksdb_put_cf(
                 self.0.db,
                 if low_priority {
                     self.0.low_priority_write_options
@@ -383,7 +374,7 @@ impl Db {
         low_priority: bool,
     ) -> Result<()> {
         unsafe {
-            ffi_result!(rocksdb_transactiondb_merge_cf(
+            ffi_result!(rocksdb_merge_cf(
                 self.0.db,
                 if low_priority {
                     self.0.low_priority_write_options
@@ -415,7 +406,7 @@ impl Db {
         low_priority: bool,
     ) -> Result<()> {
         unsafe {
-            ffi_result!(rocksdb_transactiondb_delete_cf(
+            ffi_result!(rocksdb_delete_cf(
                 self.0.db,
                 if low_priority {
                     self.0.low_priority_write_options
@@ -465,8 +456,7 @@ impl Db {
                     upper_bound.len(),
                 );
             }
-            let iter =
-                rocksdb_transactiondb_create_iterator_cf(self.0.db, options, column_family.0);
+            let iter = rocksdb_create_iterator_cf(self.0.db, options, column_family.0);
             assert!(!iter.is_null(), "rocksdb_create_iterator returned null");
             if prefix.is_empty() {
                 rocksdb_iter_seek_to_first(iter);
