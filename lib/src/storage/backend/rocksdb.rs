@@ -61,6 +61,7 @@ struct DbHandler {
     write_options: *mut rocksdb_writeoptions_t,
     flush_options: *mut rocksdb_flushoptions_t,
     compaction_options: *mut rocksdb_compactoptions_t,
+    block_based_table_options: *mut rocksdb_block_based_table_options_t,
     env: Option<*mut rocksdb_env_t>,
     column_family_names: Vec<&'static str>,
     cf_handles: Vec<*mut rocksdb_column_family_handle_t>,
@@ -83,6 +84,7 @@ impl Drop for DbHandler {
             rocksdb_flushoptions_destroy(self.flush_options);
             rocksdb_compactoptions_destroy(self.compaction_options);
             rocksdb_options_destroy(self.options);
+            rocksdb_block_based_options_destroy(self.block_based_table_options);
             if let Some(env) = self.env {
                 rocksdb_env_destroy(env);
             }
@@ -158,6 +160,17 @@ impl Db {
             if for_bulk_load {
                 rocksdb_options_prepare_for_bulk_load(options);
             }
+            let block_based_table_options = rocksdb_block_based_options_create();
+            assert!(
+                !block_based_table_options.is_null(),
+                "rocksdb_block_based_options_create returned null"
+            );
+            rocksdb_block_based_options_set_format_version(block_based_table_options, 5);
+            rocksdb_block_based_options_set_index_block_restart_interval(
+                block_based_table_options,
+                16,
+            );
+            rocksdb_options_set_block_based_table_factory(options, block_based_table_options);
 
             let env = if in_memory {
                 let env = rocksdb_create_mem_env();
@@ -292,6 +305,7 @@ impl Db {
                 write_options,
                 flush_options,
                 compaction_options,
+                block_based_table_options,
                 env,
                 column_family_names,
                 cf_handles,
