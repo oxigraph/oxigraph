@@ -34,7 +34,7 @@ use crate::storage::io::{dump_dataset, dump_graph, load_dataset, load_graph};
 use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::storage::BulkLoader;
-use crate::storage::{ChainedDecodingQuadIterator, DecodingGraphIterator, Storage};
+use crate::storage::{ChainedDecodingQuadIterator, DecodingGraphIterator, Storage, StorageReader};
 use std::io::{BufRead, Write};
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
@@ -43,6 +43,9 @@ use std::{fmt, io, str};
 /// An on-on disk [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 /// Allows to query and update it using SPARQL.
 /// It is based on the [RocksDB](https://rocksdb.org/) key-value store.
+///
+/// This store ensure the "repeatable read" isolation level.
+/// All operations are not able to read the result of concurrent
 ///
 /// Usage example:
 /// ```
@@ -157,14 +160,15 @@ impl Store {
         object: Option<TermRef<'_>>,
         graph_name: Option<GraphNameRef<'_>>,
     ) -> QuadIter {
+        let reader = self.storage.snapshot();
         QuadIter {
-            iter: self.storage.quads_for_pattern(
+            iter: reader.quads_for_pattern(
                 subject.map(EncodedTerm::from).as_ref(),
                 predicate.map(EncodedTerm::from).as_ref(),
                 object.map(EncodedTerm::from).as_ref(),
                 graph_name.map(EncodedTerm::from).as_ref(),
             ),
-            storage: self.storage.clone(),
+            reader,
         }
     }
 
@@ -176,19 +180,19 @@ impl Store {
     /// Checks if this store contains a given quad
     pub fn contains<'a>(&self, quad: impl Into<QuadRef<'a>>) -> io::Result<bool> {
         let quad = EncodedQuad::from(quad.into());
-        self.storage.contains(&quad)
+        self.storage.reader().contains(&quad)
     }
 
     /// Returns the number of quads in the store
     ///
     /// Warning: this function executes a full scan
     pub fn len(&self) -> io::Result<usize> {
-        self.storage.len()
+        self.storage.reader().len()
     }
 
     /// Returns if the store is empty
     pub fn is_empty(&self) -> io::Result<bool> {
-        self.storage.is_empty()
+        self.storage.reader().is_empty()
     }
 
     /// Executes a [SPARQL 1.1 update](https://www.w3.org/TR/sparql11-update/).
@@ -231,10 +235,9 @@ impl Store {
         )
     }
 
-    /// Loads a graph file (i.e. triples) into the store
+    /// Loads a graph file (i.e. triples) into the store.
     ///
-    /// Warning: This function is not atomic. If an error happens during the file parsing, only a
-    /// part of the file might be written to the store.
+    /// This function is atomic and quite slow. To get much better performances you should use [`create_from_dataset`].
     ///
     /// Usage example:
     /// ```
@@ -264,15 +267,14 @@ impl Store {
         to_graph_name: impl Into<GraphNameRef<'a>>,
         base_iri: Option<&str>,
     ) -> io::Result<()> {
-        let mut writer = self.storage.simple_writer();
+        let mut writer = self.storage.transaction();
         load_graph(&mut writer, reader, format, to_graph_name.into(), base_iri)?;
         writer.commit()
     }
 
     /// Loads a dataset file (i.e. quads) into the store.
     ///
-    /// Warning: This function is not atomic. If an error happens during the file parsing, only a
-    /// part of the file might be written to the store.
+    /// This function is atomic and quite slow. To get much better performances you should use [`create_from_dataset`].
     ///
     /// Usage example:
     /// ```
@@ -301,7 +303,7 @@ impl Store {
         format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> io::Result<()> {
-        let mut writer = self.storage.simple_writer();
+        let mut writer = self.storage.transaction();
         load_dataset(&mut writer, reader, format, base_iri)?;
         writer.commit()
     }
@@ -325,7 +327,7 @@ impl Store {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> io::Result<bool> {
-        let mut writer = self.storage.atomic_writer();
+        let mut writer = self.storage.transaction();
         let result = writer.insert(quad.into())?;
         writer.commit()?;
         Ok(result)
@@ -351,7 +353,7 @@ impl Store {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> io::Result<bool> {
-        let mut writer = self.storage.atomic_writer();
+        let mut writer = self.storage.transaction();
         let result = writer.remove(quad.into())?;
         writer.commit()?;
         Ok(result)
@@ -424,9 +426,10 @@ impl Store {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn named_graphs(&self) -> GraphNameIter {
+        let reader = self.storage.snapshot();
         GraphNameIter {
-            iter: self.storage.named_graphs(),
-            store: self.clone(),
+            iter: reader.named_graphs(),
+            reader,
         }
     }
 
@@ -448,7 +451,7 @@ impl Store {
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> io::Result<bool> {
         let graph_name = EncodedTerm::from(graph_name.into());
-        self.storage.contains_named_graph(&graph_name)
+        self.storage.reader().contains_named_graph(&graph_name)
     }
 
     /// Inserts a graph into this store
@@ -471,7 +474,7 @@ impl Store {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> io::Result<bool> {
-        let mut writer = self.storage.atomic_writer();
+        let mut writer = self.storage.transaction();
         let result = writer.insert_named_graph(graph_name.into())?;
         writer.commit()?;
         Ok(result)
@@ -496,7 +499,7 @@ impl Store {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn clear_graph<'a>(&self, graph_name: impl Into<GraphNameRef<'a>>) -> io::Result<()> {
-        let mut writer = self.storage.simple_writer();
+        let mut writer = self.storage.transaction();
         writer.clear_graph(graph_name.into())?;
         writer.commit()
     }
@@ -525,7 +528,7 @@ impl Store {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> io::Result<bool> {
-        let mut writer = self.storage.simple_writer();
+        let mut writer = self.storage.transaction();
         let result = writer.remove_named_graph(graph_name.into())?;
         writer.commit()?;
         Ok(result)
@@ -549,7 +552,7 @@ impl Store {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn clear(&self) -> io::Result<()> {
-        let mut writer = self.storage.simple_writer();
+        let mut writer = self.storage.transaction();
         writer.clear()?;
         writer.commit()
     }
@@ -632,7 +635,7 @@ impl fmt::Display for Store {
 /// An iterator returning the quads contained in a [`Store`].
 pub struct QuadIter {
     iter: ChainedDecodingQuadIterator,
-    storage: Storage,
+    reader: StorageReader,
 }
 
 impl Iterator for QuadIter {
@@ -640,7 +643,7 @@ impl Iterator for QuadIter {
 
     fn next(&mut self) -> Option<io::Result<Quad>> {
         Some(match self.iter.next()? {
-            Ok(quad) => self.storage.decode_quad(&quad).map_err(|e| e.into()),
+            Ok(quad) => self.reader.decode_quad(&quad).map_err(|e| e.into()),
             Err(error) => Err(error),
         })
     }
@@ -649,7 +652,7 @@ impl Iterator for QuadIter {
 /// An iterator returning the graph names contained in a [`Store`].
 pub struct GraphNameIter {
     iter: DecodingGraphIterator,
-    store: Store,
+    reader: StorageReader,
 }
 
 impl Iterator for GraphNameIter {
@@ -657,9 +660,9 @@ impl Iterator for GraphNameIter {
 
     fn next(&mut self) -> Option<io::Result<NamedOrBlankNode>> {
         Some(
-            self.iter.next()?.and_then(|graph_name| {
-                Ok(self.store.storage.decode_named_or_blank_node(&graph_name)?)
-            }),
+            self.iter
+                .next()?
+                .and_then(|graph_name| Ok(self.reader.decode_named_or_blank_node(&graph_name)?)),
         )
     }
 

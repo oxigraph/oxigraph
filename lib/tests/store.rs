@@ -150,6 +150,25 @@ fn test_dump_dataset() -> io::Result<()> {
 }
 
 #[test]
+fn test_snapshot_isolation_iterator() -> io::Result<()> {
+    let quad = QuadRef::new(
+        NamedNodeRef::new_unchecked("http://example.com/s"),
+        NamedNodeRef::new_unchecked("http://example.com/p"),
+        NamedNodeRef::new_unchecked("http://example.com/o"),
+        NamedNodeRef::new_unchecked("http://example.com/g"),
+    );
+    let store = Store::new()?;
+    store.insert(quad)?;
+    let iter = store.iter();
+    store.remove(quad)?;
+    assert_eq!(
+        iter.collect::<io::Result<Vec<_>>>()?,
+        vec![quad.into_owned()]
+    );
+    Ok(())
+}
+
+#[test]
 #[cfg(not(target_arch = "wasm32"))]
 fn test_backward_compatibility() -> io::Result<()> {
     // We run twice to check if data is properly saved and closed

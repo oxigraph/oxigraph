@@ -9,7 +9,7 @@ use crate::sparql::eval::SimpleEvaluator;
 use crate::sparql::http::Client;
 use crate::sparql::plan::EncodedTuple;
 use crate::sparql::plan_builder::PlanBuilder;
-use crate::sparql::{EvaluationError, UpdateOptions};
+use crate::sparql::{EvaluationError, Update, UpdateOptions};
 use crate::storage::io::load_graph;
 use crate::storage::numeric_encoder::{Decoder, EncodedTerm};
 use crate::storage::{Storage, StorageWriter};
@@ -27,39 +27,45 @@ use std::io;
 use std::io::BufReader;
 use std::rc::Rc;
 
-pub struct SimpleUpdateEvaluator<'a> {
-    storage: &'a Storage,
-    writer: StorageWriter,
+pub struct SimpleUpdateEvaluator {
+    transaction: StorageWriter,
     base_iri: Option<Rc<Iri<String>>>,
     options: UpdateOptions,
     client: Client,
 }
 
-impl<'a> SimpleUpdateEvaluator<'a> {
-    pub fn new(
-        storage: &'a Storage,
-        base_iri: Option<Rc<Iri<String>>>,
+impl SimpleUpdateEvaluator {
+    pub fn run(
+        storage: &Storage,
+        update: Update,
         options: UpdateOptions,
-    ) -> Self {
+    ) -> Result<(), EvaluationError> {
         let client = Client::new(options.query_options.http_timeout);
-        let writer = storage.atomic_writer();
-        Self {
-            storage,
-            writer,
-            base_iri,
+        let mut evaluator = Self {
+            transaction: storage.transaction(),
+            base_iri: update.inner.base_iri.map(Rc::new),
             options,
             client,
+        };
+        match evaluator.eval_all(&update.inner.operations, &update.using_datasets) {
+            Ok(_) => {
+                evaluator.transaction.commit()?;
+                Ok(())
+            }
+            Err(e) => {
+                evaluator.transaction.rollback()?;
+                Err(e)
+            }
         }
     }
 
-    pub fn eval_all(
+    fn eval_all(
         &mut self,
         updates: &[GraphUpdateOperation],
         using_datasets: &[Option<QueryDataset>],
     ) -> Result<(), EvaluationError> {
         for (update, using_dataset) in updates.iter().zip(using_datasets) {
             self.eval(update, using_dataset)?;
-            self.writer.commit()?;
         }
         Ok(())
     }
@@ -103,7 +109,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         let mut bnodes = HashMap::new();
         for quad in data {
             let quad = Self::convert_quad(quad, &mut bnodes);
-            self.writer.insert(quad.as_ref())?;
+            self.transaction.insert(quad.as_ref())?;
         }
         Ok(())
     }
@@ -111,7 +117,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
     fn eval_delete_data(&mut self, data: &[GroundQuad]) -> Result<(), EvaluationError> {
         for quad in data {
             let quad = Self::convert_ground_quad(quad);
-            self.writer.remove(quad.as_ref())?;
+            self.transaction.remove(quad.as_ref())?;
         }
         Ok(())
     }
@@ -123,7 +129,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         using: &QueryDataset,
         algebra: &GraphPattern,
     ) -> Result<(), EvaluationError> {
-        let dataset = Rc::new(DatasetView::new(self.storage.clone(), using));
+        let dataset = Rc::new(DatasetView::new(self.transaction.reader(), using));
         let (plan, variables) = PlanBuilder::build(dataset.as_ref(), algebra, false)?;
         let evaluator = SimpleEvaluator::new(
             dataset.clone(),
@@ -137,7 +143,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                 if let Some(quad) =
                     Self::convert_ground_quad_pattern(quad, &variables, &tuple, &dataset)?
                 {
-                    self.writer.remove(quad.as_ref())?;
+                    self.transaction.remove(quad.as_ref())?;
                     if !insert.is_empty() {
                         // Hack to make sure the triple terms are still available for an insert
                         dataset.encode_term(quad.subject.as_ref());
@@ -150,7 +156,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                 if let Some(quad) =
                     Self::convert_quad_pattern(quad, &variables, &tuple, &dataset, &mut bnodes)?
                 {
-                    self.writer.insert(quad.as_ref())?;
+                    self.transaction.insert(quad.as_ref())?;
                 }
             }
             bnodes.clear();
@@ -174,7 +180,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
             GraphName::DefaultGraph => GraphNameRef::DefaultGraph,
         };
         load_graph(
-            &mut self.writer,
+            &mut self.transaction,
             BufReader::new(body),
             format,
             to_graph_name,
@@ -186,7 +192,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
 
     fn eval_create(&mut self, graph_name: &NamedNode, silent: bool) -> Result<(), EvaluationError> {
         let graph_name = NamedNodeRef::new_unchecked(&graph_name.iri);
-        if self.writer.insert_named_graph(graph_name.into())? || silent {
+        if self.transaction.insert_named_graph(graph_name.into())? || silent {
             Ok(())
         } else {
             Err(EvaluationError::msg(format!(
@@ -200,8 +206,12 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         match graph {
             GraphTarget::NamedNode(graph_name) => {
                 let graph_name = NamedNodeRef::new_unchecked(&graph_name.iri);
-                if self.storage.contains_named_graph(&graph_name.into())? {
-                    Ok(self.writer.clear_graph(graph_name.into())?)
+                if self
+                    .transaction
+                    .reader()
+                    .contains_named_graph(&graph_name.into())?
+                {
+                    Ok(self.transaction.clear_graph(graph_name.into())?)
                 } else if silent {
                     Ok(())
                 } else {
@@ -212,11 +222,11 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                 }
             }
             GraphTarget::DefaultGraph => {
-                self.writer.clear_graph(GraphNameRef::DefaultGraph)?;
+                self.transaction.clear_graph(GraphNameRef::DefaultGraph)?;
                 Ok(())
             }
-            GraphTarget::NamedGraphs => Ok(self.writer.clear_all_named_graphs()?),
-            GraphTarget::AllGraphs => Ok(self.writer.clear_all_graphs()?),
+            GraphTarget::NamedGraphs => Ok(self.transaction.clear_all_named_graphs()?),
+            GraphTarget::AllGraphs => Ok(self.transaction.clear_all_graphs()?),
         }
     }
 
@@ -224,7 +234,7 @@ impl<'a> SimpleUpdateEvaluator<'a> {
         match graph {
             GraphTarget::NamedNode(graph_name) => {
                 let graph_name = NamedNodeRef::new_unchecked(&graph_name.iri);
-                if self.writer.remove_named_graph(graph_name.into())? || silent {
+                if self.transaction.remove_named_graph(graph_name.into())? || silent {
                     Ok(())
                 } else {
                     Err(EvaluationError::msg(format!(
@@ -233,9 +243,11 @@ impl<'a> SimpleUpdateEvaluator<'a> {
                     )))
                 }
             }
-            GraphTarget::DefaultGraph => Ok(self.writer.clear_graph(GraphNameRef::DefaultGraph)?),
-            GraphTarget::NamedGraphs => Ok(self.writer.remove_all_named_graphs()?),
-            GraphTarget::AllGraphs => Ok(self.writer.clear()?),
+            GraphTarget::DefaultGraph => {
+                Ok(self.transaction.clear_graph(GraphNameRef::DefaultGraph)?)
+            }
+            GraphTarget::NamedGraphs => Ok(self.transaction.remove_all_named_graphs()?),
+            GraphTarget::AllGraphs => Ok(self.transaction.clear()?),
         }
     }
 

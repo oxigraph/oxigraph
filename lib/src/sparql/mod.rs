@@ -42,7 +42,7 @@ pub(crate) fn evaluate_query(
     options: QueryOptions,
 ) -> Result<QueryResults, EvaluationError> {
     let query = query.try_into().map_err(std::convert::Into::into)?;
-    let dataset = DatasetView::new(storage, &query.dataset);
+    let dataset = DatasetView::new(storage.snapshot(), &query.dataset);
     match query.inner {
         spargebra::Query::Select {
             pattern, base_iri, ..
@@ -181,6 +181,5 @@ pub(crate) fn evaluate_update(
     update: Update,
     options: UpdateOptions,
 ) -> Result<(), EvaluationError> {
-    SimpleUpdateEvaluator::new(storage, update.inner.base_iri.map(Rc::new), options)
-        .eval_all(&update.inner.operations, &update.using_datasets)
+    SimpleUpdateEvaluator::run(storage, update, options)
 }

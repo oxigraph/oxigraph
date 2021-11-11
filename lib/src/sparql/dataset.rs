@@ -2,20 +2,21 @@ use crate::model::TermRef;
 use crate::sparql::algebra::QueryDataset;
 use crate::sparql::EvaluationError;
 use crate::storage::numeric_encoder::{insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup};
-use crate::storage::Storage;
+use crate::storage::StorageReader;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::iter::empty;
 
 pub struct DatasetView {
-    storage: Storage,
+    reader: StorageReader,
     extra: RefCell<HashMap<StrHash, String>>,
     dataset: EncodedDatasetSpec,
 }
 
 impl DatasetView {
-    pub fn new(storage: Storage, dataset: &QueryDataset) -> Self {
+    pub fn new(reader: StorageReader, dataset: &QueryDataset) -> Self {
         let dataset = EncodedDatasetSpec {
             default: dataset
                 .default_graph_graphs()
@@ -25,7 +26,7 @@ impl DatasetView {
                 .map(|graphs| graphs.iter().map(|g| g.as_ref().into()).collect::<Vec<_>>()),
         };
         Self {
-            storage,
+            reader,
             extra: RefCell::new(HashMap::default()),
             dataset,
         }
@@ -38,7 +39,7 @@ impl DatasetView {
         object: Option<&EncodedTerm>,
         graph_name: Option<&EncodedTerm>,
     ) -> impl Iterator<Item = Result<EncodedQuad, EvaluationError>> + 'static {
-        self.storage
+        self.reader
             .quads_for_pattern(subject, predicate, object, graph_name)
             .map(|t| t.map_err(|e| e.into()))
     }
@@ -140,15 +141,17 @@ impl DatasetView {
     pub fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm {
         let term = term.into();
         let encoded = term.into();
-        insert_term(term, &encoded, &mut |key, value| {
-            self.insert_str(key, value)
-        });
+        insert_term::<Infallible, _>(term, &encoded, &mut |key, value| {
+            self.insert_str(key, value);
+            Ok(())
+        })
+        .unwrap();
         encoded
     }
 
     pub fn insert_str(&self, key: &StrHash, value: &str) {
         if let Entry::Vacant(e) = self.extra.borrow_mut().entry(*key) {
-            if !matches!(self.storage.contains_str(key), Ok(true)) {
+            if !matches!(self.reader.contains_str(key), Ok(true)) {
                 e.insert(value.to_owned());
             }
         }
@@ -162,12 +165,12 @@ impl StrLookup for DatasetView {
         Ok(if let Some(value) = self.extra.borrow().get(key) {
             Some(value.clone())
         } else {
-            self.storage.get_str(key)?
+            self.reader.get_str(key)?
         })
     }
 
     fn contains_str(&self, key: &StrHash) -> Result<bool, EvaluationError> {
-        Ok(self.extra.borrow().contains_key(key) || self.storage.contains_str(key)?)
+        Ok(self.extra.borrow().contains_key(key) || self.reader.contains_str(key)?)
     }
 }
 

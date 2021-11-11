@@ -10,12 +10,14 @@ use libc::{self, c_char, c_int, c_uchar, c_void, free, size_t};
 use oxrocksdb_sys::*;
 use rand::random;
 use std::borrow::Borrow;
+use std::cell::Cell;
 use std::env::temp_dir;
 use std::ffi::{CStr, CString};
 use std::io::{Error, ErrorKind, Result};
 use std::iter::Zip;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::Arc;
 use std::{ptr, slice};
 
@@ -58,7 +60,8 @@ unsafe impl Sync for Db {}
 struct DbHandler {
     db: *mut rocksdb_transactiondb_t,
     options: *mut rocksdb_options_t,
-    txn_options: *mut rocksdb_transactiondb_options_t,
+    transaction_options: *mut rocksdb_transaction_options_t,
+    transactiondb_options: *mut rocksdb_transactiondb_options_t,
     read_options: *mut rocksdb_readoptions_t,
     write_options: *mut rocksdb_writeoptions_t,
     flush_options: *mut rocksdb_flushoptions_t,
@@ -90,7 +93,8 @@ impl Drop for DbHandler {
             rocksdb_envoptions_destroy(self.env_options);
             rocksdb_ingestexternalfileoptions_destroy(self.ingest_external_file_options);
             rocksdb_compactoptions_destroy(self.compaction_options);
-            rocksdb_transactiondb_options_destroy(self.txn_options);
+            rocksdb_transaction_options_destroy(self.transaction_options);
+            rocksdb_transactiondb_options_destroy(self.transactiondb_options);
             rocksdb_options_destroy(self.options);
             rocksdb_block_based_options_destroy(self.block_based_table_options);
             if let Some(env) = self.env {
@@ -177,9 +181,9 @@ impl Db {
             );
             rocksdb_options_set_block_based_table_factory(options, block_based_table_options);
 
-            let txn_options = rocksdb_transactiondb_options_create();
+            let transactiondb_options = rocksdb_transactiondb_options_create();
             assert!(
-                !txn_options.is_null(),
+                !transactiondb_options.is_null(),
                 "rocksdb_transactiondb_options_create returned null"
             );
 
@@ -187,7 +191,7 @@ impl Db {
                 let env = rocksdb_create_mem_env();
                 if env.is_null() {
                     rocksdb_options_destroy(options);
-                    rocksdb_transactiondb_options_destroy(txn_options);
+                    rocksdb_transactiondb_options_destroy(transactiondb_options);
                     return Err(other_error("Not able to create an in-memory environment."));
                 }
                 rocksdb_options_set_env(options, env);
@@ -263,7 +267,7 @@ impl Db {
                 vec![ptr::null_mut(); column_family_names.len()];
             let db = ffi_result!(rocksdb_transactiondb_open_column_families(
                 options,
-                txn_options,
+                transactiondb_options,
                 c_path.as_ptr(),
                 c_column_families.len().try_into().unwrap(),
                 c_column_families
@@ -323,10 +327,18 @@ impl Db {
                 "rocksdb_compactoptions_create returned null"
             );
 
+            let transaction_options = rocksdb_transaction_options_create();
+            assert!(
+                !transaction_options.is_null(),
+                "rocksdb_transaction_options_create returned null"
+            );
+            rocksdb_transaction_options_set_set_snapshot(transaction_options, 1);
+
             Ok(DbHandler {
                 db,
                 options,
-                txn_options,
+                transaction_options,
+                transactiondb_options,
                 read_options,
                 write_options,
                 flush_options,
@@ -353,6 +365,65 @@ impl Db {
         None
     }
 
+    /// Unsafe reader (data might appear and disapear between two reads)
+    /// Use [`snapshot`] if you don't want that.
+    #[must_use]
+    pub fn reader(&self) -> Reader {
+        Reader {
+            inner: InnerReader::Raw(self.0.clone()),
+            options: unsafe { rocksdb_readoptions_create_copy(self.0.read_options) },
+        }
+    }
+
+    #[must_use]
+    pub fn snapshot(&self) -> Reader {
+        unsafe {
+            let snapshot = rocksdb_transactiondb_create_snapshot(self.0.db);
+            assert!(
+                !snapshot.is_null(),
+                "rocksdb_transactiondb_create_snapshot returned null"
+            );
+            let options = rocksdb_readoptions_create_copy(self.0.read_options);
+            rocksdb_readoptions_set_snapshot(options, snapshot);
+            Reader {
+                inner: InnerReader::Snapshot(Rc::new(InnerSnapshot {
+                    db: self.0.clone(),
+                    snapshot,
+                })),
+                options,
+            }
+        }
+    }
+
+    #[must_use]
+    pub fn transaction(&self) -> Transaction {
+        unsafe {
+            let transaction = rocksdb_transaction_begin(
+                self.0.db,
+                self.0.write_options,
+                self.0.transaction_options,
+                ptr::null_mut(),
+            );
+            assert!(
+                !transaction.is_null(),
+                "rocksdb_transaction_begin returned null"
+            );
+            let options = rocksdb_readoptions_create_copy(self.0.read_options);
+            rocksdb_readoptions_set_snapshot(
+                options,
+                rocksdb_transaction_get_snapshot(transaction),
+            );
+            Transaction {
+                inner: Rc::new(InnerTransaction {
+                    transaction,
+                    is_ended: Cell::new(false),
+                    _db: self.0.clone(),
+                }),
+                read_options: options,
+            }
+        }
+    }
+
     pub fn flush(&self, column_family: &ColumnFamily) -> Result<()> {
         unsafe {
             ffi_result!(rocksdb_transactiondb_flush_cf(
@@ -376,122 +447,6 @@ impl Db {
                 0,
             ))
         }
-    }
-
-    pub fn get(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<Option<PinnableSlice>> {
-        unsafe {
-            let slice = ffi_result!(rocksdb_transactiondb_get_pinned_cf(
-                self.0.db,
-                self.0.read_options,
-                column_family.0,
-                key.as_ptr() as *const c_char,
-                key.len()
-            ))?;
-            Ok(if slice.is_null() {
-                None
-            } else {
-                Some(PinnableSlice(slice))
-            })
-        }
-    }
-
-    pub fn contains_key(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<bool> {
-        Ok(self.get(column_family, key)?.is_some()) //TODO: optimize
-    }
-
-    pub fn new_batch(&self) -> WriteBatchWithIndex {
-        unsafe {
-            let batch = rocksdb_writebatch_wi_create(0, 0);
-            assert!(!batch.is_null(), "rocksdb_writebatch_create returned null");
-            WriteBatchWithIndex {
-                batch,
-                db: self.clone(),
-            }
-        }
-    }
-
-    pub fn write(&self, batch: &mut WriteBatchWithIndex) -> Result<()> {
-        unsafe {
-            ffi_result!(rocksdb_transactiondb_write_writebatch_wi(
-                self.0.db,
-                self.0.write_options,
-                batch.batch
-            ))
-        }?;
-        batch.clear();
-        Ok(())
-    }
-
-    pub fn iter(&self, column_family: &ColumnFamily) -> Iter {
-        self.scan_prefix(column_family, &[])
-    }
-
-    pub fn scan_prefix(&self, column_family: &ColumnFamily, prefix: &[u8]) -> Iter {
-        //We generate the upper bound
-        let upper_bound = {
-            let mut bound = prefix.to_vec();
-            let mut found = false;
-            for c in bound.iter_mut().rev() {
-                if *c < u8::MAX {
-                    *c += 1;
-                    found = true;
-                    break;
-                }
-            }
-            if found {
-                Some(bound)
-            } else {
-                None
-            }
-        };
-
-        unsafe {
-            let options = rocksdb_readoptions_create();
-            assert!(
-                !options.is_null(),
-                "rocksdb_readoptions_create returned null"
-            );
-            if let Some(upper_bound) = &upper_bound {
-                rocksdb_readoptions_set_iterate_upper_bound(
-                    options,
-                    upper_bound.as_ptr() as *const c_char,
-                    upper_bound.len(),
-                );
-            }
-            let iter =
-                rocksdb_transactiondb_create_iterator_cf(self.0.db, options, column_family.0);
-            assert!(!iter.is_null(), "rocksdb_create_iterator returned null");
-            if prefix.is_empty() {
-                rocksdb_iter_seek_to_first(iter);
-            } else {
-                rocksdb_iter_seek(iter, prefix.as_ptr() as *const c_char, prefix.len());
-            }
-            let is_currently_valid = rocksdb_iter_valid(iter) != 0;
-            Iter {
-                iter,
-                options,
-                _upper_bound: upper_bound,
-                _db: self.0.clone(),
-                is_currently_valid,
-            }
-        }
-    }
-
-    pub fn len(&self, column_family: &ColumnFamily) -> Result<usize> {
-        let mut count = 0;
-        let mut iter = self.iter(column_family);
-        while iter.is_valid() {
-            count += 1;
-            iter.next();
-        }
-        iter.status()?; // We makes sure there is no read problem
-        Ok(count)
-    }
-
-    pub fn is_empty(&self, column_family: &ColumnFamily) -> Result<bool> {
-        let iter = self.iter(column_family);
-        iter.status()?; // We makes sure there is no read problem
-        Ok(!iter.is_valid())
     }
 
     pub fn new_sst_file(&self) -> Result<SstFileWriter> {
@@ -530,77 +485,76 @@ pub struct ColumnFamily(*mut rocksdb_column_family_handle_t);
 unsafe impl Send for ColumnFamily {}
 unsafe impl Sync for ColumnFamily {}
 
-pub struct WriteBatchWithIndex {
-    batch: *mut rocksdb_writebatch_wi_t,
-    db: Db,
+pub struct Reader {
+    inner: InnerReader,
+    options: *mut rocksdb_readoptions_t,
 }
 
-impl Drop for WriteBatchWithIndex {
+#[derive(Clone)]
+enum InnerReader {
+    Raw(Arc<DbHandler>),
+    Snapshot(Rc<InnerSnapshot>),
+    Transaction(Rc<InnerTransaction>),
+}
+
+struct InnerSnapshot {
+    db: Arc<DbHandler>,
+    snapshot: *const rocksdb_snapshot_t,
+}
+
+impl Drop for InnerSnapshot {
     fn drop(&mut self) {
-        unsafe { rocksdb_writebatch_wi_destroy(self.batch) }
+        unsafe { rocksdb_transactiondb_release_snapshot(self.db.db, self.snapshot) }
     }
 }
 
-impl WriteBatchWithIndex {
-    pub fn insert(&mut self, column_family: &ColumnFamily, key: &[u8], value: &[u8]) {
-        unsafe {
-            rocksdb_writebatch_wi_put_cf(
-                self.batch,
-                column_family.0,
-                key.as_ptr() as *const c_char,
-                key.len(),
-                value.as_ptr() as *const c_char,
-                value.len(),
-            )
+impl Clone for Reader {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            options: unsafe { rocksdb_readoptions_create_copy(self.options) },
         }
     }
+}
 
-    pub fn insert_empty(&mut self, column_family: &ColumnFamily, key: &[u8]) {
-        self.insert(column_family, key, &[])
+impl Drop for Reader {
+    fn drop(&mut self) {
+        unsafe { rocksdb_readoptions_destroy(self.options) }
     }
+}
 
-    pub fn remove(&mut self, column_family: &ColumnFamily, key: &[u8]) {
+impl Reader {
+    pub fn get(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<Option<PinnableSlice>> {
         unsafe {
-            rocksdb_writebatch_wi_delete_cf(
-                self.batch,
-                column_family.0,
-                key.as_ptr() as *const c_char,
-                key.len(),
-            )
-        }
-    }
-
-    pub fn merge(&mut self, column_family: &ColumnFamily, key: &[u8], value: &[u8]) {
-        unsafe {
-            rocksdb_writebatch_wi_merge_cf(
-                self.batch,
-                column_family.0,
-                key.as_ptr() as *const c_char,
-                key.len(),
-                value.as_ptr() as *const c_char,
-                value.len(),
-            )
-        }
-    }
-
-    pub fn get(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<Option<Buffer>> {
-        unsafe {
-            let mut len = 0;
-            let base = ffi_result!(
-                rocksdb_transactiondb_writebatch_wi_get_from_batch_and_db_cf(
-                    self.batch,
-                    self.db.0.db,
-                    self.db.0.read_options,
+            let slice = match &self.inner {
+                InnerReader::Raw(inner) => ffi_result!(rocksdb_transactiondb_get_pinned_cf(
+                    inner.db,
+                    self.options,
                     column_family.0,
                     key.as_ptr() as *const c_char,
-                    key.len(),
-                    &mut len
-                )
-            )? as *mut u8;
-            Ok(if base.is_null() {
+                    key.len()
+                )),
+                InnerReader::Snapshot(inner) => ffi_result!(rocksdb_transactiondb_get_pinned_cf(
+                    inner.db.db,
+                    self.options,
+                    column_family.0,
+                    key.as_ptr() as *const c_char,
+                    key.len()
+                )),
+                InnerReader::Transaction(inner) => {
+                    ffi_result!(rocksdb_transaction_get_pinned_cf(
+                        inner.transaction,
+                        self.options,
+                        column_family.0,
+                        key.as_ptr() as *const c_char,
+                        key.len()
+                    ))
+                }
+            }?;
+            Ok(if slice.is_null() {
                 None
             } else {
-                Some(Buffer { base, len })
+                Some(PinnableSlice(slice))
             })
         }
     }
@@ -609,16 +563,204 @@ impl WriteBatchWithIndex {
         Ok(self.get(column_family, key)?.is_some()) //TODO: optimize
     }
 
-    pub fn clear(&mut self) {
+    #[must_use]
+    pub fn iter(&self, column_family: &ColumnFamily) -> Iter {
+        self.scan_prefix(column_family, &[])
+    }
+
+    #[must_use]
+    pub fn scan_prefix(&self, column_family: &ColumnFamily, prefix: &[u8]) -> Iter {
+        //We generate the upper bound
+        let upper_bound = {
+            let mut bound = prefix.to_vec();
+            let mut found = false;
+            for c in bound.iter_mut().rev() {
+                if *c < u8::MAX {
+                    *c += 1;
+                    found = true;
+                    break;
+                }
+            }
+            if found {
+                Some(bound)
+            } else {
+                None
+            }
+        };
+
         unsafe {
-            rocksdb_writebatch_wi_clear(self.batch);
+            let options = rocksdb_readoptions_create_copy(self.options);
+            assert!(
+                !options.is_null(),
+                "rocksdb_readoptions_create returned null"
+            );
+            if let Some(upper_bound) = &upper_bound {
+                rocksdb_readoptions_set_iterate_upper_bound(
+                    options,
+                    upper_bound.as_ptr() as *const c_char,
+                    upper_bound.len(),
+                );
+            }
+            let iter = match &self.inner {
+                InnerReader::Raw(inner) => {
+                    rocksdb_transactiondb_create_iterator_cf(inner.db, options, column_family.0)
+                }
+                InnerReader::Snapshot(inner) => {
+                    rocksdb_transactiondb_create_iterator_cf(inner.db.db, options, column_family.0)
+                }
+                InnerReader::Transaction(inner) => rocksdb_transaction_create_iterator_cf(
+                    inner.transaction,
+                    options,
+                    column_family.0,
+                ),
+            };
+            assert!(!iter.is_null(), "rocksdb_create_iterator returned null");
+            if prefix.is_empty() {
+                rocksdb_iter_seek_to_first(iter);
+            } else {
+                rocksdb_iter_seek(iter, prefix.as_ptr() as *const c_char, prefix.len());
+            }
+            let is_currently_valid = rocksdb_iter_valid(iter) != 0;
+            Iter {
+                iter,
+                options,
+                _upper_bound: upper_bound,
+                _reader: self.clone(),
+                is_currently_valid,
+            }
         }
     }
 
-    pub fn len(&self) -> usize {
-        unsafe { rocksdb_writebatch_wi_count(self.batch) }
-            .try_into()
-            .unwrap()
+    pub fn len(&self, column_family: &ColumnFamily) -> Result<usize> {
+        let mut count = 0;
+        let mut iter = self.iter(column_family);
+        while iter.is_valid() {
+            count += 1;
+            iter.next();
+        }
+        iter.status()?; // We makes sure there is no read problem
+        Ok(count)
+    }
+
+    pub fn is_empty(&self, column_family: &ColumnFamily) -> Result<bool> {
+        let iter = self.iter(column_family);
+        iter.status()?; // We makes sure there is no read problem
+        Ok(!iter.is_valid())
+    }
+}
+
+pub struct Transaction {
+    inner: Rc<InnerTransaction>,
+    read_options: *mut rocksdb_readoptions_t,
+}
+
+struct InnerTransaction {
+    transaction: *mut rocksdb_transaction_t,
+    is_ended: Cell<bool>,
+    _db: Arc<DbHandler>, // Used to ensure that the transaction is not outliving the DB
+}
+
+impl Drop for Transaction {
+    fn drop(&mut self) {
+        unsafe { rocksdb_readoptions_destroy(self.read_options) }
+    }
+}
+
+impl Drop for InnerTransaction {
+    fn drop(&mut self) {
+        if !self.is_ended.get() {
+            unsafe { ffi_result!(rocksdb_transaction_rollback(self.transaction)) }.unwrap();
+        }
+        unsafe { rocksdb_transaction_destroy(self.transaction) }
+    }
+}
+
+impl Transaction {
+    pub fn commit(self) -> Result<()> {
+        self.inner.is_ended.set(true);
+        unsafe { ffi_result!(rocksdb_transaction_commit(self.inner.transaction)) }
+    }
+
+    pub fn rollback(self) -> Result<()> {
+        self.inner.is_ended.set(true);
+        unsafe { ffi_result!(rocksdb_transaction_rollback(self.inner.transaction)) }
+    }
+
+    pub fn reader(&self) -> Reader {
+        Reader {
+            inner: InnerReader::Transaction(self.inner.clone()),
+            options: unsafe { rocksdb_readoptions_create_copy(self.read_options) },
+        }
+    }
+
+    pub fn get_for_update(
+        &self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+    ) -> Result<Option<PinnableSlice>> {
+        unsafe {
+            let slice = ffi_result!(rocksdb_transaction_get_for_update_pinned_cf(
+                self.inner.transaction,
+                self.read_options,
+                column_family.0,
+                key.as_ptr() as *const c_char,
+                key.len()
+            ))?;
+            Ok(if slice.is_null() {
+                None
+            } else {
+                Some(PinnableSlice(slice))
+            })
+        }
+    }
+
+    pub fn contains_key_for_update(
+        &self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+    ) -> Result<bool> {
+        Ok(self.get_for_update(column_family, key)?.is_some()) //TODO: optimize
+    }
+
+    pub fn insert(&mut self, column_family: &ColumnFamily, key: &[u8], value: &[u8]) -> Result<()> {
+        unsafe {
+            ffi_result!(rocksdb_transaction_put_cf(
+                self.inner.transaction,
+                column_family.0,
+                key.as_ptr() as *const c_char,
+                key.len(),
+                value.as_ptr() as *const c_char,
+                value.len(),
+            ))
+        }
+    }
+
+    pub fn insert_empty(&mut self, column_family: &ColumnFamily, key: &[u8]) -> Result<()> {
+        self.insert(column_family, key, &[])
+    }
+
+    pub fn remove(&mut self, column_family: &ColumnFamily, key: &[u8]) -> Result<()> {
+        unsafe {
+            ffi_result!(rocksdb_transaction_delete_cf(
+                self.inner.transaction,
+                column_family.0,
+                key.as_ptr() as *const c_char,
+                key.len(),
+            ))
+        }
+    }
+
+    pub fn merge(&mut self, column_family: &ColumnFamily, key: &[u8], value: &[u8]) -> Result<()> {
+        unsafe {
+            ffi_result!(rocksdb_transaction_merge_cf(
+                self.inner.transaction,
+                column_family.0,
+                key.as_ptr() as *const c_char,
+                key.len(),
+                value.as_ptr() as *const c_char,
+                value.len(),
+            ))
+        }
     }
 }
 
@@ -693,7 +835,7 @@ pub struct Iter {
     iter: *mut rocksdb_iterator_t,
     is_currently_valid: bool,
     _upper_bound: Option<Vec<u8>>,
-    _db: Arc<DbHandler>, // needed to ensure that DB still lives while iter is used
+    _reader: Reader, // needed to ensure that DB still lives while iter is used
     options: *mut rocksdb_readoptions_t, // needed to ensure that options still lives while iter is used
 }
 
