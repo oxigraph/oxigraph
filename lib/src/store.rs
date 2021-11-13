@@ -23,7 +23,8 @@
 //! };
 //! # Result::<_,Box<dyn std::error::Error>>::Ok(())
 //! ```
-use crate::io::{DatasetFormat, GraphFormat};
+use crate::error::invalid_input_error;
+use crate::io::{DatasetFormat, DatasetParser, GraphFormat};
 use crate::model::*;
 use crate::sparql::{
     evaluate_query, evaluate_update, EvaluationError, Query, QueryOptions, QueryResults, Update,
@@ -31,6 +32,8 @@ use crate::sparql::{
 };
 use crate::storage::io::{dump_dataset, dump_graph, load_dataset, load_graph};
 use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::storage::BulkLoader;
 use crate::storage::{ChainedDecodingQuadIterator, DecodingGraphIterator, Storage};
 use std::io::{BufRead, Write};
 #[cfg(not(target_arch = "wasm32"))]
@@ -574,8 +577,9 @@ impl Store {
 
     /// Creates a store efficiently from a dataset file.
     ///
-    /// Warning: This functions is optimized for performances and saves the triples in a not atomic way.
-    /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
+    /// Warning: This function is optimized for speed and might eat a lot of memory.
+    ///
+    /// Warning: If the parsing fails in the middle of the file, only a part of it may be written to the store.
     ///
     /// Usage example:
     /// ```
@@ -606,14 +610,13 @@ impl Store {
         format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> io::Result<()> {
-        let storage = Storage::open(path, false)?;
-        {
-            let mut writer = storage.simple_writer();
-            load_dataset(&mut writer, reader, format, base_iri)?;
-            writer.commit()?;
+        let mut parser = DatasetParser::from_format(format);
+        if let Some(base_iri) = base_iri {
+            parser = parser
+                .with_base_iri(base_iri)
+                .map_err(invalid_input_error)?;
         }
-        storage.flush()?;
-        storage.compact()
+        BulkLoader::new(path)?.load(parser.read_quads(reader)?)
     }
 }
 

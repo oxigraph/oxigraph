@@ -11,34 +11,64 @@ use std::io::{BufRead, BufReader, Cursor, Read};
 use std::path::{Path, PathBuf};
 
 fn store_load(c: &mut Criterion) {
-    let mut data = Vec::new();
-    read_data("explore-1000.nt.zst")
-        .read_to_end(&mut data)
-        .unwrap();
+    {
+        let mut data = Vec::new();
+        read_data("explore-1000.nt.zst")
+            .read_to_end(&mut data)
+            .unwrap();
 
-    let mut group = c.benchmark_group("store load");
-    group.throughput(Throughput::Bytes(data.len() as u64));
-    group.sample_size(10);
-    group.bench_function("load BSBM explore 1000 in memory", |b| {
-        b.iter(|| {
-            let store = Store::new().unwrap();
-            do_load(&store, &data);
-        })
-    });
-    group.bench_function("load BSBM explore 1000 in on disk", |b| {
-        b.iter(|| {
-            let path = TempDir::default();
-            let store = Store::open(&path.0).unwrap();
-            do_load(&store, &data);
-        })
-    });
-    group.bench_function("load BSBM explore 1000 in on disk with bulk load", |b| {
-        b.iter(|| {
-            let path = TempDir::default();
-            Store::create_from_dataset(&path.0, Cursor::new(&data), DatasetFormat::NQuads, None)
+        let mut group = c.benchmark_group("store load");
+        group.throughput(Throughput::Bytes(data.len() as u64));
+        group.sample_size(10);
+        group.bench_function("load BSBM explore 1000 in memory", |b| {
+            b.iter(|| {
+                let store = Store::new().unwrap();
+                do_load(&store, &data);
+            })
+        });
+        group.bench_function("load BSBM explore 1000 in on disk", |b| {
+            b.iter(|| {
+                let path = TempDir::default();
+                let store = Store::open(&path.0).unwrap();
+                do_load(&store, &data);
+            })
+        });
+        group.bench_function("load BSBM explore 1000 in on disk with bulk load", |b| {
+            b.iter(|| {
+                let path = TempDir::default();
+                Store::create_from_dataset(
+                    &path.0,
+                    Cursor::new(&data),
+                    DatasetFormat::NQuads,
+                    None,
+                )
                 .unwrap();
-        })
-    });
+            })
+        });
+    }
+
+    {
+        let mut data = Vec::new();
+        read_data("explore-10000.nt.zst")
+            .read_to_end(&mut data)
+            .unwrap();
+
+        let mut group = c.benchmark_group("store load large");
+        group.throughput(Throughput::Bytes(data.len() as u64));
+        group.sample_size(10);
+        group.bench_function("load BSBM explore 10000 in on disk with bulk load", |b| {
+            b.iter(|| {
+                let path = TempDir::default();
+                Store::create_from_dataset(
+                    &path.0,
+                    Cursor::new(&data),
+                    DatasetFormat::NQuads,
+                    None,
+                )
+                .unwrap();
+            })
+        });
+    }
 }
 
 fn do_load(store: &Store, data: &[u8]) {

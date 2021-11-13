@@ -8,13 +8,14 @@ use crate::error::invalid_input_error;
 use crate::storage::backend::{CompactionAction, CompactionFilter};
 use libc::{self, c_char, c_int, c_uchar, c_void, free, size_t};
 use oxrocksdb_sys::*;
+use rand::random;
 use std::borrow::Borrow;
 use std::env::temp_dir;
 use std::ffi::{CStr, CString};
 use std::io::{Error, ErrorKind, Result};
 use std::iter::Zip;
 use std::ops::Deref;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{ptr, slice};
 
@@ -60,6 +61,8 @@ struct DbHandler {
     read_options: *mut rocksdb_readoptions_t,
     write_options: *mut rocksdb_writeoptions_t,
     flush_options: *mut rocksdb_flushoptions_t,
+    env_options: *mut rocksdb_envoptions_t,
+    ingest_external_file_options: *mut rocksdb_ingestexternalfileoptions_t,
     compaction_options: *mut rocksdb_compactoptions_t,
     block_based_table_options: *mut rocksdb_block_based_table_options_t,
     env: Option<*mut rocksdb_env_t>,
@@ -67,6 +70,7 @@ struct DbHandler {
     cf_handles: Vec<*mut rocksdb_column_family_handle_t>,
     cf_options: Vec<*mut rocksdb_options_t>,
     cf_compaction_filters: Vec<*mut rocksdb_compactionfilter_t>,
+    path: PathBuf,
 }
 
 impl Drop for DbHandler {
@@ -82,6 +86,8 @@ impl Drop for DbHandler {
             rocksdb_readoptions_destroy(self.read_options);
             rocksdb_writeoptions_destroy(self.write_options);
             rocksdb_flushoptions_destroy(self.flush_options);
+            rocksdb_envoptions_destroy(self.env_options);
+            rocksdb_ingestexternalfileoptions_destroy(self.ingest_external_file_options);
             rocksdb_compactoptions_destroy(self.compaction_options);
             rocksdb_options_destroy(self.options);
             rocksdb_block_based_options_destroy(self.block_based_table_options);
@@ -159,6 +165,7 @@ impl Db {
             );
             if for_bulk_load {
                 rocksdb_options_prepare_for_bulk_load(options);
+                rocksdb_options_set_error_if_exists(options, 1);
             }
             let block_based_table_options = rocksdb_block_based_options_create();
             assert!(
@@ -292,6 +299,18 @@ impl Db {
                 "rocksdb_flushoptions_create returned null"
             );
 
+            let env_options = rocksdb_envoptions_create();
+            assert!(
+                !env_options.is_null(),
+                "rocksdb_envoptions_create returned null"
+            );
+
+            let ingest_external_file_options = rocksdb_ingestexternalfileoptions_create();
+            assert!(
+                !ingest_external_file_options.is_null(),
+                "rocksdb_ingestexternalfileoptions_create returned null"
+            );
+
             let compaction_options = rocksdb_compactoptions_create();
             assert!(
                 !compaction_options.is_null(),
@@ -304,6 +323,8 @@ impl Db {
                 read_options,
                 write_options,
                 flush_options,
+                env_options,
+                ingest_external_file_options,
                 compaction_options,
                 block_based_table_options,
                 env,
@@ -311,6 +332,7 @@ impl Db {
                 cf_handles,
                 cf_options,
                 cf_compaction_filters,
+                path: path.to_path_buf(),
             })
         }
     }
@@ -463,6 +485,41 @@ impl Db {
         let iter = self.iter(column_family);
         iter.status()?; // We makes sure there is no read problem
         Ok(!iter.is_valid())
+    }
+
+    pub fn new_sst_file(&self) -> Result<SstFileWriter> {
+        unsafe {
+            let writer = rocksdb_sstfilewriter_create(self.0.env_options, self.0.options);
+            let cpath = CString::new(
+                self.0
+                    .path
+                    .join(random::<u128>().to_string())
+                    .to_string_lossy()
+                    .to_string(),
+            )
+            .map_err(invalid_input_error)?;
+            ffi_result!(rocksdb_sstfilewriter_open(writer, cpath.as_ptr()))?;
+            Ok(SstFileWriter { writer, cpath })
+        }
+    }
+
+    pub fn write_stt_files(
+        &self,
+        writers_with_cf: Vec<(&ColumnFamily, SstFileWriter)>,
+    ) -> Result<()> {
+        for (cf, writer) in writers_with_cf {
+            unsafe {
+                ffi_result!(rocksdb_sstfilewriter_finish(writer.writer))?;
+                ffi_result!(rocksdb_ingest_external_file_cf(
+                    self.0.db,
+                    cf.0,
+                    &writer.cpath.as_ptr(),
+                    1,
+                    self.0.ingest_external_file_options
+                ))?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -688,6 +745,49 @@ impl Iter {
             }
         } else {
             None
+        }
+    }
+}
+
+pub struct SstFileWriter {
+    writer: *mut rocksdb_sstfilewriter_t,
+    cpath: CString,
+}
+
+impl Drop for SstFileWriter {
+    fn drop(&mut self) {
+        unsafe {
+            rocksdb_sstfilewriter_destroy(self.writer);
+        }
+    }
+}
+
+impl SstFileWriter {
+    pub fn insert(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
+        unsafe {
+            ffi_result!(rocksdb_sstfilewriter_put(
+                self.writer,
+                key.as_ptr() as *const c_char,
+                key.len(),
+                value.as_ptr() as *const c_char,
+                value.len(),
+            ))
+        }
+    }
+
+    pub fn insert_empty(&mut self, key: &[u8]) -> Result<()> {
+        self.insert(key, &[])
+    }
+
+    pub fn merge(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
+        unsafe {
+            ffi_result!(rocksdb_sstfilewriter_merge(
+                self.writer,
+                key.as_ptr() as *const c_char,
+                key.len(),
+                value.as_ptr() as *const c_char,
+                value.len(),
+            ))
         }
     }
 }

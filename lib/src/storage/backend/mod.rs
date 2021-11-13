@@ -7,7 +7,8 @@ pub use fallback::{
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use rocksdb::{
-    ColumnFamily, ColumnFamilyDefinition, Db, Iter, MergeOperator, WriteBatchWithIndex,
+    ColumnFamily, ColumnFamilyDefinition, Db, Iter, MergeOperator, SstFileWriter,
+    WriteBatchWithIndex,
 };
 use std::ffi::CString;
 

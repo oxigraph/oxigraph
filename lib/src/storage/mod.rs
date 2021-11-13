@@ -1,5 +1,5 @@
 use crate::error::invalid_data_error;
-use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef, TermRef};
+use crate::model::{GraphNameRef, NamedOrBlankNodeRef, Quad, QuadRef, TermRef};
 use crate::storage::binary_encoder::{
     decode_term, encode_term, encode_term_pair, encode_term_quad, encode_term_triple,
     write_gosp_quad, write_gpos_quad, write_gspo_quad, write_osp_quad, write_ospg_quad,
@@ -9,12 +9,18 @@ use crate::storage::binary_encoder::{
 use crate::storage::numeric_encoder::{
     insert_term, remove_term, EncodedQuad, EncodedTerm, StrHash, StrLookup,
 };
+#[cfg(not(target_arch = "wasm32"))]
+use backend::SstFileWriter;
 use backend::{
     ColumnFamily, ColumnFamilyDefinition, CompactionAction, CompactionFilter, Db, Iter,
     MergeOperator, WriteBatchWithIndex,
 };
+#[cfg(not(target_arch = "wasm32"))]
+use std::collections::{hash_map, HashMap, HashSet};
 use std::ffi::CString;
 use std::io::Result;
+#[cfg(not(target_arch = "wasm32"))]
+use std::mem::take;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
@@ -1030,6 +1036,218 @@ impl StorageWriter {
     pub fn commit(&mut self) -> Result<()> {
         self.storage.db.write(&mut self.batch)?;
         Ok(())
+    }
+}
+
+/// Creates a database from a dataset files.
+#[cfg(not(target_arch = "wasm32"))]
+pub struct BulkLoader {
+    storage: Storage,
+    id2str: HashMap<StrHash, (i32, Box<str>)>,
+    quads: HashSet<EncodedQuad>,
+    triples: HashSet<EncodedQuad>,
+    graphs: HashSet<EncodedTerm>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl BulkLoader {
+    pub fn new(path: &Path) -> Result<Self> {
+        Ok(Self {
+            storage: Storage::open(path, true)?, //TODO: remove bulk option
+            id2str: HashMap::default(),
+            quads: HashSet::default(),
+            triples: HashSet::default(),
+            graphs: HashSet::default(),
+        })
+    }
+
+    pub fn load(&mut self, quads: impl IntoIterator<Item = Result<Quad>>) -> Result<()> {
+        let mut count = 0;
+        for quad in quads {
+            let quad = quad?;
+            let encoded = EncodedQuad::from(quad.as_ref());
+            if quad.graph_name.is_default_graph() {
+                if self.triples.insert(encoded.clone()) {
+                    self.insert_term(quad.subject.as_ref().into(), &encoded.subject);
+                    self.insert_term(quad.predicate.as_ref().into(), &encoded.predicate);
+                    self.insert_term(quad.object.as_ref(), &encoded.object);
+                }
+            } else if self.quads.insert(encoded.clone()) {
+                self.insert_term(quad.subject.as_ref().into(), &encoded.subject);
+                self.insert_term(quad.predicate.as_ref().into(), &encoded.predicate);
+                self.insert_term(quad.object.as_ref(), &encoded.object);
+                if self.graphs.insert(encoded.graph_name.clone()) {
+                    self.insert_term(
+                        match quad.graph_name.as_ref() {
+                            GraphNameRef::NamedNode(n) => n.into(),
+                            GraphNameRef::BlankNode(n) => n.into(),
+                            GraphNameRef::DefaultGraph => unreachable!(),
+                        },
+                        &encoded.graph_name,
+                    );
+                }
+            }
+            count += 1;
+            if count % (1024 * 1024) == 0 {
+                self.save()?;
+            }
+        }
+        self.save()?;
+        self.storage.compact()
+    }
+
+    fn save(&mut self) -> Result<()> {
+        let mut to_load = Vec::new();
+
+        // id2str
+        if !self.id2str.is_empty() {
+            let mut id2str = take(&mut self.id2str)
+                .into_iter()
+                .map(|(k, v)| (k.to_be_bytes(), v))
+                .collect::<Vec<_>>();
+            id2str.sort();
+            let mut id2str_sst = self.storage.db.new_sst_file()?;
+            let mut buffer = Vec::new();
+            for (k, (count, v)) in id2str {
+                buffer.extend_from_slice(&count.to_be_bytes());
+                buffer.extend_from_slice(v.as_bytes());
+                id2str_sst.merge(&k, &buffer)?;
+                buffer.clear();
+            }
+            to_load.push((&self.storage.id2str_cf, id2str_sst));
+        }
+
+        if !self.triples.is_empty() {
+            to_load.push((
+                &self.storage.dspo_cf,
+                self.add_keys_to_sst(
+                    self.triples.iter().map(|quad| {
+                        encode_term_triple(&quad.subject, &quad.predicate, &quad.object)
+                    }),
+                )?,
+            ));
+            to_load.push((
+                &self.storage.dpos_cf,
+                self.add_keys_to_sst(
+                    self.triples.iter().map(|quad| {
+                        encode_term_triple(&quad.predicate, &quad.object, &quad.subject)
+                    }),
+                )?,
+            ));
+            to_load.push((
+                &self.storage.dosp_cf,
+                self.add_keys_to_sst(
+                    self.triples.iter().map(|quad| {
+                        encode_term_triple(&quad.object, &quad.subject, &quad.predicate)
+                    }),
+                )?,
+            ));
+            self.triples.clear();
+        }
+
+        if !self.quads.is_empty() {
+            let quads = take(&mut self.graphs);
+            to_load.push((
+                &self.storage.graphs_cf,
+                self.add_keys_to_sst(quads.into_iter().map(|g| encode_term(&g)))?,
+            ));
+
+            to_load.push((
+                &self.storage.gspo_cf,
+                self.add_keys_to_sst(self.quads.iter().map(|quad| {
+                    encode_term_quad(
+                        &quad.graph_name,
+                        &quad.subject,
+                        &quad.predicate,
+                        &quad.object,
+                    )
+                }))?,
+            ));
+            to_load.push((
+                &self.storage.gpos_cf,
+                self.add_keys_to_sst(self.quads.iter().map(|quad| {
+                    encode_term_quad(
+                        &quad.graph_name,
+                        &quad.object,
+                        &quad.subject,
+                        &quad.predicate,
+                    )
+                }))?,
+            ));
+            to_load.push((
+                &self.storage.gosp_cf,
+                self.add_keys_to_sst(self.quads.iter().map(|quad| {
+                    encode_term_quad(
+                        &quad.graph_name,
+                        &quad.object,
+                        &quad.subject,
+                        &quad.predicate,
+                    )
+                }))?,
+            ));
+            to_load.push((
+                &self.storage.spog_cf,
+                self.add_keys_to_sst(self.quads.iter().map(|quad| {
+                    encode_term_quad(
+                        &quad.subject,
+                        &quad.predicate,
+                        &quad.object,
+                        &quad.graph_name,
+                    )
+                }))?,
+            ));
+            to_load.push((
+                &self.storage.posg_cf,
+                self.add_keys_to_sst(self.quads.iter().map(|quad| {
+                    encode_term_quad(
+                        &quad.object,
+                        &quad.subject,
+                        &quad.predicate,
+                        &quad.graph_name,
+                    )
+                }))?,
+            ));
+            to_load.push((
+                &self.storage.ospg_cf,
+                self.add_keys_to_sst(self.quads.iter().map(|quad| {
+                    encode_term_quad(
+                        &quad.object,
+                        &quad.subject,
+                        &quad.predicate,
+                        &quad.graph_name,
+                    )
+                }))?,
+            ));
+            self.quads.clear();
+        }
+
+        self.storage.db.write_stt_files(to_load)
+    }
+
+    fn insert_term(&mut self, term: TermRef<'_>, encoded: &EncodedTerm) {
+        insert_term(
+            term,
+            encoded,
+            &mut |key, value| match self.id2str.entry(*key) {
+                hash_map::Entry::Occupied(mut e) => {
+                    let e = e.get_mut();
+                    e.0 = e.0.wrapping_add(1);
+                }
+                hash_map::Entry::Vacant(e) => {
+                    e.insert((1, value.into()));
+                }
+            },
+        )
+    }
+
+    fn add_keys_to_sst(&self, values: impl Iterator<Item = Vec<u8>>) -> Result<SstFileWriter> {
+        let mut values = values.collect::<Vec<_>>();
+        values.sort_unstable();
+        let mut sst = self.storage.db.new_sst_file()?;
+        for t in values {
+            sst.insert_empty(&t)?;
+        }
+        Ok(sst)
     }
 }
 
