@@ -9,8 +9,6 @@ use crate::storage::binary_encoder::{
 use crate::storage::numeric_encoder::{
     insert_term, remove_term, EncodedQuad, EncodedTerm, StrHash, StrLookup,
 };
-#[cfg(not(target_arch = "wasm32"))]
-use backend::SstFileWriter;
 use backend::{
     ColumnFamily, ColumnFamilyDefinition, CompactionAction, CompactionFilter, Db, Iter,
     MergeOperator, WriteBatchWithIndex,
@@ -23,6 +21,7 @@ use std::io::Result;
 use std::mem::take;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
+use std::path::PathBuf;
 
 mod backend;
 mod binary_encoder;
@@ -1114,13 +1113,13 @@ impl BulkLoader {
                 id2str_sst.merge(&k, &buffer)?;
                 buffer.clear();
             }
-            to_load.push((&self.storage.id2str_cf, id2str_sst));
+            to_load.push((&self.storage.id2str_cf, id2str_sst.finish()?));
         }
 
         if !self.triples.is_empty() {
             to_load.push((
                 &self.storage.dspo_cf,
-                self.add_keys_to_sst(
+                self.build_sst_for_keys(
                     self.triples.iter().map(|quad| {
                         encode_term_triple(&quad.subject, &quad.predicate, &quad.object)
                     }),
@@ -1128,7 +1127,7 @@ impl BulkLoader {
             ));
             to_load.push((
                 &self.storage.dpos_cf,
-                self.add_keys_to_sst(
+                self.build_sst_for_keys(
                     self.triples.iter().map(|quad| {
                         encode_term_triple(&quad.predicate, &quad.object, &quad.subject)
                     }),
@@ -1136,7 +1135,7 @@ impl BulkLoader {
             ));
             to_load.push((
                 &self.storage.dosp_cf,
-                self.add_keys_to_sst(
+                self.build_sst_for_keys(
                     self.triples.iter().map(|quad| {
                         encode_term_triple(&quad.object, &quad.subject, &quad.predicate)
                     }),
@@ -1149,12 +1148,12 @@ impl BulkLoader {
             let quads = take(&mut self.graphs);
             to_load.push((
                 &self.storage.graphs_cf,
-                self.add_keys_to_sst(quads.into_iter().map(|g| encode_term(&g)))?,
+                self.build_sst_for_keys(quads.into_iter().map(|g| encode_term(&g)))?,
             ));
 
             to_load.push((
                 &self.storage.gspo_cf,
-                self.add_keys_to_sst(self.quads.iter().map(|quad| {
+                self.build_sst_for_keys(self.quads.iter().map(|quad| {
                     encode_term_quad(
                         &quad.graph_name,
                         &quad.subject,
@@ -1165,7 +1164,7 @@ impl BulkLoader {
             ));
             to_load.push((
                 &self.storage.gpos_cf,
-                self.add_keys_to_sst(self.quads.iter().map(|quad| {
+                self.build_sst_for_keys(self.quads.iter().map(|quad| {
                     encode_term_quad(
                         &quad.graph_name,
                         &quad.object,
@@ -1176,7 +1175,7 @@ impl BulkLoader {
             ));
             to_load.push((
                 &self.storage.gosp_cf,
-                self.add_keys_to_sst(self.quads.iter().map(|quad| {
+                self.build_sst_for_keys(self.quads.iter().map(|quad| {
                     encode_term_quad(
                         &quad.graph_name,
                         &quad.object,
@@ -1187,7 +1186,7 @@ impl BulkLoader {
             ));
             to_load.push((
                 &self.storage.spog_cf,
-                self.add_keys_to_sst(self.quads.iter().map(|quad| {
+                self.build_sst_for_keys(self.quads.iter().map(|quad| {
                     encode_term_quad(
                         &quad.subject,
                         &quad.predicate,
@@ -1198,7 +1197,7 @@ impl BulkLoader {
             ));
             to_load.push((
                 &self.storage.posg_cf,
-                self.add_keys_to_sst(self.quads.iter().map(|quad| {
+                self.build_sst_for_keys(self.quads.iter().map(|quad| {
                     encode_term_quad(
                         &quad.object,
                         &quad.subject,
@@ -1209,7 +1208,7 @@ impl BulkLoader {
             ));
             to_load.push((
                 &self.storage.ospg_cf,
-                self.add_keys_to_sst(self.quads.iter().map(|quad| {
+                self.build_sst_for_keys(self.quads.iter().map(|quad| {
                     encode_term_quad(
                         &quad.object,
                         &quad.subject,
@@ -1240,14 +1239,14 @@ impl BulkLoader {
         )
     }
 
-    fn add_keys_to_sst(&self, values: impl Iterator<Item = Vec<u8>>) -> Result<SstFileWriter> {
+    fn build_sst_for_keys(&self, values: impl Iterator<Item = Vec<u8>>) -> Result<PathBuf> {
         let mut values = values.collect::<Vec<_>>();
         values.sort_unstable();
         let mut sst = self.storage.db.new_sst_file()?;
         for t in values {
             sst.insert_empty(&t)?;
         }
-        Ok(sst)
+        sst.finish()
     }
 }
 

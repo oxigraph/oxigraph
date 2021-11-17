@@ -138,11 +138,7 @@ impl Db {
         in_memory: bool,
         for_bulk_load: bool,
     ) -> Result<DbHandler> {
-        let c_path = CString::new(
-            path.to_str()
-                .ok_or_else(|| invalid_input_error("The DB path is not valid UTF-8"))?,
-        )
-        .map_err(invalid_input_error)?;
+        let c_path = path_to_cstring(path)?;
 
         unsafe {
             let options = rocksdb_options_create();
@@ -500,31 +496,23 @@ impl Db {
 
     pub fn new_sst_file(&self) -> Result<SstFileWriter> {
         unsafe {
+            let path = self.0.path.join(random::<u128>().to_string());
             let writer = rocksdb_sstfilewriter_create(self.0.env_options, self.0.options);
-            let cpath = CString::new(
-                self.0
-                    .path
-                    .join(random::<u128>().to_string())
-                    .to_string_lossy()
-                    .to_string(),
-            )
-            .map_err(invalid_input_error)?;
-            ffi_result!(rocksdb_sstfilewriter_open(writer, cpath.as_ptr()))?;
-            Ok(SstFileWriter { writer, cpath })
+            ffi_result!(rocksdb_sstfilewriter_open(
+                writer,
+                path_to_cstring(&path)?.as_ptr()
+            ))?;
+            Ok(SstFileWriter { writer, path })
         }
     }
 
-    pub fn write_stt_files(
-        &self,
-        writers_with_cf: Vec<(&ColumnFamily, SstFileWriter)>,
-    ) -> Result<()> {
-        for (cf, writer) in writers_with_cf {
+    pub fn write_stt_files(&self, ssts_for_cf: Vec<(&ColumnFamily, PathBuf)>) -> Result<()> {
+        for (cf, path) in ssts_for_cf {
             unsafe {
-                ffi_result!(rocksdb_sstfilewriter_finish(writer.writer))?;
                 ffi_result!(rocksdb_transactiondb_ingest_external_file_cf(
                     self.0.db,
                     cf.0,
-                    &writer.cpath.as_ptr(),
+                    &path_to_cstring(&path)?.as_ptr(),
                     1,
                     self.0.ingest_external_file_options
                 ))?;
@@ -764,7 +752,7 @@ impl Iter {
 
 pub struct SstFileWriter {
     writer: *mut rocksdb_sstfilewriter_t,
-    cpath: CString,
+    path: PathBuf,
 }
 
 impl Drop for SstFileWriter {
@@ -802,6 +790,13 @@ impl SstFileWriter {
                 value.len(),
             ))
         }
+    }
+
+    pub fn finish(self) -> Result<PathBuf> {
+        unsafe {
+            ffi_result!(rocksdb_sstfilewriter_finish(self.writer))?;
+        }
+        Ok(self.path.clone())
     }
 }
 
@@ -949,4 +944,12 @@ unsafe extern "C" fn compactionfilter_filter(
 unsafe extern "C" fn compactionfilter_name(filter: *mut c_void) -> *const c_char {
     let filter = &*(filter as *const CompactionFilter);
     filter.name.as_ptr()
+}
+
+fn path_to_cstring(path: &Path) -> Result<CString> {
+    CString::new(
+        path.to_str()
+            .ok_or_else(|| invalid_input_error("The DB path is not valid UTF-8"))?,
+    )
+    .map_err(invalid_input_error)
 }
