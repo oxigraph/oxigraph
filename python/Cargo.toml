@@ -17,5 +17,5 @@ doctest = false
 
 [dependencies]
 oxigraph = {version = "0.2", path="../lib", features = ["sled", "http_client"]}
-pyo3 = {version = "0.14", features = ["extension-module", "abi3-py36"]}
+pyo3 = {version = "0.15", features = ["extension-module", "abi3-py36"]}
 native-tls = {version = "0.2", features = ["vendored"]}
