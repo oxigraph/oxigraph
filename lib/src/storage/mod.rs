@@ -244,7 +244,7 @@ impl Storage {
             let mut transaction = this.db.transaction();
             let reader = this.db.snapshot();
             let mut size = 0;
-            let mut iter = reader.iter(&this.id2str_cf);
+            let mut iter = reader.iter(&this.id2str_cf)?;
             while let (Some(key), Some(value)) = (iter.key(), iter.value()) {
                 let mut new_value = Vec::with_capacity(value.len() + 4);
                 new_value.extend_from_slice(&i32::MAX.to_be_bytes());
@@ -615,7 +615,7 @@ impl StorageReader {
 
     pub fn named_graphs(&self) -> DecodingGraphIterator {
         DecodingGraphIterator {
-            iter: self.reader.iter(&self.storage.graphs_cf),
+            iter: self.reader.iter(&self.storage.graphs_cf).unwrap(), //TODO: propagate error?
         }
     }
 
@@ -667,7 +667,7 @@ impl StorageReader {
         encoding: QuadEncoding,
     ) -> DecodingQuadIterator {
         DecodingQuadIterator {
-            iter: self.reader.scan_prefix(column_family, prefix),
+            iter: self.reader.scan_prefix(column_family, prefix).unwrap(), // TODO: propagate error?
             encoding,
         }
     }

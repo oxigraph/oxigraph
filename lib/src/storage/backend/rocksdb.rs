@@ -542,6 +542,9 @@ impl Reader {
                     key.len()
                 )),
                 InnerReader::Transaction(inner) => {
+                    if inner.is_ended.get() {
+                        return Err(invalid_input_error("The transaction is already ended"));
+                    }
                     ffi_result!(rocksdb_transaction_get_pinned_cf(
                         inner.transaction,
                         self.options,
@@ -564,12 +567,12 @@ impl Reader {
     }
 
     #[must_use]
-    pub fn iter(&self, column_family: &ColumnFamily) -> Iter {
+    pub fn iter(&self, column_family: &ColumnFamily) -> Result<Iter> {
         self.scan_prefix(column_family, &[])
     }
 
     #[must_use]
-    pub fn scan_prefix(&self, column_family: &ColumnFamily, prefix: &[u8]) -> Iter {
+    pub fn scan_prefix(&self, column_family: &ColumnFamily, prefix: &[u8]) -> Result<Iter> {
         //We generate the upper bound
         let upper_bound = {
             let mut bound = prefix.to_vec();
@@ -608,11 +611,16 @@ impl Reader {
                 InnerReader::Snapshot(inner) => {
                     rocksdb_transactiondb_create_iterator_cf(inner.db.db, options, column_family.0)
                 }
-                InnerReader::Transaction(inner) => rocksdb_transaction_create_iterator_cf(
-                    inner.transaction,
-                    options,
-                    column_family.0,
-                ),
+                InnerReader::Transaction(inner) => {
+                    if inner.is_ended.get() {
+                        return Err(invalid_input_error("The transaction is already ended"));
+                    }
+                    rocksdb_transaction_create_iterator_cf(
+                        inner.transaction,
+                        options,
+                        column_family.0,
+                    )
+                }
             };
             assert!(!iter.is_null(), "rocksdb_create_iterator returned null");
             if prefix.is_empty() {
@@ -621,19 +629,19 @@ impl Reader {
                 rocksdb_iter_seek(iter, prefix.as_ptr() as *const c_char, prefix.len());
             }
             let is_currently_valid = rocksdb_iter_valid(iter) != 0;
-            Iter {
+            Ok(Iter {
                 iter,
                 options,
                 _upper_bound: upper_bound,
                 _reader: self.clone(),
                 is_currently_valid,
-            }
+            })
         }
     }
 
     pub fn len(&self, column_family: &ColumnFamily) -> Result<usize> {
         let mut count = 0;
-        let mut iter = self.iter(column_family);
+        let mut iter = self.iter(column_family)?;
         while iter.is_valid() {
             count += 1;
             iter.next();
@@ -643,7 +651,7 @@ impl Reader {
     }
 
     pub fn is_empty(&self, column_family: &ColumnFamily) -> Result<bool> {
-        let iter = self.iter(column_family);
+        let iter = self.iter(column_family)?;
         iter.status()?; // We makes sure there is no read problem
         Ok(!iter.is_valid())
     }
@@ -1094,4 +1102,17 @@ fn path_to_cstring(path: &Path) -> Result<CString> {
             .ok_or_else(|| invalid_input_error("The DB path is not valid UTF-8"))?,
     )
     .map_err(invalid_input_error)
+}
+
+#[test]
+fn test_transaction_read_after_commit() -> Result<()> {
+    let db = Db::new(vec![])?;
+    let cf = db.column_family("default").unwrap();
+    let mut tr = db.transaction();
+    let reader = tr.reader();
+    tr.insert(&cf, b"test", b"foo")?;
+    assert_eq!(reader.get(&cf, b"test")?.as_deref(), Some(b"foo".as_ref()));
+    tr.commit()?;
+    assert!(reader.get(&cf, b"test").is_err());
+    Ok(())
 }
