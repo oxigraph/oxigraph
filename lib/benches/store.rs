@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use oxhttp::model::{Method, Request, Status};
-use oxigraph::io::{DatasetFormat, GraphFormat};
+use oxigraph::io::GraphFormat;
 use oxigraph::model::GraphNameRef;
 use oxigraph::sparql::{Query, QueryResults, Update};
 use oxigraph::store::Store;
@@ -36,13 +36,8 @@ fn store_load(c: &mut Criterion) {
         group.bench_function("load BSBM explore 1000 in on disk with bulk load", |b| {
             b.iter(|| {
                 let path = TempDir::default();
-                Store::create_from_dataset(
-                    &path.0,
-                    Cursor::new(&data),
-                    DatasetFormat::NQuads,
-                    None,
-                )
-                .unwrap();
+                let mut store = Store::open(&path.0).unwrap();
+                do_bulk_load(&mut store, &data);
             })
         });
     }
@@ -59,13 +54,8 @@ fn store_load(c: &mut Criterion) {
         group.bench_function("load BSBM explore 10000 in on disk with bulk load", |b| {
             b.iter(|| {
                 let path = TempDir::default();
-                Store::create_from_dataset(
-                    &path.0,
-                    Cursor::new(&data),
-                    DatasetFormat::NQuads,
-                    None,
-                )
-                .unwrap();
+                let mut store = Store::open(&path.0).unwrap();
+                do_bulk_load(&mut store, &data);
             })
         });
     }
@@ -74,6 +64,18 @@ fn store_load(c: &mut Criterion) {
 fn do_load(store: &Store, data: &[u8]) {
     store
         .load_graph(
+            Cursor::new(&data),
+            GraphFormat::NTriples,
+            GraphNameRef::DefaultGraph,
+            None,
+        )
+        .unwrap();
+    store.optimize().unwrap();
+}
+
+fn do_bulk_load(store: &mut Store, data: &[u8]) {
+    store
+        .bulk_load_graph(
             Cursor::new(&data),
             GraphFormat::NTriples,
             GraphNameRef::DefaultGraph,
@@ -114,8 +116,8 @@ fn store_query_and_update(c: &mut Criterion) {
     group.sample_size(10);
 
     {
-        let memory_store = Store::new().unwrap();
-        do_load(&memory_store, &data);
+        let mut memory_store = Store::new().unwrap();
+        do_bulk_load(&mut memory_store, &data);
         group.bench_function("BSBM explore 1000 query in memory", |b| {
             b.iter(|| run_operation(&memory_store, &query_operations))
         });
@@ -126,8 +128,8 @@ fn store_query_and_update(c: &mut Criterion) {
 
     {
         let path = TempDir::default();
-        let disk_store = Store::open(&path.0).unwrap();
-        do_load(&disk_store, &data);
+        let mut disk_store = Store::open(&path.0).unwrap();
+        do_bulk_load(&mut disk_store, &data);
         group.bench_function("BSBM explore 1000 query on disk", |b| {
             b.iter(|| run_operation(&disk_store, &query_operations))
         });

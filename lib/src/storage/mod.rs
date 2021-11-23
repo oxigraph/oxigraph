@@ -69,8 +69,8 @@ impl Storage {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn open(path: &Path, for_bulk_load: bool) -> Result<Self> {
-        Self::setup(Db::open(path, Self::column_families(), for_bulk_load)?)
+    pub fn open(path: &Path) -> Result<Self> {
+        Self::setup(Db::open(path, Self::column_families())?)
     }
 
     fn column_families() -> Vec<ColumnFamilyDefinition> {
@@ -1085,24 +1085,28 @@ impl StorageWriter {
 
 /// Creates a database from a dataset files.
 #[cfg(not(target_arch = "wasm32"))]
-pub struct BulkLoader {
-    storage: Storage,
+pub struct BulkLoader<'a> {
+    storage: &'a Storage,
+    reader: Reader,
     id2str: HashMap<StrHash, (i32, Box<str>)>,
     quads: HashSet<EncodedQuad>,
     triples: HashSet<EncodedQuad>,
     graphs: HashSet<EncodedTerm>,
+    buffer: Vec<u8>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl BulkLoader {
-    pub fn new(path: &Path) -> Result<Self> {
-        Ok(Self {
-            storage: Storage::open(path, true)?, //TODO: remove bulk option
+impl<'a> BulkLoader<'a> {
+    pub fn new(storage: &'a Storage) -> Self {
+        Self {
+            storage,
+            reader: storage.db.reader(),
             id2str: HashMap::default(),
             quads: HashSet::default(),
             triples: HashSet::default(),
             graphs: HashSet::default(),
-        })
+            buffer: Vec::new(),
+        }
     }
 
     pub fn load(&mut self, quads: impl IntoIterator<Item = Result<Quad>>) -> Result<()> {
@@ -1110,25 +1114,45 @@ impl BulkLoader {
         for quad in quads {
             let quad = quad?;
             let encoded = EncodedQuad::from(quad.as_ref());
+            self.buffer.clear();
             if quad.graph_name.is_default_graph() {
-                if self.triples.insert(encoded.clone()) {
+                write_spo_quad(&mut self.buffer, &encoded);
+                if !self
+                    .reader
+                    .contains_key(&self.storage.dspo_cf, &self.buffer)?
+                    && self.triples.insert(encoded.clone())
+                {
                     self.insert_term(quad.subject.as_ref().into(), &encoded.subject)?;
                     self.insert_term(quad.predicate.as_ref().into(), &encoded.predicate)?;
                     self.insert_term(quad.object.as_ref(), &encoded.object)?;
                 }
-            } else if self.quads.insert(encoded.clone()) {
-                self.insert_term(quad.subject.as_ref().into(), &encoded.subject)?;
-                self.insert_term(quad.predicate.as_ref().into(), &encoded.predicate)?;
-                self.insert_term(quad.object.as_ref(), &encoded.object)?;
-                if self.graphs.insert(encoded.graph_name.clone()) {
-                    self.insert_term(
-                        match quad.graph_name.as_ref() {
-                            GraphNameRef::NamedNode(n) => n.into(),
-                            GraphNameRef::BlankNode(n) => n.into(),
-                            GraphNameRef::DefaultGraph => unreachable!(),
-                        },
-                        &encoded.graph_name,
-                    )?;
+            } else {
+                write_spog_quad(&mut self.buffer, &encoded);
+                if !self
+                    .reader
+                    .contains_key(&self.storage.spog_cf, &self.buffer)?
+                    && self.quads.insert(encoded.clone())
+                {
+                    self.insert_term(quad.subject.as_ref().into(), &encoded.subject)?;
+                    self.insert_term(quad.predicate.as_ref().into(), &encoded.predicate)?;
+                    self.insert_term(quad.object.as_ref(), &encoded.object)?;
+
+                    self.buffer.clear();
+                    write_term(&mut self.buffer, &encoded.graph_name);
+                    if !self
+                        .reader
+                        .contains_key(&self.storage.graphs_cf, &self.buffer)?
+                        && self.graphs.insert(encoded.graph_name.clone())
+                    {
+                        self.insert_term(
+                            match quad.graph_name.as_ref() {
+                                GraphNameRef::NamedNode(n) => n.into(),
+                                GraphNameRef::BlankNode(n) => n.into(),
+                                GraphNameRef::DefaultGraph => unreachable!(),
+                            },
+                            &encoded.graph_name,
+                        )?;
+                    }
                 }
             }
             count += 1;

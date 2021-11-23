@@ -2,9 +2,6 @@ use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
 use oxigraph::store::Store;
-use rand::random;
-use std::env::temp_dir;
-use std::fs::remove_dir_all;
 use std::io;
 use std::io::Cursor;
 use std::process::Command;
@@ -104,13 +101,12 @@ fn test_load_dataset() -> io::Result<()> {
 
 #[test]
 fn test_bulk_load_dataset() -> io::Result<()> {
-    let temp = temp_dir().join(random::<usize>().to_string());
-    Store::create_from_dataset(&temp, Cursor::new(DATA), DatasetFormat::TriG, None)?;
-    let store = Store::open(&temp)?;
+    let mut store = Store::new().unwrap();
+    store.bulk_load_dataset(Cursor::new(DATA), DatasetFormat::TriG, None)?;
     for q in quads(GraphNameRef::DefaultGraph) {
         assert!(store.contains(q)?);
     }
-    remove_dir_all(&temp)
+    Ok(())
 }
 
 #[test]

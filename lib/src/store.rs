@@ -24,7 +24,7 @@
 //! # Result::<_,Box<dyn std::error::Error>>::Ok(())
 //! ```
 use crate::error::invalid_input_error;
-use crate::io::{DatasetFormat, DatasetParser, GraphFormat};
+use crate::io::{DatasetFormat, DatasetParser, GraphFormat, GraphParser};
 use crate::model::*;
 use crate::sparql::{
     evaluate_query, evaluate_update, EvaluationError, Query, QueryOptions, QueryResults, Update,
@@ -94,7 +94,7 @@ impl Store {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn open(path: impl AsRef<Path>) -> io::Result<Self> {
         Ok(Self {
-            storage: Storage::open(path.as_ref(), false)?,
+            storage: Storage::open(path.as_ref())?,
         })
     }
 
@@ -578,11 +578,11 @@ impl Store {
         self.storage.compact()
     }
 
-    /// Creates a store efficiently from a dataset file.
+    /// Loads a dataset file efficiently into the store.
     ///
     /// Warning: This function is optimized for speed and might eat a lot of memory.
     ///
-    /// Warning: If the parsing fails in the middle of the file, only a part of it may be written to the store.
+    /// Warning: This method is not atomic. If the parsing fails in the middle of the file, only a part of it may be written to the store.
     ///
     /// Usage example:
     /// ```
@@ -590,14 +590,13 @@ impl Store {
     /// use oxigraph::io::DatasetFormat;
     /// use oxigraph::model::*;
     ///
-    /// let store = Store::new()?;
+    /// let mut store = Store::new()?;
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
-    /// Store::create_from_dataset("example.db", file.as_ref(), DatasetFormat::NQuads, None)?;
+    /// store.bulk_load_dataset(file.as_ref(), DatasetFormat::NQuads, None)?;
     ///
     /// // we inspect the store contents
-    /// let store = Store::open("example.db")?;
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -607,8 +606,8 @@ impl Store {
     /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
     /// Errors related to data loading into the store use the other error kinds.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn create_from_dataset(
-        path: &Path,
+    pub fn bulk_load_dataset(
+        &mut self,
         reader: impl BufRead,
         format: DatasetFormat,
         base_iri: Option<&str>,
@@ -619,7 +618,55 @@ impl Store {
                 .with_base_iri(base_iri)
                 .map_err(invalid_input_error)?;
         }
-        BulkLoader::new(path)?.load(parser.read_quads(reader)?)
+        BulkLoader::new(&self.storage).load(parser.read_quads(reader)?)
+    }
+
+    /// Loads a dataset file efficiently into the store.
+    ///
+    /// Warning: This function is optimized for speed and might eat a lot of memory.
+    ///
+    /// Warning: This method is not atomic. If the parsing fails in the middle of the file, only a part of it may be written to the store.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::store::Store;
+    /// use oxigraph::io::GraphFormat;
+    /// use oxigraph::model::*;
+    ///
+    /// let mut store = Store::new()?;
+    ///
+    /// // insertion
+    /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
+    /// store.bulk_load_graph(file.as_ref(), GraphFormat::NTriples, &GraphName::DefaultGraph, None)?;
+    ///
+    /// // we inspect the store contents
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    ///
+    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
+    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
+    /// Errors related to data loading into the store use the other error kinds.
+    pub fn bulk_load_graph<'a>(
+        &mut self,
+        reader: impl BufRead,
+        format: GraphFormat,
+        to_graph_name: impl Into<GraphNameRef<'a>>,
+        base_iri: Option<&str>,
+    ) -> io::Result<()> {
+        let mut parser = GraphParser::from_format(format);
+        if let Some(base_iri) = base_iri {
+            parser = parser
+                .with_base_iri(base_iri)
+                .map_err(invalid_input_error)?;
+        }
+        let to_graph_name = to_graph_name.into();
+        BulkLoader::new(&self.storage).load(
+            parser
+                .read_triples(reader)?
+                .map(|r| Ok(r?.in_graph(to_graph_name.into_owned()))),
+        )
     }
 }
 

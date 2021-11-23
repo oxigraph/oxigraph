@@ -115,32 +115,17 @@ impl Db {
             temp_dir()
         }
         .join("oxigraph-temp-rocksdb");
-        Ok(Self(Arc::new(Self::do_open(
-            &path,
-            column_families,
-            true,
-            false,
-        )?)))
+        Ok(Self(Arc::new(Self::do_open(&path, column_families, true)?)))
     }
 
-    pub fn open(
-        path: &Path,
-        column_families: Vec<ColumnFamilyDefinition>,
-        for_bulk_load: bool,
-    ) -> Result<Self> {
-        Ok(Self(Arc::new(Self::do_open(
-            path,
-            column_families,
-            false,
-            for_bulk_load,
-        )?)))
+    pub fn open(path: &Path, column_families: Vec<ColumnFamilyDefinition>) -> Result<Self> {
+        Ok(Self(Arc::new(Self::do_open(path, column_families, false)?)))
     }
 
     fn do_open(
         path: &Path,
         mut column_families: Vec<ColumnFamilyDefinition>,
         in_memory: bool,
-        for_bulk_load: bool,
     ) -> Result<DbHandler> {
         let c_path = path_to_cstring(path)?;
 
@@ -165,10 +150,6 @@ impl Db {
                 .try_into()
                 .unwrap(),
             );
-            if for_bulk_load {
-                rocksdb_options_prepare_for_bulk_load(options);
-                rocksdb_options_set_error_if_exists(options, 1);
-            }
             let block_based_table_options = rocksdb_block_based_options_create();
             assert!(
                 !block_based_table_options.is_null(),
@@ -566,12 +547,10 @@ impl Reader {
         Ok(self.get(column_family, key)?.is_some()) //TODO: optimize
     }
 
-    #[must_use]
     pub fn iter(&self, column_family: &ColumnFamily) -> Result<Iter> {
         self.scan_prefix(column_family, &[])
     }
 
-    #[must_use]
     pub fn scan_prefix(&self, column_family: &ColumnFamily, prefix: &[u8]) -> Result<Iter> {
         //We generate the upper bound
         let upper_bound = {
