@@ -752,40 +752,6 @@ pub fn insert_term<E, F: FnMut(&StrHash, &str) -> Result<(), E>>(
     }
 }
 
-pub fn remove_term<E, F: FnMut(&StrHash) -> Result<(), E>>(
-    encoded: &EncodedTerm,
-    remove_str: &mut F,
-) -> Result<(), E> {
-    match encoded {
-        EncodedTerm::NamedNode { iri_id } => remove_str(iri_id),
-        EncodedTerm::BigBlankNode { id_id } => remove_str(id_id),
-        EncodedTerm::BigStringLiteral { value_id }
-        | EncodedTerm::BigSmallLangStringLiteral { value_id, .. } => remove_str(value_id),
-        EncodedTerm::SmallBigLangStringLiteral { language_id, .. } => remove_str(language_id),
-        EncodedTerm::BigBigLangStringLiteral {
-            value_id,
-            language_id,
-        } => {
-            remove_str(value_id)?;
-            remove_str(language_id)
-        }
-        EncodedTerm::SmallTypedLiteral { datatype_id, .. } => remove_str(datatype_id),
-        EncodedTerm::BigTypedLiteral {
-            value_id,
-            datatype_id,
-        } => {
-            remove_str(value_id)?;
-            remove_str(datatype_id)
-        }
-        EncodedTerm::Triple(encoded) => {
-            remove_term(&encoded.subject, remove_str)?;
-            remove_term(&encoded.predicate, remove_str)?;
-            remove_term(&encoded.object, remove_str)
-        }
-        _ => Ok(()),
-    }
-}
-
 pub fn parse_boolean_str(value: &str) -> Option<EncodedTerm> {
     match value {
         "true" | "1" => Some(EncodedTerm::BooleanLiteral(true)),

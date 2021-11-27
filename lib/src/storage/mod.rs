@@ -7,9 +7,7 @@ use crate::storage::binary_encoder::{
     write_pos_quad, write_posg_quad, write_spo_quad, write_spog_quad, write_term, QuadEncoding,
     LATEST_STORAGE_VERSION, WRITTEN_TERM_MAX_SIZE,
 };
-use crate::storage::numeric_encoder::{
-    insert_term, remove_term, EncodedQuad, EncodedTerm, StrHash, StrLookup,
-};
+use crate::storage::numeric_encoder::{insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup};
 use backend::{
     ColumnFamily, ColumnFamilyDefinition, CompactionAction, CompactionFilter, Db, Iter,
     MergeOperator,
@@ -77,8 +75,8 @@ impl Storage {
         vec![
             ColumnFamilyDefinition {
                 name: ID2STR_CF,
-                merge_operator: Some(Self::str2id_merge()),
-                compaction_filter: Some(Self::str2id_filter()),
+                merge_operator: None,
+                compaction_filter: None,
                 use_iter: false,
                 min_prefix_size: 0,
             },
@@ -155,51 +153,6 @@ impl Storage {
         ]
     }
 
-    fn str2id_merge() -> MergeOperator {
-        fn merge_counted_values<'a>(values: impl Iterator<Item = &'a [u8]>) -> Vec<u8> {
-            let (counter, str) =
-                values.fold((0_i32, [].as_ref()), |(prev_counter, prev_str), current| {
-                    let new_counter = i32::from_be_bytes(current[..4].try_into().unwrap());
-                    (
-                        if prev_counter == i32::MAX {
-                            i32::MAX // We keep to max, no counting
-                        } else {
-                            prev_counter.saturating_add(new_counter)
-                        },
-                        if prev_str.is_empty() {
-                            &current[4..]
-                        } else {
-                            prev_str
-                        },
-                    )
-                });
-            let mut buffer = Vec::with_capacity(str.len() + 4);
-            buffer.extend_from_slice(&counter.to_be_bytes());
-            buffer.extend_from_slice(str);
-            buffer
-        }
-
-        MergeOperator {
-            full: |_, previous, values| merge_counted_values(previous.into_iter().chain(values)),
-            partial: |_, values| merge_counted_values(values),
-            name: CString::new("id2str_merge").unwrap(),
-        }
-    }
-
-    fn str2id_filter() -> CompactionFilter {
-        CompactionFilter {
-            filter: |_, value| {
-                let counter = i32::from_be_bytes(value[..4].try_into().unwrap());
-                if counter > 0 {
-                    CompactionAction::Keep
-                } else {
-                    CompactionAction::Remove
-                }
-            },
-            name: CString::new("id2str_compaction_filter").unwrap(),
-        }
-    }
-
     fn setup(db: Db) -> Result<Self> {
         let this = Self {
             default_cf: db.column_family(DEFAULT_CF).unwrap(),
@@ -237,31 +190,6 @@ impl Storage {
             transaction.commit()?;
             this.db.flush(&this.graphs_cf)?;
             version = 1;
-            this.update_version(version)?;
-        }
-        if version == 1 {
-            // We migrate to v2
-            let mut transaction = this.db.transaction();
-            let reader = this.db.snapshot();
-            let mut size = 0;
-            let mut iter = reader.iter(&this.id2str_cf)?;
-            while let (Some(key), Some(value)) = (iter.key(), iter.value()) {
-                let mut new_value = Vec::with_capacity(value.len() + 4);
-                new_value.extend_from_slice(&i32::MAX.to_be_bytes());
-                new_value.extend_from_slice(value);
-                transaction.insert(&this.id2str_cf, key, &new_value)?;
-                iter.next();
-                size += 1;
-                if size % AUTO_WRITE_BATCH_THRESHOLD == 0 {
-                    let mut tr = this.db.transaction();
-                    swap(&mut transaction, &mut tr);
-                    tr.commit()?;
-                }
-            }
-            transaction.commit()?;
-            iter.status()?;
-            this.db.flush(&this.id2str_cf)?;
-            version = 2;
             this.update_version(version)?;
         }
 
@@ -675,25 +603,14 @@ impl StorageReader {
     pub fn get_str(&self, key: &StrHash) -> Result<Option<String>> {
         self.reader
             .get(&self.storage.id2str_cf, &key.to_be_bytes())?
-            .and_then(|v| {
-                let count = i32::from_be_bytes(v[..4].try_into().unwrap());
-                if count > 0 {
-                    Some(String::from_utf8(v[4..].to_vec()))
-                } else {
-                    None
-                }
-            })
+            .map(|v| String::from_utf8(v.to_vec()))
             .transpose()
             .map_err(invalid_data_error)
     }
 
     pub fn contains_str(&self, key: &StrHash) -> Result<bool> {
-        Ok(self
-            .reader
-            .get(&self.storage.id2str_cf, &key.to_be_bytes())?
-            .map_or(false, |v| {
-                i32::from_be_bytes(v[..4].try_into().unwrap()) > 0
-            }))
+        self.reader
+            .contains_key(&self.storage.id2str_cf, &key.to_be_bytes())
     }
 }
 
@@ -914,11 +831,11 @@ impl StorageWriter {
     }
 
     fn insert_str(&mut self, key: &StrHash, value: &str) -> Result<()> {
-        self.buffer.clear();
-        self.buffer.extend_from_slice(&1_i32.to_be_bytes());
-        self.buffer.extend_from_slice(value.as_bytes());
-        self.transaction
-            .merge(&self.storage.id2str_cf, &key.to_be_bytes(), &self.buffer)
+        self.transaction.insert(
+            &self.storage.id2str_cf,
+            &key.to_be_bytes(),
+            value.as_bytes(),
+        )
     }
 
     pub fn remove(&mut self, quad: QuadRef<'_>) -> Result<bool> {
@@ -946,10 +863,6 @@ impl StorageWriter {
                 write_osp_quad(&mut self.buffer, quad);
                 self.transaction
                     .remove(&self.storage.dosp_cf, &self.buffer)?;
-
-                self.remove_term(&quad.subject)?;
-                self.remove_term(&quad.predicate)?;
-                self.remove_term(&quad.object)?;
                 true
             } else {
                 false
@@ -988,10 +901,6 @@ impl StorageWriter {
                 write_gosp_quad(&mut self.buffer, quad);
                 self.transaction
                     .remove(&self.storage.gosp_cf, &self.buffer)?;
-
-                self.remove_term(&quad.subject)?;
-                self.remove_term(&quad.predicate)?;
-                self.remove_term(&quad.object)?;
                 true
             } else {
                 false
@@ -1037,7 +946,6 @@ impl StorageWriter {
         {
             self.transaction
                 .remove(&self.storage.graphs_cf, &self.buffer)?;
-            self.remove_term(graph_name)?;
             true
         } else {
             false
@@ -1062,18 +970,6 @@ impl StorageWriter {
         Ok(())
     }
 
-    fn remove_term(&mut self, encoded: &EncodedTerm) -> Result<()> {
-        remove_term(encoded, &mut |key| self.remove_str(key))
-    }
-
-    fn remove_str(&mut self, key: &StrHash) -> Result<()> {
-        self.transaction.merge(
-            &self.storage.id2str_cf,
-            &key.to_be_bytes(),
-            &(-1_i32).to_be_bytes(),
-        )
-    }
-
     pub fn commit(self) -> Result<()> {
         self.transaction.commit()
     }
@@ -1088,7 +984,7 @@ impl StorageWriter {
 pub struct BulkLoader<'a> {
     storage: &'a Storage,
     reader: Reader,
-    id2str: HashMap<StrHash, (i32, Box<str>)>,
+    id2str: HashMap<StrHash, Box<str>>,
     quads: HashSet<EncodedQuad>,
     triples: HashSet<EncodedQuad>,
     graphs: HashSet<EncodedTerm>,
@@ -1175,12 +1071,8 @@ impl<'a> BulkLoader<'a> {
                 .collect::<Vec<_>>();
             id2str.sort();
             let mut id2str_sst = self.storage.db.new_sst_file()?;
-            let mut buffer = Vec::new();
-            for (k, (count, v)) in id2str {
-                buffer.extend_from_slice(&count.to_be_bytes());
-                buffer.extend_from_slice(v.as_bytes());
-                id2str_sst.merge(&k, &buffer)?;
-                buffer.clear();
+            for (k, v) in id2str {
+                id2str_sst.insert(&k, v.as_bytes())?;
             }
             to_load.push((&self.storage.id2str_cf, id2str_sst.finish()?));
         }
@@ -1294,15 +1186,7 @@ impl<'a> BulkLoader<'a> {
 
     fn insert_term(&mut self, term: TermRef<'_>, encoded: &EncodedTerm) -> Result<()> {
         insert_term(term, encoded, &mut |key, value| {
-            match self.id2str.entry(*key) {
-                hash_map::Entry::Occupied(mut e) => {
-                    let e = e.get_mut();
-                    e.0 = e.0.wrapping_add(1);
-                }
-                hash_map::Entry::Vacant(e) => {
-                    e.insert((1, value.into()));
-                }
-            };
+            self.id2str.entry(*key).or_insert_with(|| value.into());
             Ok(())
         })
     }
