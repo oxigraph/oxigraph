@@ -957,7 +957,6 @@ impl StorageWriter {
 #[cfg(not(target_arch = "wasm32"))]
 pub struct BulkLoader<'a> {
     storage: &'a Storage,
-    reader: Reader,
     id2str: HashMap<StrHash, Box<str>>,
     quads: HashSet<EncodedQuad>,
     triples: HashSet<EncodedQuad>,
@@ -970,7 +969,6 @@ impl<'a> BulkLoader<'a> {
     pub fn new(storage: &'a Storage) -> Self {
         Self {
             storage,
-            reader: storage.db.reader(),
             id2str: HashMap::default(),
             quads: HashSet::default(),
             triples: HashSet::default(),
@@ -987,33 +985,21 @@ impl<'a> BulkLoader<'a> {
             self.buffer.clear();
             if quad.graph_name.is_default_graph() {
                 write_spo_quad(&mut self.buffer, &encoded);
-                if !self
-                    .reader
-                    .contains_key(&self.storage.dspo_cf, &self.buffer)?
-                    && self.triples.insert(encoded.clone())
-                {
+                if self.triples.insert(encoded.clone()) {
                     self.insert_term(quad.subject.as_ref().into(), &encoded.subject)?;
                     self.insert_term(quad.predicate.as_ref().into(), &encoded.predicate)?;
                     self.insert_term(quad.object.as_ref(), &encoded.object)?;
                 }
             } else {
                 write_spog_quad(&mut self.buffer, &encoded);
-                if !self
-                    .reader
-                    .contains_key(&self.storage.spog_cf, &self.buffer)?
-                    && self.quads.insert(encoded.clone())
-                {
+                if self.quads.insert(encoded.clone()) {
                     self.insert_term(quad.subject.as_ref().into(), &encoded.subject)?;
                     self.insert_term(quad.predicate.as_ref().into(), &encoded.predicate)?;
                     self.insert_term(quad.object.as_ref(), &encoded.object)?;
 
                     self.buffer.clear();
                     write_term(&mut self.buffer, &encoded.graph_name);
-                    if !self
-                        .reader
-                        .contains_key(&self.storage.graphs_cf, &self.buffer)?
-                        && self.graphs.insert(encoded.graph_name.clone())
-                    {
+                    if self.graphs.insert(encoded.graph_name.clone()) {
                         self.insert_term(
                             match quad.graph_name.as_ref() {
                                 GraphNameRef::NamedNode(n) => n.into(),
