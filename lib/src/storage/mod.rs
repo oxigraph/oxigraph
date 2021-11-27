@@ -8,13 +8,9 @@ use crate::storage::binary_encoder::{
     LATEST_STORAGE_VERSION, WRITTEN_TERM_MAX_SIZE,
 };
 use crate::storage::numeric_encoder::{insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup};
-use backend::{
-    ColumnFamily, ColumnFamilyDefinition, CompactionAction, CompactionFilter, Db, Iter,
-    MergeOperator,
-};
+use backend::{ColumnFamily, ColumnFamilyDefinition, Db, Iter};
 #[cfg(not(target_arch = "wasm32"))]
-use std::collections::{hash_map, HashMap, HashSet};
-use std::ffi::CString;
+use std::collections::{HashMap, HashSet};
 use std::io::Result;
 use std::mem::swap;
 #[cfg(not(target_arch = "wasm32"))]
@@ -75,78 +71,56 @@ impl Storage {
         vec![
             ColumnFamilyDefinition {
                 name: ID2STR_CF,
-                merge_operator: None,
-                compaction_filter: None,
                 use_iter: false,
                 min_prefix_size: 0,
             },
             ColumnFamilyDefinition {
                 name: SPOG_CF,
-                merge_operator: None,
-                compaction_filter: None,
                 use_iter: true,
                 min_prefix_size: 17, // named or blank node start
             },
             ColumnFamilyDefinition {
                 name: POSG_CF,
-                merge_operator: None,
-                compaction_filter: None,
                 use_iter: true,
                 min_prefix_size: 17, // named node start
             },
             ColumnFamilyDefinition {
                 name: OSPG_CF,
-                merge_operator: None,
-                compaction_filter: None,
                 use_iter: true,
                 min_prefix_size: 0, // There are small literals...
             },
             ColumnFamilyDefinition {
                 name: GSPO_CF,
-                merge_operator: None,
-                compaction_filter: None,
                 use_iter: true,
                 min_prefix_size: 17, // named or blank node start
             },
             ColumnFamilyDefinition {
                 name: GPOS_CF,
-                merge_operator: None,
-                compaction_filter: None,
                 use_iter: true,
                 min_prefix_size: 17, // named or blank node start
             },
             ColumnFamilyDefinition {
                 name: GOSP_CF,
-                merge_operator: None,
-                compaction_filter: None,
                 use_iter: true,
                 min_prefix_size: 17, // named or blank node start
             },
             ColumnFamilyDefinition {
                 name: DSPO_CF,
-                merge_operator: None,
-                compaction_filter: None,
                 use_iter: true,
                 min_prefix_size: 17, // named or blank node start
             },
             ColumnFamilyDefinition {
                 name: DPOS_CF,
-                merge_operator: None,
-                compaction_filter: None,
                 use_iter: true,
                 min_prefix_size: 17, // named or blank node start
             },
             ColumnFamilyDefinition {
                 name: DOSP_CF,
-                merge_operator: None,
-                compaction_filter: None,
                 use_iter: true,
                 min_prefix_size: 0, // There are small literals...
             },
             ColumnFamilyDefinition {
                 name: GRAPHS_CF,
-                merge_operator: None,
-                compaction_filter: None,
                 use_iter: true,
                 min_prefix_size: 17, // named or blank node start
             },
