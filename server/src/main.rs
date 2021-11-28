@@ -9,7 +9,7 @@
     unused_qualifications
 )]
 
-use clap::{App, Arg};
+use clap::{App, AppSettings, Arg, SubCommand};
 use oxhttp::model::{Body, HeaderName, HeaderValue, Request, Response, Status};
 use oxhttp::Server;
 use oxigraph::io::{DatasetFormat, DatasetSerializer, GraphFormat, GraphSerializer};
@@ -20,6 +20,7 @@ use oxiri::Iri;
 use rand::random;
 use std::cell::RefCell;
 use std::cmp::min;
+use std::fs::File;
 use std::io::{BufReader, Error, ErrorKind, Read, Write};
 use std::rc::Rc;
 use std::str::FromStr;
@@ -34,36 +35,77 @@ const LOGO: &str = include_str!("../logo.svg");
 pub fn main() -> std::io::Result<()> {
     let matches = App::new("Oxigraph SPARQL server")
         .arg(
-            Arg::with_name("bind")
-                .short("b")
-                .long("bind")
-                .help("Sets a custom config file")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("file")
-                .short("f")
-                .long("file")
+            Arg::with_name("location")
+                .short("l")
+                .long("location")
                 .help("directory in which persist the data")
                 .takes_value(true),
         )
+        .setting(AppSettings::SubcommandRequiredElseHelp)
+        .subcommand(
+            SubCommand::with_name("serve")
+                .about("Start Oxigraph HTTP server")
+                .arg(
+                    Arg::with_name("bind")
+                        .short("b")
+                        .long("bind")
+                        .help("Sets a custom config file")
+                        .takes_value(true),
+                ),
+        )
+        .subcommand(
+            SubCommand::with_name("load")
+                .about("Bulk loads a file into the store")
+                .arg(
+                    Arg::with_name("file")
+                        .short("f")
+                        .long("file")
+                        .help("The file to load")
+                        .takes_value(true)
+                        .required(true),
+                ),
+        )
         .get_matches();
-    let bind = matches.value_of("bind").unwrap_or("localhost:7878");
-    let file = matches.value_of("file");
 
-    let store = if let Some(file) = file {
-        Store::open(file)
+    let mut store = if let Some(path) = matches.value_of_os("location") {
+        Store::open(path)
     } else {
         Store::new()
     }?;
 
-    let mut server = Server::new(move |request| handle_request(request, store.clone()));
-    server.set_global_timeout(HTTP_TIMEOUT);
-    server
-        .set_server_name(concat!("Oxigraph/", env!("CARGO_PKG_VERSION")))
-        .unwrap();
-    println!("Listening for requests at http://{}", &bind);
-    server.listen(bind)
+    match matches.subcommand() {
+        ("load", Some(submatches)) => {
+            let file = submatches.value_of("file").unwrap();
+            let format = file
+                .rsplit_once(".")
+                .and_then(|(_, extension)| {
+                    DatasetFormat::from_extension(extension)
+                        .or_else(|| GraphFormat::from_extension(extension)?.try_into().ok())
+                })
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorKind::InvalidInput,
+                        "The server is not able to guess the file format of {} from its extension",
+                    )
+                })?;
+            store.bulk_load_dataset(BufReader::new(File::open(file)?), format, None)?;
+            store.optimize()
+        }
+        ("serve", Some(submatches)) => {
+            let bind = submatches.value_of("bind").unwrap_or("localhost:7878");
+            let mut server = Server::new(move |request| handle_request(request, store.clone()));
+            server.set_global_timeout(HTTP_TIMEOUT);
+            server
+                .set_server_name(concat!("Oxigraph/", env!("CARGO_PKG_VERSION")))
+                .unwrap();
+            println!("Listening for requests at http://{}", &bind);
+            server.listen(bind)
+        }
+        (s, _) => {
+            eprintln!("Not supported subcommand: '{}'", s);
+            Ok(())
+        }
+    }
 }
 
 fn handle_request(request: &mut Request, store: Store) -> Response {

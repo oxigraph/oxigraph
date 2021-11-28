@@ -190,20 +190,34 @@ impl QueryResultsFormat {
     /// assert_eq!(QueryResultsFormat::from_media_type("application/sparql-results+json; charset=utf-8"), Some(QueryResultsFormat::Json))
     /// ```
     pub fn from_media_type(media_type: &str) -> Option<Self> {
-        if let Some(base_type) = media_type.split(';').next() {
-            match base_type {
-                "application/sparql-results+xml" | "application/xml" | "text/xml" => {
-                    Some(Self::Xml)
-                }
-                "application/sparql-results+json" | "application/json" | "text/json" => {
-                    Some(Self::Json)
-                }
-                "text/csv" => Some(Self::Csv),
-                "text/tab-separated-values" | "text/tsv" => Some(Self::Tsv),
-                _ => None,
+        match media_type.split(';').next()?.trim() {
+            "application/sparql-results+xml" | "application/xml" | "text/xml" => Some(Self::Xml),
+            "application/sparql-results+json" | "application/json" | "text/json" => {
+                Some(Self::Json)
             }
-        } else {
-            None
+            "text/csv" => Some(Self::Csv),
+            "text/tab-separated-values" | "text/tsv" => Some(Self::Tsv),
+            _ => None,
+        }
+    }
+
+    /// Looks for a known format from an extension.
+    ///
+    /// It supports some aliases.
+    ///
+    /// Example:
+    /// ```
+    /// use oxigraph::sparql::QueryResultsFormat;
+    ///
+    /// assert_eq!(QueryResultsFormat::from_extension("json"), Some(QueryResultsFormat::Json))
+    /// ```
+    pub fn from_extension(extension: &str) -> Option<Self> {
+        match extension {
+            "srx" | "xml" => Some(Self::Xml),
+            "srj" | "json" => Some(Self::Json),
+            "csv" | "txt" => Some(Self::Csv),
+            "tsv" => Some(Self::Tsv),
+            _ => None,
         }
     }
 }

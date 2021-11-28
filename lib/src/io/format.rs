@@ -72,15 +72,30 @@ impl GraphFormat {
     /// assert_eq!(GraphFormat::from_media_type("text/turtle; charset=utf-8"), Some(GraphFormat::Turtle))
     /// ```
     pub fn from_media_type(media_type: &str) -> Option<Self> {
-        if let Some(base_type) = media_type.split(';').next() {
-            match base_type.trim() {
-                "application/n-triples" | "text/plain" => Some(Self::NTriples),
-                "text/turtle" | "application/turtle" | "application/x-turtle" => Some(Self::Turtle),
-                "application/rdf+xml" | "application/xml" | "text/xml" => Some(Self::RdfXml),
-                _ => None,
-            }
-        } else {
-            None
+        match media_type.split(';').next()?.trim() {
+            "application/n-triples" | "text/plain" => Some(Self::NTriples),
+            "text/turtle" | "application/turtle" | "application/x-turtle" => Some(Self::Turtle),
+            "application/rdf+xml" | "application/xml" | "text/xml" => Some(Self::RdfXml),
+            _ => None,
+        }
+    }
+
+    /// Looks for a known format from an extension.
+    ///
+    /// It supports some aliases.
+    ///
+    /// Example:
+    /// ```
+    /// use oxigraph::io::GraphFormat;
+    ///
+    /// assert_eq!(GraphFormat::from_extension("nt"), Some(GraphFormat::NTriples))
+    /// ```
+    pub fn from_extension(extension: &str) -> Option<Self> {
+        match extension {
+            "nt" | "txt" => Some(Self::NTriples),
+            "ttl" => Some(Self::Turtle),
+            "rdf" | "xml" => Some(Self::RdfXml),
+            _ => None,
         }
     }
 }
@@ -153,16 +168,53 @@ impl DatasetFormat {
     /// assert_eq!(DatasetFormat::from_media_type("application/n-quads; charset=utf-8"), Some(DatasetFormat::NQuads))
     /// ```
     pub fn from_media_type(media_type: &str) -> Option<Self> {
-        if let Some(base_type) = media_type.split(';').next() {
-            match base_type.trim() {
-                "application/n-quads" | "text/x-nquads" | "text/nquads" => {
-                    Some(Self::NQuads)
-                }
-                "application/trig" | "application/x-trig" => Some(Self::TriG),
-                _ => None,
-            }
-        } else {
-            None
+        match media_type.split(';').next()?.trim() {
+            "application/n-quads" | "text/x-nquads" | "text/nquads" => Some(Self::NQuads),
+            "application/trig" | "application/x-trig" => Some(Self::TriG),
+            _ => None,
+        }
+    }
+
+    /// Looks for a known format from an extension.
+    ///
+    /// It supports some aliases.
+    ///
+    /// Example:
+    /// ```
+    /// use oxigraph::io::DatasetFormat;
+    ///
+    /// assert_eq!(DatasetFormat::from_extension("nq"), Some(DatasetFormat::NQuads))
+    /// ```
+    pub fn from_extension(extension: &str) -> Option<Self> {
+        match extension {
+            "nq" | "txt" => Some(Self::NQuads),
+            "trig" => Some(Self::TriG),
+            _ => None,
+        }
+    }
+}
+
+impl TryFrom<DatasetFormat> for GraphFormat {
+    type Error = ();
+
+    /// Attempts to find a graph format that is a subset of this [`DatasetFormat`].
+    fn try_from(value: DatasetFormat) -> Result<Self, ()> {
+        match value {
+            DatasetFormat::NQuads => Ok(Self::NTriples),
+            DatasetFormat::TriG => Ok(Self::Turtle),
+        }
+    }
+}
+
+impl TryFrom<GraphFormat> for DatasetFormat {
+    type Error = ();
+
+    /// Attempts to find a dataset format that is a superset of this [`GraphFormat`].
+    fn try_from(value: GraphFormat) -> Result<Self, ()> {
+        match value {
+            GraphFormat::NTriples => Ok(Self::NQuads),
+            GraphFormat::Turtle => Ok(Self::TriG),
+            GraphFormat::RdfXml => Err(()),
         }
     }
 }
