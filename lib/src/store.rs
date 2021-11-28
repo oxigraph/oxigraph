@@ -30,10 +30,10 @@ use crate::sparql::{
     evaluate_query, evaluate_update, EvaluationError, Query, QueryOptions, QueryResults, Update,
     UpdateOptions,
 };
+#[cfg(not(target_arch = "wasm32"))]
+use crate::storage::bulk_load;
 use crate::storage::io::{dump_dataset, dump_graph, load_dataset, load_graph};
 use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
-#[cfg(not(target_arch = "wasm32"))]
-use crate::storage::BulkLoader;
 use crate::storage::{ChainedDecodingQuadIterator, DecodingGraphIterator, Storage, StorageReader};
 use std::io::{BufRead, Write};
 #[cfg(not(target_arch = "wasm32"))]
@@ -618,7 +618,7 @@ impl Store {
                 .with_base_iri(base_iri)
                 .map_err(invalid_input_error)?;
         }
-        BulkLoader::new(&self.storage).load(parser.read_quads(reader)?)
+        bulk_load(&self.storage, parser.read_quads(reader)?)
     }
 
     /// Loads a dataset file efficiently into the store.
@@ -662,7 +662,8 @@ impl Store {
                 .map_err(invalid_input_error)?;
         }
         let to_graph_name = to_graph_name.into();
-        BulkLoader::new(&self.storage).load(
+        bulk_load(
+            &self.storage,
             parser
                 .read_triples(reader)?
                 .map(|r| Ok(r?.in_graph(to_graph_name.into_owned()))),

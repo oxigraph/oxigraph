@@ -18,6 +18,7 @@ use std::mem::take;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 use std::path::PathBuf;
+use std::thread::spawn;
 
 mod backend;
 mod binary_encoder;
@@ -37,7 +38,7 @@ const DPOS_CF: &str = "dpos";
 const DOSP_CF: &str = "dosp";
 const GRAPHS_CF: &str = "graphs";
 const DEFAULT_CF: &str = "default";
-const AUTO_WRITE_BATCH_THRESHOLD: usize = 1024 * 1024;
+const BULK_LOAD_BATCH_SIZE: usize = 1024 * 1024;
 
 /// Low level storage primitives
 #[derive(Clone)]
@@ -154,7 +155,7 @@ impl Storage {
                 if !quad.graph_name.is_default_graph() {
                     transaction.insert_empty(&this.graphs_cf, &encode_term(&quad.graph_name))?;
                     size += 1;
-                    if size % AUTO_WRITE_BATCH_THRESHOLD == 0 {
+                    if size % BULK_LOAD_BATCH_SIZE == 0 {
                         let mut tr = this.db.transaction();
                         swap(&mut transaction, &mut tr);
                         tr.commit()?;
@@ -955,8 +956,29 @@ impl StorageWriter {
 
 /// Creates a database from a dataset files.
 #[cfg(not(target_arch = "wasm32"))]
-pub struct BulkLoader<'a> {
-    storage: &'a Storage,
+pub fn bulk_load(storage: &Storage, quads: impl IntoIterator<Item = Result<Quad>>) -> Result<()> {
+    let mut threads = Vec::new();
+    let mut buffer = Vec::with_capacity(BULK_LOAD_BATCH_SIZE);
+    for quad in quads {
+        let quad = quad?;
+        buffer.push(quad);
+        if buffer.len() >= BULK_LOAD_BATCH_SIZE {
+            let buffer = take(&mut buffer);
+            let storage = storage.clone();
+            threads.push(spawn(move || BulkLoader::new(storage).load(buffer)));
+        }
+    }
+    BulkLoader::new(storage.clone()).load(buffer)?; // Last buffer
+    for thread in threads {
+        thread.join().unwrap()?;
+    }
+    Ok(())
+}
+
+/// Creates a database from a dataset files.
+#[cfg(not(target_arch = "wasm32"))]
+struct BulkLoader {
+    storage: Storage,
     id2str: HashMap<StrHash, Box<str>>,
     quads: HashSet<EncodedQuad>,
     triples: HashSet<EncodedQuad>,
@@ -965,8 +987,8 @@ pub struct BulkLoader<'a> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl<'a> BulkLoader<'a> {
-    pub fn new(storage: &'a Storage) -> Self {
+impl BulkLoader {
+    fn new(storage: Storage) -> Self {
         Self {
             storage,
             id2str: HashMap::default(),
@@ -977,10 +999,8 @@ impl<'a> BulkLoader<'a> {
         }
     }
 
-    pub fn load(&mut self, quads: impl IntoIterator<Item = Result<Quad>>) -> Result<()> {
-        let mut count = 0;
+    fn load(&mut self, quads: impl IntoIterator<Item = Quad>) -> Result<()> {
         for quad in quads {
-            let quad = quad?;
             let encoded = EncodedQuad::from(quad.as_ref());
             self.buffer.clear();
             if quad.graph_name.is_default_graph() {
@@ -1011,13 +1031,8 @@ impl<'a> BulkLoader<'a> {
                     }
                 }
             }
-            count += 1;
-            if count % (1024 * 1024) == 0 {
-                self.save()?;
-            }
         }
-        self.save()?;
-        self.storage.compact()
+        self.save()
     }
 
     fn save(&mut self) -> Result<()> {
