@@ -885,8 +885,22 @@ impl StorageWriter {
     }
 
     pub fn clear_graph(&mut self, graph_name: GraphNameRef<'_>) -> Result<()> {
-        for quad in self.reader().quads_for_graph(&graph_name.into()) {
-            self.remove_encoded(&quad?)?;
+        if graph_name.is_default_graph() {
+            for quad in self.reader().quads_for_graph(&EncodedTerm::DefaultGraph) {
+                self.remove_encoded(&quad?)?;
+            }
+        } else {
+            self.buffer.clear();
+            write_term(&mut self.buffer, &graph_name.into());
+            if self
+                .transaction
+                .contains_key_for_update(&self.storage.graphs_cf, &self.buffer)?
+            {
+                // The condition is useful to lock the graph itself and ensure no quad is inserted at the same time
+                for quad in self.reader().quads_for_graph(&graph_name.into()) {
+                    self.remove_encoded(&quad?)?;
+                }
+            }
         }
         Ok(())
     }
@@ -910,15 +924,18 @@ impl StorageWriter {
     }
 
     fn remove_encoded_named_graph(&mut self, graph_name: &EncodedTerm) -> Result<bool> {
-        for quad in self.reader().quads_for_graph(graph_name) {
-            self.remove_encoded(&quad?)?;
-        }
         self.buffer.clear();
         write_term(&mut self.buffer, graph_name);
         let result = if self
             .transaction
             .contains_key_for_update(&self.storage.graphs_cf, &self.buffer)?
         {
+            // The condition is done ASAP to lock the graph itself
+            for quad in self.reader().quads_for_graph(graph_name) {
+                self.remove_encoded(&quad?)?;
+            }
+            self.buffer.clear();
+            write_term(&mut self.buffer, graph_name);
             self.transaction
                 .remove(&self.storage.graphs_cf, &self.buffer)?;
             true
