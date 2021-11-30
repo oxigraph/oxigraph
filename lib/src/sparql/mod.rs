@@ -29,7 +29,7 @@ pub use crate::sparql::model::{Variable, VariableNameParseError};
 use crate::sparql::plan_builder::PlanBuilder;
 pub use crate::sparql::service::ServiceHandler;
 use crate::sparql::service::{EmptyServiceHandler, ErrorConversionServiceHandler};
-use crate::sparql::update::SimpleUpdateEvaluator;
+pub(crate) use crate::sparql::update::evaluate_update;
 use crate::storage::Storage;
 pub use spargebra::ParseError;
 use std::rc::Rc;
@@ -174,12 +174,4 @@ impl From<QueryOptions> for UpdateOptions {
     fn from(query_options: QueryOptions) -> Self {
         Self { query_options }
     }
-}
-
-pub(crate) fn evaluate_update(
-    storage: &Storage,
-    update: Update,
-    options: UpdateOptions,
-) -> Result<(), EvaluationError> {
-    SimpleUpdateEvaluator::run(storage, update, options)
 }

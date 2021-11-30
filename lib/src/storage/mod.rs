@@ -12,7 +12,6 @@ use backend::{ColumnFamily, ColumnFamilyDefinition, Db, Iter};
 #[cfg(not(target_arch = "wasm32"))]
 use std::collections::{HashMap, HashSet};
 use std::io::Result;
-use std::mem::swap;
 #[cfg(not(target_arch = "wasm32"))]
 use std::mem::take;
 #[cfg(not(target_arch = "wasm32"))]
@@ -22,7 +21,6 @@ use std::thread::spawn;
 
 mod backend;
 mod binary_encoder;
-pub mod io;
 pub mod numeric_encoder;
 pub mod small_string;
 
@@ -147,23 +145,25 @@ impl Storage {
 
         let mut version = this.ensure_version()?;
         if version == 0 {
-            let mut transaction = this.db.transaction();
-            let mut size = 0;
             // We migrate to v1
+            let mut graph_names = HashSet::new();
             for quad in this.reader().quads() {
                 let quad = quad?;
                 if !quad.graph_name.is_default_graph() {
-                    transaction.insert_empty(&this.graphs_cf, &encode_term(&quad.graph_name))?;
-                    size += 1;
-                    if size % BULK_LOAD_BATCH_SIZE == 0 {
-                        let mut tr = this.db.transaction();
-                        swap(&mut transaction, &mut tr);
-                        tr.commit()?;
-                    }
+                    graph_names.insert(quad.graph_name);
                 }
             }
-            transaction.commit()?;
-            this.db.flush(&this.graphs_cf)?;
+            let mut graph_names = graph_names
+                .into_iter()
+                .map(|g| encode_term(&g))
+                .collect::<Vec<_>>();
+            graph_names.sort_unstable();
+            let mut stt_file = this.db.new_sst_file()?;
+            for k in graph_names {
+                stt_file.insert_empty(&k)?;
+            }
+            this.db
+                .write_stt_files(vec![(&this.graphs_cf, stt_file.finish()?)])?;
             version = 1;
             this.update_version(version)?;
         }
@@ -195,9 +195,8 @@ impl Storage {
     }
 
     fn update_version(&self, version: u64) -> Result<()> {
-        let mut transaction = self.db.transaction();
-        transaction.insert(&self.default_cf, b"oxversion", &version.to_be_bytes())?;
-        transaction.commit()?;
+        self.db
+            .transaction(|t| t.insert(&self.default_cf, b"oxversion", &version.to_be_bytes()))?;
         self.db.flush(&self.default_cf)
     }
 
@@ -217,12 +216,14 @@ impl Storage {
         }
     }
 
-    pub fn transaction(&self) -> StorageWriter {
-        StorageWriter {
-            buffer: Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE),
-            transaction: self.db.transaction(),
-            storage: self.clone(),
-        }
+    pub fn transaction<T>(&self, f: impl Fn(StorageWriter<'_>) -> Result<T>) -> Result<T> {
+        self.db.transaction(|transaction| {
+            f(StorageWriter {
+                buffer: Vec::new(),
+                transaction,
+                storage: self,
+            })
+        })
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -671,13 +672,13 @@ impl StrLookup for StorageReader {
     }
 }
 
-pub struct StorageWriter {
+pub struct StorageWriter<'a> {
     buffer: Vec<u8>,
-    transaction: Transaction,
-    storage: Storage,
+    transaction: &'a mut Transaction,
+    storage: &'a Storage,
 }
 
-impl StorageWriter {
+impl<'a> StorageWriter<'a> {
     pub fn reader(&self) -> StorageReader {
         StorageReader {
             reader: self.transaction.reader(),
@@ -961,14 +962,6 @@ impl StorageWriter {
         }
         Ok(())
     }
-
-    pub fn commit(self) -> Result<()> {
-        self.transaction.commit()
-    }
-
-    pub fn rollback(self) -> Result<()> {
-        self.transaction.rollback()
-    }
 }
 
 /// Creates a database from a dataset files.
@@ -1061,7 +1054,7 @@ impl BulkLoader {
                 .into_iter()
                 .map(|(k, v)| (k.to_be_bytes(), v))
                 .collect::<Vec<_>>();
-            id2str.sort();
+            id2str.sort_unstable();
             let mut id2str_sst = self.storage.db.new_sst_file()?;
             for (k, v) in id2str {
                 id2str_sst.insert(&k, v.as_bytes())?;
@@ -1191,32 +1184,5 @@ impl BulkLoader {
             sst.insert_empty(&t)?;
         }
         sst.finish()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::model::NamedNodeRef;
-
-    #[test]
-    fn test_transaction_isolation() -> Result<()> {
-        let quad = QuadRef::new(
-            NamedNodeRef::new_unchecked("http://example.com/s"),
-            NamedNodeRef::new_unchecked("http://example.com/p"),
-            NamedNodeRef::new_unchecked("http://example.com/o"),
-            NamedNodeRef::new_unchecked("http://example.com/g"),
-        );
-        let storage = Storage::new()?;
-        let mut t1 = storage.transaction();
-        let snapshot = storage.snapshot();
-        t1.insert(quad)?;
-        t1.commit()?;
-        assert_eq!(snapshot.len()?, 0);
-        let mut t2 = storage.transaction();
-        let mut t3 = storage.transaction();
-        t2.insert(quad)?;
-        assert!(t3.remove(quad).is_err()); // Already locked
-        Ok(())
     }
 }

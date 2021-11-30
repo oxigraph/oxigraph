@@ -24,7 +24,9 @@
 //! # Result::<_,Box<dyn std::error::Error>>::Ok(())
 //! ```
 use crate::error::invalid_input_error;
-use crate::io::{DatasetFormat, DatasetParser, GraphFormat, GraphParser};
+use crate::io::{
+    DatasetFormat, DatasetParser, DatasetSerializer, GraphFormat, GraphParser, GraphSerializer,
+};
 use crate::model::*;
 use crate::sparql::{
     evaluate_query, evaluate_update, EvaluationError, Query, QueryOptions, QueryResults, Update,
@@ -32,7 +34,6 @@ use crate::sparql::{
 };
 #[cfg(not(target_arch = "wasm32"))]
 use crate::storage::bulk_load;
-use crate::storage::io::{dump_dataset, dump_graph, load_dataset, load_graph};
 use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
 use crate::storage::{ChainedDecodingQuadIterator, DecodingGraphIterator, Storage, StorageReader};
 use std::io::{BufRead, Write};
@@ -237,7 +238,7 @@ impl Store {
 
     /// Loads a graph file (i.e. triples) into the store.
     ///
-    /// This function is atomic and quite slow. To get much better performances you should use [`create_from_dataset`].
+    /// This function is atomic and quite slow and memory hungry. To get much better performances you might want to use [`bulk_load_graph`].
     ///
     /// Usage example:
     /// ```
@@ -267,14 +268,27 @@ impl Store {
         to_graph_name: impl Into<GraphNameRef<'a>>,
         base_iri: Option<&str>,
     ) -> io::Result<()> {
-        let mut writer = self.storage.transaction();
-        load_graph(&mut writer, reader, format, to_graph_name.into(), base_iri)?;
-        writer.commit()
+        let mut parser = GraphParser::from_format(format);
+        if let Some(base_iri) = base_iri {
+            parser = parser
+                .with_base_iri(base_iri)
+                .map_err(invalid_input_error)?;
+        }
+        let quads = parser
+            .read_triples(reader)?
+            .collect::<io::Result<Vec<_>>>()?;
+        let to_graph_name = to_graph_name.into();
+        self.storage.transaction(move |mut t| {
+            for quad in &quads {
+                t.insert(quad.as_ref().in_graph(to_graph_name))?;
+            }
+            Ok(())
+        })
     }
 
     /// Loads a dataset file (i.e. quads) into the store.
     ///
-    /// This function is atomic and quite slow. To get much better performances you should use [`create_from_dataset`].
+    /// This function is atomic and quite slow. To get much better performances you might want to [`bulk_load_dataset`].
     ///
     /// Usage example:
     /// ```
@@ -303,9 +317,19 @@ impl Store {
         format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> io::Result<()> {
-        let mut writer = self.storage.transaction();
-        load_dataset(&mut writer, reader, format, base_iri)?;
-        writer.commit()
+        let mut parser = DatasetParser::from_format(format);
+        if let Some(base_iri) = base_iri {
+            parser = parser
+                .with_base_iri(base_iri)
+                .map_err(invalid_input_error)?;
+        }
+        let quads = parser.read_quads(reader)?.collect::<io::Result<Vec<_>>>()?;
+        self.storage.transaction(move |mut t| {
+            for quad in &quads {
+                t.insert(quad.into())?;
+            }
+            Ok(())
+        })
     }
 
     /// Adds a quad to this store.
@@ -327,10 +351,21 @@ impl Store {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> io::Result<bool> {
-        let mut writer = self.storage.transaction();
-        let result = writer.insert(quad.into())?;
-        writer.commit()?;
-        Ok(result)
+        let quad = quad.into();
+        self.storage.transaction(move |mut t| t.insert(quad))
+    }
+
+    /// Adds atomically a set of quads to this store.
+    ///
+    /// Warning: This operation uses a memory heavy transaction internally, use [`bulk_extend`] if you plan to add ten of millions of triples.
+    pub fn extend(&self, quads: impl IntoIterator<Item = Quad>) -> io::Result<()> {
+        let quads = quads.into_iter().collect::<Vec<_>>();
+        self.storage.transaction(move |mut t| {
+            for quad in &quads {
+                t.insert(quad.into())?;
+            }
+            Ok(())
+        })
     }
 
     /// Removes a quad from this store.
@@ -353,10 +388,8 @@ impl Store {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> io::Result<bool> {
-        let mut writer = self.storage.transaction();
-        let result = writer.remove(quad.into())?;
-        writer.commit()?;
-        Ok(result)
+        let quad = quad.into();
+        self.storage.transaction(move |mut t| t.remove(quad))
     }
 
     /// Dumps a store graph into a file.
@@ -383,12 +416,11 @@ impl Store {
         format: GraphFormat,
         from_graph_name: impl Into<GraphNameRef<'a>>,
     ) -> io::Result<()> {
-        dump_graph(
-            self.quads_for_pattern(None, None, None, Some(from_graph_name.into()))
-                .map(|q| Ok(q?.into())),
-            writer,
-            format,
-        )
+        let mut writer = GraphSerializer::from_format(format).triple_writer(writer)?;
+        for quad in self.quads_for_pattern(None, None, None, Some(from_graph_name.into())) {
+            writer.write(quad?.as_ref())?;
+        }
+        writer.finish()
     }
 
     /// Dumps the store into a file.
@@ -408,7 +440,11 @@ impl Store {
     /// # std::io::Result::Ok(())
     /// ```
     pub fn dump_dataset(&self, writer: impl Write, format: DatasetFormat) -> io::Result<()> {
-        dump_dataset(self.iter(), writer, format)
+        let mut writer = DatasetSerializer::from_format(format).quad_writer(writer)?;
+        for quad in self.iter() {
+            writer.write(&quad?)?;
+        }
+        writer.finish()
     }
 
     /// Returns all the store named graphs
@@ -474,10 +510,9 @@ impl Store {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> io::Result<bool> {
-        let mut writer = self.storage.transaction();
-        let result = writer.insert_named_graph(graph_name.into())?;
-        writer.commit()?;
-        Ok(result)
+        let graph_name = graph_name.into();
+        self.storage
+            .transaction(move |mut t| t.insert_named_graph(graph_name))
     }
 
     /// Clears a graph from this store.
@@ -499,9 +534,9 @@ impl Store {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn clear_graph<'a>(&self, graph_name: impl Into<GraphNameRef<'a>>) -> io::Result<()> {
-        let mut writer = self.storage.transaction();
-        writer.clear_graph(graph_name.into())?;
-        writer.commit()
+        let graph_name = graph_name.into();
+        self.storage
+            .transaction(move |mut t| t.clear_graph(graph_name))
     }
 
     /// Removes a graph from this store.
@@ -528,10 +563,9 @@ impl Store {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> io::Result<bool> {
-        let mut writer = self.storage.transaction();
-        let result = writer.remove_named_graph(graph_name.into())?;
-        writer.commit()?;
-        Ok(result)
+        let graph_name = graph_name.into();
+        self.storage
+            .transaction(move |mut t| t.remove_named_graph(graph_name))
     }
 
     /// Clears the store.
@@ -552,9 +586,7 @@ impl Store {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn clear(&self) -> io::Result<()> {
-        let mut writer = self.storage.transaction();
-        writer.clear()?;
-        writer.commit()
+        self.storage.transaction(|mut t| t.clear())
     }
 
     /// Flushes all buffers and ensures that all writes are saved on disk.
@@ -580,9 +612,11 @@ impl Store {
 
     /// Loads a dataset file efficiently into the store.
     ///
-    /// Warning: This function is optimized for speed and might eat a lot of memory.
+    /// This function is optimized for large dataset loading speed. For small files, [`load_dataset`] might be more convenient.
     ///
     /// Warning: This method is not atomic. If the parsing fails in the middle of the file, only a part of it may be written to the store.
+    ///
+    /// Warning: This method is optimized for speed. It uses multiple threads and multiple GBs of RAM on large files.
     ///
     /// Usage example:
     /// ```
@@ -623,9 +657,11 @@ impl Store {
 
     /// Loads a dataset file efficiently into the store.
     ///
-    /// Warning: This function is optimized for speed and might eat a lot of memory.
+    /// This function is optimized for large dataset loading speed. For small files, [`load_graph`] might be more convenient.   
     ///
     /// Warning: This method is not atomic. If the parsing fails in the middle of the file, only a part of it may be written to the store.
+    ///
+    /// Warning: This method is optimized for speed. It uses multiple threads and multiple GBs of RAM on large files.
     ///
     /// Usage example:
     /// ```
@@ -668,6 +704,15 @@ impl Store {
                 .read_triples(reader)?
                 .map(|r| Ok(r?.in_graph(to_graph_name.into_owned()))),
         )
+    }
+
+    /// Adds a set of triples to this store using bulk load.
+    ///
+    /// Warning: This method is not atomic. If the parsing fails in the middle of the file, only a part of it may be written to the store.
+    ///
+    /// Warning: This method is optimized for speed. It uses multiple threads and multiple GBs of RAM on large files.
+    pub fn bulk_extend(&mut self, quads: impl IntoIterator<Item = Quad>) -> io::Result<()> {
+        bulk_load(&self.storage, quads.into_iter().map(Ok))
     }
 }
 

@@ -1,4 +1,5 @@
-use crate::io::GraphFormat;
+use crate::error::invalid_input_error;
+use crate::io::{GraphFormat, GraphParser};
 use crate::model::{
     BlankNode as OxBlankNode, GraphName as OxGraphName, GraphNameRef, Literal as OxLiteral,
     NamedNode as OxNamedNode, NamedNodeRef, Quad as OxQuad, Term as OxTerm, Triple as OxTriple,
@@ -10,7 +11,6 @@ use crate::sparql::http::Client;
 use crate::sparql::plan::EncodedTuple;
 use crate::sparql::plan_builder::PlanBuilder;
 use crate::sparql::{EvaluationError, Update, UpdateOptions};
-use crate::storage::io::load_graph;
 use crate::storage::numeric_encoder::{Decoder, EncodedTerm};
 use crate::storage::{Storage, StorageWriter};
 use oxiri::Iri;
@@ -23,42 +23,50 @@ use spargebra::term::{
 };
 use spargebra::GraphUpdateOperation;
 use std::collections::HashMap;
-use std::io;
-use std::io::BufReader;
+use std::io::{BufReader, Error, ErrorKind};
 use std::rc::Rc;
 
-pub struct SimpleUpdateEvaluator {
-    transaction: StorageWriter,
-    base_iri: Option<Rc<Iri<String>>>,
+pub fn evaluate_update(
+    storage: &Storage,
+    update: Update,
     options: UpdateOptions,
-    client: Client,
+) -> Result<(), EvaluationError> {
+    let base_iri = update.inner.base_iri.map(Rc::new);
+    let client = Client::new(options.query_options.http_timeout);
+    storage
+        .transaction(move |transaction| {
+            SimpleUpdateEvaluator {
+                transaction,
+                base_iri: base_iri.clone(),
+                options: &options,
+                client: &client,
+            }
+            .eval_all(&update.inner.operations, &update.using_datasets)
+            .map_err(|e| match e {
+                EvaluationError::Io(e) => e,
+                q => Error::new(ErrorKind::Other, q),
+            })
+        })
+        .map_err(|e| {
+            if e.get_ref()
+                .map_or(false, |inner| inner.is::<EvaluationError>())
+            {
+                *e.into_inner().unwrap().downcast().unwrap()
+            } else {
+                EvaluationError::Io(e)
+            }
+        })?;
+    Ok(())
 }
 
-impl SimpleUpdateEvaluator {
-    pub fn run(
-        storage: &Storage,
-        update: Update,
-        options: UpdateOptions,
-    ) -> Result<(), EvaluationError> {
-        let client = Client::new(options.query_options.http_timeout);
-        let mut evaluator = Self {
-            transaction: storage.transaction(),
-            base_iri: update.inner.base_iri.map(Rc::new),
-            options,
-            client,
-        };
-        match evaluator.eval_all(&update.inner.operations, &update.using_datasets) {
-            Ok(_) => {
-                evaluator.transaction.commit()?;
-                Ok(())
-            }
-            Err(e) => {
-                evaluator.transaction.rollback()?;
-                Err(e)
-            }
-        }
-    }
+struct SimpleUpdateEvaluator<'a> {
+    transaction: StorageWriter<'a>,
+    base_iri: Option<Rc<Iri<String>>>,
+    options: &'a UpdateOptions,
+    client: &'a Client,
+}
 
+impl SimpleUpdateEvaluator<'_> {
     fn eval_all(
         &mut self,
         updates: &[GraphUpdateOperation],
@@ -173,14 +181,16 @@ impl SimpleUpdateEvaluator {
             GraphName::NamedNode(graph_name) => NamedNodeRef::new_unchecked(&graph_name.iri).into(),
             GraphName::DefaultGraph => GraphNameRef::DefaultGraph,
         };
-        load_graph(
-            &mut self.transaction,
-            BufReader::new(body),
-            format,
-            to_graph_name,
-            Some(&from.iri),
-        )
-        .map_err(io::Error::from)?;
+        let mut parser = GraphParser::from_format(format);
+        if let Some(base_iri) = &self.base_iri {
+            parser = parser
+                .with_base_iri(base_iri.as_str())
+                .map_err(invalid_input_error)?;
+        }
+        for t in parser.read_triples(BufReader::new(body))? {
+            self.transaction
+                .insert(t?.as_ref().in_graph(to_graph_name))?;
+        }
         Ok(())
     }
 

@@ -7,7 +7,7 @@ cd bsbm-tools
 cargo build --release --manifest-path="../../server/Cargo.toml"
 ./../../target/release/oxigraph_server --location oxigraph_data load --file "explore-${DATASET_SIZE}.nt"
 ./../../target/release/oxigraph_server --location oxigraph_data serve --bind 127.0.0.1:7878 &
-sleep 5
+sleep 1
 curl -f -X POST -H 'Content-Type:application/n-triples' --data-binary "@explore-${DATASET_SIZE}.nt" http://127.0.0.1:7878/store?default
 ./testdriver -mt ${PARALLELISM} -ucf usecases/explore/sparql.txt -o "../bsbm.explore.oxigraph.${DATASET_SIZE}.${PARALLELISM}.main.xml" http://127.0.0.1:7878/query
 ./testdriver -mt ${PARALLELISM} -ucf usecases/exploreAndUpdate/sparql.txt -o "../bsbm.exploreAndUpdate.oxigraph.${DATASET_SIZE}.${PARALLELISM}.main.xml" http://127.0.0.1:7878/query -u http://127.0.0.1:7878/update -udataset "explore-update-${DATASET_SIZE}.nt"

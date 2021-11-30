@@ -351,8 +351,33 @@ impl Db {
         }
     }
 
+    pub fn transaction<T>(&self, f: impl Fn(&mut Transaction) -> Result<T>) -> Result<T> {
+        loop {
+            let mut transaction = self.build_transaction();
+            match { f(&mut transaction) } {
+                Ok(result) => {
+                    transaction.commit()?;
+                    return Ok(result);
+                }
+                Err(e) => {
+                    transaction.rollback()?;
+                    let is_conflict_error = e.get_ref().map_or(false, |e| {
+                        let msg = e.to_string();
+                        msg == "Resource busy: "
+                            || msg == "Operation timed out: Timeout waiting to lock key"
+                    });
+                    if is_conflict_error {
+                        // We retry
+                        continue;
+                    }
+                    return Err(e);
+                }
+            }
+        }
+    }
+
     #[must_use]
-    pub fn transaction(&self) -> Transaction {
+    fn build_transaction(&self) -> Transaction {
         unsafe {
             let transaction = rocksdb_transaction_begin(
                 self.0.db,
@@ -638,12 +663,12 @@ impl Drop for InnerTransaction {
 }
 
 impl Transaction {
-    pub fn commit(self) -> Result<()> {
+    fn commit(self) -> Result<()> {
         self.inner.is_ended.set(true);
         unsafe { ffi_result!(rocksdb_transaction_commit(self.inner.transaction)) }
     }
 
-    pub fn rollback(self) -> Result<()> {
+    fn rollback(self) -> Result<()> {
         self.inner.is_ended.set(true);
         unsafe { ffi_result!(rocksdb_transaction_rollback(self.inner.transaction)) }
     }
@@ -877,7 +902,7 @@ fn convert_error(ptr: *const c_char) -> Error {
 }
 
 fn other_error(error: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Error {
-    Error::new(ErrorKind::InvalidInput, error)
+    Error::new(ErrorKind::Other, error)
 }
 
 struct UnsafeEnv(*mut rocksdb_env_t);
@@ -897,7 +922,7 @@ fn path_to_cstring(path: &Path) -> Result<CString> {
 fn test_transaction_read_after_commit() -> Result<()> {
     let db = Db::new(vec![])?;
     let cf = db.column_family("default").unwrap();
-    let mut tr = db.transaction();
+    let mut tr = db.build_transaction();
     let reader = tr.reader();
     tr.insert(&cf, b"test", b"foo")?;
     assert_eq!(reader.get(&cf, b"test")?.as_deref(), Some(b"foo".as_ref()));

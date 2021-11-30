@@ -16,9 +16,8 @@ pub enum EvaluationError {
     Io(io::Error),
     /// An error returned during the query evaluation itself
     Query(QueryError),
-    /// A conflict during a transaction
     #[doc(hidden)]
-    Conflict,
+    Extra,
 }
 
 #[derive(Debug)]
@@ -38,7 +37,7 @@ impl fmt::Display for EvaluationError {
             Self::Parsing(error) => error.fmt(f),
             Self::Io(error) => error.fmt(f),
             Self::Query(error) => error.fmt(f),
-            Self::Conflict => write!(f, "Transaction conflict"),
+            Self::Extra => write!(f, "Unknown error"),
         }
     }
 }
