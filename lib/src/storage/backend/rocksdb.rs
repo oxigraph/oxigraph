@@ -442,7 +442,7 @@ impl Db {
         }
     }
 
-    pub fn write_stt_files(&self, ssts_for_cf: Vec<(&ColumnFamily, PathBuf)>) -> Result<()> {
+    pub fn insert_stt_files(&self, ssts_for_cf: Vec<(&ColumnFamily, PathBuf)>) -> Result<()> {
         for (cf, path) in ssts_for_cf {
             unsafe {
                 ffi_result!(rocksdb_transactiondb_ingest_external_file_cf(

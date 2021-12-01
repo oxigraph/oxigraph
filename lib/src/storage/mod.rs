@@ -163,7 +163,7 @@ impl Storage {
                 stt_file.insert_empty(&k)?;
             }
             this.db
-                .write_stt_files(vec![(&this.graphs_cf, stt_file.finish()?)])?;
+                .insert_stt_files(vec![(&this.graphs_cf, stt_file.finish()?)])?;
             version = 1;
             this.update_version(version)?;
         }
@@ -1166,7 +1166,7 @@ impl BulkLoader {
             self.quads.clear();
         }
 
-        self.storage.db.write_stt_files(to_load)
+        self.storage.db.insert_stt_files(to_load)
     }
 
     fn insert_term(&mut self, term: TermRef<'_>, encoded: &EncodedTerm) -> Result<()> {

@@ -2,8 +2,7 @@ use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
 use oxigraph::store::Store;
-use std::io;
-use std::io::Cursor;
+use std::io::{Cursor, Result};
 use std::process::Command;
 
 const DATA: &str = r#"
@@ -75,7 +74,7 @@ fn quads(graph_name: impl Into<GraphNameRef<'static>>) -> Vec<QuadRef<'static>> 
 }
 
 #[test]
-fn test_load_graph() -> io::Result<()> {
+fn test_load_graph() -> Result<()> {
     let store = Store::new()?;
     store.load_graph(
         Cursor::new(DATA),
@@ -90,7 +89,7 @@ fn test_load_graph() -> io::Result<()> {
 }
 
 #[test]
-fn test_load_dataset() -> io::Result<()> {
+fn test_load_dataset() -> Result<()> {
     let store = Store::new()?;
     store.load_dataset(Cursor::new(DATA), DatasetFormat::TriG, None)?;
     for q in quads(GraphNameRef::DefaultGraph) {
@@ -100,7 +99,7 @@ fn test_load_dataset() -> io::Result<()> {
 }
 
 #[test]
-fn test_bulk_load_dataset() -> io::Result<()> {
+fn test_bulk_load_dataset() -> Result<()> {
     let mut store = Store::new().unwrap();
     store.bulk_load_dataset(Cursor::new(DATA), DatasetFormat::TriG, None)?;
     for q in quads(GraphNameRef::DefaultGraph) {
@@ -110,7 +109,7 @@ fn test_bulk_load_dataset() -> io::Result<()> {
 }
 
 #[test]
-fn test_dump_graph() -> io::Result<()> {
+fn test_dump_graph() -> Result<()> {
     let store = Store::new()?;
     for q in quads(GraphNameRef::DefaultGraph) {
         store.insert(q)?;
@@ -130,7 +129,7 @@ fn test_dump_graph() -> io::Result<()> {
 }
 
 #[test]
-fn test_dump_dataset() -> io::Result<()> {
+fn test_dump_dataset() -> Result<()> {
     let store = Store::new()?;
     for q in quads(GraphNameRef::DefaultGraph) {
         store.insert(q)?;
@@ -146,7 +145,7 @@ fn test_dump_dataset() -> io::Result<()> {
 }
 
 #[test]
-fn test_snapshot_isolation_iterator() -> io::Result<()> {
+fn test_snapshot_isolation_iterator() -> Result<()> {
     let quad = QuadRef::new(
         NamedNodeRef::new_unchecked("http://example.com/s"),
         NamedNodeRef::new_unchecked("http://example.com/p"),
@@ -157,16 +156,28 @@ fn test_snapshot_isolation_iterator() -> io::Result<()> {
     store.insert(quad)?;
     let iter = store.iter();
     store.remove(quad)?;
-    assert_eq!(
-        iter.collect::<io::Result<Vec<_>>>()?,
-        vec![quad.into_owned()]
+    assert_eq!(iter.collect::<Result<Vec<_>>>()?, vec![quad.into_owned()]);
+    Ok(())
+}
+
+#[test]
+fn test_bulk_load_on_existing_delete_overrides_the_delete() -> Result<()> {
+    let quad = QuadRef::new(
+        NamedNodeRef::new_unchecked("http://example.com/s"),
+        NamedNodeRef::new_unchecked("http://example.com/p"),
+        NamedNodeRef::new_unchecked("http://example.com/o"),
+        NamedNodeRef::new_unchecked("http://example.com/g"),
     );
+    let mut store = Store::new()?;
+    store.remove(quad)?;
+    store.bulk_extend([quad.into_owned()])?;
+    assert_eq!(store.len()?, 1);
     Ok(())
 }
 
 #[test]
 #[cfg(not(target_arch = "wasm32"))]
-fn test_backward_compatibility() -> io::Result<()> {
+fn test_backward_compatibility() -> Result<()> {
     // We run twice to check if data is properly saved and closed
     for _ in 0..2 {
         let store = Store::open("tests/rocksdb_bc_data")?;
@@ -181,14 +192,14 @@ fn test_backward_compatibility() -> io::Result<()> {
         assert!(store.contains_named_graph(graph_name)?);
         assert_eq!(
             vec![NamedOrBlankNode::from(graph_name)],
-            store.named_graphs().collect::<io::Result<Vec<_>>>()?
+            store.named_graphs().collect::<Result<Vec<_>>>()?
         );
     }
     reset_dir("tests/rocksdb_bc_data")?;
     Ok(())
 }
 
-fn reset_dir(dir: &str) -> io::Result<()> {
+fn reset_dir(dir: &str) -> Result<()> {
     assert!(Command::new("git")
         .args(&["clean", "-fX", dir])
         .status()?
