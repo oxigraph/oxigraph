@@ -109,6 +109,21 @@ fn test_bulk_load_dataset() -> Result<()> {
 }
 
 #[test]
+fn test_load_graph_generates_new_blank_nodes() -> Result<()> {
+    let store = Store::new()?;
+    for _ in 0..2 {
+        store.load_graph(
+            Cursor::new("_:a <http://example.com/p> <http://example.com/p> ."),
+            GraphFormat::NTriples,
+            GraphNameRef::DefaultGraph,
+            None,
+        )?;
+    }
+    assert_eq!(store.len()?, 2);
+    Ok(())
+}
+
+#[test]
 fn test_dump_graph() -> Result<()> {
     let store = Store::new()?;
     for q in quads(GraphNameRef::DefaultGraph) {
