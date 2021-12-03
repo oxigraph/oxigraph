@@ -1340,6 +1340,7 @@ impl Timestamp {
     }
 }
 
+#[allow(clippy::unnecessary_wraps)]
 #[cfg(target_arch = "wasm32")]
 fn since_unix_epoch() -> Result<Duration, DateTimeError> {
     Ok(Duration::new(

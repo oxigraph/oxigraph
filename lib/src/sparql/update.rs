@@ -32,14 +32,14 @@ pub fn evaluate_update(
     options: UpdateOptions,
 ) -> Result<(), EvaluationError> {
     let base_iri = update.inner.base_iri.map(Rc::new);
-    let client = Client::new(options.query_options.http_timeout);
     storage
         .transaction(move |transaction| {
+            let client = Client::new(options.query_options.http_timeout);
             SimpleUpdateEvaluator {
                 transaction,
                 base_iri: base_iri.clone(),
-                options: &options,
-                client: &client,
+                options: options.clone(),
+                client,
             }
             .eval_all(&update.inner.operations, &update.using_datasets)
             .map_err(|e| match e {
@@ -62,8 +62,8 @@ pub fn evaluate_update(
 struct SimpleUpdateEvaluator<'a> {
     transaction: StorageWriter<'a>,
     base_iri: Option<Rc<Iri<String>>>,
-    options: &'a UpdateOptions,
-    client: &'a Client,
+    options: UpdateOptions,
+    client: Client,
 }
 
 impl SimpleUpdateEvaluator<'_> {

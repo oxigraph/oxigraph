@@ -1,11 +1,13 @@
 use crate::error::invalid_data_error;
 use crate::model::{GraphNameRef, NamedOrBlankNodeRef, Quad, QuadRef, TermRef};
 use crate::storage::backend::{Reader, Transaction};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::storage::binary_encoder::LATEST_STORAGE_VERSION;
 use crate::storage::binary_encoder::{
     decode_term, encode_term, encode_term_pair, encode_term_quad, encode_term_triple,
     write_gosp_quad, write_gpos_quad, write_gspo_quad, write_osp_quad, write_ospg_quad,
     write_pos_quad, write_posg_quad, write_spo_quad, write_spog_quad, write_term, QuadEncoding,
-    LATEST_STORAGE_VERSION, WRITTEN_TERM_MAX_SIZE,
+    WRITTEN_TERM_MAX_SIZE,
 };
 use crate::storage::numeric_encoder::{insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup};
 use backend::{ColumnFamily, ColumnFamilyDefinition, Db, Iter};
@@ -15,8 +17,8 @@ use std::io::Result;
 #[cfg(not(target_arch = "wasm32"))]
 use std::mem::take;
 #[cfg(not(target_arch = "wasm32"))]
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+#[cfg(not(target_arch = "wasm32"))]
 use std::thread::spawn;
 
 mod backend;
@@ -36,6 +38,7 @@ const DPOS_CF: &str = "dpos";
 const DOSP_CF: &str = "dosp";
 const GRAPHS_CF: &str = "graphs";
 const DEFAULT_CF: &str = "default";
+#[cfg(not(target_arch = "wasm32"))]
 const BULK_LOAD_BATCH_SIZE: usize = 1024 * 1024;
 
 /// Low level storage primitives
@@ -142,12 +145,18 @@ impl Storage {
             graphs_cf: db.column_family(GRAPHS_CF).unwrap(),
             db,
         };
+        #[cfg(not(target_arch = "wasm32"))]
+        this.migrate()?;
+        Ok(this)
+    }
 
-        let mut version = this.ensure_version()?;
+    #[cfg(not(target_arch = "wasm32"))]
+    fn migrate(&self) -> Result<()> {
+        let mut version = self.ensure_version()?;
         if version == 0 {
             // We migrate to v1
             let mut graph_names = HashSet::new();
-            for quad in this.reader().quads() {
+            for quad in self.snapshot().quads() {
                 let quad = quad?;
                 if !quad.graph_name.is_default_graph() {
                     graph_names.insert(quad.graph_name);
@@ -158,14 +167,14 @@ impl Storage {
                 .map(|g| encode_term(&g))
                 .collect::<Vec<_>>();
             graph_names.sort_unstable();
-            let mut stt_file = this.db.new_sst_file()?;
+            let mut stt_file = self.db.new_sst_file()?;
             for k in graph_names {
                 stt_file.insert_empty(&k)?;
             }
-            this.db
-                .insert_stt_files(vec![(&this.graphs_cf, stt_file.finish()?)])?;
+            self.db
+                .insert_stt_files(vec![(&self.graphs_cf, stt_file.finish()?)])?;
             version = 1;
-            this.update_version(version)?;
+            self.update_version(version)?;
         }
 
         match version {
@@ -173,7 +182,7 @@ impl Storage {
                 "The RocksDB database is using the outdated encoding version {}. Automated migration is not supported, please dump the store dataset using a compatible Oxigraph version and load it again using the current version",
                 version
             ))),
-            LATEST_STORAGE_VERSION => Ok(this),
+            LATEST_STORAGE_VERSION => Ok(()),
             _ => Err(invalid_data_error(format!(
                 "The RocksDB database is using the too recent version {}. Upgrade to the latest Oxigraph version to load this database",
                 version
@@ -181,9 +190,10 @@ impl Storage {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn ensure_version(&self) -> Result<u64> {
         Ok(
-            if let Some(version) = self.reader().reader.get(&self.default_cf, b"oxversion")? {
+            if let Some(version) = self.db.snapshot().get(&self.default_cf, b"oxversion")? {
                 let mut buffer = [0; 8];
                 buffer.copy_from_slice(&version);
                 u64::from_be_bytes(buffer)
@@ -194,19 +204,12 @@ impl Storage {
         )
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn update_version(&self, version: u64) -> Result<()> {
-        self.db
-            .transaction(|t| t.insert(&self.default_cf, b"oxversion", &version.to_be_bytes()))?;
+        self.db.transaction(|mut t| {
+            t.insert(&self.default_cf, b"oxversion", &version.to_be_bytes())
+        })?;
         self.db.flush(&self.default_cf)
-    }
-
-    /// Unsafe reader (data might appear and disapear between two reads)
-    /// Use [`snapshot`] if you don't want that.
-    pub fn reader(&self) -> StorageReader {
-        StorageReader {
-            reader: self.db.reader(),
-            storage: self.clone(),
-        }
     }
 
     pub fn snapshot(&self) -> StorageReader {
@@ -216,7 +219,10 @@ impl Storage {
         }
     }
 
-    pub fn transaction<T>(&self, f: impl Fn(StorageWriter<'_>) -> Result<T>) -> Result<T> {
+    pub fn transaction<'a, 'b: 'a, T>(
+        &'b self,
+        f: impl Fn(StorageWriter<'a>) -> Result<T>,
+    ) -> Result<T> {
         self.db.transaction(|transaction| {
             f(StorageWriter {
                 buffer: Vec::new(),
@@ -579,7 +585,7 @@ impl StorageReader {
     pub fn get_str(&self, key: &StrHash) -> Result<Option<String>> {
         self.reader
             .get(&self.storage.id2str_cf, &key.to_be_bytes())?
-            .map(|v| String::from_utf8(v.to_vec()))
+            .map(|v| String::from_utf8(v.into()))
             .transpose()
             .map_err(invalid_data_error)
     }
@@ -674,7 +680,7 @@ impl StrLookup for StorageReader {
 
 pub struct StorageWriter<'a> {
     buffer: Vec<u8>,
-    transaction: &'a mut Transaction,
+    transaction: Transaction<'a>,
     storage: &'a Storage,
 }
 

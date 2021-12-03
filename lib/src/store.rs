@@ -181,19 +181,19 @@ impl Store {
     /// Checks if this store contains a given quad
     pub fn contains<'a>(&self, quad: impl Into<QuadRef<'a>>) -> io::Result<bool> {
         let quad = EncodedQuad::from(quad.into());
-        self.storage.reader().contains(&quad)
+        self.storage.snapshot().contains(&quad)
     }
 
     /// Returns the number of quads in the store
     ///
     /// Warning: this function executes a full scan
     pub fn len(&self) -> io::Result<usize> {
-        self.storage.reader().len()
+        self.storage.snapshot().len()
     }
 
     /// Returns if the store is empty
     pub fn is_empty(&self) -> io::Result<bool> {
-        self.storage.reader().is_empty()
+        self.storage.snapshot().is_empty()
     }
 
     /// Executes a [SPARQL 1.1 update](https://www.w3.org/TR/sparql11-update/).
@@ -487,7 +487,7 @@ impl Store {
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> io::Result<bool> {
         let graph_name = EncodedTerm::from(graph_name.into());
-        self.storage.reader().contains_named_graph(&graph_name)
+        self.storage.snapshot().contains_named_graph(&graph_name)
     }
 
     /// Inserts a graph into this store
@@ -684,6 +684,7 @@ impl Store {
     /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
     /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
     /// Errors related to data loading into the store use the other error kinds.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn bulk_load_graph<'a>(
         &mut self,
         reader: impl BufRead,
@@ -711,6 +712,7 @@ impl Store {
     /// Warning: This method is not atomic. If the parsing fails in the middle of the file, only a part of it may be written to the store.
     ///
     /// Warning: This method is optimized for speed. It uses multiple threads and multiple GBs of RAM on large files.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn bulk_extend(&mut self, quads: impl IntoIterator<Item = Quad>) -> io::Result<()> {
         bulk_load(&self.storage, quads.into_iter().map(Ok))
     }

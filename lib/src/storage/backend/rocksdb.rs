@@ -10,14 +10,14 @@ use libc::{self, c_char, c_void, free};
 use oxrocksdb_sys::*;
 use rand::random;
 use std::borrow::Borrow;
-use std::cell::Cell;
 use std::env::temp_dir;
 use std::ffi::{CStr, CString};
 use std::fs::remove_dir_all;
 use std::io::{Error, ErrorKind, Result};
+use std::marker::PhantomData;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::{ptr, slice};
 
@@ -321,16 +321,6 @@ impl Db {
         None
     }
 
-    /// Unsafe reader (data might appear and disapear between two reads)
-    /// Use [`snapshot`] if you don't want that.
-    #[must_use]
-    pub fn reader(&self) -> Reader {
-        Reader {
-            inner: InnerReader::Raw(self.0.clone()),
-            options: unsafe { rocksdb_readoptions_create_copy(self.0.read_options) },
-        }
-    }
-
     #[must_use]
     pub fn snapshot(&self) -> Reader {
         unsafe {
@@ -351,56 +341,62 @@ impl Db {
         }
     }
 
-    pub fn transaction<T>(&self, f: impl Fn(&mut Transaction) -> Result<T>) -> Result<T> {
+    pub fn transaction<'a, 'b: 'a, T>(
+        &'b self,
+        f: impl Fn(Transaction<'a>) -> Result<T>,
+    ) -> Result<T> {
         loop {
-            let mut transaction = self.build_transaction();
-            match { f(&mut transaction) } {
+            let transaction = unsafe {
+                let transaction = rocksdb_transaction_begin(
+                    self.0.db,
+                    self.0.write_options,
+                    self.0.transaction_options,
+                    ptr::null_mut(),
+                );
+                assert!(
+                    !transaction.is_null(),
+                    "rocksdb_transaction_begin returned null"
+                );
+                transaction
+            };
+            let read_options = unsafe {
+                let options = rocksdb_readoptions_create_copy(self.0.read_options);
+                rocksdb_readoptions_set_snapshot(
+                    options,
+                    rocksdb_transaction_get_snapshot(transaction),
+                );
+                options
+            };
+            let result = f(Transaction {
+                transaction: Rc::new(transaction),
+                read_options,
+                _lifetime: PhantomData::default(),
+            });
+            match result {
                 Ok(result) => {
-                    transaction.commit()?;
+                    unsafe {
+                        ffi_result!(rocksdb_transaction_commit(transaction))?;
+                        rocksdb_transaction_destroy(transaction);
+                        rocksdb_readoptions_destroy(read_options);
+                    }
                     return Ok(result);
                 }
                 Err(e) => {
-                    transaction.rollback()?;
+                    unsafe {
+                        ffi_result!(rocksdb_transaction_rollback(transaction))?;
+                        rocksdb_transaction_destroy(transaction);
+                        rocksdb_readoptions_destroy(read_options);
+                    }
                     let is_conflict_error = e.get_ref().map_or(false, |e| {
                         let msg = e.to_string();
                         msg == "Resource busy: "
                             || msg == "Operation timed out: Timeout waiting to lock key"
                     });
-                    if is_conflict_error {
-                        // We retry
-                        continue;
+                    if !is_conflict_error {
+                        // We raise the error
+                        return Err(e);
                     }
-                    return Err(e);
                 }
-            }
-        }
-    }
-
-    #[must_use]
-    fn build_transaction(&self) -> Transaction {
-        unsafe {
-            let transaction = rocksdb_transaction_begin(
-                self.0.db,
-                self.0.write_options,
-                self.0.transaction_options,
-                ptr::null_mut(),
-            );
-            assert!(
-                !transaction.is_null(),
-                "rocksdb_transaction_begin returned null"
-            );
-            let options = rocksdb_readoptions_create_copy(self.0.read_options);
-            rocksdb_readoptions_set_snapshot(
-                options,
-                rocksdb_transaction_get_snapshot(transaction),
-            );
-            Transaction {
-                inner: Rc::new(InnerTransaction {
-                    transaction,
-                    is_ended: Cell::new(false),
-                    _db: self.0.clone(),
-                }),
-                read_options: options,
             }
         }
     }
@@ -473,9 +469,8 @@ pub struct Reader {
 
 #[derive(Clone)]
 enum InnerReader {
-    Raw(Arc<DbHandler>),
     Snapshot(Rc<InnerSnapshot>),
-    Transaction(Rc<InnerTransaction>),
+    Transaction(Weak<*mut rocksdb_transaction_t>),
 }
 
 struct InnerSnapshot {
@@ -508,13 +503,6 @@ impl Reader {
     pub fn get(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<Option<PinnableSlice>> {
         unsafe {
             let slice = match &self.inner {
-                InnerReader::Raw(inner) => ffi_result!(rocksdb_transactiondb_get_pinned_cf(
-                    inner.db,
-                    self.options,
-                    column_family.0,
-                    key.as_ptr() as *const c_char,
-                    key.len()
-                )),
                 InnerReader::Snapshot(inner) => ffi_result!(rocksdb_transactiondb_get_pinned_cf(
                     inner.db.db,
                     self.options,
@@ -523,16 +511,17 @@ impl Reader {
                     key.len()
                 )),
                 InnerReader::Transaction(inner) => {
-                    if inner.is_ended.get() {
+                    if let Some(inner) = inner.upgrade() {
+                        ffi_result!(rocksdb_transaction_get_pinned_cf(
+                            *inner,
+                            self.options,
+                            column_family.0,
+                            key.as_ptr() as *const c_char,
+                            key.len()
+                        ))
+                    } else {
                         return Err(invalid_input_error("The transaction is already ended"));
                     }
-                    ffi_result!(rocksdb_transaction_get_pinned_cf(
-                        inner.transaction,
-                        self.options,
-                        column_family.0,
-                        key.as_ptr() as *const c_char,
-                        key.len()
-                    ))
                 }
             }?;
             Ok(if slice.is_null() {
@@ -584,21 +573,15 @@ impl Reader {
                 );
             }
             let iter = match &self.inner {
-                InnerReader::Raw(inner) => {
-                    rocksdb_transactiondb_create_iterator_cf(inner.db, options, column_family.0)
-                }
                 InnerReader::Snapshot(inner) => {
                     rocksdb_transactiondb_create_iterator_cf(inner.db.db, options, column_family.0)
                 }
                 InnerReader::Transaction(inner) => {
-                    if inner.is_ended.get() {
+                    if let Some(inner) = inner.upgrade() {
+                        rocksdb_transaction_create_iterator_cf(*inner, options, column_family.0)
+                    } else {
                         return Err(invalid_input_error("The transaction is already ended"));
                     }
-                    rocksdb_transaction_create_iterator_cf(
-                        inner.transaction,
-                        options,
-                        column_family.0,
-                    )
                 }
             };
             assert!(!iter.is_null(), "rocksdb_create_iterator returned null");
@@ -636,68 +619,17 @@ impl Reader {
     }
 }
 
-pub struct Transaction {
-    inner: Rc<InnerTransaction>,
+pub struct Transaction<'a> {
+    transaction: Rc<*mut rocksdb_transaction_t>,
     read_options: *mut rocksdb_readoptions_t,
+    _lifetime: PhantomData<&'a ()>,
 }
 
-struct InnerTransaction {
-    transaction: *mut rocksdb_transaction_t,
-    is_ended: Cell<bool>,
-    _db: Arc<DbHandler>, // Used to ensure that the transaction is not outliving the DB
-}
-
-impl Drop for Transaction {
-    fn drop(&mut self) {
-        unsafe { rocksdb_readoptions_destroy(self.read_options) }
-    }
-}
-
-impl Drop for InnerTransaction {
-    fn drop(&mut self) {
-        if !self.is_ended.get() {
-            unsafe { ffi_result!(rocksdb_transaction_rollback(self.transaction)) }.unwrap();
-        }
-        unsafe { rocksdb_transaction_destroy(self.transaction) }
-    }
-}
-
-impl Transaction {
-    fn commit(self) -> Result<()> {
-        self.inner.is_ended.set(true);
-        unsafe { ffi_result!(rocksdb_transaction_commit(self.inner.transaction)) }
-    }
-
-    fn rollback(self) -> Result<()> {
-        self.inner.is_ended.set(true);
-        unsafe { ffi_result!(rocksdb_transaction_rollback(self.inner.transaction)) }
-    }
-
+impl Transaction<'_> {
     pub fn reader(&self) -> Reader {
         Reader {
-            inner: InnerReader::Transaction(self.inner.clone()),
+            inner: InnerReader::Transaction(Rc::downgrade(&self.transaction)),
             options: unsafe { rocksdb_readoptions_create_copy(self.read_options) },
-        }
-    }
-
-    pub fn get_for_update(
-        &self,
-        column_family: &ColumnFamily,
-        key: &[u8],
-    ) -> Result<Option<PinnableSlice>> {
-        unsafe {
-            let slice = ffi_result!(rocksdb_transaction_get_for_update_pinned_cf(
-                self.inner.transaction,
-                self.read_options,
-                column_family.0,
-                key.as_ptr() as *const c_char,
-                key.len()
-            ))?;
-            Ok(if slice.is_null() {
-                None
-            } else {
-                Some(PinnableSlice(slice))
-            })
         }
     }
 
@@ -706,13 +638,22 @@ impl Transaction {
         column_family: &ColumnFamily,
         key: &[u8],
     ) -> Result<bool> {
-        Ok(self.get_for_update(column_family, key)?.is_some()) //TODO: optimize
+        unsafe {
+            let slice = ffi_result!(rocksdb_transaction_get_for_update_pinned_cf(
+                *self.transaction,
+                self.read_options,
+                column_family.0,
+                key.as_ptr() as *const c_char,
+                key.len()
+            ))?;
+            Ok(!slice.is_null())
+        }
     }
 
     pub fn insert(&mut self, column_family: &ColumnFamily, key: &[u8], value: &[u8]) -> Result<()> {
         unsafe {
             ffi_result!(rocksdb_transaction_put_cf(
-                self.inner.transaction,
+                *self.transaction,
                 column_family.0,
                 key.as_ptr() as *const c_char,
                 key.len(),
@@ -729,7 +670,7 @@ impl Transaction {
     pub fn remove(&mut self, column_family: &ColumnFamily, key: &[u8]) -> Result<()> {
         unsafe {
             ffi_result!(rocksdb_transaction_delete_cf(
-                self.inner.transaction,
+                *self.transaction,
                 column_family.0,
                 key.as_ptr() as *const c_char,
                 key.len(),
@@ -772,6 +713,12 @@ impl Borrow<[u8]> for PinnableSlice {
     }
 }
 
+impl From<PinnableSlice> for Vec<u8> {
+    fn from(value: PinnableSlice) -> Self {
+        value.to_vec()
+    }
+}
+
 pub struct Buffer {
     base: *mut u8,
     len: usize,
@@ -802,6 +749,12 @@ impl AsRef<[u8]> for Buffer {
 impl Borrow<[u8]> for Buffer {
     fn borrow(&self) -> &[u8] {
         &*self
+    }
+}
+
+impl From<Buffer> for Vec<u8> {
+    fn from(value: Buffer) -> Self {
+        value.to_vec()
     }
 }
 
@@ -916,17 +869,4 @@ fn path_to_cstring(path: &Path) -> Result<CString> {
             .ok_or_else(|| invalid_input_error("The DB path is not valid UTF-8"))?,
     )
     .map_err(invalid_input_error)
-}
-
-#[test]
-fn test_transaction_read_after_commit() -> Result<()> {
-    let db = Db::new(vec![])?;
-    let cf = db.column_family("default").unwrap();
-    let mut tr = db.build_transaction();
-    let reader = tr.reader();
-    tr.insert(&cf, b"test", b"foo")?;
-    assert_eq!(reader.get(&cf, b"test")?.as_deref(), Some(b"foo".as_ref()));
-    tr.commit()?;
-    assert!(reader.get(&cf, b"test").is_err());
-    Ok(())
 }
