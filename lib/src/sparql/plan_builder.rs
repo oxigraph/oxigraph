@@ -1,4 +1,5 @@
-use crate::model::{LiteralRef, NamedNodeRef};
+use crate::error::invalid_data_error;
+use crate::model::{LiteralRef, NamedNode as OxNamedNode, NamedNodeRef, Term as OxTerm};
 use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::model::Variable as OxVariable;
@@ -7,12 +8,13 @@ use crate::storage::numeric_encoder::{EncodedTerm, EncodedTriple};
 use rand::random;
 use spargebra::algebra::*;
 use spargebra::term::*;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::mem::swap;
 use std::rc::Rc;
 
 pub struct PlanBuilder<'a> {
     dataset: &'a DatasetView,
+    custom_functions: &'a HashMap<OxNamedNode, Rc<dyn Fn(&[OxTerm]) -> Option<OxTerm>>>,
 }
 
 impl<'a> PlanBuilder<'a> {
@@ -20,9 +22,14 @@ impl<'a> PlanBuilder<'a> {
         dataset: &'a DatasetView,
         pattern: &GraphPattern,
         is_cardinality_meaningful: bool,
+        custom_functions: &'a HashMap<OxNamedNode, Rc<dyn Fn(&[OxTerm]) -> Option<OxTerm>>>,
     ) -> Result<(PlanNode, Vec<Variable>), EvaluationError> {
         let mut variables = Vec::default();
-        let plan = PlanBuilder { dataset }.build_for_graph_pattern(
+        let plan = PlanBuilder {
+            dataset,
+            custom_functions,
+        }
+        .build_for_graph_pattern(
             pattern,
             &mut variables,
             &PatternValue::Constant(EncodedTerm::DefaultGraph),
@@ -43,8 +50,13 @@ impl<'a> PlanBuilder<'a> {
         dataset: &'a DatasetView,
         template: &[TriplePattern],
         mut variables: Vec<Variable>,
+        custom_functions: &'a HashMap<OxNamedNode, Rc<dyn Fn(&[OxTerm]) -> Option<OxTerm>>>,
     ) -> Vec<TripleTemplate> {
-        PlanBuilder { dataset }.build_for_graph_template(template, &mut variables)
+        PlanBuilder {
+            dataset,
+            custom_functions,
+        }
+        .build_for_graph_template(template, &mut variables)
     }
 
     fn build_for_graph_pattern(
@@ -628,7 +640,16 @@ impl<'a> PlanBuilder<'a> {
                     self.build_for_expression(&parameters[0], variables, graph_name)?,
                 )),
                 Function::Custom(name) => {
-                    if name.iri == "http://www.w3.org/2001/XMLSchema#boolean" {
+                    let ox_name = OxNamedNode::new(&name.iri).map_err(invalid_data_error)?;
+                    if self.custom_functions.contains_key(&ox_name) {
+                        PlanExpression::CustomFunction(
+                            ox_name,
+                            parameters
+                                .iter()
+                                .map(|p| self.build_for_expression(p, variables, graph_name))
+                                .collect::<Result<Vec<_>, EvaluationError>>()?,
+                        )
+                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#boolean" {
                         self.build_cast(
                             parameters,
                             PlanExpression::BooleanCast,

@@ -1,3 +1,4 @@
+use crate::model::NamedNode;
 use crate::sparql::model::Variable;
 use crate::storage::numeric_encoder::EncodedTerm;
 use spargebra::algebra::GraphPattern;
@@ -454,6 +455,7 @@ pub enum PlanExpression {
     YearMonthDurationCast(Box<Self>),
     DayTimeDurationCast(Box<Self>),
     StringCast(Box<Self>),
+    CustomFunction(NamedNode, Vec<Self>),
 }
 
 impl PlanExpression {
@@ -557,8 +559,9 @@ impl PlanExpression {
                 c.lookup_used_variables(callback);
                 d.lookup_used_variables(callback);
             }
-
-            PlanExpression::Concat(es) | PlanExpression::Coalesce(es) => {
+            PlanExpression::Concat(es)
+            | PlanExpression::Coalesce(es)
+            | PlanExpression::CustomFunction(_, es) => {
                 for e in es {
                     e.lookup_used_variables(callback);
                 }

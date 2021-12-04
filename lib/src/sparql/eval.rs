@@ -1,7 +1,7 @@
 use crate::model::vocab::{rdf, xsd};
 use crate::model::xsd::*;
-use crate::model::Triple;
 use crate::model::{BlankNode, LiteralRef, NamedNodeRef};
+use crate::model::{NamedNode, Term, Triple};
 use crate::sparql::algebra::{Query, QueryDataset};
 use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::EvaluationError;
@@ -38,6 +38,7 @@ pub struct SimpleEvaluator {
     base_iri: Option<Rc<Iri<String>>>,
     now: DateTime,
     service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
+    custom_functions: Rc<HashMap<NamedNode, Rc<dyn Fn(&[Term]) -> Option<Term>>>>,
 }
 
 impl SimpleEvaluator {
@@ -45,12 +46,14 @@ impl SimpleEvaluator {
         dataset: Rc<DatasetView>,
         base_iri: Option<Rc<Iri<String>>>,
         service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
+        custom_functions: Rc<HashMap<NamedNode, Rc<dyn Fn(&[Term]) -> Option<Term>>>>,
     ) -> Self {
         Self {
             dataset,
             base_iri,
             now: DateTime::now().unwrap(),
             service_handler,
+            custom_functions,
         }
     }
 
@@ -2015,6 +2018,24 @@ impl SimpleEvaluator {
                     }
                     _ => None,
                 })
+            }
+            PlanExpression::CustomFunction(function_name, args) => {
+                if let Some(function) = self.custom_functions.get(function_name).cloned() {
+                    let args = args
+                        .iter()
+                        .map(|e| self.expression_evaluator(e))
+                        .collect::<Vec<_>>();
+                    let dataset = self.dataset.clone();
+                    Rc::new(move |tuple| {
+                        let args = args
+                            .iter()
+                            .map(|f| dataset.decode_term(&f(tuple)?).ok())
+                            .collect::<Option<Vec<_>>>()?;
+                        Some(dataset.encode_term(&function(&args)?))
+                    })
+                } else {
+                    Rc::new(|_| None)
+                }
             }
         }
     }

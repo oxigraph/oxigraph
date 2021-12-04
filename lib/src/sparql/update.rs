@@ -138,11 +138,17 @@ impl SimpleUpdateEvaluator<'_> {
         algebra: &GraphPattern,
     ) -> Result<(), EvaluationError> {
         let dataset = Rc::new(DatasetView::new(self.transaction.reader(), using));
-        let (plan, variables) = PlanBuilder::build(dataset.as_ref(), algebra, false)?;
+        let (plan, variables) = PlanBuilder::build(
+            dataset.as_ref(),
+            algebra,
+            false,
+            &self.options.query_options.custom_functions,
+        )?;
         let evaluator = SimpleEvaluator::new(
             dataset.clone(),
             self.base_iri.clone(),
             self.options.query_options.service_handler(),
+            Rc::new(self.options.query_options.custom_functions.clone()),
         );
         let mut bnodes = HashMap::new();
         for tuple in evaluator.plan_evaluator(&plan)(EncodedTuple::with_capacity(variables.len())) {

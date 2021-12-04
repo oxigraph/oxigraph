@@ -16,6 +16,7 @@ mod service;
 mod update;
 mod xml_results;
 
+use crate::model::{NamedNode, Term};
 pub use crate::sparql::algebra::{Query, Update};
 use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::EvaluationError;
@@ -32,6 +33,7 @@ use crate::sparql::service::{EmptyServiceHandler, ErrorConversionServiceHandler}
 pub(crate) use crate::sparql::update::evaluate_update;
 use crate::storage::Storage;
 pub use spargebra::ParseError;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -47,11 +49,13 @@ pub(crate) fn evaluate_query(
         spargebra::Query::Select {
             pattern, base_iri, ..
         } => {
-            let (plan, variables) = PlanBuilder::build(&dataset, &pattern, true)?;
+            let (plan, variables) =
+                PlanBuilder::build(&dataset, &pattern, true, &options.custom_functions)?;
             Ok(SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
                 options.service_handler(),
+                Rc::new(options.custom_functions),
             )
             .evaluate_select_plan(
                 &plan,
@@ -66,11 +70,13 @@ pub(crate) fn evaluate_query(
         spargebra::Query::Ask {
             pattern, base_iri, ..
         } => {
-            let (plan, _) = PlanBuilder::build(&dataset, &pattern, false)?;
+            let (plan, _) =
+                PlanBuilder::build(&dataset, &pattern, false, &options.custom_functions)?;
             SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
                 options.service_handler(),
+                Rc::new(options.custom_functions),
             )
             .evaluate_ask_plan(&plan)
         }
@@ -80,23 +86,32 @@ pub(crate) fn evaluate_query(
             base_iri,
             ..
         } => {
-            let (plan, variables) = PlanBuilder::build(&dataset, &pattern, false)?;
-            let construct = PlanBuilder::build_graph_template(&dataset, &template, variables);
+            let (plan, variables) =
+                PlanBuilder::build(&dataset, &pattern, false, &options.custom_functions)?;
+            let construct = PlanBuilder::build_graph_template(
+                &dataset,
+                &template,
+                variables,
+                &options.custom_functions,
+            );
             Ok(SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
                 options.service_handler(),
+                Rc::new(options.custom_functions),
             )
             .evaluate_construct_plan(&plan, construct))
         }
         spargebra::Query::Describe {
             pattern, base_iri, ..
         } => {
-            let (plan, _) = PlanBuilder::build(&dataset, &pattern, false)?;
+            let (plan, _) =
+                PlanBuilder::build(&dataset, &pattern, false, &options.custom_functions)?;
             Ok(SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
                 options.service_handler(),
+                Rc::new(options.custom_functions),
             )
             .evaluate_describe_plan(&plan))
         }
@@ -110,7 +125,8 @@ pub(crate) fn evaluate_query(
 /// a simple HTTP 1.1 client is used to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls.
 #[derive(Clone, Default)]
 pub struct QueryOptions {
-    pub(crate) service_handler: Option<Rc<dyn ServiceHandler<Error = EvaluationError>>>,
+    service_handler: Option<Rc<dyn ServiceHandler<Error = EvaluationError>>>,
+    custom_functions: HashMap<NamedNode, Rc<dyn Fn(&[Term]) -> Option<Term>>>,
     http_timeout: Option<Duration>,
 }
 
@@ -135,6 +151,36 @@ impl QueryOptions {
     #[cfg(feature = "http_client")]
     pub fn with_http_timeout(mut self, timeout: Duration) -> Self {
         self.http_timeout = Some(timeout);
+        self
+    }
+
+    /// Adds a custom SPARQL evaluation function
+    ///
+    /// ```
+    /// use oxigraph::store::Store;
+    /// use oxigraph::model::*;
+    /// use oxigraph::sparql::{QueryOptions, QueryResults};
+    ///
+    /// let store = Store::new()?;
+    ///
+    /// if let QueryResults::Solutions(mut solutions) = store.query_opt(
+    ///     "SELECT (<http://www.w3.org/ns/formats/N-Triples>(1) AS ?nt) WHERE {}",
+    ///     QueryOptions::default().with_custom_function(
+    ///         NamedNode::new("http://www.w3.org/ns/formats/N-Triples")?,
+    ///         |args| args.get(0).map(|t| Literal::from(t.to_string()).into())
+    ///     )
+    /// )? {
+    ///     assert_eq!(solutions.next().unwrap()?.get("nt"), Some(&Literal::from("\"1\"^^<http://www.w3.org/2001/XMLSchema#integer>").into()));
+    /// }
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[inline]
+    pub fn with_custom_function(
+        mut self,
+        name: NamedNode,
+        evaluator: impl Fn(&[Term]) -> Option<Term> + 'static,
+    ) -> Self {
+        self.custom_functions.insert(name, Rc::new(evaluator));
         self
     }
 
