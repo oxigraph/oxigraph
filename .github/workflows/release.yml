@@ -97,8 +97,11 @@ jobs:
         with:
           submodules: true
       - run: sed -i 's/path="..\/lib", //g' python/Cargo.toml
-      - run: docker run --rm -v $(pwd):/io konstin2/maturin:v0.11.1 publish -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
-        working-directory: ./python
+      - uses: messense/maturin-action@v1
+        with:
+          manylinux: auto
+          command: publish
+          args: -m python/Cargo.toml -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
   publish_pypi_mac:
     runs-on: macos-latest
     needs: publish_lib_crate
@@ -106,13 +109,10 @@ jobs:
       - uses: actions/checkout@v2
         with:
           submodules: true
-      - run: rustup update && rustup target add aarch64-apple-darwin
-      - uses: actions/setup-python@v2
+      - uses: messense/maturin-action@v1
         with:
-          python-version: 3.6
-      - run: pip install 'maturin~=0.12'
-      - run: maturin publish --universal2 --no-sdist -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
-        working-directory: ./python
+          command: publish
+          args: -m python/Cargo.toml --universal2 --no-sdist -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
   publish_pypi_windows:
     runs-on: windows-latest
     needs: publish_lib_crate
@@ -120,12 +120,10 @@ jobs:
       - uses: actions/checkout@v2
         with:
           submodules: true
-      - uses: actions/setup-python@v2
+      - uses: messense/maturin-action@v1
         with:
-          python-version: 3.6
-      - run: pip install 'maturin~=0.12'
-      - run: maturin publish --no-sdist -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
-        working-directory: ./python
+          command: publish
+          args: -m python/Cargo.toml --no-sdist -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
   publish_npm:
     runs-on: ubuntu-latest
     steps:
