@@ -27,20 +27,29 @@ jobs:
       - run: rustup update && rustup component add clippy
       - run: cargo clippy --all-targets --all-features
 
-  test:
-    strategy:
-      matrix:
-        os: [ ubuntu-latest, windows-latest ]
-    runs-on: ${{ matrix.os }}
+  test_linux:
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
       with:
         submodules: true
     - run: rustup update
-    - run: cargo build
     - run: cargo test --all-features
       env:
         RUST_BACKTRACE: 1
+
+  test_windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - run: rustup update
+      - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
+      - run: choco install llvm -y
+      - run: cargo test --all-features
+        env:
+          RUST_BACKTRACE: 1
 
   js:
     runs-on: ubuntu-latest
