@@ -45,8 +45,9 @@ use std::{fmt, io, str};
 /// Allows to query and update it using SPARQL.
 /// It is based on the [RocksDB](https://rocksdb.org/) key-value store.
 ///
-/// This store ensure the "repeatable read" isolation level.
-/// All operations are not able to read the result of concurrent
+/// This store ensure the "repeatable read" isolation level: the store only exposes changes that have
+/// been "committed" (i.e. no partial writes) and the exposed state does not change for the complete duration
+/// of a read operation (e.g. a SPARQL query) or a read/write operation (e.g. a SPARQL update).
 ///
 /// Usage example:
 /// ```
@@ -721,7 +722,7 @@ impl Store {
 impl fmt::Display for Store {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for t in self.iter() {
-            writeln!(f, "{}", t.map_err(|_| fmt::Error)?)?;
+            writeln!(f, "{} .", t.map_err(|_| fmt::Error)?)?;
         }
         Ok(())
     }

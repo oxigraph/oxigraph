@@ -16,7 +16,7 @@ pub fn add_to_module(module: &PyModule) -> PyResult<()> {
     module.add_wrapped(wrap_pyfunction!(serialize))
 }
 
-/// Parses RDF graph and dataset serialization formats
+/// Parses RDF graph and dataset serialization formats.
 ///
 /// It currently supports the following formats:
 ///
@@ -32,14 +32,14 @@ pub fn add_to_module(module: &PyModule) -> PyResult<()> {
 ///
 /// :param input: The binary I/O object to read from. For example, it could be a file opened in binary mode with ``open('my_file.ttl', 'rb')``.
 /// :type input: io.RawIOBase or io.BufferedIOBase
-/// :param mime_type: the MIME type of the RDF serialization
+/// :param mime_type: the MIME type of the RDF serialization.
 /// :type mime_type: str
-/// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done
+/// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
 /// :type base_iri: str or None, optional
-/// :return: an iterator of RDF triples or quads depending on the format
+/// :return: an iterator of RDF triples or quads depending on the format.
 /// :rtype: iter(Triple) or iter(Quad)
-/// :raises ValueError: if the MIME type is not supported
-/// :raises SyntaxError: if the provided data is invalid
+/// :raises ValueError: if the MIME type is not supported.
+/// :raises SyntaxError: if the provided data is invalid.
 ///
 /// >>> input = io.BytesIO(b'<foo> <p> "1" .')
 /// >>> list(parse(input, "text/turtle", base_iri="http://example.com/"))
@@ -83,7 +83,7 @@ pub fn parse(
     }
 }
 
-/// Serializes an RDF graph or dataset
+/// Serializes an RDF graph or dataset.
 ///
 /// It currently supports the following formats:
 ///
@@ -97,14 +97,14 @@ pub fn parse(
 /// For example ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
 /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
 ///
-/// :param input: the RDF triples and quads to serialize
+/// :param input: the RDF triples and quads to serialize.
 /// :type input: iter(Triple) or iter(Quad)
 /// :param output: The binary I/O object to write to. For example, it could be a file opened in binary mode with ``open('my_file.ttl', 'wb')``.
 /// :type output: io.RawIOBase or io.BufferedIOBase
-/// :param mime_type: the MIME type of the RDF serialization
+/// :param mime_type: the MIME type of the RDF serialization.
 /// :type mime_type: str
-/// :raises ValueError: if the MIME type is not supported
-/// :raises TypeError: if a triple is given during a quad format serialization or reverse
+/// :raises ValueError: if the MIME type is not supported.
+/// :raises TypeError: if a triple is given during a quad format serialization or reverse.
 ///
 /// >>> output = io.BytesIO()
 /// >>> serialize([Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))], output, "text/turtle")

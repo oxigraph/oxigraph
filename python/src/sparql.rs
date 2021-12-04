@@ -9,11 +9,12 @@ use std::vec::IntoIter;
 
 pub fn parse_query(
     query: &str,
+    base_iri: Option<&str>,
     use_default_graph_as_union: bool,
     default_graph: Option<&PyAny>,
     named_graphs: Option<&PyAny>,
 ) -> PyResult<Query> {
-    let mut query = Query::parse(query, None).map_err(|e| map_evaluation_error(e.into()))?;
+    let mut query = Query::parse(query, base_iri).map_err(|e| map_evaluation_error(e.into()))?;
 
     if use_default_graph_as_union && default_graph.is_some() {
         return Err(PyValueError::new_err(

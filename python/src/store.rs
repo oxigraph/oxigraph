@@ -5,6 +5,7 @@ use crate::model::*;
 use crate::sparql::*;
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::GraphNameRef;
+use oxigraph::sparql::Update;
 use oxigraph::store::{self, Store};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -14,11 +15,15 @@ use std::io::BufReader;
 /// Disk-based RDF store.
 ///
 /// It encodes a `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_ and allows to query it using SPARQL.
-/// It is based on the `RocksDB <https://rocksdb.org/>`_ key-value database
+/// It is based on the `RocksDB <https://rocksdb.org/>`_ key-value database.
+///
+/// This store ensure the "repeatable read" isolation level: the store only exposes changes that have
+/// been "committed" (i.e. no partial writes) and the exposed state does not change for the complete duration
+/// of a read operation (e.g. a SPARQL query) or a read/write operation (e.g. a SPARQL update).
 ///
 /// :param path: the path of the directory in which the store should read and write its data. If the directory does not exist, it is created. If no directory is provided a temporary one is created and removed when the Python garbage collector removes the store.
-/// :type path: str or None, optional
-/// :raises IOError: if the target directory contains invalid data or could not be accessed
+/// :type path: str or None, optional.
+/// :raises IOError: if the target directory contains invalid data or could not be accessed.
 ///
 /// The :py:func:`str` function provides a serialization of the store in NQuads:
 ///
@@ -47,11 +52,11 @@ impl PyStore {
         })
     }
 
-    /// Adds a quad to the store
+    /// Adds a quad to the store.
     ///
-    /// :param quad: the quad to add
+    /// :param quad: the quad to add.
     /// :type quad: Quad
-    /// :raises IOError: if an I/O error happens during the quad insertion
+    /// :raises IOError: if an I/O error happens during the quad insertion.
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
@@ -63,11 +68,11 @@ impl PyStore {
         Ok(())
     }
 
-    /// Removes a quad from the store
+    /// Removes a quad from the store.
     ///
-    /// :param quad: the quad to remove
+    /// :param quad: the quad to remove.
     /// :type quad: Quad
-    /// :raises IOError: if an I/O error happens during the quad removal
+    /// :raises IOError: if an I/O error happens during the quad removal.
     ///
     /// >>> store = Store()
     /// >>> quad = Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))
@@ -81,7 +86,7 @@ impl PyStore {
         Ok(())
     }
 
-    /// Looks for the quads matching a given pattern
+    /// Looks for the quads matching a given pattern.
     ///
     /// :param subject: the quad subject or :py:const:`None` to match everything.
     /// :type subject: NamedNode or BlankNode or None
@@ -91,9 +96,9 @@ impl PyStore {
     /// :type object: NamedNode or BlankNode or Literal or None
     /// :param graph: the quad graph name. To match only the default graph, use :py:class:`DefaultGraph`. To match everything use :py:const:`None`.
     /// :type graph: NamedNode or BlankNode or DefaultGraph or None
-    /// :return: an iterator of the quads matching the pattern
+    /// :return: an iterator of the quads matching the pattern.
     /// :rtype: iter(Quad)
-    /// :raises IOError: if an I/O error happens during the quads lookup
+    /// :raises IOError: if an I/O error happens during the quads lookup.
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
@@ -121,8 +126,10 @@ impl PyStore {
 
     /// Executes a `SPARQL 1.1 query <https://www.w3.org/TR/sparql11-query/>`_.
     ///
-    /// :param query: the query to execute
+    /// :param query: the query to execute.
     /// :type query: str
+    /// :param base_iri: the base IRI used to resolve the relative IRIs in the SPARQL query or :py:const:`None` if relative IRI resolution should not be done.
+    /// :type base_iri: str or None, optional
     /// :param use_default_graph_as_union: if the SPARQL query should look for triples in all the dataset graphs by default (i.e. without `GRAPH` operations). Disabled by default.
     /// :type use_default_graph_as_union: bool, optional
     /// :param default_graph: list of the graphs that should be used as the query default graph. By default, the store default graph is used.
@@ -131,8 +138,8 @@ impl PyStore {
     /// :type named_graphs: list(NamedNode or BlankNode) or None, optional
     /// :return: a :py:class:`bool` for ``ASK`` queries, an iterator of :py:class:`Triple` for ``CONSTRUCT`` and ``DESCRIBE`` queries and an iterator of :py:class:`QuerySolution` for ``SELECT`` queries.
     /// :rtype: QuerySolutions or QueryTriples or bool
-    /// :raises SyntaxError: if the provided query is invalid
-    /// :raises IOError: if an I/O error happens while reading the store
+    /// :raises SyntaxError: if the provided query is invalid.
+    /// :raises IOError: if an I/O error happens while reading the store.
     ///
     /// ``SELECT`` query:
     ///
@@ -155,11 +162,12 @@ impl PyStore {
     /// >>> store.query('ASK { ?s ?p ?o }')
     /// True
     #[pyo3(
-        text_signature = "($self, query, *, use_default_graph_as_union, default_graph, named_graphs)"
+        text_signature = "($self, query, *, base_iri, use_default_graph_as_union, default_graph, named_graphs)"
     )]
     #[args(
         query,
         "*",
+        base_iri = "None",
         use_default_graph_as_union = "false",
         default_graph = "None",
         named_graphs = "None"
@@ -167,6 +175,7 @@ impl PyStore {
     fn query(
         &self,
         query: &str,
+        base_iri: Option<&str>,
         use_default_graph_as_union: bool,
         default_graph: Option<&PyAny>,
         named_graphs: Option<&PyAny>,
@@ -174,6 +183,7 @@ impl PyStore {
     ) -> PyResult<PyObject> {
         let query = parse_query(
             query,
+            base_iri,
             use_default_graph_as_union,
             default_graph,
             named_graphs,
@@ -184,10 +194,14 @@ impl PyStore {
 
     /// Executes a `SPARQL 1.1 update <https://www.w3.org/TR/sparql11-update/>`_.
     ///
-    /// :param update: the update to execute
+    /// Updates are applied in a transactional manner: either the full operation succeeds or nothing is written to the database.
+    ///
+    /// :param update: the update to execute.
     /// :type update: str
-    /// :raises SyntaxError: if the provided update is invalid
-    /// :raises IOError: if an I/O error happens while reading the store
+    /// :param base_iri: the base IRI used to resolve the relative IRIs in the SPARQL update or :py:const:`None` if relative IRI resolution should not be done.
+    /// :type base_iri: str or None, optional
+    /// :raises SyntaxError: if the provided update is invalid.
+    /// :raises IOError: if an I/O error happens while reading the store.
     ///
     /// The store does not track the existence of empty named graphs.
     /// This method has no ACID guarantees.
@@ -214,12 +228,19 @@ impl PyStore {
     /// >>> store.update('DELETE WHERE { <http://example.com> ?p ?o }')
     /// >>> list(store)
     /// []
-    #[pyo3(text_signature = "($self, update)")]
-    fn update(&self, update: &str) -> PyResult<()> {
+    #[pyo3(text_signature = "($self, update, *, base_iri)")]
+    #[args(update, "*", base_iri = "None")]
+    fn update(&self, update: &str, base_iri: Option<&str>) -> PyResult<()> {
+        let update = Update::parse(update, base_iri).map_err(|e| map_evaluation_error(e.into()))?;
         self.inner.update(update).map_err(map_evaluation_error)
     }
 
-    /// Loads an RDF serialization into the store
+    /// Loads an RDF serialization into the store.
+    ///
+    /// Loads are applied in a transactional manner: either the full operation succeeds or nothing is written to the database.
+    /// The :py:func:`bulk_load` method is also available for much faster loading of big files but without transactional guarantees.
+    ///
+    /// Beware, the full file is loaded into memory.
     ///
     /// It currently supports the following formats:
     ///
@@ -235,15 +256,15 @@ impl PyStore {
     ///
     /// :param input: The binary I/O object to read from. For example, it could be a file opened in binary mode with ``open('my_file.ttl', 'rb')``.
     /// :type input: io.RawIOBase or io.BufferedIOBase
-    /// :param mime_type: the MIME type of the RDF serialization
+    /// :param mime_type: the MIME type of the RDF serialization.
     /// :type mime_type: str
-    /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done
+    /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
     /// :type base_iri: str or None, optional
     /// :param to_graph: if it is a file composed of triples, the graph in which store the triples. By default, the default graph is used.
     /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :raises ValueError: if the MIME type is not supported or the `to_graph` parameter is given with a quad file.
-    /// :raises SyntaxError: if the provided data is invalid
-    /// :raises IOError: if an I/O error happens during a quad insertion
+    /// :raises SyntaxError: if the provided data is invalid.
+    /// :raises IOError: if an I/O error happens during a quad insertion.
     ///
     /// >>> store = Store()
     /// >>> store.load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
@@ -290,7 +311,83 @@ impl PyStore {
         }
     }
 
-    /// Dumps the store quads or triples into a file
+    /// Loads an RDF serialization into the store.
+    ///
+    /// This function is designed to be as fast as possible on big files without transactional guarantees.
+    /// If the file is invalid only a piece of it might be written to the store.
+    ///
+    /// The :py:func:`load` method is also available for loads with transactional guarantees.
+    ///
+    /// It currently supports the following formats:
+    ///
+    /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (``application/n-triples``)
+    /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (``application/n-quads``)
+    /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (``text/turtle``)
+    /// * `TriG <https://www.w3.org/TR/trig/>`_ (``application/trig``)
+    /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml``)
+    ///
+    /// It supports also some MIME type aliases.
+    /// For example ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
+    /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
+    ///
+    /// :param input: The binary I/O object to read from. For example, it could be a file opened in binary mode with ``open('my_file.ttl', 'rb')``.
+    /// :type input: io.RawIOBase or io.BufferedIOBase
+    /// :param mime_type: the MIME type of the RDF serialization.
+    /// :type mime_type: str
+    /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
+    /// :type base_iri: str or None, optional
+    /// :param to_graph: if it is a file composed of triples, the graph in which store the triples. By default, the default graph is used.
+    /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
+    /// :raises ValueError: if the MIME type is not supported or the `to_graph` parameter is given with a quad file.
+    /// :raises SyntaxError: if the provided data is invalid.
+    /// :raises IOError: if an I/O error happens during a quad insertion.
+    ///
+    /// >>> store = Store()
+    /// >>> store.bulk_load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
+    /// >>> list(store)
+    /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
+    #[pyo3(text_signature = "($self, data, /, mime_type, *, base_iri = None, to_graph = None)")]
+    #[args(input, mime_type, "*", base_iri = "None", to_graph = "None")]
+    fn bulk_load(
+        &mut self,
+        input: PyObject,
+        mime_type: &str,
+        base_iri: Option<&str>,
+        to_graph: Option<&PyAny>,
+    ) -> PyResult<()> {
+        let to_graph_name = if let Some(graph_name) = to_graph {
+            Some(PyGraphNameRef::try_from(graph_name)?)
+        } else {
+            None
+        };
+        let input = BufReader::new(PyFileLike::new(input));
+        if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
+            self.inner
+                .bulk_load_graph(
+                    input,
+                    graph_format,
+                    &to_graph_name.unwrap_or(PyGraphNameRef::DefaultGraph),
+                    base_iri,
+                )
+                .map_err(map_io_err)
+        } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
+            if to_graph_name.is_some() {
+                return Err(PyValueError::new_err(
+                    "The target graph name parameter is not available for dataset formats",
+                ));
+            }
+            self.inner
+                .bulk_load_dataset(input, dataset_format, base_iri)
+                .map_err(map_io_err)
+        } else {
+            Err(PyValueError::new_err(format!(
+                "Not supported MIME type: {}",
+                mime_type
+            )))
+        }
+    }
+
+    /// Dumps the store quads or triples into a file.
     ///
     /// It currently supports the following formats:
     ///
@@ -306,7 +403,7 @@ impl PyStore {
     ///
     /// :param output: The binary I/O object to write to. For example, it could be a file opened in binary mode with ``open('my_file.ttl', 'wb')``.
     /// :type input: io.RawIOBase or io.BufferedIOBase
-    /// :param mime_type: the MIME type of the RDF serialization
+    /// :param mime_type: the MIME type of the RDF serialization.
     /// :type mime_type: str
     /// :param from_graph: if a triple based format is requested, the store graph from which dump the triples. By default, the default graph is used.
     /// :type from_graph: NamedNode or BlankNode or DefaultGraph or None, optional
@@ -353,11 +450,11 @@ impl PyStore {
         }
     }
 
-    /// Returns an iterator over all the store named graphs
+    /// Returns an iterator over all the store named graphs.
     ///
-    /// :return: an iterator of the store graph names
+    /// :return: an iterator of the store graph names.
     /// :rtype: iter(NamedNode or BlankNode)
-    /// :raises IOError: if an I/O error happens during the named graphs lookup
+    /// :raises IOError: if an I/O error happens during the named graphs lookup.
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
@@ -370,11 +467,11 @@ impl PyStore {
         }
     }
 
-    /// Adds a named graph to the store
+    /// Adds a named graph to the store.
     ///
-    /// :param graph_name: the name of the name graph to add
+    /// :param graph_name: the name of the name graph to add.
     /// :type graph_name: NamedNode or BlankNode
-    /// :raises IOError: if an I/O error happens during the named graph insertion
+    /// :raises IOError: if an I/O error happens during the named graph insertion.
     ///
     /// >>> store = Store()
     /// >>> store.add_graph(NamedNode('http://example.com/g'))
@@ -396,13 +493,13 @@ impl PyStore {
         .map_err(map_io_err)
     }
 
-    /// Removes a graph from the store
+    /// Removes a graph from the store.
     ///
     /// The default graph will not be remove but just cleared.
     ///
-    /// :param graph_name: the name of the name graph to remove
+    /// :param graph_name: the name of the name graph to remove.
     /// :type graph_name: NamedNode or BlankNode or DefaultGraph
-    /// :raises IOError: if an I/O error happens during the named graph removal
+    /// :raises IOError: if an I/O error happens during the named graph removal.
     ///
     /// >>> store = Store()
     /// >>> quad = Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))

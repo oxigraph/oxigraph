@@ -9,11 +9,11 @@ use std::hash::Hash;
 use std::hash::Hasher;
 use std::vec::IntoIter;
 
-/// An RDF `node identified by an IRI <https://www.w3.org/TR/rdf11-concepts/#dfn-iri>`_
+/// An RDF `node identified by an IRI <https://www.w3.org/TR/rdf11-concepts/#dfn-iri>`_.
 ///
-/// :param value: the IRI as a string
+/// :param value: the IRI as a string.
 /// :type value: str
-/// :raises ValueError: if the IRI is not valid according to `RFC 3987 <https://tools.ietf.org/rfc/rfc3987>`_
+/// :raises ValueError: if the IRI is not valid according to `RFC 3987 <https://tools.ietf.org/rfc/rfc3987>`_.
 ///
 /// The :py:func:`str` function provides a serialization compatible with NTriples, Turtle and SPARQL:
 ///
@@ -71,7 +71,7 @@ impl PyNamedNode {
             .into())
     }
 
-    /// :return: the named node IRI
+    /// :return: the named node IRI.
     /// :rtype: str
     ///
     /// >>> NamedNode("http://example.com").value
@@ -111,7 +111,7 @@ impl PyNamedNode {
     }
 }
 
-/// An RDF `blank node <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node>`_
+/// An RDF `blank node <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node>`_.
 ///
 /// :param value: the `blank node ID <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node-identifier>`_ (if not present, a random blank node ID is automatically generated).
 /// :type value: str, optional
@@ -176,7 +176,7 @@ impl PyBlankNode {
         .into())
     }
 
-    /// :return: the `blank node ID <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node-identifier>`_
+    /// :return: the `blank node ID <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node-identifier>`_.
     /// :rtype: str
     ///
     /// >>> BlankNode("ex").value
@@ -216,15 +216,15 @@ impl PyBlankNode {
     }
 }
 
-/// An RDF `literal <https://www.w3.org/TR/rdf11-concepts/#dfn-literal>`_
+/// An RDF `literal <https://www.w3.org/TR/rdf11-concepts/#dfn-literal>`_.
 ///
-/// :param value: the literal value or `lexical form <https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form>`_
+/// :param value: the literal value or `lexical form <https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form>`_.
 /// :type value: str
 /// :param datatype: the literal `datatype IRI <https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri>`_.
 /// :type datatype: NamedNode, optional
-/// :param language: the literal `language tag <https://www.w3.org/TR/rdf11-concepts/#dfn-language-tag>`_
+/// :param language: the literal `language tag <https://www.w3.org/TR/rdf11-concepts/#dfn-language-tag>`_.
 /// :type language: str, optional
-/// :raises ValueError: if the language tag is not valid according to `RFC 5646 <https://tools.ietf.org/rfc/rfc5646>`_ (`BCP 47 <https://tools.ietf.org/rfc/bcp/bcp47>`_)
+/// :raises ValueError: if the language tag is not valid according to `RFC 5646 <https://tools.ietf.org/rfc/rfc5646>`_ (`BCP 47 <https://tools.ietf.org/rfc/bcp/bcp47>`_).
 ///
 /// The :py:func:`str` function provides a serialization compatible with NTriples, Turtle and SPARQL:
 ///
@@ -286,7 +286,7 @@ impl PyLiteral {
         .into())
     }
 
-    /// :return: the literal value or `lexical form <https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form>`_
+    /// :return: the literal value or `lexical form <https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form>`_.
     /// :rtype: str
     ///
     /// >>> Literal("example").value
@@ -296,7 +296,7 @@ impl PyLiteral {
         self.inner.value()
     }
 
-    /// :return: the literal `language tag <https://www.w3.org/TR/rdf11-concepts/#dfn-language-tag>`_
+    /// :return: the literal `language tag <https://www.w3.org/TR/rdf11-concepts/#dfn-language-tag>`_.
     /// :rtype: str or None
     ///
     /// >>> Literal('example', language='en').language
@@ -308,7 +308,7 @@ impl PyLiteral {
         self.inner.language()
     }
 
-    /// :return: the literal `datatype IRI <https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri>`_
+    /// :return: the literal `datatype IRI <https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri>`_.
     /// :rtype: NamedNode
     ///
     /// >>> Literal('11', datatype=NamedNode('http://www.w3.org/2001/XMLSchema#integer')).datatype
@@ -352,7 +352,7 @@ impl PyLiteral {
     }
 }
 
-/// The RDF `default graph name <https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph>`_
+/// The RDF `default graph name <https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph>`_.
 #[pyclass(name = "DefaultGraph", module = "oxigraph")]
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct PyDefaultGraph {}
@@ -514,19 +514,19 @@ impl IntoPy<PyObject> for PyTerm {
     }
 }
 
-/// An RDF `triple <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple>`_
+/// An RDF `triple <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple>`_.
 ///
-/// :param subject: the triple subject
+/// :param subject: the triple subject.
 /// :type subject: NamedNode or BlankNode
-/// :param predicate: the triple predicate
+/// :param predicate: the triple predicate.
 /// :type predicate: NamedNode
-/// :param object: the triple object
+/// :param object: the triple object.
 /// :type object: NamedNode or BlankNode or Literal
 ///
 /// The :py:func:`str` function provides a serialization compatible with NTriples, Turtle and SPARQL:
 ///
 /// >>> str(Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
-/// '<http://example.com> <http://example.com/p> "1" .'
+/// '<http://example.com> <http://example.com/p> "1"'
 ///
 /// A triple could also be easily destructed into its components:
 ///
@@ -575,7 +575,7 @@ impl PyTriple {
         Triple::new(subject, predicate, object).into()
     }
 
-    /// :return: the triple subject
+    /// :return: the triple subject.
     /// :rtype: NamedNode or BlankNode
     ///
     /// >>> Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')).subject
@@ -585,7 +585,7 @@ impl PyTriple {
         self.inner.subject.clone().into()
     }
 
-    /// :return: the triple predicate
+    /// :return: the triple predicate.
     /// :rtype: NamedNode
     ///
     /// >>> Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')).predicate
@@ -595,7 +595,7 @@ impl PyTriple {
         self.inner.predicate.clone().into()
     }
 
-    /// :return: the triple object
+    /// :return: the triple object.
     /// :rtype: NamedNode or BlankNode or Literal
     ///
     /// >>> Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')).object
@@ -685,14 +685,14 @@ impl IntoPy<PyObject> for PyGraphName {
     }
 }
 
-/// An RDF `triple <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple>`_
-/// in a `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_
+/// An RDF `triple <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple>`_.
+/// in a `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_.
 ///
-/// :param subject: the quad subject
+/// :param subject: the quad subject.
 /// :type subject: NamedNode or BlankNode
-/// :param predicate: the quad predicate
+/// :param predicate: the quad predicate.
 /// :type predicate: NamedNode
-/// :param object: the quad object
+/// :param object: the quad object.
 /// :type object: NamedNode or BlankNode or Literal
 /// :param graph: the quad graph name. If not present, the default graph is assumed.
 /// :type graph: NamedNode or BlankNode or DefaultGraph or None, optional
@@ -700,10 +700,10 @@ impl IntoPy<PyObject> for PyGraphName {
 /// The :py:func:`str` function provides a serialization compatible with NTriples, Turtle and SPARQL:
 ///
 /// >>> str(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
-/// '<http://example.com> <http://example.com/p> "1" <http://example.com/g> .'
+/// '<http://example.com> <http://example.com/p> "1" <http://example.com/g>'
 ///
 /// >>> str(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), DefaultGraph()))
-/// '<http://example.com> <http://example.com/p> "1" .'
+/// '<http://example.com> <http://example.com/p> "1"'
 ///
 /// A quad could also be easily destructed into its components:
 ///
@@ -751,7 +751,7 @@ impl PyQuad {
         .into()
     }
 
-    /// :return: the quad subject
+    /// :return: the quad subject.
     /// :rtype: NamedNode or BlankNode
     ///
     /// >>> Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')).subject
@@ -761,7 +761,7 @@ impl PyQuad {
         self.inner.subject.clone().into()
     }
 
-    /// :return: the quad predicate
+    /// :return: the quad predicate.
     /// :rtype: NamedNode
     ///
     /// >>> Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')).predicate
@@ -771,7 +771,7 @@ impl PyQuad {
         self.inner.predicate.clone().into()
     }
 
-    /// :return: the quad object
+    /// :return: the quad object.
     /// :rtype: NamedNode or BlankNode or Literal
     ///
     /// >>> Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')).object
@@ -781,7 +781,7 @@ impl PyQuad {
         self.inner.object.clone().into()
     }
 
-    /// :return: the quad graph name
+    /// :return: the quad graph name.
     /// :rtype: NamedNode or BlankNode or DefaultGraph
     ///
     /// >>> Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')).graph_name
@@ -791,7 +791,7 @@ impl PyQuad {
         self.inner.graph_name.clone().into()
     }
 
-    /// :return: the quad underlying triple
+    /// :return: the quad underlying triple.
     /// :rtype: Triple
     ///
     /// >>> Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')).triple
@@ -860,9 +860,9 @@ impl PyQuad {
     }
 }
 
-/// A SPARQL query variable
+/// A SPARQL query variable.
 ///
-/// :param value: the variable name as a string
+/// :param value: the variable name as a string.
 /// :type value: str
 /// :raises ValueError: if the variable name is invalid according to the SPARQL grammar.
 ///
@@ -904,7 +904,7 @@ impl PyVariable {
             .into())
     }
 
-    /// :return: the variable name
+    /// :return: the variable name.
     /// :rtype: str
     ///
     /// >>> Variable("foo").value
