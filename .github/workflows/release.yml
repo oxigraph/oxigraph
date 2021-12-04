@@ -96,7 +96,7 @@ jobs:
       - uses: actions/setup-python@v2
         with:
           python-version: 3.6
-      - run: pip install 'maturin>=0.11,<0.12'
+      - run: pip install 'maturin~=0.12'
       - run: maturin publish --universal2 --no-sdist -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
         working-directory: ./python
   publish_pypi_windows:
@@ -107,7 +107,7 @@ jobs:
       - uses: actions/setup-python@v2
         with:
           python-version: 3.6
-      - run: pip install 'maturin>=0.11,<0.12'
+      - run: pip install 'maturin~=0.12'
       - run: maturin publish --no-sdist -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
         working-directory: ./python
   publish_npm:
@@ -137,7 +137,7 @@ jobs:
         with:
           python-version: 3.8
       - run: python -m venv python/venv
-      - run: source python/venv/bin/activate && pip install --upgrade 'maturin>=0.11,<0.12' sphinx
+      - run: source python/venv/bin/activate && pip install --upgrade 'maturin~=0.12' sphinx
       - run: source venv/bin/activate && maturin develop
         working-directory: ./python
       - run: source ../venv/bin/activate && sphinx-build -M doctest . build
