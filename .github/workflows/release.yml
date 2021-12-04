@@ -101,7 +101,7 @@ jobs:
         with:
           manylinux: auto
           command: publish
-          args: -m python/Cargo.toml -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
+          args: -m python/Cargo.toml --cargo-extra-args="--features vendored" -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
   publish_pypi_mac:
     runs-on: macos-latest
     needs: publish_lib_crate
@@ -120,6 +120,8 @@ jobs:
       - uses: actions/checkout@v2
         with:
           submodules: true
+      - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
+      - run: choco install llvm -y
       - uses: messense/maturin-action@v1
         with:
           command: publish

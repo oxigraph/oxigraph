@@ -94,7 +94,7 @@ jobs:
         with:
           manylinux: auto
           command: build
-          args: -m python/Cargo.toml
+          args: -m python/Cargo.toml --cargo-extra-args="--features vendored"
 
   python_wheel_mac:
     runs-on: macos-latest
@@ -115,6 +115,8 @@ jobs:
       - uses: actions/checkout@v2
         with:
           submodules: true
+      - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
+      - run: choco install llvm -y
       - uses: messense/maturin-action@v1
         with:
           command: build
