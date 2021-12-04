@@ -191,7 +191,7 @@ fn test_bulk_load_on_existing_delete_overrides_the_delete() -> Result<()> {
 }
 
 #[test]
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(target_os = "linux")]
 fn test_backward_compatibility() -> Result<()> {
     // We run twice to check if data is properly saved and closed
     for _ in 0..2 {
