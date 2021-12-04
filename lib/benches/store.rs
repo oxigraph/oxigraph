@@ -185,6 +185,7 @@ fn read_data(file: &str) -> impl BufRead {
     BufReader::new(zstd::Decoder::new(File::open(file).unwrap()).unwrap())
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone)]
 enum Operation {
     Query(Query),

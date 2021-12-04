@@ -3,11 +3,8 @@ use crate::model::*;
 use oxigraph::model::Term;
 use oxigraph::sparql::*;
 use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyTypeError, PyValueError};
-use pyo3::prelude::{
-    pyclass, pymethods, pyproto, FromPyObject, IntoPy, Py, PyAny, PyCell, PyErr, PyObject, PyRef,
-    PyRefMut, PyResult, Python,
-};
-use pyo3::{PyIterProtocol, PyMappingProtocol, PyObjectProtocol};
+use pyo3::prelude::*;
+use pyo3::{Py, PyRef};
 use std::vec::IntoIter;
 
 pub fn parse_query(
@@ -90,8 +87,8 @@ pub struct PyQuerySolution {
     inner: QuerySolution,
 }
 
-#[pyproto]
-impl PyObjectProtocol for PyQuerySolution {
+#[pymethods]
+impl PyQuerySolution {
     fn __repr__(&self) -> String {
         let mut buffer = String::new();
         buffer.push_str("<QuerySolution");
@@ -104,10 +101,7 @@ impl PyObjectProtocol for PyQuerySolution {
         buffer.push('>');
         buffer
     }
-}
 
-#[pyproto]
-impl PyMappingProtocol for PyQuerySolution {
     fn __len__(&self) -> usize {
         self.inner.len()
     }
@@ -130,13 +124,10 @@ impl PyMappingProtocol for PyQuerySolution {
             )))
         }
     }
-}
 
-#[pyproto]
-impl PyIterProtocol for PyQuerySolution {
-    fn __iter__(slf: PyRef<Self>) -> SolutionValueIter {
+    fn __iter__(&self) -> SolutionValueIter {
         SolutionValueIter {
-            inner: slf
+            inner: self
                 .inner
                 .values()
                 .map(|v| v.cloned())
@@ -151,14 +142,14 @@ pub struct SolutionValueIter {
     inner: IntoIter<Option<Term>>,
 }
 
-#[pyproto]
-impl PyIterProtocol for SolutionValueIter {
-    fn __iter__(slf: PyRefMut<Self>) -> Py<Self> {
+#[pymethods]
+impl SolutionValueIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> Py<Self> {
         slf.into()
     }
 
-    fn __next__(mut slf: PyRefMut<Self>) -> Option<Option<PyTerm>> {
-        slf.inner.next().map(|v| v.map(PyTerm::from))
+    fn __next__(&mut self) -> Option<Option<PyTerm>> {
+        self.inner.next().map(|v| v.map(PyTerm::from))
     }
 }
 
@@ -189,16 +180,13 @@ impl PyQuerySolutions {
             .map(|v| v.clone().into())
             .collect()
     }
-}
 
-#[pyproto]
-impl PyIterProtocol for PyQuerySolutions {
-    fn __iter__(slf: PyRefMut<Self>) -> Py<Self> {
+    fn __iter__(slf: PyRef<'_, Self>) -> Py<Self> {
         slf.into()
     }
 
-    fn __next__(mut slf: PyRefMut<Self>) -> PyResult<Option<PyQuerySolution>> {
-        Ok(slf
+    fn __next__(&mut self) -> PyResult<Option<PyQuerySolution>> {
+        Ok(self
             .inner
             .next()
             .transpose()
@@ -218,14 +206,14 @@ pub struct PyQueryTriples {
     inner: QueryTripleIter,
 }
 
-#[pyproto]
-impl PyIterProtocol for PyQueryTriples {
-    fn __iter__(slf: PyRefMut<Self>) -> Py<Self> {
+#[pymethods]
+impl PyQueryTriples {
+    fn __iter__(slf: PyRef<'_, Self>) -> Py<Self> {
         slf.into()
     }
 
-    fn __next__(mut slf: PyRefMut<Self>) -> PyResult<Option<PyTriple>> {
-        Ok(slf
+    fn __next__(&mut self) -> PyResult<Option<PyTriple>> {
+        Ok(self
             .inner
             .next()
             .transpose()

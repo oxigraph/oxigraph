@@ -1,3 +1,5 @@
+#![allow(clippy::needless_option_as_deref)]
+
 use crate::model::{PyQuad, PyTriple};
 use oxigraph::io::read::{QuadReader, TripleReader};
 use oxigraph::io::{
@@ -7,9 +9,7 @@ use pyo3::exceptions::{PyIOError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::wrap_pyfunction;
-use pyo3::PyIterProtocol;
-use std::io;
-use std::io::{BufReader, Read, Write};
+use std::io::{self, BufReader, Read, Write};
 
 pub fn add_to_module(module: &PyModule) -> PyResult<()> {
     module.add_wrapped(wrap_pyfunction!(parse))?;
@@ -149,14 +149,14 @@ pub struct PyTripleReader {
     inner: TripleReader<BufReader<PyFileLike>>,
 }
 
-#[pyproto]
-impl PyIterProtocol for PyTripleReader {
-    fn __iter__(slf: PyRefMut<Self>) -> Py<Self> {
+#[pymethods]
+impl PyTripleReader {
+    fn __iter__(slf: PyRef<'_, Self>) -> Py<Self> {
         slf.into()
     }
 
-    fn __next__(mut slf: PyRefMut<Self>) -> PyResult<Option<PyTriple>> {
-        slf.inner
+    fn __next__(&mut self) -> PyResult<Option<PyTriple>> {
+        self.inner
             .next()
             .map(|q| Ok(q.map_err(map_io_err)?.into()))
             .transpose()
@@ -168,14 +168,14 @@ pub struct PyQuadReader {
     inner: QuadReader<BufReader<PyFileLike>>,
 }
 
-#[pyproto]
-impl PyIterProtocol for PyQuadReader {
-    fn __iter__(slf: PyRefMut<Self>) -> Py<Self> {
+#[pymethods]
+impl PyQuadReader {
+    fn __iter__(slf: PyRef<'_, Self>) -> Py<Self> {
         slf.into()
     }
 
-    fn __next__(mut slf: PyRefMut<Self>) -> PyResult<Option<PyQuad>> {
-        slf.inner
+    fn __next__(&mut self) -> PyResult<Option<PyQuad>> {
+        self.inner
             .next()
             .map(|q| Ok(q.map_err(map_io_err)?.into()))
             .transpose()

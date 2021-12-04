@@ -3,7 +3,7 @@ use oxigraph::sparql::Variable;
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::{PyIndexError, PyNotImplementedError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::{PyIterProtocol, PyMappingProtocol, PyObjectProtocol, PyTypeInfo};
+use pyo3::PyTypeInfo;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -80,10 +80,7 @@ impl PyNamedNode {
     fn value(&self) -> &str {
         self.inner.as_str()
     }
-}
 
-#[pyproto]
-impl PyObjectProtocol for PyNamedNode {
     fn __str__(&self) -> String {
         self.inner.to_string()
     }
@@ -99,7 +96,7 @@ impl PyObjectProtocol for PyNamedNode {
     }
 
     fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
-        if let Ok(other) = other.downcast::<PyCell<PyNamedNode>>() {
+        if let Ok(other) = other.downcast::<PyCell<Self>>() {
             Ok(eq_ord_compare(self, &other.borrow(), op))
         } else if PyBlankNode::is_type_of(other)
             || PyLiteral::is_type_of(other)
@@ -188,10 +185,7 @@ impl PyBlankNode {
     fn value(&self) -> &str {
         self.inner.as_str()
     }
-}
 
-#[pyproto]
-impl PyObjectProtocol for PyBlankNode {
     fn __str__(&self) -> String {
         self.inner.to_string()
     }
@@ -207,7 +201,7 @@ impl PyObjectProtocol for PyBlankNode {
     }
 
     fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
-        if let Ok(other) = other.downcast::<PyCell<PyBlankNode>>() {
+        if let Ok(other) = other.downcast::<PyCell<Self>>() {
             eq_compare(self, &other.borrow(), op)
         } else if PyNamedNode::is_type_of(other)
             || PyLiteral::is_type_of(other)
@@ -327,10 +321,7 @@ impl PyLiteral {
     fn datatype(&self) -> PyNamedNode {
         self.inner.datatype().into_owned().into()
     }
-}
 
-#[pyproto]
-impl PyObjectProtocol for PyLiteral {
     fn __str__(&self) -> String {
         self.inner.to_string()
     }
@@ -346,7 +337,7 @@ impl PyObjectProtocol for PyLiteral {
     }
 
     fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
-        if let Ok(other) = other.downcast::<PyCell<PyLiteral>>() {
+        if let Ok(other) = other.downcast::<PyCell<Self>>() {
             eq_compare(self, &other.borrow(), op)
         } else if PyNamedNode::is_type_of(other)
             || PyBlankNode::is_type_of(other)
@@ -376,22 +367,19 @@ impl From<PyDefaultGraph> for GraphName {
 impl PyDefaultGraph {
     #[new]
     fn new() -> Self {
-        PyDefaultGraph {}
+        Self {}
     }
 
     #[getter]
     fn value(&self) -> &str {
         ""
     }
-}
 
-#[pyproto]
-impl PyObjectProtocol for PyDefaultGraph {
-    fn __str__(&self) -> &'p str {
+    fn __str__(&self) -> &str {
         "DEFAULT"
     }
 
-    fn __repr__(&self) -> &'p str {
+    fn __repr__(&self) -> &str {
         "<DefaultGraph>"
     }
 
@@ -400,7 +388,7 @@ impl PyObjectProtocol for PyDefaultGraph {
     }
 
     fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
-        if let Ok(other) = other.downcast::<PyCell<PyDefaultGraph>>() {
+        if let Ok(other) = other.downcast::<PyCell<Self>>() {
             eq_compare(self, &other.borrow(), op)
         } else if PyNamedNode::is_type_of(other)
             || PyBlankNode::is_type_of(other)
@@ -616,10 +604,7 @@ impl PyTriple {
     fn object(&self) -> PyTerm {
         self.inner.object.clone().into()
     }
-}
 
-#[pyproto]
-impl PyObjectProtocol for PyTriple {
     fn __str__(&self) -> String {
         self.inner.to_string()
     }
@@ -634,13 +619,10 @@ impl PyObjectProtocol for PyTriple {
         hash(&self.inner)
     }
 
-    fn __richcmp__(&self, other: &PyCell<Self>, op: CompareOp) -> PyResult<bool> {
-        eq_compare(self, &other.borrow(), op)
+    fn __richcmp__(&self, other: &Self, op: CompareOp) -> PyResult<bool> {
+        eq_compare(self, other, op)
     }
-}
 
-#[pyproto]
-impl PyMappingProtocol<'p> for PyTriple {
     fn __len__(&self) -> usize {
         3
     }
@@ -653,16 +635,13 @@ impl PyMappingProtocol<'p> for PyTriple {
             _ => Err(PyIndexError::new_err("A triple has only 3 elements")),
         }
     }
-}
 
-#[pyproto]
-impl PyIterProtocol for PyTriple {
-    fn __iter__(slf: PyRef<Self>) -> TripleComponentsIter {
+    fn __iter__(&self) -> TripleComponentsIter {
         TripleComponentsIter {
             inner: vec![
-                slf.inner.subject.clone().into(),
-                slf.inner.predicate.clone().into(),
-                slf.inner.object.clone(),
+                self.inner.subject.clone().into(),
+                self.inner.predicate.clone().into(),
+                self.inner.object.clone(),
             ]
             .into_iter(),
         }
@@ -821,10 +800,7 @@ impl PyQuad {
     fn triple(&self) -> PyTriple {
         Triple::from(self.inner.clone()).into()
     }
-}
 
-#[pyproto]
-impl PyObjectProtocol for PyQuad {
     fn __str__(&self) -> String {
         self.inner.to_string()
     }
@@ -847,13 +823,10 @@ impl PyObjectProtocol for PyQuad {
         hash(&self.inner)
     }
 
-    fn __richcmp__(&self, other: &PyCell<Self>, op: CompareOp) -> PyResult<bool> {
-        eq_compare(self, &other.borrow(), op)
+    fn __richcmp__(&self, other: &Self, op: CompareOp) -> PyResult<bool> {
+        eq_compare(self, other, op)
     }
-}
 
-#[pyproto]
-impl PyMappingProtocol<'p> for PyQuad {
     fn __len__(&self) -> usize {
         4
     }
@@ -869,11 +842,8 @@ impl PyMappingProtocol<'p> for PyQuad {
             _ => Err(PyIndexError::new_err("A quad has only 4 elements")),
         }
     }
-}
 
-#[pyproto]
-impl PyIterProtocol for PyQuad {
-    fn __iter__(slf: PyRef<Self>) -> QuadComponentsIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> QuadComponentsIter {
         QuadComponentsIter {
             inner: vec![
                 Some(slf.inner.subject.clone().into()),
@@ -943,10 +913,7 @@ impl PyVariable {
     fn value(&self) -> &str {
         self.inner.as_str()
     }
-}
 
-#[pyproto]
-impl PyObjectProtocol for PyVariable {
     fn __str__(&self) -> String {
         self.inner.to_string()
     }
@@ -959,8 +926,8 @@ impl PyObjectProtocol for PyVariable {
         hash(&self.inner)
     }
 
-    fn __richcmp__(&self, other: &PyCell<Self>, op: CompareOp) -> PyResult<bool> {
-        eq_compare(self, &other.borrow(), op)
+    fn __richcmp__(&self, other: &Self, op: CompareOp) -> PyResult<bool> {
+        eq_compare(self, other, op)
     }
 }
 
@@ -1233,14 +1200,14 @@ pub struct TripleComponentsIter {
     inner: IntoIter<Term>,
 }
 
-#[pyproto]
-impl PyIterProtocol for TripleComponentsIter {
-    fn __iter__(slf: PyRefMut<Self>) -> Py<Self> {
+#[pymethods]
+impl TripleComponentsIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> Py<Self> {
         slf.into()
     }
 
-    fn __next__(mut slf: PyRefMut<Self>) -> Option<PyTerm> {
-        slf.inner.next().map(PyTerm::from)
+    fn __next__(&mut self) -> Option<PyTerm> {
+        self.inner.next().map(PyTerm::from)
     }
 }
 
@@ -1249,18 +1216,18 @@ pub struct QuadComponentsIter {
     inner: IntoIter<Option<Term>>,
 }
 
-#[pyproto]
-impl PyIterProtocol for QuadComponentsIter {
-    fn __iter__(slf: PyRefMut<Self>) -> Py<Self> {
+#[pymethods]
+impl QuadComponentsIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> Py<Self> {
         slf.into()
     }
 
-    fn __next__(mut slf: PyRefMut<Self>) -> Option<PyObject> {
-        slf.inner.next().map(move |t| {
+    fn __next__(&mut self, py: Python<'_>) -> Option<PyObject> {
+        self.inner.next().map(move |t| {
             if let Some(t) = t {
-                PyTerm::from(t).into_py(slf.py())
+                PyTerm::from(t).into_py(py)
             } else {
-                PyDefaultGraph {}.into_py(slf.py())
+                PyDefaultGraph {}.into_py(py)
             }
         })
     }

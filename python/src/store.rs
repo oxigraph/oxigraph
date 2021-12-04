@@ -1,3 +1,5 @@
+#![allow(clippy::needless_option_as_deref)]
+
 use crate::io::{map_io_err, PyFileLike};
 use crate::model::*;
 use crate::sparql::*;
@@ -5,10 +7,8 @@ use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::GraphNameRef;
 use oxigraph::store::{self, Store};
 use pyo3::exceptions::PyValueError;
-use pyo3::prelude::{
-    pyclass, pymethods, pyproto, Py, PyAny, PyObject, PyRef, PyRefMut, PyResult, Python,
-};
-use pyo3::{PyIterProtocol, PyObjectProtocol, PySequenceProtocol};
+use pyo3::prelude::*;
+use pyo3::{Py, PyRef};
 use std::io::BufReader;
 
 /// Disk-based RDF store.
@@ -425,10 +425,7 @@ impl PyStore {
         .map_err(map_io_err)?;
         Ok(())
     }
-}
 
-#[pyproto]
-impl PyObjectProtocol for PyStore {
     fn __str__(&self) -> String {
         self.inner.to_string()
     }
@@ -436,10 +433,7 @@ impl PyObjectProtocol for PyStore {
     fn __bool__(&self) -> PyResult<bool> {
         Ok(!self.inner.is_empty()?)
     }
-}
 
-#[pyproto]
-impl PySequenceProtocol for PyStore {
     fn __len__(&self) -> PyResult<usize> {
         Ok(self.inner.len()?)
     }
@@ -447,13 +441,10 @@ impl PySequenceProtocol for PyStore {
     fn __contains__(&self, quad: PyQuad) -> PyResult<bool> {
         self.inner.contains(&quad).map_err(map_io_err)
     }
-}
 
-#[pyproto]
-impl PyIterProtocol for PyStore {
-    fn __iter__(slf: PyRef<Self>) -> QuadIter {
+    fn __iter__(&self) -> QuadIter {
         QuadIter {
-            inner: slf.inner.iter(),
+            inner: self.inner.iter(),
         }
     }
 }
@@ -463,14 +454,14 @@ pub struct QuadIter {
     inner: store::QuadIter,
 }
 
-#[pyproto]
-impl PyIterProtocol for QuadIter {
-    fn __iter__(slf: PyRefMut<Self>) -> Py<Self> {
+#[pymethods]
+impl QuadIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> Py<Self> {
         slf.into()
     }
 
-    fn __next__(mut slf: PyRefMut<Self>) -> PyResult<Option<PyQuad>> {
-        slf.inner
+    fn __next__(&mut self) -> PyResult<Option<PyQuad>> {
+        self.inner
             .next()
             .map(|q| Ok(q.map_err(map_io_err)?.into()))
             .transpose()
@@ -482,14 +473,14 @@ pub struct GraphNameIter {
     inner: store::GraphNameIter,
 }
 
-#[pyproto]
-impl PyIterProtocol for GraphNameIter {
-    fn __iter__(slf: PyRefMut<Self>) -> Py<Self> {
+#[pymethods]
+impl GraphNameIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> Py<Self> {
         slf.into()
     }
 
-    fn __next__(mut slf: PyRefMut<Self>) -> PyResult<Option<PyNamedOrBlankNode>> {
-        slf.inner
+    fn __next__(&mut self) -> PyResult<Option<PyNamedOrBlankNode>> {
+        self.inner
             .next()
             .map(|q| Ok(q.map_err(map_io_err)?.into()))
             .transpose()
@@ -511,23 +502,23 @@ pub fn extract_quads_pattern<'a>(
         if subject.is_none() {
             None
         } else {
-            Some(subject.try_into()?)
+            Some(TryFrom::try_from(subject)?)
         },
         if predicate.is_none() {
             None
         } else {
-            Some(predicate.try_into()?)
+            Some(TryFrom::try_from(predicate)?)
         },
         if object.is_none() {
             None
         } else {
-            Some(object.try_into()?)
+            Some(TryFrom::try_from(object)?)
         },
         if let Some(graph_name) = graph_name {
             if graph_name.is_none() {
                 None
             } else {
-                Some(graph_name.try_into()?)
+                Some(TryFrom::try_from(graph_name)?)
             }
         } else {
             None
