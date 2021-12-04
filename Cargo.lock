@@ -1205,9 +1205,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.108"
+version = "0.2.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8521a1b57e76b1ec69af7599e75e38e7b7fad6610f037db8c79b127201b5d119"
+checksum = "f98a04dce437184842841303488f70d0188c5f51437d2a834dc097eafa909a01"
 
 [[package]]
 name = "libloading"
@@ -1391,6 +1391,15 @@ checksum = "28988d872ab76095a6e6ac88d99b54fd267702734fd7ffe610ca27f533ddb95a"
 
 [[package]]
 name = "openssl-src"
+version = "111.16.0+1.1.1l"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ab2173f69416cf3ec12debb5823d244127d23a9b127d5a5189aa97c5fa2859f"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "openssl-src"
 version = "300.0.2+3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14a760a11390b1a5daf72074d4f6ff1a6e772534ae191f999f57e9ee8146d1fb"
@@ -1407,7 +1416,7 @@ dependencies = [
  "autocfg",
  "cc",
  "libc",
- "openssl-src",
+ "openssl-src 300.0.2+3.0.0",
  "pkg-config",
  "vcpkg",
 ]
@@ -1782,6 +1791,7 @@ name = "pyoxigraph"
 version = "0.3.0-dev"
 dependencies = [
  "native-tls",
+ "openssl-src 111.16.0+1.1.1l",
  "oxigraph",
  "pyo3",
 ]
