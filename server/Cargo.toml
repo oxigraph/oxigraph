@@ -7,7 +7,7 @@ readme = "README.md"
 repository = "https://github.com/oxigraph/oxigraph/tree/master/server"
 homepage = "https://oxigraph.org/server/"
 description = """
-SPARQL server based on Oxigraph
+Oxigraph SPARQL HTTP server
 """
 edition = "2021"
 

@@ -14,7 +14,7 @@ Its goal is to provide a compliant, safe, and fast graph database based on the [
 It is written in Rust.
 It also provides a set of utility functions for reading, writing, and processing RDF files.
 
-Oxigraph is in heavy development and SPARQL query evaluation has not been optimized yet.
+Oxigraph is in heavy development and SPARQL query evaluation has not been optimized yet. The development roadmap is using [GitHub milestones](https://github.com/oxigraph/oxigraph/milestones?direction=desc&sort=completeness&state=open).
 
 It is split into multiple parts:
 * [The database written as a Rust library](https://crates.io/crates/oxigraph). Its source code is in the `lib` directory.

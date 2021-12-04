@@ -123,6 +123,7 @@
     clippy::range_minus_one,
     clippy::range_plus_one,
     //TODO clippy::rc_mutex,
+    clippy::enum_variant_names,
     //TODO clippy::redundant_closure_for_method_calls,
     clippy::redundant_else,
     clippy::redundant_pub_crate,
@@ -165,7 +166,8 @@
     clippy::verbose_bit_mask,
     clippy::verbose_file_reads,
     clippy::wildcard_dependencies,
-    clippy::zero_sized_map_values
+    clippy::zero_sized_map_values,
+    clippy::wrong_self_convention,
 )]
 #![doc(test(attr(deny(warnings))))]
 

@@ -6,7 +6,7 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/oxigraph/oxigraph/tree/master/wikibase"
 description = """
-SPARQL server based on Oxigraph for Wikibase instances
+Oxigraph SPARQL server for Wikibase
 """
 edition = "2021"
 

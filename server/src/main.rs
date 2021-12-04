@@ -9,7 +9,7 @@
     unused_qualifications
 )]
 
-use clap::{App, AppSettings, Arg, SubCommand};
+use clap::{crate_version, App, AppSettings, Arg, SubCommand};
 use oxhttp::model::{Body, HeaderName, HeaderValue, Request, Response, Status};
 use oxhttp::Server;
 use oxigraph::io::{DatasetFormat, DatasetSerializer, GraphFormat, GraphSerializer};
@@ -34,11 +34,12 @@ const LOGO: &str = include_str!("../logo.svg");
 
 pub fn main() -> std::io::Result<()> {
     let matches = App::new("Oxigraph SPARQL server")
+        .version(crate_version!())
         .arg(
             Arg::with_name("location")
                 .short("l")
                 .long("location")
-                .help("directory in which persist the data")
+                .help("Directory in which persist the data")
                 .takes_value(true),
         )
         .setting(AppSettings::SubcommandRequiredElseHelp)
@@ -49,7 +50,8 @@ pub fn main() -> std::io::Result<()> {
                     Arg::with_name("bind")
                         .short("b")
                         .long("bind")
-                        .help("Sets a custom config file")
+                        .help("Host and port to listen to")
+                        .default_value("localhost:7878")
                         .takes_value(true),
                 ),
         )
@@ -92,7 +94,7 @@ pub fn main() -> std::io::Result<()> {
             store.optimize()
         }
         ("serve", Some(submatches)) => {
-            let bind = submatches.value_of("bind").unwrap_or("localhost:7878");
+            let bind = submatches.value_of("bind").unwrap();
             let mut server = Server::new(move |request| handle_request(request, store.clone()));
             server.set_global_timeout(HTTP_TIMEOUT);
             server

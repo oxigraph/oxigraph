@@ -37,7 +37,7 @@ rio_xml = "0.6"
 hex = "0.4"
 nom = "7"
 siphasher = "0.3"
-lasso = "0.6"
+lasso = {version="0.6", features=["multi-threaded", "inline-more"]}
 lazy_static = "1"
 sophia_api = { version = "0.7", optional = true }
 json-event-parser = "0.1"

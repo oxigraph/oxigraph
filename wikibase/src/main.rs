@@ -14,7 +14,7 @@ use async_std::future::Future;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::task::spawn;
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use http_types::content::ContentType;
 use http_types::{
     bail_status, format_err_status, headers, Error, Method, Mime, Request, Response, Result,
@@ -36,54 +36,57 @@ const SERVER: &str = concat!("Oxigraph/", env!("CARGO_PKG_VERSION"));
 #[async_std::main]
 pub async fn main() -> Result<()> {
     let matches = App::new("Oxigraph SPARQL server for Wikibase")
+        .version(crate_version!())
         .arg(
             Arg::with_name("bind")
                 .short("b")
                 .long("bind")
                 .help("Sets a custom config file")
+                .default_value("localhost:7878")
                 .takes_value(true),
         )
         .arg(
             Arg::with_name("file")
                 .short("f")
                 .long("file")
-                .help("directory in which persist the data")
+                .help("Directory in which persist the data")
                 .takes_value(true),
         )
         .arg(
             Arg::with_name("mediawiki_api")
                 .long("mediawiki_api")
-                .help("base URL of the MediaWiki API like https://www.wikidata.org/w/api.php")
+                .help("Base URL of the MediaWiki API like https://www.wikidata.org/w/api.php")
                 .takes_value(true)
                 .required(true),
         )
         .arg(
             Arg::with_name("mediawiki_base_url")
                 .long("mediawiki_base_url")
-                .help("base URL of MediaWiki like https://www.wikidata.org/wiki/")
+                .help("Base URL of MediaWiki like https://www.wikidata.org/wiki/")
                 .takes_value(true)
                 .required(true),
         )
         .arg(
             Arg::with_name("namespaces")
                 .long("namespaces")
-                .help("namespaces ids to load like '0,120'")
+                .help("Namespaces ids to load like '0,120'")
+                .default_value("")
                 .takes_value(true),
         )
         .arg(
             Arg::with_name("slot")
                 .long("slot")
-                .help("slot to load like 'mediainfo'. Could not be use with namespaces")
+                .help("Slot to load like 'mediainfo'. Could not be use with namespaces")
                 .takes_value(true),
         )
         .get_matches();
-    let bind = matches.value_of("bind").unwrap_or("localhost:7878");
+    let bind = matches.value_of("bind").unwrap();
     let file = matches.value_of("file");
     let mediawiki_api = matches.value_of("mediawiki_api").unwrap();
     let mediawiki_base_url = matches.value_of("mediawiki_base_url").unwrap();
     let namespaces = matches
         .value_of("namespaces")
-        .unwrap_or("")
+        .unwrap()
         .split(',')
         .flat_map(|t| {
             let t = t.trim();
