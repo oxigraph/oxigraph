@@ -9,6 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+        with:
+          submodules: true
       - uses: docker/metadata-action@v3
         id: docker_meta
         with:
@@ -30,6 +32,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+        with:
+          submodules: true
       - uses: docker/metadata-action@v3
         id: docker_meta
         with:
@@ -51,6 +55,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+        with:
+          submodules: true
       - run: rustup update
       - run: cargo login $CRATES_IO_TOKEN
         env:
@@ -62,6 +68,8 @@ jobs:
     needs: publish_lib_crate
     steps:
       - uses: actions/checkout@v2
+        with:
+          submodules: true
       - run: rustup update
       - run: cargo login $CRATES_IO_TOKEN
         env:
@@ -73,6 +81,8 @@ jobs:
     needs: publish_lib_crate
     steps:
       - uses: actions/checkout@v2
+        with:
+          submodules: true
       - run: rustup update
       - run: cargo login $CRATES_IO_TOKEN
         env:
@@ -84,6 +94,8 @@ jobs:
     needs: publish_lib_crate
     steps:
       - uses: actions/checkout@v2
+        with:
+          submodules: true
       - run: sed -i 's/path="..\/lib", //g' python/Cargo.toml
       - run: docker run --rm -v $(pwd):/io konstin2/maturin:v0.11.1 publish -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
         working-directory: ./python
@@ -92,6 +104,8 @@ jobs:
     needs: publish_lib_crate
     steps:
       - uses: actions/checkout@v2
+        with:
+          submodules: true
       - run: rustup update && rustup target add aarch64-apple-darwin
       - uses: actions/setup-python@v2
         with:
@@ -104,6 +118,8 @@ jobs:
     needs: publish_lib_crate
     steps:
       - uses: actions/checkout@v2
+        with:
+          submodules: true
       - uses: actions/setup-python@v2
         with:
           python-version: 3.6
@@ -114,6 +130,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+        with:
+          submodules: true
       - uses: actions/setup-node@v2
         with:
           node-version: 14
@@ -132,6 +150,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+        with:
+          submodules: true
       - run: rustup update
       - uses: actions/setup-python@v2
         with:
