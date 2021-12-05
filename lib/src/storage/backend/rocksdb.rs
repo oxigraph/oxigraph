@@ -2,7 +2,7 @@
 //!
 //! TODO: still has some memory leaks if the database opening fails
 
-#![allow(unsafe_code)]
+#![allow(unsafe_code, trivial_casts)]
 
 use crate::error::invalid_input_error;
 use lazy_static::lazy_static;
