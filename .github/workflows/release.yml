@@ -99,7 +99,8 @@ jobs:
       - run: sed -i 's/path="..\/lib", //g' python/Cargo.toml
       - uses: messense/maturin-action@v1
         with:
-          manylinux: auto
+          manylinux: 2014
+          container: messense/manylinux2014-cross:x86_64
           command: publish
           args: -m python/Cargo.toml --cargo-extra-args="--no-default-features --features vendored" -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
   publish_pypi_mac:

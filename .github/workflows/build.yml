@@ -92,7 +92,8 @@ jobs:
           submodules: true
       - uses: messense/maturin-action@v1
         with:
-          manylinux: auto
+          manylinux: 2014
+          container: messense/manylinux2014-cross:x86_64
           command: build
           args: -m python/Cargo.toml --cargo-extra-args="--no-default-features --features vendored"
 
