@@ -19,7 +19,7 @@ all-features = true
 [features]
 default = []
 sophia = ["sophia_api"]
-http_client = ["oxhttp", "oxhttp/native-tls"]
+http_client = ["oxhttp"]
 
 [dependencies]
 quick-xml = "0.22"
