@@ -15,7 +15,7 @@ use std::str::Chars;
 use std::str::FromStr;
 use std::{char, fmt};
 
-/// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query
+/// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
 pub fn parse_query(query: &str, base_iri: Option<&str>) -> Result<Query, ParseError> {
     let mut state = ParserState {
         base_iri: if let Some(base_iri) = base_iri {
@@ -36,7 +36,7 @@ pub fn parse_query(query: &str, base_iri: Option<&str>) -> Result<Query, ParseEr
     })
 }
 
-/// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query
+/// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query.
 pub fn parse_update(update: &str, base_iri: Option<&str>) -> Result<Update, ParseError> {
     let mut state = ParserState {
         base_iri: if let Some(base_iri) = base_iri {

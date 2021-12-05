@@ -1,4 +1,4 @@
-//! Utilities to read RDF graphs and datasets
+//! Utilities to read RDF graphs and datasets.
 
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;

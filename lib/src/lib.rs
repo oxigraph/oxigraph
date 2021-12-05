@@ -1,6 +1,6 @@
 //! Oxigraph is a graph database library implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
 //!
-//! Its goal is to provide a compliant, safe and fast graph on-disk database.
+//! Its goal is to provide a compliant, safe and fast on-disk database.
 //! It also provides a set of utility functions for reading, writing, and processing RDF files.
 //!
 //! Oxigraph is in heavy development and SPARQL query evaluation has not been optimized yet.

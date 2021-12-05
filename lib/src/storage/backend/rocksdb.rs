@@ -1,4 +1,4 @@
-//! Code inspired by [https://github.com/rust-rocksdb/rust-rocksdb][Rust RocksDB] under Apache License 2.0.
+//! Code inspired by [Rust RocksDB](https://github.com/rust-rocksdb/rust-rocksdb) under Apache License 2.0.
 //!
 //! TODO: still has some memory leaks if the database opening fails
 

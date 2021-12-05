@@ -1,4 +1,4 @@
-//! API to access an on-on disk [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
+//! API to access an on-disk [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 //!
 //! Usage example:
 //! ```
@@ -41,7 +41,7 @@ use std::io::{BufRead, Write};
 use std::path::Path;
 use std::{fmt, io, str};
 
-/// An on-on disk [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
+/// An on-disk [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 /// Allows to query and update it using SPARQL.
 /// It is based on the [RocksDB](https://rocksdb.org/) key-value store.
 ///
@@ -85,14 +85,14 @@ pub struct Store {
 //TODO: indexes for the default graph and indexes for the named graphs (no more Optional and space saving)
 
 impl Store {
-    /// Creates a temporary [`Store`]() that will be deleted after drop.
+    /// Creates a temporary [`Store`] that will be deleted after drop.
     pub fn new() -> io::Result<Self> {
         Ok(Self {
             storage: Storage::new()?,
         })
     }
 
-    /// Opens a [`Store`]() and creates it if it does not exist yet.
+    /// Opens a [`Store`] and creates it if it does not exist yet.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn open(path: impl AsRef<Path>) -> io::Result<Self> {
         Ok(Self {
@@ -174,25 +174,25 @@ impl Store {
         }
     }
 
-    /// Returns all the quads contained in the store
+    /// Returns all the quads contained in the store.
     pub fn iter(&self) -> QuadIter {
         self.quads_for_pattern(None, None, None, None)
     }
 
-    /// Checks if this store contains a given quad
+    /// Checks if this store contains a given quad.
     pub fn contains<'a>(&self, quad: impl Into<QuadRef<'a>>) -> io::Result<bool> {
         let quad = EncodedQuad::from(quad.into());
         self.storage.snapshot().contains(&quad)
     }
 
-    /// Returns the number of quads in the store
+    /// Returns the number of quads in the store.
     ///
-    /// Warning: this function executes a full scan
+    /// Warning: this function executes a full scan.
     pub fn len(&self) -> io::Result<usize> {
         self.storage.snapshot().len()
     }
 
-    /// Returns if the store is empty
+    /// Returns if the store is empty.
     pub fn is_empty(&self) -> io::Result<bool> {
         self.storage.snapshot().is_empty()
     }
@@ -239,7 +239,7 @@ impl Store {
 
     /// Loads a graph file (i.e. triples) into the store.
     ///
-    /// This function is atomic and quite slow and memory hungry. To get much better performances you might want to use [`bulk_load_graph`].
+    /// This function is atomic and quite slow and memory hungry. To get much better performances you might want to use [`bulk_load_graph`](Store::bulk_load_graph).
     ///
     /// Usage example:
     /// ```
@@ -289,7 +289,7 @@ impl Store {
 
     /// Loads a dataset file (i.e. quads) into the store.
     ///
-    /// This function is atomic and quite slow. To get much better performances you might want to [`bulk_load_dataset`].
+    /// This function is atomic and quite slow. To get much better performances you might want to [`bulk_load_dataset`](Store::bulk_load_dataset).
     ///
     /// Usage example:
     /// ```
@@ -358,7 +358,7 @@ impl Store {
 
     /// Adds atomically a set of quads to this store.
     ///
-    /// Warning: This operation uses a memory heavy transaction internally, use [`bulk_extend`] if you plan to add ten of millions of triples.
+    /// Warning: This operation uses a memory heavy transaction internally, use [`bulk_extend`](Store::bulk_extend) if you plan to add ten of millions of triples.
     pub fn extend(&self, quads: impl IntoIterator<Item = Quad>) -> io::Result<()> {
         let quads = quads.into_iter().collect::<Vec<_>>();
         self.storage.transaction(move |mut t| {
@@ -491,7 +491,7 @@ impl Store {
         self.storage.snapshot().contains_named_graph(&graph_name)
     }
 
-    /// Inserts a graph into this store
+    /// Inserts a graph into this store.
     ///
     /// Returns `true` if the graph was not already in the store.
     ///
@@ -592,10 +592,7 @@ impl Store {
 
     /// Flushes all buffers and ensures that all writes are saved on disk.
     ///
-    /// Flushes are automatically done for most platform using background threads.
-    /// However, calling this method explicitly is still required for Windows and Android.
-    ///
-    /// An [async version](SledStore::flush_async) is also available.
+    /// Flushes are automatically done using background threads but might lag a little bit.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn flush(&self) -> io::Result<()> {
         self.storage.flush()
@@ -613,7 +610,7 @@ impl Store {
 
     /// Loads a dataset file efficiently into the store.
     ///
-    /// This function is optimized for large dataset loading speed. For small files, [`load_dataset`] might be more convenient.
+    /// This function is optimized for large dataset loading speed. For small files, [`load_dataset`](Store::load_dataset) might be more convenient.
     ///
     /// Warning: This method is not atomic. If the parsing fails in the middle of the file, only a part of it may be written to the store.
     ///
@@ -658,7 +655,7 @@ impl Store {
 
     /// Loads a dataset file efficiently into the store.
     ///
-    /// This function is optimized for large dataset loading speed. For small files, [`load_graph`] might be more convenient.   
+    /// This function is optimized for large dataset loading speed. For small files, [`load_graph`](Store::load_graph) might be more convenient.   
     ///
     /// Warning: This method is not atomic. If the parsing fails in the middle of the file, only a part of it may be written to the store.
     ///

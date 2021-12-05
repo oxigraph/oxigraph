@@ -9,7 +9,7 @@ use spargebra::GraphUpdateOperation;
 use std::fmt;
 use std::str::FromStr;
 
-/// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/)
+/// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/).
 ///
 /// ```
 /// use oxigraph::model::NamedNode;
@@ -33,7 +33,7 @@ pub struct Query {
 }
 
 impl Query {
-    /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query
+    /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
     pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self, spargebra::ParseError> {
         let query = spargebra::Query::parse(query, base_iri)?;
         Ok(Self {
@@ -88,7 +88,7 @@ impl<'a> TryFrom<&'a String> for Query {
     }
 }
 
-/// A parsed [SPARQL update](https://www.w3.org/TR/sparql11-update/)
+/// A parsed [SPARQL update](https://www.w3.org/TR/sparql11-update/).
 ///
 /// ```
 /// use oxigraph::sparql::Update;
@@ -106,7 +106,7 @@ pub struct Update {
 }
 
 impl Update {
-    /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query
+    /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query.
     pub fn parse(update: &str, base_iri: Option<&str>) -> Result<Self, spargebra::ParseError> {
         let update = spargebra::Update::parse(update, base_iri)?;
         Ok(Self {

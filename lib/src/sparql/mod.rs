@@ -154,8 +154,9 @@ impl QueryOptions {
         self
     }
 
-    /// Adds a custom SPARQL evaluation function
+    /// Adds a custom SPARQL evaluation function.
     ///
+    /// Example with a function serializing terms to N-Triples:
     /// ```
     /// use oxigraph::store::Store;
     /// use oxigraph::model::*;

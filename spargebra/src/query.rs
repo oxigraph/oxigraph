@@ -5,7 +5,7 @@ use oxiri::Iri;
 use std::fmt;
 use std::str::FromStr;
 
-/// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/)
+/// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/).
 ///
 /// ```
 /// use spargebra::Query;
@@ -59,7 +59,7 @@ pub enum Query {
 }
 
 impl Query {
-    /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query
+    /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
     pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self, ParseError> {
         parse_query(query, base_iri)
     }

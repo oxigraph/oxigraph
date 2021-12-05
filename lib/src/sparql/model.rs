@@ -11,18 +11,18 @@ use std::io::{BufRead, Write};
 use std::rc::Rc;
 use std::{fmt, io};
 
-/// Results of a [SPARQL query](https://www.w3.org/TR/sparql11-query/)
+/// Results of a [SPARQL query](https://www.w3.org/TR/sparql11-query/).
 pub enum QueryResults {
-    /// Results of a [SELECT](https://www.w3.org/TR/sparql11-query/#select) query
+    /// Results of a [SELECT](https://www.w3.org/TR/sparql11-query/#select) query.
     Solutions(QuerySolutionIter),
-    /// Result of a [ASK](https://www.w3.org/TR/sparql11-query/#ask) query
+    /// Result of a [ASK](https://www.w3.org/TR/sparql11-query/#ask) query.
     Boolean(bool),
-    /// Results of a [CONSTRUCT](https://www.w3.org/TR/sparql11-query/#construct) or [DESCRIBE](https://www.w3.org/TR/sparql11-query/#describe) query
+    /// Results of a [CONSTRUCT](https://www.w3.org/TR/sparql11-query/#construct) or [DESCRIBE](https://www.w3.org/TR/sparql11-query/#describe) query.
     Graph(QueryTripleIter),
 }
 
 impl QueryResults {
-    /// Reads a SPARQL query results serialization
+    /// Reads a SPARQL query results serialization.
     pub fn read(reader: impl BufRead + 'static, format: QueryResultsFormat) -> io::Result<Self> {
         match format {
             QueryResultsFormat::Xml => read_xml_results(reader),
@@ -34,9 +34,9 @@ impl QueryResults {
         }
     }
 
-    /// Writes the query results (solutions or boolean)
+    /// Writes the query results (solutions or boolean).
     ///
-    /// This method fails if it is called on the `Graph` results
+    /// This method fails if it is called on the `Graph` results.
     ///
     /// ```
     /// use oxigraph::store::Store;
@@ -65,9 +65,9 @@ impl QueryResults {
         }
     }
 
-    /// Writes the graph query results
+    /// Writes the graph query results.
     ///
-    /// This method fails if it is called on the `Solution` or `Boolean` results
+    /// This method fails if it is called on the `Solution` or `Boolean` results.
     ///
     /// ```
     /// use oxigraph::store::Store;
@@ -113,7 +113,7 @@ impl From<QuerySolutionIter> for QueryResults {
     }
 }
 
-/// [SPARQL query](https://www.w3.org/TR/sparql11-query/) results serialization formats
+/// [SPARQL query](https://www.w3.org/TR/sparql11-query/) results serialization formats.
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 #[non_exhaustive]
 pub enum QueryResultsFormat {
@@ -222,7 +222,7 @@ impl QueryResultsFormat {
     }
 }
 
-/// An iterator over [`QuerySolution`]s
+/// An iterator over [`QuerySolution`]s.
 ///
 /// ```
 /// use oxigraph::store::Store;
@@ -249,14 +249,14 @@ impl QuerySolutionIter {
         Self { variables, iter }
     }
 
-    /// The variables used in the solutions
+    /// The variables used in the solutions.
     ///
     /// ```
     /// use oxigraph::store::Store;
     /// use oxigraph::sparql::{QueryResults, Variable};
     ///
     /// let store = Store::new()?;
-    /// if let QueryResults::Solutions(solutions) = store.query("SELECT ?s ?o WHERE { ?s ?p ?o }")? {
+    /// if let QueryResults::SolutionReturns all the quads contained in the stores(solutions) = store.query("SELECT ?s ?o WHERE { ?s ?p ?o }")? {
     ///     assert_eq!(solutions.variables(), &[Variable::new("s")?, Variable::new("o")?]);
     /// }
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -367,7 +367,7 @@ impl VariableSolutionIndex for Variable {
     }
 }
 
-/// An iterator over the triples that compose a graph solution
+/// An iterator over the triples that compose a graph solution.
 ///
 /// ```
 /// use oxigraph::store::Store;
@@ -407,7 +407,7 @@ impl Iterator for QueryTripleIter {
     }
 }
 
-/// A SPARQL query variable
+/// A SPARQL query variable.
 ///
 /// ```
 /// use oxigraph::sparql::Variable;

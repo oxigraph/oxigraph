@@ -1,4 +1,4 @@
-//! Utilities to write RDF graphs and datasets
+//! Utilities to write RDF graphs and datasets.
 
 use crate::error::invalid_input_error;
 use crate::io::{DatasetFormat, GraphFormat};

@@ -5,7 +5,7 @@ use oxiri::Iri;
 use std::fmt;
 use std::str::FromStr;
 
-/// A parsed [SPARQL update](https://www.w3.org/TR/sparql11-update/)
+/// A parsed [SPARQL update](https://www.w3.org/TR/sparql11-update/).
 ///
 /// ```
 /// use spargebra::Update;
@@ -25,7 +25,7 @@ pub struct Update {
 }
 
 impl Update {
-    /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query
+    /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query.
     pub fn parse(update: &str, base_iri: Option<&str>) -> Result<Self, ParseError> {
         parse_update(update, base_iri)
     }
