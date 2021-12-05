@@ -94,7 +94,7 @@ jobs:
         with:
           manylinux: auto
           command: build
-          args: -m python/Cargo.toml --cargo-extra-args="--features vendored"
+          args: -m python/Cargo.toml --cargo-extra-args="--no-default-features --features vendored"
 
   python_wheel_mac:
     runs-on: macos-latest

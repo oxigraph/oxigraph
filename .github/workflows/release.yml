@@ -101,7 +101,7 @@ jobs:
         with:
           manylinux: auto
           command: publish
-          args: -m python/Cargo.toml --cargo-extra-args="--features vendored" -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
+          args: -m python/Cargo.toml --cargo-extra-args="--no-default-features --features vendored" -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
   publish_pypi_mac:
     runs-on: macos-latest
     needs: publish_lib_crate

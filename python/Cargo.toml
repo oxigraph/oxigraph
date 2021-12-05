@@ -16,10 +16,10 @@ name = "pyoxigraph"
 doctest = false
 
 [dependencies]
-oxigraph = {version = "0.3.0-dev", path="../lib", features = ["http_client"]}
-pyo3 = {version = "0.15", features = ["extension-module", "abi3-py36"]}
-native-tls = "0.2"
-openssl-src = { version = "111.16.0+1.1.1l", optional = true }
+oxigraph = { version = "0.3.0-dev", path="../lib", features = ["http_client"] }
+pyo3 = { version = "0.15", features = ["extension-module", "abi3-py36"] }
+oxhttp = "0.1"
 
 [features]
-vendored = ["native-tls/vendored", "openssl-src"]
+default = ["oxhttp/native-tls"]
+vendored = ["oxhttp/rustls"]

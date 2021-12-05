@@ -55,7 +55,7 @@ getrandom = {version="0.2", features=["js"]}
 
 [dev-dependencies]
 criterion = "0.3"
-oxhttp = { version = "^0.1.2", features = ["native-tls"] }
+oxhttp = "0.1"
 sophia_api = { version = "0.7", features = ["test_macro"] }
 zstd = "0.9"
 
