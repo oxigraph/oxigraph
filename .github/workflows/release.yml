@@ -51,8 +51,21 @@ jobs:
           push: true
           tags: ${{ steps.docker_meta.outputs.tags }}
           labels: ${{ steps.docker_meta.outputs.labels }}
+  publish_rocksdb_crate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - run: rustup update
+      - run: cargo login $CRATES_IO_TOKEN
+        env:
+          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+      - run: cargo publish
+        working-directory: ./rocksdb-sys
   publish_lib_crate:
     runs-on: ubuntu-latest
+    needs: publish_rocksdb_crate
     steps:
       - uses: actions/checkout@v2
         with:
