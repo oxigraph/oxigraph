@@ -30,11 +30,13 @@ fn nquads_w3c_testsuite() -> Result<()> {
     run_testsuite("http://w3c.github.io/rdf-tests/nquads/manifest.ttl")
 }
 
+#[cfg(not(target_os = "windows"))] // Tests don't like git auto "\r\n" on Windows
 #[test]
 fn turtle_w3c_testsuite() -> Result<()> {
     run_testsuite("http://w3c.github.io/rdf-tests/turtle/manifest.ttl")
 }
 
+#[cfg(not(target_os = "windows"))] // Tests don't like git auto "\r\n" on Windows
 #[test]
 fn trig_w3c_testsuite() -> Result<()> {
     run_testsuite("http://w3c.github.io/rdf-tests/trig/manifest.ttl")
