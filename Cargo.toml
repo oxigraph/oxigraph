@@ -6,8 +6,7 @@ members = [
     "rocksdb-sys",
     "server",
     "spargebra",
-    "testsuite",
-    "wikibase"
+    "testsuite"
 ]
 
 [profile.release]

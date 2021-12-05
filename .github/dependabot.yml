@@ -22,7 +22,3 @@ updates:
     directory: "/server"
     schedule:
       interval: daily
-  - package-ecosystem: docker
-    directory: "/wikibase"
-    schedule:
-      interval: daily
