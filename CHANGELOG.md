@@ -1,6 +1,50 @@
+## [0.3.0-dev]
+
+### Added
+- [RDF-star](https://w3c.github.io/rdf-star/cg-spec) support. `Triple` is now a possible `Term`. Serialization formats and SPARQL support have been updated to match the [latest version of the specification draft](https://w3c.github.io/rdf-star/cg-spec/2021-07-01.html).
+- Fast data bulk load with the `Store` `bulk_load_dataset` and `bulk_load_graph` methods and a special command line option of the server.
+- It is now possible to quickly backup the database using the `backup` method.
+- Rust: `*Syntax::from_extension` to easy guess a graph/dataset/sparql result format from a file extension.
+- Rust: Custom SPARQL functions are now supported using `QueryOptions::with_custom_function`.
+- Rust: Simple in-memory graph (`Graph`) and dataset (`Dataset`) data structures with canonicalization.
+- Nightly build of the server binary and docker image, and of pyoxigraph wheels.
+- `Store` operations are now transactional using the "repeatable read" isolation level:
+  the store only exposes changes that have been "committed" (i.e. no partial writes) and the exposed state does not change for the complete duration of a read operation (e.g. a SPARQL query) or a read/write operation (e.g. a SPARQL update).
+  the `Store` `transaction` method now allows to do read/write transactions.
+* `RDF-star <https://w3c.github.io/rdf-star/cg-spec>`_ is now supported (including serialization formats and SPARQL-star). :py:class:`.Triple` can now be used in :py:attr:`.Triple.object`, :py:attr:`.Triple.object`, :py:attr:`.Quad.subject` and :py:attr:`.Quad.object`.
+
+### Changed
+- SPARQL: It is now possible to compare `rdf:langString` literals with the same language tag.
+- SPARQL: The parser now validates more carefully the inputs following the SPARQL specification and test suite.
+- SPARQL: Variable scoping was buggy with "FILTER EXISTS". It is now fixed.
+- Rust: RDF model, SPARQL parser and SPARQL result parsers have been moved to stand-alone reusable libraries.
+- Rust: HTTPS is not supported by default with the `http_client` option. You need to enable the `native-tls` or the `rustls` feature of the `oxhttp` crate to enable a TSL layer.
+- Rust: The error types have been cleaned.
+  Most of the `Store` methods now return a `StorageError` that is more descriptive than the previous `std::io::Error`.
+  The new error type all implements `Into<std::io::Error>` for easy conversion.
+- Rust: There is now a `Subject` struct that is the union of `NamedNode`, `BlankNode` and `Triple`.
+  It is The used type of the `subject` field of the `Triple` and `Quad` structs.
+- Rust: The SPARQL algebra is not anymore publicly exposed in the `oxigraph` crate. The new `oxalgebra` crate exposes it.
+- Rust: `UpdateOptions` API have been rewritten. It can now be built using `From<QueryOptions>` or `Default`.
+- Server: The command line API has been redesign. See the [server README](server/README.md) for more information.
+- Server: The HTTP implementation is now provided by [`oxhttp`](https://github.com/oxigraph/oxhttp).
+- Server: The HTTP response bodies are now generated on the fly instead of being buffered.
+- Python: The `SledStore` and `MemoryStore` classes have been removed in favor of the `Store` class.
+- JS: The `MemoryStore` class has been renamed to `Store`.
+- JS: The [RDF/JS `DataFactory` interface](http://rdf.js.org/data-model-spec/#datafactory-interface) is now implemented by the `oxigraph` module itself and the `MemoryStore.dataFactory` propery has been removed.
+- The implementation of SPARQL evaluation has been improved for better performances (especially joins).
+- The TLS implementation used in SPARQL HTTP calls is now [rustls](https://github.com/rustls/rustls) and not [native-tls](https://github.com/sfackler/rust-native-tls). The host system certificate registry is still used.
+- Spargebra: The basic RDF terms are now the ones of the `oxrdf` crate.
+
+### Removed
+- `SledStore` and `MemoryStore`. There is only the `RocksDbStore` anymore that is renamed to `Store`.
+- `oxigraph_wikibase` is now stored in [its own repository](https://github.com/oxigraph/oxigraph-wikibase).
+- Rust: `From` implementations between `oxigraph` terms and `rio_api` terms.
+
+
 ## [0.2.5] - 2021-07-11
 
-## Added
+### Added
 - [SPARQL 1.1 Query Results JSON Format](http://www.w3.org/TR/sparql11-results-json/) parser.
 - Python wheels for macOS are now universal2 binaries.
 

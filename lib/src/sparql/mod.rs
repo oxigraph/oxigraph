@@ -150,6 +150,7 @@ impl QueryOptions {
 
     /// Sets a timeout for HTTP requests done during SPARQL evaluation
     #[cfg(feature = "http_client")]
+    #[inline]
     #[must_use]
     pub fn with_http_timeout(mut self, timeout: Duration) -> Self {
         self.http_timeout = Some(timeout);
