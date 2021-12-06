@@ -44,9 +44,9 @@ It will create a fat binary in `target/release/oxigraph_server`.
 
 ## Usage
 
-Run `oxigraph_server serve --location my_data_storage_directory` to start the server where `my_data_storage_directory` is the directory where you want Oxigraph data to be stored in. It listens by default on `localhost:7878`.
+Run `oxigraph_server --location my_data_storage_directory serve` to start the server where `my_data_storage_directory` is the directory where you want Oxigraph data to be stored in. It listens by default on `localhost:7878`.
 
-The server provides an HTML UI with a form to execute SPARQL requests.
+The server provides an HTML UI, based on [YASGUI](https://yasgui.triply.cc), with a form to execute SPARQL requests.
 
 It provides the following REST actions:
 * `/query` allows to evaluate SPARQL queries against the server repository following the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/#query-operation).
@@ -63,7 +63,7 @@ It provides the following REST actions:
 Use `oxigraph_server --help` to see the possible options when starting the server.
 
 It is also possible to load RDF data offline using bulk loading:
-`oxigraph_server load --location my_data_storage_directory --file my_file.nq`
+`oxigraph_server --location my_data_storage_directory load --file my_file.nq`
 
 ## Using a Docker image
 
@@ -75,10 +75,11 @@ docker run --rm oxigraph/oxigraph --help
 ### Run the Web server
 Expose the server on port `7878` of the host machine, and save data on the local `./data` folder
 ```sh
-docker run --init --rm -v $PWD/data:/data -p 7878:7878 oxigraph/oxigraph serve --bind 0.0.0.0:7878 --location /data
+docker run --rm -v $PWD/data:/data -p 7878:7878 oxigraph/oxigraph --location /data serve --bind 0.0.0.0:7878
 ```
 
 You can then access it from your machine on port `7878`:
+
 ```sh
 # Open the GUI in a browser
 firefox http://localhost:7878
@@ -93,7 +94,47 @@ curl -X POST -H 'Accept: application/sparql-results+json' -H 'Content-Type: appl
 curl -X POST -H 'Content-Type: application/sparql-update' --data 'DELETE WHERE { <http://example.com/s> ?p ?o }' http://localhost:7878/update
 ```
 
-You could easily build your own Docker image by running `docker build -t oxigraph server -f server/Dockerfile .` from the root directory.
+### Run the Web server with basic authentication
+
+It can be useful to make Oxigraph SPARQL endpoint available publicly, with a layer of authentication to be able to add data.
+
+To quickly use a single user/password you can define them in a `.env` file along the `docker-compose.yaml`:
+
+```sh
+cat << EOF > .env
+OXIGRAPH_USER=oxigraph
+OXIGRAPH_PASSWORD=oxigraphy
+EOF
+```
+
+Start the Oxigraph server and nginx proxy for authentication with `docker-compose`:
+
+```bash
+docker-compose up
+```
+
+In case you want to have multiple users, you can comment the `entrypoint:` line in the `docker-compose.yml` file, uncomment the `.htpasswd` volume, then generate each user in the `.htpasswd` file with this command:
+
+```bash
+htpasswd -Bbn $YOUR_USER $YOUR_PASSWORD >> .htpasswd
+```
+
+> You can find the nginx configuration in `server/nginx.conf`
+
+### Build the image
+
+You could easily build your own Docker image by cloning this repository with its submodules, and going to the root folder:
+
+```sh
+git clone --recursive https://github.com/oxigraph/oxigraph.git
+cd oxigraph
+```
+
+Then run this command to build the image locally:
+
+````sh
+docker build -t oxigraph/oxigraph .
+````
 
 ## Homebrew
 
