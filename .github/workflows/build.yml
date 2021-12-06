@@ -84,6 +84,7 @@ jobs:
 
   python_wheel_linux:
     runs-on: ubuntu-latest
+    needs: python
     steps:
       - uses: actions/checkout@v2
         with:
@@ -99,6 +100,7 @@ jobs:
 
   python_wheel_mac:
     runs-on: macos-latest
+    needs: python
     steps:
       - uses: actions/checkout@v2
         with:
@@ -112,6 +114,7 @@ jobs:
 
   python_wheel_windows:
     runs-on: windows-latest
+    needs: python
     strategy:
       matrix:
         architecture: ["x86", "x64"]

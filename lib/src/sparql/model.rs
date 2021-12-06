@@ -256,7 +256,7 @@ impl QuerySolutionIter {
     /// use oxigraph::sparql::{QueryResults, Variable};
     ///
     /// let store = Store::new()?;
-    /// if let QueryResults::SolutionReturns all the quads contained in the stores(solutions) = store.query("SELECT ?s ?o WHERE { ?s ?p ?o }")? {
+    /// if let QueryResults::Solutions(solutions) = store.query("SELECT ?s ?o WHERE { ?s ?p ?o }")? {
     ///     assert_eq!(solutions.variables(), &[Variable::new("s")?, Variable::new("o")?]);
     /// }
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
