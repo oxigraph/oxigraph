@@ -46,7 +46,6 @@ jobs:
           submodules: true
       - run: rustup update
       - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
-      - run: choco install llvm -y
       - run: cargo test --all-features
         env:
           RUST_BACKTRACE: 1
@@ -71,7 +70,7 @@ jobs:
       - run: rustup update
       - uses: actions/setup-python@v2
         with:
-          python-version: 3.8
+          python-version: "3.10"
       - run: python -m venv python/venv
       - run: source python/venv/bin/activate && pip install --upgrade 'maturin~=0.12' sphinx
       - run: source venv/bin/activate && maturin develop
@@ -85,7 +84,6 @@ jobs:
 
   python_wheel_linux:
     runs-on: ubuntu-latest
-    needs: python
     steps:
       - uses: actions/checkout@v2
         with:
@@ -96,10 +94,11 @@ jobs:
           container: messense/manylinux2014-cross:x86_64
           command: build
           args: -m python/Cargo.toml --cargo-extra-args="--no-default-features --features vendored"
+      - run: pip install pyoxigraph --no-index --find-links ../../target/wheels && python -m unittest
+        working-directory: ./python/tests
 
   python_wheel_mac:
     runs-on: macos-latest
-    needs: python
     steps:
       - uses: actions/checkout@v2
         with:
@@ -108,17 +107,27 @@ jobs:
         with:
           command: build
           args: -m python/Cargo.toml --universal2
+      - run: pip install pyoxigraph --no-index --find-links ../../target/wheels && python -m unittest
+        working-directory: ./python/tests
 
   python_wheel_windows:
     runs-on: windows-latest
-    needs: python
+    strategy:
+      matrix:
+        architecture: ["x86", "x64"]
     steps:
       - uses: actions/checkout@v2
         with:
           submodules: true
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.7
+          architecture: ${{ matrix.architecture }}
       - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
-      - run: choco install llvm -y
       - uses: messense/maturin-action@v1
         with:
           command: build
+          target: ${{ matrix.architecture }}
           args: -m python/Cargo.toml
+      - run: pip install pyoxigraph --no-index --find-links ../../target/wheels && python -m unittest
+        working-directory: ./python/tests

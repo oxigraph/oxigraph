@@ -28,6 +28,7 @@ jobs:
           push: true
           tags: ${{ steps.docker_meta.outputs.tags }}
           labels: ${{ steps.docker_meta.outputs.labels }}
+
   publish_rocksdb_crate:
     runs-on: ubuntu-latest
     steps:
@@ -40,6 +41,7 @@ jobs:
           CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
       - run: cargo publish
         working-directory: ./rocksdb-sys
+
   publish_lib_crate:
     runs-on: ubuntu-latest
     needs: publish_rocksdb_crate
@@ -53,6 +55,7 @@ jobs:
           CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
       - run: cargo publish
         working-directory: ./lib
+
   publish_server_crate:
     runs-on: ubuntu-latest
     needs: publish_lib_crate
@@ -66,7 +69,8 @@ jobs:
           CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
       - run: cargo publish
         working-directory: ./server
-  publish_pypi_linux:
+
+  python_wheel_linux:
     runs-on: ubuntu-latest
     needs: publish_lib_crate
     steps:
@@ -79,7 +83,8 @@ jobs:
           manylinux: 2014
           container: messense/manylinux2014-cross:x86_64
           command: publish
-          args: -m python/Cargo.toml --cargo-extra-args="--no-default-features --features vendored" -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
+          args: -m python/Cargo.toml --cargo-extra-args="--no-default-features --features vendored" --no-sdist -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
+
   publish_pypi_mac:
     runs-on: macos-latest
     needs: publish_lib_crate
@@ -90,20 +95,33 @@ jobs:
       - uses: messense/maturin-action@v1
         with:
           command: publish
-          args: -m python/Cargo.toml --universal2 --no-sdist -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
-  publish_pypi_windows:
-    runs-on: windows-latest
-    needs: publish_lib_crate
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          submodules: true
-      - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
-      - run: choco install llvm -y
+          args: -m python/Cargo.toml --universal2 -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
       - uses: messense/maturin-action@v1
         with:
           command: publish
           args: -m python/Cargo.toml --no-sdist -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
+
+  python_wheel_windows:
+    runs-on: windows-latest
+    needs: publish_lib_crate
+    strategy:
+      matrix:
+        architecture: ["x86", "x64"]
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.7
+          architecture: ${{ matrix.architecture }}
+      - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
+      - uses: messense/maturin-action@v1
+        with:
+          command: publish
+          target: ${{ matrix.architecture }}
+          args: -m python/Cargo.toml --no-sdist -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
+
   publish_npm:
     runs-on: ubuntu-latest
     steps:
@@ -124,6 +142,7 @@ jobs:
         working-directory: ./js
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
   publish_python_doc:
     runs-on: ubuntu-latest
     steps:
@@ -158,6 +177,7 @@ jobs:
           git diff-index --quiet HEAD || git commit -m "Updates pyoxigraph documentation"
           git push
         working-directory: ./website
+
   publish_homebrew:
     runs-on: ubuntu-latest
     steps:
