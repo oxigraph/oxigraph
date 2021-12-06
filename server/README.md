@@ -96,9 +96,9 @@ curl -X POST -H 'Content-Type: application/sparql-update' --data 'DELETE WHERE {
 
 ### Run the Web server with basic authentication
 
-It can be useful to make Oxigraph SPARQL endpoint available publicly, with a layer of authentication to be able to add data.
+It can be useful to make Oxigraph SPARQL endpoint available publicly, with a layer of authentication on `/update` to be able to add data.
 
-To quickly use a single user/password you can define them in a `.env` file along the `docker-compose.yaml`:
+To quickly use a single user/password you can define them in a `.env` file alongside the `docker-compose.yaml`:
 
 ```sh
 cat << EOF > .env
@@ -109,14 +109,20 @@ EOF
 
 Start the Oxigraph server and nginx proxy for authentication with `docker-compose`:
 
-```bash
+```sh
 docker-compose up
+```
+
+To make an update, first change `$OXIGRAPH_USER` and `$OXIGRAPH_PASSWORD`, or set the environment variables, then run:
+
+```sh
+curl -X POST -u $OXIGRAPH_USER:$OXIGRAPH_PASSWORD -H 'Content-Type: application/sparql-update' --data 'INSERT DATA { <http://example.com/s> <http://example.com/p> <http://example.com/o> }' http://localhost:7878/update
 ```
 
 In case you want to have multiple users, you can comment the `entrypoint:` line in the `docker-compose.yml` file, uncomment the `.htpasswd` volume, then generate each user in the `.htpasswd` file with this command:
 
-```bash
-htpasswd -Bbn $YOUR_USER $YOUR_PASSWORD >> .htpasswd
+```sh
+htpasswd -Bbn $OXIGRAPH_USER $OXIGRAPH_PASSWORD >> .htpasswd
 ```
 
 > You can find the nginx configuration in `server/nginx.conf`
