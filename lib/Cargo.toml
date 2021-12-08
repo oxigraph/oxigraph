@@ -24,7 +24,7 @@ http_client = ["oxhttp"]
 [dependencies]
 quick-xml = "0.22"
 rand = "0.8"
-md-5 = "0.9"
+md-5 = "0.10"
 sha-1 = "0.9"
 sha2 = "0.9"
 digest = "0.9"
