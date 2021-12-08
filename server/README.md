@@ -98,22 +98,72 @@ curl -X POST -H 'Content-Type: application/sparql-update' --data 'DELETE WHERE {
 
 It can be useful to make Oxigraph SPARQL endpoint available publicly, with a layer of authentication on `/update` to be able to add data.
 
-To quickly use a single user/password you can define them in a `.env` file alongside the `docker-compose.yaml`:
+You can do so by using a nginx basic authentication in an additional docker container with `docker-compose`. First create a `nginx.conf` file:
 
-```sh
-cat << EOF > .env
-OXIGRAPH_USER=oxigraph
-OXIGRAPH_PASSWORD=oxigraphy
-EOF
+```nginx
+daemon off;
+events {
+    worker_connections  1024;
+}
+http {
+    server {
+        server_name localhost;
+        listen 7878;
+        rewrite ^/(.*) /$1 break;
+        proxy_ignore_client_abort on;
+        proxy_set_header  X-Real-IP  $remote_addr;
+        proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header  Host $http_host;
+        proxy_set_header Access-Control-Allow-Origin "*";
+        location ~ ^(/|/query)$ {
+            proxy_pass http://oxigraph:7878;
+            proxy_pass_request_headers on;
+        }
+        location ~ ^(/update|/store)$ {
+            auth_basic "Oxigraph Administrator's Area";
+            auth_basic_user_file /etc/nginx/.htpasswd; 
+            proxy_pass http://oxigraph:7878;
+            proxy_pass_request_headers on;
+        }
+    }
+}
 ```
 
-Start the Oxigraph server and nginx proxy for authentication with `docker-compose`:
+Then a `docker-compose.yml` in the same folder, you can change the default user and password in the `environment` section:
+
+```yaml
+version: "3"
+services:
+  oxigraph:
+    image: ghcr.io/oxigraph/oxigraph
+    ## To build from local source code:
+    # build:
+    #   context: .
+    #   dockerfile: server/Dockerfile
+    volumes:
+      - ./data:/data
+
+  nginx-auth:
+    image: nginx:1.21.4
+    environment:
+      - OXIGRAPH_USER=oxigraph
+      - OXIGRAPH_PASSWORD=oxigraphy
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      ## For multiple users: uncomment this line to mount a pre-generated .htpasswd 
+      # - ./.htpasswd:/etc/nginx/.htpasswd
+    ports:
+      - 7878:7878
+    entrypoint: "bash -c 'echo -n $OXIGRAPH_USER: >> /etc/nginx/.htpasswd && echo $OXIGRAPH_PASSWORD | openssl passwd -stdin -apr1 >> /etc/nginx/.htpasswd && /docker-entrypoint.sh nginx'"
+```
+
+Once the `docker-compose.yaml` and `nginx.conf` are ready, start the Oxigraph server and nginx proxy for authentication on http://localhost:7878:
 
 ```sh
 docker-compose up
 ```
 
-To make an update, first change `$OXIGRAPH_USER` and `$OXIGRAPH_PASSWORD`, or set the environment variables, then run:
+To make an update to the graph, first change `$OXIGRAPH_USER` and `$OXIGRAPH_PASSWORD`, or set the environment variables, then run:
 
 ```sh
 curl -X POST -u $OXIGRAPH_USER:$OXIGRAPH_PASSWORD -H 'Content-Type: application/sparql-update' --data 'INSERT DATA { <http://example.com/s> <http://example.com/p> <http://example.com/o> }' http://localhost:7878/update
@@ -124,8 +174,6 @@ In case you want to have multiple users, you can comment the `entrypoint:` line 
 ```sh
 htpasswd -Bbn $OXIGRAPH_USER $OXIGRAPH_PASSWORD >> .htpasswd
 ```
-
-> You can find the nginx configuration in `server/nginx.conf`
 
 ### Build the image
 
@@ -139,7 +187,7 @@ cd oxigraph
 Then run this command to build the image locally:
 
 ````sh
-docker build -t oxigraph/oxigraph .
+docker build -t oxigraph/oxigraph -f server/Dockerfile .
 ````
 
 ## Homebrew

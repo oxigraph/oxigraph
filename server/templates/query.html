@@ -11,12 +11,12 @@
 <div id="yasgui"></div>
 <script>
     new Yasgui(document.getElementById("yasgui"), {
-        requestConfig: { endpoint: window.location.protocol + '//' + window.location.host + "/query" },
+        requestConfig: { endpoint: window.location.protocol + '//' + window.location.host + window.location.pathname + "/query" },
         endpointCatalogueOptions: {
             getData: function () {
                 return [
-                    { endpoint: window.location.protocol + '//' + window.location.host + "/query" },
-                    { endpoint: window.location.protocol + '//' + window.location.host + "/update" },
+                    { endpoint: window.location.protocol + '//' + window.location.host + window.location.pathname + "/query" },
+                    { endpoint: window.location.protocol + '//' + window.location.host + window.location.pathname + "/update" },
                 ];
             },
             keys: [],
