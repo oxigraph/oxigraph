@@ -1,9 +1,11 @@
-name: doc
+name: doc and docker
 
 on:
   push:
     branches:
       - master
+  release:
+    types: [published]
 
 jobs:
   python:
@@ -37,3 +39,47 @@ jobs:
           git diff-index --quiet HEAD || git commit -m "Updates pyoxigraph documentation"
           git push
         working-directory: ./website
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: 'recursive'
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v1 
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{github.actor}}
+          password: ${{secrets.GITHUB_TOKEN}}
+
+      - name: Generate image ID and version
+        run: |
+          IMAGE_ID=ghcr.io/${{ github.repository_owner }}/oxigraph
+          # Change all uppercase to lowercase
+          IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
+          # Strip git ref prefix from version
+          VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+          # Strip "v" prefix from tag name
+          [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo $VERSION | sed -e 's/^v//')
+          # Use Docker `latest` tag convention
+          [ "$VERSION" == "master" ] && VERSION=latest
+          echo "IMAGE_ID=$IMAGE_ID" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      # Cache: https://github.com/docker/build-push-action/blob/master/docs/advanced/cache.md#github-cache
+      - name: Build and publish Docker image
+        uses: docker/build-push-action@v2
+        with:
+          context: ./
+          file: ./server/Dockerfile
+          builder: ${{ steps.buildx.outputs.name }}
+          push: true
+          tags: ${{ env.IMAGE_ID }}:${{ env.VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

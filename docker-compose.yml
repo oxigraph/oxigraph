@@ -1,22 +1,23 @@
 version: "3"
-
 services:
-
   oxigraph:
-    # image: oxigraph/oxigraph
-    build: .
+    # image: ghcr.io/oxigraph/oxigraph
+    ## To build from local source code:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
     volumes:
       - ./data:/data
 
   nginx-auth:
     image: nginx:1.21.4
+    environment:
+      - OXIGRAPH_USER=oxigraph
+      - OXIGRAPH_PASSWORD=oxigraphy
     volumes:
-      - ./server/nginx.conf:/etc/nginx/nginx.conf
-      ## For multiple users: uncomment this line to use your local .htpasswd file:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      ## For multiple users: uncomment this line to mount a pre-generated .htpasswd 
       # - ./.htpasswd:/etc/nginx/.htpasswd
     ports:
       - 7878:7878
-    environment:
-      - OXIGRAPH_USER=${OXIGRAPH_USER:-oxigraph}
-      - OXIGRAPH_PASSWORD=${OXIGRAPH_PASSWORD:-oxigraphy}
     entrypoint: "bash -c 'echo -n $OXIGRAPH_USER: >> /etc/nginx/.htpasswd && echo $OXIGRAPH_PASSWORD | openssl passwd -stdin -apr1 >> /etc/nginx/.htpasswd && /docker-entrypoint.sh nginx'"
