@@ -10,13 +10,14 @@
 <body>
 <div id="yasgui"></div>
 <script>
+    const url = window.location.href.endsWith('/') ? window.location.href.slice(0, -1) : window.location.href;
     new Yasgui(document.getElementById("yasgui"), {
-        requestConfig: { endpoint: window.location.protocol + '//' + window.location.host + window.location.pathname + "/query" },
+        requestConfig: { endpoint: url + "/query" },
         endpointCatalogueOptions: {
             getData: function () {
                 return [
-                    { endpoint: window.location.protocol + '//' + window.location.host + window.location.pathname + "/query" },
-                    { endpoint: window.location.protocol + '//' + window.location.host + window.location.pathname + "/update" },
+                    { endpoint: url + "/query" },
+                    { endpoint: url + "/update" },
                 ];
             },
             keys: [],
