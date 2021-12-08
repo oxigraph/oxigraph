@@ -612,7 +612,9 @@ impl Store {
     ///
     /// This function is optimized for large dataset loading speed. For small files, [`load_dataset`](Store::load_dataset) might be more convenient.
     ///
-    /// Warning: This method is not atomic. If the parsing fails in the middle of the file, only a part of it may be written to the store.
+    /// Warning: This method is not atomic.
+    /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
+    /// Results might get weird if you delete data during the loading process.
     ///
     /// Warning: This method is optimized for speed. It uses multiple threads and multiple GBs of RAM on large files.
     ///
@@ -622,7 +624,7 @@ impl Store {
     /// use oxigraph::io::DatasetFormat;
     /// use oxigraph::model::*;
     ///
-    /// let mut store = Store::new()?;
+    /// let store = Store::new()?;
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
@@ -639,7 +641,7 @@ impl Store {
     /// Errors related to data loading into the store use the other error kinds.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn bulk_load_dataset(
-        &mut self,
+        &self,
         reader: impl BufRead,
         format: DatasetFormat,
         base_iri: Option<&str>,
@@ -657,7 +659,9 @@ impl Store {
     ///
     /// This function is optimized for large dataset loading speed. For small files, [`load_graph`](Store::load_graph) might be more convenient.   
     ///
-    /// Warning: This method is not atomic. If the parsing fails in the middle of the file, only a part of it may be written to the store.
+    /// Warning: This method is not atomic.
+    /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
+    /// Results might get weird if you delete data during the loading process.
     ///
     /// Warning: This method is optimized for speed. It uses multiple threads and multiple GBs of RAM on large files.
     ///
@@ -667,7 +671,7 @@ impl Store {
     /// use oxigraph::io::GraphFormat;
     /// use oxigraph::model::*;
     ///
-    /// let mut store = Store::new()?;
+    /// let store = Store::new()?;
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
@@ -684,7 +688,7 @@ impl Store {
     /// Errors related to data loading into the store use the other error kinds.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn bulk_load_graph<'a>(
-        &mut self,
+        &self,
         reader: impl BufRead,
         format: GraphFormat,
         to_graph_name: impl Into<GraphNameRef<'a>>,
@@ -707,11 +711,13 @@ impl Store {
 
     /// Adds a set of triples to this store using bulk load.
     ///
-    /// Warning: This method is not atomic. If the parsing fails in the middle of the file, only a part of it may be written to the store.
+    /// Warning: This method is not atomic.
+    /// If the process fails in the middle of the file, only a part of the data may be written to the store.
+    /// Results might get weird if you delete data during the loading process.
     ///
     /// Warning: This method is optimized for speed. It uses multiple threads and multiple GBs of RAM on large files.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn bulk_extend(&mut self, quads: impl IntoIterator<Item = Quad>) -> io::Result<()> {
+    pub fn bulk_extend(&self, quads: impl IntoIterator<Item = Quad>) -> io::Result<()> {
         bulk_load(&self.storage, quads.into_iter().map(Ok))
     }
 }

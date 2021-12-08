@@ -6,6 +6,13 @@
 extern "C" {
 #endif
 
+typedef struct rocksdb_ingestexternalfilearg_t {
+    rocksdb_column_family_handle_t* column_family;
+    char const* const* external_files;
+    size_t external_files_len;
+    rocksdb_ingestexternalfileoptions_t* options;
+} rocksdb_ingestexternalfilearg_t;
+
 extern ROCKSDB_LIBRARY_API rocksdb_pinnableslice_t* rocksdb_transactiondb_get_pinned_cf(
         rocksdb_transactiondb_t* db, const rocksdb_readoptions_t* options,
         rocksdb_column_family_handle_t* column_family, const char* key,
@@ -24,6 +31,10 @@ extern ROCKSDB_LIBRARY_API void rocksdb_transactiondb_ingest_external_file_cf(
         rocksdb_transactiondb_t* db, rocksdb_column_family_handle_t* handle,
         const char* const* file_list, const size_t list_len,
         const rocksdb_ingestexternalfileoptions_t* opt, char** errptr);
+
+extern ROCKSDB_LIBRARY_API void rocksdb_transactiondb_ingest_external_files(
+        rocksdb_transactiondb_t* db, const rocksdb_ingestexternalfilearg_t* list,
+        const size_t list_len, char** errptr);
 
 extern ROCKSDB_LIBRARY_API rocksdb_pinnableslice_t* rocksdb_transaction_get_pinned_cf(
         rocksdb_transaction_t* txn, const rocksdb_readoptions_t* options,

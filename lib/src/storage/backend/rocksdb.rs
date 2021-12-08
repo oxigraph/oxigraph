@@ -10,6 +10,7 @@ use libc::{self, c_char, c_void, free};
 use oxrocksdb_sys::*;
 use rand::random;
 use std::borrow::Borrow;
+use std::collections::HashMap;
 use std::env::temp_dir;
 use std::ffi::{CStr, CString};
 use std::fs::remove_dir_all;
@@ -438,25 +439,40 @@ impl Db {
         }
     }
 
-    pub fn insert_stt_files(&self, ssts_for_cf: Vec<(&ColumnFamily, PathBuf)>) -> Result<()> {
+    pub fn insert_stt_files(&self, ssts_for_cf: &[(&ColumnFamily, PathBuf)]) -> Result<()> {
+        let mut paths_by_cf = HashMap::<_, Vec<_>>::new();
         for (cf, path) in ssts_for_cf {
-            unsafe {
-                ffi_result!(rocksdb_transactiondb_ingest_external_file_cf(
-                    self.0.db,
-                    cf.0,
-                    &path_to_cstring(&path)?.as_ptr(),
-                    1,
-                    self.0.ingest_external_file_options
-                ))?;
-            }
+            paths_by_cf
+                .entry(*cf)
+                .or_default()
+                .push(path_to_cstring(path)?);
         }
-        Ok(())
+        let cpaths_by_cf = paths_by_cf
+            .iter()
+            .map(|(cf, paths)| (*cf, paths.iter().map(|p| p.as_ptr()).collect::<Vec<_>>()))
+            .collect::<Vec<_>>();
+        let args = cpaths_by_cf
+            .iter()
+            .map(|(cf, p)| rocksdb_ingestexternalfilearg_t {
+                column_family: cf.0,
+                external_files: p.as_ptr(),
+                external_files_len: p.len(),
+                options: self.0.ingest_external_file_options,
+            })
+            .collect::<Vec<_>>();
+        unsafe {
+            ffi_result!(rocksdb_transactiondb_ingest_external_files(
+                self.0.db,
+                args.as_ptr(),
+                args.len()
+            ))
+        }
     }
 }
 
 // It is fine to not keep a lifetime: there is no way to use this type without the database being still in scope.
 // So, no use after free possible.
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub struct ColumnFamily(*mut rocksdb_column_family_handle_t);
 
 unsafe impl Send for ColumnFamily {}

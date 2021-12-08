@@ -69,7 +69,7 @@ pub fn main() -> std::io::Result<()> {
         )
         .get_matches();
 
-    let mut store = if let Some(path) = matches.value_of_os("location") {
+    let store = if let Some(path) = matches.value_of_os("location") {
         Store::open(path)
     } else {
         Store::new()

@@ -100,7 +100,7 @@ fn test_load_dataset() -> Result<()> {
 
 #[test]
 fn test_bulk_load_dataset() -> Result<()> {
-    let mut store = Store::new().unwrap();
+    let store = Store::new().unwrap();
     store.bulk_load_dataset(Cursor::new(DATA), DatasetFormat::TriG, None)?;
     for q in quads(GraphNameRef::DefaultGraph) {
         assert!(store.contains(q)?);
@@ -183,7 +183,7 @@ fn test_bulk_load_on_existing_delete_overrides_the_delete() -> Result<()> {
         NamedNodeRef::new_unchecked("http://example.com/o"),
         NamedNodeRef::new_unchecked("http://example.com/g"),
     );
-    let mut store = Store::new()?;
+    let store = Store::new()?;
     store.remove(quad)?;
     store.bulk_extend([quad.into_owned()])?;
     assert_eq!(store.len()?, 1);
