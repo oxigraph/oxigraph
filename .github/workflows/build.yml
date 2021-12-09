@@ -27,6 +27,12 @@ jobs:
       - run: rustup update && rustup component add clippy
       - run: cargo clippy --all-targets --all-features
 
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: EmbarkStudios/cargo-deny-action@v1
+
   test_linux:
     runs-on: ubuntu-latest
     steps:
