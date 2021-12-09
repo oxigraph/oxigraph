@@ -2048,7 +2048,7 @@ impl SimpleEvaluator {
         let dataset = self.dataset.clone();
         Rc::new(move |tuple| {
             let input = to_simple_string(&dataset, &arg(tuple)?)?;
-            let hash = hex::encode(H::new().chain(input.as_str()).finalize());
+            let hash = hex::encode(H::new().chain_update(input.as_str()).finalize());
             Some(build_string_literal(&dataset, &hash))
         })
     }
