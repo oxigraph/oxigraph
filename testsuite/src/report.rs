@@ -1,14 +1,15 @@
 use anyhow::Result;
-use chrono::{DateTime, Utc};
 use oxigraph::model::{Dataset, NamedNode};
 use std::fmt::Write;
 use text_diff::{diff, Difference};
+use time::format_description::well_known::Rfc3339;
+use time::OffsetDateTime;
 
 #[derive(Debug)]
 pub struct TestResult {
     pub test: NamedNode,
     pub outcome: Result<()>,
-    pub date: DateTime<Utc>,
+    pub date: OffsetDateTime,
 }
 
 pub fn dataset_diff(expected: &Dataset, actual: &Dataset) -> String {
@@ -71,7 +72,7 @@ pub fn build_report(results: impl IntoIterator<Item = TestResult>) -> String {
     writeln!(
         &mut buffer,
         "\tdc:issued \"{}\"^^xsd:dateTime ;",
-        Utc::now().to_rfc3339()
+        OffsetDateTime::now_utc().format(&Rfc3339).unwrap()
     );
     writeln!(
         &mut buffer,
@@ -140,7 +141,7 @@ pub fn build_report(results: impl IntoIterator<Item = TestResult>) -> String {
         writeln!(
             &mut buffer,
             "\t\tdc:date \"{}\"^^xsd:dateTime",
-            result.date.to_rfc3339()
+            result.date.format(&Rfc3339).unwrap()
         );
         writeln!(&mut buffer, "\t] ;");
         writeln!(&mut buffer, "\tearl:mode earl:automatic");

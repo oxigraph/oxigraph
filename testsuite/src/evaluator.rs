@@ -1,8 +1,8 @@
 use crate::manifest::Test;
 use crate::report::TestResult;
 use anyhow::{anyhow, Result};
-use chrono::Utc;
 use std::collections::HashMap;
+use time::OffsetDateTime;
 
 #[derive(Default)]
 pub struct TestEvaluator {
@@ -33,7 +33,7 @@ impl TestEvaluator {
                 Ok(TestResult {
                     test: test.id,
                     outcome,
-                    date: Utc::now(),
+                    date: OffsetDateTime::now_utc(),
                 })
             })
             .collect()
