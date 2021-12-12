@@ -20,6 +20,7 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
+use std::thread::yield_now;
 use std::{ptr, slice};
 
 macro_rules! ffi_result {
@@ -393,7 +394,10 @@ impl Db {
                         msg == "Resource busy: "
                             || msg == "Operation timed out: Timeout waiting to lock key"
                     });
-                    if !is_conflict_error {
+                    if is_conflict_error {
+                        // We give a chance to the OS to do something else before retrying in order to help avoiding an other conflict
+                        yield_now();
+                    } else {
                         // We raise the error
                         return Err(e);
                     }
