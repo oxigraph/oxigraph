@@ -24,6 +24,7 @@ use std::fs::File;
 use std::io::{BufReader, Error, ErrorKind, Read, Write};
 use std::rc::Rc;
 use std::str::FromStr;
+use std::thread::{spawn, JoinHandle};
 use std::time::Duration;
 use url::form_urlencoded;
 
@@ -64,6 +65,7 @@ pub fn main() -> std::io::Result<()> {
                         .long("file")
                         .help("The file to load")
                         .takes_value(true)
+                        .multiple(true)
                         .required(true),
                 ),
         )
@@ -77,20 +79,29 @@ pub fn main() -> std::io::Result<()> {
 
     match matches.subcommand() {
         ("load", Some(submatches)) => {
-            let file = submatches.value_of("file").unwrap();
-            let format = file
-                .rsplit_once(".")
-                .and_then(|(_, extension)| {
-                    DatasetFormat::from_extension(extension)
-                        .or_else(|| GraphFormat::from_extension(extension)?.try_into().ok())
+            let handles = submatches.values_of("file").unwrap().into_iter().map(|file| {
+                let store = store.clone();
+                let file = file.to_string();
+                spawn(move || {
+                    let format = file
+                        .rsplit_once(".")
+                        .and_then(|(_, extension)| {
+                            DatasetFormat::from_extension(extension)
+                                .or_else(|| GraphFormat::from_extension(extension)?.try_into().ok())
+                        })
+                        .ok_or_else(|| {
+                            Error::new(
+                                ErrorKind::InvalidInput,
+                                "The server is not able to guess the file format of {} from its extension",
+                            )
+                        })?;
+                    store.bulk_load_dataset(BufReader::new(File::open(file)?), format, None)?;
+                    Ok(())
                 })
-                .ok_or_else(|| {
-                    Error::new(
-                        ErrorKind::InvalidInput,
-                        "The server is not able to guess the file format of {} from its extension",
-                    )
-                })?;
-            store.bulk_load_dataset(BufReader::new(File::open(file)?), format, None)?;
+            }).collect::<Vec<JoinHandle<Result<(),Error>>>>();
+            for handle in handles {
+                handle.join().unwrap()?;
+            }
             store.optimize()
         }
         ("serve", Some(submatches)) => {
