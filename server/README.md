@@ -135,7 +135,7 @@ Then a `docker-compose.yml` in the same folder, you can change the default user 
 version: "3"
 services:
   oxigraph:
-    image: ghcr.io/oxigraph/oxigraph
+    image: ghcr.io/oxigraph/oxigraph:latest
     ## To build from local source code:
     # build:
     #   context: .
@@ -163,7 +163,7 @@ Once the `docker-compose.yaml` and `nginx.conf` are ready, start the Oxigraph se
 docker-compose up
 ```
 
-To make an update to the graph, first change `$OXIGRAPH_USER` and `$OXIGRAPH_PASSWORD`, or set the environment variables, then run:
+Then it is possible to update the graph using basic authentication mechanisms. For example with `curl`: change `$OXIGRAPH_USER` and `$OXIGRAPH_PASSWORD`, or set them as environment variables, then run this command to insert a simple triple:
 
 ```sh
 curl -X POST -u $OXIGRAPH_USER:$OXIGRAPH_PASSWORD -H 'Content-Type: application/sparql-update' --data 'INSERT DATA { <http://example.com/s> <http://example.com/p> <http://example.com/o> }' http://localhost:7878/update
