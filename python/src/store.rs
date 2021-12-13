@@ -349,7 +349,7 @@ impl PyStore {
     #[pyo3(text_signature = "($self, data, /, mime_type, *, base_iri = None, to_graph = None)")]
     #[args(input, mime_type, "*", base_iri = "None", to_graph = "None")]
     fn bulk_load(
-        &mut self,
+        &self,
         input: PyObject,
         mime_type: &str,
         base_iri: Option<&str>,

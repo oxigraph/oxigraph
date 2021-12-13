@@ -27,6 +27,12 @@ jobs:
       - run: rustup update && rustup component add clippy
       - run: cargo clippy --all-targets --all-features
 
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: EmbarkStudios/cargo-deny-action@v1
+
   test_linux:
     runs-on: ubuntu-latest
     steps:
@@ -94,7 +100,7 @@ jobs:
           manylinux: 2014
           container: messense/manylinux2014-cross:x86_64
           command: build
-          args: -m python/Cargo.toml --cargo-extra-args="--no-default-features --features vendored"
+          args: -m python/Cargo.toml
       - run: pip install pyoxigraph --no-index --find-links ../../target/wheels && python -m unittest
         working-directory: ./python/tests
 

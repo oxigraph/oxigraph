@@ -19,15 +19,15 @@ all-features = true
 [features]
 default = []
 sophia = ["sophia_api"]
-http_client = ["oxhttp"]
+http_client = ["oxhttp", "oxhttp/rustls"]
 
 [dependencies]
 quick-xml = "0.22"
 rand = "0.8"
-md-5 = "0.9"
-sha-1 = "0.9"
-sha2 = "0.9"
-digest = "0.9"
+md-5 = "0.10"
+sha-1 = "0.10"
+sha2 = "0.10"
+digest = "0.10"
 regex = "1"
 oxilangtag = "0.1"
 oxiri = "0.1"

@@ -53,6 +53,22 @@ void rocksdb_transactiondb_ingest_external_file_cf(
     SaveError(errptr, db->rep->IngestExternalFile(handle->rep, files, opt->rep));
 }
 
+void rocksdb_transactiondb_ingest_external_files(
+        rocksdb_transactiondb_t* db, const rocksdb_ingestexternalfilearg_t* list,
+        const size_t list_len, char** errptr) {
+    std::vector<rocksdb::IngestExternalFileArg> args(list_len);
+    for (size_t i = 0; i < list_len; ++i) {
+        args[i].column_family = list[i].column_family->rep;
+        std::vector<std::string> files(list[i].external_files_len);
+        for (size_t j = 0; j < list[i].external_files_len; ++j) {
+            files[j] = std::string(list[i].external_files[j]);
+        }
+        args[i].external_files = files;
+        args[i].options = list[i].options->rep;
+    }
+    SaveError(errptr, db->rep->IngestExternalFiles(args));
+}
+
 rocksdb_pinnableslice_t* rocksdb_transaction_get_pinned_cf(
         rocksdb_transaction_t* txn, const rocksdb_readoptions_t* options,
         rocksdb_column_family_handle_t* column_family, const char* key,
