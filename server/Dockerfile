@@ -1,4 +1,4 @@
-FROM rust:1-buster as builder
+FROM rust:1-bullseye as builder
 
 RUN apt-get update && \
     apt-get install -y libclang-dev clang
@@ -8,8 +8,7 @@ WORKDIR /oxigraph/server
 RUN cargo build --release
 
 
-FROM debian:buster-slim
-LABEL org.opencontainers.image.source="https://github.com/oxigraph/oxigraph"
+FROM debian:bullseye-slim
 
 RUN apt-get update && \
     apt-get install -y ca-certificates && \
