@@ -12,6 +12,7 @@ fn main() -> Result<()> {
             Arg::with_name("manifest")
                 .help("URI of the testsuite manifest to run")
                 .takes_value(true)
+                .multiple(true)
                 .required(true),
         )
         .get_matches();
@@ -19,7 +20,7 @@ fn main() -> Result<()> {
     let mut evaluator = TestEvaluator::default();
     register_parser_tests(&mut evaluator);
     register_sparql_tests(&mut evaluator);
-    let manifest = TestManifest::new(vec![matches.value_of("manifest").unwrap()]);
+    let manifest = TestManifest::new(matches.values_of("manifest").unwrap());
     let results = evaluator.evaluate(manifest)?;
     print!("{}", build_report(results));
     Ok(())
