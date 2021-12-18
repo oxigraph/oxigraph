@@ -71,7 +71,7 @@ It provides the following REST actions:
   will add the N-Triples file MY_FILE.nt to the server dataset inside of the `http://example.com/g` named graph.
   [Turtle](https://www.w3.org/TR/turtle/), [N-Triples](https://www.w3.org/TR/n-triples/) and [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) are supported.
   It is also possible to `POST`, `PUT` and `GET` the complete RDF dataset on the server using RDF dataset formats ([TriG](https://www.w3.org/TR/trig/) and [N-Quads](https://www.w3.org/TR/n-quads/)) against the `/store` endpoint.
-  For example
+  For example:
   ```sh
   curl -f -X POST -H 'Content-Type:application/n-quads' \
     --data-binary "@MY_FILE.nq" http://localhost:7878/store
