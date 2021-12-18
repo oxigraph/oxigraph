@@ -1,9 +1,9 @@
 //! This crate provides implementation of [Sophia](https://docs.rs/sophia/) traits for the `store` module.
 
 use crate::model::{
-    BlankNodeRef, GraphNameRef, LiteralRef, NamedNodeRef, Quad, QuadRef, SubjectRef, Term, TermRef,
+    BlankNodeRef, GraphName, GraphNameRef, LiteralRef, NamedNodeRef, Quad, QuadRef, Subject,
+    SubjectRef, Term, TermRef,
 };
-use crate::sparql::{EvaluationError, QueryResults};
 use crate::store::Store;
 use sophia_api::dataset::{
     CollectibleDataset, DQuadSource, DResultTermSet, DTerm, Dataset, MdResult, MutableDataset,
@@ -13,7 +13,7 @@ use sophia_api::quad::streaming_mode::{ByValue, StreamedQuad};
 use sophia_api::term::{TTerm, TermKind};
 use std::collections::HashSet;
 use std::hash::Hash;
-use std::io::{Error, ErrorKind};
+use std::io::Error;
 use std::iter::empty;
 
 type SophiaQuad = ([Term; 3], Option<Term>);
@@ -288,81 +288,85 @@ impl Dataset for Store {
     where
         DTerm<Self>: Clone + Eq + Hash,
     {
-        sparql_to_hashset(
-            self,
-            "SELECT DISTINCT ?s {{?s ?p ?o} UNION { GRAPH ?g {?s ?p ?o}}}",
-        )
+        self.iter()
+            .map(|r| r.map(|q| q.subject.into()))
+            .collect::<Result<_, _>>()
     }
     fn predicates(&self) -> DResultTermSet<Self>
     where
         DTerm<Self>: Clone + Eq + Hash,
     {
-        sparql_to_hashset(
-            self,
-            "SELECT DISTINCT ?p {{?s ?p ?o} UNION { GRAPH ?g {?s ?p ?o}}}",
-        )
+        self.iter()
+            .map(|r| r.map(|q| q.predicate.into()))
+            .collect::<Result<_, _>>()
     }
     fn objects(&self) -> DResultTermSet<Self>
     where
         DTerm<Self>: Clone + Eq + Hash,
     {
-        sparql_to_hashset(
-            self,
-            "SELECT DISTINCT ?o {{?s ?p ?o} UNION { GRAPH ?g {?s ?p ?o}}}",
-        )
+        self.iter()
+            .map(|r| r.map(|q| q.object))
+            .collect::<Result<_, _>>()
     }
     fn graph_names(&self) -> DResultTermSet<Self>
     where
         DTerm<Self>: Clone + Eq + Hash,
     {
-        sparql_to_hashset(self, "SELECT DISTINCT ?g {GRAPH ?g {?s ?p ?o}}")
+        self.named_graphs()
+            .map(|r| r.map(|g| g.into()))
+            .collect::<Result<_, _>>()
     }
     fn iris(&self) -> DResultTermSet<Self>
     where
         DTerm<Self>: Clone + Eq + Hash,
     {
-        sparql_to_hashset(
-            self,
-            "SELECT DISTINCT ?iri {
-                        {?iri ?p ?o} UNION
-                        {?s ?iri ?o} UNION
-                        {?s ?p ?iri} UNION
-                        {GRAPH ?iri {?s ?p ?o}} UNION
-                        {GRAPH ?s {?iri ?p ?o}} UNION
-                        {GRAPH ?g {?s ?iri ?o}} UNION
-                        {GRAPH ?g {?s ?p ?iri}}
-                        FILTER isIRI(?iri)
-                    }",
-        )
+        let mut iris = HashSet::new();
+        for q in self.iter() {
+            let q = q?;
+            if let Subject::NamedNode(s) = q.subject {
+                iris.insert(s.into());
+            }
+            iris.insert(q.predicate.into());
+            if let Term::NamedNode(o) = q.object {
+                iris.insert(o.into());
+            }
+            if let GraphName::NamedNode(g) = q.graph_name {
+                iris.insert(g.into());
+            }
+        }
+        Ok(iris)
     }
     fn bnodes(&self) -> DResultTermSet<Self>
     where
         DTerm<Self>: Clone + Eq + Hash,
     {
-        sparql_to_hashset(
-            self,
-            "SELECT DISTINCT ?bn {
-                        {?bn ?p ?o} UNION
-                        {?s ?p ?bn} UNION
-                        {GRAPH ?bn {?s ?p ?o}} UNION
-                        {GRAPH ?s {?bn ?p ?o}} UNION
-                        {GRAPH ?g {?s ?p ?bn}}
-                        FILTER isBlank(?bn)
-                    }",
-        )
+        let mut bnodes = HashSet::new();
+        for q in self.iter() {
+            let q = q?;
+            if let Subject::BlankNode(s) = q.subject {
+                bnodes.insert(s.into());
+            }
+            if let Term::BlankNode(o) = q.object {
+                bnodes.insert(o.into());
+            }
+            if let GraphName::BlankNode(g) = q.graph_name {
+                bnodes.insert(g.into());
+            }
+        }
+        Ok(bnodes)
     }
     fn literals(&self) -> DResultTermSet<Self>
     where
         DTerm<Self>: Clone + Eq + Hash,
     {
-        sparql_to_hashset(
-            self,
-            "SELECT DISTINCT ?lit {
-                        {?s ?p ?lit} UNION
-                        { GRAPH ?g {?s ?p ?lit}}
-                        FILTER isLiteral(?lit)
-                    }",
-        )
+        let mut literals = HashSet::new();
+        for q in self.iter() {
+            let q = q?;
+            if let Term::Literal(o) = q.object {
+                literals.insert(o.into());
+            }
+        }
+        Ok(literals)
     }
     fn variables(&self) -> DResultTermSet<Self>
     where
@@ -439,13 +443,6 @@ fn io_quad_map<'a>(res: Result<Quad, Error>) -> Result<StreamedSophiaQuad<'a>, E
         let q: SophiaQuad = q.into();
         StreamedQuad::by_value(q)
     })
-}
-
-fn io_err_map(err: EvaluationError) -> Error {
-    match err {
-        EvaluationError::Io(err) => err,
-        err => Error::new(ErrorKind::InvalidInput, err),
-    }
 }
 
 fn convert_subject<'a, T>(term: &'a T, buffer: &'a mut String) -> Option<SubjectRef<'a>>
@@ -567,23 +564,6 @@ where
         None => return None,
     };
     Some(QuadRef::new(s, p, o, g))
-}
-
-/// Execute a SPARQL query in a store, and return the result as a `HashSet`,
-/// mapping the error (if any) through the given function.
-///
-/// # Precondition
-/// + the query must be a SELECT query with a single selected variable
-/// + it must not produce NULL results
-fn sparql_to_hashset(store: &Store, sparql: &str) -> Result<HashSet<Term>, Error> {
-    if let QueryResults::Solutions(solutions) = store.query(sparql).map_err(io_err_map)? {
-        solutions
-            .map(|r| r.map(|v| v.get(0).unwrap().clone()))
-            .collect::<Result<_, _>>()
-            .map_err(io_err_map)
-    } else {
-        unreachable!()
-    }
 }
 
 #[cfg(test)]
