@@ -23,7 +23,7 @@
 //! };
 //! # Result::<_,Box<dyn std::error::Error>>::Ok(())
 //! ```
-use crate::error::invalid_input_error;
+use crate::io::read::ParserError;
 use crate::io::{
     DatasetFormat, DatasetParser, DatasetSerializer, GraphFormat, GraphParser, GraphSerializer,
 };
@@ -36,10 +36,11 @@ use crate::sparql::{
 use crate::storage::bulk_load;
 use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
 use crate::storage::{ChainedDecodingQuadIterator, DecodingGraphIterator, Storage, StorageReader};
+pub use crate::storage::{CorruptionError, LoaderError, SerializerError, StorageError};
 use std::io::{BufRead, Write};
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
-use std::{fmt, io, str};
+use std::{fmt, str};
 
 /// An on-disk [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 /// Allows to query and update it using SPARQL.
@@ -86,7 +87,7 @@ pub struct Store {
 
 impl Store {
     /// Creates a temporary [`Store`] that will be deleted after drop.
-    pub fn new() -> io::Result<Self> {
+    pub fn new() -> Result<Self, StorageError> {
         Ok(Self {
             storage: Storage::new()?,
         })
@@ -94,7 +95,7 @@ impl Store {
 
     /// Opens a [`Store`] and creates it if it does not exist yet.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn open(path: impl AsRef<Path>) -> io::Result<Self> {
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, StorageError> {
         Ok(Self {
             storage: Storage::open(path.as_ref())?,
         })
@@ -180,7 +181,7 @@ impl Store {
     }
 
     /// Checks if this store contains a given quad.
-    pub fn contains<'a>(&self, quad: impl Into<QuadRef<'a>>) -> io::Result<bool> {
+    pub fn contains<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, StorageError> {
         let quad = EncodedQuad::from(quad.into());
         self.storage.snapshot().contains(&quad)
     }
@@ -188,12 +189,12 @@ impl Store {
     /// Returns the number of quads in the store.
     ///
     /// Warning: this function executes a full scan.
-    pub fn len(&self) -> io::Result<usize> {
+    pub fn len(&self) -> Result<usize, StorageError> {
         self.storage.snapshot().len()
     }
 
     /// Returns if the store is empty.
-    pub fn is_empty(&self) -> io::Result<bool> {
+    pub fn is_empty(&self) -> Result<bool, StorageError> {
         self.storage.snapshot().is_empty()
     }
 
@@ -268,16 +269,16 @@ impl Store {
         format: GraphFormat,
         to_graph_name: impl Into<GraphNameRef<'a>>,
         base_iri: Option<&str>,
-    ) -> io::Result<()> {
+    ) -> Result<(), LoaderError> {
         let mut parser = GraphParser::from_format(format);
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
-                .map_err(invalid_input_error)?;
+                .map_err(|e| ParserError::invalid_base_iri(base_iri, e))?;
         }
         let quads = parser
             .read_triples(reader)?
-            .collect::<io::Result<Vec<_>>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
         let to_graph_name = to_graph_name.into();
         self.storage.transaction(move |mut t| {
             for quad in &quads {
@@ -317,14 +318,14 @@ impl Store {
         reader: impl BufRead,
         format: DatasetFormat,
         base_iri: Option<&str>,
-    ) -> io::Result<()> {
+    ) -> Result<(), LoaderError> {
         let mut parser = DatasetParser::from_format(format);
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
-                .map_err(invalid_input_error)?;
+                .map_err(|e| ParserError::invalid_base_iri(base_iri, e))?;
         }
-        let quads = parser.read_quads(reader)?.collect::<io::Result<Vec<_>>>()?;
+        let quads = parser.read_quads(reader)?.collect::<Result<Vec<_>, _>>()?;
         self.storage.transaction(move |mut t| {
             for quad in &quads {
                 t.insert(quad.into())?;
@@ -351,7 +352,7 @@ impl Store {
     /// assert!(store.contains(quad)?);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> io::Result<bool> {
+    pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, StorageError> {
         let quad = quad.into();
         self.storage.transaction(move |mut t| t.insert(quad))
     }
@@ -359,7 +360,7 @@ impl Store {
     /// Adds atomically a set of quads to this store.
     ///
     /// Warning: This operation uses a memory heavy transaction internally, use [`bulk_extend`](Store::bulk_extend) if you plan to add ten of millions of triples.
-    pub fn extend(&self, quads: impl IntoIterator<Item = Quad>) -> io::Result<()> {
+    pub fn extend(&self, quads: impl IntoIterator<Item = Quad>) -> Result<(), StorageError> {
         let quads = quads.into_iter().collect::<Vec<_>>();
         self.storage.transaction(move |mut t| {
             for quad in &quads {
@@ -388,7 +389,7 @@ impl Store {
     /// assert!(!store.contains(quad)?);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> io::Result<bool> {
+    pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, StorageError> {
         let quad = quad.into();
         self.storage.transaction(move |mut t| t.remove(quad))
     }
@@ -416,12 +417,13 @@ impl Store {
         writer: impl Write,
         format: GraphFormat,
         from_graph_name: impl Into<GraphNameRef<'a>>,
-    ) -> io::Result<()> {
+    ) -> Result<(), SerializerError> {
         let mut writer = GraphSerializer::from_format(format).triple_writer(writer)?;
         for quad in self.quads_for_pattern(None, None, None, Some(from_graph_name.into())) {
             writer.write(quad?.as_ref())?;
         }
-        writer.finish()
+        writer.finish()?;
+        Ok(())
     }
 
     /// Dumps the store into a file.
@@ -440,12 +442,17 @@ impl Store {
     /// assert_eq!(file, buffer.as_slice());
     /// # std::io::Result::Ok(())
     /// ```
-    pub fn dump_dataset(&self, writer: impl Write, format: DatasetFormat) -> io::Result<()> {
+    pub fn dump_dataset(
+        &self,
+        writer: impl Write,
+        format: DatasetFormat,
+    ) -> Result<(), SerializerError> {
         let mut writer = DatasetSerializer::from_format(format).quad_writer(writer)?;
         for quad in self.iter() {
             writer.write(&quad?)?;
         }
-        writer.finish()
+        writer.finish()?;
+        Ok(())
     }
 
     /// Returns all the store named graphs
@@ -486,7 +493,7 @@ impl Store {
     pub fn contains_named_graph<'a>(
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
-    ) -> io::Result<bool> {
+    ) -> Result<bool, StorageError> {
         let graph_name = EncodedTerm::from(graph_name.into());
         self.storage.snapshot().contains_named_graph(&graph_name)
     }
@@ -510,7 +517,7 @@ impl Store {
     pub fn insert_named_graph<'a>(
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
-    ) -> io::Result<bool> {
+    ) -> Result<bool, StorageError> {
         let graph_name = graph_name.into();
         self.storage
             .transaction(move |mut t| t.insert_named_graph(graph_name))
@@ -534,7 +541,10 @@ impl Store {
     /// assert_eq!(1, store.named_graphs().count());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn clear_graph<'a>(&self, graph_name: impl Into<GraphNameRef<'a>>) -> io::Result<()> {
+    pub fn clear_graph<'a>(
+        &self,
+        graph_name: impl Into<GraphNameRef<'a>>,
+    ) -> Result<(), StorageError> {
         let graph_name = graph_name.into();
         self.storage
             .transaction(move |mut t| t.clear_graph(graph_name))
@@ -563,7 +573,7 @@ impl Store {
     pub fn remove_named_graph<'a>(
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
-    ) -> io::Result<bool> {
+    ) -> Result<bool, StorageError> {
         let graph_name = graph_name.into();
         self.storage
             .transaction(move |mut t| t.remove_named_graph(graph_name))
@@ -586,7 +596,7 @@ impl Store {
     /// assert!(store.is_empty()?);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn clear(&self) -> io::Result<()> {
+    pub fn clear(&self) -> Result<(), StorageError> {
         self.storage.transaction(|mut t| t.clear())
     }
 
@@ -594,7 +604,7 @@ impl Store {
     ///
     /// Flushes are automatically done using background threads but might lag a little bit.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn flush(&self) -> io::Result<()> {
+    pub fn flush(&self) -> Result<(), StorageError> {
         self.storage.flush()
     }
 
@@ -604,7 +614,7 @@ impl Store {
     ///
     /// Warning: Can take hours on huge databases.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn optimize(&self) -> io::Result<()> {
+    pub fn optimize(&self) -> Result<(), StorageError> {
         self.storage.compact()
     }
 
@@ -645,12 +655,12 @@ impl Store {
         reader: impl BufRead,
         format: DatasetFormat,
         base_iri: Option<&str>,
-    ) -> io::Result<()> {
+    ) -> Result<(), LoaderError> {
         let mut parser = DatasetParser::from_format(format);
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
-                .map_err(invalid_input_error)?;
+                .map_err(|e| ParserError::invalid_base_iri(base_iri, e))?;
         }
         bulk_load(&self.storage, parser.read_quads(reader)?)
     }
@@ -693,19 +703,19 @@ impl Store {
         format: GraphFormat,
         to_graph_name: impl Into<GraphNameRef<'a>>,
         base_iri: Option<&str>,
-    ) -> io::Result<()> {
+    ) -> Result<(), LoaderError> {
         let mut parser = GraphParser::from_format(format);
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
-                .map_err(invalid_input_error)?;
+                .map_err(|e| ParserError::invalid_base_iri(base_iri, e))?;
         }
         let to_graph_name = to_graph_name.into();
         bulk_load(
             &self.storage,
             parser
                 .read_triples(reader)?
-                .map(|r| Ok(r?.in_graph(to_graph_name.into_owned()))),
+                .map(|r| r.map(|q| q.in_graph(to_graph_name.into_owned()))),
         )
     }
 
@@ -717,8 +727,8 @@ impl Store {
     ///
     /// Warning: This method is optimized for speed. It uses multiple threads and multiple GBs of RAM on large files.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn bulk_extend(&self, quads: impl IntoIterator<Item = Quad>) -> io::Result<()> {
-        bulk_load(&self.storage, quads.into_iter().map(Ok))
+    pub fn bulk_extend(&self, quads: impl IntoIterator<Item = Quad>) -> Result<(), StorageError> {
+        bulk_load::<StorageError, _, _>(&self.storage, quads.into_iter().map(Ok))
     }
 }
 
@@ -738,11 +748,11 @@ pub struct QuadIter {
 }
 
 impl Iterator for QuadIter {
-    type Item = io::Result<Quad>;
+    type Item = Result<Quad, StorageError>;
 
-    fn next(&mut self) -> Option<io::Result<Quad>> {
+    fn next(&mut self) -> Option<Result<Quad, StorageError>> {
         Some(match self.iter.next()? {
-            Ok(quad) => self.reader.decode_quad(&quad).map_err(|e| e.into()),
+            Ok(quad) => self.reader.decode_quad(&quad),
             Err(error) => Err(error),
         })
     }
@@ -755,13 +765,13 @@ pub struct GraphNameIter {
 }
 
 impl Iterator for GraphNameIter {
-    type Item = io::Result<NamedOrBlankNode>;
+    type Item = Result<NamedOrBlankNode, StorageError>;
 
-    fn next(&mut self) -> Option<io::Result<NamedOrBlankNode>> {
+    fn next(&mut self) -> Option<Result<NamedOrBlankNode, StorageError>> {
         Some(
             self.iter
                 .next()?
-                .and_then(|graph_name| Ok(self.reader.decode_named_or_blank_node(&graph_name)?)),
+                .and_then(|graph_name| self.reader.decode_named_or_blank_node(&graph_name)),
         )
     }
 
@@ -771,7 +781,7 @@ impl Iterator for GraphNameIter {
 }
 
 #[test]
-fn store() -> io::Result<()> {
+fn store() -> Result<(), StorageError> {
     use crate::model::*;
 
     let main_s = Subject::from(BlankNode::default());

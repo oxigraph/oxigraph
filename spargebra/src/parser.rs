@@ -87,7 +87,14 @@ impl fmt::Display for ParseError {
     }
 }
 
-impl Error for ParseError {}
+impl Error for ParseError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self.inner {
+            ParseErrorKind::InvalidBaseIri(ref e) => Some(e),
+            ParseErrorKind::Parser(ref e) => Some(e),
+        }
+    }
+}
 
 struct AnnotatedTerm {
     term: TermPattern,

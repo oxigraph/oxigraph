@@ -1,13 +1,13 @@
 #![allow(clippy::needless_option_as_deref)]
 
-use crate::io::{map_io_err, PyFileLike};
+use crate::io::{map_parser_error, PyFileLike};
 use crate::model::*;
 use crate::sparql::*;
 use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::GraphNameRef;
 use oxigraph::sparql::Update;
-use oxigraph::store::{self, Store};
-use pyo3::exceptions::PyValueError;
+use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
+use pyo3::exceptions::{PyIOError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::{Py, PyRef};
 use std::io::BufReader;
@@ -48,7 +48,7 @@ impl PyStore {
             } else {
                 Store::new()
             }
-            .map_err(map_io_err)?,
+            .map_err(map_storage_error)?,
         })
     }
 
@@ -64,7 +64,7 @@ impl PyStore {
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
     #[pyo3(text_signature = "($self, quad)")]
     fn add(&self, quad: &PyQuad) -> PyResult<()> {
-        self.inner.insert(quad).map_err(map_io_err)?;
+        self.inner.insert(quad).map_err(map_storage_error)?;
         Ok(())
     }
 
@@ -82,7 +82,7 @@ impl PyStore {
     /// []
     #[pyo3(text_signature = "($self, quad)")]
     fn remove(&self, quad: &PyQuad) -> PyResult<()> {
-        self.inner.remove(quad).map_err(map_io_err)?;
+        self.inner.remove(quad).map_err(map_storage_error)?;
         Ok(())
     }
 
@@ -293,7 +293,7 @@ impl PyStore {
                     &to_graph_name.unwrap_or(PyGraphNameRef::DefaultGraph),
                     base_iri,
                 )
-                .map_err(map_io_err)
+                .map_err(map_loader_error)
         } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
             if to_graph_name.is_some() {
                 return Err(PyValueError::new_err(
@@ -302,7 +302,7 @@ impl PyStore {
             }
             self.inner
                 .load_dataset(input, dataset_format, base_iri)
-                .map_err(map_io_err)
+                .map_err(map_loader_error)
         } else {
             Err(PyValueError::new_err(format!(
                 "Not supported MIME type: {}",
@@ -369,7 +369,7 @@ impl PyStore {
                     &to_graph_name.unwrap_or(PyGraphNameRef::DefaultGraph),
                     base_iri,
                 )
-                .map_err(map_io_err)
+                .map_err(map_loader_error)
         } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
             if to_graph_name.is_some() {
                 return Err(PyValueError::new_err(
@@ -378,7 +378,7 @@ impl PyStore {
             }
             self.inner
                 .bulk_load_dataset(input, dataset_format, base_iri)
-                .map_err(map_io_err)
+                .map_err(map_loader_error)
         } else {
             Err(PyValueError::new_err(format!(
                 "Not supported MIME type: {}",
@@ -432,7 +432,7 @@ impl PyStore {
                     graph_format,
                     &from_graph_name.unwrap_or(PyGraphNameRef::DefaultGraph),
                 )
-                .map_err(map_io_err)
+                .map_err(map_serializer_error)
         } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
             if from_graph_name.is_some() {
                 return Err(PyValueError::new_err(
@@ -441,7 +441,7 @@ impl PyStore {
             }
             self.inner
                 .dump_dataset(output, dataset_format)
-                .map_err(map_io_err)
+                .map_err(map_serializer_error)
         } else {
             Err(PyValueError::new_err(format!(
                 "Not supported MIME type: {}",
@@ -490,7 +490,7 @@ impl PyStore {
                 .insert_named_graph(&PyNamedOrBlankNodeRef::BlankNode(graph_name))
                 .map(|_| ()),
         }
-        .map_err(map_io_err)
+        .map_err(map_storage_error)
     }
 
     /// Removes a graph from the store.
@@ -519,7 +519,7 @@ impl PyStore {
                 .remove_named_graph(&PyNamedOrBlankNodeRef::BlankNode(graph_name))
                 .map(|_| ()),
         }
-        .map_err(map_io_err)?;
+        .map_err(map_storage_error)?;
         Ok(())
     }
 
@@ -528,15 +528,15 @@ impl PyStore {
     }
 
     fn __bool__(&self) -> PyResult<bool> {
-        Ok(!self.inner.is_empty()?)
+        Ok(!self.inner.is_empty().map_err(map_storage_error)?)
     }
 
     fn __len__(&self) -> PyResult<usize> {
-        Ok(self.inner.len()?)
+        self.inner.len().map_err(map_storage_error)
     }
 
     fn __contains__(&self, quad: PyQuad) -> PyResult<bool> {
-        self.inner.contains(&quad).map_err(map_io_err)
+        self.inner.contains(&quad).map_err(map_storage_error)
     }
 
     fn __iter__(&self) -> QuadIter {
@@ -560,7 +560,7 @@ impl QuadIter {
     fn __next__(&mut self) -> PyResult<Option<PyQuad>> {
         self.inner
             .next()
-            .map(|q| Ok(q.map_err(map_io_err)?.into()))
+            .map(|q| Ok(q.map_err(map_storage_error)?.into()))
             .transpose()
     }
 }
@@ -579,7 +579,7 @@ impl GraphNameIter {
     fn __next__(&mut self) -> PyResult<Option<PyNamedOrBlankNode>> {
         self.inner
             .next()
-            .map(|q| Ok(q.map_err(map_io_err)?.into()))
+            .map(|q| Ok(q.map_err(map_storage_error)?.into()))
             .transpose()
     }
 }
@@ -621,4 +621,25 @@ pub fn extract_quads_pattern<'a>(
             None
         },
     ))
+}
+
+pub(crate) fn map_storage_error(error: StorageError) -> PyErr {
+    match error {
+        StorageError::Io(error) => PyIOError::new_err(error.to_string()),
+        _ => PyRuntimeError::new_err(error.to_string()),
+    }
+}
+
+pub(crate) fn map_loader_error(error: LoaderError) -> PyErr {
+    match error {
+        LoaderError::Storage(error) => map_storage_error(error),
+        LoaderError::Parser(error) => map_parser_error(error),
+    }
+}
+
+pub(crate) fn map_serializer_error(error: SerializerError) -> PyErr {
+    match error {
+        SerializerError::Storage(error) => map_storage_error(error),
+        SerializerError::Io(error) => PyIOError::new_err(error.to_string()),
+    }
 }

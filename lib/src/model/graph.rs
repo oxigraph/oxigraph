@@ -19,6 +19,7 @@
 //!
 //! See also [`Dataset`](super::Dataset) if you want to get support of multiple RDF graphs at the same time.
 
+use crate::io::read::ParserError;
 use crate::io::GraphFormat;
 use crate::model::dataset::*;
 use crate::model::*;
@@ -207,7 +208,7 @@ impl Graph {
         reader: impl BufRead,
         format: GraphFormat,
         base_iri: Option<&str>,
-    ) -> io::Result<()> {
+    ) -> Result<(), ParserError> {
         self.graph_mut().load(reader, format, base_iri)
     }
 

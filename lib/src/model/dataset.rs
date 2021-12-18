@@ -23,6 +23,7 @@
 //!
 //! See also [`Graph`](super::Graph) if you only care about plain triples.
 
+use crate::io::read::ParserError;
 use crate::io::{
     DatasetFormat, DatasetParser, DatasetSerializer, GraphFormat, GraphParser, GraphSerializer,
 };
@@ -434,12 +435,12 @@ impl Dataset {
         reader: impl BufRead,
         format: DatasetFormat,
         base_iri: Option<&str>,
-    ) -> io::Result<()> {
+    ) -> Result<(), ParserError> {
         let mut parser = DatasetParser::from_format(format);
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+                .map_err(|e| ParserError::invalid_base_iri(base_iri, e))?;
         }
         for t in parser.read_quads(reader)? {
             self.insert(&t?);
@@ -1400,12 +1401,12 @@ impl<'a> GraphViewMut<'a> {
         reader: impl BufRead,
         format: GraphFormat,
         base_iri: Option<&str>,
-    ) -> io::Result<()> {
+    ) -> Result<(), ParserError> {
         let mut parser = GraphParser::from_format(format);
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+                .map_err(|e| ParserError::invalid_base_iri(base_iri, e))?;
         }
         for t in parser.read_triples(reader)? {
             self.insert(&t?);

@@ -1,6 +1,6 @@
-use crate::error::invalid_data_error;
+use crate::io::read::ParserError;
 use crate::sparql::ParseError;
-use crate::storage::numeric_encoder::DecoderError;
+use crate::storage::StorageError;
 use std::convert::Infallible;
 use std::error;
 use std::fmt;
@@ -10,14 +10,16 @@ use std::io;
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum EvaluationError {
-    /// An error in SPARQL query parsing
+    /// An error in SPARQL parsing
     Parsing(ParseError),
+    /// An error from the storage
+    Storage(StorageError),
+    /// An error while parsing an external RDF file
+    ExternalParser(ParserError),
     /// An error returned during store IOs or during results write
     Io(io::Error),
     /// An error returned during the query evaluation itself
     Query(QueryError),
-    #[doc(hidden)]
-    Extra,
 }
 
 #[derive(Debug)]
@@ -35,9 +37,10 @@ impl fmt::Display for EvaluationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Parsing(error) => error.fmt(f),
+            Self::Storage(error) => error.fmt(f),
+            Self::ExternalParser(error) => error.fmt(f),
             Self::Io(error) => error.fmt(f),
             Self::Query(error) => error.fmt(f),
-            Self::Extra => write!(f, "Unknown error"),
         }
     }
 }
@@ -55,9 +58,10 @@ impl error::Error for EvaluationError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Self::Parsing(e) => Some(e),
+            Self::Storage(e) => Some(e),
+            Self::ExternalParser(e) => Some(e),
             Self::Io(e) => Some(e),
             Self::Query(e) => Some(e),
-            _ => None,
         }
     }
 }
@@ -99,17 +103,32 @@ impl From<ParseError> for EvaluationError {
     }
 }
 
+impl From<StorageError> for EvaluationError {
+    fn from(error: StorageError) -> Self {
+        Self::Storage(error)
+    }
+}
+
 impl From<io::Error> for EvaluationError {
     fn from(error: io::Error) -> Self {
         Self::Io(error)
     }
 }
 
-impl<E: Into<Self>> From<DecoderError<E>> for EvaluationError {
-    fn from(error: DecoderError<E>) -> Self {
+impl From<ParserError> for EvaluationError {
+    fn from(error: ParserError) -> Self {
+        Self::ExternalParser(error)
+    }
+}
+
+impl From<EvaluationError> for io::Error {
+    fn from(error: EvaluationError) -> Self {
         match error {
-            DecoderError::Store(error) => error.into(),
-            DecoderError::Decoder { msg } => invalid_data_error(msg).into(),
+            EvaluationError::Parsing(error) => Self::new(io::ErrorKind::InvalidData, error),
+            EvaluationError::ExternalParser(error) => error.into(),
+            EvaluationError::Io(error) => error,
+            EvaluationError::Storage(error) => error.into(),
+            EvaluationError::Query(error) => Self::new(io::ErrorKind::Other, error),
         }
     }
 }

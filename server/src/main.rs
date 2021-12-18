@@ -21,7 +21,7 @@ use rand::random;
 use std::cell::RefCell;
 use std::cmp::min;
 use std::fs::File;
-use std::io::{BufReader, Error, ErrorKind, Read, Write};
+use std::io::{self, BufReader, ErrorKind, Read, Write};
 use std::rc::Rc;
 use std::str::FromStr;
 use std::thread::{spawn, JoinHandle};
@@ -90,7 +90,7 @@ pub fn main() -> std::io::Result<()> {
                                 .or_else(|| GraphFormat::from_extension(extension)?.try_into().ok())
                         })
                         .ok_or_else(|| {
-                            Error::new(
+                            io::Error::new(
                                 ErrorKind::InvalidInput,
                                 "The server is not able to guess the file format of {} from its extension",
                             )
@@ -98,11 +98,12 @@ pub fn main() -> std::io::Result<()> {
                     store.bulk_load_dataset(BufReader::new(File::open(file)?), format, None)?;
                     Ok(())
                 })
-            }).collect::<Vec<JoinHandle<Result<(),Error>>>>();
+            }).collect::<Vec<JoinHandle<io::Result<()>>>>();
             for handle in handles {
                 handle.join().unwrap()?;
             }
-            store.optimize()
+            store.optimize()?;
+            Ok(())
         }
         ("serve", Some(submatches)) => {
             let bind = submatches.value_of("bind").unwrap();
@@ -112,7 +113,8 @@ pub fn main() -> std::io::Result<()> {
                 .set_server_name(concat!("Oxigraph/", env!("CARGO_PKG_VERSION")))
                 .unwrap();
             println!("Listening for requests at http://{}", &bind);
-            server.listen(bind)
+            server.listen(bind)?;
+            Ok(())
         }
         (s, _) => {
             eprintln!("Not supported subcommand: '{}'", s);
@@ -597,7 +599,7 @@ fn evaluate_sparql_query(
             },
             |(mut writer, mut triples)| {
                 Ok(if let Some(t) = triples.next() {
-                    writer.write(&t.map_err(|e| Error::new(ErrorKind::Other, e))?)?;
+                    writer.write(&t?)?;
                     Some((writer, triples))
                 } else {
                     writer.finish()?;

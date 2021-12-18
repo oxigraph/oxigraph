@@ -1,4 +1,3 @@
-use crate::error::invalid_data_error;
 use crate::model::{GraphNameRef, NamedOrBlankNodeRef, Quad, QuadRef, TermRef};
 use crate::storage::backend::{Reader, Transaction};
 #[cfg(not(target_arch = "wasm32"))]
@@ -9,11 +8,12 @@ use crate::storage::binary_encoder::{
     write_pos_quad, write_posg_quad, write_spo_quad, write_spog_quad, write_term, QuadEncoding,
     WRITTEN_TERM_MAX_SIZE,
 };
+pub use crate::storage::error::{CorruptionError, LoaderError, SerializerError, StorageError};
 use crate::storage::numeric_encoder::{insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup};
 use backend::{ColumnFamily, ColumnFamilyDefinition, Db, Iter};
 #[cfg(not(target_arch = "wasm32"))]
 use std::collections::{HashMap, HashSet};
-use std::io::Result;
+use std::error::Error;
 #[cfg(not(target_arch = "wasm32"))]
 use std::mem::take;
 #[cfg(not(target_arch = "wasm32"))]
@@ -23,6 +23,7 @@ use std::thread::spawn;
 
 mod backend;
 mod binary_encoder;
+mod error;
 pub mod numeric_encoder;
 pub mod small_string;
 
@@ -60,12 +61,12 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Result<Self, StorageError> {
         Self::setup(Db::new(Self::column_families())?)
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn open(path: &Path) -> Result<Self> {
+    pub fn open(path: &Path) -> Result<Self, StorageError> {
         Self::setup(Db::open(path, Self::column_families())?)
     }
 
@@ -129,7 +130,7 @@ impl Storage {
         ]
     }
 
-    fn setup(db: Db) -> Result<Self> {
+    fn setup(db: Db) -> Result<Self, StorageError> {
         let this = Self {
             default_cf: db.column_family(DEFAULT_CF).unwrap(),
             id2str_cf: db.column_family(ID2STR_CF).unwrap(),
@@ -151,7 +152,7 @@ impl Storage {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn migrate(&self) -> Result<()> {
+    fn migrate(&self) -> Result<(), StorageError> {
         let mut version = self.ensure_version()?;
         if version == 0 {
             // We migrate to v1
@@ -178,20 +179,20 @@ impl Storage {
         }
 
         match version {
-            _ if version < LATEST_STORAGE_VERSION => Err(invalid_data_error(format!(
+            _ if version < LATEST_STORAGE_VERSION => Err(CorruptionError::msg(format!(
                 "The RocksDB database is using the outdated encoding version {}. Automated migration is not supported, please dump the store dataset using a compatible Oxigraph version and load it again using the current version",
                 version
-            ))),
+            )).into()),
             LATEST_STORAGE_VERSION => Ok(()),
-            _ => Err(invalid_data_error(format!(
+            _ => Err(CorruptionError::msg(format!(
                 "The RocksDB database is using the too recent version {}. Upgrade to the latest Oxigraph version to load this database",
                 version
-            )))
+            )).into())
         }
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn ensure_version(&self) -> Result<u64> {
+    fn ensure_version(&self) -> Result<u64, StorageError> {
         Ok(
             if let Some(version) = self.db.snapshot().get(&self.default_cf, b"oxversion")? {
                 let mut buffer = [0; 8];
@@ -205,7 +206,7 @@ impl Storage {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn update_version(&self, version: u64) -> Result<()> {
+    fn update_version(&self, version: u64) -> Result<(), StorageError> {
         self.db.transaction(|mut t| {
             t.insert(&self.default_cf, b"oxversion", &version.to_be_bytes())
         })?;
@@ -219,10 +220,10 @@ impl Storage {
         }
     }
 
-    pub fn transaction<'a, 'b: 'a, T>(
+    pub fn transaction<'a, 'b: 'a, T, E: Error + 'static + From<StorageError>>(
         &'b self,
-        f: impl Fn(StorageWriter<'a>) -> Result<T>,
-    ) -> Result<T> {
+        f: impl Fn(StorageWriter<'a>) -> Result<T, E>,
+    ) -> Result<T, E> {
         self.db.transaction(|transaction| {
             f(StorageWriter {
                 buffer: Vec::new(),
@@ -233,7 +234,7 @@ impl Storage {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn flush(&self) -> Result<()> {
+    pub fn flush(&self) -> Result<(), StorageError> {
         self.db.flush(&self.default_cf)?;
         self.db.flush(&self.gpos_cf)?;
         self.db.flush(&self.gpos_cf)?;
@@ -248,7 +249,7 @@ impl Storage {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn compact(&self) -> Result<()> {
+    pub fn compact(&self) -> Result<(), StorageError> {
         self.db.compact(&self.default_cf)?;
         self.db.compact(&self.gpos_cf)?;
         self.db.compact(&self.gpos_cf)?;
@@ -269,16 +270,16 @@ pub struct StorageReader {
 }
 
 impl StorageReader {
-    pub fn len(&self) -> Result<usize> {
+    pub fn len(&self) -> Result<usize, StorageError> {
         Ok(self.reader.len(&self.storage.gspo_cf)? + self.reader.len(&self.storage.dspo_cf)?)
     }
 
-    pub fn is_empty(&self) -> Result<bool> {
+    pub fn is_empty(&self) -> Result<bool, StorageError> {
         Ok(self.reader.is_empty(&self.storage.gspo_cf)?
             && self.reader.is_empty(&self.storage.dspo_cf)?)
     }
 
-    pub fn contains(&self, quad: &EncodedQuad) -> Result<bool> {
+    pub fn contains(&self, quad: &EncodedQuad) -> Result<bool, StorageError> {
         let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
         if quad.graph_name.is_default_graph() {
             write_spo_quad(&mut buffer, quad);
@@ -529,7 +530,7 @@ impl StorageReader {
         }
     }
 
-    pub fn contains_named_graph(&self, graph_name: &EncodedTerm) -> Result<bool> {
+    pub fn contains_named_graph(&self, graph_name: &EncodedTerm) -> Result<bool, StorageError> {
         self.reader
             .contains_key(&self.storage.graphs_cf, &encode_term(graph_name))
     }
@@ -582,15 +583,16 @@ impl StorageReader {
         }
     }
 
-    pub fn get_str(&self, key: &StrHash) -> Result<Option<String>> {
-        self.reader
+    pub fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
+        Ok(self
+            .reader
             .get(&self.storage.id2str_cf, &key.to_be_bytes())?
             .map(|v| String::from_utf8(v.into()))
             .transpose()
-            .map_err(invalid_data_error)
+            .map_err(CorruptionError::new)?)
     }
 
-    pub fn contains_str(&self, key: &StrHash) -> Result<bool> {
+    pub fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError> {
         self.reader
             .contains_key(&self.storage.id2str_cf, &key.to_be_bytes())
     }
@@ -618,9 +620,9 @@ impl ChainedDecodingQuadIterator {
 }
 
 impl Iterator for ChainedDecodingQuadIterator {
-    type Item = Result<EncodedQuad>;
+    type Item = Result<EncodedQuad, StorageError>;
 
-    fn next(&mut self) -> Option<Result<EncodedQuad>> {
+    fn next(&mut self) -> Option<Result<EncodedQuad, StorageError>> {
         if let Some(result) = self.first.next() {
             Some(result)
         } else if let Some(second) = self.second.as_mut() {
@@ -637,9 +639,9 @@ pub struct DecodingQuadIterator {
 }
 
 impl Iterator for DecodingQuadIterator {
-    type Item = Result<EncodedQuad>;
+    type Item = Result<EncodedQuad, StorageError>;
 
-    fn next(&mut self) -> Option<Result<EncodedQuad>> {
+    fn next(&mut self) -> Option<Result<EncodedQuad, StorageError>> {
         if let Err(e) = self.iter.status() {
             return Some(Err(e));
         }
@@ -654,9 +656,9 @@ pub struct DecodingGraphIterator {
 }
 
 impl Iterator for DecodingGraphIterator {
-    type Item = Result<EncodedTerm>;
+    type Item = Result<EncodedTerm, StorageError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTerm>> {
+    fn next(&mut self) -> Option<Result<EncodedTerm, StorageError>> {
         if let Err(e) = self.iter.status() {
             return Some(Err(e));
         }
@@ -667,13 +669,11 @@ impl Iterator for DecodingGraphIterator {
 }
 
 impl StrLookup for StorageReader {
-    type Error = std::io::Error;
-
-    fn get_str(&self, key: &StrHash) -> Result<Option<String>> {
+    fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
         self.get_str(key)
     }
 
-    fn contains_str(&self, key: &StrHash) -> Result<bool> {
+    fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError> {
         self.contains_str(key)
     }
 }
@@ -692,7 +692,7 @@ impl<'a> StorageWriter<'a> {
         }
     }
 
-    pub fn insert(&mut self, quad: QuadRef<'_>) -> Result<bool> {
+    pub fn insert(&mut self, quad: QuadRef<'_>) -> Result<bool, StorageError> {
         let encoded = quad.into();
         self.buffer.clear();
         let result = if quad.graph_name.is_default_graph() {
@@ -777,7 +777,10 @@ impl<'a> StorageWriter<'a> {
         Ok(result)
     }
 
-    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) -> Result<bool> {
+    pub fn insert_named_graph(
+        &mut self,
+        graph_name: NamedOrBlankNodeRef<'_>,
+    ) -> Result<bool, StorageError> {
         let encoded_graph_name = graph_name.into();
 
         self.buffer.clear();
@@ -796,7 +799,11 @@ impl<'a> StorageWriter<'a> {
         Ok(result)
     }
 
-    fn insert_term(&mut self, term: TermRef<'_>, encoded: &EncodedTerm) -> Result<()> {
+    fn insert_term(
+        &mut self,
+        term: TermRef<'_>,
+        encoded: &EncodedTerm,
+    ) -> Result<(), StorageError> {
         insert_term(term, encoded, &mut |key, value| self.insert_str(key, value))
     }
 
@@ -804,7 +811,7 @@ impl<'a> StorageWriter<'a> {
         &mut self,
         graph_name: GraphNameRef<'_>,
         encoded: &EncodedTerm,
-    ) -> Result<()> {
+    ) -> Result<(), StorageError> {
         match graph_name {
             GraphNameRef::NamedNode(graph_name) => self.insert_term(graph_name.into(), encoded),
             GraphNameRef::BlankNode(graph_name) => self.insert_term(graph_name.into(), encoded),
@@ -812,7 +819,7 @@ impl<'a> StorageWriter<'a> {
         }
     }
 
-    fn insert_str(&mut self, key: &StrHash, value: &str) -> Result<()> {
+    fn insert_str(&mut self, key: &StrHash, value: &str) -> Result<(), StorageError> {
         self.transaction.insert(
             &self.storage.id2str_cf,
             &key.to_be_bytes(),
@@ -820,11 +827,11 @@ impl<'a> StorageWriter<'a> {
         )
     }
 
-    pub fn remove(&mut self, quad: QuadRef<'_>) -> Result<bool> {
+    pub fn remove(&mut self, quad: QuadRef<'_>) -> Result<bool, StorageError> {
         self.remove_encoded(&quad.into())
     }
 
-    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<bool> {
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<bool, StorageError> {
         self.buffer.clear();
         let result = if quad.graph_name.is_default_graph() {
             write_spo_quad(&mut self.buffer, quad);
@@ -891,7 +898,7 @@ impl<'a> StorageWriter<'a> {
         Ok(result)
     }
 
-    pub fn clear_graph(&mut self, graph_name: GraphNameRef<'_>) -> Result<()> {
+    pub fn clear_graph(&mut self, graph_name: GraphNameRef<'_>) -> Result<(), StorageError> {
         if graph_name.is_default_graph() {
             for quad in self.reader().quads_for_graph(&EncodedTerm::DefaultGraph) {
                 self.remove_encoded(&quad?)?;
@@ -912,25 +919,31 @@ impl<'a> StorageWriter<'a> {
         Ok(())
     }
 
-    pub fn clear_all_named_graphs(&mut self) -> Result<()> {
+    pub fn clear_all_named_graphs(&mut self) -> Result<(), StorageError> {
         for quad in self.reader().quads_in_named_graph() {
             self.remove_encoded(&quad?)?;
         }
         Ok(())
     }
 
-    pub fn clear_all_graphs(&mut self) -> Result<()> {
+    pub fn clear_all_graphs(&mut self) -> Result<(), StorageError> {
         for quad in self.reader().quads() {
             self.remove_encoded(&quad?)?;
         }
         Ok(())
     }
 
-    pub fn remove_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) -> Result<bool> {
+    pub fn remove_named_graph(
+        &mut self,
+        graph_name: NamedOrBlankNodeRef<'_>,
+    ) -> Result<bool, StorageError> {
         self.remove_encoded_named_graph(&graph_name.into())
     }
 
-    fn remove_encoded_named_graph(&mut self, graph_name: &EncodedTerm) -> Result<bool> {
+    fn remove_encoded_named_graph(
+        &mut self,
+        graph_name: &EncodedTerm,
+    ) -> Result<bool, StorageError> {
         self.buffer.clear();
         write_term(&mut self.buffer, graph_name);
         let result = if self
@@ -952,14 +965,14 @@ impl<'a> StorageWriter<'a> {
         Ok(result)
     }
 
-    pub fn remove_all_named_graphs(&mut self) -> Result<()> {
+    pub fn remove_all_named_graphs(&mut self) -> Result<(), StorageError> {
         for graph_name in self.reader().named_graphs() {
             self.remove_encoded_named_graph(&graph_name?)?;
         }
         Ok(())
     }
 
-    pub fn clear(&mut self) -> Result<()> {
+    pub fn clear(&mut self) -> Result<(), StorageError> {
         for graph_name in self.reader().named_graphs() {
             self.remove_encoded_named_graph(&graph_name?)?;
         }
@@ -972,7 +985,14 @@ impl<'a> StorageWriter<'a> {
 
 /// Creates a database from a dataset files.
 #[cfg(not(target_arch = "wasm32"))]
-pub fn bulk_load(storage: &Storage, quads: impl IntoIterator<Item = Result<Quad>>) -> Result<()> {
+pub fn bulk_load<
+    EI,
+    EO: From<StorageError> + From<EI>,
+    I: IntoIterator<Item = Result<Quad, EI>>,
+>(
+    storage: &Storage,
+    quads: I,
+) -> Result<(), EO> {
     let mut threads = Vec::new();
     let mut buffer = Vec::with_capacity(BULK_LOAD_BATCH_SIZE);
     for quad in quads {
@@ -1015,7 +1035,7 @@ impl BulkLoader {
         }
     }
 
-    fn load(&mut self, quads: impl IntoIterator<Item = Quad>) -> Result<()> {
+    fn load(&mut self, quads: impl IntoIterator<Item = Quad>) -> Result<(), StorageError> {
         for quad in quads {
             let encoded = EncodedQuad::from(quad.as_ref());
             self.buffer.clear();
@@ -1051,7 +1071,7 @@ impl BulkLoader {
         self.save()
     }
 
-    fn save(&mut self) -> Result<()> {
+    fn save(&mut self) -> Result<(), StorageError> {
         let mut to_load = Vec::new();
 
         // id2str
@@ -1175,14 +1195,21 @@ impl BulkLoader {
         self.storage.db.insert_stt_files(&to_load)
     }
 
-    fn insert_term(&mut self, term: TermRef<'_>, encoded: &EncodedTerm) -> Result<()> {
+    fn insert_term(
+        &mut self,
+        term: TermRef<'_>,
+        encoded: &EncodedTerm,
+    ) -> Result<(), StorageError> {
         insert_term(term, encoded, &mut |key, value| {
             self.id2str.entry(*key).or_insert_with(|| value.into());
             Ok(())
         })
     }
 
-    fn build_sst_for_keys(&self, values: impl Iterator<Item = Vec<u8>>) -> Result<PathBuf> {
+    fn build_sst_for_keys(
+        &self,
+        values: impl Iterator<Item = Vec<u8>>,
+    ) -> Result<PathBuf, StorageError> {
         let mut values = values.collect::<Vec<_>>();
         values.sort_unstable();
         let mut sst = self.storage.db.new_sst_file()?;

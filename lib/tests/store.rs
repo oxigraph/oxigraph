@@ -2,7 +2,8 @@ use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
 use oxigraph::store::Store;
-use std::io::{Cursor, Result};
+use std::error::Error;
+use std::io::Cursor;
 use std::process::Command;
 
 const DATA: &str = r#"
@@ -74,7 +75,7 @@ fn quads(graph_name: impl Into<GraphNameRef<'static>>) -> Vec<QuadRef<'static>> 
 }
 
 #[test]
-fn test_load_graph() -> Result<()> {
+fn test_load_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store.load_graph(
         Cursor::new(DATA),
@@ -89,7 +90,7 @@ fn test_load_graph() -> Result<()> {
 }
 
 #[test]
-fn test_load_dataset() -> Result<()> {
+fn test_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store.load_dataset(Cursor::new(DATA), DatasetFormat::TriG, None)?;
     for q in quads(GraphNameRef::DefaultGraph) {
@@ -99,7 +100,7 @@ fn test_load_dataset() -> Result<()> {
 }
 
 #[test]
-fn test_bulk_load_dataset() -> Result<()> {
+fn test_bulk_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new().unwrap();
     store.bulk_load_dataset(Cursor::new(DATA), DatasetFormat::TriG, None)?;
     for q in quads(GraphNameRef::DefaultGraph) {
@@ -109,7 +110,7 @@ fn test_bulk_load_dataset() -> Result<()> {
 }
 
 #[test]
-fn test_load_graph_generates_new_blank_nodes() -> Result<()> {
+fn test_load_graph_generates_new_blank_nodes() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     for _ in 0..2 {
         store.load_graph(
@@ -124,7 +125,7 @@ fn test_load_graph_generates_new_blank_nodes() -> Result<()> {
 }
 
 #[test]
-fn test_dump_graph() -> Result<()> {
+fn test_dump_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     for q in quads(GraphNameRef::DefaultGraph) {
         store.insert(q)?;
@@ -144,7 +145,7 @@ fn test_dump_graph() -> Result<()> {
 }
 
 #[test]
-fn test_dump_dataset() -> Result<()> {
+fn test_dump_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     for q in quads(GraphNameRef::DefaultGraph) {
         store.insert(q)?;
@@ -160,7 +161,7 @@ fn test_dump_dataset() -> Result<()> {
 }
 
 #[test]
-fn test_snapshot_isolation_iterator() -> Result<()> {
+fn test_snapshot_isolation_iterator() -> Result<(), Box<dyn Error>> {
     let quad = QuadRef::new(
         NamedNodeRef::new_unchecked("http://example.com/s"),
         NamedNodeRef::new_unchecked("http://example.com/p"),
@@ -171,12 +172,15 @@ fn test_snapshot_isolation_iterator() -> Result<()> {
     store.insert(quad)?;
     let iter = store.iter();
     store.remove(quad)?;
-    assert_eq!(iter.collect::<Result<Vec<_>>>()?, vec![quad.into_owned()]);
+    assert_eq!(
+        iter.collect::<Result<Vec<_>, _>>()?,
+        vec![quad.into_owned()]
+    );
     Ok(())
 }
 
 #[test]
-fn test_bulk_load_on_existing_delete_overrides_the_delete() -> Result<()> {
+fn test_bulk_load_on_existing_delete_overrides_the_delete() -> Result<(), Box<dyn Error>> {
     let quad = QuadRef::new(
         NamedNodeRef::new_unchecked("http://example.com/s"),
         NamedNodeRef::new_unchecked("http://example.com/p"),
@@ -192,7 +196,7 @@ fn test_bulk_load_on_existing_delete_overrides_the_delete() -> Result<()> {
 
 #[test]
 #[cfg(target_os = "linux")]
-fn test_backward_compatibility() -> Result<()> {
+fn test_backward_compatibility() -> Result<(), Box<dyn Error>> {
     // We run twice to check if data is properly saved and closed
     for _ in 0..2 {
         let store = Store::open("tests/rocksdb_bc_data")?;
@@ -207,14 +211,14 @@ fn test_backward_compatibility() -> Result<()> {
         assert!(store.contains_named_graph(graph_name)?);
         assert_eq!(
             vec![NamedOrBlankNode::from(graph_name)],
-            store.named_graphs().collect::<Result<Vec<_>>>()?
+            store.named_graphs().collect::<Result<Vec<_>, _>>()?
         );
     }
     reset_dir("tests/rocksdb_bc_data")?;
     Ok(())
 }
 
-fn reset_dir(dir: &str) -> Result<()> {
+fn reset_dir(dir: &str) -> Result<(), Box<dyn Error>> {
     assert!(Command::new("git")
         .args(&["clean", "-fX", dir])
         .status()?

@@ -2,11 +2,10 @@ use crate::model::TermRef;
 use crate::sparql::algebra::QueryDataset;
 use crate::sparql::EvaluationError;
 use crate::storage::numeric_encoder::{insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup};
-use crate::storage::StorageReader;
+use crate::storage::{StorageError, StorageReader};
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::convert::Infallible;
 use std::iter::empty;
 
 pub struct DatasetView {
@@ -141,7 +140,7 @@ impl DatasetView {
     pub fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm {
         let term = term.into();
         let encoded = term.into();
-        insert_term::<Infallible, _>(term, &encoded, &mut |key, value| {
+        insert_term(term, &encoded, &mut |key, value| {
             self.insert_str(key, value);
             Ok(())
         })
@@ -159,9 +158,7 @@ impl DatasetView {
 }
 
 impl StrLookup for DatasetView {
-    type Error = EvaluationError;
-
-    fn get_str(&self, key: &StrHash) -> Result<Option<String>, EvaluationError> {
+    fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
         Ok(if let Some(value) = self.extra.borrow().get(key) {
             Some(value.clone())
         } else {
@@ -169,7 +166,7 @@ impl StrLookup for DatasetView {
         })
     }
 
-    fn contains_str(&self, key: &StrHash) -> Result<bool, EvaluationError> {
+    fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError> {
         Ok(self.extra.borrow().contains_key(key) || self.reader.contains_str(key)?)
     }
 }

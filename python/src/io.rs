@@ -1,7 +1,7 @@
 #![allow(clippy::needless_option_as_deref)]
 
 use crate::model::{PyQuad, PyTriple};
-use oxigraph::io::read::{QuadReader, TripleReader};
+use oxigraph::io::read::{ParserError, QuadReader, TripleReader};
 use oxigraph::io::{
     DatasetFormat, DatasetParser, DatasetSerializer, GraphFormat, GraphParser, GraphSerializer,
 };
@@ -61,7 +61,7 @@ pub fn parse(
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
         }
         Ok(PyTripleReader {
-            inner: parser.read_triples(input).map_err(map_io_err)?,
+            inner: parser.read_triples(input).map_err(map_parser_error)?,
         }
         .into_py(py))
     } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
@@ -72,7 +72,7 @@ pub fn parse(
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
         }
         Ok(PyQuadReader {
-            inner: parser.read_quads(input).map_err(map_io_err)?,
+            inner: parser.read_quads(input).map_err(map_parser_error)?,
         }
         .into_py(py))
     } else {
@@ -158,7 +158,7 @@ impl PyTripleReader {
     fn __next__(&mut self) -> PyResult<Option<PyTriple>> {
         self.inner
             .next()
-            .map(|q| Ok(q.map_err(map_io_err)?.into()))
+            .map(|q| Ok(q.map_err(map_parser_error)?.into()))
             .transpose()
     }
 }
@@ -177,7 +177,7 @@ impl PyQuadReader {
     fn __next__(&mut self) -> PyResult<Option<PyQuad>> {
         self.inner
             .next()
-            .map(|q| Ok(q.map_err(map_io_err)?.into()))
+            .map(|q| Ok(q.map_err(map_parser_error)?.into()))
             .transpose()
     }
 }
@@ -243,12 +243,13 @@ fn to_io_err(error: impl Into<PyErr>, py: Python<'_>) -> io::Error {
     }
 }
 
-pub fn map_io_err(error: io::Error) -> PyErr {
-    match error.kind() {
-        io::ErrorKind::InvalidInput => PyValueError::new_err(error.to_string()),
-        io::ErrorKind::InvalidData | io::ErrorKind::UnexpectedEof => {
-            PySyntaxError::new_err(error.to_string())
-        }
-        _ => PyIOError::new_err(error.to_string()),
+pub(crate) fn map_io_err(error: io::Error) -> PyErr {
+    PyIOError::new_err(error.to_string())
+}
+
+pub(crate) fn map_parser_error(error: ParserError) -> PyErr {
+    match error {
+        ParserError::Syntax(error) => PySyntaxError::new_err(error.to_string()),
+        ParserError::Io(error) => map_io_err(error),
     }
 }

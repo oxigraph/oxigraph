@@ -4,7 +4,7 @@ use crate::model::{
     BlankNodeRef, GraphName, GraphNameRef, LiteralRef, NamedNodeRef, Quad, QuadRef, Subject,
     SubjectRef, Term, TermRef,
 };
-use crate::store::Store;
+use crate::store::{StorageError, Store};
 use sophia_api::dataset::{
     CollectibleDataset, DQuadSource, DResultTermSet, DTerm, Dataset, MdResult, MutableDataset,
 };
@@ -13,7 +13,6 @@ use sophia_api::quad::streaming_mode::{ByValue, StreamedQuad};
 use sophia_api::term::{TTerm, TermKind};
 use std::collections::HashSet;
 use std::hash::Hash;
-use std::io::Error;
 use std::iter::empty;
 
 type SophiaQuad = ([Term; 3], Option<Term>);
@@ -21,10 +20,10 @@ type StreamedSophiaQuad<'a> = StreamedQuad<'a, ByValue<SophiaQuad>>;
 
 impl Dataset for Store {
     type Quad = ByValue<SophiaQuad>;
-    type Error = Error;
+    type Error = StorageError;
 
     fn quads(&self) -> DQuadSource<'_, Self> {
-        Box::new(self.iter().map(io_quad_map))
+        Box::new(self.iter().map(quad_map))
     }
 
     fn quads_with_s<'s, TS>(&'s self, s: &'s TS) -> DQuadSource<'s, Self>
@@ -36,7 +35,7 @@ impl Dataset for Store {
         if s.is_none() {
             Box::new(empty())
         } else {
-            Box::new(self.quads_for_pattern(s, None, None, None).map(io_quad_map))
+            Box::new(self.quads_for_pattern(s, None, None, None).map(quad_map))
         }
     }
     fn quads_with_p<'s, TP>(&'s self, p: &'s TP) -> DQuadSource<'s, Self>
@@ -48,7 +47,7 @@ impl Dataset for Store {
         if p.is_none() {
             Box::new(empty())
         } else {
-            Box::new(self.quads_for_pattern(None, p, None, None).map(io_quad_map))
+            Box::new(self.quads_for_pattern(None, p, None, None).map(quad_map))
         }
     }
     fn quads_with_o<'s, TS>(&'s self, o: &'s TS) -> DQuadSource<'s, Self>
@@ -60,7 +59,7 @@ impl Dataset for Store {
         if o.is_none() {
             Box::new(empty())
         } else {
-            Box::new(self.quads_for_pattern(None, None, o, None).map(io_quad_map))
+            Box::new(self.quads_for_pattern(None, None, o, None).map(quad_map))
         }
     }
     fn quads_with_g<'s, TS>(&'s self, g: Option<&'s TS>) -> DQuadSource<'s, Self>
@@ -72,7 +71,7 @@ impl Dataset for Store {
         if g.is_none() {
             Box::new(empty())
         } else {
-            Box::new(self.quads_for_pattern(None, None, None, g).map(io_quad_map))
+            Box::new(self.quads_for_pattern(None, None, None, g).map(quad_map))
         }
     }
     fn quads_with_sp<'s, TS, TP>(&'s self, s: &'s TS, p: &'s TP) -> DQuadSource<'s, Self>
@@ -87,7 +86,7 @@ impl Dataset for Store {
         if s.is_none() || p.is_none() {
             Box::new(empty())
         } else {
-            Box::new(self.quads_for_pattern(s, p, None, None).map(io_quad_map))
+            Box::new(self.quads_for_pattern(s, p, None, None).map(quad_map))
         }
     }
     fn quads_with_so<'s, TS, TO>(&'s self, s: &'s TS, o: &'s TO) -> DQuadSource<'s, Self>
@@ -102,7 +101,7 @@ impl Dataset for Store {
         if s.is_none() || o.is_none() {
             Box::new(empty())
         } else {
-            Box::new(self.quads_for_pattern(s, None, o, None).map(io_quad_map))
+            Box::new(self.quads_for_pattern(s, None, o, None).map(quad_map))
         }
     }
     fn quads_with_sg<'s, TS, TG>(&'s self, s: &'s TS, g: Option<&'s TG>) -> DQuadSource<'s, Self>
@@ -117,7 +116,7 @@ impl Dataset for Store {
         if s.is_none() || g.is_none() {
             Box::new(empty())
         } else {
-            Box::new(self.quads_for_pattern(s, None, None, g).map(io_quad_map))
+            Box::new(self.quads_for_pattern(s, None, None, g).map(quad_map))
         }
     }
     fn quads_with_po<'s, TP, TO>(&'s self, p: &'s TP, o: &'s TO) -> DQuadSource<'s, Self>
@@ -132,7 +131,7 @@ impl Dataset for Store {
         if p.is_none() || o.is_none() {
             Box::new(empty())
         } else {
-            Box::new(self.quads_for_pattern(None, p, o, None).map(io_quad_map))
+            Box::new(self.quads_for_pattern(None, p, o, None).map(quad_map))
         }
     }
     fn quads_with_pg<'s, TP, TG>(&'s self, p: &'s TP, g: Option<&'s TG>) -> DQuadSource<'s, Self>
@@ -147,7 +146,7 @@ impl Dataset for Store {
         if p.is_none() || g.is_none() {
             Box::new(empty())
         } else {
-            Box::new(self.quads_for_pattern(None, p, None, g).map(io_quad_map))
+            Box::new(self.quads_for_pattern(None, p, None, g).map(quad_map))
         }
     }
     fn quads_with_og<'s, TO, TG>(&'s self, o: &'s TO, g: Option<&'s TG>) -> DQuadSource<'s, Self>
@@ -162,7 +161,7 @@ impl Dataset for Store {
         if o.is_none() || g.is_none() {
             Box::new(empty())
         } else {
-            Box::new(self.quads_for_pattern(None, None, o, g).map(io_quad_map))
+            Box::new(self.quads_for_pattern(None, None, o, g).map(quad_map))
         }
     }
     fn quads_with_spo<'s, TS, TP, TO>(
@@ -185,7 +184,7 @@ impl Dataset for Store {
         if s.is_none() || p.is_none() || o.is_none() {
             Box::new(empty())
         } else {
-            Box::new(self.quads_for_pattern(s, p, o, None).map(io_quad_map))
+            Box::new(self.quads_for_pattern(s, p, o, None).map(quad_map))
         }
     }
     fn quads_with_spg<'s, TS, TP, TG>(
@@ -208,7 +207,7 @@ impl Dataset for Store {
         if s.is_none() || p.is_none() || g.is_none() {
             Box::new(empty())
         } else {
-            Box::new(self.quads_for_pattern(s, p, None, g).map(io_quad_map))
+            Box::new(self.quads_for_pattern(s, p, None, g).map(quad_map))
         }
     }
     fn quads_with_sog<'s, TS, TO, TG>(
@@ -231,7 +230,7 @@ impl Dataset for Store {
         if s.is_none() || o.is_none() || g.is_none() {
             Box::new(empty())
         } else {
-            Box::new(self.quads_for_pattern(s, None, o, g).map(io_quad_map))
+            Box::new(self.quads_for_pattern(s, None, o, g).map(quad_map))
         }
     }
     fn quads_with_pog<'s, TP, TO, TG>(
@@ -254,7 +253,7 @@ impl Dataset for Store {
         if p.is_none() || o.is_none() || g.is_none() {
             Box::new(empty())
         } else {
-            Box::new(self.quads_for_pattern(None, p, o, g).map(io_quad_map))
+            Box::new(self.quads_for_pattern(None, p, o, g).map(quad_map))
         }
     }
     fn quads_with_spog<'s, TS, TP, TO, TG>(
@@ -281,7 +280,7 @@ impl Dataset for Store {
         if s.is_none() || p.is_none() || o.is_none() || g.is_none() {
             Box::new(empty())
         } else {
-            Box::new(self.quads_for_pattern(s, p, o, g).map(io_quad_map))
+            Box::new(self.quads_for_pattern(s, p, o, g).map(quad_map))
         }
     }
     fn subjects(&self) -> DResultTermSet<Self>
@@ -377,7 +376,7 @@ impl Dataset for Store {
 }
 
 impl MutableDataset for Store {
-    type MutationError = Error;
+    type MutationError = StorageError;
     fn insert<TS, TP, TO, TG>(
         &mut self,
         s: &TS,
@@ -438,7 +437,7 @@ impl CollectibleDataset for Store {
 }
 
 // helper functions
-fn io_quad_map<'a>(res: Result<Quad, Error>) -> Result<StreamedSophiaQuad<'a>, Error> {
+fn quad_map<'a>(res: Result<Quad, StorageError>) -> Result<StreamedSophiaQuad<'a>, StorageError> {
     res.map(|q| {
         let q: SophiaQuad = q.into();
         StreamedQuad::by_value(q)

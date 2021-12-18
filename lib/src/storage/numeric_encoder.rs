@@ -1,17 +1,15 @@
 #![allow(clippy::unreadable_literal)]
 
-use crate::error::invalid_data_error;
 use crate::model::xsd::*;
 use crate::model::*;
-use crate::sparql::EvaluationError;
 use crate::storage::small_string::SmallString;
+use crate::store::{CorruptionError, StorageError};
 use siphasher::sip128::{Hasher128, SipHasher24};
-use std::error::Error;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::rc::Rc;
-use std::{fmt, io, str};
+use std::str;
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 #[repr(transparent)]
@@ -658,18 +656,16 @@ impl From<QuadRef<'_>> for EncodedQuad {
 }
 
 pub trait StrLookup {
-    type Error: Error + Into<EvaluationError> + 'static;
+    fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError>;
 
-    fn get_str(&self, key: &StrHash) -> Result<Option<String>, Self::Error>;
-
-    fn contains_str(&self, key: &StrHash) -> Result<bool, Self::Error>;
+    fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError>;
 }
 
-pub fn insert_term<E, F: FnMut(&StrHash, &str) -> Result<(), E>>(
+pub fn insert_term<F: FnMut(&StrHash, &str) -> Result<(), StorageError>>(
     term: TermRef<'_>,
     encoded: &EncodedTerm,
     insert_str: &mut F,
-) -> Result<(), E> {
+) -> Result<(), StorageError> {
     match term {
         TermRef::NamedNode(node) => {
             if let EncodedTerm::NamedNode { iri_id } = encoded {
@@ -824,15 +820,16 @@ pub fn parse_day_time_duration_str(value: &str) -> Option<EncodedTerm> {
 }
 
 pub trait Decoder: StrLookup {
-    fn decode_term(&self, encoded: &EncodedTerm) -> Result<Term, DecoderError<Self::Error>>;
+    fn decode_term(&self, encoded: &EncodedTerm) -> Result<Term, StorageError>;
 
-    fn decode_subject(&self, encoded: &EncodedTerm) -> Result<Subject, DecoderError<Self::Error>> {
+    fn decode_subject(&self, encoded: &EncodedTerm) -> Result<Subject, StorageError> {
         match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node.into()),
             Term::BlankNode(blank_node) => Ok(blank_node.into()),
-            Term::Literal(_) => Err(DecoderError::Decoder {
-                msg: "A literal has been found instead of a subject node".to_owned(),
-            }),
+            Term::Literal(_) => Err(CorruptionError::msg(
+                "A literal has been found instead of a subject node",
+            )
+            .into()),
             Term::Triple(triple) => Ok(Subject::Triple(triple)),
         }
     }
@@ -840,38 +837,38 @@ pub trait Decoder: StrLookup {
     fn decode_named_or_blank_node(
         &self,
         encoded: &EncodedTerm,
-    ) -> Result<NamedOrBlankNode, DecoderError<Self::Error>> {
+    ) -> Result<NamedOrBlankNode, StorageError> {
         match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node.into()),
             Term::BlankNode(blank_node) => Ok(blank_node.into()),
-            Term::Literal(_) => Err(DecoderError::Decoder {
-                msg: "A literal has been found instead of a named or blank node".to_owned(),
-            }),
-            Term::Triple(_) => Err(DecoderError::Decoder {
-                msg: "A triple has been found instead of a named or blank node".to_owned(),
-            }),
+            Term::Literal(_) => Err(CorruptionError::msg(
+                "A literal has been found instead of a named or blank node",
+            )
+            .into()),
+            Term::Triple(_) => Err(CorruptionError::msg(
+                "A triple has been found instead of a named or blank node",
+            )
+            .into()),
         }
     }
 
-    fn decode_named_node(
-        &self,
-        encoded: &EncodedTerm,
-    ) -> Result<NamedNode, DecoderError<Self::Error>> {
+    fn decode_named_node(&self, encoded: &EncodedTerm) -> Result<NamedNode, StorageError> {
         match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node),
-            Term::BlankNode(_) => Err(DecoderError::Decoder {
-                msg: "A blank node has been found instead of a named node".to_owned(),
-            }),
-            Term::Literal(_) => Err(DecoderError::Decoder {
-                msg: "A literal has been found instead of a named node".to_owned(),
-            }),
-            Term::Triple(_) => Err(DecoderError::Decoder {
-                msg: "A triple has been found instead of a named node".to_owned(),
-            }),
+            Term::BlankNode(_) => Err(CorruptionError::msg(
+                "A blank node has been found instead of a named node",
+            )
+            .into()),
+            Term::Literal(_) => {
+                Err(CorruptionError::msg("A literal has been found instead of a named node").into())
+            }
+            Term::Triple(_) => {
+                Err(CorruptionError::msg("A triple has been found instead of a named node").into())
+            }
         }
     }
 
-    fn decode_triple(&self, encoded: &EncodedTriple) -> Result<Triple, DecoderError<Self::Error>> {
+    fn decode_triple(&self, encoded: &EncodedTriple) -> Result<Triple, StorageError> {
         Ok(Triple::new(
             self.decode_subject(&encoded.subject)?,
             self.decode_named_node(&encoded.predicate)?,
@@ -879,7 +876,7 @@ pub trait Decoder: StrLookup {
         ))
     }
 
-    fn decode_quad(&self, encoded: &EncodedQuad) -> Result<Quad, DecoderError<Self::Error>> {
+    fn decode_quad(&self, encoded: &EncodedQuad) -> Result<Quad, StorageError> {
         Ok(Quad::new(
             self.decode_subject(&encoded.subject)?,
             self.decode_named_node(&encoded.predicate)?,
@@ -891,14 +888,14 @@ pub trait Decoder: StrLookup {
                     Term::NamedNode(named_node) => named_node.into(),
                     Term::BlankNode(blank_node) => blank_node.into(),
                     Term::Literal(_) => {
-                        return Err(DecoderError::Decoder {
-                            msg: "A literal is not a valid graph name".to_owned(),
-                        })
+                        return Err(
+                            CorruptionError::msg("A literal is not a valid graph name").into()
+                        )
                     }
                     Term::Triple(_) => {
-                        return Err(DecoderError::Decoder {
-                            msg: "A triple is not a valid graph name".to_owned(),
-                        })
+                        return Err(
+                            CorruptionError::msg("A triple is not a valid graph name").into()
+                        )
                     }
                 }
             },
@@ -907,11 +904,11 @@ pub trait Decoder: StrLookup {
 }
 
 impl<S: StrLookup> Decoder for S {
-    fn decode_term(&self, encoded: &EncodedTerm) -> Result<Term, DecoderError<Self::Error>> {
+    fn decode_term(&self, encoded: &EncodedTerm) -> Result<Term, StorageError> {
         match encoded {
-            EncodedTerm::DefaultGraph => Err(DecoderError::Decoder {
-                msg: "The default graph tag is not a valid term".to_owned(),
-            }),
+            EncodedTerm::DefaultGraph => {
+                Err(CorruptionError::msg("The default graph tag is not a valid term").into())
+            }
             EncodedTerm::NamedNode { iri_id } => {
                 Ok(NamedNode::new_unchecked(get_required_str(self, iri_id)?).into())
             }
@@ -987,50 +984,11 @@ impl<S: StrLookup> Decoder for S {
     }
 }
 
-fn get_required_str<L: StrLookup>(
-    lookup: &L,
-    id: &StrHash,
-) -> Result<String, DecoderError<L::Error>> {
-    lookup
-        .get_str(id)
-        .map_err(DecoderError::Store)?
-        .ok_or_else(|| DecoderError::Decoder {
-            msg: format!(
-                "Not able to find the string with id {:?} in the string store",
-                id
-            ),
-        })
-}
-
-#[derive(Debug)]
-pub enum DecoderError<E> {
-    Store(E),
-    Decoder { msg: String },
-}
-
-impl<E: fmt::Display> fmt::Display for DecoderError<E> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Store(e) => e.fmt(f),
-            Self::Decoder { msg } => write!(f, "{}", msg),
-        }
-    }
-}
-
-impl<E: Error + 'static> Error for DecoderError<E> {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Store(e) => Some(e),
-            Self::Decoder { .. } => None,
-        }
-    }
-}
-
-impl<E: Into<Self>> From<DecoderError<E>> for io::Error {
-    fn from(e: DecoderError<E>) -> Self {
-        match e {
-            DecoderError::Store(e) => e.into(),
-            DecoderError::Decoder { msg } => invalid_data_error(msg),
-        }
-    }
+fn get_required_str<L: StrLookup>(lookup: &L, id: &StrHash) -> Result<String, StorageError> {
+    Ok(lookup.get_str(id)?.ok_or_else(|| {
+        CorruptionError::new(format!(
+            "Not able to find the string with id {:?} in the string store",
+            id
+        ))
+    })?)
 }

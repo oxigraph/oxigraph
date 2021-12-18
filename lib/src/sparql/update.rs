@@ -23,7 +23,7 @@ use spargebra::term::{
 };
 use spargebra::GraphUpdateOperation;
 use std::collections::HashMap;
-use std::io::{BufReader, Error, ErrorKind};
+use std::io::BufReader;
 use std::rc::Rc;
 
 pub fn evaluate_update(
@@ -32,31 +32,16 @@ pub fn evaluate_update(
     options: UpdateOptions,
 ) -> Result<(), EvaluationError> {
     let base_iri = update.inner.base_iri.map(Rc::new);
-    storage
-        .transaction(move |transaction| {
-            let client = Client::new(options.query_options.http_timeout);
-            SimpleUpdateEvaluator {
-                transaction,
-                base_iri: base_iri.clone(),
-                options: options.clone(),
-                client,
-            }
-            .eval_all(&update.inner.operations, &update.using_datasets)
-            .map_err(|e| match e {
-                EvaluationError::Io(e) => e,
-                q => Error::new(ErrorKind::Other, q),
-            })
-        })
-        .map_err(|e| {
-            if e.get_ref()
-                .map_or(false, |inner| inner.is::<EvaluationError>())
-            {
-                *e.into_inner().unwrap().downcast().unwrap()
-            } else {
-                EvaluationError::Io(e)
-            }
-        })?;
-    Ok(())
+    storage.transaction(move |transaction| {
+        let client = Client::new(options.query_options.http_timeout);
+        SimpleUpdateEvaluator {
+            transaction,
+            base_iri: base_iri.clone(),
+            options: options.clone(),
+            client,
+        }
+        .eval_all(&update.inner.operations, &update.using_datasets)
+    })
 }
 
 struct SimpleUpdateEvaluator<'a> {

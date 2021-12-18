@@ -5,6 +5,8 @@
 #![allow(unsafe_code)]
 
 use crate::error::invalid_input_error;
+use crate::storage::error::StorageError;
+use crate::store::CorruptionError;
 use lazy_static::lazy_static;
 use libc::{self, c_char, c_void, free};
 use oxrocksdb_sys::*;
@@ -12,10 +14,11 @@ use rand::random;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::env::temp_dir;
+use std::error::Error;
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::fs::remove_dir_all;
-use std::io::{Error, ErrorKind, Result};
+use std::io;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -43,7 +46,11 @@ macro_rules! ffi_result_impl {
             string: ptr::null()
         };
         let result = $($function)::*($($arg,)* &mut status);
-        convert_status(status).map(move |_| result)
+        if status.code == rocksdb_status_code_t_rocksdb_status_code_ok {
+            Ok(result)
+        } else {
+            Err(ErrorStatus(status))
+        }
     }}
 }
 
@@ -123,7 +130,7 @@ impl Drop for DbHandler {
 }
 
 impl Db {
-    pub fn new(column_families: Vec<ColumnFamilyDefinition>) -> Result<Self> {
+    pub fn new(column_families: Vec<ColumnFamilyDefinition>) -> Result<Self, StorageError> {
         let path = if cfg!(target_os = "linux") {
             "/dev/shm/".into()
         } else {
@@ -133,7 +140,10 @@ impl Db {
         Ok(Self(Arc::new(Self::do_open(path, column_families, true)?)))
     }
 
-    pub fn open(path: &Path, column_families: Vec<ColumnFamilyDefinition>) -> Result<Self> {
+    pub fn open(
+        path: &Path,
+        column_families: Vec<ColumnFamilyDefinition>,
+    ) -> Result<Self, StorageError> {
         Ok(Self(Arc::new(Self::do_open(
             path.to_owned(),
             column_families,
@@ -145,7 +155,7 @@ impl Db {
         path: PathBuf,
         mut column_families: Vec<ColumnFamilyDefinition>,
         in_memory: bool,
-    ) -> Result<DbHandler> {
+    ) -> Result<DbHandler, StorageError> {
         let c_path = path_to_cstring(&path)?;
 
         unsafe {
@@ -205,8 +215,8 @@ impl Db {
             let c_column_families = column_family_names
                 .iter()
                 .map(|name| CString::new(*name))
-                .collect::<std::result::Result<Vec<_>, _>>()
-                .map_err(invalid_input_error)?;
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| StorageError::Other(Box::new(e)))?;
             let cf_options = column_families
                 .into_iter()
                 .map(|cf| {
@@ -241,13 +251,10 @@ impl Db {
             ))?;
             assert!(!db.is_null(), "rocksdb_create returned null");
             for handle in &cf_handles {
-                if handle.is_null() {
-                    rocksdb_transactiondb_close(db);
-                    return Err(Error::new(
-                        ErrorKind::Other,
-                        "Received null column family handle from RocksDB.",
-                    ));
-                }
+                assert!(
+                    !handle.is_null(),
+                    "rocksdb_readoptions_create returned a null column family"
+                );
             }
 
             let read_options = rocksdb_readoptions_create();
@@ -346,10 +353,10 @@ impl Db {
         }
     }
 
-    pub fn transaction<'a, 'b: 'a, T>(
+    pub fn transaction<'a, 'b: 'a, T, E: Error + 'static + From<StorageError>>(
         &'b self,
-        f: impl Fn(Transaction<'a>) -> Result<T>,
-    ) -> Result<T> {
+        f: impl Fn(Transaction<'a>) -> Result<T, E>,
+    ) -> Result<T, E> {
         loop {
             let transaction = unsafe {
                 let transaction = rocksdb_transaction_begin(
@@ -380,7 +387,8 @@ impl Db {
             match result {
                 Ok(result) => {
                     unsafe {
-                        ffi_result!(rocksdb_transaction_commit_with_status(transaction))?;
+                        ffi_result!(rocksdb_transaction_commit_with_status(transaction))
+                            .map_err(StorageError::from)?;
                         rocksdb_transaction_destroy(transaction);
                         rocksdb_readoptions_destroy(read_options);
                     }
@@ -388,22 +396,22 @@ impl Db {
                 }
                 Err(e) => {
                     unsafe {
-                        ffi_result!(rocksdb_transaction_rollback_with_status(transaction))?;
+                        ffi_result!(rocksdb_transaction_rollback_with_status(transaction))
+                            .map_err(StorageError::from)?;
                         rocksdb_transaction_destroy(transaction);
                         rocksdb_readoptions_destroy(read_options);
                     }
-                    let is_conflict_error = e.get_ref().map_or(false, |error| {
-                        let mut error: &dyn std::error::Error = error;
-                        // We use the narroest source: as a chance to be a RocksDB status
-                        while let Some(e) = error.source() {
-                            error = e;
-                        }
+                    // We look for the root error
+                    let mut error: &(dyn Error + 'static) = &e;
+                    while let Some(e) = error.source() {
+                        error = e;
+                    }
+                    let is_conflict_error =
                         error.downcast_ref::<ErrorStatus>().map_or(false, |e| {
                             e.0.code == rocksdb_status_code_t_rocksdb_status_code_busy
                                 || e.0.code == rocksdb_status_code_t_rocksdb_status_code_timed_out
                                 || e.0.code == rocksdb_status_code_t_rocksdb_status_code_try_again
-                        })
-                    });
+                        });
                     if is_conflict_error {
                         // We give a chance to the OS to do something else before retrying in order to help avoiding an other conflict
                         yield_now();
@@ -416,18 +424,19 @@ impl Db {
         }
     }
 
-    pub fn flush(&self, column_family: &ColumnFamily) -> Result<()> {
+    pub fn flush(&self, column_family: &ColumnFamily) -> Result<(), StorageError> {
         unsafe {
             ffi_result!(rocksdb_transactiondb_flush_cf_with_status(
                 self.0.db,
                 self.0.flush_options,
                 column_family.0,
-            ))
+            ))?;
         }
+        Ok(())
     }
 
     #[allow(clippy::unnecessary_wraps)]
-    pub fn compact(&self, column_family: &ColumnFamily) -> Result<()> {
+    pub fn compact(&self, column_family: &ColumnFamily) -> Result<(), StorageError> {
         unsafe {
             ffi_result!(rocksdb_transactiondb_compact_range_cf_opt_with_status(
                 self.0.db,
@@ -437,11 +446,12 @@ impl Db {
                 0,
                 ptr::null(),
                 0,
-            ))
+            ))?;
         }
+        Ok(())
     }
 
-    pub fn new_sst_file(&self) -> Result<SstFileWriter> {
+    pub fn new_sst_file(&self) -> Result<SstFileWriter, StorageError> {
         unsafe {
             let path = self.0.path.join(random::<u128>().to_string());
             let writer = rocksdb_sstfilewriter_create(self.0.env_options, self.0.options);
@@ -453,7 +463,10 @@ impl Db {
         }
     }
 
-    pub fn insert_stt_files(&self, ssts_for_cf: &[(&ColumnFamily, PathBuf)]) -> Result<()> {
+    pub fn insert_stt_files(
+        &self,
+        ssts_for_cf: &[(&ColumnFamily, PathBuf)],
+    ) -> Result<(), StorageError> {
         let mut paths_by_cf = HashMap::<_, Vec<_>>::new();
         for (cf, path) in ssts_for_cf {
             paths_by_cf
@@ -479,8 +492,9 @@ impl Db {
                 self.0.db,
                 args.as_ptr(),
                 args.len()
-            ))
+            ))?;
         }
+        Ok(())
     }
 }
 
@@ -530,7 +544,11 @@ impl Drop for Reader {
 }
 
 impl Reader {
-    pub fn get(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<Option<PinnableSlice>> {
+    pub fn get(
+        &self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+    ) -> Result<Option<PinnableSlice>, StorageError> {
         unsafe {
             let slice = match &self.inner {
                 InnerReader::Snapshot(inner) => {
@@ -552,7 +570,9 @@ impl Reader {
                             key.len()
                         ))
                     } else {
-                        return Err(invalid_input_error("The transaction is already ended"));
+                        return Err(StorageError::Other(
+                            "The transaction is already ended".into(),
+                        ));
                     }
                 }
             }?;
@@ -564,15 +584,23 @@ impl Reader {
         }
     }
 
-    pub fn contains_key(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<bool> {
+    pub fn contains_key(
+        &self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+    ) -> Result<bool, StorageError> {
         Ok(self.get(column_family, key)?.is_some()) //TODO: optimize
     }
 
-    pub fn iter(&self, column_family: &ColumnFamily) -> Result<Iter> {
+    pub fn iter(&self, column_family: &ColumnFamily) -> Result<Iter, StorageError> {
         self.scan_prefix(column_family, &[])
     }
 
-    pub fn scan_prefix(&self, column_family: &ColumnFamily, prefix: &[u8]) -> Result<Iter> {
+    pub fn scan_prefix(
+        &self,
+        column_family: &ColumnFamily,
+        prefix: &[u8],
+    ) -> Result<Iter, StorageError> {
         //We generate the upper bound
         let upper_bound = {
             let mut bound = prefix.to_vec();
@@ -612,7 +640,9 @@ impl Reader {
                     if let Some(inner) = inner.upgrade() {
                         rocksdb_transaction_create_iterator_cf(*inner, options, column_family.0)
                     } else {
-                        return Err(invalid_input_error("The transaction is already ended"));
+                        return Err(StorageError::Other(
+                            "The transaction is already ended".into(),
+                        ));
                     }
                 }
             };
@@ -633,7 +663,7 @@ impl Reader {
         }
     }
 
-    pub fn len(&self, column_family: &ColumnFamily) -> Result<usize> {
+    pub fn len(&self, column_family: &ColumnFamily) -> Result<usize, StorageError> {
         let mut count = 0;
         let mut iter = self.iter(column_family)?;
         while iter.is_valid() {
@@ -644,7 +674,7 @@ impl Reader {
         Ok(count)
     }
 
-    pub fn is_empty(&self, column_family: &ColumnFamily) -> Result<bool> {
+    pub fn is_empty(&self, column_family: &ColumnFamily) -> Result<bool, StorageError> {
         let iter = self.iter(column_family)?;
         iter.status()?; // We makes sure there is no read problem
         Ok(!iter.is_valid())
@@ -669,7 +699,7 @@ impl Transaction<'_> {
         &self,
         column_family: &ColumnFamily,
         key: &[u8],
-    ) -> Result<bool> {
+    ) -> Result<bool, StorageError> {
         unsafe {
             let slice = ffi_result!(rocksdb_transaction_get_for_update_pinned_cf_with_status(
                 *self.transaction,
@@ -682,7 +712,12 @@ impl Transaction<'_> {
         }
     }
 
-    pub fn insert(&mut self, column_family: &ColumnFamily, key: &[u8], value: &[u8]) -> Result<()> {
+    pub fn insert(
+        &mut self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+        value: &[u8],
+    ) -> Result<(), StorageError> {
         unsafe {
             ffi_result!(rocksdb_transaction_put_cf_with_status(
                 *self.transaction,
@@ -691,23 +726,29 @@ impl Transaction<'_> {
                 key.len(),
                 value.as_ptr() as *const c_char,
                 value.len(),
-            ))
+            ))?;
         }
+        Ok(())
     }
 
-    pub fn insert_empty(&mut self, column_family: &ColumnFamily, key: &[u8]) -> Result<()> {
+    pub fn insert_empty(
+        &mut self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+    ) -> Result<(), StorageError> {
         self.insert(column_family, key, &[])
     }
 
-    pub fn remove(&mut self, column_family: &ColumnFamily, key: &[u8]) -> Result<()> {
+    pub fn remove(&mut self, column_family: &ColumnFamily, key: &[u8]) -> Result<(), StorageError> {
         unsafe {
             ffi_result!(rocksdb_transaction_delete_cf_with_status(
                 *self.transaction,
                 column_family.0,
                 key.as_ptr() as *const c_char,
                 key.len(),
-            ))
+            ))?;
         }
+        Ok(())
     }
 }
 
@@ -815,8 +856,11 @@ impl Iter {
         self.is_currently_valid
     }
 
-    pub fn status(&self) -> Result<()> {
-        unsafe { ffi_result!(rocksdb_iter_get_status(self.iter)) }
+    pub fn status(&self) -> Result<(), StorageError> {
+        unsafe {
+            ffi_result!(rocksdb_iter_get_status(self.iter))?;
+        }
+        Ok(())
     }
 
     pub fn next(&mut self) {
@@ -853,7 +897,7 @@ impl Drop for SstFileWriter {
 }
 
 impl SstFileWriter {
-    pub fn insert(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
+    pub fn insert(&mut self, key: &[u8], value: &[u8]) -> Result<(), StorageError> {
         unsafe {
             ffi_result!(rocksdb_sstfilewriter_put_with_status(
                 self.writer,
@@ -861,52 +905,21 @@ impl SstFileWriter {
                 key.len(),
                 value.as_ptr() as *const c_char,
                 value.len(),
-            ))
+            ))?;
         }
+        Ok(())
     }
 
-    pub fn insert_empty(&mut self, key: &[u8]) -> Result<()> {
+    pub fn insert_empty(&mut self, key: &[u8]) -> Result<(), StorageError> {
         self.insert(key, &[])
     }
 
-    pub fn finish(self) -> Result<PathBuf> {
+    pub fn finish(self) -> Result<PathBuf, StorageError> {
         unsafe {
             ffi_result!(rocksdb_sstfilewriter_finish_with_status(self.writer))?;
         }
         Ok(self.path.clone())
     }
-}
-
-fn convert_status(status: rocksdb_status_t) -> Result<()> {
-    let kind = if status.code == rocksdb_status_code_t_rocksdb_status_code_ok {
-        return Ok(()); // No error
-    } else if status.code == rocksdb_status_code_t_rocksdb_status_code_not_supported {
-        ErrorKind::Unsupported
-    } else if status.code == rocksdb_status_code_t_rocksdb_status_code_invalid_argument {
-        ErrorKind::InvalidInput
-    } else if status.code == rocksdb_status_code_t_rocksdb_status_code_timed_out {
-        ErrorKind::TimedOut
-    } else if status.code == rocksdb_status_code_t_rocksdb_status_code_busy {
-        ErrorKind::Other // TODO ErrorKind::ResourceBusy
-    } else if status.code == rocksdb_status_code_t_rocksdb_status_code_expired {
-        ErrorKind::TimedOut
-    } else if status.code == rocksdb_status_code_t_rocksdb_status_code_io_error
-        && status.subcode == rocksdb_status_subcode_t_rocksdb_status_subcode_no_space
-    {
-        ErrorKind::Other // TODO ErrorKind::StorageFull
-    } else if status.code == rocksdb_status_code_t_rocksdb_status_code_aborted
-        && status.subcode == rocksdb_status_subcode_t_rocksdb_status_subcode_memory_limit
-    {
-        ErrorKind::OutOfMemory
-    } else if (status.code == rocksdb_status_code_t_rocksdb_status_code_not_found
-        || status.code == rocksdb_status_code_t_rocksdb_status_code_io_error)
-        && status.subcode == rocksdb_status_subcode_t_rocksdb_status_subcode_path_not_found
-    {
-        ErrorKind::NotFound
-    } else {
-        ErrorKind::Other
-    };
-    Err(Error::new(kind, ErrorStatus(status)))
 }
 
 #[derive(Debug)]
@@ -933,17 +946,39 @@ impl fmt::Display for ErrorStatus {
     }
 }
 
-impl std::error::Error for ErrorStatus {}
+impl Error for ErrorStatus {}
+
+impl From<ErrorStatus> for StorageError {
+    fn from(status: ErrorStatus) -> Self {
+        if status.0.code == rocksdb_status_code_t_rocksdb_status_code_io_error {
+            let kind =
+                if status.0.subcode == rocksdb_status_subcode_t_rocksdb_status_subcode_no_space {
+                    io::ErrorKind::Other // TODO ErrorKind::StorageFull
+                } else if status.0.subcode
+                    == rocksdb_status_subcode_t_rocksdb_status_subcode_path_not_found
+                {
+                    io::ErrorKind::NotFound
+                } else {
+                    io::ErrorKind::Other
+                };
+            Self::Io(io::Error::new(kind, status))
+        } else if status.0.code == rocksdb_status_code_t_rocksdb_status_code_corruption {
+            Self::Corruption(CorruptionError::new(status))
+        } else {
+            Self::Other(Box::new(status))
+        }
+    }
+}
 
 struct UnsafeEnv(*mut rocksdb_env_t);
 
 // Hack for lazy_static. OK because only written in lazy static and used in a thread-safe way by RocksDB
 unsafe impl Sync for UnsafeEnv {}
 
-fn path_to_cstring(path: &Path) -> Result<CString> {
-    CString::new(
+fn path_to_cstring(path: &Path) -> Result<CString, StorageError> {
+    Ok(CString::new(
         path.to_str()
             .ok_or_else(|| invalid_input_error("The DB path is not valid UTF-8"))?,
     )
-    .map_err(invalid_input_error)
+    .map_err(|e| invalid_input_error(format!("The DB path contains null bytes: {}", e)))?)
 }

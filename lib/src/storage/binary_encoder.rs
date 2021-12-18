@@ -1,8 +1,8 @@
-use crate::error::invalid_data_error;
 use crate::model::xsd::*;
 use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, EncodedTriple, StrHash};
 use crate::storage::small_string::SmallString;
-use std::io;
+use crate::storage::StorageError;
+use crate::store::CorruptionError;
 use std::io::{Cursor, Read};
 use std::mem::size_of;
 use std::rc::Rc;
@@ -64,7 +64,7 @@ pub enum QuadEncoding {
 }
 
 impl QuadEncoding {
-    pub fn decode(self, buffer: &[u8]) -> io::Result<EncodedQuad> {
+    pub fn decode(self, buffer: &[u8]) -> Result<EncodedQuad, StorageError> {
         let mut cursor = Cursor::new(&buffer);
         match self {
             QuadEncoding::Spog => cursor.read_spog_quad(),
@@ -80,14 +80,14 @@ impl QuadEncoding {
     }
 }
 
-pub fn decode_term(buffer: &[u8]) -> io::Result<EncodedTerm> {
+pub fn decode_term(buffer: &[u8]) -> Result<EncodedTerm, StorageError> {
     Cursor::new(&buffer).read_term()
 }
 
 pub trait TermReader {
-    fn read_term(&mut self) -> io::Result<EncodedTerm>;
+    fn read_term(&mut self) -> Result<EncodedTerm, StorageError>;
 
-    fn read_spog_quad(&mut self) -> io::Result<EncodedQuad> {
+    fn read_spog_quad(&mut self) -> Result<EncodedQuad, StorageError> {
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
         let object = self.read_term()?;
@@ -100,7 +100,7 @@ pub trait TermReader {
         })
     }
 
-    fn read_posg_quad(&mut self) -> io::Result<EncodedQuad> {
+    fn read_posg_quad(&mut self) -> Result<EncodedQuad, StorageError> {
         let predicate = self.read_term()?;
         let object = self.read_term()?;
         let subject = self.read_term()?;
@@ -113,7 +113,7 @@ pub trait TermReader {
         })
     }
 
-    fn read_ospg_quad(&mut self) -> io::Result<EncodedQuad> {
+    fn read_ospg_quad(&mut self) -> Result<EncodedQuad, StorageError> {
         let object = self.read_term()?;
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
@@ -126,7 +126,7 @@ pub trait TermReader {
         })
     }
 
-    fn read_gspo_quad(&mut self) -> io::Result<EncodedQuad> {
+    fn read_gspo_quad(&mut self) -> Result<EncodedQuad, StorageError> {
         let graph_name = self.read_term()?;
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
@@ -139,7 +139,7 @@ pub trait TermReader {
         })
     }
 
-    fn read_gpos_quad(&mut self) -> io::Result<EncodedQuad> {
+    fn read_gpos_quad(&mut self) -> Result<EncodedQuad, StorageError> {
         let graph_name = self.read_term()?;
         let predicate = self.read_term()?;
         let object = self.read_term()?;
@@ -152,7 +152,7 @@ pub trait TermReader {
         })
     }
 
-    fn read_gosp_quad(&mut self) -> io::Result<EncodedQuad> {
+    fn read_gosp_quad(&mut self) -> Result<EncodedQuad, StorageError> {
         let graph_name = self.read_term()?;
         let object = self.read_term()?;
         let subject = self.read_term()?;
@@ -165,7 +165,7 @@ pub trait TermReader {
         })
     }
 
-    fn read_dspo_quad(&mut self) -> io::Result<EncodedQuad> {
+    fn read_dspo_quad(&mut self) -> Result<EncodedQuad, StorageError> {
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
         let object = self.read_term()?;
@@ -177,7 +177,7 @@ pub trait TermReader {
         })
     }
 
-    fn read_dpos_quad(&mut self) -> io::Result<EncodedQuad> {
+    fn read_dpos_quad(&mut self) -> Result<EncodedQuad, StorageError> {
         let predicate = self.read_term()?;
         let object = self.read_term()?;
         let subject = self.read_term()?;
@@ -189,7 +189,7 @@ pub trait TermReader {
         })
     }
 
-    fn read_dosp_quad(&mut self) -> io::Result<EncodedQuad> {
+    fn read_dosp_quad(&mut self) -> Result<EncodedQuad, StorageError> {
         let object = self.read_term()?;
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
@@ -203,7 +203,7 @@ pub trait TermReader {
 }
 
 impl<R: Read> TermReader for R {
-    fn read_term(&mut self) -> io::Result<EncodedTerm> {
+    fn read_term(&mut self) -> Result<EncodedTerm, StorageError> {
         let mut type_buffer = [0];
         self.read_exact(&mut type_buffer)?;
         match type_buffer[0] {
@@ -225,7 +225,7 @@ impl<R: Read> TermReader for R {
                 let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
                 Ok(EncodedTerm::SmallBlankNode(
-                    SmallString::from_be_bytes(buffer).map_err(invalid_data_error)?,
+                    SmallString::from_be_bytes(buffer).map_err(CorruptionError::new)?,
                 ))
             }
             TYPE_BIG_BLANK_NODE_ID => {
@@ -241,9 +241,10 @@ impl<R: Read> TermReader for R {
                 let mut value_buffer = [0; 16];
                 self.read_exact(&mut value_buffer)?;
                 Ok(EncodedTerm::SmallSmallLangStringLiteral {
-                    value: SmallString::from_be_bytes(value_buffer).map_err(invalid_data_error)?,
+                    value: SmallString::from_be_bytes(value_buffer)
+                        .map_err(CorruptionError::new)?,
                     language: SmallString::from_be_bytes(language_buffer)
-                        .map_err(invalid_data_error)?,
+                        .map_err(CorruptionError::new)?,
                 })
             }
             TYPE_SMALL_BIG_LANG_STRING_LITERAL => {
@@ -252,7 +253,8 @@ impl<R: Read> TermReader for R {
                 let mut value_buffer = [0; 16];
                 self.read_exact(&mut value_buffer)?;
                 Ok(EncodedTerm::SmallBigLangStringLiteral {
-                    value: SmallString::from_be_bytes(value_buffer).map_err(invalid_data_error)?,
+                    value: SmallString::from_be_bytes(value_buffer)
+                        .map_err(CorruptionError::new)?,
                     language_id: StrHash::from_be_bytes(language_buffer),
                 })
             }
@@ -264,7 +266,7 @@ impl<R: Read> TermReader for R {
                 Ok(EncodedTerm::BigSmallLangStringLiteral {
                     value_id: StrHash::from_be_bytes(value_buffer),
                     language: SmallString::from_be_bytes(language_buffer)
-                        .map_err(invalid_data_error)?,
+                        .map_err(CorruptionError::new)?,
                 })
             }
             TYPE_BIG_BIG_LANG_STRING_LITERAL => {
@@ -284,7 +286,8 @@ impl<R: Read> TermReader for R {
                 self.read_exact(&mut value_buffer)?;
                 Ok(EncodedTerm::SmallTypedLiteral {
                     datatype_id: StrHash::from_be_bytes(datatype_buffer),
-                    value: SmallString::from_be_bytes(value_buffer).map_err(invalid_data_error)?,
+                    value: SmallString::from_be_bytes(value_buffer)
+                        .map_err(CorruptionError::new)?,
                 })
             }
             TYPE_BIG_TYPED_LITERAL => {
@@ -301,7 +304,7 @@ impl<R: Read> TermReader for R {
                 let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
                 Ok(EncodedTerm::SmallStringLiteral(
-                    SmallString::from_be_bytes(buffer).map_err(invalid_data_error)?,
+                    SmallString::from_be_bytes(buffer).map_err(CorruptionError::new)?,
                 ))
             }
             TYPE_BIG_STRING_LITERAL => {
@@ -405,7 +408,7 @@ impl<R: Read> TermReader for R {
                 predicate: self.read_term()?,
                 object: self.read_term()?,
             }))),
-            _ => Err(invalid_data_error("the term buffer has an invalid type id")),
+            _ => Err(CorruptionError::msg("the term buffer has an invalid type id").into()),
         }
     }
 }
@@ -646,7 +649,6 @@ mod tests {
     use crate::storage::numeric_encoder::*;
     use std::cell::RefCell;
     use std::collections::HashMap;
-    use std::convert::Infallible;
 
     #[derive(Default)]
     struct MemoryStrStore {
@@ -654,13 +656,11 @@ mod tests {
     }
 
     impl StrLookup for MemoryStrStore {
-        type Error = Infallible;
-
-        fn get_str(&self, key: &StrHash) -> Result<Option<String>, Infallible> {
+        fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
             Ok(self.id2str.borrow().get(key).cloned())
         }
 
-        fn contains_str(&self, key: &StrHash) -> Result<bool, Infallible> {
+        fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError> {
             Ok(self.id2str.borrow().contains_key(key))
         }
     }
@@ -669,8 +669,7 @@ mod tests {
         fn insert_term(&self, term: TermRef<'_>, encoded: &EncodedTerm) {
             insert_term(term, encoded, &mut |h, v| {
                 self.insert_str(h, v);
-                let r: Result<(), Infallible> = Ok(());
-                r
+                Ok(())
             })
             .unwrap();
         }
