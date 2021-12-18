@@ -50,15 +50,33 @@ The server provides an HTML UI, based on [YASGUI](https://yasgui.triply.cc), wit
 
 It provides the following REST actions:
 * `/query` allows to evaluate SPARQL queries against the server repository following the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/#query-operation).
-  For example `curl -X POST -H 'Content-Type:application/sparql-query' --data 'SELECT * WHERE { ?s ?p ?o } LIMIT 10' http://localhost:7878/query`.
+  For example:
+  ```bash
+  curl -X POST -H 'Content-Type:application/sparql-query' \
+    --data 'SELECT * WHERE { ?s ?p ?o } LIMIT 10' http://localhost:7878/query
+  ```
   This action supports content negotiation and could return [Turtle](https://www.w3.org/TR/turtle/), [N-Triples](https://www.w3.org/TR/n-triples/), [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/), [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/) and [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/).
 * `/update` allows to execute SPARQL updates against the server repository following the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/#update-operation).
-  For example `curl -X POST -H 'Content-Type: application/sparql-update' --data 'DELETE WHERE { <http://example.com/s> ?p ?o }' http://localhost:7878/update`.
+  For example: 
+  ```sh
+  curl -X POST -H 'Content-Type: application/sparql-update' \
+    --data 'DELETE WHERE { <http://example.com/s> ?p ?o }' http://localhost:7878/update
+  ```
 * `/store` allows to retrieve and change the server content using the [SPARQL 1.1 Graph Store HTTP Protocol](https://www.w3.org/TR/sparql11-http-rdf-update/).
-  For example `curl -f -X POST -H 'Content-Type:application/n-triples' --data-binary "@MY_FILE.nt" http://localhost:7878/store?graph=http://example.com/g` will add the N-Triples file MY_FILE.nt to the server dataset inside of the `http://example.com/g` named graph.
+  For example:
+  ```sh
+  curl -f -X POST -H 'Content-Type:application/n-triples' \
+    --data-binary "@MY_FILE.nt" "http://localhost:7878/store?graph=http://example.com/g"
+  ```
+  will add the N-Triples file `MY_FILE.nt` to the server dataset inside of the `http://example.com/g` named graph.
   [Turtle](https://www.w3.org/TR/turtle/), [N-Triples](https://www.w3.org/TR/n-triples/) and [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) are supported.
   It is also possible to `POST`, `PUT` and `GET` the complete RDF dataset on the server using RDF dataset formats ([TriG](https://www.w3.org/TR/trig/) and [N-Quads](https://www.w3.org/TR/n-quads/)) against the `/store` endpoint.
-  For example `curl -f -X POST -H 'Content-Type:application/n-quads' --data-binary "@MY_FILE.nq" http://localhost:7878/store` will add the N-Quads file MY_FILE.nq to the server dataset.
+  For example:
+  ```sh
+  curl -f -X POST -H 'Content-Type:application/n-quads' \
+    --data-binary "@MY_FILE.nq" http://localhost:7878/store
+  ```
+  will add the N-Quads file `MY_FILE.nq` to the server dataset.
 
 Use `oxigraph_server --help` to see the possible options when starting the server.
 
