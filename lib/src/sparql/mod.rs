@@ -3,30 +3,27 @@
 //! Stores execute SPARQL. See [`Store`](crate::store::Store::query()) for an example.
 
 mod algebra;
-mod csv_results;
 mod dataset;
 mod error;
 mod eval;
 mod http;
-mod json_results;
+pub mod io;
 mod model;
 mod plan;
 mod plan_builder;
 mod service;
 mod update;
-mod xml_results;
 
 use crate::model::{NamedNode, Term};
 pub use crate::sparql::algebra::{Query, Update};
 use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::EvaluationError;
 use crate::sparql::eval::SimpleEvaluator;
-pub use crate::sparql::model::QueryResults;
-pub use crate::sparql::model::QueryResultsFormat;
-pub use crate::sparql::model::QuerySolution;
-pub use crate::sparql::model::QuerySolutionIter;
-pub use crate::sparql::model::QueryTripleIter;
-pub use crate::sparql::model::{Variable, VariableNameParseError};
+pub use crate::sparql::io::QueryResultsFormat;
+pub use crate::sparql::model::{
+    QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter, Variable,
+    VariableNameParseError,
+};
 use crate::sparql::plan_builder::PlanBuilder;
 pub use crate::sparql::service::ServiceHandler;
 use crate::sparql::service::{EmptyServiceHandler, ErrorConversionServiceHandler};

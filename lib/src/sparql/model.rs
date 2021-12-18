@@ -2,10 +2,8 @@ use crate::error::invalid_input_error;
 use crate::io::GraphFormat;
 use crate::io::GraphSerializer;
 use crate::model::*;
-use crate::sparql::csv_results::{read_tsv_results, write_csv_results, write_tsv_results};
 use crate::sparql::error::EvaluationError;
-use crate::sparql::json_results::{read_json_results, write_json_results};
-use crate::sparql::xml_results::{read_xml_results, write_xml_results};
+use crate::sparql::io::{QueryResultsFormat, QueryResultsParser, QueryResultsSerializer};
 use std::error::Error;
 use std::io::{BufRead, Write};
 use std::rc::Rc;
@@ -24,14 +22,9 @@ pub enum QueryResults {
 impl QueryResults {
     /// Reads a SPARQL query results serialization.
     pub fn read(reader: impl BufRead + 'static, format: QueryResultsFormat) -> io::Result<Self> {
-        match format {
-            QueryResultsFormat::Xml => read_xml_results(reader),
-            QueryResultsFormat::Json => read_json_results(reader),
-            QueryResultsFormat::Csv => Err(invalid_input_error(
-                "CSV SPARQL results format parsing is not implemented",
-            )),
-            QueryResultsFormat::Tsv => read_tsv_results(reader),
-        }
+        Ok(QueryResultsParser::from_format(format)
+            .read_results(reader)?
+            .into())
     }
 
     /// Writes the query results (solutions or boolean).
@@ -57,12 +50,44 @@ impl QueryResults {
         writer: impl Write,
         format: QueryResultsFormat,
     ) -> Result<(), EvaluationError> {
-        match format {
-            QueryResultsFormat::Xml => write_xml_results(self, writer),
-            QueryResultsFormat::Json => write_json_results(self, writer),
-            QueryResultsFormat::Csv => write_csv_results(self, writer),
-            QueryResultsFormat::Tsv => write_tsv_results(self, writer),
+        let serializer = QueryResultsSerializer::from_format(format);
+        match self {
+            Self::Boolean(value) => {
+                serializer.write_boolean_result(writer, value)?;
+            }
+            QueryResults::Solutions(solutions) => {
+                let mut writer = serializer.solutions_writer(writer, solutions.variables())?;
+                for solution in solutions {
+                    writer.write(
+                        solution?
+                            .values
+                            .iter()
+                            .map(|t| t.as_ref().map(|t| t.as_ref())),
+                    )?;
+                }
+                writer.finish()?;
+            }
+            QueryResults::Graph(triples) => {
+                let mut writer = serializer.solutions_writer(
+                    writer,
+                    &[
+                        Variable::new_unchecked("subject"),
+                        Variable::new_unchecked("predicate"),
+                        Variable::new_unchecked("object"),
+                    ],
+                )?;
+                for triple in triples {
+                    let triple = triple?;
+                    writer.write([
+                        Some(triple.subject.as_ref().into()),
+                        Some(triple.predicate.as_ref().into()),
+                        Some(triple.object.as_ref()),
+                    ])?;
+                }
+                writer.finish()?;
+            }
         }
+        Ok(())
     }
 
     /// Writes the graph query results.
@@ -110,115 +135,6 @@ impl From<QuerySolutionIter> for QueryResults {
     #[inline]
     fn from(value: QuerySolutionIter) -> Self {
         Self::Solutions(value)
-    }
-}
-
-/// [SPARQL query](https://www.w3.org/TR/sparql11-query/) results serialization formats.
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
-#[non_exhaustive]
-pub enum QueryResultsFormat {
-    /// [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/)
-    Xml,
-    /// [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/)
-    Json,
-    /// [SPARQL Query Results CSV Format](https://www.w3.org/TR/sparql11-results-csv-tsv/)
-    Csv,
-    /// [SPARQL Query Results TSV Format](https://www.w3.org/TR/sparql11-results-csv-tsv/)
-    Tsv,
-}
-
-impl QueryResultsFormat {
-    /// The format canonical IRI according to the [Unique URIs for file formats registry](https://www.w3.org/ns/formats/).
-    ///
-    /// ```
-    /// use oxigraph::sparql::QueryResultsFormat;
-    ///
-    /// assert_eq!(QueryResultsFormat::Json.iri(), "http://www.w3.org/ns/formats/SPARQL_Results_JSON")
-    /// ```
-    #[inline]
-    pub fn iri(self) -> &'static str {
-        match self {
-            QueryResultsFormat::Xml => "http://www.w3.org/ns/formats/SPARQL_Results_XML",
-            QueryResultsFormat::Json => "http://www.w3.org/ns/formats/SPARQL_Results_JSON",
-            QueryResultsFormat::Csv => "http://www.w3.org/ns/formats/SPARQL_Results_CSV",
-            QueryResultsFormat::Tsv => "http://www.w3.org/ns/formats/SPARQL_Results_TSV",
-        }
-    }
-    /// The format [IANA media type](https://tools.ietf.org/html/rfc2046).
-    ///
-    /// ```
-    /// use oxigraph::sparql::QueryResultsFormat;
-    ///
-    /// assert_eq!(QueryResultsFormat::Json.media_type(), "application/sparql-results+json")
-    /// ```
-    #[inline]
-    pub fn media_type(self) -> &'static str {
-        match self {
-            QueryResultsFormat::Xml => "application/sparql-results+xml",
-            QueryResultsFormat::Json => "application/sparql-results+json",
-            QueryResultsFormat::Csv => "text/csv; charset=utf-8",
-            QueryResultsFormat::Tsv => "text/tab-separated-values; charset=utf-8",
-        }
-    }
-
-    /// The format [IANA-registered](https://tools.ietf.org/html/rfc2046) file extension.
-    ///
-    /// ```
-    /// use oxigraph::sparql::QueryResultsFormat;
-    ///
-    /// assert_eq!(QueryResultsFormat::Json.file_extension(), "srj")
-    /// ```
-    #[inline]
-    pub fn file_extension(self) -> &'static str {
-        match self {
-            QueryResultsFormat::Xml => "srx",
-            QueryResultsFormat::Json => "srj",
-            QueryResultsFormat::Csv => "csv",
-            QueryResultsFormat::Tsv => "tsv",
-        }
-    }
-
-    /// Looks for a known format from a media type.
-    ///
-    /// It supports some media type aliases.
-    /// For example "application/xml" is going to return `Xml` even if it is not its canonical media type.
-    ///
-    /// Example:
-    /// ```
-    /// use oxigraph::sparql::QueryResultsFormat;
-    ///
-    /// assert_eq!(QueryResultsFormat::from_media_type("application/sparql-results+json; charset=utf-8"), Some(QueryResultsFormat::Json))
-    /// ```
-    pub fn from_media_type(media_type: &str) -> Option<Self> {
-        match media_type.split(';').next()?.trim() {
-            "application/sparql-results+xml" | "application/xml" | "text/xml" => Some(Self::Xml),
-            "application/sparql-results+json" | "application/json" | "text/json" => {
-                Some(Self::Json)
-            }
-            "text/csv" => Some(Self::Csv),
-            "text/tab-separated-values" | "text/tsv" => Some(Self::Tsv),
-            _ => None,
-        }
-    }
-
-    /// Looks for a known format from an extension.
-    ///
-    /// It supports some aliases.
-    ///
-    /// Example:
-    /// ```
-    /// use oxigraph::sparql::QueryResultsFormat;
-    ///
-    /// assert_eq!(QueryResultsFormat::from_extension("json"), Some(QueryResultsFormat::Json))
-    /// ```
-    pub fn from_extension(extension: &str) -> Option<Self> {
-        match extension {
-            "srx" | "xml" => Some(Self::Xml),
-            "srj" | "json" => Some(Self::Json),
-            "csv" | "txt" => Some(Self::Csv),
-            "tsv" => Some(Self::Tsv),
-            _ => None,
-        }
     }
 }
 
@@ -288,8 +204,8 @@ impl Iterator for QuerySolutionIter {
 ///
 /// It is the equivalent of a row in SQL.
 pub struct QuerySolution {
-    values: Vec<Option<Term>>,
-    variables: Rc<Vec<Variable>>,
+    pub(super) values: Vec<Option<Term>>,
+    pub(super) variables: Rc<Vec<Variable>>,
 }
 
 impl QuerySolution {

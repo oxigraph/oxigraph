@@ -38,7 +38,7 @@ pub struct GraphParser {
 }
 
 impl GraphParser {
-    /// Builds a parser for the given format
+    /// Builds a parser for the given format.
     pub fn from_format(format: GraphFormat) -> Self {
         Self {
             format,
@@ -46,7 +46,7 @@ impl GraphParser {
         }
     }
 
-    /// Provides an IRI that could be used to resolve the file relative IRIs
+    /// Provides an IRI that could be used to resolve the file relative IRIs.
     ///
     /// ```
     /// use oxigraph::io::{GraphFormat, GraphParser};
@@ -66,7 +66,7 @@ impl GraphParser {
         Ok(self)
     }
 
-    /// Executes the parsing itself on a [`BufRead`](std::io::BufRead) implementation and returns an iterator of triples
+    /// Executes the parsing itself on a [`BufRead`](std::io::BufRead) implementation and returns an iterator of triples.
     #[allow(clippy::unnecessary_wraps)]
     pub fn read_triples<R: BufRead>(&self, reader: R) -> Result<TripleReader<R>, ParserError> {
         Ok(TripleReader {
@@ -187,7 +187,7 @@ pub struct DatasetParser {
 }
 
 impl DatasetParser {
-    /// Builds a parser for the given format
+    /// Builds a parser for the given format.
     pub fn from_format(format: DatasetFormat) -> Self {
         Self {
             format,
@@ -195,7 +195,7 @@ impl DatasetParser {
         }
     }
 
-    /// Provides an IRI that could be used to resolve the file relative IRIs
+    /// Provides an IRI that could be used to resolve the file relative IRIs.
     ///
     /// ```
     /// use oxigraph::io::{DatasetFormat, DatasetParser};
@@ -215,7 +215,7 @@ impl DatasetParser {
         Ok(self)
     }
 
-    /// Executes the parsing itself on a [`BufRead`](std::io::BufRead) implementation and returns an iterator of quads
+    /// Executes the parsing itself on a [`BufRead`](std::io::BufRead) implementation and returns an iterator of quads.
     #[allow(clippy::unnecessary_wraps)]
     pub fn read_quads<R: BufRead>(&self, reader: R) -> Result<QuadReader<R>, ParserError> {
         Ok(QuadReader {
@@ -442,9 +442,23 @@ impl From<RdfXmlError> for ParserError {
     }
 }
 
+impl From<TermParseError> for ParserError {
+    fn from(error: TermParseError) -> Self {
+        Self::Syntax(SyntaxError {
+            inner: SyntaxErrorKind::Term(error),
+        })
+    }
+}
+
 impl From<io::Error> for ParserError {
     fn from(error: io::Error) -> Self {
         Self::Io(error)
+    }
+}
+
+impl From<SyntaxError> for ParserError {
+    fn from(error: SyntaxError) -> Self {
+        Self::Syntax(error)
     }
 }
 
@@ -457,17 +471,40 @@ impl From<ParserError> for io::Error {
     }
 }
 
+impl From<quick_xml::Error> for ParserError {
+    fn from(error: quick_xml::Error) -> Self {
+        match error {
+            quick_xml::Error::Io(error) => Self::Io(error),
+            error => Self::Syntax(SyntaxError {
+                inner: SyntaxErrorKind::Xml(error),
+            }),
+        }
+    }
+}
+
 /// An error in the syntax of the parsed file
 #[derive(Debug)]
 pub struct SyntaxError {
-    inner: SyntaxErrorKind,
+    pub(crate) inner: SyntaxErrorKind,
 }
 
 #[derive(Debug)]
-enum SyntaxErrorKind {
+pub(crate) enum SyntaxErrorKind {
     Turtle(TurtleError),
     RdfXml(RdfXmlError),
     BaseIri { iri: String, error: IriParseError },
+    Xml(quick_xml::Error),
+    Term(TermParseError),
+    Msg { msg: String },
+}
+
+impl SyntaxError {
+    /// Builds an error from a printable error message.
+    pub(crate) fn msg(msg: impl Into<String>) -> Self {
+        Self {
+            inner: SyntaxErrorKind::Msg { msg: msg.into() },
+        }
+    }
 }
 
 impl fmt::Display for SyntaxError {
@@ -478,6 +515,9 @@ impl fmt::Display for SyntaxError {
             SyntaxErrorKind::BaseIri { iri, error } => {
                 write!(f, "Invalid base IRI '{}': {}", iri, error)
             }
+            SyntaxErrorKind::Xml(e) => e.fmt(f),
+            SyntaxErrorKind::Term(e) => e.fmt(f),
+            SyntaxErrorKind::Msg { msg } => f.write_str(msg),
         }
     }
 }
@@ -487,7 +527,9 @@ impl Error for SyntaxError {
         match &self.inner {
             SyntaxErrorKind::Turtle(e) => Some(e),
             SyntaxErrorKind::RdfXml(e) => Some(e),
-            SyntaxErrorKind::BaseIri { .. } => None,
+            SyntaxErrorKind::Xml(e) => Some(e),
+            SyntaxErrorKind::Term(e) => Some(e),
+            SyntaxErrorKind::BaseIri { .. } | SyntaxErrorKind::Msg { .. } => None,
         }
     }
 }
@@ -501,6 +543,15 @@ impl From<SyntaxError> for io::Error {
                 io::ErrorKind::InvalidInput,
                 format!("Invalid IRI '{}': {}", iri, error),
             ),
+            SyntaxErrorKind::Xml(error) => match error {
+                quick_xml::Error::Io(error) => error,
+                quick_xml::Error::UnexpectedEof(error) => {
+                    Self::new(io::ErrorKind::UnexpectedEof, error)
+                }
+                error => Self::new(io::ErrorKind::InvalidData, error),
+            },
+            SyntaxErrorKind::Term(error) => Self::new(io::ErrorKind::InvalidData, error),
+            SyntaxErrorKind::Msg { msg } => Self::new(io::ErrorKind::InvalidData, msg),
         }
     }
 }

@@ -6,8 +6,7 @@ use crate::model::*;
 use rio_api::formatter::TriplesFormatter;
 use rio_api::model as rio;
 use rio_xml::RdfXmlFormatter;
-use std::io;
-use std::io::Write;
+use std::io::{self, Write};
 
 /// A serializer for RDF graph serialization formats.
 ///
@@ -43,7 +42,7 @@ impl GraphSerializer {
         Self { format }
     }
 
-    /// Returns a `TripleWriter` allowing writing triples into the given [`Write`](std::io::Write) implementation
+    /// Returns a [`TripleWriter`] allowing writing triples into the given [`Write`](std::io::Write) implementation
     pub fn triple_writer<W: Write>(&self, writer: W) -> io::Result<TripleWriter<W>> {
         Ok(TripleWriter {
             formatter: match self.format {
@@ -182,7 +181,7 @@ impl DatasetSerializer {
         Self { format }
     }
 
-    /// Returns a `QuadWriter` allowing writing triples into the given [`Write`](std::io::Write) implementation
+    /// Returns a [`QuadWriter`] allowing writing triples into the given [`Write`](std::io::Write) implementation
     #[allow(clippy::unnecessary_wraps)]
     pub fn quad_writer<W: Write>(&self, writer: W) -> io::Result<QuadWriter<W>> {
         Ok(QuadWriter {
