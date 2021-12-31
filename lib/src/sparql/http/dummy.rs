@@ -1,7 +1,6 @@
 //! Simple HTTP client
 
-use crate::error::invalid_input_error;
-use std::io::{Empty, Result};
+use std::io::{Empty, Error, ErrorKind, Result};
 use std::time::Duration;
 
 pub struct Client {}
@@ -12,7 +11,8 @@ impl Client {
     }
 
     pub fn get(&self, _url: &str, _accept: &str) -> Result<(String, Empty)> {
-        Err(invalid_input_error(
+        Err(Error::new(
+            ErrorKind::Unsupported,
             "HTTP client is not available. Enable the feature 'http_client'",
         ))
     }
@@ -24,7 +24,8 @@ impl Client {
         _content_type: &str,
         _accept: &str,
     ) -> Result<(String, Empty)> {
-        Err(invalid_input_error(
+        Err(Error::new(
+            ErrorKind::Unsupported,
             "HTTP client is not available. Enable the feature 'http_client'",
         ))
     }

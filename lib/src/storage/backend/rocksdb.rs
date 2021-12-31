@@ -4,7 +4,6 @@
 
 #![allow(unsafe_code)]
 
-use crate::error::invalid_input_error;
 use crate::storage::error::StorageError;
 use crate::store::CorruptionError;
 use lazy_static::lazy_static;
@@ -976,9 +975,16 @@ struct UnsafeEnv(*mut rocksdb_env_t);
 unsafe impl Sync for UnsafeEnv {}
 
 fn path_to_cstring(path: &Path) -> Result<CString, StorageError> {
-    Ok(CString::new(
-        path.to_str()
-            .ok_or_else(|| invalid_input_error("The DB path is not valid UTF-8"))?,
-    )
-    .map_err(|e| invalid_input_error(format!("The DB path contains null bytes: {}", e)))?)
+    Ok(CString::new(path.to_str().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "The DB path is not valid UTF-8",
+        )
+    })?)
+    .map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("The DB path contains null bytes: {}", e),
+        )
+    })?)
 }

@@ -388,7 +388,7 @@ pub enum ParserError {
 impl ParserError {
     pub(crate) fn invalid_base_iri(iri: &str, error: IriParseError) -> Self {
         Self::Syntax(SyntaxError {
-            inner: SyntaxErrorKind::BaseIri {
+            inner: SyntaxErrorKind::InvalidBaseIri {
                 iri: iri.to_owned(),
                 error,
             },
@@ -492,7 +492,7 @@ pub struct SyntaxError {
 pub(crate) enum SyntaxErrorKind {
     Turtle(TurtleError),
     RdfXml(RdfXmlError),
-    BaseIri { iri: String, error: IriParseError },
+    InvalidBaseIri { iri: String, error: IriParseError },
     Xml(quick_xml::Error),
     Term(TermParseError),
     Msg { msg: String },
@@ -512,7 +512,7 @@ impl fmt::Display for SyntaxError {
         match &self.inner {
             SyntaxErrorKind::Turtle(e) => e.fmt(f),
             SyntaxErrorKind::RdfXml(e) => e.fmt(f),
-            SyntaxErrorKind::BaseIri { iri, error } => {
+            SyntaxErrorKind::InvalidBaseIri { iri, error } => {
                 write!(f, "Invalid base IRI '{}': {}", iri, error)
             }
             SyntaxErrorKind::Xml(e) => e.fmt(f),
@@ -529,7 +529,7 @@ impl Error for SyntaxError {
             SyntaxErrorKind::RdfXml(e) => Some(e),
             SyntaxErrorKind::Xml(e) => Some(e),
             SyntaxErrorKind::Term(e) => Some(e),
-            SyntaxErrorKind::BaseIri { .. } | SyntaxErrorKind::Msg { .. } => None,
+            SyntaxErrorKind::InvalidBaseIri { .. } | SyntaxErrorKind::Msg { .. } => None,
         }
     }
 }
@@ -539,7 +539,7 @@ impl From<SyntaxError> for io::Error {
         match error.inner {
             SyntaxErrorKind::Turtle(error) => error.into(),
             SyntaxErrorKind::RdfXml(error) => error.into(),
-            SyntaxErrorKind::BaseIri { iri, error } => Self::new(
+            SyntaxErrorKind::InvalidBaseIri { iri, error } => Self::new(
                 io::ErrorKind::InvalidInput,
                 format!("Invalid IRI '{}': {}", iri, error),
             ),

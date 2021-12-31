@@ -1,4 +1,3 @@
-use crate::error::invalid_data_error;
 use crate::model::{LiteralRef, NamedNode as OxNamedNode, NamedNodeRef, Term as OxTerm};
 use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::EvaluationError;
@@ -640,7 +639,7 @@ impl<'a> PlanBuilder<'a> {
                     self.build_for_expression(&parameters[0], variables, graph_name)?,
                 )),
                 Function::Custom(name) => {
-                    let ox_name = OxNamedNode::new(&name.iri).map_err(invalid_data_error)?;
+                    let ox_name = OxNamedNode::new(&name.iri).map_err(EvaluationError::wrap)?;
                     if self.custom_functions.contains_key(&ox_name) {
                         PlanExpression::CustomFunction(
                             ox_name,

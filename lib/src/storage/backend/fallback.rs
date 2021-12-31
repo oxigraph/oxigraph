@@ -1,9 +1,9 @@
 //! TODO: This storage is dramatically naive.
 
-use crate::error::invalid_input_error;
+use crate::storage::StorageError;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
-use std::io::Result;
+use std::error::Error;
 use std::mem::transmute;
 use std::rc::{Rc, Weak};
 use std::sync::{Arc, RwLock, RwLockWriteGuard};
@@ -18,7 +18,7 @@ pub struct ColumnFamilyDefinition {
 pub struct Db(Arc<RwLock<HashMap<ColumnFamily, BTreeMap<Vec<u8>, Vec<u8>>>>>);
 
 impl Db {
-    pub fn new(column_families: Vec<ColumnFamilyDefinition>) -> Result<Self> {
+    pub fn new(column_families: Vec<ColumnFamilyDefinition>) -> Result<Self, StorageError> {
         let mut trees = HashMap::new();
         for cf in column_families {
             trees.insert(ColumnFamily(cf.name), BTreeMap::default());
@@ -41,10 +41,10 @@ impl Db {
         Reader(InnerReader::Simple(self.0.clone()))
     }
 
-    pub fn transaction<'a, 'b: 'a, T>(
+    pub fn transaction<'a, 'b: 'a, T, E: Error + 'static + From<StorageError>>(
         &'b self,
-        f: impl Fn(Transaction<'a>) -> Result<T>,
-    ) -> Result<T> {
+        f: impl Fn(Transaction<'a>) -> Result<T, E>,
+    ) -> Result<T, E> {
         f(Transaction(Rc::new(RefCell::new(self.0.write().unwrap()))))
     }
 }
@@ -62,7 +62,11 @@ enum InnerReader {
 }
 
 impl Reader {
-    pub fn get(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<Option<Vec<u8>>> {
+    pub fn get(
+        &self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+    ) -> Result<Option<Vec<u8>>, StorageError> {
         match &self.0 {
             InnerReader::Simple(reader) => Ok(reader
                 .read()
@@ -76,13 +80,19 @@ impl Reader {
                         .get(column_family)
                         .and_then(|cf| cf.get(key).cloned()))
                 } else {
-                    Err(invalid_input_error("The transaction is already ended"))
+                    Err(StorageError::Other(
+                        "The transaction is already ended".into(),
+                    ))
                 }
             }
         }
     }
 
-    pub fn contains_key(&self, column_family: &ColumnFamily, key: &[u8]) -> Result<bool> {
+    pub fn contains_key(
+        &self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+    ) -> Result<bool, StorageError> {
         match &self.0 {
             InnerReader::Simple(reader) => Ok(reader
                 .read()
@@ -96,17 +106,23 @@ impl Reader {
                         .get(column_family)
                         .map_or(false, |cf| cf.contains_key(key)))
                 } else {
-                    Err(invalid_input_error("The transaction is already ended"))
+                    Err(StorageError::Other(
+                        "The transaction is already ended".into(),
+                    ))
                 }
             }
         }
     }
 
-    pub fn iter(&self, column_family: &ColumnFamily) -> Result<Iter> {
+    pub fn iter(&self, column_family: &ColumnFamily) -> Result<Iter, StorageError> {
         self.scan_prefix(column_family, &[])
     }
 
-    pub fn scan_prefix(&self, column_family: &ColumnFamily, prefix: &[u8]) -> Result<Iter> {
+    pub fn scan_prefix(
+        &self,
+        column_family: &ColumnFamily,
+        prefix: &[u8],
+    ) -> Result<Iter, StorageError> {
         let data: Vec<_> = match &self.0 {
             InnerReader::Simple(reader) => {
                 let trees = reader.read().unwrap();
@@ -147,7 +163,9 @@ impl Reader {
                             .collect()
                     }
                 } else {
-                    return Err(invalid_input_error("The transaction is already ended"));
+                    return Err(StorageError::Other(
+                        "The transaction is already ended".into(),
+                    ));
                 }
             }
         };
@@ -156,7 +174,7 @@ impl Reader {
         Ok(Iter { iter, current })
     }
 
-    pub fn len(&self, column_family: &ColumnFamily) -> Result<usize> {
+    pub fn len(&self, column_family: &ColumnFamily) -> Result<usize, StorageError> {
         match &self.0 {
             InnerReader::Simple(reader) => Ok(reader
                 .read()
@@ -170,13 +188,15 @@ impl Reader {
                         .get(column_family)
                         .map_or(0, |tree| tree.len()))
                 } else {
-                    Err(invalid_input_error("The transaction is already ended"))
+                    Err(StorageError::Other(
+                        "The transaction is already ended".into(),
+                    ))
                 }
             }
         }
     }
 
-    pub fn is_empty(&self, column_family: &ColumnFamily) -> Result<bool> {
+    pub fn is_empty(&self, column_family: &ColumnFamily) -> Result<bool, StorageError> {
         match &self.0 {
             InnerReader::Simple(reader) => Ok(reader
                 .read()
@@ -190,7 +210,9 @@ impl Reader {
                         .get(column_family)
                         .map_or(true, |tree| tree.is_empty()))
                 } else {
-                    Err(invalid_input_error("The transaction is already ended"))
+                    Err(StorageError::Other(
+                        "The transaction is already ended".into(),
+                    ))
                 }
             }
         }
@@ -214,14 +236,19 @@ impl Transaction<'_> {
         &self,
         column_family: &ColumnFamily,
         key: &[u8],
-    ) -> Result<bool> {
+    ) -> Result<bool, StorageError> {
         Ok((*self.0)
             .borrow()
             .get(column_family)
             .map_or(false, |cf| cf.contains_key(key)))
     }
 
-    pub fn insert(&mut self, column_family: &ColumnFamily, key: &[u8], value: &[u8]) -> Result<()> {
+    pub fn insert(
+        &mut self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+        value: &[u8],
+    ) -> Result<(), StorageError> {
         self.0
             .borrow_mut()
             .get_mut(column_family)
@@ -230,11 +257,15 @@ impl Transaction<'_> {
         Ok(())
     }
 
-    pub fn insert_empty(&mut self, column_family: &ColumnFamily, key: &[u8]) -> Result<()> {
+    pub fn insert_empty(
+        &mut self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+    ) -> Result<(), StorageError> {
         self.insert(column_family, key, &[])
     }
 
-    pub fn remove(&mut self, column_family: &ColumnFamily, key: &[u8]) -> Result<()> {
+    pub fn remove(&mut self, column_family: &ColumnFamily, key: &[u8]) -> Result<(), StorageError> {
         self.0
             .borrow_mut()
             .get_mut(column_family)
@@ -262,7 +293,7 @@ impl Iter {
         self.current = self.iter.next();
     }
 
-    pub fn status(&self) -> Result<()> {
+    pub fn status(&self) -> Result<(), StorageError> {
         Ok(())
     }
 }

@@ -171,7 +171,6 @@
 )]
 #![doc(test(attr(deny(warnings))))]
 
-mod error;
 pub mod io;
 pub mod model;
 #[cfg(feature = "sophia")]

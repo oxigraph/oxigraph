@@ -1,4 +1,4 @@
-use crate::error::invalid_input_error;
+use crate::io::read::ParserError;
 use crate::io::{GraphFormat, GraphParser};
 use crate::model::{
     BlankNode as OxBlankNode, GraphName as OxGraphName, GraphNameRef, Literal as OxLiteral,
@@ -176,7 +176,7 @@ impl SimpleUpdateEvaluator<'_> {
         if let Some(base_iri) = &self.base_iri {
             parser = parser
                 .with_base_iri(base_iri.as_str())
-                .map_err(invalid_input_error)?;
+                .map_err(|e| ParserError::invalid_base_iri(base_iri, e))?;
         }
         for t in parser.read_triples(BufReader::new(body))? {
             self.transaction

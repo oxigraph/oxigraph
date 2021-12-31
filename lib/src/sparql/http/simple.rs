@@ -1,6 +1,5 @@
-use crate::error::{invalid_data_error, invalid_input_error};
 use oxhttp::model::{Body, HeaderName, Method, Request};
-use std::io::Result;
+use std::io::{Error, ErrorKind, Result};
 use std::time::Duration;
 
 pub struct Client {
@@ -56,4 +55,12 @@ impl Client {
             .to_owned();
         Ok((content_type, response.into_body()))
     }
+}
+
+fn invalid_data_error(error: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Error {
+    Error::new(ErrorKind::InvalidData, error)
+}
+
+fn invalid_input_error(error: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Error {
+    Error::new(ErrorKind::InvalidInput, error)
 }

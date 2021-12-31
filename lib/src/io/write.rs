@@ -1,6 +1,5 @@
 //! Utilities to write RDF graphs and datasets.
 
-use crate::error::invalid_input_error;
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use rio_api::formatter::TriplesFormatter;
@@ -97,7 +96,10 @@ impl<W: Write> TripleWriter<W> {
                     SubjectRef::NamedNode(node) => rio::NamedNode { iri: node.as_str() }.into(),
                     SubjectRef::BlankNode(node) => rio::BlankNode { id: node.as_str() }.into(),
                     SubjectRef::Triple(_) => {
-                        return Err(invalid_input_error("RDF/XML does not support RDF-star yet"))
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "RDF/XML does not support RDF-star yet",
+                        ))
                     }
                 },
                 predicate: rio::NamedNode {
@@ -127,7 +129,10 @@ impl<W: Write> TripleWriter<W> {
                     }
                     .into(),
                     TermRef::Triple(_) => {
-                        return Err(invalid_input_error("RDF/XML does not support RDF-star yet"))
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "RDF/XML does not support RDF-star yet",
+                        ))
                     }
                 },
             })?,

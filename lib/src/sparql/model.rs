@@ -1,4 +1,3 @@
-use crate::error::invalid_input_error;
 use crate::io::GraphFormat;
 use crate::io::GraphSerializer;
 use crate::model::*;
@@ -123,10 +122,9 @@ impl QueryResults {
             writer.finish()?;
             Ok(())
         } else {
-            Err(
-                invalid_input_error("Bindings or booleans could not be formatted as an RDF graph")
-                    .into(),
-            )
+            Err(EvaluationError::msg(
+                "Bindings or booleans could not be formatted as an RDF graph",
+            ))
         }
     }
 }
