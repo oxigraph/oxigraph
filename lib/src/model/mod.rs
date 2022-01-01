@@ -13,7 +13,6 @@ mod parser;
 mod sophia;
 mod triple;
 pub mod vocab;
-pub(crate) mod xsd;
 
 pub use self::blank_node::{BlankNode, BlankNodeIdParseError, BlankNodeRef};
 pub use self::dataset::Dataset;

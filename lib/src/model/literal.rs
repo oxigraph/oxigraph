@@ -1,8 +1,8 @@
 use crate::model::named_node::NamedNode;
 use crate::model::vocab::rdf;
 use crate::model::vocab::xsd;
-use crate::model::xsd::*;
 use crate::model::NamedNodeRef;
+use crate::xsd::*;
 use oxilangtag::{LanguageTag, LanguageTagParseError};
 use rio_api::model as rio;
 use std::borrow::Cow;

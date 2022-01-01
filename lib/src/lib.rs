@@ -178,3 +178,4 @@ mod sophia;
 pub mod sparql;
 mod storage;
 pub mod store;
+mod xsd;

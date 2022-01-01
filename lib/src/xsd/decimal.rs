@@ -1,5 +1,4 @@
-use crate::model::xsd::double::Double;
-use crate::model::xsd::Float;
+use crate::xsd::{Double, Float};
 use std::error::Error;
 use std::fmt;
 use std::fmt::Write;

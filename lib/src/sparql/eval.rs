@@ -1,5 +1,4 @@
 use crate::model::vocab::{rdf, xsd};
-use crate::model::xsd::*;
 use crate::model::{BlankNode, LiteralRef, NamedNodeRef};
 use crate::model::{NamedNode, Term, Triple};
 use crate::sparql::algebra::{Query, QueryDataset};
@@ -10,6 +9,7 @@ use crate::sparql::plan::*;
 use crate::sparql::service::ServiceHandler;
 use crate::storage::numeric_encoder::*;
 use crate::storage::small_string::SmallString;
+use crate::xsd::*;
 use digest::Digest;
 use md5::Md5;
 use oxilangtag::LanguageTag;

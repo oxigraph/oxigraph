@@ -1,3 +1,6 @@
+use super::date_time::{DateTimeError, GDay, GMonth, GMonthDay, GYear, GYearMonth, TimezoneOffset};
+use super::decimal::ParseDecimalError;
+use super::duration::{DayTimeDuration, YearMonthDuration};
 use super::*;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_while, take_while_m_n};
@@ -8,15 +11,10 @@ use nom::multi::many1;
 use nom::sequence::{preceded, terminated, tuple};
 use nom::Err;
 use nom::{IResult, Needed};
-use std::str::FromStr;
-
-use super::date_time::DateTimeError;
-use super::decimal::ParseDecimalError;
-use crate::model::xsd::date_time::{GDay, GMonth, GMonthDay, GYear, GYearMonth, TimezoneOffset};
-use crate::model::xsd::duration::{DayTimeDuration, YearMonthDuration};
 use std::error::Error;
 use std::fmt;
 use std::num::ParseIntError;
+use std::str::FromStr;
 
 #[derive(Debug, Clone)]
 pub struct XsdParseError {

@@ -1,4 +1,4 @@
-use crate::model::xsd::Float;
+use crate::xsd::Float;
 use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};

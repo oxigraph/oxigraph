@@ -1,8 +1,8 @@
-use crate::model::xsd::*;
 use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, EncodedTriple, StrHash};
 use crate::storage::small_string::SmallString;
 use crate::storage::StorageError;
 use crate::store::CorruptionError;
+use crate::xsd::*;
 use std::io::{Cursor, Read};
 use std::mem::size_of;
 use std::rc::Rc;
