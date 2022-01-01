@@ -9,7 +9,7 @@
     unused_qualifications
 )]
 
-use clap::{crate_version, App, AppSettings, Arg, SubCommand};
+use clap::{Parser, Subcommand};
 use oxhttp::model::{Body, HeaderName, HeaderValue, Request, Response, Status};
 use oxhttp::Server;
 use oxigraph::io::{DatasetFormat, DatasetSerializer, GraphFormat, GraphSerializer};
@@ -22,6 +22,7 @@ use std::cell::RefCell;
 use std::cmp::min;
 use std::fs::File;
 use std::io::{self, BufReader, ErrorKind, Read, Write};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::thread::{spawn, JoinHandle};
@@ -33,53 +34,45 @@ const HTTP_TIMEOUT: Duration = Duration::from_secs(60);
 const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
 const LOGO: &str = include_str!("../logo.svg");
 
-pub fn main() -> std::io::Result<()> {
-    let matches = App::new("Oxigraph SPARQL server")
-        .version(crate_version!())
-        .arg(
-            Arg::with_name("location")
-                .short("l")
-                .long("location")
-                .help("Directory in which persist the data")
-                .takes_value(true),
-        )
-        .setting(AppSettings::SubcommandRequiredElseHelp)
-        .subcommand(
-            SubCommand::with_name("serve")
-                .about("Start Oxigraph HTTP server")
-                .arg(
-                    Arg::with_name("bind")
-                        .short("b")
-                        .long("bind")
-                        .help("Host and port to listen to")
-                        .default_value("localhost:7878")
-                        .takes_value(true),
-                ),
-        )
-        .subcommand(
-            SubCommand::with_name("load")
-                .about("Bulk loads a file into the store")
-                .arg(
-                    Arg::with_name("file")
-                        .short("f")
-                        .long("file")
-                        .help("The file to load")
-                        .takes_value(true)
-                        .multiple(true)
-                        .required(true),
-                ),
-        )
-        .get_matches();
+#[derive(Parser)]
+#[clap(about, author, version)]
+/// Oxigraph SPARQL server
+struct Args {
+    /// Directory in which persist the data
+    #[clap(short, long, parse(from_os_str))]
+    location: Option<PathBuf>,
+    #[clap(subcommand)]
+    command: Command,
+}
 
-    let store = if let Some(path) = matches.value_of_os("location") {
+#[derive(Subcommand)]
+enum Command {
+    /// Start Oxigraph HTTP server
+    Serve {
+        /// Host and port to listen to
+        #[clap(short, long, default_value = "localhost:7878")]
+        bind: String,
+    },
+    /// Bulk loads file(s) into the store
+    Load {
+        /// file(s) to load
+        #[clap(short, long)]
+        file: Vec<String>,
+    },
+}
+
+pub fn main() -> std::io::Result<()> {
+    let matches = Args::parse();
+
+    let store = if let Some(path) = &matches.location {
         Store::open(path)
     } else {
         Store::new()
     }?;
 
-    match matches.subcommand() {
-        ("load", Some(submatches)) => {
-            let handles = submatches.values_of("file").unwrap().into_iter().map(|file| {
+    match matches.command {
+        Command::Load { file } => {
+            let handles = file.iter().map(|file| {
                 let store = store.clone();
                 let file = file.to_string();
                 spawn(move || {
@@ -105,8 +98,7 @@ pub fn main() -> std::io::Result<()> {
             store.optimize()?;
             Ok(())
         }
-        ("serve", Some(submatches)) => {
-            let bind = submatches.value_of("bind").unwrap();
+        Command::Serve { bind } => {
             let mut server = Server::new(move |request| handle_request(request, store.clone()));
             server.set_global_timeout(HTTP_TIMEOUT);
             server
@@ -114,10 +106,6 @@ pub fn main() -> std::io::Result<()> {
                 .unwrap();
             println!("Listening for requests at http://{}", &bind);
             server.listen(bind)?;
-            Ok(())
-        }
-        (s, _) => {
-            eprintln!("Not supported subcommand: '{}'", s);
             Ok(())
         }
     }
@@ -1507,5 +1495,12 @@ mod tests {
             response.body_mut().read_to_string(&mut buf).unwrap();
             assert_eq!(response.status(), expected_status, "Error message: {}", buf);
         }
+    }
+
+    #[test]
+    fn clap_debug() {
+        use clap::IntoApp;
+
+        Args::into_app().debug_assert()
     }
 }
