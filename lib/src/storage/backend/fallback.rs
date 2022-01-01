@@ -12,6 +12,7 @@ pub struct ColumnFamilyDefinition {
     pub name: &'static str,
     pub use_iter: bool,
     pub min_prefix_size: usize,
+    pub unordered_writes: bool,
 }
 
 #[derive(Clone)]

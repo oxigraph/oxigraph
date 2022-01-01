@@ -61,6 +61,16 @@ rocksdb_pinnableslice_t* rocksdb_transactiondb_get_pinned_cf_with_status(
     return v;
 }
 
+void rocksdb_transactiondb_put_cf_with_status(rocksdb_transactiondb_t* txn_db,
+                                  const rocksdb_writeoptions_t* options,
+                                  rocksdb_column_family_handle_t* column_family,
+                                  const char* key, size_t keylen,
+                                  const char* val, size_t vallen,
+                                  rocksdb_status_t* statusptr) {
+    SaveStatus(statusptr, txn_db->rep->Put(options->rep, column_family->rep,
+                                       Slice(key, keylen), Slice(val, vallen)));
+}
+
 void rocksdb_transactiondb_flush_cf_with_status(
         rocksdb_transactiondb_t* db,
         const rocksdb_flushoptions_t* options,

@@ -76,56 +76,67 @@ impl Storage {
                 name: ID2STR_CF,
                 use_iter: false,
                 min_prefix_size: 0,
+                unordered_writes: true,
             },
             ColumnFamilyDefinition {
                 name: SPOG_CF,
                 use_iter: true,
                 min_prefix_size: 17, // named or blank node start
+                unordered_writes: false,
             },
             ColumnFamilyDefinition {
                 name: POSG_CF,
                 use_iter: true,
                 min_prefix_size: 17, // named node start
+                unordered_writes: false,
             },
             ColumnFamilyDefinition {
                 name: OSPG_CF,
                 use_iter: true,
                 min_prefix_size: 0, // There are small literals...
+                unordered_writes: false,
             },
             ColumnFamilyDefinition {
                 name: GSPO_CF,
                 use_iter: true,
                 min_prefix_size: 17, // named or blank node start
+                unordered_writes: false,
             },
             ColumnFamilyDefinition {
                 name: GPOS_CF,
                 use_iter: true,
                 min_prefix_size: 17, // named or blank node start
+                unordered_writes: false,
             },
             ColumnFamilyDefinition {
                 name: GOSP_CF,
                 use_iter: true,
                 min_prefix_size: 17, // named or blank node start
+                unordered_writes: false,
             },
             ColumnFamilyDefinition {
                 name: DSPO_CF,
                 use_iter: true,
                 min_prefix_size: 17, // named or blank node start
+                unordered_writes: false,
             },
             ColumnFamilyDefinition {
                 name: DPOS_CF,
                 use_iter: true,
                 min_prefix_size: 17, // named or blank node start
+                unordered_writes: false,
             },
             ColumnFamilyDefinition {
                 name: DOSP_CF,
                 use_iter: true,
                 min_prefix_size: 0, // There are small literals...
+                unordered_writes: false,
             },
             ColumnFamilyDefinition {
                 name: GRAPHS_CF,
                 use_iter: true,
                 min_prefix_size: 17, // named or blank node start
+                unordered_writes: false,
             },
         ]
     }
@@ -194,7 +205,7 @@ impl Storage {
     #[cfg(not(target_arch = "wasm32"))]
     fn ensure_version(&self) -> Result<u64, StorageError> {
         Ok(
-            if let Some(version) = self.db.snapshot().get(&self.default_cf, b"oxversion")? {
+            if let Some(version) = self.db.get(&self.default_cf, b"oxversion")? {
                 let mut buffer = [0; 8];
                 buffer.copy_from_slice(&version);
                 u64::from_be_bytes(buffer)
@@ -207,9 +218,8 @@ impl Storage {
 
     #[cfg(not(target_arch = "wasm32"))]
     fn update_version(&self, version: u64) -> Result<(), StorageError> {
-        self.db.transaction(|mut t| {
-            t.insert(&self.default_cf, b"oxversion", &version.to_be_bytes())
-        })?;
+        self.db
+            .insert(&self.default_cf, b"oxversion", &version.to_be_bytes())?;
         self.db.flush(&self.default_cf)
     }
 
@@ -583,6 +593,18 @@ impl StorageReader {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
+        Ok(self
+            .storage
+            .db
+            .get(&self.storage.id2str_cf, &key.to_be_bytes())?
+            .map(|v| String::from_utf8(v.into()))
+            .transpose()
+            .map_err(CorruptionError::new)?)
+    }
+
+    #[cfg(target_arch = "wasm32")]
     pub fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
         Ok(self
             .reader
@@ -592,6 +614,14 @@ impl StorageReader {
             .map_err(CorruptionError::new)?)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError> {
+        self.storage
+            .db
+            .contains_key(&self.storage.id2str_cf, &key.to_be_bytes())
+    }
+
+    #[cfg(target_arch = "wasm32")]
     pub fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError> {
         self.reader
             .contains_key(&self.storage.id2str_cf, &key.to_be_bytes())
@@ -819,6 +849,23 @@ impl<'a> StorageWriter<'a> {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    fn insert_str(&mut self, key: &StrHash, value: &str) -> Result<(), StorageError> {
+        if self
+            .storage
+            .db
+            .contains_key(&self.storage.id2str_cf, &key.to_be_bytes())?
+        {
+            return Ok(());
+        }
+        self.storage.db.insert(
+            &self.storage.id2str_cf,
+            &key.to_be_bytes(),
+            value.as_bytes(),
+        )
+    }
+
+    #[cfg(target_arch = "wasm32")]
     fn insert_str(&mut self, key: &StrHash, value: &str) -> Result<(), StorageError> {
         self.transaction.insert(
             &self.storage.id2str_cf,

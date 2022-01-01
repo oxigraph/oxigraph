@@ -74,6 +74,7 @@ pub struct ColumnFamilyDefinition {
     pub name: &'static str,
     pub use_iter: bool,
     pub min_prefix_size: usize,
+    pub unordered_writes: bool,
 }
 
 #[derive(Clone)]
@@ -208,6 +209,7 @@ impl Db {
                     name: "default",
                     use_iter: true,
                     min_prefix_size: 0,
+                    unordered_writes: false,
                 })
             }
             let column_family_names = column_families.iter().map(|c| c.name).collect::<Vec<_>>();
@@ -228,6 +230,9 @@ impl Db {
                             options,
                             rocksdb_slicetransform_create_fixed_prefix(cf.min_prefix_size),
                         );
+                    }
+                    if cf.unordered_writes {
+                        rocksdb_options_set_unordered_write(options, 1);
                     }
                     options
                 })
@@ -421,6 +426,55 @@ impl Db {
                 }
             }
         }
+    }
+
+    pub fn get(
+        &self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+    ) -> Result<Option<PinnableSlice>, StorageError> {
+        unsafe {
+            let slice = ffi_result!(rocksdb_transactiondb_get_pinned_cf_with_status(
+                self.0.db,
+                self.0.read_options,
+                column_family.0,
+                key.as_ptr() as *const c_char,
+                key.len()
+            ))?;
+            Ok(if slice.is_null() {
+                None
+            } else {
+                Some(PinnableSlice(slice))
+            })
+        }
+    }
+
+    pub fn contains_key(
+        &self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+    ) -> Result<bool, StorageError> {
+        Ok(self.get(column_family, key)?.is_some()) //TODO: optimize
+    }
+
+    pub fn insert(
+        &self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+        value: &[u8],
+    ) -> Result<(), StorageError> {
+        unsafe {
+            ffi_result!(rocksdb_transactiondb_put_cf_with_status(
+                self.0.db,
+                self.0.write_options,
+                column_family.0,
+                key.as_ptr() as *const c_char,
+                key.len(),
+                value.as_ptr() as *const c_char,
+                value.len(),
+            ))?;
+        }
+        Ok(())
     }
 
     pub fn flush(&self, column_family: &ColumnFamily) -> Result<(), StorageError> {
