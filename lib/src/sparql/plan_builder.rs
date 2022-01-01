@@ -1,9 +1,9 @@
 use crate::model::{LiteralRef, NamedNode as OxNamedNode, NamedNodeRef, Term as OxTerm};
 use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::EvaluationError;
-use crate::sparql::model::Variable as OxVariable;
 use crate::sparql::plan::*;
 use crate::storage::numeric_encoder::{EncodedTerm, EncodedTriple};
+use oxrdf::Variable as OxVariable;
 use rand::random;
 use spargebra::algebra::*;
 use spargebra::term::*;

@@ -2,7 +2,7 @@
 //!
 //! Usage example:
 //! ```
-//! use oxigraph::model::*;
+//! use oxrdf::*;
 //!
 //! let mut graph = Graph::default();
 //!
@@ -19,8 +19,8 @@
 //!
 //! See also [`Dataset`](super::Dataset) if you want to get support of multiple RDF graphs at the same time.
 
-use crate::model::dataset::*;
-use crate::model::*;
+use crate::dataset::*;
+use crate::*;
 use std::fmt;
 
 /// An in-memory [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-graph).
@@ -31,7 +31,7 @@ use std::fmt;
 ///
 /// Usage example:
 /// ```
-/// use oxigraph::model::*;
+/// use oxrdf::*;
 ///
 /// let mut graph = Graph::default();
 ///
@@ -181,7 +181,7 @@ impl Graph {
     ///   
     /// Usage example ([Graph isomorphim](https://www.w3.org/TR/rdf11-concepts/#dfn-graph-isomorphism)):
     /// ```
-    /// use oxigraph::model::*;
+    /// use oxrdf::*;
     ///
     /// let iri = NamedNodeRef::new("http://example.com")?;
     ///
@@ -192,8 +192,8 @@ impl Graph {
     ///
     /// let mut graph2 = Graph::new();
     /// let bnode2 = BlankNode::default();
-    /// graph1.insert(TripleRef::new(iri, iri, &bnode2));
-    /// graph1.insert(TripleRef::new(&bnode2, iri, iri));
+    /// graph2.insert(TripleRef::new(iri, iri, &bnode2));
+    /// graph2.insert(TripleRef::new(&bnode2, iri, iri));
     ///
     /// assert_ne!(graph1, graph2);
     /// graph1.canonicalize();

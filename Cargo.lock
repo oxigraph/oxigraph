@@ -845,6 +845,7 @@ dependencies = [
  "oxhttp",
  "oxilangtag",
  "oxiri",
+ "oxrdf",
  "oxrocksdb-sys",
  "quick-xml",
  "rand",
@@ -907,6 +908,18 @@ name = "oxiri"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8e54fb37480ffa01a9af93f991ba229b3091f2e6ac84c8f6df2c509356cc473"
+
+[[package]]
+name = "oxrdf"
+version = "0.1.0"
+dependencies = [
+ "lasso",
+ "oxilangtag",
+ "oxiri",
+ "rand",
+ "rio_api",
+ "sophia_api",
+]
 
 [[package]]
 name = "oxrocksdb-sys"

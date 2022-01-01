@@ -20,15 +20,13 @@ use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::EvaluationError;
 use crate::sparql::eval::SimpleEvaluator;
 pub use crate::sparql::io::QueryResultsFormat;
-pub use crate::sparql::model::{
-    QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter, Variable,
-    VariableNameParseError,
-};
+pub use crate::sparql::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
 use crate::sparql::plan_builder::PlanBuilder;
 pub use crate::sparql::service::ServiceHandler;
 use crate::sparql::service::{EmptyServiceHandler, ErrorConversionServiceHandler};
 pub(crate) use crate::sparql::update::evaluate_update;
 use crate::storage::Storage;
+pub use oxrdf::{Variable, VariableNameParseError};
 pub use spargebra::ParseError;
 use std::collections::HashMap;
 use std::rc::Rc;

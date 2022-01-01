@@ -14,6 +14,7 @@ use digest::Digest;
 use md5::Md5;
 use oxilangtag::LanguageTag;
 use oxiri::Iri;
+use oxrdf::Variable;
 use rand::random;
 use regex::{Regex, RegexBuilder};
 use sha1::Sha1;

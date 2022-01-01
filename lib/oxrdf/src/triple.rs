@@ -1,7 +1,7 @@
-use crate::model::blank_node::BlankNode;
-use crate::model::literal::Literal;
-use crate::model::named_node::NamedNode;
-use crate::model::{BlankNodeRef, LiteralRef, NamedNodeRef};
+use crate::blank_node::BlankNode;
+use crate::literal::Literal;
+use crate::named_node::NamedNode;
+use crate::{BlankNodeRef, LiteralRef, NamedNodeRef};
 use std::fmt;
 use std::sync::Arc;
 

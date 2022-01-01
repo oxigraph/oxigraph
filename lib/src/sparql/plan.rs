@@ -1,6 +1,6 @@
 use crate::model::NamedNode;
-use crate::sparql::model::Variable;
 use crate::storage::numeric_encoder::EncodedTerm;
+use oxrdf::Variable;
 use spargebra::algebra::GraphPattern;
 use std::cmp::max;
 use std::collections::btree_map::Entry;

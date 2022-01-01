@@ -1,6 +1,6 @@
 //! Interning of RDF elements using Rodeo
 
-use crate::model::*;
+use crate::*;
 use lasso::{Key, Rodeo, Spur};
 use std::collections::HashMap;
 

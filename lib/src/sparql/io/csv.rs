@@ -2,7 +2,7 @@
 
 use crate::io::read::{ParserError, SyntaxError};
 use crate::model::{vocab::xsd, *};
-use crate::sparql::model::Variable;
+use oxrdf::Variable;
 use std::io::{self, BufRead, Write};
 use std::str::FromStr;
 

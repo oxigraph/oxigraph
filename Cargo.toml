@@ -2,6 +2,7 @@
 members = [
     "js",
     "lib",
+    "lib/oxrdf",
     "python",
     "rocksdb-sys",
     "server",

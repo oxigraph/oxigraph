@@ -3,7 +3,7 @@
 use crate::io::read::{ParserError, SyntaxError};
 use crate::model::vocab::rdf;
 use crate::model::*;
-use crate::sparql::model::Variable;
+use oxrdf::Variable;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Reader;
 use quick_xml::Writer;

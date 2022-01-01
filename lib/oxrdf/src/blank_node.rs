@@ -14,13 +14,13 @@ use std::str;
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
 /// ```
-/// use oxigraph::model::BlankNode;
+/// use oxrdf::BlankNode;
 ///
 /// assert_eq!(
 ///     "_:a122",
 ///     BlankNode::new("a122")?.to_string()
 /// );
-/// # Result::<_,oxigraph::model::BlankNodeIdParseError>::Ok(())
+/// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct BlankNode(BlankNodeContent);
@@ -62,8 +62,8 @@ impl BlankNode {
     /// Creates a blank node from a unique numerical id
     ///
     /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default()`].
-    pub fn new_from_unique_id(id: impl Into<u128>) -> Self {
-        let id = id.into();
+    #[inline]
+    pub fn new_from_unique_id(id: u128) -> Self {
         Self(BlankNodeContent::Anonymous {
             id,
             str: IdStr::new(id),
@@ -124,13 +124,13 @@ impl Default for BlankNode {
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
 /// ```
-/// use oxigraph::model::BlankNodeRef;
+/// use oxrdf::BlankNodeRef;
 ///
 /// assert_eq!(
 ///     "_:a122",
 ///     BlankNodeRef::new("a122")?.to_string()
 /// );
-/// # Result::<_,oxigraph::model::BlankNodeIdParseError>::Ok(())
+/// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct BlankNodeRef<'a>(BlankNodeRefContent<'a>);
@@ -179,9 +179,17 @@ impl<'a> BlankNodeRef<'a> {
         }
     }
 
-    /// Returns the internal numerical ID of this blank node, if it exists
+    /// Returns the internal numerical ID of this blank node if it has been created using [`BlankNode::new_from_unique_id`]
+    ///
+    /// ```
+    /// use oxrdf::BlankNode;
+    ///
+    /// assert_eq!(BlankNode::new_from_unique_id(128).as_ref().unique_id(), Some(128));
+    /// assert_eq!(BlankNode::new("128")?.as_ref().unique_id(), None);
+    /// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
+    /// ```
     #[inline]
-    pub(crate) fn id(&self) -> Option<u128> {
+    pub fn unique_id(&self) -> Option<u128> {
         match self.0 {
             BlankNodeRefContent::Named(_) => None,
             BlankNodeRefContent::Anonymous { id, .. } => Some(id),
@@ -349,13 +357,13 @@ mod tests {
 
     #[test]
     fn as_str_partial() {
-        let b = BlankNode::new_from_unique_id(0x42_u128);
+        let b = BlankNode::new_from_unique_id(0x42);
         assert_eq!(b.as_str(), "42");
     }
 
     #[test]
     fn as_str_full() {
-        let b = BlankNode::new_from_unique_id(0x7777_6666_5555_4444_3333_2222_1111_0000_u128);
+        let b = BlankNode::new_from_unique_id(0x7777_6666_5555_4444_3333_2222_1111_0000);
         assert_eq!(b.as_str(), "77776666555544443333222211110000");
     }
 
@@ -374,11 +382,11 @@ mod tests {
     fn new_numerical() {
         assert_eq!(
             BlankNode::new("100a").unwrap(),
-            BlankNode::new_from_unique_id(0x100a_u128),
+            BlankNode::new_from_unique_id(0x100a),
         );
         assert_ne!(
             BlankNode::new("100A").unwrap(),
-            BlankNode::new_from_unique_id(0x100a_u128)
+            BlankNode::new_from_unique_id(0x100a)
         );
     }
 

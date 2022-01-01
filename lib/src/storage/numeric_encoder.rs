@@ -439,7 +439,7 @@ impl From<NamedNodeRef<'_>> for EncodedTerm {
 
 impl From<BlankNodeRef<'_>> for EncodedTerm {
     fn from(blank_node: BlankNodeRef<'_>) -> Self {
-        if let Some(id) = blank_node.id() {
+        if let Some(id) = blank_node.unique_id() {
             Self::NumericalBlankNode { id }
         } else {
             let id = blank_node.as_str();

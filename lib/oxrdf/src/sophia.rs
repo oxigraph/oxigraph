@@ -1,6 +1,6 @@
 //! This crate provides implementation of [Sophia](https://docs.rs/sophia/) traits for the `model` module.
 
-use crate::model::*;
+use crate::*;
 use sophia_api::term::*;
 use std::fmt;
 

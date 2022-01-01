@@ -2,7 +2,7 @@
 //!
 //! Usage example:
 //! ```
-//! use oxigraph::model::*;
+//! use oxrdf::*;
 //!
 //! let mut dataset = Dataset::default();
 //!
@@ -23,9 +23,9 @@
 //!
 //! See also [`Graph`](super::Graph) if you only care about plain triples.
 
-use crate::model::interning::*;
-use crate::model::SubjectRef;
-use crate::model::*;
+use crate::interning::*;
+use crate::SubjectRef;
+use crate::*;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeSet;
 use std::collections::{HashMap, HashSet};
@@ -40,7 +40,7 @@ use std::hash::{Hash, Hasher};
 ///
 /// Usage example:
 /// ```
-/// use oxigraph::model::*;
+/// use oxrdf::*;
 ///
 /// let mut dataset = Dataset::default();
 ///
@@ -108,7 +108,7 @@ impl Dataset {
     /// Provides a read-only view on a [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-graph) contained in this dataset.
     ///
     /// ```
-    /// use oxigraph::model::*;
+    /// use oxrdf::*;
     ///
     /// let mut dataset = Dataset::default();
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -131,7 +131,7 @@ impl Dataset {
     /// Provides a read/write view on a [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-graph) contained in this dataset.
     ///
     /// ```
-    /// use oxigraph::model::*;
+    /// use oxrdf::*;
     ///
     /// let mut dataset = Dataset::default();
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -491,7 +491,7 @@ impl Dataset {
     ///
     /// Usage example ([Dataset isomorphim](https://www.w3.org/TR/rdf11-concepts/#dfn-dataset-isomorphism)):
     /// ```
-    /// use oxigraph::model::*;
+    /// use oxrdf::*;
     ///
     /// let iri = NamedNodeRef::new("http://example.com")?;
     ///
@@ -504,8 +504,8 @@ impl Dataset {
     /// let mut graph2 = Graph::new();
     /// let bnode2 = BlankNode::default();
     /// let g2 = BlankNode::default();
-    /// graph1.insert(QuadRef::new(iri, iri, &bnode2, &g2));
-    /// graph1.insert(QuadRef::new(&bnode2, iri, iri, &g2));
+    /// graph2.insert(QuadRef::new(iri, iri, &bnode2, &g2));
+    /// graph2.insert(QuadRef::new(&bnode2, iri, iri, &g2));
     ///
     /// assert_ne!(graph1, graph2);
     /// graph1.canonicalize();
@@ -808,7 +808,7 @@ impl Dataset {
         old_bnode: InternedBlankNode,
         hashes: &HashMap<InternedBlankNode, u64>,
     ) -> BlankNode {
-        BlankNode::new_from_unique_id(hashes[&old_bnode])
+        BlankNode::new_from_unique_id(hashes[&old_bnode].into())
     }
 }
 
@@ -884,7 +884,7 @@ impl fmt::Display for Dataset {
 ///
 /// Usage example:
 /// ```
-/// use oxigraph::model::*;
+/// use oxrdf::*;
 ///
 /// let mut dataset = Dataset::default();
 /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -1219,7 +1219,7 @@ impl<'a> fmt::Display for GraphView<'a> {
 ///
 /// Usage example:
 /// ```
-/// use oxigraph::model::*;
+/// use oxrdf::*;
 ///
 /// let mut dataset = Dataset::default();
 /// let ex = NamedNodeRef::new("http://example.com")?;

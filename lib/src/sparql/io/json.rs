@@ -4,8 +4,8 @@ use crate::io::read::{ParserError, SyntaxError};
 use crate::model::vocab::rdf;
 use crate::model::*;
 use crate::sparql::error::EvaluationError;
-use crate::sparql::model::Variable;
 use json_event_parser::{JsonEvent, JsonReader, JsonWriter};
+use oxrdf::Variable;
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, Write};
 

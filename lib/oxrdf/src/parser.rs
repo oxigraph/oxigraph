@@ -1,8 +1,8 @@
-use crate::model::vocab::xsd;
-use crate::model::{BlankNode, BlankNodeIdParseError, Literal, NamedNode, Subject, Term, Triple};
-use crate::sparql::{Variable, VariableNameParseError};
-use oxilangtag::LanguageTagParseError;
-use oxiri::IriParseError;
+use crate::vocab::xsd;
+use crate::{
+    BlankNode, BlankNodeIdParseError, IriParseError, LanguageTagParseError, Literal, NamedNode,
+    Subject, Term, Triple, Variable, VariableNameParseError,
+};
 use std::char;
 use std::error::Error;
 use std::fmt;
@@ -14,7 +14,7 @@ impl FromStr for NamedNode {
     /// Parses a named node from its NTriples and Turtle serialization
     ///
     /// ```
-    /// use oxigraph::model::NamedNode;
+    /// use oxrdf::NamedNode;
     /// use std::str::FromStr;
     ///
     /// assert_eq!(NamedNode::from_str("<http://example.com>").unwrap(), NamedNode::new("http://example.com").unwrap())
@@ -36,7 +36,7 @@ impl FromStr for BlankNode {
     /// Parses a blank node from its NTriples and Turtle serialization
     ///
     /// ```
-    /// use oxigraph::model::BlankNode;
+    /// use oxrdf::BlankNode;
     /// use std::str::FromStr;
     ///
     /// assert_eq!(BlankNode::from_str("_:ex").unwrap(), BlankNode::new("ex").unwrap())
@@ -58,7 +58,7 @@ impl FromStr for Literal {
     /// Parses a literal from its NTriples or Turtle serialization
     ///
     /// ```
-    /// use oxigraph::model::{Literal, NamedNode, vocab::xsd};
+    /// use oxrdf::{Literal, NamedNode, vocab::xsd};
     /// use std::str::FromStr;
     ///
     /// assert_eq!(Literal::from_str("\"ex\\n\"").unwrap(), Literal::new_simple_literal("ex\n"));
@@ -84,7 +84,7 @@ impl FromStr for Term {
     /// Parses a term from its NTriples or Turtle serialization
     ///
     /// ```
-    /// use oxigraph::model::*;
+    /// use oxrdf::*;
     /// use std::str::FromStr;
     ///
     /// assert_eq!(Term::from_str("\"ex\"").unwrap(), Literal::new_simple_literal("ex").into());
@@ -109,7 +109,7 @@ impl FromStr for Variable {
     /// Parses a variable from its SPARQL serialization
     ///
     /// ```
-    /// use oxigraph::sparql::Variable;
+    /// use oxrdf::Variable;
     /// use std::str::FromStr;
     ///
     /// assert_eq!(Variable::from_str("$foo").unwrap(), Variable::new("foo").unwrap())

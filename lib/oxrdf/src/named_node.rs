@@ -6,13 +6,13 @@ use std::fmt;
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
 /// ```
-/// use oxigraph::model::NamedNode;
+/// use oxrdf::NamedNode;
 ///
 /// assert_eq!(
 ///     "<http://example.com/foo>",
 ///     NamedNode::new("http://example.com/foo")?.to_string()
 /// );
-/// # Result::<_,oxigraph::model::IriParseError>::Ok(())
+/// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct NamedNode {
@@ -95,13 +95,13 @@ impl PartialEq<NamedNode> for &str {
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
 /// ```
-/// use oxigraph::model::NamedNodeRef;
+/// use oxrdf::NamedNodeRef;
 ///
 /// assert_eq!(
 ///     "<http://example.com/foo>",
 ///     NamedNodeRef::new("http://example.com/foo")?.to_string()
 /// );
-/// # Result::<_,oxigraph::model::IriParseError>::Ok(())
+/// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct NamedNodeRef<'a> {

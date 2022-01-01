@@ -2,7 +2,7 @@
 
 pub mod rdf {
     //! [RDF](https://www.w3.org/TR/rdf11-concepts/) vocabulary
-    use crate::model::named_node::NamedNodeRef;
+    use crate::named_node::NamedNodeRef;
 
     /// The class of containers of alternatives.
     pub const ALT: NamedNodeRef<'_> =
@@ -58,7 +58,7 @@ pub mod rdf {
 
 pub mod rdfs {
     //! [RDFS](https://www.w3.org/TR/rdf-schema/) vocabulary
-    use crate::model::named_node::NamedNodeRef;
+    use crate::named_node::NamedNodeRef;
 
     /// The class of classes.
     pub const CLASS: NamedNodeRef<'_> =
@@ -110,7 +110,7 @@ pub mod rdfs {
 
 pub mod xsd {
     //! [RDF compatible XSD datatypes](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-compatible-xsd-types)
-    use crate::model::named_node::NamedNodeRef;
+    use crate::named_node::NamedNodeRef;
 
     /// Absolute or relative URIs and IRIs
     pub const ANY_URI: NamedNodeRef<'_> =

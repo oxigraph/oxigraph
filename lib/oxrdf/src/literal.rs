@@ -1,8 +1,7 @@
-use crate::model::named_node::NamedNode;
-use crate::model::vocab::rdf;
-use crate::model::vocab::xsd;
-use crate::model::NamedNodeRef;
-use crate::xsd::*;
+use crate::named_node::NamedNode;
+use crate::vocab::rdf;
+use crate::vocab::xsd;
+use crate::NamedNodeRef;
 use oxilangtag::{LanguageTag, LanguageTagParseError};
 use rio_api::model as rio;
 use std::borrow::Cow;
@@ -14,8 +13,8 @@ use std::option::Option;
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
 /// ```
 /// # use oxilangtag::LanguageTagParseError;
-/// use oxigraph::model::Literal;
-/// use oxigraph::model::vocab::xsd;
+/// use oxrdf::Literal;
+/// use oxrdf::vocab::xsd;
 ///
 /// assert_eq!(
 ///     "\"foo\\nbar\"",
@@ -265,15 +264,14 @@ impl From<u16> for Literal {
 impl From<f32> for Literal {
     #[inline]
     fn from(value: f32) -> Self {
-        Float::from(value).into()
-    }
-}
-
-impl From<Float> for Literal {
-    #[inline]
-    fn from(value: Float) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
+            value: if value == f32::INFINITY {
+                "INF".to_string()
+            } else if value == f32::NEG_INFINITY {
+                "-INF".to_string()
+            } else {
+                value.to_string()
+            },
             datatype: xsd::FLOAT.into(),
         })
     }
@@ -282,136 +280,15 @@ impl From<Float> for Literal {
 impl From<f64> for Literal {
     #[inline]
     fn from(value: f64) -> Self {
-        Double::from(value).into()
-    }
-}
-
-impl From<Double> for Literal {
-    #[inline]
-    fn from(value: Double) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
+            value: if value == f64::INFINITY {
+                "INF".to_string()
+            } else if value == f64::NEG_INFINITY {
+                "-INF".to_string()
+            } else {
+                value.to_string()
+            },
             datatype: xsd::DOUBLE.into(),
-        })
-    }
-}
-
-impl From<Decimal> for Literal {
-    #[inline]
-    fn from(value: Decimal) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
-            datatype: xsd::DECIMAL.into(),
-        })
-    }
-}
-
-impl From<DateTime> for Literal {
-    #[inline]
-    fn from(value: DateTime) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
-            datatype: xsd::DATE_TIME.into(),
-        })
-    }
-}
-
-impl From<Time> for Literal {
-    #[inline]
-    fn from(value: Time) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
-            datatype: xsd::TIME.into(),
-        })
-    }
-}
-
-impl From<Date> for Literal {
-    #[inline]
-    fn from(value: Date) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
-            datatype: xsd::DATE.into(),
-        })
-    }
-}
-
-impl From<GYearMonth> for Literal {
-    #[inline]
-    fn from(value: GYearMonth) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
-            datatype: xsd::G_YEAR_MONTH.into(),
-        })
-    }
-}
-
-impl From<GYear> for Literal {
-    #[inline]
-    fn from(value: GYear) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
-            datatype: xsd::G_YEAR.into(),
-        })
-    }
-}
-
-impl From<GMonthDay> for Literal {
-    #[inline]
-    fn from(value: GMonthDay) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
-            datatype: xsd::G_MONTH_DAY.into(),
-        })
-    }
-}
-
-impl From<GMonth> for Literal {
-    #[inline]
-    fn from(value: GMonth) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
-            datatype: xsd::G_MONTH.into(),
-        })
-    }
-}
-
-impl From<GDay> for Literal {
-    #[inline]
-    fn from(value: GDay) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
-            datatype: xsd::G_DAY.into(),
-        })
-    }
-}
-
-impl From<Duration> for Literal {
-    #[inline]
-    fn from(value: Duration) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
-            datatype: xsd::DURATION.into(),
-        })
-    }
-}
-
-impl From<YearMonthDuration> for Literal {
-    #[inline]
-    fn from(value: YearMonthDuration) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
-            datatype: xsd::YEAR_MONTH_DURATION.into(),
-        })
-    }
-}
-
-impl From<DayTimeDuration> for Literal {
-    #[inline]
-    fn from(value: DayTimeDuration) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
-            datatype: xsd::DAY_TIME_DURATION.into(),
         })
     }
 }
@@ -420,9 +297,8 @@ impl From<DayTimeDuration> for Literal {
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
 /// ```
-/// # use oxilangtag::LanguageTagParseError;
-/// use oxigraph::model::LiteralRef;
-/// use oxigraph::model::vocab::xsd;
+/// use oxrdf::LiteralRef;
+/// use oxrdf::vocab::xsd;
 ///
 /// assert_eq!(
 ///     "\"foo\\nbar\"",
@@ -433,7 +309,6 @@ impl From<DayTimeDuration> for Literal {
 ///     "\"1999-01-01\"^^<http://www.w3.org/2001/XMLSchema#date>",
 ///     LiteralRef::new_typed_literal("1999-01-01", xsd::DATE).to_string()
 /// );
-/// # Result::<(), LanguageTagParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct LiteralRef<'a>(LiteralRefContent<'a>);
