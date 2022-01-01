@@ -23,19 +23,14 @@
 //!
 //! See also [`Graph`](super::Graph) if you only care about plain triples.
 
-use crate::io::read::ParserError;
-use crate::io::{
-    DatasetFormat, DatasetParser, DatasetSerializer, GraphFormat, GraphParser, GraphSerializer,
-};
 use crate::model::interning::*;
 use crate::model::SubjectRef;
 use crate::model::*;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeSet;
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::io::{BufRead, Write};
-use std::{fmt, io};
 
 /// An in-memory [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 ///
@@ -404,77 +399,6 @@ impl Dataset {
         self.ospg.clear();
     }
 
-    /// Loads a file into the dataset.
-    ///
-    /// To load a specific graph use [`GraphViewMut::load`].
-    ///
-    /// Usage example:
-    /// ```
-    /// use oxigraph::model::*;
-    /// use oxigraph::io::DatasetFormat;
-    ///
-    /// let mut dataset = Dataset::new();
-    ///
-    /// // insertion
-    /// let file = b"<http://example.com> <http://example.com> <http://example.com>  <http://example.com> .";
-    /// dataset.load(file.as_ref(), DatasetFormat::NQuads, None)?;
-    ///
-    /// // we inspect the store contents
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// assert!(dataset.contains(QuadRef::new(ex, ex, ex, ex)));
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
-    /// ```
-    ///
-    /// Warning: This functions inserts the quads during the parsing.
-    /// If the parsing fails in the middle of the file, the quads read before stay in the dataset.
-    ///
-    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
-    pub fn load(
-        &mut self,
-        reader: impl BufRead,
-        format: DatasetFormat,
-        base_iri: Option<&str>,
-    ) -> Result<(), ParserError> {
-        let mut parser = DatasetParser::from_format(format);
-        if let Some(base_iri) = base_iri {
-            parser = parser
-                .with_base_iri(base_iri)
-                .map_err(|e| ParserError::invalid_base_iri(base_iri, e))?;
-        }
-        for t in parser.read_quads(reader)? {
-            self.insert(&t?);
-        }
-        Ok(())
-    }
-
-    /// Dumps the dataset into a file.
-    ///
-    /// To dump a specific graph use [`GraphView::dump`].
-    ///
-    /// Usage example:
-    /// ```
-    /// use oxigraph::io::DatasetFormat;
-    /// use oxigraph::model::Dataset;
-    ///
-    /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
-    ///
-    /// let mut store = Dataset::new();
-    /// store.load(file, DatasetFormat::NQuads, None)?;
-    ///
-    /// let mut buffer = Vec::new();
-    /// store.dump(&mut buffer, DatasetFormat::NQuads)?;
-    /// assert_eq!(file, buffer.as_slice());
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
-    /// ```
-    pub fn dump(&self, writer: impl Write, format: DatasetFormat) -> io::Result<()> {
-        let mut writer = DatasetSerializer::from_format(format).quad_writer(writer)?;
-        for t in self {
-            writer.write(t)?;
-        }
-        writer.finish()
-    }
-
     fn encode_quad(
         &mut self,
         quad: QuadRef<'_>,
@@ -567,20 +491,26 @@ impl Dataset {
     ///
     /// Usage example ([Dataset isomorphim](https://www.w3.org/TR/rdf11-concepts/#dfn-dataset-isomorphism)):
     /// ```
-    /// use oxigraph::io::DatasetFormat;
-    /// use oxigraph::model::Dataset;
+    /// use oxigraph::model::*;
     ///
-    /// let file = "GRAPH _:a1 { <http://example.com> <http://example.com> [ <http://example.com/p> <http://example.com/o> ] . }".as_bytes();
+    /// let iri = NamedNodeRef::new("http://example.com")?;
     ///
-    /// let mut dataset1 = Dataset::new();
-    /// dataset1.load(file, DatasetFormat::TriG, None)?;
-    /// let mut dataset2 = Dataset::new();
-    /// dataset2.load(file, DatasetFormat::TriG, None)?;
+    /// let mut graph1 = Graph::new();
+    /// let bnode1 = BlankNode::default();
+    /// let g1 = BlankNode::default();
+    /// graph1.insert(QuadRef::new(iri, iri, &bnode1, &g1));
+    /// graph1.insert(QuadRef::new(&bnode1, iri, iri, &g1));
     ///
-    /// assert_ne!(dataset1, dataset2);
-    /// dataset1.canonicalize();
-    /// dataset2.canonicalize();
-    /// assert_eq!(dataset1, dataset2);
+    /// let mut graph2 = Graph::new();
+    /// let bnode2 = BlankNode::default();
+    /// let g2 = BlankNode::default();
+    /// graph1.insert(QuadRef::new(iri, iri, &bnode2, &g2));
+    /// graph1.insert(QuadRef::new(&bnode2, iri, iri, &g2));
+    ///
+    /// assert_ne!(graph1, graph2);
+    /// graph1.canonicalize();
+    /// graph2.canonicalize();
+    /// assert_eq!(graph1, graph2);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     ///
@@ -1247,31 +1177,6 @@ impl<'a> GraphView<'a> {
         self.iter().next().is_none()
     }
 
-    /// Dumps the graph into a file.
-    ///
-    /// Usage example:
-    /// ```
-    /// use oxigraph::io::GraphFormat;
-    /// use oxigraph::model::*;    
-    ///
-    /// let mut dataset = Dataset::new();
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// dataset.insert(QuadRef::new(ex, ex, ex, ex));
-    ///
-    /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
-    /// let mut buffer = Vec::new();
-    /// dataset.graph(ex).dump(&mut buffer, GraphFormat::NTriples)?;
-    /// assert_eq!(file, buffer.as_slice());
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
-    /// ```
-    pub fn dump(&self, writer: impl Write, format: GraphFormat) -> io::Result<()> {
-        let mut writer = GraphSerializer::from_format(format).triple_writer(writer)?;
-        for t in self {
-            writer.write(t)?;
-        }
-        writer.finish()
-    }
-
     fn encoded_triple(&self, triple: TripleRef<'_>) -> Option<InternedTriple> {
         Some(InternedTriple {
             subject: self.dataset.encoded_subject(triple.subject)?,
@@ -1369,49 +1274,6 @@ impl<'a> GraphViewMut<'a> {
         } else {
             false
         }
-    }
-
-    /// Loads a file into the graph.
-    ///
-    /// Usage example:
-    /// ```
-    /// use oxigraph::model::*;
-    /// use oxigraph::io::GraphFormat;
-    ///
-    /// let mut dataset = Dataset::new();
-    /// let mut graph = dataset.graph_mut(NamedNodeRef::new("http://example.com")?);
-    ///
-    /// // insertion
-    /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
-    /// graph.load(file.as_ref(), GraphFormat::NTriples, None)?;
-    ///
-    /// // we inspect the dataset contents
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// assert!(graph.contains(TripleRef::new(ex, ex, ex)));
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
-    /// ```
-    ///
-    /// Warning: This functions inserts the triples during the parsing.
-    /// If the parsing fails in the middle of the file, the triples read before stay in the graph.
-    ///
-    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
-    pub fn load(
-        &mut self,
-        reader: impl BufRead,
-        format: GraphFormat,
-        base_iri: Option<&str>,
-    ) -> Result<(), ParserError> {
-        let mut parser = GraphParser::from_format(format);
-        if let Some(base_iri) = base_iri {
-            parser = parser
-                .with_base_iri(base_iri)
-                .map_err(|e| ParserError::invalid_base_iri(base_iri, e))?;
-        }
-        for t in parser.read_triples(reader)? {
-            self.insert(&t?);
-        }
-        Ok(())
     }
 
     fn encode_triple(&mut self, triple: TripleRef<'_>) -> InternedTriple {
@@ -1516,29 +1378,6 @@ impl<'a> GraphViewMut<'a> {
     /// Checks if this graph contains a triple
     pub fn is_empty(&self) -> bool {
         self.read().is_empty()
-    }
-
-    /// Dumps the graph into a file.
-    ///
-    /// Usage example:
-    /// ```
-    /// use oxigraph::io::GraphFormat;
-    /// use oxigraph::model::*;    
-    ///
-    /// let mut dataset = Dataset::new();
-    /// let mut graph = dataset.graph_mut(NamedNodeRef::new("http://example.com")?);
-    ///
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// graph.insert(TripleRef::new(ex, ex, ex));
-    ///
-    /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
-    /// let mut buffer = Vec::new();
-    /// graph.dump(&mut buffer, GraphFormat::NTriples)?;
-    /// assert_eq!(file, buffer.as_slice());
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
-    /// ```
-    pub fn dump(self, writer: impl Write, format: GraphFormat) -> io::Result<()> {
-        self.read().dump(writer, format)
     }
 }
 

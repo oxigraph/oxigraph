@@ -19,12 +19,9 @@
 //!
 //! See also [`Dataset`](super::Dataset) if you want to get support of multiple RDF graphs at the same time.
 
-use crate::io::read::ParserError;
-use crate::io::GraphFormat;
 use crate::model::dataset::*;
 use crate::model::*;
-use std::io::{BufRead, Write};
-use std::{fmt, io};
+use std::fmt;
 
 /// An in-memory [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-graph).
 ///
@@ -179,74 +176,24 @@ impl Graph {
         self.dataset.clear()
     }
 
-    /// Loads a file into the graph.
-    ///
-    /// Usage example:
-    /// ```
-    /// use oxigraph::model::*;
-    /// use oxigraph::io::GraphFormat;
-    ///
-    /// let mut graph = Graph::new();
-    ///
-    /// // insertion
-    /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
-    /// graph.load(file.as_ref(), GraphFormat::NTriples, None)?;
-    ///
-    /// // we inspect the graph contents
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// assert!(graph.contains(TripleRef::new(ex, ex, ex)));
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
-    /// ```
-    ///
-    /// Warning: This functions inserts the triples during the parsing.
-    /// If the parsing fails in the middle of the file, the triples read before stay in the graph.
-    ///
-    /// Errors related to parameter validation like the base IRI use the [`InvalidInput`](std::io::ErrorKind::InvalidInput) error kind.
-    /// Errors related to a bad syntax in the loaded file use the [`InvalidData`](std::io::ErrorKind::InvalidData) or [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof) error kinds.
-    pub fn load(
-        &mut self,
-        reader: impl BufRead,
-        format: GraphFormat,
-        base_iri: Option<&str>,
-    ) -> Result<(), ParserError> {
-        self.graph_mut().load(reader, format, base_iri)
-    }
-
-    /// Dumps the graph into a file.
-    ///
-    /// Usage example:
-    /// ```
-    /// use oxigraph::io::GraphFormat;
-    /// use oxigraph::model::Graph;
-    ///
-    /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
-    ///
-    /// let mut graph = Graph::new();
-    /// graph.load(file, GraphFormat::NTriples, None)?;
-    ///
-    /// let mut buffer = Vec::new();
-    /// graph.dump(&mut buffer, GraphFormat::NTriples)?;
-    /// assert_eq!(file, buffer.as_slice());
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
-    /// ```
-    pub fn dump(&self, writer: impl Write, format: GraphFormat) -> io::Result<()> {
-        self.graph().dump(writer, format)
-    }
-
     /// Applies on the graph the canonicalization process described in
     /// [Canonical Forms for Isomorphic and Equivalent RDF Graphs: Algorithms for Leaning and Labelling Blank Nodes, Aidan Hogan, 2017](http://aidanhogan.com/docs/rdf-canonicalisation.pdf)
     ///   
     /// Usage example ([Graph isomorphim](https://www.w3.org/TR/rdf11-concepts/#dfn-graph-isomorphism)):
     /// ```
-    /// use oxigraph::io::GraphFormat;
-    /// use oxigraph::model::Graph;
+    /// use oxigraph::model::*;
     ///
-    /// let file = "<http://example.com> <http://example.com> [ <http://example.com/p> <http://example.com/o> ] .".as_bytes();
+    /// let iri = NamedNodeRef::new("http://example.com")?;
     ///
     /// let mut graph1 = Graph::new();
-    /// graph1.load(file, GraphFormat::Turtle, None)?;
+    /// let bnode1 = BlankNode::default();
+    /// graph1.insert(TripleRef::new(iri, iri, &bnode1));
+    /// graph1.insert(TripleRef::new(&bnode1, iri, iri));
+    ///
     /// let mut graph2 = Graph::new();
-    /// graph2.load(file, GraphFormat::Turtle, None)?;
+    /// let bnode2 = BlankNode::default();
+    /// graph1.insert(TripleRef::new(iri, iri, &bnode2));
+    /// graph1.insert(TripleRef::new(&bnode2, iri, iri));
     ///
     /// assert_ne!(graph1, graph2);
     /// graph1.canonicalize();
