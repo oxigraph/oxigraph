@@ -1,5 +1,4 @@
 use rand::random;
-use rio_api::model as rio;
 use std::error::Error;
 use std::fmt;
 use std::io::Write;
@@ -211,7 +210,7 @@ impl<'a> BlankNodeRef<'a> {
 impl fmt::Display for BlankNodeRef<'_> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        rio::BlankNode { id: self.as_str() }.fmt(f)
+        write!(f, "_:{}", self.as_str())
     }
 }
 

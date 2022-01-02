@@ -3,9 +3,9 @@ use crate::vocab::rdf;
 use crate::vocab::xsd;
 use crate::NamedNodeRef;
 use oxilangtag::{LanguageTag, LanguageTagParseError};
-use rio_api::model as rio;
 use std::borrow::Cow;
 use std::fmt;
+use std::fmt::Write;
 use std::option::Option;
 
 /// An owned RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal)
@@ -437,18 +437,16 @@ impl fmt::Display for LiteralRef<'_> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
-            LiteralRefContent::String(value) => rio::Literal::Simple { value },
+            LiteralRefContent::String(value) => print_quoted_str(value, f),
             LiteralRefContent::LanguageTaggedString { value, language } => {
-                rio::Literal::LanguageTaggedString { value, language }
+                print_quoted_str(value, f)?;
+                write!(f, "@{}", language)
             }
-            LiteralRefContent::TypedLiteral { value, datatype } => rio::Literal::Typed {
-                value,
-                datatype: rio::NamedNode {
-                    iri: datatype.as_str(),
-                },
-            },
+            LiteralRefContent::TypedLiteral { value, datatype } => {
+                print_quoted_str(value, f)?;
+                write!(f, "^^{}", datatype)
+            }
         }
-        .fmt(f)
     }
 }
 
@@ -485,6 +483,21 @@ impl PartialEq<LiteralRef<'_>> for Literal {
     fn eq(&self, other: &LiteralRef<'_>) -> bool {
         self.as_ref() == *other
     }
+}
+
+#[inline]
+pub(crate) fn print_quoted_str(string: &str, f: &mut impl Write) -> fmt::Result {
+    f.write_char('"')?;
+    for c in string.chars() {
+        match c {
+            '\n' => f.write_str("\\n"),
+            '\r' => f.write_str("\\r"),
+            '"' => f.write_str("\\\""),
+            '\\' => f.write_str("\\\\"),
+            c => f.write_char(c),
+        }?;
+    }
+    f.write_char('"')
 }
 
 #[cfg(test)]

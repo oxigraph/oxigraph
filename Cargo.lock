@@ -917,7 +917,6 @@ dependencies = [
  "oxilangtag",
  "oxiri",
  "rand",
- "rio_api",
  "sophia_api",
 ]
 

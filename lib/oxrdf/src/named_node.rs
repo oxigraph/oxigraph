@@ -1,5 +1,4 @@
 use oxiri::{Iri, IriParseError};
-use rio_api::model as rio;
 use std::fmt;
 
 /// An owned RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
@@ -143,7 +142,7 @@ impl<'a> NamedNodeRef<'a> {
 impl fmt::Display for NamedNodeRef<'_> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        rio::NamedNode { iri: self.as_str() }.fmt(f)
+        write!(f, "<{}>", self.as_str())
     }
 }
 

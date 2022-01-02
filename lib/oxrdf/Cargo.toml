@@ -20,8 +20,7 @@ rdf-star = []
 rand = "0.8"
 oxilangtag = "0.1"
 oxiri = "0.1"
-rio_api = "0.6"
-lasso = {version="0.6", features=["multi-threaded", "inline-more"]}
+lasso = { version="0.6", features = ["multi-threaded", "inline-more"] }
 sophia_api = { version = "0.7", optional = true }
 
 [package.metadata.docs.rs]
