@@ -7,6 +7,7 @@ use std::collections::HashMap;
 #[derive(Debug, Default)]
 pub struct Interner {
     strings: Rodeo,
+    #[cfg(feature = "rdf-star")]
     triples: HashMap<InternedTriple, Triple>,
 }
 
@@ -175,6 +176,7 @@ impl InternedLiteral {
 pub enum InternedSubject {
     NamedNode(InternedNamedNode),
     BlankNode(InternedBlankNode),
+    #[cfg(feature = "rdf-star")]
     Triple(Box<InternedTriple>),
 }
 
@@ -187,6 +189,7 @@ impl InternedSubject {
             SubjectRef::BlankNode(node) => {
                 Self::BlankNode(InternedBlankNode::encoded_into(node, interner))
             }
+            #[cfg(feature = "rdf-star")]
             SubjectRef::Triple(triple) => Self::Triple(Box::new(InternedTriple::encoded_into(
                 triple.as_ref(),
                 interner,
@@ -202,6 +205,7 @@ impl InternedSubject {
             SubjectRef::BlankNode(node) => {
                 Self::BlankNode(InternedBlankNode::encoded_from(node, interner)?)
             }
+            #[cfg(feature = "rdf-star")]
             SubjectRef::Triple(triple) => Self::Triple(Box::new(InternedTriple::encoded_from(
                 triple.as_ref(),
                 interner,
@@ -213,6 +217,7 @@ impl InternedSubject {
         match self {
             Self::NamedNode(node) => SubjectRef::NamedNode(node.decode_from(interner)),
             Self::BlankNode(node) => SubjectRef::BlankNode(node.decode_from(interner)),
+            #[cfg(feature = "rdf-star")]
             Self::Triple(triple) => SubjectRef::Triple(&interner.triples[triple.as_ref()]),
         }
     }
@@ -225,6 +230,7 @@ impl InternedSubject {
         match self {
             Self::NamedNode(node) => Self::NamedNode(node.next()),
             Self::BlankNode(node) => Self::BlankNode(node.next()),
+            #[cfg(feature = "rdf-star")]
             Self::Triple(triple) => Self::Triple(Box::new(triple.next())),
         }
     }
@@ -296,6 +302,7 @@ pub enum InternedTerm {
     NamedNode(InternedNamedNode),
     BlankNode(InternedBlankNode),
     Literal(InternedLiteral),
+    #[cfg(feature = "rdf-star")]
     Triple(Box<InternedTriple>),
 }
 
@@ -309,6 +316,7 @@ impl InternedTerm {
                 Self::BlankNode(InternedBlankNode::encoded_into(term, interner))
             }
             TermRef::Literal(term) => Self::Literal(InternedLiteral::encoded_into(term, interner)),
+            #[cfg(feature = "rdf-star")]
             TermRef::Triple(triple) => Self::Triple(Box::new(InternedTriple::encoded_into(
                 triple.as_ref(),
                 interner,
@@ -325,6 +333,7 @@ impl InternedTerm {
                 Self::BlankNode(InternedBlankNode::encoded_from(term, interner)?)
             }
             TermRef::Literal(term) => Self::Literal(InternedLiteral::encoded_from(term, interner)?),
+            #[cfg(feature = "rdf-star")]
             TermRef::Triple(triple) => Self::Triple(Box::new(InternedTriple::encoded_from(
                 triple.as_ref(),
                 interner,
@@ -337,6 +346,7 @@ impl InternedTerm {
             Self::NamedNode(term) => TermRef::NamedNode(term.decode_from(interner)),
             Self::BlankNode(term) => TermRef::BlankNode(term.decode_from(interner)),
             Self::Literal(term) => TermRef::Literal(term.decode_from(interner)),
+            #[cfg(feature = "rdf-star")]
             Self::Triple(triple) => TermRef::Triple(&interner.triples[triple.as_ref()]),
         }
     }
@@ -350,6 +360,7 @@ impl InternedTerm {
             Self::NamedNode(node) => Self::NamedNode(node.next()),
             Self::BlankNode(node) => Self::BlankNode(node.next()),
             Self::Literal(node) => Self::Literal(node.next()),
+            #[cfg(feature = "rdf-star")]
             Self::Triple(triple) => Self::Triple(Box::new(triple.next())),
         }
     }
@@ -366,6 +377,7 @@ pub struct InternedTriple {
     pub object: InternedTerm,
 }
 
+#[cfg(feature = "rdf-star")]
 impl InternedTriple {
     pub fn encoded_into(triple: TripleRef<'_>, interner: &mut Interner) -> Self {
         let interned_triple = Self {

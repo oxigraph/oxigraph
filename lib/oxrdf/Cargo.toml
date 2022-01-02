@@ -12,6 +12,10 @@ A library providing basic data structures related to RDF
 """
 edition = "2021"
 
+[features]
+default = []
+rdf-star = []
+
 [dependencies]
 rand = "0.8"
 oxilangtag = "0.1"

@@ -536,12 +536,16 @@ impl Dataset {
         for (g, s, _, o) in &self.gspo {
             if let InternedSubject::BlankNode(bnode) = s {
                 bnodes.insert(*bnode);
-            } else if let InternedSubject::Triple(triple) = s {
+            }
+            #[cfg(feature = "rdf-star")]
+            if let InternedSubject::Triple(triple) = s {
                 self.triple_blank_nodes(triple, &mut bnodes);
             }
             if let InternedTerm::BlankNode(bnode) = o {
                 bnodes.insert(*bnode);
-            } else if let InternedTerm::Triple(triple) = o {
+            }
+            #[cfg(feature = "rdf-star")]
+            if let InternedTerm::Triple(triple) = o {
                 self.triple_blank_nodes(triple, &mut bnodes);
             }
             if let InternedGraphName::BlankNode(bnode) = g {
@@ -551,6 +555,7 @@ impl Dataset {
         bnodes
     }
 
+    #[cfg(feature = "rdf-star")]
     fn triple_blank_nodes(&self, triple: &InternedTriple, bnodes: &mut HashSet<InternedBlankNode>) {
         if let InternedSubject::BlankNode(bnode) = &triple.subject {
             bnodes.insert(*bnode);
@@ -633,20 +638,24 @@ impl Dataset {
         node: &InternedSubject,
         bnodes_hash: &HashMap<InternedBlankNode, u64>,
     ) -> u64 {
+        #[cfg(feature = "rdf-star")]
+        if let InternedSubject::Triple(triple) = node {
+            return self.hash_triple(triple, bnodes_hash);
+        }
         if let InternedSubject::BlankNode(bnode) = node {
             bnodes_hash[bnode]
-        } else if let InternedSubject::Triple(triple) = node {
-            self.hash_triple(triple, bnodes_hash)
         } else {
             Self::hash_tuple(node.decode_from(&self.interner))
         }
     }
 
     fn hash_term(&self, term: &InternedTerm, bnodes_hash: &HashMap<InternedBlankNode, u64>) -> u64 {
+        #[cfg(feature = "rdf-star")]
+        if let InternedTerm::Triple(triple) = term {
+            return self.hash_triple(triple, bnodes_hash);
+        }
         if let InternedTerm::BlankNode(bnode) = term {
             bnodes_hash[bnode]
-        } else if let InternedTerm::Triple(triple) = term {
-            self.hash_triple(triple, bnodes_hash)
         } else {
             Self::hash_tuple(term.decode_from(&self.interner))
         }
@@ -664,6 +673,7 @@ impl Dataset {
         }
     }
 
+    #[cfg(feature = "rdf-star")]
     fn hash_triple(
         &self,
         triple: &InternedTriple,
@@ -738,24 +748,42 @@ impl Dataset {
                 (
                     if let InternedSubject::BlankNode(bnode) = s {
                         InternedSubject::BlankNode(self.map_bnode(bnode, hashes))
-                    } else if let InternedSubject::Triple(triple) = s {
-                        InternedSubject::Triple(Box::new(InternedTriple::encoded_into(
-                            self.label_triple(&triple, hashes).as_ref(),
-                            &mut self.interner,
-                        )))
                     } else {
-                        s
+                        #[cfg(feature = "rdf-star")]
+                        {
+                            if let InternedSubject::Triple(triple) = s {
+                                InternedSubject::Triple(Box::new(InternedTriple::encoded_into(
+                                    self.label_triple(&triple, hashes).as_ref(),
+                                    &mut self.interner,
+                                )))
+                            } else {
+                                s
+                            }
+                        }
+                        #[cfg(not(feature = "rdf-star"))]
+                        {
+                            s
+                        }
                     },
                     p,
                     if let InternedTerm::BlankNode(bnode) = o {
                         InternedTerm::BlankNode(self.map_bnode(bnode, hashes))
-                    } else if let InternedTerm::Triple(triple) = o {
-                        InternedTerm::Triple(Box::new(InternedTriple::encoded_into(
-                            self.label_triple(&triple, hashes).as_ref(),
-                            &mut self.interner,
-                        )))
                     } else {
-                        o
+                        #[cfg(feature = "rdf-star")]
+                        {
+                            if let InternedTerm::Triple(triple) = o {
+                                InternedTerm::Triple(Box::new(InternedTriple::encoded_into(
+                                    self.label_triple(&triple, hashes).as_ref(),
+                                    &mut self.interner,
+                                )))
+                            } else {
+                                o
+                            }
+                        }
+                        #[cfg(not(feature = "rdf-star"))]
+                        {
+                            o
+                        }
                     },
                     if let InternedGraphName::BlankNode(bnode) = g {
                         InternedGraphName::BlankNode(self.map_bnode(bnode, hashes))
@@ -769,6 +797,7 @@ impl Dataset {
         quads
     }
 
+    #[cfg(feature = "rdf-star")]
     fn label_triple(
         &mut self,
         triple: &InternedTriple,

@@ -2,6 +2,8 @@
 //!
 //! This crate is intended to be a basic building block of other crates like [Oxigraph](https://crates.io/crates/oxigraph) or [Spargebra](https://crates.io/crates/spargebra).
 //!
+//! Support for [RDF-star](https://w3c.github.io/rdf-star/cg-spec/) is available behind the `rdf-star` feature.
+//!
 //! Inspired by [RDF/JS](https://rdf.js.org/data-model-spec/) and [Apache Commons RDF](http://commons.apache.org/proper/commons-rdf/).
 //!
 //! Usage example:

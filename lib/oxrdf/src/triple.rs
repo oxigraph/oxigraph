@@ -157,6 +157,7 @@ impl<'a> From<NamedOrBlankNodeRef<'a>> for NamedOrBlankNode {
 pub enum Subject {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
+    #[cfg(feature = "rdf-star")]
     Triple(Arc<Triple>),
 }
 
@@ -171,6 +172,7 @@ impl Subject {
         self.as_ref().is_blank_node()
     }
 
+    #[cfg(feature = "rdf-star")]
     #[inline]
     pub fn is_triple(&self) -> bool {
         self.as_ref().is_triple()
@@ -181,6 +183,7 @@ impl Subject {
         match self {
             Self::NamedNode(node) => SubjectRef::NamedNode(node.as_ref()),
             Self::BlankNode(node) => SubjectRef::BlankNode(node.as_ref()),
+            #[cfg(feature = "rdf-star")]
             Self::Triple(triple) => SubjectRef::Triple(triple),
         }
     }
@@ -221,6 +224,7 @@ impl From<BlankNodeRef<'_>> for Subject {
     }
 }
 
+#[cfg(feature = "rdf-star")]
 impl From<Triple> for Subject {
     #[inline]
     fn from(node: Triple) -> Self {
@@ -228,6 +232,7 @@ impl From<Triple> for Subject {
     }
 }
 
+#[cfg(feature = "rdf-star")]
 impl From<Arc<Triple>> for Subject {
     #[inline]
     fn from(node: Arc<Triple>) -> Self {
@@ -235,6 +240,7 @@ impl From<Arc<Triple>> for Subject {
     }
 }
 
+#[cfg(feature = "rdf-star")]
 impl From<Box<Triple>> for Subject {
     #[inline]
     fn from(node: Box<Triple>) -> Self {
@@ -242,6 +248,7 @@ impl From<Box<Triple>> for Subject {
     }
 }
 
+#[cfg(feature = "rdf-star")]
 impl From<TripleRef<'_>> for Subject {
     #[inline]
     fn from(node: TripleRef<'_>) -> Self {
@@ -271,6 +278,7 @@ impl From<NamedOrBlankNodeRef<'_>> for Subject {
 pub enum SubjectRef<'a> {
     NamedNode(NamedNodeRef<'a>),
     BlankNode(BlankNodeRef<'a>),
+    #[cfg(feature = "rdf-star")]
     Triple(&'a Triple),
 }
 
@@ -285,6 +293,7 @@ impl<'a> SubjectRef<'a> {
         matches!(self, Self::BlankNode(_))
     }
 
+    #[cfg(feature = "rdf-star")]
     #[inline]
     pub fn is_triple(&self) -> bool {
         matches!(self, Self::Triple(_))
@@ -295,6 +304,7 @@ impl<'a> SubjectRef<'a> {
         match self {
             Self::NamedNode(node) => Subject::NamedNode(node.into_owned()),
             Self::BlankNode(node) => Subject::BlankNode(node.into_owned()),
+            #[cfg(feature = "rdf-star")]
             Self::Triple(triple) => Subject::Triple(Arc::new(triple.clone())),
         }
     }
@@ -306,6 +316,7 @@ impl fmt::Display for SubjectRef<'_> {
         match self {
             Self::NamedNode(node) => node.fmt(f),
             Self::BlankNode(node) => node.fmt(f),
+            #[cfg(feature = "rdf-star")]
             Self::Triple(triple) => write!(f, "<<{}>>", triple),
         }
     }
@@ -339,6 +350,7 @@ impl<'a> From<&'a BlankNode> for SubjectRef<'a> {
     }
 }
 
+#[cfg(feature = "rdf-star")]
 impl<'a> From<&'a Triple> for SubjectRef<'a> {
     #[inline]
     fn from(node: &'a Triple) -> Self {
@@ -384,6 +396,7 @@ pub enum Term {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
     Literal(Literal),
+    #[cfg(feature = "rdf-star")]
     Triple(Arc<Triple>),
 }
 
@@ -403,6 +416,7 @@ impl Term {
         self.as_ref().is_literal()
     }
 
+    #[cfg(feature = "rdf-star")]
     #[inline]
     pub fn is_triple(&self) -> bool {
         self.as_ref().is_triple()
@@ -414,6 +428,7 @@ impl Term {
             Self::NamedNode(node) => TermRef::NamedNode(node.as_ref()),
             Self::BlankNode(node) => TermRef::BlankNode(node.as_ref()),
             Self::Literal(literal) => TermRef::Literal(literal.as_ref()),
+            #[cfg(feature = "rdf-star")]
             Self::Triple(triple) => TermRef::Triple(triple),
         }
     }
@@ -468,6 +483,7 @@ impl From<LiteralRef<'_>> for Term {
     }
 }
 
+#[cfg(feature = "rdf-star")]
 impl From<Triple> for Term {
     #[inline]
     fn from(triple: Triple) -> Self {
@@ -475,6 +491,7 @@ impl From<Triple> for Term {
     }
 }
 
+#[cfg(feature = "rdf-star")]
 impl From<Arc<Triple>> for Term {
     #[inline]
     fn from(node: Arc<Triple>) -> Self {
@@ -482,6 +499,7 @@ impl From<Arc<Triple>> for Term {
     }
 }
 
+#[cfg(feature = "rdf-star")]
 impl From<Box<Triple>> for Term {
     #[inline]
     fn from(node: Box<Triple>) -> Self {
@@ -489,6 +507,7 @@ impl From<Box<Triple>> for Term {
     }
 }
 
+#[cfg(feature = "rdf-star")]
 impl From<TripleRef<'_>> for Term {
     #[inline]
     fn from(triple: TripleRef<'_>) -> Self {
@@ -519,6 +538,7 @@ impl From<Subject> for Term {
         match node {
             Subject::NamedNode(node) => node.into(),
             Subject::BlankNode(node) => node.into(),
+            #[cfg(feature = "rdf-star")]
             Subject::Triple(triple) => Self::Triple(triple),
         }
     }
@@ -538,6 +558,7 @@ pub enum TermRef<'a> {
     NamedNode(NamedNodeRef<'a>),
     BlankNode(BlankNodeRef<'a>),
     Literal(LiteralRef<'a>),
+    #[cfg(feature = "rdf-star")]
     Triple(&'a Triple),
 }
 
@@ -557,6 +578,7 @@ impl<'a> TermRef<'a> {
         matches!(self, Self::Literal(_))
     }
 
+    #[cfg(feature = "rdf-star")]
     #[inline]
     pub fn is_triple(&self) -> bool {
         matches!(self, Self::Triple(_))
@@ -568,6 +590,7 @@ impl<'a> TermRef<'a> {
             Self::NamedNode(node) => Term::NamedNode(node.into_owned()),
             Self::BlankNode(node) => Term::BlankNode(node.into_owned()),
             Self::Literal(literal) => Term::Literal(literal.into_owned()),
+            #[cfg(feature = "rdf-star")]
             Self::Triple(triple) => Term::Triple(Arc::new(triple.clone())),
         }
     }
@@ -580,6 +603,7 @@ impl fmt::Display for TermRef<'_> {
             Self::NamedNode(node) => node.fmt(f),
             Self::BlankNode(node) => node.fmt(f),
             Self::Literal(literal) => literal.fmt(f),
+            #[cfg(feature = "rdf-star")]
             Self::Triple(triple) => {
                 write!(f, "<<{}>>", triple)
             }
@@ -629,6 +653,7 @@ impl<'a> From<&'a Literal> for TermRef<'a> {
     }
 }
 
+#[cfg(feature = "rdf-star")]
 impl<'a> From<&'a Triple> for TermRef<'a> {
     #[inline]
     fn from(node: &'a Triple) -> Self {
@@ -659,6 +684,7 @@ impl<'a> From<SubjectRef<'a>> for TermRef<'a> {
         match node {
             SubjectRef::NamedNode(node) => node.into(),
             SubjectRef::BlankNode(node) => node.into(),
+            #[cfg(feature = "rdf-star")]
             SubjectRef::Triple(triple) => triple.into(),
         }
     }

@@ -301,24 +301,31 @@ fn read_term(s: &str) -> Result<(Term, &str), TermParseError> {
         let (object, remain) = read_term(remain)?;
         let remain = remain.trim_start();
         if let Some(remain) = remain.strip_prefix(">>") {
-            Ok((
-                Triple {
-                    subject: match subject {
-                        Term::NamedNode(s) => s.into(),
-                        Term::BlankNode(s) => s.into(),
-                        Term::Literal(_) => {
-                            return Err(TermParseError::msg(
-                                "Literals are not allowed in subject position",
-                            ))
-                        }
-                        Term::Triple(s) => Subject::Triple(s),
-                    },
-                    predicate,
-                    object,
-                }
-                .into(),
-                remain,
-            ))
+            #[cfg(feature = "rdf-star")]
+            {
+                Ok((
+                    Triple {
+                        subject: match subject {
+                            Term::NamedNode(s) => s.into(),
+                            Term::BlankNode(s) => s.into(),
+                            Term::Literal(_) => {
+                                return Err(TermParseError::msg(
+                                    "Literals are not allowed in subject position",
+                                ))
+                            }
+                            Term::Triple(s) => Subject::Triple(s),
+                        },
+                        predicate,
+                        object,
+                    }
+                    .into(),
+                    remain,
+                ))
+            }
+            #[cfg(not(feature = "rdf-star"))]
+            {
+                Err(TermParseError::msg("RDF-star is not supported"))
+            }
         } else {
             Err(TermParseError::msg(
                 "Nested triple serialization should be enclosed between << and >>",
