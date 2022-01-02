@@ -5,7 +5,6 @@ use crate::utils::to_err;
 use js_sys::{Reflect, UriError};
 use oxigraph::model::*;
 use oxigraph::sparql::Variable;
-use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
 thread_local! {
@@ -515,8 +514,8 @@ impl From<Triple> for JsTerm {
     }
 }
 
-impl From<Arc<Triple>> for JsTerm {
-    fn from(triple: Arc<Triple>) -> Self {
+impl From<Box<Triple>> for JsTerm {
+    fn from(triple: Box<Triple>) -> Self {
         triple.as_ref().clone().into()
     }
 }

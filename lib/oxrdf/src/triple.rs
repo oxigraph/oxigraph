@@ -3,7 +3,6 @@ use crate::literal::Literal;
 use crate::named_node::NamedNode;
 use crate::{BlankNodeRef, LiteralRef, NamedNodeRef};
 use std::fmt;
-use std::sync::Arc;
 
 /// The owned union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -158,7 +157,7 @@ pub enum Subject {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
     #[cfg(feature = "rdf-star")]
-    Triple(Arc<Triple>),
+    Triple(Box<Triple>),
 }
 
 impl Subject {
@@ -228,15 +227,7 @@ impl From<BlankNodeRef<'_>> for Subject {
 impl From<Triple> for Subject {
     #[inline]
     fn from(node: Triple) -> Self {
-        Self::Triple(Arc::new(node))
-    }
-}
-
-#[cfg(feature = "rdf-star")]
-impl From<Arc<Triple>> for Subject {
-    #[inline]
-    fn from(node: Arc<Triple>) -> Self {
-        Self::Triple(node)
+        Self::Triple(Box::new(node))
     }
 }
 
@@ -244,7 +235,7 @@ impl From<Arc<Triple>> for Subject {
 impl From<Box<Triple>> for Subject {
     #[inline]
     fn from(node: Box<Triple>) -> Self {
-        Self::Triple(node.into())
+        Self::Triple(node)
     }
 }
 
@@ -305,7 +296,7 @@ impl<'a> SubjectRef<'a> {
             Self::NamedNode(node) => Subject::NamedNode(node.into_owned()),
             Self::BlankNode(node) => Subject::BlankNode(node.into_owned()),
             #[cfg(feature = "rdf-star")]
-            Self::Triple(triple) => Subject::Triple(Arc::new(triple.clone())),
+            Self::Triple(triple) => Subject::Triple(Box::new(triple.clone())),
         }
     }
 }
@@ -397,7 +388,7 @@ pub enum Term {
     BlankNode(BlankNode),
     Literal(Literal),
     #[cfg(feature = "rdf-star")]
-    Triple(Arc<Triple>),
+    Triple(Box<Triple>),
 }
 
 impl Term {
@@ -487,15 +478,7 @@ impl From<LiteralRef<'_>> for Term {
 impl From<Triple> for Term {
     #[inline]
     fn from(triple: Triple) -> Self {
-        Self::Triple(Arc::new(triple))
-    }
-}
-
-#[cfg(feature = "rdf-star")]
-impl From<Arc<Triple>> for Term {
-    #[inline]
-    fn from(node: Arc<Triple>) -> Self {
-        Self::Triple(node)
+        Self::Triple(Box::new(triple))
     }
 }
 
@@ -503,7 +486,7 @@ impl From<Arc<Triple>> for Term {
 impl From<Box<Triple>> for Term {
     #[inline]
     fn from(node: Box<Triple>) -> Self {
-        Self::Triple(node.into())
+        Self::Triple(node)
     }
 }
 
@@ -591,7 +574,7 @@ impl<'a> TermRef<'a> {
             Self::BlankNode(node) => Term::BlankNode(node.into_owned()),
             Self::Literal(literal) => Term::Literal(literal.into_owned()),
             #[cfg(feature = "rdf-star")]
-            Self::Triple(triple) => Term::Triple(Arc::new(triple.clone())),
+            Self::Triple(triple) => Term::Triple(Box::new(triple.clone())),
         }
     }
 }
