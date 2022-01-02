@@ -188,19 +188,11 @@ impl QueryDataset {
     fn from_algebra(inner: &Option<spargebra::algebra::QueryDataset>) -> Self {
         if let Some(inner) = inner {
             Self {
-                default: Some(
-                    inner
-                        .default
-                        .iter()
-                        .map(|g| NamedNode::new_unchecked(&g.iri).into())
-                        .collect(),
-                ),
-                named: inner.named.as_ref().map(|named| {
-                    named
-                        .iter()
-                        .map(|g| NamedNode::new_unchecked(&g.iri).into())
-                        .collect()
-                }),
+                default: Some(inner.default.iter().map(|g| g.clone().into()).collect()),
+                named: inner
+                    .named
+                    .as_ref()
+                    .map(|named| named.iter().map(|g| g.clone().into()).collect()),
             }
         } else {
             Self {

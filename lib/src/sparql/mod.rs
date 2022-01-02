@@ -52,15 +52,7 @@ pub(crate) fn evaluate_query(
                 options.service_handler(),
                 Rc::new(options.custom_functions),
             )
-            .evaluate_select_plan(
-                &plan,
-                Rc::new(
-                    variables
-                        .into_iter()
-                        .map(|v| Variable::new_unchecked(v.name))
-                        .collect(),
-                ),
-            ))
+            .evaluate_select_plan(&plan, Rc::new(variables)))
         }
         spargebra::Query::Ask {
             pattern, base_iri, ..

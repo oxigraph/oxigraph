@@ -184,7 +184,7 @@ impl<'a> BlankNodeRef<'a> {
     /// use oxrdf::BlankNode;
     ///
     /// assert_eq!(BlankNode::new_from_unique_id(128).as_ref().unique_id(), Some(128));
-    /// assert_eq!(BlankNode::new("128")?.as_ref().unique_id(), None);
+    /// assert_eq!(BlankNode::new("foo")?.as_ref().unique_id(), None);
     /// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
     /// ```
     #[inline]

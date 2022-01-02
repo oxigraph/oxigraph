@@ -191,8 +191,7 @@ impl GraphUpdateOperation {
                 if *silent {
                     write!(f, "silent ")?;
                 }
-                source.fmt_sse(f)?;
-                write!(f, " ")?;
+                write!(f, "{} ", source)?;
                 destination.fmt_sse(f)?;
                 write!(f, ")")
             }
@@ -209,8 +208,7 @@ impl GraphUpdateOperation {
                 if *silent {
                     write!(f, "silent ")?;
                 }
-                graph.fmt_sse(f)?;
-                write!(f, ")")
+                write!(f, "{})", graph)
             }
             GraphUpdateOperation::Drop { silent, graph } => {
                 write!(f, "(drop ")?;

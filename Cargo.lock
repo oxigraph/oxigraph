@@ -1556,6 +1556,7 @@ version = "0.1.0"
 dependencies = [
  "oxilangtag",
  "oxiri",
+ "oxrdf",
  "peg",
  "rand",
 ]

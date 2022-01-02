@@ -8,7 +8,7 @@ use std::fmt;
 use std::fmt::Write;
 use std::option::Option;
 
-/// An owned RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal)
+/// An owned RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
 /// ```
@@ -43,13 +43,13 @@ enum LiteralContent {
 }
 
 impl Literal {
-    /// Builds an RDF [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal)
+    /// Builds an RDF [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal).
     #[inline]
     pub fn new_simple_literal(value: impl Into<String>) -> Self {
         Self(LiteralContent::String(value.into()))
     }
 
-    /// Builds an RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) with a [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri)
+    /// Builds an RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) with a [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri).
     #[inline]
     pub fn new_typed_literal(value: impl Into<String>, datatype: impl Into<NamedNode>) -> Self {
         let value = value.into();
@@ -61,7 +61,7 @@ impl Literal {
         })
     }
 
-    /// Builds an RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
+    /// Builds an RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string).
     #[inline]
     pub fn new_language_tagged_literal(
         value: impl Into<String>,
@@ -75,7 +75,7 @@ impl Literal {
         ))
     }
 
-    /// Builds an RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
+    /// Builds an RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string).
     ///
     /// It is the responsibility of the caller to check that `language`
     /// is valid [BCP47](https://tools.ietf.org/html/bcp47) language tag,
@@ -93,7 +93,7 @@ impl Literal {
         })
     }
 
-    /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form)
+    /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form).
     #[inline]
     pub fn value(&self) -> &str {
         self.as_ref().value()
@@ -293,7 +293,7 @@ impl From<f64> for Literal {
     }
 }
 
-/// A borrowed RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal)
+/// A borrowed RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
 /// ```
@@ -327,13 +327,13 @@ enum LiteralRefContent<'a> {
 }
 
 impl<'a> LiteralRef<'a> {
-    /// Builds an RDF [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal)
+    /// Builds an RDF [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal).
     #[inline]
     pub fn new_simple_literal(value: &'a str) -> Self {
         LiteralRef(LiteralRefContent::String(value))
     }
 
-    /// Builds an RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) with a [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri)
+    /// Builds an RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) with a [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri).
     #[inline]
     pub fn new_typed_literal(value: &'a str, datatype: impl Into<NamedNodeRef<'a>>) -> Self {
         let datatype = datatype.into();
@@ -344,7 +344,7 @@ impl<'a> LiteralRef<'a> {
         })
     }
 
-    /// Builds an RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
+    /// Builds an RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string).
     ///
     /// It is the responsibility of the caller to check that `language`
     /// is valid [BCP47](https://tools.ietf.org/html/bcp47) language tag,

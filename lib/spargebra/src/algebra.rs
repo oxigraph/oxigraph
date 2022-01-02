@@ -1,7 +1,7 @@
 //! [SPARQL 1.1 Query Algebra](https://www.w3.org/TR/sparql11-query/#sparqlQuery) representation
 
-use crate::term::print_quoted_str;
 use crate::term::*;
+use oxrdf::LiteralRef;
 use std::fmt;
 
 /// A [property path expression](https://www.w3.org/TR/sparql11-query/#defn_PropertyPathExpr)
@@ -21,7 +21,7 @@ impl PropertyPathExpression {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
-            Self::NamedNode(p) => p.fmt_sse(f),
+            Self::NamedNode(p) => write!(f, "{}", p),
             Self::Reverse(p) => {
                 write!(f, "(reverse ")?;
                 p.fmt_sse(f)?;
@@ -59,8 +59,7 @@ impl PropertyPathExpression {
             Self::NegatedPropertySet(p) => {
                 write!(f, "(notoneof")?;
                 for p in p {
-                    write!(f, " ")?;
-                    p.fmt_sse(f)?;
+                    write!(f, " {}", p)?;
                 }
                 write!(f, ")")
             }
@@ -150,9 +149,9 @@ impl Expression {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
-            Self::NamedNode(node) => node.fmt_sse(f),
-            Self::Literal(l) => l.fmt_sse(f),
-            Self::Variable(var) => var.fmt_sse(f),
+            Self::NamedNode(node) => write!(f, "{}", node),
+            Self::Literal(l) => write!(f, "{}", l),
+            Self::Variable(var) => write!(f, "{}", var),
             Self::Or(a, b) => fmt_sse_binary_expression(f, "||", a, b),
             Self::And(a, b) => fmt_sse_binary_expression(f, "&&", a, b),
             Self::Equal(a, b) => fmt_sse_binary_expression(f, "=", a, b),
@@ -192,9 +191,7 @@ impl Expression {
                 write!(f, ")")
             }
             Self::Bound(v) => {
-                write!(f, "(bound ")?;
-                v.fmt_sse(f)?;
-                write!(f, ")")
+                write!(f, "(bound {})", v)
             }
             Self::If(a, b, c) => {
                 write!(f, "(if ")?;
@@ -442,7 +439,7 @@ impl Function {
             Self::Object => write!(f, "object"),
             #[cfg(feature = "rdf-star")]
             Self::IsTriple => write!(f, "istriple"),
-            Self::Custom(iri) => iri.fmt_sse(f),
+            Self::Custom(iri) => write!(f, "{}", iri),
         }
     }
 }
@@ -658,9 +655,7 @@ impl GraphPattern {
                 variable,
                 expression,
             } => {
-                write!(f, "(extend ((")?;
-                variable.fmt_sse(f)?;
-                write!(f, " ")?;
+                write!(f, "(extend (({} ", variable)?;
                 expression.fmt_sse(f)?;
                 write!(f, ")) ")?;
                 inner.fmt_sse(f)?;
@@ -697,7 +692,7 @@ impl GraphPattern {
                     if i > 0 {
                         write!(f, " ")?;
                     }
-                    v.fmt_sse(f)?;
+                    write!(f, "{}", v)?;
                 }
                 write!(f, ") (")?;
                 for (i, (v, a)) in aggregates.iter().enumerate() {
@@ -706,9 +701,7 @@ impl GraphPattern {
                     }
                     write!(f, "(")?;
                     a.fmt_sse(f)?;
-                    write!(f, " ")?;
-                    v.fmt_sse(f)?;
-                    write!(f, ")")?;
+                    write!(f, " {})", v)?;
                 }
                 write!(f, ") ")?;
                 inner.fmt_sse(f)?;
@@ -720,19 +713,14 @@ impl GraphPattern {
             } => {
                 write!(f, "(table (vars")?;
                 for var in variables {
-                    write!(f, " ")?;
-                    var.fmt_sse(f)?;
+                    write!(f, " {}", var)?;
                 }
                 write!(f, ")")?;
                 for row in bindings {
                     write!(f, " (row")?;
                     for (value, var) in row.iter().zip(variables) {
                         if let Some(value) = value {
-                            write!(f, " (")?;
-                            var.fmt_sse(f)?;
-                            write!(f, " ")?;
-                            value.fmt_sse(f)?;
-                            write!(f, ")")?;
+                            write!(f, " ({} {})", var, value)?;
                         }
                     }
                     write!(f, ")")?;
@@ -757,7 +745,7 @@ impl GraphPattern {
                     if i > 0 {
                         write!(f, " ")?;
                     }
-                    v.fmt_sse(f)?;
+                    write!(f, "{}", v)?;
                 }
                 write!(f, ") ")?;
                 inner.fmt_sse(f)?;
@@ -1213,8 +1201,7 @@ impl AggregateExpression {
                 }
                 expr.fmt_sse(f)?;
                 if let Some(separator) = separator {
-                    write!(f, " ")?;
-                    print_quoted_str(separator, f)?;
+                    write!(f, " {}", LiteralRef::new_simple_literal(separator))?;
                 }
                 write!(f, ")")
             }
@@ -1223,8 +1210,7 @@ impl AggregateExpression {
                 expr,
                 distinct,
             } => {
-                write!(f, "(")?;
-                name.fmt_sse(f)?;
+                write!(f, "({}", name)?;
                 if *distinct {
                     write!(f, " distinct")?;
                 }
@@ -1294,16 +1280,22 @@ impl fmt::Display for AggregateExpression {
             } => {
                 if *distinct {
                     if let Some(separator) = separator {
-                        write!(f, "GROUP_CONCAT(DISTINCT {}; SEPARATOR = ", expr)?;
-                        print_quoted_str(separator, f)?;
-                        write!(f, ")")
+                        write!(
+                            f,
+                            "GROUP_CONCAT(DISTINCT {}; SEPARATOR = {})",
+                            expr,
+                            LiteralRef::new_simple_literal(separator)
+                        )
                     } else {
                         write!(f, "GROUP_CONCAT(DISTINCT {})", expr)
                     }
                 } else if let Some(separator) = separator {
-                    write!(f, "GROUP_CONCAT({}; SEPARATOR = ", expr)?;
-                    print_quoted_str(separator, f)?;
-                    write!(f, ")")
+                    write!(
+                        f,
+                        "GROUP_CONCAT({}; SEPARATOR = {})",
+                        expr,
+                        LiteralRef::new_simple_literal(separator)
+                    )
                 } else {
                     write!(f, "GROUP_CONCAT({})", expr)
                 }
@@ -1374,16 +1366,14 @@ impl QueryDataset {
             if i > 0 {
                 write!(f, " ")?;
             }
-            graph_name.fmt_sse(f)?;
+            write!(f, "{}", graph_name)?;
         }
         if let Some(named) = &self.named {
             for (i, graph_name) in named.iter().enumerate() {
                 if !self.default.is_empty() || i > 0 {
                     write!(f, " ")?;
                 }
-                write!(f, "(named ")?;
-                graph_name.fmt_sse(f)?;
-                write!(f, ")")?;
+                write!(f, "(named {})", graph_name)?;
             }
         }
         write!(f, ")")
@@ -1419,7 +1409,7 @@ impl GraphTarget {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
-            Self::NamedNode(node) => node.fmt_sse(f),
+            Self::NamedNode(node) => write!(f, "{}", node),
             Self::DefaultGraph => write!(f, "default"),
             Self::NamedGraphs => write!(f, "named"),
             Self::AllGraphs => write!(f, "all"),

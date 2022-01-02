@@ -1,7 +1,7 @@
 use oxiri::{Iri, IriParseError};
 use std::fmt;
 
-/// An owned RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
+/// An owned RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri).
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
 /// ```
@@ -19,7 +19,7 @@ pub struct NamedNode {
 }
 
 impl NamedNode {
-    /// Builds and validate an RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
+    /// Builds and validate an RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri).
     pub fn new(iri: impl Into<String>) -> Result<Self, IriParseError> {
         Ok(Self::new_from_iri(Iri::parse(iri.into())?))
     }
@@ -90,7 +90,7 @@ impl PartialEq<NamedNode> for &str {
     }
 }
 
-/// A borrowed RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri)
+/// A borrowed RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri).
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
 /// ```

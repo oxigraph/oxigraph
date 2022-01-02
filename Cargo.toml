@@ -3,10 +3,10 @@ members = [
     "js",
     "lib",
     "lib/oxrdf",
+    "lib/spargebra",
     "python",
     "rocksdb-sys",
     "server",
-    "spargebra",
     "testsuite"
 ]
 

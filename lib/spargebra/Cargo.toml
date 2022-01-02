@@ -5,7 +5,7 @@ authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["SPARQL"]
-repository = "https://github.com/oxigraph/oxigraph/tree/v0.3/spargebra"
+repository = "https://github.com/oxigraph/oxigraph/tree/master/lib/spargebra"
 homepage = "https://oxigraph.org/"
 description = """
 A SPARQL parser
@@ -14,13 +14,14 @@ edition = "2021"
 
 [features]
 default = []
-rdf-star = []
+rdf-star = ["oxrdf/rdf-star"]
 
 [dependencies]
 peg = "0.7"
 rand = "0.8"
 oxiri = "0.1"
 oxilangtag = "0.1"
+oxrdf = { version = "0.1", path="../oxrdf" }
 
 [package.metadata.docs.rs]
 all-features = true

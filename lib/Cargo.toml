@@ -43,7 +43,7 @@ sophia_api = { version = "0.7", optional = true }
 json-event-parser = "0.1"
 num_cpus = "1"
 oxrdf = { version = "0.1", path="oxrdf", features = ["rdf-star"] }
-spargebra = { version = "0.1", path="../spargebra", features = ["rdf-star"] }
+spargebra = { version = "0.1", path="spargebra", features = ["rdf-star"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 libc = "0.2"

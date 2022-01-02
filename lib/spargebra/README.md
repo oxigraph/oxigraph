@@ -1,5 +1,5 @@
 Spargebra
-========
+=========
 
 [![Latest Version](https://img.shields.io/crates/v/spargebra.svg)](https://crates.io/crates/spargebra)
 [![Released API docs](https://docs.rs/spargebra/badge.svg)](https://docs.rs/spargebra)

@@ -1,9 +1,10 @@
-use crate::model::{LiteralRef, NamedNode as OxNamedNode, NamedNodeRef, Term as OxTerm};
+use crate::model::Term as OxTerm;
 use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::plan::*;
 use crate::storage::numeric_encoder::{EncodedTerm, EncodedTriple};
-use oxrdf::Variable as OxVariable;
+use oxrdf::vocab::xsd;
+use oxrdf::TermRef;
 use rand::random;
 use spargebra::algebra::*;
 use spargebra::term::*;
@@ -13,7 +14,7 @@ use std::rc::Rc;
 
 pub struct PlanBuilder<'a> {
     dataset: &'a DatasetView,
-    custom_functions: &'a HashMap<OxNamedNode, Rc<dyn Fn(&[OxTerm]) -> Option<OxTerm>>>,
+    custom_functions: &'a HashMap<NamedNode, Rc<dyn Fn(&[OxTerm]) -> Option<OxTerm>>>,
 }
 
 impl<'a> PlanBuilder<'a> {
@@ -21,7 +22,7 @@ impl<'a> PlanBuilder<'a> {
         dataset: &'a DatasetView,
         pattern: &GraphPattern,
         is_cardinality_meaningful: bool,
-        custom_functions: &'a HashMap<OxNamedNode, Rc<dyn Fn(&[OxTerm]) -> Option<OxTerm>>>,
+        custom_functions: &'a HashMap<NamedNode, Rc<dyn Fn(&[OxTerm]) -> Option<OxTerm>>>,
     ) -> Result<(PlanNode, Vec<Variable>), EvaluationError> {
         let mut variables = Vec::default();
         let plan = PlanBuilder {
@@ -49,7 +50,7 @@ impl<'a> PlanBuilder<'a> {
         dataset: &'a DatasetView,
         template: &[TriplePattern],
         mut variables: Vec<Variable>,
-        custom_functions: &'a HashMap<OxNamedNode, Rc<dyn Fn(&[OxTerm]) -> Option<OxTerm>>>,
+        custom_functions: &'a HashMap<NamedNode, Rc<dyn Fn(&[OxTerm]) -> Option<OxTerm>>>,
     ) -> Vec<TripleTemplate> {
         PlanBuilder {
             dataset,
@@ -168,12 +169,7 @@ impl<'a> PlanBuilder<'a> {
                 let service_name = self.pattern_value_from_named_node_or_variable(name, variables);
                 PlanNode::Service {
                     service_name,
-                    variables: Rc::new(
-                        variables
-                            .iter()
-                            .map(|v| OxVariable::new_unchecked(v.name.clone()))
-                            .collect(),
-                    ),
+                    variables: Rc::new(variables.clone()),
                     child: Box::new(child),
                     graph_pattern: Rc::new(inner.as_ref().clone()),
                     silent: *silent,
@@ -295,9 +291,7 @@ impl<'a> PlanBuilder<'a> {
 
     fn build_for_path(&mut self, path: &PropertyPathExpression) -> PlanPropertyPath {
         match path {
-            PropertyPathExpression::NamedNode(p) => {
-                PlanPropertyPath::Path(self.build_named_node(p))
-            }
+            PropertyPathExpression::NamedNode(p) => PlanPropertyPath::Path(self.build_term(p)),
             PropertyPathExpression::Reverse(p) => {
                 PlanPropertyPath::Reverse(Rc::new(self.build_for_path(p)))
             }
@@ -319,7 +313,7 @@ impl<'a> PlanBuilder<'a> {
                 PlanPropertyPath::ZeroOrOne(Rc::new(self.build_for_path(p)))
             }
             PropertyPathExpression::NegatedPropertySet(p) => PlanPropertyPath::NegatedPropertySet(
-                Rc::new(p.iter().map(|p| self.build_named_node(p)).collect()),
+                Rc::new(p.iter().map(|p| self.build_term(p)).collect()),
             ),
         }
     }
@@ -331,8 +325,8 @@ impl<'a> PlanBuilder<'a> {
         graph_name: &PatternValue,
     ) -> Result<PlanExpression, EvaluationError> {
         Ok(match expression {
-            Expression::NamedNode(node) => PlanExpression::Constant(self.build_named_node(node)),
-            Expression::Literal(l) => PlanExpression::Constant(self.build_literal(l)),
+            Expression::NamedNode(node) => PlanExpression::Constant(self.build_term(node)),
+            Expression::Literal(l) => PlanExpression::Constant(self.build_term(l)),
             Expression::Variable(v) => PlanExpression::Variable(variable_key(variables, v)),
             Expression::Or(a, b) => PlanExpression::Or(
                 Box::new(self.build_for_expression(a, variables, graph_name)?),
@@ -639,16 +633,15 @@ impl<'a> PlanBuilder<'a> {
                     self.build_for_expression(&parameters[0], variables, graph_name)?,
                 )),
                 Function::Custom(name) => {
-                    let ox_name = OxNamedNode::new(&name.iri).map_err(EvaluationError::wrap)?;
-                    if self.custom_functions.contains_key(&ox_name) {
+                    if self.custom_functions.contains_key(name) {
                         PlanExpression::CustomFunction(
-                            ox_name,
+                            name.clone(),
                             parameters
                                 .iter()
                                 .map(|p| self.build_for_expression(p, variables, graph_name))
                                 .collect::<Result<Vec<_>, EvaluationError>>()?,
                         )
-                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#boolean" {
+                    } else if name.as_ref() == xsd::BOOLEAN {
                         self.build_cast(
                             parameters,
                             PlanExpression::BooleanCast,
@@ -656,7 +649,7 @@ impl<'a> PlanBuilder<'a> {
                             graph_name,
                             "boolean",
                         )?
-                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#double" {
+                    } else if name.as_ref() == xsd::DOUBLE {
                         self.build_cast(
                             parameters,
                             PlanExpression::DoubleCast,
@@ -664,7 +657,7 @@ impl<'a> PlanBuilder<'a> {
                             graph_name,
                             "double",
                         )?
-                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#float" {
+                    } else if name.as_ref() == xsd::FLOAT {
                         self.build_cast(
                             parameters,
                             PlanExpression::FloatCast,
@@ -672,7 +665,7 @@ impl<'a> PlanBuilder<'a> {
                             graph_name,
                             "float",
                         )?
-                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#decimal" {
+                    } else if name.as_ref() == xsd::DECIMAL {
                         self.build_cast(
                             parameters,
                             PlanExpression::DecimalCast,
@@ -680,7 +673,7 @@ impl<'a> PlanBuilder<'a> {
                             graph_name,
                             "decimal",
                         )?
-                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#integer" {
+                    } else if name.as_ref() == xsd::INTEGER {
                         self.build_cast(
                             parameters,
                             PlanExpression::IntegerCast,
@@ -688,7 +681,7 @@ impl<'a> PlanBuilder<'a> {
                             graph_name,
                             "integer",
                         )?
-                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#date" {
+                    } else if name.as_ref() == xsd::DATE {
                         self.build_cast(
                             parameters,
                             PlanExpression::DateCast,
@@ -696,7 +689,7 @@ impl<'a> PlanBuilder<'a> {
                             graph_name,
                             "date",
                         )?
-                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#time" {
+                    } else if name.as_ref() == xsd::TIME {
                         self.build_cast(
                             parameters,
                             PlanExpression::TimeCast,
@@ -704,7 +697,7 @@ impl<'a> PlanBuilder<'a> {
                             graph_name,
                             "time",
                         )?
-                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#dateTime" {
+                    } else if name.as_ref() == xsd::DATE_TIME {
                         self.build_cast(
                             parameters,
                             PlanExpression::DateTimeCast,
@@ -712,7 +705,7 @@ impl<'a> PlanBuilder<'a> {
                             graph_name,
                             "dateTime",
                         )?
-                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#duration" {
+                    } else if name.as_ref() == xsd::DURATION {
                         self.build_cast(
                             parameters,
                             PlanExpression::DurationCast,
@@ -720,7 +713,7 @@ impl<'a> PlanBuilder<'a> {
                             graph_name,
                             "duration",
                         )?
-                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#yearMonthDuration" {
+                    } else if name.as_ref() == xsd::YEAR_MONTH_DURATION {
                         self.build_cast(
                             parameters,
                             PlanExpression::YearMonthDurationCast,
@@ -728,7 +721,7 @@ impl<'a> PlanBuilder<'a> {
                             graph_name,
                             "yearMonthDuration",
                         )?
-                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#dayTimeDuration" {
+                    } else if name.as_ref() == xsd::DAY_TIME_DURATION {
                         self.build_cast(
                             parameters,
                             PlanExpression::DayTimeDurationCast,
@@ -736,7 +729,7 @@ impl<'a> PlanBuilder<'a> {
                             graph_name,
                             "dayTimeDuration",
                         )?
-                    } else if name.iri == "http://www.w3.org/2001/XMLSchema#string" {
+                    } else if name.as_ref() == xsd::STRING {
                         self.build_cast(
                             parameters,
                             PlanExpression::StringCast,
@@ -814,17 +807,15 @@ impl<'a> PlanBuilder<'a> {
             TermPattern::Variable(variable) => {
                 PatternValue::Variable(variable_key(variables, variable))
             }
-            TermPattern::NamedNode(node) => PatternValue::Constant(self.build_named_node(node)),
+            TermPattern::NamedNode(node) => PatternValue::Constant(self.build_term(node)),
             TermPattern::BlankNode(bnode) => {
                 PatternValue::Variable(variable_key(
                     variables,
-                    &Variable {
-                        name: bnode.id.clone(),
-                    },
+                    &Variable::new_unchecked(bnode.as_str()),
                 ))
                 //TODO: very bad hack to convert bnode to variable
             }
-            TermPattern::Literal(literal) => PatternValue::Constant(self.build_literal(literal)),
+            TermPattern::Literal(literal) => PatternValue::Constant(self.build_term(literal)),
             TermPattern::Triple(triple) => {
                 match (
                     self.pattern_value_from_term_or_variable(&triple.subject, variables),
@@ -862,7 +853,7 @@ impl<'a> PlanBuilder<'a> {
     ) -> PatternValue {
         match named_node_or_variable {
             NamedNodePattern::NamedNode(named_node) => {
-                PatternValue::Constant(self.build_named_node(named_node))
+                PatternValue::Constant(self.build_term(named_node))
             }
             NamedNodePattern::Variable(variable) => {
                 PatternValue::Variable(variable_key(variables, variable))
@@ -888,8 +879,8 @@ impl<'a> PlanBuilder<'a> {
                         result.set(
                             bindings_variables_keys[key],
                             match term {
-                                GroundTerm::NamedNode(node) => self.build_named_node(node),
-                                GroundTerm::Literal(literal) => self.build_literal(literal),
+                                GroundTerm::NamedNode(node) => self.build_term(node),
+                                GroundTerm::Literal(literal) => self.build_term(literal),
                                 GroundTerm::Triple(triple) => self.build_triple(triple),
                             },
                         );
@@ -992,14 +983,12 @@ impl<'a> PlanBuilder<'a> {
             TermPattern::Variable(variable) => {
                 TripleTemplateValue::Variable(variable_key(variables, variable))
             }
-            TermPattern::NamedNode(node) => {
-                TripleTemplateValue::Constant(self.build_named_node(node))
-            }
+            TermPattern::NamedNode(node) => TripleTemplateValue::Constant(self.build_term(node)),
             TermPattern::BlankNode(bnode) => {
                 TripleTemplateValue::BlankNode(bnode_key(bnodes, bnode))
             }
             TermPattern::Literal(literal) => {
-                TripleTemplateValue::Constant(self.build_literal(literal))
+                TripleTemplateValue::Constant(self.build_term(literal))
             }
             TermPattern::Triple(triple) => match (
                 self.template_value_from_term_or_variable(&triple.subject, variables, bnodes),
@@ -1039,7 +1028,7 @@ impl<'a> PlanBuilder<'a> {
                 TripleTemplateValue::Variable(variable_key(variables, variable))
             }
             NamedNodePattern::NamedNode(term) => {
-                TripleTemplateValue::Constant(self.build_named_node(term))
+                TripleTemplateValue::Constant(self.build_term(term))
             }
         }
     }
@@ -1073,9 +1062,7 @@ impl<'a> PlanBuilder<'a> {
         }) {
             to_id
         } else {
-            to.push(Variable {
-                name: format!("{:x}", random::<u128>()),
-            });
+            to.push(Variable::new_unchecked(format!("{:x}", random::<u128>())));
             to.len() - 1
         }
     }
@@ -1326,34 +1313,20 @@ impl<'a> PlanBuilder<'a> {
         }
     }
 
-    fn build_named_node(&mut self, node: &NamedNode) -> EncodedTerm {
-        self.dataset
-            .encode_term(NamedNodeRef::new_unchecked(node.iri.as_str()))
-    }
-
-    fn build_literal(&mut self, literal: &Literal) -> EncodedTerm {
-        self.dataset.encode_term(match literal {
-            Literal::Simple { value } => LiteralRef::new_simple_literal(value),
-            Literal::LanguageTaggedString { value, language } => {
-                LiteralRef::new_language_tagged_literal_unchecked(value, language.as_str())
-            }
-            Literal::Typed { value, datatype } => LiteralRef::new_typed_literal(
-                value,
-                NamedNodeRef::new_unchecked(datatype.iri.as_str()),
-            ),
-        })
+    fn build_term<'b>(&mut self, term: impl Into<TermRef<'b>>) -> EncodedTerm {
+        self.dataset.encode_term(term)
     }
 
     fn build_triple(&mut self, triple: &GroundTriple) -> EncodedTerm {
         EncodedTriple::new(
             match &triple.subject {
-                GroundSubject::NamedNode(node) => self.build_named_node(node),
+                GroundSubject::NamedNode(node) => self.build_term(node),
                 GroundSubject::Triple(triple) => self.build_triple(triple),
             },
-            self.build_named_node(&triple.predicate),
+            self.build_term(&triple.predicate),
             match &triple.object {
-                GroundTerm::NamedNode(node) => self.build_named_node(node),
-                GroundTerm::Literal(literal) => self.build_literal(literal),
+                GroundTerm::NamedNode(node) => self.build_term(node),
+                GroundTerm::Literal(literal) => self.build_term(literal),
                 GroundTerm::Triple(triple) => self.build_triple(triple),
             },
         )

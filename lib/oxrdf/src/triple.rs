@@ -694,21 +694,36 @@ impl<'a> From<TermRef<'a>> for Term {
     }
 }
 
-/// An owned [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple)
+/// An owned [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
+///
+/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
+/// ```
+/// use oxrdf::{Triple, NamedNode};
+///
+/// assert_eq!(
+///     "<http://example.com/s> <http://example.com/p> <http://example.com/o>",
+///     Triple {
+///         subject: NamedNode::new("http://example.com/s")?.into(),
+///         predicate: NamedNode::new("http://example.com/p")?,
+///         object: NamedNode::new("http://example.com/o")?.into(),
+///     }.to_string()
+/// );
+/// # Result::<_,oxrdf::IriParseError>::Ok(())
+/// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Triple {
-    /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
+    /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple.
     pub subject: Subject,
 
-    /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
+    /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple.
     pub predicate: NamedNode,
 
-    /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple
+    /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple.
     pub object: Term,
 }
 
 impl Triple {
-    /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple)
+    /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
     #[inline]
     pub fn new(
         subject: impl Into<Subject>,
@@ -722,7 +737,7 @@ impl Triple {
         }
     }
 
-    /// Encodes that this triple is in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
+    /// Encodes that this triple is in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
     #[inline]
     pub fn in_graph(self, graph_name: impl Into<GraphName>) -> Quad {
         Quad {
@@ -750,21 +765,37 @@ impl fmt::Display for Triple {
     }
 }
 
-/// A borrowed [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple)
+/// A borrowed [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
+///
+/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
+/// ```
+/// use oxrdf::{TripleRef, NamedNodeRef};
+///
+/// assert_eq!(
+///     "<http://example.com/s> <http://example.com/p> <http://example.com/o>",
+///     TripleRef {
+///         subject: NamedNodeRef::new("http://example.com/s")?.into(),
+///         predicate: NamedNodeRef::new("http://example.com/p")?,
+///         object: NamedNodeRef::new("http://example.com/o")?.into(),
+///     }.to_string()
+/// );
+/// # Result::<_,oxrdf::IriParseError>::Ok(())
+/// ```
+
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct TripleRef<'a> {
-    /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
+    /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple.
     pub subject: SubjectRef<'a>,
 
-    /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
+    /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple.
     pub predicate: NamedNodeRef<'a>,
 
-    /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple
+    /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple.
     pub object: TermRef<'a>,
 }
 
 impl<'a> TripleRef<'a> {
-    /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple)
+    /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
     #[inline]
     pub fn new(
         subject: impl Into<SubjectRef<'a>>,
@@ -778,7 +809,7 @@ impl<'a> TripleRef<'a> {
         }
     }
 
-    /// Encodes that this triple is in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
+    /// Encodes that this triple is in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
     #[inline]
     pub fn in_graph(self, graph_name: impl Into<GraphNameRef<'a>>) -> QuadRef<'a> {
         QuadRef {
@@ -978,16 +1009,32 @@ impl<'a> From<GraphNameRef<'a>> for GraphName {
     }
 }
 
-/// An owned [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
+/// An owned [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
+///
+/// The default string formatter is returning an N-Quads compatible representation:
+/// ```
+/// use oxrdf::{Quad, NamedNode};
+///
+/// assert_eq!(
+///     "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g>",
+///     Quad {
+///         subject: NamedNode::new("http://example.com/s")?.into(),
+///         predicate: NamedNode::new("http://example.com/p")?,
+///         object: NamedNode::new("http://example.com/o")?.into(),
+///         graph_name: NamedNode::new("http://example.com/g")?.into(),
+///     }.to_string()
+/// );
+/// # Result::<_,oxrdf::IriParseError>::Ok(())
+/// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Quad {
-    /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
+    /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple.
     pub subject: Subject,
 
-    /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
+    /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple.
     pub predicate: NamedNode,
 
-    /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple
+    /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple.
     pub object: Term,
 
     /// The name of the RDF [graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph) in which the triple is.
@@ -995,7 +1042,7 @@ pub struct Quad {
 }
 
 impl Quad {
-    /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
+    /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
     #[inline]
     pub fn new(
         subject: impl Into<Subject>,
@@ -1040,16 +1087,32 @@ impl From<Quad> for Triple {
     }
 }
 
-/// A borrowed [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
+/// A borrowed [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
+///
+/// The default string formatter is returning an N-Quads compatible representation:
+/// ```
+/// use oxrdf::{QuadRef, NamedNodeRef};
+///
+/// assert_eq!(
+///     "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g>",
+///     QuadRef {
+///         subject: NamedNodeRef::new("http://example.com/s")?.into(),
+///         predicate: NamedNodeRef::new("http://example.com/p")?,
+///         object: NamedNodeRef::new("http://example.com/o")?.into(),
+///         graph_name: NamedNodeRef::new("http://example.com/g")?.into(),
+///     }.to_string()
+/// );
+/// # Result::<_,oxrdf::IriParseError>::Ok(())
+/// ```
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct QuadRef<'a> {
-    /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple
+    /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple.
     pub subject: SubjectRef<'a>,
 
-    /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple
+    /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple.
     pub predicate: NamedNodeRef<'a>,
 
-    /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple
+    /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple.
     pub object: TermRef<'a>,
 
     /// The name of the RDF [graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph) in which the triple is.
@@ -1057,7 +1120,7 @@ pub struct QuadRef<'a> {
 }
 
 impl<'a> QuadRef<'a> {
-    /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset)
+    /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
     #[inline]
     pub fn new(
         subject: impl Into<SubjectRef<'a>>,

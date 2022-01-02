@@ -4,6 +4,7 @@ use crate::term::*;
 use crate::update::*;
 use oxilangtag::LanguageTag;
 use oxiri::{Iri, IriParseError};
+use oxrdf::vocab::{rdf, xsd};
 use peg::parser;
 use peg::str::LineCol;
 use rand::random;
@@ -200,7 +201,7 @@ fn add_to_triple_or_path_patterns(
                 if !object.annotations.is_empty() {
                     return Err("Annotations are not allowed on property paths");
                 }
-                let middle = bnode();
+                let middle = BlankNode::default();
                 add_to_triple_or_path_patterns(
                     subject,
                     *a,
@@ -618,17 +619,17 @@ fn are_variables_bound(expression: &Expression, variables: &HashSet<Variable>) -
 fn copy_graph(from: impl Into<GraphName>, to: impl Into<GraphNamePattern>) -> GraphUpdateOperation {
     let bgp = GraphPattern::Bgp {
         patterns: vec![TriplePattern::new(
-            Variable { name: "s".into() },
-            Variable { name: "p".into() },
-            Variable { name: "o".into() },
+            Variable::new_unchecked("s"),
+            Variable::new_unchecked("p"),
+            Variable::new_unchecked("o"),
         )],
     };
     GraphUpdateOperation::DeleteInsert {
         delete: Vec::new(),
         insert: vec![QuadPattern::new(
-            Variable { name: "s".into() },
-            Variable { name: "p".into() },
-            Variable { name: "o".into() },
+            Variable::new_unchecked("s"),
+            Variable::new_unchecked("p"),
+            Variable::new_unchecked("o"),
             to,
         )],
         using: None,
@@ -882,20 +883,8 @@ pub fn unescape_pn_local(input: &str) -> Cow<'_, str> {
     unescape_characters(input, &UNESCAPE_PN_CHARACTERS, &UNESCAPE_PN_REPLACEMENT)
 }
 
-fn iri(value: impl Into<String>) -> NamedNode {
-    NamedNode { iri: value.into() }
-}
-
-fn bnode() -> BlankNode {
-    BlankNode {
-        id: format!("{:x}", random::<u128>()),
-    }
-}
-
 fn variable() -> Variable {
-    Variable {
-        name: format!("{:x}", random::<u128>()),
-    }
+    Variable::new_unchecked(format!("{:x}", random::<u128>()))
 }
 
 parser! {
@@ -1155,7 +1144,7 @@ parser! {
             if from == to {
                 Vec::new() // identity case
             } else {
-                let bgp = GraphPattern::Bgp { patterns: vec![TriplePattern::new(Variable { name: "s".into() }, Variable { name: "p".into() }, Variable { name: "o".into() })] };
+                let bgp = GraphPattern::Bgp { patterns: vec![TriplePattern::new(Variable::new_unchecked("s"), Variable::new_unchecked("p"), Variable::new_unchecked("o"))] };
                 vec![copy_graph(from, to)]
             }
         }
@@ -1166,7 +1155,7 @@ parser! {
             if from == to {
                 Vec::new() // identity case
             } else {
-                let bgp = GraphPattern::Bgp { patterns: vec![TriplePattern::new(Variable { name: "s".into() }, Variable { name: "p".into() }, Variable { name: "o".into() })] };
+                let bgp = GraphPattern::Bgp { patterns: vec![TriplePattern::new(Variable::new_unchecked("s"), Variable::new_unchecked("p"), Variable::new_unchecked("o"))] };
                 vec![GraphUpdateOperation::Drop { silent: true, graph: to.clone().into() }, copy_graph(from.clone(), to), GraphUpdateOperation::Drop { silent, graph: from.into() }]
             }
         }
@@ -1177,7 +1166,7 @@ parser! {
             if from == to {
                 Vec::new() // identity case
             } else {
-                let bgp = GraphPattern::Bgp { patterns: vec![TriplePattern::new(Variable { name: "s".into() }, Variable { name: "p".into() }, Variable{ name: "o".into() })] };
+                let bgp = GraphPattern::Bgp { patterns: vec![TriplePattern::new(Variable::new_unchecked("s"), Variable::new_unchecked("p"), Variable::new_unchecked("o"))] };
                 vec![GraphUpdateOperation::Drop { silent: true, graph: to.clone().into() }, copy_graph(from, to)]
             }
         }
@@ -1557,7 +1546,7 @@ parser! {
         }
 
         //[78]
-        rule Verb() -> NamedNodePattern = VarOrIri() / "a" { iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").into() }
+        rule Verb() -> NamedNodePattern = VarOrIri() / "a" { rdf::TYPE.into_owned().into() }
 
         //[79]
         rule ObjectList() -> FocusedTriplePattern<Vec<AnnotatedTerm>> = o:ObjectList_item() **<1,> ("," _) {
@@ -1717,7 +1706,7 @@ parser! {
         //[94]
         rule PathPrimary() -> PropertyPathExpression =
             v:iri() { v.into() } /
-            "a" { iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").into() } /
+            "a" { rdf::TYPE.into_owned().into() } /
             "!" _ p:PathNegatedPropertySet() { p } /
             "(" _ p:Path() _ ")" { p }
 
@@ -1754,9 +1743,9 @@ parser! {
         //[96]
         rule PathOneInPropertySet() -> Either<NamedNode,NamedNode> =
             "^" _ v:iri() { Either::Right(v) } /
-            "^" _ "a" { Either::Right(iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")) } /
+            "^" _ "a" { Either::Right(rdf::TYPE.into()) } /
             v:iri() { Either::Left(v) } /
-            "a" { Either::Left(iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")) }
+            "a" { Either::Left(rdf::TYPE.into()) }
 
         //[98]
         rule TriplesNode() -> FocusedTriplePattern<TermPattern> = Collection() / BlankNodePropertyList()
@@ -1764,7 +1753,7 @@ parser! {
         //[99]
         rule BlankNodePropertyList() -> FocusedTriplePattern<TermPattern> = "[" _ po:PropertyListNotEmpty() _ "]" {?
             let mut patterns = po.patterns;
-            let mut bnode = TermPattern::from(bnode());
+            let mut bnode = TermPattern::from(BlankNode::default());
             for (p, os) in po.focus {
                 for o in os {
                     add_to_triple_patterns(bnode.clone(), p.clone(), o, &mut patterns)?;
@@ -1782,7 +1771,7 @@ parser! {
         //[101]
         rule BlankNodePropertyListPath() -> FocusedTripleOrPathPattern<TermPattern> = "[" _ po:PropertyListPathNotEmpty() _ "]" {?
             let mut patterns: Vec<TripleOrPathPattern> = Vec::new();
-            let mut bnode = TermPattern::from(bnode());
+            let mut bnode = TermPattern::from(BlankNode::default());
             for (p, os) in po.focus {
                 for o in os {
                     add_to_triple_or_path_patterns(bnode.clone(), p.clone(), o, &mut patterns)?;
@@ -1797,11 +1786,11 @@ parser! {
         //[102]
         rule Collection() -> FocusedTriplePattern<TermPattern> = "(" _ o:Collection_item()+ ")" {
             let mut patterns: Vec<TriplePattern> = Vec::new();
-            let mut current_list_node = TermPattern::from(iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"));
+            let mut current_list_node = TermPattern::from(rdf::NIL.into_owned());
             for objWithPatterns in o.into_iter().rev() {
-                let new_blank_node = TermPattern::from(bnode());
-                patterns.push(TriplePattern::new(new_blank_node.clone(), iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#first"), objWithPatterns.focus.clone()));
-                patterns.push(TriplePattern::new(new_blank_node.clone(), iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"), current_list_node));
+                let new_blank_node = TermPattern::from(BlankNode::default());
+                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::FIRST.into_owned(), objWithPatterns.focus.clone()));
+                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::REST.into_owned(), current_list_node));
                 current_list_node = new_blank_node;
                 patterns.extend_from_slice(&objWithPatterns.patterns);
             }
@@ -1815,11 +1804,11 @@ parser! {
         //[103]
         rule CollectionPath() -> FocusedTripleOrPathPattern<TermPattern> = "(" _ o:CollectionPath_item()+ _ ")" {
             let mut patterns: Vec<TripleOrPathPattern> = Vec::new();
-            let mut current_list_node = TermPattern::from(iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"));
+            let mut current_list_node = TermPattern::from(rdf::NIL.into_owned());
             for objWithPatterns in o.into_iter().rev() {
-                let new_blank_node = TermPattern::from(bnode());
-                patterns.push(TriplePattern::new(new_blank_node.clone(), iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#first"), objWithPatterns.focus.clone()).into());
-                patterns.push(TriplePattern::new(new_blank_node.clone(), iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"), current_list_node).into());
+                let new_blank_node = TermPattern::from(BlankNode::default());
+                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::FIRST.into_owned(), objWithPatterns.focus.clone()).into());
+                patterns.push(TriplePattern::new(new_blank_node.clone(), rdf::REST.into_owned(), current_list_node).into());
                 current_list_node = new_blank_node;
                 patterns.extend(objWithPatterns.patterns);
             }
@@ -1851,7 +1840,7 @@ parser! {
             i:iri() { i.into() }
 
         //[108]
-        rule Var() -> Variable = name:(VAR1() / VAR2()) { Variable { name: name.into() } }
+        rule Var() -> Variable = name:(VAR1() / VAR2()) { Variable::new_unchecked(name) }
 
         //[109]
         rule GraphTerm() -> Term =
@@ -1860,7 +1849,7 @@ parser! {
             l:NumericLiteral() { l.into() } /
             l:BooleanLiteral() { l.into() } /
             b:BlankNode() { b.into() } /
-            NIL() { iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil").into() }
+            NIL() { rdf::NIL.into_owned().into() }
 
         //[110]
         rule Expression() -> Expression = e:ConditionalOrExpression() {e}
@@ -2078,43 +2067,43 @@ parser! {
 
         //[129]
         rule RDFLiteral() -> Literal =
-            value:String() _ "^^" _ datatype:iri() { Literal::Typed { value, datatype } } /
-            value:String() _ language:LANGTAG() { Literal::LanguageTaggedString { value, language: language.into_inner() } } /
-            value:String() { Literal::Simple { value } }
+            value:String() _ "^^" _ datatype:iri() { Literal::new_typed_literal(value, datatype) } /
+            value:String() _ language:LANGTAG() { Literal::new_language_tagged_literal_unchecked(value, language.into_inner()) } /
+            value:String() { Literal::new_simple_literal(value) }
 
         //[130]
         rule NumericLiteral() -> Literal  = NumericLiteralUnsigned() / NumericLiteralPositive() / NumericLiteralNegative()
 
         //[131]
         rule NumericLiteralUnsigned() -> Literal =
-            d:$(DOUBLE()) { Literal::Typed { value: d.into(), datatype: iri("http://www.w3.org/2001/XMLSchema#double") } } /
-            d:$(DECIMAL()) { Literal::Typed { value: d.into(), datatype: iri("http://www.w3.org/2001/XMLSchema#decimal") } } /
-            i:$(INTEGER()) { Literal::Typed { value: i.into(), datatype: iri("http://www.w3.org/2001/XMLSchema#integer") } }
+            d:$(DOUBLE()) { Literal::new_typed_literal(d, xsd::DOUBLE) } /
+            d:$(DECIMAL()) { Literal::new_typed_literal(d, xsd::DECIMAL) } /
+            i:$(INTEGER()) { Literal::new_typed_literal(i, xsd::INTEGER) }
 
         //[132]
         rule NumericLiteralPositive() -> Literal =
-            d:$(DOUBLE_POSITIVE()) { Literal::Typed { value: d.into(), datatype: iri("http://www.w3.org/2001/XMLSchema#double") } } /
-            d:$(DECIMAL_POSITIVE()) { Literal::Typed { value: d.into(), datatype: iri("http://www.w3.org/2001/XMLSchema#decimal") } } /
-            i:$(INTEGER_POSITIVE()) { Literal::Typed { value: i.into(), datatype: iri("http://www.w3.org/2001/XMLSchema#integer") } }
+            d:$(DOUBLE_POSITIVE()) { Literal::new_typed_literal(d, xsd::DOUBLE) } /
+            d:$(DECIMAL_POSITIVE()) { Literal::new_typed_literal(d, xsd::DECIMAL) } /
+            i:$(INTEGER_POSITIVE()) { Literal::new_typed_literal(i, xsd::INTEGER) }
 
 
         //[133]
         rule NumericLiteralNegative() -> Literal =
-            d:$(DOUBLE_NEGATIVE()) { Literal::Typed { value: d.into(), datatype: iri("http://www.w3.org/2001/XMLSchema#double") } } /
-            d:$(DECIMAL_NEGATIVE()) { Literal::Typed { value: d.into(), datatype: iri("http://www.w3.org/2001/XMLSchema#decimal") } } /
-            i:$(INTEGER_NEGATIVE()) { Literal::Typed { value: i.into(), datatype: iri("http://www.w3.org/2001/XMLSchema#integer") } }
+            d:$(DOUBLE_NEGATIVE()) { Literal::new_typed_literal(d, xsd::DOUBLE) } /
+            d:$(DECIMAL_NEGATIVE()) { Literal::new_typed_literal(d, xsd::DECIMAL) } /
+            i:$(INTEGER_NEGATIVE()) { Literal::new_typed_literal(i, xsd::INTEGER) }
 
         //[134]
         rule BooleanLiteral() -> Literal =
-            "true" { Literal::Typed { value: "true".into(), datatype: iri("http://www.w3.org/2001/XMLSchema#boolean") } } /
-            "false" { Literal::Typed { value: "false".into(), datatype: iri("http://www.w3.org/2001/XMLSchema#boolean") } }
+            "true" { Literal::new_typed_literal("true", xsd::BOOLEAN) } /
+            "false" { Literal::new_typed_literal("false", xsd::BOOLEAN) }
 
         //[135]
         rule String() -> String = STRING_LITERAL_LONG1() / STRING_LITERAL_LONG2() / STRING_LITERAL1() / STRING_LITERAL2()
 
         //[136]
         rule iri() -> NamedNode = i:(IRIREF() / PrefixedName()) {
-            iri(i.into_inner())
+            NamedNode::new_unchecked(i.into_inner())
         }
 
         //[137]
@@ -2127,14 +2116,14 @@ parser! {
 
         //[138]
         rule BlankNode() -> BlankNode = id:BLANK_NODE_LABEL() {?
-            let node = BlankNode { id: id.to_owned() };
+            let node = BlankNode::new_unchecked(id);
             if state.used_bnodes.contains(&node) {
                 Err("Already used blank node id")
             } else {
                 state.currently_used_bnodes.insert(node.clone());
                 Ok(node)
             }
-        } / ANON() { bnode() }
+        } / ANON() { BlankNode::default() }
 
         //[139]
         rule IRIREF() -> Iri<String> = "<" i:$((!['>'] [_])*) ">" {?
@@ -2285,7 +2274,7 @@ parser! {
                 object: o
             })
         }
-        rule EmbTriple_p() -> NamedNode = i: iri() { i } / "a" { iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type") }
+        rule EmbTriple_p() -> NamedNode = i: iri() { i } / "a" { rdf::TYPE.into() }
 
         //[176]
         rule EmbSubjectOrObject() -> TermPattern =

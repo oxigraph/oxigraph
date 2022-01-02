@@ -1,242 +1,8 @@
 //! Data structures for [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/) like IRI, literal or triples.
 
+pub use oxrdf::{BlankNode, Literal, NamedNode, Subject, Term, Triple, Variable};
 use std::fmt;
 use std::fmt::Write;
-
-/// An RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri).
-///
-/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
-///
-/// ```
-/// use spargebra::term::NamedNode;
-///
-/// assert_eq!(
-///     "<http://example.com/foo>",
-///     NamedNode { iri: "http://example.com/foo".into() }.to_string()
-/// )
-/// ```
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
-pub struct NamedNode {
-    /// The [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) itself.
-    pub iri: String,
-}
-
-impl NamedNode {
-    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
-    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
-        write!(f, "<{}>", self.iri)
-    }
-}
-
-impl fmt::Display for NamedNode {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<{}>", self.iri)
-    }
-}
-
-impl TryFrom<NamedNodePattern> for NamedNode {
-    type Error = ();
-
-    #[inline]
-    fn try_from(pattern: NamedNodePattern) -> Result<Self, ()> {
-        match pattern {
-            NamedNodePattern::NamedNode(t) => Ok(t),
-            NamedNodePattern::Variable(_) => Err(()),
-        }
-    }
-}
-
-/// An RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
-///
-///
-/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
-///
-/// ```
-/// use spargebra::term::BlankNode;
-///
-/// assert_eq!(
-///     "_:a1",
-///     BlankNode { id: "a1".into() }.to_string()
-/// )
-/// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct BlankNode {
-    /// The [blank node identifier](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node-identifier).
-    pub id: String,
-}
-
-impl BlankNode {
-    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
-    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
-        write!(f, "_:{}", self.id)
-    }
-}
-
-impl fmt::Display for BlankNode {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "_:{}", self.id)
-    }
-}
-
-/// An RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
-///
-/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
-///
-/// The language tags should be lowercased  [as suggested by the RDF specification](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string).
-///
-/// ```
-/// use spargebra::term::NamedNode;
-/// use spargebra::term::Literal;
-///
-/// assert_eq!(
-///     "\"foo\\nbar\"",
-///     Literal::Simple { value: "foo\nbar".into() }.to_string()
-/// );
-///
-/// assert_eq!(
-///     "\"1999-01-01\"^^<http://www.w3.org/2001/XMLSchema#date>",
-///     Literal::Typed { value: "1999-01-01".into(), datatype: NamedNode { iri: "http://www.w3.org/2001/XMLSchema#date".into() }}.to_string()
-/// );
-///
-/// assert_eq!(
-///     "\"foo\"@en",
-///     Literal::LanguageTaggedString { value: "foo".into(), language: "en".into() }.to_string()
-/// );
-/// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum Literal {
-    /// A [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal) without datatype or language form.
-    Simple {
-        /// The [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form).
-        value: String,
-    },
-    /// A [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
-    LanguageTaggedString {
-        /// The [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form).
-        value: String,
-        /// The [language tag](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tag).
-        language: String,
-    },
-    /// A literal with an explicit datatype
-    Typed {
-        /// The [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form).
-        value: String,
-        /// The [datatype IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri).
-        datatype: NamedNode,
-    },
-}
-
-impl Literal {
-    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
-    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
-        match self {
-            Literal::Simple { value } => print_quoted_str(value, f),
-            Literal::LanguageTaggedString { value, language } => {
-                print_quoted_str(value, f)?;
-                write!(f, "@{}", language)
-            }
-            Literal::Typed { value, datatype } => {
-                print_quoted_str(value, f)?;
-                write!(f, "^^{}", datatype)
-            }
-        }
-    }
-}
-
-impl fmt::Display for Literal {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Literal::Simple { value } => print_quoted_str(value, f),
-            Literal::LanguageTaggedString { value, language } => {
-                print_quoted_str(value, f)?;
-                write!(f, "@{}", language)
-            }
-            Literal::Typed { value, datatype } => {
-                print_quoted_str(value, f)?;
-                write!(f, "^^{}", datatype)
-            }
-        }
-    }
-}
-
-/// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
-///
-/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum Subject {
-    NamedNode(NamedNode),
-    BlankNode(BlankNode),
-    #[cfg(feature = "rdf-star")]
-    Triple(Box<Triple>),
-}
-
-impl Subject {
-    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
-    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
-        match self {
-            Self::NamedNode(node) => node.fmt_sse(f),
-            Self::BlankNode(node) => node.fmt_sse(f),
-            #[cfg(feature = "rdf-star")]
-            Self::Triple(triple) => triple.fmt_sse(f),
-        }
-    }
-}
-
-impl fmt::Display for Subject {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NamedNode(node) => node.fmt(f),
-            Self::BlankNode(node) => node.fmt(f),
-            #[cfg(feature = "rdf-star")]
-            Self::Triple(triple) => write!(
-                f,
-                "<<{} {} {}>>",
-                triple.subject, triple.predicate, triple.object
-            ),
-        }
-    }
-}
-
-impl From<NamedNode> for Subject {
-    #[inline]
-    fn from(node: NamedNode) -> Self {
-        Self::NamedNode(node)
-    }
-}
-
-impl From<BlankNode> for Subject {
-    #[inline]
-    fn from(node: BlankNode) -> Self {
-        Self::BlankNode(node)
-    }
-}
-
-#[cfg(feature = "rdf-star")]
-impl From<Triple> for Subject {
-    #[inline]
-    fn from(triple: Triple) -> Self {
-        Self::Triple(Box::new(triple))
-    }
-}
-
-impl TryFrom<TermPattern> for Subject {
-    type Error = ();
-
-    #[inline]
-    fn try_from(term: TermPattern) -> Result<Self, ()> {
-        match term {
-            TermPattern::NamedNode(t) => Ok(t.into()),
-            TermPattern::BlankNode(t) => Ok(t.into()),
-            #[cfg(feature = "rdf-star")]
-            TermPattern::Triple(t) => Ok(Triple::try_from(*t)?.into()),
-            TermPattern::Literal(_) | TermPattern::Variable(_) => Err(()),
-        }
-    }
-}
 
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
 ///
@@ -246,17 +12,6 @@ pub enum GroundSubject {
     NamedNode(NamedNode),
     #[cfg(feature = "rdf-star")]
     Triple(Box<GroundTriple>),
-}
-
-impl GroundSubject {
-    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
-    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
-        match self {
-            Self::NamedNode(node) => node.fmt_sse(f),
-            #[cfg(feature = "rdf-star")]
-            Self::Triple(triple) => triple.fmt_sse(f),
-        }
-    }
 }
 
 impl fmt::Display for GroundSubject {
@@ -317,107 +72,6 @@ impl TryFrom<GroundTerm> for GroundSubject {
     }
 }
 
-/// An RDF [term](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term).
-///
-/// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) and [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
-///
-/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum Term {
-    NamedNode(NamedNode),
-    BlankNode(BlankNode),
-    Literal(Literal),
-    #[cfg(feature = "rdf-star")]
-    Triple(Box<Triple>),
-}
-
-impl Term {
-    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
-    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
-        match self {
-            Self::NamedNode(node) => node.fmt_sse(f),
-            Self::BlankNode(node) => node.fmt_sse(f),
-            Self::Literal(literal) => literal.fmt_sse(f),
-            #[cfg(feature = "rdf-star")]
-            Self::Triple(triple) => triple.fmt_sse(f),
-        }
-    }
-}
-
-impl fmt::Display for Term {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NamedNode(node) => node.fmt(f),
-            Self::BlankNode(node) => node.fmt(f),
-            Self::Literal(literal) => literal.fmt(f),
-            #[cfg(feature = "rdf-star")]
-            Self::Triple(triple) => write!(
-                f,
-                "<<{} {} {}>>",
-                triple.subject, triple.predicate, triple.object
-            ),
-        }
-    }
-}
-
-impl From<NamedNode> for Term {
-    #[inline]
-    fn from(node: NamedNode) -> Self {
-        Self::NamedNode(node)
-    }
-}
-
-impl From<BlankNode> for Term {
-    #[inline]
-    fn from(node: BlankNode) -> Self {
-        Self::BlankNode(node)
-    }
-}
-
-impl From<Literal> for Term {
-    #[inline]
-    fn from(literal: Literal) -> Self {
-        Self::Literal(literal)
-    }
-}
-
-#[cfg(feature = "rdf-star")]
-impl From<Triple> for Term {
-    #[inline]
-    fn from(triple: Triple) -> Self {
-        Self::Triple(Box::new(triple))
-    }
-}
-
-impl From<Subject> for Term {
-    #[inline]
-    fn from(resource: Subject) -> Self {
-        match resource {
-            Subject::NamedNode(node) => node.into(),
-            Subject::BlankNode(node) => node.into(),
-            #[cfg(feature = "rdf-star")]
-            Subject::Triple(t) => (*t).into(),
-        }
-    }
-}
-
-impl TryFrom<TermPattern> for Term {
-    type Error = ();
-
-    #[inline]
-    fn try_from(pattern: TermPattern) -> Result<Self, ()> {
-        match pattern {
-            TermPattern::NamedNode(t) => Ok(t.into()),
-            TermPattern::BlankNode(t) => Ok(t.into()),
-            TermPattern::Literal(t) => Ok(t.into()),
-            #[cfg(feature = "rdf-star")]
-            TermPattern::Triple(t) => Ok(Triple::try_from(*t)?.into()),
-            TermPattern::Variable(_) => Err(()),
-        }
-    }
-}
-
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
 ///
 /// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
@@ -427,18 +81,6 @@ pub enum GroundTerm {
     Literal(Literal),
     #[cfg(feature = "rdf-star")]
     Triple(Box<GroundTriple>),
-}
-
-impl GroundTerm {
-    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
-    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
-        match self {
-            Self::NamedNode(node) => node.fmt_sse(f),
-            Self::Literal(literal) => literal.fmt_sse(f),
-            #[cfg(feature = "rdf-star")]
-            Self::Triple(triple) => triple.fmt_sse(f),
-        }
-    }
 }
 
 impl fmt::Display for GroundTerm {
@@ -494,98 +136,28 @@ impl TryFrom<Term> for GroundTerm {
     }
 }
 
-/// A [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
-///
-/// The default string formatter is returning a N-Quads representation.
-///
-/// ```
-/// use spargebra::term::NamedNode;
-/// use spargebra::term::Triple;
-///
-/// assert_eq!(
-///     "<http://example.com/foo> <http://schema.org/sameAs> <http://example.com/foo>",
-///     Triple {
-///         subject: NamedNode { iri: "http://example.com/foo".into() }.into(),
-///         predicate: NamedNode { iri: "http://schema.org/sameAs".into() },
-///         object: NamedNode { iri: "http://example.com/foo".into() }.into(),
-///     }.to_string()
-/// )
-/// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct Triple {
-    pub subject: Subject,
-    pub predicate: NamedNode,
-    pub object: Term,
-}
-
-impl Triple {
-    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
-    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
-        write!(f, "(triple ")?;
-        self.subject.fmt_sse(f)?;
-        write!(f, " ")?;
-        self.predicate.fmt_sse(f)?;
-        write!(f, " ")?;
-        self.object.fmt_sse(f)?;
-        write!(f, ")")
-    }
-}
-
-impl fmt::Display for Triple {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {} {}", self.subject, self.predicate, self.object)
-    }
-}
-
-impl TryFrom<TriplePattern> for Triple {
-    type Error = ();
-
-    #[inline]
-    fn try_from(triple: TriplePattern) -> Result<Self, ()> {
-        Ok(Self {
-            subject: triple.subject.try_into()?,
-            predicate: triple.predicate.try_into()?,
-            object: triple.object.try_into()?,
-        })
-    }
-}
-
 /// A [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) without blank nodes.
 ///
 /// The default string formatter is returning a N-Quads representation.
 ///
 /// ```
-/// use spargebra::term::NamedNode;
-/// use spargebra::term::GroundTriple;
+/// use spargebra::term::{NamedNode, GroundTriple};
 ///
 /// assert_eq!(
-///     "<http://example.com/foo> <http://schema.org/sameAs> <http://example.com/foo>",
+///     "<http://example.com/s> <http://example.com/p> <http://example.com/o>",
 ///     GroundTriple {
-///         subject: NamedNode { iri: "http://example.com/foo".into() }.into(),
-///         predicate: NamedNode { iri: "http://schema.org/sameAs".into() },
-///         object: NamedNode { iri: "http://example.com/foo".into() }.into(),
+///         subject: NamedNode::new("http://example.com/s")?.into(),
+///         predicate: NamedNode::new("http://example.com/p")?,
+///         object: NamedNode::new("http://example.com/o")?.into(),
 ///     }.to_string()
-/// )
+/// );
+/// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct GroundTriple {
     pub subject: GroundSubject,
     pub predicate: NamedNode,
     pub object: GroundTerm,
-}
-
-impl GroundTriple {
-    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
-    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
-        write!(f, "(triple ")?;
-        self.subject.fmt_sse(f)?;
-        write!(f, " ")?;
-        self.predicate.fmt_sse(f)?;
-        write!(f, " ")?;
-        self.object.fmt_sse(f)?;
-        write!(f, ")")
-    }
 }
 
 impl fmt::Display for GroundTriple {
@@ -621,7 +193,7 @@ impl GraphName {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
-            Self::NamedNode(node) => node.fmt_sse(f),
+            Self::NamedNode(node) => write!(f, "{}", node),
             Self::DefaultGraph => write!(f, "default"),
         }
     }
@@ -662,18 +234,18 @@ impl TryFrom<GraphNamePattern> for GraphName {
 /// The default string formatter is returning a N-Quads representation.
 ///
 /// ```
-/// use spargebra::term::NamedNode;
-/// use spargebra::term::Quad;
+/// use spargebra::term::{NamedNode, Quad};
 ///
 /// assert_eq!(
-///     "<http://example.com/foo> <http://schema.org/sameAs> <http://example.com/foo> <http://example.com/>",
+///     "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g>",
 ///     Quad {
-///         subject: NamedNode { iri: "http://example.com/foo".into() }.into(),
-///         predicate: NamedNode { iri: "http://schema.org/sameAs".into() },
-///         object: NamedNode { iri: "http://example.com/foo".into() }.into(),
-///         graph_name: NamedNode { iri: "http://example.com/".into() }.into(),
+///         subject: NamedNode::new("http://example.com/s")?.into(),
+///         predicate: NamedNode::new("http://example.com/p")?,
+///         object: NamedNode::new("http://example.com/o")?.into(),
+///         graph_name: NamedNode::new("http://example.com/g")?.into(),
 ///     }.to_string()
-/// )
+/// );
+/// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Quad {
@@ -691,13 +263,11 @@ impl Quad {
             self.graph_name.fmt_sse(f)?;
             write!(f, " (")?;
         }
-        write!(f, "(triple ")?;
-        self.subject.fmt_sse(f)?;
-        write!(f, " ")?;
-        self.predicate.fmt_sse(f)?;
-        write!(f, " ")?;
-        self.object.fmt_sse(f)?;
-        write!(f, ")")?;
+        write!(
+            f,
+            "(triple {} {} {})",
+            self.subject, self.predicate, self.object
+        )?;
         if self.graph_name != GraphName::DefaultGraph {
             write!(f, "))")?;
         }
@@ -739,18 +309,18 @@ impl TryFrom<QuadPattern> for Quad {
 /// The default string formatter is returning a N-Quads representation.
 ///
 /// ```
-/// use spargebra::term::NamedNode;
-/// use spargebra::term::GroundQuad;
+/// use spargebra::term::{NamedNode, GroundQuad};
 ///
 /// assert_eq!(
-///     "<http://example.com/foo> <http://schema.org/sameAs> <http://example.com/foo> <http://example.com/>",
+///     "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g>",
 ///     GroundQuad {
-///         subject: NamedNode { iri: "http://example.com/foo".into() }.into(),
-///         predicate: NamedNode { iri: "http://schema.org/sameAs".into() },
-///         object: NamedNode { iri: "http://example.com/foo".into() }.into(),
-///         graph_name: NamedNode { iri: "http://example.com/".into() }.into(),
+///         subject: NamedNode::new("http://example.com/s")?.into(),
+///         predicate: NamedNode::new("http://example.com/p")?,
+///         object: NamedNode::new("http://example.com/o")?.into(),
+///         graph_name: NamedNode::new("http://example.com/g")?.into(),
 ///     }.to_string()
-/// )
+/// );
+/// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct GroundQuad {
@@ -768,13 +338,11 @@ impl GroundQuad {
             self.graph_name.fmt_sse(f)?;
             write!(f, " (")?;
         }
-        write!(f, "(triple ")?;
-        self.subject.fmt_sse(f)?;
-        write!(f, " ")?;
-        self.predicate.fmt_sse(f)?;
-        write!(f, " ")?;
-        self.object.fmt_sse(f)?;
-        write!(f, ")")?;
+        write!(
+            f,
+            "(triple {} {} {})",
+            self.subject, self.predicate, self.object
+        )?;
         if self.graph_name != GraphName::DefaultGraph {
             write!(f, "))")?;
         }
@@ -811,35 +379,6 @@ impl TryFrom<Quad> for GroundQuad {
     }
 }
 
-/// A [SPARQL query variable](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
-///
-/// ```
-/// use spargebra::term::Variable;
-///
-/// assert_eq!(
-///     "?foo",
-///     Variable { name: "foo".into() }.to_string()
-/// );
-/// ```
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
-pub struct Variable {
-    pub name: String,
-}
-
-impl Variable {
-    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
-    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
-        write!(f, "?{}", self.name)
-    }
-}
-
-impl fmt::Display for Variable {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "?{}", self.name)
-    }
-}
-
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum NamedNodePattern {
@@ -851,8 +390,8 @@ impl NamedNodePattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
-            Self::NamedNode(node) => node.fmt_sse(f),
-            Self::Variable(var) => var.fmt_sse(f),
+            Self::NamedNode(node) => write!(f, "{}", node),
+            Self::Variable(var) => write!(f, "{}", var),
         }
     }
 }
@@ -881,6 +420,18 @@ impl From<Variable> for NamedNodePattern {
     }
 }
 
+impl TryFrom<NamedNodePattern> for NamedNode {
+    type Error = ();
+
+    #[inline]
+    fn try_from(pattern: NamedNodePattern) -> Result<Self, ()> {
+        match pattern {
+            NamedNodePattern::NamedNode(t) => Ok(t),
+            NamedNodePattern::Variable(_) => Err(()),
+        }
+    }
+}
+
 /// The union of [terms](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum TermPattern {
@@ -896,12 +447,12 @@ impl TermPattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
-            Self::NamedNode(term) => term.fmt_sse(f),
-            Self::BlankNode(term) => term.fmt_sse(f),
-            Self::Literal(term) => term.fmt_sse(f),
+            Self::NamedNode(term) => write!(f, "{}", term),
+            Self::BlankNode(term) => write!(f, "{}", term),
+            Self::Literal(term) => write!(f, "{}", term),
             #[cfg(feature = "rdf-star")]
             Self::Triple(triple) => triple.fmt_sse(f),
-            Self::Variable(var) => var.fmt_sse(f),
+            Self::Variable(var) => write!(f, "{}", var),
         }
     }
 }
@@ -990,6 +541,36 @@ impl From<NamedNodePattern> for TermPattern {
     }
 }
 
+impl TryFrom<TermPattern> for Subject {
+    type Error = ();
+
+    #[inline]
+    fn try_from(term: TermPattern) -> Result<Self, ()> {
+        match term {
+            TermPattern::NamedNode(t) => Ok(t.into()),
+            TermPattern::BlankNode(t) => Ok(t.into()),
+            #[cfg(feature = "rdf-star")]
+            TermPattern::Triple(t) => Ok(Triple::try_from(*t)?.into()),
+            TermPattern::Literal(_) | TermPattern::Variable(_) => Err(()),
+        }
+    }
+}
+
+impl TryFrom<TermPattern> for Term {
+    type Error = ();
+
+    #[inline]
+    fn try_from(pattern: TermPattern) -> Result<Self, ()> {
+        match pattern {
+            TermPattern::NamedNode(t) => Ok(t.into()),
+            TermPattern::BlankNode(t) => Ok(t.into()),
+            TermPattern::Literal(t) => Ok(t.into()),
+            #[cfg(feature = "rdf-star")]
+            TermPattern::Triple(t) => Ok(Triple::try_from(*t)?.into()),
+            TermPattern::Variable(_) => Err(()),
+        }
+    }
+}
 /// The union of [terms](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables) without blank nodes.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GroundTermPattern {
@@ -1003,9 +584,9 @@ impl GroundTermPattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
-            Self::NamedNode(term) => term.fmt_sse(f),
-            Self::Literal(term) => term.fmt_sse(f),
-            Self::Variable(var) => var.fmt_sse(f),
+            Self::NamedNode(term) => write!(f, "{}", term),
+            Self::Literal(term) => write!(f, "{}", term),
+            Self::Variable(var) => write!(f, "{}", var),
             Self::Triple(triple) => triple.fmt_sse(f),
         }
     }
@@ -1111,9 +692,9 @@ impl GraphNamePattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
-            Self::NamedNode(node) => node.fmt_sse(f),
+            Self::NamedNode(node) => write!(f, "{}", node),
             Self::DefaultGraph => write!(f, "default"),
-            Self::Variable(var) => var.fmt_sse(f),
+            Self::Variable(var) => write!(f, "{}", var),
         }
     }
 }
@@ -1216,7 +797,20 @@ impl From<Triple> for TriplePattern {
     }
 }
 
-/// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) without blank nodes
+impl TryFrom<TriplePattern> for Triple {
+    type Error = ();
+
+    #[inline]
+    fn try_from(triple: TriplePattern) -> Result<Self, ()> {
+        Ok(Self {
+            subject: triple.subject.try_into()?,
+            predicate: triple.predicate.try_into()?,
+            object: triple.object.try_into()?,
+        })
+    }
+}
+
+/// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) without blank nodes.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct GroundTriplePattern {
     pub subject: GroundTermPattern,
@@ -1330,7 +924,7 @@ impl fmt::Display for QuadPattern {
     }
 }
 
-/// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) in a specific graph without blank nodes
+/// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) in a specific graph without blank nodes.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct GroundQuadPattern {
     pub subject: GroundTermPattern,
@@ -1388,19 +982,4 @@ impl TryFrom<QuadPattern> for GroundQuadPattern {
             graph_name: pattern.graph_name,
         })
     }
-}
-
-#[inline]
-pub(crate) fn print_quoted_str(string: &str, f: &mut impl Write) -> fmt::Result {
-    f.write_char('"')?;
-    for c in string.chars() {
-        match c {
-            '\n' => f.write_str("\\n"),
-            '\r' => f.write_str("\\r"),
-            '"' => f.write_str("\\\""),
-            '\\' => f.write_str("\\\\"),
-            c => f.write_char(c),
-        }?;
-    }
-    f.write_char('"')
 }
