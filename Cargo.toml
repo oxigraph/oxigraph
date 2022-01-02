@@ -4,6 +4,7 @@ members = [
     "lib",
     "lib/oxrdf",
     "lib/spargebra",
+    "lib/sparesults",
     "python",
     "rocksdb-sys",
     "server",

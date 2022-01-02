@@ -129,12 +129,7 @@ impl PyQuerySolution {
 
     fn __iter__(&self) -> SolutionValueIter {
         SolutionValueIter {
-            inner: self
-                .inner
-                .values()
-                .map(|v| v.cloned())
-                .collect::<Vec<_>>()
-                .into_iter(),
+            inner: self.inner.values().to_vec().into_iter(),
         }
     }
 }

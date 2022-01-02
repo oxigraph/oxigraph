@@ -1,8 +1,8 @@
 //! Implementation of [SPARQL 1.1 Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql11-results-csv-tsv/)
 
-use crate::io::read::{ParserError, SyntaxError};
-use crate::model::{vocab::xsd, *};
+use crate::error::{ParseError, SyntaxError, SyntaxErrorKind};
 use oxrdf::Variable;
+use oxrdf::{vocab::xsd, *};
 use std::io::{self, BufRead, Write};
 use std::str::FromStr;
 
@@ -13,12 +13,13 @@ pub fn write_boolean_csv_result<W: Write>(mut sink: W, value: bool) -> io::Resul
 
 pub struct CsvSolutionsWriter<W: Write> {
     sink: W,
+    variables: Vec<Variable>,
 }
 
 impl<W: Write> CsvSolutionsWriter<W> {
-    pub fn start(mut sink: W, variables: &[Variable]) -> io::Result<Self> {
+    pub fn start(mut sink: W, variables: Vec<Variable>) -> io::Result<Self> {
         let mut start_vars = true;
-        for variable in variables {
+        for variable in &variables {
             if start_vars {
                 start_vars = false;
             } else {
@@ -26,16 +27,22 @@ impl<W: Write> CsvSolutionsWriter<W> {
             }
             sink.write_all(variable.as_str().as_bytes())?;
         }
-        Ok(Self { sink })
+        Ok(Self { sink, variables })
     }
 
     pub fn write<'a>(
         &mut self,
-        solution: impl IntoIterator<Item = Option<TermRef<'a>>>,
+        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
     ) -> io::Result<()> {
+        let mut values = vec![None; self.variables.len()];
+        for (variable, value) in solution {
+            if let Some(position) = self.variables.iter().position(|v| v == variable) {
+                values[position] = Some(value);
+            }
+        }
         self.sink.write_all(b"\r\n")?;
         let mut start_binding = true;
-        for value in solution {
+        for value in values {
             if start_binding {
                 start_binding = false;
             } else {
@@ -61,6 +68,7 @@ fn write_csv_term<'a>(term: impl Into<TermRef<'a>>, sink: &mut impl Write) -> io
             sink.write_all(bnode.as_str().as_bytes())
         }
         TermRef::Literal(literal) => write_escaped_csv_string(literal.value(), sink),
+        #[cfg(feature = "rdf-star")]
         TermRef::Triple(triple) => {
             write_csv_term(&triple.subject, sink)?;
             sink.write_all(b" ")?;
@@ -94,12 +102,13 @@ pub fn write_boolean_tsv_result<W: Write>(mut sink: W, value: bool) -> io::Resul
 
 pub struct TsvSolutionsWriter<W: Write> {
     sink: W,
+    variables: Vec<Variable>,
 }
 
 impl<W: Write> TsvSolutionsWriter<W> {
-    pub fn start(mut sink: W, variables: &[Variable]) -> io::Result<Self> {
+    pub fn start(mut sink: W, variables: Vec<Variable>) -> io::Result<Self> {
         let mut start_vars = true;
-        for variable in variables {
+        for variable in &variables {
             if start_vars {
                 start_vars = false;
             } else {
@@ -108,16 +117,22 @@ impl<W: Write> TsvSolutionsWriter<W> {
             sink.write_all(b"?")?;
             sink.write_all(variable.as_str().as_bytes())?;
         }
-        Ok(Self { sink })
+        Ok(Self { sink, variables })
     }
 
     pub fn write<'a>(
         &mut self,
-        solution: impl IntoIterator<Item = Option<TermRef<'a>>>,
+        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
     ) -> io::Result<()> {
+        let mut values = vec![None; self.variables.len()];
+        for (variable, value) in solution {
+            if let Some(position) = self.variables.iter().position(|v| v == variable) {
+                values[position] = Some(value);
+            }
+        }
         self.sink.write_all(b"\n")?;
         let mut start_binding = true;
-        for value in solution {
+        for value in values {
             if start_binding {
                 start_binding = false;
             } else {
@@ -155,6 +170,7 @@ fn write_tsv_term<'a>(term: impl Into<TermRef<'a>>, sink: &mut impl Write) -> io
             }
             _ => sink.write_all(literal.to_string().as_bytes()),
         },
+        #[cfg(feature = "rdf-star")]
         TermRef::Triple(triple) => {
             sink.write_all(b"<<")?;
             write_tsv_term(&triple.subject, sink)?;
@@ -177,7 +193,7 @@ pub enum TsvQueryResultsReader<R: BufRead> {
 }
 
 impl<R: BufRead> TsvQueryResultsReader<R> {
-    pub fn read(mut source: R) -> Result<Self, ParserError> {
+    pub fn read(mut source: R) -> Result<Self, ParseError> {
         let mut buffer = String::new();
 
         // We read the header
@@ -209,7 +225,7 @@ pub struct TsvSolutionsReader<R: BufRead> {
 }
 
 impl<R: BufRead> TsvSolutionsReader<R> {
-    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, ParserError> {
+    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, ParseError> {
         self.buffer.clear();
         if self.source.read_line(&mut self.buffer)? == 0 {
             return Ok(None);
@@ -222,12 +238,12 @@ impl<R: BufRead> TsvSolutionsReader<R> {
                     if v.is_empty() {
                         Ok(None)
                     } else {
-                        Ok(Some(
-                            Term::from_str(v).map_err(|e| SyntaxError::msg(e.to_string()))?,
-                        ))
+                        Ok(Some(Term::from_str(v).map_err(|e| SyntaxError {
+                            inner: SyntaxErrorKind::Term(e),
+                        })?))
                     }
                 })
-                .collect::<Result<_, ParserError>>()?,
+                .collect::<Result<_, ParseError>>()?,
         ))
     }
 }
@@ -235,6 +251,8 @@ impl<R: BufRead> TsvSolutionsReader<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::QuerySolution;
+    use std::rc::Rc;
     use std::str;
 
     fn build_example() -> (Vec<Variable>, Vec<Vec<Option<Term>>>) {
@@ -283,9 +301,10 @@ mod tests {
     #[test]
     fn test_csv_serialization() -> io::Result<()> {
         let (variables, solutions) = build_example();
-        let mut writer = CsvSolutionsWriter::start(Vec::new(), &variables)?;
-        for solution in &solutions {
-            writer.write(solution.iter().map(|t| t.as_ref().map(|t| t.as_ref())))?;
+        let mut writer = CsvSolutionsWriter::start(Vec::new(), variables.clone())?;
+        let variables = Rc::new(variables);
+        for solution in solutions {
+            writer.write(QuerySolution::from((variables.clone(), solution)).iter())?;
         }
         let result = writer.finish();
         assert_eq!(str::from_utf8(&result).unwrap(), "x,literal\r\nhttp://example/x,String\r\nhttp://example/x,\"String-with-dquote\"\"\"\r\n_:b0,Blank node\r\n,Missing 'x'\r\n,\r\nhttp://example/x,\r\n_:b1,String-with-lang\r\n_:b1,123");
@@ -295,9 +314,10 @@ mod tests {
     #[test]
     fn test_tsv_serialization() -> io::Result<()> {
         let (variables, solutions) = build_example();
-        let mut writer = TsvSolutionsWriter::start(Vec::new(), &variables)?;
-        for solution in &solutions {
-            writer.write(solution.iter().map(|t| t.as_ref().map(|t| t.as_ref())))?;
+        let mut writer = TsvSolutionsWriter::start(Vec::new(), variables.clone())?;
+        let variables = Rc::new(variables);
+        for solution in solutions {
+            writer.write(QuerySolution::from((variables.clone(), solution)).iter())?;
         }
         let result = writer.finish();
         assert_eq!(str::from_utf8(&result).unwrap(), "?x\t?literal\n<http://example/x>\t\"String\"\n<http://example/x>\t\"String-with-dquote\\\"\"\n_:b0\t\"Blank node\"\n\t\"Missing 'x'\"\n\t\n<http://example/x>\t\n_:b1\t\"String-with-lang\"@en\n_:b1\t123");

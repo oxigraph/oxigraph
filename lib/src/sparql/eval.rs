@@ -2330,7 +2330,7 @@ fn encode_bindings(
             put_variable_value(
                 variable,
                 &variables,
-                dataset.encode_term(term.as_ref()),
+                dataset.encode_term(term),
                 &mut encoded_terms,
             )
         }

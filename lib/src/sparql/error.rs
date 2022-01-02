@@ -1,5 +1,4 @@
 use crate::io::read::ParserError;
-use crate::sparql::ParseError;
 use crate::storage::StorageError;
 use std::convert::Infallible;
 use std::error;
@@ -11,11 +10,13 @@ use std::io;
 #[non_exhaustive]
 pub enum EvaluationError {
     /// An error in SPARQL parsing
-    Parsing(ParseError),
+    Parsing(spargebra::ParseError),
     /// An error from the storage
     Storage(StorageError),
     /// An error while parsing an external RDF file
     ExternalParser(ParserError),
+    /// An error while parsing an external result file (likely from a federated query)
+    ResultsParsing(sparesults::ParseError),
     /// An error returned during store IOs or during results write
     Io(io::Error),
     /// An error returned during the query evaluation itself
@@ -39,6 +40,7 @@ impl fmt::Display for EvaluationError {
             Self::Parsing(error) => error.fmt(f),
             Self::Storage(error) => error.fmt(f),
             Self::ExternalParser(error) => error.fmt(f),
+            Self::ResultsParsing(error) => error.fmt(f),
             Self::Io(error) => error.fmt(f),
             Self::Query(error) => error.fmt(f),
         }
@@ -60,6 +62,7 @@ impl error::Error for EvaluationError {
             Self::Parsing(e) => Some(e),
             Self::Storage(e) => Some(e),
             Self::ExternalParser(e) => Some(e),
+            Self::ResultsParsing(e) => Some(e),
             Self::Io(e) => Some(e),
             Self::Query(e) => Some(e),
         }
@@ -97,8 +100,8 @@ impl From<Infallible> for EvaluationError {
     }
 }
 
-impl From<ParseError> for EvaluationError {
-    fn from(error: ParseError) -> Self {
+impl From<spargebra::ParseError> for EvaluationError {
+    fn from(error: spargebra::ParseError) -> Self {
         Self::Parsing(error)
     }
 }
@@ -121,11 +124,18 @@ impl From<ParserError> for EvaluationError {
     }
 }
 
+impl From<sparesults::ParseError> for EvaluationError {
+    fn from(error: sparesults::ParseError) -> Self {
+        Self::ResultsParsing(error)
+    }
+}
+
 impl From<EvaluationError> for io::Error {
     fn from(error: EvaluationError) -> Self {
         match error {
             EvaluationError::Parsing(error) => Self::new(io::ErrorKind::InvalidData, error),
             EvaluationError::ExternalParser(error) => error.into(),
+            EvaluationError::ResultsParsing(error) => error.into(),
             EvaluationError::Io(error) => error,
             EvaluationError::Storage(error) => error.into(),
             EvaluationError::Query(error) => Self::new(io::ErrorKind::Other, error),

@@ -471,18 +471,7 @@ impl From<ParserError> for io::Error {
     }
 }
 
-impl From<quick_xml::Error> for ParserError {
-    fn from(error: quick_xml::Error) -> Self {
-        match error {
-            quick_xml::Error::Io(error) => Self::Io(error),
-            error => Self::Syntax(SyntaxError {
-                inner: SyntaxErrorKind::Xml(error),
-            }),
-        }
-    }
-}
-
-/// An error in the syntax of the parsed file
+/// An error in the syntax of the parsed file.
 #[derive(Debug)]
 pub struct SyntaxError {
     pub(crate) inner: SyntaxErrorKind,
@@ -493,18 +482,7 @@ pub(crate) enum SyntaxErrorKind {
     Turtle(TurtleError),
     RdfXml(RdfXmlError),
     InvalidBaseIri { iri: String, error: IriParseError },
-    Xml(quick_xml::Error),
     Term(TermParseError),
-    Msg { msg: String },
-}
-
-impl SyntaxError {
-    /// Builds an error from a printable error message.
-    pub(crate) fn msg(msg: impl Into<String>) -> Self {
-        Self {
-            inner: SyntaxErrorKind::Msg { msg: msg.into() },
-        }
-    }
 }
 
 impl fmt::Display for SyntaxError {
@@ -515,9 +493,7 @@ impl fmt::Display for SyntaxError {
             SyntaxErrorKind::InvalidBaseIri { iri, error } => {
                 write!(f, "Invalid base IRI '{}': {}", iri, error)
             }
-            SyntaxErrorKind::Xml(e) => e.fmt(f),
             SyntaxErrorKind::Term(e) => e.fmt(f),
-            SyntaxErrorKind::Msg { msg } => f.write_str(msg),
         }
     }
 }
@@ -527,9 +503,8 @@ impl Error for SyntaxError {
         match &self.inner {
             SyntaxErrorKind::Turtle(e) => Some(e),
             SyntaxErrorKind::RdfXml(e) => Some(e),
-            SyntaxErrorKind::Xml(e) => Some(e),
             SyntaxErrorKind::Term(e) => Some(e),
-            SyntaxErrorKind::InvalidBaseIri { .. } | SyntaxErrorKind::Msg { .. } => None,
+            SyntaxErrorKind::InvalidBaseIri { .. } => None,
         }
     }
 }
@@ -543,15 +518,7 @@ impl From<SyntaxError> for io::Error {
                 io::ErrorKind::InvalidInput,
                 format!("Invalid IRI '{}': {}", iri, error),
             ),
-            SyntaxErrorKind::Xml(error) => match error {
-                quick_xml::Error::Io(error) => error,
-                quick_xml::Error::UnexpectedEof(error) => {
-                    Self::new(io::ErrorKind::UnexpectedEof, error)
-                }
-                error => Self::new(io::ErrorKind::InvalidData, error),
-            },
             SyntaxErrorKind::Term(error) => Self::new(io::ErrorKind::InvalidData, error),
-            SyntaxErrorKind::Msg { msg } => Self::new(io::ErrorKind::InvalidData, msg),
         }
     }
 }

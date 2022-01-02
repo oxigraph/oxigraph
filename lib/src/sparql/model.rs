@@ -2,8 +2,12 @@ use crate::io::GraphFormat;
 use crate::io::GraphSerializer;
 use crate::model::*;
 use crate::sparql::error::EvaluationError;
-use crate::sparql::io::{QueryResultsFormat, QueryResultsParser, QueryResultsSerializer};
 use oxrdf::Variable;
+pub use sparesults::QuerySolution;
+use sparesults::{
+    QueryResultsFormat, QueryResultsParser, QueryResultsReader, QueryResultsSerializer,
+    SolutionsReader,
+};
 use std::io::{self, BufRead, Write};
 use std::rc::Rc;
 
@@ -54,32 +58,25 @@ impl QueryResults {
                 serializer.write_boolean_result(writer, value)?;
             }
             QueryResults::Solutions(solutions) => {
-                let mut writer = serializer.solutions_writer(writer, solutions.variables())?;
+                let mut writer =
+                    serializer.solutions_writer(writer, solutions.variables().to_vec())?;
                 for solution in solutions {
-                    writer.write(
-                        solution?
-                            .values
-                            .iter()
-                            .map(|t| t.as_ref().map(|t| t.as_ref())),
-                    )?;
+                    writer.write(&solution?)?;
                 }
                 writer.finish()?;
             }
             QueryResults::Graph(triples) => {
-                let mut writer = serializer.solutions_writer(
-                    writer,
-                    &[
-                        Variable::new_unchecked("subject"),
-                        Variable::new_unchecked("predicate"),
-                        Variable::new_unchecked("object"),
-                    ],
-                )?;
+                let s = Variable::new_unchecked("subject");
+                let p = Variable::new_unchecked("predicate");
+                let o = Variable::new_unchecked("object");
+                let mut writer =
+                    serializer.solutions_writer(writer, vec![s.clone(), p.clone(), o.clone()])?;
                 for triple in triples {
                     let triple = triple?;
                     writer.write([
-                        Some(triple.subject.as_ref().into()),
-                        Some(triple.predicate.as_ref().into()),
-                        Some(triple.object.as_ref()),
+                        (&s, &triple.subject.into()),
+                        (&p, &triple.predicate.into()),
+                        (&o, &triple.object),
                     ])?;
                 }
                 writer.finish()?;
@@ -135,6 +132,15 @@ impl From<QuerySolutionIter> for QueryResults {
     }
 }
 
+impl<R: BufRead + 'static> From<QueryResultsReader<R>> for QueryResults {
+    fn from(reader: QueryResultsReader<R>) -> Self {
+        match reader {
+            QueryResultsReader::Solutions(s) => Self::Solutions(s.into()),
+            QueryResultsReader::Boolean(v) => Self::Boolean(v),
+        }
+    }
+}
+
 /// An iterator over [`QuerySolution`]s.
 ///
 /// ```
@@ -151,15 +157,18 @@ impl From<QuerySolutionIter> for QueryResults {
 /// ```
 pub struct QuerySolutionIter {
     variables: Rc<Vec<Variable>>,
-    iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>, EvaluationError>>>,
+    iter: Box<dyn Iterator<Item = Result<QuerySolution, EvaluationError>>>,
 }
 
 impl QuerySolutionIter {
     pub fn new(
         variables: Rc<Vec<Variable>>,
-        iter: Box<dyn Iterator<Item = Result<Vec<Option<Term>>, EvaluationError>>>,
+        iter: impl Iterator<Item = Result<Vec<Option<Term>>, EvaluationError>> + 'static,
     ) -> Self {
-        Self { variables, iter }
+        Self {
+            variables: variables.clone(),
+            iter: Box::new(iter.map(move |t| t.map(|values| (variables.clone(), values).into()))),
+        }
     }
 
     /// The variables used in the solutions.
@@ -180,103 +189,26 @@ impl QuerySolutionIter {
     }
 }
 
+impl<R: BufRead + 'static> From<SolutionsReader<R>> for QuerySolutionIter {
+    fn from(reader: SolutionsReader<R>) -> Self {
+        Self {
+            variables: Rc::new(reader.variables().to_vec()),
+            iter: Box::new(reader.map(|t| t.map_err(EvaluationError::from))),
+        }
+    }
+}
+
 impl Iterator for QuerySolutionIter {
     type Item = Result<QuerySolution, EvaluationError>;
 
     #[inline]
     fn next(&mut self) -> Option<Result<QuerySolution, EvaluationError>> {
-        Some(self.iter.next()?.map(|values| QuerySolution {
-            values,
-            variables: self.variables.clone(),
-        }))
+        self.iter.next()
     }
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.iter.size_hint()
-    }
-}
-
-/// Tuple associating variables and terms that are the result of a SPARQL query.
-///
-/// It is the equivalent of a row in SQL.
-pub struct QuerySolution {
-    pub(super) values: Vec<Option<Term>>,
-    pub(super) variables: Rc<Vec<Variable>>,
-}
-
-impl QuerySolution {
-    /// Returns a value for a given position in the tuple ([`usize`](std::usize)) or a given variable name ([`&str`](std::str) or [`Variable`])
-    ///
-    /// ```ignore
-    /// let foo = solution.get("foo"); // Get the value of the variable ?foo if it exists
-    /// let first = solution.get(1); // Get the value of the second column if it exists
-    /// ```
-    #[inline]
-    pub fn get(&self, index: impl VariableSolutionIndex) -> Option<&Term> {
-        self.values
-            .get(index.index(self)?)
-            .and_then(std::option::Option::as_ref)
-    }
-
-    /// The number of variables which could be bound
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.values.len()
-    }
-
-    /// Is this binding empty?
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.values.is_empty()
-    }
-
-    /// Returns an iterator over bound variables
-    #[inline]
-    pub fn iter(&self) -> impl Iterator<Item = (&Variable, &Term)> {
-        self.values
-            .iter()
-            .enumerate()
-            .filter_map(move |(i, value)| value.as_ref().map(|value| (&self.variables[i], value)))
-    }
-
-    /// Returns an iterator over all values, bound or not
-    #[inline]
-    pub fn values(&self) -> impl Iterator<Item = Option<&Term>> {
-        self.values.iter().map(std::option::Option::as_ref)
-    }
-}
-
-/// A utility trait to get values for a given variable or tuple position
-pub trait VariableSolutionIndex {
-    fn index(self, solution: &QuerySolution) -> Option<usize>;
-}
-
-impl VariableSolutionIndex for usize {
-    #[inline]
-    fn index(self, _: &QuerySolution) -> Option<usize> {
-        Some(self)
-    }
-}
-
-impl VariableSolutionIndex for &str {
-    #[inline]
-    fn index(self, solution: &QuerySolution) -> Option<usize> {
-        solution.variables.iter().position(|v| v.as_str() == self)
-    }
-}
-
-impl VariableSolutionIndex for &Variable {
-    #[inline]
-    fn index(self, solution: &QuerySolution) -> Option<usize> {
-        solution.variables.iter().position(|v| v == self)
-    }
-}
-
-impl VariableSolutionIndex for Variable {
-    #[inline]
-    fn index(self, solution: &QuerySolution) -> Option<usize> {
-        (&self).index(solution)
     }
 }
 

@@ -1,9 +1,9 @@
 //! Implementation of [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/)
 
-use crate::io::read::{ParserError, SyntaxError};
-use crate::model::vocab::rdf;
-use crate::model::*;
+use crate::error::{ParseError, SyntaxError};
+use oxrdf::vocab::rdf;
 use oxrdf::Variable;
+use oxrdf::*;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Reader;
 use quick_xml::Writer;
@@ -35,56 +35,50 @@ fn do_write_boolean_xml_result<W: Write>(sink: W, value: bool) -> Result<W, quic
 
 pub struct XmlSolutionsWriter<W: Write> {
     writer: Writer<W>,
-    variables: Vec<Variable>,
 }
 
 impl<W: Write> XmlSolutionsWriter<W> {
-    pub fn start(sink: W, variables: &[Variable]) -> io::Result<Self> {
+    pub fn start(sink: W, variables: Vec<Variable>) -> io::Result<Self> {
         Self::do_start(sink, variables).map_err(map_xml_error)
     }
 
-    fn do_start(sink: W, variables: &[Variable]) -> Result<Self, quick_xml::Error> {
+    fn do_start(sink: W, variables: Vec<Variable>) -> Result<Self, quick_xml::Error> {
         let mut writer = Writer::new(sink);
         writer.write_event(Event::Decl(BytesDecl::new(b"1.0", None, None)))?;
         let mut sparql_open = BytesStart::borrowed_name(b"sparql");
         sparql_open.push_attribute(("xmlns", "http://www.w3.org/2005/sparql-results#"));
         writer.write_event(Event::Start(sparql_open))?;
         writer.write_event(Event::Start(BytesStart::borrowed_name(b"head")))?;
-        for variable in variables {
+        for variable in &variables {
             let mut variable_tag = BytesStart::borrowed_name(b"variable");
             variable_tag.push_attribute(("name", variable.as_str()));
             writer.write_event(Event::Empty(variable_tag))?;
         }
         writer.write_event(Event::End(BytesEnd::borrowed(b"head")))?;
         writer.write_event(Event::Start(BytesStart::borrowed_name(b"results")))?;
-        Ok(Self {
-            writer,
-            variables: variables.to_vec(),
-        })
+        Ok(Self { writer })
     }
 
     pub fn write<'a>(
         &mut self,
-        solution: impl IntoIterator<Item = Option<TermRef<'a>>>,
+        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
     ) -> io::Result<()> {
         self.do_write(solution).map_err(map_xml_error)
     }
 
     fn do_write<'a>(
         &mut self,
-        solution: impl IntoIterator<Item = Option<TermRef<'a>>>,
+        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
     ) -> Result<(), quick_xml::Error> {
         self.writer
             .write_event(Event::Start(BytesStart::borrowed_name(b"result")))?;
-        for (value, variable) in solution.into_iter().zip(&self.variables) {
-            if let Some(value) = value {
-                let mut binding_tag = BytesStart::borrowed_name(b"binding");
-                binding_tag.push_attribute(("name", variable.as_str()));
-                self.writer.write_event(Event::Start(binding_tag))?;
-                write_xml_term(value, &mut self.writer)?;
-                self.writer
-                    .write_event(Event::End(BytesEnd::borrowed(b"binding")))?;
-            }
+        for (variable, value) in solution {
+            let mut binding_tag = BytesStart::borrowed_name(b"binding");
+            binding_tag.push_attribute(("name", variable.as_str()));
+            self.writer.write_event(Event::Start(binding_tag))?;
+            write_xml_term(value.as_ref(), &mut self.writer)?;
+            self.writer
+                .write_event(Event::End(BytesEnd::borrowed(b"binding")))?;
         }
         self.writer
             .write_event(Event::End(BytesEnd::borrowed(b"result")))
@@ -129,6 +123,7 @@ fn write_xml_term(
             writer.write_event(Event::Text(BytesText::from_plain_str(literal.value())))?;
             writer.write_event(Event::End(BytesEnd::borrowed(b"literal")))?;
         }
+        #[cfg(feature = "rdf-star")]
         TermRef::Triple(triple) => {
             writer.write_event(Event::Start(BytesStart::borrowed_name(b"triple")))?;
             writer.write_event(Event::Start(BytesStart::borrowed_name(b"subject")))?;
@@ -155,7 +150,7 @@ pub enum XmlQueryResultsReader<R: BufRead> {
 }
 
 impl<R: BufRead> XmlQueryResultsReader<R> {
-    pub fn read(source: R) -> Result<Self, ParserError> {
+    pub fn read(source: R) -> Result<Self, ParseError> {
         enum State {
             Start,
             Sparql,
@@ -301,7 +296,7 @@ pub struct XmlSolutionsReader<R: BufRead> {
 }
 
 impl<R: BufRead> XmlSolutionsReader<R> {
-    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, ParserError> {
+    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, ParseError> {
         let mut state = State::Start;
 
         let mut new_bindings = vec![None; self.mapping.len()];
@@ -513,6 +508,7 @@ impl<R: BufRead> XmlSolutionsReader<R> {
                         state = self.stack.pop().unwrap();
                     }
                     State::Triple => {
+                        #[cfg(feature = "rdf-star")]
                         if let (Some(subject), Some(predicate), Some(object)) = (
                             self.subject_stack.pop(),
                             self.predicate_stack.pop(),
@@ -550,6 +546,13 @@ impl<R: BufRead> XmlSolutionsReader<R> {
                                 SyntaxError::msg("A <triple> should contain a <subject>, a <predicate> and an <object>").into()
                             );
                         }
+                        #[cfg(not(feature = "rdf-star"))]
+                        {
+                            return Err(SyntaxError::msg(
+                                "The <triple> tag is only supported with RDF-star",
+                            )
+                            .into());
+                        }
                     }
                     State::End => (),
                 },
@@ -564,7 +567,7 @@ fn build_literal(
     value: impl Into<String>,
     lang: Option<String>,
     datatype: Option<NamedNode>,
-) -> Result<Literal, ParserError> {
+) -> Result<Literal, ParseError> {
     match lang {
         Some(lang) => {
             if let Some(datatype) = datatype {

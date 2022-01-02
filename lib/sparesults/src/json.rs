@@ -1,11 +1,10 @@
 //! Implementation of [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/)
 
-use crate::io::read::{ParserError, SyntaxError};
-use crate::model::vocab::rdf;
-use crate::model::*;
-use crate::sparql::error::EvaluationError;
+use crate::error::{ParseError, SyntaxError};
 use json_event_parser::{JsonEvent, JsonReader, JsonWriter};
+use oxrdf::vocab::rdf;
 use oxrdf::Variable;
+use oxrdf::*;
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, Write};
 
@@ -23,18 +22,17 @@ pub fn write_boolean_json_result<W: Write>(sink: W, value: bool) -> io::Result<W
 
 pub struct JsonSolutionsWriter<W: Write> {
     writer: JsonWriter<W>,
-    variables: Vec<Variable>,
 }
 
 impl<W: Write> JsonSolutionsWriter<W> {
-    pub fn start(sink: W, variables: &[Variable]) -> io::Result<Self> {
+    pub fn start(sink: W, variables: Vec<Variable>) -> io::Result<Self> {
         let mut writer = JsonWriter::from_writer(sink);
         writer.write_event(JsonEvent::StartObject)?;
         writer.write_event(JsonEvent::ObjectKey("head"))?;
         writer.write_event(JsonEvent::StartObject)?;
         writer.write_event(JsonEvent::ObjectKey("vars"))?;
         writer.write_event(JsonEvent::StartArray)?;
-        for variable in variables {
+        for variable in &variables {
             writer.write_event(JsonEvent::String(variable.as_str()))?;
         }
         writer.write_event(JsonEvent::EndArray)?;
@@ -43,23 +41,18 @@ impl<W: Write> JsonSolutionsWriter<W> {
         writer.write_event(JsonEvent::StartObject)?;
         writer.write_event(JsonEvent::ObjectKey("bindings"))?;
         writer.write_event(JsonEvent::StartArray)?;
-        Ok(Self {
-            writer,
-            variables: variables.to_vec(),
-        })
+        Ok(Self { writer })
     }
 
     pub fn write<'a>(
         &mut self,
-        solution: impl IntoIterator<Item = Option<TermRef<'a>>>,
+        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
     ) -> io::Result<()> {
         self.writer.write_event(JsonEvent::StartObject)?;
-        for (value, variable) in solution.into_iter().zip(&self.variables) {
-            if let Some(value) = value {
-                self.writer
-                    .write_event(JsonEvent::ObjectKey(variable.as_str()))?;
-                write_json_term(value, &mut self.writer)?;
-            }
+        for (variable, value) in solution {
+            self.writer
+                .write_event(JsonEvent::ObjectKey(variable.as_str()))?;
+            write_json_term(value.as_ref(), &mut self.writer)?;
         }
         self.writer.write_event(JsonEvent::EndObject)?;
         Ok(())
@@ -73,10 +66,7 @@ impl<W: Write> JsonSolutionsWriter<W> {
     }
 }
 
-fn write_json_term(
-    term: TermRef<'_>,
-    writer: &mut JsonWriter<impl Write>,
-) -> Result<(), EvaluationError> {
+fn write_json_term(term: TermRef<'_>, writer: &mut JsonWriter<impl Write>) -> io::Result<()> {
     match term {
         TermRef::NamedNode(uri) => {
             writer.write_event(JsonEvent::StartObject)?;
@@ -109,6 +99,7 @@ fn write_json_term(
             }
             writer.write_event(JsonEvent::EndObject)?;
         }
+        #[cfg(feature = "rdf-star")]
         TermRef::Triple(triple) => {
             writer.write_event(JsonEvent::StartObject)?;
             writer.write_event(JsonEvent::ObjectKey("type"))?;
@@ -137,7 +128,7 @@ pub enum JsonQueryResultsReader<R: BufRead> {
 }
 
 impl<R: BufRead> JsonQueryResultsReader<R> {
-    pub fn read(source: R) -> Result<Self, ParserError> {
+    pub fn read(source: R) -> Result<Self, ParseError> {
         let mut reader = JsonReader::from_reader(source);
         let mut buffer = Vec::default();
         let mut variables = None;
@@ -234,7 +225,7 @@ pub struct JsonSolutionsReader<R: BufRead> {
 }
 
 impl<R: BufRead> JsonSolutionsReader<R> {
-    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, ParserError> {
+    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, ParseError> {
         let mut new_bindings = vec![None; self.mapping.len()];
         loop {
             match self.reader.read_event(&mut self.buffer)? {
@@ -255,11 +246,12 @@ impl<R: BufRead> JsonSolutionsReader<R> {
         }
     }
 
-    fn read_value(&mut self) -> Result<Term, ParserError> {
+    fn read_value(&mut self) -> Result<Term, ParseError> {
         enum Type {
             Uri,
             BNode,
             Literal,
+            #[cfg(feature = "rdf-star")]
             Triple,
         }
         #[derive(Eq, PartialEq)]
@@ -312,6 +304,7 @@ impl<R: BufRead> JsonSolutionsReader<R> {
                             "uri" => t = Some(Type::Uri),
                             "bnode" => t = Some(Type::BNode),
                             "literal" => t = Some(Type::Literal),
+                            #[cfg(feature = "rdf-star")]
                             "triple" => t = Some(Type::Triple),
                             _ => {
                                 return Err(SyntaxError::msg(format!(
@@ -393,6 +386,7 @@ impl<R: BufRead> JsonSolutionsReader<R> {
                                     }
                                         .into())
                             }
+                            #[cfg(feature = "rdf-star")]
                             Some(Type::Triple) => Ok(Triple::new(
                                 match subject.ok_or_else(|| {
                                     SyntaxError::msg(
@@ -441,7 +435,7 @@ impl<R: BufRead> JsonSolutionsReader<R> {
 fn read_head<R: BufRead>(
     reader: &mut JsonReader<R>,
     buffer: &mut Vec<u8>,
-) -> Result<Vec<String>, ParserError> {
+) -> Result<Vec<String>, ParseError> {
     if reader.read_event(buffer)? != JsonEvent::StartObject {
         return Err(SyntaxError::msg("head should be an object").into());
     }
@@ -468,7 +462,7 @@ fn read_head<R: BufRead>(
 fn read_string_array<R: BufRead>(
     reader: &mut JsonReader<R>,
     buffer: &mut Vec<u8>,
-) -> Result<Vec<String>, ParserError> {
+) -> Result<Vec<String>, ParseError> {
     if reader.read_event(buffer)? != JsonEvent::StartArray {
         return Err(SyntaxError::msg("Variable list should be an array").into());
     }
@@ -480,224 +474,6 @@ fn read_string_array<R: BufRead>(
             }
             JsonEvent::EndArray => return Ok(elements),
             _ => return Err(SyntaxError::msg("Variable names should be strings").into()),
-        }
-    }
-}
-
-struct ResultsIterator<R: BufRead> {
-    reader: JsonReader<R>,
-    buffer: Vec<u8>,
-    mapping: BTreeMap<String, usize>,
-}
-
-impl<R: BufRead> Iterator for ResultsIterator<R> {
-    type Item = Result<Vec<Option<Term>>, EvaluationError>;
-
-    fn next(&mut self) -> Option<Result<Vec<Option<Term>>, EvaluationError>> {
-        self.read_next().map_err(EvaluationError::from).transpose()
-    }
-}
-
-impl<R: BufRead> ResultsIterator<R> {
-    fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, ParserError> {
-        let mut new_bindings = vec![None; self.mapping.len()];
-        loop {
-            match self.reader.read_event(&mut self.buffer)? {
-                JsonEvent::StartObject => (),
-                JsonEvent::EndObject => return Ok(Some(new_bindings)),
-                JsonEvent::EndArray | JsonEvent::Eof => return Ok(None),
-                JsonEvent::ObjectKey(key) => {
-                    let k = *self.mapping.get(key).ok_or_else(|| {
-                        SyntaxError::msg(format!(
-                            "The variable {} has not been defined in the header",
-                            key
-                        ))
-                    })?;
-                    new_bindings[k] = Some(self.read_value()?)
-                }
-                _ => return Err(SyntaxError::msg("Invalid result serialization").into()),
-            }
-        }
-    }
-    fn read_value(&mut self) -> Result<Term, ParserError> {
-        enum Type {
-            Uri,
-            BNode,
-            Literal,
-            Triple,
-        }
-        #[derive(Eq, PartialEq)]
-        enum State {
-            Type,
-            Value,
-            Lang,
-            Datatype,
-        }
-        let mut state = None;
-        let mut t = None;
-        let mut value = None;
-        let mut lang = None;
-        let mut datatype = None;
-        let mut subject = None;
-        let mut predicate = None;
-        let mut object = None;
-        if self.reader.read_event(&mut self.buffer)? != JsonEvent::StartObject {
-            return Err(SyntaxError::msg("Term serializations should be an object").into());
-        }
-        loop {
-            match self.reader.read_event(&mut self.buffer)? {
-                JsonEvent::ObjectKey(key) => match key {
-                    "type" => state = Some(State::Type),
-                    "value" => state = Some(State::Value),
-                    "xml:lang" => state = Some(State::Lang),
-                    "datatype" => state = Some(State::Datatype),
-                    "subject" => subject = Some(self.read_value()?),
-                    "predicate" => predicate = Some(self.read_value()?),
-                    "object" => object = Some(self.read_value()?),
-                    _ => {
-                        return Err(SyntaxError::msg(format!(
-                            "Unexpected key in term serialization: '{}'",
-                            key
-                        ))
-                        .into())
-                    }
-                },
-                JsonEvent::StartObject => {
-                    if state != Some(State::Value) {
-                        return Err(SyntaxError::msg(
-                            "Unexpected nested object in term serialization",
-                        )
-                        .into());
-                    }
-                }
-                JsonEvent::String(s) => match state {
-                    Some(State::Type) => {
-                        match s {
-                            "uri" => t = Some(Type::Uri),
-                            "bnode" => t = Some(Type::BNode),
-                            "literal" => t = Some(Type::Literal),
-                            "triple" => t = Some(Type::Triple),
-                            _ => {
-                                return Err(SyntaxError::msg(format!(
-                                    "Unexpected term type: '{}'",
-                                    s
-                                ))
-                                .into())
-                            }
-                        };
-                        state = None;
-                    }
-                    Some(State::Value) => {
-                        value = Some(s.to_owned());
-                        state = None;
-                    }
-                    Some(State::Lang) => {
-                        lang = Some(s.to_owned());
-                        state = None;
-                    }
-                    Some(State::Datatype) => {
-                        datatype = Some(NamedNode::new(s).map_err(|e| {
-                            SyntaxError::msg(format!("Invalid datatype value: {}", e))
-                        })?);
-                        state = None;
-                    }
-                    _ => (), // impossible
-                },
-                JsonEvent::EndObject => {
-                    if let Some(s) = state {
-                        if s == State::Value {
-                            state = None; //End of triple
-                        } else {
-                            return Err(SyntaxError::msg(
-                                "Term description values should be string",
-                            )
-                            .into());
-                        }
-                    } else {
-                        return match t {
-                            None => Err(SyntaxError::msg(
-                                "Term serialization should have a 'type' key",
-                            )
-                            .into()),
-                            Some(Type::Uri) => Ok(NamedNode::new(value.ok_or_else(|| {
-                                SyntaxError::msg("uri serialization should have a 'value' key")
-                            })?)
-                            .map_err(|e| SyntaxError::msg(format!("Invalid uri value: {}", e)))?
-                            .into()),
-                            Some(Type::BNode) => Ok(BlankNode::new(value.ok_or_else(|| {
-                                SyntaxError::msg("bnode serialization should have a 'value' key")
-                            })?)
-                            .map_err(|e| SyntaxError::msg(format!("Invalid bnode value: {}", e)))?
-                            .into()),
-                            Some(Type::Literal) => {
-                                let value = value.ok_or_else(|| {
-                                    SyntaxError::msg(
-                                        "literal serialization should have a 'value' key",
-                                    )
-                                })?;
-                                Ok(match lang {
-                                    Some(lang) => {
-                                        if let Some(datatype) = datatype {
-                                            if datatype.as_ref() != rdf::LANG_STRING {
-                                                return Err(SyntaxError::msg(format!(
-                                                    "xml:lang value '{}' provided with the datatype {}",
-                                                    lang, datatype
-                                                )).into())
-                                            }
-                                        }
-                                        Literal::new_language_tagged_literal(value, &lang).map_err(|e| {
-                                            SyntaxError::msg(format!("Invalid xml:lang value '{}': {}", lang, e))
-                                        })?
-                                    }
-                                    None => if let Some(datatype) = datatype {
-                                        Literal::new_typed_literal(value, datatype)
-                                    } else {
-                                        Literal::new_simple_literal(value)
-                                    }
-                                }
-                                .into())
-                            }
-                            Some(Type::Triple) => Ok(Triple::new(
-                                match subject.ok_or_else(|| {
-                                    SyntaxError::msg(
-                                        "triple serialization should have a 'subject' key",
-                                    )
-                                })? {
-                                    Term::NamedNode(subject) => subject.into(),
-                                    Term::BlankNode(subject) => subject.into(),
-                                    Term::Triple(subject) => Subject::Triple(subject),
-                                    Term::Literal(_) => {
-                                        return Err(SyntaxError::msg(
-                                            "The 'subject' value should not be a literal",
-                                        )
-                                        .into())
-                                    }
-                                },
-                                match predicate.ok_or_else(|| {
-                                    SyntaxError::msg(
-                                        "triple serialization should have a 'predicate' key",
-                                    )
-                                })? {
-                                    Term::NamedNode(predicate) => predicate,
-                                    _ => {
-                                        return Err(SyntaxError::msg(
-                                            "The 'predicate' value should be a uri",
-                                        )
-                                        .into())
-                                    }
-                                },
-                                object.ok_or_else(|| {
-                                    SyntaxError::msg(
-                                        "triple serialization should have a 'object' key",
-                                    )
-                                })?,
-                            )
-                            .into()),
-                        };
-                    }
-                }
-                _ => return Err(SyntaxError::msg("Invalid term serialization").into()),
-            }
         }
     }
 }
