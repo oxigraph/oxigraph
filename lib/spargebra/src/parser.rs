@@ -731,7 +731,7 @@ impl<'a> Iterator for UnescapeUnicodeCharIterator<'a> {
                             return Some('\\');
                         }
                     }
-                    if let Some(c) = u32::from_str_radix(&self.buffer[1..5], 16)
+                    if let Some(c) = u32::from_str_radix(&self.buffer[1..], 16)
                         .ok()
                         .and_then(char::from_u32)
                     {
@@ -750,7 +750,7 @@ impl<'a> Iterator for UnescapeUnicodeCharIterator<'a> {
                             return Some('\\');
                         }
                     }
-                    if let Some(c) = u32::from_str_radix(&self.buffer[1..9], 16)
+                    if let Some(c) = u32::from_str_radix(&self.buffer[1..], 16)
                         .ok()
                         .and_then(char::from_u32)
                     {

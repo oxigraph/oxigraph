@@ -9,6 +9,10 @@
     rdfs:label "Oxigraph SPARQL tests" ;
     mf:entries
     (
+    :small_unicode_escape_with_multibytes_char
+    :long_unicode_escape_with_multibytes_char
+    :small_unicode_escape_with_multibytes_char_update
+    :long_unicode_escape_with_multibytes_char_update
     :describe
     :describe_where
     :group_concat_with_null
@@ -20,6 +24,22 @@
     :cmp_langString
     :update_dirtyRead
     ) .
+
+:small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
+    mf:name "Multibytes character at the end of a unicode espace sequence" ;
+    mf:action <small_unicode_escape_with_multibytes_char.rq> .
+
+:long_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
+    mf:name "Multibytes character at the end of a unicode espace sequence" ;
+    mf:action <long_unicode_escape_with_multibytes_char.rq> .
+
+:small_unicode_escape_with_multibytes_char_update rdf:type mf:NegativeUpdateSyntaxTest11 ;
+    mf:name "Multibytes character at the end of a unicode espace sequence" ;
+    mf:action <small_unicode_escape_with_multibytes_char.ru> .
+
+:long_unicode_escape_with_multibytes_char_update rdf:type mf:NegativeUpdateSyntaxTest11 ;
+    mf:name "Multibytes character at the end of a unicode espace sequence" ;
+    mf:action <long_unicode_escape_with_multibytes_char.ru> .
 
 :describe rdf:type mf:QueryEvaluationTest ;
     mf:name "Simple DESCRIBE request" ;
