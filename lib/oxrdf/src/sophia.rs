@@ -5,14 +5,17 @@ use sophia_api::term::*;
 use std::fmt;
 
 impl TTerm for BlankNode {
+    #[inline]
     fn kind(&self) -> TermKind {
         TermKind::BlankNode
     }
 
+    #[inline]
     fn value_raw(&self) -> RawValue<'_> {
         self.as_str().into()
     }
 
+    #[inline]
     fn as_dyn(&self) -> &dyn TTerm {
         self
     }
@@ -21,6 +24,7 @@ impl TTerm for BlankNode {
 impl TryCopyTerm for BlankNode {
     type Error = SophiaToOxigraphConversionError;
 
+    #[inline]
     fn try_copy<T>(other: &T) -> Result<Self, Self::Error>
     where
         T: TTerm + ?Sized,
@@ -33,28 +37,34 @@ impl TryCopyTerm for BlankNode {
 }
 
 impl<'a> TTerm for BlankNodeRef<'a> {
+    #[inline]
     fn kind(&self) -> TermKind {
         TermKind::BlankNode
     }
 
+    #[inline]
     fn value_raw(&self) -> RawValue<'_> {
         self.as_str().into()
     }
 
+    #[inline]
     fn as_dyn(&self) -> &dyn TTerm {
         self
     }
 }
 
 impl TTerm for Literal {
+    #[inline]
     fn kind(&self) -> TermKind {
         TermKind::Literal
     }
 
+    #[inline]
     fn value_raw(&self) -> RawValue<'_> {
         Self::value(self).into()
     }
 
+    #[inline]
     fn datatype(&self) -> Option<SimpleIri<'_>> {
         Some(SimpleIri::new_unchecked(
             Self::datatype(self).as_str(),
@@ -62,10 +72,12 @@ impl TTerm for Literal {
         ))
     }
 
+    #[inline]
     fn language(&self) -> Option<&str> {
         Self::language(self)
     }
 
+    #[inline]
     fn as_dyn(&self) -> &dyn TTerm {
         self
     }
@@ -74,6 +86,7 @@ impl TTerm for Literal {
 impl TryCopyTerm for Literal {
     type Error = SophiaToOxigraphConversionError;
 
+    #[inline]
     fn try_copy<T>(other: &T) -> Result<Self, Self::Error>
     where
         T: TTerm + ?Sized,
@@ -95,14 +108,17 @@ impl TryCopyTerm for Literal {
 }
 
 impl<'a> TTerm for LiteralRef<'a> {
+    #[inline]
     fn kind(&self) -> TermKind {
         TermKind::Literal
     }
 
+    #[inline]
     fn value_raw(&self) -> RawValue<'_> {
         LiteralRef::value(*self).into()
     }
 
+    #[inline]
     fn datatype(&self) -> Option<SimpleIri<'_>> {
         Some(SimpleIri::new_unchecked(
             LiteralRef::datatype(*self).as_str(),
@@ -110,24 +126,29 @@ impl<'a> TTerm for LiteralRef<'a> {
         ))
     }
 
+    #[inline]
     fn language(&self) -> Option<&str> {
         LiteralRef::language(*self)
     }
 
+    #[inline]
     fn as_dyn(&self) -> &dyn TTerm {
         self
     }
 }
 
 impl TTerm for NamedNode {
+    #[inline]
     fn kind(&self) -> TermKind {
         TermKind::Iri
     }
 
+    #[inline]
     fn value_raw(&self) -> RawValue<'_> {
         self.as_str().into()
     }
 
+    #[inline]
     fn as_dyn(&self) -> &dyn TTerm {
         self
     }
@@ -136,6 +157,7 @@ impl TTerm for NamedNode {
 impl TryCopyTerm for NamedNode {
     type Error = SophiaToOxigraphConversionError;
 
+    #[inline]
     fn try_copy<T>(other: &T) -> Result<Self, Self::Error>
     where
         T: TTerm + ?Sized,
@@ -148,26 +170,31 @@ impl TryCopyTerm for NamedNode {
 }
 
 impl<'a> From<SimpleIri<'a>> for NamedNode {
+    #[inline]
     fn from(other: SimpleIri<'a>) -> Self {
         Self::new_unchecked(other.value())
     }
 }
 
 impl<'a> TTerm for NamedNodeRef<'a> {
+    #[inline]
     fn kind(&self) -> TermKind {
         TermKind::BlankNode
     }
 
+    #[inline]
     fn value_raw(&self) -> RawValue<'_> {
         self.as_str().into()
     }
 
+    #[inline]
     fn as_dyn(&self) -> &dyn TTerm {
         self
     }
 }
 
 impl From<GraphName> for Option<Term> {
+    #[inline]
     fn from(other: GraphName) -> Self {
         match other {
             GraphName::NamedNode(n) => Some(n.into()),
@@ -178,6 +205,7 @@ impl From<GraphName> for Option<Term> {
 }
 
 impl<'a> From<GraphNameRef<'a>> for Option<TermRef<'a>> {
+    #[inline]
     fn from(other: GraphNameRef<'a>) -> Self {
         match other {
             GraphNameRef::NamedNode(n) => Some(n.into()),
@@ -188,6 +216,7 @@ impl<'a> From<GraphNameRef<'a>> for Option<TermRef<'a>> {
 }
 
 impl TTerm for Subject {
+    #[inline]
     fn kind(&self) -> TermKind {
         match self {
             Self::NamedNode(_) => TermKind::Iri,
@@ -196,6 +225,7 @@ impl TTerm for Subject {
         }
     }
 
+    #[inline]
     fn value_raw(&self) -> RawValue<'_> {
         match self {
             Self::NamedNode(n) => n.value_raw(),
@@ -204,6 +234,7 @@ impl TTerm for Subject {
         }
     }
 
+    #[inline]
     fn as_dyn(&self) -> &dyn TTerm {
         match self {
             Self::NamedNode(n) => n.as_dyn(),
@@ -216,6 +247,7 @@ impl TTerm for Subject {
 impl TryCopyTerm for Subject {
     type Error = SophiaToOxigraphConversionError;
 
+    #[inline]
     fn try_copy<T>(other: &T) -> Result<Self, Self::Error>
     where
         T: TTerm + ?Sized,
@@ -229,6 +261,7 @@ impl TryCopyTerm for Subject {
 }
 
 impl<'a> TTerm for SubjectRef<'a> {
+    #[inline]
     fn kind(&self) -> TermKind {
         match self {
             Self::NamedNode(_) => TermKind::Iri,
@@ -237,6 +270,7 @@ impl<'a> TTerm for SubjectRef<'a> {
         }
     }
 
+    #[inline]
     fn value_raw(&self) -> RawValue<'_> {
         match self {
             Self::NamedNode(n) => n.value_raw(),
@@ -245,6 +279,7 @@ impl<'a> TTerm for SubjectRef<'a> {
         }
     }
 
+    #[inline]
     fn as_dyn(&self) -> &dyn TTerm {
         match self {
             Self::NamedNode(n) => n.as_dyn(),
@@ -255,6 +290,7 @@ impl<'a> TTerm for SubjectRef<'a> {
 }
 
 impl TTerm for Term {
+    #[inline]
     fn kind(&self) -> TermKind {
         match self {
             Self::NamedNode(_) => TermKind::Iri,
@@ -264,6 +300,7 @@ impl TTerm for Term {
         }
     }
 
+    #[inline]
     fn value_raw(&self) -> RawValue<'_> {
         match self {
             Self::NamedNode(n) => n.value_raw(),
@@ -273,6 +310,7 @@ impl TTerm for Term {
         }
     }
 
+    #[inline]
     fn datatype(&self) -> Option<SimpleIri<'_>> {
         if let Self::Literal(l) = self {
             TTerm::datatype(l)
@@ -281,6 +319,7 @@ impl TTerm for Term {
         }
     }
 
+    #[inline]
     fn language(&self) -> Option<&str> {
         if let Self::Literal(l) = self {
             TTerm::language(l)
@@ -289,6 +328,7 @@ impl TTerm for Term {
         }
     }
 
+    #[inline]
     fn as_dyn(&self) -> &dyn TTerm {
         match self {
             Self::NamedNode(n) => n.as_dyn(),
@@ -302,6 +342,7 @@ impl TTerm for Term {
 impl TryCopyTerm for Term {
     type Error = SophiaToOxigraphConversionError;
 
+    #[inline]
     fn try_copy<T>(other: &T) -> Result<Self, Self::Error>
     where
         T: TTerm + ?Sized,
@@ -316,6 +357,7 @@ impl TryCopyTerm for Term {
 }
 
 impl<'a> TTerm for TermRef<'a> {
+    #[inline]
     fn kind(&self) -> TermKind {
         match self {
             Self::NamedNode(_) => TermKind::Iri,
@@ -325,6 +367,7 @@ impl<'a> TTerm for TermRef<'a> {
         }
     }
 
+    #[inline]
     fn datatype(&self) -> Option<SimpleIri<'_>> {
         if let Self::Literal(l) = self {
             TTerm::datatype(l)
@@ -333,6 +376,7 @@ impl<'a> TTerm for TermRef<'a> {
         }
     }
 
+    #[inline]
     fn language(&self) -> Option<&str> {
         if let Self::Literal(l) = self {
             TTerm::language(l)
@@ -341,6 +385,7 @@ impl<'a> TTerm for TermRef<'a> {
         }
     }
 
+    #[inline]
     fn value_raw(&self) -> RawValue<'_> {
         match self {
             Self::NamedNode(n) => n.value_raw(),
@@ -350,6 +395,7 @@ impl<'a> TTerm for TermRef<'a> {
         }
     }
 
+    #[inline]
     fn as_dyn(&self) -> &dyn TTerm {
         match self {
             Self::NamedNode(n) => n.as_dyn(),
@@ -361,6 +407,7 @@ impl<'a> TTerm for TermRef<'a> {
 }
 
 impl From<Quad> for ([Term; 3], Option<Term>) {
+    #[inline]
     fn from(other: Quad) -> Self {
         (
             [other.subject.into(), other.predicate.into(), other.object],
@@ -370,6 +417,7 @@ impl From<Quad> for ([Term; 3], Option<Term>) {
 }
 
 impl<'a> From<QuadRef<'a>> for ([TermRef<'a>; 3], Option<TermRef<'a>>) {
+    #[inline]
     fn from(other: QuadRef<'a>) -> Self {
         (
             [other.subject.into(), other.predicate.into(), other.object],
@@ -379,12 +427,14 @@ impl<'a> From<QuadRef<'a>> for ([TermRef<'a>; 3], Option<TermRef<'a>>) {
 }
 
 impl From<Triple> for [Term; 3] {
+    #[inline]
     fn from(other: Triple) -> Self {
         [other.subject.into(), other.predicate.into(), other.object]
     }
 }
 
 impl<'a> From<TripleRef<'a>> for [TermRef<'a>; 3] {
+    #[inline]
     fn from(other: TripleRef<'a>) -> Self {
         [other.subject.into(), other.predicate.into(), other.object]
     }
@@ -397,6 +447,7 @@ impl<'a> From<TripleRef<'a>> for [TermRef<'a>; 3] {
 pub struct SophiaToOxigraphConversionError;
 
 impl fmt::Display for SophiaToOxigraphConversionError {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }

@@ -38,6 +38,7 @@ pub struct GraphParser {
 
 impl GraphParser {
     /// Builds a parser for the given format.
+    #[inline]
     pub fn from_format(format: GraphFormat) -> Self {
         Self {
             format,
@@ -60,6 +61,7 @@ impl GraphParser {
     ///assert_eq!(triples[0].subject.to_string(), "<http://example.com/s>");
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[inline]
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
         self.base_iri = Some(Iri::parse(base_iri.into())?);
         Ok(self)
@@ -187,6 +189,7 @@ pub struct DatasetParser {
 
 impl DatasetParser {
     /// Builds a parser for the given format.
+    #[inline]
     pub fn from_format(format: DatasetFormat) -> Self {
         Self {
             format,
@@ -209,6 +212,7 @@ impl DatasetParser {
     ///assert_eq!(triples[0].subject.to_string(), "<http://example.com/s>");
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[inline]
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
         self.base_iri = Some(Iri::parse(base_iri.into())?);
         Ok(self)

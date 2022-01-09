@@ -78,6 +78,7 @@ enum ParseErrorKind {
 }
 
 impl fmt::Display for ParseError {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.inner {
             ParseErrorKind::InvalidBaseIri(e) => {
@@ -89,6 +90,7 @@ impl fmt::Display for ParseError {
 }
 
 impl Error for ParseError {
+    #[inline]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self.inner {
             ParseErrorKind::InvalidBaseIri(ref e) => Some(e),

@@ -129,6 +129,7 @@ impl<'a> IntoIterator for &'a QuerySolution {
     type Item = (&'a Variable, &'a Term);
     type IntoIter = Iter<'a>;
 
+    #[inline]
     fn into_iter(self) -> Iter<'a> {
         Iter {
             inner: self.variables.iter().zip(&self.values),
@@ -152,6 +153,7 @@ pub struct Iter<'a> {
 impl<'a> Iterator for Iter<'a> {
     type Item = (&'a Variable, &'a Term);
 
+    #[inline]
     fn next(&mut self) -> Option<(&'a Variable, &'a Term)> {
         for (variable, value) in &mut self.inner {
             if let Some(value) = value {
@@ -161,6 +163,7 @@ impl<'a> Iterator for Iter<'a> {
         None
     }
 
+    #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         (0, self.inner.size_hint().1)
     }

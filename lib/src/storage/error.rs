@@ -16,6 +16,7 @@ pub enum StorageError {
 }
 
 impl fmt::Display for StorageError {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Io(e) => e.fmt(f),
@@ -26,6 +27,7 @@ impl fmt::Display for StorageError {
 }
 
 impl Error for StorageError {
+    #[inline]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Io(e) => Some(e),
@@ -36,12 +38,14 @@ impl Error for StorageError {
 }
 
 impl From<io::Error> for StorageError {
+    #[inline]
     fn from(error: io::Error) -> Self {
         Self::Io(error)
     }
 }
 
 impl From<StorageError> for io::Error {
+    #[inline]
     fn from(error: StorageError) -> Self {
         match error {
             StorageError::Io(error) => error,
@@ -65,6 +69,7 @@ enum CorruptionErrorKind {
 
 impl CorruptionError {
     /// Builds an error from a printable error message.
+    #[inline]
     pub(crate) fn new(error: impl Into<Box<dyn Error + Send + Sync + 'static>>) -> Self {
         Self {
             inner: CorruptionErrorKind::Other(error.into()),
@@ -72,6 +77,7 @@ impl CorruptionError {
     }
 
     /// Builds an error from a printable error message.
+    #[inline]
     pub(crate) fn msg(msg: impl Into<String>) -> Self {
         Self {
             inner: CorruptionErrorKind::Msg(msg.into()),
@@ -80,6 +86,7 @@ impl CorruptionError {
 }
 
 impl fmt::Display for CorruptionError {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.inner {
             CorruptionErrorKind::Msg(e) => e.fmt(f),
@@ -89,6 +96,7 @@ impl fmt::Display for CorruptionError {
 }
 
 impl Error for CorruptionError {
+    #[inline]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match &self.inner {
             CorruptionErrorKind::Msg(_) => None,
@@ -98,12 +106,14 @@ impl Error for CorruptionError {
 }
 
 impl From<CorruptionError> for StorageError {
+    #[inline]
     fn from(error: CorruptionError) -> Self {
         Self::Corruption(error)
     }
 }
 
 impl From<CorruptionError> for io::Error {
+    #[inline]
     fn from(error: CorruptionError) -> Self {
         Self::new(io::ErrorKind::InvalidData, error)
     }
@@ -119,6 +129,7 @@ pub enum LoaderError {
 }
 
 impl fmt::Display for LoaderError {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Parsing(e) => e.fmt(f),
@@ -128,6 +139,7 @@ impl fmt::Display for LoaderError {
 }
 
 impl Error for LoaderError {
+    #[inline]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Parsing(e) => Some(e),
@@ -137,18 +149,21 @@ impl Error for LoaderError {
 }
 
 impl From<ParseError> for LoaderError {
+    #[inline]
     fn from(error: ParseError) -> Self {
         Self::Parsing(error)
     }
 }
 
 impl From<StorageError> for LoaderError {
+    #[inline]
     fn from(error: StorageError) -> Self {
         Self::Storage(error)
     }
 }
 
 impl From<LoaderError> for io::Error {
+    #[inline]
     fn from(error: LoaderError) -> Self {
         match error {
             LoaderError::Storage(error) => error.into(),
@@ -167,6 +182,7 @@ pub enum SerializerError {
 }
 
 impl fmt::Display for SerializerError {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Io(e) => e.fmt(f),
@@ -176,6 +192,7 @@ impl fmt::Display for SerializerError {
 }
 
 impl Error for SerializerError {
+    #[inline]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Io(e) => Some(e),
@@ -185,18 +202,21 @@ impl Error for SerializerError {
 }
 
 impl From<io::Error> for SerializerError {
+    #[inline]
     fn from(error: io::Error) -> Self {
         Self::Io(error)
     }
 }
 
 impl From<StorageError> for SerializerError {
+    #[inline]
     fn from(error: StorageError) -> Self {
         Self::Storage(error)
     }
 }
 
 impl From<SerializerError> for io::Error {
+    #[inline]
     fn from(error: SerializerError) -> Self {
         match error {
             SerializerError::Storage(error) => error.into(),

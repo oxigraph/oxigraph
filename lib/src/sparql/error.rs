@@ -35,6 +35,7 @@ enum QueryErrorKind {
 }
 
 impl fmt::Display for EvaluationError {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Parsing(error) => error.fmt(f),
@@ -48,6 +49,7 @@ impl fmt::Display for EvaluationError {
 }
 
 impl fmt::Display for QueryError {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.inner {
             QueryErrorKind::Msg { msg } => write!(f, "{}", msg),
@@ -57,6 +59,7 @@ impl fmt::Display for QueryError {
 }
 
 impl error::Error for EvaluationError {
+    #[inline]
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Self::Parsing(e) => Some(e),
@@ -70,6 +73,7 @@ impl error::Error for EvaluationError {
 }
 
 impl error::Error for QueryError {
+    #[inline]
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match &self.inner {
             QueryErrorKind::Msg { .. } => None,
@@ -80,6 +84,7 @@ impl error::Error for QueryError {
 
 impl EvaluationError {
     /// Wraps another error.
+    #[inline]
     pub(crate) fn wrap(error: impl error::Error + Send + Sync + 'static) -> Self {
         Self::Query(QueryError {
             inner: QueryErrorKind::Other(Box::new(error)),
@@ -87,6 +92,7 @@ impl EvaluationError {
     }
 
     /// Builds an error from a printable error message.
+    #[inline]
     pub(crate) fn msg(msg: impl Into<String>) -> Self {
         Self::Query(QueryError {
             inner: QueryErrorKind::Msg { msg: msg.into() },
@@ -95,42 +101,49 @@ impl EvaluationError {
 }
 
 impl From<Infallible> for EvaluationError {
+    #[inline]
     fn from(error: Infallible) -> Self {
         match error {}
     }
 }
 
 impl From<spargebra::ParseError> for EvaluationError {
+    #[inline]
     fn from(error: spargebra::ParseError) -> Self {
         Self::Parsing(error)
     }
 }
 
 impl From<StorageError> for EvaluationError {
+    #[inline]
     fn from(error: StorageError) -> Self {
         Self::Storage(error)
     }
 }
 
 impl From<io::Error> for EvaluationError {
+    #[inline]
     fn from(error: io::Error) -> Self {
         Self::Io(error)
     }
 }
 
 impl From<ParseError> for EvaluationError {
+    #[inline]
     fn from(error: ParseError) -> Self {
         Self::GraphParsing(error)
     }
 }
 
 impl From<sparesults::ParseError> for EvaluationError {
+    #[inline]
     fn from(error: sparesults::ParseError) -> Self {
         Self::ResultsParsing(error)
     }
 }
 
 impl From<EvaluationError> for io::Error {
+    #[inline]
     fn from(error: EvaluationError) -> Self {
         match error {
             EvaluationError::Parsing(error) => Self::new(io::ErrorKind::InvalidData, error),

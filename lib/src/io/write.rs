@@ -37,6 +37,7 @@ pub struct GraphSerializer {
 
 impl GraphSerializer {
     /// Builds a serializer for the given format
+    #[inline]
     pub fn from_format(format: GraphFormat) -> Self {
         Self { format }
     }
@@ -182,6 +183,7 @@ pub struct DatasetSerializer {
 
 impl DatasetSerializer {
     /// Builds a serializer for the given format
+    #[inline]
     pub fn from_format(format: DatasetFormat) -> Self {
         Self { format }
     }

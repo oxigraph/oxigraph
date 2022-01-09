@@ -14,6 +14,7 @@ pub enum ParseError {
 }
 
 impl ParseError {
+    #[inline]
     pub(crate) fn invalid_base_iri(iri: &str, error: IriParseError) -> Self {
         Self::Syntax(SyntaxError {
             inner: SyntaxErrorKind::InvalidBaseIri {
@@ -25,6 +26,7 @@ impl ParseError {
 }
 
 impl fmt::Display for ParseError {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Io(e) => e.fmt(f),
@@ -34,6 +36,7 @@ impl fmt::Display for ParseError {
 }
 
 impl Error for ParseError {
+    #[inline]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Io(e) => Some(e),
@@ -44,6 +47,7 @@ impl Error for ParseError {
 
 #[allow(clippy::fallible_impl_from)]
 impl From<TurtleError> for ParseError {
+    #[inline]
     fn from(error: TurtleError) -> Self {
         let error = io::Error::from(error);
         if error.get_ref().map_or(false, |e| e.is::<TurtleError>()) {
@@ -58,6 +62,7 @@ impl From<TurtleError> for ParseError {
 
 #[allow(clippy::fallible_impl_from)]
 impl From<RdfXmlError> for ParseError {
+    #[inline]
     fn from(error: RdfXmlError) -> Self {
         let error = io::Error::from(error);
         if error.get_ref().map_or(false, |e| e.is::<RdfXmlError>()) {
@@ -71,18 +76,21 @@ impl From<RdfXmlError> for ParseError {
 }
 
 impl From<io::Error> for ParseError {
+    #[inline]
     fn from(error: io::Error) -> Self {
         Self::Io(error)
     }
 }
 
 impl From<SyntaxError> for ParseError {
+    #[inline]
     fn from(error: SyntaxError) -> Self {
         Self::Syntax(error)
     }
 }
 
 impl From<ParseError> for io::Error {
+    #[inline]
     fn from(error: ParseError) -> Self {
         match error {
             ParseError::Io(error) => error,
@@ -105,6 +113,7 @@ enum SyntaxErrorKind {
 }
 
 impl fmt::Display for SyntaxError {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.inner {
             SyntaxErrorKind::Turtle(e) => e.fmt(f),
@@ -117,6 +126,7 @@ impl fmt::Display for SyntaxError {
 }
 
 impl Error for SyntaxError {
+    #[inline]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match &self.inner {
             SyntaxErrorKind::Turtle(e) => Some(e),
@@ -127,6 +137,7 @@ impl Error for SyntaxError {
 }
 
 impl From<SyntaxError> for io::Error {
+    #[inline]
     fn from(error: SyntaxError) -> Self {
         match error.inner {
             SyntaxErrorKind::Turtle(error) => error.into(),

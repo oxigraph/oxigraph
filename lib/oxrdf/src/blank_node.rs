@@ -49,6 +49,7 @@ impl BlankNode {
     /// according to N-Triples, Turtle and SPARQL grammars.
     ///
     /// [`BlankNode::new()`] is a safe version of this constructor and should be used for untrusted data.
+    #[inline]
     pub fn new_unchecked(id: impl Into<String>) -> Self {
         let id = id.into();
         if let Some(numerical_id) = to_integer_id(&id) {
@@ -158,6 +159,7 @@ impl<'a> BlankNodeRef<'a> {
     /// according to N-Triples, Turtle and SPARQL grammars.
     ///
     /// [`BlankNodeRef::new()`) is a safe version of this constructor and should be used for untrusted data.
+    #[inline]
     pub fn new_unchecked(id: &'a str) -> Self {
         if let Some(numerical_id) = to_integer_id(id) {
             Self(BlankNodeRefContent::Anonymous {
@@ -246,12 +248,14 @@ impl PartialEq<BlankNodeRef<'_>> for BlankNode {
 struct IdStr([u8; 32]);
 
 impl IdStr {
+    #[inline]
     fn new(id: u128) -> Self {
         let mut str = [0; 32];
         write!(&mut str[..], "{:x}", id).unwrap();
         Self(str)
     }
 
+    #[inline]
     fn as_str(&self) -> &str {
         let len = self.0.iter().position(|x| x == &0).unwrap_or(32);
         str::from_utf8(&self.0[..len]).unwrap()
@@ -317,6 +321,7 @@ fn validate_blank_node_identifier(id: &str) -> Result<(), BlankNodeIdParseError>
     }
 }
 
+#[inline]
 fn to_integer_id(id: &str) -> Option<u128> {
     let digits = id.as_bytes();
     let mut value: u128 = 0;

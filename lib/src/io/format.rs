@@ -71,6 +71,7 @@ impl GraphFormat {
     ///
     /// assert_eq!(GraphFormat::from_media_type("text/turtle; charset=utf-8"), Some(GraphFormat::Turtle))
     /// ```
+    #[inline]
     pub fn from_media_type(media_type: &str) -> Option<Self> {
         match media_type.split(';').next()?.trim() {
             "application/n-triples" | "text/plain" => Some(Self::NTriples),
@@ -90,6 +91,7 @@ impl GraphFormat {
     ///
     /// assert_eq!(GraphFormat::from_extension("nt"), Some(GraphFormat::NTriples))
     /// ```
+    #[inline]
     pub fn from_extension(extension: &str) -> Option<Self> {
         match extension {
             "nt" | "txt" => Some(Self::NTriples),
@@ -167,6 +169,7 @@ impl DatasetFormat {
     ///
     /// assert_eq!(DatasetFormat::from_media_type("application/n-quads; charset=utf-8"), Some(DatasetFormat::NQuads))
     /// ```
+    #[inline]
     pub fn from_media_type(media_type: &str) -> Option<Self> {
         match media_type.split(';').next()?.trim() {
             "application/n-quads" | "text/x-nquads" | "text/nquads" => Some(Self::NQuads),
@@ -185,6 +188,7 @@ impl DatasetFormat {
     ///
     /// assert_eq!(DatasetFormat::from_extension("nq"), Some(DatasetFormat::NQuads))
     /// ```
+    #[inline]
     pub fn from_extension(extension: &str) -> Option<Self> {
         match extension {
             "nq" | "txt" => Some(Self::NQuads),
@@ -198,6 +202,7 @@ impl TryFrom<DatasetFormat> for GraphFormat {
     type Error = ();
 
     /// Attempts to find a graph format that is a subset of this [`DatasetFormat`].
+    #[inline]
     fn try_from(value: DatasetFormat) -> Result<Self, ()> {
         match value {
             DatasetFormat::NQuads => Ok(Self::NTriples),
@@ -210,6 +215,7 @@ impl TryFrom<GraphFormat> for DatasetFormat {
     type Error = ();
 
     /// Attempts to find a dataset format that is a superset of this [`GraphFormat`].
+    #[inline]
     fn try_from(value: GraphFormat) -> Result<Self, ()> {
         match value {
             GraphFormat::NTriples => Ok(Self::NQuads),
