@@ -9,7 +9,11 @@ Spargebra
 
 Spargebra is a [SPARQL](https://www.w3.org/TR/sparql11-overview/) parser.
 
-It supports [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/) and [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/).
+It supports both [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/) and [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/).
+
+The emitted tree is based on [SPARQL 1.1 Query Algebra](https://www.w3.org/TR/sparql11-query/#sparqlQuery) objects.
+
+The API entry point for SPARQL queries is the [`Query`] struct and the API entry point for SPARQL updates is the [`Update`] struct.
 
 Support for [SPARQL-star](https://w3c.github.io/rdf-star/cg-spec/#sparql-star) is also available behind the `rdf-star` feature.
 
@@ -21,7 +25,7 @@ Usage example:
 use spargebra::Query;
 
 let query_str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
-let mut query = Query::parse(query_str, None)?;
+let query = Query::parse(query_str, None).unwrap();
 assert_eq!(query.to_string(), query_str);
 ```
 
@@ -30,9 +34,9 @@ assert_eq!(query.to_string(), query_str);
 This project is licensed under either of
 
 * Apache License, Version 2.0, ([LICENSE-APACHE](../LICENSE-APACHE) or
-  http://www.apache.org/licenses/LICENSE-2.0)
+  `<http://www.apache.org/licenses/LICENSE-2.0>`)
 * MIT license ([LICENSE-MIT](../LICENSE-MIT) or
-  http://opensource.org/licenses/MIT)
+  `<http://opensource.org/licenses/MIT>`)
 
 at your option.
 

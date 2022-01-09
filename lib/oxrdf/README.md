@@ -23,7 +23,7 @@ use oxrdf::*;
 let mut graph = Graph::default();
 
 // insertion
-let ex = NamedNodeRef::new("http://example.com")?;
+let ex = NamedNodeRef::new("http://example.com").unwrap();
 let triple = TripleRef::new(ex, ex, ex);
 graph.insert(triple);
 
@@ -37,9 +37,9 @@ assert_eq!(vec![triple], results);
 This project is licensed under either of
 
 * Apache License, Version 2.0, ([LICENSE-APACHE](../LICENSE-APACHE) or
-  http://www.apache.org/licenses/LICENSE-2.0)
+  `<http://www.apache.org/licenses/LICENSE-2.0>`)
 * MIT license ([LICENSE-MIT](../LICENSE-MIT) or
-  http://opensource.org/licenses/MIT)
+  `<http://opensource.org/licenses/MIT>`)
 
 at your option.
 

@@ -26,39 +26,38 @@ Oxigraph implements the following specifications:
 
 A preliminary benchmark [is provided](../bench/README.md).
 
-Usage example:
-
+The main entry point of Oxigraph is the [`Store`](store::Store) struct:
 ```rust
 use oxigraph::store::Store;
-use oxigraph::sparql::QueryResults;
 use oxigraph::model::*;
+use oxigraph::sparql::QueryResults;
 
-let store = Store::open("example.db")?;
+let store = Store::new().unwrap();
 
 // insertion
-let ex = NamedNode::new("http://example.com")?;
+let ex = NamedNode::new("http://example.com").unwrap();
 let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), GraphName::DefaultGraph);
 store.insert(&quad)?;
 
 // quad filter
-let results: Result<Vec<Quad>,_> = store.quads_for_pattern(None, None, None, None).collect();
-assert_eq!(vec![quad], results?);
+let results = store.quads_for_pattern(Some(ex.as_ref().into()), None, None, None).collect::<Result<Vec<Quad>,_>>().unwrap();
+assert_eq!(vec![quad], results);
 
 // SPARQL query
-if let QueryResults::Solutions(mut solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }")? {
-assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
-};
+if let QueryResults::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { ?s ?p ?o }").unwrap() {
+    assert_eq!(solutions.next().unwrap().unwrap().get("s"), Some(&ex.into()));
+}
 ```
 
 ## License
 
 This project is licensed under either of
 
- * Apache License, Version 2.0, ([LICENSE-APACHE](../LICENSE-APACHE) or
-   http://www.apache.org/licenses/LICENSE-2.0)
- * MIT license ([LICENSE-MIT](../LICENSE-MIT) or
-   http://opensource.org/licenses/MIT)
-   
+* Apache License, Version 2.0, ([LICENSE-APACHE](../LICENSE-APACHE) or
+  `<http://www.apache.org/licenses/LICENSE-2.0>`)
+* MIT license ([LICENSE-MIT](../LICENSE-MIT) or
+  `<http://opensource.org/licenses/MIT>`)
+
 at your option.
 
 

@@ -1,29 +1,15 @@
-//! OxRDF is a simple library providing datastructures encoding [RDF 1.1 concepts](https://www.w3.org/TR/rdf11-concepts/).
-//!
-//! This crate is intended to be a basic building block of other crates like [Oxigraph](https://crates.io/crates/oxigraph) or [Spargebra](https://crates.io/crates/spargebra).
-//!
-//! Support for [RDF-star](https://w3c.github.io/rdf-star/cg-spec/) is available behind the `rdf-star` feature.
-//!
-//! Inspired by [RDF/JS](https://rdf.js.org/data-model-spec/) and [Apache Commons RDF](http://commons.apache.org/proper/commons-rdf/).
-//!
-//! Usage example:
-//!
-//! Usage example:
-//! ```
-//! use oxrdf::*;
-//!
-//! let mut graph = Graph::default();
-//!
-//! // insertion
-//! let ex = NamedNodeRef::new("http://example.com")?;
-//! let triple = TripleRef::new(ex, ex, ex);
-//! graph.insert(triple);
-//!
-//! // simple filter
-//! let results: Vec<_> = graph.triples_for_subject(ex).collect();
-//! assert_eq!(vec![triple], results);
-//! # Result::<_,Box<dyn std::error::Error>>::Ok(())
-//! ```
+#![doc = include_str!("../README.md")]
+#![deny(
+    future_incompatible,
+    nonstandard_style,
+    rust_2018_idioms,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unsafe_code,
+    unused_qualifications
+)]
+#![doc(test(attr(deny(warnings))))]
 
 mod blank_node;
 pub mod dataset;
