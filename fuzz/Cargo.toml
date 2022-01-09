@@ -1,0 +1,36 @@
+[package]
+name = "oxigraph-fuzz"
+version = "0.0.0"
+authors = ["Automatically generated"]
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+spargebra = { path = "../lib/spargebra", features = ["rdf-star"] }
+sparesults = { path = "../lib/sparesults", features = ["rdf-star"] }
+
+[workspace]
+
+[[bin]]
+name = "sparql_query"
+path = "fuzz_targets/sparql_query.rs"
+
+[[bin]]
+name = "sparql_update"
+path = "fuzz_targets/sparql_update.rs"
+
+[[bin]]
+name = "sparql_results_json"
+path = "fuzz_targets/sparql_results_json.rs"
+
+[[bin]]
+name = "sparql_results_xml"
+path = "fuzz_targets/sparql_results_xml.rs"
+
+[[bin]]
+name = "sparql_results_tsv"
+path = "fuzz_targets/sparql_results_tsv.rs"
