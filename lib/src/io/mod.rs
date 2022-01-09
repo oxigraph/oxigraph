@@ -1,5 +1,6 @@
 //! Utilities to read and write RDF graphs and datasets.
 
+mod error;
 mod format;
 pub mod read;
 pub mod write;

@@ -1,4 +1,4 @@
-use crate::io::read::ParserError;
+use crate::io::read::ParseError;
 use crate::io::{GraphFormat, GraphParser};
 use crate::model::{GraphName as OxGraphName, GraphNameRef, Quad as OxQuad};
 use crate::sparql::algebra::QueryDataset;
@@ -172,7 +172,7 @@ impl SimpleUpdateEvaluator<'_> {
         if let Some(base_iri) = &self.base_iri {
             parser = parser
                 .with_base_iri(base_iri.as_str())
-                .map_err(|e| ParserError::invalid_base_iri(base_iri, e))?;
+                .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
         }
         for t in parser.read_triples(BufReader::new(body))? {
             self.transaction

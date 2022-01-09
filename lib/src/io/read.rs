@@ -1,16 +1,15 @@
 //! Utilities to read RDF graphs and datasets.
 
+pub use crate::io::error::{ParseError, SyntaxError};
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use oxiri::{Iri, IriParseError};
 use rio_api::model as rio;
 use rio_api::parser::{QuadsParser, TriplesParser};
-use rio_turtle::{NQuadsParser, NTriplesParser, TriGParser, TurtleError, TurtleParser};
-use rio_xml::{RdfXmlError, RdfXmlParser};
+use rio_turtle::{NQuadsParser, NTriplesParser, TriGParser, TurtleParser};
+use rio_xml::RdfXmlParser;
 use std::collections::HashMap;
-use std::error::Error;
 use std::io::BufRead;
-use std::{fmt, io};
 
 /// Parsers for RDF graph serialization formats.
 ///
@@ -68,7 +67,7 @@ impl GraphParser {
 
     /// Executes the parsing itself on a [`BufRead`](std::io::BufRead) implementation and returns an iterator of triples.
     #[allow(clippy::unnecessary_wraps)]
-    pub fn read_triples<R: BufRead>(&self, reader: R) -> Result<TripleReader<R>, ParserError> {
+    pub fn read_triples<R: BufRead>(&self, reader: R) -> Result<TripleReader<R>, ParseError> {
         Ok(TripleReader {
             mapper: RioMapper::default(),
             parser: match self.format {
@@ -115,9 +114,9 @@ enum TripleReaderKind<R: BufRead> {
 }
 
 impl<R: BufRead> Iterator for TripleReader<R> {
-    type Item = Result<Triple, ParserError>;
+    type Item = Result<Triple, ParseError>;
 
-    fn next(&mut self) -> Option<Result<Triple, ParserError>> {
+    fn next(&mut self) -> Option<Result<Triple, ParseError>> {
         loop {
             if let Some(r) = self.buffer.pop() {
                 return Some(Ok(r));
@@ -145,9 +144,9 @@ impl<R: BufRead> TripleReader<R> {
         parser: &mut P,
         buffer: &mut Vec<Triple>,
         mapper: &mut RioMapper,
-    ) -> Option<Result<(), ParserError>>
+    ) -> Option<Result<(), ParseError>>
     where
-        ParserError: From<P::Error>,
+        ParseError: From<P::Error>,
     {
         if parser.is_end() {
             None
@@ -217,7 +216,7 @@ impl DatasetParser {
 
     /// Executes the parsing itself on a [`BufRead`](std::io::BufRead) implementation and returns an iterator of quads.
     #[allow(clippy::unnecessary_wraps)]
-    pub fn read_quads<R: BufRead>(&self, reader: R) -> Result<QuadReader<R>, ParserError> {
+    pub fn read_quads<R: BufRead>(&self, reader: R) -> Result<QuadReader<R>, ParseError> {
         Ok(QuadReader {
             mapper: RioMapper::default(),
             parser: match self.format {
@@ -260,9 +259,9 @@ enum QuadReaderKind<R: BufRead> {
 }
 
 impl<R: BufRead> Iterator for QuadReader<R> {
-    type Item = Result<Quad, ParserError>;
+    type Item = Result<Quad, ParseError>;
 
-    fn next(&mut self) -> Option<Result<Quad, ParserError>> {
+    fn next(&mut self) -> Option<Result<Quad, ParseError>> {
         loop {
             if let Some(r) = self.buffer.pop() {
                 return Some(Ok(r));
@@ -287,9 +286,9 @@ impl<R: BufRead> QuadReader<R> {
         parser: &mut P,
         buffer: &mut Vec<Quad>,
         mapper: &mut RioMapper,
-    ) -> Option<Result<(), ParserError>>
+    ) -> Option<Result<(), ParseError>>
     where
-        ParserError: From<P::Error>,
+        ParseError: From<P::Error>,
     {
         if parser.is_end() {
             None
@@ -372,153 +371,6 @@ impl<'a> RioMapper {
             predicate: Self::named_node(quad.predicate),
             object: self.term(quad.object),
             graph_name: self.graph_name(quad.graph_name),
-        }
-    }
-}
-
-/// Error returned during RDF format parsing.
-#[derive(Debug)]
-pub enum ParserError {
-    /// I/O error during parsing (file not found...).
-    Io(io::Error),
-    /// An error in the file syntax.
-    Syntax(SyntaxError),
-}
-
-impl ParserError {
-    pub(crate) fn invalid_base_iri(iri: &str, error: IriParseError) -> Self {
-        Self::Syntax(SyntaxError {
-            inner: SyntaxErrorKind::InvalidBaseIri {
-                iri: iri.to_owned(),
-                error,
-            },
-        })
-    }
-}
-
-impl fmt::Display for ParserError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Io(e) => e.fmt(f),
-            Self::Syntax(e) => e.fmt(f),
-        }
-    }
-}
-
-impl Error for ParserError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Io(e) => Some(e),
-            Self::Syntax(e) => Some(e),
-        }
-    }
-}
-
-#[allow(clippy::fallible_impl_from)]
-impl From<TurtleError> for ParserError {
-    fn from(error: TurtleError) -> Self {
-        let error = io::Error::from(error);
-        if error.get_ref().map_or(false, |e| e.is::<TurtleError>()) {
-            Self::Syntax(SyntaxError {
-                inner: SyntaxErrorKind::Turtle(*error.into_inner().unwrap().downcast().unwrap()),
-            })
-        } else {
-            Self::Io(error)
-        }
-    }
-}
-
-#[allow(clippy::fallible_impl_from)]
-impl From<RdfXmlError> for ParserError {
-    fn from(error: RdfXmlError) -> Self {
-        let error = io::Error::from(error);
-        if error.get_ref().map_or(false, |e| e.is::<RdfXmlError>()) {
-            Self::Syntax(SyntaxError {
-                inner: SyntaxErrorKind::RdfXml(*error.into_inner().unwrap().downcast().unwrap()),
-            })
-        } else {
-            Self::Io(error)
-        }
-    }
-}
-
-impl From<TermParseError> for ParserError {
-    fn from(error: TermParseError) -> Self {
-        Self::Syntax(SyntaxError {
-            inner: SyntaxErrorKind::Term(error),
-        })
-    }
-}
-
-impl From<io::Error> for ParserError {
-    fn from(error: io::Error) -> Self {
-        Self::Io(error)
-    }
-}
-
-impl From<SyntaxError> for ParserError {
-    fn from(error: SyntaxError) -> Self {
-        Self::Syntax(error)
-    }
-}
-
-impl From<ParserError> for io::Error {
-    fn from(error: ParserError) -> Self {
-        match error {
-            ParserError::Io(error) => error,
-            ParserError::Syntax(error) => error.into(),
-        }
-    }
-}
-
-/// An error in the syntax of the parsed file.
-#[derive(Debug)]
-pub struct SyntaxError {
-    pub(crate) inner: SyntaxErrorKind,
-}
-
-#[derive(Debug)]
-pub(crate) enum SyntaxErrorKind {
-    Turtle(TurtleError),
-    RdfXml(RdfXmlError),
-    InvalidBaseIri { iri: String, error: IriParseError },
-    Term(TermParseError),
-}
-
-impl fmt::Display for SyntaxError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.inner {
-            SyntaxErrorKind::Turtle(e) => e.fmt(f),
-            SyntaxErrorKind::RdfXml(e) => e.fmt(f),
-            SyntaxErrorKind::InvalidBaseIri { iri, error } => {
-                write!(f, "Invalid base IRI '{}': {}", iri, error)
-            }
-            SyntaxErrorKind::Term(e) => e.fmt(f),
-        }
-    }
-}
-
-impl Error for SyntaxError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match &self.inner {
-            SyntaxErrorKind::Turtle(e) => Some(e),
-            SyntaxErrorKind::RdfXml(e) => Some(e),
-            SyntaxErrorKind::Term(e) => Some(e),
-            SyntaxErrorKind::InvalidBaseIri { .. } => None,
-        }
-    }
-}
-
-impl From<SyntaxError> for io::Error {
-    fn from(error: SyntaxError) -> Self {
-        match error.inner {
-            SyntaxErrorKind::Turtle(error) => error.into(),
-            SyntaxErrorKind::RdfXml(error) => error.into(),
-            SyntaxErrorKind::InvalidBaseIri { iri, error } => Self::new(
-                io::ErrorKind::InvalidInput,
-                format!("Invalid IRI '{}': {}", iri, error),
-            ),
-            SyntaxErrorKind::Term(error) => Self::new(io::ErrorKind::InvalidData, error),
         }
     }
 }

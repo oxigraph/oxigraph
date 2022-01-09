@@ -1,6 +1,6 @@
 #![allow(clippy::needless_option_as_deref)]
 
-use crate::io::{map_parser_error, PyFileLike};
+use crate::io::{map_parse_error, PyFileLike};
 use crate::model::*;
 use crate::sparql::*;
 use oxigraph::io::{DatasetFormat, GraphFormat};
@@ -633,7 +633,7 @@ pub(crate) fn map_storage_error(error: StorageError) -> PyErr {
 pub(crate) fn map_loader_error(error: LoaderError) -> PyErr {
     match error {
         LoaderError::Storage(error) => map_storage_error(error),
-        LoaderError::Parser(error) => map_parser_error(error),
+        LoaderError::Parsing(error) => map_parse_error(error),
     }
 }
 

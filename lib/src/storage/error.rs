@@ -1,4 +1,4 @@
-use crate::io::read::ParserError;
+use crate::io::read::ParseError;
 use std::error::Error;
 use std::fmt;
 use std::io;
@@ -113,7 +113,7 @@ impl From<CorruptionError> for io::Error {
 #[derive(Debug)]
 pub enum LoaderError {
     /// An error raised while reading the file.
-    Parser(ParserError),
+    Parsing(ParseError),
     /// An error raised during the insertion in the store.
     Storage(StorageError),
 }
@@ -121,7 +121,7 @@ pub enum LoaderError {
 impl fmt::Display for LoaderError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Parser(e) => e.fmt(f),
+            Self::Parsing(e) => e.fmt(f),
             Self::Storage(e) => e.fmt(f),
         }
     }
@@ -130,15 +130,15 @@ impl fmt::Display for LoaderError {
 impl Error for LoaderError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::Parser(e) => Some(e),
+            Self::Parsing(e) => Some(e),
             Self::Storage(e) => Some(e),
         }
     }
 }
 
-impl From<ParserError> for LoaderError {
-    fn from(error: ParserError) -> Self {
-        Self::Parser(error)
+impl From<ParseError> for LoaderError {
+    fn from(error: ParseError) -> Self {
+        Self::Parsing(error)
     }
 }
 
@@ -152,7 +152,7 @@ impl From<LoaderError> for io::Error {
     fn from(error: LoaderError) -> Self {
         match error {
             LoaderError::Storage(error) => error.into(),
-            LoaderError::Parser(error) => error.into(),
+            LoaderError::Parsing(error) => error.into(),
         }
     }
 }

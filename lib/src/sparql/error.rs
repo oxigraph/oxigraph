@@ -1,4 +1,4 @@
-use crate::io::read::ParserError;
+use crate::io::read::ParseError;
 use crate::storage::StorageError;
 use std::convert::Infallible;
 use std::error;
@@ -14,7 +14,7 @@ pub enum EvaluationError {
     /// An error from the storage
     Storage(StorageError),
     /// An error while parsing an external RDF file
-    ExternalParser(ParserError),
+    GraphParsing(ParseError),
     /// An error while parsing an external result file (likely from a federated query)
     ResultsParsing(sparesults::ParseError),
     /// An error returned during store IOs or during results write
@@ -39,7 +39,7 @@ impl fmt::Display for EvaluationError {
         match self {
             Self::Parsing(error) => error.fmt(f),
             Self::Storage(error) => error.fmt(f),
-            Self::ExternalParser(error) => error.fmt(f),
+            Self::GraphParsing(error) => error.fmt(f),
             Self::ResultsParsing(error) => error.fmt(f),
             Self::Io(error) => error.fmt(f),
             Self::Query(error) => error.fmt(f),
@@ -61,7 +61,7 @@ impl error::Error for EvaluationError {
         match self {
             Self::Parsing(e) => Some(e),
             Self::Storage(e) => Some(e),
-            Self::ExternalParser(e) => Some(e),
+            Self::GraphParsing(e) => Some(e),
             Self::ResultsParsing(e) => Some(e),
             Self::Io(e) => Some(e),
             Self::Query(e) => Some(e),
@@ -118,9 +118,9 @@ impl From<io::Error> for EvaluationError {
     }
 }
 
-impl From<ParserError> for EvaluationError {
-    fn from(error: ParserError) -> Self {
-        Self::ExternalParser(error)
+impl From<ParseError> for EvaluationError {
+    fn from(error: ParseError) -> Self {
+        Self::GraphParsing(error)
     }
 }
 
@@ -134,7 +134,7 @@ impl From<EvaluationError> for io::Error {
     fn from(error: EvaluationError) -> Self {
         match error {
             EvaluationError::Parsing(error) => Self::new(io::ErrorKind::InvalidData, error),
-            EvaluationError::ExternalParser(error) => error.into(),
+            EvaluationError::GraphParsing(error) => error.into(),
             EvaluationError::ResultsParsing(error) => error.into(),
             EvaluationError::Io(error) => error,
             EvaluationError::Storage(error) => error.into(),

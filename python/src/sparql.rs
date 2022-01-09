@@ -1,4 +1,4 @@
-use crate::io::{map_io_err, map_parser_error};
+use crate::io::{map_io_err, map_parse_error};
 use crate::map_storage_error;
 use crate::model::*;
 use oxigraph::model::Term;
@@ -224,7 +224,7 @@ pub(crate) fn map_evaluation_error(error: EvaluationError) -> PyErr {
         EvaluationError::Parsing(error) => PySyntaxError::new_err(error.to_string()),
         EvaluationError::Storage(error) => map_storage_error(error),
         EvaluationError::Io(error) => map_io_err(error),
-        EvaluationError::ExternalParser(error) => map_parser_error(error),
+        EvaluationError::GraphParsing(error) => map_parse_error(error),
         EvaluationError::Query(error) => PyValueError::new_err(error.to_string()),
         _ => PyRuntimeError::new_err(error.to_string()),
     }

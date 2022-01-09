@@ -23,7 +23,7 @@
 //! };
 //! # Result::<_,Box<dyn std::error::Error>>::Ok(())
 //! ```
-use crate::io::read::ParserError;
+use crate::io::read::ParseError;
 use crate::io::{
     DatasetFormat, DatasetParser, DatasetSerializer, GraphFormat, GraphParser, GraphSerializer,
 };
@@ -274,7 +274,7 @@ impl Store {
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
-                .map_err(|e| ParserError::invalid_base_iri(base_iri, e))?;
+                .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
         }
         let quads = parser
             .read_triples(reader)?
@@ -323,7 +323,7 @@ impl Store {
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
-                .map_err(|e| ParserError::invalid_base_iri(base_iri, e))?;
+                .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
         }
         let quads = parser.read_quads(reader)?.collect::<Result<Vec<_>, _>>()?;
         self.storage.transaction(move |mut t| {
@@ -660,7 +660,7 @@ impl Store {
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
-                .map_err(|e| ParserError::invalid_base_iri(base_iri, e))?;
+                .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
         }
         bulk_load(&self.storage, parser.read_quads(reader)?)
     }
@@ -708,7 +708,7 @@ impl Store {
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
-                .map_err(|e| ParserError::invalid_base_iri(base_iri, e))?;
+                .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
         }
         let to_graph_name = to_graph_name.into();
         bulk_load(
