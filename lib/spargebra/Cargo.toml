@@ -19,7 +19,7 @@ rdf-star = ["oxrdf/rdf-star"]
 [dependencies]
 peg = "0.8"
 rand = "0.8"
-oxiri = "0.1"
+oxiri = "0.2"
 oxilangtag = "0.1"
 oxrdf = { version = "0.1", path="../oxrdf" }
 

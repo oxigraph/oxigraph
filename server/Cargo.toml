@@ -17,4 +17,4 @@ clap = { version = "3", features = ["derive"] }
 oxigraph = { version = "0.3.0-dev", path = "../lib", features = ["http_client"] }
 rand = "0.8"
 url = "2"
-oxiri = "0.1"
+oxiri = "0.2"

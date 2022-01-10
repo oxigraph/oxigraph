@@ -177,9 +177,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.0.5"
+version = "3.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6f34b09b9ee8c7c7b400fe2f8df39cafc9538b03d6ba7f4ae13e4cb90bfbb7d"
+checksum = "1957aa4a5fb388f0a0a73ce7556c5b42025b874e5cdc2c670775e346e97adec0"
 dependencies = [
  "atty",
  "bitflags",
@@ -194,9 +194,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "3.0.5"
+version = "3.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41a0645a430ec9136d2d701e54a95d557de12649a9dd7109ced3187e648ac824"
+checksum = "517358c28fcef6607bf6f76108e02afad7e82297d132a6b846dcc1fc3efcd153"
 dependencies = [
  "heck",
  "proc-macro-error",
@@ -870,7 +870,7 @@ dependencies = [
 name = "oxigraph_server"
 version = "0.3.0-dev"
 dependencies = [
- "clap 3.0.5",
+ "clap 3.0.6",
  "oxhttp",
  "oxigraph",
  "oxiri",
@@ -883,7 +883,7 @@ name = "oxigraph_testsuite"
 version = "0.3.0-dev"
 dependencies = [
  "anyhow",
- "clap 3.0.5",
+ "clap 3.0.6",
  "criterion",
  "oxigraph",
  "text-diff",
@@ -898,9 +898,9 @@ checksum = "c59b4fef9c3c51e25835de30fe78e570d0ef42dceca0d514c66dca413d505316"
 
 [[package]]
 name = "oxiri"
-version = "0.1.1"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8e54fb37480ffa01a9af93f991ba229b3091f2e6ac84c8f6df2c509356cc473"
+checksum = "a8a8821a5332e388ab8d6436ab703c5744516c11976e2c08702fbc93fe4b3f51"
 
 [[package]]
 name = "oxrdf"
@@ -1288,15 +1288,15 @@ dependencies = [
 
 [[package]]
 name = "rio_api"
-version = "0.6.1"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33d56fef74f659212c3eed41c8d17cfe3f633d482524893736ed6857e8cdbf99"
+checksum = "6ed96d73ad4e0de59e667b26c899930c90912cad3fec5f0291fc3171c90dacae"
 
 [[package]]
 name = "rio_turtle"
-version = "0.6.1"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "896e6e63b744436510f2cd4bdc1d236e3f2a5d0cbbe0468f75cdce45c60172e7"
+checksum = "1945ea5cf5f489bd2cbafeb705686abdc94edfa9dd88a63a25e8c5c0d38f9cc2"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1305,9 +1305,9 @@ dependencies = [
 
 [[package]]
 name = "rio_xml"
-version = "0.6.1"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2646b30f115ba1e85e5941a6f6a651b245b7b89033a2d92ae0e5646804b388be"
+checksum = "6627c31020654c595ca89c4f2472cb28fc493a160f8a110bd5e978f66a9e6bdb"
 dependencies = [
  "oxilangtag",
  "oxiri",
