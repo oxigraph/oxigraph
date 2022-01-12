@@ -175,7 +175,7 @@ fn read_blank_node(s: &str) -> Result<(BlankNode, &str), TermParseError> {
 fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
     let s = s.trim();
     if let Some(s) = s.strip_prefix('"') {
-        let mut value = String::with_capacity(s.len() - 1);
+        let mut value = String::with_capacity(s.len());
         let mut chars = s.chars();
         while let Some(c) = chars.next() {
             match c {

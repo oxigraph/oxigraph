@@ -252,6 +252,7 @@ impl<R: BufRead> TsvSolutionsReader<R> {
 mod tests {
     use super::*;
     use crate::QuerySolution;
+    use std::io::Cursor;
     use std::rc::Rc;
     use std::str;
 
@@ -321,6 +322,21 @@ mod tests {
         }
         let result = writer.finish();
         assert_eq!(str::from_utf8(&result).unwrap(), "?x\t?literal\n<http://example/x>\t\"String\"\n<http://example/x>\t\"String-with-dquote\\\"\"\n_:b0\t\"Blank node\"\n\t\"Missing 'x'\"\n\t\n<http://example/x>\t\n_:b1\t\"String-with-lang\"@en\n_:b1\t123");
+        Ok(())
+    }
+
+    #[test]
+    fn test_bad_tsv() -> io::Result<()> {
+        let bad_tsvs = vec![
+            "?", "?p", "?p?o", "?p\n<", "?p\n_", "?p\n_:", "?p\n\"", "?p\n<<",
+        ];
+        for bad_tsv in bad_tsvs {
+            if let TsvQueryResultsReader::Solutions { mut solutions, .. } =
+                TsvQueryResultsReader::read(Cursor::new(bad_tsv))?
+            {
+                while solutions.read_next()?.is_some() {}
+            }
+        }
         Ok(())
     }
 }
