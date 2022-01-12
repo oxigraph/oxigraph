@@ -9,6 +9,7 @@ use oxigraph::model::*;
 use oxigraph::sparql::*;
 use oxigraph::store::Store;
 use std::collections::HashMap;
+use std::io::Cursor;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::{fmt, io};
@@ -46,6 +47,18 @@ pub fn register_sparql_tests(evaluator: &mut TestEvaluator) {
         "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#UpdateEvaluationTest",
         evaluate_update_evaluation_test,
     );
+    evaluator.register(
+        "https://github.com/oxigraph/oxigraph/tests#NegativeJsonResultsSyntaxTest",
+        evaluate_negative_json_result_syntax_test,
+    );
+    evaluator.register(
+        "https://github.com/oxigraph/oxigraph/tests#NegativeXmlResultsSyntaxTest",
+        evaluate_negative_xml_result_syntax_test,
+    );
+    evaluator.register(
+        "https://github.com/oxigraph/oxigraph/tests#NegativeTsvResultsSyntaxTest",
+        evaluate_negative_tsv_result_syntax_test,
+    );
 }
 
 fn evaluate_positive_syntax_test(test: &Test) -> Result<()> {
@@ -80,6 +93,51 @@ fn evaluate_negative_syntax_test(test: &Test) -> Result<()> {
         )),
         Err(_) => Ok(()),
     }
+}
+
+fn evaluate_negative_json_result_syntax_test(test: &Test) -> Result<()> {
+    if result_syntax_check(test, QueryResultsFormat::Json).is_ok() {
+        Err(anyhow!("Oxigraph parses even if it should not {}.", test))
+    } else {
+        Ok(())
+    }
+}
+
+fn evaluate_negative_xml_result_syntax_test(test: &Test) -> Result<()> {
+    if result_syntax_check(test, QueryResultsFormat::Xml).is_ok() {
+        Err(anyhow!("Oxigraph parses even if it should not {}.", test))
+    } else {
+        Ok(())
+    }
+}
+
+fn evaluate_negative_tsv_result_syntax_test(test: &Test) -> Result<()> {
+    if result_syntax_check(test, QueryResultsFormat::Tsv).is_ok() {
+        Err(anyhow!("Oxigraph parses even if it should not {}.", test))
+    } else {
+        Ok(())
+    }
+}
+
+fn result_syntax_check(test: &Test, format: QueryResultsFormat) -> Result<()> {
+    let results_file = test
+        .action
+        .as_deref()
+        .ok_or_else(|| anyhow!("No action found for test {}", test))?;
+    match QueryResults::read(Cursor::new(read_file_to_string(results_file)?), format)? {
+        QueryResults::Solutions(solutions) => {
+            for s in solutions {
+                s?;
+            }
+        }
+        QueryResults::Graph(triples) => {
+            for t in triples {
+                t?;
+            }
+        }
+        QueryResults::Boolean(_) => (),
+    }
+    Ok(())
 }
 
 fn evaluate_evaluation_test(test: &Test) -> Result<()> {

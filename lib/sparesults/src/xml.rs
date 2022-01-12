@@ -207,7 +207,15 @@ impl<R: BufRead> XmlQueryResultsReader<R> {
                                 .find(|attr| attr.key == b"name")
                                 .ok_or_else(|| SyntaxError::msg("No name attribute found for the <variable> tag"))?
                                 .unescape_and_decode_value(&reader)?;
-                            variables.push(Variable::new(name).map_err(|e| SyntaxError::msg(format!("Invalid variable name: {}", e)))?);
+                            let variable = Variable::new(name).map_err(|e| SyntaxError::msg(format!("Invalid variable name: {}", e)))?;
+                            if variables.contains(&variable) {
+                                return Err(SyntaxError::msg(format!(
+                                    "The variable {} is declared twice",
+                                    variable
+                                ))
+                                    .into());
+                            }
+                            variables.push(variable);
                         } else if event.name() == b"link" {
                             // no op
                         } else {

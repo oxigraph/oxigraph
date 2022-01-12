@@ -145,7 +145,9 @@ impl<R: BufRead> JsonQueryResultsReader<R> {
             let event = reader.read_event(&mut buffer)?;
             match event {
                 JsonEvent::ObjectKey(key) => match key {
-                    "head" => variables = Some(read_head(&mut reader, &mut buffer)?),
+                    "head" => {
+                        variables = Some(read_head(&mut reader, &mut buffer)?);
+                    }
                     "results" => {
                         if reader.read_event(&mut buffer)? != JsonEvent::StartObject {
                             return Err(SyntaxError::msg("'results' should be an object").into());
@@ -162,20 +164,10 @@ impl<R: BufRead> JsonQueryResultsReader<R> {
                         return if let Some(variables) = variables {
                             let mut mapping = BTreeMap::default();
                             for (i, var) in variables.iter().enumerate() {
-                                mapping.insert(var.clone(), i);
+                                mapping.insert(var.as_str().to_string(), i);
                             }
                             Ok(Self::Solutions {
-                                variables: variables
-                                    .into_iter()
-                                    .map(|v| {
-                                        Variable::new(v).map_err(|e| {
-                                            SyntaxError::msg(format!(
-                                                "Invalid variable name: {}",
-                                                e
-                                            ))
-                                        })
-                                    })
-                                    .collect::<Result<Vec<_>, _>>()?,
+                                variables,
                                 solutions: JsonSolutionsReader {
                                     reader,
                                     buffer,
@@ -448,17 +440,58 @@ impl<R: BufRead> JsonSolutionsReader<R> {
 fn read_head<R: BufRead>(
     reader: &mut JsonReader<R>,
     buffer: &mut Vec<u8>,
-) -> Result<Vec<String>, ParseError> {
+) -> Result<Vec<Variable>, ParseError> {
     if reader.read_event(buffer)? != JsonEvent::StartObject {
         return Err(SyntaxError::msg("head should be an object").into());
     }
-    let mut variables = None;
+    let mut variables = Vec::new();
     loop {
         match reader.read_event(buffer)? {
             JsonEvent::ObjectKey(key) => match key {
-                "vars" => variables = Some(read_string_array(reader, buffer)?),
+                "vars" => {
+                    if reader.read_event(buffer)? != JsonEvent::StartArray {
+                        return Err(SyntaxError::msg("Variable list should be an array").into());
+                    }
+                    loop {
+                        match reader.read_event(buffer)? {
+                            JsonEvent::String(s) => {
+                                let new_var = Variable::new(s).map_err(|e| {
+                                    SyntaxError::msg(format!(
+                                        "Invalid variable declaration '{}': {}",
+                                        s, e
+                                    ))
+                                })?;
+                                if variables.contains(&new_var) {
+                                    return Err(SyntaxError::msg(format!(
+                                        "The variable {} is declared twice",
+                                        new_var
+                                    ))
+                                    .into());
+                                }
+                                variables.push(new_var);
+                            }
+                            JsonEvent::EndArray => break,
+                            _ => {
+                                return Err(
+                                    SyntaxError::msg("Variable names should be strings").into()
+                                )
+                            }
+                        }
+                    }
+                }
                 "link" => {
-                    read_string_array(reader, buffer)?;
+                    if reader.read_event(buffer)? != JsonEvent::StartArray {
+                        return Err(SyntaxError::msg("Variable list should be an array").into());
+                    }
+                    loop {
+                        match reader.read_event(buffer)? {
+                            JsonEvent::String(_) => (),
+                            JsonEvent::EndArray => break,
+                            _ => {
+                                return Err(SyntaxError::msg("Link names should be strings").into())
+                            }
+                        }
+                    }
                 }
                 _ => {
                     return Err(
@@ -466,27 +499,8 @@ fn read_head<R: BufRead>(
                     )
                 }
             },
-            JsonEvent::EndObject => return Ok(variables.unwrap_or_else(Vec::new)),
+            JsonEvent::EndObject => return Ok(variables),
             _ => return Err(SyntaxError::msg("Invalid head serialization").into()),
-        }
-    }
-}
-
-fn read_string_array<R: BufRead>(
-    reader: &mut JsonReader<R>,
-    buffer: &mut Vec<u8>,
-) -> Result<Vec<String>, ParseError> {
-    if reader.read_event(buffer)? != JsonEvent::StartArray {
-        return Err(SyntaxError::msg("Variable list should be an array").into());
-    }
-    let mut elements = Vec::new();
-    loop {
-        match reader.read_event(buffer)? {
-            JsonEvent::String(s) => {
-                elements.push(s.into());
-            }
-            JsonEvent::EndArray => return Ok(elements),
-            _ => return Err(SyntaxError::msg("Variable names should be strings").into()),
         }
     }
 }

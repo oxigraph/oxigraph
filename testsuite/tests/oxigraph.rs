@@ -26,3 +26,10 @@ fn oxigraph_sparql_testsuite() -> Result<()> {
         "https://github.com/oxigraph/oxigraph/tests/sparql/manifest.ttl",
     ])
 }
+
+#[test]
+fn oxigraph_sparql_results_testsuite() -> Result<()> {
+    run_testsuite(vec![
+        "https://github.com/oxigraph/oxigraph/tests/sparql-results/manifest.ttl",
+    ])
+}

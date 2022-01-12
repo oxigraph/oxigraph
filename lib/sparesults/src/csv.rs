@@ -204,13 +204,21 @@ impl<R: BufRead> TsvQueryResultsReader<R> {
         if buffer.trim().eq_ignore_ascii_case("false") {
             return Ok(Self::Boolean(false));
         }
-        let variables = buffer
-            .split('\t')
-            .map(|v| {
-                Variable::from_str(v.trim())
-                    .map_err(|e| SyntaxError::msg(format!("Invalid variable name '{}': {}", v, e)))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut variables = Vec::new();
+        for v in buffer.split('\t') {
+            let v = v.trim();
+            let variable = Variable::from_str(v).map_err(|e| {
+                SyntaxError::msg(format!("Invalid variable declaration '{}': {}", v, e))
+            })?;
+            if variables.contains(&variable) {
+                return Err(SyntaxError::msg(format!(
+                    "The variable {} is declared twice",
+                    variable
+                ))
+                .into());
+            }
+            variables.push(variable);
+        }
 
         Ok(Self::Solutions {
             variables,
