@@ -326,17 +326,18 @@ mod tests {
     }
 
     #[test]
-    fn test_bad_tsv() -> io::Result<()> {
-        let bad_tsvs = vec![
+    fn test_bad_tsv() {
+        let mut bad_tsvs = vec![
             "?", "?p", "?p?o", "?p\n<", "?p\n_", "?p\n_:", "?p\n\"", "?p\n<<",
         ];
+        let a_lot_of_strings = format!("?p\n{}\n", "<".repeat(100_000));
+        bad_tsvs.push(&a_lot_of_strings);
         for bad_tsv in bad_tsvs {
-            if let TsvQueryResultsReader::Solutions { mut solutions, .. } =
-                TsvQueryResultsReader::read(Cursor::new(bad_tsv))?
+            if let Ok(TsvQueryResultsReader::Solutions { mut solutions, .. }) =
+                TsvQueryResultsReader::read(Cursor::new(bad_tsv))
             {
-                while solutions.read_next()?.is_some() {}
+                while let Ok(Some(_)) = solutions.read_next() {}
             }
         }
-        Ok(())
     }
 }

@@ -8,6 +8,10 @@ use oxrdf::*;
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, Write};
 
+/// This limit is set in order to avoid stack overflow error when parsing nested triples due to too many recursive calls.
+/// The actual limit value is a wet finger compromise between not failing to parse valid files and avoiding to trigger stack overflow errors.
+const MAX_NUMBER_OF_NESTED_TRIPLES: usize = 256;
+
 pub fn write_boolean_json_result<W: Write>(sink: W, value: bool) -> io::Result<W> {
     let mut writer = JsonWriter::from_writer(sink);
     writer.write_event(JsonEvent::StartObject)?;
@@ -239,14 +243,21 @@ impl<R: BufRead> JsonSolutionsReader<R> {
                             key
                         ))
                     })?;
-                    new_bindings[k] = Some(self.read_value()?)
+                    new_bindings[k] = Some(self.read_value(0)?)
                 }
                 _ => return Err(SyntaxError::msg("Invalid result serialization").into()),
             }
         }
     }
 
-    fn read_value(&mut self) -> Result<Term, ParseError> {
+    fn read_value(&mut self, number_of_recursive_calls: usize) -> Result<Term, ParseError> {
+        if number_of_recursive_calls == MAX_NUMBER_OF_NESTED_TRIPLES {
+            return Err(SyntaxError::msg(format!(
+                "Too many nested triples ({}). The parser fails here to avoid a stack overflow.",
+                MAX_NUMBER_OF_NESTED_TRIPLES
+            ))
+            .into());
+        }
         enum Type {
             Uri,
             BNode,
@@ -279,9 +290,11 @@ impl<R: BufRead> JsonSolutionsReader<R> {
                     "value" => state = Some(State::Value),
                     "xml:lang" => state = Some(State::Lang),
                     "datatype" => state = Some(State::Datatype),
-                    "subject" => subject = Some(self.read_value()?),
-                    "predicate" => predicate = Some(self.read_value()?),
-                    "object" => object = Some(self.read_value()?),
+                    "subject" => subject = Some(self.read_value(number_of_recursive_calls + 1)?),
+                    "predicate" => {
+                        predicate = Some(self.read_value(number_of_recursive_calls + 1)?)
+                    }
+                    "object" => object = Some(self.read_value(number_of_recursive_calls + 1)?),
                     _ => {
                         return Err(SyntaxError::msg(format!(
                             "Unexpected key in term serialization: '{}'",

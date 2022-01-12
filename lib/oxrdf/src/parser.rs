@@ -8,6 +8,10 @@ use std::error::Error;
 use std::fmt;
 use std::str::{Chars, FromStr};
 
+/// This limit is set in order to avoid stack overflow error when parsing nested triples due to too many recursive calls.
+/// The actual limit value is a wet finger compromise between not failing to parse valid files and avoiding to trigger stack overflow errors.
+const MAX_NUMBER_OF_NESTED_TRIPLES: usize = 512;
+
 impl FromStr for NamedNode {
     type Err = TermParseError;
 
@@ -95,7 +99,7 @@ impl FromStr for Term {
     /// ).into());
     /// ```
     fn from_str(s: &str) -> Result<Self, TermParseError> {
-        let (term, left) = read_term(s)?;
+        let (term, left) = read_term(s, 0)?;
         if !left.is_empty() {
             return Err(TermParseError::msg("Invalid term serialization"));
         }
@@ -293,12 +297,17 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
     }
 }
 
-fn read_term(s: &str) -> Result<(Term, &str), TermParseError> {
+fn read_term(s: &str, number_of_recursive_calls: usize) -> Result<(Term, &str), TermParseError> {
     let s = s.trim();
     if let Some(remain) = s.strip_prefix("<<") {
-        let (subject, remain) = read_term(remain)?;
+        if number_of_recursive_calls == MAX_NUMBER_OF_NESTED_TRIPLES {
+            return Err(TermParseError::msg(
+                "Too many nested triples. The parser fails here to avoid a stack overflow.",
+            ));
+        }
+        let (subject, remain) = read_term(remain, number_of_recursive_calls + 1)?;
         let (predicate, remain) = read_named_node(remain)?;
-        let (object, remain) = read_term(remain)?;
+        let (object, remain) = read_term(remain, number_of_recursive_calls + 1)?;
         let remain = remain.trim_start();
         if let Some(remain) = remain.strip_prefix(">>") {
             #[cfg(feature = "rdf-star")]
