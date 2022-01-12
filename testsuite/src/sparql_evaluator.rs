@@ -243,7 +243,7 @@ fn evaluate_negative_update_syntax_test(test: &Test) -> Result<()> {
         .action
         .as_deref()
         .ok_or_else(|| anyhow!("No action found for test {}", test))?;
-    match Query::parse(&read_file_to_string(update_file)?, Some(update_file)) {
+    match Update::parse(&read_file_to_string(update_file)?, Some(update_file)) {
         Ok(result) => Err(anyhow!(
             "Oxigraph parses even if it should not {}. The output tree is: {}",
             test,
