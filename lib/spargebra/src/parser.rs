@@ -1694,11 +1694,19 @@ parser! {
         rule PathSequence_item() -> PropertyPathExpression = p:PathEltOrInverse() _ { p }
 
         //[91]
-        rule PathElt() -> PropertyPathExpression =
-            p:PathPrimary() "?" { PropertyPathExpression::ZeroOrOne(Box::new(p)) } / //TODO: allow space before "?"
-            p:PathPrimary() _ "*" { PropertyPathExpression::ZeroOrMore(Box::new(p)) } /
-            p:PathPrimary() _ "+" { PropertyPathExpression::OneOrMore(Box::new(p)) } /
-            PathPrimary()
+        rule PathElt() -> PropertyPathExpression = p:PathPrimary() _ o:PathElt_op()? {
+            match o {
+                Some('?') => PropertyPathExpression::ZeroOrOne(Box::new(p)),
+                Some('*') => PropertyPathExpression::ZeroOrMore(Box::new(p)),
+                Some('+') => PropertyPathExpression::OneOrMore(Box::new(p)),
+                Some(_) => unreachable!(),
+                None => p
+            }
+        }
+        rule PathElt_op() -> char =
+            "*" { '*' } /
+            "+" { '+' } /
+            "?" !(['0'..='9'] / PN_CHARS_U()) { '?' } // We mandate that this is not a variable
 
         //[92]
         rule PathEltOrInverse() -> PropertyPathExpression =

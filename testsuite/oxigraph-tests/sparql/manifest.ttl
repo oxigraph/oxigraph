@@ -23,6 +23,8 @@
     :subquery_in_filter_not_exists
     :cmp_langString
     :update_dirtyRead
+    :nested_path
+    :nested_expression
     ) .
 
 :small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
@@ -98,3 +100,11 @@
     mf:name "An update operation should not be able to read its own writes" ;
     mf:action [ ut:request <update_dirtyRead.ru> ] ;
     mf:result [ ut:data <update_dirty_read_result.ttl> ] .
+
+:nested_path rdf:type mf:PositiveSyntaxTest11 ;
+    mf:name "A very nested property path" ;
+    mf:action <nested_path.rq> .
+
+:nested_expression rdf:type mf:PositiveSyntaxTest11 ;
+    mf:name "A very nested expression" ;
+    mf:action <nested_expression.rq> .
