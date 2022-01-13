@@ -10,7 +10,7 @@ use std::io::{self, BufRead, Write};
 
 /// This limit is set in order to avoid stack overflow error when parsing nested triples due to too many recursive calls.
 /// The actual limit value is a wet finger compromise between not failing to parse valid files and avoiding to trigger stack overflow errors.
-const MAX_NUMBER_OF_NESTED_TRIPLES: usize = 256;
+const MAX_NUMBER_OF_NESTED_TRIPLES: usize = 128;
 
 pub fn write_boolean_json_result<W: Write>(sink: W, value: bool) -> io::Result<W> {
     let mut writer = JsonWriter::from_writer(sink);

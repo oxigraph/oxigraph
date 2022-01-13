@@ -10,7 +10,7 @@ use std::str::{Chars, FromStr};
 
 /// This limit is set in order to avoid stack overflow error when parsing nested triples due to too many recursive calls.
 /// The actual limit value is a wet finger compromise between not failing to parse valid files and avoiding to trigger stack overflow errors.
-const MAX_NUMBER_OF_NESTED_TRIPLES: usize = 512;
+const MAX_NUMBER_OF_NESTED_TRIPLES: usize = 128;
 
 impl FromStr for NamedNode {
     type Err = TermParseError;
