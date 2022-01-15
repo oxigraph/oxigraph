@@ -79,7 +79,7 @@ pub fn load_to_store<'a>(
 
 pub fn load_to_graph(url: &str, graph: &mut Graph) -> Result<()> {
     let format = url
-        .rsplit_once(".")
+        .rsplit_once('.')
         .and_then(|(_, extension)| GraphFormat::from_extension(extension))
         .ok_or_else(|| anyhow!("Serialization type not found for {}", url))?;
     let parser = GraphParser::from_format(format).with_base_iri(url)?;
@@ -101,7 +101,7 @@ pub fn load_to_dataset<'a>(
     to_graph_name: impl Into<GraphNameRef<'a>>,
 ) -> Result<()> {
     let to_graph_name = to_graph_name.into();
-    let extension = url.rsplit_once(".").map(|(_, ext)| ext);
+    let extension = url.rsplit_once('.').map(|(_, ext)| ext);
     if let Some(format) = extension.and_then(GraphFormat::from_extension) {
         let parser = GraphParser::from_format(format).with_base_iri(url)?;
         for t in parser.read_triples(read_file(url)?)? {

@@ -119,6 +119,7 @@ pub struct QueryOptions {
 impl QueryOptions {
     /// Use a given [`ServiceHandler`] to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls.
     #[inline]
+    #[must_use]
     pub fn with_service_handler(mut self, service_handler: impl ServiceHandler + 'static) -> Self {
         self.service_handler = Some(Rc::new(ErrorConversionServiceHandler::wrap(
             service_handler,
@@ -128,6 +129,7 @@ impl QueryOptions {
 
     /// Disables the `SERVICE` calls
     #[inline]
+    #[must_use]
     pub fn without_service_handler(mut self) -> Self {
         self.service_handler = Some(Rc::new(EmptyServiceHandler));
         self
@@ -135,6 +137,7 @@ impl QueryOptions {
 
     /// Sets a timeout for HTTP requests done during SPARQL evaluation
     #[cfg(feature = "http_client")]
+    #[must_use]
     pub fn with_http_timeout(mut self, timeout: Duration) -> Self {
         self.http_timeout = Some(timeout);
         self
@@ -162,6 +165,7 @@ impl QueryOptions {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
+    #[must_use]
     pub fn with_custom_function(
         mut self,
         name: NamedNode,

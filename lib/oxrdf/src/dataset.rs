@@ -725,7 +725,7 @@ impl Dataset {
                         b
                     })
                 })
-                .unwrap_or_else(Vec::new)
+                .unwrap_or_default()
         } else {
             self.label(hash)
         }

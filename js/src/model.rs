@@ -34,16 +34,16 @@ pub fn literal(
     language_or_datatype: &JsValue,
 ) -> Result<JsLiteral, JsValue> {
     if language_or_datatype.is_null() || language_or_datatype.is_undefined() {
-        Ok(Literal::new_simple_literal(value.unwrap_or_else(String::new)).into())
+        Ok(Literal::new_simple_literal(value.unwrap_or_default()).into())
     } else if language_or_datatype.is_string() {
         Ok(Literal::new_language_tagged_literal(
-            value.unwrap_or_else(String::new),
-            language_or_datatype.as_string().unwrap_or_else(String::new),
+            value.unwrap_or_default(),
+            language_or_datatype.as_string().unwrap_or_default(),
         )
         .map_err(to_err)?
         .into())
     } else if let JsTerm::NamedNode(datatype) = FROM_JS.with(|c| c.to_term(language_or_datatype))? {
-        Ok(Literal::new_typed_literal(value.unwrap_or_else(String::new), datatype).into())
+        Ok(Literal::new_typed_literal(value.unwrap_or_default(), datatype).into())
     } else {
         Err(format_err!("The literal datatype should be a NamedNode"))
     }

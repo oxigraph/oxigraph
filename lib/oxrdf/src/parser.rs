@@ -160,7 +160,7 @@ fn read_blank_node(s: &str) -> Result<(BlankNode, &str), TermParseError> {
     if let Some(remain) = s.strip_prefix("_:") {
         let end = remain
             .find(|v: char| v.is_whitespace() || matches!(v, '<' | '_' | '?' | '$' | '"' | '\''))
-            .unwrap_or_else(|| remain.len());
+            .unwrap_or(remain.len());
         let (value, remain) = remain.split_at(end);
         let term = BlankNode::new(value).map_err(|error| TermParseError {
             kind: TermParseErrorKind::BlankNode {
@@ -188,7 +188,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                     return if let Some(remain) = remain.strip_prefix('@') {
                         let end = remain
                             .find(|v| !matches!(v, 'a'..='z' | 'A'..='Z' | '-'))
-                            .unwrap_or_else(|| remain.len());
+                            .unwrap_or(remain.len());
                         let (language, remain) = remain.split_at(end);
                         Ok((
                             Literal::new_language_tagged_literal(value, language).map_err(

@@ -77,7 +77,7 @@ pub fn main() -> std::io::Result<()> {
                 let file = file.to_string();
                 spawn(move || {
                     let format = file
-                        .rsplit_once(".")
+                        .rsplit_once('.')
                         .and_then(|(_, extension)| {
                             DatasetFormat::from_extension(extension)
                                 .or_else(|| GraphFormat::from_extension(extension)?.try_into().ok())

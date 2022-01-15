@@ -80,7 +80,9 @@ pub struct ColumnFamilyDefinition {
 #[derive(Clone)]
 pub struct Db(Arc<DbHandler>);
 
+#[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl Send for Db {}
+
 unsafe impl Sync for Db {}
 
 struct DbHandler {
@@ -926,7 +928,9 @@ impl Drop for Iter {
     }
 }
 
+#[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl Send for Iter {}
+
 unsafe impl Sync for Iter {}
 
 impl Iter {

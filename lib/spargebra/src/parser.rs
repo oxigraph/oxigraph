@@ -1205,8 +1205,8 @@ parser! {
         //[41]
         rule Modify() -> Vec<GraphUpdateOperation> = with:Modify_with()? _ Modify_clear() c:Modify_clauses() _ u:(UsingClause() ** (_)) _ i("WHERE") _ pattern:GroupGraphPattern() {
             let (delete, insert) = c;
-            let mut delete = delete.unwrap_or_else(Vec::new);
-            let mut insert = insert.unwrap_or_else(Vec::new);
+            let mut delete = delete.unwrap_or_default();
+            let mut insert = insert.unwrap_or_default();
             let mut pattern = pattern;
 
             let mut using = if u.is_empty() {
@@ -1325,7 +1325,7 @@ parser! {
 
         //[51]
         rule QuadsNotTriples() -> Vec<QuadPattern> = i("GRAPH") _ g:VarOrIri() _ "{" _ t:TriplesTemplate()? _ "}" {
-            t.unwrap_or_else(Vec::new).into_iter().map(|t| QuadPattern::new(t.subject, t.predicate, t.object, g.clone())).collect()
+            t.unwrap_or_default().into_iter().map(|t| QuadPattern::new(t.subject, t.predicate, t.object, g.clone())).collect()
         }
 
         //[52]
