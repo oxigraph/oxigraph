@@ -805,6 +805,7 @@ dependencies = [
  "oxigraph",
  "oxiri",
  "rand",
+ "sparesults",
  "url",
 ]
 

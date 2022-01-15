@@ -14,10 +14,11 @@ use oxhttp::model::{Body, HeaderName, HeaderValue, Request, Response, Status};
 use oxhttp::Server;
 use oxigraph::io::{DatasetFormat, DatasetSerializer, GraphFormat, GraphSerializer};
 use oxigraph::model::{GraphName, GraphNameRef, IriParseError, NamedNode, NamedOrBlankNode};
-use oxigraph::sparql::{Query, QueryResults, QueryResultsFormat, Update};
+use oxigraph::sparql::{Query, QueryResults, Update};
 use oxigraph::store::Store;
 use oxiri::Iri;
 use rand::random;
+use sparesults::{QueryResultsFormat, QueryResultsSerializer};
 use std::cell::RefCell;
 use std::cmp::min;
 use std::fs::File;
@@ -573,53 +574,72 @@ fn evaluate_sparql_query(
         Ok(results) => results,
         Err(e) => return internal_server_error(e),
     };
-    if let QueryResults::Graph(triples) = results {
-        let format = match graph_content_negotiation(request) {
-            Ok(format) => format,
-            Err(response) => return response,
-        };
-        ReadForWrite::build_response(
-            move |w| {
-                Ok((
-                    GraphSerializer::from_format(format).triple_writer(w)?,
-                    triples,
-                ))
-            },
-            |(mut writer, mut triples)| {
-                Ok(if let Some(t) = triples.next() {
-                    writer.write(&t?)?;
-                    Some((writer, triples))
-                } else {
-                    writer.finish()?;
-                    None
-                })
-            },
-            format.media_type(),
-        )
-    } else {
-        //TODO: stream
-        let mut body = Vec::default();
-        let format = match content_negotiation(
-            request,
-            &[
-                QueryResultsFormat::Xml.media_type(),
-                QueryResultsFormat::Json.media_type(),
-                QueryResultsFormat::Csv.media_type(),
-                QueryResultsFormat::Tsv.media_type(),
-            ],
-            QueryResultsFormat::from_media_type,
-        ) {
-            Ok(format) => format,
-            Err(response) => return response,
-        };
-        if let Err(e) = results.write(&mut body, format) {
-            return internal_server_error(e);
+    match results {
+        QueryResults::Solutions(solutions) => {
+            let format = match query_results_content_negotiation(request) {
+                Ok(format) => format,
+                Err(response) => return response,
+            };
+            ReadForWrite::build_response(
+                move |w| {
+                    Ok((
+                        QueryResultsSerializer::from_format(format)
+                            .solutions_writer(w, solutions.variables().to_vec())?,
+                        solutions,
+                    ))
+                },
+                |(mut writer, mut solutions)| {
+                    Ok(if let Some(solution) = solutions.next() {
+                        writer.write(&solution?)?;
+                        Some((writer, solutions))
+                    } else {
+                        writer.finish()?;
+                        None
+                    })
+                },
+                format.media_type(),
+            )
         }
-
-        Response::builder(Status::OK)
-            .with_header(HeaderName::CONTENT_TYPE, format.media_type())
-            .unwrap()
-            .with_body(body)
+        QueryResults::Boolean(result) => {
+            let format = match query_results_content_negotiation(request) {
+                Ok(format) => format,
+                Err(response) => return response,
+            };
+            let mut body = Vec::new();
+            if let Err(e) =
+                QueryResultsSerializer::from_format(format).write_boolean_result(&mut body, result)
+            {
+                return internal_server_error(e);
+            }
+            Response::builder(Status::OK)
+                .with_header(HeaderName::CONTENT_TYPE, format.media_type())
+                .unwrap()
+                .with_body(body)
+        }
+        QueryResults::Graph(triples) => {
+            let format = match graph_content_negotiation(request) {
+                Ok(format) => format,
+                Err(response) => return response,
+            };
+            ReadForWrite::build_response(
+                move |w| {
+                    Ok((
+                        GraphSerializer::from_format(format).triple_writer(w)?,
+                        triples,
+                    ))
+                },
+                |(mut writer, mut triples)| {
+                    Ok(if let Some(t) = triples.next() {
+                        writer.write(&t?)?;
+                        Some((writer, triples))
+                    } else {
+                        writer.finish()?;
+                        None
+                    })
+                },
+                format.media_type(),
+            )
+        }
     }
 }
 
@@ -802,6 +822,19 @@ fn dataset_content_negotiation(request: &Request) -> Result<DatasetFormat, Respo
     )
 }
 
+fn query_results_content_negotiation(request: &Request) -> Result<QueryResultsFormat, Response> {
+    content_negotiation(
+        request,
+        &[
+            QueryResultsFormat::Json.media_type(),
+            QueryResultsFormat::Xml.media_type(),
+            QueryResultsFormat::Csv.media_type(),
+            QueryResultsFormat::Tsv.media_type(),
+        ],
+        QueryResultsFormat::from_media_type,
+    )
+}
+
 fn content_negotiation<F>(
     request: &Request,
     supported: &[&str],
@@ -931,7 +964,7 @@ impl<O, U: (Fn(O) -> std::io::Result<Option<O>>)> Read for ReadForWrite<O, U> {
         while self.position == self.buffer.borrow().len() {
             // We read more data
             if let Some(state) = self.state.take() {
-                self.buffer.as_ref().borrow_mut().clear();
+                self.buffer.borrow_mut().clear();
                 self.position = 0;
                 self.state = (self.add_more_data)(state)?;
             } else {
@@ -939,11 +972,9 @@ impl<O, U: (Fn(O) -> std::io::Result<Option<O>>)> Read for ReadForWrite<O, U> {
             }
         }
         let buffer = self.buffer.borrow();
-        let start = self.position;
-        let end = min(buffer.len() - self.position, buf.len());
-        let len = end - start;
-        buf[..len].copy_from_slice(&buffer[start..end]);
-        self.position = end;
+        let len = min(buffer.len() - self.position, buf.len());
+        buf[..len].copy_from_slice(&buffer[self.position..self.position + len]);
+        self.position += len;
         Ok(len)
     }
 }

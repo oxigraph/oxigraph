@@ -15,6 +15,7 @@ edition = "2021"
 oxhttp = "0.1"
 clap = { version = "3", features = ["derive"] }
 oxigraph = { version = "0.3.0-dev", path = "../lib", features = ["http_client"] }
+sparesults = { version = "0.1", path="../lib/sparesults", features = ["rdf-star"] }
 rand = "0.8"
 url = "2"
 oxiri = "0.2"
