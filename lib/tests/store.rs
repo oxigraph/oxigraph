@@ -2,8 +2,13 @@ use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
 use oxigraph::store::Store;
+use rand::random;
+use std::env::temp_dir;
 use std::error::Error;
-use std::io::Cursor;
+use std::fs::{create_dir, remove_dir_all, File};
+use std::io::{Cursor, Write};
+use std::iter::once;
+use std::path::PathBuf;
 use std::process::Command;
 
 const DATA: &str = r#"
@@ -195,6 +200,33 @@ fn test_bulk_load_on_existing_delete_overrides_the_delete() -> Result<(), Box<dy
 }
 
 #[test]
+fn test_open_bad_dir() -> Result<(), Box<dyn Error>> {
+    let dir = TempDir::default();
+    create_dir(&dir.0)?;
+    {
+        File::create(dir.0.join("CURRENT"))?.write_all(b"foo")?;
+    }
+    assert!(Store::open(&dir.0).is_err());
+    Ok(())
+}
+
+#[test]
+fn test_bad_stt_open() -> Result<(), Box<dyn Error>> {
+    let dir = TempDir::default();
+    let store = Store::open(&dir.0)?;
+    remove_dir_all(&dir.0)?;
+    assert!(store
+        .bulk_extend(once(Quad {
+            subject: NamedNode::new_unchecked("http://example.com/s").into(),
+            predicate: NamedNode::new_unchecked("http://example.com/p"),
+            object: NamedNode::new_unchecked("http://example.com/o").into(),
+            graph_name: GraphName::DefaultGraph
+        }))
+        .is_err());
+    Ok(())
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_backward_compatibility() -> Result<(), Box<dyn Error>> {
     // We run twice to check if data is properly saved and closed
@@ -228,4 +260,18 @@ fn reset_dir(dir: &str) -> Result<(), Box<dyn Error>> {
         .status()?
         .success());
     Ok(())
+}
+
+struct TempDir(PathBuf);
+
+impl Default for TempDir {
+    fn default() -> Self {
+        Self(temp_dir().join(format!("oxigraph-test-{}", random::<u128>())))
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = remove_dir_all(&self.0);
+    }
 }

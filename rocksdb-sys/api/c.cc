@@ -5,7 +5,14 @@ static bool SaveStatus(rocksdb_status_t* target, const Status source) {
     target->code = static_cast<rocksdb_status_code_t>(source.code());
     target->subcode = static_cast<rocksdb_status_subcode_t>(source.subcode());
     target->severity = static_cast<rocksdb_status_severity_t>(source.severity());
-    target->string = source.ok() ? nullptr : source.ToString().c_str();
+    if(source.ok()) {
+        target->string = nullptr;
+    } else {
+        std::string msg = source.ToString();
+        char *string = new char[msg.size() + 1];   //we need extra char for NUL
+        memcpy(string, msg.c_str(), msg.size() + 1);
+        target->string = string;
+    }
     return !source.ok();
 }
 

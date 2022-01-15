@@ -252,7 +252,16 @@ impl Db {
                     .as_ptr(),
                 cf_options.as_ptr() as *const *const rocksdb_options_t,
                 cf_handles.as_mut_ptr(),
-            ))?;
+            ))
+            .map_err(|e| {
+                for cf_option in &cf_options {
+                    rocksdb_options_destroy(*cf_option);
+                }
+                rocksdb_transactiondb_options_destroy(transactiondb_options);
+                rocksdb_options_destroy(options);
+                rocksdb_block_based_options_destroy(block_based_table_options);
+                e
+            })?;
             assert!(!db.is_null(), "rocksdb_create returned null");
             for handle in &cf_handles {
                 assert!(
@@ -375,13 +384,11 @@ impl Db {
                 );
                 transaction
             };
-            let read_options = unsafe {
+            let (read_options, snapshot) = unsafe {
                 let options = rocksdb_readoptions_create_copy(self.0.read_options);
-                rocksdb_readoptions_set_snapshot(
-                    options,
-                    rocksdb_transaction_get_snapshot(transaction),
-                );
-                options
+                let snapshot = rocksdb_transaction_get_snapshot(transaction);
+                rocksdb_readoptions_set_snapshot(options, snapshot);
+                (options, snapshot)
             };
             let result = f(Transaction {
                 transaction: Rc::new(transaction),
@@ -391,19 +398,21 @@ impl Db {
             match result {
                 Ok(result) => {
                     unsafe {
-                        ffi_result!(rocksdb_transaction_commit_with_status(transaction))
-                            .map_err(StorageError::from)?;
+                        let r = ffi_result!(rocksdb_transaction_commit_with_status(transaction));
                         rocksdb_transaction_destroy(transaction);
                         rocksdb_readoptions_destroy(read_options);
+                        free(snapshot as *mut c_void);
+                        r.map_err(StorageError::from)?; // We make sure to also run destructors if the commit fails
                     }
                     return Ok(result);
                 }
                 Err(e) => {
                     unsafe {
-                        ffi_result!(rocksdb_transaction_rollback_with_status(transaction))
-                            .map_err(StorageError::from)?;
+                        let r = ffi_result!(rocksdb_transaction_rollback_with_status(transaction));
                         rocksdb_transaction_destroy(transaction);
                         rocksdb_readoptions_destroy(read_options);
+                        free(snapshot as *mut c_void);
+                        r.map_err(StorageError::from)?; // We make sure to also run destructors if the commit fails
                     }
                     // We look for the root error
                     let mut error: &(dyn Error + 'static) = &e;
@@ -511,7 +520,11 @@ impl Db {
             ffi_result!(rocksdb_sstfilewriter_open_with_status(
                 writer,
                 path_to_cstring(&path)?.as_ptr()
-            ))?;
+            ))
+            .map_err(|e| {
+                rocksdb_sstfilewriter_destroy(writer);
+                e
+            })?;
             Ok(SstFileWriter { writer, path })
         }
     }
@@ -748,11 +761,11 @@ impl Transaction<'_> {
         }
     }
 
-    pub fn contains_key_for_update(
+    pub fn get_for_update(
         &self,
         column_family: &ColumnFamily,
         key: &[u8],
-    ) -> Result<bool, StorageError> {
+    ) -> Result<Option<PinnableSlice>, StorageError> {
         unsafe {
             let slice = ffi_result!(rocksdb_transaction_get_for_update_pinned_cf_with_status(
                 *self.transaction,
@@ -761,8 +774,20 @@ impl Transaction<'_> {
                 key.as_ptr() as *const c_char,
                 key.len()
             ))?;
-            Ok(!slice.is_null())
+            Ok(if slice.is_null() {
+                None
+            } else {
+                Some(PinnableSlice(slice))
+            })
         }
+    }
+
+    pub fn contains_key_for_update(
+        &self,
+        column_family: &ColumnFamily,
+        key: &[u8],
+    ) -> Result<bool, StorageError> {
+        Ok(self.get_for_update(column_family, key)?.is_some()) //TODO: optimize
     }
 
     pub fn insert(
@@ -983,19 +1008,23 @@ unsafe impl Sync for ErrorStatus {}
 
 impl Drop for ErrorStatus {
     fn drop(&mut self) {
-        unsafe {
-            free(self.0.string as *mut c_void);
+        if self.0.string.is_null() {
+            unsafe {
+                free(self.0.string as *mut c_void);
+            }
         }
     }
 }
 
 impl fmt::Display for ErrorStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(
+        f.write_str(if self.0.string.is_null() {
+            "Unknown error"
+        } else {
             unsafe { CStr::from_ptr(self.0.string) }
                 .to_str()
-                .map_err(|_| fmt::Error)?,
-        )
+                .map_err(|_| fmt::Error)?
+        })
     }
 }
 

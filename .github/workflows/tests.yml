@@ -44,6 +44,18 @@ jobs:
       env:
         RUST_BACKTRACE: 1
 
+  address_sanitizer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - run: rustup update && rustup toolchain install nightly
+      - run: cargo +nightly test --tests --target x86_64-unknown-linux-gnu --workspace --exclude pyoxigraph --exclude oxigraph_testsuite
+        env:
+          RUST_BACKTRACE: 1
+          RUSTFLAGS: -Z sanitizer=address
+
   test_windows:
     runs-on: windows-latest
     steps:
