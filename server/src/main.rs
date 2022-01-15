@@ -849,14 +849,16 @@ fn content_negotiation<F>(
 
     if header.is_empty() {
         return parse(supported.first().unwrap())
-            .ok_or_else(|| error(Status::INTERNAL_SERVER_ERROR, "Unknown mime type"));
+            .ok_or_else(|| internal_server_error("Unknown media type"));
     }
     let mut result = None;
     let mut result_score = 0f32;
 
     for possible in header.split(',') {
         let (possible, parameters) = possible.split_once(';').unwrap_or((possible, ""));
-        let (possible_base, possible_sub) = possible.split_once('/').unwrap_or((possible, ""));
+        let (possible_base, possible_sub) = possible
+            .split_once('/')
+            .ok_or_else(|| bad_request(format!("Invalid media type: '{}'", possible)))?;
         let possible_base = possible_base.trim();
         let possible_sub = possible_sub.trim();
 
@@ -872,8 +874,13 @@ fn content_negotiation<F>(
             continue;
         }
         for candidate in supported {
-            let (candidate_base, candidate_sub) =
-                candidate.split_once('/').unwrap_or((candidate, ""));
+            let (candidate_base, candidate_sub) = candidate
+                .split_once(';')
+                .map_or(*candidate, |(p, _)| p)
+                .split_once('/')
+                .ok_or_else(|| {
+                    internal_server_error(format!("Invalid media type: '{}'", possible))
+                })?;
             if (possible_base == candidate_base || possible_base == "*")
                 && (possible_sub == candidate_sub || possible_sub == "*")
             {
@@ -891,7 +898,7 @@ fn content_negotiation<F>(
         )
     })?;
 
-    parse(result).ok_or_else(|| error(Status::INTERNAL_SERVER_ERROR, "Unknown mime type"))
+    parse(result).ok_or_else(|| error(Status::INTERNAL_SERVER_ERROR, "Unknown media type"))
 }
 
 fn content_type(request: &Request) -> Option<String> {
