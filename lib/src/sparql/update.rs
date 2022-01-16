@@ -9,7 +9,7 @@ use crate::sparql::plan::EncodedTuple;
 use crate::sparql::plan_builder::PlanBuilder;
 use crate::sparql::{EvaluationError, Update, UpdateOptions};
 use crate::storage::numeric_encoder::{Decoder, EncodedTerm};
-use crate::storage::{Storage, StorageWriter};
+use crate::storage::StorageWriter;
 use oxiri::Iri;
 use spargebra::algebra::{GraphPattern, GraphTarget};
 use spargebra::term::{
@@ -22,32 +22,28 @@ use std::collections::HashMap;
 use std::io::BufReader;
 use std::rc::Rc;
 
-pub fn evaluate_update(
-    storage: &Storage,
-    update: Update,
-    options: UpdateOptions,
+pub fn evaluate_update<'a, 'b: 'a>(
+    transaction: &'a mut StorageWriter<'b>,
+    update: &Update,
+    options: &UpdateOptions,
 ) -> Result<(), EvaluationError> {
-    let base_iri = update.inner.base_iri.map(Rc::new);
-    storage.transaction(move |transaction| {
-        let client = Client::new(options.query_options.http_timeout);
-        SimpleUpdateEvaluator {
-            transaction,
-            base_iri: base_iri.clone(),
-            options: options.clone(),
-            client,
-        }
-        .eval_all(&update.inner.operations, &update.using_datasets)
-    })
+    SimpleUpdateEvaluator {
+        transaction,
+        base_iri: update.inner.base_iri.clone().map(Rc::new),
+        options: options.clone(),
+        client: Client::new(options.query_options.http_timeout),
+    }
+    .eval_all(&update.inner.operations, &update.using_datasets)
 }
 
-struct SimpleUpdateEvaluator<'a> {
-    transaction: StorageWriter<'a>,
+struct SimpleUpdateEvaluator<'a, 'b> {
+    transaction: &'a mut StorageWriter<'b>,
     base_iri: Option<Rc<Iri<String>>>,
     options: UpdateOptions,
     client: Client,
 }
 
-impl SimpleUpdateEvaluator<'_> {
+impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
     fn eval_all(
         &mut self,
         updates: &[GraphUpdateOperation],

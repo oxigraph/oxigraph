@@ -23,7 +23,7 @@ use crate::sparql::plan_builder::PlanBuilder;
 pub use crate::sparql::service::ServiceHandler;
 use crate::sparql::service::{EmptyServiceHandler, ErrorConversionServiceHandler};
 pub(crate) use crate::sparql::update::evaluate_update;
-use crate::storage::Storage;
+use crate::storage::StorageReader;
 pub use oxrdf::{Variable, VariableNameParseError};
 pub use sparesults::QueryResultsFormat;
 pub use spargebra::ParseError;
@@ -33,12 +33,12 @@ use std::time::Duration;
 
 #[allow(clippy::needless_pass_by_value)]
 pub(crate) fn evaluate_query(
-    storage: Storage,
+    reader: StorageReader,
     query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
     options: QueryOptions,
 ) -> Result<QueryResults, EvaluationError> {
     let query = query.try_into().map_err(std::convert::Into::into)?;
-    let dataset = DatasetView::new(storage.snapshot(), &query.dataset);
+    let dataset = DatasetView::new(reader, &query.dataset);
     match query.inner {
         spargebra::Query::Select {
             pattern, base_iri, ..
