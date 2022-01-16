@@ -1012,7 +1012,7 @@ unsafe impl Sync for ErrorStatus {}
 
 impl Drop for ErrorStatus {
     fn drop(&mut self) {
-        if self.0.string.is_null() {
+        if !self.0.string.is_null() {
             unsafe {
                 free(self.0.string as *mut c_void);
             }
