@@ -109,6 +109,19 @@ pub(crate) fn evaluate_query(
 ///
 /// If the `"http_client"` optional feature is enabled,
 /// a simple HTTP 1.1 client is used to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls.
+///
+/// Usage example disabling the federated query support:
+/// ```
+/// use oxigraph::store::Store;
+/// use oxigraph::sparql::QueryOptions;
+///
+/// let store = Store::new()?;
+/// store.query_opt(
+///     "SELECT * WHERE { SERVICE <https://query.wikidata.org/sparql> {} }",
+///     QueryOptions::default().without_service_handler()
+/// )?;
+/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// ```
 #[derive(Clone, Default)]
 pub struct QueryOptions {
     service_handler: Option<Rc<dyn ServiceHandler<Error = EvaluationError>>>,
@@ -186,24 +199,10 @@ impl QueryOptions {
     }
 }
 
-/// Options for SPARQL update evaluation
+/// Options for SPARQL update evaluation.
 #[derive(Clone, Default)]
 pub struct UpdateOptions {
     query_options: QueryOptions,
-}
-
-impl UpdateOptions {
-    /// The options related to the querying part of the updates
-    #[inline]
-    pub fn query_options(&self) -> &QueryOptions {
-        &self.query_options
-    }
-
-    /// The options related to the querying part of the updates
-    #[inline]
-    pub fn query_options_mut(&mut self) -> &mut QueryOptions {
-        &mut self.query_options
-    }
 }
 
 impl From<QueryOptions> for UpdateOptions {

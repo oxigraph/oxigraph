@@ -129,6 +129,26 @@ impl Store {
     }
 
     /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) with some options.
+    ///
+    ///
+    /// Usage example with a custom function serializing terms to N-Triples:
+    /// ```
+    /// use oxigraph::store::Store;
+    /// use oxigraph::model::*;
+    /// use oxigraph::sparql::{QueryOptions, QueryResults};
+    ///
+    /// let store = Store::new()?;
+    /// if let QueryResults::Solutions(mut solutions) = store.query_opt(
+    ///     "SELECT (<http://www.w3.org/ns/formats/N-Triples>(1) AS ?nt) WHERE {}",
+    ///     QueryOptions::default().with_custom_function(
+    ///         NamedNode::new("http://www.w3.org/ns/formats/N-Triples")?,
+    ///         |args| args.get(0).map(|t| Literal::from(t.to_string()).into())
+    ///     )
+    /// )? {
+    ///     assert_eq!(solutions.next().unwrap()?.get("nt"), Some(&Literal::from("\"1\"^^<http://www.w3.org/2001/XMLSchema#integer>").into()));
+    /// }
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
     pub fn query_opt(
         &self,
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
@@ -226,15 +246,31 @@ impl Store {
     }
 
     /// Executes a [SPARQL 1.1 update](https://www.w3.org/TR/sparql11-update/) with some options.
+    ///
+    /// ```
+    /// use oxigraph::store::Store;
+    /// use oxigraph::model::*;
+    /// use oxigraph::sparql::QueryOptions;
+    ///
+    /// let store = Store::new()?;
+    /// store.update_opt(
+    ///     "INSERT { ?s <http://example.com/n-triples-representation> ?n } WHERE { ?s ?p ?o BIND(<http://www.w3.org/ns/formats/N-Triples>(?s) AS ?nt) }",
+    ///     QueryOptions::default().with_custom_function(
+    ///         NamedNode::new("http://www.w3.org/ns/formats/N-Triples")?,
+    ///         |args| args.get(0).map(|t| Literal::from(t.to_string()).into())
+    ///     )
+    /// )?;
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
     pub fn update_opt(
         &self,
         update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
-        options: UpdateOptions,
+        options: impl Into<UpdateOptions>,
     ) -> Result<(), EvaluationError> {
         evaluate_update(
             &self.storage,
             update.try_into().map_err(std::convert::Into::into)?,
-            options,
+            options.into(),
         )
     }
 
