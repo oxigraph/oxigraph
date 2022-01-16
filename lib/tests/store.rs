@@ -211,6 +211,7 @@ fn test_open_bad_dir() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn test_bad_stt_open() -> Result<(), Box<dyn Error>> {
     let dir = TempDir::default();
     let store = Store::open(&dir.0)?;
