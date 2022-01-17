@@ -2,7 +2,7 @@ name: Release artifacts
 
 on:
   release:
-    types: [published]
+    types: [ published ]
 
 jobs:
   push_server_to_docker_registry:
@@ -18,13 +18,11 @@ jobs:
           images: |
             ${{ github.repository }}
             ghcr.io/${{ github.repository }}
-      - name: Login to DockerHub
-        uses: docker/login-action@v1
+      - uses: docker/login-action@v1
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v1
+      - uses: docker/login-action@v1
         with:
           registry: ghcr.io
           username: ${{github.actor}}
@@ -40,7 +38,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  publish_rocksdb_crate:
+  publish_crates:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -52,72 +50,43 @@ jobs:
           CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
       - run: cargo publish
         working-directory: ./rocksdb-sys
-
-  publish_lib_crate:
-    runs-on: ubuntu-latest
-    needs: publish_rocksdb_crate
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          submodules: true
-      - run: rustup update
-      - run: cargo login $CRATES_IO_TOKEN
-        env:
-          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+      - run: cargo publish
+        working-directory: ./lib/oxrdf
+      - run: cargo publish
+        working-directory: ./lib/sparesults
+      - run: cargo publish
+        working-directory: ./lib/spargebra
       - run: cargo publish
         working-directory: ./lib
-
-  publish_server_crate:
-    runs-on: ubuntu-latest
-    needs: publish_lib_crate
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          submodules: true
-      - run: rustup update
-      - run: cargo login $CRATES_IO_TOKEN
-        env:
-          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
       - run: cargo publish
         working-directory: ./server
 
-  python_wheel_linux:
+  publish_pypi_linux:
     runs-on: ubuntu-latest
-    needs: publish_lib_crate
+    needs: publish_lib_crates
+    strategy:
+      matrix:
+        architecture: [ "x86_64", "aarch64" ]
     steps:
       - uses: actions/checkout@v2
         with:
           submodules: true
       - run: sed -i 's/path="..\/lib", //g' python/Cargo.toml
-      - uses: messense/maturin-action@v1
+      - run: sed 's/%arch%/${{ matrix.architecture }}/g' .github/workflows/manylinux_build.sh > .github/workflows/manylinux_build_script.sh
+      - run: docker run -v "$(pwd)":/workdir --platform linux/${{ matrix.architecture }} quay.io/pypa/manylinux2014_${{ matrix.architecture }} /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
+      - uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          manylinux: 2014
-          container: messense/manylinux2014-cross:x86_64
-          command: publish
-          args: -m python/Cargo.toml --cargo-extra-args="--no-default-features --features vendored" --no-sdist -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
+          user: __token__
+          password: ${{ secrets.PYPI_PASSWORD }}
+          packages_dir: target/wheels
 
   publish_pypi_mac:
     runs-on: macos-latest
-    needs: publish_lib_crate
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          submodules: true
-      - uses: messense/maturin-action@v1
-        with:
-          command: publish
-          args: -m python/Cargo.toml --universal2 -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
-      - uses: messense/maturin-action@v1
-        with:
-          command: publish
-          args: -m python/Cargo.toml --no-sdist -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
-
-  python_wheel_windows:
-    runs-on: windows-latest
-    needs: publish_lib_crate
-    strategy:
-      matrix:
-        architecture: ["x86", "x64"]
+    needs: publish_lib_crates
+    env:
+      DEVELOPER_DIR: '/Applications/Xcode.app/Contents/Developer'
+      SDKROOT: '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk'
+      MACOSX_DEPLOYMENT_TARGET: '10.9'
     steps:
       - uses: actions/checkout@v2
         with:
@@ -125,13 +94,37 @@ jobs:
       - uses: actions/setup-python@v2
         with:
           python-version: 3.7
-          architecture: ${{ matrix.architecture }}
-      - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
-      - uses: messense/maturin-action@v1
+      - run: rustup update && rustup target add aarch64-apple-darwin
+      - run: pip install maturin
+      - run: sed -i 's/path="..\/lib", //g' python/Cargo.toml
+      - run: maturin build --release -m python/Cargo.toml --universal2
+      - run: maturin build --release --no-sdist -m python/Cargo.toml
+      - uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          command: publish
-          target: ${{ matrix.architecture }}
-          args: -m python/Cargo.toml --no-sdist -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
+          user: __token__
+          password: ${{ secrets.PYPI_PASSWORD }}
+          packages_dir: target/wheels
+
+  publish_pypi_windows:
+    runs-on: windows-latest
+    needs: publish_lib_crates
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.7
+      - run: rustup update
+      - run: pip install maturin
+      - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
+      - run: sed -i 's/path="..\/lib", //g' python/Cargo.toml
+      - run: maturin build --release --no-sdist -m python/Cargo.toml
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_PASSWORD }}
+          packages_dir: target/wheels
 
   publish_npm:
     runs-on: ubuntu-latest
