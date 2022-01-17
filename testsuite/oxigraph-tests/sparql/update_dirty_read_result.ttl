@@ -1,3 +1,0 @@
-@prefix ex: <http://example.com/> .
-
-ex:s ex:p 1 , 2 , 5 , 6 .

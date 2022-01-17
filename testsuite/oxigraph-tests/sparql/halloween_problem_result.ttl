@@ -1,0 +1,5 @@
+@prefix ex: <http://example.com/> .
+
+ex:s ex:salary 1300 .
+ex:s2 ex:salary 1350 .
+ex:boss ex:salary 1600 .

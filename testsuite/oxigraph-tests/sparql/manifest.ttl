@@ -22,7 +22,7 @@
     :values_in_filter_not_exists
     :subquery_in_filter_not_exists
     :cmp_langString
-    :update_dirtyRead
+    :halloween_problem
     :nested_path
     :nested_expression
     ) .
@@ -96,10 +96,10 @@
     mf:action [ qt:query <cmp_langString.rq> ] ;
     mf:result <cmp_langString.srx> .
 
-:update_dirty_read rdf:type mf:UpdateEvaluationTest ;
-    mf:name "An update operation should not be able to read its own writes" ;
-    mf:action [ ut:request <update_dirtyRead.ru> ] ;
-    mf:result [ ut:data <update_dirty_read_result.ttl> ] .
+:halloween_problem rdf:type mf:UpdateEvaluationTest ;
+    mf:name "Halloween Problem: An update operation should not be able to read its own writes" ;
+    mf:action [ ut:request <halloween_problem.ru> ] ;
+    mf:result [ ut:data <halloween_problem_result.ttl> ] .
 
 :nested_path rdf:type mf:PositiveSyntaxTest11 ;
     mf:name "A very nested property path" ;
