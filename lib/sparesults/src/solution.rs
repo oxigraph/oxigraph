@@ -1,7 +1,8 @@
 //! Definition of [`QuerySolution`] structure and associated utility constructions.
 
-use oxrdf::{Term, Variable};
+use oxrdf::{Term, Variable, VariableRef};
 use std::iter::Zip;
+use std::ops::Index;
 use std::rc::Rc;
 
 /// Tuple associating variables and terms that are the result of a SPARQL query.
@@ -137,6 +138,53 @@ impl<'a> IntoIterator for &'a QuerySolution {
     }
 }
 
+impl Index<usize> for QuerySolution {
+    type Output = Term;
+
+    #[inline]
+    fn index(&self, index: usize) -> &Term {
+        self.get(index)
+            .unwrap_or_else(|| panic!("The column {} is not set in this solution", index))
+    }
+}
+
+impl Index<&str> for QuerySolution {
+    type Output = Term;
+
+    #[inline]
+    fn index(&self, index: &str) -> &Term {
+        self.get(index)
+            .unwrap_or_else(|| panic!("The variable ?{} is not set in this solution", index))
+    }
+}
+
+impl Index<VariableRef<'_>> for QuerySolution {
+    type Output = Term;
+
+    #[inline]
+    fn index(&self, index: VariableRef<'_>) -> &Term {
+        self.get(index)
+            .unwrap_or_else(|| panic!("The variable {} is not set in this solution", index))
+    }
+}
+impl Index<Variable> for QuerySolution {
+    type Output = Term;
+
+    #[inline]
+    fn index(&self, index: Variable) -> &Term {
+        self.index(index.as_ref())
+    }
+}
+
+impl Index<&Variable> for QuerySolution {
+    type Output = Term;
+
+    #[inline]
+    fn index(&self, index: &Variable) -> &Term {
+        self.index(index.as_ref())
+    }
+}
+
 /// An iterator over [`QuerySolution`] bound variables.
 ///
 /// ```
@@ -190,16 +238,23 @@ impl VariableSolutionIndex for &str {
     }
 }
 
+impl VariableSolutionIndex for VariableRef<'_> {
+    #[inline]
+    fn index(self, solution: &QuerySolution) -> Option<usize> {
+        solution.variables.iter().position(|v| *v == self)
+    }
+}
+
 impl VariableSolutionIndex for &Variable {
     #[inline]
     fn index(self, solution: &QuerySolution) -> Option<usize> {
-        solution.variables.iter().position(|v| v == self)
+        self.as_ref().index(solution)
     }
 }
 
 impl VariableSolutionIndex for Variable {
     #[inline]
     fn index(self, solution: &QuerySolution) -> Option<usize> {
-        (&self).index(solution)
+        self.as_ref().index(solution)
     }
 }
