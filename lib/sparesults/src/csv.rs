@@ -32,11 +32,11 @@ impl<W: Write> CsvSolutionsWriter<W> {
 
     pub fn write<'a>(
         &mut self,
-        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
+        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
     ) -> io::Result<()> {
         let mut values = vec![None; self.variables.len()];
         for (variable, value) in solution {
-            if let Some(position) = self.variables.iter().position(|v| v == variable) {
+            if let Some(position) = self.variables.iter().position(|v| *v == variable) {
                 values[position] = Some(value);
             }
         }
@@ -122,11 +122,11 @@ impl<W: Write> TsvSolutionsWriter<W> {
 
     pub fn write<'a>(
         &mut self,
-        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
+        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
     ) -> io::Result<()> {
         let mut values = vec![None; self.variables.len()];
         for (variable, value) in solution {
-            if let Some(position) = self.variables.iter().position(|v| v == variable) {
+            if let Some(position) = self.variables.iter().position(|v| *v == variable) {
                 values[position] = Some(value);
             }
         }
@@ -259,7 +259,6 @@ impl<R: BufRead> TsvSolutionsReader<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::QuerySolution;
     use std::io::Cursor;
     use std::rc::Rc;
     use std::str;
@@ -313,7 +312,12 @@ mod tests {
         let mut writer = CsvSolutionsWriter::start(Vec::new(), variables.clone())?;
         let variables = Rc::new(variables);
         for solution in solutions {
-            writer.write(QuerySolution::from((variables.clone(), solution)).iter())?;
+            writer.write(
+                variables
+                    .iter()
+                    .zip(&solution)
+                    .filter_map(|(v, s)| s.as_ref().map(|s| (v.as_ref(), s.as_ref()))),
+            )?;
         }
         let result = writer.finish();
         assert_eq!(str::from_utf8(&result).unwrap(), "x,literal\r\nhttp://example/x,String\r\nhttp://example/x,\"String-with-dquote\"\"\"\r\n_:b0,Blank node\r\n,Missing 'x'\r\n,\r\nhttp://example/x,\r\n_:b1,String-with-lang\r\n_:b1,123");
@@ -326,7 +330,12 @@ mod tests {
         let mut writer = TsvSolutionsWriter::start(Vec::new(), variables.clone())?;
         let variables = Rc::new(variables);
         for solution in solutions {
-            writer.write(QuerySolution::from((variables.clone(), solution)).iter())?;
+            writer.write(
+                variables
+                    .iter()
+                    .zip(&solution)
+                    .filter_map(|(v, s)| s.as_ref().map(|s| (v.as_ref(), s.as_ref()))),
+            )?;
         }
         let result = writer.finish();
         assert_eq!(str::from_utf8(&result).unwrap(), "?x\t?literal\n<http://example/x>\t\"String\"\n<http://example/x>\t\"String-with-dquote\\\"\"\n_:b0\t\"Blank node\"\n\t\"Missing 'x'\"\n\t\n<http://example/x>\t\n_:b1\t\"String-with-lang\"@en\n_:b1\t123");

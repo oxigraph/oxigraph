@@ -50,13 +50,13 @@ impl<W: Write> JsonSolutionsWriter<W> {
 
     pub fn write<'a>(
         &mut self,
-        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
+        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
     ) -> io::Result<()> {
         self.writer.write_event(JsonEvent::StartObject)?;
         for (variable, value) in solution {
             self.writer
                 .write_event(JsonEvent::ObjectKey(variable.as_str()))?;
-            write_json_term(value.as_ref(), &mut self.writer)?;
+            write_json_term(value, &mut self.writer)?;
         }
         self.writer.write_event(JsonEvent::EndObject)?;
         Ok(())

@@ -61,14 +61,14 @@ impl<W: Write> XmlSolutionsWriter<W> {
 
     pub fn write<'a>(
         &mut self,
-        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
+        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
     ) -> io::Result<()> {
         self.do_write(solution).map_err(map_xml_error)
     }
 
     fn do_write<'a>(
         &mut self,
-        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
+        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
     ) -> Result<(), quick_xml::Error> {
         self.writer
             .write_event(Event::Start(BytesStart::borrowed_name(b"result")))?;
@@ -76,7 +76,7 @@ impl<W: Write> XmlSolutionsWriter<W> {
             let mut binding_tag = BytesStart::borrowed_name(b"binding");
             binding_tag.push_attribute(("name", variable.as_str()));
             self.writer.write_event(Event::Start(binding_tag))?;
-            write_xml_term(value.as_ref(), &mut self.writer)?;
+            write_xml_term(value, &mut self.writer)?;
             self.writer
                 .write_event(Event::End(BytesEnd::borrowed(b"binding")))?;
         }

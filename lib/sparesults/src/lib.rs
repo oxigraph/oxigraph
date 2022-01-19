@@ -22,8 +22,7 @@ pub use crate::error::{ParseError, SyntaxError};
 use crate::json::*;
 pub use crate::solution::QuerySolution;
 use crate::xml::*;
-use oxrdf::Term;
-pub use oxrdf::Variable;
+use oxrdf::{TermRef, Variable, VariableRef};
 use std::io::{self, BufRead, Write};
 use std::rc::Rc;
 
@@ -342,7 +341,7 @@ impl<R: BufRead> Iterator for SolutionsReader<R> {
 /// Example in JSON (the API is the same for XML and TSV):
 /// ```
 /// use sparesults::{QueryResultsFormat, QueryResultsSerializer};
-/// use oxrdf::{Literal, Variable};
+/// use oxrdf::{LiteralRef, Variable, VariableRef};
 /// use std::iter::once;
 ///
 /// let json_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Json);
@@ -355,7 +354,7 @@ impl<R: BufRead> Iterator for SolutionsReader<R> {
 /// // solutions
 /// let mut buffer = Vec::new();
 /// let mut writer = json_serializer.solutions_writer(&mut buffer, vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")])?;
-/// writer.write(once((&Variable::new_unchecked("foo"), &Literal::from("test").into())))?;
+/// writer.write(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test"))))?;
 /// writer.finish()?;
 /// assert_eq!(buffer, b"{\"head\":{\"vars\":[\"foo\",\"bar\"]},\"results\":{\"bindings\":[{\"foo\":{\"type\":\"literal\",\"value\":\"test\"}}]}}");
 /// # std::io::Result::Ok(())
@@ -398,13 +397,13 @@ impl QueryResultsSerializer {
     /// Example in XML (the API is the same for JSON and TSV):
     /// ```
     /// use sparesults::{QueryResultsFormat, QueryResultsSerializer};
-    /// use oxrdf::{Literal, Variable};
+    /// use oxrdf::{LiteralRef, Variable, VariableRef};
     /// use std::iter::once;
     ///
     /// let json_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Xml);
     /// let mut buffer = Vec::new();
     /// let mut writer = json_serializer.solutions_writer(&mut buffer, vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")])?;
-    /// writer.write(once((&Variable::new_unchecked("foo"), &Literal::from("test").into())))?;
+    /// writer.write(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test"))))?;
     /// writer.finish()?;
     /// assert_eq!(buffer, b"<?xml version=\"1.0\"?><sparql xmlns=\"http://www.w3.org/2005/sparql-results#\"><head><variable name=\"foo\"/><variable name=\"bar\"/></head><results><result><binding name=\"foo\"><literal>test</literal></binding></result></results></sparql>");
     /// # std::io::Result::Ok(())
@@ -441,13 +440,13 @@ impl QueryResultsSerializer {
 /// Example in TSV (the API is the same for JSON and XML):
 /// ```
 /// use sparesults::{QueryResultsFormat, QueryResultsSerializer};
-/// use oxrdf::{Literal, Variable};
+/// use oxrdf::{LiteralRef, Variable, VariableRef};
 /// use std::iter::once;
 ///
 /// let json_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Tsv);
 /// let mut buffer = Vec::new();
 /// let mut writer = json_serializer.solutions_writer(&mut buffer, vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")])?;
-/// writer.write(once((&Variable::new_unchecked("foo"), &Literal::from("test").into())))?;
+/// writer.write(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test"))))?;
 /// writer.finish()?;
 /// assert_eq!(buffer, b"?foo\t?bar\n\"test\"\t");
 /// # std::io::Result::Ok(())
@@ -470,13 +469,13 @@ impl<W: Write> SolutionsWriter<W> {
     /// Example in JSON (the API is the same for XML and TSV):
     /// ```
     /// use sparesults::{QueryResultsFormat, QueryResultsSerializer, QuerySolution};
-    /// use oxrdf::{Literal, Variable};
+    /// use oxrdf::{Literal, LiteralRef, Variable, VariableRef};
     /// use std::iter::once;
     ///
     /// let json_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Json);
     /// let mut buffer = Vec::new();
     /// let mut writer = json_serializer.solutions_writer(&mut buffer, vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")])?;
-    /// writer.write(once((&Variable::new_unchecked("foo"), &Literal::from("test").into())))?;
+    /// writer.write(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test"))))?;
     /// writer.write(&QuerySolution::from((vec![Variable::new_unchecked("bar")], vec![Some(Literal::from("test").into())])))?;
     /// writer.finish()?;
     /// assert_eq!(buffer, b"{\"head\":{\"vars\":[\"foo\",\"bar\"]},\"results\":{\"bindings\":[{\"foo\":{\"type\":\"literal\",\"value\":\"test\"}},{\"bar\":{\"type\":\"literal\",\"value\":\"test\"}}]}}");
@@ -484,8 +483,9 @@ impl<W: Write> SolutionsWriter<W> {
     /// ```
     pub fn write<'a>(
         &mut self,
-        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
+        solution: impl IntoIterator<Item = (impl Into<VariableRef<'a>>, impl Into<TermRef<'a>>)>,
     ) -> io::Result<()> {
+        let solution = solution.into_iter().map(|(v, s)| (v.into(), s.into()));
         match &mut self.formatter {
             SolutionsWriterKind::Xml(writer) => writer.write(solution),
             SolutionsWriterKind::Json(writer) => writer.write(solution),

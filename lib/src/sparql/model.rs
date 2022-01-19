@@ -2,7 +2,7 @@ use crate::io::GraphFormat;
 use crate::io::GraphSerializer;
 use crate::model::*;
 use crate::sparql::error::EvaluationError;
-use oxrdf::Variable;
+use oxrdf::{Variable, VariableRef};
 pub use sparesults::QuerySolution;
 use sparesults::{
     QueryResultsFormat, QueryResultsParser, QueryResultsReader, QueryResultsSerializer,
@@ -66,17 +66,19 @@ impl QueryResults {
                 writer.finish()?;
             }
             QueryResults::Graph(triples) => {
-                let s = Variable::new_unchecked("subject");
-                let p = Variable::new_unchecked("predicate");
-                let o = Variable::new_unchecked("object");
-                let mut writer =
-                    serializer.solutions_writer(writer, vec![s.clone(), p.clone(), o.clone()])?;
+                let s = VariableRef::new_unchecked("subject");
+                let p = VariableRef::new_unchecked("predicate");
+                let o = VariableRef::new_unchecked("object");
+                let mut writer = serializer.solutions_writer(
+                    writer,
+                    vec![s.into_owned(), p.into_owned(), o.into_owned()],
+                )?;
                 for triple in triples {
                     let triple = triple?;
                     writer.write([
-                        (&s, &triple.subject.into()),
-                        (&p, &triple.predicate.into()),
-                        (&o, &triple.object),
+                        (s, &triple.subject.into()),
+                        (p, &triple.predicate.into()),
+                        (o, &triple.object),
                     ])?;
                 }
                 writer.finish()?;
