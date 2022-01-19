@@ -228,6 +228,44 @@ fn test_bad_stt_open() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
+fn test_backup() -> Result<(), Box<dyn Error>> {
+    let quad = QuadRef {
+        subject: NamedNodeRef::new_unchecked("http://example.com/s").into(),
+        predicate: NamedNodeRef::new_unchecked("http://example.com/p"),
+        object: NamedNodeRef::new_unchecked("http://example.com/o").into(),
+        graph_name: GraphNameRef::DefaultGraph,
+    };
+    let store_dir = TempDir::default();
+    let backup_dir = TempDir::default();
+
+    let store = Store::open(&store_dir.0)?;
+    store.insert(quad)?;
+    store.backup(&backup_dir.0)?;
+    store.remove(quad)?;
+
+    assert!(!store.contains(quad)?);
+    assert!(Store::open(&backup_dir.0)?.contains(quad)?);
+    Ok(())
+}
+
+#[test]
+fn test_bad_backup() -> Result<(), Box<dyn Error>> {
+    let store_dir = TempDir::default();
+    let backup_dir = TempDir::default();
+
+    create_dir(&backup_dir.0)?;
+    assert!(Store::open(&store_dir.0)?.backup(&backup_dir.0).is_err());
+    Ok(())
+}
+
+#[test]
+fn test_backup_on_in_memory() -> Result<(), Box<dyn Error>> {
+    let backup_dir = TempDir::default();
+    assert!(Store::new()?.backup(&backup_dir.0).is_err());
+    Ok(())
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_backward_compatibility() -> Result<(), Box<dyn Error>> {
     // We run twice to check if data is properly saved and closed

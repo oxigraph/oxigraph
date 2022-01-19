@@ -272,6 +272,11 @@ impl Storage {
         self.db.compact(&self.dosp_cf)?;
         self.db.compact(&self.id2str_cf)
     }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn backup(&self, target_directory: &Path) -> Result<(), StorageError> {
+        self.db.backup(target_directory)
+    }
 }
 
 pub struct StorageReader {

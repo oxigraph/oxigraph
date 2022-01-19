@@ -101,7 +101,7 @@ struct DbHandler {
     cf_handles: Vec<*mut rocksdb_column_family_handle_t>,
     cf_options: Vec<*mut rocksdb_options_t>,
     path: PathBuf,
-    remove_path: bool,
+    in_memory: bool,
 }
 
 impl Drop for DbHandler {
@@ -125,7 +125,7 @@ impl Drop for DbHandler {
             rocksdb_options_destroy(self.options);
             rocksdb_block_based_options_destroy(self.block_based_table_options);
         }
-        if self.remove_path && self.path.exists() {
+        if self.in_memory && self.path.exists() {
             remove_dir_all(&self.path).unwrap();
         }
     }
@@ -334,7 +334,7 @@ impl Db {
                 cf_handles,
                 cf_options,
                 path,
-                remove_path: in_memory,
+                in_memory,
             })
         }
     }
@@ -560,6 +560,23 @@ impl Db {
                 self.0.db,
                 args.as_ptr(),
                 args.len()
+            ))?;
+        }
+        Ok(())
+    }
+
+    pub fn backup(&self, target_directory: &Path) -> Result<(), StorageError> {
+        if self.0.in_memory {
+            return Err(StorageError::Other(
+                "It is not possible to backup an in-memory database created with `Store::open`"
+                    .into(),
+            ));
+        }
+        let path = path_to_cstring(target_directory)?;
+        unsafe {
+            ffi_result!(rocksdb_transactiondb_create_checkpoint_with_status(
+                self.0.db,
+                path.as_ptr()
             ))?;
         }
         Ok(())

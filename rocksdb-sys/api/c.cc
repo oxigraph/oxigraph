@@ -55,7 +55,7 @@ rocksdb_pinnableslice_t* rocksdb_transactiondb_get_pinned_cf_with_status(
         rocksdb_transactiondb_t* db, const rocksdb_readoptions_t* options,
         rocksdb_column_family_handle_t* column_family, const char* key,
         size_t keylen, rocksdb_status_t* statusptr) {
-    rocksdb_pinnableslice_t* v = new (rocksdb_pinnableslice_t);
+    rocksdb_pinnableslice_t* v = new rocksdb_pinnableslice_t;
     Status s = db->rep->Get(options->rep, column_family->rep, Slice(key, keylen),
                             &v->rep);
     if (!s.ok()) {
@@ -116,6 +116,19 @@ void rocksdb_transactiondb_ingest_external_files_with_status(
     SaveStatus(statusptr, db->rep->IngestExternalFiles(args));
 }
 
+void rocksdb_transactiondb_create_checkpoint_with_status(
+        rocksdb_transactiondb_t* db, const char* checkpoint_dir,
+        rocksdb_status_t* statusptr) {
+    Checkpoint* checkpoint;
+    Status s = Checkpoint::Create(db->rep, &checkpoint);
+    if (!s.ok()) {
+        SaveStatus(statusptr, s);
+        return;
+    }
+    SaveStatus(statusptr, checkpoint->CreateCheckpoint(std::string(checkpoint_dir)));
+    delete checkpoint;
+}
+
 
 void rocksdb_transaction_commit_with_status(rocksdb_transaction_t* txn, rocksdb_status_t* statusptr) {
     SaveStatus(statusptr, txn->rep->Commit());
@@ -129,7 +142,7 @@ rocksdb_pinnableslice_t* rocksdb_transaction_get_pinned_cf_with_status(
         rocksdb_transaction_t* txn, const rocksdb_readoptions_t* options,
         rocksdb_column_family_handle_t* column_family, const char* key,
         size_t keylen, rocksdb_status_t* statusptr) {
-    rocksdb_pinnableslice_t* v = new (rocksdb_pinnableslice_t);
+    rocksdb_pinnableslice_t* v = new rocksdb_pinnableslice_t;
     Status s = txn->rep->Get(options->rep, column_family->rep, Slice(key, keylen),
                             &v->rep);
     if (!s.ok()) {
@@ -146,7 +159,7 @@ rocksdb_pinnableslice_t* rocksdb_transaction_get_for_update_pinned_cf_with_statu
         rocksdb_transaction_t* txn, const rocksdb_readoptions_t* options,
         rocksdb_column_family_handle_t* column_family, const char* key,
         size_t keylen, rocksdb_status_t* statusptr) {
-    rocksdb_pinnableslice_t* v = new (rocksdb_pinnableslice_t);
+    rocksdb_pinnableslice_t* v = new rocksdb_pinnableslice_t;
     Status s = txn->rep->GetForUpdate(options->rep, column_family->rep, Slice(key, keylen),
                              &v->rep);
     if (!s.ok()) {

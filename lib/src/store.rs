@@ -733,6 +733,27 @@ impl Store {
         self.storage.compact()
     }
 
+    /// Creates database backup into the `target_directory`.
+    ///
+    /// After its creation, the backup is usable using [`Store::open`]
+    /// like a regular Oxigraph database and operates independently from the original database.
+    ///
+    /// Warning: Backups are only possible for on-disk databases created using [`Store::open`].
+    /// Temporary in-memory databases created using [`Store::new`] are not compatible with RocksDB backup system.
+    ///
+    /// Warning: An error is raised if the `target_directory` already exists.
+    ///
+    /// If the target directory is in the same file system as the current database,
+    /// the database content will not be fully copied
+    /// but hard links will be used to point to the original database immutable snapshots.
+    /// This allows cheap regular backups.
+    ///
+    /// If you want to move your data to an other RDF storage system, you should have a look at the [`Store::dump_dataset`] function instead.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn backup(&self, target_directory: &Path) -> Result<(), StorageError> {
+        self.storage.backup(target_directory)
+    }
+
     /// Loads a dataset file efficiently into the store.
     ///
     /// This function is optimized for large dataset loading speed. For small files, [`load_dataset`](Store::load_dataset) might be more convenient.

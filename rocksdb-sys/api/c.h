@@ -96,6 +96,9 @@ extern ROCKSDB_LIBRARY_API void rocksdb_transactiondb_ingest_external_files_with
         rocksdb_transactiondb_t* db, const rocksdb_ingestexternalfilearg_t* list,
         const size_t list_len, rocksdb_status_t* statusptr);
 
+extern ROCKSDB_LIBRARY_API void rocksdb_transactiondb_create_checkpoint_with_status(
+        rocksdb_transactiondb_t* db, const char* checkpoint_dir, rocksdb_status_t* statusptr);
+
 
 extern ROCKSDB_LIBRARY_API void rocksdb_transaction_commit_with_status(
         rocksdb_transaction_t* txn, rocksdb_status_t* statusptr);
