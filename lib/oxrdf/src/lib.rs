@@ -34,6 +34,6 @@ pub use crate::triple::{
     GraphName, GraphNameRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad, QuadRef, Subject,
     SubjectRef, Term, TermRef, Triple, TripleRef,
 };
-pub use crate::variable::{Variable, VariableNameParseError};
+pub use crate::variable::{Variable, VariableNameParseError, VariableRef};
 pub use oxilangtag::LanguageTagParseError;
 pub use oxiri::IriParseError;

@@ -1,4 +1,5 @@
 use oxiri::{Iri, IriParseError};
+use std::cmp::Ordering;
 use std::fmt;
 
 /// An owned RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri).
@@ -154,6 +155,7 @@ impl From<NamedNodeRef<'_>> for NamedNode {
 }
 
 impl<'a> From<&'a NamedNode> for NamedNodeRef<'a> {
+    #[inline]
     fn from(node: &'a NamedNode) -> Self {
         node.as_ref()
     }
@@ -198,5 +200,19 @@ impl PartialEq<NamedNodeRef<'_>> for &str {
     #[inline]
     fn eq(&self, other: &NamedNodeRef<'_>) -> bool {
         *self == other
+    }
+}
+
+impl PartialOrd<NamedNode> for NamedNodeRef<'_> {
+    #[inline]
+    fn partial_cmp(&self, other: &NamedNode) -> Option<Ordering> {
+        self.partial_cmp(&other.as_ref())
+    }
+}
+
+impl PartialOrd<NamedNodeRef<'_>> for NamedNode {
+    #[inline]
+    fn partial_cmp(&self, other: &NamedNodeRef<'_>) -> Option<Ordering> {
+        self.as_ref().partial_cmp(other)
     }
 }
