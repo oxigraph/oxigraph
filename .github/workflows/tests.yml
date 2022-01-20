@@ -90,7 +90,7 @@ jobs:
         with:
           python-version: "3.10"
       - run: python -m venv python/venv
-      - run: source python/venv/bin/activate && pip install --upgrade 'maturin~=0.12' sphinx
+      - run: source python/venv/bin/activate && pip install --upgrade maturin sphinx
       - run: source venv/bin/activate && maturin develop
         working-directory: ./python
       - run: source ../venv/bin/activate && python -m unittest

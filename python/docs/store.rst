@@ -1,5 +1,5 @@
-Disk-based RDF Store
-====================
+RDF Store
+=========
 
 .. autoclass:: pyoxigraph.Store
     :members:

@@ -59,9 +59,9 @@ Table of contents
 """""""""""""""""
 
 .. toctree::
-   :maxdepth: 2
 
    model
    io
    store
    sparql
+   migration

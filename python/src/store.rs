@@ -12,7 +12,7 @@ use pyo3::prelude::*;
 use pyo3::{Py, PyRef};
 use std::io::BufReader;
 
-/// Disk-based RDF store.
+/// RDF store.
 ///
 /// It encodes a `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_ and allows to query it using SPARQL.
 /// It is based on the `RocksDB <https://rocksdb.org/>`_ key-value database.
@@ -21,7 +21,9 @@ use std::io::BufReader;
 /// been "committed" (i.e. no partial writes) and the exposed state does not change for the complete duration
 /// of a read operation (e.g. a SPARQL query) or a read/write operation (e.g. a SPARQL update).
 ///
-/// :param path: the path of the directory in which the store should read and write its data. If the directory does not exist, it is created. If no directory is provided a temporary one is created and removed when the Python garbage collector removes the store.
+/// :param path: the path of the directory in which the store should read and write its data. If the directory does not exist, it is created.
+///              If no directory is provided a temporary one is created and removed when the Python garbage collector removes the store.
+///              In this case the store data are kept in memory and never written on disk.
 /// :type path: str or None, optional.
 /// :raises IOError: if the target directory contains invalid data or could not be accessed.
 ///
@@ -313,7 +315,7 @@ impl PyStore {
 
     /// Loads an RDF serialization into the store.
     ///
-    /// This function is designed to be as fast as possible on big files without transactional guarantees.
+    /// This function is designed to be as fast as possible on big files **without** transactional guarantees.
     /// If the file is invalid only a piece of it might be written to the store.
     ///
     /// The :py:func:`load` method is also available for loads with transactional guarantees.
