@@ -525,6 +525,33 @@ impl PyStore {
         Ok(())
     }
 
+    /// Creates database backup into the `target_directory`.
+    ///
+    /// After its creation, the backup is usable using :py:class:`Store` constructor.
+    /// like a regular pyxigraph database and operates independently from the original database.
+    ///
+    /// Warning: Backups are only possible for on-disk databases created by providing a path to :py:class:`Store` constructor.
+    /// Temporary in-memory databases created without path are not compatible with the backup system.
+    ///
+    /// Warning: An error is raised if the ``target_directory`` already exists.
+    ///
+    /// If the target directory is in the same file system as the current database,
+    /// the database content will not be fully copied
+    /// but hard links will be used to point to the original database immutable snapshots.
+    /// This allows cheap regular backups.
+    ///
+    /// If you want to move your data to an other RDF storage system, you should have a look at the :py:func:`dump_dataset` function instead.
+    ///
+    /// :param target_directory: the name of directory to save the database to.
+    /// :type target_directory: str
+    /// :raises IOError: if an I/O error happens during the backup.
+    #[pyo3(text_signature = "($self, target_directory)")]
+    fn backup(&self, target_directory: &str) -> PyResult<()> {
+        self.inner
+            .backup(target_directory)
+            .map_err(map_storage_error)
+    }
+
     fn __str__(&self) -> String {
         self.inner.to_string()
     }

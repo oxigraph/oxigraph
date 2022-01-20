@@ -750,8 +750,8 @@ impl Store {
     ///
     /// If you want to move your data to an other RDF storage system, you should have a look at the [`Store::dump_dataset`] function instead.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn backup(&self, target_directory: &Path) -> Result<(), StorageError> {
-        self.storage.backup(target_directory)
+    pub fn backup(&self, target_directory: impl AsRef<Path>) -> Result<(), StorageError> {
+        self.storage.backup(target_directory.as_ref())
     }
 
     /// Loads a dataset file efficiently into the store.
