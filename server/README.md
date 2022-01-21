@@ -219,6 +219,18 @@ brew install oxigraph
 ```
 It installs the `oxigraph_server` binary. [See the usage documentation to know how to use it](#usage).
 
+
+## Migration guide
+
+### From 0.2 to 0.3
+* The cli API have been completely rewritten. To start the server run `oxigraph_server serve --location MY_STORAGE` instead of `oxigraph_server --file MY_STORAGE`.
+* Fast data bulk loading is not supported using `oxigraph_server load --location MY_STORAGE --file MY_FILE`. The file format is guessed from the extension (`.nt`, `.ttl`, `.nq`...).
+* [RDF-star](https://w3c.github.io/rdf-star/cg-spec) is now implemented.
+* All operations are now transactional using the "repeatable read" isolation level:
+  the store only exposes changes that have been "committed" (i.e. no partial writes)
+  and the exposed state does not change for the complete duration of a read operation (e.g. a SPARQL query) or a read/write operation (e.g. a SPARQL update).
+
+
 ## License
 
 This project is licensed under either of
