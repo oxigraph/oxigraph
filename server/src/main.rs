@@ -36,11 +36,11 @@ const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
 const LOGO: &str = include_str!("../logo.svg");
 
 #[derive(Parser)]
-#[clap(about, author, version)]
+#[clap(about, version)]
 /// Oxigraph SPARQL server
 struct Args {
     /// Directory in which persist the data
-    #[clap(short, long, parse(from_os_str))]
+    #[clap(short, long, parse(from_os_str), global = true)]
     location: Option<PathBuf>,
     #[clap(subcommand)]
     command: Command,
@@ -51,13 +51,13 @@ enum Command {
     /// Start Oxigraph HTTP server
     Serve {
         /// Host and port to listen to
-        #[clap(short, long, default_value = "localhost:7878")]
+        #[clap(short, long, default_value = "localhost:7878", global = true)]
         bind: String,
     },
-    /// Bulk loads file(s) into the store
+    /// Load file(s) into the store
     Load {
         /// file(s) to load
-        #[clap(short, long)]
+        #[clap(short, long, global = true)]
         file: Vec<String>,
     },
 }
