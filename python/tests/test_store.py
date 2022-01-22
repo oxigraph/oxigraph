@@ -1,5 +1,5 @@
 import unittest
-from io import BytesIO
+from io import BytesIO, RawIOBase
 
 from pyoxigraph import *
 
@@ -103,7 +103,7 @@ class TestStore(unittest.TestCase):
         self.assertEqual(solution["o"], baz)
         self.assertEqual(solution[Variable("s")], foo)
         self.assertEqual(solution[Variable("o")], baz)
-        s,o = solution
+        s, o = solution
         self.assertEqual(s, foo)
         self.assertEqual(o, baz)
 
@@ -221,6 +221,13 @@ class TestStore(unittest.TestCase):
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
+    def test_load_with_io_error(self):
+        class BadIO(RawIOBase):
+            pass
+
+        with self.assertRaises(NotImplementedError) as _:
+            Store().load(BadIO(), mime_type="application/n-triples")
+
     def test_dump_ntriples(self):
         store = Store()
         store.add(Quad(foo, bar, baz, graph))
@@ -239,6 +246,13 @@ class TestStore(unittest.TestCase):
             output.getvalue(),
             b"<http://foo> <http://bar> <http://baz> <http://graph> .\n",
         )
+
+    def test_dump_with_io_error(self):
+        class BadIO(RawIOBase):
+            pass
+
+        with self.assertRaises(OSError) as _:
+            Store().dump(BadIO(), mime_type="application/rdf+xml")
 
     def test_write_in_read(self):
         store = Store()

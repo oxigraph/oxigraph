@@ -199,8 +199,8 @@ impl Read for PyFileLike {
         let read = self
             .inner
             .call_method(py, "read", (buf.len(),), None)
-            .map_err(|e| to_io_err(e, py))?;
-        let bytes: &PyBytes = read.cast_as(py).map_err(|e| to_io_err(e, py))?;
+            .map_err(to_io_err)?;
+        let bytes: &PyBytes = read.cast_as(py).map_err(to_io_err)?;
         buf.write_all(bytes.as_bytes())?;
         Ok(bytes.len()?)
     }
@@ -213,10 +213,10 @@ impl Write for PyFileLike {
         usize::extract(
             self.inner
                 .call_method(py, "write", (PyBytes::new(py, buf),), None)
-                .map_err(|e| to_io_err(e, py))?
+                .map_err(to_io_err)?
                 .as_ref(py),
         )
-        .map_err(|e| to_io_err(e, py))
+        .map_err(to_io_err)
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -227,24 +227,16 @@ impl Write for PyFileLike {
     }
 }
 
-fn to_io_err(error: impl Into<PyErr>, py: Python<'_>) -> io::Error {
-    if let Ok(message) = error
-        .into()
-        .to_object(py)
-        .call_method(py, "__str__", (), None)
-    {
-        if let Ok(message) = message.extract::<String>(py) {
-            io::Error::new(io::ErrorKind::Other, message)
-        } else {
-            io::Error::new(io::ErrorKind::Other, "An unknown error has occurred")
-        }
-    } else {
-        io::Error::new(io::ErrorKind::Other, "An unknown error has occurred")
-    }
+fn to_io_err(error: impl Into<PyErr>) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, error.into())
 }
 
 pub(crate) fn map_io_err(error: io::Error) -> PyErr {
-    PyIOError::new_err(error.to_string())
+    if error.get_ref().map_or(false, |s| s.is::<PyErr>()) {
+        *error.into_inner().unwrap().downcast().unwrap()
+    } else {
+        PyIOError::new_err(error.to_string())
+    }
 }
 
 pub(crate) fn map_parse_error(error: ParseError) -> PyErr {
