@@ -5,10 +5,10 @@ use crate::sparql::error::EvaluationError;
 use oxrdf::{Variable, VariableRef};
 pub use sparesults::QuerySolution;
 use sparesults::{
-    QueryResultsFormat, QueryResultsParser, QueryResultsReader, QueryResultsSerializer,
+    ParseError, QueryResultsFormat, QueryResultsParser, QueryResultsReader, QueryResultsSerializer,
     SolutionsReader,
 };
-use std::io::{self, BufRead, Write};
+use std::io::{BufRead, Write};
 use std::rc::Rc;
 
 /// Results of a [SPARQL query](https://www.w3.org/TR/sparql11-query/).
@@ -23,7 +23,10 @@ pub enum QueryResults {
 
 impl QueryResults {
     /// Reads a SPARQL query results serialization.
-    pub fn read(reader: impl BufRead + 'static, format: QueryResultsFormat) -> io::Result<Self> {
+    pub fn read(
+        reader: impl BufRead + 'static,
+        format: QueryResultsFormat,
+    ) -> Result<Self, ParseError> {
         Ok(QueryResultsParser::from_format(format)
             .read_results(reader)?
             .into())
