@@ -34,7 +34,7 @@ use std::hash::{Hash, Hasher};
 
 /// An in-memory [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 ///
-/// It can accomodate a fairly large number of quads (in the few millions).
+/// It can accommodate a fairly large number of quads (in the few millions).
 /// Beware: it interns the string and does not do any garbage collection yet:
 /// if you insert and remove a lot of different terms, memory will grow without any reduction.
 ///
@@ -160,7 +160,7 @@ impl Dataset {
         }
     }
 
-    /// Returns all the quads contained by the dataset
+    /// Returns all the quads contained by the dataset.
     pub fn iter(&self) -> Iter<'_> {
         let iter = self.spog.iter();
         Iter {
@@ -328,17 +328,17 @@ impl Dataset {
         }
     }
 
-    /// Returns the number of quads in this dataset
+    /// Returns the number of quads in this dataset.
     pub fn len(&self) -> usize {
         self.gspo.len()
     }
 
-    /// Checks if this dataset contains a quad
+    /// Checks if this dataset contains a quad.
     pub fn is_empty(&self) -> bool {
         self.gspo.is_empty()
     }
 
-    /// Adds a quad to the dataset
+    /// Adds a quad to the dataset.
     pub fn insert<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> bool {
         let quad = self.encode_quad(quad.into());
         self.insert_encoded(quad)
@@ -362,7 +362,7 @@ impl Dataset {
         self.ospg.insert((o, s, p, g))
     }
 
-    /// Removes a concrete quad from the dataset
+    /// Removes a concrete quad from the dataset.
     pub fn remove<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> bool {
         if let Some(quad) = self.encoded_quad(quad.into()) {
             self.remove_encoded(quad)
@@ -389,7 +389,7 @@ impl Dataset {
         self.ospg.remove(&(o, s, p, g))
     }
 
-    /// Clears the dataset
+    /// Clears the dataset.
     pub fn clear(&mut self) {
         self.gspo.clear();
         self.gpos.clear();
@@ -487,7 +487,7 @@ impl Dataset {
     }
 
     /// Applies on the dataset the canonicalization process described in
-    /// [Canonical Forms for Isomorphic and Equivalent RDF Graphs: Algorithms for Leaning and Labelling Blank Nodes, Aidan Hogan, 2017](http://aidanhogan.com/docs/rdf-canonicalisation.pdf)
+    /// [Canonical Forms for Isomorphic and Equivalent RDF Graphs: Algorithms for Leaning and Labelling Blank Nodes, Aidan Hogan, 2017](http://aidanhogan.com/docs/rdf-canonicalisation.pdf).
     ///
     /// Usage example ([Dataset isomorphim](https://www.w3.org/TR/rdf11-concepts/#dfn-dataset-isomorphism)):
     /// ```
@@ -517,9 +517,9 @@ impl Dataset {
     /// Warning 1: Blank node ids depends on the current shape of the graph. Adding a new quad might change the ids of a lot of blank nodes.
     /// Hence, this canonization might not be suitable for diffs.
     ///
-    /// Warning 2: The canonicalization algorithm is not stable and canonical blank node Ids might change between Oxigraph version.
+    /// Warning 2: The canonicalization algorithm is not stable and canonical blank node ids might change between Oxigraph version.
     ///
-    /// Warning 3: This implementation worst-case complexity is in *O(b!)* with b the number of blank nodes in the input dataset.
+    /// Warning 3: This implementation worst-case complexity is in *O(b!)* with *b* the number of blank nodes in the input dataset.
     pub fn canonicalize(&mut self) {
         let bnodes = self.blank_nodes();
         let (hash, partition) =
@@ -930,7 +930,7 @@ pub struct GraphView<'a> {
 }
 
 impl<'a> GraphView<'a> {
-    /// Returns all the triples contained by the graph
+    /// Returns all the triples contained by the graph.
     pub fn iter(&self) -> GraphViewIter<'a> {
         let iter = self.dataset.gspo.range(
             &(
@@ -998,7 +998,7 @@ impl<'a> GraphView<'a> {
         )
     }
 
-    pub fn objects_for_interned_subject_predicate(
+    pub(super) fn objects_for_interned_subject_predicate(
         &self,
         subject: Option<InternedSubject>,
         predicate: Option<InternedNamedNode>,
@@ -1157,7 +1157,7 @@ impl<'a> GraphView<'a> {
         self.triples_for_interned_object(self.dataset.encoded_term(object))
     }
 
-    pub fn triples_for_interned_object(
+    pub(super) fn triples_for_interned_object(
         &self,
         object: Option<InternedTerm>,
     ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
@@ -1182,7 +1182,7 @@ impl<'a> GraphView<'a> {
             .map(move |(_, o, s, p)| ds.decode_spo((s, p, o)))
     }
 
-    /// Checks if the graph contains the given triple
+    /// Checks if the graph contains the given triple.
     pub fn contains<'b>(&self, triple: impl Into<TripleRef<'b>>) -> bool {
         if let Some(triple) = self.encoded_triple(triple.into()) {
             self.dataset.gspo.contains(&(
@@ -1196,12 +1196,12 @@ impl<'a> GraphView<'a> {
         }
     }
 
-    /// Returns the number of triples in this graph
+    /// Returns the number of triples in this graph.
     pub fn len(&self) -> usize {
         self.iter().count()
     }
 
-    /// Checks if this graph contains a triple
+    /// Checks if this graph contains a triple.
     pub fn is_empty(&self) -> bool {
         self.iter().next().is_none()
     }
@@ -1280,7 +1280,7 @@ impl<'a> GraphViewMut<'a> {
         }
     }
 
-    /// Adds a triple to the graph
+    /// Adds a triple to the graph.
     pub fn insert<'b>(&mut self, triple: impl Into<TripleRef<'b>>) -> bool {
         let triple = self.encode_triple(triple.into());
         self.dataset.insert_encoded((
@@ -1291,7 +1291,7 @@ impl<'a> GraphViewMut<'a> {
         ))
     }
 
-    /// Removes a concrete triple from the graph
+    /// Removes a concrete triple from the graph.
     pub fn remove<'b>(&mut self, triple: impl Into<TripleRef<'b>>) -> bool {
         if let Some(triple) = self.read().encoded_triple(triple.into()) {
             self.dataset.remove_encoded((
@@ -1394,17 +1394,17 @@ impl<'a> GraphViewMut<'a> {
             .triples_for_interned_object(self.dataset.encoded_term(object))
     }
 
-    /// Checks if the graph contains the given triple
+    /// Checks if the graph contains the given triple.
     pub fn contains<'b>(&self, triple: impl Into<TripleRef<'b>>) -> bool {
         self.read().contains(triple)
     }
 
-    /// Returns the number of triples in this graph
+    /// Returns the number of triples in this graph.
     pub fn len(&self) -> usize {
         self.read().len()
     }
 
-    /// Checks if this graph contains a triple
+    /// Checks if this graph contains a triple.
     pub fn is_empty(&self) -> bool {
         self.read().is_empty()
     }
@@ -1444,7 +1444,7 @@ impl<'a> fmt::Display for GraphViewMut<'a> {
     }
 }
 
-/// Iterator returned by [`Dataset::iter`]
+/// Iterator returned by [`Dataset::iter`].
 pub struct Iter<'a> {
     dataset: &'a Dataset,
     inner: std::collections::btree_set::Iter<
@@ -1468,7 +1468,7 @@ impl<'a> Iterator for Iter<'a> {
     }
 }
 
-/// Iterator returned by [`GraphView::iter`]
+/// Iterator returned by [`GraphView::iter`].
 pub struct GraphViewIter<'a> {
     dataset: &'a Dataset,
     inner: std::collections::btree_set::Range<

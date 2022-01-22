@@ -256,7 +256,7 @@ fn evaluate_negative_update_syntax_test(test: &Test) -> Result<()> {
 fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
     let store = Store::new()?;
     if let Some(data) = &test.data {
-        load_to_store(data, &store, &GraphName::DefaultGraph)?;
+        load_to_store(data, &store, GraphNameRef::DefaultGraph)?;
     }
     for (name, value) in &test.graph_data {
         load_to_store(value, &store, name)?;
@@ -264,7 +264,7 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
 
     let result_store = Store::new()?;
     if let Some(data) = &test.result {
-        load_to_store(data, &result_store, &GraphName::DefaultGraph)?;
+        load_to_store(data, &result_store, GraphNameRef::DefaultGraph)?;
     }
     for (name, value) in &test.result_graph_data {
         load_to_store(value, &result_store, name)?;
@@ -343,7 +343,7 @@ impl StaticServiceHandler {
                     .map(|(name, data)| {
                         let name = NamedNode::new(name)?;
                         let store = Store::new()?;
-                        load_to_store(data, &store, &GraphName::DefaultGraph)?;
+                        load_to_store(data, &store, GraphNameRef::DefaultGraph)?;
                         Ok((name, store))
                     })
                     .collect::<Result<_>>()?,

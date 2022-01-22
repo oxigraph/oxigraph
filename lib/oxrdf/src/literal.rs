@@ -140,7 +140,7 @@ impl Literal {
         })
     }
 
-    /// Extract components from this literal
+    /// Extract components from this literal (value, datatype and language tag).
     #[inline]
     pub fn destruct(self) -> (String, Option<NamedNode>, Option<String>) {
         match self.0 {

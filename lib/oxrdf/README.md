@@ -13,7 +13,7 @@ This crate is intended to be a basic building block of other crates like [Oxigra
 
 Support for [RDF-star](https://w3c.github.io/rdf-star/cg-spec/) is available behind the `rdf-star` feature.
 
-Inspired by [RDF/JS](https://rdf.js.org/data-model-spec/) and [Apache Commons RDF](http://commons.apache.org/proper/commons-rdf/).
+OxRDF is inspired by [RDF/JS](https://rdf.js.org/data-model-spec/) and [Apache Commons RDF](http://commons.apache.org/proper/commons-rdf/).
 
 Usage example:
 

@@ -1,4 +1,4 @@
-//! Implements data structures for [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/) using [Oxrdf](https://crates.io/crates/oxrdf).
+//! Implements data structures for [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/) using [OxRDF](https://crates.io/crates/oxrdf).
 
 use crate::xsd::*;
 use oxrdf::vocab::xsd;

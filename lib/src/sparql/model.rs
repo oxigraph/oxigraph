@@ -100,7 +100,7 @@ impl QueryResults {
     /// let graph = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
     ///
     /// let store = Store::new()?;
-    /// store.load_graph(Cursor::new(graph), GraphFormat::NTriples, &GraphName::DefaultGraph, None)?;
+    /// store.load_graph(Cursor::new(graph), GraphFormat::NTriples, GraphNameRef::DefaultGraph, None)?;
     ///
     /// let mut results = Vec::new();
     /// store.query("CONSTRUCT WHERE { ?s ?p ?o }")?.write_graph(&mut results, GraphFormat::NTriples)?;

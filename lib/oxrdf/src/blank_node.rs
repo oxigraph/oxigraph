@@ -59,7 +59,7 @@ impl BlankNode {
         }
     }
 
-    /// Creates a blank node from a unique numerical id
+    /// Creates a blank node from a unique numerical id.
     ///
     /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default()`].
     #[inline]
@@ -70,7 +70,7 @@ impl BlankNode {
         })
     }
 
-    /// Returns the underlying ID of this blank node
+    /// Returns the underlying ID of this blank node.
     #[inline]
     pub fn as_str(&self) -> &str {
         match &self.0 {
@@ -79,7 +79,7 @@ impl BlankNode {
         }
     }
 
-    /// Returns the underlying ID of this blank node
+    /// Returns the underlying ID of this blank node.
     #[inline]
     pub fn into_string(self) -> String {
         match self.0 {
@@ -108,7 +108,7 @@ impl fmt::Display for BlankNode {
 }
 
 impl Default for BlankNode {
-    /// Builds a new RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a unique id
+    /// Builds a new RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a unique id.
     #[inline]
     fn default() -> Self {
         Self::new_from_unique_id(random::<u128>())
@@ -171,7 +171,7 @@ impl<'a> BlankNodeRef<'a> {
         }
     }
 
-    /// Returns the underlying ID of this blank node
+    /// Returns the underlying ID of this blank node.
     #[inline]
     pub fn as_str(self) -> &'a str {
         match self.0 {
@@ -180,7 +180,7 @@ impl<'a> BlankNodeRef<'a> {
         }
     }
 
-    /// Returns the internal numerical ID of this blank node if it has been created using [`BlankNode::new_from_unique_id`]
+    /// Returns the internal numerical ID of this blank node if it has been created using [`BlankNode::new_from_unique_id`].
     ///
     /// ```
     /// use oxrdf::BlankNode;

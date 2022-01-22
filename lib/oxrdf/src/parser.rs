@@ -374,7 +374,7 @@ fn read_hexa_char(input: &mut Chars<'_>, len: usize) -> Result<char, TermParseEr
     char::from_u32(value).ok_or_else(|| TermParseError::msg("Invalid encoded unicode code point"))
 }
 
-/// An error raised during term serialization parsing.
+/// An error raised during term serialization parsing using the [`FromStr`] trait.
 #[allow(missing_copy_implementations)]
 #[derive(Debug)]
 pub struct TermParseError {

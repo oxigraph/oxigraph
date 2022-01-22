@@ -49,6 +49,11 @@ if let QueryResults::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { 
 }
 ```
 
+Some parts of this library are available as standalone crates:
+* [`oxrdf`](https://crates.io/crates/oxrdf) provides datastructures encoding RDF basic concepts (the `oxigraph::model` module).
+* [`spargebra`](https://crates.io/crates/spargebra) provides a SPARQL parser.
+* [`sparesults`](https://crates.io/crates/sparesults) provides parsers and serializers for SPARQL result formats.
+
 ## License
 
 This project is licensed under either of

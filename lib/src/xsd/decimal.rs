@@ -438,7 +438,7 @@ impl fmt::Display for DecimalOverflowError {
 impl Error for DecimalOverflowError {}
 
 impl fmt::Display for Decimal {
-    /// Formats the decimal following its canonical representation
+    /// Formats the decimal following its canonical representation.
     #[allow(clippy::cast_possible_truncation)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.value == 0 {

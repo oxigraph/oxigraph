@@ -22,8 +22,8 @@ Oxigraph provides python classes to represents basic RDF concepts:
     :members:
 
 
-`Triple <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple>`_
-""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+`Triples <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple>`_
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 .. autoclass:: pyoxigraph.Triple
     :members:
 

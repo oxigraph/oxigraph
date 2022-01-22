@@ -313,9 +313,6 @@ impl Store {
 
     /// Executes a [SPARQL 1.1 update](https://www.w3.org/TR/sparql11-update/).
     ///
-    /// The store does not track the existence of empty named graphs.
-    /// This method has no ACID guarantees.
-    ///
     /// Usage example:
     /// ```
     /// use oxigraph::store::Store;
@@ -380,7 +377,7 @@ impl Store {
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
-    /// store.load_graph(file.as_ref(), GraphFormat::NTriples, &GraphName::DefaultGraph, None)?;
+    /// store.load_graph(file.as_ref(), GraphFormat::NTriples, GraphNameRef::DefaultGraph, None)?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -467,7 +464,8 @@ impl Store {
     /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
     ///
     /// let store = Store::new()?;
-    /// store.insert(quad)?;
+    /// assert!(store.insert(quad)?);
+    /// assert!(!store.insert(quad)?);
     ///
     /// assert!(store.contains(quad)?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -502,7 +500,8 @@ impl Store {
     ///
     /// let store = Store::new()?;
     /// store.insert(quad)?;
-    /// store.remove(quad)?;
+    /// assert!(store.remove(quad)?);
+    /// assert!(!store.remove(quad)?);
     ///
     /// assert!(!store.contains(quad)?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -518,15 +517,15 @@ impl Store {
     /// ```
     /// use oxigraph::store::Store;
     /// use oxigraph::io::GraphFormat;
-    /// use oxigraph::model::GraphName;
+    /// use oxigraph::model::GraphNameRef;
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
     ///
     /// let store = Store::new()?;
-    /// store.load_graph(file, GraphFormat::NTriples, &GraphName::DefaultGraph, None)?;
+    /// store.load_graph(file, GraphFormat::NTriples, GraphNameRef::DefaultGraph, None)?;
     ///
     /// let mut buffer = Vec::new();
-    /// store.dump_graph(&mut buffer, GraphFormat::NTriples, &GraphName::DefaultGraph)?;
+    /// store.dump_graph(&mut buffer, GraphFormat::NTriples, GraphNameRef::DefaultGraph)?;
     /// assert_eq!(file, buffer.as_slice());
     /// # std::io::Result::Ok(())
     /// ```
@@ -681,7 +680,7 @@ impl Store {
     /// store.insert(quad)?;
     /// assert_eq!(1, store.len()?);
     ///
-    /// store.remove_named_graph(ex)?;
+    /// assert!(store.remove_named_graph(ex)?);
     /// assert!(store.is_empty()?);
     /// assert_eq!(0, store.named_graphs().count());
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -762,7 +761,7 @@ impl Store {
     /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
     /// Results might get weird if you delete data during the loading process.
     ///
-    /// Warning: This method is optimized for speed. It uses multiple threads and multiple GBs of RAM on large files.
+    /// Warning: This method is optimized for speed. It uses multiple threads and GBs of RAM on large files.
     ///
     /// Usage example:
     /// ```
@@ -805,7 +804,7 @@ impl Store {
     /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
     /// Results might get weird if you delete data during the loading process.
     ///
-    /// Warning: This method is optimized for speed. It uses multiple threads and multiple GBs of RAM on large files.
+    /// Warning: This method is optimized for speed. It uses multiple threads and GBs of RAM on large files.
     ///
     /// Usage example:
     /// ```
@@ -817,7 +816,7 @@ impl Store {
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
-    /// store.bulk_load_graph(file.as_ref(), GraphFormat::NTriples, &GraphName::DefaultGraph, None)?;
+    /// store.bulk_load_graph(file.as_ref(), GraphFormat::NTriples, GraphNameRef::DefaultGraph, None)?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -853,7 +852,7 @@ impl Store {
     /// If the process fails in the middle of the file, only a part of the data may be written to the store.
     /// Results might get weird if you delete data during the loading process.
     ///
-    /// Warning: This method is optimized for speed. It uses multiple threads and multiple GBs of RAM on large files.
+    /// Warning: This method is optimized for speed. It uses multiple threads and GBs of RAM on large files.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn bulk_extend(&self, quads: impl IntoIterator<Item = Quad>) -> Result<(), StorageError> {
         bulk_load::<StorageError, _, _>(&self.storage, quads.into_iter().map(Ok))
@@ -1007,9 +1006,6 @@ impl<'a> Transaction<'a> {
 
     /// Executes a [SPARQL 1.1 update](https://www.w3.org/TR/sparql11-update/).
     ///
-    /// The store does not track the existence of empty named graphs.
-    /// This method has no ACID guarantees.
-    ///
     /// Usage example:
     /// ```
     /// use oxigraph::store::Store;
@@ -1061,7 +1057,7 @@ impl<'a> Transaction<'a> {
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
     /// store.transaction(|mut transaction| {
-    ///     transaction.load_graph(file.as_ref(), GraphFormat::NTriples, &GraphName::DefaultGraph, None)
+    ///     transaction.load_graph(file.as_ref(), GraphFormat::NTriples, GraphNameRef::DefaultGraph, None)
     /// })?;
     ///
     /// // we inspect the store contents

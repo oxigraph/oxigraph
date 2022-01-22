@@ -25,7 +25,7 @@ use std::fmt;
 
 /// An in-memory [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-graph).
 ///
-/// It can accomodate a fairly large number of triples (in the few millions).
+/// It can accommodate a fairly large number of triples (in the few millions).
 /// Beware: it interns the string and does not do any garbage collection yet:
 /// if you insert and remove a lot of different terms, memory will grow without any reduction.
 ///
@@ -51,7 +51,7 @@ pub struct Graph {
 }
 
 impl Graph {
-    /// Creates a new graph
+    /// Creates a new graph.
     pub fn new() -> Self {
         Self::default()
     }
@@ -64,7 +64,7 @@ impl Graph {
         self.dataset.graph_mut(GraphNameRef::DefaultGraph)
     }
 
-    /// Returns all the triples contained by the graph
+    /// Returns all the triples contained by the graph.
     pub fn iter(&self) -> Iter<'_> {
         Iter {
             inner: self.graph().iter(),
@@ -146,38 +146,38 @@ impl Graph {
             .triples_for_interned_object(self.dataset.encoded_term(object))
     }
 
-    /// Checks if the graph contains the given triple
+    /// Checks if the graph contains the given triple.
     pub fn contains<'a>(&self, triple: impl Into<TripleRef<'a>>) -> bool {
         self.graph().contains(triple)
     }
 
-    /// Returns the number of triples in this graph
+    /// Returns the number of triples in this graph.
     pub fn len(&self) -> usize {
         self.dataset.len()
     }
 
-    /// Checks if this graph contains a triple
+    /// Checks if this graph contains a triple.
     pub fn is_empty(&self) -> bool {
         self.dataset.is_empty()
     }
 
-    /// Adds a triple to the graph
+    /// Adds a triple to the graph.
     pub fn insert<'a>(&mut self, triple: impl Into<TripleRef<'a>>) -> bool {
         self.graph_mut().insert(triple)
     }
 
-    /// Removes a concrete triple from the graph
+    /// Removes a concrete triple from the graph.
     pub fn remove<'a>(&mut self, triple: impl Into<TripleRef<'a>>) -> bool {
         self.graph_mut().remove(triple)
     }
 
-    /// Clears the graph
+    /// Clears the graph.
     pub fn clear(&mut self) {
         self.dataset.clear()
     }
 
     /// Applies on the graph the canonicalization process described in
-    /// [Canonical Forms for Isomorphic and Equivalent RDF Graphs: Algorithms for Leaning and Labelling Blank Nodes, Aidan Hogan, 2017](http://aidanhogan.com/docs/rdf-canonicalisation.pdf)
+    /// [Canonical Forms for Isomorphic and Equivalent RDF Graphs: Algorithms for Leaning and Labelling Blank Nodes, Aidan Hogan, 2017](http://aidanhogan.com/docs/rdf-canonicalisation.pdf).
     ///   
     /// Usage example ([Graph isomorphim](https://www.w3.org/TR/rdf11-concepts/#dfn-graph-isomorphism)):
     /// ```
@@ -207,7 +207,7 @@ impl Graph {
     ///
     /// Warning 2: The canonicalization algorithm is not stable and canonical blank node Ids might change between Oxigraph version.
     ///
-    /// Warning 3: This implementation worst-case complexity is in *O(b!)* with b the number of blank nodes in the input graph.
+    /// Warning 3: This implementation worst-case complexity is in *O(b!)* with *b* the number of blank nodes in the input graph.
     pub fn canonicalize(&mut self) {
         self.dataset.canonicalize()
     }
@@ -264,7 +264,7 @@ impl fmt::Display for Graph {
     }
 }
 
-/// Iterator returned by [`Graph::iter`]
+/// Iterator returned by [`Graph::iter`].
 pub struct Iter<'a> {
     inner: GraphViewIter<'a>,
 }

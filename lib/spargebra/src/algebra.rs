@@ -1,10 +1,10 @@
-//! [SPARQL 1.1 Query Algebra](https://www.w3.org/TR/sparql11-query/#sparqlQuery) representation
+//! [SPARQL 1.1 Query Algebra](https://www.w3.org/TR/sparql11-query/#sparqlQuery) representation.
 
 use crate::term::*;
 use oxrdf::LiteralRef;
 use std::fmt;
 
-/// A [property path expression](https://www.w3.org/TR/sparql11-query/#defn_PropertyPathExpr)
+/// A [property path expression](https://www.w3.org/TR/sparql11-query/#defn_PropertyPathExpr).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum PropertyPathExpression {
     NamedNode(NamedNode),
@@ -97,51 +97,51 @@ impl From<NamedNode> for PropertyPathExpression {
     }
 }
 
-/// An [expression](https://www.w3.org/TR/sparql11-query/#expressions)
+/// An [expression](https://www.w3.org/TR/sparql11-query/#expressions).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Expression {
     NamedNode(NamedNode),
     Literal(Literal),
     Variable(Variable),
-    /// [Logical-or](https://www.w3.org/TR/sparql11-query/#func-logical-or)
+    /// [Logical-or](https://www.w3.org/TR/sparql11-query/#func-logical-or).
     Or(Box<Self>, Box<Self>),
-    /// [Logical-and](https://www.w3.org/TR/sparql11-query/#func-logical-and)
+    /// [Logical-and](https://www.w3.org/TR/sparql11-query/#func-logical-and).
     And(Box<Self>, Box<Self>),
-    /// [RDFterm-equal](https://www.w3.org/TR/sparql11-query/#func-RDFterm-equal) and all the XSD equalities
+    /// [RDFterm-equal](https://www.w3.org/TR/sparql11-query/#func-RDFterm-equal) and all the XSD equalities.
     Equal(Box<Self>, Box<Self>),
-    /// [sameTerm](https://www.w3.org/TR/sparql11-query/#func-sameTerm)
+    /// [sameTerm](https://www.w3.org/TR/sparql11-query/#func-sameTerm).
     SameTerm(Box<Self>, Box<Self>),
-    /// [op:numeric-greater-than](https://www.w3.org/TR/xpath-functions/#func-numeric-greater-than) and other XSD greater than operators
+    /// [op:numeric-greater-than](https://www.w3.org/TR/xpath-functions/#func-numeric-greater-than) and other XSD greater than operators.
     Greater(Box<Self>, Box<Self>),
     GreaterOrEqual(Box<Self>, Box<Self>),
-    /// [op:numeric-less-than](https://www.w3.org/TR/xpath-functions/#func-numeric-less-than) and other XSD greater than operators
+    /// [op:numeric-less-than](https://www.w3.org/TR/xpath-functions/#func-numeric-less-than) and other XSD greater than operators.
     Less(Box<Self>, Box<Self>),
     LessOrEqual(Box<Self>, Box<Self>),
     /// [IN](https://www.w3.org/TR/sparql11-query/#func-in)
     In(Box<Self>, Vec<Self>),
-    /// [op:numeric-add](https://www.w3.org/TR/xpath-functions/#func-numeric-add) and other XSD additions
+    /// [op:numeric-add](https://www.w3.org/TR/xpath-functions/#func-numeric-add) and other XSD additions.
     Add(Box<Self>, Box<Self>),
-    /// [op:numeric-subtract](https://www.w3.org/TR/xpath-functions/#func-numeric-subtract) and other XSD subtractions
+    /// [op:numeric-subtract](https://www.w3.org/TR/xpath-functions/#func-numeric-subtract) and other XSD subtractions.
     Subtract(Box<Self>, Box<Self>),
-    /// [op:numeric-multiply](https://www.w3.org/TR/xpath-functions/#func-numeric-multiply) and other XSD multiplications
+    /// [op:numeric-multiply](https://www.w3.org/TR/xpath-functions/#func-numeric-multiply) and other XSD multiplications.
     Multiply(Box<Self>, Box<Self>),
-    /// [op:numeric-divide](https://www.w3.org/TR/xpath-functions/#func-numeric-divide) and other XSD divides
+    /// [op:numeric-divide](https://www.w3.org/TR/xpath-functions/#func-numeric-divide) and other XSD divides.
     Divide(Box<Self>, Box<Self>),
-    /// [op:numeric-unary-plus](https://www.w3.org/TR/xpath-functions/#func-numeric-unary-plus) and other XSD unary plus
+    /// [op:numeric-unary-plus](https://www.w3.org/TR/xpath-functions/#func-numeric-unary-plus) and other XSD unary plus.
     UnaryPlus(Box<Self>),
-    /// [op:numeric-unary-minus](https://www.w3.org/TR/xpath-functions/#func-numeric-unary-minus) and other XSD unary minus
+    /// [op:numeric-unary-minus](https://www.w3.org/TR/xpath-functions/#func-numeric-unary-minus) and other XSD unary minus.
     UnaryMinus(Box<Self>),
-    /// [fn:not](https://www.w3.org/TR/xpath-functions/#func-not)
+    /// [fn:not](https://www.w3.org/TR/xpath-functions/#func-not).
     Not(Box<Self>),
-    /// [EXISTS](https://www.w3.org/TR/sparql11-query/#func-filter-exists)
+    /// [EXISTS](https://www.w3.org/TR/sparql11-query/#func-filter-exists).
     Exists(Box<GraphPattern>),
-    /// [BOUND](https://www.w3.org/TR/sparql11-query/#func-bound)
+    /// [BOUND](https://www.w3.org/TR/sparql11-query/#func-bound).
     Bound(Variable),
-    /// [IF](https://www.w3.org/TR/sparql11-query/#func-if)
+    /// [IF](https://www.w3.org/TR/sparql11-query/#func-if).
     If(Box<Self>, Box<Self>, Box<Self>),
-    /// [COALESCE](https://www.w3.org/TR/sparql11-query/#func-coalesce)
+    /// [COALESCE](https://www.w3.org/TR/sparql11-query/#func-coalesce).
     Coalesce(Vec<Self>),
-    /// A regular function call
+    /// A regular function call.
     FunctionCall(Function, Vec<Self>),
 }
 
@@ -317,7 +317,7 @@ fn write_arg_list(
     write!(f, ")")
 }
 
-/// A function name
+/// A function name.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Function {
     Str,
@@ -508,73 +508,73 @@ impl fmt::Display for Function {
     }
 }
 
-/// A SPARQL query [graph pattern](https://www.w3.org/TR/sparql11-query/#sparqlQuery)
+/// A SPARQL query [graph pattern](https://www.w3.org/TR/sparql11-query/#sparqlQuery).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GraphPattern {
-    /// A [basic graph pattern](https://www.w3.org/TR/sparql11-query/#defn_BasicGraphPattern)
+    /// A [basic graph pattern](https://www.w3.org/TR/sparql11-query/#defn_BasicGraphPattern).
     Bgp { patterns: Vec<TriplePattern> },
-    /// A [property path pattern](https://www.w3.org/TR/sparql11-query/#defn_evalPP_predicate)
+    /// A [property path pattern](https://www.w3.org/TR/sparql11-query/#defn_evalPP_predicate).
     Path {
         subject: TermPattern,
         path: PropertyPathExpression,
         object: TermPattern,
     },
-    /// [Join](https://www.w3.org/TR/sparql11-query/#defn_algJoin)
+    /// [Join](https://www.w3.org/TR/sparql11-query/#defn_algJoin).
     Join { left: Box<Self>, right: Box<Self> },
-    /// [LeftJoin](https://www.w3.org/TR/sparql11-query/#defn_algLeftJoin)
+    /// [LeftJoin](https://www.w3.org/TR/sparql11-query/#defn_algLeftJoin).
     LeftJoin {
         left: Box<Self>,
         right: Box<Self>,
         expression: Option<Expression>,
     },
-    /// [Filter](https://www.w3.org/TR/sparql11-query/#defn_algFilter)
+    /// [Filter](https://www.w3.org/TR/sparql11-query/#defn_algFilter).
     Filter { expr: Expression, inner: Box<Self> },
-    /// [Union](https://www.w3.org/TR/sparql11-query/#defn_algUnion)
+    /// [Union](https://www.w3.org/TR/sparql11-query/#defn_algUnion).
     Union { left: Box<Self>, right: Box<Self> },
     Graph {
         name: NamedNodePattern,
         inner: Box<Self>,
     },
-    /// [Extend](https://www.w3.org/TR/sparql11-query/#defn_extend)
+    /// [Extend](https://www.w3.org/TR/sparql11-query/#defn_extend).
     Extend {
         inner: Box<Self>,
         variable: Variable,
         expression: Expression,
     },
-    /// [Minus](https://www.w3.org/TR/sparql11-query/#defn_algMinus)
+    /// [Minus](https://www.w3.org/TR/sparql11-query/#defn_algMinus).
     Minus { left: Box<Self>, right: Box<Self> },
     /// A table used to provide inline values
     Values {
         variables: Vec<Variable>,
         bindings: Vec<Vec<Option<GroundTerm>>>,
     },
-    /// [OrderBy](https://www.w3.org/TR/sparql11-query/#defn_algOrdered)
+    /// [OrderBy](https://www.w3.org/TR/sparql11-query/#defn_algOrdered).
     OrderBy {
         inner: Box<Self>,
         expression: Vec<OrderExpression>,
     },
-    /// [Project](https://www.w3.org/TR/sparql11-query/#defn_algProjection)
+    /// [Project](https://www.w3.org/TR/sparql11-query/#defn_algProjection).
     Project {
         inner: Box<Self>,
         variables: Vec<Variable>,
     },
-    /// [Distinct](https://www.w3.org/TR/sparql11-query/#defn_algDistinct)
+    /// [Distinct](https://www.w3.org/TR/sparql11-query/#defn_algDistinct).
     Distinct { inner: Box<Self> },
-    /// [Reduced](https://www.w3.org/TR/sparql11-query/#defn_algReduced)
+    /// [Reduced](https://www.w3.org/TR/sparql11-query/#defn_algReduced).
     Reduced { inner: Box<Self> },
-    /// [Slice](https://www.w3.org/TR/sparql11-query/#defn_algSlice)
+    /// [Slice](https://www.w3.org/TR/sparql11-query/#defn_algSlice).
     Slice {
         inner: Box<Self>,
         start: usize,
         length: Option<usize>,
     },
-    /// [Group](https://www.w3.org/TR/sparql11-federated-query/#aggregateAlgebra)
+    /// [Group](https://www.w3.org/TR/sparql11-federated-query/#aggregateAlgebra).
     Group {
         inner: Box<Self>,
         variables: Vec<Variable>,
         aggregates: Vec<(Variable, AggregateExpression)>,
     },
-    /// [Service](https://www.w3.org/TR/sparql11-federated-query/#defn_evalService)
+    /// [Service](https://www.w3.org/TR/sparql11-federated-query/#defn_evalService).
     Service {
         name: NamedNodePattern,
         inner: Box<Self>,
@@ -904,7 +904,7 @@ impl Default for GraphPattern {
 }
 
 impl GraphPattern {
-    /// Calls `callback` on each [in-scope variable](https://www.w3.org/TR/sparql11-query/#variableScope) occurrence
+    /// Calls `callback` on each [in-scope variable](https://www.w3.org/TR/sparql11-query/#variableScope) occurrence.
     pub fn on_in_scope_variable<'a>(&'a self, mut callback: impl FnMut(&'a Variable)) {
         self.lookup_in_scope_variables(&mut callback)
     }
@@ -1088,46 +1088,46 @@ impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
     }
 }
 
-/// A set function used in aggregates (c.f. [`GraphPattern::Group`])
+/// A set function used in aggregates (c.f. [`GraphPattern::Group`]).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum AggregateExpression {
-    /// [Count](https://www.w3.org/TR/sparql11-query/#defn_aggCount)
+    /// [Count](https://www.w3.org/TR/sparql11-query/#defn_aggCount).
     Count {
         expr: Option<Box<Expression>>,
         distinct: bool,
     },
-    /// [Sum](https://www.w3.org/TR/sparql11-query/#defn_aggSum)
+    /// [Sum](https://www.w3.org/TR/sparql11-query/#defn_aggSum).
     Sum {
         expr: Box<Expression>,
         distinct: bool,
     },
-    /// [Avg](https://www.w3.org/TR/sparql11-query/#defn_aggAvg)
+    /// [Avg](https://www.w3.org/TR/sparql11-query/#defn_aggAvg).
     Avg {
         expr: Box<Expression>,
         distinct: bool,
     },
-    /// [Min](https://www.w3.org/TR/sparql11-query/#defn_aggMin)
+    /// [Min](https://www.w3.org/TR/sparql11-query/#defn_aggMin).
     Min {
         expr: Box<Expression>,
         distinct: bool,
     },
-    /// [Max](https://www.w3.org/TR/sparql11-query/#defn_aggMax)
+    /// [Max](https://www.w3.org/TR/sparql11-query/#defn_aggMax).
     Max {
         expr: Box<Expression>,
         distinct: bool,
     },
-    /// [GroupConcat](https://www.w3.org/TR/sparql11-query/#defn_aggGroupConcat)
+    /// [GroupConcat](https://www.w3.org/TR/sparql11-query/#defn_aggGroupConcat).
     GroupConcat {
         expr: Box<Expression>,
         distinct: bool,
         separator: Option<String>,
     },
-    /// [Sample](https://www.w3.org/TR/sparql11-query/#defn_aggSample)
+    /// [Sample](https://www.w3.org/TR/sparql11-query/#defn_aggSample).
     Sample {
         expr: Box<Expression>,
         distinct: bool,
     },
-    /// Custom function
+    /// Custom function.
     Custom {
         name: NamedNode,
         expr: Box<Expression>,
@@ -1315,7 +1315,7 @@ impl fmt::Display for AggregateExpression {
     }
 }
 
-/// An ordering comparator used by [`GraphPattern::OrderBy`]
+/// An ordering comparator used by [`GraphPattern::OrderBy`].
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum OrderExpression {
     /// Ascending order
@@ -1351,7 +1351,7 @@ impl fmt::Display for OrderExpression {
     }
 }
 
-/// A SPARQL query [dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset)
+/// A SPARQL query [dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct QueryDataset {
     pub default: Vec<NamedNode>,
@@ -1394,7 +1394,7 @@ impl fmt::Display for QueryDataset {
     }
 }
 
-/// A target RDF graph for update operations
+/// A target RDF graph for update operations.
 ///
 /// Could be a specific graph, all named graphs or the complete dataset.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]

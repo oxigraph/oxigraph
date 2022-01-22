@@ -23,7 +23,7 @@ pub struct QuerySolution {
 }
 
 impl QuerySolution {
-    /// Returns a value for a given position in the tuple ([`usize`](std::usize)) or a given variable name ([`&str`](std::str) or [`Variable`]).
+    /// Returns a value for a given position in the tuple ([`usize`](std::usize)) or a given variable name ([`&str`](std::str), [`Variable`] or [`VariableRef`]).
     ///
     /// ```
     /// use sparesults::QuerySolution;

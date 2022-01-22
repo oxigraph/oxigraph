@@ -9,20 +9,21 @@ use std::io;
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum EvaluationError {
-    /// An error in SPARQL parsing
+    /// An error in SPARQL parsing.
     Parsing(spargebra::ParseError),
-    /// An error from the storage
+    /// An error from the storage.
     Storage(StorageError),
-    /// An error while parsing an external RDF file
+    /// An error while parsing an external RDF file.
     GraphParsing(ParseError),
-    /// An error while parsing an external result file (likely from a federated query)
+    /// An error while parsing an external result file (likely from a federated query).
     ResultsParsing(sparesults::ParseError),
-    /// An error returned during store IOs or during results write
+    /// An error returned during store IOs or during results write.
     Io(io::Error),
-    /// An error returned during the query evaluation itself
+    /// An error returned during the query evaluation itself (not supported custom function...).
     Query(QueryError),
 }
 
+/// An error returned during the query evaluation itself (not supported custom function...).
 #[derive(Debug)]
 pub struct QueryError {
     inner: QueryErrorKind,

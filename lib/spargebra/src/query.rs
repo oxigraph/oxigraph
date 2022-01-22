@@ -18,42 +18,42 @@ use std::str::FromStr;
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Query {
-    /// [SELECT](https://www.w3.org/TR/sparql11-query/#select)
+    /// [SELECT](https://www.w3.org/TR/sparql11-query/#select).
     Select {
-        /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset)
+        /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
         dataset: Option<QueryDataset>,
-        /// The query selection graph pattern
+        /// The query selection graph pattern.
         pattern: GraphPattern,
-        /// The query base IRI
+        /// The query base IRI.
         base_iri: Option<Iri<String>>,
     },
-    /// [CONSTRUCT](https://www.w3.org/TR/sparql11-query/#construct)
+    /// [CONSTRUCT](https://www.w3.org/TR/sparql11-query/#construct).
     Construct {
-        /// The query construction template
+        /// The query construction template.
         template: Vec<TriplePattern>,
-        /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset)
+        /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
         dataset: Option<QueryDataset>,
-        /// The query selection graph pattern
+        /// The query selection graph pattern.
         pattern: GraphPattern,
-        /// The query base IRI
+        /// The query base IRI.
         base_iri: Option<Iri<String>>,
     },
-    /// [DESCRIBE](https://www.w3.org/TR/sparql11-query/#describe)
+    /// [DESCRIBE](https://www.w3.org/TR/sparql11-query/#describe).
     Describe {
-        /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset)
+        /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
         dataset: Option<QueryDataset>,
-        /// The query selection graph pattern
+        /// The query selection graph pattern.
         pattern: GraphPattern,
-        /// The query base IRI
+        /// The query base IRI.
         base_iri: Option<Iri<String>>,
     },
-    /// [ASK](https://www.w3.org/TR/sparql11-query/#ask)
+    /// [ASK](https://www.w3.org/TR/sparql11-query/#ask).
     Ask {
-        /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset)
+        /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
         dataset: Option<QueryDataset>,
-        /// The query selection graph pattern
+        /// The query selection graph pattern.
         pattern: GraphPattern,
-        /// The query base IRI
+        /// The query base IRI.
         base_iri: Option<Iri<String>>,
     },
 }

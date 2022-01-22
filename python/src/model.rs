@@ -517,11 +517,11 @@ impl IntoPy<PyObject> for PyTerm {
 /// An RDF `triple <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple>`_.
 ///
 /// :param subject: the triple subject.
-/// :type subject: NamedNode or BlankNode
+/// :type subject: NamedNode or BlankNode or Triple
 /// :param predicate: the triple predicate.
 /// :type predicate: NamedNode
 /// :param object: the triple object.
-/// :type object: NamedNode or BlankNode or Literal
+/// :type object: NamedNode or BlankNode or Literal or Triple
 ///
 /// The :py:func:`str` function provides a serialization compatible with NTriples, Turtle and SPARQL:
 ///
@@ -576,7 +576,7 @@ impl PyTriple {
     }
 
     /// :return: the triple subject.
-    /// :rtype: NamedNode or BlankNode
+    /// :rtype: NamedNode or BlankNode or Triple
     ///
     /// >>> Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')).subject
     /// <NamedNode value=http://example.com>
@@ -596,7 +596,7 @@ impl PyTriple {
     }
 
     /// :return: the triple object.
-    /// :rtype: NamedNode or BlankNode or Literal
+    /// :rtype: NamedNode or BlankNode or Literal or Triple
     ///
     /// >>> Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')).object
     /// <Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>>
@@ -689,11 +689,11 @@ impl IntoPy<PyObject> for PyGraphName {
 /// in a `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_.
 ///
 /// :param subject: the quad subject.
-/// :type subject: NamedNode or BlankNode
+/// :type subject: NamedNode or BlankNode or Triple
 /// :param predicate: the quad predicate.
 /// :type predicate: NamedNode
 /// :param object: the quad object.
-/// :type object: NamedNode or BlankNode or Literal
+/// :type object: NamedNode or BlankNode or Literal or Triple
 /// :param graph: the quad graph name. If not present, the default graph is assumed.
 /// :type graph: NamedNode or BlankNode or DefaultGraph or None, optional
 ///
@@ -752,7 +752,7 @@ impl PyQuad {
     }
 
     /// :return: the quad subject.
-    /// :rtype: NamedNode or BlankNode
+    /// :rtype: NamedNode or BlankNode or Triple
     ///
     /// >>> Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')).subject
     /// <NamedNode value=http://example.com>
@@ -772,7 +772,7 @@ impl PyQuad {
     }
 
     /// :return: the quad object.
-    /// :rtype: NamedNode or BlankNode or Literal
+    /// :rtype: NamedNode or BlankNode or Literal or Triple
     ///
     /// >>> Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')).object
     /// <Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>>

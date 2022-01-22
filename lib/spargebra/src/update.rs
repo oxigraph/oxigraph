@@ -18,9 +18,9 @@ use std::str::FromStr;
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Update {
-    /// The update base IRI
+    /// The update base IRI.
     pub base_iri: Option<Iri<String>>,
-    /// The [update operations](https://www.w3.org/TR/sparql11-update/#formalModelGraphUpdate)
+    /// The [update operations](https://www.w3.org/TR/sparql11-update/#formalModelGraphUpdate).
     pub operations: Vec<GraphUpdateOperation>,
 }
 
@@ -92,31 +92,31 @@ impl<'a> TryFrom<&'a String> for Update {
     }
 }
 
-/// The [graph update operations](https://www.w3.org/TR/sparql11-update/#formalModelGraphUpdate)
+/// The [graph update operations](https://www.w3.org/TR/sparql11-update/#formalModelGraphUpdate).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GraphUpdateOperation {
-    /// [insert data](https://www.w3.org/TR/sparql11-update/#defn_insertDataOperation)
+    /// [insert data](https://www.w3.org/TR/sparql11-update/#defn_insertDataOperation).
     InsertData { data: Vec<Quad> },
-    /// [delete data](https://www.w3.org/TR/sparql11-update/#defn_deleteDataOperation)
+    /// [delete data](https://www.w3.org/TR/sparql11-update/#defn_deleteDataOperation).
     DeleteData { data: Vec<GroundQuad> },
-    /// [delete insert](https://www.w3.org/TR/sparql11-update/#defn_deleteInsertOperation)
+    /// [delete insert](https://www.w3.org/TR/sparql11-update/#defn_deleteInsertOperation).
     DeleteInsert {
         delete: Vec<GroundQuadPattern>,
         insert: Vec<QuadPattern>,
         using: Option<QueryDataset>,
         pattern: Box<GraphPattern>,
     },
-    /// [load](https://www.w3.org/TR/sparql11-update/#defn_loadOperation)
+    /// [load](https://www.w3.org/TR/sparql11-update/#defn_loadOperation).
     Load {
         silent: bool,
         source: NamedNode,
         destination: GraphName,
     },
-    /// [clear](https://www.w3.org/TR/sparql11-update/#defn_clearOperation)
+    /// [clear](https://www.w3.org/TR/sparql11-update/#defn_clearOperation).
     Clear { silent: bool, graph: GraphTarget },
-    /// [create](https://www.w3.org/TR/sparql11-update/#defn_createOperation)
+    /// [create](https://www.w3.org/TR/sparql11-update/#defn_createOperation).
     Create { silent: bool, graph: NamedNode },
-    /// [drop](https://www.w3.org/TR/sparql11-update/#defn_dropOperation)
+    /// [drop](https://www.w3.org/TR/sparql11-update/#defn_dropOperation).
     Drop { silent: bool, graph: GraphTarget },
 }
 
