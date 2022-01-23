@@ -21,6 +21,7 @@ use rand::random;
 use sparesults::{QueryResultsFormat, QueryResultsSerializer};
 use std::cell::RefCell;
 use std::cmp::min;
+use std::fmt;
 use std::fs::File;
 use std::io::{self, BufReader, ErrorKind, Read, Write};
 use std::path::PathBuf;
@@ -912,14 +913,14 @@ fn content_type(request: &Request) -> Option<String> {
     )
 }
 
-fn error(status: Status, message: impl ToString) -> Response {
+fn error(status: Status, message: impl fmt::Display) -> Response {
     Response::builder(status)
-        .with_header(HeaderName::CONTENT_TYPE, "text/plain")
+        .with_header(HeaderName::CONTENT_TYPE, "text/plain; charset=utf-8")
         .unwrap()
         .with_body(message.to_string())
 }
 
-fn bad_request(message: impl ToString) -> Response {
+fn bad_request(message: impl fmt::Display) -> Response {
     error(Status::BAD_REQUEST, message)
 }
 
@@ -930,7 +931,8 @@ fn unsupported_media_type(content_type: &str) -> Response {
     )
 }
 
-fn internal_server_error(message: impl ToString) -> Response {
+fn internal_server_error(message: impl fmt::Display) -> Response {
+    eprintln!("Internal server error: {}", message);
     error(Status::INTERNAL_SERVER_ERROR, message)
 }
 
@@ -955,12 +957,12 @@ impl<O: 'static, U: (Fn(O) -> std::io::Result<Option<O>>) + 'static> ReadForWrit
             Ok(state) => Response::builder(Status::OK)
                 .with_header(HeaderName::CONTENT_TYPE, content_type)
                 .unwrap()
-                .with_body(Self {
+                .with_body(Body::from_read(Self {
                     buffer,
                     position: 0,
                     add_more_data,
                     state: Some(state),
-                }),
+                })),
             Err(e) => internal_server_error(e),
         }
     }
@@ -973,7 +975,16 @@ impl<O, U: (Fn(O) -> std::io::Result<Option<O>>)> Read for ReadForWrite<O, U> {
             if let Some(state) = self.state.take() {
                 self.buffer.borrow_mut().clear();
                 self.position = 0;
-                self.state = (self.add_more_data)(state)?;
+                self.state = match (self.add_more_data)(state) {
+                    Ok(state) => state,
+                    Err(e) => {
+                        eprintln!("Internal server error while steaming: {}", e);
+                        self.buffer
+                            .borrow_mut()
+                            .write_all(e.to_string().as_bytes())?;
+                        None
+                    }
+                }
             } else {
                 return Ok(0); // End
             }
@@ -986,25 +997,21 @@ impl<O, U: (Fn(O) -> std::io::Result<Option<O>>)> Read for ReadForWrite<O, U> {
     }
 }
 
-impl<O: 'static, U: (Fn(O) -> std::io::Result<Option<O>>) + 'static> From<ReadForWrite<O, U>>
-    for Body
-{
-    fn from(body: ReadForWrite<O, U>) -> Self {
-        Body::from_read(body)
-    }
-}
-
 struct ReadForWriteWriter {
     buffer: Rc<RefCell<Vec<u8>>>,
 }
 
 impl Write for ReadForWriteWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.buffer.as_ref().borrow_mut().write(buf)
+        self.buffer.borrow_mut().write(buf)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        self.buffer.borrow_mut().write_all(buf)
     }
 }
 
