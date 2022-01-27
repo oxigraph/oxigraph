@@ -96,7 +96,7 @@ impl QueryResultsFormat {
     /// Looks for a known format from a media type.
     ///
     /// It supports some media type aliases.
-    /// For example "application/xml" is going to return `Xml` even if it is not its canonical media type.
+    /// For example, "application/xml" is going to return `Xml` even if it is not its canonical media type.
     ///
     /// Example:
     /// ```

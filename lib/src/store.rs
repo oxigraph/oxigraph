@@ -49,7 +49,7 @@ use std::{fmt, str};
 /// Allows to query and update it using SPARQL.
 /// It is based on the [RocksDB](https://rocksdb.org/) key-value store.
 ///
-/// This store ensure the "repeatable read" isolation level: the store only exposes changes that have
+/// This store ensures the "repeatable read" isolation level: the store only exposes changes that have
 /// been "committed" (i.e. no partial writes) and the exposed state does not change for the complete duration
 /// of a read operation (e.g. a SPARQL query) or a read/write operation (e.g. a SPARQL update).
 ///
@@ -281,7 +281,7 @@ impl Store {
 
     /// Executes a transaction.
     ///
-    /// Transaction ensures the "repeatable read" isolation level: the store only exposes changes that have
+    /// Transactions ensure the "repeatable read" isolation level: the store only exposes changes that have
     /// been "committed" (i.e. no partial writes) and the exposed state does not change for the complete duration
     /// of a read operation (e.g. a SPARQL query) or a read/write operation (e.g. a SPARQL update).
     ///
@@ -724,7 +724,7 @@ impl Store {
 
     /// Optimizes the database for future workload.
     ///
-    /// Useful to call after a batch upload or an other similar operation.
+    /// Useful to call after a batch upload or another similar operation.
     ///
     /// Warning: Can take hours on huge databases.
     #[cfg(not(target_arch = "wasm32"))]
@@ -747,7 +747,7 @@ impl Store {
     /// but hard links will be used to point to the original database immutable snapshots.
     /// This allows cheap regular backups.
     ///
-    /// If you want to move your data to an other RDF storage system, you should have a look at the [`Store::dump_dataset`] function instead.
+    /// If you want to move your data to another RDF storage system, you should have a look at the [`Store::dump_dataset`] function instead.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn backup(&self, target_directory: impl AsRef<Path>) -> Result<(), StorageError> {
         self.storage.backup(target_directory.as_ref())

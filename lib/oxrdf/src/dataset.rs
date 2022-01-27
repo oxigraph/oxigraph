@@ -105,7 +105,7 @@ impl Dataset {
         Self::default()
     }
 
-    /// Provides a read-only view on a [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-graph) contained in this dataset.
+    /// Provides a read-only view on an [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-graph) contained in this dataset.
     ///
     /// ```
     /// use oxrdf::*;
@@ -128,7 +128,7 @@ impl Dataset {
         }
     }
 
-    /// Provides a read/write view on a [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-graph) contained in this dataset.
+    /// Provides a read/write view on an [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-graph) contained in this dataset.
     ///
     /// ```
     /// use oxrdf::*;
@@ -907,7 +907,7 @@ impl fmt::Display for Dataset {
     }
 }
 
-/// A read-only view on a [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-graph) contained in a [`Dataset`].
+/// A read-only view on an [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-graph) contained in a [`Dataset`].
 ///
 /// It is built using the [`Dataset::graph`] method.
 ///
@@ -1242,7 +1242,7 @@ impl<'a> fmt::Display for GraphView<'a> {
     }
 }
 
-/// A read/write view on a [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-graph) contained in a [`Dataset`].
+/// A read/write view on an [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-graph) contained in a [`Dataset`].
 ///
 /// It is built using the [`Dataset::graph_mut`] method.
 ///

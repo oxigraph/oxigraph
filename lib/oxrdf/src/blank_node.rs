@@ -9,9 +9,9 @@ use std::str;
 /// The common way to create a new blank node is to use the [`BlankNode::default()`] function.
 ///
 /// It is also possible to create a blank node from a blank node identifier using the [`BlankNode::new()`] function.
-/// The blank node identifier must be valid according to N-Triples, Turtle and SPARQL grammars.
+/// The blank node identifier must be valid according to N-Triples, Turtle, and SPARQL grammars.
 ///
-/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
+/// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
 /// ```
 /// use oxrdf::BlankNode;
 ///
@@ -33,7 +33,7 @@ enum BlankNodeContent {
 impl BlankNode {
     /// Creates a blank node from a unique identifier.
     ///
-    /// The blank node identifier must be valid according to N-Triples, Turtle and SPARQL grammars.
+    /// The blank node identifier must be valid according to N-Triples, Turtle, and SPARQL grammars.
     ///
     /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default()`]
     ///that creates a random ID that could be easily inlined by Oxigraph stores.
@@ -46,7 +46,7 @@ impl BlankNode {
     /// Creates a blank node from a unique identifier without validation.
     ///
     /// It is the caller's responsibility to ensure that `id` is a valid blank node identifier
-    /// according to N-Triples, Turtle and SPARQL grammars.
+    /// according to N-Triples, Turtle, and SPARQL grammars.
     ///
     /// [`BlankNode::new()`] is a safe version of this constructor and should be used for untrusted data.
     #[inline]
@@ -120,9 +120,9 @@ impl Default for BlankNode {
 /// The common way to create a new blank node is to use the [`BlankNode::default`] trait method.
 ///
 /// It is also possible to create a blank node from a blank node identifier using the [`BlankNodeRef::new()`] function.
-/// The blank node identifier must be valid according to N-Triples, Turtle and SPARQL grammars.
+/// The blank node identifier must be valid according to N-Triples, Turtle, and SPARQL grammars.
 ///
-/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
+/// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
 /// ```
 /// use oxrdf::BlankNodeRef;
 ///
@@ -144,7 +144,7 @@ enum BlankNodeRefContent<'a> {
 impl<'a> BlankNodeRef<'a> {
     /// Creates a blank node from a unique identifier.
     ///
-    /// The blank node identifier must be valid according to N-Triples, Turtle and SPARQL grammars.
+    /// The blank node identifier must be valid according to N-Triples, Turtle, and SPARQL grammars.
     ///
     /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default()`].
     /// that creates a random ID that could be easily inlined by Oxigraph stores.
@@ -156,7 +156,7 @@ impl<'a> BlankNodeRef<'a> {
     /// Creates a blank node from a unique identifier without validation.
     ///
     /// It is the caller's responsibility to ensure that `id` is a valid blank node identifier
-    /// according to N-Triples, Turtle and SPARQL grammars.
+    /// according to N-Triples, Turtle, and SPARQL grammars.
     ///
     /// [`BlankNodeRef::new()`) is a safe version of this constructor and should be used for untrusted data.
     #[inline]

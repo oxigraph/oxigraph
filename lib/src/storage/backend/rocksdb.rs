@@ -428,7 +428,7 @@ impl Db {
                                 || e.0.code == rocksdb_status_code_t_rocksdb_status_code_try_again
                         });
                     if is_conflict_error {
-                        // We give a chance to the OS to do something else before retrying in order to help avoiding an other conflict
+                        // We give a chance to the OS to do something else before retrying in order to help avoiding another conflict
                         yield_now();
                     } else {
                         // We raise the error

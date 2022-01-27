@@ -6,7 +6,7 @@ use std::fmt::Write;
 
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
 ///
-/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
+/// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GroundSubject {
     NamedNode(NamedNode),
@@ -74,7 +74,7 @@ impl TryFrom<GroundTerm> for GroundSubject {
 
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
 ///
-/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation.
+/// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GroundTerm {
     NamedNode(NamedNode),
@@ -229,7 +229,7 @@ impl TryFrom<GraphNamePattern> for GraphName {
     }
 }
 
-/// A [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
+/// A [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in an [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 ///
 /// The default string formatter is returning a N-Quads representation.
 ///
@@ -304,7 +304,7 @@ impl TryFrom<QuadPattern> for Quad {
     }
 }
 
-/// A [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) without blank nodes.
+/// A [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in an [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) without blank nodes.
 ///
 /// The default string formatter is returning a N-Quads representation.
 ///

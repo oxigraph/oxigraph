@@ -696,7 +696,7 @@ impl<'a> From<TermRef<'a>> for Term {
 
 /// An owned [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
 ///
-/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
+/// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
 /// ```
 /// use oxrdf::{Triple, NamedNode};
 ///
@@ -737,7 +737,7 @@ impl Triple {
         }
     }
 
-    /// Encodes that this triple is in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
+    /// Encodes that this triple is in an [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
     #[inline]
     pub fn in_graph(self, graph_name: impl Into<GraphName>) -> Quad {
         Quad {
@@ -767,7 +767,7 @@ impl fmt::Display for Triple {
 
 /// A borrowed [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
 ///
-/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
+/// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
 /// ```
 /// use oxrdf::{TripleRef, NamedNodeRef};
 ///
@@ -809,7 +809,7 @@ impl<'a> TripleRef<'a> {
         }
     }
 
-    /// Encodes that this triple is in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
+    /// Encodes that this triple is in an [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
     #[inline]
     pub fn in_graph(self, graph_name: impl Into<GraphNameRef<'a>>) -> QuadRef<'a> {
         QuadRef {
@@ -1009,7 +1009,7 @@ impl<'a> From<GraphNameRef<'a>> for GraphName {
     }
 }
 
-/// An owned [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
+/// An owned [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in an [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 ///
 /// The default string formatter is returning an N-Quads compatible representation:
 /// ```
@@ -1042,7 +1042,7 @@ pub struct Quad {
 }
 
 impl Quad {
-    /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
+    /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in an [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
     #[inline]
     pub fn new(
         subject: impl Into<Subject>,
@@ -1087,7 +1087,7 @@ impl From<Quad> for Triple {
     }
 }
 
-/// A borrowed [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
+/// A borrowed [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in an [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 ///
 /// The default string formatter is returning an N-Quads compatible representation:
 /// ```
@@ -1120,7 +1120,7 @@ pub struct QuadRef<'a> {
 }
 
 impl<'a> QuadRef<'a> {
-    /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in a [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
+    /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in an [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
     #[inline]
     pub fn new(
         subject: impl Into<SubjectRef<'a>>,

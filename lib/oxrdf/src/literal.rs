@@ -10,7 +10,7 @@ use std::option::Option;
 
 /// An owned RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
 ///
-/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
+/// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
 /// ```
 /// # use oxilangtag::LanguageTagParseError;
 /// use oxrdf::Literal;
@@ -295,7 +295,7 @@ impl From<f64> for Literal {
 
 /// A borrowed RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
 ///
-/// The default string formatter is returning an N-Triples, Turtle and SPARQL compatible representation:
+/// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
 /// ```
 /// use oxrdf::LiteralRef;
 /// use oxrdf::vocab::xsd;

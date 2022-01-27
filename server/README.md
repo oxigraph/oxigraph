@@ -44,12 +44,12 @@ It will create a fat binary in `target/release/oxigraph_server`.
 
 ## Usage
 
-Run `oxigraph_server --location my_data_storage_directory serve` to start the server where `my_data_storage_directory` is the directory where you want Oxigraph data to be stored in. It listens by default on `localhost:7878`.
+Run `oxigraph_server --location my_data_storage_directory serve` to start the server where `my_data_storage_directory` is the directory where you want Oxigraph data to be stored. It listens by default on `localhost:7878`.
 
 The server provides an HTML UI, based on [YASGUI](https://yasgui.triply.cc), with a form to execute SPARQL requests.
 
 It provides the following REST actions:
-* `/query` allows to evaluate SPARQL queries against the server repository following the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/#query-operation).
+* `/query` allows evaluating SPARQL queries against the server repository following the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/#query-operation).
   For example:
   ```bash
   curl -X POST -H 'Content-Type:application/sparql-query' \
@@ -57,7 +57,7 @@ It provides the following REST actions:
   ```
   This action supports content negotiation and could return [Turtle](https://www.w3.org/TR/turtle/), [N-Triples](https://www.w3.org/TR/n-triples/), [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/), [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/) and [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/).
 * `/update` allows to execute SPARQL updates against the server repository following the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/#update-operation).
-  For example: 
+  For example:
   ```sh
   curl -X POST -H 'Content-Type: application/sparql-update' \
     --data 'DELETE WHERE { <http://example.com/s> ?p ?o }' http://localhost:7878/update
@@ -90,7 +90,7 @@ It is also possible to load RDF data offline using bulk loading:
 docker run --rm oxigraph/oxigraph --help
 ```
 
-### Run the Web server
+### Run the Webserver
 Expose the server on port `7878` of the host machine, and save data on the local `./data` folder
 ```sh
 docker run --rm -v $PWD/data:/data -p 7878:7878 oxigraph/oxigraph --location /data serve --bind 0.0.0.0:7878
@@ -223,7 +223,7 @@ It installs the `oxigraph_server` binary. [See the usage documentation to know h
 ## Migration guide
 
 ### From 0.2 to 0.3
-* The cli API have been completely rewritten. To start the server run `oxigraph_server serve --location MY_STORAGE` instead of `oxigraph_server --file MY_STORAGE`.
+* The cli API has been completely rewritten. To start the server run `oxigraph_server serve --location MY_STORAGE` instead of `oxigraph_server --file MY_STORAGE`.
 * Fast data bulk loading is not supported using `oxigraph_server load --location MY_STORAGE --file MY_FILE`. The file format is guessed from the extension (`.nt`, `.ttl`, `.nq`...).
 * [RDF-star](https://w3c.github.io/rdf-star/cg-spec) is now implemented.
 * All operations are now transactional using the "repeatable read" isolation level:
@@ -245,4 +245,4 @@ at your option.
 
 ### Contribution
 
-Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in Futures by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in Oxigraph by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.

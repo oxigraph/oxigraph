@@ -17,13 +17,13 @@ use std::io::BufReader;
 /// It encodes a `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_ and allows to query it using SPARQL.
 /// It is based on the `RocksDB <https://rocksdb.org/>`_ key-value database.
 ///
-/// This store ensure the "repeatable read" isolation level: the store only exposes changes that have
+/// This store ensures the "repeatable read" isolation level: the store only exposes changes that have
 /// been "committed" (i.e. no partial writes) and the exposed state does not change for the complete duration
 /// of a read operation (e.g. a SPARQL query) or a read/write operation (e.g. a SPARQL update).
 ///
 /// :param path: the path of the directory in which the store should read and write its data. If the directory does not exist, it is created.
 ///              If no directory is provided a temporary one is created and removed when the Python garbage collector removes the store.
-///              In this case the store data are kept in memory and never written on disk.
+///              In this case, the store data are kept in memory and never written on disk.
 /// :type path: str or None, optional.
 /// :raises IOError: if the target directory contains invalid data or could not be accessed.
 ///
@@ -250,7 +250,7 @@ impl PyStore {
     /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml``)
     ///
     /// It supports also some MIME type aliases.
-    /// For example ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
+    /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
     /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
     /// :param input: The binary I/O object to read from. For example, it could be a file opened in binary mode with ``open('my_file.ttl', 'rb')``.
@@ -259,7 +259,7 @@ impl PyStore {
     /// :type mime_type: str
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
     /// :type base_iri: str or None, optional
-    /// :param to_graph: if it is a file composed of triples, the graph in which store the triples. By default, the default graph is used.
+    /// :param to_graph: if it is a file composed of triples, the graph in which the triples should be stored. By default, the default graph is used.
     /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :raises ValueError: if the MIME type is not supported or the `to_graph` parameter is given with a quad file.
     /// :raises SyntaxError: if the provided data is invalid.
@@ -326,7 +326,7 @@ impl PyStore {
     /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml``)
     ///
     /// It supports also some MIME type aliases.
-    /// For example ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
+    /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
     /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
     /// :param input: The binary I/O object to read from. For example, it could be a file opened in binary mode with ``open('my_file.ttl', 'rb')``.
@@ -335,7 +335,7 @@ impl PyStore {
     /// :type mime_type: str
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
     /// :type base_iri: str or None, optional
-    /// :param to_graph: if it is a file composed of triples, the graph in which store the triples. By default, the default graph is used.
+    /// :param to_graph: if it is a file composed of triples, the graph in which the triples should be stored. By default, the default graph is used.
     /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :raises ValueError: if the MIME type is not supported or the `to_graph` parameter is given with a quad file.
     /// :raises SyntaxError: if the provided data is invalid.
@@ -397,7 +397,7 @@ impl PyStore {
     /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml``)
     ///
     /// It supports also some MIME type aliases.
-    /// For example ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
+    /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
     /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
     /// :param output: The binary I/O object to write to. For example, it could be a file opened in binary mode with ``open('my_file.ttl', 'wb')``.
@@ -494,7 +494,7 @@ impl PyStore {
 
     /// Removes a graph from the store.
     ///
-    /// The default graph will not be remove but just cleared.
+    /// The default graph will not be removed but just cleared.
     ///
     /// :param graph_name: the name of the name graph to remove.
     /// :type graph_name: NamedNode or BlankNode or DefaultGraph
@@ -537,9 +537,9 @@ impl PyStore {
     /// but hard links will be used to point to the original database immutable snapshots.
     /// This allows cheap regular backups.
     ///
-    /// If you want to move your data to an other RDF storage system, you should have a look at the :py:func:`dump_dataset` function instead.
+    /// If you want to move your data to another RDF storage system, you should have a look at the :py:func:`dump_dataset` function instead.
     ///
-    /// :param target_directory: the name of directory to save the database to.
+    /// :param target_directory: the directory name to save the database to.
     /// :type target_directory: str
     /// :raises IOError: if an I/O error happens during the backup.
     #[pyo3(text_signature = "($self, target_directory)")]

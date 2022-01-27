@@ -27,7 +27,7 @@ pub fn add_to_module(module: &PyModule) -> PyResult<()> {
 /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml``)
 ///
 /// It supports also some MIME type aliases.
-/// For example ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
+/// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
 /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
 ///
 /// :param input: The binary I/O object to read from. For example, it could be a file opened in binary mode with ``open('my_file.ttl', 'rb')``.
@@ -94,7 +94,7 @@ pub fn parse(
 /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml``)
 ///
 /// It supports also some MIME type aliases.
-/// For example ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
+/// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
 /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
 ///
 /// :param input: the RDF triples and quads to serialize.
