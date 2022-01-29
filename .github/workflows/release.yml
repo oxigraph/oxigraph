@@ -52,12 +52,15 @@ jobs:
         working-directory: ./rocksdb-sys
       - run: cargo publish
         working-directory: ./lib/oxrdf
+      - run: sleep 60
       - run: cargo publish
         working-directory: ./lib/sparesults
       - run: cargo publish
         working-directory: ./lib/spargebra
+      - run: sleep 60
       - run: cargo publish
         working-directory: ./lib
+      - run: sleep 60
       - run: cargo publish
         working-directory: ./server
 
@@ -79,6 +82,9 @@ jobs:
           user: __token__
           password: ${{ secrets.PYPI_PASSWORD }}
           packages_dir: target/wheels
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: target/wheels/*
 
   publish_pypi_mac:
     runs-on: macos-latest
@@ -104,6 +110,9 @@ jobs:
           user: __token__
           password: ${{ secrets.PYPI_PASSWORD }}
           packages_dir: target/wheels
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: target/wheels/*
 
   publish_pypi_windows:
     runs-on: windows-latest
@@ -125,6 +134,9 @@ jobs:
           user: __token__
           password: ${{ secrets.PYPI_PASSWORD }}
           packages_dir: target/wheels
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: target/wheels/*
 
   publish_npm:
     runs-on: ubuntu-latest
@@ -182,23 +194,84 @@ jobs:
           git push
         working-directory: ./website
 
+  publish_full_archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - run: |
+          zip -r oxigraph_${{ github.event.release.tag_name }}.zip .
+          tar -czf /tmp/oxigraph_${{ github.event.release.tag_name }}.tar.gz .
+          mv /tmp/oxigraph_${{ github.event.release.tag_name }}.tar.gz .
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            oxigraph_${{ github.event.release.tag_name }}.zip
+            oxigraph_${{ github.event.release.tag_name }}.tar.gz
+
   publish_homebrew:
     runs-on: ubuntu-latest
-    needs: publish_crates
+    needs: publish_full_archive
     steps:
       - uses: actions/checkout@v2
         with:
           repository: oxigraph/homebrew-oxigraph
           token: ${{ secrets.FULL_ACCESS_TOKEN }}
-      - run: echo "RELEASE_VERSION=$(echo ${GITHUB_REF:10})" >> $GITHUB_ENV
       - run: |
-          wget "https://github.com/oxigraph/oxigraph/archive/$RELEASE_VERSION.tar.gz"
-          SHA=`shasum -a 256 "$RELEASE_VERSION.tar.gz" | awk '{ print $1 }'`
-          rm "$RELEASE_VERSION.tar.gz"
-          sed -i "s/archive\/.*\.tar/archive\/$RELEASE_VERSION.tar/g" Formula/oxigraph.rb
+          wget "https://github.com/oxigraph/oxigraph/releases/download/${{ github.event.release.tag_name }}/oxigraph_${{ github.event.release.tag_name }}.tar.gz"
+          SHA=`shasum -a 256 "oxigraph_${{ github.event.release.tag_name }}.tar.gz" | awk '{ print $1 }'`
+          rm "oxigraph_${{ github.event.release.tag_name }}.tar.gz"
+          sed -i "s/download\/.*\.tar/download\/${{ github.event.release.tag_name }}.tar/g" Formula/oxigraph.rb
           sed -i "s/sha256 \".*\"/sha256 \"$SHA\"/g" Formula/oxigraph.rb
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add .
-          git diff-index --quiet HEAD || git commit -m "Upgrades to $RELEASE_VERSION"
+          git diff-index --quiet HEAD || git commit -m "Upgrades to ${{ github.event.release.tag_name }}"
           git push
+
+  publish_binary_linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - run: cargo build --release
+        working-directory: ./server
+      - run: mv target/release/oxigraph_server oxigraph_server_${{ github.event.release.tag_name }}_x86_64_linux_gnu
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: oxigraph_server_${{ github.event.release.tag_name }}_x86_64_linux_gnu
+
+  publish_binary_mac:
+    runs-on: macos-latest
+    env:
+      DEVELOPER_DIR: '/Applications/Xcode.app/Contents/Developer'
+      SDKROOT: '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk'
+      MACOSX_DEPLOYMENT_TARGET: '10.9'
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - run: rustup update
+      - run: cargo build --release
+        working-directory: ./server
+      - run: mv target/release/oxigraph_server oxigraph_server_${{ github.event.release.tag_name }}_x86_64_apple
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: oxigraph_server_${{ github.event.release.tag_name }}_x86_64_apple
+
+  publish_binary_windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - run: rustup update
+      - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
+      - run: cargo build --release
+        working-directory: ./server
+      - run: mv target/release/oxigraph_server.exe oxigraph_server_${{ github.event.release.tag_name }}_x86_64_windows_msvc.exe
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: oxigraph_server_${{ github.event.release.tag_name }}_x86_64_windows_msvc.exe
