@@ -15,9 +15,9 @@ rm apache-jena-fuseki-${VERSION}.zip
 echo "rootLogger.level = ERROR" > ./apache-jena-fuseki-${VERSION}/log4j2.properties
 ./apache-jena-fuseki-${VERSION}/fuseki-server --tdb2 --loc=td_data --update /bsbm &
 sleep 10
-./testdriver -mt ${PARALLELISM} -ucf usecases/explore/sparql.txt -o "../bsbm.explore.jena.${DATASET_SIZE}.${PARALLELISM}.${VERSION}.xml" http://localhost:3030/bsbm/query
-./testdriver -mt ${PARALLELISM} -ucf usecases/exploreAndUpdate/sparql.txt -o "../bsbm.exploreAndUpdate.jena.${DATASET_SIZE}.${PARALLELISM}.${VERSION}.xml" http://localhost:3030/bsbm/query -u http://localhost:3030/bsbm/update -udataset "explore-update-${DATASET_SIZE}.nt"
-#./testdriver -mt ${PARALLELISM} -ucf usecases/businessIntelligence/sparql.txt -o "../bsbm.businessIntelligence.jena.${DATASET_SIZE}.${PARALLELISM}.${VERSION}.xml" http://localhost:3030/bsbm/query
+./testdriver -mt ${PARALLELISM} -ucf usecases/explore/sparql.txt -o "../bsbm.explore.jena.${VERSION}.${DATASET_SIZE}.${PARALLELISM}.xml" http://localhost:3030/bsbm/query
+./testdriver -mt ${PARALLELISM} -ucf usecases/exploreAndUpdate/sparql.txt -o "../bsbm.exploreAndUpdate.jena.${VERSION}.${DATASET_SIZE}.${PARALLELISM}.xml" http://localhost:3030/bsbm/query -u http://localhost:3030/bsbm/update -udataset "explore-update-${DATASET_SIZE}.nt"
+#./testdriver -mt ${PARALLELISM} -ucf usecases/businessIntelligence/sparql.txt -o "../bsbm.businessIntelligence.jena.${VERSION}.${DATASET_SIZE}.${PARALLELISM}.xml" http://localhost:3030/bsbm/query
 kill $!
 rm "explore-${DATASET_SIZE}.nt"
 rm "explore-update-${DATASET_SIZE}.nt"

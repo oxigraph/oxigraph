@@ -36,7 +36,7 @@ def plot_usecase(name: str):
                     if val > 0:
                         aqet[run][query_id] = val
                 elif child.tag == "avgresults":
-                    avgresults_by_query[query_id][int(parts[3])][run] = float(query.find('avgresults').text)
+                    avgresults_by_query[query_id][int(parts[-3])][run] = float(query.find('avgresults').text)
     plot_y_per_x_per_plot(aqet, 'query id', 'execution time (s)', 'bsbm.{}.svg'.format(name))
 
     # we check if avgresults seems consistent

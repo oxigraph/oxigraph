@@ -14,9 +14,9 @@ SPARQL CREATE GRAPH <urn:graph:test>;
 ld_dir('$(realpath .)', 'explore-${DATASET_SIZE}.nt', 'urn:graph:test');
 rdf_loader_run();
 EOF
-./testdriver -mt ${PARALLELISM} -ucf usecases/explore/sparql.txt -o "../bsbm.explore.virtuoso.${DATASET_SIZE}.${VERSION}.xml" 'http://localhost:8890/sparql?graph-uri=urn:graph:test'
-# ./testdriver -mt ${PARALLELISM} -ucf usecases/exploreAndUpdate/sparql.txt -o "../bsbm.exploreAndUpdate.virtuoso.${DATASET_SIZE}.${PARALLELISM}.${VERSION}.xml" 'http://localhost:8890/sparql?graph-uri=urn:graph:test' -u 'http://dba:dba@localhost:8890/sparql-auth?graph-uri=urn:graph:test' -udataset "explore-update-${DATASET_SIZE}.nt"
-# ./testdriver -mt ${PARALLELISM} -ucf usecases/businessIntelligence/sparql.txt -o "../bsbm.businessIntelligence.virtuoso.${DATASET_SIZE}.${VERSION}.xml" 'http://localhost:8890/sparql?graph-uri=urn:graph:test'
+./testdriver -mt ${PARALLELISM} -ucf usecases/explore/sparql.txt -o "../bsbm.explore.virtuoso.${VERSION}.${DATASET_SIZE}.${PARALLELISM}.xml" 'http://localhost:8890/sparql?graph-uri=urn:graph:test'
+# ./testdriver -mt ${PARALLELISM} -ucf usecases/exploreAndUpdate/sparql.txt -o "../bsbm.exploreAndUpdate.virtuoso.${DATASET_SIZE}.${PARALLELISM}.${PARALLELISM}.${VERSION}.xml" 'http://localhost:8890/sparql?graph-uri=urn:graph:test' -u 'http://dba:dba@localhost:8890/sparql-auth?graph-uri=urn:graph:test' -udataset "explore-update-${DATASET_SIZE}.nt"
+# ./testdriver -mt ${PARALLELISM} -ucf usecases/businessIntelligence/sparql.txt -o "../bsbm.businessIntelligence.virtuoso.${VERSION}.${DATASET_SIZE}.${PARALLELISM}.xml" 'http://localhost:8890/sparql?graph-uri=urn:graph:test'
 kill $!
 rm -r ../database
 rm "explore-${DATASET_SIZE}.nt"

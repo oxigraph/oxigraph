@@ -9,9 +9,9 @@ VERSION=$(./../../target/release/oxigraph_server --version | sed 's/oxigraph_ser
 ./../../target/release/oxigraph_server --location oxigraph_data load --file "explore-${DATASET_SIZE}.nt"
 ./../../target/release/oxigraph_server --location oxigraph_data serve --bind 127.0.0.1:7878 &
 sleep 1
-./testdriver -mt ${PARALLELISM} -ucf usecases/explore/sparql.txt -o "../bsbm.explore.oxigraph.${DATASET_SIZE}.${PARALLELISM}.${VERSION}.xml" http://127.0.0.1:7878/query
-./testdriver -mt ${PARALLELISM} -ucf usecases/exploreAndUpdate/sparql.txt -o "../bsbm.exploreAndUpdate.oxigraph.${DATASET_SIZE}.${PARALLELISM}.${VERSION}.xml" http://127.0.0.1:7878/query -u http://127.0.0.1:7878/update -udataset "explore-update-${DATASET_SIZE}.nt"
-#./testdriver -mt ${PARALLELISM} -ucf usecases/businessIntelligence/sparql.txt -o "../bsbm.businessIntelligence.${DATASET_SIZE}.${PARALLELISM}.${VERSION}.xml" "http://127.0.0.1:7878/query"
+./testdriver -mt ${PARALLELISM} -ucf usecases/explore/sparql.txt -o "../bsbm.explore.oxigraph.${VERSION}.${DATASET_SIZE}.${PARALLELISM}.xml" http://127.0.0.1:7878/query
+./testdriver -mt ${PARALLELISM} -ucf usecases/exploreAndUpdate/sparql.txt -o "../bsbm.exploreAndUpdate.oxigraph.${VERSION}.${DATASET_SIZE}.${PARALLELISM}.xml" http://127.0.0.1:7878/query -u http://127.0.0.1:7878/update -udataset "explore-update-${DATASET_SIZE}.nt"
+#./testdriver -mt ${PARALLELISM} -ucf usecases/businessIntelligence/sparql.txt -o "../bsbm.businessIntelligence.${VERSION}.${DATASET_SIZE}.${PARALLELISM}.xml" "http://127.0.0.1:7878/query"
 kill $!
 rm -r oxigraph_data
 rm "explore-${DATASET_SIZE}.nt"

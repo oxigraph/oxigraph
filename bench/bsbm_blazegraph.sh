@@ -8,9 +8,9 @@ wget https://github.com/blazegraph/database/releases/download/BLAZEGRAPH_RELEASE
 /usr/lib/jvm/java-8-openjdk/bin/java -server -jar blazegraph.jar &
 sleep 10
 curl -f -X POST -H 'Content-Type:text/turtle' -T "explore-${DATASET_SIZE}.nt" http://localhost:9999/blazegraph/sparql
-./testdriver -mt ${PARALLELISM} -ucf usecases/explore/sparql.txt -o "../bsbm.explore.blazegraph.${DATASET_SIZE}.${PARALLELISM}.2.1.5.xml" http://localhost:9999/blazegraph/sparql
-./testdriver -mt ${PARALLELISM} -ucf usecases/exploreAndUpdate/sparql.txt -o "../bsbm.exploreAndUpdate.blazegraph.${DATASET_SIZE}.${PARALLELISM}.2.1.5.xml" http://localhost:9999/blazegraph/sparql -u http://localhost:9999/blazegraph/sparql -udataset "explore-update-${DATASET_SIZE}.nt"
-#./testdriver -mt ${PARALLELISM} -ucf usecases/businessIntelligence/sparql.txt -o "../bsbm.businessIntelligence.blazegraph.${DATASET_SIZE}.${PARALLELISM}.2.1.5.xml" http://localhost:9999/blazegraph/sparql
+./testdriver -mt ${PARALLELISM} -ucf usecases/explore/sparql.txt -o "../bsbm.explore.blazegraph.2.1.5.${DATASET_SIZE}.${PARALLELISM}.xml" http://localhost:9999/blazegraph/sparql
+./testdriver -mt ${PARALLELISM} -ucf usecases/exploreAndUpdate/sparql.txt -o "../bsbm.exploreAndUpdate.blazegraph.2.1.5.${DATASET_SIZE}.${PARALLELISM}.xml" http://localhost:9999/blazegraph/sparql -u http://localhost:9999/blazegraph/sparql -udataset "explore-update-${DATASET_SIZE}.nt"
+#./testdriver -mt ${PARALLELISM} -ucf usecases/businessIntelligence/sparql.txt -o "../bsbm.businessIntelligence.blazegraph.2.1.5.${DATASET_SIZE}.${PARALLELISM}.xml" http://localhost:9999/blazegraph/sparql
 kill $!
 rm blazegraph.jar
 rm blazegraph.jnl
