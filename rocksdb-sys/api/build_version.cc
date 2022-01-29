@@ -7,7 +7,7 @@
 
 namespace ROCKSDB_NAMESPACE {
 const std::unordered_map<std::string, std::string>& GetRocksBuildProperties() {
-  static std::unique_ptr<std::unordered_map<std::string, std::string>> props;
+  static std::unique_ptr<std::unordered_map<std::string, std::string>> props(new std::unordered_map<std::string, std::string>());
   return *props;
 }
 
