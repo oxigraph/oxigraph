@@ -1,6 +1,6 @@
 [package]
 name = "oxigraph"
-version = "0.3.0-beta.1"
+version = "0.3.0-beta.2"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -39,13 +39,13 @@ siphasher = "0.3"
 lazy_static = "1"
 sophia_api = { version = "0.7", optional = true }
 num_cpus = "1"
-oxrdf = { version = "0.1.0-beta.1", path="oxrdf", features = ["rdf-star"] }
-spargebra = { version = "0.2.0-beta.1", path="spargebra", features = ["rdf-star"] }
-sparesults = { version = "0.1.0-beta.1", path="sparesults", features = ["rdf-star"] }
+oxrdf = { version = "0.1.0-beta.2", path="oxrdf", features = ["rdf-star"] }
+spargebra = { version = "0.2.0-beta.2", path="spargebra", features = ["rdf-star"] }
+sparesults = { version = "0.1.0-beta.2", path="sparesults", features = ["rdf-star"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 libc = "0.2"
-oxrocksdb-sys = { version = "0.3.0-beta.1", path="../rocksdb-sys" }
+oxrocksdb-sys = { version = "0.3.0-beta.2", path="../rocksdb-sys" }
 oxhttp = { version = "0.1", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
