@@ -184,6 +184,7 @@ jobs:
 
   publish_homebrew:
     runs-on: ubuntu-latest
+    needs: publish_crates
     steps:
       - uses: actions/checkout@v2
         with:
