@@ -63,7 +63,7 @@ jobs:
 
   publish_pypi_linux:
     runs-on: ubuntu-latest
-    needs: publish_lib_crates
+    needs: publish_crates
     strategy:
       matrix:
         architecture: [ "x86_64", "aarch64" ]
@@ -82,7 +82,7 @@ jobs:
 
   publish_pypi_mac:
     runs-on: macos-latest
-    needs: publish_lib_crates
+    needs: publish_crates
     env:
       DEVELOPER_DIR: '/Applications/Xcode.app/Contents/Developer'
       SDKROOT: '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk'
@@ -107,7 +107,7 @@ jobs:
 
   publish_pypi_windows:
     runs-on: windows-latest
-    needs: publish_lib_crates
+    needs: publish_crates
     steps:
       - uses: actions/checkout@v2
         with:

@@ -7,7 +7,7 @@ It provides a dataset generator and multiple sets of queries grouped by "use cas
 
 ## Results
 
-We compare here Oxigraph with some existing SPARQL implementations (Blazegraph, GraphDB, Jena, and Virtuoso).
+We compare here Oxigraph 0.2 and 0.3 with some existing SPARQL implementations (Blazegraph, GraphDB, Jena, and Virtuoso).
 
 The dataset used in the following charts is generated with 100k "products" (see [its spec](http://wifo5-03.informatik.uni-mannheim.de/bizer/berlinsparqlbenchmark/spec/Dataset/index.html)). It leads to the creation of 35M triples.
 It has been executed on a PrevailPro P3000 with 32GB of RAM.

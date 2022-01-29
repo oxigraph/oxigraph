@@ -1,4 +1,4 @@
-## [0.3.0-dev]
+## [0.3.0-beta1] - 2022-01-29
 
 ### Added
 - [RDF-star](https://w3c.github.io/rdf-star/cg-spec) support. `Triple` is now a possible `Term`. Serialization formats and SPARQL support have been updated to match the [latest version of the specification draft](https://w3c.github.io/rdf-star/cg-spec/2021-07-01.html).
@@ -11,7 +11,7 @@
 - `Store` operations are now transactional using the "repeatable read" isolation level:
   the store only exposes changes that have been "committed" (i.e. no partial writes) and the exposed state does not change for the complete duration of a read operation (e.g. a SPARQL query) or a read/write operation (e.g. a SPARQL update).
   the `Store` `transaction` method now allows to do read/write transactions.
-* `RDF-star <https://w3c.github.io/rdf-star/cg-spec>`_ is now supported (including serialization formats and SPARQL-star). :py:class:`.Triple` can now be used in :py:attr:`.Triple.object`, :py:attr:`.Triple.object`, :py:attr:`.Quad.subject` and :py:attr:`.Quad.object`.
+-`RDF-star <https://w3c.github.io/rdf-star/cg-spec>`_ is now supported (including serialization formats and SPARQL-star). :py:class:`.Triple` can now be used in :py:attr:`.Triple.object`, :py:attr:`.Triple.object`, :py:attr:`.Quad.subject` and :py:attr:`.Quad.object`.
 
 ### Changed
 - SPARQL: It is now possible to compare `rdf:langString` literals with the same language tag.
@@ -40,6 +40,8 @@
 - `SledStore` and `MemoryStore`. There is only the `RocksDbStore` anymore that is renamed to `Store`.
 - `oxigraph_wikibase` is now stored in [its own repository](https://github.com/oxigraph/oxigraph-wikibase).
 - Rust: `From` implementations between `oxigraph` terms and `rio_api` terms.
+
+Many thanks to [Thad Guidry](https://github.com/thadguidry), [James Overton](https://github.com/jamesaoverton) and [Jeremiah](https://github.com/jeremiahpslewis) who sponsored the project during the development of this version.
 
 
 ## [0.2.5] - 2021-07-11

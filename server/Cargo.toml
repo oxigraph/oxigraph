@@ -1,6 +1,6 @@
 [package]
 name = "oxigraph_server"
-version = "0.3.0-dev"
+version = "0.3.0-beta.1"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -14,8 +14,8 @@ edition = "2021"
 [dependencies]
 oxhttp = { version = "0.1", features = ["rayon"] }
 clap = { version = "3", features = ["derive"] }
-oxigraph = { version = "0.3.0-dev", path = "../lib", features = ["http_client"] }
-sparesults = { version = "0.1.0-dev", path="../lib/sparesults", features = ["rdf-star"] }
+oxigraph = { version = "0.3.0-beta.1", path = "../lib", features = ["http_client"] }
+sparesults = { version = "0.1.0-beta.1", path="../lib/sparesults", features = ["rdf-star"] }
 rand = "0.8"
 url = "2"
 oxiri = "0.2"

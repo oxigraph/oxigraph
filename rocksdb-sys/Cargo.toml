@@ -1,6 +1,6 @@
 [package]
 name = "oxrocksdb-sys"
-version = "0.3.0-dev"
+version = "0.3.0-beta.1"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "GPL-2.0 OR Apache-2.0"
 repository = "https://github.com/oxigraph/oxigraph/tree/v0.3/rocksdb-sys"
