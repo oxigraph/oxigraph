@@ -1,4 +1,9 @@
-## [0.3.0-beta1] - 2022-01-29
+## [0.3.0-beta.2] - 2022-01-29
+
+### Changed
+- Fixes release on crates.io of the RocksDB bindings.
+
+## [0.3.0-beta.1] - 2022-01-29
 
 ### Added
 - [RDF-star](https://w3c.github.io/rdf-star/cg-spec) support. `Triple` is now a possible `Term`. Serialization formats and SPARQL support have been updated to match the [latest version of the specification draft](https://w3c.github.io/rdf-star/cg-spec/2021-07-01.html).
