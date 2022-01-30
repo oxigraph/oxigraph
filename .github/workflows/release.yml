@@ -49,7 +49,7 @@ jobs:
         env:
           CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
       - run: cargo publish
-        working-directory: ./rocksdb-sys
+        working-directory: ./oxrocksdb-sys
       - run: cargo publish
         working-directory: ./lib/oxrdf
       - run: sleep 60

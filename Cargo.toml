@@ -6,7 +6,7 @@ members = [
     "lib/spargebra",
     "lib/sparesults",
     "python",
-    "rocksdb-sys",
+    "oxrocksdb-sys",
     "server",
     "testsuite"
 ]
