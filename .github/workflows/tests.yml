@@ -89,13 +89,12 @@ jobs:
       - uses: actions/setup-python@v2
         with:
           python-version: "3.10"
-      - run: python -m venv python/venv
-      - run: source python/venv/bin/activate && pip install --upgrade maturin sphinx
-      - run: source venv/bin/activate && maturin develop
-        working-directory: ./python
-      - run: source ../venv/bin/activate && python -m unittest
+      - run: pip install --upgrade maturin sphinx
+      - run: maturin sdist -m python/Cargo.toml
+      - run: pip install target/wheels/*.tar.gz
+      - run: python -m unittest
         working-directory: ./python/tests
-      - run: source ../venv/bin/activate && sphinx-build -M doctest . build
+      - run: sphinx-build -M doctest . build
         working-directory: ./python/docs
-      - run: source ../venv/bin/activate && sphinx-build -M html . build
+      - run: sphinx-build -M html . build
         working-directory: ./python/docs

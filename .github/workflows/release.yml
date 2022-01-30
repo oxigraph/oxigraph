@@ -103,7 +103,7 @@ jobs:
       - run: rustup update && rustup target add aarch64-apple-darwin
       - run: pip install maturin
       - run: sed -i 's/path="..\/lib", //g' python/Cargo.toml
-      - run: maturin build --release -m python/Cargo.toml --universal2
+      - run: maturin build --release --no-sdist --universal2 -m python/Cargo.toml
       - run: maturin build --release --no-sdist -m python/Cargo.toml
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
@@ -129,6 +129,25 @@ jobs:
       - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
       - run: sed -i 's/path="..\/lib", //g' python/Cargo.toml
       - run: maturin build --release --no-sdist -m python/Cargo.toml
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_PASSWORD }}
+          packages_dir: target/wheels
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: target/wheels/*
+
+  publish_pypi_stdist:
+    runs-on: ubuntu-latest
+    needs: publish_crates
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - run: pip install maturin
+      - run: sed -i 's/path="..\/lib", //g' python/Cargo.toml
+      - run: maturin sdist -m python/Cargo.toml
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__

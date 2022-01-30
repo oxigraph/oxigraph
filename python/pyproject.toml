@@ -27,3 +27,6 @@ Documentation = "https://oxigraph.org/pyoxigraph/"
 Homepage = "https://oxigraph.org/pyoxigraph/"
 Source = "https://github.com/oxigraph/oxigraph/tree/master/python"
 Tracker = "https://github.com/oxigraph/oxigraph/issues"
+
+[tool.maturin]
+cargo-extra-args = "--frozen"
