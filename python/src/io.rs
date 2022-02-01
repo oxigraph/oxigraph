@@ -9,7 +9,7 @@ use pyo3::exceptions::{PyIOError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::wrap_pyfunction;
-use std::io::{self, BufReader, Read, Write};
+use std::io::{self, BufReader, BufWriter, Read, Write};
 
 pub fn add_to_module(module: &PyModule) -> PyResult<()> {
     module.add_wrapped(wrap_pyfunction!(parse))?;
@@ -61,7 +61,7 @@ pub fn parse(
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
         }
         Ok(PyTripleReader {
-            inner: parser.read_triples(input).map_err(map_parse_error)?,
+            inner: py.allow_threads(|| parser.read_triples(input).map_err(map_parse_error))?,
         }
         .into_py(py))
     } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
@@ -72,7 +72,7 @@ pub fn parse(
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
         }
         Ok(PyQuadReader {
-            inner: parser.read_quads(input).map_err(map_parse_error)?,
+            inner: py.allow_threads(|| parser.read_quads(input).map_err(map_parse_error))?,
         }
         .into_py(py))
     } else {
@@ -113,7 +113,7 @@ pub fn parse(
 #[pyfunction]
 #[pyo3(text_signature = "(input, output, /, mime_type, *, base_iri = None)")]
 pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str) -> PyResult<()> {
-    let output = PyFileLike::new(output);
+    let output = BufWriter::new(PyFileLike::new(output));
     if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
         let mut writer = GraphSerializer::from_format(graph_format)
             .triple_writer(output)
@@ -155,11 +155,13 @@ impl PyTripleReader {
         slf.into()
     }
 
-    fn __next__(&mut self) -> PyResult<Option<PyTriple>> {
-        self.inner
-            .next()
-            .map(|q| Ok(q.map_err(map_parse_error)?.into()))
-            .transpose()
+    fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<PyTriple>> {
+        py.allow_threads(|| {
+            self.inner
+                .next()
+                .map(|q| Ok(q.map_err(map_parse_error)?.into()))
+                .transpose()
+        })
     }
 }
 
@@ -174,11 +176,13 @@ impl PyQuadReader {
         slf.into()
     }
 
-    fn __next__(&mut self) -> PyResult<Option<PyQuad>> {
-        self.inner
-            .next()
-            .map(|q| Ok(q.map_err(map_parse_error)?.into()))
-            .transpose()
+    fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<PyQuad>> {
+        py.allow_threads(|| {
+            self.inner
+                .next()
+                .map(|q| Ok(q.map_err(map_parse_error)?.into()))
+                .transpose()
+        })
     }
 }
 
@@ -244,4 +248,28 @@ pub(crate) fn map_parse_error(error: ParseError) -> PyErr {
         ParseError::Syntax(error) => PySyntaxError::new_err(error.to_string()),
         ParseError::Io(error) => map_io_err(error),
     }
+}
+
+/// Release the GIL
+/// There should not be ANY use of pyo3 code inside of this method!!!
+///
+/// Code from pyo3: https://github.com/PyO3/pyo3/blob/a67180c8a42a0bc0fdc45b651b62c0644130cf47/src/python.rs#L366
+#[allow(unsafe_code)]
+pub(crate) fn allow_threads_unsafe<T>(f: impl FnOnce() -> T) -> T {
+    struct RestoreGuard {
+        tstate: *mut pyo3::ffi::PyThreadState,
+    }
+
+    impl Drop for RestoreGuard {
+        fn drop(&mut self) {
+            unsafe {
+                pyo3::ffi::PyEval_RestoreThread(self.tstate);
+            }
+        }
+    }
+
+    let _guard = RestoreGuard {
+        tstate: unsafe { pyo3::ffi::PyEval_SaveThread() },
+    };
+    f()
 }

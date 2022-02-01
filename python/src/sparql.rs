@@ -1,4 +1,4 @@
-use crate::io::{map_io_err, map_parse_error};
+use crate::io::{allow_threads_unsafe, map_io_err, map_parse_error};
 use crate::map_storage_error;
 use crate::model::*;
 use oxigraph::model::Term;
@@ -15,7 +15,8 @@ pub fn parse_query(
     default_graph: Option<&PyAny>,
     named_graphs: Option<&PyAny>,
 ) -> PyResult<Query> {
-    let mut query = Query::parse(query, base_iri).map_err(|e| map_evaluation_error(e.into()))?;
+    let mut query = allow_threads_unsafe(|| Query::parse(query, base_iri))
+        .map_err(|e| map_evaluation_error(e.into()))?;
 
     if use_default_graph_as_union && default_graph.is_some() {
         return Err(PyValueError::new_err(
@@ -183,9 +184,7 @@ impl PyQuerySolutions {
     }
 
     fn __next__(&mut self) -> PyResult<Option<PyQuerySolution>> {
-        Ok(self
-            .inner
-            .next()
+        Ok(allow_threads_unsafe(|| self.inner.next())
             .transpose()
             .map_err(map_evaluation_error)?
             .map(move |inner| PyQuerySolution { inner }))
@@ -210,9 +209,7 @@ impl PyQueryTriples {
     }
 
     fn __next__(&mut self) -> PyResult<Option<PyTriple>> {
-        Ok(self
-            .inner
-            .next()
+        Ok(allow_threads_unsafe(|| self.inner.next())
             .transpose()
             .map_err(map_evaluation_error)?
             .map(|t| t.into()))
