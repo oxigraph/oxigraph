@@ -132,7 +132,7 @@ fn handle_request(request: &mut Request, store: Store) -> Response {
             .unwrap()
             .with_body(LOGO),
         ("/query", "GET") => {
-            configure_and_evaluate_sparql_query(store, url_query(request), None, request)
+            configure_and_evaluate_sparql_query(store, &[url_query(request)], None, request)
         }
         ("/query", "POST") => {
             if let Some(content_type) = content_type(request) {
@@ -145,8 +145,12 @@ fn handle_request(request: &mut Request, store: Store) -> Response {
                     {
                         return bad_request(e);
                     }
-                    let encoded = url_query(request);
-                    configure_and_evaluate_sparql_query(store, encoded, Some(buffer), request)
+                    configure_and_evaluate_sparql_query(
+                        store,
+                        &[url_query(request)],
+                        Some(buffer),
+                        request,
+                    )
                 } else if content_type == "application/x-www-form-urlencoded" {
                     let mut buffer = Vec::new();
                     if let Err(e) = request
@@ -156,7 +160,12 @@ fn handle_request(request: &mut Request, store: Store) -> Response {
                     {
                         return bad_request(e);
                     }
-                    configure_and_evaluate_sparql_query(store, buffer, None, request)
+                    configure_and_evaluate_sparql_query(
+                        store,
+                        &[url_query(request), &buffer],
+                        None,
+                        request,
+                    )
                 } else {
                     unsupported_media_type(&content_type)
                 }
@@ -177,7 +186,7 @@ fn handle_request(request: &mut Request, store: Store) -> Response {
                     }
                     configure_and_evaluate_sparql_update(
                         store,
-                        url_query(request),
+                        &[url_query(request)],
                         Some(buffer),
                         request,
                     )
@@ -190,7 +199,12 @@ fn handle_request(request: &mut Request, store: Store) -> Response {
                     {
                         return bad_request(e);
                     }
-                    configure_and_evaluate_sparql_update(store, buffer, None, request)
+                    configure_and_evaluate_sparql_update(
+                        store,
+                        &[url_query(request), &buffer],
+                        None,
+                        request,
+                    )
                 } else {
                     unsupported_media_type(&content_type)
                 }
@@ -481,31 +495,33 @@ fn resolve_with_base(request: &Request, url: &str) -> Result<NamedNode, Response
     ))
 }
 
-fn url_query(request: &Request) -> Vec<u8> {
-    request.url().query().unwrap_or("").as_bytes().to_vec()
+fn url_query(request: &Request) -> &[u8] {
+    request.url().query().unwrap_or("").as_bytes()
 }
 
 fn configure_and_evaluate_sparql_query(
     store: Store,
-    encoded: Vec<u8>,
+    encoded: &[&[u8]],
     mut query: Option<String>,
     request: &Request,
 ) -> Response {
     let mut default_graph_uris = Vec::new();
     let mut named_graph_uris = Vec::new();
     let mut use_default_graph_as_union = false;
-    for (k, v) in form_urlencoded::parse(&encoded) {
-        match k.as_ref() {
-            "query" => {
-                if query.is_some() {
-                    return bad_request("Multiple query parameters provided");
+    for encoded in encoded {
+        for (k, v) in form_urlencoded::parse(encoded) {
+            match k.as_ref() {
+                "query" => {
+                    if query.is_some() {
+                        return bad_request("Multiple query parameters provided");
+                    }
+                    query = Some(v.into_owned())
                 }
-                query = Some(v.into_owned())
+                "default-graph-uri" => default_graph_uris.push(v.into_owned()),
+                "union-default-graph" => use_default_graph_as_union = true,
+                "named-graph-uri" => named_graph_uris.push(v.into_owned()),
+                _ => (),
             }
-            "default-graph-uri" => default_graph_uris.push(v.into_owned()),
-            "union-default-graph" => use_default_graph_as_union = true,
-            "named-graph-uri" => named_graph_uris.push(v.into_owned()),
-            _ => (),
         }
     }
     if let Some(query) = query {
@@ -646,25 +662,27 @@ fn evaluate_sparql_query(
 
 fn configure_and_evaluate_sparql_update(
     store: Store,
-    encoded: Vec<u8>,
+    encoded: &[&[u8]],
     mut update: Option<String>,
     request: &Request,
 ) -> Response {
     let mut use_default_graph_as_union = false;
     let mut default_graph_uris = Vec::new();
     let mut named_graph_uris = Vec::new();
-    for (k, v) in form_urlencoded::parse(&encoded) {
-        match k.as_ref() {
-            "update" => {
-                if update.is_some() {
-                    return bad_request("Multiple update parameters provided");
+    for encoded in encoded {
+        for (k, v) in form_urlencoded::parse(encoded) {
+            match k.as_ref() {
+                "update" => {
+                    if update.is_some() {
+                        return bad_request("Multiple update parameters provided");
+                    }
+                    update = Some(v.into_owned())
                 }
-                update = Some(v.into_owned())
+                "using-graph-uri" => default_graph_uris.push(v.into_owned()),
+                "using-union-graph" => use_default_graph_as_union = true,
+                "using-named-graph-uri" => named_graph_uris.push(v.into_owned()),
+                _ => (),
             }
-            "using-graph-uri" => default_graph_uris.push(v.into_owned()),
-            "using-union-graph" => use_default_graph_as_union = true,
-            "using-named-graph-uri" => named_graph_uris.push(v.into_owned()),
-            _ => (),
         }
     }
     if let Some(update) = update {
@@ -1161,6 +1179,35 @@ mod tests {
         ).with_header(HeaderName::ACCEPT, "text/csv")
             .unwrap()
             .build();
+        server.test_body(
+            request,
+            "s,p,o\r\nhttp://example.com,http://example.com,http://example.com",
+        );
+    }
+    #[test]
+    fn get_query_union_graph_in_url_and_urlencoded() {
+        let server = ServerTest::new();
+
+        let request = Request::builder(Method::PUT, "http://localhost/store/1".parse().unwrap())
+            .with_header(HeaderName::CONTENT_TYPE, "text/turtle")
+            .unwrap()
+            .with_body("<http://example.com> <http://example.com> <http://example.com> .");
+        server.test_status(request, Status::CREATED);
+
+        let request = Request::builder(
+            Method::POST,
+            "http://localhost/query?union-default-graph"
+                .parse()
+                .unwrap(),
+        )
+        .with_header(
+            HeaderName::CONTENT_TYPE,
+            "application/x-www-form-urlencoded",
+        )
+        .unwrap()
+        .with_header(HeaderName::ACCEPT, "text/csv")
+        .unwrap()
+        .with_body("query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}");
         server.test_body(
             request,
             "s,p,o\r\nhttp://example.com,http://example.com,http://example.com",
