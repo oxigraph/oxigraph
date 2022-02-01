@@ -1057,15 +1057,26 @@ mod tests {
 
     #[test]
     fn get_query() {
-        ServerTest::new().test_status(
-            Request::builder(
-                Method::GET,
-                "http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}"
-                    .parse()
-                    .unwrap(),
-            )
-            .build(),
-            Status::OK,
+        let server = ServerTest::new();
+
+        let request = Request::builder(Method::POST, "http://localhost/store".parse().unwrap())
+            .with_header(HeaderName::CONTENT_TYPE, "application/trig")
+            .unwrap()
+            .with_body("<http://example.com> <http://example.com> <http://example.com> .");
+        server.test_status(request, Status::NO_CONTENT);
+
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}"
+                .parse()
+                .unwrap(),
+        )
+        .with_header(HeaderName::ACCEPT, "text/csv")
+        .unwrap()
+        .build();
+        server.test_body(
+            request,
+            "s,p,o\r\nhttp://example.com,http://example.com,http://example.com",
         );
     }
 
@@ -1073,21 +1084,24 @@ mod tests {
     fn get_query_accept_star() {
         let request = Request::builder(
             Method::GET,
-            "http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}"
+            "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}"
                 .parse()
                 .unwrap(),
         )
         .with_header(HeaderName::ACCEPT, "*/*")
         .unwrap()
         .build();
-        ServerTest::new().test_status(request, Status::OK);
+        ServerTest::new().test_body(
+            request,
+            "{\"head\":{\"vars\":[\"s\",\"p\",\"o\"]},\"results\":{\"bindings\":[]}}",
+        );
     }
 
     #[test]
     fn get_query_accept_good() {
         let request = Request::builder(
             Method::GET,
-            "http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}"
+            "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}"
                 .parse()
                 .unwrap(),
         )
@@ -1097,7 +1111,10 @@ mod tests {
         )
         .unwrap()
         .build();
-        ServerTest::new().test_status(request, Status::OK);
+        ServerTest::new().test_body(
+            request,
+            "{\"head\":{\"vars\":[\"s\",\"p\",\"o\"]},\"results\":{\"bindings\":[]}}",
+        );
     }
 
     #[test]
@@ -1128,11 +1145,26 @@ mod tests {
 
     #[test]
     fn get_query_union_graph() {
-        ServerTest::new().test_status(Request::builder(
+        let server = ServerTest::new();
+
+        let request = Request::builder(Method::PUT, "http://localhost/store/1".parse().unwrap())
+            .with_header(HeaderName::CONTENT_TYPE, "text/turtle")
+            .unwrap()
+            .with_body("<http://example.com> <http://example.com> <http://example.com> .");
+        server.test_status(request, Status::CREATED);
+
+        let request = Request::builder(
             Method::GET,
-            "http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}&union-default-graph".parse()
+            "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}&union-default-graph"
+                .parse()
                 .unwrap(),
-        ).build(), Status::OK);
+        ).with_header(HeaderName::ACCEPT, "text/csv")
+            .unwrap()
+            .build();
+        server.test_body(
+            request,
+            "s,p,o\r\nhttp://example.com,http://example.com,http://example.com",
+        );
     }
 
     #[test]
@@ -1539,6 +1571,14 @@ mod tests {
             let mut buf = String::new();
             response.body_mut().read_to_string(&mut buf).unwrap();
             assert_eq!(response.status(), expected_status, "Error message: {}", buf);
+        }
+
+        fn test_body(&self, request: Request, expected_body: &str) {
+            let mut response = self.exec(request);
+            let mut buf = String::new();
+            response.body_mut().read_to_string(&mut buf).unwrap();
+            assert_eq!(response.status(), Status::OK, "Error message: {}", buf);
+            assert_eq!(&buf, expected_body);
         }
     }
 
