@@ -73,6 +73,10 @@ jobs:
       - uses: actions/checkout@v2
         with:
           submodules: true
+      - uses: docker/setup-qemu-action@v1
+        with:
+          platforms: linux/${{ matrix.architecture }}
+        if: matrix.architecture != 'x86_64'
       - run: sed 's/%arch%/${{ matrix.architecture }}/g' .github/workflows/manylinux_build.sh > .github/workflows/manylinux_build_script.sh
       - run: docker run -v "$(pwd)":/workdir --platform linux/${{ matrix.architecture }} quay.io/pypa/manylinux2014_${{ matrix.architecture }} /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
       - uses: pypa/gh-action-pypi-publish@release/v1
@@ -99,13 +103,8 @@ jobs:
           python-version: 3.7
       - run: rustup update && rustup target add aarch64-apple-darwin
       - run: pip install maturin
-      - run: maturin build --release --no-sdist --universal2 -m python/Cargo.toml
-      - run: maturin build --release --no-sdist -m python/Cargo.toml
-      - uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_PASSWORD }}
-          packages_dir: target/wheels
+      - run: maturin publish --no-sdist --universal2 -m python/Cargo.toml -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
+      - run: maturin publish --no-sdist -m python/Cargo.toml -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
       - uses: softprops/action-gh-release@v1
         with:
           files: target/wheels/*
@@ -122,12 +121,7 @@ jobs:
       - run: rustup update
       - run: pip install maturin
       - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
-      - run: maturin build --release --no-sdist -m python/Cargo.toml
-      - uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_PASSWORD }}
-          packages_dir: target/wheels
+      - run: maturin publish --no-sdist -m python/Cargo.toml -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
       - uses: softprops/action-gh-release@v1
         with:
           files: target/wheels/*
@@ -195,7 +189,7 @@ jobs:
           token: ${{ secrets.FULL_ACCESS_TOKEN }}
       - run: echo "RELEASE_VERSION=$(echo ${GITHUB_REF:10})" >> $GITHUB_ENV
       - run: rm -rf ./website/pyoxigraph/stable && mkdir -p ./website/pyoxigraph/stable && cp -r ./python/docs/build/html/* ./website/pyoxigraph/stable/
-        if: ${{ !contains('-', github.event.release.tag_name) }}
+        if: !contains('-', github.event.release.tag_name)
       - run: mkdir -p ./website/pyoxigraph/$RELEASE_VERSION && cp -r ./python/docs/build/html/* ./website/pyoxigraph/$RELEASE_VERSION/
       - run: |
           git config user.name github-actions
@@ -222,7 +216,7 @@ jobs:
             oxigraph_${{ github.event.release.tag_name }}.tar.gz
 
   publish_homebrew:
-    if: ${{ !contains('-', github.event.release.tag_name) }}
+    if: !contains('-', github.event.release.tag_name)
     runs-on: ubuntu-latest
     needs: publish_full_archive
     steps:
