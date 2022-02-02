@@ -860,6 +860,7 @@ impl Store {
 
     /// Validates that all the store invariants held in the data
     #[doc(hidden)]
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn validate(&self) -> Result<(), StorageError> {
         self.storage.snapshot().validate()
     }

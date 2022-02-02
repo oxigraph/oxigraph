@@ -635,6 +635,7 @@ impl StorageReader {
     }
 
     /// Validates that all the storage invariants held in the data
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn validate(&self) -> Result<(), StorageError> {
         // triples
         let dspo_size = self.dspo_quads(&[]).count();
