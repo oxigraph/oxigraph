@@ -24,6 +24,21 @@ wd:Q90 a schema:City ;
     schema:url "https://www.paris.fr/"^^xsd:anyURI ;
     schema:postalCode "75001" .
 "#;
+const GRAPH_DATA: &str = r#"
+@prefix schema: <http://schema.org/> .
+@prefix wd: <http://www.wikidata.org/entity/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+GRAPH <http://www.wikidata.org/wiki/Special:EntityData/Q90> {
+    wd:Q90 a schema:City ;
+        schema:name "Paris"@fr , "la ville lumière"@fr ;
+        schema:country wd:Q142 ;
+        schema:population 2000000 ;
+        schema:startDate "-300"^^xsd:gYear ;
+        schema:url "https://www.paris.fr/"^^xsd:anyURI ;
+        schema:postalCode "75001" .
+}
+"#;
 const NUMBER_OF_TRIPLES: usize = 8;
 
 fn quads(graph_name: impl Into<GraphNameRef<'static>>) -> Vec<QuadRef<'static>> {
@@ -91,26 +106,49 @@ fn test_load_graph() -> Result<(), Box<dyn Error>> {
     for q in quads(GraphNameRef::DefaultGraph) {
         assert!(store.contains(q)?);
     }
+    store.validate()?;
+    Ok(())
+}
+
+#[test]
+fn test_bulk_load_graph() -> Result<(), Box<dyn Error>> {
+    let store = Store::new()?;
+    store.bulk_load_graph(
+        Cursor::new(DATA),
+        GraphFormat::Turtle,
+        GraphNameRef::DefaultGraph,
+        None,
+    )?;
+    for q in quads(GraphNameRef::DefaultGraph) {
+        assert!(store.contains(q)?);
+    }
+    store.validate()?;
     Ok(())
 }
 
 #[test]
 fn test_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
-    store.load_dataset(Cursor::new(DATA), DatasetFormat::TriG, None)?;
-    for q in quads(GraphNameRef::DefaultGraph) {
+    store.load_dataset(Cursor::new(GRAPH_DATA), DatasetFormat::TriG, None)?;
+    for q in quads(NamedNodeRef::new_unchecked(
+        "http://www.wikidata.org/wiki/Special:EntityData/Q90",
+    )) {
         assert!(store.contains(q)?);
     }
+    store.validate()?;
     Ok(())
 }
 
 #[test]
 fn test_bulk_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new().unwrap();
-    store.bulk_load_dataset(Cursor::new(DATA), DatasetFormat::TriG, None)?;
-    for q in quads(GraphNameRef::DefaultGraph) {
+    store.bulk_load_dataset(Cursor::new(GRAPH_DATA), DatasetFormat::TriG, None)?;
+    for q in quads(NamedNodeRef::new_unchecked(
+        "http://www.wikidata.org/wiki/Special:EntityData/Q90",
+    )) {
         assert!(store.contains(q)?);
     }
+    store.validate()?;
     Ok(())
 }
 
@@ -171,12 +209,13 @@ fn test_snapshot_isolation_iterator() -> Result<(), Box<dyn Error>> {
         NamedNodeRef::new_unchecked("http://example.com/s"),
         NamedNodeRef::new_unchecked("http://example.com/p"),
         NamedNodeRef::new_unchecked("http://example.com/o"),
-        NamedNodeRef::new_unchecked("http://example.com/g"),
+        NamedNodeRef::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90"),
     );
     let store = Store::new()?;
     store.insert(quad)?;
     let iter = store.iter();
     store.remove(quad)?;
+    store.validate()?;
     assert_eq!(
         iter.collect::<Result<Vec<_>, _>>()?,
         vec![quad.into_owned()]
@@ -190,7 +229,7 @@ fn test_bulk_load_on_existing_delete_overrides_the_delete() -> Result<(), Box<dy
         NamedNodeRef::new_unchecked("http://example.com/s"),
         NamedNodeRef::new_unchecked("http://example.com/p"),
         NamedNodeRef::new_unchecked("http://example.com/o"),
-        NamedNodeRef::new_unchecked("http://example.com/g"),
+        NamedNodeRef::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90"),
     );
     let store = Store::new()?;
     store.remove(quad)?;
@@ -244,7 +283,9 @@ fn test_backup() -> Result<(), Box<dyn Error>> {
     store.remove(quad)?;
 
     assert!(!store.contains(quad)?);
-    assert!(Store::open(&backup_dir.0)?.contains(quad)?);
+    let backup = Store::open(&backup_dir.0)?;
+    backup.validate()?;
+    assert!(backup.contains(quad)?);
     Ok(())
 }
 

@@ -857,6 +857,12 @@ impl Store {
     pub fn bulk_extend(&self, quads: impl IntoIterator<Item = Quad>) -> Result<(), StorageError> {
         bulk_load::<StorageError, _, _>(&self.storage, quads.into_iter().map(Ok))
     }
+
+    /// Validates that all the store invariants held in the data
+    #[doc(hidden)]
+    pub fn validate(&self) -> Result<(), StorageError> {
+        self.storage.snapshot().validate()
+    }
 }
 
 impl fmt::Display for Store {

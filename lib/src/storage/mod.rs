@@ -9,7 +9,9 @@ use crate::storage::binary_encoder::{
     WRITTEN_TERM_MAX_SIZE,
 };
 pub use crate::storage::error::{CorruptionError, LoaderError, SerializerError, StorageError};
-use crate::storage::numeric_encoder::{insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup};
+use crate::storage::numeric_encoder::{
+    insert_term, Decoder, EncodedQuad, EncodedTerm, StrHash, StrLookup,
+};
 use backend::{ColumnFamily, ColumnFamilyDefinition, Db, Iter};
 #[cfg(not(target_arch = "wasm32"))]
 use std::collections::{HashMap, HashSet};
@@ -631,6 +633,117 @@ impl StorageReader {
         self.reader
             .contains_key(&self.storage.id2str_cf, &key.to_be_bytes())
     }
+
+    /// Validates that all the storage invariants held in the data
+    pub fn validate(&self) -> Result<(), StorageError> {
+        // triples
+        let dspo_size = self.dspo_quads(&[]).count();
+        if dspo_size != self.dpos_quads(&[]).count() || dspo_size != self.dosp_quads(&[]).count() {
+            return Err(CorruptionError::new(
+                "Not the same number of triples in dspo, dpos and dosp",
+            )
+            .into());
+        }
+        for spo in self.dspo_quads(&[]) {
+            let spo = spo?;
+            self.decode_quad(&spo)?; // We ensure that the quad is readable
+            if !self.storage.db.contains_key(
+                &self.storage.dpos_cf,
+                &encode_term_triple(&spo.predicate, &spo.object, &spo.subject),
+            )? {
+                return Err(CorruptionError::new("Quad in dspo and not in dpos").into());
+            }
+            if !self.storage.db.contains_key(
+                &self.storage.dosp_cf,
+                &encode_term_triple(&spo.object, &spo.subject, &spo.predicate),
+            )? {
+                return Err(CorruptionError::new("Quad in dspo and not in dpos").into());
+            }
+        }
+
+        // quads
+        let gspo_size = self.gspo_quads(&[]).count();
+        if gspo_size != self.gpos_quads(&[]).count()
+            || gspo_size != self.gosp_quads(&[]).count()
+            || gspo_size != self.spog_quads(&[]).count()
+            || gspo_size != self.posg_quads(&[]).count()
+            || gspo_size != self.ospg_quads(&[]).count()
+        {
+            return Err(CorruptionError::new(
+                "Not the same number of triples in dspo, dpos and dosp",
+            )
+            .into());
+        }
+        for gspo in self.gspo_quads(&[]) {
+            let gspo = gspo?;
+            self.decode_quad(&gspo)?; // We ensure that the quad is readable
+            if !self.storage.db.contains_key(
+                &self.storage.gpos_cf,
+                &encode_term_quad(
+                    &gspo.graph_name,
+                    &gspo.predicate,
+                    &gspo.object,
+                    &gspo.subject,
+                ),
+            )? {
+                return Err(CorruptionError::new("Quad in gspo and not in gpos").into());
+            }
+            if !self.storage.db.contains_key(
+                &self.storage.gosp_cf,
+                &encode_term_quad(
+                    &gspo.graph_name,
+                    &gspo.object,
+                    &gspo.subject,
+                    &gspo.predicate,
+                ),
+            )? {
+                return Err(CorruptionError::new("Quad in gspo and not in gosp").into());
+            }
+            if !self.storage.db.contains_key(
+                &self.storage.spog_cf,
+                &encode_term_quad(
+                    &gspo.subject,
+                    &gspo.predicate,
+                    &gspo.object,
+                    &gspo.graph_name,
+                ),
+            )? {
+                return Err(CorruptionError::new("Quad in gspo and not in spog").into());
+            }
+            if !self.storage.db.contains_key(
+                &self.storage.posg_cf,
+                &encode_term_quad(
+                    &gspo.predicate,
+                    &gspo.object,
+                    &gspo.subject,
+                    &gspo.graph_name,
+                ),
+            )? {
+                return Err(CorruptionError::new("Quad in gspo and not in posg").into());
+            }
+            if !self.storage.db.contains_key(
+                &self.storage.ospg_cf,
+                &encode_term_quad(
+                    &gspo.object,
+                    &gspo.subject,
+                    &gspo.predicate,
+                    &gspo.graph_name,
+                ),
+            )? {
+                return Err(CorruptionError::new("Quad in gspo and not in ospg").into());
+            }
+            if !self
+                .storage
+                .db
+                .contains_key(&self.storage.graphs_cf, &encode_term(&gspo.graph_name))?
+            {
+                return Err(
+                    CorruptionError::new("Quad graph name in gspo and not in graphs").into(),
+                );
+            }
+        }
+        Ok(())
+    }
 }
 
 pub struct ChainedDecodingQuadIterator {
@@ -1191,9 +1304,9 @@ impl BulkLoader {
                 self.build_sst_for_keys(self.quads.iter().map(|quad| {
                     encode_term_quad(
                         &quad.graph_name,
+                        &quad.predicate,
                         &quad.object,
                         &quad.subject,
-                        &quad.predicate,
                     )
                 }))?,
             ));
@@ -1223,9 +1336,9 @@ impl BulkLoader {
                 &self.storage.posg_cf,
                 self.build_sst_for_keys(self.quads.iter().map(|quad| {
                     encode_term_quad(
+                        &quad.predicate,
                         &quad.object,
                         &quad.subject,
-                        &quad.predicate,
                         &quad.graph_name,
                     )
                 }))?,
