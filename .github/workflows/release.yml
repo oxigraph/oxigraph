@@ -222,6 +222,7 @@ jobs:
             oxigraph_${{ github.event.release.tag_name }}.tar.gz
 
   publish_homebrew:
+    if: ${{ !contains('-', github.event.release.tag_name) }}
     runs-on: ubuntu-latest
     needs: publish_full_archive
     steps:
