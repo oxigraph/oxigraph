@@ -177,9 +177,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.0.13"
+version = "3.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08799f92c961c7a1cf0cc398a9073da99e21ce388b46372c37f3191f2f3eed3e"
+checksum = "b63edc3f163b3c71ec8aa23f9bd6070f77edbf3d1d198b164afa90ff00e4ec62"
 dependencies = [
  "atty",
  "bitflags",
@@ -194,9 +194,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "3.0.12"
+version = "3.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fd2078197a22f338bd4fbf7d6387eb6f0d6a3c69e6cbc09f5c93e97321fd92a"
+checksum = "9a1132dc3944b31c20dd8b906b3a9f0a5d0243e092d59171414969657ac6aa85"
 dependencies = [
  "heck",
  "proc-macro-error",
@@ -811,7 +811,7 @@ dependencies = [
 name = "oxigraph_server"
 version = "0.3.0-beta.3"
 dependencies = [
- "clap 3.0.13",
+ "clap 3.0.14",
  "oxhttp",
  "oxigraph",
  "oxiri",
@@ -825,7 +825,7 @@ name = "oxigraph_testsuite"
 version = "0.3.0-beta.3"
 dependencies = [
  "anyhow",
- "clap 3.0.13",
+ "clap 3.0.14",
  "criterion",
  "oxigraph",
  "text-diff",
@@ -1445,9 +1445,9 @@ checksum = "f2dd574626839106c320a323308629dcb1acfc96e32a8cba364ddc61ac23ee83"
 
 [[package]]
 name = "sophia_api"
-version = "0.7.1"
+version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e45365d668e8b7c4841094db3713a747a4f40f8db40f8b84b13303d2890ad9fd"
+checksum = "aad03aad8253bd0f7c5423da4a1aaf4b18e5856b40e8841063ba5226cebc5efb"
 dependencies = [
  "lazy_static",
  "mownstr",
@@ -1459,9 +1459,9 @@ dependencies = [
 
 [[package]]
 name = "sophia_iri"
-version = "0.7.1"
+version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85b1a4e06de36c45e0b55ed1b061acc65c1d59eeeaf73baa1c244917f4cca942"
+checksum = "ecf2b1953a03e53c8cbfb029646be5b75c7e3a83cde8ef16ffe185c471093437"
 dependencies = [
  "lazy_static",
  "mownstr",

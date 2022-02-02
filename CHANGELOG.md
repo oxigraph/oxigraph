@@ -1,3 +1,13 @@
+## [0.3.0-beta.3] - 2022-02-02
+
+### Changed
+- Fixes a bug in the `bulk_load_dataset` method that was creating an invalid database.
+- Server: Takes into account also URL query parameters if the send SPARQL request body is using form-urlencoded.
+- Upgrades RocksDB to v0.28.2.
+- Generate clean python sdist files compiling Oxigraph from scratch with the proper `Cargo.lock`.
+- Do not push beta releases to homebrew and python stable documentation.
+- Moves RocksDB binding directory to `oxrocksdb-sys`.
+
 ## [0.3.0-beta.2] - 2022-01-29
 
 ### Changed
