@@ -498,11 +498,11 @@ impl<W: Write> SolutionsWriter<W> {
 
     /// Writes the last bytes of the file.
     pub fn finish(self) -> io::Result<W> {
-        Ok(match self.formatter {
-            SolutionsWriterKind::Xml(write) => write.finish()?,
-            SolutionsWriterKind::Json(write) => write.finish()?,
+        match self.formatter {
+            SolutionsWriterKind::Xml(write) => write.finish(),
+            SolutionsWriterKind::Json(write) => write.finish(),
             SolutionsWriterKind::Csv(write) => write.finish(),
             SolutionsWriterKind::Tsv(write) => write.finish(),
-        })
+        }
     }
 }

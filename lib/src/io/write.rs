@@ -144,12 +144,9 @@ impl<W: Write> TripleWriter<W> {
     /// Writes the last bytes of the file
     pub fn finish(self) -> io::Result<()> {
         match self.formatter {
-            TripleWriterKind::NTriples(_) => (),
-            TripleWriterKind::RdfXml(formatter) => {
-                formatter.finish()?;
-            }
-        };
-        Ok(())
+            TripleWriterKind::NTriples(mut writer) => writer.flush(),
+            TripleWriterKind::RdfXml(formatter) => formatter.finish()?.flush(), //TODO: remove flush when the next version of Rio is going to be released
+        }
     }
 }
 
@@ -259,6 +256,8 @@ impl<W: Write> QuadWriter<W> {
     /// Writes the last bytes of the file
     #[allow(clippy::unused_self, clippy::unnecessary_wraps)]
     pub fn finish(self) -> io::Result<()> {
-        Ok(())
+        match self.formatter {
+            QuadWriterKind::NQuads(mut writer) | QuadWriterKind::TriG(mut writer) => writer.flush(),
+        }
     }
 }

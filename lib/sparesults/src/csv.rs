@@ -55,8 +55,9 @@ impl<W: Write> CsvSolutionsWriter<W> {
         Ok(())
     }
 
-    pub fn finish(self) -> W {
-        self.sink
+    pub fn finish(mut self) -> io::Result<W> {
+        self.sink.flush()?;
+        Ok(self.sink)
     }
 }
 
@@ -145,8 +146,9 @@ impl<W: Write> TsvSolutionsWriter<W> {
         Ok(())
     }
 
-    pub fn finish(self) -> W {
-        self.sink
+    pub fn finish(mut self) -> io::Result<W> {
+        self.sink.flush()?;
+        Ok(self.sink)
     }
 }
 
@@ -319,7 +321,7 @@ mod tests {
                     .filter_map(|(v, s)| s.as_ref().map(|s| (v.as_ref(), s.as_ref()))),
             )?;
         }
-        let result = writer.finish();
+        let result = writer.finish()?;
         assert_eq!(str::from_utf8(&result).unwrap(), "x,literal\r\nhttp://example/x,String\r\nhttp://example/x,\"String-with-dquote\"\"\"\r\n_:b0,Blank node\r\n,Missing 'x'\r\n,\r\nhttp://example/x,\r\n_:b1,String-with-lang\r\n_:b1,123");
         Ok(())
     }
@@ -337,7 +339,7 @@ mod tests {
                     .filter_map(|(v, s)| s.as_ref().map(|s| (v.as_ref(), s.as_ref()))),
             )?;
         }
-        let result = writer.finish();
+        let result = writer.finish()?;
         assert_eq!(str::from_utf8(&result).unwrap(), "?x\t?literal\n<http://example/x>\t\"String\"\n<http://example/x>\t\"String-with-dquote\\\"\"\n_:b0\t\"Blank node\"\n\t\"Missing 'x'\"\n\t\n<http://example/x>\t\n_:b1\t\"String-with-lang\"@en\n_:b1\t123");
         Ok(())
     }
