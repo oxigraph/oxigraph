@@ -1,7 +1,9 @@
+import os
 import unittest
 from io import BytesIO, RawIOBase
 
 from pyoxigraph import *
+from tempfile import NamedTemporaryFile
 
 foo = NamedNode("http://foo")
 bar = NamedNode("http://bar")
@@ -221,6 +223,15 @@ class TestStore(unittest.TestCase):
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
+    def test_load_file(self):
+        with NamedTemporaryFile(delete=False) as fp:
+            file_name = fp.name
+            fp.write(b"<http://foo> <http://bar> <http://baz> <http://graph>.")
+        store = Store()
+        store.load(file_name, mime_type="application/n-quads")
+        os.remove(file_name)
+        self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
+
     def test_load_with_io_error(self):
         class BadIO(RawIOBase):
             pass
@@ -245,6 +256,19 @@ class TestStore(unittest.TestCase):
         self.assertEqual(
             output.getvalue(),
             b"<http://foo> <http://bar> <http://baz> <http://graph> .\n",
+        )
+
+    def test_dump_file(self):
+        with NamedTemporaryFile(delete=False) as fp:
+            file_name = fp.name
+        store = Store()
+        store.add(Quad(foo, bar, baz, graph))
+        store.dump(file_name, "application/n-quads")
+        with open(file_name, 'rt') as fp:
+            file_content = fp.read()
+        self.assertEqual(
+            file_content,
+            "<http://foo> <http://bar> <http://baz> <http://graph> .\n",
         )
 
     def test_dump_with_io_error(self):

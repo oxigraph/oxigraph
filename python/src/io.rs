@@ -9,6 +9,7 @@ use pyo3::exceptions::{PyIOError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::wrap_pyfunction;
+use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Read, Write};
 
 pub fn add_to_module(module: &PyModule) -> PyResult<()> {
@@ -30,8 +31,8 @@ pub fn add_to_module(module: &PyModule) -> PyResult<()> {
 /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
 /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
 ///
-/// :param input: The binary I/O object to read from. For example, it could be a file opened in binary mode with ``open('my_file.ttl', 'rb')``.
-/// :type input: io.RawIOBase or io.BufferedIOBase
+/// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
+/// :type input: io.RawIOBase or io.BufferedIOBase or str
 /// :param mime_type: the MIME type of the RDF serialization.
 /// :type mime_type: str
 /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
@@ -52,7 +53,7 @@ pub fn parse(
     base_iri: Option<&str>,
     py: Python<'_>,
 ) -> PyResult<PyObject> {
-    let input = BufReader::new(PyFileLike::new(input));
+    let input = PyFileLike::open(input, py).map_err(map_io_err)?;
     if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
         let mut parser = GraphParser::from_format(graph_format);
         if let Some(base_iri) = base_iri {
@@ -99,8 +100,8 @@ pub fn parse(
 ///
 /// :param input: the RDF triples and quads to serialize.
 /// :type input: iter(Triple) or iter(Quad)
-/// :param output: The binary I/O object to write to. For example, it could be a file opened in binary mode with ``open('my_file.ttl', 'wb')``.
-/// :type output: io.RawIOBase or io.BufferedIOBase
+/// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``.
+/// :type output: io.RawIOBase or io.BufferedIOBase or str
 /// :param mime_type: the MIME type of the RDF serialization.
 /// :type mime_type: str
 /// :raises ValueError: if the MIME type is not supported.
@@ -112,8 +113,8 @@ pub fn parse(
 /// b'<http://example.com> <http://example.com/p> "1" .\n'
 #[pyfunction]
 #[pyo3(text_signature = "(input, output, /, mime_type, *, base_iri = None)")]
-pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str) -> PyResult<()> {
-    let output = BufWriter::new(PyFileLike::new(output));
+pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_>) -> PyResult<()> {
+    let output = PyFileLike::create(output, py).map_err(map_io_err)?;
     if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
         let mut writer = GraphSerializer::from_format(graph_format)
             .triple_writer(output)
@@ -186,48 +187,72 @@ impl PyQuadReader {
     }
 }
 
-pub struct PyFileLike {
-    inner: PyObject,
+pub(crate) enum PyFileLike {
+    Io(PyObject),
+    File(File),
 }
 
 impl PyFileLike {
-    pub fn new(inner: PyObject) -> Self {
-        Self { inner }
+    pub fn open(inner: PyObject, py: Python<'_>) -> io::Result<BufReader<Self>> {
+        Ok(BufReader::new(match inner.extract::<&str>(py) {
+            Ok(path) => Self::File(py.allow_threads(|| File::open(path))?),
+            Err(_) => Self::Io(inner),
+        }))
+    }
+
+    pub fn create(inner: PyObject, py: Python<'_>) -> io::Result<BufWriter<Self>> {
+        Ok(BufWriter::new(match inner.extract::<&str>(py) {
+            Ok(path) => Self::File(py.allow_threads(|| File::create(path))?),
+            Err(_) => Self::Io(inner),
+        }))
     }
 }
 
 impl Read for PyFileLike {
     fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
-        let gil = Python::acquire_gil();
-        let py = gil.python();
-        let read = self
-            .inner
-            .call_method(py, "read", (buf.len(),), None)
-            .map_err(to_io_err)?;
-        let bytes: &PyBytes = read.cast_as(py).map_err(to_io_err)?;
-        buf.write_all(bytes.as_bytes())?;
-        Ok(bytes.len()?)
+        match self {
+            Self::Io(io) => {
+                let gil = Python::acquire_gil();
+                let py = gil.python();
+                let read = io
+                    .call_method(py, "read", (buf.len(),), None)
+                    .map_err(to_io_err)?;
+                let bytes: &[u8] = read.extract(py).map_err(to_io_err)?;
+                buf.write_all(bytes)?;
+                Ok(bytes.len())
+            }
+            Self::File(file) => file.read(buf),
+        }
     }
 }
 
 impl Write for PyFileLike {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let gil = Python::acquire_gil();
-        let py = gil.python();
-        usize::extract(
-            self.inner
-                .call_method(py, "write", (PyBytes::new(py, buf),), None)
-                .map_err(to_io_err)?
-                .as_ref(py),
-        )
-        .map_err(to_io_err)
+        match self {
+            Self::Io(io) => {
+                let gil = Python::acquire_gil();
+                let py = gil.python();
+                usize::extract(
+                    io.call_method(py, "write", (PyBytes::new(py, buf),), None)
+                        .map_err(to_io_err)?
+                        .as_ref(py),
+                )
+                .map_err(to_io_err)
+            }
+            Self::File(file) => file.write(buf),
+        }
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        let gil = Python::acquire_gil();
-        let py = gil.python();
-        self.inner.call_method(py, "flush", (), None)?;
-        Ok(())
+        match self {
+            Self::Io(io) => {
+                let gil = Python::acquire_gil();
+                let py = gil.python();
+                io.call_method(py, "flush", (), None)?;
+                Ok(())
+            }
+            Self::File(file) => file.flush(),
+        }
     }
 }
 

@@ -1,6 +1,6 @@
 #![allow(clippy::needless_option_as_deref)]
 
-use crate::io::{allow_threads_unsafe, map_parse_error, PyFileLike};
+use crate::io::{allow_threads_unsafe, map_io_err, map_parse_error, PyFileLike};
 use crate::model::*;
 use crate::sparql::*;
 use oxigraph::io::{DatasetFormat, GraphFormat};
@@ -10,7 +10,6 @@ use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
 use pyo3::exceptions::{PyIOError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::{Py, PyRef};
-use std::io::{BufReader, BufWriter};
 
 /// RDF store.
 ///
@@ -263,8 +262,8 @@ impl PyStore {
     /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
     /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
-    /// :param input: The binary I/O object to read from. For example, it could be a file opened in binary mode with ``open('my_file.ttl', 'rb')``.
-    /// :type input: io.RawIOBase or io.BufferedIOBase
+    /// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
+    /// :type input: io.RawIOBase or io.BufferedIOBase or str
     /// :param mime_type: the MIME type of the RDF serialization.
     /// :type mime_type: str
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
@@ -294,8 +293,8 @@ impl PyStore {
         } else {
             None
         };
+        let input = PyFileLike::open(input, py).map_err(map_io_err)?;
         py.allow_threads(|| {
-            let input = BufReader::new(PyFileLike::new(input));
             if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
                 self.inner
                     .load_graph(
@@ -342,8 +341,8 @@ impl PyStore {
     /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
     /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
-    /// :param input: The binary I/O object to read from. For example, it could be a file opened in binary mode with ``open('my_file.ttl', 'rb')``.
-    /// :type input: io.RawIOBase or io.BufferedIOBase
+    /// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
+    /// :type input: io.RawIOBase or io.BufferedIOBase or str
     /// :param mime_type: the MIME type of the RDF serialization.
     /// :type mime_type: str
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
@@ -373,8 +372,8 @@ impl PyStore {
         } else {
             None
         };
+        let input = PyFileLike::open(input, py).map_err(map_io_err)?;
         py.allow_threads(|| {
-            let input = BufReader::new(PyFileLike::new(input));
             if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
                 self.inner
                     .bulk_load_graph(
@@ -416,8 +415,8 @@ impl PyStore {
     /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
     /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
-    /// :param output: The binary I/O object to write to. For example, it could be a file opened in binary mode with ``open('my_file.ttl', 'wb')``.
-    /// :type input: io.RawIOBase or io.BufferedIOBase
+    /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``.
+    /// :type output: io.RawIOBase or io.BufferedIOBase or str
     /// :param mime_type: the MIME type of the RDF serialization.
     /// :type mime_type: str
     /// :param from_graph: if a triple based format is requested, the store graph from which dump the triples. By default, the default graph is used.
@@ -445,8 +444,8 @@ impl PyStore {
         } else {
             None
         };
+        let output = PyFileLike::create(output, py).map_err(map_io_err)?;
         py.allow_threads(|| {
-            let output = BufWriter::new(PyFileLike::new(output));
             if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
                 self.inner
                     .dump_graph(
