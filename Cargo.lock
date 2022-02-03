@@ -677,12 +677,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
-name = "mownstr"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76aacdf8f9850a9db34e33e35abfc17a29b9577d0eb2cbfaeb734662cacca5b3"
-
-[[package]]
 name = "nom"
 version = "7.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -789,7 +783,6 @@ dependencies = [
  "sha-1",
  "sha2",
  "siphasher",
- "sophia_api",
  "sparesults",
  "spargebra",
  "wasm-bindgen-test",
@@ -852,7 +845,6 @@ dependencies = [
  "oxilangtag",
  "oxiri",
  "rand",
- "sophia_api",
 ]
 
 [[package]]
@@ -1192,12 +1184,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f497285884f3fcff424ffc933e56d7cbca511def0c9831a7f9b5f6153e3cc89b"
 
 [[package]]
-name = "resiter"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd69ab1e90258b7769f0b5c46bfd802b8206d0707ced4ca4b9d5681b744de1be"
-
-[[package]]
 name = "ring"
 version = "0.16.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1444,32 +1430,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2dd574626839106c320a323308629dcb1acfc96e32a8cba364ddc61ac23ee83"
 
 [[package]]
-name = "sophia_api"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aad03aad8253bd0f7c5423da4a1aaf4b18e5856b40e8841063ba5226cebc5efb"
-dependencies = [
- "lazy_static",
- "mownstr",
- "regex",
- "resiter",
- "sophia_iri",
- "thiserror",
-]
-
-[[package]]
-name = "sophia_iri"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecf2b1953a03e53c8cbfb029646be5b75c7e3a83cde8ef16ffe185c471093437"
-dependencies = [
- "lazy_static",
- "mownstr",
- "regex",
- "thiserror",
-]
-
-[[package]]
 name = "sparesults"
 version = "0.1.0-beta.4"
 dependencies = [
@@ -1561,26 +1521,6 @@ name = "textwrap"
 version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0066c8d12af8b5acd21e00547c3797fde4e8677254a7ee429176ccebbe93dd80"
-
-[[package]]
-name = "thiserror"
-version = "1.0.30"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "854babe52e4df1653706b98fcfc05843010039b406875930a70e4d9644e5c417"
-dependencies = [
- "thiserror-impl",
-]
-
-[[package]]
-name = "thiserror-impl"
-version = "1.0.30"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa32fd3f627f367fe16f893e2597ae3c05020f8bba2666a4e6ea73d377e5714b"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
 
 [[package]]
 name = "time"

@@ -138,8 +138,6 @@
 
 pub mod io;
 pub mod model;
-#[cfg(feature = "sophia")]
-mod sophia;
 pub mod sparql;
 mod storage;
 pub mod store;

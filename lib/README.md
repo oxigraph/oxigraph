@@ -14,8 +14,6 @@ It also provides a set of utility functions for reading, writing, and processing
 
 Oxigraph is in heavy development and SPARQL query evaluation has not been optimized yet.
 
-The disabled by default `"sophia"` feature provides [`sophia_api`](https://docs.rs/sophia_api/) traits implementation on Oxigraph terms and stores.
-
 Oxigraph also provides [a standalone HTTP server](https://crates.io/crates/oxigraph_server) and [a Python library](https://oxigraph.org/pyoxigraph/) based on this library.
 
 

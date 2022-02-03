@@ -18,7 +18,6 @@ all-features = true
 
 [features]
 default = []
-sophia = ["sophia_api", "oxrdf/sophia_api"]
 http_client = ["oxhttp", "oxhttp/rustls"]
 
 [dependencies]
@@ -37,7 +36,6 @@ hex = "0.4"
 nom = "7"
 siphasher = "0.3"
 lazy_static = "1"
-sophia_api = { version = "0.7", optional = true }
 num_cpus = "1"
 oxrdf = { version = "0.1.0-beta.4", path="oxrdf", features = ["rdf-star"] }
 spargebra = { version = "0.2.0-beta.4", path="spargebra", features = ["rdf-star"] }
@@ -55,7 +53,6 @@ getrandom = {version="0.2", features=["js"]}
 [dev-dependencies]
 criterion = "0.3"
 oxhttp = "0.1"
-sophia_api = { version = "0.7", features = ["test_macro"] }
 zstd = "0.10"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]

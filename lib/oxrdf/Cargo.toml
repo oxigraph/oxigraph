@@ -21,7 +21,6 @@ rand = "0.8"
 oxilangtag = "0.1"
 oxiri = "0.2"
 lasso = { version = "0.6", features = ["inline-more"] }
-sophia_api = { version = "0.7", optional = true }
 
 [package.metadata.docs.rs]
 all-features = true

@@ -20,8 +20,6 @@ mod interning;
 mod literal;
 mod named_node;
 mod parser;
-#[cfg(feature = "sophia_api")]
-mod sophia;
 mod triple;
 mod variable;
 pub mod vocab;
