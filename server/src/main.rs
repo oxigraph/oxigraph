@@ -28,7 +28,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::thread::{spawn, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use url::form_urlencoded;
 
 const MAX_SPARQL_BODY_SIZE: u64 = 1_048_576;
@@ -78,20 +78,29 @@ pub fn main() -> std::io::Result<()> {
                 let store = store.clone();
                 let file = file.to_string();
                 spawn(move || {
-                    let format = file
+                    let f = file.clone();
+                    let start = Instant::now();
+                    let loader = store.bulk_loader().on_progress(move |size| {
+                        let elapsed = start.elapsed();
+                        println!("{} triples loaded in {}s ({} t/s) from {}", size, elapsed.as_secs(), size / elapsed.as_secs(), f)
+                    });
+                    let reader = BufReader::new(File::open(&file)?);
+                    if let Some(format) = file
                         .rsplit_once('.')
-                        .and_then(|(_, extension)| {
-                            DatasetFormat::from_extension(extension)
-                                .or_else(|| GraphFormat::from_extension(extension)?.try_into().ok())
-                        })
-                        .ok_or_else(|| {
-                            io::Error::new(
-                                ErrorKind::InvalidInput,
-                                "The server is not able to guess the file format of {} from its extension",
-                            )
-                        })?;
-                    store.bulk_load_dataset(BufReader::new(File::open(file)?), format, None)?;
-                    Ok(())
+                        .and_then(|(_, extension)| DatasetFormat::from_extension(extension)) {
+                        loader.load_dataset(reader, format, None)?;
+                        Ok(())
+                    } else if let Some(format) = file
+                        .rsplit_once('.')
+                        .and_then(|(_, extension)| GraphFormat::from_extension(extension)) {
+                        loader.load_graph(reader, format, GraphNameRef::DefaultGraph, None)?;
+                        Ok(())
+                    } else {
+                        Err(io::Error::new(
+                            ErrorKind::InvalidInput,
+                            "The server is not able to guess the file format of {} from its extension",
+                        ))
+                    }
                 })
             }).collect::<Vec<JoinHandle<io::Result<()>>>>();
             for handle in handles {

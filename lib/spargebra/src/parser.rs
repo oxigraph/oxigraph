@@ -1265,7 +1265,7 @@ parser! {
         } / i:InsertClause() {
             (None, Some(i))
         }
-        rule Modify_clear() -> () = {
+        rule Modify_clear() = {
             state.used_bnodes.clear();
             state.currently_used_bnodes.clear();
         }

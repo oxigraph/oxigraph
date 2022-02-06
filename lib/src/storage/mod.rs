@@ -13,6 +13,7 @@ use crate::storage::numeric_encoder::{
     insert_term, Decoder, EncodedQuad, EncodedTerm, StrHash, StrLookup,
 };
 use backend::{ColumnFamily, ColumnFamilyDefinition, Db, Iter};
+use std::collections::VecDeque;
 #[cfg(not(target_arch = "wasm32"))]
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -20,8 +21,11 @@ use std::error::Error;
 use std::mem::take;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread::spawn;
+use std::thread::JoinHandle;
 
 mod backend;
 mod binary_encoder;
@@ -42,7 +46,7 @@ const DOSP_CF: &str = "dosp";
 const GRAPHS_CF: &str = "graphs";
 const DEFAULT_CF: &str = "default";
 #[cfg(not(target_arch = "wasm32"))]
-const BULK_LOAD_BATCH_SIZE: usize = 1024 * 1024;
+const BULK_LOAD_BATCH_SIZE: usize = 1_000_000;
 
 /// Low level storage primitives
 #[derive(Clone)]
@@ -1149,47 +1153,109 @@ impl<'a> StorageWriter<'a> {
     }
 }
 
-/// Creates a database from a dataset files.
 #[cfg(not(target_arch = "wasm32"))]
-pub fn bulk_load<
-    EI,
-    EO: From<StorageError> + From<EI>,
-    I: IntoIterator<Item = Result<Quad, EI>>,
->(
-    storage: &Storage,
-    quads: I,
-) -> Result<(), EO> {
-    let mut threads = Vec::new();
-    let mut buffer = Vec::with_capacity(BULK_LOAD_BATCH_SIZE);
-    for quad in quads {
-        let quad = quad?;
-        buffer.push(quad);
-        if buffer.len() >= BULK_LOAD_BATCH_SIZE {
-            let buffer = take(&mut buffer);
-            let storage = storage.clone();
-            threads.push(spawn(move || BulkLoader::new(storage).load(buffer)));
-        }
-    }
-    BulkLoader::new(storage.clone()).load(buffer)?; // Last buffer
-    for thread in threads {
-        thread.join().unwrap()?;
-    }
-    Ok(())
+pub struct StorageBulkLoader {
+    storage: Storage,
+    hooks: Vec<Box<dyn Fn(u64)>>,
+    num_threads: usize,
 }
 
-/// Creates a database from a dataset files.
 #[cfg(not(target_arch = "wasm32"))]
-struct BulkLoader {
+impl StorageBulkLoader {
+    pub fn new(storage: Storage) -> Self {
+        Self {
+            storage,
+            hooks: Vec::new(),
+            num_threads: num_cpus::get() * 4,
+        }
+    }
+
+    pub fn on_progress(mut self, callback: impl Fn(u64) + 'static) -> Self {
+        self.hooks.push(Box::new(callback));
+        self
+    }
+
+    pub fn load<EI, EO: From<StorageError> + From<EI>, I: IntoIterator<Item = Result<Quad, EI>>>(
+        &self,
+        quads: I,
+    ) -> Result<(), EO> {
+        let mut threads = VecDeque::with_capacity(self.num_threads);
+        let mut buffer = Vec::with_capacity(BULK_LOAD_BATCH_SIZE);
+        let done_counter = Arc::new(AtomicU64::new(0));
+        let mut done_and_displayed_counter = 0;
+        for quad in quads {
+            let quad = quad?;
+            buffer.push(quad);
+            if buffer.len() >= BULK_LOAD_BATCH_SIZE {
+                self.spawn_load_thread(
+                    &mut buffer,
+                    &mut threads,
+                    &done_counter,
+                    &mut done_and_displayed_counter,
+                )?;
+            }
+        }
+        self.spawn_load_thread(
+            &mut buffer,
+            &mut threads,
+            &done_counter,
+            &mut done_and_displayed_counter,
+        )?;
+        for thread in threads {
+            thread.join().unwrap()?;
+            self.on_possible_progress(&done_counter, &mut done_and_displayed_counter);
+        }
+        Ok(())
+    }
+
+    fn spawn_load_thread(
+        &self,
+        buffer: &mut Vec<Quad>,
+        threads: &mut VecDeque<JoinHandle<Result<(), StorageError>>>,
+        done_counter: &Arc<AtomicU64>,
+        done_and_displayed_counter: &mut u64,
+    ) -> Result<(), StorageError> {
+        self.on_possible_progress(done_counter, done_and_displayed_counter);
+        // We avoid to have too many threads
+        if threads.len() >= self.num_threads {
+            if let Some(thread) = threads.pop_front() {
+                thread.join().unwrap()?;
+                self.on_possible_progress(done_counter, done_and_displayed_counter);
+            }
+        }
+        let buffer = take(buffer);
+        let storage = self.storage.clone();
+        let done_counter_clone = done_counter.clone();
+        threads.push_back(spawn(move || {
+            FileBulkLoader::new(storage).load(buffer, &done_counter_clone)
+        }));
+        self.on_possible_progress(done_counter, done_and_displayed_counter);
+        Ok(())
+    }
+
+    fn on_possible_progress(&self, done: &AtomicU64, done_and_displayed: &mut u64) {
+        let new_counter = done.fetch_max(*done_and_displayed, Ordering::Relaxed);
+        let display_step = u64::try_from(BULK_LOAD_BATCH_SIZE).unwrap();
+        if new_counter % display_step > *done_and_displayed % display_step {
+            for hook in &self.hooks {
+                hook(new_counter);
+            }
+        }
+        *done_and_displayed = new_counter;
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+struct FileBulkLoader {
     storage: Storage,
     id2str: HashMap<StrHash, Box<str>>,
     quads: HashSet<EncodedQuad>,
     triples: HashSet<EncodedQuad>,
     graphs: HashSet<EncodedTerm>,
-    buffer: Vec<u8>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl BulkLoader {
+impl FileBulkLoader {
     fn new(storage: Storage) -> Self {
         Self {
             storage,
@@ -1197,30 +1263,42 @@ impl BulkLoader {
             quads: HashSet::default(),
             triples: HashSet::default(),
             graphs: HashSet::default(),
-            buffer: Vec::new(),
         }
     }
 
-    fn load(&mut self, quads: impl IntoIterator<Item = Quad>) -> Result<(), StorageError> {
+    fn load(
+        &mut self,
+        quads: impl IntoIterator<Item = Quad>,
+        counter: &AtomicU64,
+    ) -> Result<(), StorageError> {
+        self.encode(quads)?;
+        let size = self.triples.len() + self.quads.len();
+        self.save()?;
+        counter.fetch_add(size.try_into().unwrap(), Ordering::Relaxed);
+        Ok(())
+    }
+
+    fn encode(&mut self, quads: impl IntoIterator<Item = Quad>) -> Result<(), StorageError> {
+        let mut buffer = Vec::new();
         for quad in quads {
             let encoded = EncodedQuad::from(quad.as_ref());
-            self.buffer.clear();
+            buffer.clear();
             if quad.graph_name.is_default_graph() {
-                write_spo_quad(&mut self.buffer, &encoded);
+                write_spo_quad(&mut buffer, &encoded);
                 if self.triples.insert(encoded.clone()) {
                     self.insert_term(quad.subject.as_ref().into(), &encoded.subject)?;
                     self.insert_term(quad.predicate.as_ref().into(), &encoded.predicate)?;
                     self.insert_term(quad.object.as_ref(), &encoded.object)?;
                 }
             } else {
-                write_spog_quad(&mut self.buffer, &encoded);
+                write_spog_quad(&mut buffer, &encoded);
                 if self.quads.insert(encoded.clone()) {
                     self.insert_term(quad.subject.as_ref().into(), &encoded.subject)?;
                     self.insert_term(quad.predicate.as_ref().into(), &encoded.predicate)?;
                     self.insert_term(quad.object.as_ref(), &encoded.object)?;
 
-                    self.buffer.clear();
-                    write_term(&mut self.buffer, &encoded.graph_name);
+                    buffer.clear();
+                    write_term(&mut buffer, &encoded.graph_name);
                     if self.graphs.insert(encoded.graph_name.clone()) {
                         self.insert_term(
                             match quad.graph_name.as_ref() {
@@ -1234,7 +1312,7 @@ impl BulkLoader {
                 }
             }
         }
-        self.save()
+        Ok(())
     }
 
     fn save(&mut self) -> Result<(), StorageError> {

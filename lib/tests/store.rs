@@ -113,7 +113,7 @@ fn test_load_graph() -> Result<(), Box<dyn Error>> {
 #[test]
 fn test_bulk_load_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
-    store.bulk_load_graph(
+    store.bulk_loader().load_graph(
         Cursor::new(DATA),
         GraphFormat::Turtle,
         GraphNameRef::DefaultGraph,
@@ -142,7 +142,9 @@ fn test_load_dataset() -> Result<(), Box<dyn Error>> {
 #[test]
 fn test_bulk_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new().unwrap();
-    store.bulk_load_dataset(Cursor::new(GRAPH_DATA), DatasetFormat::TriG, None)?;
+    store
+        .bulk_loader()
+        .load_dataset(Cursor::new(GRAPH_DATA), DatasetFormat::TriG, None)?;
     for q in quads(NamedNodeRef::new_unchecked(
         "http://www.wikidata.org/wiki/Special:EntityData/Q90",
     )) {
@@ -233,7 +235,7 @@ fn test_bulk_load_on_existing_delete_overrides_the_delete() -> Result<(), Box<dy
     );
     let store = Store::new()?;
     store.remove(quad)?;
-    store.bulk_extend([quad.into_owned()])?;
+    store.bulk_loader().load_quads([quad.into_owned()])?;
     assert_eq!(store.len()?, 1);
     Ok(())
 }
@@ -256,7 +258,8 @@ fn test_bad_stt_open() -> Result<(), Box<dyn Error>> {
     let store = Store::open(&dir.0)?;
     remove_dir_all(&dir.0)?;
     assert!(store
-        .bulk_extend(once(Quad {
+        .bulk_loader()
+        .load_quads(once(Quad {
             subject: NamedNode::new_unchecked("http://example.com/s").into(),
             predicate: NamedNode::new_unchecked("http://example.com/p"),
             object: NamedNode::new_unchecked("http://example.com/o").into(),

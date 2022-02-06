@@ -376,7 +376,8 @@ impl PyStore {
         py.allow_threads(|| {
             if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
                 self.inner
-                    .bulk_load_graph(
+                    .bulk_loader()
+                    .load_graph(
                         input,
                         graph_format,
                         &to_graph_name.unwrap_or(GraphName::DefaultGraph),
@@ -390,7 +391,8 @@ impl PyStore {
                     ));
                 }
                 self.inner
-                    .bulk_load_dataset(input, dataset_format, base_iri)
+                    .bulk_loader()
+                    .load_dataset(input, dataset_format, base_iri)
                     .map_err(map_loader_error)
             } else {
                 Err(PyValueError::new_err(format!(

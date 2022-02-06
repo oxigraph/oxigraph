@@ -32,9 +32,9 @@ use crate::sparql::{
     evaluate_query, evaluate_update, EvaluationError, Query, QueryOptions, QueryResults, Update,
     UpdateOptions,
 };
-#[cfg(not(target_arch = "wasm32"))]
-use crate::storage::bulk_load;
 use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::storage::StorageBulkLoader;
 use crate::storage::{
     ChainedDecodingQuadIterator, DecodingGraphIterator, Storage, StorageReader, StorageWriter,
 };
@@ -365,7 +365,7 @@ impl Store {
 
     /// Loads a graph file (i.e. triples) into the store.
     ///
-    /// This function is atomic, quite slow and memory hungry. To get much better performances you might want to use [`bulk_load_graph`](Store::bulk_load_graph).
+    /// This function is atomic, quite slow and memory hungry. To get much better performances you might want to use the [`bulk_loader`](Store::bulk_loader).
     ///
     /// Usage example:
     /// ```
@@ -411,7 +411,7 @@ impl Store {
 
     /// Loads a dataset file (i.e. quads) into the store.
     ///
-    /// This function is atomic, quite slow and memory hungry. To get much better performances you might want to [`bulk_load_dataset`](Store::bulk_load_dataset).
+    /// This function is atomic, quite slow and memory hungry. To get much better performances you might want to use the [`bulk_loader`](Store::bulk_loader).
     ///
     /// Usage example:
     /// ```
@@ -477,7 +477,7 @@ impl Store {
 
     /// Adds atomically a set of quads to this store.
     ///
-    /// Warning: This operation uses a memory heavy transaction internally, use [`bulk_extend`](Store::bulk_extend) if you plan to add ten of millions of triples.
+    /// Warning: This operation uses a memory heavy transaction internally, use the [`bulk_loader`](Store::bulk_loader) if you plan to add ten of millions of triples.
     pub fn extend(
         &self,
         quads: impl IntoIterator<Item = impl Into<Quad>>,
@@ -753,15 +753,7 @@ impl Store {
         self.storage.backup(target_directory.as_ref())
     }
 
-    /// Loads a dataset file efficiently into the store.
-    ///
-    /// This function is optimized for large dataset loading speed. For small files, [`load_dataset`](Store::load_dataset) might be more convenient.
-    ///
-    /// Warning: This method is not atomic.
-    /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
-    /// Results might get weird if you delete data during the loading process.
-    ///
-    /// Warning: This method is optimized for speed. It uses multiple threads and GBs of RAM on large files.
+    /// Creates a bulk loader allowing to load at lot of data quickly into the store.
     ///
     /// Usage example:
     /// ```
@@ -771,9 +763,9 @@ impl Store {
     ///
     /// let store = Store::new()?;
     ///
-    /// // insertion
+    /// // quads file insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
-    /// store.bulk_load_dataset(file.as_ref(), DatasetFormat::NQuads, None)?;
+    /// store.bulk_loader().load_dataset(file.as_ref(), DatasetFormat::NQuads, None)?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -781,81 +773,10 @@ impl Store {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn bulk_load_dataset(
-        &self,
-        reader: impl BufRead,
-        format: DatasetFormat,
-        base_iri: Option<&str>,
-    ) -> Result<(), LoaderError> {
-        let mut parser = DatasetParser::from_format(format);
-        if let Some(base_iri) = base_iri {
-            parser = parser
-                .with_base_iri(base_iri)
-                .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
+    pub fn bulk_loader(&self) -> BulkLoader {
+        BulkLoader {
+            storage: StorageBulkLoader::new(self.storage.clone()),
         }
-        bulk_load(&self.storage, parser.read_quads(reader)?)
-    }
-
-    /// Loads a dataset file efficiently into the store.
-    ///
-    /// This function is optimized for large dataset loading speed. For small files, [`load_graph`](Store::load_graph) might be more convenient.   
-    ///
-    /// Warning: This method is not atomic.
-    /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
-    /// Results might get weird if you delete data during the loading process.
-    ///
-    /// Warning: This method is optimized for speed. It uses multiple threads and GBs of RAM on large files.
-    ///
-    /// Usage example:
-    /// ```
-    /// use oxigraph::store::Store;
-    /// use oxigraph::io::GraphFormat;
-    /// use oxigraph::model::*;
-    ///
-    /// let store = Store::new()?;
-    ///
-    /// // insertion
-    /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
-    /// store.bulk_load_graph(file.as_ref(), GraphFormat::NTriples, GraphNameRef::DefaultGraph, None)?;
-    ///
-    /// // we inspect the store contents
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
-    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
-    /// ```
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn bulk_load_graph<'a>(
-        &self,
-        reader: impl BufRead,
-        format: GraphFormat,
-        to_graph_name: impl Into<GraphNameRef<'a>>,
-        base_iri: Option<&str>,
-    ) -> Result<(), LoaderError> {
-        let mut parser = GraphParser::from_format(format);
-        if let Some(base_iri) = base_iri {
-            parser = parser
-                .with_base_iri(base_iri)
-                .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
-        }
-        let to_graph_name = to_graph_name.into();
-        bulk_load(
-            &self.storage,
-            parser
-                .read_triples(reader)?
-                .map(|r| r.map(|q| q.in_graph(to_graph_name.into_owned()))),
-        )
-    }
-
-    /// Adds a set of triples to this store using bulk load.
-    ///
-    /// Warning: This method is not atomic.
-    /// If the process fails in the middle of the file, only a part of the data may be written to the store.
-    /// Results might get weird if you delete data during the loading process.
-    ///
-    /// Warning: This method is optimized for speed. It uses multiple threads and GBs of RAM on large files.
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn bulk_extend(&self, quads: impl IntoIterator<Item = Quad>) -> Result<(), StorageError> {
-        bulk_load::<StorageError, _, _>(&self.storage, quads.into_iter().map(Ok))
     }
 
     /// Validates that all the store invariants held in the data
@@ -1155,9 +1076,7 @@ impl<'a> Transaction<'a> {
         self.writer.insert(quad.into())
     }
 
-    /// Adds atomically a set of quads to this store.
-    ///
-    /// Warning: This operation uses a memory heavy transaction internally, use [`bulk_extend`](Store::bulk_extend) if you plan to add ten of millions of triples.
+    /// Adds a set of quads to this store.
     pub fn extend<'b>(
         &mut self,
         quads: impl IntoIterator<Item = impl Into<QuadRef<'b>>>,
@@ -1343,6 +1262,148 @@ impl Iterator for GraphNameIter {
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.iter.size_hint()
+    }
+}
+
+/// A bulk loader allowing to load at lot of data quickly into the store.
+///
+/// Warning: The operations provided here are not atomic.
+/// If the operation fails in the middle, only a part of the data may be written to the store.
+/// Results might get weird if you delete data during the loading process.
+///
+/// Warning: It is optimized for speed. It uses multiple threads and GBs of RAM on large files.
+///
+/// Usage example with loading a dataset:
+/// ```
+/// use oxigraph::store::Store;
+/// use oxigraph::io::DatasetFormat;
+/// use oxigraph::model::*;
+///
+/// let store = Store::new()?;
+///
+/// // quads file insertion
+/// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
+/// store.bulk_loader().load_dataset(file.as_ref(), DatasetFormat::NQuads, None)?;
+///
+/// // we inspect the store contents
+/// let ex = NamedNodeRef::new("http://example.com")?;
+/// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+/// ```
+#[cfg(not(target_arch = "wasm32"))]
+pub struct BulkLoader {
+    storage: StorageBulkLoader,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl BulkLoader {
+    /// Adds a `callback` evaluated from time to time with the number of loaded triples.
+    pub fn on_progress(self, callback: impl Fn(u64) + 'static) -> Self {
+        Self {
+            storage: self.storage.on_progress(callback),
+        }
+    }
+
+    /// Loads a dataset file using the bulk loader.
+    ///
+    /// This function is optimized for large dataset loading speed. For small files, [`Store::load_dataset`] might be more convenient.
+    ///
+    /// Warning: This method is not atomic.
+    /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
+    /// Results might get weird if you delete data during the loading process.
+    ///
+    /// Warning: This method is optimized for speed. It uses multiple threads and GBs of RAM on large files.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::store::Store;
+    /// use oxigraph::io::DatasetFormat;
+    /// use oxigraph::model::*;
+    ///
+    /// let store = Store::new()?;
+    ///
+    /// // insertion
+    /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
+    /// store.bulk_loader().load_dataset(file.as_ref(), DatasetFormat::NQuads, None)?;
+    ///
+    /// // we inspect the store contents
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn load_dataset(
+        &self,
+        reader: impl BufRead,
+        format: DatasetFormat,
+        base_iri: Option<&str>,
+    ) -> Result<(), LoaderError> {
+        let mut parser = DatasetParser::from_format(format);
+        if let Some(base_iri) = base_iri {
+            parser = parser
+                .with_base_iri(base_iri)
+                .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
+        }
+        self.storage.load(parser.read_quads(reader)?)
+    }
+
+    /// Loads a graph file using the bulk loader.
+    ///
+    /// This function is optimized for large graph loading speed. For small files, [`Store::load_graph`] might be more convenient.   
+    ///
+    /// Warning: This method is not atomic.
+    /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
+    /// Results might get weird if you delete data during the loading process.
+    ///
+    /// Warning: This method is optimized for speed. It uses multiple threads and GBs of RAM on large files.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::store::Store;
+    /// use oxigraph::io::GraphFormat;
+    /// use oxigraph::model::*;
+    ///
+    /// let store = Store::new()?;
+    ///
+    /// // insertion
+    /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
+    /// store.bulk_loader().load_graph(file.as_ref(), GraphFormat::NTriples, GraphNameRef::DefaultGraph, None)?;
+    ///
+    /// // we inspect the store contents
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn load_graph<'a>(
+        &self,
+        reader: impl BufRead,
+        format: GraphFormat,
+        to_graph_name: impl Into<GraphNameRef<'a>>,
+        base_iri: Option<&str>,
+    ) -> Result<(), LoaderError> {
+        let mut parser = GraphParser::from_format(format);
+        if let Some(base_iri) = base_iri {
+            parser = parser
+                .with_base_iri(base_iri)
+                .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
+        }
+        let to_graph_name = to_graph_name.into();
+        self.storage.load(
+            parser
+                .read_triples(reader)?
+                .map(|r| r.map(|q| q.in_graph(to_graph_name.into_owned()))),
+        )
+    }
+
+    /// Adds a set of quads using the bulk loader.
+    ///
+    /// Warning: This method is not atomic.
+    /// If the process fails in the middle of the file, only a part of the data may be written to the store.
+    /// Results might get weird if you delete data during the loading process.
+    ///
+    /// Warning: This method is optimized for speed. It uses multiple threads and GBs of RAM on large files.
+    pub fn load_quads(&self, quads: impl IntoIterator<Item = Quad>) -> Result<(), StorageError> {
+        self.storage
+            .load::<StorageError, _, _>(quads.into_iter().map(Ok))
     }
 }
 

@@ -75,7 +75,8 @@ fn do_load(store: &Store, data: &[u8]) {
 
 fn do_bulk_load(store: &Store, data: &[u8]) {
     store
-        .bulk_load_graph(
+        .bulk_loader()
+        .load_graph(
             Cursor::new(&data),
             GraphFormat::NTriples,
             GraphNameRef::DefaultGraph,
