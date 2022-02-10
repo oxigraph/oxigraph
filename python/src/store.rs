@@ -518,6 +518,27 @@ impl PyStore {
         })
     }
 
+    /// Clears a graph from the store without removing it.
+    ///
+    /// :raises IOError: if an I/O error happens during the operation.
+    ///
+    /// >>> store = Store()
+    /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
+    /// >>> store.clear_graph(NamedNode('http://example.com/g'))
+    /// >>> list(store)
+    /// []
+    /// >>> list(store.named_graphs())
+    /// [<NamedNode value=http://example.com/g>]
+    #[pyo3(text_signature = "($self, graph_name)")]
+    fn clear_graph(&self, graph_name: &PyAny, py: Python<'_>) -> PyResult<()> {
+        let graph_name = GraphName::from(&PyGraphNameRef::try_from(graph_name)?);
+        py.allow_threads(|| {
+            self.inner
+                .clear_graph(&graph_name)
+                .map_err(map_storage_error)
+        })
+    }
+
     /// Removes a graph from the store.
     ///
     /// The default graph will not be removed but just cleared.
@@ -527,9 +548,9 @@ impl PyStore {
     /// :raises IOError: if an I/O error happens during the named graph removal.
     ///
     /// >>> store = Store()
-    /// >>> quad = Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))
+    /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     /// >>> store.remove_graph(NamedNode('http://example.com/g'))
-    /// >>> list(store)
+    /// >>> list(store.named_graphs())
     /// []
     #[pyo3(text_signature = "($self, graph_name)")]
     fn remove_graph(&self, graph_name: &PyAny, py: Python<'_>) -> PyResult<()> {
@@ -544,9 +565,44 @@ impl PyStore {
                     self.inner.remove_named_graph(&graph_name).map(|_| ())
                 }
             }
-            .map_err(map_storage_error)?;
-            Ok(())
+            .map_err(map_storage_error)
         })
+    }
+
+    /// Clears the store by removing all its contents.
+    ///
+    /// :raises IOError: if an I/O error happens during the operation.
+    ///
+    /// >>> store = Store()
+    /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
+    /// >>> store.clear()
+    /// >>> list(store)
+    /// []
+    /// >>> list(store.named_graphs())
+    /// []
+    #[pyo3(text_signature = "($self)")]
+    fn clear(&self, py: Python<'_>) -> PyResult<()> {
+        py.allow_threads(|| self.inner.clear().map_err(map_storage_error))
+    }
+
+    /// Flushes all buffers and ensures that all writes are saved on disk.
+    ///
+    /// Flushes are automatically done using background threads but might lag a little bit.
+    ///
+    /// :raises IOError: if an I/O error happens during the flush.
+    #[pyo3(text_signature = "($self)")]
+    fn flush(&self, py: Python<'_>) -> PyResult<()> {
+        py.allow_threads(|| self.inner.flush().map_err(map_storage_error))
+    }
+
+    /// Optimizes the database for future workload.
+    ///
+    /// Useful to call after a batch upload or another similar operation.
+    ///
+    /// :raises IOError: if an I/O error happens during the optimization.
+    #[pyo3(text_signature = "($self)")]
+    fn optimize(&self, py: Python<'_>) -> PyResult<()> {
+        py.allow_threads(|| self.inner.optimize().map_err(map_storage_error))
     }
 
     /// Creates database backup into the `target_directory`.
