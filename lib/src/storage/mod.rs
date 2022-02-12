@@ -1178,7 +1178,7 @@ impl StorageBulkLoader {
         self
     }
 
-    pub fn set_max_memory_size_in_bytes(mut self, max_memory_size: usize) -> Self {
+    pub fn set_max_memory_size_in_megabytes(mut self, max_memory_size: usize) -> Self {
         self.max_memory_size = Some(max_memory_size);
         self
     }
@@ -1198,7 +1198,7 @@ impl StorageBulkLoader {
             } else if let Some(max_memory_size) = self.max_memory_size {
                 min(
                     num_cpus::get(),
-                    max_memory_size / 1000 / DEFAULT_BULK_LOAD_BATCH_SIZE,
+                    max_memory_size * 1000 / DEFAULT_BULK_LOAD_BATCH_SIZE,
                 )
             } else {
                 num_cpus::get()
@@ -1206,7 +1206,7 @@ impl StorageBulkLoader {
             2,
         );
         let batch_size = if let Some(max_memory_size) = self.max_memory_size {
-            max(1000, max_memory_size / 1000 / num_threads)
+            max(1000, max_memory_size * 1000 / num_threads)
         } else {
             DEFAULT_BULK_LOAD_BATCH_SIZE
         };

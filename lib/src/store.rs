@@ -1272,7 +1272,7 @@ impl Iterator for GraphNameIter {
 /// Results might get weird if you delete data during the loading process.
 ///
 /// Warning: It is optimized for speed.
-/// Memory usage is configurable using [`BulkLoader::set_max_memory_size_in_bytes`]
+/// Memory usage is configurable using [`BulkLoader::set_max_memory_size_in_megabytes`]
 /// and the number of used threads with [`BulkLoader::set_num_threads`].
 /// By default the memory consumption target (excluding the system and RocksDB internal consumption)
 /// is 1GB per thread and the number of threads is set to the number of logical CPU cores provided by the system.
@@ -1307,7 +1307,7 @@ impl BulkLoader {
     /// This number must be at last 2 (one for parsing and one for loading).
     ///
     /// By default this is the number of logical CPU cores provided by the system except if
-    /// [`BulkLoader::set_max_memory_size_in_bytes`] is set. In this case at least one 1GB is reserved
+    /// [`BulkLoader::set_max_memory_size_in_megabytes`] is set. In this case at least one 1GB is reserved
     /// per used thread.
     pub fn set_num_threads(self, num_threads: usize) -> Self {
         Self {
@@ -1324,9 +1324,11 @@ impl BulkLoader {
     ///
     /// By default, at most 1GB per used thread is used
     /// (i.e. at most GBs at the number of available logical CPU cores in total).
-    pub fn set_max_memory_size_in_bytes(self, max_memory_size: usize) -> Self {
+    pub fn set_max_memory_size_in_megabytes(self, max_memory_size: usize) -> Self {
         Self {
-            storage: self.storage.set_max_memory_size_in_bytes(max_memory_size),
+            storage: self
+                .storage
+                .set_max_memory_size_in_megabytes(max_memory_size),
         }
     }
 
