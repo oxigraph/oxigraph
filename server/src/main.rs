@@ -110,7 +110,6 @@ pub fn main() -> std::io::Result<()> {
             for handle in handles {
                 handle.join().unwrap()?;
             }
-            store.optimize()?;
             Ok(())
         }
         Command::Serve { bind } => {
