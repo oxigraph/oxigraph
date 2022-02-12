@@ -1271,7 +1271,12 @@ impl Iterator for GraphNameIter {
 /// If the operation fails in the middle, only a part of the data may be written to the store.
 /// Results might get weird if you delete data during the loading process.
 ///
-/// Warning: It is optimized for speed. It uses multiple threads and GBs of RAM on large files.
+/// Warning: It is optimized for speed.
+/// Memory usage is configurable using [`BulkLoader::set_max_memory_size_in_bytes`]
+/// and the number of used threads with [`BulkLoader::set_num_threads`].
+/// By default the memory consumption target (excluding the system and RocksDB internal consumption)
+/// is 1GB per thread and the number of threads is set to the number of logical CPU cores provided by the system.
+/// These targets are considered per loaded file.
 ///
 /// Usage example with loading a dataset:
 /// ```
@@ -1297,6 +1302,34 @@ pub struct BulkLoader {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl BulkLoader {
+    /// Sets the maximal number of threads to be used by the bulk loader per operation.
+    ///
+    /// This number must be at last 2 (one for parsing and one for loading).
+    ///
+    /// By default this is the number of logical CPU cores provided by the system except if
+    /// [`BulkLoader::set_max_memory_size_in_bytes`] is set. In this case at least one 1GB is reserved
+    /// per used thread.
+    pub fn set_num_threads(self, num_threads: usize) -> Self {
+        Self {
+            storage: self.storage.set_num_threads(num_threads),
+        }
+    }
+
+    /// Sets the maximal number of memory used by this operation.
+    ///
+    /// This number must be at last a few megabytes per thread.
+    ///
+    /// Memory used by RocksDB and the system is not taken into account in this limit.
+    /// Note that depending on the system behavior this amount might never be reached.
+    ///
+    /// By default, at most 1GB per used thread is used
+    /// (i.e. at most GBs at the number of available logical CPU cores in total).
+    pub fn set_max_memory_size_in_bytes(self, max_memory_size: usize) -> Self {
+        Self {
+            storage: self.storage.set_max_memory_size_in_bytes(max_memory_size),
+        }
+    }
+
     /// Adds a `callback` evaluated from time to time with the number of loaded triples.
     pub fn on_progress(self, callback: impl Fn(u64) + 'static) -> Self {
         Self {
@@ -1312,7 +1345,7 @@ impl BulkLoader {
     /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
     /// Results might get weird if you delete data during the loading process.
     ///
-    /// Warning: This method is optimized for speed. It uses multiple threads and GBs of RAM on large files.
+    /// Warning: This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.
     ///
     /// Usage example:
     /// ```
@@ -1354,7 +1387,7 @@ impl BulkLoader {
     /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
     /// Results might get weird if you delete data during the loading process.
     ///
-    /// Warning: This method is optimized for speed. It uses multiple threads and GBs of RAM on large files.
+    /// Warning: This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.
     ///
     /// Usage example:
     /// ```
@@ -1400,7 +1433,7 @@ impl BulkLoader {
     /// If the process fails in the middle of the file, only a part of the data may be written to the store.
     /// Results might get weird if you delete data during the loading process.
     ///
-    /// Warning: This method is optimized for speed. It uses multiple threads and GBs of RAM on large files.
+    /// Warning: This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.
     pub fn load_quads(&self, quads: impl IntoIterator<Item = Quad>) -> Result<(), StorageError> {
         self.storage
             .load::<StorageError, _, _>(quads.into_iter().map(Ok))

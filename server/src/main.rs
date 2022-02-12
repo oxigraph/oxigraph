@@ -38,9 +38,9 @@ const LOGO: &str = include_str!("../logo.svg");
 
 #[derive(Parser)]
 #[clap(about, version)]
-/// Oxigraph SPARQL server
+/// Oxigraph SPARQL server.
 struct Args {
-    /// Directory in which persist the data
+    /// Directory in which persist the data.
     #[clap(short, long, parse(from_os_str), global = true)]
     location: Option<PathBuf>,
     #[clap(subcommand)]
@@ -49,15 +49,17 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Start Oxigraph HTTP server
+    /// Start Oxigraph HTTP server.
     Serve {
-        /// Host and port to listen to
+        /// Host and port to listen to.
         #[clap(short, long, default_value = "localhost:7878", global = true)]
         bind: String,
     },
-    /// Load file(s) into the store
+    /// Load file(s) into the store.
     Load {
-        /// file(s) to load
+        /// file(s) to load.
+        ///
+        /// If multiple files are provided they are loaded in parallel.
         #[clap(short, long, global = true)]
         file: Vec<String>,
     },

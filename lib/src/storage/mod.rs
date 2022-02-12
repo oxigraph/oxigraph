@@ -13,6 +13,7 @@ use crate::storage::numeric_encoder::{
     insert_term, Decoder, EncodedQuad, EncodedTerm, StrHash, StrLookup,
 };
 use backend::{ColumnFamily, ColumnFamilyDefinition, Db, Iter};
+use std::cmp::{max, min};
 use std::collections::VecDeque;
 #[cfg(not(target_arch = "wasm32"))]
 use std::collections::{HashMap, HashSet};
@@ -46,7 +47,7 @@ const DOSP_CF: &str = "dosp";
 const GRAPHS_CF: &str = "graphs";
 const DEFAULT_CF: &str = "default";
 #[cfg(not(target_arch = "wasm32"))]
-const BULK_LOAD_BATCH_SIZE: usize = 1_000_000;
+const DEFAULT_BULK_LOAD_BATCH_SIZE: usize = 1_000_000;
 
 /// Low level storage primitives
 #[derive(Clone)]
@@ -1157,7 +1158,8 @@ impl<'a> StorageWriter<'a> {
 pub struct StorageBulkLoader {
     storage: Storage,
     hooks: Vec<Box<dyn Fn(u64)>>,
-    num_threads: usize,
+    num_threads: Option<usize>,
+    max_memory_size: Option<usize>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1166,8 +1168,19 @@ impl StorageBulkLoader {
         Self {
             storage,
             hooks: Vec::new(),
-            num_threads: num_cpus::get() * 4,
+            num_threads: None,
+            max_memory_size: None,
         }
+    }
+
+    pub fn set_num_threads(mut self, num_threads: usize) -> Self {
+        self.num_threads = Some(num_threads);
+        self
+    }
+
+    pub fn set_max_memory_size_in_bytes(mut self, max_memory_size: usize) -> Self {
+        self.max_memory_size = Some(max_memory_size);
+        self
     }
 
     pub fn on_progress(mut self, callback: impl Fn(u64) + 'static) -> Self {
@@ -1179,19 +1192,38 @@ impl StorageBulkLoader {
         &self,
         quads: I,
     ) -> Result<(), EO> {
-        let mut threads = VecDeque::with_capacity(self.num_threads);
-        let mut buffer = Vec::with_capacity(BULK_LOAD_BATCH_SIZE);
+        let num_threads = max(
+            if let Some(num_threads) = self.num_threads {
+                num_threads
+            } else if let Some(max_memory_size) = self.max_memory_size {
+                min(
+                    num_cpus::get(),
+                    max_memory_size / 1000 / DEFAULT_BULK_LOAD_BATCH_SIZE,
+                )
+            } else {
+                num_cpus::get()
+            },
+            2,
+        );
+        let batch_size = if let Some(max_memory_size) = self.max_memory_size {
+            max(1000, max_memory_size / 1000 / num_threads)
+        } else {
+            DEFAULT_BULK_LOAD_BATCH_SIZE
+        };
+        let mut threads = VecDeque::with_capacity(num_threads - 1);
+        let mut buffer = Vec::with_capacity(batch_size);
         let done_counter = Arc::new(AtomicU64::new(0));
         let mut done_and_displayed_counter = 0;
         for quad in quads {
             let quad = quad?;
             buffer.push(quad);
-            if buffer.len() >= BULK_LOAD_BATCH_SIZE {
+            if buffer.len() >= batch_size {
                 self.spawn_load_thread(
                     &mut buffer,
                     &mut threads,
                     &done_counter,
                     &mut done_and_displayed_counter,
+                    num_threads,
                 )?;
             }
         }
@@ -1200,6 +1232,7 @@ impl StorageBulkLoader {
             &mut threads,
             &done_counter,
             &mut done_and_displayed_counter,
+            num_threads,
         )?;
         for thread in threads {
             thread.join().unwrap()?;
@@ -1214,10 +1247,11 @@ impl StorageBulkLoader {
         threads: &mut VecDeque<JoinHandle<Result<(), StorageError>>>,
         done_counter: &Arc<AtomicU64>,
         done_and_displayed_counter: &mut u64,
+        num_threads: usize,
     ) -> Result<(), StorageError> {
         self.on_possible_progress(done_counter, done_and_displayed_counter);
         // We avoid to have too many threads
-        if threads.len() >= self.num_threads {
+        if threads.len() >= num_threads {
             if let Some(thread) = threads.pop_front() {
                 thread.join().unwrap()?;
                 self.on_possible_progress(done_counter, done_and_displayed_counter);
@@ -1235,7 +1269,7 @@ impl StorageBulkLoader {
 
     fn on_possible_progress(&self, done: &AtomicU64, done_and_displayed: &mut u64) {
         let new_counter = done.fetch_max(*done_and_displayed, Ordering::Relaxed);
-        let display_step = u64::try_from(BULK_LOAD_BATCH_SIZE).unwrap();
+        let display_step = u64::try_from(DEFAULT_BULK_LOAD_BATCH_SIZE).unwrap();
         if new_counter % display_step > *done_and_displayed % display_step {
             for hook in &self.hooks {
                 hook(new_counter);
