@@ -19,3 +19,4 @@ sparesults = { version = "0.1.0-beta.4", path = "../lib/sparesults", features = 
 rand = "0.8"
 url = "2"
 oxiri = "0.2"
+flate2 = "1"

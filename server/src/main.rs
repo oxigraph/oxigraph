@@ -10,12 +10,13 @@
 )]
 
 use clap::{Parser, Subcommand};
+use flate2::read::MultiGzDecoder;
 use oxhttp::model::{Body, HeaderName, HeaderValue, Request, Response, Status};
 use oxhttp::Server;
 use oxigraph::io::{DatasetFormat, DatasetSerializer, GraphFormat, GraphSerializer};
 use oxigraph::model::{GraphName, GraphNameRef, IriParseError, NamedNode, NamedOrBlankNode};
 use oxigraph::sparql::{Query, QueryResults, Update};
-use oxigraph::store::Store;
+use oxigraph::store::{BulkLoader, Store};
 use oxiri::Iri;
 use rand::random;
 use sparesults::{QueryResultsFormat, QueryResultsSerializer};
@@ -76,35 +77,36 @@ pub fn main() -> std::io::Result<()> {
 
     match matches.command {
         Command::Load { file } => {
-            let handles = file.iter().map(|file| {
-                let store = store.clone();
-                let file = file.to_string();
-                spawn(move || {
-                    let f = file.clone();
-                    let start = Instant::now();
-                    let loader = store.bulk_loader().on_progress(move |size| {
-                        let elapsed = start.elapsed();
-                        println!("{} triples loaded in {}s ({} t/s) from {}", size, elapsed.as_secs(), size / elapsed.as_secs(), f)
-                    });
-                    let reader = BufReader::new(File::open(&file)?);
-                    if let Some(format) = file
-                        .rsplit_once('.')
-                        .and_then(|(_, extension)| DatasetFormat::from_extension(extension)) {
-                        loader.load_dataset(reader, format, None)?;
-                        Ok(())
-                    } else if let Some(format) = file
-                        .rsplit_once('.')
-                        .and_then(|(_, extension)| GraphFormat::from_extension(extension)) {
-                        loader.load_graph(reader, format, GraphNameRef::DefaultGraph, None)?;
-                        Ok(())
-                    } else {
-                        Err(io::Error::new(
-                            ErrorKind::InvalidInput,
-                            "The server is not able to guess the file format of {} from its extension",
-                        ))
-                    }
+            let handles = file
+                .iter()
+                .map(|file| {
+                    let store = store.clone();
+                    let file = file.to_string();
+                    spawn(move || {
+                        let f = file.clone();
+                        let start = Instant::now();
+                        let loader = store.bulk_loader().on_progress(move |size| {
+                            let elapsed = start.elapsed();
+                            println!(
+                                "{} triples loaded in {}s ({} t/s) from {}",
+                                size,
+                                elapsed.as_secs(),
+                                size / elapsed.as_secs(),
+                                f
+                            )
+                        });
+                        if file.ends_with(".gz") {
+                            bulk_load(
+                                loader,
+                                &file[..file.len() - 3],
+                                MultiGzDecoder::new(File::open(&file)?),
+                            )
+                        } else {
+                            bulk_load(loader, &file, File::open(&file)?)
+                        }
+                    })
                 })
-            }).collect::<Vec<JoinHandle<io::Result<()>>>>();
+                .collect::<Vec<JoinHandle<io::Result<()>>>>();
             for handle in handles {
                 handle.join().unwrap()?;
             }
@@ -121,6 +123,28 @@ pub fn main() -> std::io::Result<()> {
             server.listen(bind)?;
             Ok(())
         }
+    }
+}
+
+fn bulk_load(loader: BulkLoader, file: &str, reader: impl Read) -> io::Result<()> {
+    let (_, extension) = file.rsplit_once('.').ok_or_else(|| io::Error::new(
+        ErrorKind::InvalidInput,
+        format!("The server is not able to guess the file format of {} because the file name as no extension", file)))?;
+    let reader = BufReader::new(reader);
+    if let Some(format) = DatasetFormat::from_extension(extension) {
+        loader.load_dataset(reader, format, None)?;
+        Ok(())
+    } else if let Some(format) = GraphFormat::from_extension(extension) {
+        loader.load_graph(reader, format, GraphNameRef::DefaultGraph, None)?;
+        Ok(())
+    } else {
+        Err(io::Error::new(
+            ErrorKind::InvalidInput,
+            format!(
+                "The server is not able to guess the file format from the extension {}",
+                extension
+            ),
+        ))
     }
 }
 
