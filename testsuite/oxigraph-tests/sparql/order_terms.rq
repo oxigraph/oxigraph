@@ -1,3 +1,3 @@
 SELECT ?o WHERE {
-    VALUES ?o { 4.0 "v" "u"@en "a" "d"@de "c"@en "b" "foo"^^<http://example.com/h> 1 "2021-30-30"^^<http://www.w3.org/2001/XMLSchema#date> "2020-30-29T00:00:00"^^<http://www.w3.org/2001/XMLSchema#dateTime> d }
+    VALUES ?o { 4.0 "v" "u"@en "a" "d"@de "c"@en "b" "foo"^^<http://example.com/h> 1 "2021-30-30"^^<http://www.w3.org/2001/XMLSchema#date> "2020-30-29T00:00:00"^^<http://www.w3.org/2001/XMLSchema#dateTime> -1e3 }
 } ORDER BY ?o
