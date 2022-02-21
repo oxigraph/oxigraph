@@ -8,8 +8,14 @@
     "standard": "^16.0.0"
   },
   "scripts": {
-    "test": "standard test/* && wasm-pack build --dev --target nodejs && mocha",
-    "build": "wasm-pack build --release --target nodejs && sed -i 's/oxigraph_js/oxigraph/g' pkg/package.json",
-    "release": "wasm-pack pack && wasm-pack publish"
+    "test": "standard && wasm-pack build --debug --target nodejs && mocha",
+    "build": "rm -rf pkg && wasm-pack build --release --target web --out-name web && mv pkg pkg-web && wasm-pack build --release --target nodejs --out-name node && mv pkg pkg-node && node build_package.js && rm -r pkg-web && rm -r pkg-node",
+    "release": "npm run build && npm publish ./pkg",
+    "pack": "npm run build && npm pack ./pkg"
+  },
+  "standard": {
+    "ignore": [
+      "pkg*"
+    ]
   }
 }

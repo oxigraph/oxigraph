@@ -157,12 +157,14 @@ jobs:
       - run: cargo install wasm-pack
       - run: npm install
         working-directory: ./js
-      - run: npm run build
-        working-directory: ./js
       - run: npm run release
         working-directory: ./js
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm run pack
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: js/*.tgz
 
   publish_python_doc:
     runs-on: ubuntu-latest

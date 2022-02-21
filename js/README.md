@@ -13,29 +13,73 @@ Oxigraph for JavaScript is a work in progress and currently offers a simple in-m
 
 The store is also able to load RDF serialized in [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/) and [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/).
 
+It is distributed using a [a NPM package](https://www.npmjs.com/package/oxigraph) that should work with Node.JS 12+ and modern web browsers compatible with WebAssembly.
 
-It is distributed using a [a NPM package](https://www.npmjs.com/package/oxigraph) that should work with nodeJS 12+.
-
+To install:
 ```bash
 npm install oxigraph
 ```
 
+To load with Node.JS:
 ```js
 const oxigraph = require('oxigraph');
 ```
 
-## Example
+or with ES modules:
+```js
+import oxigraph from './node_modules/oxigraph/node.js';
+```
 
-Insert the triple `<http://example/> <http://schema.org/name> "example"` and log the name of `<http://example/>` in SPARQL:
+To load on an HTML web page:
+```html
+<script type="module">
+    import init, * as oxigraph from './node_modules/oxigraph/web.js'
+
+    (async function () {
+        await init(); // Required to compile the WebAssembly code.
+
+        // We can use here Oxigraph methods
+    })()
+</script>
+```
+
+## Node.JS Example
+
+Insert the triple `<http://example/> <http://schema.org/name> "example"` and log the name of `<http://example/>` in  SPARQL:
+
 ```js
 const oxigraph = require('oxigraph');
 const store = new oxigraph.Store();
 const ex = oxigraph.namedNode("http://example/");
 const schemaName = oxigraph.namedNode("http://schema.org/name");
 store.add(oxigraph.triple(ex, schemaName, oxigraph.literal("example")));
-for (binding of store.query("SELECT ?name WHERE { <http://example/> <http://schema.org/name> ?name }")) {
+for (const binding of store.query("SELECT ?name WHERE { <http://example/> <http://schema.org/name> ?name }")) {
     console.log(binding.get("name").value);
 }
+```
+
+## Web Example
+
+Insert the triple `<http://example/> <http://schema.org/name> "example"` and log the name of `<http://example/>` in
+SPARQL:
+
+```html
+
+<script type="module">
+    import init, * as oxigraph from './node_modules/oxigraph/web.js'
+
+    (async function () {
+        await init(); // Required to compile the WebAssembly.
+
+        const store = new oxigraph.Store();
+        const ex = oxigraph.namedNode("http://example/");
+        const schemaName = oxigraph.namedNode("http://schema.org/name");
+        store.add(oxigraph.triple(ex, schemaName, oxigraph.literal("example")));
+        for (const binding of store.query("SELECT ?name WHERE { <http://example/> <http://schema.org/name> ?name }")) {
+            console.log(binding.get("name").value);
+        }
+    })()
+</script>
 ```
 
 ## API
