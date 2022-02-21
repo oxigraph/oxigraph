@@ -136,6 +136,19 @@ jobs:
           name: pyoxigraph_wheel_x86_64_windows
           path: target/wheels/*.whl
 
+  npm_tarball:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: rustup update
+      - run: cargo install wasm-pack
+      - run: npm run pack
+        working-directory: ./js
+      - uses: actions/upload-artifact@v2
+        with:
+          name: oxigraph_wasm_npm
+          path: js/*.tgz
+
   docker:
     runs-on: ubuntu-latest
     steps:
