@@ -325,7 +325,7 @@ fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
             false,
         )
     } else {
-        Ok(StaticQueryResults::from_graph(load_graph(url)?))
+        StaticQueryResults::from_graph(load_graph(url)?)
     }
 }
 
@@ -547,10 +547,10 @@ impl fmt::Display for StaticQueryResults {
 
 impl StaticQueryResults {
     fn from_query_results(results: QueryResults, with_order: bool) -> Result<StaticQueryResults> {
-        Ok(Self::from_graph(to_graph(results, with_order)?))
+        Self::from_graph(to_graph(results, with_order)?)
     }
 
-    fn from_graph(graph: Graph) -> StaticQueryResults {
+    fn from_graph(graph: Graph) -> Result<StaticQueryResults> {
         // Hack to normalize literals
         let store = Store::new().unwrap();
         for t in graph.iter() {
@@ -563,28 +563,30 @@ impl StaticQueryResults {
         if let Some(result_set) = graph.subject_for_predicate_object(rdf::TYPE, rs::RESULT_SET) {
             if let Some(bool) = graph.object_for_subject_predicate(result_set, rs::BOOLEAN) {
                 // Boolean query
-                StaticQueryResults::Boolean(bool == Literal::from(true).as_ref().into())
+                Ok(StaticQueryResults::Boolean(
+                    bool == Literal::from(true).as_ref().into(),
+                ))
             } else {
                 // Regular query
                 let mut variables: Vec<Variable> = graph
                     .objects_for_subject_predicate(result_set, rs::RESULT_VARIABLE)
-                    .filter_map(|object| {
+                    .map(|object| {
                         if let TermRef::Literal(l) = object {
-                            Some(Variable::new_unchecked(l.value()))
+                            Ok(Variable::new_unchecked(l.value()))
                         } else {
-                            None
+                            Err(anyhow!("Invalid rs:resultVariable: {}", object))
                         }
                     })
-                    .collect();
+                    .collect::<Result<Vec<_>>>()?;
                 variables.sort();
 
-                let mut solutions: Vec<_> = graph
+                let mut solutions = graph
                     .objects_for_subject_predicate(result_set, rs::SOLUTION)
-                    .filter_map(|object| {
+                    .map(|object| {
                         if let TermRef::BlankNode(solution) = object {
                             let mut bindings = graph
                                 .objects_for_subject_predicate(solution, rs::BINDING)
-                                .filter_map(|object| {
+                                .map(|object| {
                                     if let TermRef::BlankNode(binding) = object {
                                         if let (Some(TermRef::Literal(variable)), Some(value)) = (
                                             graph.object_for_subject_predicate(
@@ -593,50 +595,51 @@ impl StaticQueryResults {
                                             ),
                                             graph.object_for_subject_predicate(binding, rs::VALUE),
                                         ) {
-                                            Some((
+                                            Ok((
                                                 Variable::new_unchecked(variable.value()),
                                                 value.into_owned(),
                                             ))
                                         } else {
-                                            None
+                                            Err(anyhow!("Invalid rs:binding: {}", binding))
                                         }
                                     } else {
-                                        None
+                                        Err(anyhow!("Invalid rs:binding: {}", object))
                                     }
                                 })
-                                .collect::<Vec<_>>();
+                                .collect::<Result<Vec<_>>>()?;
                             bindings.sort_by(|(a, _), (b, _)| a.cmp(b));
                             let index = graph
                                 .object_for_subject_predicate(solution, rs::INDEX)
-                                .and_then(|object| {
+                                .map(|object| {
                                     if let TermRef::Literal(l) = object {
-                                        u64::from_str(l.value()).ok()
+                                        Ok(u64::from_str(l.value())?)
                                     } else {
-                                        None
+                                        Err(anyhow!("Invalid rs:index: {}", object))
                                     }
-                                });
-                            Some((bindings, index))
+                                })
+                                .transpose()?;
+                            Ok((bindings, index))
                         } else {
-                            None
+                            Err(anyhow!("Invalid rs:solution: {}", object))
                         }
                     })
-                    .collect();
+                    .collect::<Result<Vec<_>>>()?;
                 solutions.sort_by(|(_, index_a), (_, index_b)| index_a.cmp(index_b));
 
                 let ordered = solutions.iter().all(|(_, index)| index.is_some());
 
-                StaticQueryResults::Solutions {
+                Ok(StaticQueryResults::Solutions {
                     variables,
                     solutions: solutions
                         .into_iter()
                         .map(|(solution, _)| solution)
                         .collect(),
                     ordered,
-                }
+                })
             }
         } else {
             graph.canonicalize();
-            StaticQueryResults::Graph(graph)
+            Ok(StaticQueryResults::Graph(graph))
         }
     }
 }
