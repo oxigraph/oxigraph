@@ -616,10 +616,9 @@ impl SimpleEvaluator {
                                 );
                             }
                         });
-                    if accumulators_for_group.is_empty() {
-                        // There is always at least one group
-                        accumulators_for_group
-                            .insert(vec![None; key_mapping.len()], Vec::default());
+                    if accumulators_for_group.is_empty() && key_mapping.is_empty() {
+                        // There is always a single group if there is no GROUP BY
+                        accumulators_for_group.insert(Vec::new(), Vec::new());
                     }
                     let accumulator_variables = accumulator_variables.clone();
                     Box::new(
