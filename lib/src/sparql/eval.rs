@@ -3011,7 +3011,13 @@ fn put_pattern_value(
     tuple: &mut EncodedTuple,
 ) -> Option<()> {
     match selector {
-        PatternValue::Constant(_) => Some(()),
+        PatternValue::Constant(c) => {
+            if *c == value {
+                Some(())
+            } else {
+                None
+            }
+        }
         PatternValue::Variable(v) => {
             if let Some(old) = tuple.get(*v) {
                 if value == *old {
