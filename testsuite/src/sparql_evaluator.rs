@@ -445,6 +445,7 @@ fn are_query_results_isomorphic(
             },
         ) => {
             expected_variables == actual_variables
+                && expected_solutions.len() == actual_solutions.len()
                 && if *ordered {
                     expected_solutions.iter().zip(actual_solutions).all(
                         |(expected_solution, actual_solution)| {

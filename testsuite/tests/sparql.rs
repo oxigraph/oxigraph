@@ -60,7 +60,9 @@ fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
         // We use XSD 1.1 equality on dates
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#date-2",
         // We choose to simplify first the nested group patterns in OPTIONAL
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest#dawg-optional-filter-005-not-simplified"
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest#dawg-optional-filter-005-not-simplified",
+        // This test relies on naive iteration on the input file
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-2"
     ])
 }
 
