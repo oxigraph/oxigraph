@@ -112,6 +112,11 @@ impl JsNamedNode {
         self.inner.as_str().to_owned()
     }
 
+    #[wasm_bindgen(js_name = toString)]
+    pub fn to_string(&self) -> String {
+        self.inner.to_string()
+    }
+
     pub fn equals(&self, other: &JsValue) -> bool {
         if let Ok(Some(JsTerm::NamedNode(other))) =
             FromJsConverter::default().to_optional_term(other)
@@ -175,6 +180,11 @@ impl JsBlankNode {
     #[wasm_bindgen(getter)]
     pub fn value(&self) -> String {
         self.inner.as_str().to_owned()
+    }
+
+    #[wasm_bindgen(js_name = toString)]
+    pub fn to_string(&self) -> String {
+        self.inner.to_string()
     }
 
     pub fn equals(&self, other: &JsValue) -> bool {
@@ -252,6 +262,11 @@ impl JsLiteral {
         self.inner.datatype().into_owned().into()
     }
 
+    #[wasm_bindgen(js_name = toString)]
+    pub fn to_string(&self) -> String {
+        self.inner.to_string()
+    }
+
     pub fn equals(&self, other: &JsValue) -> bool {
         if let Ok(Some(JsTerm::Literal(other))) = FromJsConverter::default().to_optional_term(other)
         {
@@ -296,6 +311,11 @@ impl JsDefaultGraph {
         "".to_owned()
     }
 
+    #[wasm_bindgen(js_name = toString)]
+    pub fn to_string(&self) -> String {
+        "DEFAULT".to_string()
+    }
+
     pub fn equals(&self, other: &JsValue) -> bool {
         if let Ok(Some(JsTerm::DefaultGraph(other))) =
             FromJsConverter::default().to_optional_term(other)
@@ -323,6 +343,11 @@ impl JsVariable {
     #[wasm_bindgen(getter)]
     pub fn value(&self) -> String {
         self.inner.as_str().to_owned()
+    }
+
+    #[wasm_bindgen(js_name = toString)]
+    pub fn to_string(&self) -> String {
+        self.inner.to_string()
     }
 
     pub fn equals(&self, other: &JsValue) -> bool {
@@ -384,6 +409,11 @@ impl JsQuad {
     #[wasm_bindgen(getter = graph)]
     pub fn graph(&self) -> JsValue {
         JsTerm::from(self.inner.graph_name.clone()).into()
+    }
+
+    #[wasm_bindgen(js_name = toString)]
+    pub fn to_string(&self) -> String {
+        self.inner.to_string()
     }
 
     pub fn equals(&self, other: &JsValue) -> bool {

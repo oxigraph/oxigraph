@@ -57,6 +57,8 @@ const foo = oxigraph.literal("foo");
 const quad = oxigraph.quad(blank, ex, foo);
 ```
 
+All terms overrides the the `toString()` method to return a N-Quads/SPARQL-like representation of the terms.
+
 ### `Store`
 
 Oxigraph API is centered around the `Store` class.
