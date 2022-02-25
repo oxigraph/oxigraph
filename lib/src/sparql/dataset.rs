@@ -96,7 +96,18 @@ impl DatasetView {
                         }))
                     }
                 } else {
-                    Box::new(self.store_encoded_quads_for_pattern(subject, predicate, object, None))
+                    Box::new(
+                        self.store_encoded_quads_for_pattern(subject, predicate, object, None)
+                            .map(|quad| {
+                                let quad = quad?;
+                                Ok(EncodedQuad::new(
+                                    quad.subject,
+                                    quad.predicate,
+                                    quad.object,
+                                    EncodedTerm::DefaultGraph,
+                                ))
+                            }),
+                    )
                 }
             } else if self
                 .dataset

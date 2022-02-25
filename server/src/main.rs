@@ -1218,6 +1218,7 @@ mod tests {
             "s,p,o\r\nhttp://example.com,http://example.com,http://example.com",
         );
     }
+
     #[test]
     fn get_query_union_graph_in_url_and_urlencoded() {
         let server = ServerTest::new();
