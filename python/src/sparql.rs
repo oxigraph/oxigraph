@@ -128,6 +128,7 @@ impl PyQuerySolution {
         }
     }
 
+    #[allow(clippy::unnecessary_to_owned)]
     fn __iter__(&self) -> SolutionValueIter {
         SolutionValueIter {
             inner: self.inner.values().to_vec().into_iter(),
