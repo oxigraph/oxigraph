@@ -30,7 +30,7 @@ or with ES modules:
 import oxigraph from './node_modules/oxigraph/node.js';
 ```
 
-To load on an HTML web page:
+To load on an HTML web page (for [WebPack 5](https://webpack.js.org/) remove the `<script>` tag and put the code in a JS file):
 ```html
 <script type="module">
     import init, * as oxigraph from './node_modules/oxigraph/web.js'
@@ -81,6 +81,8 @@ SPARQL:
     })()
 </script>
 ```
+
+This example works with WebPack too if you remove the `<script>` tag and put the code in a JS file.
 
 ## API
 
