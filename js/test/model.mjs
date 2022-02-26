@@ -1,8 +1,10 @@
 /* global describe, it */
 
-const oxigraph = require('../pkg/oxigraph.js')
-const assert = require('assert')
-require('../node_modules/@rdfjs/data-model/test/index.js')(oxigraph)
+import oxigraph from '../pkg/oxigraph.js'
+import assert from 'assert'
+import runTests from '../node_modules/@rdfjs/data-model/test/index.js'
+
+runTests({ factory: oxigraph })
 
 describe('DataModel', function () {
   describe('#toString()', function () {
