@@ -162,6 +162,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - run: npm run pack
+        working-directory: ./js
       - uses: softprops/action-gh-release@v1
         with:
           files: js/*.tgz
@@ -191,7 +192,7 @@ jobs:
           token: ${{ secrets.FULL_ACCESS_TOKEN }}
       - run: echo "RELEASE_VERSION=$(echo ${GITHUB_REF:10})" >> $GITHUB_ENV
       - run: rm -rf ./website/pyoxigraph/stable && mkdir -p ./website/pyoxigraph/stable && cp -r ./python/docs/build/html/* ./website/pyoxigraph/stable/
-        if: ${{ !contains('-', github.event.release.tag_name) }}
+        if: "!contains('-', github.event.release.tag_name)"
       - run: mkdir -p ./website/pyoxigraph/$RELEASE_VERSION && cp -r ./python/docs/build/html/* ./website/pyoxigraph/$RELEASE_VERSION/
       - run: |
           git config user.name github-actions
@@ -218,7 +219,7 @@ jobs:
             oxigraph_${{ github.event.release.tag_name }}.tar.gz
 
   publish_homebrew:
-    if: ${{ !contains('-', github.event.release.tag_name) }}
+    if: "!contains('-', github.event.release.tag_name)"
     runs-on: ubuntu-latest
     needs: publish_full_archive
     steps:
