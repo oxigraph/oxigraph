@@ -1,3 +1,27 @@
+## [0.3.0-beta.4] - 2022-02-27
+
+### Added
+- JS: Oxigraph NPM package is now also supporting web browsers and WebPack.
+- JS: RDF term related classes now overrides the `toString` method.
+- Python: It is now possible to directly give a file path to the
+  `parse`, `serialize`, `Store.load`, `Store.bulk_load` and `Store.dump` functions.
+- Python: New `Store.clear_graph`, `Store.clear`, `Store.optimize` and `Store.flush` methods.
+
+### Removed
+- `sophia_api` traits implementation following a request of Sophia maintainer.
+
+### Changed
+- SPARQL: fixes evaluation of SPARQL queries with no results but an `ORDER BY` clause.
+  There should be no group in the output instead of one empty group.
+  This behavior has been changed following [this discussion](https://github.com/w3c/rdf-tests/pull/61).
+- SPARQL: fixes SPARQL-star evaluation of nested triples with both variables and constants.
+- SPARQL: if results are sorted, literals are now ordered by value, then datatype, then language tag.
+  This ordering is considered as "implementation defined" by the SPARQL specification and is very likely to change in the future.
+- Python: all costly methods now release the python GIL allowing multithreaded usages of pyoxigraph.
+- Rust: SPARQL results writer now flushes the buffer at the end of the results writes. This makes their API less error-prone.
+- Rust: the bulk loader API has been rewritten to allow hooking a progress indicator and set parallelism limit.
+- Server: it is now possible to bulk load gzipped files.
+
 ## [0.3.0-beta.3] - 2022-02-02
 
 ### Changed
