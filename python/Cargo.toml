@@ -17,4 +17,4 @@ doctest = false
 
 [dependencies]
 oxigraph = { version = "0.3.0-beta.4", path="../lib", features = ["http_client"] }
-pyo3 = { version = "0.15", features = ["extension-module", "abi3-py37"] }
+pyo3 = { version = "0.16", features = ["extension-module", "abi3-py37"] }
