@@ -1200,15 +1200,15 @@ dependencies = [
 
 [[package]]
 name = "rio_api"
-version = "0.6.2"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ed96d73ad4e0de59e667b26c899930c90912cad3fec5f0291fc3171c90dacae"
+checksum = "3202105593818d97ca7937eaa646b58d125ac7761d15fe5d8469f0e671521e1f"
 
 [[package]]
 name = "rio_turtle"
-version = "0.6.2"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1945ea5cf5f489bd2cbafeb705686abdc94edfa9dd88a63a25e8c5c0d38f9cc2"
+checksum = "fb8f47f8dd19886475a4cae345b2945455d077aa44b4d3b6c455011c035c7487"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1217,9 +1217,9 @@ dependencies = [
 
 [[package]]
 name = "rio_xml"
-version = "0.6.2"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6627c31020654c595ca89c4f2472cb28fc493a160f8a110bd5e978f66a9e6bdb"
+checksum = "48e320dfe5cdbe2b09ddc0e551d6d7abcc64e63d0a95b9ba2f776f762f62e96c"
 dependencies = [
  "oxilangtag",
  "oxiri",
