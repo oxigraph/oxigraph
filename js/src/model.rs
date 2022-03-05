@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code, clippy::inherent_to_string)]
 
 use crate::format_err;
 use crate::utils::to_err;
