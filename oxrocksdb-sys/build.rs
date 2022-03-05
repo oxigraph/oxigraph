@@ -141,9 +141,9 @@ fn build_rocksdb() {
     config.define("ROCKSDB_SUPPORT_THREAD_LOCAL", None);
 
     if target.contains("msvc") {
-        config.flag("-EHsc");
+        config.flag("-EHsc").flag("-std:c++17");
     } else {
-        config.flag("-std=c++11");
+        config.flag("-std=c++17");
     }
 
     for file in lib_sources {
