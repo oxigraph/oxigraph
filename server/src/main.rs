@@ -73,7 +73,6 @@ enum Command {
 
 pub fn main() -> std::io::Result<()> {
     let matches = Args::parse();
-
     let store = if let Some(path) = &matches.location {
         Store::open(path)
     } else {
@@ -92,7 +91,7 @@ pub fn main() -> std::io::Result<()> {
                         let start = Instant::now();
                         let mut loader = store.bulk_loader().on_progress(move |size| {
                             let elapsed = start.elapsed();
-                            println!(
+                            eprintln!(
                                 "{} triples loaded in {}s ({} t/s) from {}",
                                 size,
                                 elapsed.as_secs(),
@@ -102,7 +101,7 @@ pub fn main() -> std::io::Result<()> {
                         });
                         if lenient {
                             loader = loader.on_parse_error(|e| {
-                                println!("Parsing error: {}", e);
+                                eprintln!("Parsing error: {}", e);
                                 Ok(())
                             })
                         }
@@ -129,7 +128,7 @@ pub fn main() -> std::io::Result<()> {
             server
                 .set_server_name(concat!("Oxigraph/", env!("CARGO_PKG_VERSION")))
                 .unwrap();
-            println!("Listening for requests at http://{}", &bind);
+            eprintln!("Listening for requests at http://{}", &bind);
             server.listen(bind)?;
             Ok(())
         }
