@@ -63,6 +63,11 @@ enum Command {
         /// If multiple files are provided they are loaded in parallel.
         #[clap(short, long, global = true)]
         file: Vec<String>,
+        /// Attempt to keep loading even if the data file is invalid.
+        ///
+        /// Only works with N-Triples and N-Quads for now.
+        #[clap(long, global = true)]
+        lenient: bool,
     },
 }
 
@@ -76,7 +81,7 @@ pub fn main() -> std::io::Result<()> {
     }?;
 
     match matches.command {
-        Command::Load { file } => {
+        Command::Load { file, lenient } => {
             let handles = file
                 .iter()
                 .map(|file| {
@@ -85,7 +90,7 @@ pub fn main() -> std::io::Result<()> {
                     spawn(move || {
                         let f = file.clone();
                         let start = Instant::now();
-                        let loader = store.bulk_loader().on_progress(move |size| {
+                        let mut loader = store.bulk_loader().on_progress(move |size| {
                             let elapsed = start.elapsed();
                             println!(
                                 "{} triples loaded in {}s ({} t/s) from {}",
@@ -95,6 +100,12 @@ pub fn main() -> std::io::Result<()> {
                                 f
                             )
                         });
+                        if lenient {
+                            loader = loader.on_parse_error(|e| {
+                                println!("Parsing error: {}", e);
+                                Ok(())
+                            })
+                        }
                         if file.ends_with(".gz") {
                             bulk_load(
                                 loader,

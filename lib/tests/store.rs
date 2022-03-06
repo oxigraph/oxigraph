@@ -127,6 +127,26 @@ fn test_bulk_load_graph() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
+fn test_bulk_load_graph_lenient() -> Result<(), Box<dyn Error>> {
+    let store = Store::new()?;
+    store.bulk_loader().on_parse_error(|_| Ok(())).load_graph(
+        Cursor::new(b"<http://example.com> <http://example.com> <http://example.com##> .\n<http://example.com> <http://example.com> <http://example.com> ."),
+        GraphFormat::NTriples,
+        GraphNameRef::DefaultGraph,
+        None,
+    )?;
+    assert_eq!(store.len()?, 1);
+    assert!(store.contains(QuadRef::new(
+        NamedNodeRef::new_unchecked("http://example.com"),
+        NamedNodeRef::new_unchecked("http://example.com"),
+        NamedNodeRef::new_unchecked("http://example.com"),
+        GraphNameRef::DefaultGraph
+    ))?);
+    store.validate()?;
+    Ok(())
+}
+
+#[test]
 fn test_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store.load_dataset(Cursor::new(GRAPH_DATA), DatasetFormat::TriG, None)?;
