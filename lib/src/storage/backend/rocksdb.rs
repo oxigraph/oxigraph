@@ -1021,7 +1021,6 @@ impl SstFileWriter {
     }
 }
 
-#[derive(Debug)]
 struct ErrorStatus(rocksdb_status_t);
 
 unsafe impl Send for ErrorStatus {}
@@ -1037,15 +1036,32 @@ impl Drop for ErrorStatus {
     }
 }
 
-impl fmt::Display for ErrorStatus {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(if self.0.string.is_null() {
+impl ErrorStatus {
+    fn message(&self) -> &str {
+        if self.0.string.is_null() {
             "Unknown error"
         } else {
             unsafe { CStr::from_ptr(self.0.string) }
                 .to_str()
-                .map_err(|_| fmt::Error)?
-        })
+                .unwrap_or("Invalid error message")
+        }
+    }
+}
+
+impl fmt::Debug for ErrorStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ErrorStatus")
+            .field("code", &self.0.code)
+            .field("subcode", &self.0.subcode)
+            .field("severity", &self.0.severity)
+            .field("message", &self.message())
+            .finish()
+    }
+}
+
+impl fmt::Display for ErrorStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.message())
     }
 }
 
