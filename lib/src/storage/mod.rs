@@ -27,6 +27,7 @@ use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread::spawn;
 use std::thread::JoinHandle;
+use sysinfo::{System, SystemExt};
 
 mod backend;
 mod binary_encoder;
@@ -48,6 +49,7 @@ const GRAPHS_CF: &str = "graphs";
 const DEFAULT_CF: &str = "default";
 #[cfg(not(target_arch = "wasm32"))]
 const DEFAULT_BULK_LOAD_BATCH_SIZE: usize = 1_000_000;
+const MAX_BULK_LOAD_BATCH_SIZE: usize = 100_000_000;
 
 /// Low level storage primitives
 #[derive(Clone)]
@@ -1192,24 +1194,32 @@ impl StorageBulkLoader {
         &self,
         quads: I,
     ) -> Result<(), EO> {
+        let system = System::new_all();
+        let cpu_count = min(8, system.physical_core_count().unwrap_or(2));
         let num_threads = max(
             if let Some(num_threads) = self.num_threads {
                 num_threads
             } else if let Some(max_memory_size) = self.max_memory_size {
                 min(
-                    num_cpus::get(),
+                    cpu_count,
                     max_memory_size * 1000 / DEFAULT_BULK_LOAD_BATCH_SIZE,
                 )
             } else {
-                num_cpus::get()
+                cpu_count
             },
             2,
         );
-        let batch_size = if let Some(max_memory_size) = self.max_memory_size {
-            max(1000, max_memory_size * 1000 / num_threads)
-        } else {
-            DEFAULT_BULK_LOAD_BATCH_SIZE
-        };
+        let batch_size = min(
+            if let Some(max_memory_size) = self.max_memory_size {
+                max(1000, max_memory_size * 1000 / num_threads)
+            } else {
+                max(
+                    usize::try_from(system.free_memory()).unwrap() / num_threads,
+                    DEFAULT_BULK_LOAD_BATCH_SIZE,
+                )
+            },
+            MAX_BULK_LOAD_BATCH_SIZE,
+        );
         let mut threads = VecDeque::with_capacity(num_threads - 1);
         let mut buffer = Vec::with_capacity(batch_size);
         let done_counter = Arc::new(AtomicU64::new(0));

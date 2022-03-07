@@ -25,6 +25,7 @@ use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::thread::yield_now;
 use std::{ptr, slice};
+use sysinfo::{System, SystemExt};
 
 macro_rules! ffi_result {
     ( $($function:ident)::*() ) => {
@@ -68,6 +69,7 @@ lazy_static! {
             UnsafeEnv(env)
         }
     };
+    static ref CPU_COUNT: Option<usize> = System::new().physical_core_count();
 }
 
 pub struct ColumnFamilyDefinition {
@@ -166,7 +168,9 @@ impl Db {
             rocksdb_options_set_create_if_missing(options, 1);
             rocksdb_options_set_create_missing_column_families(options, 1);
             rocksdb_options_optimize_level_style_compaction(options, 512 * 1024 * 1024);
-            rocksdb_options_increase_parallelism(options, num_cpus::get().try_into().unwrap());
+            if let Some(cpu_count) = *CPU_COUNT {
+                rocksdb_options_increase_parallelism(options, cpu_count.try_into().unwrap());
+            }
             rocksdb_options_set_info_log_level(options, 2); // We only log warnings
             rocksdb_options_set_max_log_file_size(options, 1024 * 1024); // Only 1MB log size
             rocksdb_options_set_recycle_log_file_num(options, 10); // We do not keep more than 10 log files
