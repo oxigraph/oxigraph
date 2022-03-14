@@ -1,3 +1,13 @@
+## [0.3.0-rc.4] - 2022-03-14
+
+### Added
+- The bulk loader now check available memory and tries to increase its batch size to make use of it.
+- The Bulk loader provides now a `--lenient` option to keep loading a file even if invalid data is found (works only with N-Triples and N-Quads). 
+  This behavior can be customised in the Rust API using the `BulkLoader::on_parse_error` method.
+
+### Changed
+- Rocksdb has been upgrade to 7.0.2. It now requires a C++17 compatible compiler. This required dropping support of macOS 10.9 to 10.13.
+
 ## [0.3.0-beta.4] - 2022-02-27
 
 ### Added

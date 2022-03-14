@@ -790,7 +790,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph"
-version = "0.3.0-beta.4"
+version = "0.3.0-rc.1"
 dependencies = [
  "criterion",
  "digest",
@@ -823,7 +823,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_js"
-version = "0.3.0-beta.4"
+version = "0.3.0-rc.1"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
@@ -834,7 +834,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_server"
-version = "0.3.0-beta.4"
+version = "0.3.0-rc.1"
 dependencies = [
  "clap 3.1.6",
  "flate2",
@@ -848,7 +848,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_testsuite"
-version = "0.3.0-beta.4"
+version = "0.3.0-rc.1"
 dependencies = [
  "anyhow",
  "clap 3.1.6",
@@ -872,7 +872,7 @@ checksum = "a8a8821a5332e388ab8d6436ab703c5744516c11976e2c08702fbc93fe4b3f51"
 
 [[package]]
 name = "oxrdf"
-version = "0.1.0-beta.4"
+version = "0.1.0-rc.1"
 dependencies = [
  "lasso",
  "oxilangtag",
@@ -882,7 +882,7 @@ dependencies = [
 
 [[package]]
 name = "oxrocksdb-sys"
-version = "0.3.0-beta.4"
+version = "0.3.0-rc.1"
 dependencies = [
  "bindgen",
  "cc",
@@ -1081,7 +1081,7 @@ dependencies = [
 
 [[package]]
 name = "pyoxigraph"
-version = "0.3.0-beta.4"
+version = "0.3.0-rc.1"
 dependencies = [
  "oxigraph",
  "pyo3",
@@ -1440,7 +1440,7 @@ checksum = "f2dd574626839106c320a323308629dcb1acfc96e32a8cba364ddc61ac23ee83"
 
 [[package]]
 name = "sparesults"
-version = "0.1.0-beta.4"
+version = "0.1.0-rc.1"
 dependencies = [
  "json-event-parser",
  "oxrdf",
@@ -1449,7 +1449,7 @@ dependencies = [
 
 [[package]]
 name = "spargebra"
-version = "0.2.0-beta.4"
+version = "0.2.0-rc.1"
 dependencies = [
  "oxilangtag",
  "oxiri",
