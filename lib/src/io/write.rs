@@ -30,7 +30,6 @@ use std::io::{self, Write};
 ///assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n".as_bytes());
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[allow(missing_copy_implementations)]
 pub struct GraphSerializer {
     format: GraphFormat,
 }
@@ -173,7 +172,6 @@ impl<W: Write> TripleWriter<W> {
 ///assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[allow(missing_copy_implementations)]
 pub struct DatasetSerializer {
     format: DatasetFormat,
 }

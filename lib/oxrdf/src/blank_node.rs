@@ -342,7 +342,6 @@ fn to_integer_id(id: &str) -> Option<u128> {
 }
 
 /// An error raised during [`BlankNode`] IDs validation.
-#[allow(missing_copy_implementations)]
 #[derive(Debug)]
 pub struct BlankNodeIdParseError {}
 

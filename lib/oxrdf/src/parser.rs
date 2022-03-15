@@ -375,7 +375,6 @@ fn read_hexa_char(input: &mut Chars<'_>, len: usize) -> Result<char, TermParseEr
 }
 
 /// An error raised during term serialization parsing using the [`FromStr`] trait.
-#[allow(missing_copy_implementations)]
 #[derive(Debug)]
 pub struct TermParseError {
     kind: TermParseErrorKind,

@@ -218,7 +218,6 @@ fn validate_variable_identifier(id: &str) -> Result<(), VariableNameParseError> 
 }
 
 /// An error raised during [`Variable`] name validation.
-#[allow(missing_copy_implementations)]
 #[derive(Debug)]
 pub struct VariableNameParseError {}
 

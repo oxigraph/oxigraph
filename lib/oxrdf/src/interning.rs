@@ -172,7 +172,6 @@ impl InternedLiteral {
     }
 }
 
-#[allow(missing_copy_implementations)]
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum InternedSubject {
     NamedNode(InternedNamedNode),
@@ -298,7 +297,6 @@ impl InternedGraphName {
     }
 }
 
-#[allow(missing_copy_implementations)]
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum InternedTerm {
     NamedNode(InternedNamedNode),

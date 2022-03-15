@@ -1,14 +1,3 @@
-#![deny(
-    future_incompatible,
-    nonstandard_style,
-    rust_2018_idioms,
-    missing_copy_implementations,
-    trivial_casts,
-    trivial_numeric_casts,
-    unsafe_code,
-    unused_qualifications
-)]
-
 use clap::{Parser, Subcommand};
 use flate2::read::MultiGzDecoder;
 use oxhttp::model::{Body, HeaderName, HeaderValue, Request, Response, Status};

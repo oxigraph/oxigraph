@@ -1,14 +1,5 @@
 #![doc = include_str!("../README.md")]
-#![deny(
-    future_incompatible,
-    nonstandard_style,
-    rust_2018_idioms,
-    missing_copy_implementations,
-    trivial_casts,
-    trivial_numeric_casts,
-    unsafe_code,
-    unused_qualifications
-)]
+#![deny(unsafe_code)]
 #![doc(test(attr(deny(warnings))))]
 #![doc(html_favicon_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/master/logo.svg")]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/master/logo.svg")]
@@ -165,7 +156,6 @@ impl QueryResultsFormat {
 /// }
 /// # Result::<(),sparesults::ParseError>::Ok(())
 /// ```
-#[allow(missing_copy_implementations)]
 pub struct QueryResultsParser {
     format: QueryResultsFormat,
 }
@@ -361,7 +351,6 @@ impl<R: BufRead> Iterator for SolutionsReader<R> {
 /// assert_eq!(buffer, b"{\"head\":{\"vars\":[\"foo\",\"bar\"]},\"results\":{\"bindings\":[{\"foo\":{\"type\":\"literal\",\"value\":\"test\"}}]}}");
 /// # std::io::Result::Ok(())
 /// ```
-#[allow(missing_copy_implementations)]
 pub struct QueryResultsSerializer {
     format: QueryResultsFormat,
 }

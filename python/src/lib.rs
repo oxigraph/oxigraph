@@ -1,13 +1,3 @@
-#![deny(
-    future_incompatible,
-    nonstandard_style,
-    rust_2018_idioms,
-    trivial_casts,
-    trivial_numeric_casts,
-    unsafe_code,
-    unused_qualifications
-)]
-
 mod io;
 mod model;
 mod sparql;
