@@ -1,8 +1,6 @@
 //! Code inspired by [Rust RocksDB](https://github.com/rust-rocksdb/rust-rocksdb) under Apache License 2.0.
-//!
-//! TODO: still has some memory leaks if the database opening fails
 
-#![allow(unsafe_code)]
+#![allow(unsafe_code, trivial_casts)]
 
 use crate::storage::error::StorageError;
 use crate::store::CorruptionError;
