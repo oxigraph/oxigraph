@@ -32,6 +32,15 @@ Pyoxigraph documentation is [available on the Oxigraph website](https://oxigraph
 To build and install the development version of pyoxigraph you need to clone this git repository
 and to run `pip install .` in the `python` directory (the one this README is in).
 
+
+## Help
+
+Feel free to use [GitHub discussions](https://github.com/oxigraph/oxigraph/discussions) or [the Gitter chat](https://gitter.im/oxigraph/community) to ask questions or talk about Oxigraph.
+[Bug reports](https://github.com/oxigraph/oxigraph/issues) are also very welcome.
+
+If you need advanced support or are willing to pay to get some extra features, feel free to reach out to [Tpt](https://github.com/Tpt).
+
+
 ## How to contribute
 
 Pyoxigraph is written in Rust using [PyO3](https://github.com/PyO3/pyo3).

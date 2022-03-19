@@ -231,6 +231,14 @@ It installs the `oxigraph_server` binary. [See the usage documentation to know h
   and the exposed state does not change for the complete duration of a read operation (e.g. a SPARQL query) or a read/write operation (e.g. a SPARQL update).
 
 
+## Help
+
+Feel free to use [GitHub discussions](https://github.com/oxigraph/oxigraph/discussions) or [the Gitter chat](https://gitter.im/oxigraph/community) to ask questions or talk about Oxigraph.
+[Bug reports](https://github.com/oxigraph/oxigraph/issues) are also very welcome.
+
+If you need advanced support or are willing to pay to get some extra features, feel free to reach out to [Tpt](https://github.com/Tpt).
+
+
 ## License
 
 This project is licensed under either of

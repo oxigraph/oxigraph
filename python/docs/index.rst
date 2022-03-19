@@ -65,3 +65,12 @@ Table of contents
    store
    sparql
    migration
+
+
+Help
+""""
+
+Feel free to use `GitHub discussions <https://github.com/oxigraph/oxigraph/discussions>`_ or `the Gitter chat <https://gitter.im/oxigraph/community>`_ to ask questions or talk about Oxigraph.
+`Bug reports <https://github.com/oxigraph/oxigraph/issues>`_ are also very welcome.
+
+If you need advanced support or are willing to pay to get some extra features, feel free to reach out to `Tpt <https://github.com/Tpt>`_.
