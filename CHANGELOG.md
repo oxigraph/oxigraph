@@ -1,4 +1,11 @@
-## [0.3.0-rc.4] - 2022-03-14
+## [0.3.0] - 2022-03-19
+
+### Changed
+- Fixes compilation on ARM.
+- Moves some lints from errors to warnings in order to avoid compilation failures on different Rust versions.
+
+
+## [0.3.0-rc.1] - 2022-03-14
 
 ### Added
 - The bulk loader now check available memory and tries to increase its batch size to make use of it.
