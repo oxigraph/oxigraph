@@ -10,7 +10,7 @@ use crate::storage::binary_encoder::{
 };
 pub use crate::storage::error::{CorruptionError, LoaderError, SerializerError, StorageError};
 use crate::storage::numeric_encoder::{
-    insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup, TermDecoder,
+    insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup, TermDecoder, TermEncoder,
 };
 use backend::{ColumnFamily, ColumnFamilyDefinition, Db, Iter};
 use std::cmp::{max, min};
@@ -294,6 +294,11 @@ pub struct StorageReader {
 }
 
 impl StorageReader {
+    #[allow(clippy::unused_self)]
+    pub fn term_encoder(&self) -> TermEncoder {
+        TermEncoder::new()
+    }
+
     pub fn term_decoder(&self) -> TermDecoder<Self> {
         TermDecoder::new(self)
     }
@@ -852,8 +857,13 @@ impl<'a> StorageWriter<'a> {
         }
     }
 
+    #[allow(clippy::unused_self)]
+    pub fn term_encoder(&self) -> TermEncoder {
+        TermEncoder::new()
+    }
+
     pub fn insert(&mut self, quad: QuadRef<'_>) -> Result<bool, StorageError> {
-        let encoded = quad.into();
+        let encoded = self.term_encoder().encode_quad(quad);
         self.buffer.clear();
         let result = if quad.graph_name.is_default_graph() {
             write_spo_quad(&mut self.buffer, &encoded);
@@ -941,7 +951,7 @@ impl<'a> StorageWriter<'a> {
         &mut self,
         graph_name: NamedOrBlankNodeRef<'_>,
     ) -> Result<bool, StorageError> {
-        let encoded_graph_name = graph_name.into();
+        let encoded_graph_name = self.term_encoder().encode_graph_name(graph_name);
 
         self.buffer.clear();
         write_term(&mut self.buffer, &encoded_graph_name);
@@ -1005,7 +1015,7 @@ impl<'a> StorageWriter<'a> {
     }
 
     pub fn remove(&mut self, quad: QuadRef<'_>) -> Result<bool, StorageError> {
-        self.remove_encoded(&quad.into())
+        self.remove_encoded(&self.term_encoder().encode_quad(quad))
     }
 
     fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<bool, StorageError> {
@@ -1081,14 +1091,15 @@ impl<'a> StorageWriter<'a> {
                 self.remove_encoded(&quad?)?;
             }
         } else {
+            let graph_name = self.term_encoder().encode_graph_name(graph_name);
             self.buffer.clear();
-            write_term(&mut self.buffer, &graph_name.into());
+            write_term(&mut self.buffer, &graph_name);
             if self
                 .transaction
                 .contains_key_for_update(&self.storage.graphs_cf, &self.buffer)?
             {
                 // The condition is useful to lock the graph itself and ensure no quad is inserted at the same time
-                for quad in self.reader().quads_for_graph(&graph_name.into()) {
+                for quad in self.reader().quads_for_graph(&graph_name) {
                     self.remove_encoded(&quad?)?;
                 }
             }
@@ -1114,7 +1125,7 @@ impl<'a> StorageWriter<'a> {
         &mut self,
         graph_name: NamedOrBlankNodeRef<'_>,
     ) -> Result<bool, StorageError> {
-        self.remove_encoded_named_graph(&graph_name.into())
+        self.remove_encoded_named_graph(&self.term_encoder().encode_graph_name(graph_name))
     }
 
     fn remove_encoded_named_graph(
@@ -1327,8 +1338,9 @@ impl FileBulkLoader {
     }
 
     fn encode(&mut self, quads: impl IntoIterator<Item = Quad>) -> Result<(), StorageError> {
+        let encoder = TermEncoder::new();
         for quad in quads {
-            let encoded = EncodedQuad::from(quad.as_ref());
+            let encoded = encoder.encode_quad(&quad);
             if quad.graph_name.is_default_graph() {
                 if self.triples.insert(encoded.clone()) {
                     self.insert_term(quad.subject.as_ref().into(), &encoded.subject)?;

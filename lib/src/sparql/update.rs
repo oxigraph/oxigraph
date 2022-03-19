@@ -191,11 +191,12 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
     fn eval_clear(&mut self, graph: &GraphTarget, silent: bool) -> Result<(), EvaluationError> {
         match graph {
             GraphTarget::NamedNode(graph_name) => {
-                if self
-                    .transaction
-                    .reader()
-                    .contains_named_graph(&graph_name.as_ref().into())?
-                {
+                if self.transaction.reader().contains_named_graph(
+                    &self
+                        .transaction
+                        .term_encoder()
+                        .encode_graph_name(graph_name),
+                )? {
                     Ok(self.transaction.clear_graph(graph_name.into())?)
                 } else if silent {
                     Ok(())

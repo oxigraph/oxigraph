@@ -429,33 +429,88 @@ impl From<EncodedTriple> for EncodedTerm {
     }
 }
 
-impl From<NamedNodeRef<'_>> for EncodedTerm {
-    fn from(named_node: NamedNodeRef<'_>) -> Self {
-        Self::NamedNode {
-            iri_id: StrHash::new(named_node.as_str()),
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct EncodedTriple {
+    pub subject: EncodedTerm,
+    pub predicate: EncodedTerm,
+    pub object: EncodedTerm,
+}
+
+impl EncodedTriple {
+    pub fn new(subject: EncodedTerm, predicate: EncodedTerm, object: EncodedTerm) -> Self {
+        Self {
+            subject,
+            predicate,
+            object,
         }
     }
 }
 
-impl From<BlankNodeRef<'_>> for EncodedTerm {
-    fn from(blank_node: BlankNodeRef<'_>) -> Self {
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct EncodedQuad {
+    pub subject: EncodedTerm,
+    pub predicate: EncodedTerm,
+    pub object: EncodedTerm,
+    pub graph_name: EncodedTerm,
+}
+
+impl EncodedQuad {
+    pub fn new(
+        subject: EncodedTerm,
+        predicate: EncodedTerm,
+        object: EncodedTerm,
+        graph_name: EncodedTerm,
+    ) -> Self {
+        Self {
+            subject,
+            predicate,
+            object,
+            graph_name,
+        }
+    }
+}
+
+pub struct TermEncoder {}
+
+impl TermEncoder {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    pub fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm {
+        match term.into() {
+            TermRef::NamedNode(named_node) => self.encode_named_node(named_node),
+            TermRef::BlankNode(blank_node) => self.encode_blank_node(blank_node),
+            TermRef::Literal(literal) => self.encode_literal(literal),
+            TermRef::Triple(triple) => self.encode_triple(triple.as_ref()).into(),
+        }
+    }
+
+    #[allow(clippy::unused_self)]
+    fn encode_named_node(&self, named_node: NamedNodeRef<'_>) -> EncodedTerm {
+        EncodedTerm::NamedNode {
+            iri_id: StrHash::new(named_node.as_str()),
+        }
+    }
+
+    #[allow(clippy::unused_self)]
+    fn encode_blank_node(&self, blank_node: BlankNodeRef<'_>) -> EncodedTerm {
         if let Some(id) = blank_node.unique_id() {
-            Self::NumericalBlankNode { id }
+            EncodedTerm::NumericalBlankNode { id }
         } else {
             let id = blank_node.as_str();
             if let Ok(id) = id.try_into() {
-                Self::SmallBlankNode(id)
+                EncodedTerm::SmallBlankNode(id)
             } else {
-                Self::BigBlankNode {
+                EncodedTerm::BigBlankNode {
                     id_id: StrHash::new(id),
                 }
             }
         }
     }
-}
 
-impl From<LiteralRef<'_>> for EncodedTerm {
-    fn from(literal: LiteralRef<'_>) -> Self {
+    #[allow(clippy::unused_self)]
+    fn encode_literal(&self, literal: LiteralRef<'_>) -> EncodedTerm {
         let value = literal.value();
         let datatype = literal.datatype().as_str();
         let native_encoding = match datatype {
@@ -463,20 +518,20 @@ impl From<LiteralRef<'_>> for EncodedTerm {
                 literal.language().map(|language| {
                     if let Ok(value) = SmallString::try_from(value) {
                         if let Ok(language) = SmallString::try_from(language) {
-                            Self::SmallSmallLangStringLiteral { value, language }
+                            EncodedTerm::SmallSmallLangStringLiteral { value, language }
                         } else {
-                            Self::SmallBigLangStringLiteral {
+                            EncodedTerm::SmallBigLangStringLiteral {
                                 value,
                                 language_id: StrHash::new(language),
                             }
                         }
                     } else if let Ok(language) = SmallString::try_from(language) {
-                        Self::BigSmallLangStringLiteral {
+                        EncodedTerm::BigSmallLangStringLiteral {
                             value_id: StrHash::new(value),
                             language,
                         }
                     } else {
-                        Self::BigBigLangStringLiteral {
+                        EncodedTerm::BigBigLangStringLiteral {
                             value_id: StrHash::new(value),
                             language_id: StrHash::new(language),
                         }
@@ -487,9 +542,9 @@ impl From<LiteralRef<'_>> for EncodedTerm {
             "http://www.w3.org/2001/XMLSchema#string" => {
                 let value = value;
                 Some(if let Ok(value) = SmallString::try_from(value) {
-                    Self::SmallStringLiteral(value)
+                    EncodedTerm::SmallStringLiteral(value)
                 } else {
-                    Self::BigStringLiteral {
+                    EncodedTerm::BigStringLiteral {
                         value_id: StrHash::new(value),
                     }
                 })
@@ -532,12 +587,12 @@ impl From<LiteralRef<'_>> for EncodedTerm {
             Some(term) => term,
             None => {
                 if let Ok(value) = SmallString::try_from(value) {
-                    Self::SmallTypedLiteral {
+                    EncodedTerm::SmallTypedLiteral {
                         value,
                         datatype_id: StrHash::new(datatype),
                     }
                 } else {
-                    Self::BigTypedLiteral {
+                    EncodedTerm::BigTypedLiteral {
                         value_id: StrHash::new(value),
                         datatype_id: StrHash::new(datatype),
                     }
@@ -545,112 +600,30 @@ impl From<LiteralRef<'_>> for EncodedTerm {
             }
         }
     }
-}
 
-impl From<NamedOrBlankNodeRef<'_>> for EncodedTerm {
-    fn from(term: NamedOrBlankNodeRef<'_>) -> Self {
-        match term {
-            NamedOrBlankNodeRef::NamedNode(named_node) => named_node.into(),
-            NamedOrBlankNodeRef::BlankNode(blank_node) => blank_node.into(),
+    pub fn encode_graph_name<'a>(&self, name: impl Into<GraphNameRef<'a>>) -> EncodedTerm {
+        match name.into() {
+            GraphNameRef::NamedNode(named_node) => self.encode_named_node(named_node),
+            GraphNameRef::BlankNode(blank_node) => self.encode_blank_node(blank_node),
+            GraphNameRef::DefaultGraph => EncodedTerm::DefaultGraph,
         }
     }
-}
 
-impl From<SubjectRef<'_>> for EncodedTerm {
-    fn from(term: SubjectRef<'_>) -> Self {
-        match term {
-            SubjectRef::NamedNode(named_node) => named_node.into(),
-            SubjectRef::BlankNode(blank_node) => blank_node.into(),
-            SubjectRef::Triple(triple) => triple.as_ref().into(),
+    fn encode_triple(&self, triple: TripleRef<'_>) -> EncodedTriple {
+        EncodedTriple {
+            subject: self.encode_term(triple.subject),
+            predicate: self.encode_term(triple.predicate),
+            object: self.encode_term(triple.object),
         }
     }
-}
 
-impl From<TermRef<'_>> for EncodedTerm {
-    fn from(term: TermRef<'_>) -> Self {
-        match term {
-            TermRef::NamedNode(named_node) => named_node.into(),
-            TermRef::BlankNode(blank_node) => blank_node.into(),
-            TermRef::Literal(literal) => literal.into(),
-            TermRef::Triple(triple) => triple.as_ref().into(),
-        }
-    }
-}
-
-impl From<GraphNameRef<'_>> for EncodedTerm {
-    fn from(name: GraphNameRef<'_>) -> Self {
-        match name {
-            GraphNameRef::NamedNode(named_node) => named_node.into(),
-            GraphNameRef::BlankNode(blank_node) => blank_node.into(),
-            GraphNameRef::DefaultGraph => Self::DefaultGraph,
-        }
-    }
-}
-
-impl From<TripleRef<'_>> for EncodedTerm {
-    fn from(triple: TripleRef<'_>) -> Self {
-        Self::Triple(Rc::new(triple.into()))
-    }
-}
-
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct EncodedTriple {
-    pub subject: EncodedTerm,
-    pub predicate: EncodedTerm,
-    pub object: EncodedTerm,
-}
-
-impl EncodedTriple {
-    pub fn new(subject: EncodedTerm, predicate: EncodedTerm, object: EncodedTerm) -> Self {
-        Self {
-            subject,
-            predicate,
-            object,
-        }
-    }
-}
-
-impl From<TripleRef<'_>> for EncodedTriple {
-    fn from(triple: TripleRef<'_>) -> Self {
-        Self {
-            subject: triple.subject.into(),
-            predicate: triple.predicate.into(),
-            object: triple.object.into(),
-        }
-    }
-}
-
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct EncodedQuad {
-    pub subject: EncodedTerm,
-    pub predicate: EncodedTerm,
-    pub object: EncodedTerm,
-    pub graph_name: EncodedTerm,
-}
-
-impl EncodedQuad {
-    pub fn new(
-        subject: EncodedTerm,
-        predicate: EncodedTerm,
-        object: EncodedTerm,
-        graph_name: EncodedTerm,
-    ) -> Self {
-        Self {
-            subject,
-            predicate,
-            object,
-            graph_name,
-        }
-    }
-}
-
-impl From<QuadRef<'_>> for EncodedQuad {
-    fn from(quad: QuadRef<'_>) -> Self {
-        Self {
-            subject: quad.subject.into(),
-            predicate: quad.predicate.into(),
-            object: quad.object.into(),
-            graph_name: quad.graph_name.into(),
+    pub fn encode_quad<'a>(&self, quad: impl Into<QuadRef<'a>>) -> EncodedQuad {
+        let quad = quad.into();
+        EncodedQuad {
+            subject: self.encode_term(quad.subject),
+            predicate: self.encode_term(quad.predicate),
+            object: self.encode_term(quad.object),
+            graph_name: self.encode_graph_name(quad.graph_name),
         }
     }
 }

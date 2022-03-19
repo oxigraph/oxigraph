@@ -32,7 +32,6 @@ use crate::sparql::{
     evaluate_query, evaluate_update, EvaluationError, Query, QueryOptions, QueryResults, Update,
     UpdateOptions,
 };
-use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::storage::StorageBulkLoader;
 use crate::storage::{
@@ -184,12 +183,13 @@ impl Store {
         graph_name: Option<GraphNameRef<'_>>,
     ) -> QuadIter {
         let reader = self.storage.snapshot();
+        let encoder = reader.term_encoder();
         QuadIter {
             iter: reader.quads_for_pattern(
-                subject.map(EncodedTerm::from).as_ref(),
-                predicate.map(EncodedTerm::from).as_ref(),
-                object.map(EncodedTerm::from).as_ref(),
-                graph_name.map(EncodedTerm::from).as_ref(),
+                subject.map(|t| encoder.encode_term(t)).as_ref(),
+                predicate.map(|t| encoder.encode_term(t)).as_ref(),
+                object.map(|t| encoder.encode_term(t)).as_ref(),
+                graph_name.map(|t| encoder.encode_graph_name(t)).as_ref(),
             ),
             reader,
         }
@@ -236,8 +236,9 @@ impl Store {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn contains<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, StorageError> {
-        let quad = EncodedQuad::from(quad.into());
-        self.storage.snapshot().contains(&quad)
+        let reader = self.storage.snapshot();
+        let quad = reader.term_encoder().encode_quad(quad);
+        reader.contains(&quad)
     }
 
     /// Returns the number of quads in the store.
@@ -611,8 +612,9 @@ impl Store {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool, StorageError> {
-        let graph_name = EncodedTerm::from(graph_name.into());
-        self.storage.snapshot().contains_named_graph(&graph_name)
+        let reader = self.storage.snapshot();
+        let graph_name = reader.term_encoder().encode_graph_name(graph_name.into());
+        reader.contains_named_graph(&graph_name)
     }
 
     /// Inserts a graph into this store.
@@ -899,12 +901,13 @@ impl<'a> Transaction<'a> {
         graph_name: Option<GraphNameRef<'_>>,
     ) -> QuadIter {
         let reader = self.writer.reader();
+        let encoder = reader.term_encoder();
         QuadIter {
             iter: reader.quads_for_pattern(
-                subject.map(EncodedTerm::from).as_ref(),
-                predicate.map(EncodedTerm::from).as_ref(),
-                object.map(EncodedTerm::from).as_ref(),
-                graph_name.map(EncodedTerm::from).as_ref(),
+                subject.map(|t| encoder.encode_term(t)).as_ref(),
+                predicate.map(|t| encoder.encode_term(t)).as_ref(),
+                object.map(|t| encoder.encode_term(t)).as_ref(),
+                graph_name.map(|t| encoder.encode_graph_name(t)).as_ref(),
             ),
             reader,
         }
@@ -917,8 +920,9 @@ impl<'a> Transaction<'a> {
 
     /// Checks if this store contains a given quad.
     pub fn contains<'b>(&self, quad: impl Into<QuadRef<'b>>) -> Result<bool, StorageError> {
-        let quad = EncodedQuad::from(quad.into());
-        self.writer.reader().contains(&quad)
+        let reader = self.writer.reader();
+        let quad = reader.term_encoder().encode_quad(quad);
+        reader.contains(&quad)
     }
 
     /// Returns the number of quads in the store.
@@ -1125,9 +1129,9 @@ impl<'a> Transaction<'a> {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'b>>,
     ) -> Result<bool, StorageError> {
-        self.writer
-            .reader()
-            .contains_named_graph(&EncodedTerm::from(graph_name.into()))
+        let reader = self.writer.reader();
+        let graph_name = reader.term_encoder().encode_graph_name(graph_name.into());
+        reader.contains_named_graph(&graph_name)
     }
 
     /// Inserts a graph into this store.

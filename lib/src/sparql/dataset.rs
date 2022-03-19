@@ -18,13 +18,20 @@ pub struct DatasetView {
 
 impl DatasetView {
     pub fn new(reader: StorageReader, dataset: &QueryDataset) -> Self {
+        let encoder = reader.term_encoder();
         let dataset = EncodedDatasetSpec {
-            default: dataset
-                .default_graph_graphs()
-                .map(|graphs| graphs.iter().map(|g| g.as_ref().into()).collect::<Vec<_>>()),
-            named: dataset
-                .available_named_graphs()
-                .map(|graphs| graphs.iter().map(|g| g.as_ref().into()).collect::<Vec<_>>()),
+            default: dataset.default_graph_graphs().map(|graphs| {
+                graphs
+                    .iter()
+                    .map(|g| encoder.encode_graph_name(g))
+                    .collect::<Vec<_>>()
+            }),
+            named: dataset.available_named_graphs().map(|graphs| {
+                graphs
+                    .iter()
+                    .map(|g| encoder.encode_term(g))
+                    .collect::<Vec<_>>()
+            }),
         };
         Self {
             reader,
@@ -152,7 +159,7 @@ impl DatasetView {
 
     pub fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm {
         let term = term.into();
-        let encoded = term.into();
+        let encoded = self.reader.term_encoder().encode_term(term);
         insert_term(term, &encoded, &mut |key, value| {
             self.insert_str(key, value);
             Ok(())
