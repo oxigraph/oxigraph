@@ -1,8 +1,8 @@
 #![doc = include_str!("../README.md")]
 #![deny(unsafe_code)]
 #![doc(test(attr(deny(warnings))))]
-#![doc(html_favicon_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/master/logo.svg")]
-#![doc(html_logo_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/master/logo.svg")]
+#![doc(html_favicon_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
+#![doc(html_logo_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
 
 mod csv;
 mod error;
