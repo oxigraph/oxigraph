@@ -664,14 +664,8 @@ mod tests {
             Decimal::from_str("-2.5").unwrap().round(),
             Decimal::from(-2)
         );
-        assert_eq!(
-            Decimal::from(i64::MIN).round(),
-            Decimal::from(i64::MIN)
-        );
-        assert_eq!(
-            Decimal::from(i64::MAX).round(),
-            Decimal::from(i64::MAX)
-        );
+        assert_eq!(Decimal::from(i64::MIN).round(), Decimal::from(i64::MIN));
+        assert_eq!(Decimal::from(i64::MAX).round(), Decimal::from(i64::MAX));
     }
 
     #[test]
@@ -683,14 +677,8 @@ mod tests {
             Decimal::from_str("-10.5").unwrap().ceil(),
             Decimal::from(-10)
         );
-        assert_eq!(
-            Decimal::from(i64::MIN).ceil(),
-            Decimal::from(i64::MIN)
-        );
-        assert_eq!(
-            Decimal::from(i64::MAX).ceil(),
-            Decimal::from(i64::MAX)
-        );
+        assert_eq!(Decimal::from(i64::MIN).ceil(), Decimal::from(i64::MIN));
+        assert_eq!(Decimal::from(i64::MAX).ceil(), Decimal::from(i64::MAX));
     }
 
     #[test]
@@ -705,13 +693,7 @@ mod tests {
             Decimal::from_str("-10.5").unwrap().floor(),
             Decimal::from(-11)
         );
-        assert_eq!(
-            Decimal::from(i64::MIN).floor(),
-            Decimal::from(i64::MIN)
-        );
-        assert_eq!(
-            Decimal::from(i64::MAX).floor(),
-            Decimal::from(i64::MAX)
-        );
+        assert_eq!(Decimal::from(i64::MIN).floor(), Decimal::from(i64::MIN));
+        assert_eq!(Decimal::from(i64::MAX).floor(), Decimal::from(i64::MAX));
     }
 }
