@@ -489,7 +489,7 @@ impl Dataset {
     /// Applies on the dataset the canonicalization process described in
     /// [Canonical Forms for Isomorphic and Equivalent RDF Graphs: Algorithms for Leaning and Labelling Blank Nodes, Aidan Hogan, 2017](http://aidanhogan.com/docs/rdf-canonicalisation.pdf).
     ///
-    /// Usage example ([Dataset isomorphim](https://www.w3.org/TR/rdf11-concepts/#dfn-dataset-isomorphism)):
+    /// Usage example ([Dataset isomorphism](https://www.w3.org/TR/rdf11-concepts/#dfn-dataset-isomorphism)):
     /// ```
     /// use oxrdf::*;
     ///

@@ -178,8 +178,8 @@ impl Graph {
 
     /// Applies on the graph the canonicalization process described in
     /// [Canonical Forms for Isomorphic and Equivalent RDF Graphs: Algorithms for Leaning and Labelling Blank Nodes, Aidan Hogan, 2017](http://aidanhogan.com/docs/rdf-canonicalisation.pdf).
-    ///   
-    /// Usage example ([Graph isomorphim](https://www.w3.org/TR/rdf11-concepts/#dfn-graph-isomorphism)):
+    ///
+    /// Usage example ([Graph isomorphism](https://www.w3.org/TR/rdf11-concepts/#dfn-graph-isomorphism)):
     /// ```
     /// use oxrdf::*;
     ///
