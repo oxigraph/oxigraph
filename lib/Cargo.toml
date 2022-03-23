@@ -6,7 +6,7 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["RDF", "SPARQL", "graph-database", "database"]
 categories = ["database-implementations"]
-repository = "https://github.com/oxigraph/oxigraph/tree/master/lib"
+repository = "https://github.com/oxigraph/oxigraph/tree/main/lib"
 homepage = "https://oxigraph.org/"
 description = """
 a SPARQL database and RDF toolkit

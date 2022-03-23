@@ -5,7 +5,7 @@ authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["RDF", "N-Triples", "Turtle", "RDF/XML", "SPARQL"]
-repository = "https://github.com/oxigraph/oxigraph/tree/master/js"
+repository = "https://github.com/oxigraph/oxigraph/tree/main/js"
 description = "JavaScript bindings of Oxigraph"
 edition = "2021"
 

@@ -5,7 +5,7 @@ authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["RDF"]
-repository = "https://github.com/oxigraph/oxigraph/tree/master/lib/oxrdf"
+repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/oxrdf"
 homepage = "https://oxigraph.org/"
 description = """
 A library providing basic data structures related to RDF

@@ -5,7 +5,7 @@ authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["SPARQL"]
-repository = "https://github.com/oxigraph/oxigraph/tree/master/lib/sparesults"
+repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/sparesults"
 homepage = "https://oxigraph.org/"
 description = """
 SPARQL query results formats parsers and serializers
