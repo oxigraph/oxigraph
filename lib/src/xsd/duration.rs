@@ -564,10 +564,10 @@ mod tests {
     #[test]
     fn from_str() {
         let min = Duration::new(
-            i64::min_value() + 1,
+            i64::MIN + 1,
             Decimal::min_value().checked_add(Decimal::step()).unwrap(),
         );
-        let max = Duration::new(i64::max_value(), Decimal::max_value());
+        let max = Duration::new(i64::MAX, Decimal::max_value());
 
         assert_eq!(
             YearMonthDuration::from_str("P1Y").unwrap().to_string(),
