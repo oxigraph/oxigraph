@@ -27,7 +27,7 @@ Pyoxigraph is `distributed on Pypi <https://pypi.org/project/pyoxigraph/>`_.
 
 There is also a small library providing a `rdflib <https://rdflib.readthedocs.io>`_ store using pyoxigraph: `oxrdflib <https://github.com/oxigraph/oxrdflib>`_.
 
-Oxigraph and pyoxigraph source code are on `GitHub <https://github.com/oxigraph/oxigraph/tree/master/python>`_.
+Oxigraph and pyoxigraph source code are on `GitHub <https://github.com/oxigraph/oxigraph/tree/main/python>`_.
 
 
 Installation

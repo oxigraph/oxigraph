@@ -18,7 +18,7 @@ pkg.browser = 'web.js'
 pkg.files = [
   '*.{js,wasm,d.ts}'
 ]
-pkg.homepage = 'https://github.com/oxigraph/oxigraph/tree/master/js'
+pkg.homepage = 'https://github.com/oxigraph/oxigraph/tree/main/js'
 pkg.bugs = {
   url: 'https://github.com/oxigraph/oxigraph/issues'
 }
