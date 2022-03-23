@@ -171,7 +171,7 @@ services:
       ## For multiple users: uncomment this line to mount a pre-generated .htpasswd 
       # - ./.htpasswd:/etc/nginx/.htpasswd
     ports:
-      - 7878:7878
+      - "7878:7878"
     entrypoint: "bash -c 'echo -n $OXIGRAPH_USER: >> /etc/nginx/.htpasswd && echo $OXIGRAPH_PASSWORD | openssl passwd -stdin -apr1 >> /etc/nginx/.htpasswd && /docker-entrypoint.sh nginx'"
 ```
 

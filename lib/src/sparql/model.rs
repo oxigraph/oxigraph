@@ -258,7 +258,7 @@ impl Iterator for QueryTripleIter {
 }
 
 #[test]
-fn test_serialization_rountrip() -> Result<(), EvaluationError> {
+fn test_serialization_roundtrip() -> Result<(), EvaluationError> {
     use std::io::Cursor;
     use std::str;
 

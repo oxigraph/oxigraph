@@ -1499,12 +1499,12 @@ impl SimpleEvaluator {
                             }
                             _ => {
                                 result.push(b'%');
-                                let hight = c / 16;
+                                let high = c / 16;
                                 let low = c % 16;
-                                result.push(if hight < 10 {
-                                    b'0' + hight
+                                result.push(if high < 10 {
+                                    b'0' + high
                                 } else {
-                                    b'A' + (hight - 10)
+                                    b'A' + (high - 10)
                                 });
                                 result.push(if low < 10 {
                                     b'0' + low

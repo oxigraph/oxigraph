@@ -49,7 +49,7 @@ impl QuerySolution {
     /// use oxrdf::{Variable, Literal};
     ///
     /// let solution = QuerySolution::from((vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")], vec![Some(Literal::from(1).into()), None]));
-    /// assert_eq!(solution.len(), 2); // there arre
+    /// assert_eq!(solution.len(), 2); // there are
     /// ```
     #[inline]
     pub fn len(&self) -> usize {

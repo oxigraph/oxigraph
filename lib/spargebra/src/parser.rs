@@ -511,7 +511,7 @@ fn build_select(
                         if with_aggregate && !are_variables_bound(&expression, &visible) {
                             // We validate projection variables if there is an aggregate
                             return Err(
-                                "The SELECT contains an exprssion with a variable that is unbound",
+                                "The SELECT contains an expression with a variable that is unbound",
                             );
                         }
                         p = GraphPattern::Extend {
