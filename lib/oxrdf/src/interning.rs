@@ -422,5 +422,5 @@ fn next_spur(value: Spur) -> Spur {
 }
 
 fn impossible_spur() -> Spur {
-    Spur::try_from_usize((u32::max_value() - 10).try_into().unwrap()).unwrap()
+    Spur::try_from_usize((u32::MAX - 10).try_into().unwrap()).unwrap()
 }

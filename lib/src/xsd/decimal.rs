@@ -665,12 +665,12 @@ mod tests {
             Decimal::from(-2)
         );
         assert_eq!(
-            Decimal::from(i64::min_value()).round(),
-            Decimal::from(i64::min_value())
+            Decimal::from(i64::MIN).round(),
+            Decimal::from(i64::MIN)
         );
         assert_eq!(
-            Decimal::from(i64::max_value()).round(),
-            Decimal::from(i64::max_value())
+            Decimal::from(i64::MAX).round(),
+            Decimal::from(i64::MAX)
         );
     }
 
@@ -684,12 +684,12 @@ mod tests {
             Decimal::from(-10)
         );
         assert_eq!(
-            Decimal::from(i64::min_value()).ceil(),
-            Decimal::from(i64::min_value())
+            Decimal::from(i64::MIN).ceil(),
+            Decimal::from(i64::MIN)
         );
         assert_eq!(
-            Decimal::from(i64::max_value()).ceil(),
-            Decimal::from(i64::max_value())
+            Decimal::from(i64::MAX).ceil(),
+            Decimal::from(i64::MAX)
         );
     }
 
@@ -706,12 +706,12 @@ mod tests {
             Decimal::from(-11)
         );
         assert_eq!(
-            Decimal::from(i64::min_value()).floor(),
-            Decimal::from(i64::min_value())
+            Decimal::from(i64::MIN).floor(),
+            Decimal::from(i64::MIN)
         );
         assert_eq!(
-            Decimal::from(i64::max_value()).floor(),
-            Decimal::from(i64::max_value())
+            Decimal::from(i64::MAX).floor(),
+            Decimal::from(i64::MAX)
         );
     }
 }
