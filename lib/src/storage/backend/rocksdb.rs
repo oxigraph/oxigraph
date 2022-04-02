@@ -21,9 +21,8 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
-use std::thread::yield_now;
+use std::thread::{available_parallelism, yield_now};
 use std::{ptr, slice};
-use sysinfo::{System, SystemExt};
 
 macro_rules! ffi_result {
     ( $($function:ident)::*() ) => {
@@ -67,7 +66,6 @@ lazy_static! {
             UnsafeEnv(env)
         }
     };
-    static ref CPU_COUNT: Option<usize> = System::new().physical_core_count();
 }
 
 pub struct ColumnFamilyDefinition {
@@ -166,8 +164,26 @@ impl Db {
             rocksdb_options_set_create_if_missing(options, 1);
             rocksdb_options_set_create_missing_column_families(options, 1);
             rocksdb_options_optimize_level_style_compaction(options, 512 * 1024 * 1024);
-            if let Some(cpu_count) = *CPU_COUNT {
-                rocksdb_options_increase_parallelism(options, cpu_count.try_into().unwrap());
+            rocksdb_options_increase_parallelism(
+                options,
+                available_parallelism()?.get().try_into().unwrap(),
+            );
+            if let Some(available_fd) = available_file_descriptors()? {
+                if available_fd < 96 {
+                    rocksdb_options_destroy(options);
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!(
+                            "Oxigraph needs at least 96 file descriptors, only {} allowed. Run e.g. `ulimit -n 512` to allow 512 opened files",
+                            available_fd
+                        ),
+                    )
+                    .into());
+                }
+                rocksdb_options_set_max_open_files(
+                    options,
+                    (available_fd - 48).try_into().unwrap(),
+                );
             }
             rocksdb_options_set_info_log_level(options, 2); // We only log warnings
             rocksdb_options_set_max_log_file_size(options, 1024 * 1024); // Only 1MB log size
@@ -1109,4 +1125,27 @@ fn path_to_cstring(path: &Path) -> Result<CString, StorageError> {
             format!("The DB path contains null bytes: {}", e),
         )
     })?)
+}
+
+#[cfg(unix)]
+fn available_file_descriptors() -> io::Result<Option<u64>> {
+    let mut rlimit = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut rlimit) } == 0 {
+        Ok(Some(rlimit.rlim_cur))
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+#[cfg(windows)]
+fn available_file_descriptors() -> io::Result<Option<u64>> {
+    Ok(Some(512)) // https://docs.microsoft.com/en-us/cpp/c-runtime-library/file-handling
+}
+
+#[cfg(not(any(unix, windows)))]
+fn available_file_descriptors() -> io::Result<Option<u64>> {
+    Ok(None)
 }
