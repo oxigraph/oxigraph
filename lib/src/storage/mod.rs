@@ -1195,7 +1195,7 @@ impl StorageBulkLoader {
         quads: I,
     ) -> Result<(), EO> {
         let system = System::new_all();
-        let cpu_count = min(8, system.physical_core_count().unwrap_or(2));
+        let cpu_count = min(4, system.physical_core_count().unwrap_or(2));
         let num_threads = max(
             if let Some(num_threads) = self.num_threads {
                 num_threads
