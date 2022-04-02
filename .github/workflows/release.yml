@@ -231,7 +231,7 @@ jobs:
           wget "https://github.com/oxigraph/oxigraph/releases/download/${{ github.event.release.tag_name }}/oxigraph_${{ github.event.release.tag_name }}.tar.gz"
           SHA=`shasum -a 256 "oxigraph_${{ github.event.release.tag_name }}.tar.gz" | awk '{ print $1 }'`
           rm "oxigraph_${{ github.event.release.tag_name }}.tar.gz"
-          sed -i "s/download\/.*\.tar/download\/${{ github.event.release.tag_name }}.tar/g" Formula/oxigraph.rb
+          sed -i "s/download\/.*\.tar/download\/${{ github.event.release.tag_name }}\/oxigraph_${{ github.event.release.tag_name }}.tar/g" Formula/oxigraph.rb
           sed -i "s/sha256 \".*\"/sha256 \"$SHA\"/g" Formula/oxigraph.rb
           git config user.name github-actions
           git config user.email github-actions@github.com
