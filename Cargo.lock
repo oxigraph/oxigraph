@@ -791,7 +791,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "criterion",
  "digest",
@@ -824,7 +824,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_js"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
@@ -835,7 +835,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_server"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "clap 3.1.8",
  "flate2",
@@ -849,7 +849,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_testsuite"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "clap 3.1.8",
@@ -883,7 +883,7 @@ dependencies = [
 
 [[package]]
 name = "oxrocksdb-sys"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "bindgen",
  "cc",
@@ -1082,7 +1082,7 @@ dependencies = [
 
 [[package]]
 name = "pyoxigraph"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "oxigraph",
  "pyo3",

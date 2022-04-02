@@ -1,3 +1,12 @@
+## [0.3.1] - 2022-04-02
+
+### Changed
+- The default git branch is now `main` and not `master` (thanks to @nyurik).
+- Upgrades RocksDB to v7.0.4.
+- Limits the number of bulk loader threads to at most 4 (allows bigger BTree chunks and a better data layout).
+- Limits the number of files opened by RocksDB to the soft file descriptor limit minus 48.
+
+
 ## [0.3.0] - 2022-03-19
 
 ### Changed
@@ -8,7 +17,7 @@
 ## [0.3.0-rc.1] - 2022-03-14
 
 ### Added
-- The bulk loader now check available memory and tries to increase its batch size to make use of it.
+- The bulk loader now checks available memory and tries to increase its batch size to make use of it.
 - The Bulk loader provides now a `--lenient` option to keep loading a file even if invalid data is found (works only with N-Triples and N-Quads). 
   This behavior can be customised in the Rust API using the `BulkLoader::on_parse_error` method.
 
