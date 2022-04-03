@@ -9,6 +9,7 @@ use libc::{self, c_char, c_void, free};
 use oxrocksdb_sys::*;
 use rand::random;
 use std::borrow::Borrow;
+use std::cmp::min;
 use std::collections::HashMap;
 use std::env::temp_dir;
 use std::error::Error;
@@ -1134,7 +1135,7 @@ fn available_file_descriptors() -> io::Result<Option<u64>> {
         rlim_max: 0,
     };
     if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut rlimit) } == 0 {
-        Ok(Some(rlimit.rlim_cur))
+        Ok(Some(min(rlimit.rlim_cur, rlimit.rlim_max)))
     } else {
         Err(io::Error::last_os_error())
     }
