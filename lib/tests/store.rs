@@ -165,11 +165,12 @@ fn test_bulk_load_dataset() -> Result<(), Box<dyn Error>> {
     store
         .bulk_loader()
         .load_dataset(Cursor::new(GRAPH_DATA), DatasetFormat::TriG, None)?;
-    for q in quads(NamedNodeRef::new_unchecked(
-        "http://www.wikidata.org/wiki/Special:EntityData/Q90",
-    )) {
+    let graph_name =
+        NamedNodeRef::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90");
+    for q in quads(graph_name) {
         assert!(store.contains(q)?);
     }
+    assert!(store.contains_named_graph(graph_name)?);
     store.validate()?;
     Ok(())
 }

@@ -1500,9 +1500,19 @@ impl FileBulkLoader {
     ) -> Result<PathBuf, StorageError> {
         let mut values = values.collect::<Vec<_>>();
         values.sort_unstable();
+        let deduplicated_values = values.iter().enumerate().filter_map(|(i, value)| {
+            if values
+                .get(i + 1)
+                .map_or(true, |next_value| value != next_value)
+            {
+                Some(value)
+            } else {
+                None
+            }
+        });
         let mut sst = self.storage.db.new_sst_file()?;
-        for t in values {
-            sst.insert_empty(&t)?;
+        for value in deduplicated_values {
+            sst.insert_empty(value)?;
         }
         sst.finish()
     }
