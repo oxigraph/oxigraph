@@ -143,7 +143,7 @@ fn build_rocksdb() {
     if target.contains("msvc") {
         config.flag("-EHsc").flag("-std:c++17");
     } else {
-        config.flag("-std=c++17");
+        config.flag("-std=c++17").flag("-Wno-invalid-offsetof");
     }
 
     for file in lib_sources {
