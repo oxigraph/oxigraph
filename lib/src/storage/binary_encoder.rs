@@ -742,11 +742,12 @@ mod tests {
             )
             .into(),
         ];
+        let decoder = TermDecoder::new(&store);
         for term in terms {
             let encoded = term.as_ref().into();
             store.insert_term(term.as_ref(), &encoded);
             assert_eq!(encoded, term.as_ref().into());
-            assert_eq!(term, store.decode_term(&encoded).unwrap());
+            assert_eq!(term, decoder.decode_term(&encoded).unwrap());
 
             let mut buffer = Vec::new();
             write_term(&mut buffer, &encoded);

@@ -10,7 +10,7 @@ use crate::storage::binary_encoder::{
 };
 pub use crate::storage::error::{CorruptionError, LoaderError, SerializerError, StorageError};
 use crate::storage::numeric_encoder::{
-    insert_term, Decoder, EncodedQuad, EncodedTerm, StrHash, StrLookup,
+    insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup, TermDecoder,
 };
 use backend::{ColumnFamily, ColumnFamilyDefinition, Db, Iter};
 use std::cmp::{max, min};
@@ -294,6 +294,10 @@ pub struct StorageReader {
 }
 
 impl StorageReader {
+    pub fn term_decoder(&self) -> TermDecoder<Self> {
+        TermDecoder::new(self)
+    }
+
     pub fn len(&self) -> Result<usize, StorageError> {
         Ok(self.reader.len(&self.storage.gspo_cf)? + self.reader.len(&self.storage.dspo_cf)?)
     }
@@ -654,7 +658,7 @@ impl StorageReader {
         }
         for spo in self.dspo_quads(&[]) {
             let spo = spo?;
-            self.decode_quad(&spo)?; // We ensure that the quad is readable
+            self.term_decoder().decode_quad(&spo)?; // We ensure that the quad is readable
             if !self.storage.db.contains_key(
                 &self.storage.dpos_cf,
                 &encode_term_triple(&spo.predicate, &spo.object, &spo.subject),
@@ -684,7 +688,7 @@ impl StorageReader {
         }
         for gspo in self.gspo_quads(&[]) {
             let gspo = gspo?;
-            self.decode_quad(&gspo)?; // We ensure that the quad is readable
+            self.term_decoder().decode_quad(&gspo)?; // We ensure that the quad is readable
             if !self.storage.db.contains_key(
                 &self.storage.gpos_cf,
                 &encode_term_quad(

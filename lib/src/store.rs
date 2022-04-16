@@ -32,7 +32,7 @@ use crate::sparql::{
     evaluate_query, evaluate_update, EvaluationError, Query, QueryOptions, QueryResults, Update,
     UpdateOptions,
 };
-use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
+use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::storage::StorageBulkLoader;
 use crate::storage::{
@@ -1238,7 +1238,7 @@ impl Iterator for QuadIter {
 
     fn next(&mut self) -> Option<Result<Quad, StorageError>> {
         Some(match self.iter.next()? {
-            Ok(quad) => self.reader.decode_quad(&quad),
+            Ok(quad) => self.reader.term_decoder().decode_quad(&quad),
             Err(error) => Err(error),
         })
     }
@@ -1254,11 +1254,11 @@ impl Iterator for GraphNameIter {
     type Item = Result<NamedOrBlankNode, StorageError>;
 
     fn next(&mut self) -> Option<Result<NamedOrBlankNode, StorageError>> {
-        Some(
-            self.iter
-                .next()?
-                .and_then(|graph_name| self.reader.decode_named_or_blank_node(&graph_name)),
-        )
+        Some(self.iter.next()?.and_then(|graph_name| {
+            self.reader
+                .term_decoder()
+                .decode_named_or_blank_node(&graph_name)
+        }))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {

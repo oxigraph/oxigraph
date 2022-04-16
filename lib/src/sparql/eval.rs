@@ -659,7 +659,9 @@ impl SimpleEvaluator {
         let service_name = get_pattern_value(service_name, from)
             .ok_or_else(|| EvaluationError::msg("The SERVICE name is not bound"))?;
         if let QueryResults::Solutions(iter) = self.service_handler.handle(
-            self.dataset.decode_named_node(&service_name)?,
+            self.dataset
+                .term_decoder()
+                .decode_named_node(&service_name)?,
             Query {
                 inner: spargebra::Query::Select {
                     dataset: None,
@@ -2029,7 +2031,7 @@ impl SimpleEvaluator {
                     Rc::new(move |tuple| {
                         let args = args
                             .iter()
-                            .map(|f| dataset.decode_term(&f(tuple)?).ok())
+                            .map(|f| dataset.term_decoder().decode_term(&f(tuple)?).ok())
                             .collect::<Option<Vec<_>>>()?;
                         Some(dataset.encode_term(&function(&args)?))
                     })
@@ -2307,9 +2309,10 @@ fn decode_bindings(
         variables,
         Box::new(iter.map(move |values| {
             let mut result = vec![None; tuple_size];
+            let decoder = dataset.term_decoder();
             for (i, value) in values?.iter().enumerate() {
                 if let Some(term) = value {
-                    result[i] = Some(dataset.decode_term(&term)?)
+                    result[i] = Some(decoder.decode_term(&term)?)
                 }
             }
             Ok(result)
@@ -2569,9 +2572,10 @@ fn cmp_terms(dataset: &DatasetView, a: Option<&EncodedTerm>, b: Option<&EncodedT
                 b => {
                     if let Some(ord) = partial_cmp_literals(dataset, a, b) {
                         ord
-                    } else if let (Ok(Term::Literal(a)), Ok(Term::Literal(b))) =
-                        (dataset.decode_term(a), dataset.decode_term(b))
-                    {
+                    } else if let (Ok(Term::Literal(a)), Ok(Term::Literal(b))) = (
+                        dataset.term_decoder().decode_term(a),
+                        dataset.term_decoder().decode_term(b),
+                    ) {
                         (a.value(), a.datatype(), a.language()).cmp(&(
                             b.value(),
                             b.datatype(),
@@ -3323,7 +3327,7 @@ impl Iterator for ConstructIterator {
                         get_triple_template_value(&template.object, &tuple, &mut self.bnodes),
                     ) {
                         self.buffered_results.push(decode_triple(
-                            &*self.eval.dataset,
+                            &self.eval.dataset.term_decoder(),
                             &subject,
                             &predicate,
                             &object,
@@ -3373,8 +3377,8 @@ fn new_bnode() -> EncodedTerm {
     EncodedTerm::NumericalBlankNode { id: random() }
 }
 
-fn decode_triple<D: Decoder>(
-    decoder: &D,
+fn decode_triple<S: StrLookup>(
+    decoder: &TermDecoder<S>,
     subject: &EncodedTerm,
     predicate: &EncodedTerm,
     object: &EncodedTerm,
@@ -3402,6 +3406,7 @@ impl Iterator for DescribeIterator {
                     Ok(quad) => self
                         .eval
                         .dataset
+                        .term_decoder()
                         .decode_quad(&quad)
                         .map(|q| q.into())
                         .map_err(|e| e.into()),

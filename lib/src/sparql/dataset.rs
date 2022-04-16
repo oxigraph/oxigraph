@@ -1,7 +1,9 @@
 use crate::model::TermRef;
 use crate::sparql::algebra::QueryDataset;
 use crate::sparql::EvaluationError;
-use crate::storage::numeric_encoder::{insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup};
+use crate::storage::numeric_encoder::{
+    insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup, TermDecoder,
+};
 use crate::storage::{StorageError, StorageReader};
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
@@ -157,6 +159,10 @@ impl DatasetView {
         })
         .unwrap();
         encoded
+    }
+
+    pub fn term_decoder(&self) -> TermDecoder<Self> {
+        TermDecoder::new(self)
     }
 
     pub fn insert_str(&self, key: &StrHash, value: &str) {

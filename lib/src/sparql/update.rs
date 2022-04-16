@@ -8,7 +8,7 @@ use crate::sparql::http::Client;
 use crate::sparql::plan::EncodedTuple;
 use crate::sparql::plan_builder::PlanBuilder;
 use crate::sparql::{EvaluationError, Update, UpdateOptions};
-use crate::storage::numeric_encoder::{Decoder, EncodedTerm};
+use crate::storage::numeric_encoder::EncodedTerm;
 use crate::storage::StorageWriter;
 use oxiri::Iri;
 use spargebra::algebra::{GraphPattern, GraphTarget};
@@ -374,7 +374,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                     .map(|t| t.into())
             }
             TermPattern::Variable(v) => Self::lookup_variable(v, variables, values)
-                .map(|node| dataset.decode_term(&node))
+                .map(|node| dataset.term_decoder().decode_term(&node))
                 .transpose()?,
         })
     }
@@ -388,7 +388,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         Ok(match term {
             NamedNodePattern::NamedNode(term) => Some(term.clone()),
             NamedNodePattern::Variable(v) => Self::lookup_variable(v, variables, values)
-                .map(|node| dataset.decode_named_node(&node))
+                .map(|node| dataset.term_decoder().decode_named_node(&node))
                 .transpose()?,
         })
     }
@@ -407,7 +407,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                     Ok(if node == EncodedTerm::DefaultGraph {
                         OxGraphName::DefaultGraph
                     } else {
-                        dataset.decode_named_node(&node)?.into()
+                        dataset.term_decoder().decode_named_node(&node)?.into()
                     })
                 })
                 .transpose(),
@@ -507,7 +507,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                     .map(|t| t.into())
             }
             GroundTermPattern::Variable(v) => Self::lookup_variable(v, variables, values)
-                .map(|node| dataset.decode_term(&node))
+                .map(|node| dataset.term_decoder().decode_term(&node))
                 .transpose()?,
         })
     }

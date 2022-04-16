@@ -819,10 +819,95 @@ pub fn parse_day_time_duration_str(value: &str) -> Option<EncodedTerm> {
     value.parse().map(EncodedTerm::DayTimeDurationLiteral).ok()
 }
 
-pub trait Decoder: StrLookup {
-    fn decode_term(&self, encoded: &EncodedTerm) -> Result<Term, StorageError>;
+pub struct TermDecoder<'a, S: StrLookup> {
+    lookup: &'a S,
+}
 
-    fn decode_subject(&self, encoded: &EncodedTerm) -> Result<Subject, StorageError> {
+impl<'a, S: StrLookup> TermDecoder<'a, S> {
+    pub fn new(lookup: &'a S) -> Self {
+        Self { lookup }
+    }
+
+    pub fn decode_term(&self, encoded: &EncodedTerm) -> Result<Term, StorageError> {
+        match encoded {
+            EncodedTerm::DefaultGraph => {
+                Err(CorruptionError::msg("The default graph tag is not a valid term").into())
+            }
+            EncodedTerm::NamedNode { iri_id } => {
+                Ok(NamedNode::new_unchecked(get_required_str(self.lookup, iri_id)?).into())
+            }
+            EncodedTerm::NumericalBlankNode { id } => Ok(BlankNode::new_from_unique_id(*id).into()),
+            EncodedTerm::SmallBlankNode(id) => Ok(BlankNode::new_unchecked(id.as_str()).into()),
+            EncodedTerm::BigBlankNode { id_id } => {
+                Ok(BlankNode::new_unchecked(get_required_str(self.lookup, id_id)?).into())
+            }
+            EncodedTerm::SmallStringLiteral(value) => {
+                Ok(Literal::new_simple_literal(*value).into())
+            }
+            EncodedTerm::BigStringLiteral { value_id } => {
+                Ok(Literal::new_simple_literal(get_required_str(self.lookup, value_id)?).into())
+            }
+            EncodedTerm::SmallSmallLangStringLiteral { value, language } => {
+                Ok(Literal::new_language_tagged_literal_unchecked(*value, *language).into())
+            }
+            EncodedTerm::SmallBigLangStringLiteral { value, language_id } => {
+                Ok(Literal::new_language_tagged_literal_unchecked(
+                    *value,
+                    get_required_str(self.lookup, language_id)?,
+                )
+                .into())
+            }
+            EncodedTerm::BigSmallLangStringLiteral { value_id, language } => {
+                Ok(Literal::new_language_tagged_literal_unchecked(
+                    get_required_str(self.lookup, value_id)?,
+                    *language,
+                )
+                .into())
+            }
+            EncodedTerm::BigBigLangStringLiteral {
+                value_id,
+                language_id,
+            } => Ok(Literal::new_language_tagged_literal_unchecked(
+                get_required_str(self.lookup, value_id)?,
+                get_required_str(self.lookup, language_id)?,
+            )
+            .into()),
+            EncodedTerm::SmallTypedLiteral { value, datatype_id } => {
+                Ok(Literal::new_typed_literal(
+                    *value,
+                    NamedNode::new_unchecked(get_required_str(self.lookup, datatype_id)?),
+                )
+                .into())
+            }
+            EncodedTerm::BigTypedLiteral {
+                value_id,
+                datatype_id,
+            } => Ok(Literal::new_typed_literal(
+                get_required_str(self.lookup, value_id)?,
+                NamedNode::new_unchecked(get_required_str(self.lookup, datatype_id)?),
+            )
+            .into()),
+            EncodedTerm::BooleanLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::FloatLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::DoubleLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::IntegerLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::DecimalLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::DateTimeLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::DateLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::TimeLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::GYearMonthLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::GYearLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::GMonthDayLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::GDayLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::GMonthLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::DurationLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::YearMonthDurationLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::DayTimeDurationLiteral(value) => Ok(Literal::from(*value).into()),
+            EncodedTerm::Triple(triple) => Ok(self.decode_triple(triple)?.into()),
+        }
+    }
+
+    pub fn decode_subject(&self, encoded: &EncodedTerm) -> Result<Subject, StorageError> {
         match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node.into()),
             Term::BlankNode(blank_node) => Ok(blank_node.into()),
@@ -834,7 +919,7 @@ pub trait Decoder: StrLookup {
         }
     }
 
-    fn decode_named_or_blank_node(
+    pub fn decode_named_or_blank_node(
         &self,
         encoded: &EncodedTerm,
     ) -> Result<NamedOrBlankNode, StorageError> {
@@ -852,7 +937,7 @@ pub trait Decoder: StrLookup {
         }
     }
 
-    fn decode_named_node(&self, encoded: &EncodedTerm) -> Result<NamedNode, StorageError> {
+    pub fn decode_named_node(&self, encoded: &EncodedTerm) -> Result<NamedNode, StorageError> {
         match self.decode_term(encoded)? {
             Term::NamedNode(named_node) => Ok(named_node),
             Term::BlankNode(_) => Err(CorruptionError::msg(
@@ -868,7 +953,7 @@ pub trait Decoder: StrLookup {
         }
     }
 
-    fn decode_triple(&self, encoded: &EncodedTriple) -> Result<Triple, StorageError> {
+    pub fn decode_triple(&self, encoded: &EncodedTriple) -> Result<Triple, StorageError> {
         Ok(Triple::new(
             self.decode_subject(&encoded.subject)?,
             self.decode_named_node(&encoded.predicate)?,
@@ -876,7 +961,7 @@ pub trait Decoder: StrLookup {
         ))
     }
 
-    fn decode_quad(&self, encoded: &EncodedQuad) -> Result<Quad, StorageError> {
+    pub fn decode_quad(&self, encoded: &EncodedQuad) -> Result<Quad, StorageError> {
         Ok(Quad::new(
             self.decode_subject(&encoded.subject)?,
             self.decode_named_node(&encoded.predicate)?,
@@ -900,87 +985,6 @@ pub trait Decoder: StrLookup {
                 }
             },
         ))
-    }
-}
-
-impl<S: StrLookup> Decoder for S {
-    fn decode_term(&self, encoded: &EncodedTerm) -> Result<Term, StorageError> {
-        match encoded {
-            EncodedTerm::DefaultGraph => {
-                Err(CorruptionError::msg("The default graph tag is not a valid term").into())
-            }
-            EncodedTerm::NamedNode { iri_id } => {
-                Ok(NamedNode::new_unchecked(get_required_str(self, iri_id)?).into())
-            }
-            EncodedTerm::NumericalBlankNode { id } => Ok(BlankNode::new_from_unique_id(*id).into()),
-            EncodedTerm::SmallBlankNode(id) => Ok(BlankNode::new_unchecked(id.as_str()).into()),
-            EncodedTerm::BigBlankNode { id_id } => {
-                Ok(BlankNode::new_unchecked(get_required_str(self, id_id)?).into())
-            }
-            EncodedTerm::SmallStringLiteral(value) => {
-                Ok(Literal::new_simple_literal(*value).into())
-            }
-            EncodedTerm::BigStringLiteral { value_id } => {
-                Ok(Literal::new_simple_literal(get_required_str(self, value_id)?).into())
-            }
-            EncodedTerm::SmallSmallLangStringLiteral { value, language } => {
-                Ok(Literal::new_language_tagged_literal_unchecked(*value, *language).into())
-            }
-            EncodedTerm::SmallBigLangStringLiteral { value, language_id } => {
-                Ok(Literal::new_language_tagged_literal_unchecked(
-                    *value,
-                    get_required_str(self, language_id)?,
-                )
-                .into())
-            }
-            EncodedTerm::BigSmallLangStringLiteral { value_id, language } => {
-                Ok(Literal::new_language_tagged_literal_unchecked(
-                    get_required_str(self, value_id)?,
-                    *language,
-                )
-                .into())
-            }
-            EncodedTerm::BigBigLangStringLiteral {
-                value_id,
-                language_id,
-            } => Ok(Literal::new_language_tagged_literal_unchecked(
-                get_required_str(self, value_id)?,
-                get_required_str(self, language_id)?,
-            )
-            .into()),
-            EncodedTerm::SmallTypedLiteral { value, datatype_id } => {
-                Ok(Literal::new_typed_literal(
-                    *value,
-                    NamedNode::new_unchecked(get_required_str(self, datatype_id)?),
-                )
-                .into())
-            }
-            EncodedTerm::BigTypedLiteral {
-                value_id,
-                datatype_id,
-            } => Ok(Literal::new_typed_literal(
-                get_required_str(self, value_id)?,
-                NamedNode::new_unchecked(get_required_str(self, datatype_id)?),
-            )
-            .into()),
-            EncodedTerm::BooleanLiteral(value) => Ok(Literal::from(*value).into()),
-            EncodedTerm::FloatLiteral(value) => Ok(Literal::from(*value).into()),
-            EncodedTerm::DoubleLiteral(value) => Ok(Literal::from(*value).into()),
-            EncodedTerm::IntegerLiteral(value) => Ok(Literal::from(*value).into()),
-            EncodedTerm::DecimalLiteral(value) => Ok(Literal::from(*value).into()),
-            EncodedTerm::DateTimeLiteral(value) => Ok(Literal::from(*value).into()),
-            EncodedTerm::DateLiteral(value) => Ok(Literal::from(*value).into()),
-            EncodedTerm::TimeLiteral(value) => Ok(Literal::from(*value).into()),
-            EncodedTerm::GYearMonthLiteral(value) => Ok(Literal::from(*value).into()),
-            EncodedTerm::GYearLiteral(value) => Ok(Literal::from(*value).into()),
-            EncodedTerm::GMonthDayLiteral(value) => Ok(Literal::from(*value).into()),
-            EncodedTerm::GDayLiteral(value) => Ok(Literal::from(*value).into()),
-            EncodedTerm::GMonthLiteral(value) => Ok(Literal::from(*value).into()),
-            EncodedTerm::DurationLiteral(value) => Ok(Literal::from(*value).into()),
-            EncodedTerm::YearMonthDurationLiteral(value) => Ok(Literal::from(*value).into()),
-            EncodedTerm::DayTimeDurationLiteral(value) => Ok(Literal::from(*value).into()),
-            EncodedTerm::Triple(triple) => Ok(self.decode_triple(triple)?.into()),
-        }
     }
 }
 
