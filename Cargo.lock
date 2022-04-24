@@ -39,9 +39,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.56"
+version = "1.0.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4361135be9122e0870de935d7c439aef945b9f9ddd4199a553b5270b49c82a27"
+checksum = "08f9b8508dccb7687a1d6c4ce66b2b0ecef467c94667de27d8d7fe1f8d2a9cdc"
 
 [[package]]
 name = "atty"
@@ -183,9 +183,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.1.10"
+version = "3.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3124f3f75ce09e22d1410043e1e24f2ecc44fad3afe4f08408f1f7663d68da2b"
+checksum = "7c167e37342afc5f33fd87bbc870cedd020d2a6dffa05d45ccd9241fbdd146db"
 dependencies = [
  "atty",
  "bitflags",
@@ -787,7 +787,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "criterion",
  "digest",
@@ -820,7 +820,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_js"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
@@ -831,9 +831,9 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_server"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
- "clap 3.1.10",
+ "clap 3.1.12",
  "flate2",
  "oxhttp",
  "oxigraph",
@@ -845,10 +845,10 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_testsuite"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
- "clap 3.1.10",
+ "clap 3.1.12",
  "criterion",
  "oxigraph",
  "text-diff",
@@ -879,7 +879,7 @@ dependencies = [
 
 [[package]]
 name = "oxrocksdb-sys"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "bindgen",
  "cc",
@@ -1076,7 +1076,7 @@ dependencies = [
 
 [[package]]
 name = "pyoxigraph"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "oxigraph",
  "pyo3",

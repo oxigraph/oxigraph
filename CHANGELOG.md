@@ -1,3 +1,11 @@
+## [0.3.2] - 2022-04-24
+
+### Changed
+- Fixes a bug in the server bulk loader that crashed on very small files.
+- Upgrades RocksDB to v7.1.
+- Removes some dead code in the bulk loader.
+
+
 ## [0.3.1] - 2022-04-02
 
 ### Changed
