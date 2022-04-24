@@ -84,7 +84,7 @@ pub fn main() -> std::io::Result<()> {
                                 "{} triples loaded in {}s ({} t/s) from {}",
                                 size,
                                 elapsed.as_secs(),
-                                size / elapsed.as_secs(),
+                                ((size as f64) / elapsed.as_secs_f64()).round(),
                                 f
                             )
                         });
