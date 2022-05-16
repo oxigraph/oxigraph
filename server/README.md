@@ -39,7 +39,7 @@ You need to have [a recent stable version of Rust and Cargo installed](https://w
 To download, build and install the latest released version run `cargo install oxigraph_server`.
 There is no need to clone the git repository.
 
-To compile the server from source, clone this git repository, and execute `cargo build --release` in the `server` directory to compile the full server after having downloaded its dependencies.
+To compile the server from source, clone this git repository, clone its submodules (`git submodule init && git submodule update`) and execute `cargo build --release` in the `server` directory to compile the full server after having downloaded its dependencies.
 It will create a fat binary in `target/release/oxigraph_server`.
 
 ## Usage
