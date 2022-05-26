@@ -23,9 +23,9 @@ impl GraphFormat {
     #[inline]
     pub fn iri(self) -> &'static str {
         match self {
-            GraphFormat::NTriples => "http://www.w3.org/ns/formats/N-Triples",
-            GraphFormat::Turtle => "http://www.w3.org/ns/formats/Turtle",
-            GraphFormat::RdfXml => "http://www.w3.org/ns/formats/RDF_XML",
+            Self::NTriples => "http://www.w3.org/ns/formats/N-Triples",
+            Self::Turtle => "http://www.w3.org/ns/formats/Turtle",
+            Self::RdfXml => "http://www.w3.org/ns/formats/RDF_XML",
         }
     }
 
@@ -39,9 +39,9 @@ impl GraphFormat {
     #[inline]
     pub fn media_type(self) -> &'static str {
         match self {
-            GraphFormat::NTriples => "application/n-triples",
-            GraphFormat::Turtle => "text/turtle",
-            GraphFormat::RdfXml => "application/rdf+xml",
+            Self::NTriples => "application/n-triples",
+            Self::Turtle => "text/turtle",
+            Self::RdfXml => "application/rdf+xml",
         }
     }
 
@@ -55,9 +55,9 @@ impl GraphFormat {
     #[inline]
     pub fn file_extension(self) -> &'static str {
         match self {
-            GraphFormat::NTriples => "nt",
-            GraphFormat::Turtle => "ttl",
-            GraphFormat::RdfXml => "rdf",
+            Self::NTriples => "nt",
+            Self::Turtle => "ttl",
+            Self::RdfXml => "rdf",
         }
     }
     /// Looks for a known format from a media type.
@@ -125,8 +125,8 @@ impl DatasetFormat {
     #[inline]
     pub fn iri(self) -> &'static str {
         match self {
-            DatasetFormat::NQuads => "http://www.w3.org/ns/formats/N-Quads",
-            DatasetFormat::TriG => "http://www.w3.org/ns/formats/TriG",
+            Self::NQuads => "http://www.w3.org/ns/formats/N-Quads",
+            Self::TriG => "http://www.w3.org/ns/formats/TriG",
         }
     }
 
@@ -140,8 +140,8 @@ impl DatasetFormat {
     #[inline]
     pub fn media_type(self) -> &'static str {
         match self {
-            DatasetFormat::NQuads => "application/n-quads",
-            DatasetFormat::TriG => "application/trig",
+            Self::NQuads => "application/n-quads",
+            Self::TriG => "application/trig",
         }
     }
 
@@ -155,8 +155,8 @@ impl DatasetFormat {
     #[inline]
     pub fn file_extension(self) -> &'static str {
         match self {
-            DatasetFormat::NQuads => "nq",
-            DatasetFormat::TriG => "trig",
+            Self::NQuads => "nq",
+            Self::TriG => "trig",
         }
     }
     /// Looks for a known format from a media type.

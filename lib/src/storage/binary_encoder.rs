@@ -67,15 +67,15 @@ impl QuadEncoding {
     pub fn decode(self, buffer: &[u8]) -> Result<EncodedQuad, StorageError> {
         let mut cursor = Cursor::new(&buffer);
         match self {
-            QuadEncoding::Spog => cursor.read_spog_quad(),
-            QuadEncoding::Posg => cursor.read_posg_quad(),
-            QuadEncoding::Ospg => cursor.read_ospg_quad(),
-            QuadEncoding::Gspo => cursor.read_gspo_quad(),
-            QuadEncoding::Gpos => cursor.read_gpos_quad(),
-            QuadEncoding::Gosp => cursor.read_gosp_quad(),
-            QuadEncoding::Dspo => cursor.read_dspo_quad(),
-            QuadEncoding::Dpos => cursor.read_dpos_quad(),
-            QuadEncoding::Dosp => cursor.read_dosp_quad(),
+            Self::Spog => cursor.read_spog_quad(),
+            Self::Posg => cursor.read_posg_quad(),
+            Self::Ospg => cursor.read_ospg_quad(),
+            Self::Gspo => cursor.read_gspo_quad(),
+            Self::Gpos => cursor.read_gpos_quad(),
+            Self::Gosp => cursor.read_gosp_quad(),
+            Self::Dspo => cursor.read_dspo_quad(),
+            Self::Dpos => cursor.read_dpos_quad(),
+            Self::Dosp => cursor.read_dosp_quad(),
         }
     }
 }

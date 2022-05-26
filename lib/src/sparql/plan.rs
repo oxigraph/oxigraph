@@ -461,112 +461,110 @@ pub enum PlanExpression {
 impl PlanExpression {
     pub fn lookup_used_variables(&self, callback: &mut impl FnMut(usize)) {
         match self {
-            PlanExpression::Variable(v) | PlanExpression::Bound(v) => {
+            Self::Variable(v) | Self::Bound(v) => {
                 callback(*v);
             }
-            PlanExpression::Constant(_)
-            | PlanExpression::Rand
-            | PlanExpression::Now
-            | PlanExpression::Uuid
-            | PlanExpression::StrUuid
-            | PlanExpression::BNode(None) => (),
-            PlanExpression::UnaryPlus(e)
-            | PlanExpression::UnaryMinus(e)
-            | PlanExpression::Not(e)
-            | PlanExpression::BNode(Some(e))
-            | PlanExpression::Str(e)
-            | PlanExpression::Lang(e)
-            | PlanExpression::Datatype(e)
-            | PlanExpression::Iri(e)
-            | PlanExpression::Abs(e)
-            | PlanExpression::Ceil(e)
-            | PlanExpression::Floor(e)
-            | PlanExpression::Round(e)
-            | PlanExpression::UCase(e)
-            | PlanExpression::LCase(e)
-            | PlanExpression::StrLen(e)
-            | PlanExpression::EncodeForUri(e)
-            | PlanExpression::Year(e)
-            | PlanExpression::Month(e)
-            | PlanExpression::Day(e)
-            | PlanExpression::Hours(e)
-            | PlanExpression::Minutes(e)
-            | PlanExpression::Seconds(e)
-            | PlanExpression::Timezone(e)
-            | PlanExpression::Tz(e)
-            | PlanExpression::Md5(e)
-            | PlanExpression::Sha1(e)
-            | PlanExpression::Sha256(e)
-            | PlanExpression::Sha384(e)
-            | PlanExpression::Sha512(e)
-            | PlanExpression::IsIri(e)
-            | PlanExpression::IsBlank(e)
-            | PlanExpression::IsLiteral(e)
-            | PlanExpression::IsNumeric(e)
-            | PlanExpression::IsTriple(e)
-            | PlanExpression::Subject(e)
-            | PlanExpression::Predicate(e)
-            | PlanExpression::Object(e)
-            | PlanExpression::BooleanCast(e)
-            | PlanExpression::DoubleCast(e)
-            | PlanExpression::FloatCast(e)
-            | PlanExpression::DecimalCast(e)
-            | PlanExpression::IntegerCast(e)
-            | PlanExpression::DateCast(e)
-            | PlanExpression::TimeCast(e)
-            | PlanExpression::DateTimeCast(e)
-            | PlanExpression::DurationCast(e)
-            | PlanExpression::YearMonthDurationCast(e)
-            | PlanExpression::DayTimeDurationCast(e)
-            | PlanExpression::StringCast(e) => e.lookup_used_variables(callback),
-            PlanExpression::Or(a, b)
-            | PlanExpression::And(a, b)
-            | PlanExpression::Equal(a, b)
-            | PlanExpression::Greater(a, b)
-            | PlanExpression::GreaterOrEqual(a, b)
-            | PlanExpression::Less(a, b)
-            | PlanExpression::LessOrEqual(a, b)
-            | PlanExpression::Add(a, b)
-            | PlanExpression::Subtract(a, b)
-            | PlanExpression::Multiply(a, b)
-            | PlanExpression::Divide(a, b)
-            | PlanExpression::LangMatches(a, b)
-            | PlanExpression::Contains(a, b)
-            | PlanExpression::StrStarts(a, b)
-            | PlanExpression::StrEnds(a, b)
-            | PlanExpression::StrBefore(a, b)
-            | PlanExpression::StrAfter(a, b)
-            | PlanExpression::StrLang(a, b)
-            | PlanExpression::StrDt(a, b)
-            | PlanExpression::SameTerm(a, b)
-            | PlanExpression::SubStr(a, b, None)
-            | PlanExpression::Regex(a, b, None) => {
+            Self::Constant(_)
+            | Self::Rand
+            | Self::Now
+            | Self::Uuid
+            | Self::StrUuid
+            | Self::BNode(None) => (),
+            Self::UnaryPlus(e)
+            | Self::UnaryMinus(e)
+            | Self::Not(e)
+            | Self::BNode(Some(e))
+            | Self::Str(e)
+            | Self::Lang(e)
+            | Self::Datatype(e)
+            | Self::Iri(e)
+            | Self::Abs(e)
+            | Self::Ceil(e)
+            | Self::Floor(e)
+            | Self::Round(e)
+            | Self::UCase(e)
+            | Self::LCase(e)
+            | Self::StrLen(e)
+            | Self::EncodeForUri(e)
+            | Self::Year(e)
+            | Self::Month(e)
+            | Self::Day(e)
+            | Self::Hours(e)
+            | Self::Minutes(e)
+            | Self::Seconds(e)
+            | Self::Timezone(e)
+            | Self::Tz(e)
+            | Self::Md5(e)
+            | Self::Sha1(e)
+            | Self::Sha256(e)
+            | Self::Sha384(e)
+            | Self::Sha512(e)
+            | Self::IsIri(e)
+            | Self::IsBlank(e)
+            | Self::IsLiteral(e)
+            | Self::IsNumeric(e)
+            | Self::IsTriple(e)
+            | Self::Subject(e)
+            | Self::Predicate(e)
+            | Self::Object(e)
+            | Self::BooleanCast(e)
+            | Self::DoubleCast(e)
+            | Self::FloatCast(e)
+            | Self::DecimalCast(e)
+            | Self::IntegerCast(e)
+            | Self::DateCast(e)
+            | Self::TimeCast(e)
+            | Self::DateTimeCast(e)
+            | Self::DurationCast(e)
+            | Self::YearMonthDurationCast(e)
+            | Self::DayTimeDurationCast(e)
+            | Self::StringCast(e) => e.lookup_used_variables(callback),
+            Self::Or(a, b)
+            | Self::And(a, b)
+            | Self::Equal(a, b)
+            | Self::Greater(a, b)
+            | Self::GreaterOrEqual(a, b)
+            | Self::Less(a, b)
+            | Self::LessOrEqual(a, b)
+            | Self::Add(a, b)
+            | Self::Subtract(a, b)
+            | Self::Multiply(a, b)
+            | Self::Divide(a, b)
+            | Self::LangMatches(a, b)
+            | Self::Contains(a, b)
+            | Self::StrStarts(a, b)
+            | Self::StrEnds(a, b)
+            | Self::StrBefore(a, b)
+            | Self::StrAfter(a, b)
+            | Self::StrLang(a, b)
+            | Self::StrDt(a, b)
+            | Self::SameTerm(a, b)
+            | Self::SubStr(a, b, None)
+            | Self::Regex(a, b, None) => {
                 a.lookup_used_variables(callback);
                 b.lookup_used_variables(callback);
             }
-            PlanExpression::If(a, b, c)
-            | PlanExpression::SubStr(a, b, Some(c))
-            | PlanExpression::Regex(a, b, Some(c))
-            | PlanExpression::Replace(a, b, c, None)
-            | PlanExpression::Triple(a, b, c) => {
+            Self::If(a, b, c)
+            | Self::SubStr(a, b, Some(c))
+            | Self::Regex(a, b, Some(c))
+            | Self::Replace(a, b, c, None)
+            | Self::Triple(a, b, c) => {
                 a.lookup_used_variables(callback);
                 b.lookup_used_variables(callback);
                 c.lookup_used_variables(callback);
             }
-            PlanExpression::Replace(a, b, c, Some(d)) => {
+            Self::Replace(a, b, c, Some(d)) => {
                 a.lookup_used_variables(callback);
                 b.lookup_used_variables(callback);
                 c.lookup_used_variables(callback);
                 d.lookup_used_variables(callback);
             }
-            PlanExpression::Concat(es)
-            | PlanExpression::Coalesce(es)
-            | PlanExpression::CustomFunction(_, es) => {
+            Self::Concat(es) | Self::Coalesce(es) | Self::CustomFunction(_, es) => {
                 for e in es {
                     e.lookup_used_variables(callback);
                 }
             }
-            PlanExpression::Exists(e) => {
+            Self::Exists(e) => {
                 e.lookup_used_variables(callback);
             }
         }

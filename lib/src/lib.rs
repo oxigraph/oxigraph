@@ -75,7 +75,7 @@
     clippy::needless_continue,
     clippy::needless_pass_by_value,
     clippy::non_ascii_literal,
-    //TODO clippy::nonstandard_macro_braces,
+    clippy::nonstandard_macro_braces,
     //TODO clippy::option_if_let_else,
     // clippy::panic, clippy::panic_in_result_fn, does not work well with tests
     clippy::path_buf_push_overwrite,
@@ -83,7 +83,7 @@
     clippy::print_stdout,
     clippy::range_minus_one,
     clippy::range_plus_one,
-    //TODO clippy::rc_mutex,
+    clippy::rc_mutex,
     clippy::enum_variant_names,
     //TODO clippy::redundant_closure_for_method_calls,
     clippy::redundant_else,
