@@ -1,0 +1,20 @@
+version: 2
+
+sphinx:
+  builder: html
+
+build:
+  os: "ubuntu-22.04"
+  tools:
+    python: "3"
+    rust: "1.61"
+  apt_packages:
+    - clang
+
+python:
+  install:
+    - method: pip
+      path: python
+
+submodules:
+  include: all
