@@ -127,6 +127,7 @@ pub struct QueryOptions {
     service_handler: Option<Rc<dyn ServiceHandler<Error = EvaluationError>>>,
     custom_functions: HashMap<NamedNode, Rc<dyn Fn(&[Term]) -> Option<Term>>>,
     http_timeout: Option<Duration>,
+    http_redirection_limit: usize,
 }
 
 impl QueryOptions {
@@ -148,12 +149,23 @@ impl QueryOptions {
         self
     }
 
-    /// Sets a timeout for HTTP requests done during SPARQL evaluation
+    /// Sets a timeout for HTTP requests done during SPARQL evaluation.
     #[cfg(feature = "http_client")]
     #[inline]
     #[must_use]
     pub fn with_http_timeout(mut self, timeout: Duration) -> Self {
         self.http_timeout = Some(timeout);
+        self
+    }
+
+    /// Sets an upper bound of the number of HTTP redirection followed per HTTP request done during SPARQL evaluation.
+    ///
+    /// By default this value is `0`.
+    #[cfg(feature = "http_client")]
+    #[inline]
+    #[must_use]
+    pub fn with_http_redirection_limit(mut self, redirection_limit: usize) -> Self {
+        self.http_redirection_limit = redirection_limit;
         self
     }
 
@@ -192,7 +204,10 @@ impl QueryOptions {
     fn service_handler(&self) -> Rc<dyn ServiceHandler<Error = EvaluationError>> {
         self.service_handler.clone().unwrap_or_else(|| {
             if cfg!(feature = "http_client") {
-                Rc::new(service::SimpleServiceHandler::new(self.http_timeout))
+                Rc::new(service::SimpleServiceHandler::new(
+                    self.http_timeout,
+                    self.http_redirection_limit,
+                ))
             } else {
                 Rc::new(EmptyServiceHandler)
             }

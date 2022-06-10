@@ -97,9 +97,9 @@ pub struct SimpleServiceHandler {
 }
 
 impl SimpleServiceHandler {
-    pub fn new(http_timeout: Option<Duration>) -> Self {
+    pub fn new(http_timeout: Option<Duration>, http_redirection_limit: usize) -> Self {
         Self {
-            client: Client::new(http_timeout),
+            client: Client::new(http_timeout, http_redirection_limit),
         }
     }
 }

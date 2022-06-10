@@ -31,7 +31,10 @@ pub fn evaluate_update<'a, 'b: 'a>(
         transaction,
         base_iri: update.inner.base_iri.clone().map(Rc::new),
         options: options.clone(),
-        client: Client::new(options.query_options.http_timeout),
+        client: Client::new(
+            options.query_options.http_timeout,
+            options.query_options.http_redirection_limit,
+        ),
     }
     .eval_all(&update.inner.operations, &update.using_datasets)
 }

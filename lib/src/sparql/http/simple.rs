@@ -7,11 +7,12 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new(timeout: Option<Duration>) -> Self {
+    pub fn new(timeout: Option<Duration>, redirection_limit: usize) -> Self {
         let mut client = oxhttp::Client::new();
         if let Some(timeout) = timeout {
             client.set_global_timeout(timeout);
         }
+        client.set_redirection_limit(redirection_limit);
         client
             .set_user_agent(concat!("Oxigraph/", env!("CARGO_PKG_VERSION")))
             .unwrap();
