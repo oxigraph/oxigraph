@@ -24,6 +24,18 @@ impl Client {
             .map_err(invalid_input_error)?
             .build();
         let response = self.client.request(request)?;
+        let status = response.status();
+        if !status.is_successful() {
+            return Err(Error::new(
+                ErrorKind::Other,
+                format!(
+                    "Error {} returned by {} with payload:\n{}",
+                    status,
+                    url,
+                    response.into_body().to_string()?
+                ),
+            ));
+        }
         let content_type = response
             .header(&HeaderName::CONTENT_TYPE)
             .ok_or_else(|| invalid_data_error(format!("No Content-Type returned by {}", url)))?
@@ -40,13 +52,25 @@ impl Client {
         content_type: &str,
         accept: &str,
     ) -> Result<(String, Body)> {
-        let request = Request::builder(Method::GET, url.parse().map_err(invalid_input_error)?)
+        let request = Request::builder(Method::POST, url.parse().map_err(invalid_input_error)?)
             .with_header(HeaderName::ACCEPT, accept)
             .map_err(invalid_input_error)?
             .with_header(HeaderName::CONTENT_TYPE, content_type)
             .map_err(invalid_input_error)?
             .with_body(payload);
         let response = self.client.request(request)?;
+        let status = response.status();
+        if !status.is_successful() {
+            return Err(Error::new(
+                ErrorKind::Other,
+                format!(
+                    "Error {} returned by {} with payload:\n{}",
+                    status,
+                    url,
+                    response.into_body().to_string()?
+                ),
+            ));
+        }
         let content_type = response
             .header(&HeaderName::CONTENT_TYPE)
             .ok_or_else(|| invalid_data_error(format!("No Content-Type returned by {}", url)))?

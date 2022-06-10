@@ -1029,7 +1029,7 @@ impl<O, U: (Fn(O) -> std::io::Result<Option<O>>)> Read for ReadForWrite<O, U> {
                 self.state = match (self.add_more_data)(state) {
                     Ok(state) => state,
                     Err(e) => {
-                        eprintln!("Internal server error while steaming: {}", e);
+                        eprintln!("Internal server error while streaming results: {}", e);
                         self.buffer
                             .borrow_mut()
                             .write_all(e.to_string().as_bytes())?;
