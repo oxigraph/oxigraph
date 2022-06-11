@@ -154,11 +154,17 @@ impl<R: BufRead> JsonQueryResultsReader<R> {
                         if reader.read_event(&mut buffer)? != JsonEvent::StartObject {
                             return Err(SyntaxError::msg("'results' should be an object").into());
                         }
-                        if reader.read_event(&mut buffer)? != JsonEvent::ObjectKey("bindings") {
-                            return Err(SyntaxError::msg(
-                                "'results' should contain a 'bindings' key",
-                            )
-                            .into());
+                        loop {
+                            match reader.read_event(&mut buffer)? {
+                                JsonEvent::ObjectKey("bindings") => break, // Found
+                                JsonEvent::ObjectKey(_) => ignore_value(&mut reader, &mut buffer)?,
+                                _ => {
+                                    return Err(SyntaxError::msg(
+                                        "'results' should contain a 'bindings' key",
+                                    )
+                                    .into())
+                                }
+                            }
                         }
                         if reader.read_event(&mut buffer)? != JsonEvent::StartArray {
                             return Err(SyntaxError::msg("'bindings' should be an object").into());
@@ -495,14 +501,38 @@ fn read_head<R: BufRead>(
                         }
                     }
                 }
-                _ => {
-                    return Err(
-                        SyntaxError::msg(format!("Unexpected key in head: '{}'", key)).into(),
-                    )
-                }
+                _ => ignore_value(reader, buffer)?,
             },
             JsonEvent::EndObject => return Ok(variables),
             _ => return Err(SyntaxError::msg("Invalid head serialization").into()),
+        }
+    }
+}
+
+fn ignore_value<R: BufRead>(
+    reader: &mut JsonReader<R>,
+    buffer: &mut Vec<u8>,
+) -> Result<(), ParseError> {
+    let mut nesting = 0;
+    loop {
+        match reader.read_event(buffer)? {
+            JsonEvent::Boolean(_)
+            | JsonEvent::Null
+            | JsonEvent::Number(_)
+            | JsonEvent::String(_) => {
+                if nesting == 0 {
+                    return Ok(());
+                }
+            }
+            JsonEvent::ObjectKey(_) => (),
+            JsonEvent::StartArray | JsonEvent::StartObject => nesting += 1,
+            JsonEvent::EndArray | JsonEvent::EndObject => {
+                nesting -= 1;
+                if nesting == 0 {
+                    return Ok(());
+                }
+            }
+            JsonEvent::Eof => return Err(SyntaxError::msg("Unexpected end of file").into()),
         }
     }
 }

@@ -48,8 +48,16 @@ pub fn register_sparql_tests(evaluator: &mut TestEvaluator) {
         evaluate_update_evaluation_test,
     );
     evaluator.register(
+        "https://github.com/oxigraph/oxigraph/tests#PositiveJsonResultsSyntaxTest",
+        evaluate_positive_json_result_syntax_test,
+    );
+    evaluator.register(
         "https://github.com/oxigraph/oxigraph/tests#NegativeJsonResultsSyntaxTest",
         evaluate_negative_json_result_syntax_test,
+    );
+    evaluator.register(
+        "https://github.com/oxigraph/oxigraph/tests#PositiveXmlResultsSyntaxTest",
+        evaluate_positive_xml_result_syntax_test,
     );
     evaluator.register(
         "https://github.com/oxigraph/oxigraph/tests#NegativeXmlResultsSyntaxTest",
@@ -95,12 +103,20 @@ fn evaluate_negative_syntax_test(test: &Test) -> Result<()> {
     }
 }
 
+fn evaluate_positive_json_result_syntax_test(test: &Test) -> Result<()> {
+    result_syntax_check(test, QueryResultsFormat::Json)
+}
+
 fn evaluate_negative_json_result_syntax_test(test: &Test) -> Result<()> {
     if result_syntax_check(test, QueryResultsFormat::Json).is_ok() {
         Err(anyhow!("Oxigraph parses even if it should not {}.", test))
     } else {
         Ok(())
     }
+}
+
+fn evaluate_positive_xml_result_syntax_test(test: &Test) -> Result<()> {
+    result_syntax_check(test, QueryResultsFormat::Xml)
 }
 
 fn evaluate_negative_xml_result_syntax_test(test: &Test) -> Result<()> {

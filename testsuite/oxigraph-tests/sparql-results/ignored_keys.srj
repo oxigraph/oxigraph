@@ -1,0 +1,17 @@
+{
+  "head": {
+    "vars": ["s"],
+    "custom": null
+  },
+  "results": {
+    "custom": {"foo": [true, false]},
+    "bindings": [
+      {
+        "s": {
+          "type": "uri",
+          "value": "http://example.org/s1"
+        }
+      }
+    ]
+  }
+}
