@@ -6,7 +6,7 @@ use std::time::Duration;
 pub struct Client {}
 
 impl Client {
-    pub fn new(_timeout: Option<Duration>) -> Self {
+    pub fn new(_timeout: Option<Duration>, _redirection_limit: usize) -> Self {
         Self {}
     }
 
