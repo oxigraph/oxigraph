@@ -1293,10 +1293,18 @@ mod tests {
     }
 
     #[test]
-    fn post_federated_query() {
+    fn post_federated_query_wikidata() {
         let request = Request::builder(Method::POST, "http://localhost/query".parse().unwrap())
             .with_header(HeaderName::CONTENT_TYPE, "application/sparql-query")
             .unwrap().with_body("SELECT * WHERE { SERVICE <https://query.wikidata.org/sparql> { <https://en.wikipedia.org/wiki/Paris> ?p ?o } }");
+        ServerTest::new().test_status(request, Status::OK)
+    }
+
+    #[test]
+    fn post_federated_query_dbpedia() {
+        let request = Request::builder(Method::POST, "http://localhost/query".parse().unwrap())
+            .with_header(HeaderName::CONTENT_TYPE, "application/sparql-query")
+            .unwrap().with_body("SELECT * WHERE { SERVICE <https://dbpedia.org/sparql> { <http://dbpedia.org/resource/Paris> ?p ?o } }");
         ServerTest::new().test_status(request, Status::OK)
     }
 

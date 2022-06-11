@@ -316,7 +316,7 @@ impl<R: BufRead> JsonSolutionsReader<R> {
                         match s {
                             "uri" => t = Some(Type::Uri),
                             "bnode" => t = Some(Type::BNode),
-                            "literal" => t = Some(Type::Literal),
+                            "literal" | "typed-literal" => t = Some(Type::Literal),
                             #[cfg(feature = "rdf-star")]
                             "triple" => t = Some(Type::Triple),
                             _ => {

@@ -13,6 +13,7 @@
     :results_tsv_duplicated_variables
     :results_json_ignored_keys
     :results_xml_ignored_keys
+    :results_json_typed_literal
     ) .
 
 :results_json_duplicated_variables rdf:type ox:NegativeJsonResultsSyntaxTest ;
@@ -34,3 +35,7 @@
 :results_xml_ignored_keys rdf:type ox:PositiveXmlResultsSyntaxTest ;
     mf:name "Ignore unknown attributes on tags" ;
     mf:action <ignored_keys.srx> .
+
+:results_json_typed_literal rdf:type ox:PositiveJsonResultsSyntaxTest ;
+    mf:name "typed-literal term type is allowed" ;
+    mf:action <typed_literal.srj> .
