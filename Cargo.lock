@@ -1079,15 +1079,6 @@ dependencies = [
 
 [[package]]
 name = "quick-xml"
-version = "0.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8533f14c8382aaad0d592c812ac3b826162128b65662331e1127b45c3d18536b"
-dependencies = [
- "memchr",
-]
-
-[[package]]
-name = "quick-xml"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9279fbdacaad3baf559d8cabe0acc3d06e30ea14931af31af79578ac0946decc"
@@ -1224,13 +1215,13 @@ dependencies = [
 
 [[package]]
 name = "rio_xml"
-version = "0.7.1"
+version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "877c9f32a6fbd30deaadafe8af82fe0dae9e62abf6080ddbe7982757b3996dae"
+checksum = "4a3ef1876b0b13a193ed6b13f7d5a70c4f7dbe308fe18d26b6caa21d08a9946d"
 dependencies = [
  "oxilangtag",
  "oxiri",
- "quick-xml 0.22.0",
+ "quick-xml",
  "rio_api",
 ]
 
@@ -1354,9 +1345,9 @@ dependencies = [
 
 [[package]]
 name = "semver"
-version = "1.0.9"
+version = "1.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cb243bdfdb5936c8dc3c45762a19d12ab4550cdc753bc247637d4ec35a040fd"
+checksum = "a41d061efea015927ac527063765e73601444cdc344ba855bc7bd44578b25e1c"
 
 [[package]]
 name = "serde"
@@ -1442,7 +1433,7 @@ version = "0.1.0"
 dependencies = [
  "json-event-parser",
  "oxrdf",
- "quick-xml 0.23.0",
+ "quick-xml",
 ]
 
 [[package]]
