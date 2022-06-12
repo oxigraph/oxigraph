@@ -1,3 +1,17 @@
+## [0.3.3] - 2022-06-12
+
+### Added
+- `QueryResults::with_http_redirection_limit` that allows to set a limit on the number of HTTP redirection followed (`0` by default).
+
+### Changed
+- Fixes a bug in SPARQL parser that was always enabling the `SILENT` option of the `SERVICE` operator.
+- Allows unknown keys in the objects present in the SPARQL JSON query results. It allows to parse e.g. Virtuoso query results.
+- Allows `"typed-literal"` as an alias of `"literal"` in SPARQL JSON query results. 
+- Improves the HTTP client error reporting: no silent failures on 4XX and 5XX responses.
+- Upgrades RocksDB to 7.3.1.
+- Upgrades quick-xml to 0.23.
+
+
 ## [0.3.2] - 2022-04-24
 
 ### Changed
