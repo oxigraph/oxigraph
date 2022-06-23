@@ -28,7 +28,7 @@ Pyoxigraph documentation is [available on the Oxigraph website](https://oxigraph
 
 ## Build the development version
 
-To build and install the development version of pyoxigraph you need to clone this git repository
+To build and install the development version of pyoxigraph you need to clone this git repository including submodules (`git clone --recursive https://github.com/oxigraph/oxigraph.git`)
 and to run `pip install .` in the `python` directory (the one this README is in).
 
 ## Help
