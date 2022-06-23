@@ -39,13 +39,10 @@ Oxigraph implements the following specifications:
 
 A preliminary benchmark [is provided](bench/README.md). There is also [a document describing Oxigraph technical architecture](https://github.com/oxigraph/oxigraph/wiki/Architecture).
 
-## Development
+When cloning this codebase, don't forget to clone the submodules using
+`git clone --recursive https://github.com/oxigraph/oxigraph.git` to clone the repository including submodules or
+`git submodule update --init` to add the submodules to the already cloned repository.
 
-The easiest way to set up the development environment is to use Visual Studio Code's [development containers](https://code.visualstudio.com/docs/remote/containers). Note that this requires Docker Desktop on Windows and Mac and Docker CE/EE on Linux.
-
-Open the repository with Visual Studio Code and use the Command Palette to run `Remote-Containers: Rebuild Container`. This will re-open the project inside a development container with the Rust toolchain and Python dependencies installed. For more details on how the development container is set up, see [.devcontainer/devcontainer.json](.devcontainer/devcontainer.json) and [.devcontainer/Dockerfile](.devcontainer/Dockerfile).
-
-For further development details, see the README in each of the respective sub-projects.
 
 ## Help
 

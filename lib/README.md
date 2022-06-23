@@ -52,6 +52,9 @@ Some parts of this library are available as standalone crates:
 * [`spargebra`](https://crates.io/crates/spargebra) provides a SPARQL parser.
 * [`sparesults`](https://crates.io/crates/sparesults) provides parsers and serializers for SPARQL result formats.
 
+To build the library, don't forget to clone the submodules using `git clone --recursive https://github.com/oxigraph/oxigraph.git` to clone the repository including submodules or `git submodule update --init` to add submodules to the already cloned repository.
+
+
 ## License
 
 This project is licensed under either of
