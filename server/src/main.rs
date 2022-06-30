@@ -8,16 +8,17 @@ use oxigraph::sparql::{Query, QueryResults, Update};
 use oxigraph::store::{BulkLoader, Store};
 use oxiri::Iri;
 use rand::random;
+use rayon_core::ThreadPoolBuilder;
 use sparesults::{QueryResultsFormat, QueryResultsSerializer};
 use std::cell::RefCell;
-use std::cmp::min;
+use std::cmp::{max, min};
 use std::fmt;
 use std::fs::File;
-use std::io::{self, BufReader, ErrorKind, Read, Write};
+use std::io::{self, BufReader, Error, ErrorKind, Read, Write};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::str::FromStr;
-use std::thread::{spawn, JoinHandle};
+use std::thread::available_parallelism;
 use std::time::{Duration, Instant};
 use url::form_urlencoded;
 
@@ -70,45 +71,58 @@ pub fn main() -> std::io::Result<()> {
 
     match matches.command {
         Command::Load { file, lenient } => {
-            let handles = file
-                .iter()
-                .map(|file| {
-                    let store = store.clone();
-                    let file = file.to_string();
-                    spawn(move || {
-                        let f = file.clone();
-                        let start = Instant::now();
-                        let mut loader = store.bulk_loader().on_progress(move |size| {
-                            let elapsed = start.elapsed();
-                            eprintln!(
-                                "{} triples loaded in {}s ({} t/s) from {}",
-                                size,
-                                elapsed.as_secs(),
-                                ((size as f64) / elapsed.as_secs_f64()).round(),
-                                f
-                            )
-                        });
-                        if lenient {
-                            loader = loader.on_parse_error(|e| {
-                                eprintln!("Parsing error: {}", e);
-                                Ok(())
-                            })
-                        }
-                        if file.ends_with(".gz") {
-                            bulk_load(
-                                loader,
-                                &file[..file.len() - 3],
-                                MultiGzDecoder::new(File::open(&file)?),
-                            )
-                        } else {
-                            bulk_load(loader, &file, File::open(&file)?)
-                        }
-                    })
-                })
-                .collect::<Vec<JoinHandle<io::Result<()>>>>();
-            for handle in handles {
-                handle.join().unwrap()?;
-            }
+            ThreadPoolBuilder::new()
+                .num_threads(max(1, available_parallelism()?.get() / 2))
+                .thread_name(|i| format!("Oxigraph bulk loader thread {}", i))
+                .build()
+                .map_err(|e| Error::new(ErrorKind::Other, e))?
+                .scope(|s| {
+                    for file in file {
+                        let store = store.clone();
+                        let file = file.to_string();
+                        s.spawn(move |_| {
+                            let f = file.clone();
+                            let start = Instant::now();
+                            let mut loader = store.bulk_loader().on_progress(move |size| {
+                                let elapsed = start.elapsed();
+                                eprintln!(
+                                    "{} triples loaded in {}s ({} t/s) from {}",
+                                    size,
+                                    elapsed.as_secs(),
+                                    ((size as f64) / elapsed.as_secs_f64()).round(),
+                                    f
+                                )
+                            });
+                            if lenient {
+                                let f = file.clone();
+                                loader = loader.on_parse_error(move |e| {
+                                    eprintln!("Parsing error on file {}: {}", f, e);
+                                    Ok(())
+                                })
+                            }
+                            let fp = match File::open(&file) {
+                                Ok(fp) => fp,
+                                Err(error) => {
+                                    eprintln!("Error while opening file {}: {}", file, error);
+                                    return;
+                                }
+                            };
+                            if let Err(error) = {
+                                if file.ends_with(".gz") {
+                                    bulk_load(
+                                        loader,
+                                        &file[..file.len() - 3],
+                                        MultiGzDecoder::new(fp),
+                                    )
+                                } else {
+                                    bulk_load(loader, &file, fp)
+                                }
+                            } {
+                                eprintln!("Error while loading file {}: {}", file, error)
+                            }
+                        })
+                    }
+                });
             Ok(())
         }
         Command::Serve { bind } => {

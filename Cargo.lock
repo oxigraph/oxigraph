@@ -827,6 +827,7 @@ dependencies = [
  "oxigraph",
  "oxiri",
  "rand",
+ "rayon-core",
  "sparesults",
  "url",
 ]
