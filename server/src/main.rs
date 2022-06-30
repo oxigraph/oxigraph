@@ -50,7 +50,7 @@ enum Command {
         /// file(s) to load.
         ///
         /// If multiple files are provided they are loaded in parallel.
-        #[clap(short, long, global = true)]
+        #[clap(short, long, global = true, multiple_values = true)]
         file: Vec<String>,
         /// Attempt to keep loading even if the data file is invalid.
         ///
