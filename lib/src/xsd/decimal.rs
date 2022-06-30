@@ -460,7 +460,7 @@ impl fmt::Display for Decimal {
         let mut digits = [b'0'; 40];
         let mut i = 0;
         while value != 0 {
-            digits[i] = b'0' + ((value % 10).abs() as u8);
+            digits[i] = b'0' + ((value % 10).unsigned_abs() as u8);
             value /= 10;
             i += 1;
         }

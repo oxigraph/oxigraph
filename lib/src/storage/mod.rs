@@ -1190,6 +1190,7 @@ impl StorageBulkLoader {
         self
     }
 
+    #[allow(clippy::trait_duplication_in_bounds)]
     pub fn load<EI, EO: From<StorageError> + From<EI>, I: IntoIterator<Item = Result<Quad, EI>>>(
         &self,
         quads: I,
