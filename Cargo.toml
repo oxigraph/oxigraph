@@ -5,6 +5,7 @@ members = [
     "lib/oxrdf",
     "lib/spargebra",
     "lib/sparesults",
+    "lib/sparql-smith",
     "python",
     "oxrocksdb-sys",
     "server",
