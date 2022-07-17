@@ -1,3 +1,10 @@
+## [0.3.4] - 2022-07-17
+
+### Changed
+- Allows multiple value to be given to `oxigraph_server` `--file` parameter.
+- Limits parallelism of `oxigraph_server` file loader to avoid stack overflows.
+
+
 ## [0.3.3] - 2022-06-12
 
 ### Added
