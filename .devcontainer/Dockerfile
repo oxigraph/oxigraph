@@ -16,4 +16,4 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN pip3 install maturin
 
 # Change owner to the devcontainer user
-RUN chown -R 1001:1001 $VIRTUAL_ENV
+RUN chown -R 1000:1000 $VIRTUAL_ENV
