@@ -34,7 +34,7 @@ class Store(PyStore):
     >>> store = Store()
     >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     >>> str(store)
-    '<http://example.com> <http://example.com/p> "1" <http://example.com/g> .\n'
+    '<http://example.com> <http://example.com/p> "1" <http://example.com/g> .\\n'
     """
 
     def __init__(self, path: Union[str, None] = None) -> None:
@@ -193,7 +193,7 @@ class Store(PyStore):
         >>> output = io.BytesIO()
         >>> store.dump(output, "text/turtle", from_graph=NamedNode("http://example.com/g"))
         >>> output.getvalue()
-        b'<http://example.com> <http://example.com/p> "1" .\n'
+        b'<http://example.com> <http://example.com/p> "1" .\\n'
         """
         super().dump(output, mime_type, from_graph=from_graph)
 
