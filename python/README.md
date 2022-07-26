@@ -1,5 +1,4 @@
-Pyoxigraph (Oxigraph for Python)
-================================
+# Pyoxigraph (Oxigraph for Python)
 
 [![PyPI](https://img.shields.io/pypi/v/pyoxigraph)](https://pypi.org/project/pyoxigraph/)
 ![PyPI - Implementation](https://img.shields.io/pypi/implementation/pyoxigraph)
@@ -9,13 +8,13 @@ Pyoxigraph (Oxigraph for Python)
 
 Pyoxigraph is a graph database library implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
 It is a Python library written on top of [Oxigraph](https://crates.io/crates/oxigraph).
- 
+
 Pyoxigraph offers two stores with [SPARQL 1.1](https://www.w3.org/TR/sparql11-overview/) capabilities.
 One of the store is in-memory, and the other one is disk based.
 
 It also provides a set of utility functions for reading, writing and processing RDF files in
-[Turtle](https://www.w3.org/TR/turtle/), 
-[TriG](https://www.w3.org/TR/trig/), 
+[Turtle](https://www.w3.org/TR/turtle/),
+[TriG](https://www.w3.org/TR/trig/),
 [N-Triples](https://www.w3.org/TR/n-triples/),
 [N-Quads](https://www.w3.org/TR/n-quads/) and
 [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/).
@@ -32,14 +31,12 @@ Pyoxigraph documentation is [available on the Oxigraph website](https://oxigraph
 To build and install the development version of pyoxigraph you need to clone this git repository
 and to run `pip install .` in the `python` directory (the one this README is in).
 
-
 ## Help
 
 Feel free to use [GitHub discussions](https://github.com/oxigraph/oxigraph/discussions) or [the Gitter chat](https://gitter.im/oxigraph/community) to ask questions or talk about Oxigraph.
 [Bug reports](https://github.com/oxigraph/oxigraph/issues) are also very welcome.
 
 If you need advanced support or are willing to pay to get some extra features, feel free to reach out to [Tpt](https://github.com/Tpt).
-
 
 ## How to contribute
 
@@ -49,20 +46,33 @@ Pyoxigraph is built using [Maturin](https://github.com/PyO3/maturin).
 Maturin could be installed using the `pip install 'maturin>=0.9,<0.10'`.
 To install a development version of Oxigraph just run `maturin develop` in this README directory.
 
+### Tests
+
 The Python bindings tests are written in Python.
 To run them use `python -m unittest` in the `tests` directory.
+
+### Docs
+
+The Sphinx documentation can be generated and viewed in the browser using the following command:
+
+```
+sphinx-autobuild docs docs/_build/html
+```
+
+Note that you will need to have [sphinx-autobuild](https://pypi.org/project/sphinx-autobuild/) installed. This should be installed already if you are using this repository's development container.
+
+Alternatively, you can use `sphinx-build` with Python's `http.server` to achieve the same thing.
 
 ## License
 
 This project is licensed under either of
 
-* Apache License, Version 2.0, ([LICENSE-APACHE](../LICENSE-APACHE) or
+- Apache License, Version 2.0, ([LICENSE-APACHE](../LICENSE-APACHE) or
   http://www.apache.org/licenses/LICENSE-2.0)
-* MIT license ([LICENSE-MIT](../LICENSE-MIT) or
+- MIT license ([LICENSE-MIT](../LICENSE-MIT) or
   http://opensource.org/licenses/MIT)
 
 at your option.
-
 
 ### Contribution
 
