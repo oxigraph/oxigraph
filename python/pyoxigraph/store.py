@@ -44,7 +44,6 @@ class Store(PyStore):
         """Adds a quad to the store.
 
         :param quad: the quad to add.
-        :type quad: Quad
         :raises IOError: if an I/O error happens during the quad insertion.
 
         >>> store = Store()
@@ -283,7 +282,6 @@ class Store(PyStore):
         :param object: the quad object or :py:const:`None` to match everything.
         :param graph: the quad graph name. To match only the default graph, use :py:class:`DefaultGraph`. To match everything use :py:const:`None`.
         :return: an iterator of the quads matching the pattern.
-        :rtype: iter(Quad)
         :raises IOError: if an I/O error happens during the quads lookup.
 
         >>> store = Store()
