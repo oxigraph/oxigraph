@@ -7,13 +7,18 @@ FROM mcr.microsoft.com/vscode/devcontainers/rust:0-${VARIANT}
 # [Optional] Uncomment this section to install additional packages.
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends \
+        python3 \
         python3-venv \
+        python-is-python3 \
         libclang-dev
 
 ENV VIRTUAL_ENV=/opt/venv
-RUN python3 -m venv $VIRTUAL_ENV
+RUN python -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
-RUN pip3 install maturin
+RUN pip install --no-cache-dir \
+    maturin \
+    sphinx \
+    sphinx-autobuild
 
 # Change owner to the devcontainer user
 RUN chown -R 1000:1000 $VIRTUAL_ENV
