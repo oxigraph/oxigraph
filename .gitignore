@@ -9,3 +9,7 @@ venv
 .env
 data/
 .htpasswd
+**/docs/_build
+**/docs/build
+*.so
+*.pyc

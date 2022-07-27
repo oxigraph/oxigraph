@@ -22,7 +22,7 @@ exclude_patterns = ["build", "Thumbs.db", ".DS_Store"]
 
 # -- Options for HTML output -------------------------------------------------
 
-html_theme = "classic"
+html_theme = "furo"
 html_static_path = []
 html_logo = "../../logo.svg"
 html_favicon = "../../logo.svg"

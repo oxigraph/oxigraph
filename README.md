@@ -1,7 +1,6 @@
-Oxigraph
-========
+# Oxigraph
 
-[![Latest Version](https://img.shields.io/crates/v/oxigraph.svg)](https://crates.io/crates/oxigraph) 
+[![Latest Version](https://img.shields.io/crates/v/oxigraph.svg)](https://crates.io/crates/oxigraph)
 [![Released API docs](https://docs.rs/oxigraph/badge.svg)](https://docs.rs/oxigraph)
 [![PyPI](https://img.shields.io/pypi/v/pyoxigraph)](https://pypi.org/project/pyoxigraph/)
 [![npm](https://img.shields.io/npm/v/oxigraph)](https://www.npmjs.com/package/oxigraph)
@@ -21,23 +20,32 @@ The development roadmap is using [GitHub milestones](https://github.com/oxigraph
 Oxigraph internal design [is described on the wiki](https://github.com/oxigraph/oxigraph/wiki/Architecture).
 
 It is split into multiple parts:
-* [The database written as a Rust library](https://crates.io/crates/oxigraph). Its source code is in the `lib` directory.
-[![Latest Version](https://img.shields.io/crates/v/oxigraph.svg)](https://crates.io/crates/oxigraph) 
-[![Released API docs](https://docs.rs/oxigraph/badge.svg)](https://docs.rs/oxigraph)
-* [`pyoxigraph` that exposes Oxigraph to the Python world](https://oxigraph.org/pyoxigraph/). Its source code is in the `python` directory. [![PyPI](https://img.shields.io/pypi/v/pyoxigraph)](https://pypi.org/project/pyoxigraph/)
-* [JavaScript bindings for Oxigraph](https://www.npmjs.com/package/oxigraph). WebAssembly is used to package Oxigraph into a NodeJS compatible NPM package. Its source code is in the `js` directory.
-[![npm](https://img.shields.io/npm/v/oxigraph)](https://www.npmjs.com/package/oxigraph)
-* [Oxigraph server](https://crates.io/crates/oxigraph_server) that provides a standalone binary of a web server implementing the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/) and the [SPARQL 1.1 Graph Store Protocol](https://www.w3.org/TR/sparql11-http-rdf-update/). Its source code is in the `server` directory.
-[![Latest Version](https://img.shields.io/crates/v/oxigraph_server.svg)](https://crates.io/crates/oxigraph_server) 
-[![Docker Image Version (latest semver)](https://img.shields.io/docker/v/oxigraph/oxigraph?sort=semver)](https://hub.docker.com/r/oxigraph/oxigraph)
+
+- [The database written as a Rust library](https://crates.io/crates/oxigraph). Its source code is in the `lib` directory.
+  [![Latest Version](https://img.shields.io/crates/v/oxigraph.svg)](https://crates.io/crates/oxigraph)
+  [![Released API docs](https://docs.rs/oxigraph/badge.svg)](https://docs.rs/oxigraph)
+- [`pyoxigraph` that exposes Oxigraph to the Python world](https://oxigraph.org/pyoxigraph/). Its source code is in the `python` directory. [![PyPI](https://img.shields.io/pypi/v/pyoxigraph)](https://pypi.org/project/pyoxigraph/)
+- [JavaScript bindings for Oxigraph](https://www.npmjs.com/package/oxigraph). WebAssembly is used to package Oxigraph into a NodeJS compatible NPM package. Its source code is in the `js` directory.
+  [![npm](https://img.shields.io/npm/v/oxigraph)](https://www.npmjs.com/package/oxigraph)
+- [Oxigraph server](https://crates.io/crates/oxigraph_server) that provides a standalone binary of a web server implementing the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/) and the [SPARQL 1.1 Graph Store Protocol](https://www.w3.org/TR/sparql11-http-rdf-update/). Its source code is in the `server` directory.
+  [![Latest Version](https://img.shields.io/crates/v/oxigraph_server.svg)](https://crates.io/crates/oxigraph_server)
+  [![Docker Image Version (latest semver)](https://img.shields.io/docker/v/oxigraph/oxigraph?sort=semver)](https://hub.docker.com/r/oxigraph/oxigraph)
 
 Oxigraph implements the following specifications:
-* [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/), [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/), and [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/).
-* [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/), and [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) RDF serialization formats for both data ingestion and retrieval using the [Rio library](https://github.com/oxigraph/rio).
-* [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/), [SPARQL 1.1 Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/) and [SPARQL 1.1 Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql11-results-csv-tsv/).
+
+- [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/), [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/), and [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/).
+- [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/), and [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) RDF serialization formats for both data ingestion and retrieval using the [Rio library](https://github.com/oxigraph/rio).
+- [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/), [SPARQL 1.1 Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/) and [SPARQL 1.1 Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql11-results-csv-tsv/).
 
 A preliminary benchmark [is provided](bench/README.md). There is also [a document describing Oxigraph technical architecture](https://github.com/oxigraph/oxigraph/wiki/Architecture).
 
+## Development
+
+The easiest way to set up the development environment is to use Visual Studio Code's [development containers](https://code.visualstudio.com/docs/remote/containers). Note that this requires Docker Desktop on Windows and Mac and Docker CE/EE on Linux.
+
+Open the repository with Visual Studio Code and use the Command Palette to run `Remote-Containers: Rebuild Container`. This will re-open the project inside a development container with the Rust toolchain and Python dependencies installed. For more details on how the development container is set up, see [.devcontainer/devcontainer.json](.devcontainer/devcontainer.json) and [.devcontainer/Dockerfile](.devcontainer/Dockerfile).
+
+For further development details, see the README in each of the respective sub-projects.
 
 ## Help
 
@@ -46,18 +54,16 @@ Feel free to use [GitHub discussions](https://github.com/oxigraph/oxigraph/discu
 
 If you need advanced support or are willing to pay to get some extra features, feel free to reach out to [Tpt](https://github.com/Tpt/).
 
-
 ## License
 
 This project is licensed under either of
 
- * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
-   http://www.apache.org/licenses/LICENSE-2.0)
- * MIT license ([LICENSE-MIT](LICENSE-MIT) or
-   http://opensource.org/licenses/MIT)
-   
-at your option.
+- Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+  http://www.apache.org/licenses/LICENSE-2.0)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or
+  http://opensource.org/licenses/MIT)
 
+at your option.
 
 ### Contribution
 
