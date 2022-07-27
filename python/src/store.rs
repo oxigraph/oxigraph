@@ -32,7 +32,7 @@ use pyo3::{Py, PyRef};
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
 /// >>> str(store)
 /// '<http://example.com> <http://example.com/p> "1" <http://example.com/g> .\n'
-#[pyclass(name = "Store", module = "oxigraph", subclass)]
+#[pyclass(name = "Store", module = "oxigraph")]
 #[pyo3(text_signature = "(path = None)")]
 #[derive(Clone)]
 pub struct PyStore {
