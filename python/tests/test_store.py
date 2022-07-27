@@ -3,7 +3,6 @@ import unittest
 from io import BytesIO, RawIOBase
 
 from pyoxigraph import *
-from pyoxigraph.pyoxigraph import QuerySolutions, QuerySolution, QueryTriples
 from tempfile import NamedTemporaryFile
 
 foo = NamedNode("http://foo")
