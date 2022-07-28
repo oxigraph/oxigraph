@@ -19,7 +19,8 @@ RUN pip install --no-cache-dir \
     maturin \
     sphinx \
     sphinx-autobuild \
-    furo
+    furo \
+    stubdoc
 
 # Change owner to the devcontainer user
 RUN chown -R 1000:1000 $VIRTUAL_ENV
