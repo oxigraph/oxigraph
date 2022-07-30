@@ -71,6 +71,14 @@ Python type hints for pyoxigraph are defined in the python stub file [pyoxigraph
 python generate_type_hints.py
 ```
 
+#### `generate_type_hints.py`
+
+[generate_type_hints.py](generate_type_hints.py) makes a copy of [base.pyi](base.pyi) and runs [stubdoc](https://github.com/simon-ritchie/stubdoc/tree/main) on it to pull the docstrings from the rust code into the generated [pyoxigraph.pyi](pyoxigraph.pyi) file. Unfortunately, stubdoc is not a perfect solution yet for pyoxigraph as it is only able to partially pull out docstrings from functions and class methods. The plan is to monkey patch stubdoc and contribute the fixes back to upstream.
+
+We currently commit the generated [pyoxigraph.pyi](pyoxigraph.pyi) file to the repository. In the future, we may look at generating [pyoxigraph.pyi](pyoxigraph.pyi) in GitHub Actions to ensure it is always up to date.
+
+In the future, PyO3 may be able to generate the Python Interface files (`.pyi`) once the proposal in this issue [#2454](https://github.com/PyO3/pyo3/issues/2454) is implemented.
+
 ## License
 
 This project is licensed under either of
