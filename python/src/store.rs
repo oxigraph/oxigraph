@@ -96,13 +96,13 @@ impl PyStore {
     /// Looks for the quads matching a given pattern.
     ///
     /// :param subject: the quad subject or :py:const:`None` to match everything.
-    /// :type subject: NamedNode or BlankNode or None
+    /// :type subject: NamedNode or BlankNode or Triple or None
     /// :param predicate: the quad predicate or :py:const:`None` to match everything.
     /// :type predicate: NamedNode or None
     /// :param object: the quad object or :py:const:`None` to match everything.
-    /// :type object: NamedNode or BlankNode or Literal or None
-    /// :param graph: the quad graph name. To match only the default graph, use :py:class:`DefaultGraph`. To match everything use :py:const:`None`.
-    /// :type graph: NamedNode or BlankNode or DefaultGraph or None
+    /// :type object: NamedNode or BlankNode or Literal or Triple or None
+    /// :param graph_name: the quad graph name. To match only the default graph, use :py:class:`DefaultGraph`. To match everything use :py:const:`None`.
+    /// :type graph_name: NamedNode or BlankNode or DefaultGraph or None
     /// :return: an iterator of the quads matching the pattern.
     /// :rtype: iter(Quad)
     /// :raises IOError: if an I/O error happens during the quads lookup.
@@ -520,6 +520,8 @@ impl PyStore {
 
     /// Clears a graph from the store without removing it.
     ///
+    /// :param graph_name: the name of the graph to clear.
+    /// :type graph_name: NamedNode or BlankNode or DefaultGraph
     /// :raises IOError: if an I/O error happens during the operation.
     ///
     /// >>> store = Store()
