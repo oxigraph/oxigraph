@@ -63,6 +63,14 @@ Note that you will need to have [sphinx-autobuild](https://pypi.org/project/sphi
 
 Alternatively, you can use `sphinx-build` with Python's `http.server` to achieve the same thing.
 
+### Python type hints
+
+Python type hints for pyoxigraph are defined in the python stub file [pyoxigraph.pyi](pyoxigraph.pyi). This is the final python stub file generated from [base.pyi](base.pyi) using [generate_type_hints.py](generate_type_hints.py). [pyoxigraph.pyi](pyoxigraph.pyi) should not be modified directly. Instead, modify [base.pyi](base.pyi) and run the following command in this directory:
+
+```
+python generate_type_hints.py
+```
+
 ## License
 
 This project is licensed under either of
