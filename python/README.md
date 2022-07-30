@@ -73,7 +73,7 @@ python generate_type_hints.py
 
 #### `generate_type_hints.py`
 
-[generate_type_hints.py](generate_type_hints.py) makes a copy of [base.pyi](base.pyi) and runs [stubdoc](https://github.com/simon-ritchie/stubdoc/tree/main) on it to pull the docstrings from the rust code into the generated [pyoxigraph.pyi](pyoxigraph.pyi) file. Unfortunately, stubdoc is not a perfect solution yet for pyoxigraph as it is only able to partially pull out docstrings from functions and class methods. The plan is to monkey patch stubdoc and contribute the fixes back to upstream.
+[generate_type_hints.py](generate_type_hints.py) makes a copy of [base.pyi](base.pyi) and runs [stubdoc](https://github.com/simon-ritchie/stubdoc/tree/main) on it to pull the docstrings from the rust code into the generated [pyoxigraph.pyi](pyoxigraph.pyi) file. Unfortunately, stubdoc is not a perfect solution yet for pyoxigraph as it is only able to partially pull out docstrings from functions and class methods. stubdoc currently ignores class docstrings, class properties and PyO3 functions. The plan is to monkey patch stubdoc and contribute the fixes back to upstream.
 
 We currently commit the generated [pyoxigraph.pyi](pyoxigraph.pyi) file to the repository. In the future, we may look at generating [pyoxigraph.pyi](pyoxigraph.pyi) in GitHub Actions to ensure it is always up to date.
 
