@@ -694,8 +694,8 @@ impl IntoPy<PyObject> for PyGraphName {
 /// :type predicate: NamedNode
 /// :param object: the quad object.
 /// :type object: NamedNode or BlankNode or Literal or Triple
-/// :param graph: the quad graph name. If not present, the default graph is assumed.
-/// :type graph: NamedNode or BlankNode or DefaultGraph or None, optional
+/// :param graph_name: the quad graph name. If not present, the default graph is assumed.
+/// :type graph_name: NamedNode or BlankNode or DefaultGraph or None, optional
 ///
 /// The :py:func:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
 ///
