@@ -128,7 +128,7 @@ impl<F> From<FocusedTriplePattern<F>> for FocusedTriplePattern<Vec<F>> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum VariableOrPropertyPath {
     Variable(Variable),
     PropertyPath(PropertyPathExpression),
@@ -289,6 +289,7 @@ fn build_bgp(patterns: Vec<TripleOrPathPattern>) -> GraphPattern {
     elements.into_iter().reduce(new_join).unwrap_or_default()
 }
 
+#[derive(Debug)]
 enum TripleOrPathPattern {
     Triple(TriplePattern),
     Path {
@@ -304,6 +305,7 @@ impl From<TriplePattern> for TripleOrPathPattern {
     }
 }
 
+#[derive(Debug)]
 struct AnnotatedTermPath {
     term: TermPattern,
     annotations: Vec<(VariableOrPropertyPath, Vec<AnnotatedTermPath>)>,
@@ -322,7 +324,7 @@ impl From<AnnotatedTerm> for AnnotatedTermPath {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct FocusedTripleOrPathPattern<F> {
     focus: F,
     patterns: Vec<TripleOrPathPattern>,
@@ -1596,7 +1598,7 @@ parser! {
             } /
             s:TriplesNodePath() _ po:PropertyListPath() {?
                 let mut patterns = s.patterns;
-                    patterns.extend(po.patterns);
+                patterns.extend(po.patterns);
                 for (p, os) in po.focus {
                     for o in os {
                         add_to_triple_or_path_patterns(s.focus.clone(), p.clone(), o, &mut patterns)?;
@@ -1780,7 +1782,7 @@ parser! {
 
         //[101]
         rule BlankNodePropertyListPath() -> FocusedTripleOrPathPattern<TermPattern> = "[" _ po:PropertyListPathNotEmpty() _ "]" {?
-            let mut patterns: Vec<TripleOrPathPattern> = Vec::new();
+            let mut patterns = po.patterns;
             let mut bnode = TermPattern::from(BlankNode::default());
             for (p, os) in po.focus {
                 for o in os {
