@@ -15,11 +15,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
 ENV VIRTUAL_ENV=/opt/venv
 RUN python -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
-RUN pip install --no-cache-dir \
-    maturin \
-    sphinx \
-    sphinx-autobuild \
-    furo
+RUN pip install --no-cache-dir -r python/requirements.dev.txt
 
 # Change owner to the devcontainer user
 RUN chown -R 1000:1000 $VIRTUAL_ENV

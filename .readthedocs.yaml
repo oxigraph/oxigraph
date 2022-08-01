@@ -13,6 +13,7 @@ build:
 
 python:
   install:
+    - requirements: python/requirements.dev.txt
     - method: pip
       path: python
 
