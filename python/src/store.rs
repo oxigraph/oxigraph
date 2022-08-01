@@ -354,7 +354,7 @@ impl PyStore {
     /// :raises IOError: if an I/O error happens during a quad insertion.
     ///
     /// >>> store = Store()
-    /// >>> store.load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
+    /// >>> store.load_from_stream(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
     #[pyo3(text_signature = "($self, data, /, mime_type, *, base_iri = None, to_graph = None)")]
@@ -433,7 +433,8 @@ impl PyStore {
     /// :raises IOError: if an I/O error happens during a quad insertion.
     ///
     /// >>> store = Store()
-    /// >>> store.load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
+    /// >>> data = '<foo> <p> "1" .'
+    /// >>> store.load_from_data(data, "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
     #[pyo3(text_signature = "($self, data, /, mime_type, *, base_iri = None, to_graph = None)")]
