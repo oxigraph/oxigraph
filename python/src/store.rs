@@ -322,6 +322,163 @@ impl PyStore {
         })
     }
 
+    /// Loads an RDF serialization into the store from a stream.
+    ///
+    /// Loads are applied in a transactional manner: either the full operation succeeds or nothing is written to the database.
+    /// The :py:func:`bulk_load` method is also available for much faster loading of big files but without transactional guarantees.
+    ///
+    /// Beware, the full file is loaded into memory.
+    ///
+    /// It currently supports the following formats:
+    ///
+    /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (``application/n-triples``)
+    /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (``application/n-quads``)
+    /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (``text/turtle``)
+    /// * `TriG <https://www.w3.org/TR/trig/>`_ (``application/trig``)
+    /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml``)
+    ///
+    /// It supports also some MIME type aliases.
+    /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
+    /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
+    ///
+    /// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
+    /// :type input: io.RawIOBase or io.BufferedIOBase or str
+    /// :param mime_type: the MIME type of the RDF serialization.
+    /// :type mime_type: str
+    /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
+    /// :type base_iri: str or None, optional
+    /// :param to_graph: if it is a file composed of triples, the graph in which the triples should be stored. By default, the default graph is used.
+    /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
+    /// :raises ValueError: if the MIME type is not supported or the `to_graph` parameter is given with a quad file.
+    /// :raises SyntaxError: if the provided data is invalid.
+    /// :raises IOError: if an I/O error happens during a quad insertion.
+    ///
+    /// >>> store = Store()
+    /// >>> store.load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
+    /// >>> list(store)
+    /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
+    #[pyo3(text_signature = "($self, data, /, mime_type, *, base_iri = None, to_graph = None)")]
+    #[args(input, mime_type, "*", base_iri = "None", to_graph = "None")]
+    fn load_from_stream(
+        &self,
+        input: PyObject,
+        mime_type: &str,
+        base_iri: Option<&str>,
+        to_graph: Option<&PyAny>,
+        py: Python<'_>,
+    ) -> PyResult<()> {
+        let to_graph_name = if let Some(graph_name) = to_graph {
+            Some(GraphName::from(&PyGraphNameRef::try_from(graph_name)?))
+        } else {
+            None
+        };
+        let input = PyFileLike::open(input, py).map_err(map_io_err)?;
+        py.allow_threads(|| {
+            if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
+                self.inner
+                    .load_graph(
+                        input,
+                        graph_format,
+                        to_graph_name.as_ref().unwrap_or(&GraphName::DefaultGraph),
+                        base_iri,
+                    )
+                    .map_err(map_loader_error)
+            } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
+                if to_graph_name.is_some() {
+                    return Err(PyValueError::new_err(
+                        "The target graph name parameter is not available for dataset formats",
+                    ));
+                }
+                self.inner
+                    .load_dataset(input, dataset_format, base_iri)
+                    .map_err(map_loader_error)
+            } else {
+                Err(PyValueError::new_err(format!(
+                    "Not supported MIME type: {}",
+                    mime_type
+                )))
+            }
+        })
+    }
+
+    /// Loads an RDF serialization into the store from a string.
+    ///
+    /// Loads are applied in a transactional manner: either the full operation succeeds or nothing is written to the database.
+    /// The :py:func:`bulk_load` method is also available for much faster loading of big files but without transactional guarantees.
+    ///
+    /// Beware, the full file is loaded into memory.
+    ///
+    /// It currently supports the following formats:
+    ///
+    /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (``application/n-triples``)
+    /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (``application/n-quads``)
+    /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (``text/turtle``)
+    /// * `TriG <https://www.w3.org/TR/trig/>`_ (``application/trig``)
+    /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml``)
+    ///
+    /// It supports also some MIME type aliases.
+    /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
+    /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
+    ///
+    /// :param input: The RDF string data
+    /// :type input: str
+    /// :param mime_type: the MIME type of the RDF serialization.
+    /// :type mime_type: str
+    /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
+    /// :type base_iri: str or None, optional
+    /// :param to_graph: if it is a file composed of triples, the graph in which the triples should be stored. By default, the default graph is used.
+    /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
+    /// :raises ValueError: if the MIME type is not supported or the `to_graph` parameter is given with a quad file.
+    /// :raises SyntaxError: if the provided data is invalid.
+    /// :raises IOError: if an I/O error happens during a quad insertion.
+    ///
+    /// >>> store = Store()
+    /// >>> store.load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
+    /// >>> list(store)
+    /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
+    #[pyo3(text_signature = "($self, data, /, mime_type, *, base_iri = None, to_graph = None)")]
+    #[args(input, mime_type, "*", base_iri = "None", to_graph = "None")]
+    fn load_from_data(
+        &self,
+        input: &str,
+        mime_type: &str,
+        base_iri: Option<&str>,
+        to_graph: Option<&PyAny>,
+        py: Python<'_>,
+    ) -> PyResult<()> {
+        let to_graph_name = if let Some(graph_name) = to_graph {
+            Some(GraphName::from(&PyGraphNameRef::try_from(graph_name)?))
+        } else {
+            None
+        };
+        py.allow_threads(|| {
+            if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
+                self.inner
+                    .load_graph(
+                        input.as_ref(),
+                        graph_format,
+                        to_graph_name.as_ref().unwrap_or(&GraphName::DefaultGraph),
+                        base_iri,
+                    )
+                    .map_err(map_loader_error)
+            } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
+                if to_graph_name.is_some() {
+                    return Err(PyValueError::new_err(
+                        "The target graph name parameter is not available for dataset formats",
+                    ));
+                }
+                self.inner
+                    .load_dataset(input.as_ref(), dataset_format, base_iri)
+                    .map_err(map_loader_error)
+            } else {
+                Err(PyValueError::new_err(format!(
+                    "Not supported MIME type: {}",
+                    mime_type
+                )))
+            }
+        })
+    }
+
     /// Loads an RDF serialization into the store.
     ///
     /// This function is designed to be as fast as possible on big files **without** transactional guarantees.

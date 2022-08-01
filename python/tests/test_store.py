@@ -232,6 +232,21 @@ class TestStore(unittest.TestCase):
         os.remove(file_name)
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
+    def test_load_from_stream(self):
+        with NamedTemporaryFile(delete=False) as fp:
+            file_name = fp.name
+            fp.write(b"<http://foo> <http://bar> <http://baz> <http://graph>.")
+        store = Store()
+        store.load_from_stream(file_name, mime_type="application/n-quads")
+        os.remove(file_name)
+        self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
+
+    def test_load_from_data(self):
+        data = "<http://foo> <http://bar> <http://baz> <http://graph>."
+        store = Store()
+        store.load_from_data(data, mime_type="application/n-quads")
+        self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
+
     def test_load_with_io_error(self):
         class BadIO(RawIOBase):
             pass
