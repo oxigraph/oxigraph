@@ -26,6 +26,7 @@
     :nested_path
     :nested_expression
     :order_terms
+    :nested_anonymous
     ) .
 
 :small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
@@ -114,3 +115,10 @@
     mf:name "literals have an order for ORDER BY" ;
     mf:action [ qt:query <order_terms.rq> ] ;
     mf:result <order_terms.ttl> .
+
+:nested_anonymous rdf:type mf:QueryEvaluationTest ;
+    mf:name "Nested anonymous" ;
+    mf:action
+         [ qt:query  <nested_anonymous.rq> ;
+           qt:data   <nested_anonymous.ttl> ] ;
+    mf:result  <nested_anonymous.srx> .

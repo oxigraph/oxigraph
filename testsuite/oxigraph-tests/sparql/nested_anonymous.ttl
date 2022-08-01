@@ -1,0 +1,4 @@
+PREFIX : <http://example.com/>
+
+[ :p1 "t1" ; :p2 [ :p3 :foo ] ] .
+[ :p1 "t2" ; :p2 [ :p3 :bar ] ] .
