@@ -1,0 +1,4 @@
+furo
+maturin
+sphinx
+sphinx-autobuild

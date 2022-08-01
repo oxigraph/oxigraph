@@ -183,8 +183,10 @@ jobs:
       - uses: actions/setup-python@v2
         with:
           python-version: 3.8
-      - run: python -m venv python/venv
-      - run: source python/venv/bin/activate && pip install --upgrade maturin sphinx furo
+      - run: python -m venv venv
+        working-directory: ./python
+      - run: source venv/bin/activate && pip install --upgrade -r requirements.dev.txt
+        working-directory: ./python
       - run: source venv/bin/activate && maturin develop
         working-directory: ./python
       - run: source ../venv/bin/activate && sphinx-build -M doctest . build
