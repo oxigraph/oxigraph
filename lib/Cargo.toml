@@ -36,7 +36,7 @@ hex = "0.4"
 nom = "7"
 siphasher = "0.3"
 lazy_static = "1"
-sysinfo = "0.24"
+sysinfo = "0.25"
 oxrdf = { version = "0.1.0", path="oxrdf", features = ["rdf-star"] }
 spargebra = { version = "0.2.1", path="spargebra", features = ["rdf-star"] }
 sparesults = { version = "0.1.1", path="sparesults", features = ["rdf-star"] }
