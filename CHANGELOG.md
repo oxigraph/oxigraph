@@ -1,3 +1,10 @@
+## [0.3.5] - 2022-08-02
+
+### Changed
+- Fixes a bug in the SPARQL parser with nested anonymous blank nodes (`[]`).
+- Migrates the Python documentation skin to [Furo](https://pradyunsg.me/furo/).
+
+
 ## [0.3.4] - 2022-07-17
 
 ### Changed

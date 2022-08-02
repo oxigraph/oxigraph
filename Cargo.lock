@@ -525,9 +525,9 @@ dependencies = [
 
 [[package]]
 name = "indoc"
-version = "1.0.6"
+version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05a0bd019339e5d968b37855180087b7b9d512c5046fbd244cf8c95687927d6e"
+checksum = "adab1eaa3408fb7f0c777a73e7465fd5656136fc93b670eb6df3c88c2c1344e3"
 
 [[package]]
 name = "itertools"
@@ -772,7 +772,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "criterion",
  "digest",
@@ -805,7 +805,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_js"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
@@ -816,7 +816,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_server"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "clap 3.2.16",
  "flate2",
@@ -831,7 +831,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_testsuite"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "clap 3.2.16",
@@ -1062,7 +1062,7 @@ dependencies = [
 
 [[package]]
 name = "pyoxigraph"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "oxigraph",
  "pyo3",
@@ -1414,7 +1414,7 @@ dependencies = [
 
 [[package]]
 name = "spargebra"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1583,9 +1583,9 @@ checksum = "3ed742d4ea2bd1176e236172c8429aaf54486e7ac098db29ffe6529e0ce50973"
 
 [[package]]
 name = "unindent"
-version = "0.1.9"
+version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52fee519a3e570f7df377a06a1a7775cdbfb7aa460be7e08de2b1f0e69973a44"
+checksum = "58ee9362deb4a96cef4d437d1ad49cffc9b9e92d202b6995674e928ce684f112"
 
 [[package]]
 name = "untrusted"
