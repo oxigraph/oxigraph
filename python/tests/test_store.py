@@ -223,7 +223,7 @@ class TestStore(unittest.TestCase):
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
-    def test_load_file(self):
+    def test_load(self):
         with NamedTemporaryFile(delete=False) as fp:
             file_name = fp.name
             fp.write(b"<http://foo> <http://bar> <http://baz> <http://graph>.")
@@ -232,20 +232,31 @@ class TestStore(unittest.TestCase):
         os.remove(file_name)
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
-    def test_load_from_stream(self):
+    def test_load_file(self):
         with NamedTemporaryFile(delete=False) as fp:
             file_name = fp.name
             fp.write(b"<http://foo> <http://bar> <http://baz> <http://graph>.")
         store = Store()
-        store.load_from_stream(file_name, mime_type="application/n-quads")
+        store.load_file(file_name, mime_type="application/n-quads")
         os.remove(file_name)
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
-    def test_load_from_data(self):
+    def test_load_data_str(self):
         data = "<http://foo> <http://bar> <http://baz> <http://graph>."
         store = Store()
-        store.load_from_data(data, mime_type="application/n-quads")
+        store.load_data(data, mime_type="application/n-quads")
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
+
+    def test_load_data_bytestr(self):
+        data = b"<http://foo> <http://bar> <http://baz> <http://graph>."
+        store = Store()
+        store.load_data(data, mime_type="application/n-quads")
+        self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
+
+    def test_load_data_int(self):
+        data = 123
+        with self.assertRaises(TypeError) as _:
+            Store().load_data(data, mime_type="application/n-triples")
 
     def test_load_with_io_error(self):
         class BadIO(RawIOBase):
