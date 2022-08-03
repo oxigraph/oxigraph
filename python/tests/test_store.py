@@ -1,3 +1,4 @@
+import io
 import os
 import unittest
 from io import BytesIO, RawIOBase
@@ -252,6 +253,29 @@ class TestStore(unittest.TestCase):
         store = Store()
         store.load_data(data, mime_type="application/n-quads")
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
+
+    def test_load_data_bytesio(self):
+        data = b"<http://foo> <http://bar> <http://baz> <http://graph>."
+        input_io = io.BytesIO(data)
+        store = Store()
+        store.load_data(input_io, mime_type="application/n-quads")
+        self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
+
+    def test_load_data_stringio(self):
+        data = "<http://foo> <http://bar> <http://baz> <http://graph>."
+        input_io = io.StringIO(data)
+        store = Store()
+        store.load_data(input_io, mime_type="application/n-quads")
+        self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
+
+    def test_load_data_fileio(self):
+        try:
+            input_io = io.FileIO("data.nq", "r")
+            store = Store()
+            store.load_data(input_io, mime_type="application/n-quads")
+            self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
+        finally:
+            input_io.close()
 
     def test_load_data_int(self):
         data = 123

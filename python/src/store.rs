@@ -8,7 +8,7 @@ use oxigraph::model::{GraphName, GraphNameRef};
 use oxigraph::sparql::Update;
 use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
 use pyo3::exceptions::{self, PyIOError, PyRuntimeError, PyValueError};
-use pyo3::types::{IntoPyDict, PyBytes, PyString};
+use pyo3::types::{IntoPyDict, PyBytes, PyString, PyType};
 use pyo3::{prelude::*, PyTypeInfo};
 use pyo3::{Py, PyRef};
 
@@ -18,6 +18,24 @@ impl<'source> FromPyObject<'source> for InputValue {
     fn extract(ob: &'source pyo3::PyAny) -> PyResult<Self> {
         let gil = Python::acquire_gil();
         let py = gil.python();
+
+        let py_io_module = PyModule::import(py, "io")?;
+        let py_rawiobase: &PyType = py_io_module
+            .getattr("RawIOBase")
+            .unwrap()
+            .extract()
+            .unwrap();
+        let py_bufferediobase: &PyType = py_io_module
+            .getattr("BufferedIOBase")
+            .unwrap()
+            .extract()
+            .unwrap();
+        let py_textiobase: &PyType = py_io_module
+            .getattr("TextIOBase")
+            .unwrap()
+            .extract()
+            .unwrap();
+
         if PyString::is_type_of(ob) {
             Ok(InputValue(ob.to_string()))
         } else if PyBytes::is_type_of(ob) {
@@ -27,6 +45,19 @@ impl<'source> FromPyObject<'source> for InputValue {
                     .unwrap()
                     .to_string(),
             ))
+        } else if ob.is_instance(py_rawiobase).unwrap()
+            || ob.is_instance(py_bufferediobase).unwrap()
+        {
+            let kwargs = vec![("encoding", "utf-8")].into_py_dict(py);
+            Ok(InputValue(
+                ob.call_method0("read")
+                    .unwrap()
+                    .call_method("decode", (), Some(kwargs))
+                    .unwrap()
+                    .to_string(),
+            ))
+        } else if ob.is_instance(py_textiobase).unwrap() {
+            Ok(InputValue(ob.call_method0("read").unwrap().to_string()))
         } else {
             Err(exceptions::PyTypeError::new_err(format!(
                 "'{}' type is unsupported.",
@@ -426,7 +457,7 @@ impl PyStore {
         })
     }
 
-    /// Loads an RDF serialization into the store from a str or bytes buffer.
+    /// Loads an RDF serialization into the store from a buffer or a python I/O object.
     ///
     /// Loads are applied in a transactional manner: either the full operation succeeds or nothing is written to the database.
     /// The :py:func:`bulk_load` method is also available for much faster loading of big files but without transactional guarantees.
@@ -446,7 +477,7 @@ impl PyStore {
     /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
     /// :param input: the data to be loaded into the store.
-    /// :type input: str or bytes
+    /// :type input: str or bytes or io.RawIOBase or io.BufferedIOBase or io.TextIOBase
     /// :param mime_type: the MIME type of the RDF serialization.
     /// :type mime_type: str
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
