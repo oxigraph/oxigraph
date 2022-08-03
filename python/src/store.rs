@@ -455,7 +455,6 @@ impl PyStore {
     /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :raises ValueError: if the MIME type is not supported or the `to_graph` parameter is given with a quad file.
     /// :raises SyntaxError: if the provided data is invalid.
-    /// :raises IOError: if an I/O error happens during a quad insertion.
     ///
     /// >>> data = '<foo> <p> "1" .'
     /// >>> store = Store()
