@@ -189,6 +189,14 @@ class TestStore(unittest.TestCase):
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, DefaultGraph())})
 
+    def test_load_file_ntriples_to_default_graph(self):
+        store = Store()
+        store.load_file(
+            BytesIO(b"<http://foo> <http://bar> <http://baz> ."),
+            mime_type="application/n-triples",
+        )
+        self.assertEqual(set(store), {Quad(foo, bar, baz, DefaultGraph())})
+
     def test_load_ntriples_to_named_graph(self):
         store = Store()
         store.load(
@@ -198,26 +206,35 @@ class TestStore(unittest.TestCase):
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
-    def test_load_turtle_with_base_iri(self):
+    def test_load_file_ntriples_to_named_graph(self):
         store = Store()
-        store.load(
+        store.load_file(
+            BytesIO(b"<http://foo> <http://bar> <http://baz> ."),
+            mime_type="application/n-triples",
+            to_graph=graph,
+        )
+        self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
+
+    def test_load_file_turtle_with_base_iri(self):
+        store = Store()
+        store.load_file(
             BytesIO(b"<http://foo> <http://bar> <> ."),
             mime_type="text/turtle",
             base_iri="http://baz",
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, DefaultGraph())})
 
-    def test_load_nquads(self):
+    def test_load_file_nquads(self):
         store = Store()
-        store.load(
+        store.load_file(
             BytesIO(b"<http://foo> <http://bar> <http://baz> <http://graph>."),
             mime_type="application/n-quads",
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
-    def test_load_trig_with_base_iri(self):
+    def test_load_file_trig_with_base_iri(self):
         store = Store()
-        store.load(
+        store.load_file(
             BytesIO(b"<http://graph> { <http://foo> <http://bar> <> . }"),
             mime_type="application/trig",
             base_iri="http://baz",
@@ -288,6 +305,13 @@ class TestStore(unittest.TestCase):
 
         with self.assertRaises(NotImplementedError) as _:
             Store().load(BadIO(), mime_type="application/n-triples")
+
+    def test_load_file_with_io_error(self):
+        class BadIO(RawIOBase):
+            pass
+
+        with self.assertRaises(NotImplementedError) as _:
+            Store().load_file(BadIO(), mime_type="application/n-triples")
 
     def test_dump_ntriples(self):
         store = Store()

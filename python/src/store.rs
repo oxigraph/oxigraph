@@ -1,5 +1,7 @@
 #![allow(clippy::needless_option_as_deref)]
 
+use std::io::Read;
+
 use crate::io::{allow_threads_unsafe, map_io_err, map_parse_error, PyFileLike};
 use crate::model::*;
 use crate::sparql::*;
@@ -7,7 +9,7 @@ use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::{GraphName, GraphNameRef};
 use oxigraph::sparql::Update;
 use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
-use pyo3::exceptions::{self, PyIOError, PyRuntimeError, PyValueError};
+use pyo3::exceptions::{self, PyIOError, PyNotImplementedError, PyRuntimeError, PyValueError};
 use pyo3::types::{IntoPyDict, PyBytes, PyString, PyType};
 use pyo3::{prelude::*, PyTypeInfo};
 use pyo3::{Py, PyRef};
@@ -344,38 +346,12 @@ impl PyStore {
         to_graph: Option<&PyAny>,
         py: Python<'_>,
     ) -> PyResult<()> {
-        let to_graph_name = if let Some(graph_name) = to_graph {
-            Some(GraphName::from(&PyGraphNameRef::try_from(graph_name)?))
-        } else {
-            None
-        };
-        let input = PyFileLike::open(input, py).map_err(map_io_err)?;
-        py.allow_threads(|| {
-            if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
-                self.inner
-                    .load_graph(
-                        input,
-                        graph_format,
-                        to_graph_name.as_ref().unwrap_or(&GraphName::DefaultGraph),
-                        base_iri,
-                    )
-                    .map_err(map_loader_error)
-            } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
-                if to_graph_name.is_some() {
-                    return Err(PyValueError::new_err(
-                        "The target graph name parameter is not available for dataset formats",
-                    ));
-                }
-                self.inner
-                    .load_dataset(input, dataset_format, base_iri)
-                    .map_err(map_loader_error)
-            } else {
-                Err(PyValueError::new_err(format!(
-                    "Not supported MIME type: {}",
-                    mime_type
-                )))
-            }
-        })
+        let mut input = PyFileLike::open(input, py).map_err(map_io_err)?;
+        let mut buf = String::new();
+        match input.read_to_string(&mut buf) {
+            Ok(_) => self.internal_load(buf.as_bytes(), mime_type, base_iri, to_graph, py),
+            Err(err) => Err(PyNotImplementedError::new_err(err.to_string())),
+        }
     }
 
     /// Loads an RDF serialization into the store from a file.
@@ -423,38 +399,12 @@ impl PyStore {
         to_graph: Option<&PyAny>,
         py: Python<'_>,
     ) -> PyResult<()> {
-        let to_graph_name = if let Some(graph_name) = to_graph {
-            Some(GraphName::from(&PyGraphNameRef::try_from(graph_name)?))
-        } else {
-            None
-        };
-        let input = PyFileLike::open(input, py).map_err(map_io_err)?;
-        py.allow_threads(|| {
-            if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
-                self.inner
-                    .load_graph(
-                        input,
-                        graph_format,
-                        to_graph_name.as_ref().unwrap_or(&GraphName::DefaultGraph),
-                        base_iri,
-                    )
-                    .map_err(map_loader_error)
-            } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
-                if to_graph_name.is_some() {
-                    return Err(PyValueError::new_err(
-                        "The target graph name parameter is not available for dataset formats",
-                    ));
-                }
-                self.inner
-                    .load_dataset(input, dataset_format, base_iri)
-                    .map_err(map_loader_error)
-            } else {
-                Err(PyValueError::new_err(format!(
-                    "Not supported MIME type: {}",
-                    mime_type
-                )))
-            }
-        })
+        let mut input = PyFileLike::open(input, py).map_err(map_io_err)?;
+        let mut buf = String::new();
+        match input.read_to_string(&mut buf) {
+            Ok(_) => self.internal_load(buf.as_bytes(), mime_type, base_iri, to_graph, py),
+            Err(err) => Err(PyNotImplementedError::new_err(err.to_string())),
+        }
     }
 
     /// Loads an RDF serialization into the store from a buffer or a python I/O object.
@@ -502,20 +452,29 @@ impl PyStore {
         to_graph: Option<&PyAny>,
         py: Python<'_>,
     ) -> PyResult<()> {
-        let to_graph_name = if let Some(graph_name) = to_graph {
-            Some(GraphName::from(&PyGraphNameRef::try_from(graph_name)?))
-        } else {
-            None
-        };
         let InputValue(value) = input;
+        self.internal_load(value.as_bytes(), mime_type, base_iri, to_graph, py)
+    }
+
+    // fn internal_load_data<File: BufRead + std::marker::Send>(
+    fn internal_load(
+        &self,
+        input: &[u8],
+        mime_type: &str,
+        base_iri: Option<&str>,
+        to_graph: Option<&PyAny>,
+        py: Python<'_>,
+    ) -> PyResult<()> {
+        let to_graph_name = to_graph
+            .map(|graph_name| GraphName::from(&PyGraphNameRef::try_from(graph_name).unwrap()));
 
         py.allow_threads(|| {
             if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
                 self.inner
                     .load_graph(
-                        value.as_ref(),
+                        input,
                         graph_format,
-                        to_graph_name.as_ref().unwrap_or(&GraphName::DefaultGraph),
+                        &to_graph_name.unwrap_or(GraphName::DefaultGraph),
                         base_iri,
                     )
                     .map_err(map_loader_error)
@@ -526,7 +485,7 @@ impl PyStore {
                     ));
                 }
                 self.inner
-                    .load_dataset(value.as_ref(), dataset_format, base_iri)
+                    .load_dataset(input, dataset_format, base_iri)
                     .map_err(map_loader_error)
             } else {
                 Err(PyValueError::new_err(format!(
