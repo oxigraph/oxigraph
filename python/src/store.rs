@@ -349,7 +349,7 @@ impl PyStore {
         let mut input = PyFileLike::open(input, py).map_err(map_io_err)?;
         let mut buf = String::new();
         match input.read_to_string(&mut buf) {
-            Ok(_) => self.internal_load(buf.as_bytes(), mime_type, base_iri, to_graph, py),
+            Ok(_) => self.load_inner(buf.as_bytes(), mime_type, base_iri, to_graph, py),
             Err(err) => Err(PyNotImplementedError::new_err(err.to_string())),
         }
     }
@@ -402,7 +402,7 @@ impl PyStore {
         let mut input = PyFileLike::open(input, py).map_err(map_io_err)?;
         let mut buf = String::new();
         match input.read_to_string(&mut buf) {
-            Ok(_) => self.internal_load(buf.as_bytes(), mime_type, base_iri, to_graph, py),
+            Ok(_) => self.load_inner(buf.as_bytes(), mime_type, base_iri, to_graph, py),
             Err(err) => Err(PyNotImplementedError::new_err(err.to_string())),
         }
     }
@@ -453,11 +453,11 @@ impl PyStore {
         py: Python<'_>,
     ) -> PyResult<()> {
         let InputValue(value) = input;
-        self.internal_load(value.as_bytes(), mime_type, base_iri, to_graph, py)
+        self.load_inner(value.as_bytes(), mime_type, base_iri, to_graph, py)
     }
 
     // fn internal_load_data<File: BufRead + std::marker::Send>(
-    fn internal_load(
+    fn load_inner(
         &self,
         input: &[u8],
         mime_type: &str,
