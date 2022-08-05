@@ -1,7 +1,7 @@
 // Code from https://github.com/rust-rocksdb/rust-rocksdb/blob/eb2d302682418b361a80ad8f4dcf335ade60dcf5/librocksdb-sys/build.rs
 // License: https://github.com/rust-rocksdb/rust-rocksdb/blob/master/LICENSE
 
-use std::env::var;
+use std::env::{set_var, var};
 use std::path::PathBuf;
 
 fn link(name: &str, bundled: bool) {
@@ -76,11 +76,32 @@ fn build_rocksdb() {
             config.define("HAVE_PCLMUL", Some("1"));
             config.flag_if_supported("-mpclmul");
         }
+        if target_features.contains(&"avx2") {
+            config.define("HAVE_AVX2", Some("1"));
+            config.flag_if_supported("-mavx2");
+        }
+        if target_features.contains(&"bmi1") {
+            config.define("HAVE_BMI", Some("1"));
+            config.flag_if_supported("-mbmi");
+        }
+        if target_features.contains(&"lzcnt") {
+            config.define("HAVE_LZCNT", Some("1"));
+            config.flag_if_supported("-mlzcnt");
+        }
     } else if target.contains("aarch64") {
         lib_sources.push("util/crc32c_arm64.cc")
     }
 
-    if target.contains("darwin") {
+    if target.contains("apple-ios") {
+        config.define("OS_MACOSX", None);
+        config.define("IOS_CROSS_COMPILE", None);
+        config.define("PLATFORM", "IOS");
+        config.define("NIOSTATS_CONTEXT", None);
+        config.define("NPERF_CONTEXT", None);
+        config.define("ROCKSDB_PLATFORM_POSIX", None);
+        config.define("ROCKSDB_LIB_IO_POSIX", None);
+        set_var("IPHONEOS_DEPLOYMENT_TARGET", "11.0");
+    } else if target.contains("darwin") {
         config.define("OS_MACOSX", None);
         config.define("ROCKSDB_PLATFORM_POSIX", None);
         config.define("ROCKSDB_LIB_IO_POSIX", None);
@@ -104,7 +125,7 @@ fn build_rocksdb() {
         config.define("_MBCS", None);
         config.define("WIN64", None);
         config.define("NOMINMAX", None);
-        config.define("WITH_WINDOWS_UTF8_FILENAMES", "ON");
+        config.define("ROCKSDB_WINDOWS_UTF8_FILENAMES", None);
 
         if target == "x86_64-pc-windows-gnu" {
             // Tell MinGW to create localtime_r wrapper of localtime_s function.
@@ -130,12 +151,15 @@ fn build_rocksdb() {
             .collect::<Vec<&'static str>>();
 
         // Add Windows-specific sources
-        lib_sources.push("port/win/port_win.cc");
-        lib_sources.push("port/win/env_win.cc");
-        lib_sources.push("port/win/env_default.cc");
-        lib_sources.push("port/win/win_logger.cc");
-        lib_sources.push("port/win/io_win.cc");
-        lib_sources.push("port/win/win_thread.cc");
+        lib_sources.extend([
+            "port/win/env_default.cc",
+            "port/win/port_win.cc",
+            "port/win/xpress_win.cc",
+            "port/win/io_win.cc",
+            "port/win/win_thread.cc",
+            "port/win/env_win.cc",
+            "port/win/win_logger.cc",
+        ]);
     }
 
     config.define("ROCKSDB_SUPPORT_THREAD_LOCAL", None);
@@ -143,15 +167,17 @@ fn build_rocksdb() {
     if target.contains("msvc") {
         config.flag("-EHsc").flag("-std:c++17");
     } else {
-        config.flag("-std=c++17").flag("-Wno-invalid-offsetof");
+        config
+            .flag("-std=c++17")
+            .flag("-Wno-invalid-offsetof")
+            .define("HAVE_UINT128_EXTENSION", Some("1"));
     }
 
     for file in lib_sources {
         if file == "db/c.cc" || file == "util/build_version.cc" {
             continue;
         }
-        let file = "rocksdb/".to_string() + file;
-        config.file(&file);
+        config.file(&format!("rocksdb/{file}"));
     }
     config.compile("rocksdb");
 }
