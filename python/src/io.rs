@@ -10,7 +10,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::wrap_pyfunction;
 use std::fs::File;
-use std::io::{self, BufReader, BufWriter, Read, Write};
+use std::io::{self, BufRead, BufReader, BufWriter, Cursor, Read, Write};
 
 pub fn add_to_module(module: &PyModule) -> PyResult<()> {
     module.add_wrapped(wrap_pyfunction!(parse))?;
@@ -32,7 +32,7 @@ pub fn add_to_module(module: &PyModule) -> PyResult<()> {
 /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
 ///
 /// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
-/// :type input: io.RawIOBase or io.BufferedIOBase or str
+/// :type input: io.RawIOBase or io.BufferedIOBase or io.TextIOBase or str
 /// :param mime_type: the MIME type of the RDF serialization.
 /// :type mime_type: str
 /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
@@ -53,7 +53,12 @@ pub fn parse(
     base_iri: Option<&str>,
     py: Python<'_>,
 ) -> PyResult<PyObject> {
-    let input = PyFileLike::open(input, py).map_err(map_io_err)?;
+    let input = if let Ok(path) = input.extract::<&str>(py) {
+        PyReadable::from_file(path, py)
+    } else {
+        PyReadable::from_data(input, py)
+    }
+    .map_err(map_io_err)?;
     if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
         let mut parser = GraphParser::from_format(graph_format);
         if let Some(base_iri) = base_iri {
@@ -114,7 +119,12 @@ pub fn parse(
 #[pyfunction]
 #[pyo3(text_signature = "(input, output, /, mime_type, *, base_iri = None)")]
 pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_>) -> PyResult<()> {
-    let output = PyFileLike::create(output, py).map_err(map_io_err)?;
+    let output = if let Ok(path) = output.extract::<&str>(py) {
+        PyWritable::from_file(path, py)
+    } else {
+        PyWritable::from_data(output)
+    }
+    .map_err(map_io_err)?;
     if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
         let mut writer = GraphSerializer::from_format(graph_format)
             .triple_writer(output)
@@ -147,7 +157,7 @@ pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_
 
 #[pyclass(name = "TripleReader", module = "oxigraph")]
 pub struct PyTripleReader {
-    inner: TripleReader<BufReader<PyFileLike>>,
+    inner: TripleReader<PyReadable>,
 }
 
 #[pymethods]
@@ -168,7 +178,7 @@ impl PyTripleReader {
 
 #[pyclass(name = "QuadReader", module = "oxigraph")]
 pub struct PyQuadReader {
-    inner: QuadReader<BufReader<PyFileLike>>,
+    inner: QuadReader<PyReadable>,
 }
 
 #[pymethods]
@@ -187,72 +197,126 @@ impl PyQuadReader {
     }
 }
 
-pub(crate) enum PyFileLike {
-    Io(PyObject),
-    File(File),
+pub(crate) enum PyReadable {
+    Bytes(Cursor<Vec<u8>>),
+    Io(BufReader<PyIo>),
+    File(BufReader<File>),
 }
 
-impl PyFileLike {
-    pub fn open(inner: PyObject, py: Python<'_>) -> io::Result<BufReader<Self>> {
-        Ok(BufReader::new(match inner.extract::<&str>(py) {
-            Ok(path) => Self::File(py.allow_threads(|| File::open(path))?),
-            Err(_) => Self::Io(inner),
-        }))
+impl PyReadable {
+    pub fn from_file(file: &str, py: Python<'_>) -> io::Result<Self> {
+        Ok(Self::File(BufReader::new(
+            py.allow_threads(|| File::open(file))?,
+        )))
     }
 
-    pub fn create(inner: PyObject, py: Python<'_>) -> io::Result<BufWriter<Self>> {
-        Ok(BufWriter::new(match inner.extract::<&str>(py) {
-            Ok(path) => Self::File(py.allow_threads(|| File::create(path))?),
-            Err(_) => Self::Io(inner),
-        }))
+    pub fn from_data(data: PyObject, py: Python<'_>) -> io::Result<Self> {
+        Ok(if let Ok(bytes) = data.extract::<Vec<u8>>(py) {
+            Self::Bytes(Cursor::new(bytes))
+        } else if let Ok(string) = data.extract::<String>(py) {
+            Self::Bytes(Cursor::new(string.into_bytes()))
+        } else {
+            Self::Io(BufReader::new(PyIo(data)))
+        })
     }
 }
 
-impl Read for PyFileLike {
-    fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+impl Read for PyReadable {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
-            Self::Io(io) => {
-                let gil = Python::acquire_gil();
-                let py = gil.python();
-                let read = io
-                    .call_method(py, "read", (buf.len(),), None)
-                    .map_err(to_io_err)?;
-                let bytes: &[u8] = read.extract(py).map_err(to_io_err)?;
-                buf.write_all(bytes)?;
-                Ok(bytes.len())
-            }
+            Self::Bytes(bytes) => bytes.read(buf),
+            Self::Io(io) => io.read(buf),
             Self::File(file) => file.read(buf),
         }
     }
 }
 
-impl Write for PyFileLike {
+impl BufRead for PyReadable {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        match self {
+            Self::Bytes(bytes) => bytes.fill_buf(),
+            Self::Io(io) => io.fill_buf(),
+            Self::File(file) => file.fill_buf(),
+        }
+    }
+
+    fn consume(&mut self, amt: usize) {
+        match self {
+            Self::Bytes(bytes) => bytes.consume(amt),
+            Self::Io(io) => io.consume(amt),
+            Self::File(file) => file.consume(amt),
+        }
+    }
+}
+
+pub(crate) enum PyWritable {
+    Io(BufWriter<PyIo>),
+    File(BufWriter<File>),
+}
+
+impl PyWritable {
+    pub fn from_file(file: &str, py: Python<'_>) -> io::Result<Self> {
+        Ok(Self::File(BufWriter::new(
+            py.allow_threads(|| File::create(file))?,
+        )))
+    }
+
+    pub fn from_data(data: PyObject) -> io::Result<Self> {
+        Ok(Self::Io(BufWriter::new(PyIo(data))))
+    }
+}
+
+impl Write for PyWritable {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match self {
-            Self::Io(io) => {
-                let gil = Python::acquire_gil();
-                let py = gil.python();
-                usize::extract(
-                    io.call_method(py, "write", (PyBytes::new(py, buf),), None)
-                        .map_err(to_io_err)?
-                        .as_ref(py),
-                )
-                .map_err(to_io_err)
-            }
+            Self::Io(io) => io.write(buf),
             Self::File(file) => file.write(buf),
         }
     }
 
     fn flush(&mut self) -> io::Result<()> {
         match self {
-            Self::Io(io) => {
-                let gil = Python::acquire_gil();
-                let py = gil.python();
-                io.call_method(py, "flush", (), None)?;
-                Ok(())
-            }
+            Self::Io(io) => io.flush(),
             Self::File(file) => file.flush(),
         }
+    }
+}
+
+pub(crate) struct PyIo(PyObject);
+
+impl Read for PyIo {
+    fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        let read = self
+            .0
+            .call_method(py, "read", (buf.len(),), None)
+            .map_err(to_io_err)?;
+        let bytes = read
+            .extract::<&[u8]>(py)
+            .or_else(|e| read.extract::<&str>(py).map(|s| s.as_bytes()).or(Err(e)))
+            .map_err(to_io_err)?;
+        buf.write_all(bytes)?;
+        Ok(bytes.len())
+    }
+}
+
+impl Write for PyIo {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        self.0
+            .call_method(py, "write", (PyBytes::new(py, buf),), None)
+            .map_err(to_io_err)?
+            .extract::<usize>(py)
+            .map_err(to_io_err)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        self.0.call_method(py, "flush", (), None)?;
+        Ok(())
     }
 }
 
