@@ -1,6 +1,6 @@
 #![allow(clippy::needless_option_as_deref)]
 
-use crate::io::{allow_threads_unsafe, map_io_err, map_parse_error, PyFileLike};
+use crate::io::{allow_threads_unsafe, map_io_err, map_parse_error, PyReadable, PyWritable};
 use crate::model::*;
 use crate::sparql::*;
 use oxigraph::io::{DatasetFormat, GraphFormat};
@@ -263,7 +263,7 @@ impl PyStore {
     /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
     /// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
-    /// :type input: io.RawIOBase or io.BufferedIOBase or str
+    /// :type input: io.RawIOBase or io.BufferedIOBase or io.TextIOBase or str
     /// :param mime_type: the MIME type of the RDF serialization.
     /// :type mime_type: str
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
@@ -293,7 +293,12 @@ impl PyStore {
         } else {
             None
         };
-        let input = PyFileLike::open(input, py).map_err(map_io_err)?;
+        let input = if let Ok(path) = input.extract::<&str>(py) {
+            PyReadable::from_file(path, py)
+        } else {
+            PyReadable::from_data(input, py)
+        }
+        .map_err(map_io_err)?;
         py.allow_threads(|| {
             if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
                 self.inner
@@ -342,7 +347,7 @@ impl PyStore {
     /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
     /// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
-    /// :type input: io.RawIOBase or io.BufferedIOBase or str
+    /// :type input: io.RawIOBase or io.BufferedIOBase or io.TextIOBase or str
     /// :param mime_type: the MIME type of the RDF serialization.
     /// :type mime_type: str
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
@@ -372,7 +377,12 @@ impl PyStore {
         } else {
             None
         };
-        let input = PyFileLike::open(input, py).map_err(map_io_err)?;
+        let input = if let Ok(path) = input.extract::<&str>(py) {
+            PyReadable::from_file(path, py)
+        } else {
+            PyReadable::from_data(input, py)
+        }
+        .map_err(map_io_err)?;
         py.allow_threads(|| {
             if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
                 self.inner
@@ -441,12 +451,17 @@ impl PyStore {
         from_graph: Option<&PyAny>,
         py: Python<'_>,
     ) -> PyResult<()> {
+        let output = if let Ok(path) = output.extract::<&str>(py) {
+            PyWritable::from_file(path, py)
+        } else {
+            PyWritable::from_data(output)
+        }
+        .map_err(map_io_err)?;
         let from_graph_name = if let Some(graph_name) = from_graph {
             Some(GraphName::from(&PyGraphNameRef::try_from(graph_name)?))
         } else {
             None
         };
-        let output = PyFileLike::create(output, py).map_err(map_io_err)?;
         py.allow_threads(|| {
             if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
                 self.inner
