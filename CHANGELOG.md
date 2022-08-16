@@ -1,3 +1,10 @@
+## [0.3.6] - 2022-08-16
+
+### Changed
+- Server: Makes sure body is always sent for all HTTP response codes that are not explicitly to not do that according to the HTTP specification.
+- Python: Adds support of reading from `io.TextIOBase`.
+
+
 ## [0.3.5] - 2022-08-02
 
 ### Changed
