@@ -97,7 +97,7 @@ impl PyNamedNode {
 
     fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
         if let Ok(other) = other.downcast::<PyCell<Self>>() {
-            Ok(eq_ord_compare(self, &other.borrow(), op))
+            Ok(op.matches(self.cmp(&other.borrow())))
         } else if PyBlankNode::is_type_of(other)
             || PyLiteral::is_type_of(other)
             || PyDefaultGraph::is_type_of(other)
@@ -831,9 +831,7 @@ impl PyQuad {
         4
     }
 
-    fn __getitem__(&self, input: usize) -> PyResult<PyObject> {
-        let gil = Python::acquire_gil();
-        let py = gil.python();
+    fn __getitem__(&self, input: usize, py: Python<'_>) -> PyResult<PyObject> {
         match input {
             0 => Ok(PySubject::from(self.inner.subject.clone()).into_py(py)),
             1 => Ok(PyNamedNode::from(self.inner.predicate.clone()).into_py(py)),
@@ -1123,17 +1121,6 @@ fn eq_compare_other_type(op: CompareOp) -> PyResult<bool> {
         _ => Err(PyNotImplementedError::new_err(
             "Ordering is not implemented",
         )),
-    }
-}
-
-fn eq_ord_compare<T: Eq + Ord>(a: &T, b: &T, op: CompareOp) -> bool {
-    match op {
-        CompareOp::Lt => a < b,
-        CompareOp::Le => a <= b,
-        CompareOp::Eq => a == b,
-        CompareOp::Ne => a != b,
-        CompareOp::Gt => a > b,
-        CompareOp::Ge => a >= b,
     }
 }
 
