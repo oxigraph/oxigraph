@@ -1027,19 +1027,19 @@ impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
             match child {
                 GraphPattern::OrderBy { inner, expression } => {
                     order = Some(expression);
-                    child = &*inner;
+                    child = inner;
                 }
                 GraphPattern::Project { inner, variables } if project.is_empty() => {
                     project = variables;
-                    child = &*inner;
+                    child = inner;
                 }
                 GraphPattern::Distinct { inner } => {
                     distinct = true;
-                    child = &*inner;
+                    child = inner;
                 }
                 GraphPattern::Reduced { inner } => {
                     reduced = true;
-                    child = &*inner;
+                    child = inner;
                 }
                 GraphPattern::Slice {
                     inner,

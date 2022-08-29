@@ -241,7 +241,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
             return Err(TermParseError::msg("Empty term serialization"));
         }
 
-        let mut cursor = match input.get(0) {
+        let mut cursor = match input.first() {
             Some(b'+' | b'-') => 1,
             _ => 0,
         };

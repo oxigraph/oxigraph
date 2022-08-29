@@ -107,7 +107,7 @@ impl PlanNode {
 
     pub fn lookup_used_variables(&self, callback: &mut impl FnMut(usize)) {
         match self {
-            PlanNode::StaticBindings { tuples } => {
+            Self::StaticBindings { tuples } => {
                 for tuple in tuples {
                     for (key, value) in tuple.iter().enumerate() {
                         if value.is_some() {
@@ -116,7 +116,7 @@ impl PlanNode {
                     }
                 }
             }
-            PlanNode::QuadPattern {
+            Self::QuadPattern {
                 subject,
                 predicate,
                 object,
@@ -135,7 +135,7 @@ impl PlanNode {
                     callback(*var);
                 }
             }
-            PlanNode::PathPattern {
+            Self::PathPattern {
                 subject,
                 object,
                 graph_name,
@@ -151,23 +151,23 @@ impl PlanNode {
                     callback(*var);
                 }
             }
-            PlanNode::Filter { child, expression } => {
+            Self::Filter { child, expression } => {
                 expression.lookup_used_variables(callback);
                 child.lookup_used_variables(callback);
             }
-            PlanNode::Union { children } => {
+            Self::Union { children } => {
                 for child in children.iter() {
                     child.lookup_used_variables(callback);
                 }
             }
-            PlanNode::HashJoin { left, right }
-            | PlanNode::ForLoopJoin { left, right, .. }
-            | PlanNode::AntiJoin { left, right }
-            | PlanNode::LeftJoin { left, right, .. } => {
+            Self::HashJoin { left, right }
+            | Self::ForLoopJoin { left, right, .. }
+            | Self::AntiJoin { left, right }
+            | Self::LeftJoin { left, right, .. } => {
                 left.lookup_used_variables(callback);
                 right.lookup_used_variables(callback);
             }
-            PlanNode::Extend {
+            Self::Extend {
                 child,
                 position,
                 expression,
@@ -176,12 +176,12 @@ impl PlanNode {
                 expression.lookup_used_variables(callback);
                 child.lookup_used_variables(callback);
             }
-            PlanNode::Sort { child, .. }
-            | PlanNode::HashDeduplicate { child }
-            | PlanNode::Reduced { child }
-            | PlanNode::Skip { child, .. }
-            | PlanNode::Limit { child, .. } => child.lookup_used_variables(callback),
-            PlanNode::Service {
+            Self::Sort { child, .. }
+            | Self::HashDeduplicate { child }
+            | Self::Reduced { child }
+            | Self::Skip { child, .. }
+            | Self::Limit { child, .. } => child.lookup_used_variables(callback),
+            Self::Service {
                 child,
                 service_name,
                 ..
@@ -191,7 +191,7 @@ impl PlanNode {
                 }
                 child.lookup_used_variables(callback);
             }
-            PlanNode::Project { mapping, child } => {
+            Self::Project { mapping, child } => {
                 let child_bound = child.used_variables();
                 for (child_i, output_i) in mapping.iter() {
                     if child_bound.contains(child_i) {
@@ -199,7 +199,7 @@ impl PlanNode {
                     }
                 }
             }
-            PlanNode::Aggregate {
+            Self::Aggregate {
                 key_mapping,
                 aggregates,
                 ..
@@ -227,7 +227,7 @@ impl PlanNode {
 
     pub fn lookup_always_bound_variables(&self, callback: &mut impl FnMut(usize)) {
         match self {
-            PlanNode::StaticBindings { tuples } => {
+            Self::StaticBindings { tuples } => {
                 let mut variables = BTreeMap::default(); // value true iff always bound
                 let max_tuple_length = tuples.iter().map(|t| t.capacity()).fold(0, max);
                 for tuple in tuples {
@@ -250,7 +250,7 @@ impl PlanNode {
                     }
                 }
             }
-            PlanNode::QuadPattern {
+            Self::QuadPattern {
                 subject,
                 predicate,
                 object,
@@ -269,7 +269,7 @@ impl PlanNode {
                     callback(*var);
                 }
             }
-            PlanNode::PathPattern {
+            Self::PathPattern {
                 subject,
                 object,
                 graph_name,
@@ -285,11 +285,11 @@ impl PlanNode {
                     callback(*var);
                 }
             }
-            PlanNode::Filter { child, .. } => {
+            Self::Filter { child, .. } => {
                 //TODO: have a look at the expression to know if it filters out unbound variables
                 child.lookup_always_bound_variables(callback);
             }
-            PlanNode::Union { children } => {
+            Self::Union { children } => {
                 if let Some(vars) = children
                     .iter()
                     .map(|c| c.always_bound_variables())
@@ -300,14 +300,14 @@ impl PlanNode {
                     }
                 }
             }
-            PlanNode::HashJoin { left, right } | PlanNode::ForLoopJoin { left, right, .. } => {
+            Self::HashJoin { left, right } | Self::ForLoopJoin { left, right, .. } => {
                 left.lookup_always_bound_variables(callback);
                 right.lookup_always_bound_variables(callback);
             }
-            PlanNode::AntiJoin { left, .. } | PlanNode::LeftJoin { left, .. } => {
+            Self::AntiJoin { left, .. } | Self::LeftJoin { left, .. } => {
                 left.lookup_always_bound_variables(callback);
             }
-            PlanNode::Extend {
+            Self::Extend {
                 child,
                 position,
                 expression,
@@ -318,19 +318,19 @@ impl PlanNode {
                 }
                 child.lookup_always_bound_variables(callback);
             }
-            PlanNode::Sort { child, .. }
-            | PlanNode::HashDeduplicate { child }
-            | PlanNode::Reduced { child }
-            | PlanNode::Skip { child, .. }
-            | PlanNode::Limit { child, .. } => child.lookup_always_bound_variables(callback),
-            PlanNode::Service { child, silent, .. } => {
+            Self::Sort { child, .. }
+            | Self::HashDeduplicate { child }
+            | Self::Reduced { child }
+            | Self::Skip { child, .. }
+            | Self::Limit { child, .. } => child.lookup_always_bound_variables(callback),
+            Self::Service { child, silent, .. } => {
                 if *silent {
                     // none, might return a null tuple
                 } else {
                     child.lookup_always_bound_variables(callback)
                 }
             }
-            PlanNode::Project { mapping, child } => {
+            Self::Project { mapping, child } => {
                 let child_bound = child.always_bound_variables();
                 for (child_i, output_i) in mapping.iter() {
                     if child_bound.contains(child_i) {
@@ -338,7 +338,7 @@ impl PlanNode {
                     }
                 }
             }
-            PlanNode::Aggregate { .. } => {
+            Self::Aggregate { .. } => {
                 //TODO
             }
         }

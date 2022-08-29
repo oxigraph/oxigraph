@@ -892,13 +892,13 @@ impl Deref for PinnableSlice {
 
 impl AsRef<[u8]> for PinnableSlice {
     fn as_ref(&self) -> &[u8] {
-        &*self
+        self
     }
 }
 
 impl Borrow<[u8]> for PinnableSlice {
     fn borrow(&self) -> &[u8] {
-        &*self
+        self
     }
 }
 
@@ -931,13 +931,13 @@ impl Deref for Buffer {
 
 impl AsRef<[u8]> for Buffer {
     fn as_ref(&self) -> &[u8] {
-        &*self
+        self
     }
 }
 
 impl Borrow<[u8]> for Buffer {
     fn borrow(&self) -> &[u8] {
-        &*self
+        self
     }
 }
 
