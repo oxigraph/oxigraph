@@ -1215,7 +1215,7 @@ impl StorageBulkLoader {
                 max(1000, max_memory_size * 1000 / num_threads)
             } else {
                 max(
-                    usize::try_from(system.free_memory()).unwrap() / num_threads,
+                    usize::try_from(system.free_memory()).unwrap() / 1000 / num_threads,
                     DEFAULT_BULK_LOAD_BATCH_SIZE,
                 )
             },
