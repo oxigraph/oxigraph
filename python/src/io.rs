@@ -286,37 +286,37 @@ pub(crate) struct PyIo(PyObject);
 
 impl Read for PyIo {
     fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
-        let gil = Python::acquire_gil();
-        let py = gil.python();
-        let read = self
-            .0
-            .call_method(py, "read", (buf.len(),), None)
-            .map_err(to_io_err)?;
-        let bytes = read
-            .extract::<&[u8]>(py)
-            .or_else(|e| read.extract::<&str>(py).map(|s| s.as_bytes()).or(Err(e)))
-            .map_err(to_io_err)?;
-        buf.write_all(bytes)?;
-        Ok(bytes.len())
+        Python::with_gil(|py| {
+            let read = self
+                .0
+                .call_method(py, "read", (buf.len(),), None)
+                .map_err(to_io_err)?;
+            let bytes = read
+                .extract::<&[u8]>(py)
+                .or_else(|e| read.extract::<&str>(py).map(|s| s.as_bytes()).or(Err(e)))
+                .map_err(to_io_err)?;
+            buf.write_all(bytes)?;
+            Ok(bytes.len())
+        })
     }
 }
 
 impl Write for PyIo {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let gil = Python::acquire_gil();
-        let py = gil.python();
-        self.0
-            .call_method(py, "write", (PyBytes::new(py, buf),), None)
-            .map_err(to_io_err)?
-            .extract::<usize>(py)
-            .map_err(to_io_err)
+        Python::with_gil(|py| {
+            self.0
+                .call_method(py, "write", (PyBytes::new(py, buf),), None)
+                .map_err(to_io_err)?
+                .extract::<usize>(py)
+                .map_err(to_io_err)
+        })
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        let gil = Python::acquire_gil();
-        let py = gil.python();
-        self.0.call_method(py, "flush", (), None)?;
-        Ok(())
+        Python::with_gil(|py| {
+            self.0.call_method(py, "flush", (), None)?;
+            Ok(())
+        })
     }
 }
 
