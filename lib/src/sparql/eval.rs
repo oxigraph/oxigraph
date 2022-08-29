@@ -32,6 +32,7 @@ use std::str;
 const REGEX_SIZE_LIMIT: usize = 1_000_000;
 
 type EncodedTuplesIterator = Box<dyn Iterator<Item = Result<EncodedTuple, EvaluationError>>>;
+type CustomFunctionRegistry = HashMap<NamedNode, Rc<dyn Fn(&[Term]) -> Option<Term>>>;
 
 #[derive(Clone)]
 pub struct SimpleEvaluator {
@@ -39,7 +40,7 @@ pub struct SimpleEvaluator {
     base_iri: Option<Rc<Iri<String>>>,
     now: DateTime,
     service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
-    custom_functions: Rc<HashMap<NamedNode, Rc<dyn Fn(&[Term]) -> Option<Term>>>>,
+    custom_functions: Rc<CustomFunctionRegistry>,
 }
 
 impl SimpleEvaluator {
@@ -47,7 +48,7 @@ impl SimpleEvaluator {
         dataset: Rc<DatasetView>,
         base_iri: Option<Rc<Iri<String>>>,
         service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
-        custom_functions: Rc<HashMap<NamedNode, Rc<dyn Fn(&[Term]) -> Option<Term>>>>,
+        custom_functions: Rc<CustomFunctionRegistry>,
     ) -> Self {
         Self {
             dataset,

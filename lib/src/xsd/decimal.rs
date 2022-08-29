@@ -320,7 +320,7 @@ impl FromStr for Decimal {
             return Err(PARSE_UNEXPECTED_END);
         }
 
-        let (sign, mut cursor) = match input.get(0) {
+        let (sign, mut cursor) = match input.first() {
             Some(b'+') => (1, 1),
             Some(b'-') => (-1, 1),
             _ => (1, 0),

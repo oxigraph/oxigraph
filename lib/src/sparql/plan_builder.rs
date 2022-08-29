@@ -1079,7 +1079,7 @@ impl<'a> PlanBuilder<'a> {
                         set.insert(v);
                     }
                 });
-                self.add_left_join_problematic_variables(&*child, set);
+                self.add_left_join_problematic_variables(child, set);
             }
             PlanNode::Union { children } => {
                 for child in children.iter() {
@@ -1087,14 +1087,14 @@ impl<'a> PlanBuilder<'a> {
                 }
             }
             PlanNode::HashJoin { left, right } | PlanNode::ForLoopJoin { left, right } => {
-                self.add_left_join_problematic_variables(&*left, set);
-                self.add_left_join_problematic_variables(&*right, set);
+                self.add_left_join_problematic_variables(left, set);
+                self.add_left_join_problematic_variables(right, set);
             }
             PlanNode::AntiJoin { left, .. } => {
-                self.add_left_join_problematic_variables(&*left, set);
+                self.add_left_join_problematic_variables(left, set);
             }
             PlanNode::LeftJoin { left, right, .. } => {
-                self.add_left_join_problematic_variables(&*left, set);
+                self.add_left_join_problematic_variables(left, set);
                 right.lookup_used_variables(&mut |v| {
                     set.insert(v);
                 });
@@ -1108,28 +1108,26 @@ impl<'a> PlanBuilder<'a> {
                         set.insert(v);
                     }
                 });
-                self.add_left_join_problematic_variables(&*child, set);
-                self.add_left_join_problematic_variables(&*child, set);
+                self.add_left_join_problematic_variables(child, set);
+                self.add_left_join_problematic_variables(child, set);
             }
             PlanNode::Sort { child, .. }
             | PlanNode::HashDeduplicate { child }
             | PlanNode::Reduced { child }
             | PlanNode::Skip { child, .. }
-            | PlanNode::Limit { child, .. } => {
-                self.add_left_join_problematic_variables(&*child, set)
-            }
+            | PlanNode::Limit { child, .. } => self.add_left_join_problematic_variables(child, set),
             PlanNode::Service { child, silent, .. } => {
                 if *silent {
                     child.lookup_used_variables(&mut |v| {
                         set.insert(v);
                     });
                 } else {
-                    self.add_left_join_problematic_variables(&*child, set)
+                    self.add_left_join_problematic_variables(child, set)
                 }
             }
             PlanNode::Project { mapping, child } => {
                 let mut child_bound = BTreeSet::new();
-                self.add_left_join_problematic_variables(&*child, &mut child_bound);
+                self.add_left_join_problematic_variables(child, &mut child_bound);
                 for (child_i, output_i) in mapping.iter() {
                     if child_bound.contains(child_i) {
                         set.insert(*output_i);

@@ -60,7 +60,7 @@ impl QueryResults {
             Self::Boolean(value) => {
                 serializer.write_boolean_result(writer, value)?;
             }
-            QueryResults::Solutions(solutions) => {
+            Self::Solutions(solutions) => {
                 let mut writer =
                     serializer.solutions_writer(writer, solutions.variables().to_vec())?;
                 for solution in solutions {
@@ -68,7 +68,7 @@ impl QueryResults {
                 }
                 writer.finish()?;
             }
-            QueryResults::Graph(triples) => {
+            Self::Graph(triples) => {
                 let s = VariableRef::new_unchecked("subject");
                 let p = VariableRef::new_unchecked("predicate");
                 let o = VariableRef::new_unchecked("object");
@@ -115,7 +115,7 @@ impl QueryResults {
         write: impl Write,
         format: GraphFormat,
     ) -> Result<(), EvaluationError> {
-        if let QueryResults::Graph(triples) = self {
+        if let Self::Graph(triples) = self {
             let mut writer = GraphSerializer::from_format(format).triple_writer(write)?;
             for triple in triples {
                 writer.write(&triple?)?;
