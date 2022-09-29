@@ -22,7 +22,7 @@ Oxigraph provides three different installation methods for Oxigraph server.
 * [A Docker image](#using-a-docker-image)
 * [A Homebrew formula](#homebrew)
 
-It is also usable as [a Rust library](https://crates.io/crates/oxigraph) and as [a Python library](https://oxigraph.org/pyoxigraph/).
+It is also usable as [a Rust library](https://crates.io/crates/oxigraph) and as [a Python library](https://pyoxigraph.readthedocs.io/).
 
 Oxigraph implements the following specifications:
 * [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/), [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/), and [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/).

@@ -24,7 +24,7 @@ It is split into multiple parts:
 - [The database written as a Rust library](https://crates.io/crates/oxigraph). Its source code is in the `lib` directory.
   [![Latest Version](https://img.shields.io/crates/v/oxigraph.svg)](https://crates.io/crates/oxigraph)
   [![Released API docs](https://docs.rs/oxigraph/badge.svg)](https://docs.rs/oxigraph)
-- [`pyoxigraph` that exposes Oxigraph to the Python world](https://oxigraph.org/pyoxigraph/). Its source code is in the `python` directory. [![PyPI](https://img.shields.io/pypi/v/pyoxigraph)](https://pypi.org/project/pyoxigraph/)
+- [`pyoxigraph` that exposes Oxigraph to the Python world](https://pyoxigraph.readthedocs.io/). Its source code is in the `python` directory. [![PyPI](https://img.shields.io/pypi/v/pyoxigraph)](https://pypi.org/project/pyoxigraph/)
 - [JavaScript bindings for Oxigraph](https://www.npmjs.com/package/oxigraph). WebAssembly is used to package Oxigraph into a NodeJS compatible NPM package. Its source code is in the `js` directory.
   [![npm](https://img.shields.io/npm/v/oxigraph)](https://www.npmjs.com/package/oxigraph)
 - [Oxigraph server](https://crates.io/crates/oxigraph_server) that provides a standalone binary of a web server implementing the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/) and the [SPARQL 1.1 Graph Store Protocol](https://www.w3.org/TR/sparql11-http-rdf-update/). Its source code is in the `server` directory.

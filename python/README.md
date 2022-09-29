@@ -24,7 +24,7 @@ Run `pip install pyoxigraph` to install it.
 
 There exists also a small library providing [rdflib](https://rdflib.readthedocs.io) stores using pyoxigraph: [oxrdflib](https://github.com/oxigraph/oxrdflib).
 
-Pyoxigraph documentation is [available on the Oxigraph website](https://oxigraph.org/pyoxigraph/).
+Pyoxigraph documentation is [available on the Oxigraph website](https://pyoxigraph.readthedocs.io/).
 
 ## Build the development version
 
