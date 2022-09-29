@@ -6,7 +6,7 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["RDF", "SPARQL", "graph-database", "database"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/python"
-homepage = "https://oxigraph.org/pyoxigraph/"
+homepage = "https://pyoxigraph.readthedocs.io/"
 description = "Python bindings of Oxigraph, a SPARQL database and RDF toolkit"
 edition = "2021"
 

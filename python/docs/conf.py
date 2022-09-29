@@ -27,7 +27,7 @@ html_static_path = []
 html_logo = "../../logo.svg"
 html_favicon = "../../logo.svg"
 html_theme_options = {"body_max_width": None}
-html_baseurl = "https://oxigraph.org/pyoxigraph/stable/"
+html_baseurl = "https://pyoxigraph.readthedocs.io/en/stable/"
 
 # -- Options for doctests -------------------------------------------------
 
