@@ -539,14 +539,14 @@ impl Dataset {
             }
             #[cfg(feature = "rdf-star")]
             if let InternedSubject::Triple(triple) = s {
-                self.triple_blank_nodes(triple, &mut bnodes);
+                Self::triple_blank_nodes(triple, &mut bnodes);
             }
             if let InternedTerm::BlankNode(bnode) = o {
                 bnodes.insert(*bnode);
             }
             #[cfg(feature = "rdf-star")]
             if let InternedTerm::Triple(triple) = o {
-                self.triple_blank_nodes(triple, &mut bnodes);
+                Self::triple_blank_nodes(triple, &mut bnodes);
             }
             if let InternedGraphName::BlankNode(bnode) = g {
                 bnodes.insert(*bnode);
@@ -556,16 +556,16 @@ impl Dataset {
     }
 
     #[cfg(feature = "rdf-star")]
-    fn triple_blank_nodes(&self, triple: &InternedTriple, bnodes: &mut HashSet<InternedBlankNode>) {
+    fn triple_blank_nodes(triple: &InternedTriple, bnodes: &mut HashSet<InternedBlankNode>) {
         if let InternedSubject::BlankNode(bnode) = &triple.subject {
             bnodes.insert(*bnode);
         } else if let InternedSubject::Triple(t) = &triple.subject {
-            self.triple_blank_nodes(t, bnodes);
+            Self::triple_blank_nodes(t, bnodes);
         }
         if let InternedTerm::BlankNode(bnode) = &triple.object {
             bnodes.insert(*bnode);
         } else if let InternedTerm::Triple(t) = &triple.object {
-            self.triple_blank_nodes(t, bnodes);
+            Self::triple_blank_nodes(t, bnodes);
         }
     }
 

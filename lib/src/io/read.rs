@@ -109,6 +109,7 @@ pub struct TripleReader<R: BufRead> {
     buffer: Vec<Triple>,
 }
 
+#[allow(clippy::large_enum_variant)]
 enum TripleReaderKind<R: BufRead> {
     NTriples(NTriplesParser<R>),
     Turtle(TurtleParser<R>),

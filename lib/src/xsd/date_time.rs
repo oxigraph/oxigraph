@@ -1234,12 +1234,8 @@ impl Timestamp {
         let year =
             (400 * year_mul_400 + 100 * year_mul_100 + 4 * year_mul_4 + year_mod_4 + shift) as i64;
 
-        let leap_year_offset = if (year_mul_100 == 0 || year_mul_4 != 0) && year_mod_4 == 0 {
-            1
-        } else {
-            0
-        };
-        days += leap_year_offset;
+        let is_leap_year = (year_mul_100 == 0 || year_mul_4 != 0) && year_mod_4 == 0;
+        days += i128::from(is_leap_year);
 
         let mut month = 0;
         for month_i in 1..=12 {

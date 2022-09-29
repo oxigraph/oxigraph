@@ -190,7 +190,7 @@ impl QuerySolutionIter {
     /// ```
     #[inline]
     pub fn variables(&self) -> &[Variable] {
-        &*self.variables
+        &self.variables
     }
 }
 
