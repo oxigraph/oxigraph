@@ -13,7 +13,7 @@ edition = "2021"
 
 [dependencies]
 oxhttp = { version = "0.1", features = ["rayon"] }
-clap = { version = "3", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
 oxigraph = { version = "0.3.6", path = "../lib", features = ["http_client"] }
 sparesults = { version = "0.1.1", path = "../lib/sparesults", features = ["rdf-star"] }
 rand = "0.8"
