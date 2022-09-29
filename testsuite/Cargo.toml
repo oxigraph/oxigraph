@@ -13,7 +13,7 @@ publish = false
 
 [dependencies]
 anyhow = "1"
-clap = { version = "3", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
 time = { version = "0.3", features = ["formatting"] }
 oxigraph = { version = "0.3.6", path="../lib" }
 text-diff = "0.4"

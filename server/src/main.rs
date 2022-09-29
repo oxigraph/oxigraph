@@ -28,13 +28,13 @@ const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
 const LOGO: &str = include_str!("../logo.svg");
 
 #[derive(Parser)]
-#[clap(about, version)]
+#[command(about, version)]
 /// Oxigraph SPARQL server.
 struct Args {
     /// Directory in which persist the data.
-    #[clap(short, long, parse(from_os_str), global = true)]
+    #[arg(short, long, global = true)]
     location: Option<PathBuf>,
-    #[clap(subcommand)]
+    #[command(subcommand)]
     command: Command,
 }
 
@@ -43,7 +43,7 @@ enum Command {
     /// Start Oxigraph HTTP server.
     Serve {
         /// Host and port to listen to.
-        #[clap(short, long, default_value = "localhost:7878", global = true)]
+        #[arg(short, long, default_value = "localhost:7878", global = true)]
         bind: String,
     },
     /// Load file(s) into the store.
@@ -51,12 +51,12 @@ enum Command {
         /// file(s) to load.
         ///
         /// If multiple files are provided they are loaded in parallel.
-        #[clap(short, long, global = true, multiple_values = true)]
+        #[arg(short, long, global = true, num_args = 0..)]
         file: Vec<String>,
         /// Attempt to keep loading even if the data file is invalid.
         ///
         /// Only works with N-Triples and N-Quads for now.
-        #[clap(long, global = true)]
+        #[arg(long, global = true)]
         lenient: bool,
     },
 }
@@ -1687,7 +1687,7 @@ mod tests {
 
     #[test]
     fn clap_debug() {
-        use clap::IntoApp;
+        use clap::CommandFactory;
 
         Args::command().debug_assert()
     }
