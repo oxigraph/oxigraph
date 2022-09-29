@@ -205,7 +205,7 @@ impl<R: BufRead> XmlQueryResultsReader<R> {
                     State::Head => {
                         if event.name() == b"variable" {
                             let name = event.attributes()
-                                .filter_map(std::result::Result::ok)
+                                .filter_map(Result::ok)
                                 .find(|attr| attr.key == b"name")
                                 .ok_or_else(|| SyntaxError::msg("No name attribute found for the <variable> tag"))?
                                 .unescape_and_decode_value(&reader)?;
@@ -345,7 +345,7 @@ impl<R: BufRead> XmlSolutionsReader<R> {
                         if event.name() == b"binding" {
                             match event
                                 .attributes()
-                                .filter_map(std::result::Result::ok)
+                                .filter_map(Result::ok)
                                 .find(|attr| attr.key == b"name")
                             {
                                 Some(attr) => current_var = Some(attr.unescaped_value()?.to_vec()),

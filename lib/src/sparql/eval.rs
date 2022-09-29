@@ -345,9 +345,7 @@ impl SimpleEvaluator {
                 let right = self.plan_evaluator(right);
                 if join_keys.is_empty() {
                     Rc::new(move |from| {
-                        let right: Vec<_> = right(from.clone())
-                            .filter_map(std::result::Result::ok)
-                            .collect();
+                        let right: Vec<_> = right(from.clone()).filter_map(Result::ok).collect();
                         Box::new(left(from).filter(move |left_tuple| {
                             if let Ok(left_tuple) = left_tuple {
                                 !right.iter().any(|right_tuple| {
@@ -361,8 +359,7 @@ impl SimpleEvaluator {
                 } else {
                     Rc::new(move |from| {
                         let mut right_values = EncodedTupleSet::new(join_keys.clone());
-                        right_values
-                            .extend(right(from.clone()).filter_map(std::result::Result::ok));
+                        right_values.extend(right(from.clone()).filter_map(Result::ok));
                         Box::new(left(from).filter(move |left_tuple| {
                             if let Ok(left_tuple) = left_tuple {
                                 !right_values.get(left_tuple).iter().any(|right_tuple| {

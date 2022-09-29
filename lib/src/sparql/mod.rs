@@ -37,7 +37,7 @@ pub(crate) fn evaluate_query(
     query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
     options: QueryOptions,
 ) -> Result<QueryResults, EvaluationError> {
-    let query = query.try_into().map_err(std::convert::Into::into)?;
+    let query = query.try_into().map_err(Into::into)?;
     let dataset = DatasetView::new(reader, &query.dataset);
     match query.inner {
         spargebra::Query::Select {

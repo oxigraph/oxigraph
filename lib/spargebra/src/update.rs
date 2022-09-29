@@ -14,7 +14,7 @@ use std::str::FromStr;
 /// let update = Update::parse(update_str, None)?;
 /// assert_eq!(update.to_string().trim(), update_str);
 /// assert_eq!(update.to_sse(), "(update (clear all))");
-/// # Result::Ok::<_, spargebra::ParseError>(())
+/// # Ok::<_, spargebra::ParseError>(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Update {

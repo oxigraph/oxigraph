@@ -357,7 +357,7 @@ impl Store {
         update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
         options: impl Into<UpdateOptions>,
     ) -> Result<(), EvaluationError> {
-        let update = update.try_into().map_err(std::convert::Into::into)?;
+        let update = update.try_into().map_err(Into::into)?;
         let options = options.into();
         self.storage
             .transaction(|mut t| evaluate_update(&mut t, &update, &options))
@@ -968,7 +968,7 @@ impl<'a> Transaction<'a> {
     ) -> Result<(), EvaluationError> {
         evaluate_update(
             &mut self.writer,
-            &update.try_into().map_err(std::convert::Into::into)?,
+            &update.try_into().map_err(Into::into)?,
             &options.into(),
         )
     }
