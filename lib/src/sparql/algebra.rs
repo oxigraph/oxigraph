@@ -24,7 +24,7 @@ use std::str::FromStr;
 /// let default = vec![NamedNode::new("http://example.com")?.into()];
 /// query.dataset_mut().set_default_graph(default.clone());
 /// assert_eq!(query.dataset().default_graph_graphs(), Some(default.as_slice()));
-/// # Result::Ok::<_, Box<dyn std::error::Error>>(())
+/// # Ok::<_, Box<dyn std::error::Error>>(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Query {
@@ -97,7 +97,7 @@ impl<'a> TryFrom<&'a String> for Query {
 /// let update = Update::parse(update_str, None)?;
 ///
 /// assert_eq!(update.to_string().trim(), update_str);
-/// # Result::Ok::<_, oxigraph::sparql::ParseError>(())
+/// # Ok::<_, oxigraph::sparql::ParseError>(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Update {
@@ -127,16 +127,12 @@ impl Update {
 
     /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset) in [DELETE/INSERT operations](https://www.w3.org/TR/sparql11-update/#deleteInsert).
     pub fn using_datasets(&self) -> impl Iterator<Item = &QueryDataset> {
-        self.using_datasets
-            .iter()
-            .filter_map(std::option::Option::as_ref)
+        self.using_datasets.iter().filter_map(Option::as_ref)
     }
 
     /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset) in [DELETE/INSERT operations](https://www.w3.org/TR/sparql11-update/#deleteInsert).
     pub fn using_datasets_mut(&mut self) -> impl Iterator<Item = &mut QueryDataset> {
-        self.using_datasets
-            .iter_mut()
-            .filter_map(std::option::Option::as_mut)
+        self.using_datasets.iter_mut().filter_map(Option::as_mut)
     }
 }
 
@@ -211,7 +207,7 @@ impl QueryDataset {
     /// assert!(Query::parse("SELECT ?s ?p ?o WHERE { ?s ?p ?o . }", None)?.dataset().is_default_dataset());
     /// assert!(!Query::parse("SELECT ?s ?p ?o FROM <http://example.com> WHERE { ?s ?p ?o . }", None)?.dataset().is_default_dataset());
     ///
-    /// # Result::Ok::<_, Box<dyn std::error::Error>>(())
+    /// # Ok::<_, Box<dyn std::error::Error>>(())
     /// ```
     pub fn is_default_dataset(&self) -> bool {
         self.default
@@ -243,7 +239,7 @@ impl QueryDataset {
     /// query.dataset_mut().set_default_graph(default.clone());
     /// assert_eq!(query.dataset().default_graph_graphs(), Some(default.as_slice()));    
     ///
-    /// # Result::Ok::<_, Box<dyn std::error::Error>>(())
+    /// # Ok::<_, Box<dyn std::error::Error>>(())
     /// ```
     pub fn set_default_graph(&mut self, graphs: Vec<GraphName>) {
         self.default = Some(graphs)
@@ -265,7 +261,7 @@ impl QueryDataset {
     /// query.dataset_mut().set_available_named_graphs(named.clone());
     /// assert_eq!(query.dataset().available_named_graphs(), Some(named.as_slice()));
     ///
-    /// # Result::Ok::<_, Box<dyn std::error::Error>>(())
+    /// # Ok::<_, Box<dyn std::error::Error>>(())
     /// ```
     pub fn set_available_named_graphs(&mut self, named_graphs: Vec<NamedOrBlankNode>) {
         self.named = Some(named_graphs);

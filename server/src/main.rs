@@ -61,7 +61,7 @@ enum Command {
     },
 }
 
-pub fn main() -> std::io::Result<()> {
+pub fn main() -> io::Result<()> {
     let matches = Args::parse();
     let store = if let Some(path) = &matches.location {
         Store::open(path)
@@ -139,7 +139,7 @@ pub fn main() -> std::io::Result<()> {
 }
 
 fn bulk_load(loader: BulkLoader, file: &str, reader: impl Read) -> io::Result<()> {
-    let (_, extension) = file.rsplit_once('.').ok_or_else(|| io::Error::new(
+    let (_, extension) = file.rsplit_once('.').ok_or_else(|| Error::new(
         ErrorKind::InvalidInput,
         format!("The server is not able to guess the file format of {} because the file name as no extension", file)))?;
     let reader = BufReader::new(reader);
@@ -150,7 +150,7 @@ fn bulk_load(loader: BulkLoader, file: &str, reader: impl Read) -> io::Result<()
         loader.load_graph(reader, format, GraphNameRef::DefaultGraph, None)?;
         Ok(())
     } else {
-        Err(io::Error::new(
+        Err(Error::new(
             ErrorKind::InvalidInput,
             format!(
                 "The server is not able to guess the file format from the extension {}",
@@ -1002,16 +1002,16 @@ fn internal_server_error(message: impl fmt::Display) -> Response {
 }
 
 /// Hacky tool to allow implementing read on top of a write loop
-struct ReadForWrite<O, U: (Fn(O) -> std::io::Result<Option<O>>)> {
+struct ReadForWrite<O, U: (Fn(O) -> io::Result<Option<O>>)> {
     buffer: Rc<RefCell<Vec<u8>>>,
     position: usize,
     add_more_data: U,
     state: Option<O>,
 }
 
-impl<O: 'static, U: (Fn(O) -> std::io::Result<Option<O>>) + 'static> ReadForWrite<O, U> {
+impl<O: 'static, U: (Fn(O) -> io::Result<Option<O>>) + 'static> ReadForWrite<O, U> {
     fn build_response(
-        initial_state_builder: impl FnOnce(ReadForWriteWriter) -> std::io::Result<O>,
+        initial_state_builder: impl FnOnce(ReadForWriteWriter) -> io::Result<O>,
         add_more_data: U,
         content_type: &'static str,
     ) -> Response {
@@ -1033,8 +1033,8 @@ impl<O: 'static, U: (Fn(O) -> std::io::Result<Option<O>>) + 'static> ReadForWrit
     }
 }
 
-impl<O, U: (Fn(O) -> std::io::Result<Option<O>>)> Read for ReadForWrite<O, U> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+impl<O, U: (Fn(O) -> io::Result<Option<O>>)> Read for ReadForWrite<O, U> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         while self.position == self.buffer.borrow().len() {
             // We read more data
             if let Some(state) = self.state.take() {
@@ -1067,15 +1067,15 @@ struct ReadForWriteWriter {
 }
 
 impl Write for ReadForWriteWriter {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.buffer.borrow_mut().write(buf)
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
 
-    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         self.buffer.borrow_mut().write_all(buf)
     }
 }

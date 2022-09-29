@@ -14,7 +14,7 @@ use std::str::FromStr;
 /// let query = Query::parse(query_str, None)?;
 /// assert_eq!(query.to_string(), query_str);
 /// assert_eq!(query.to_sse(), "(project (?s ?p ?o) (bgp (triple ?s ?p ?o)))");
-/// # Result::Ok::<_, spargebra::ParseError>(())
+/// # Ok::<_, spargebra::ParseError>(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Query {
