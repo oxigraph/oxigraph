@@ -102,7 +102,7 @@ impl<'a> PlanBuilder<'a> {
                 let right = self.build_for_graph_pattern(right, variables, graph_name)?;
 
                 let mut possible_problem_vars = BTreeSet::new();
-                self.add_left_join_problematic_variables(&right, &mut possible_problem_vars);
+                Self::add_left_join_problematic_variables(&right, &mut possible_problem_vars);
 
                 //We add the extra filter if needed
                 let right = if let Some(expr) = expression {
@@ -182,7 +182,7 @@ impl<'a> PlanBuilder<'a> {
             } => {
                 let mut inner_variables = by.clone();
                 let inner_graph_name =
-                    self.convert_pattern_value_id(graph_name, variables, &mut inner_variables);
+                    Self::convert_pattern_value_id(graph_name, variables, &mut inner_variables);
 
                 PlanNode::Aggregate {
                     child: Box::new(self.build_for_graph_pattern(
@@ -242,7 +242,7 @@ impl<'a> PlanBuilder<'a> {
             } => {
                 let mut inner_variables = projection.clone();
                 let inner_graph_name =
-                    self.convert_pattern_value_id(graph_name, variables, &mut inner_variables);
+                    Self::convert_pattern_value_id(graph_name, variables, &mut inner_variables);
                 PlanNode::Project {
                     child: Box::new(self.build_for_graph_pattern(
                         inner,
@@ -1034,7 +1034,6 @@ impl<'a> PlanBuilder<'a> {
     }
 
     fn convert_pattern_value_id(
-        &self,
         from_value: &PatternValue,
         from: &[Variable],
         to: &mut Vec<Variable>,
@@ -1045,9 +1044,9 @@ impl<'a> PlanBuilder<'a> {
                 PatternValue::Variable(Self::convert_variable_id(*from_id, from, to))
             }
             PatternValue::Triple(triple) => PatternValue::Triple(Box::new(TriplePatternValue {
-                subject: self.convert_pattern_value_id(&triple.subject, from, to),
-                predicate: self.convert_pattern_value_id(&triple.predicate, from, to),
-                object: self.convert_pattern_value_id(&triple.object, from, to),
+                subject: Self::convert_pattern_value_id(&triple.subject, from, to),
+                predicate: Self::convert_pattern_value_id(&triple.predicate, from, to),
+                object: Self::convert_pattern_value_id(&triple.object, from, to),
             })),
         }
     }
@@ -1067,7 +1066,7 @@ impl<'a> PlanBuilder<'a> {
         }
     }
 
-    fn add_left_join_problematic_variables(&self, node: &PlanNode, set: &mut BTreeSet<usize>) {
+    fn add_left_join_problematic_variables(node: &PlanNode, set: &mut BTreeSet<usize>) {
         match node {
             PlanNode::StaticBindings { .. }
             | PlanNode::QuadPattern { .. }
@@ -1079,22 +1078,22 @@ impl<'a> PlanBuilder<'a> {
                         set.insert(v);
                     }
                 });
-                self.add_left_join_problematic_variables(child, set);
+                Self::add_left_join_problematic_variables(child, set);
             }
             PlanNode::Union { children } => {
                 for child in children.iter() {
-                    self.add_left_join_problematic_variables(child, set);
+                    Self::add_left_join_problematic_variables(child, set);
                 }
             }
             PlanNode::HashJoin { left, right } | PlanNode::ForLoopJoin { left, right } => {
-                self.add_left_join_problematic_variables(left, set);
-                self.add_left_join_problematic_variables(right, set);
+                Self::add_left_join_problematic_variables(left, set);
+                Self::add_left_join_problematic_variables(right, set);
             }
             PlanNode::AntiJoin { left, .. } => {
-                self.add_left_join_problematic_variables(left, set);
+                Self::add_left_join_problematic_variables(left, set);
             }
             PlanNode::LeftJoin { left, right, .. } => {
-                self.add_left_join_problematic_variables(left, set);
+                Self::add_left_join_problematic_variables(left, set);
                 right.lookup_used_variables(&mut |v| {
                     set.insert(v);
                 });
@@ -1108,26 +1107,28 @@ impl<'a> PlanBuilder<'a> {
                         set.insert(v);
                     }
                 });
-                self.add_left_join_problematic_variables(child, set);
-                self.add_left_join_problematic_variables(child, set);
+                Self::add_left_join_problematic_variables(child, set);
+                Self::add_left_join_problematic_variables(child, set);
             }
             PlanNode::Sort { child, .. }
             | PlanNode::HashDeduplicate { child }
             | PlanNode::Reduced { child }
             | PlanNode::Skip { child, .. }
-            | PlanNode::Limit { child, .. } => self.add_left_join_problematic_variables(child, set),
+            | PlanNode::Limit { child, .. } => {
+                Self::add_left_join_problematic_variables(child, set)
+            }
             PlanNode::Service { child, silent, .. } => {
                 if *silent {
                     child.lookup_used_variables(&mut |v| {
                         set.insert(v);
                     });
                 } else {
-                    self.add_left_join_problematic_variables(child, set)
+                    Self::add_left_join_problematic_variables(child, set)
                 }
             }
             PlanNode::Project { mapping, child } => {
                 let mut child_bound = BTreeSet::new();
-                self.add_left_join_problematic_variables(child, &mut child_bound);
+                Self::add_left_join_problematic_variables(child, &mut child_bound);
                 for (child_i, output_i) in mapping.iter() {
                     if child_bound.contains(child_i) {
                         set.insert(*output_i);
@@ -1367,7 +1368,7 @@ fn sort_bgp(p: &[TriplePattern]) -> Vec<&TriplePattern> {
     let mut new_p: Vec<_> = p.iter().collect();
 
     for i in 0..new_p.len() {
-        (&mut new_p[i..]).sort_by(|p1, p2| {
+        new_p[i..].sort_by(|p1, p2| {
             estimate_pattern_cost(p1, &assigned_variables, &assigned_blank_nodes).cmp(
                 &estimate_pattern_cost(p2, &assigned_variables, &assigned_blank_nodes),
             )

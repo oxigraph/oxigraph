@@ -1484,7 +1484,7 @@ impl SimpleEvaluator {
                 Rc::new(move |tuple| {
                     let (arg1, arg2, _) =
                         to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
-                    Some((&arg1).starts_with(arg2.as_str()).into())
+                    Some(arg1.starts_with(arg2.as_str()).into())
                 })
             }
             PlanExpression::EncodeForUri(ltrl) => {
@@ -1528,7 +1528,7 @@ impl SimpleEvaluator {
                 Rc::new(move |tuple| {
                     let (arg1, arg2, _) =
                         to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
-                    Some((&arg1).ends_with(arg2.as_str()).into())
+                    Some(arg1.ends_with(arg2.as_str()).into())
                 })
             }
             PlanExpression::Contains(arg1, arg2) => {
@@ -1538,7 +1538,7 @@ impl SimpleEvaluator {
                 Rc::new(move |tuple| {
                     let (arg1, arg2, _) =
                         to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
-                    Some((&arg1).contains(arg2.as_str()).into())
+                    Some(arg1.contains(arg2.as_str()).into())
                 })
             }
             PlanExpression::StrBefore(arg1, arg2) => {
@@ -1548,7 +1548,7 @@ impl SimpleEvaluator {
                 Rc::new(move |tuple| {
                     let (arg1, arg2, language) =
                         to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
-                    Some(if let Some(position) = (&arg1).find(arg2.as_str()) {
+                    Some(if let Some(position) = arg1.find(arg2.as_str()) {
                         build_plain_literal(&dataset, &arg1[..position], language)
                     } else {
                         build_string_literal(&dataset, "")
@@ -1562,7 +1562,7 @@ impl SimpleEvaluator {
                 Rc::new(move |tuple| {
                     let (arg1, arg2, language) =
                         to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
-                    Some(if let Some(position) = (&arg1).find(arg2.as_str()) {
+                    Some(if let Some(position) = arg1.find(arg2.as_str()) {
                         build_plain_literal(&dataset, &arg1[position + arg2.len()..], language)
                     } else {
                         build_string_literal(&dataset, "")
@@ -1858,7 +1858,7 @@ impl SimpleEvaluator {
                     EncodedTerm::DecimalLiteral(value) => Some(value.to_bool().into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_boolean_str(&value),
                     EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_boolean_str(&*dataset.get_str(&value_id).ok()??)
+                        parse_boolean_str(&dataset.get_str(&value_id).ok()??)
                     }
                     _ => None,
                 })
@@ -1876,7 +1876,7 @@ impl SimpleEvaluator {
                     }
                     EncodedTerm::SmallStringLiteral(value) => parse_double_str(&value),
                     EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_double_str(&*dataset.get_str(&value_id).ok()??)
+                        parse_double_str(&dataset.get_str(&value_id).ok()??)
                     }
                     _ => None,
                 })
@@ -1894,7 +1894,7 @@ impl SimpleEvaluator {
                     }
                     EncodedTerm::SmallStringLiteral(value) => parse_float_str(&value),
                     EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_float_str(&*dataset.get_str(&value_id).ok()??)
+                        parse_float_str(&dataset.get_str(&value_id).ok()??)
                     }
                     _ => None,
                 })
@@ -1907,10 +1907,10 @@ impl SimpleEvaluator {
                     EncodedTerm::DoubleLiteral(value) => Some(value.to_i64().into()),
                     EncodedTerm::IntegerLiteral(value) => Some(value.into()),
                     EncodedTerm::DecimalLiteral(value) => Some(i64::try_from(value).ok()?.into()),
-                    EncodedTerm::BooleanLiteral(value) => Some(if value { 1 } else { 0 }.into()),
+                    EncodedTerm::BooleanLiteral(value) => Some(i64::from(value).into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_integer_str(&value),
                     EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_integer_str(&*dataset.get_str(&value_id).ok()??)
+                        parse_integer_str(&dataset.get_str(&value_id).ok()??)
                     }
                     _ => None,
                 })
@@ -1923,12 +1923,10 @@ impl SimpleEvaluator {
                     EncodedTerm::DoubleLiteral(value) => Some(Decimal::from_double(value).into()),
                     EncodedTerm::IntegerLiteral(value) => Some(Decimal::from(value).into()),
                     EncodedTerm::DecimalLiteral(value) => Some(value.into()),
-                    EncodedTerm::BooleanLiteral(value) => {
-                        Some(Decimal::from(if value { 1 } else { 0 }).into())
-                    }
+                    EncodedTerm::BooleanLiteral(value) => Some(Decimal::from(value).into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_decimal_str(&value),
                     EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_decimal_str(&*dataset.get_str(&value_id).ok()??)
+                        parse_decimal_str(&dataset.get_str(&value_id).ok()??)
                     }
                     _ => None,
                 })
@@ -1941,7 +1939,7 @@ impl SimpleEvaluator {
                     EncodedTerm::DateTimeLiteral(value) => Some(Date::try_from(value).ok()?.into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_date_str(&value),
                     EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_date_str(&*dataset.get_str(&value_id).ok()??)
+                        parse_date_str(&dataset.get_str(&value_id).ok()??)
                     }
                     _ => None,
                 })
@@ -1954,7 +1952,7 @@ impl SimpleEvaluator {
                     EncodedTerm::DateTimeLiteral(value) => Some(Time::try_from(value).ok()?.into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_time_str(&value),
                     EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_time_str(&*dataset.get_str(&value_id).ok()??)
+                        parse_time_str(&dataset.get_str(&value_id).ok()??)
                     }
                     _ => None,
                 })
@@ -1967,7 +1965,7 @@ impl SimpleEvaluator {
                     EncodedTerm::DateLiteral(value) => Some(DateTime::try_from(value).ok()?.into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_date_time_str(&value),
                     EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_date_time_str(&*dataset.get_str(&value_id).ok()??)
+                        parse_date_time_str(&dataset.get_str(&value_id).ok()??)
                     }
                     _ => None,
                 })
@@ -1985,7 +1983,7 @@ impl SimpleEvaluator {
                     }
                     EncodedTerm::SmallStringLiteral(value) => parse_duration_str(&value),
                     EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_duration_str(&*dataset.get_str(&value_id).ok()??)
+                        parse_duration_str(&dataset.get_str(&value_id).ok()??)
                     }
                     _ => None,
                 })
@@ -2000,7 +1998,7 @@ impl SimpleEvaluator {
                     EncodedTerm::YearMonthDurationLiteral(value) => Some(value.into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_year_month_duration_str(&value),
                     EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_year_month_duration_str(&*dataset.get_str(&value_id).ok()??)
+                        parse_year_month_duration_str(&dataset.get_str(&value_id).ok()??)
                     }
                     _ => None,
                 })
@@ -2015,7 +2013,7 @@ impl SimpleEvaluator {
                     EncodedTerm::DayTimeDurationLiteral(value) => Some(value.into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_day_time_duration_str(&value),
                     EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_day_time_duration_str(&*dataset.get_str(&value_id).ok()??)
+                        parse_day_time_duration_str(&dataset.get_str(&value_id).ok()??)
                     }
                     _ => None,
                 })
@@ -3292,7 +3290,7 @@ impl Iterator for ConsecutiveDeduplication {
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         let (min, max) = self.inner.size_hint();
-        (if min == 0 { 0 } else { 1 }, max)
+        ((min != 0).into(), max)
     }
 }
 

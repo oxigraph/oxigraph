@@ -113,9 +113,9 @@ impl Decimal {
         let value = self.value / DECIMAL_PART_POW_MINUS_ONE;
         Self {
             value: if value >= 0 {
-                (value / 10 + if value % 10 >= 5 { 1 } else { 0 }) * DECIMAL_PART_POW
+                (value / 10 + i128::from(value % 10 >= 5)) * DECIMAL_PART_POW
             } else {
-                (value / 10 + if -value % 10 > 5 { -1 } else { 0 }) * DECIMAL_PART_POW
+                (value / 10 - i128::from(-value % 10 > 5)) * DECIMAL_PART_POW
             },
         }
     }
@@ -207,6 +207,15 @@ impl Decimal {
     #[cfg(test)]
     pub(super) const fn step() -> Self {
         Self { value: 1 }
+    }
+}
+
+impl From<bool> for Decimal {
+    #[inline]
+    fn from(value: bool) -> Self {
+        Self {
+            value: i128::from(value) * DECIMAL_PART_POW,
+        }
     }
 }
 

@@ -356,11 +356,11 @@ fn test_backward_compatibility() -> Result<(), Box<dyn Error>> {
 
 fn reset_dir(dir: &str) -> Result<(), Box<dyn Error>> {
     assert!(Command::new("git")
-        .args(&["clean", "-fX", dir])
+        .args(["clean", "-fX", dir])
         .status()?
         .success());
     assert!(Command::new("git")
-        .args(&["checkout", "HEAD", "--", dir])
+        .args(["checkout", "HEAD", "--", dir])
         .status()?
         .success());
     Ok(())
