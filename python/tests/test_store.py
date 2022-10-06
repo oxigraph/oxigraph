@@ -88,7 +88,8 @@ class TestStore(unittest.TestCase):
         results = store.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
         self.assertIsInstance(results, QueryTriples)
         self.assertEqual(
-            set(results), {Triple(foo, bar, baz)},
+            set(results),
+            {Triple(foo, bar, baz)},
         )
 
     def test_select_query(self):
@@ -154,30 +155,34 @@ class TestStore(unittest.TestCase):
 
     def test_update_insert_data(self):
         store = Store()
-        store.update('INSERT DATA { <http://foo> <http://foo> <http://foo> }')
+        store.update("INSERT DATA { <http://foo> <http://foo> <http://foo> }")
         self.assertEqual(len(store), 1)
 
     def test_update_delete_data(self):
         store = Store()
         store.add(Quad(foo, foo, foo))
-        store.update('DELETE DATA { <http://foo> <http://foo> <http://foo> }')
+        store.update("DELETE DATA { <http://foo> <http://foo> <http://foo> }")
         self.assertEqual(len(store), 0)
 
     def test_update_delete_where(self):
         store = Store()
         store.add(Quad(foo, foo, foo))
-        store.update('DELETE WHERE { ?v ?v ?v }')
+        store.update("DELETE WHERE { ?v ?v ?v }")
         self.assertEqual(len(store), 0)
 
     def test_update_load(self):
         store = Store()
-        store.update('LOAD <https://www.w3.org/1999/02/22-rdf-syntax-ns>')
+        store.update("LOAD <https://www.w3.org/1999/02/22-rdf-syntax-ns>")
         self.assertGreater(len(store), 100)
 
     def test_update_star(self):
         store = Store()
-        store.update('PREFIX : <http://www.example.org/> INSERT DATA { :alice :claims << :bob :age 23 >> }')
-        results = store.query('PREFIX : <http://www.example.org/> SELECT ?p ?a WHERE { ?p :claims << :bob :age ?a >> }')
+        store.update(
+            "PREFIX : <http://www.example.org/> INSERT DATA { :alice :claims << :bob :age 23 >> }"
+        )
+        results = store.query(
+            "PREFIX : <http://www.example.org/> SELECT ?p ?a WHERE { ?p :claims << :bob :age ?a >> }"
+        )
         self.assertEqual(len(list(results)), 1)
 
     def test_load_ntriples_to_default_graph(self):
@@ -245,7 +250,8 @@ class TestStore(unittest.TestCase):
         output = BytesIO()
         store.dump(output, "application/n-triples", from_graph=graph)
         self.assertEqual(
-            output.getvalue(), b"<http://foo> <http://bar> <http://baz> .\n",
+            output.getvalue(),
+            b"<http://foo> <http://bar> <http://baz> .\n",
         )
 
     def test_dump_nquads(self):
@@ -264,7 +270,7 @@ class TestStore(unittest.TestCase):
         store = Store()
         store.add(Quad(foo, bar, baz, graph))
         store.dump(file_name, "application/n-quads")
-        with open(file_name, 'rt') as fp:
+        with open(file_name, "rt") as fp:
             file_content = fp.read()
         self.assertEqual(
             file_content,

@@ -29,8 +29,8 @@ class TestBlankNode(unittest.TestCase):
     def test_equal(self):
         self.assertEqual(BlankNode("foo"), BlankNode("foo"))
         self.assertNotEqual(BlankNode("foo"), BlankNode("bar"))
-        self.assertNotEqual(BlankNode('foo'), NamedNode('http://foo'))
-        self.assertNotEqual(NamedNode('http://foo'), BlankNode('foo'))
+        self.assertNotEqual(BlankNode("foo"), NamedNode("http://foo"))
+        self.assertNotEqual(NamedNode("http://foo"), BlankNode("foo"))
 
 
 class TestLiteral(unittest.TestCase):
@@ -59,10 +59,10 @@ class TestLiteral(unittest.TestCase):
             Literal("foo", language="en", datatype=RDF_LANG_STRING),
             Literal("foo", language="en"),
         )
-        self.assertNotEqual(NamedNode('http://foo'), Literal('foo'))
-        self.assertNotEqual(Literal('foo'), NamedNode('http://foo'))
-        self.assertNotEqual(BlankNode('foo'), Literal('foo'))
-        self.assertNotEqual(Literal('foo'), BlankNode('foo'))
+        self.assertNotEqual(NamedNode("http://foo"), Literal("foo"))
+        self.assertNotEqual(Literal("foo"), NamedNode("http://foo"))
+        self.assertNotEqual(BlankNode("foo"), Literal("foo"))
+        self.assertNotEqual(Literal("foo"), BlankNode("foo"))
 
 
 class TestTriple(unittest.TestCase):
@@ -81,25 +81,32 @@ class TestTriple(unittest.TestCase):
             Triple(
                 NamedNode("http://example.com/ss"),
                 NamedNode("http://example.com/sp"),
-                NamedNode("http://example.com/so")
+                NamedNode("http://example.com/so"),
             ),
             NamedNode("http://example.com/p"),
             Triple(
                 NamedNode("http://example.com/os"),
                 NamedNode("http://example.com/op"),
-                NamedNode("http://example.com/oo")
-            ), )
-        self.assertEqual(t.subject, Triple(
-            NamedNode("http://example.com/ss"),
-            NamedNode("http://example.com/sp"),
-            NamedNode("http://example.com/so")
-        ))
+                NamedNode("http://example.com/oo"),
+            ),
+        )
+        self.assertEqual(
+            t.subject,
+            Triple(
+                NamedNode("http://example.com/ss"),
+                NamedNode("http://example.com/sp"),
+                NamedNode("http://example.com/so"),
+            ),
+        )
         self.assertEqual(t.predicate, NamedNode("http://example.com/p"))
-        self.assertEqual(t.object, Triple(
-            NamedNode("http://example.com/os"),
-            NamedNode("http://example.com/op"),
-            NamedNode("http://example.com/oo")
-        ))
+        self.assertEqual(
+            t.object,
+            Triple(
+                NamedNode("http://example.com/os"),
+                NamedNode("http://example.com/op"),
+                NamedNode("http://example.com/oo"),
+            ),
+        )
 
     def test_mapping(self):
         t = Triple(
