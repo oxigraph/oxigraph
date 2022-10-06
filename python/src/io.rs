@@ -117,7 +117,7 @@ pub fn parse(
 /// >>> output.getvalue()
 /// b'<http://example.com> <http://example.com/p> "1" .\n'
 #[pyfunction]
-#[pyo3(text_signature = "(input, output, /, mime_type, *, base_iri = None)")]
+#[pyo3(text_signature = "(input, output, /, mime_type)")]
 pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_>) -> PyResult<()> {
     let output = if let Ok(path) = output.extract::<&str>(py) {
         PyWritable::from_file(path, py)
@@ -155,7 +155,7 @@ pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_
     }
 }
 
-#[pyclass(name = "TripleReader", module = "oxigraph")]
+#[pyclass(name = "TripleReader")]
 pub struct PyTripleReader {
     inner: TripleReader<PyReadable>,
 }
@@ -176,7 +176,7 @@ impl PyTripleReader {
     }
 }
 
-#[pyclass(name = "QuadReader", module = "oxigraph")]
+#[pyclass(name = "QuadReader")]
 pub struct PyQuadReader {
     inner: QuadReader<PyReadable>,
 }

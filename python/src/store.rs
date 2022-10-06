@@ -23,7 +23,7 @@ use pyo3::{Py, PyRef};
 /// :param path: the path of the directory in which the store should read and write its data. If the directory does not exist, it is created.
 ///              If no directory is provided a temporary one is created and removed when the Python garbage collector removes the store.
 ///              In this case, the store data are kept in memory and never written on disk.
-/// :type path: str or None, optional.
+/// :type path: str or None, optional
 /// :raises IOError: if the target directory contains invalid data or could not be accessed.
 ///
 /// The :py:func:`str` function provides a serialization of the store in NQuads:
@@ -32,7 +32,7 @@ use pyo3::{Py, PyRef};
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
 /// >>> str(store)
 /// '<http://example.com> <http://example.com/p> "1" <http://example.com/g> .\n'
-#[pyclass(name = "Store", module = "oxigraph")]
+#[pyclass(name = "Store")]
 #[pyo3(text_signature = "(path = None)")]
 #[derive(Clone)]
 pub struct PyStore {
@@ -101,8 +101,8 @@ impl PyStore {
     /// :type predicate: NamedNode or None
     /// :param object: the quad object or :py:const:`None` to match everything.
     /// :type object: NamedNode or BlankNode or Literal or None
-    /// :param graph: the quad graph name. To match only the default graph, use :py:class:`DefaultGraph`. To match everything use :py:const:`None`.
-    /// :type graph: NamedNode or BlankNode or DefaultGraph or None
+    /// :param graph_name: the quad graph name. To match only the default graph, use :py:class:`DefaultGraph`. To match everything use :py:const:`None`.
+    /// :type graph_name: NamedNode or BlankNode or DefaultGraph or None
     /// :return: an iterator of the quads matching the pattern.
     /// :rtype: iter(Quad)
     /// :raises IOError: if an I/O error happens during the quads lookup.
@@ -152,7 +152,7 @@ impl PyStore {
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
-    /// >>> list(solution['s'] for solution in store.query('SELECT ?s WHERE { ?s ?p ?o }'))
+    /// >>> [solution['s'] for solution in store.query('SELECT ?s WHERE { ?s ?p ?o }')]
     /// [<NamedNode value=http://example.com>]
     ///
     /// ``CONSTRUCT`` query:
@@ -169,7 +169,7 @@ impl PyStore {
     /// >>> store.query('ASK { ?s ?p ?o }')
     /// True
     #[pyo3(
-        text_signature = "($self, query, *, base_iri, use_default_graph_as_union, default_graph, named_graphs)"
+        text_signature = "($self, query, *, base_iri = None, use_default_graph_as_union = False, default_graph = None, named_graphs = None)"
     )]
     #[args(
         query,
@@ -233,7 +233,7 @@ impl PyStore {
     /// >>> store.update('DELETE WHERE { <http://example.com> ?p ?o }')
     /// >>> list(store)
     /// []
-    #[pyo3(text_signature = "($self, update, *, base_iri)")]
+    #[pyo3(text_signature = "($self, update, *, base_iri = None)")]
     #[args(update, "*", base_iri = "None")]
     fn update(&self, update: &str, base_iri: Option<&str>, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| {
@@ -278,7 +278,7 @@ impl PyStore {
     /// >>> store.load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[pyo3(text_signature = "($self, data, /, mime_type, *, base_iri = None, to_graph = None)")]
+    #[pyo3(text_signature = "($self, input, /, mime_type, *, base_iri = None, to_graph = None)")]
     #[args(input, mime_type, "*", base_iri = "None", to_graph = "None")]
     fn load(
         &self,
@@ -362,7 +362,7 @@ impl PyStore {
     /// >>> store.bulk_load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[pyo3(text_signature = "($self, data, /, mime_type, *, base_iri = None, to_graph = None)")]
+    #[pyo3(text_signature = "($self, input, /, mime_type, *, base_iri = None, to_graph = None)")]
     #[args(input, mime_type, "*", base_iri = "None", to_graph = "None")]
     fn bulk_load(
         &self,
@@ -535,6 +535,8 @@ impl PyStore {
 
     /// Clears a graph from the store without removing it.
     ///
+    /// :param graph_name: the name of the name graph to clear.
+    /// :type graph_name: NamedNode or BlankNode or DefaultGraph
     /// :raises IOError: if an I/O error happens during the operation.
     ///
     /// >>> store = Store()
@@ -672,7 +674,7 @@ impl PyStore {
     }
 }
 
-#[pyclass(unsendable, module = "oxigraph")]
+#[pyclass(unsendable)]
 pub struct QuadIter {
     inner: store::QuadIter,
 }
@@ -691,7 +693,7 @@ impl QuadIter {
     }
 }
 
-#[pyclass(unsendable, module = "oxigraph")]
+#[pyclass(unsendable)]
 pub struct GraphNameIter {
     inner: store::GraphNameIter,
 }
