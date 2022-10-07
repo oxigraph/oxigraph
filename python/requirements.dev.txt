@@ -1,5 +1,6 @@
 black
 furo
 maturin
+mypy
 sphinx
 sphinx-autobuild
