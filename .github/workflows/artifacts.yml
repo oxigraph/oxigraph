@@ -115,9 +115,13 @@ jobs:
           submodules: true
       - uses: actions/setup-python@v2
         with:
-          python-version: 3.7
+          python-version: "3.10"
       - run: rustup update && rustup target add aarch64-apple-darwin
-      - run: pip install maturin
+      - run: pip install -r python/requirements.dev.txt
+      - run: maturin build --release -m python/Cargo.toml
+      - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
+      - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
+        working-directory: ./python
       - run: maturin build --release -m python/Cargo.toml --universal2
       - uses: actions/upload-artifact@v2
         with:
@@ -132,10 +136,14 @@ jobs:
           submodules: true
       - uses: actions/setup-python@v2
         with:
-          python-version: 3.7
+          python-version: "3.10"
       - run: rustup update
       - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
-      - run: pip install maturin
+      - run: pip install -r python/requirements.dev.txt
+      - run: maturin build --release -m python/Cargo.toml
+      - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
+      - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
+        working-directory: ./python
       - run: maturin build --release -m python/Cargo.toml
       - uses: actions/upload-artifact@v2
         with:

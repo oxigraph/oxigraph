@@ -13,3 +13,4 @@ data/
 **/docs/build
 *.so
 *.pyc
+**.pyi

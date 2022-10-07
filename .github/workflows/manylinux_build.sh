@@ -3,6 +3,11 @@ yum -y install centos-release-scl-rh
 yum -y install llvm-toolset-7.0
 source scl_source enable llvm-toolset-7.0
 curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal
-curl --verbose -L "https://github.com/PyO3/maturin/releases/latest/download/maturin-%arch%-unknown-linux-musl.tar.gz" | tar -xz -C /usr/local/bin
-export PATH="${PATH}:/root/.cargo/bin:/opt/python/cp37-cp37m/bin:/opt/python/cp38-cp38/bin:/opt/python/cp39-cp39/bin:/opt/python/cp310-cp310/bin"
-maturin build --release -m python/Cargo.toml
+export PATH="${PATH}:/root/.cargo/bin:/opt/python/cp37-cp37m/bin:/opt/python/cp38-cp38/bin:/opt/python/cp39-cp39/bin:/opt/python/cp310-cp310/bin:/opt/python/cp311-cp311/bin"
+cd python
+python3.10 -m venv venv
+source venv/bin/activate
+pip install -r requirements.dev.txt
+maturin develop --release -m Cargo.toml
+python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
+maturin build --release -m Cargo.toml
