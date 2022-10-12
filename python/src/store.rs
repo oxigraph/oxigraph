@@ -102,7 +102,7 @@ impl PyStore {
     /// :param object: the quad object or :py:const:`None` to match everything.
     /// :type object: NamedNode or BlankNode or Literal or Triple or None
     /// :param graph_name: the quad graph name. To match only the default graph, use :py:class:`DefaultGraph`. To match everything use :py:const:`None`.
-    /// :type graph_name: NamedNode or BlankNode or DefaultGraph or None
+    /// :type graph_name: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :return: an iterator of the quads matching the pattern.
     /// :rtype: iter(Quad)
     /// :raises IOError: if an I/O error happens during the quads lookup.

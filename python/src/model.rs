@@ -114,7 +114,7 @@ impl PyNamedNode {
 /// An RDF `blank node <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node>`_.
 ///
 /// :param value: the `blank node ID <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node-identifier>`_ (if not present, a random blank node ID is automatically generated).
-/// :type value: str, optional
+/// :type value: str or None, optional
 /// :raises ValueError: if the blank node ID is invalid according to NTriples, Turtle, and SPARQL grammars.
 ///
 /// The :py:func:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
@@ -122,7 +122,7 @@ impl PyNamedNode {
 /// >>> str(BlankNode('ex'))
 /// '_:ex'
 #[pyclass(name = "BlankNode")]
-#[pyo3(text_signature = "(value)")]
+#[pyo3(text_signature = "(value = None)")]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyBlankNode {
     inner: BlankNode,

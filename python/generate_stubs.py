@@ -140,12 +140,17 @@ def arguments_stub(callable, doc: str, types_to_import: Set[str], is_init: bool)
         }
 
     parsed_param_types = {}
+    optional_params = set()
     for match in re.findall(r"\n *:type *([a-z_]+): ([^\n]*) *\n", doc):
         if match[0] not in real_parameters:
             raise ValueError(
                 f"The parameter {match[0]} is defined in the documentation but not in the function signature"
             )
-        parsed_param_types[match[0]] = convert_type_from_doc(match[1], types_to_import)
+        type = match[1]
+        if type.endswith(", optional"):
+            optional_params.add(match[0])
+            type = type[:-10]
+        parsed_param_types[match[0]] = convert_type_from_doc(type, types_to_import)
 
     # we parse the parameters
     posonlyargs = []
@@ -163,9 +168,14 @@ def arguments_stub(callable, doc: str, types_to_import: Set[str], is_init: bool)
         param_ast = ast.arg(
             arg=param.name, annotation=parsed_param_types.get(param.name)
         )
+
         default_ast = None
         if param.default != param.empty:
             default_ast = ast.Constant(param.default)
+            if param.name not in optional_params:
+                raise ValueError(f"Parameter {param.name} is optional according to the type but not flagged as such in the doc")
+        elif param.name in optional_params:
+            raise ValueError(f"Parameter {param.name} is optional according to the documentation but has no default value")
 
         if param.kind == param.POSITIONAL_ONLY:
             posonlyargs.append(param_ast)
@@ -203,7 +213,7 @@ def returns_stub(doc: str, types_to_import: Set[str]):
 
 
 def convert_type_from_doc(type_str: str, types_to_import: Set[str]):
-    type_str = type_str.strip().removesuffix(", optional")
+    type_str = type_str.strip()
     return parse_type_to_ast(type_str, types_to_import)
 
 
