@@ -1,0 +1,6 @@
+PREFIX ex: <http://example.com/>
+
+SELECT ?a ?b WHERE {
+    BIND(ex:a as ?a)
+    {SELECT ?b WHERE { BIND(ex:b as ?b) FILTER(!BOUND(?a))}}
+}

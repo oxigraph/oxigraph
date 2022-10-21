@@ -531,23 +531,32 @@ impl SimpleEvaluator {
                 let mapping = mapping.clone();
                 Rc::new(move |from| {
                     let mapping = mapping.clone();
-                    // We map forward the "from" values to make sure we join wit them
-                    let mut inner_from = EncodedTuple::with_capacity(mapping.len());
-                    for (input_key, output_key) in mapping.iter() {
-                        if let Some(value) = from.get(*output_key) {
-                            inner_from.set(*input_key, value.clone());
-                        }
-                    }
-                    Box::new(child(inner_from).map(move |tuple| {
-                        let tuple = tuple?;
-                        let mut output_tuple = from.clone();
-                        for (input_key, output_key) in mapping.iter() {
-                            if let Some(value) = tuple.get(*input_key) {
-                                output_tuple.set(*output_key, value.clone());
-                            }
-                        }
-                        Ok(output_tuple)
-                    }))
+                    Box::new(
+                        child(EncodedTuple::with_capacity(mapping.len())).filter_map(
+                            move |tuple| {
+                                match tuple {
+                                    Ok(tuple) => {
+                                        let mut output_tuple = from.clone();
+                                        for (input_key, output_key) in mapping.iter() {
+                                            if let Some(value) = tuple.get(*input_key) {
+                                                if let Some(existing_value) =
+                                                    output_tuple.get(*output_key)
+                                                {
+                                                    if existing_value != value {
+                                                        return None; // Conflict
+                                                    }
+                                                } else {
+                                                    output_tuple.set(*output_key, value.clone());
+                                                }
+                                            }
+                                        }
+                                        Some(Ok(output_tuple))
+                                    }
+                                    Err(e) => Some(Err(e)),
+                                }
+                            },
+                        ),
+                    )
                 })
             }
             PlanNode::Aggregate {

@@ -27,6 +27,7 @@
     :nested_expression
     :order_terms
     :nested_anonymous
+    :unbound_variable_in_subquery
     ) .
 
 :small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
@@ -122,3 +123,9 @@
          [ qt:query  <nested_anonymous.rq> ;
            qt:data   <nested_anonymous.ttl> ] ;
     mf:result  <nested_anonymous.srx> .
+
+:unbound_variable_in_subquery rdf:type mf:QueryEvaluationTest ;
+    mf:name "Variable should stay not bound in subqueries even if they are bound in the parent query" ;
+    mf:action
+         [ qt:query  <unbound_variable_in_subquery.rq> ] ;
+    mf:result  <unbound_variable_in_subquery.srx> .
