@@ -13,11 +13,11 @@ jobs:
   python_doc:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
       - run: rustup update
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v4
         with:
           python-version: 3.8
       - run: python -m venv venv
@@ -30,7 +30,7 @@ jobs:
         working-directory: ./python/docs
       - run: source ../venv/bin/activate && sphinx-build -M html . build
         working-directory: ./python/docs
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           repository: oxigraph/oxigraph.github.io
           path: website
@@ -47,12 +47,12 @@ jobs:
   binary_linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
       - run: cargo build --release
         working-directory: ./server
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: oxigraph_server_x86_64_linux_gnu
           path: target/release/oxigraph_server
@@ -64,13 +64,13 @@ jobs:
       SDKROOT: '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk'
       MACOSX_DEPLOYMENT_TARGET: '10.14'
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
       - run: rustup update
       - run: cargo build --release
         working-directory: ./server
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: oxigraph_server_x86_64_apple
           path: target/release/oxigraph_server
@@ -78,14 +78,14 @@ jobs:
   binary_windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
       - run: rustup update
       - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
       - run: cargo build --release
         working-directory: ./server
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: oxigraph_server_x86_64_windows_msvc
           path: target/release/oxigraph_server.exe
@@ -93,12 +93,12 @@ jobs:
   wheel_linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
       - run: sed 's/%arch%/x86_64/g' .github/workflows/manylinux_build.sh > .github/workflows/manylinux_build_script.sh
       - run: docker run -v "$(pwd)":/workdir --platform linux/x86_64 quay.io/pypa/manylinux2014_x86_64 /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: pyoxigraph_x86_64_linux
           path: target/wheels/*.whl
@@ -110,10 +110,10 @@ jobs:
       SDKROOT: '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk'
       MACOSX_DEPLOYMENT_TARGET: '10.14'
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v4
         with:
           python-version: "3.10"
       - run: rustup update && rustup target add aarch64-apple-darwin
@@ -123,7 +123,7 @@ jobs:
       - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
         working-directory: ./python
       - run: maturin build --release -m python/Cargo.toml --universal2
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: pyoxigraph_wheel_universal2_mac
           path: target/wheels/*.whl
@@ -131,10 +131,10 @@ jobs:
   wheel_windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v4
         with:
           python-version: "3.10"
       - run: rustup update
@@ -145,7 +145,7 @@ jobs:
       - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
         working-directory: ./python
       - run: maturin build --release -m python/Cargo.toml
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: pyoxigraph_wheel_x86_64_windows
           path: target/wheels/*.whl
@@ -153,12 +153,12 @@ jobs:
   npm_tarball:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - run: rustup update
       - run: cargo install wasm-pack
       - run: npm run pack
         working-directory: ./js
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: oxigraph_wasm_npm
           path: js/*.tgz
@@ -166,21 +166,21 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: 'recursive'
-      - uses: docker/setup-buildx-action@v1
-      - uses: docker/login-action@v1
+      - uses: docker/setup-buildx-action@v2
+      - uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{github.actor}}
           password: ${{secrets.GITHUB_TOKEN}}
-      - uses: docker/metadata-action@v3
+      - uses: docker/metadata-action@v4
         id: docker_meta
         with:
           images: ghcr.io/${{ github.repository }}
           tags: nightly
-      - uses: docker/build-push-action@v2
+      - uses: docker/build-push-action@v3
         with:
           context: .
           file: server/Dockerfile

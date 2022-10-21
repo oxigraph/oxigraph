@@ -8,26 +8,26 @@ jobs:
   push_server_to_docker_registry:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
-      - uses: docker/setup-buildx-action@v1
-      - uses: docker/metadata-action@v3
+      - uses: docker/setup-buildx-action@v2
+      - uses: docker/metadata-action@v4
         id: docker_meta
         with:
           images: |
             ${{ github.repository }}
             ghcr.io/${{ github.repository }}
-      - uses: docker/login-action@v1
+      - uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-      - uses: docker/login-action@v1
+      - uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{github.actor}}
           password: ${{secrets.GITHUB_TOKEN}}
-      - uses: docker/build-push-action@v2
+      - uses: docker/build-push-action@v3
         with:
           context: .
           file: server/Dockerfile
@@ -41,7 +41,7 @@ jobs:
   publish_crates:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
       - run: rustup update
@@ -76,10 +76,10 @@ jobs:
         architecture: [ "x86_64", "aarch64" ]
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
-      - uses: docker/setup-qemu-action@v1
+      - uses: docker/setup-qemu-action@v2
         with:
           platforms: linux/${{ matrix.architecture }}
         if: matrix.architecture != 'x86_64'
@@ -101,10 +101,10 @@ jobs:
       SDKROOT: '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk'
       MACOSX_DEPLOYMENT_TARGET: '10.14'
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v4
         with:
           python-version: "3.10"
       - run: rustup update && rustup target add aarch64-apple-darwin
@@ -122,10 +122,10 @@ jobs:
   publish_pypi_windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v4
         with:
           python-version: "3.10"
       - run: rustup update
@@ -143,10 +143,10 @@ jobs:
   publish_pypi_stdist:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v4
         with:
           python-version: "3.10"
       - run: rustup update
@@ -168,12 +168,12 @@ jobs:
   publish_npm:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
-      - uses: actions/setup-node@v2
+      - uses: actions/setup-node@v3
         with:
-          node-version: 14
+          node-version: 16
           registry-url: https://registry.npmjs.org
       - run: rustup update
       - run: cargo install wasm-pack
@@ -192,11 +192,11 @@ jobs:
   publish_python_doc:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
       - run: rustup update
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v4
         with:
           python-version: 3.8
       - run: python -m venv venv
@@ -209,7 +209,7 @@ jobs:
         working-directory: ./python/docs
       - run: source ../venv/bin/activate && sphinx-build -M html . build
         working-directory: ./python/docs
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           repository: oxigraph/oxigraph.github.io
           path: website
@@ -229,7 +229,7 @@ jobs:
   publish_full_archive:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
       - run: |
@@ -247,7 +247,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: publish_full_archive
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           repository: oxigraph/homebrew-oxigraph
           token: ${{ secrets.FULL_ACCESS_TOKEN }}
@@ -266,7 +266,7 @@ jobs:
   publish_binary_linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
       - run: cargo build --release
@@ -283,7 +283,7 @@ jobs:
       SDKROOT: '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk'
       MACOSX_DEPLOYMENT_TARGET: '10.14'
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
       - run: rustup update
@@ -297,7 +297,7 @@ jobs:
   publish_binary_windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
       - run: rustup update
