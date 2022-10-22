@@ -293,7 +293,11 @@ impl Read for PyIo {
                 .map_err(to_io_err)?;
             let bytes = read
                 .extract::<&[u8]>(py)
-                .or_else(|e| read.extract::<&str>(py).map(|s| s.as_bytes()).or(Err(e)))
+                .or_else(|e| {
+                    read.extract::<&str>(py)
+                        .map(|s| s.as_bytes())
+                        .map_err(|_| e)
+                })
                 .map_err(to_io_err)?;
             buf.write_all(bytes)?;
             Ok(bytes.len())
