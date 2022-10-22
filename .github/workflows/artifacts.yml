@@ -120,6 +120,7 @@ jobs:
       - run: pip install -r python/requirements.dev.txt
       - run: maturin build --release -m python/Cargo.toml
       - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
+      - run: rm -r target/wheels
       - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
         working-directory: ./python
       - run: maturin build --release -m python/Cargo.toml --universal2
@@ -142,6 +143,7 @@ jobs:
       - run: pip install -r python/requirements.dev.txt
       - run: maturin build --release -m python/Cargo.toml
       - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
+      - run: rm -r target/wheels
       - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
         working-directory: ./python
       - run: maturin build --release -m python/Cargo.toml
