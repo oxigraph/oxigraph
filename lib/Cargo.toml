@@ -1,6 +1,6 @@
 [package]
 name = "oxigraph"
-version = "0.3.7"
+version = "0.3.8"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
