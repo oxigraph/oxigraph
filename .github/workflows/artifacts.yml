@@ -10,40 +10,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  python_doc:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: true
-      - run: rustup update
-      - uses: actions/setup-python@v4
-        with:
-          python-version: 3.8
-      - run: python -m venv venv
-        working-directory: ./python
-      - run: source venv/bin/activate && pip install --upgrade -r requirements.dev.txt
-        working-directory: ./python
-      - run: source venv/bin/activate && maturin develop
-        working-directory: ./python
-      - run: source ../venv/bin/activate && sphinx-build -M doctest . build
-        working-directory: ./python/docs
-      - run: source ../venv/bin/activate && sphinx-build -M html . build
-        working-directory: ./python/docs
-      - uses: actions/checkout@v3
-        with:
-          repository: oxigraph/oxigraph.github.io
-          path: website
-          token: ${{ secrets.FULL_ACCESS_TOKEN }}
-      - run: rm -rf ./website/pyoxigraph/latest && mkdir -p ./website/pyoxigraph/latest && cp -r ./python/docs/build/html/* ./website/pyoxigraph/latest/
-      - run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git add .
-          git diff-index --quiet HEAD || git commit -m "Updates pyoxigraph documentation"
-          git push
-        working-directory: ./website
-
   binary_linux:
     runs-on: ubuntu-latest
     steps:
