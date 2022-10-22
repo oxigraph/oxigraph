@@ -1,3 +1,14 @@
+## [0.3.7] - 2022-10-22
+
+### Added
+- Python type stubs are now generated and distributed alongside wheels.
+
+### Changed
+- SPARQL: Fixes evaluation of sub queries in which some variables might not be always bound.
+- Python: Uses https://pyoxigraph.readthedocs.io instead of https://oxigraph.org/pyoxigraph/ to store pyoxigraph documentation.
+- Server: Migration to Clap v4. Slight changes to the console textual outputs.
+
+
 ## [0.3.6] - 2022-08-16
 
 ### Changed
