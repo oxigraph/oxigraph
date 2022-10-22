@@ -1,3 +1,9 @@
+## [0.3.8] - 2022-10-22
+
+### Changed
+- Python: avoid uploading debug wheels to pypi.
+
+
 ## [0.3.7] - 2022-10-22
 
 ### Added
