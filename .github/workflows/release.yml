@@ -92,7 +92,7 @@ jobs:
           packages_dir: target/wheels
       - uses: softprops/action-gh-release@v1
         with:
-          files: target/wheels/*
+          files: target/wheels/*.whl
 
   publish_pypi_mac:
     runs-on: macos-latest
@@ -111,13 +111,14 @@ jobs:
       - run: pip install -r python/requirements.dev.txt
       - run: maturin build --release -m python/Cargo.toml
       - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
+      - run: rm -r target/wheels
       - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
         working-directory: ./python
       - run: maturin publish --no-sdist --universal2 -m python/Cargo.toml -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
       - run: maturin publish --no-sdist -m python/Cargo.toml -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
       - uses: softprops/action-gh-release@v1
         with:
-          files: target/wheels/*
+          files: target/wheels/*.whl
 
   publish_pypi_windows:
     runs-on: windows-latest
@@ -133,12 +134,13 @@ jobs:
       - run: pip install -r python/requirements.dev.txt
       - run: maturin build --release -m python/Cargo.toml
       - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
+      - run: rm -r target/wheels
       - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
         working-directory: ./python
       - run: maturin publish --no-sdist -m python/Cargo.toml -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
       - uses: softprops/action-gh-release@v1
         with:
-          files: target/wheels/*
+          files: target/wheels/*.whl
 
   publish_pypi_stdist:
     runs-on: ubuntu-latest
@@ -153,6 +155,7 @@ jobs:
       - run: pip install -r python/requirements.dev.txt
       - run: maturin build -m python/Cargo.toml
       - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
+      - run: rm -r target/wheels
       - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
         working-directory: ./python
       - run: maturin sdist -m python/Cargo.toml
@@ -163,7 +166,7 @@ jobs:
           packages_dir: target/wheels
       - uses: softprops/action-gh-release@v1
         with:
-          files: target/wheels/*
+          files: target/wheels/*.tar.gz
 
   publish_npm:
     runs-on: ubuntu-latest
