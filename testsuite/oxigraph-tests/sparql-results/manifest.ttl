@@ -5,7 +5,7 @@
 @prefix ox:    <https://github.com/oxigraph/oxigraph/tests#> .
 
 <>  rdf:type mf:Manifest ;
-    rdfs:label "Oxigraph SPARQL resutls tests" ;
+    rdfs:label "Oxigraph SPARQL results tests" ;
     mf:entries
     (
     :results_json_duplicated_variables

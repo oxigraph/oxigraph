@@ -93,6 +93,10 @@ impl<'a> PlanBuilder<'a> {
                 self.build_for_graph_pattern(left, variables, graph_name)?,
                 self.build_for_graph_pattern(right, variables, graph_name)?,
             ),
+            GraphPattern::Sequence { left, right } => PlanNode::ForLoopJoin {
+                left: Box::new(self.build_for_graph_pattern(left, variables, graph_name)?),
+                right: Box::new(self.build_for_graph_pattern(right, variables, graph_name)?),
+            },
             GraphPattern::LeftJoin {
                 left,
                 right,
@@ -220,6 +224,7 @@ impl<'a> PlanBuilder<'a> {
             GraphPattern::Project {
                 inner,
                 variables: projection,
+                lateral_variables,
             } => {
                 let mut inner_variables = projection.clone();
                 let inner_graph_name =
@@ -236,6 +241,17 @@ impl<'a> PlanBuilder<'a> {
                             .enumerate()
                             .map(|(new_variable, variable)| {
                                 (new_variable, variable_key(variables, variable))
+                            })
+                            .collect(),
+                    ),
+                    lateral_mapping: Rc::new(
+                        lateral_variables
+                            .iter()
+                            .map(|variable| {
+                                (
+                                    variable_key(&mut inner_variables, variable),
+                                    variable_key(variables, variable),
+                                )
                             })
                             .collect(),
                     ),
@@ -1054,11 +1070,11 @@ impl<'a> PlanBuilder<'a> {
             | PlanNode::PathPattern { .. } => (),
             PlanNode::Filter { child, expression } => {
                 let always_already_bound = child.always_bound_variables();
-                expression.lookup_used_variables(&mut |v| {
+                for v in expression.used_variables() {
                     if !always_already_bound.contains(&v) {
                         set.insert(v);
                     }
-                });
+                }
                 Self::add_left_join_problematic_variables(child, set);
             }
             PlanNode::Union { children } => {
@@ -1075,20 +1091,20 @@ impl<'a> PlanBuilder<'a> {
             }
             PlanNode::LeftJoin { left, right, .. } => {
                 Self::add_left_join_problematic_variables(left, set);
-                right.lookup_used_variables(&mut |v| {
-                    set.insert(v);
-                });
+                right.add_used_variables(set);
             }
             PlanNode::Extend {
-                child, expression, ..
+                child,
+                expression,
+                position,
             } => {
                 let always_already_bound = child.always_bound_variables();
-                expression.lookup_used_variables(&mut |v| {
+                for v in expression.used_variables() {
                     if !always_already_bound.contains(&v) {
                         set.insert(v);
                     }
-                });
-                Self::add_left_join_problematic_variables(child, set);
+                }
+                set.insert(*position); //TODO: too strict
                 Self::add_left_join_problematic_variables(child, set);
             }
             PlanNode::Sort { child, .. }
@@ -1100,18 +1116,25 @@ impl<'a> PlanBuilder<'a> {
             }
             PlanNode::Service { child, silent, .. } => {
                 if *silent {
-                    child.lookup_used_variables(&mut |v| {
-                        set.insert(v);
-                    });
+                    child.add_used_variables(set);
                 } else {
                     Self::add_left_join_problematic_variables(child, set)
                 }
             }
-            PlanNode::Project { mapping, child } => {
-                let mut child_bound = BTreeSet::new();
-                Self::add_left_join_problematic_variables(child, &mut child_bound);
+            PlanNode::Project {
+                mapping,
+                child,
+                lateral_mapping,
+            } => {
+                let mut child_problematic_set = BTreeSet::new();
+                for (child_i, output_i) in lateral_mapping.iter() {
+                    if set.contains(output_i) {
+                        child_problematic_set.insert(*child_i);
+                    }
+                }
+                Self::add_left_join_problematic_variables(child, &mut child_problematic_set);
                 for (child_i, output_i) in mapping.iter() {
-                    if child_bound.contains(child_i) {
+                    if child_problematic_set.contains(child_i) {
                         set.insert(*output_i);
                     }
                 }
@@ -1194,14 +1217,11 @@ impl<'a> PlanBuilder<'a> {
         if let PlanExpression::And(f1, f2) = *filter {
             return Self::push_filter(Box::new(Self::push_filter(node, f1)), f2);
         }
-        let mut filter_variables = BTreeSet::new();
-        filter.lookup_used_variables(&mut |v| {
-            filter_variables.insert(v);
-        });
+        let filter_variables = filter.used_variables();
         match *node {
             PlanNode::HashJoin { left, right } => {
-                if filter_variables.iter().all(|v| left.is_variable_bound(*v)) {
-                    if filter_variables.iter().all(|v| right.is_variable_bound(*v)) {
+                if left.are_all_variable_bound(&filter_variables) {
+                    if right.are_all_variable_bound(&filter_variables) {
                         PlanNode::HashJoin {
                             left: Box::new(Self::push_filter(left, filter.clone())),
                             right: Box::new(Self::push_filter(right, filter)),
@@ -1212,7 +1232,7 @@ impl<'a> PlanBuilder<'a> {
                             right,
                         }
                     }
-                } else if filter_variables.iter().all(|v| right.is_variable_bound(*v)) {
+                } else if right.are_all_variable_bound(&filter_variables) {
                     PlanNode::HashJoin {
                         left,
                         right: Box::new(Self::push_filter(right, filter)),
@@ -1225,12 +1245,12 @@ impl<'a> PlanBuilder<'a> {
                 }
             }
             PlanNode::ForLoopJoin { left, right } => {
-                if filter_variables.iter().all(|v| left.is_variable_bound(*v)) {
+                if left.are_all_variable_bound(&filter_variables) {
                     PlanNode::ForLoopJoin {
                         left: Box::new(Self::push_filter(left, filter)),
                         right,
                     }
-                } else if filter_variables.iter().all(|v| right.is_variable_bound(*v)) {
+                } else if right.are_all_variable_bound(&filter_variables) {
                     PlanNode::ForLoopJoin {
                         //TODO: should we do that always?
                         left,
@@ -1249,7 +1269,7 @@ impl<'a> PlanBuilder<'a> {
                 position,
             } => {
                 //TODO: handle the case where the filter generates an expression variable
-                if filter_variables.iter().all(|v| child.is_variable_bound(*v)) {
+                if child.are_all_variable_bound(&filter_variables) {
                     PlanNode::Extend {
                         child: Box::new(Self::push_filter(child, filter)),
                         expression,
@@ -1267,7 +1287,7 @@ impl<'a> PlanBuilder<'a> {
                 }
             }
             PlanNode::Filter { child, expression } => {
-                if filter_variables.iter().all(|v| child.is_variable_bound(*v)) {
+                if child.are_all_variable_bound(&filter_variables) {
                     PlanNode::Filter {
                         child: Box::new(Self::push_filter(child, filter)),
                         expression,

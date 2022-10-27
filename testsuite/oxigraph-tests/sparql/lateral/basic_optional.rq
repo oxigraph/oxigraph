@@ -1,0 +1,6 @@
+PREFIX ex: <http://example.org/>
+
+SELECT ?s ?o WHERE {
+    ?s a ex:T.
+    OPTIONAL { OX_LATERAL(?s) {SELECT ?o WHERE { ?s ex:p ?o } ORDER BY ?o LIMIT 2} }
+}

@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+  <head>
+    <variable name="s"/>
+    <variable name="o"/>
+  </head>
+  <results>
+    <result>
+      <binding name="s">
+        <uri>http://example.org/s1</uri>
+      </binding>
+      <binding name="o">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#integer">11</literal>
+      </binding>
+    </result>
+    <result>
+      <binding name="s">
+        <uri>http://example.org/s1</uri>
+      </binding>
+      <binding name="o">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#integer">12</literal>
+      </binding>
+    </result>
+    <result>
+      <binding name="s">
+        <uri>http://example.org/s2</uri>
+      </binding>
+      <binding name="o">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#integer">21</literal>
+      </binding>
+    </result>
+    <result>
+      <binding name="s">
+        <uri>http://example.org/s2</uri>
+      </binding>
+      <binding name="o">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#integer">22</literal>
+      </binding>
+    </result>
+  </results>
+</sparql>

@@ -86,6 +86,7 @@ pub enum PlanNode {
     Project {
         child: Box<Self>,
         mapping: Rc<Vec<(usize, usize)>>, // pairs of (variable key in child, variable key in output)
+        lateral_mapping: Rc<Vec<(usize, usize)>>, // pairs of (variable key in child, variable key in output)
     },
     Aggregate {
         // By definition the group by key are the range 0..key_mapping.len()
@@ -99,19 +100,17 @@ impl PlanNode {
     /// Returns variables that might be bound in the result set
     pub fn used_variables(&self) -> BTreeSet<usize> {
         let mut set = BTreeSet::default();
-        self.lookup_used_variables(&mut |v| {
-            set.insert(v);
-        });
+        self.add_used_variables(&mut set);
         set
     }
 
-    pub fn lookup_used_variables(&self, callback: &mut impl FnMut(usize)) {
+    pub fn add_used_variables(&self, set: &mut BTreeSet<usize>) {
         match self {
             Self::StaticBindings { tuples } => {
                 for tuple in tuples {
                     for (key, value) in tuple.iter().enumerate() {
                         if value.is_some() {
-                            callback(key);
+                            set.insert(key);
                         }
                     }
                 }
@@ -123,16 +122,16 @@ impl PlanNode {
                 graph_name,
             } => {
                 if let PatternValue::Variable(var) = subject {
-                    callback(*var);
+                    set.insert(*var);
                 }
                 if let PatternValue::Variable(var) = predicate {
-                    callback(*var);
+                    set.insert(*var);
                 }
                 if let PatternValue::Variable(var) = object {
-                    callback(*var);
+                    set.insert(*var);
                 }
                 if let PatternValue::Variable(var) = graph_name {
-                    callback(*var);
+                    set.insert(*var);
                 }
             }
             Self::PathPattern {
@@ -142,60 +141,69 @@ impl PlanNode {
                 ..
             } => {
                 if let PatternValue::Variable(var) = subject {
-                    callback(*var);
+                    set.insert(*var);
                 }
                 if let PatternValue::Variable(var) = object {
-                    callback(*var);
+                    set.insert(*var);
                 }
                 if let PatternValue::Variable(var) = graph_name {
-                    callback(*var);
+                    set.insert(*var);
                 }
             }
             Self::Filter { child, expression } => {
-                expression.lookup_used_variables(callback);
-                child.lookup_used_variables(callback);
+                expression.add_used_variables(set);
+                child.add_used_variables(set);
             }
             Self::Union { children } => {
                 for child in children.iter() {
-                    child.lookup_used_variables(callback);
+                    child.add_used_variables(set);
                 }
             }
             Self::HashJoin { left, right }
             | Self::ForLoopJoin { left, right, .. }
             | Self::AntiJoin { left, right }
             | Self::LeftJoin { left, right, .. } => {
-                left.lookup_used_variables(callback);
-                right.lookup_used_variables(callback);
+                left.add_used_variables(set);
+                right.add_used_variables(set);
             }
             Self::Extend {
                 child,
                 position,
                 expression,
             } => {
-                callback(*position);
-                expression.lookup_used_variables(callback);
-                child.lookup_used_variables(callback);
+                set.insert(*position);
+                expression.add_used_variables(set);
+                child.add_used_variables(set);
             }
             Self::Sort { child, .. }
             | Self::HashDeduplicate { child }
             | Self::Reduced { child }
             | Self::Skip { child, .. }
-            | Self::Limit { child, .. } => child.lookup_used_variables(callback),
+            | Self::Limit { child, .. } => child.add_used_variables(set),
             Self::Service {
                 child,
                 service_name,
                 ..
             } => {
                 if let PatternValue::Variable(v) = service_name {
-                    callback(*v);
+                    set.insert(*v);
                 }
-                child.lookup_used_variables(callback);
+                child.add_used_variables(set);
             }
-            Self::Project { mapping, child } => {
-                let child_bound = child.used_variables();
+            Self::Project {
+                mapping,
+                child,
+                lateral_mapping,
+            } => {
+                let mut child_bound = child.used_variables();
+                for (child_i, output_i) in lateral_mapping.iter() {
+                    if set.contains(output_i) {
+                        child_bound.insert(*child_i);
+                    }
+                }
                 for (child_i, output_i) in mapping.iter() {
                     if child_bound.contains(child_i) {
-                        callback(*output_i);
+                        set.insert(*output_i);
                     }
                 }
             }
@@ -205,10 +213,10 @@ impl PlanNode {
                 ..
             } => {
                 for var in key_variables.iter() {
-                    callback(*var);
+                    set.insert(*var);
                 }
                 for (_, var) in aggregates.iter() {
-                    callback(*var);
+                    set.insert(*var);
                 }
             }
         }
@@ -219,13 +227,11 @@ impl PlanNode {
     /// (subset because this function is not perfect yet)
     pub fn always_bound_variables(&self) -> BTreeSet<usize> {
         let mut set = BTreeSet::default();
-        self.lookup_always_bound_variables(&mut |v| {
-            set.insert(v);
-        });
+        self.add_always_bound_variables(&mut set);
         set
     }
 
-    pub fn lookup_always_bound_variables(&self, callback: &mut impl FnMut(usize)) {
+    pub fn add_always_bound_variables(&self, set: &mut BTreeSet<usize>) {
         match self {
             Self::StaticBindings { tuples } => {
                 let mut variables = BTreeMap::default(); // value true iff always bound
@@ -246,7 +252,7 @@ impl PlanNode {
                 }
                 for (k, v) in variables {
                     if v {
-                        callback(k);
+                        set.insert(k);
                     }
                 }
             }
@@ -257,16 +263,16 @@ impl PlanNode {
                 graph_name,
             } => {
                 if let PatternValue::Variable(var) = subject {
-                    callback(*var);
+                    set.insert(*var);
                 }
                 if let PatternValue::Variable(var) = predicate {
-                    callback(*var);
+                    set.insert(*var);
                 }
                 if let PatternValue::Variable(var) = object {
-                    callback(*var);
+                    set.insert(*var);
                 }
                 if let PatternValue::Variable(var) = graph_name {
-                    callback(*var);
+                    set.insert(*var);
                 }
             }
             Self::PathPattern {
@@ -276,18 +282,18 @@ impl PlanNode {
                 ..
             } => {
                 if let PatternValue::Variable(var) = subject {
-                    callback(*var);
+                    set.insert(*var);
                 }
                 if let PatternValue::Variable(var) = object {
-                    callback(*var);
+                    set.insert(*var);
                 }
                 if let PatternValue::Variable(var) = graph_name {
-                    callback(*var);
+                    set.insert(*var);
                 }
             }
             Self::Filter { child, .. } => {
                 //TODO: have a look at the expression to know if it filters out unbound variables
-                child.lookup_always_bound_variables(callback);
+                child.add_always_bound_variables(set);
             }
             Self::Union { children } => {
                 if let Some(vars) = children
@@ -296,16 +302,16 @@ impl PlanNode {
                     .reduce(|a, b| a.intersection(&b).copied().collect())
                 {
                     for v in vars {
-                        callback(v);
+                        set.insert(v);
                     }
                 }
             }
             Self::HashJoin { left, right } | Self::ForLoopJoin { left, right, .. } => {
-                left.lookup_always_bound_variables(callback);
-                right.lookup_always_bound_variables(callback);
+                left.add_always_bound_variables(set);
+                right.add_always_bound_variables(set);
             }
             Self::AntiJoin { left, .. } | Self::LeftJoin { left, .. } => {
-                left.lookup_always_bound_variables(callback);
+                left.add_always_bound_variables(set);
             }
             Self::Extend {
                 child,
@@ -314,27 +320,37 @@ impl PlanNode {
             } => {
                 if matches!(expression.as_ref(), PlanExpression::Constant(_)) {
                     // TODO: more cases?
-                    callback(*position);
+                    set.insert(*position);
                 }
-                child.lookup_always_bound_variables(callback);
+                child.add_always_bound_variables(set);
             }
             Self::Sort { child, .. }
             | Self::HashDeduplicate { child }
             | Self::Reduced { child }
             | Self::Skip { child, .. }
-            | Self::Limit { child, .. } => child.lookup_always_bound_variables(callback),
+            | Self::Limit { child, .. } => child.add_always_bound_variables(set),
             Self::Service { child, silent, .. } => {
                 if *silent {
                     // none, might return a null tuple
                 } else {
-                    child.lookup_always_bound_variables(callback)
+                    child.add_always_bound_variables(set)
                 }
             }
-            Self::Project { mapping, child } => {
-                let child_bound = child.always_bound_variables();
+            Self::Project {
+                mapping,
+                child,
+                lateral_mapping,
+            } => {
+                let mut child_bound = BTreeSet::new();
+                for (child_i, output_i) in lateral_mapping.iter() {
+                    if set.contains(output_i) {
+                        child_bound.insert(*child_i);
+                    }
+                }
+                child.add_always_bound_variables(&mut child_bound);
                 for (child_i, output_i) in mapping.iter() {
                     if child_bound.contains(child_i) {
-                        callback(*output_i);
+                        set.insert(*output_i);
                     }
                 }
             }
@@ -344,14 +360,12 @@ impl PlanNode {
         }
     }
 
-    pub fn is_variable_bound(&self, variable: usize) -> bool {
-        let mut found = false;
-        self.lookup_always_bound_variables(&mut |v| {
-            if v == variable {
-                found = true;
-            }
-        });
-        found
+    pub fn are_all_variable_bound<'a>(
+        &self,
+        variables: impl IntoIterator<Item = &'a usize>,
+    ) -> bool {
+        let bound = self.always_bound_variables();
+        variables.into_iter().all(|v| bound.contains(v))
     }
 }
 
@@ -459,10 +473,17 @@ pub enum PlanExpression {
 }
 
 impl PlanExpression {
-    pub fn lookup_used_variables(&self, callback: &mut impl FnMut(usize)) {
+    /// Returns variables that are used in the expression
+    pub fn used_variables(&self) -> BTreeSet<usize> {
+        let mut set = BTreeSet::default();
+        self.add_used_variables(&mut set);
+        set
+    }
+
+    pub fn add_used_variables(&self, set: &mut BTreeSet<usize>) {
         match self {
             Self::Variable(v) | Self::Bound(v) => {
-                callback(*v);
+                set.insert(*v);
             }
             Self::Constant(_)
             | Self::Rand
@@ -518,7 +539,7 @@ impl PlanExpression {
             | Self::DurationCast(e)
             | Self::YearMonthDurationCast(e)
             | Self::DayTimeDurationCast(e)
-            | Self::StringCast(e) => e.lookup_used_variables(callback),
+            | Self::StringCast(e) => e.add_used_variables(set),
             Self::Or(a, b)
             | Self::And(a, b)
             | Self::Equal(a, b)
@@ -541,31 +562,31 @@ impl PlanExpression {
             | Self::SameTerm(a, b)
             | Self::SubStr(a, b, None)
             | Self::Regex(a, b, None) => {
-                a.lookup_used_variables(callback);
-                b.lookup_used_variables(callback);
+                a.add_used_variables(set);
+                b.add_used_variables(set);
             }
             Self::If(a, b, c)
             | Self::SubStr(a, b, Some(c))
             | Self::Regex(a, b, Some(c))
             | Self::Replace(a, b, c, None)
             | Self::Triple(a, b, c) => {
-                a.lookup_used_variables(callback);
-                b.lookup_used_variables(callback);
-                c.lookup_used_variables(callback);
+                a.add_used_variables(set);
+                b.add_used_variables(set);
+                c.add_used_variables(set);
             }
             Self::Replace(a, b, c, Some(d)) => {
-                a.lookup_used_variables(callback);
-                b.lookup_used_variables(callback);
-                c.lookup_used_variables(callback);
-                d.lookup_used_variables(callback);
+                a.add_used_variables(set);
+                b.add_used_variables(set);
+                c.add_used_variables(set);
+                d.add_used_variables(set);
             }
             Self::Concat(es) | Self::Coalesce(es) | Self::CustomFunction(_, es) => {
                 for e in es {
-                    e.lookup_used_variables(callback);
+                    e.add_used_variables(set);
                 }
             }
             Self::Exists(e) => {
-                e.lookup_used_variables(callback);
+                e.add_used_variables(set);
             }
         }
     }

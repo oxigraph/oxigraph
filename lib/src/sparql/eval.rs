@@ -526,37 +526,43 @@ impl SimpleEvaluator {
                 let count = *count;
                 Rc::new(move |from| Box::new(child(from).take(count)))
             }
-            PlanNode::Project { child, mapping } => {
+            PlanNode::Project {
+                child,
+                mapping,
+                lateral_mapping,
+            } => {
                 let child = self.plan_evaluator(child);
                 let mapping = mapping.clone();
+                let lateral_mapping = lateral_mapping.clone();
                 Rc::new(move |from| {
                     let mapping = mapping.clone();
-                    Box::new(
-                        child(EncodedTuple::with_capacity(mapping.len())).filter_map(
-                            move |tuple| {
-                                match tuple {
-                                    Ok(tuple) => {
-                                        let mut output_tuple = from.clone();
-                                        for (input_key, output_key) in mapping.iter() {
-                                            if let Some(value) = tuple.get(*input_key) {
-                                                if let Some(existing_value) =
-                                                    output_tuple.get(*output_key)
-                                                {
-                                                    if existing_value != value {
-                                                        return None; // Conflict
-                                                    }
-                                                } else {
-                                                    output_tuple.set(*output_key, value.clone());
-                                                }
+                    let mut initial_mapping = EncodedTuple::with_capacity(mapping.len());
+                    for (input_key, output_key) in lateral_mapping.iter() {
+                        if let Some(value) = from.get(*output_key) {
+                            initial_mapping.set(*input_key, value.clone())
+                        }
+                    }
+                    Box::new(child(initial_mapping).filter_map(move |tuple| {
+                        match tuple {
+                            Ok(tuple) => {
+                                let mut output_tuple = from.clone();
+                                for (input_key, output_key) in mapping.iter() {
+                                    if let Some(value) = tuple.get(*input_key) {
+                                        if let Some(existing_value) = output_tuple.get(*output_key)
+                                        {
+                                            if existing_value != value {
+                                                return None; // Conflict
                                             }
+                                        } else {
+                                            output_tuple.set(*output_key, value.clone());
                                         }
-                                        Some(Ok(output_tuple))
                                     }
-                                    Err(e) => Some(Err(e)),
                                 }
-                            },
-                        ),
-                    )
+                                Some(Ok(output_tuple))
+                            }
+                            Err(e) => Some(Err(e)),
+                        }
+                    }))
                 })
             }
             PlanNode::Aggregate {

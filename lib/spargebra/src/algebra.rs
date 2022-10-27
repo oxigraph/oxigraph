@@ -519,6 +519,8 @@ pub enum GraphPattern {
         path: PropertyPathExpression,
         object: TermPattern,
     },
+    /// A sequence of operation (lateral join): execute left and for each element execute right
+    Sequence { left: Box<Self>, right: Box<Self> },
     /// [Join](https://www.w3.org/TR/sparql11-query/#defn_algJoin).
     Join { left: Box<Self>, right: Box<Self> },
     /// [LeftJoin](https://www.w3.org/TR/sparql11-query/#defn_algLeftJoin).
@@ -557,6 +559,8 @@ pub enum GraphPattern {
     Project {
         inner: Box<Self>,
         variables: Vec<Variable>,
+        #[cfg(feature = "ex-lateral")]
+        lateral_variables: Vec<Variable>,
     },
     /// [Distinct](https://www.w3.org/TR/sparql11-query/#defn_algDistinct).
     Distinct { inner: Box<Self> },
@@ -609,6 +613,13 @@ impl GraphPattern {
             }
             Self::Join { left, right } => {
                 write!(f, "(join ")?;
+                left.fmt_sse(f)?;
+                write!(f, " ")?;
+                right.fmt_sse(f)?;
+                write!(f, ")")
+            }
+            Self::Sequence { left, right } => {
+                write!(f, "(sequence ")?;
                 left.fmt_sse(f)?;
                 write!(f, " ")?;
                 right.fmt_sse(f)?;
@@ -739,6 +750,34 @@ impl GraphPattern {
                 inner.fmt_sse(f)?;
                 write!(f, ")")
             }
+            #[cfg(feature = "ex-lateral")]
+            Self::Project {
+                inner,
+                variables,
+                lateral_variables,
+            } => {
+                write!(f, "(project (")?;
+                for (i, v) in variables.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " ")?;
+                    }
+                    write!(f, "{}", v)?;
+                }
+                write!(f, ") ")?;
+                if !lateral_variables.is_empty() {
+                    write!(f, "(lateral (")?;
+                    for (i, v) in lateral_variables.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, " ")?;
+                        }
+                        write!(f, "{}", v)?;
+                    }
+                    write!(f, ")) ")?;
+                }
+                inner.fmt_sse(f)?;
+                write!(f, ")")
+            }
+            #[cfg(not(feature = "ex-lateral"))]
             Self::Project { inner, variables } => {
                 write!(f, "(project (")?;
                 for (i, v) in variables.iter().enumerate() {
@@ -805,6 +844,9 @@ impl fmt::Display for GraphPattern {
                 } else {
                     write!(f, "{} {}", left, right)
                 }
+            }
+            Self::Sequence { left, right } => {
+                write!(f, "{} {}", left, right)
             }
             Self::LeftJoin {
                 left,
@@ -935,6 +977,7 @@ impl GraphPattern {
                 }
             }
             Self::Join { left, right }
+            | Self::Sequence { left, right }
             | Self::LeftJoin { left, right, .. }
             | Self::Union { left, right } => {
                 left.lookup_in_scope_variables(callback);
@@ -1021,6 +1064,8 @@ impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
         let mut start = 0;
         let mut length = None;
         let mut project: &[Variable] = &[];
+        #[cfg(feature = "ex-lateral")]
+        let mut lateral: &[Variable] = &[];
 
         let mut child = self.pattern;
         loop {
@@ -1029,6 +1074,17 @@ impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
                     order = Some(expression);
                     child = inner;
                 }
+                #[cfg(feature = "ex-lateral")]
+                GraphPattern::Project {
+                    inner,
+                    variables,
+                    lateral_variables,
+                } if project.is_empty() => {
+                    project = variables;
+                    lateral = lateral_variables;
+                    child = inner;
+                }
+                #[cfg(not(feature = "ex-lateral"))]
                 GraphPattern::Project { inner, variables } if project.is_empty() => {
                     project = variables;
                     child = inner;
@@ -1051,6 +1107,20 @@ impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
                     child = inner;
                 }
                 p => {
+                    #[cfg(feature = "ex-lateral")]
+                    let mut closing_brackets = false;
+                    #[cfg(feature = "ex-lateral")]
+                    if !lateral.is_empty() {
+                        write!(f, "OX_LATERAL (")?;
+                        for (i, v) in lateral.iter().enumerate() {
+                            if i > 0 {
+                                write!(f, " ")?;
+                            }
+                            write!(f, "{}", v)?;
+                        }
+                        write!(f, ") {{")?;
+                        closing_brackets = true;
+                    }
                     write!(f, "SELECT")?;
                     if distinct {
                         write!(f, " DISTINCT")?;
@@ -1080,6 +1150,10 @@ impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
                     }
                     if let Some(length) = length {
                         write!(f, " LIMIT {}", length)?;
+                    }
+                    #[cfg(feature = "ex-lateral")]
+                    if closing_brackets {
+                        write!(f, "}}")?;
                     }
                     return Ok(());
                 }

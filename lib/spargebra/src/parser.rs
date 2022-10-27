@@ -363,10 +363,25 @@ enum PartialGraphPattern {
     Minus(GraphPattern),
     Bind(Expression, Variable),
     Filter(Expression),
+    #[cfg(feature = "ex-lateral")]
+    Lateral(GraphPattern, Vec<Variable>),
     Other(GraphPattern),
 }
 
 fn new_join(l: GraphPattern, r: GraphPattern) -> GraphPattern {
+    new_join_like(l, r, |left, right| GraphPattern::Join { left, right })
+}
+
+#[cfg(feature = "ex-lateral")]
+fn new_sequence(l: GraphPattern, r: GraphPattern) -> GraphPattern {
+    new_join_like(l, r, |left, right| GraphPattern::Sequence { left, right })
+}
+
+fn new_join_like(
+    l: GraphPattern,
+    r: GraphPattern,
+    cons: impl FnOnce(Box<GraphPattern>, Box<GraphPattern>) -> GraphPattern,
+) -> GraphPattern {
     //Avoid to output empty BGPs
     if let GraphPattern::Bgp { patterns: pl } = &l {
         if pl.is_empty() {
@@ -389,10 +404,7 @@ fn new_join(l: GraphPattern, r: GraphPattern) -> GraphPattern {
         {
             other
         }
-        (l, r) => GraphPattern::Join {
-            left: Box::new(l),
-            right: Box::new(r),
-        },
+        (l, r) => cons(Box::new(l), Box::new(r)),
     }
 }
 
@@ -562,6 +574,8 @@ fn build_select(
         m = GraphPattern::Project {
             inner: Box::new(m),
             variables: pv,
+            #[cfg(feature = "ex-lateral")]
+            lateral_variables: Vec::new(),
         };
     }
     match select.option {
@@ -579,6 +593,40 @@ fn build_select(
         }
     }
     Ok(m)
+}
+
+#[cfg(feature = "ex-lateral")]
+fn insert_lateral_variables(
+    pattern: GraphPattern,
+    new_lateral_variables: Vec<Variable>,
+) -> Result<GraphPattern, &'static str> {
+    match pattern {
+        GraphPattern::Project {
+            inner,
+            variables,
+            lateral_variables,
+        } if lateral_variables.is_empty() => Ok(GraphPattern::Project {
+            inner,
+            variables,
+            lateral_variables: new_lateral_variables,
+        }),
+        GraphPattern::Distinct { inner } => Ok(GraphPattern::Distinct {
+            inner: Box::new(insert_lateral_variables(*inner, new_lateral_variables)?),
+        }),
+        GraphPattern::Reduced { inner } => Ok(GraphPattern::Reduced {
+            inner: Box::new(insert_lateral_variables(*inner, new_lateral_variables)?),
+        }),
+        GraphPattern::Slice {
+            inner,
+            start,
+            length,
+        } => Ok(GraphPattern::Slice {
+            inner: Box::new(insert_lateral_variables(*inner, new_lateral_variables)?),
+            start,
+            length,
+        }),
+        _ => Err("Not able to parse properly OX_LATERAL"),
+    }
 }
 
 fn are_variables_bound(expression: &Expression, variables: &HashSet<Variable>) -> bool {
@@ -1375,6 +1423,9 @@ parser! {
                     } else {
                         expr
                     }),
+                            #[cfg(feature = "ex-lateral")]
+                    PartialGraphPattern::Lateral(p, mut variables) =>
+                        g = new_sequence(g, insert_lateral_variables(p, variables)?),
                     PartialGraphPattern::Other(e) => g = new_join(g, e),
                 }
             }
@@ -1400,7 +1451,15 @@ parser! {
         rule TriplesBlock_inner() -> Vec<TripleOrPathPattern> = _ h:TriplesSameSubjectPath() _ { h }
 
         //[56]
-        rule GraphPatternNotTriples() -> PartialGraphPattern = GroupOrUnionGraphPattern() / OptionalGraphPattern() / MinusGraphPattern() / GraphGraphPattern() / ServiceGraphPattern() / Filter() / Bind() / InlineData()
+        rule GraphPatternNotTriples() -> PartialGraphPattern = GroupOrUnionGraphPattern() / OptionalGraphPattern() / MinusGraphPattern() / GraphGraphPattern() / ServiceGraphPattern() / Filter() / Bind() / InlineData() / OxLateral()
+
+        rule OxLateral() -> PartialGraphPattern = i("OX_LATERAL") _ "(" _ vs:OxLateral_variable()* _ ")" _ "{" _ s:SubSelect() _ "}" {?
+            #[cfg(feature = "ex-lateral")]{ Ok(PartialGraphPattern::Lateral(s, vs)) }
+            #[cfg(not(feature = "ex-lateral"))]{ Err("The 'OX_LATERAL' syntax is not enabled") }
+        }
+        rule OxLateral_variable() -> Variable = v:Var() _ {
+            v
+        }
 
         //[57]
         rule OptionalGraphPattern() -> PartialGraphPattern = i("OPTIONAL") _ p:GroupGraphPattern() {

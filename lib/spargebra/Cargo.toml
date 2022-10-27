@@ -15,6 +15,7 @@ edition = "2021"
 [features]
 default = []
 rdf-star = ["oxrdf/rdf-star"]
+ex-lateral = []
 
 [dependencies]
 peg = "0.8"
