@@ -744,7 +744,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph"
-version = "0.3.8"
+version = "0.4.0-alpha"
 dependencies = [
  "criterion",
  "digest",
@@ -777,7 +777,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_js"
-version = "0.3.8"
+version = "0.4.0-alpha"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
@@ -788,7 +788,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_server"
-version = "0.3.8"
+version = "0.4.0-alpha"
 dependencies = [
  "clap 4.0.18",
  "flate2",
@@ -803,7 +803,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_testsuite"
-version = "0.3.8"
+version = "0.4.0-alpha"
 dependencies = [
  "anyhow",
  "clap 4.0.18",
@@ -1035,7 +1035,7 @@ dependencies = [
 
 [[package]]
 name = "pyoxigraph"
-version = "0.3.8"
+version = "0.4.0-alpha"
 dependencies = [
  "oxigraph",
  "pyo3",
@@ -1374,7 +1374,7 @@ dependencies = [
 
 [[package]]
 name = "spargebra"
-version = "0.2.2"
+version = "0.3.0-alpha"
 dependencies = [
  "oxilangtag",
  "oxiri",

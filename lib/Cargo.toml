@@ -1,6 +1,6 @@
 [package]
 name = "oxigraph"
-version = "0.3.8"
+version = "0.4.0-alpha"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -38,7 +38,7 @@ siphasher = "0.3"
 lazy_static = "1"
 sysinfo = "0.26"
 oxrdf = { version = "0.1.0", path="oxrdf", features = ["rdf-star"] }
-spargebra = { version = "0.2.2", path="spargebra", features = ["rdf-star"] }
+spargebra = { version = "0.3.0-alpha", path="spargebra", features = ["rdf-star"] }
 sparesults = { version = "0.1.1", path="sparesults", features = ["rdf-star"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
