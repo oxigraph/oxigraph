@@ -71,17 +71,17 @@ impl fmt::Display for PropertyPathExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NamedNode(p) => p.fmt(f),
-            Self::Reverse(p) => write!(f, "^{}", p),
+            Self::Reverse(p) => write!(f, "^({})", p),
             Self::Sequence(a, b) => write!(f, "({} / {})", a, b),
             Self::Alternative(a, b) => write!(f, "({} | {})", a, b),
-            Self::ZeroOrMore(p) => write!(f, "{}*", p),
-            Self::OneOrMore(p) => write!(f, "{}+", p),
-            Self::ZeroOrOne(p) => write!(f, "{}?", p),
+            Self::ZeroOrMore(p) => write!(f, "({})*", p),
+            Self::OneOrMore(p) => write!(f, "({})+", p),
+            Self::ZeroOrOne(p) => write!(f, "({})?", p),
             Self::NegatedPropertySet(p) => {
                 write!(f, "!(")?;
                 for (i, c) in p.iter().enumerate() {
                     if i > 0 {
-                        write!(f, " ")?;
+                        write!(f, " | ")?;
                     }
                     write!(f, "{}", c)?;
                 }
@@ -466,7 +466,7 @@ impl fmt::Display for Function {
             Self::LCase => write!(f, "LCASE"),
             Self::EncodeForUri => write!(f, "ENCODE_FOR_URI"),
             Self::Contains => write!(f, "CONTAINS"),
-            Self::StrStarts => write!(f, "STRSTATS"),
+            Self::StrStarts => write!(f, "STRSTARTS"),
             Self::StrEnds => write!(f, "STRENDS"),
             Self::StrBefore => write!(f, "STRBEFORE"),
             Self::StrAfter => write!(f, "STRAFTER"),
