@@ -177,6 +177,16 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
             error
         )),
         Ok(query) => {
+            // We check parsing roundtrip
+            if let Err(error) = Query::parse(&query.to_string(), None) {
+                return Err(anyhow!(
+                    "Failure to deserialize \"{}\" of {} with error: {}",
+                    query.to_string(),
+                    test,
+                    error
+                ));
+            }
+
             // FROM and FROM NAMED support. We make sure the data is in the store
             if !query.dataset().is_default_dataset() {
                 for graph_name in query.dataset().default_graph_graphs().unwrap_or(&[]) {
@@ -296,31 +306,43 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
             test,
             error
         )),
-        Ok(update) => match store.update(update) {
-            Err(error) => Err(anyhow!(
-                "Failure to execute update of {} with error: {}",
-                test,
-                error
-            )),
-            Ok(()) => {
-                let mut store_dataset: Dataset = store.iter().collect::<Result<_, _>>()?;
-                store_dataset.canonicalize();
-                let mut result_store_dataset: Dataset =
-                    result_store.iter().collect::<Result<_, _>>()?;
-                result_store_dataset.canonicalize();
-                if store_dataset == result_store_dataset {
-                    Ok(())
-                } else {
-                    Err(anyhow!(
-                        "Failure on {}.\nDiff:\n{}\nParsed update:\n{}\n",
-                        test,
-                        dataset_diff(&result_store_dataset, &store_dataset),
-                        Update::parse(&read_file_to_string(update_file)?, Some(update_file))
-                            .unwrap(),
-                    ))
+        Ok(update) => {
+            // We check parsing roundtrip
+            if let Err(error) = Update::parse(&update.to_string(), None) {
+                return Err(anyhow!(
+                    "Failure to deserialize \"{}\" of {} with error: {}",
+                    update.to_string(),
+                    test,
+                    error
+                ));
+            }
+
+            match store.update(update) {
+                Err(error) => Err(anyhow!(
+                    "Failure to execute update of {} with error: {}",
+                    test,
+                    error
+                )),
+                Ok(()) => {
+                    let mut store_dataset: Dataset = store.iter().collect::<Result<_, _>>()?;
+                    store_dataset.canonicalize();
+                    let mut result_store_dataset: Dataset =
+                        result_store.iter().collect::<Result<_, _>>()?;
+                    result_store_dataset.canonicalize();
+                    if store_dataset == result_store_dataset {
+                        Ok(())
+                    } else {
+                        Err(anyhow!(
+                            "Failure on {}.\nDiff:\n{}\nParsed update:\n{}\n",
+                            test,
+                            dataset_diff(&result_store_dataset, &store_dataset),
+                            Update::parse(&read_file_to_string(update_file)?, Some(update_file))
+                                .unwrap(),
+                        ))
+                    }
                 }
             }
-        },
+        }
     }
 }
 
