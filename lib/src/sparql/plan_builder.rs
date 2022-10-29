@@ -179,40 +179,21 @@ impl<'a> PlanBuilder<'a> {
                 inner,
                 variables: by,
                 aggregates,
-            } => {
-                let mut inner_variables = by.clone();
-                let inner_graph_name =
-                    Self::convert_pattern_value_id(graph_name, variables, &mut inner_variables);
-
-                PlanNode::Aggregate {
-                    child: Box::new(self.build_for_graph_pattern(
-                        inner,
-                        &mut inner_variables,
-                        &inner_graph_name,
-                    )?),
-                    key_mapping: Rc::new(
-                        by.iter()
-                            .map(|k| {
-                                (
-                                    variable_key(&mut inner_variables, k),
-                                    variable_key(variables, k),
-                                )
-                            })
-                            .collect(),
-                    ),
-                    aggregates: Rc::new(
-                        aggregates
-                            .iter()
-                            .map(|(v, a)| {
-                                Ok((
-                                    self.build_for_aggregate(a, &mut inner_variables, graph_name)?,
-                                    variable_key(variables, v),
-                                ))
-                            })
-                            .collect::<Result<Vec<_>, EvaluationError>>()?,
-                    ),
-                }
-            }
+            } => PlanNode::Aggregate {
+                child: Box::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
+                key_variables: Rc::new(by.iter().map(|k| variable_key(variables, k)).collect()),
+                aggregates: Rc::new(
+                    aggregates
+                        .iter()
+                        .map(|(v, a)| {
+                            Ok((
+                                self.build_for_aggregate(a, variables, graph_name)?,
+                                variable_key(variables, v),
+                            ))
+                        })
+                        .collect::<Result<Vec<_>, EvaluationError>>()?,
+                ),
+            },
             GraphPattern::Values {
                 variables: table_variables,
                 bindings,
@@ -1136,11 +1117,11 @@ impl<'a> PlanBuilder<'a> {
                 }
             }
             PlanNode::Aggregate {
-                key_mapping,
+                key_variables,
                 aggregates,
                 ..
             } => {
-                set.extend(key_mapping.iter().map(|(_, o)| o));
+                set.extend(key_variables.iter());
                 //TODO: This is too harsh
                 for (_, var) in aggregates.iter() {
                     set.insert(*var);
