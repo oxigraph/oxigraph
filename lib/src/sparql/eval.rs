@@ -561,11 +561,11 @@ impl SimpleEvaluator {
             }
             PlanNode::Aggregate {
                 child,
-                key_mapping,
+                key_variables,
                 aggregates,
             } => {
                 let child = self.plan_evaluator(child);
-                let key_mapping = key_mapping.clone();
+                let key_variables = key_variables.clone();
                 let aggregate_input_expressions: Vec<_> = aggregates
                     .iter()
                     .map(|(aggregate, _)| {
@@ -588,8 +588,8 @@ impl SimpleEvaluator {
                 let accumulator_variables: Vec<_> =
                     aggregates.iter().map(|(_, var)| *var).collect();
                 Rc::new(move |from| {
-                    let tuple_size = from.capacity(); //TODO: not nice
-                    let key_mapping = key_mapping.clone();
+                    let tuple_size = from.capacity();
+                    let key_variables = key_variables.clone();
                     let mut errors = Vec::default();
                     let mut accumulators_for_group =
                         HashMap::<Vec<Option<EncodedTerm>>, Vec<Box<dyn Accumulator>>>::default();
@@ -603,9 +603,9 @@ impl SimpleEvaluator {
                         })
                         .for_each(|tuple| {
                             //TODO avoid copy for key?
-                            let key = key_mapping
+                            let key = key_variables
                                 .iter()
-                                .map(|(v, _)| tuple.get(*v).cloned())
+                                .map(|v| tuple.get(*v).cloned())
                                 .collect();
 
                             let key_accumulators =
@@ -623,7 +623,7 @@ impl SimpleEvaluator {
                                 );
                             }
                         });
-                    if accumulators_for_group.is_empty() && key_mapping.is_empty() {
+                    if accumulators_for_group.is_empty() && key_variables.is_empty() {
                         // There is always a single group if there is no GROUP BY
                         accumulators_for_group.insert(Vec::new(), Vec::new());
                     }
@@ -635,9 +635,9 @@ impl SimpleEvaluator {
                             .chain(accumulators_for_group.into_iter().map(
                                 move |(key, accumulators)| {
                                     let mut result = EncodedTuple::with_capacity(tuple_size);
-                                    for (from_position, to_position) in key_mapping.iter() {
-                                        if let Some(value) = &key[*from_position] {
-                                            result.set(*to_position, value.clone());
+                                    for (variable, value) in key_variables.iter().zip(key) {
+                                        if let Some(value) = value {
+                                            result.set(*variable, value);
                                         }
                                     }
                                     for (accumulator, variable) in

@@ -90,7 +90,7 @@ pub enum PlanNode {
     Aggregate {
         // By definition the group by key are the range 0..key_mapping.len()
         child: Box<Self>,
-        key_mapping: Rc<Vec<(usize, usize)>>, // aggregate key pairs of (variable key in child, variable key in output)
+        key_variables: Rc<Vec<usize>>,
         aggregates: Rc<Vec<(PlanAggregation, usize)>>,
     },
 }
@@ -200,12 +200,12 @@ impl PlanNode {
                 }
             }
             Self::Aggregate {
-                key_mapping,
+                key_variables,
                 aggregates,
                 ..
             } => {
-                for (_, o) in key_mapping.iter() {
-                    callback(*o);
+                for var in key_variables.iter() {
+                    callback(*var);
                 }
                 for (_, var) in aggregates.iter() {
                     callback(*var);
