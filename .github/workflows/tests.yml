@@ -29,6 +29,12 @@ jobs:
         with:
           submodules: true
       - run: rustup update && rustup component add clippy
+      - run: cargo clippy
+        working-directory: ./lib/oxrdf
+      - run: cargo clippy
+        working-directory: ./lib/sparesults
+      - run: cargo clippy
+        working-directory: ./lib/spargebra
       - run: cargo clippy --all-targets --all-features
 
   deny:
