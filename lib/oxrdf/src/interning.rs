@@ -2,6 +2,7 @@
 
 use crate::*;
 use lasso::{Key, Rodeo, Spur};
+#[cfg(feature = "rdf-star")]
 use std::collections::HashMap;
 
 #[derive(Debug, Default)]

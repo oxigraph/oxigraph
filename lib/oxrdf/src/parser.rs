@@ -1,8 +1,10 @@
 use crate::vocab::xsd;
 use crate::{
     BlankNode, BlankNodeIdParseError, IriParseError, LanguageTagParseError, Literal, NamedNode,
-    Subject, Term, Triple, Variable, VariableNameParseError,
+    Term, Variable, VariableNameParseError,
 };
+#[cfg(feature = "rdf-star")]
+use crate::{Subject, Triple};
 use std::char;
 use std::error::Error;
 use std::fmt;
@@ -298,20 +300,21 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
 }
 
 fn read_term(s: &str, number_of_recursive_calls: usize) -> Result<(Term, &str), TermParseError> {
+    if number_of_recursive_calls == MAX_NUMBER_OF_NESTED_TRIPLES {
+        return Err(TermParseError::msg(
+            "Too many nested triples. The parser fails here to avoid a stack overflow.",
+        ));
+    }
     let s = s.trim();
+    #[allow(unused_variables)]
     if let Some(remain) = s.strip_prefix("<<") {
-        if number_of_recursive_calls == MAX_NUMBER_OF_NESTED_TRIPLES {
-            return Err(TermParseError::msg(
-                "Too many nested triples. The parser fails here to avoid a stack overflow.",
-            ));
-        }
-        let (subject, remain) = read_term(remain, number_of_recursive_calls + 1)?;
-        let (predicate, remain) = read_named_node(remain)?;
-        let (object, remain) = read_term(remain, number_of_recursive_calls + 1)?;
-        let remain = remain.trim_start();
-        if let Some(remain) = remain.strip_prefix(">>") {
-            #[cfg(feature = "rdf-star")]
-            {
+        #[cfg(feature = "rdf-star")]
+        {
+            let (subject, remain) = read_term(remain, number_of_recursive_calls + 1)?;
+            let (predicate, remain) = read_named_node(remain)?;
+            let (object, remain) = read_term(remain, number_of_recursive_calls + 1)?;
+            let remain = remain.trim_start();
+            if let Some(remain) = remain.strip_prefix(">>") {
                 Ok((
                     Triple {
                         subject: match subject {
@@ -330,15 +333,15 @@ fn read_term(s: &str, number_of_recursive_calls: usize) -> Result<(Term, &str), 
                     .into(),
                     remain,
                 ))
+            } else {
+                Err(TermParseError::msg(
+                    "Nested triple serialization should be enclosed between << and >>",
+                ))
             }
-            #[cfg(not(feature = "rdf-star"))]
-            {
-                Err(TermParseError::msg("RDF-star is not supported"))
-            }
-        } else {
-            Err(TermParseError::msg(
-                "Nested triple serialization should be enclosed between << and >>",
-            ))
+        }
+        #[cfg(not(feature = "rdf-star"))]
+        {
+            Err(TermParseError::msg("RDF-star is not supported"))
         }
     } else if s.starts_with('<') {
         let (term, remain) = read_named_node(s)?;
