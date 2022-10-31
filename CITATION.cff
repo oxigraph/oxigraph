@@ -5,7 +5,9 @@ authors:
     family-names: Pellissier Tanon
     email: thomas@pellissier-tanon.fr
     orcid: "https://orcid.org/0000-0002-0620-6486"
-license: "MIT OR Apache-2.0"
+license:
+  - Apache-2.0
+  - MIT
 message: "If you use this software, please cite it as below."
 repository-code: "https://github.com/oxigraph/oxigraph"
 title: Oxigraph
