@@ -36,15 +36,7 @@ impl Query {
     /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
     pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self, spargebra::ParseError> {
         let query = spargebra::Query::parse(query, base_iri)?;
-        Ok(Self {
-            dataset: QueryDataset::from_algebra(match &query {
-                spargebra::Query::Select { dataset, .. }
-                | spargebra::Query::Construct { dataset, .. }
-                | spargebra::Query::Describe { dataset, .. }
-                | spargebra::Query::Ask { dataset, .. } => dataset,
-            }),
-            inner: query,
-        })
+        Ok(query.into())
     }
 
     /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset)
@@ -85,6 +77,20 @@ impl<'a> TryFrom<&'a String> for Query {
 
     fn try_from(query: &String) -> Result<Self, spargebra::ParseError> {
         Self::from_str(query)
+    }
+}
+
+impl From<spargebra::Query> for Query {
+    fn from(query: spargebra::Query) -> Self {
+        Self {
+            dataset: QueryDataset::from_algebra(match &query {
+                spargebra::Query::Select { dataset, .. }
+                | spargebra::Query::Construct { dataset, .. }
+                | spargebra::Query::Describe { dataset, .. }
+                | spargebra::Query::Ask { dataset, .. } => dataset,
+            }),
+            inner: query,
+        }
     }
 }
 
