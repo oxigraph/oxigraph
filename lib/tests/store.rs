@@ -8,7 +8,7 @@ use std::error::Error;
 use std::fs::{create_dir, remove_dir_all, File};
 use std::io::{Cursor, Write};
 use std::iter::once;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const DATA: &str = r#"
@@ -301,9 +301,9 @@ fn test_backup() -> Result<(), Box<dyn Error>> {
     let store_dir = TempDir::default();
     let backup_dir = TempDir::default();
 
-    let store = Store::open(&store_dir.0)?;
+    let store = Store::open(&store_dir)?;
     store.insert(quad)?;
-    store.backup(&backup_dir.0)?;
+    store.backup(&backup_dir)?;
     store.remove(quad)?;
 
     assert!(!store.contains(quad)?);
@@ -319,14 +319,14 @@ fn test_bad_backup() -> Result<(), Box<dyn Error>> {
     let backup_dir = TempDir::default();
 
     create_dir(&backup_dir.0)?;
-    assert!(Store::open(&store_dir.0)?.backup(&backup_dir.0).is_err());
+    assert!(Store::open(&store_dir)?.backup(&backup_dir.0).is_err());
     Ok(())
 }
 
 #[test]
 fn test_backup_on_in_memory() -> Result<(), Box<dyn Error>> {
     let backup_dir = TempDir::default();
-    assert!(Store::new()?.backup(&backup_dir.0).is_err());
+    assert!(Store::new()?.backup(&backup_dir).is_err());
     Ok(())
 }
 
@@ -371,6 +371,12 @@ struct TempDir(PathBuf);
 impl Default for TempDir {
     fn default() -> Self {
         Self(temp_dir().join(format!("oxigraph-test-{}", random::<u128>())))
+    }
+}
+
+impl AsRef<Path> for TempDir {
+    fn as_ref(&self) -> &Path {
+        &self.0
     }
 }
 

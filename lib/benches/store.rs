@@ -29,14 +29,14 @@ fn store_load(c: &mut Criterion) {
         group.bench_function("load BSBM explore 1000 in on disk", |b| {
             b.iter(|| {
                 let path = TempDir::default();
-                let store = Store::open(&path.0).unwrap();
+                let store = Store::open(&path).unwrap();
                 do_load(&store, &data);
             })
         });
         group.bench_function("load BSBM explore 1000 in on disk with bulk load", |b| {
             b.iter(|| {
                 let path = TempDir::default();
-                let store = Store::open(&path.0).unwrap();
+                let store = Store::open(&path).unwrap();
                 do_bulk_load(&store, &data);
             })
         });
@@ -54,7 +54,7 @@ fn store_load(c: &mut Criterion) {
         group.bench_function("load BSBM explore 10000 in on disk with bulk load", |b| {
             b.iter(|| {
                 let path = TempDir::default();
-                let store = Store::open(&path.0).unwrap();
+                let store = Store::open(&path).unwrap();
                 do_bulk_load(&store, &data);
             })
         });
@@ -129,7 +129,7 @@ fn store_query_and_update(c: &mut Criterion) {
 
     {
         let path = TempDir::default();
-        let disk_store = Store::open(&path.0).unwrap();
+        let disk_store = Store::open(&path).unwrap();
         do_bulk_load(&disk_store, &data);
         group.bench_function("BSBM explore 1000 query on disk", |b| {
             b.iter(|| run_operation(&disk_store, &query_operations))
@@ -198,6 +198,12 @@ struct TempDir(PathBuf);
 impl Default for TempDir {
     fn default() -> Self {
         Self(temp_dir().join(format!("oxigraph-bench-{}", random::<u128>())))
+    }
+}
+
+impl AsRef<Path> for TempDir {
+    fn as_ref(&self) -> &Path {
+        &self.0
     }
 }
 
