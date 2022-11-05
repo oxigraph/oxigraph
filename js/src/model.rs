@@ -712,7 +712,7 @@ impl FromJsConverter {
                 .map_err(|v| UriError::new(&v.to_string()))?
                 .into()),
                 "BlankNode" => Ok(BlankNode::new(
-                    &Reflect::get(value, &self.value)?
+                    Reflect::get(value, &self.value)?
                         .as_string()
                         .ok_or_else(|| format_err!("BlankNode should have a string value"))?,
                 )
@@ -741,7 +741,7 @@ impl FromJsConverter {
                 }
                 "DefaultGraph" => Ok(JsTerm::DefaultGraph(JsDefaultGraph {})),
                 "Variable" => Ok(Variable::new(
-                    &Reflect::get(value, &self.value)?
+                    Reflect::get(value, &self.value)?
                         .as_string()
                         .ok_or_else(|| format_err!("Variable should have a string value"))?,
                 )
