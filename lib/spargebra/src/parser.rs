@@ -363,9 +363,11 @@ enum PartialGraphPattern {
     Minus(GraphPattern),
     Bind(Expression, Variable),
     Filter(Expression),
-    #[cfg(feature = "ex-lateral")]
-    Lateral(GraphPattern, Vec<Variable>),
     Other(GraphPattern),
+    #[cfg(feature = "ex-lateral")]
+    LateralOptional(GraphPattern),
+    #[cfg(feature = "ex-lateral")]
+    Lateral(GraphPattern),
 }
 
 fn new_join(l: GraphPattern, r: GraphPattern) -> GraphPattern {
@@ -1423,10 +1425,12 @@ parser! {
                     } else {
                         expr
                     }),
-                            #[cfg(feature = "ex-lateral")]
-                    PartialGraphPattern::Lateral(p, mut variables) =>
-                        g = new_sequence(g, insert_lateral_variables(p, variables)?),
                     PartialGraphPattern::Other(e) => g = new_join(g, e),
+                    #[cfg(feature = "ex-lateral")]
+                    PartialGraphPattern::LateralOptional(p) =>
+                        g = GraphPattern::LeftSequence { left: Box::new(g), right: Box::new(p) },
+                    #[cfg(feature = "ex-lateral")]
+                    PartialGraphPattern::Lateral(p) => g = new_sequence(g, p),
                 }
             }
 
@@ -1453,10 +1457,19 @@ parser! {
         //[56]
         rule GraphPatternNotTriples() -> PartialGraphPattern = GroupOrUnionGraphPattern() / OptionalGraphPattern() / MinusGraphPattern() / GraphGraphPattern() / ServiceGraphPattern() / Filter() / Bind() / InlineData() / OxLateral()
 
-        rule OxLateral() -> PartialGraphPattern = i("OX_LATERAL") _ "(" _ vs:OxLateral_variable()* _ ")" _ "{" _ s:SubSelect() _ "}" {?
-            #[cfg(feature = "ex-lateral")]{ Ok(PartialGraphPattern::Lateral(s, vs)) }
-            #[cfg(not(feature = "ex-lateral"))]{ Err("The 'OX_LATERAL' syntax is not enabled") }
-        }
+        rule OxLateral() -> PartialGraphPattern =
+            i("OX_LATERAL") _ i("OPTIONAL") _ p:GroupGraphPattern() {?
+                #[cfg(feature = "ex-lateral")]{ Ok(PartialGraphPattern::LateralOptional(p)) }
+                #[cfg(not(feature = "ex-lateral"))]{ Err("The 'OX_LATERAL' syntax is not enabled") }
+            } /
+            i("OX_LATERAL") _ i("GRAPH") _ name:VarOrIri() _ p:GroupGraphPattern() {?
+                #[cfg(feature = "ex-lateral")]{ Ok(PartialGraphPattern::Lateral(GraphPattern::Graph { name, inner: Box::new(p) })) }
+                #[cfg(not(feature = "ex-lateral"))]{ Err("The 'OX_LATERAL' syntax is not enabled") }
+            } /
+            i("OX_LATERAL") _ "(" _ vs:OxLateral_variable()* _ ")" _ "{" _ s:SubSelect() _ "}" {?
+                #[cfg(feature = "ex-lateral")]{ Ok(PartialGraphPattern::Lateral(insert_lateral_variables(s, vs)?)) }
+                #[cfg(not(feature = "ex-lateral"))]{ Err("The 'OX_LATERAL' syntax is not enabled") }
+            }
         rule OxLateral_variable() -> Variable = v:Var() _ {
             v
         }

@@ -13,6 +13,8 @@
     :subselect_inside_optional
     :subselect_implicit_aggregate
     :subselect_explicit_aggregate
+    :optional
+    :graph
     ) .
 
 :subselect rdf:type mf:QueryEvaluationTest ;
@@ -42,3 +44,13 @@
          [ qt:query  <subselect_explicit_aggregate.rq> ;
            qt:data   <basic_input.ttl> ] ;
     mf:result  <subselect_explicit_aggregate.srx> .
+
+:optional rdf:type mf:QueryEvaluationTest ;
+    mf:name "OX_LATERAL OPTIONAL test" ;
+    mf:action [ qt:query  <optional.rq> ] ;
+    mf:result  <simple.srx> .
+
+:optional rdf:type mf:QueryEvaluationTest ;
+    mf:name "OX_LATERAL GRAPH test" ;
+    mf:action [ qt:query  <graph.rq> ] ;
+    mf:result  <simple.srx> .

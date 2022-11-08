@@ -97,6 +97,11 @@ impl<'a> PlanBuilder<'a> {
                 left: Box::new(self.build_for_graph_pattern(left, variables, graph_name)?),
                 right: Box::new(self.build_for_graph_pattern(right, variables, graph_name)?),
             },
+            GraphPattern::LeftSequence { left, right } => PlanNode::LeftJoin {
+                left: Box::new(self.build_for_graph_pattern(left, variables, graph_name)?),
+                right: Box::new(self.build_for_graph_pattern(right, variables, graph_name)?),
+                possible_problem_vars: Rc::new(Vec::new()),
+            },
             GraphPattern::LeftJoin {
                 left,
                 right,

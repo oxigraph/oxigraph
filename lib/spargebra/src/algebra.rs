@@ -529,6 +529,8 @@ pub enum GraphPattern {
         right: Box<Self>,
         expression: Option<Expression>,
     },
+    /// Executes the left child and for each result tuple left join with right by injecting tuple to right
+    LeftSequence { left: Box<Self>, right: Box<Self> },
     /// [Filter](https://www.w3.org/TR/sparql11-query/#defn_algFilter).
     Filter { expr: Expression, inner: Box<Self> },
     /// [Union](https://www.w3.org/TR/sparql11-query/#defn_algUnion).
@@ -620,6 +622,13 @@ impl GraphPattern {
             }
             Self::Sequence { left, right } => {
                 write!(f, "(sequence ")?;
+                left.fmt_sse(f)?;
+                write!(f, " ")?;
+                right.fmt_sse(f)?;
+                write!(f, ")")
+            }
+            Self::LeftSequence { left, right } => {
+                write!(f, "(leftsequence ")?;
                 left.fmt_sse(f)?;
                 write!(f, " ")?;
                 right.fmt_sse(f)?;
@@ -846,8 +855,19 @@ impl fmt::Display for GraphPattern {
                 }
             }
             Self::Sequence { left, right } => {
-                write!(f, "{} {}", left, right)
+                if cfg!(feature = "ex_lateral") && matches!(right.as_ref(), Self::Graph { .. }) {
+                    // The second block might be considered as a modification of the first one.
+                    write!(f, "{} OX_LATERAL {}", left, right)
+                } else {
+                    write!(f, "{} {}", left, right)
+                }
             }
+            #[cfg(feature = "ex-lateral")]
+            Self::LeftSequence { left, right } => {
+                write!(f, "{} OX_LATERAL OPTIONAL {{ {} }}", left, right)
+            }
+            #[cfg(not(feature = "ex-lateral"))]
+            Self::LeftSequence { .. } => Err(fmt::Error),
             Self::LeftJoin {
                 left,
                 right,
@@ -978,6 +998,7 @@ impl GraphPattern {
             }
             Self::Join { left, right }
             | Self::Sequence { left, right }
+            | Self::LeftSequence { left, right }
             | Self::LeftJoin { left, right, .. }
             | Self::Union { left, right } => {
                 left.lookup_in_scope_variables(callback);
