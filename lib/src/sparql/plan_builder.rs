@@ -1128,9 +1128,8 @@ impl<'a> PlanBuilder<'a> {
             } => {
                 let mut child_problematic_set = BTreeSet::new();
                 for (child_i, output_i) in lateral_mapping.iter() {
-                    if set.contains(output_i) {
-                        child_problematic_set.insert(*child_i);
-                    }
+                    set.insert(*output_i);
+                    child_problematic_set.insert(*child_i);
                 }
                 Self::add_left_join_problematic_variables(child, &mut child_problematic_set);
                 for (child_i, output_i) in mapping.iter() {
