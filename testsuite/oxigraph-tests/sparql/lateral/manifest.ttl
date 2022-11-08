@@ -9,36 +9,36 @@
     rdfs:label "Oxigraph OX_LATERAL feature SPARQL tests" ;
     mf:entries
     (
-    :basic
-    :basic_optional
-    :implicit_aggregate
-    :explicit_aggregate
+    :subselect
+    :subselect_inside_optional
+    :subselect_implicit_aggregate
+    :subselect_explicit_aggregate
     ) .
 
-:basic rdf:type mf:QueryEvaluationTest ;
-    mf:name "Basic OX_LATERAL test" ;
+:subselect rdf:type mf:QueryEvaluationTest ;
+    mf:name "Basic subselect OX_LATERAL test" ;
     mf:action
-         [ qt:query  <basic.rq> ;
+         [ qt:query  <subselect.rq> ;
            qt:data   <basic_input.ttl> ] ;
-    mf:result  <basic.srx> .
+    mf:result  <subselect.srx> .
 
-:basic_optional rdf:type mf:QueryEvaluationTest ;
-    mf:name "Basic OX_LATERAL test inside optional" ;
+:subselect_inside_optional rdf:type mf:QueryEvaluationTest ;
+    mf:name "Basic subselect OX_LATERAL test inside optional" ;
     mf:action
-         [ qt:query  <basic_optional.rq> ;
+         [ qt:query  <subselect_inside_optional.rq> ;
            qt:data   <basic_input.ttl> ] ;
-    mf:result  <basic_optional.srx> .
+    mf:result  <subselect_inside_optional.srx> .
 
-:implicit_aggregate rdf:type mf:QueryEvaluationTest ;
+:subselect_implicit_aggregate rdf:type mf:QueryEvaluationTest ;
     mf:name "OX_LATERAL test with implicit aggregate" ;
     mf:action
-         [ qt:query  <implicit_aggregate.rq> ;
+         [ qt:query  <subselect_implicit_aggregate.rq> ;
            qt:data   <basic_input.ttl> ] ;
-    mf:result  <implicit_aggregate.srx> .
+    mf:result  <subselect_implicit_aggregate.srx> .
 
-:explicit_aggregate rdf:type mf:QueryEvaluationTest ;
+:subselect_explicit_aggregate rdf:type mf:QueryEvaluationTest ;
     mf:name "OX_LATERAL test with explicit aggregate" ;
     mf:action
-         [ qt:query  <explicit_aggregate.rq> ;
+         [ qt:query  <subselect_explicit_aggregate.rq> ;
            qt:data   <basic_input.ttl> ] ;
-    mf:result  <explicit_aggregate.srx> .
+    mf:result  <subselect_explicit_aggregate.srx> .
