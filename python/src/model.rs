@@ -221,9 +221,9 @@ impl PyBlankNode {
 /// :param value: the literal value or `lexical form <https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form>`_.
 /// :type value: str
 /// :param datatype: the literal `datatype IRI <https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri>`_.
-/// :type datatype: NamedNode, optional
+/// :type datatype: NamedNode or None, optional
 /// :param language: the literal `language tag <https://www.w3.org/TR/rdf11-concepts/#dfn-language-tag>`_.
-/// :type language: str, optional
+/// :type language: str or None, optional
 /// :raises ValueError: if the language tag is not valid according to `RFC 5646 <https://tools.ietf.org/rfc/rfc5646>`_ (`BCP 47 <https://tools.ietf.org/rfc/bcp/bcp47>`_).
 ///
 /// The :py:func:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
