@@ -1181,17 +1181,14 @@ impl Timestamp {
     }
 
     fn from_be_bytes(bytes: [u8; 18]) -> Self {
-        let mut value = [0; 16];
-        value.copy_from_slice(&bytes[0..16]);
-        let mut timezone_offset = [0; 2];
-        timezone_offset.copy_from_slice(&bytes[16..18]);
-
         Self {
-            value: Decimal::from_be_bytes(value),
-            timezone_offset: if timezone_offset == [u8::MAX; 2] {
+            value: Decimal::from_be_bytes(bytes[0..16].try_into().unwrap()),
+            timezone_offset: if bytes[16..18] == [u8::MAX; 2] {
                 None
             } else {
-                Some(TimezoneOffset::from_be_bytes(timezone_offset))
+                Some(TimezoneOffset::from_be_bytes(
+                    bytes[16..18].try_into().unwrap(),
+                ))
             },
         }
     }

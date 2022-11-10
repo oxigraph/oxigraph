@@ -215,9 +215,9 @@ impl Storage {
     fn ensure_version(&self) -> Result<u64, StorageError> {
         Ok(
             if let Some(version) = self.db.get(&self.default_cf, b"oxversion")? {
-                let mut buffer = [0; 8];
-                buffer.copy_from_slice(&version);
-                u64::from_be_bytes(buffer)
+                u64::from_be_bytes(version.as_ref().try_into().map_err(|e| {
+                    CorruptionError::new(format!("Error while parsing the version key: {}", e))
+                })?)
             } else {
                 self.update_version(LATEST_STORAGE_VERSION)?;
                 LATEST_STORAGE_VERSION
