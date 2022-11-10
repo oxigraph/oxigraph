@@ -25,13 +25,9 @@ impl Duration {
     }
 
     pub fn from_be_bytes(bytes: [u8; 24]) -> Self {
-        let mut months = [0; 8];
-        months.copy_from_slice(&bytes[0..8]);
-        let mut seconds = [8; 16];
-        seconds.copy_from_slice(&bytes[8..24]);
         Self {
-            year_month: YearMonthDuration::from_be_bytes(months),
-            day_time: DayTimeDuration::from_be_bytes(seconds),
+            year_month: YearMonthDuration::from_be_bytes(bytes[0..8].try_into().unwrap()),
+            day_time: DayTimeDuration::from_be_bytes(bytes[8..24].try_into().unwrap()),
         }
     }
 
