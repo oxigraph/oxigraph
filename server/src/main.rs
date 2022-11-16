@@ -1087,7 +1087,50 @@ impl Write for ReadForWriteWriter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_cmd::Command;
+    use assert_fs::prelude::*;
     use oxhttp::model::Method;
+    use predicates::prelude::*;
+
+    #[test]
+    fn cli_help() -> Result<(), Box<dyn std::error::Error>> {
+        Command::cargo_bin("oxigraph_server")?
+            .assert()
+            .failure()
+            .stdout("")
+            .stderr(predicate::str::starts_with("Oxigraph"));
+        Ok(())
+    }
+
+    #[test]
+    fn cli_load_graph() -> Result<(), Box<dyn std::error::Error>> {
+        let file = assert_fs::NamedTempFile::new("sample.nt")?;
+        file.write_str("<http://example.com/s> <http://example.com/p> <http://example.com/o> .")?;
+        Command::cargo_bin("oxigraph_server")?
+            .arg("load")
+            .arg("-f")
+            .arg(file.path())
+            .assert()
+            .success()
+            .stdout("")
+            .stderr(predicate::str::starts_with("1 triples loaded"));
+        Ok(())
+    }
+
+    #[test]
+    fn cli_load_dataset() -> Result<(), Box<dyn std::error::Error>> {
+        let file = assert_fs::NamedTempFile::new("sample.nq")?;
+        file.write_str("<http://example.com/s> <http://example.com/p> <http://example.com/o> .")?;
+        Command::cargo_bin("oxigraph_server")?
+            .arg("load")
+            .arg("-f")
+            .arg(file.path())
+            .assert()
+            .success()
+            .stdout("")
+            .stderr(predicate::str::starts_with("1 triples loaded"));
+        Ok(())
+    }
 
     #[test]
     fn get_ui() {

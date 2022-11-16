@@ -21,3 +21,8 @@ url = "2"
 oxiri = "0.2"
 flate2 = "1"
 rayon-core = "1"
+
+[dev-dependencies]
+assert_cmd = "2"
+assert_fs = "1"
+predicates = "2"
