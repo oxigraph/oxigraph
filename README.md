@@ -51,6 +51,7 @@ Feel free to use [GitHub discussions](https://github.com/oxigraph/oxigraph/discu
 
 If you need advanced support or are willing to pay to get some extra features, feel free to reach out to [Tpt](https://github.com/Tpt/).
 
+
 ## License
 
 This project is licensed under either of
@@ -65,3 +66,12 @@ at your option.
 ### Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in Oxigraph by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+
+
+## Sponsors
+
+* [RelationLabs](https://relationlabs.ai/) that builds [Relation-Graph](https://github.com/relationlabs/Relation-Graph), a SPARQL database module for the [Substrate blockchain platform](https://substrate.io/) based on Oxigraph.
+* [ACE IoT Solutions](https://aceiotsolutions.com/), a building IOT platform.
+* [Albin Larsson](https://byabbe.se/) who is building [GovDirectory](https://www.govdirectory.org/), a directory of public agencies based on Wikidata.
+
+And [others](https://github.com/sponsors/Tpt). Many thanks to them!
