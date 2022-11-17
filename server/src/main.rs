@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use flate2::read::MultiGzDecoder;
 use oxhttp::model::{Body, HeaderName, HeaderValue, Request, Response, Status};
@@ -15,7 +16,7 @@ use std::cmp::{max, min};
 use std::ffi::OsStr;
 use std::fmt;
 use std::fs::File;
-use std::io::{self, BufReader, Error, ErrorKind, Read, Write};
+use std::io::{self, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::str::FromStr;
@@ -62,7 +63,7 @@ enum Command {
     },
 }
 
-pub fn main() -> io::Result<()> {
+pub fn main() -> anyhow::Result<()> {
     let matches = Args::parse();
     let store = if let Some(path) = &matches.location {
         Store::open(path)
@@ -75,8 +76,7 @@ pub fn main() -> io::Result<()> {
             ThreadPoolBuilder::new()
                 .num_threads(max(1, available_parallelism()?.get() / 2))
                 .thread_name(|i| format!("Oxigraph bulk loader thread {}", i))
-                .build()
-                .map_err(|e| Error::new(ErrorKind::Other, e))?
+                .build()?
                 .scope(|s| {
                     for file in file {
                         let store = store.clone();
@@ -142,10 +142,16 @@ pub fn main() -> io::Result<()> {
     }
 }
 
-fn bulk_load(loader: BulkLoader, reader: impl Read, file: &Path) -> io::Result<()> {
-    let extension = file.extension().and_then(|extension| extension.to_str()).ok_or_else(|| Error::new(
-        ErrorKind::InvalidInput,
-        format!("The server is not able to guess the file format of {} because the file name as no extension", file.display())))?;
+fn bulk_load(loader: BulkLoader, reader: impl Read, file: &Path) -> anyhow::Result<()> {
+    let extension = file
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .ok_or_else(|| {
+            anyhow!(
+                "Not able to guess the file format of {} because the file name as no extension",
+                file.display()
+            )
+        })?;
     let reader = BufReader::new(reader);
     if let Some(format) = DatasetFormat::from_extension(extension) {
         loader.load_dataset(reader, format, None)?;
@@ -154,12 +160,9 @@ fn bulk_load(loader: BulkLoader, reader: impl Read, file: &Path) -> io::Result<(
         loader.load_graph(reader, format, GraphNameRef::DefaultGraph, None)?;
         Ok(())
     } else {
-        Err(Error::new(
-            ErrorKind::InvalidInput,
-            format!(
-                "The server is not able to guess the file format from the extension {}",
-                extension
-            ),
+        Err(anyhow!(
+            "Not able to guess the file format from the extension {}",
+            extension
         ))
     }
 }

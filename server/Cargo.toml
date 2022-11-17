@@ -12,6 +12,7 @@ Oxigraph SPARQL HTTP server
 edition = "2021"
 
 [dependencies]
+anyhow = "1"
 oxhttp = { version = "0.1", features = ["rayon"] }
 clap = { version = "4", features = ["derive"] }
 oxigraph = { version = "0.3.8", path = "../lib", features = ["http_client"] }
