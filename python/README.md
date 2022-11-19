@@ -59,7 +59,7 @@ The Sphinx documentation can be generated and viewed in the browser using the fo
 sphinx-autobuild docs docs/_build/html
 ```
 
-Note that you will need to have [sphinx-autobuild](https://pypi.org/project/sphinx-autobuild/) installed. This should be installed already if you are using this repository's development container.
+Note that you will need to have [sphinx-autobuild](https://pypi.org/project/sphinx-autobuild/) installed.
 
 Alternatively, you can use `sphinx-build` with Python's `http.server` to achieve the same thing.
 

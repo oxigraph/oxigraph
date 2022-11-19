@@ -1,6 +1,5 @@
-black
+black~=22.10
 furo
-maturin
-mypy
-sphinx
-sphinx-autobuild
+maturin~=0.14.0
+mypy~=0.991.0
+sphinx~=5.3
