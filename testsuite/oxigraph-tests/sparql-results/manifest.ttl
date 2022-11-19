@@ -24,7 +24,7 @@
     mf:name "Duplicated variables are not allowed" ;
     mf:action <duplicated_variables.srx> .
 
-:results_xml_duplicated_variables rdf:type ox:NegativeTsvResultsSyntaxTest ;
+:results_tsv_duplicated_variables rdf:type ox:NegativeTsvResultsSyntaxTest ;
     mf:name "Duplicated variables are not allowed" ;
     mf:action <duplicated_variables.tsv> .
 
