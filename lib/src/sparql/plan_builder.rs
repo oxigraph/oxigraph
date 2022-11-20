@@ -133,6 +133,10 @@ impl<'a> PlanBuilder<'a> {
                     }
                 }
             }
+            GraphPattern::Lateral { left, right } => PlanNode::ForLoopJoin {
+                left: Box::new(self.build_for_graph_pattern(left, variables, graph_name)?),
+                right: Box::new(self.build_for_graph_pattern(right, variables, graph_name)?),
+            },
             GraphPattern::Filter { expr, inner } => self.push_filter(
                 Box::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
                 Box::new(self.build_for_expression(expr, variables, graph_name)?),
@@ -1120,8 +1124,11 @@ impl<'a> PlanBuilder<'a> {
                 right.lookup_used_variables(&mut |v| {
                     set.insert(v);
                 });
+                let always_already_bound = left.always_bound_variables();
                 expression.lookup_used_variables(&mut |v| {
-                    set.insert(v);
+                    if !always_already_bound.contains(&v) {
+                        set.insert(v);
+                    }
                 });
             }
             PlanNode::Extend {
@@ -1138,10 +1145,14 @@ impl<'a> PlanBuilder<'a> {
             }
             PlanNode::Sort { child, .. }
             | PlanNode::HashDeduplicate { child }
-            | PlanNode::Reduced { child }
-            | PlanNode::Skip { child, .. }
-            | PlanNode::Limit { child, .. } => {
-                Self::add_left_join_problematic_variables(child, set)
+            | PlanNode::Reduced { child } => {
+                Self::add_left_join_problematic_variables(child, set);
+            }
+            PlanNode::Skip { child, .. } | PlanNode::Limit { child, .. } => {
+                // Any variable might affect arity
+                child.lookup_used_variables(&mut |v| {
+                    set.insert(v);
+                })
             }
             PlanNode::Service { child, silent, .. } => {
                 if *silent {

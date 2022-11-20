@@ -436,6 +436,8 @@ enum GraphPatternNotTriples {
     Filter(Filter),
     Bind(Bind),
     InlineData(InlineData), // TODO: ServiceGraphPattern
+    #[cfg(feature = "sep-0006")]
+    Lateral(LateralGraphPattern),
 }
 
 impl fmt::Display for GraphPatternNotTriples {
@@ -448,6 +450,8 @@ impl fmt::Display for GraphPatternNotTriples {
             Self::Filter(p) => write!(f, "{p}"),
             Self::Bind(p) => write!(f, "{p}"),
             Self::InlineData(p) => write!(f, "{p}"),
+            #[cfg(feature = "sep-0006")]
+            Self::Lateral(p) => write!(f, "{p}"),
         }
     }
 }
@@ -461,6 +465,18 @@ struct OptionalGraphPattern {
 impl fmt::Display for OptionalGraphPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, " OPTIONAL {}", self.inner)
+    }
+}
+
+#[derive(Debug, Arbitrary)]
+struct LateralGraphPattern {
+    // []  	LateralGraphPattern	  ::=  	'LATERAL' GroupGraphPattern
+    inner: GroupGraphPattern,
+}
+
+impl fmt::Display for LateralGraphPattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, " LATERAL {}", self.inner)
     }
 }
 

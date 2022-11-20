@@ -492,7 +492,8 @@ impl SimpleEvaluator {
                             current_right: Box::new(empty()),
                         })
                     } else {
-                        Box::new(BadLeftJoinIterator {
+                        Box::new(BadForLoopLeftJoinIterator {
+                            from_tuple: from.clone(),
                             right_evaluator: right.clone(),
                             left_iter: left(from),
                             current_left: None,
@@ -635,32 +636,33 @@ impl SimpleEvaluator {
                 let mapping = mapping.clone();
                 Rc::new(move |from| {
                     let mapping = mapping.clone();
-                    Box::new(
-                        child(EncodedTuple::with_capacity(mapping.len())).filter_map(
-                            move |tuple| {
-                                match tuple {
-                                    Ok(tuple) => {
-                                        let mut output_tuple = from.clone();
-                                        for (input_key, output_key) in mapping.iter() {
-                                            if let Some(value) = tuple.get(*input_key) {
-                                                if let Some(existing_value) =
-                                                    output_tuple.get(*output_key)
-                                                {
-                                                    if existing_value != value {
-                                                        return None; // Conflict
-                                                    }
-                                                } else {
-                                                    output_tuple.set(*output_key, value.clone());
-                                                }
+                    let mut input_tuple = EncodedTuple::with_capacity(mapping.len());
+                    for (input_key, output_key) in mapping.iter() {
+                        if let Some(value) = from.get(*output_key) {
+                            input_tuple.set(*input_key, value.clone());
+                        }
+                    }
+                    Box::new(child(input_tuple).filter_map(move |tuple| {
+                        match tuple {
+                            Ok(tuple) => {
+                                let mut output_tuple = from.clone();
+                                for (input_key, output_key) in mapping.iter() {
+                                    if let Some(value) = tuple.get(*input_key) {
+                                        if let Some(existing_value) = output_tuple.get(*output_key)
+                                        {
+                                            if existing_value != value {
+                                                return None; // Conflict
                                             }
+                                        } else {
+                                            output_tuple.set(*output_key, value.clone());
                                         }
-                                        Some(Ok(output_tuple))
                                     }
-                                    Err(e) => Some(Err(e)),
                                 }
-                            },
-                        ),
-                    )
+                                Some(Ok(output_tuple))
+                            }
+                            Err(e) => Some(Err(e)),
+                        }
+                    }))
                 })
             }
             PlanNode::Aggregate {
@@ -2943,27 +2945,6 @@ fn put_variable_value(
     }
 }
 
-fn unbind_variables(binding: &mut EncodedTuple, variables: &[usize]) {
-    for var in variables {
-        binding.unset(*var)
-    }
-}
-
-fn combine_tuples(mut a: EncodedTuple, b: &EncodedTuple, vars: &[usize]) -> Option<EncodedTuple> {
-    for var in vars {
-        if let Some(b_value) = b.get(*var) {
-            if let Some(a_value) = a.get(*var) {
-                if a_value != b_value {
-                    return None;
-                }
-            } else {
-                a.set(*var, b_value.clone());
-            }
-        }
-    }
-    Some(a)
-}
-
 pub fn are_compatible_and_not_disjointed(a: &EncodedTuple, b: &EncodedTuple) -> bool {
     let mut found_intersection = false;
     for (a_value, b_value) in a.iter().zip(b.iter()) {
@@ -3702,7 +3683,8 @@ impl Iterator for ForLoopLeftJoinIterator {
     }
 }
 
-struct BadLeftJoinIterator {
+struct BadForLoopLeftJoinIterator {
+    from_tuple: EncodedTuple,
     right_evaluator: Rc<dyn Fn(EncodedTuple) -> EncodedTuplesIterator>,
     left_iter: EncodedTuplesIterator,
     current_left: Option<EncodedTuple>,
@@ -3710,18 +3692,16 @@ struct BadLeftJoinIterator {
     problem_vars: Rc<Vec<usize>>,
 }
 
-impl Iterator for BadLeftJoinIterator {
+impl Iterator for BadForLoopLeftJoinIterator {
     type Item = Result<EncodedTuple, EvaluationError>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
         for right_tuple in &mut self.current_right {
             match right_tuple {
                 Ok(right_tuple) => {
-                    if let Some(combined) = combine_tuples(
-                        right_tuple,
-                        self.current_left.as_ref().unwrap(),
-                        &self.problem_vars,
-                    ) {
+                    if let Some(combined) =
+                        right_tuple.combine_with(self.current_left.as_ref().unwrap())
+                    {
                         return Some(Ok(combined));
                     }
                 }
@@ -3730,15 +3710,19 @@ impl Iterator for BadLeftJoinIterator {
         }
         match self.left_iter.next()? {
             Ok(left_tuple) => {
-                let mut filtered_left = left_tuple.clone();
-                unbind_variables(&mut filtered_left, &self.problem_vars);
-                self.current_right = (self.right_evaluator)(filtered_left);
+                let mut right_input = self.from_tuple.clone();
+                for (var, val) in left_tuple.iter().enumerate() {
+                    if let Some(val) = val {
+                        if !self.problem_vars.contains(&var) {
+                            right_input.set(var, val);
+                        }
+                    }
+                }
+                self.current_right = (self.right_evaluator)(right_input);
                 for right_tuple in &mut self.current_right {
                     match right_tuple {
                         Ok(right_tuple) => {
-                            if let Some(combined) =
-                                combine_tuples(right_tuple, &left_tuple, &self.problem_vars)
-                            {
+                            if let Some(combined) = right_tuple.combine_with(&left_tuple) {
                                 self.current_left = Some(left_tuple);
                                 return Some(Ok(combined));
                             }
