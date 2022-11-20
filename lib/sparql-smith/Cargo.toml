@@ -12,5 +12,9 @@ A SPARQL test cases generator
 """
 edition = "2021"
 
+[features]
+default = []
+sep-0006 = []
+
 [dependencies]
 arbitrary = { version = "1", features = ["derive"] }

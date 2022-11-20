@@ -360,6 +360,8 @@ impl<F, T: From<F>> From<FocusedTriplePattern<F>> for FocusedTripleOrPathPattern
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 enum PartialGraphPattern {
     Optional(GraphPattern, Option<Expression>),
+    #[cfg(feature = "sep-0006")]
+    Lateral(GraphPattern),
     Minus(GraphPattern),
     Bind(Expression, Variable),
     Filter(Expression),
@@ -617,6 +619,67 @@ fn are_variables_bound(expression: &Expression, variables: &HashSet<Variable>) -
                 && are_variables_bound(b, variables)
                 && are_variables_bound(c, variables)
         }
+    }
+}
+
+/// Called on every variable defined using "AS" or "VALUES"
+#[cfg(feature = "sep-0006")]
+fn add_defined_variables<'a>(pattern: &'a GraphPattern, set: &mut HashSet<&'a Variable>) {
+    match pattern {
+        GraphPattern::Bgp { .. } | GraphPattern::Path { .. } => {}
+        GraphPattern::Join { left, right }
+        | GraphPattern::LeftJoin { left, right, .. }
+        | GraphPattern::Lateral { left, right }
+        | GraphPattern::Union { left, right }
+        | GraphPattern::Minus { left, right } => {
+            add_defined_variables(left, set);
+            add_defined_variables(right, set);
+        }
+        GraphPattern::Graph { inner, .. } => {
+            add_defined_variables(inner, set);
+        }
+        GraphPattern::Extend {
+            inner, variable, ..
+        } => {
+            set.insert(variable);
+            add_defined_variables(inner, set);
+        }
+        GraphPattern::Group {
+            variables,
+            aggregates,
+            inner,
+        } => {
+            for (v, _) in aggregates {
+                set.insert(v);
+            }
+            let mut inner_variables = HashSet::new();
+            add_defined_variables(inner, &mut inner_variables);
+            for v in inner_variables {
+                if variables.contains(v) {
+                    set.insert(v);
+                }
+            }
+        }
+        GraphPattern::Values { variables, .. } => {
+            for v in variables {
+                set.insert(v);
+            }
+        }
+        GraphPattern::Project { variables, inner } => {
+            let mut inner_variables = HashSet::new();
+            add_defined_variables(inner, &mut inner_variables);
+            for v in inner_variables {
+                if variables.contains(v) {
+                    set.insert(v);
+                }
+            }
+        }
+        GraphPattern::Service { inner, .. }
+        | GraphPattern::Filter { inner, .. }
+        | GraphPattern::OrderBy { inner, .. }
+        | GraphPattern::Distinct { inner }
+        | GraphPattern::Reduced { inner }
+        | GraphPattern::Slice { inner, .. } => add_defined_variables(inner, set),
     }
 }
 
@@ -1355,6 +1418,21 @@ parser! {
                     PartialGraphPattern::Optional(p, f) => {
                         g = GraphPattern::LeftJoin { left: Box::new(g), right: Box::new(p), expression: f }
                     }
+                    #[cfg(feature = "sep-0006")]
+                    PartialGraphPattern::Lateral(p) => {
+                        let mut defined_variables = HashSet::default();
+                        add_defined_variables(&p, &mut defined_variables);
+                        let mut contains = false;
+                        g.on_in_scope_variable(|v| {
+                            if defined_variables.contains(v) {
+                                contains = true;
+                            }
+                        });
+                        if contains {
+                            return Err("An existing variable is overriden in the right side of LATERAL");
+                        }
+                        g = GraphPattern::Lateral { left: Box::new(g), right: Box::new(p) }
+                    }
                     PartialGraphPattern::Minus(p) => {
                         g = GraphPattern::Minus { left: Box::new(g), right: Box::new(p) }
                     }
@@ -1400,7 +1478,7 @@ parser! {
         rule TriplesBlock_inner() -> Vec<TripleOrPathPattern> = _ h:TriplesSameSubjectPath() _ { h }
 
         //[56]
-        rule GraphPatternNotTriples() -> PartialGraphPattern = GroupOrUnionGraphPattern() / OptionalGraphPattern() / MinusGraphPattern() / GraphGraphPattern() / ServiceGraphPattern() / Filter() / Bind() / InlineData()
+        rule GraphPatternNotTriples() -> PartialGraphPattern = GroupOrUnionGraphPattern() / OptionalGraphPattern() / LateralGraphPattern() / MinusGraphPattern() / GraphGraphPattern() / ServiceGraphPattern() / Filter() / Bind() / InlineData()
 
         //[57]
         rule OptionalGraphPattern() -> PartialGraphPattern = i("OPTIONAL") _ p:GroupGraphPattern() {
@@ -1409,6 +1487,11 @@ parser! {
             } else {
                PartialGraphPattern::Optional(p, None)
             }
+        }
+
+        rule LateralGraphPattern() -> PartialGraphPattern = i("LATERAL") _ p:GroupGraphPattern() {?
+                #[cfg(feature = "sep-0006")]{Ok(PartialGraphPattern::Lateral(p))}
+                #[cfg(not(feature = "sep-0006"))]{Err("The LATERAL modifier is not supported")}
         }
 
         //[58]

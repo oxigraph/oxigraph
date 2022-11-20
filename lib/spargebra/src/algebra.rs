@@ -527,6 +527,9 @@ pub enum GraphPattern {
         right: Box<Self>,
         expression: Option<Expression>,
     },
+    /// Lateral join i.e. evaluate right for all result row of left
+    #[cfg(feature = "sep-0006")]
+    Lateral { left: Box<Self>, right: Box<Self> },
     /// [Filter](https://www.w3.org/TR/sparql11-query/#defn_algFilter).
     Filter { expr: Expression, inner: Box<Self> },
     /// [Union](https://www.w3.org/TR/sparql11-query/#defn_algUnion).
@@ -627,6 +630,14 @@ impl GraphPattern {
                     write!(f, " ")?;
                     expr.fmt_sse(f)?;
                 }
+                write!(f, ")")
+            }
+            #[cfg(feature = "sep-0006")]
+            Self::Lateral { left, right } => {
+                write!(f, "(lateral ")?;
+                left.fmt_sse(f)?;
+                write!(f, " ")?;
+                right.fmt_sse(f)?;
                 write!(f, ")")
             }
             Self::Filter { expr, inner } => {
@@ -793,17 +804,19 @@ impl fmt::Display for GraphPattern {
                 object,
             } => write!(f, "{subject} {path} {object} ."),
             Self::Join { left, right } => {
-                if matches!(
-                    right.as_ref(),
+                match right.as_ref() {
                     Self::LeftJoin { .. }
-                        | Self::Minus { .. }
-                        | Self::Extend { .. }
-                        | Self::Filter { .. }
-                ) {
-                    // The second block might be considered as a modification of the first one.
-                    write!(f, "{left} {{ {right} }}")
-                } else {
-                    write!(f, "{left} {right}")
+                    | Self::Minus { .. }
+                    | Self::Extend { .. }
+                    | Self::Filter { .. } => {
+                        // The second block might be considered as a modification of the first one.
+                        write!(f, "{left} {{ {right} }}")
+                    }
+                    #[cfg(feature = "sep-0006")]
+                    Self::Lateral { .. } => {
+                        write!(f, "{left} {{ {right} }}")
+                    }
+                    _ => write!(f, "{left} {right}"),
                 }
             }
             Self::LeftJoin {
@@ -816,6 +829,10 @@ impl fmt::Display for GraphPattern {
                 } else {
                     write!(f, "{left} OPTIONAL {{ {right} }}")
                 }
+            }
+            #[cfg(feature = "sep-0006")]
+            Self::Lateral { left, right } => {
+                write!(f, "{left} LATERAL {{ {right} }}")
             }
             Self::Filter { expr, inner } => {
                 write!(f, "{inner} FILTER({expr})")
@@ -937,6 +954,11 @@ impl GraphPattern {
             Self::Join { left, right }
             | Self::LeftJoin { left, right, .. }
             | Self::Union { left, right } => {
+                left.lookup_in_scope_variables(callback);
+                right.lookup_in_scope_variables(callback);
+            }
+            #[cfg(feature = "sep-0006")]
+            Self::Lateral { left, right } => {
                 left.lookup_in_scope_variables(callback);
                 right.lookup_in_scope_variables(callback);
             }

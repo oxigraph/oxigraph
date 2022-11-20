@@ -1,0 +1,6 @@
+PREFIX ex: <http://example.org/>
+
+SELECT ?s ?c WHERE {
+    ?s a ex:T.
+    LATERAL {SELECT ?s (MAX(?o) AS ?c) WHERE { ?s ex:p ?o } GROUP BY ?s}
+}

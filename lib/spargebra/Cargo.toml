@@ -16,6 +16,7 @@ rust-version = "1.60"
 [features]
 default = []
 rdf-star = ["oxrdf/rdf-star"]
+sep-0006 = []
 
 [dependencies]
 peg = "0.8"

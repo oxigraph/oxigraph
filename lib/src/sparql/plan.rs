@@ -674,12 +674,6 @@ impl EncodedTuple {
         self.inner[index] = Some(value);
     }
 
-    pub fn unset(&mut self, index: usize) {
-        if let Some(v) = self.inner.get_mut(index) {
-            *v = None;
-        }
-    }
-
     pub fn combine_with(&self, other: &Self) -> Option<Self> {
         if self.inner.len() < other.inner.len() {
             let mut result = other.inner.clone();

@@ -7,6 +7,7 @@
 
 <>  rdf:type mf:Manifest ;
     rdfs:label "Oxigraph SPARQL tests" ;
+    mf:include ( <lateral/manifest.ttl> ) ;
     mf:entries
     (
     :small_unicode_escape_with_multibytes_char

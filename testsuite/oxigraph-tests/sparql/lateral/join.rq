@@ -1,0 +1,9 @@
+PREFIX ex: <http://example.org/>
+
+SELECT ?s ?o WHERE {
+    VALUES ?s { ex:S }
+    LATERAL {
+        { VALUES ?o { ex:O } }
+        { FILTER(BOUND(?s) && !BOUND(?o)) }
+    }
+}

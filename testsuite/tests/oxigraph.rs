@@ -16,7 +16,12 @@ fn run_testsuite(manifest_urls: Vec<&str>) -> Result<()> {
         }
     }
 
-    assert!(errors.is_empty(), "\n{}\n", errors.join("\n"));
+    assert!(
+        errors.is_empty(),
+        "{} failing tests:\n{}\n",
+        errors.len(),
+        errors.join("\n")
+    );
     Ok(())
 }
 
