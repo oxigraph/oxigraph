@@ -106,18 +106,11 @@ impl TestManifest {
         {
             Some(TermRef::NamedNode(c)) => c.into_owned(),
             _ => {
-                return if test_node
-                    .as_str()
-                    .starts_with("http://www.w3.org/2001/sw/DataAccess/tests/data-r2")
-                {
-                    self.next_test() //TODO: hack to ignore invalid tests: https://github.com/w3c/rdf-tests/pull/82
-                } else {
-                    Some(Err(anyhow!(
-                        "The test {} named {} has no rdf:type",
-                        test_node,
-                        name.as_deref().unwrap_or("")
-                    )))
-                };
+                return Some(Err(anyhow!(
+                    "The test {} named {} has no rdf:type",
+                    test_node,
+                    name.as_deref().unwrap_or("")
+                )));
             }
         };
         let comment = match self
