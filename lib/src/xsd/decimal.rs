@@ -22,12 +22,13 @@ impl Decimal {
     /// Constructs the decimal i / 10^n
     #[allow(clippy::cast_possible_truncation)]
     pub fn new(i: i128, n: u32) -> Result<Self, DecimalOverflowError> {
-        if n > DECIMAL_PART_DIGITS as u32 {
-            //TODO: check if end with zeros?
-            return Err(DecimalOverflowError);
-        }
+        let shift = (DECIMAL_PART_DIGITS as u32)
+            .checked_sub(n)
+            .ok_or(DecimalOverflowError)?;
         Ok(Self {
-            value: i.checked_div(10_i128.pow(n)).ok_or(DecimalOverflowError)?,
+            value: i
+                .checked_mul(10_i128.pow(shift))
+                .ok_or(DecimalOverflowError)?,
         })
     }
 
@@ -548,6 +549,15 @@ impl TryFrom<Decimal> for i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn new() {
+        assert_eq!(Decimal::new(1, 0).unwrap().to_string(), "1");
+        assert_eq!(Decimal::new(1, 1).unwrap().to_string(), "0.1");
+        assert_eq!(Decimal::new(10, 0).unwrap().to_string(), "10");
+        assert_eq!(Decimal::new(10, 1).unwrap().to_string(), "1");
+        assert_eq!(Decimal::new(10, 2).unwrap().to_string(), "0.1");
+    }
 
     #[test]
     fn from_str() {

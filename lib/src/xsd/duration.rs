@@ -630,6 +630,16 @@ mod tests {
     }
 
     #[test]
+    fn from_std() {
+        assert_eq!(
+            Duration::try_from(StdDuration::new(10, 10))
+                .unwrap()
+                .to_string(),
+            "PT10.00000001S"
+        );
+    }
+
+    #[test]
     fn equals() {
         assert_eq!(
             YearMonthDuration::from_str("P1Y").unwrap(),
