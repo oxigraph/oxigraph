@@ -2285,4 +2285,11 @@ mod tests {
             Time::from_str("22:10:00-05:00").unwrap()
         );
     }
+
+    #[test]
+    fn now() {
+        let now = DateTime::now().unwrap();
+        assert!(DateTime::from_str("2022-01-01T00:00:00Z").unwrap() < now);
+        assert!(now < DateTime::from_str("2100-01-01T00:00:00Z").unwrap());
+    }
 }

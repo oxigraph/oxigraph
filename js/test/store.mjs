@@ -79,7 +79,7 @@ describe('Store', function () {
 
     it('SELECT with NOW()', function () {
       const store = new Store([dataModel.quad(ex, ex, ex)])
-      const results = store.query('SELECT (YEAR(NOW()) AS ?y) WHERE {}')
+      const results = store.query('SELECT * WHERE { FILTER(2022 <= YEAR(NOW()) && YEAR(NOW()) <= 2100) }')
       assert.strictEqual(1, results.length)
     })
 
