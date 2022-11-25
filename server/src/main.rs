@@ -315,17 +315,7 @@ fn handle_request(request: &mut Request, store: Store) -> Result<Response, HttpE
         }
         (path, "GET") if path.starts_with("/store") => {
             if let Some(target) = store_target(request)? {
-                if !match &target {
-                    NamedGraphName::DefaultGraph => true,
-                    NamedGraphName::NamedNode(target) => store
-                        .contains_named_graph(target)
-                        .map_err(internal_server_error)?,
-                } {
-                    return Err((
-                        Status::NOT_FOUND,
-                        format!("The graph {} does not exists", GraphName::from(target)),
-                    ));
-                }
+                assert_that_graph_exists(&store, &target)?;
                 let format = graph_content_negotiation(request)?;
                 let triples = store.quads_for_pattern(
                     None,
@@ -460,12 +450,7 @@ fn handle_request(request: &mut Request, store: Store) -> Result<Response, HttpE
             if let Some(content_type) = content_type(request) {
                 if let Some(target) = store_target(request)? {
                     if let Some(format) = GraphFormat::from_media_type(&content_type) {
-                        let new = !match &target {
-                            NamedGraphName::NamedNode(target) => store
-                                .contains_named_graph(target)
-                                .map_err(internal_server_error)?,
-                            NamedGraphName::DefaultGraph => true,
-                        };
+                        let new = assert_that_graph_exists(&store, &target).is_ok();
                         store
                             .load_graph(
                                 BufReader::new(request.body_mut()),
@@ -507,17 +492,7 @@ fn handle_request(request: &mut Request, store: Store) -> Result<Response, HttpE
         }
         (path, "HEAD") if path.starts_with("/store") => {
             if let Some(target) = store_target(request)? {
-                if !match &target {
-                    NamedGraphName::DefaultGraph => true,
-                    NamedGraphName::NamedNode(target) => store
-                        .contains_named_graph(target)
-                        .map_err(internal_server_error)?,
-                } {
-                    return Err((
-                        Status::NOT_FOUND,
-                        format!("The graph {} does not exists", GraphName::from(target)),
-                    ));
-                }
+                assert_that_graph_exists(&store, &target)?;
             }
             Ok(Response::builder(Status::OK).build())
         }
@@ -532,19 +507,16 @@ fn handle_request(request: &mut Request, store: Store) -> Result<Response, HttpE
     }
 }
 
-fn base_url(request: &Request) -> Result<String, HttpError> {
+fn base_url(request: &Request) -> String {
     let mut url = request.url().clone();
-    if let Some(host) = request.url().host_str() {
-        url.set_host(Some(host)).map_err(bad_request)?;
-    }
     url.set_query(None);
     url.set_fragment(None);
-    Ok(url.into())
+    url.into()
 }
 
 fn resolve_with_base(request: &Request, url: &str) -> Result<NamedNode, HttpError> {
     Ok(NamedNode::new_unchecked(
-        Iri::parse(base_url(request)?)
+        Iri::parse(base_url(request))
             .map_err(bad_request)?
             .resolve(url)
             .map_err(bad_request)?
@@ -603,7 +575,7 @@ fn evaluate_sparql_query(
     named_graph_uris: Vec<String>,
     request: &Request,
 ) -> Result<Response, HttpError> {
-    let mut query = Query::parse(&query, Some(&base_url(request)?)).map_err(bad_request)?;
+    let mut query = Query::parse(&query, Some(&base_url(request))).map_err(bad_request)?;
 
     if use_default_graph_as_union {
         if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
@@ -736,7 +708,7 @@ fn evaluate_sparql_update(
     request: &Request,
 ) -> Result<Response, HttpError> {
     let mut update =
-        Update::parse(&update, Some(base_url(request)?.as_str())).map_err(bad_request)?;
+        Update::parse(&update, Some(base_url(request).as_str())).map_err(bad_request)?;
 
     if use_default_graph_as_union {
         if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
@@ -809,6 +781,25 @@ fn store_target(request: &Request) -> Result<Option<NamedGraphName>, HttpError> 
         Ok(Some(NamedGraphName::NamedNode(resolve_with_base(
             request, "",
         )?)))
+    }
+}
+
+fn assert_that_graph_exists(store: &Store, target: &NamedGraphName) -> Result<(), HttpError> {
+    if match target {
+        NamedGraphName::DefaultGraph => true,
+        NamedGraphName::NamedNode(target) => store
+            .contains_named_graph(target)
+            .map_err(internal_server_error)?,
+    } {
+        Ok(())
+    } else {
+        Err((
+            Status::NOT_FOUND,
+            format!(
+                "The graph {} does not exists",
+                GraphName::from(target.clone())
+            ),
+        ))
     }
 }
 
