@@ -48,7 +48,6 @@
     clippy::large_digit_groups,
     clippy::large_stack_arrays,
     clippy::large_types_passed_by_value,
-    clippy::let_underscore_drop,
     clippy::let_underscore_must_use,
     clippy::let_unit_value,
     clippy::linkedlist,

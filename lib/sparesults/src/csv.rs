@@ -164,7 +164,7 @@ fn write_tsv_term<'a>(term: impl Into<TermRef<'a>>, sink: &mut impl Write) -> io
                 _ => sink.write_all(literal.to_string().as_bytes()),
             },
             xsd::INTEGER => {
-                if literal.value().bytes().all(|c| matches!(c, b'0'..=b'9')) {
+                if literal.value().bytes().all(|c| c.is_ascii_digit()) {
                     sink.write_all(literal.value().as_bytes())
                 } else {
                     sink.write_all(literal.to_string().as_bytes())
