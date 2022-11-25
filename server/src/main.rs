@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use clap::{Parser, Subcommand};
 use flate2::read::MultiGzDecoder;
 use oxhttp::model::{Body, HeaderName, HeaderValue, Request, Response, Status};
@@ -160,10 +160,10 @@ fn bulk_load(loader: BulkLoader, reader: impl Read, file: &Path) -> anyhow::Resu
         loader.load_graph(reader, format, GraphNameRef::DefaultGraph, None)?;
         Ok(())
     } else {
-        Err(anyhow!(
+        bail!(
             "Not able to guess the file format from the extension {}",
             extension
-        ))
+        )
     }
 }
 
@@ -1090,14 +1090,25 @@ impl Write for ReadForWriteWriter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
     use assert_cmd::Command;
     use assert_fs::prelude::*;
     use oxhttp::model::Method;
     use predicates::prelude::*;
 
+    fn cli_command() -> Result<Command> {
+        Ok(Command::from_std(
+            escargot::CargoBuild::new()
+                .bin(env!("CARGO_PKG_NAME"))
+                .manifest_path(format!("{}/Cargo.toml", env!("CARGO_MANIFEST_DIR")))
+                .run()?
+                .command(),
+        ))
+    }
+
     #[test]
-    fn cli_help() -> Result<(), Box<dyn std::error::Error>> {
-        Command::cargo_bin("oxigraph_server")?
+    fn cli_help() -> Result<()> {
+        cli_command()?
             .assert()
             .failure()
             .stdout("")
@@ -1106,10 +1117,10 @@ mod tests {
     }
 
     #[test]
-    fn cli_load_graph() -> Result<(), Box<dyn std::error::Error>> {
+    fn cli_load_graph() -> Result<()> {
         let file = assert_fs::NamedTempFile::new("sample.nt")?;
         file.write_str("<http://example.com/s> <http://example.com/p> <http://example.com/o> .")?;
-        Command::cargo_bin("oxigraph_server")?
+        cli_command()?
             .arg("load")
             .arg("-f")
             .arg(file.path())
@@ -1121,10 +1132,10 @@ mod tests {
     }
 
     #[test]
-    fn cli_load_dataset() -> Result<(), Box<dyn std::error::Error>> {
+    fn cli_load_dataset() -> Result<()> {
         let file = assert_fs::NamedTempFile::new("sample.nq")?;
         file.write_str("<http://example.com/s> <http://example.com/p> <http://example.com/o> .")?;
-        Command::cargo_bin("oxigraph_server")?
+        cli_command()?
             .arg("load")
             .arg("-f")
             .arg(file.path())
