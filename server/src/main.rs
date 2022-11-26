@@ -244,73 +244,69 @@ fn handle_request(request: &mut Request, store: Store) -> Result<Response, HttpE
             configure_and_evaluate_sparql_query(store, &[url_query(request)], None, request)
         }
         ("/query", "POST") => {
-            if let Some(content_type) = content_type(request) {
-                if content_type == "application/sparql-query" {
-                    let mut buffer = String::new();
-                    request
-                        .body_mut()
-                        .take(MAX_SPARQL_BODY_SIZE)
-                        .read_to_string(&mut buffer)
-                        .map_err(bad_request)?;
-                    configure_and_evaluate_sparql_query(
-                        store,
-                        &[url_query(request)],
-                        Some(buffer),
-                        request,
-                    )
-                } else if content_type == "application/x-www-form-urlencoded" {
-                    let mut buffer = Vec::new();
-                    request
-                        .body_mut()
-                        .take(MAX_SPARQL_BODY_SIZE)
-                        .read_to_end(&mut buffer)
-                        .map_err(bad_request)?;
-                    configure_and_evaluate_sparql_query(
-                        store,
-                        &[url_query(request), &buffer],
-                        None,
-                        request,
-                    )
-                } else {
-                    Err(unsupported_media_type(&content_type))
-                }
+            let content_type =
+                content_type(request).ok_or_else(|| bad_request("No Content-Type given"))?;
+            if content_type == "application/sparql-query" {
+                let mut buffer = String::new();
+                request
+                    .body_mut()
+                    .take(MAX_SPARQL_BODY_SIZE)
+                    .read_to_string(&mut buffer)
+                    .map_err(bad_request)?;
+                configure_and_evaluate_sparql_query(
+                    store,
+                    &[url_query(request)],
+                    Some(buffer),
+                    request,
+                )
+            } else if content_type == "application/x-www-form-urlencoded" {
+                let mut buffer = Vec::new();
+                request
+                    .body_mut()
+                    .take(MAX_SPARQL_BODY_SIZE)
+                    .read_to_end(&mut buffer)
+                    .map_err(bad_request)?;
+                configure_and_evaluate_sparql_query(
+                    store,
+                    &[url_query(request), &buffer],
+                    None,
+                    request,
+                )
             } else {
-                Err(bad_request("No Content-Type given"))
+                Err(unsupported_media_type(&content_type))
             }
         }
         ("/update", "POST") => {
-            if let Some(content_type) = content_type(request) {
-                if content_type == "application/sparql-update" {
-                    let mut buffer = String::new();
-                    request
-                        .body_mut()
-                        .take(MAX_SPARQL_BODY_SIZE)
-                        .read_to_string(&mut buffer)
-                        .map_err(bad_request)?;
-                    configure_and_evaluate_sparql_update(
-                        store,
-                        &[url_query(request)],
-                        Some(buffer),
-                        request,
-                    )
-                } else if content_type == "application/x-www-form-urlencoded" {
-                    let mut buffer = Vec::new();
-                    request
-                        .body_mut()
-                        .take(MAX_SPARQL_BODY_SIZE)
-                        .read_to_end(&mut buffer)
-                        .map_err(bad_request)?;
-                    configure_and_evaluate_sparql_update(
-                        store,
-                        &[url_query(request), &buffer],
-                        None,
-                        request,
-                    )
-                } else {
-                    return Err(unsupported_media_type(&content_type));
-                }
+            let content_type =
+                content_type(request).ok_or_else(|| bad_request("No Content-Type given"))?;
+            if content_type == "application/sparql-update" {
+                let mut buffer = String::new();
+                request
+                    .body_mut()
+                    .take(MAX_SPARQL_BODY_SIZE)
+                    .read_to_string(&mut buffer)
+                    .map_err(bad_request)?;
+                configure_and_evaluate_sparql_update(
+                    store,
+                    &[url_query(request)],
+                    Some(buffer),
+                    request,
+                )
+            } else if content_type == "application/x-www-form-urlencoded" {
+                let mut buffer = Vec::new();
+                request
+                    .body_mut()
+                    .take(MAX_SPARQL_BODY_SIZE)
+                    .read_to_end(&mut buffer)
+                    .map_err(bad_request)?;
+                configure_and_evaluate_sparql_update(
+                    store,
+                    &[url_query(request), &buffer],
+                    None,
+                    request,
+                )
             } else {
-                Err(bad_request("No Content-Type given"))
+                return Err(unsupported_media_type(&content_type));
             }
         }
         (path, "GET") if path.starts_with("/store") => {
@@ -364,59 +360,55 @@ fn handle_request(request: &mut Request, store: Store) -> Result<Response, HttpE
             }
         }
         (path, "PUT") if path.starts_with("/store") => {
-            if let Some(content_type) = content_type(request) {
-                if let Some(target) = store_target(request)? {
-                    if let Some(format) = GraphFormat::from_media_type(&content_type) {
-                        let new = !match &target {
-                            NamedGraphName::NamedNode(target) => {
-                                if store
-                                    .contains_named_graph(target)
-                                    .map_err(internal_server_error)?
-                                {
-                                    store.clear_graph(target).map_err(internal_server_error)?;
-                                    true
-                                } else {
-                                    store
-                                        .insert_named_graph(target)
-                                        .map_err(internal_server_error)?;
-                                    false
-                                }
-                            }
-                            NamedGraphName::DefaultGraph => {
-                                store
-                                    .clear_graph(GraphNameRef::DefaultGraph)
-                                    .map_err(internal_server_error)?;
-                                true
-                            }
-                        };
-                        store
-                            .load_graph(
-                                BufReader::new(request.body_mut()),
-                                format,
-                                GraphName::from(target).as_ref(),
-                                None,
-                            )
-                            .map_err(bad_request)?;
-                        Ok(Response::builder(if new {
-                            Status::CREATED
+            let content_type =
+                content_type(request).ok_or_else(|| bad_request("No Content-Type given"))?;
+            if let Some(target) = store_target(request)? {
+                let format = GraphFormat::from_media_type(&content_type)
+                    .ok_or_else(|| unsupported_media_type(&content_type))?;
+                let new = !match &target {
+                    NamedGraphName::NamedNode(target) => {
+                        if store
+                            .contains_named_graph(target)
+                            .map_err(internal_server_error)?
+                        {
+                            store.clear_graph(target).map_err(internal_server_error)?;
+                            true
                         } else {
-                            Status::NO_CONTENT
-                        })
-                        .build())
-                    } else {
-                        Err(unsupported_media_type(&content_type))
+                            store
+                                .insert_named_graph(target)
+                                .map_err(internal_server_error)?;
+                            false
+                        }
                     }
-                } else if let Some(format) = DatasetFormat::from_media_type(&content_type) {
-                    store.clear().map_err(internal_server_error)?;
-                    store
-                        .load_dataset(BufReader::new(request.body_mut()), format, None)
-                        .map_err(internal_server_error)?;
-                    Ok(Response::builder(Status::NO_CONTENT).build())
+                    NamedGraphName::DefaultGraph => {
+                        store
+                            .clear_graph(GraphNameRef::DefaultGraph)
+                            .map_err(internal_server_error)?;
+                        true
+                    }
+                };
+                store
+                    .load_graph(
+                        BufReader::new(request.body_mut()),
+                        format,
+                        GraphName::from(target).as_ref(),
+                        None,
+                    )
+                    .map_err(bad_request)?;
+                Ok(Response::builder(if new {
+                    Status::CREATED
                 } else {
-                    Err(unsupported_media_type(&content_type))
-                }
+                    Status::NO_CONTENT
+                })
+                .build())
             } else {
-                Err(bad_request("No Content-Type given"))
+                let format = DatasetFormat::from_media_type(&content_type)
+                    .ok_or_else(|| unsupported_media_type(&content_type))?;
+                store.clear().map_err(internal_server_error)?;
+                store
+                    .load_dataset(BufReader::new(request.body_mut()), format, None)
+                    .map_err(internal_server_error)?;
+                Ok(Response::builder(Status::NO_CONTENT).build())
             }
         }
         (path, "DELETE") if path.starts_with("/store") => {
@@ -447,47 +439,44 @@ fn handle_request(request: &mut Request, store: Store) -> Result<Response, HttpE
             Ok(Response::builder(Status::NO_CONTENT).build())
         }
         (path, "POST") if path.starts_with("/store") => {
-            if let Some(content_type) = content_type(request) {
-                if let Some(target) = store_target(request)? {
-                    if let Some(format) = GraphFormat::from_media_type(&content_type) {
-                        let new = assert_that_graph_exists(&store, &target).is_ok();
-                        store
-                            .load_graph(
-                                BufReader::new(request.body_mut()),
-                                format,
-                                GraphName::from(target).as_ref(),
-                                None,
-                            )
-                            .map_err(bad_request)?;
-                        Ok(Response::builder(if new {
-                            Status::CREATED
-                        } else {
-                            Status::NO_CONTENT
-                        })
-                        .build())
+            let content_type =
+                content_type(request).ok_or_else(|| bad_request("No Content-Type given"))?;
+            if let Some(target) = store_target(request)? {
+                if let Some(format) = GraphFormat::from_media_type(&content_type) {
+                    let new = assert_that_graph_exists(&store, &target).is_ok();
+                    store
+                        .load_graph(
+                            BufReader::new(request.body_mut()),
+                            format,
+                            GraphName::from(target).as_ref(),
+                            None,
+                        )
+                        .map_err(bad_request)?;
+                    Ok(Response::builder(if new {
+                        Status::CREATED
                     } else {
-                        Err(unsupported_media_type(&content_type))
-                    }
-                } else if let Some(format) = DatasetFormat::from_media_type(&content_type) {
-                    store
-                        .load_dataset(BufReader::new(request.body_mut()), format, None)
-                        .map_err(bad_request)?;
-                    Ok(Response::builder(Status::NO_CONTENT).build())
-                } else if let Some(format) = GraphFormat::from_media_type(&content_type) {
-                    let graph =
-                        resolve_with_base(request, &format!("/store/{:x}", random::<u128>()))?;
-                    store
-                        .load_graph(BufReader::new(request.body_mut()), format, &graph, None)
-                        .map_err(bad_request)?;
-                    Ok(Response::builder(Status::CREATED)
-                        .with_header(HeaderName::LOCATION, graph.into_string())
-                        .unwrap()
-                        .build())
+                        Status::NO_CONTENT
+                    })
+                    .build())
                 } else {
                     Err(unsupported_media_type(&content_type))
                 }
+            } else if let Some(format) = DatasetFormat::from_media_type(&content_type) {
+                store
+                    .load_dataset(BufReader::new(request.body_mut()), format, None)
+                    .map_err(bad_request)?;
+                Ok(Response::builder(Status::NO_CONTENT).build())
+            } else if let Some(format) = GraphFormat::from_media_type(&content_type) {
+                let graph = resolve_with_base(request, &format!("/store/{:x}", random::<u128>()))?;
+                store
+                    .load_graph(BufReader::new(request.body_mut()), format, &graph, None)
+                    .map_err(bad_request)?;
+                Ok(Response::builder(Status::CREATED)
+                    .with_header(HeaderName::LOCATION, graph.into_string())
+                    .unwrap()
+                    .build())
             } else {
-                Err(bad_request("No Content-Type given"))
+                Err(unsupported_media_type(&content_type))
             }
         }
         (path, "HEAD") if path.starts_with("/store") => {
@@ -553,18 +542,15 @@ fn configure_and_evaluate_sparql_query(
             }
         }
     }
-    if let Some(query) = query {
-        evaluate_sparql_query(
-            store,
-            query,
-            use_default_graph_as_union,
-            default_graph_uris,
-            named_graph_uris,
-            request,
-        )
-    } else {
-        Err(bad_request("You should set the 'query' parameter"))
-    }
+    let query = query.ok_or_else(|| bad_request("You should set the 'query' parameter"))?;
+    evaluate_sparql_query(
+        store,
+        query,
+        use_default_graph_as_union,
+        default_graph_uris,
+        named_graph_uris,
+        request,
+    )
 }
 
 fn evaluate_sparql_query(
@@ -685,18 +671,15 @@ fn configure_and_evaluate_sparql_update(
             }
         }
     }
-    if let Some(update) = update {
-        evaluate_sparql_update(
-            store,
-            update,
-            use_default_graph_as_union,
-            default_graph_uris,
-            named_graph_uris,
-            request,
-        )
-    } else {
-        Err(bad_request("You should set the 'update' parameter"))
-    }
+    let update = update.ok_or_else(|| bad_request("You should set the 'update' parameter"))?;
+    evaluate_sparql_update(
+        store,
+        update,
+        use_default_graph_as_union,
+        default_graph_uris,
+        named_graph_uris,
+        request,
+    )
 }
 
 fn evaluate_sparql_update(
