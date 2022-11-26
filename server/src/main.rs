@@ -1,4 +1,4 @@
-use anyhow::bail;
+use anyhow::{anyhow, bail};
 use clap::{Parser, Subcommand};
 use flate2::read::MultiGzDecoder;
 use oxhttp::model::{Body, HeaderName, HeaderValue, Request, Response, Status};
@@ -177,7 +177,7 @@ enum GraphOrDatasetFormat {
 impl GraphOrDatasetFormat {
     fn from_path(path: &Path) -> anyhow::Result<Self> {
         if let Some(ext) = path.extension().and_then(|ext| ext.to_str()) {
-            Self::from_name(ext).map_err(|e| {
+            Self::from_extension(ext).map_err(|e| {
                 e.context(format!(
                     "Not able to guess the file format from file name extension '{}'",
                     ext
@@ -191,31 +191,30 @@ impl GraphOrDatasetFormat {
         }
     }
 
-    fn from_name(name: &str) -> anyhow::Result<Self> {
-        let mut candidates = Vec::with_capacity(4);
-        if let Some(f) = GraphFormat::from_extension(name) {
-            candidates.push(GraphOrDatasetFormat::Graph(f));
+    fn from_extension(name: &str) -> anyhow::Result<Self> {
+        match (GraphFormat::from_extension(name), DatasetFormat::from_extension(name)) {
+            (Some(g), Some(d)) => Err(anyhow!("The file extension '{}' can be resolved to both '{}' and '{}', not sure what to pick", name, g.file_extension(), d.file_extension())),
+            (Some(g), None) => Ok(GraphOrDatasetFormat::Graph(g)),
+            (None, Some(d)) => Ok(GraphOrDatasetFormat::Dataset(d)),
+            (None, None) =>
+            Err(anyhow!("The file extension '{}' is unknown", name))
         }
-        if let Some(f) = DatasetFormat::from_extension(name) {
-            candidates.push(GraphOrDatasetFormat::Dataset(f));
-        }
-        if let Some(f) = GraphFormat::from_media_type(name) {
-            candidates.push(GraphOrDatasetFormat::Graph(f));
-        }
-        if let Some(f) = DatasetFormat::from_media_type(name) {
-            candidates.push(GraphOrDatasetFormat::Dataset(f));
-        }
-        if candidates.is_empty() {
-            bail!("The format '{}' is unknown", name)
-        } else if candidates.len() == 1 {
-            Ok(candidates[0])
-        } else {
-            bail!("The format '{}' can be resolved to multiple known formats, not sure what to pick ({})", name, candidates.iter().fold(String::new(), |a, f| {
-                a + " " + match f {
-                    GraphOrDatasetFormat::Graph(f) => f.file_extension(),
-                    GraphOrDatasetFormat::Dataset(f) => f.file_extension(),
-                }
-            }).trim())
+    }
+
+    fn from_media_type(name: &str) -> anyhow::Result<Self> {
+        match (
+            GraphFormat::from_media_type(name),
+            DatasetFormat::from_media_type(name),
+        ) {
+            (Some(g), Some(d)) => Err(anyhow!(
+                "The media type '{}' can be resolved to both '{}' and '{}', not sure what to pick",
+                name,
+                g.file_extension(),
+                d.file_extension()
+            )),
+            (Some(g), None) => Ok(GraphOrDatasetFormat::Graph(g)),
+            (None, Some(d)) => Ok(GraphOrDatasetFormat::Dataset(d)),
+            (None, None) => Err(anyhow!("The media type '{}' is unknown", name)),
         }
     }
 }
@@ -442,41 +441,45 @@ fn handle_request(request: &mut Request, store: Store) -> Result<Response, HttpE
             let content_type =
                 content_type(request).ok_or_else(|| bad_request("No Content-Type given"))?;
             if let Some(target) = store_target(request)? {
-                if let Some(format) = GraphFormat::from_media_type(&content_type) {
-                    let new = assert_that_graph_exists(&store, &target).is_ok();
-                    store
-                        .load_graph(
-                            BufReader::new(request.body_mut()),
-                            format,
-                            GraphName::from(target).as_ref(),
-                            None,
-                        )
-                        .map_err(bad_request)?;
-                    Ok(Response::builder(if new {
-                        Status::CREATED
-                    } else {
-                        Status::NO_CONTENT
-                    })
-                    .build())
+                let format = GraphFormat::from_media_type(&content_type)
+                    .ok_or_else(|| unsupported_media_type(&content_type))?;
+                let new = assert_that_graph_exists(&store, &target).is_ok();
+                store
+                    .load_graph(
+                        BufReader::new(request.body_mut()),
+                        format,
+                        GraphName::from(target).as_ref(),
+                        None,
+                    )
+                    .map_err(bad_request)?;
+                Ok(Response::builder(if new {
+                    Status::CREATED
                 } else {
-                    Err(unsupported_media_type(&content_type))
-                }
-            } else if let Some(format) = DatasetFormat::from_media_type(&content_type) {
-                store
-                    .load_dataset(BufReader::new(request.body_mut()), format, None)
-                    .map_err(bad_request)?;
-                Ok(Response::builder(Status::NO_CONTENT).build())
-            } else if let Some(format) = GraphFormat::from_media_type(&content_type) {
-                let graph = resolve_with_base(request, &format!("/store/{:x}", random::<u128>()))?;
-                store
-                    .load_graph(BufReader::new(request.body_mut()), format, &graph, None)
-                    .map_err(bad_request)?;
-                Ok(Response::builder(Status::CREATED)
-                    .with_header(HeaderName::LOCATION, graph.into_string())
-                    .unwrap()
-                    .build())
+                    Status::NO_CONTENT
+                })
+                .build())
             } else {
-                Err(unsupported_media_type(&content_type))
+                match GraphOrDatasetFormat::from_media_type(&content_type)
+                    .map_err(|_| unsupported_media_type(&content_type))?
+                {
+                    GraphOrDatasetFormat::Graph(format) => {
+                        let graph =
+                            resolve_with_base(request, &format!("/store/{:x}", random::<u128>()))?;
+                        store
+                            .load_graph(BufReader::new(request.body_mut()), format, &graph, None)
+                            .map_err(bad_request)?;
+                        Ok(Response::builder(Status::CREATED)
+                            .with_header(HeaderName::LOCATION, graph.into_string())
+                            .unwrap()
+                            .build())
+                    }
+                    GraphOrDatasetFormat::Dataset(format) => {
+                        store
+                            .load_dataset(BufReader::new(request.body_mut()), format, None)
+                            .map_err(bad_request)?;
+                        Ok(Response::builder(Status::NO_CONTENT).build())
+                    }
+                }
             }
         }
         (path, "HEAD") if path.starts_with("/store") => {
