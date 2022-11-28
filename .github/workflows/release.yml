@@ -116,6 +116,7 @@ jobs:
         working-directory: ./python
       - run: maturin publish --no-sdist --universal2 -m python/Cargo.toml -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
       - run: maturin publish --no-sdist -m python/Cargo.toml -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
+      - run: maturin publish --no-sdist --target aarch64-apple-darwin -m python/Cargo.toml -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
       - uses: softprops/action-gh-release@v1
         with:
           files: target/wheels/*.whl
