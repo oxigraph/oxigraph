@@ -1441,8 +1441,12 @@ parser! {
         rule InlineDataOneVar_value() -> Vec<Option<GroundTerm>> = t:DataBlockValue() _ { vec![t] }
 
         //[64]
-        rule InlineDataFull() -> (Vec<Variable>, Vec<Vec<Option<GroundTerm>>>) = "(" _ vars:InlineDataFull_var()* _ ")" _ "{" _ val:InlineDataFull_values()* "}" {
-            (vars, val)
+        rule InlineDataFull() -> (Vec<Variable>, Vec<Vec<Option<GroundTerm>>>) = "(" _ vars:InlineDataFull_var()* _ ")" _ "{" _ vals:InlineDataFull_values()* "}" {?
+            if vals.iter().all(|vs| vs.len() == vars.len()) {
+                Ok((vars, vals))
+            } else {
+                Err("The VALUES clause rows should have exactly the same number of values as there are variables. To set a value to undefined use UNDEF.")
+            }
         }
         rule InlineDataFull_var() -> Variable = v:Var() _ { v }
         rule InlineDataFull_values() -> Vec<Option<GroundTerm>> = "(" _ v:InlineDataFull_value()* _ ")" _ { v }
