@@ -66,7 +66,7 @@ It provides the following REST actions:
   For example:
   ```sh
   curl -f -X POST -H 'Content-Type:application/n-triples' \
-    --data-binary "@MY_FILE.nt" "http://localhost:7878/store?graph=http://example.com/g"
+    -T MY_FILE.nt "http://localhost:7878/store?graph=http://example.com/g"
   ```
   will add the N-Triples file `MY_FILE.nt` to the server dataset inside of the `http://example.com/g` named graph.
   [Turtle](https://www.w3.org/TR/turtle/), [N-Triples](https://www.w3.org/TR/n-triples/) and [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) are supported.
@@ -74,7 +74,7 @@ It provides the following REST actions:
   For example:
   ```sh
   curl -f -X POST -H 'Content-Type:application/n-quads' \
-    --data-binary "@MY_FILE.nq" http://localhost:7878/store
+    -T MY_FILE.nq http://localhost:7878/store
   ```
   will add the N-Quads file `MY_FILE.nq` to the server dataset.
 
@@ -103,7 +103,7 @@ You can then access it from your machine on port `7878`:
 firefox http://localhost:7878
 
 # Post some data
-curl http://localhost:7878/store?default -H 'Content-Type: text/turtle' -d@./data.ttl
+curl http://localhost:7878/store?default -H 'Content-Type: text/turtle' -T ./data.ttl
 
 # Make a query
 curl -X POST -H 'Accept: application/sparql-results+json' -H 'Content-Type: application/sparql-query' --data 'SELECT * WHERE { ?s ?p ?o } LIMIT 10' http://localhost:7878/query
