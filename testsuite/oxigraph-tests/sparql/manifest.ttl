@@ -28,6 +28,8 @@
     :order_terms
     :nested_anonymous
     :unbound_variable_in_subquery
+    :values_too_many
+    :values_too_few
     ) .
 
 :small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
@@ -129,3 +131,11 @@
     mf:action
          [ qt:query  <unbound_variable_in_subquery.rq> ] ;
     mf:result  <unbound_variable_in_subquery.srx> .
+
+:values_too_many rdf:type mf:NegativeSyntaxTest11 ;
+    mf:name "Too many values in a VALUE clause compared to the number of variable" ;
+    mf:action <values_too_many.rq> .
+
+:values_too_few rdf:type mf:NegativeSyntaxTest11 ;
+    mf:name "Too few values in a VALUE clause compared to the number of variable" ;
+    mf:action <values_too_few.rq> .
