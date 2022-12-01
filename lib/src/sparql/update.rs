@@ -123,6 +123,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             algebra,
             false,
             &self.options.query_options.custom_functions,
+            !self.options.query_options.without_optimizations,
         )?;
         let evaluator = SimpleEvaluator::new(
             dataset.clone(),

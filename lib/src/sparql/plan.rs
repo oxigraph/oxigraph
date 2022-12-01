@@ -53,8 +53,14 @@ pub enum PlanNode {
     Union {
         children: Vec<Self>,
     },
+    /// hash left join
+    HashLeftJoin {
+        left: Box<Self>,
+        right: Box<Self>,
+        expression: Box<PlanExpression>,
+    },
     /// right nested in left loop
-    LeftJoin {
+    ForLoopLeftJoin {
         left: Box<Self>,
         right: Box<Self>,
         possible_problem_vars: Rc<Vec<usize>>, //Variables that should not be part of the entry of the left join
@@ -163,9 +169,18 @@ impl PlanNode {
             Self::HashJoin { left, right }
             | Self::ForLoopJoin { left, right, .. }
             | Self::AntiJoin { left, right }
-            | Self::LeftJoin { left, right, .. } => {
+            | Self::ForLoopLeftJoin { left, right, .. } => {
                 left.lookup_used_variables(callback);
                 right.lookup_used_variables(callback);
+            }
+            Self::HashLeftJoin {
+                left,
+                right,
+                expression,
+            } => {
+                left.lookup_used_variables(callback);
+                right.lookup_used_variables(callback);
+                expression.lookup_used_variables(callback);
             }
             Self::Extend {
                 child,
@@ -304,7 +319,9 @@ impl PlanNode {
                 left.lookup_always_bound_variables(callback);
                 right.lookup_always_bound_variables(callback);
             }
-            Self::AntiJoin { left, .. } | Self::LeftJoin { left, .. } => {
+            Self::AntiJoin { left, .. }
+            | Self::HashLeftJoin { left, .. }
+            | Self::ForLoopLeftJoin { left, .. } => {
                 left.lookup_always_bound_variables(callback);
             }
             Self::Extend {

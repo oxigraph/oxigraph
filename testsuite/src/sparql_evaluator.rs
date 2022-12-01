@@ -208,39 +208,50 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
                     }
                 }
             }
-            match store.query_opt(query, options) {
-                Err(error) => Err(anyhow!(
-                    "Failure to execute query of {} with error: {}",
-                    test,
-                    error
-                )),
-                Ok(actual_results) => {
-                    let expected_results = load_sparql_query_result(test.result.as_ref().unwrap())
+
+            for with_query_optimizer in [true, false] {
+                let mut options = options.clone();
+                if !with_query_optimizer {
+                    options = options.without_optimizations();
+                }
+                match store.query_opt(query.clone(), options) {
+                    Err(error) => {
+                        return Err(anyhow!(
+                            "Failure to execute query of {} with error: {}",
+                            test,
+                            error
+                        ))
+                    }
+                    Ok(actual_results) => {
+                        let expected_results = load_sparql_query_result(
+                            test.result.as_ref().unwrap(),
+                        )
                         .map_err(|e| {
                             anyhow!("Error constructing expected graph for {}: {}", test, e)
                         })?;
-                    let with_order =
-                        if let StaticQueryResults::Solutions { ordered, .. } = &expected_results {
+                        let with_order = if let StaticQueryResults::Solutions { ordered, .. } =
+                            &expected_results
+                        {
                             *ordered
                         } else {
                             false
                         };
-                    let actual_results =
-                        StaticQueryResults::from_query_results(actual_results, with_order)?;
+                        let actual_results =
+                            StaticQueryResults::from_query_results(actual_results, with_order)?;
 
-                    if are_query_results_isomorphic(&expected_results, &actual_results) {
-                        Ok(())
-                    } else {
-                        Err(anyhow!("Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
+                        if !are_query_results_isomorphic(&expected_results, &actual_results) {
+                            return Err(anyhow!("Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
                                                test,
                                                expected_results,
                                                actual_results,
                                                Query::parse(&read_file_to_string(query_file)?, Some(query_file)).unwrap(),
                                                store
-                            ))
+                            ));
+                        }
                     }
                 }
             }
+            Ok(())
         }
     }
 }

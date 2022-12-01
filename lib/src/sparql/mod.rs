@@ -43,8 +43,13 @@ pub(crate) fn evaluate_query(
         spargebra::Query::Select {
             pattern, base_iri, ..
         } => {
-            let (plan, variables) =
-                PlanBuilder::build(&dataset, &pattern, true, &options.custom_functions)?;
+            let (plan, variables) = PlanBuilder::build(
+                &dataset,
+                &pattern,
+                true,
+                &options.custom_functions,
+                options.without_optimizations,
+            )?;
             Ok(SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
@@ -56,8 +61,13 @@ pub(crate) fn evaluate_query(
         spargebra::Query::Ask {
             pattern, base_iri, ..
         } => {
-            let (plan, _) =
-                PlanBuilder::build(&dataset, &pattern, false, &options.custom_functions)?;
+            let (plan, _) = PlanBuilder::build(
+                &dataset,
+                &pattern,
+                false,
+                &options.custom_functions,
+                options.without_optimizations,
+            )?;
             SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
@@ -72,13 +82,19 @@ pub(crate) fn evaluate_query(
             base_iri,
             ..
         } => {
-            let (plan, variables) =
-                PlanBuilder::build(&dataset, &pattern, false, &options.custom_functions)?;
+            let (plan, variables) = PlanBuilder::build(
+                &dataset,
+                &pattern,
+                false,
+                &options.custom_functions,
+                options.without_optimizations,
+            )?;
             let construct = PlanBuilder::build_graph_template(
                 &dataset,
                 &template,
                 variables,
                 &options.custom_functions,
+                options.without_optimizations,
             );
             Ok(SimpleEvaluator::new(
                 Rc::new(dataset),
@@ -91,8 +107,13 @@ pub(crate) fn evaluate_query(
         spargebra::Query::Describe {
             pattern, base_iri, ..
         } => {
-            let (plan, _) =
-                PlanBuilder::build(&dataset, &pattern, false, &options.custom_functions)?;
+            let (plan, _) = PlanBuilder::build(
+                &dataset,
+                &pattern,
+                false,
+                &options.custom_functions,
+                options.without_optimizations,
+            )?;
             Ok(SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
@@ -128,6 +149,7 @@ pub struct QueryOptions {
     custom_functions: HashMap<NamedNode, Rc<dyn Fn(&[Term]) -> Option<Term>>>,
     http_timeout: Option<Duration>,
     http_redirection_limit: usize,
+    without_optimizations: bool,
 }
 
 impl QueryOptions {
@@ -212,6 +234,14 @@ impl QueryOptions {
                 Rc::new(EmptyServiceHandler)
             }
         })
+    }
+
+    #[doc(hidden)]
+    #[inline]
+    #[must_use]
+    pub fn without_optimizations(mut self) -> Self {
+        self.without_optimizations = true;
+        self
     }
 }
 
