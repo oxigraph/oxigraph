@@ -60,7 +60,7 @@ impl<'a> PlanBuilder<'a> {
     }
 
     fn build_for_graph_pattern(
-        &mut self,
+        &self,
         pattern: &GraphPattern,
         variables: &mut Vec<Variable>,
         graph_name: &PatternValue,
@@ -270,7 +270,7 @@ impl<'a> PlanBuilder<'a> {
         })
     }
 
-    fn build_for_path(&mut self, path: &PropertyPathExpression) -> PlanPropertyPath {
+    fn build_for_path(&self, path: &PropertyPathExpression) -> PlanPropertyPath {
         match path {
             PropertyPathExpression::NamedNode(p) => PlanPropertyPath::Path(self.build_term(p)),
             PropertyPathExpression::Reverse(p) => {
@@ -300,7 +300,7 @@ impl<'a> PlanBuilder<'a> {
     }
 
     fn build_for_expression(
-        &mut self,
+        &self,
         expression: &Expression,
         variables: &mut Vec<Variable>,
         graph_name: &PatternValue,
@@ -747,7 +747,7 @@ impl<'a> PlanBuilder<'a> {
     }
 
     fn build_cast(
-        &mut self,
+        &self,
         parameters: &[Expression],
         constructor: impl Fn(Box<PlanExpression>) -> PlanExpression,
         variables: &mut Vec<Variable>,
@@ -769,7 +769,7 @@ impl<'a> PlanBuilder<'a> {
     }
 
     fn expression_list(
-        &mut self,
+        &self,
         l: &[Expression],
         variables: &mut Vec<Variable>,
         graph_name: &PatternValue,
@@ -780,7 +780,7 @@ impl<'a> PlanBuilder<'a> {
     }
 
     fn pattern_value_from_term_or_variable(
-        &mut self,
+        &self,
         term_or_variable: &TermPattern,
         variables: &mut Vec<Variable>,
     ) -> PatternValue {
@@ -828,7 +828,7 @@ impl<'a> PlanBuilder<'a> {
     }
 
     fn pattern_value_from_named_node_or_variable(
-        &mut self,
+        &self,
         named_node_or_variable: &NamedNodePattern,
         variables: &mut Vec<Variable>,
     ) -> PatternValue {
@@ -843,7 +843,7 @@ impl<'a> PlanBuilder<'a> {
     }
 
     fn encode_bindings(
-        &mut self,
+        &self,
         table_variables: &[Variable],
         rows: &[Vec<Option<GroundTerm>>],
         variables: &mut Vec<Variable>,
@@ -873,7 +873,7 @@ impl<'a> PlanBuilder<'a> {
     }
 
     fn build_for_aggregate(
-        &mut self,
+        &self,
         aggregate: &AggregateExpression,
         variables: &mut Vec<Variable>,
         graph_name: &PatternValue,
@@ -930,7 +930,7 @@ impl<'a> PlanBuilder<'a> {
     }
 
     fn build_for_graph_template(
-        &mut self,
+        &self,
         template: &[TriplePattern],
         variables: &mut Vec<Variable>,
     ) -> Vec<TripleTemplate> {
@@ -955,7 +955,7 @@ impl<'a> PlanBuilder<'a> {
     }
 
     fn template_value_from_term_or_variable(
-        &mut self,
+        &self,
         term_or_variable: &TermPattern,
         variables: &mut Vec<Variable>,
         bnodes: &mut Vec<BlankNode>,
@@ -1000,7 +1000,7 @@ impl<'a> PlanBuilder<'a> {
     }
 
     fn template_value_from_named_node_or_variable(
-        &mut self,
+        &self,
         named_node_or_variable: &NamedNodePattern,
         variables: &mut Vec<Variable>,
     ) -> TripleTemplateValue {
@@ -1293,11 +1293,11 @@ impl<'a> PlanBuilder<'a> {
         }
     }
 
-    fn build_term<'b>(&mut self, term: impl Into<TermRef<'b>>) -> EncodedTerm {
+    fn build_term<'b>(&self, term: impl Into<TermRef<'b>>) -> EncodedTerm {
         self.dataset.encode_term(term)
     }
 
-    fn build_triple(&mut self, triple: &GroundTriple) -> EncodedTerm {
+    fn build_triple(&self, triple: &GroundTriple) -> EncodedTerm {
         EncodedTriple::new(
             match &triple.subject {
                 GroundSubject::NamedNode(node) => self.build_term(node),
