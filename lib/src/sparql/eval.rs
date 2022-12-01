@@ -372,7 +372,39 @@ impl SimpleEvaluator {
                     })
                 }
             }
-            PlanNode::LeftJoin {
+            PlanNode::HashLeftJoin {
+                left,
+                right,
+                expression,
+            } => {
+                let join_keys: Vec<_> = left
+                    .always_bound_variables()
+                    .intersection(&right.always_bound_variables())
+                    .copied()
+                    .collect();
+                let left = self.plan_evaluator(left);
+                let right = self.plan_evaluator(right);
+                let expression = self.expression_evaluator(expression);
+                // Real hash join
+                Rc::new(move |from| {
+                    let mut errors = Vec::default();
+                    let mut right_values = EncodedTupleSet::new(join_keys.clone());
+                    right_values.extend(right(from.clone()).filter_map(|result| match result {
+                        Ok(result) => Some(result),
+                        Err(error) => {
+                            errors.push(Err(error));
+                            None
+                        }
+                    }));
+                    Box::new(HashLeftJoinIterator {
+                        left_iter: left(from),
+                        right: right_values,
+                        buffered_results: errors,
+                        expression: expression.clone(),
+                    })
+                })
+            }
+            PlanNode::ForLoopLeftJoin {
                 left,
                 right,
                 possible_problem_vars,
@@ -382,7 +414,7 @@ impl SimpleEvaluator {
                 let possible_problem_vars = possible_problem_vars.clone();
                 Rc::new(move |from| {
                     if possible_problem_vars.is_empty() {
-                        Box::new(LeftJoinIterator {
+                        Box::new(ForLoopLeftJoinIterator {
                             right_evaluator: right.clone(),
                             left_iter: left(from),
                             current_right: Box::new(empty()),
@@ -3194,10 +3226,57 @@ impl Iterator for HashJoinIterator {
                 Ok(left_tuple) => left_tuple,
                 Err(error) => return Some(Err(error)),
             };
-            for right_tuple in self.right.get(&left_tuple) {
-                if let Some(result_tuple) = left_tuple.combine_with(right_tuple) {
-                    self.buffered_results.push(Ok(result_tuple))
-                }
+            self.buffered_results.extend(
+                self.right
+                    .get(&left_tuple)
+                    .iter()
+                    .filter_map(|right_tuple| left_tuple.combine_with(right_tuple).map(Ok)),
+            )
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (
+            0,
+            self.left_iter.size_hint().1.map(|v| v * self.right.len()),
+        )
+    }
+}
+
+struct HashLeftJoinIterator {
+    left_iter: EncodedTuplesIterator,
+    right: EncodedTupleSet,
+    buffered_results: Vec<Result<EncodedTuple, EvaluationError>>,
+    expression: Rc<dyn Fn(&EncodedTuple) -> Option<EncodedTerm>>,
+}
+
+impl Iterator for HashLeftJoinIterator {
+    type Item = Result<EncodedTuple, EvaluationError>;
+
+    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
+        loop {
+            if let Some(result) = self.buffered_results.pop() {
+                return Some(result);
+            }
+            let left_tuple = match self.left_iter.next()? {
+                Ok(left_tuple) => left_tuple,
+                Err(error) => return Some(Err(error)),
+            };
+            self.buffered_results.extend(
+                self.right
+                    .get(&left_tuple)
+                    .iter()
+                    .filter_map(|right_tuple| left_tuple.combine_with(right_tuple))
+                    .filter(|tuple| {
+                        (self.expression)(tuple)
+                            .and_then(|term| to_bool(&term))
+                            .unwrap_or(false)
+                    })
+                    .map(Ok),
+            );
+            if self.buffered_results.is_empty() {
+                // We have not manage to join with anything
+                return Some(Ok(left_tuple));
             }
         }
     }
@@ -3210,29 +3289,28 @@ impl Iterator for HashJoinIterator {
     }
 }
 
-struct LeftJoinIterator {
+struct ForLoopLeftJoinIterator {
     right_evaluator: Rc<dyn Fn(EncodedTuple) -> EncodedTuplesIterator>,
     left_iter: EncodedTuplesIterator,
     current_right: EncodedTuplesIterator,
 }
 
-impl Iterator for LeftJoinIterator {
+impl Iterator for ForLoopLeftJoinIterator {
     type Item = Result<EncodedTuple, EvaluationError>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
         if let Some(tuple) = self.current_right.next() {
             return Some(tuple);
         }
-        match self.left_iter.next()? {
-            Ok(left_tuple) => {
-                self.current_right = (self.right_evaluator)(left_tuple.clone());
-                if let Some(right_tuple) = self.current_right.next() {
-                    Some(right_tuple)
-                } else {
-                    Some(Ok(left_tuple))
-                }
-            }
-            Err(error) => Some(Err(error)),
+        let left_tuple = match self.left_iter.next()? {
+            Ok(left_tuple) => left_tuple,
+            Err(error) => return Some(Err(error)),
+        };
+        self.current_right = (self.right_evaluator)(left_tuple.clone());
+        if let Some(right_tuple) = self.current_right.next() {
+            Some(right_tuple)
+        } else {
+            Some(Ok(left_tuple))
         }
     }
 }
