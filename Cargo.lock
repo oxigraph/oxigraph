@@ -1240,6 +1240,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "quick-xml"
+version = "0.26.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f50b1c63b38611e7d4d7f68b82d3ad0cc71a2ad2e7f61fc10f1328d917c93cd"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1383,7 +1392,7 @@ checksum = "26defbc05a1e9d167f86d07adc70a717f108e46ef4c1ec6742d96c63c726ebb6"
 dependencies = [
  "oxilangtag",
  "oxiri",
- "quick-xml",
+ "quick-xml 0.23.1",
  "rio_api",
 ]
 
@@ -1573,7 +1582,7 @@ version = "0.1.1"
 dependencies = [
  "json-event-parser",
  "oxrdf",
- "quick-xml",
+ "quick-xml 0.26.0",
 ]
 
 [[package]]
