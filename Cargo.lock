@@ -976,7 +976,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph"
-version = "0.3.8"
+version = "0.3.9"
 dependencies = [
  "criterion",
  "digest",
@@ -1009,7 +1009,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_js"
-version = "0.3.8"
+version = "0.3.9"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
@@ -1020,7 +1020,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_server"
-version = "0.3.8"
+version = "0.3.9"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1040,7 +1040,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_testsuite"
-version = "0.3.8"
+version = "0.3.9"
 dependencies = [
  "anyhow",
  "clap 4.0.29",
@@ -1064,7 +1064,7 @@ checksum = "bb175ec8981211357b7b379869c2f8d555881c55ea62311428ec0de46d89bd5c"
 
 [[package]]
 name = "oxrdf"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "lasso",
  "oxilangtag",
@@ -1302,7 +1302,7 @@ dependencies = [
 
 [[package]]
 name = "pyoxigraph"
-version = "0.3.8"
+version = "0.3.9"
 dependencies = [
  "oxigraph",
  "pyo3",
@@ -1660,7 +1660,7 @@ checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
 
 [[package]]
 name = "sparesults"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "json-event-parser",
  "oxrdf",
@@ -1669,7 +1669,7 @@ dependencies = [
 
 [[package]]
 name = "spargebra"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "oxilangtag",
  "oxiri",
