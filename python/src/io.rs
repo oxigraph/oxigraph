@@ -46,7 +46,7 @@ pub fn add_to_module(module: &PyModule) -> PyResult<()> {
 /// >>> list(parse(input, "text/turtle", base_iri="http://example.com/"))
 /// [<Triple subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>>>]
 #[pyfunction]
-#[pyo3(text_signature = "(input, /, mime_type, *, base_iri = None)")]
+#[pyo3(text_signature = "(input, mime_type, *, base_iri = None)")]
 pub fn parse(
     input: PyObject,
     mime_type: &str,
@@ -117,7 +117,7 @@ pub fn parse(
 /// >>> output.getvalue()
 /// b'<http://example.com> <http://example.com/p> "1" .\n'
 #[pyfunction]
-#[pyo3(text_signature = "(input, output, /, mime_type)")]
+#[pyo3(text_signature = "(input, output, mime_type)")]
 pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_>) -> PyResult<()> {
     let output = if let Ok(path) = output.extract::<&str>(py) {
         PyWritable::from_file(path, py)

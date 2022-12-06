@@ -278,7 +278,7 @@ impl PyStore {
     /// >>> store.load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[pyo3(text_signature = "($self, input, /, mime_type, *, base_iri = None, to_graph = None)")]
+    #[pyo3(text_signature = "($self, input, mime_type, *, base_iri = None, to_graph = None)")]
     #[args(input, mime_type, "*", base_iri = "None", to_graph = "None")]
     fn load(
         &self,
@@ -362,7 +362,7 @@ impl PyStore {
     /// >>> store.bulk_load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[pyo3(text_signature = "($self, input, /, mime_type, *, base_iri = None, to_graph = None)")]
+    #[pyo3(text_signature = "($self, input, mime_type, *, base_iri = None, to_graph = None)")]
     #[args(input, mime_type, "*", base_iri = "None", to_graph = "None")]
     fn bulk_load(
         &self,
@@ -442,7 +442,7 @@ impl PyStore {
     /// >>> store.dump(output, "text/turtle", from_graph=NamedNode("http://example.com/g"))
     /// >>> output.getvalue()
     /// b'<http://example.com> <http://example.com/p> "1" .\n'
-    #[pyo3(text_signature = "($self, output, /, mime_type, *, from_graph = None)")]
+    #[pyo3(text_signature = "($self, output, mime_type, *, from_graph = None)")]
     #[args(output, mime_type, "*", from_graph = "None")]
     fn dump(
         &self,
