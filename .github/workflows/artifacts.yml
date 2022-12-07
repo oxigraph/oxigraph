@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -58,12 +61,26 @@ jobs:
 
   wheel_linux:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - architecture: "x86_64"
+            platform: "x86_64"
+          - architecture: "aarch64"
+            platform: "aarch64"
+          - architecture: "i686"
+            platform: "386"
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - run: sed 's/%arch%/x86_64/g' .github/workflows/manylinux_build.sh > .github/workflows/manylinux_build_script.sh
-      - run: docker run -v "$(pwd)":/workdir --platform linux/x86_64 quay.io/pypa/manylinux2014_x86_64 /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
+      - uses: docker/setup-qemu-action@v2
+        with:
+          platforms: linux/${{ matrix.architecture }}
+        if: matrix.architecture != 'x86_64' && matrix.architecture != 'i686'
+      - run: sed 's/%arch%/${{ matrix.architecture }}/g' .github/workflows/manylinux_build.sh > .github/workflows/manylinux_build_script.sh
+      - run: docker run -v "$(pwd)":/workdir --platform linux/${{ matrix.platform }} quay.io/pypa/manylinux2014_${{ matrix.architecture }} /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
       - uses: actions/upload-artifact@v3
         with:
           name: pyoxigraph_x86_64_linux
@@ -97,6 +114,14 @@ jobs:
 
   wheel_windows:
     runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - architecture: "x86_64"
+            python_architecture: "x64"
+          - architecture: "i686"
+            python_architecture: "x86"
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v3
         with:
@@ -104,15 +129,16 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: "3.10"
+          architecture: ${{ matrix.python_architecture }}
       - run: rustup update
       - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
       - run: pip install -r python/requirements.dev.txt
-      - run: maturin build --release -m python/Cargo.toml
+      - run: maturin build --release -m python/Cargo.toml --target ${{ matrix.architecture }}-pc-windows-msvc
       - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
       - run: rm -r target/wheels
       - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
         working-directory: ./python
-      - run: maturin build --release -m python/Cargo.toml
+      - run: maturin build --release -m python/Cargo.toml --target ${{ matrix.architecture }}-pc-windows-msvc
       - uses: actions/upload-artifact@v3
         with:
           name: pyoxigraph_wheel_x86_64_windows
