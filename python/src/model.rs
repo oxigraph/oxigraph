@@ -371,6 +371,8 @@ impl PyDefaultGraph {
         Self {}
     }
 
+    /// :return: the empty string.
+    /// :rtype: str
     #[getter]
     fn value(&self) -> &str {
         ""

@@ -7,26 +7,26 @@ RDF_LANG_STRING = NamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#langStri
 
 
 class TestNamedNode(unittest.TestCase):
-    def test_constructor(self):
+    def test_constructor(self) -> None:
         self.assertEqual(NamedNode("http://foo").value, "http://foo")
 
-    def test_string(self):
+    def test_string(self) -> None:
         self.assertEqual(str(NamedNode("http://foo")), "<http://foo>")
 
-    def test_equal(self):
+    def test_equal(self) -> None:
         self.assertEqual(NamedNode("http://foo"), NamedNode("http://foo"))
         self.assertNotEqual(NamedNode("http://foo"), NamedNode("http://bar"))
 
 
 class TestBlankNode(unittest.TestCase):
-    def test_constructor(self):
+    def test_constructor(self) -> None:
         self.assertEqual(BlankNode("foo").value, "foo")
         self.assertNotEqual(BlankNode(), BlankNode())
 
-    def test_string(self):
+    def test_string(self) -> None:
         self.assertEqual(str(BlankNode("foo")), "_:foo")
 
-    def test_equal(self):
+    def test_equal(self) -> None:
         self.assertEqual(BlankNode("foo"), BlankNode("foo"))
         self.assertNotEqual(BlankNode("foo"), BlankNode("bar"))
         self.assertNotEqual(BlankNode("foo"), NamedNode("http://foo"))
@@ -34,7 +34,7 @@ class TestBlankNode(unittest.TestCase):
 
 
 class TestLiteral(unittest.TestCase):
-    def test_constructor(self):
+    def test_constructor(self) -> None:
         self.assertEqual(Literal("foo").value, "foo")
         self.assertEqual(Literal("foo").datatype, XSD_STRING)
 
@@ -45,7 +45,7 @@ class TestLiteral(unittest.TestCase):
         self.assertEqual(Literal("foo", datatype=XSD_INTEGER).value, "foo")
         self.assertEqual(Literal("foo", datatype=XSD_INTEGER).datatype, XSD_INTEGER)
 
-    def test_string(self):
+    def test_string(self) -> None:
         self.assertEqual(str(Literal("foo")), '"foo"')
         self.assertEqual(str(Literal("foo", language="en")), '"foo"@en')
         self.assertEqual(
@@ -53,7 +53,7 @@ class TestLiteral(unittest.TestCase):
             '"foo"^^<http://www.w3.org/2001/XMLSchema#integer>',
         )
 
-    def test_equals(self):
+    def test_equals(self) -> None:
         self.assertEqual(Literal("foo", datatype=XSD_STRING), Literal("foo"))
         self.assertEqual(
             Literal("foo", language="en", datatype=RDF_LANG_STRING),
@@ -66,7 +66,7 @@ class TestLiteral(unittest.TestCase):
 
 
 class TestTriple(unittest.TestCase):
-    def test_constructor(self):
+    def test_constructor(self) -> None:
         t = Triple(
             NamedNode("http://example.com/s"),
             NamedNode("http://example.com/p"),
@@ -76,7 +76,7 @@ class TestTriple(unittest.TestCase):
         self.assertEqual(t.predicate, NamedNode("http://example.com/p"))
         self.assertEqual(t.object, NamedNode("http://example.com/o"))
 
-    def test_rdf_star_constructor(self):
+    def test_rdf_star_constructor(self) -> None:
         t = Triple(
             Triple(
                 NamedNode("http://example.com/ss"),
@@ -108,7 +108,7 @@ class TestTriple(unittest.TestCase):
             ),
         )
 
-    def test_mapping(self):
+    def test_mapping(self) -> None:
         t = Triple(
             NamedNode("http://example.com/s"),
             NamedNode("http://example.com/p"),
@@ -118,7 +118,7 @@ class TestTriple(unittest.TestCase):
         self.assertEqual(t[1], NamedNode("http://example.com/p"))
         self.assertEqual(t[2], NamedNode("http://example.com/o"))
 
-    def test_destruct(self):
+    def test_destruct(self) -> None:
         (s, p, o) = Triple(
             NamedNode("http://example.com/s"),
             NamedNode("http://example.com/p"),
@@ -128,7 +128,7 @@ class TestTriple(unittest.TestCase):
         self.assertEqual(p, NamedNode("http://example.com/p"))
         self.assertEqual(o, NamedNode("http://example.com/o"))
 
-    def test_string(self):
+    def test_string(self) -> None:
         self.assertEqual(
             str(
                 Triple(
@@ -142,7 +142,7 @@ class TestTriple(unittest.TestCase):
 
 
 class TestQuad(unittest.TestCase):
-    def test_constructor(self):
+    def test_constructor(self) -> None:
         t = Quad(
             NamedNode("http://example.com/s"),
             NamedNode("http://example.com/p"),
@@ -175,7 +175,7 @@ class TestQuad(unittest.TestCase):
             ),
         )
 
-    def test_mapping(self):
+    def test_mapping(self) -> None:
         t = Quad(
             NamedNode("http://example.com/s"),
             NamedNode("http://example.com/p"),
@@ -187,7 +187,7 @@ class TestQuad(unittest.TestCase):
         self.assertEqual(t[2], NamedNode("http://example.com/o"))
         self.assertEqual(t[3], NamedNode("http://example.com/g"))
 
-    def test_destruct(self):
+    def test_destruct(self) -> None:
         (s, p, o, g) = Quad(
             NamedNode("http://example.com/s"),
             NamedNode("http://example.com/p"),
@@ -199,7 +199,7 @@ class TestQuad(unittest.TestCase):
         self.assertEqual(o, NamedNode("http://example.com/o"))
         self.assertEqual(g, NamedNode("http://example.com/g"))
 
-    def test_string(self):
+    def test_string(self) -> None:
         self.assertEqual(
             str(
                 Triple(
@@ -213,13 +213,13 @@ class TestQuad(unittest.TestCase):
 
 
 class TestVariable(unittest.TestCase):
-    def test_constructor(self):
+    def test_constructor(self) -> None:
         self.assertEqual(Variable("foo").value, "foo")
 
-    def test_string(self):
+    def test_string(self) -> None:
         self.assertEqual(str(Variable("foo")), "?foo")
 
-    def test_equal(self):
+    def test_equal(self) -> None:
         self.assertEqual(Variable("foo"), Variable("foo"))
         self.assertNotEqual(Variable("foo"), Variable("bar"))
 
