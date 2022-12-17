@@ -59,6 +59,7 @@ impl PyStore {
     ///
     /// :param quad: the quad to add.
     /// :type quad: Quad
+    /// :rtype: None
     /// :raises IOError: if an I/O error happens during the quad insertion.
     ///
     /// >>> store = Store()
@@ -77,6 +78,7 @@ impl PyStore {
     ///
     /// :param quad: the quad to remove.
     /// :type quad: Quad
+    /// :rtype: None
     /// :raises IOError: if an I/O error happens during the quad removal.
     ///
     /// >>> store = Store()
@@ -104,7 +106,7 @@ impl PyStore {
     /// :param graph_name: the quad graph name. To match only the default graph, use :py:class:`DefaultGraph`. To match everything use :py:const:`None`.
     /// :type graph_name: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :return: an iterator of the quads matching the pattern.
-    /// :rtype: iter(Quad)
+    /// :rtype: iterator(Quad)
     /// :raises IOError: if an I/O error happens during the quads lookup.
     ///
     /// >>> store = Store()
@@ -208,6 +210,7 @@ impl PyStore {
     /// :type update: str
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the SPARQL update or :py:const:`None` if relative IRI resolution should not be done.
     /// :type base_iri: str or None, optional
+    /// :rtype: None
     /// :raises SyntaxError: if the provided update is invalid.
     /// :raises IOError: if an I/O error happens while reading the store.
     ///
@@ -270,6 +273,7 @@ impl PyStore {
     /// :type base_iri: str or None, optional
     /// :param to_graph: if it is a file composed of triples, the graph in which the triples should be stored. By default, the default graph is used.
     /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
+    /// :rtype: None
     /// :raises ValueError: if the MIME type is not supported or the `to_graph` parameter is given with a quad file.
     /// :raises SyntaxError: if the provided data is invalid.
     /// :raises IOError: if an I/O error happens during a quad insertion.
@@ -354,6 +358,7 @@ impl PyStore {
     /// :type base_iri: str or None, optional
     /// :param to_graph: if it is a file composed of triples, the graph in which the triples should be stored. By default, the default graph is used.
     /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
+    /// :rtype: None
     /// :raises ValueError: if the MIME type is not supported or the `to_graph` parameter is given with a quad file.
     /// :raises SyntaxError: if the provided data is invalid.
     /// :raises IOError: if an I/O error happens during a quad insertion.
@@ -433,6 +438,7 @@ impl PyStore {
     /// :type mime_type: str
     /// :param from_graph: if a triple based format is requested, the store graph from which dump the triples. By default, the default graph is used.
     /// :type from_graph: NamedNode or BlankNode or DefaultGraph or None, optional
+    /// :rtype: None
     /// :raises ValueError: if the MIME type is not supported or the `from_graph` parameter is given with a quad syntax.
     /// :raises IOError: if an I/O error happens during a quad lookup
     ///
@@ -492,7 +498,7 @@ impl PyStore {
     /// Returns an iterator over all the store named graphs.
     ///
     /// :return: an iterator of the store graph names.
-    /// :rtype: iter(NamedNode or BlankNode)
+    /// :rtype: iterator(NamedNode or BlankNode)
     /// :raises IOError: if an I/O error happens during the named graphs lookup.
     ///
     /// >>> store = Store()
@@ -510,6 +516,7 @@ impl PyStore {
     ///
     /// :param graph_name: the name of the name graph to add.
     /// :type graph_name: NamedNode or BlankNode
+    /// :rtype: None
     /// :raises IOError: if an I/O error happens during the named graph insertion.
     ///
     /// >>> store = Store()
@@ -537,6 +544,7 @@ impl PyStore {
     ///
     /// :param graph_name: the name of the name graph to clear.
     /// :type graph_name: NamedNode or BlankNode or DefaultGraph
+    /// :rtype: None
     /// :raises IOError: if an I/O error happens during the operation.
     ///
     /// >>> store = Store()
@@ -562,6 +570,7 @@ impl PyStore {
     ///
     /// :param graph_name: the name of the name graph to remove.
     /// :type graph_name: NamedNode or BlankNode or DefaultGraph
+    /// :rtype: None
     /// :raises IOError: if an I/O error happens during the named graph removal.
     ///
     /// >>> store = Store()
@@ -588,6 +597,7 @@ impl PyStore {
 
     /// Clears the store by removing all its contents.
     ///
+    /// :rtype: None
     /// :raises IOError: if an I/O error happens during the operation.
     ///
     /// >>> store = Store()
@@ -606,6 +616,7 @@ impl PyStore {
     ///
     /// Flushes are automatically done using background threads but might lag a little bit.
     ///
+    /// :rtype: None
     /// :raises IOError: if an I/O error happens during the flush.
     #[pyo3(text_signature = "($self)")]
     fn flush(&self, py: Python<'_>) -> PyResult<()> {
@@ -616,6 +627,7 @@ impl PyStore {
     ///
     /// Useful to call after a batch upload or another similar operation.
     ///
+    /// :rtype: None
     /// :raises IOError: if an I/O error happens during the optimization.
     #[pyo3(text_signature = "($self)")]
     fn optimize(&self, py: Python<'_>) -> PyResult<()> {
@@ -641,6 +653,7 @@ impl PyStore {
     ///
     /// :param target_directory: the directory name to save the database to.
     /// :type target_directory: str
+    /// :rtype: None
     /// :raises IOError: if an I/O error happens during the backup.
     #[pyo3(text_signature = "($self, target_directory)")]
     fn backup(&self, target_directory: &str, py: Python<'_>) -> PyResult<()> {

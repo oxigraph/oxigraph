@@ -114,5 +114,5 @@ jobs:
         working-directory: ./python
       - run: python -m mypy.stubtest pyoxigraph  --allowlist=mypy_allowlist.txt
         working-directory: ./python
-      - run: python -m mypy generate_stubs.py tests
+      - run: python -m mypy generate_stubs.py tests --strict
         working-directory: ./python

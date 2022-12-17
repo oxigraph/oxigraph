@@ -5,48 +5,84 @@ import inspect
 import logging
 import re
 import subprocess
-from functools import reduce
-from typing import Set, List, Mapping, Any
+from typing import Set, List, Mapping, Any, Tuple, Union, Optional, Dict
+
+
+def _path_to_type(*elements: str) -> ast.AST:
+    base: ast.AST = ast.Name(id=elements[0], ctx=AST_LOAD)
+    for e in elements[1:]:
+        base = ast.Attribute(value=base, attr=e, ctx=AST_LOAD)
+    return base
+
 
 AST_LOAD = ast.Load()
 AST_ELLIPSIS = ast.Ellipsis()
 AST_STORE = ast.Store()
-AST_TYPING_ANY = ast.Attribute(
-    value=ast.Name(id="typing", ctx=AST_LOAD), attr="Any", ctx=AST_LOAD
-)
+AST_TYPING_ANY = _path_to_type("typing", "Any")
 GENERICS = {
-    "iter": ast.Attribute(
-        value=ast.Name(id="typing", ctx=AST_LOAD), attr="Iterator", ctx=AST_LOAD
-    ),
-    "list": ast.Attribute(
-        value=ast.Name(id="typing", ctx=AST_LOAD), attr="List", ctx=AST_LOAD
-    ),
+    "iterable": _path_to_type("typing", "Iterable"),
+    "iterator": _path_to_type("typing", "Iterator"),
+    "list": _path_to_type("typing", "List"),
 }
 OBJECT_MEMBERS = dict(inspect.getmembers(object))
 
 
-ATTRIBUTES_BLACKLIST = {
-    "__class__",
-    "__dir__",
-    "__doc__",
-    "__init_subclass__",
-    "__module__",
-    "__new__",
-    "__subclasshook__",
+BUILTINS: Dict[str, Union[None, Tuple[List[ast.AST], ast.AST]]] = {
+    "__annotations__": None,
+    "__bool__": ([], _path_to_type("bool")),
+    "__bytes__": ([], _path_to_type("bytes")),
+    "__class__": None,
+    "__contains__": ([AST_TYPING_ANY], _path_to_type("bool")),
+    "__del__": None,
+    "__delattr__": ([_path_to_type("str")], _path_to_type("None")),
+    "__delitem__": ([AST_TYPING_ANY], AST_TYPING_ANY),
+    "__dict__": None,
+    "__dir__": None,
+    "__doc__": None,
+    "__eq__": ([AST_TYPING_ANY], _path_to_type("bool")),
+    "__format__": ([_path_to_type("str")], _path_to_type("str")),
+    "__ge__": ([AST_TYPING_ANY], _path_to_type("bool")),
+    "__getattribute__": ([_path_to_type("str")], AST_TYPING_ANY),
+    "__getitem__": ([AST_TYPING_ANY], AST_TYPING_ANY),
+    "__gt__": ([AST_TYPING_ANY], _path_to_type("bool")),
+    "__hash__": ([], _path_to_type("int")),
+    "__init__": ([], _path_to_type("None")),
+    "__init_subclass__": None,
+    "__iter__": ([], AST_TYPING_ANY),
+    "__le__": ([AST_TYPING_ANY], _path_to_type("bool")),
+    "__len__": ([], _path_to_type("int")),
+    "__lt__": ([AST_TYPING_ANY], _path_to_type("bool")),
+    "__module__": None,
+    "__ne__": ([AST_TYPING_ANY], _path_to_type("bool")),
+    "__new__": None,
+    "__next__": ([], AST_TYPING_ANY),
+    "__reduce__": None,
+    "__reduce_ex__": None,
+    "__repr__": ([], _path_to_type("str")),
+    "__setattr__": ([_path_to_type("str"), AST_TYPING_ANY], _path_to_type("None")),
+    "__setitem__": ([AST_TYPING_ANY, AST_TYPING_ANY], AST_TYPING_ANY),
+    "__sizeof__": None,
+    "__str__": ([], _path_to_type("str")),
+    "__subclasshook__": None,
 }
 
 
-def module_stubs(module) -> ast.Module:
+def module_stubs(module: Any) -> ast.Module:
     types_to_import = {"typing"}
     classes = []
     functions = []
     for (member_name, member_value) in inspect.getmembers(module):
+        element_path = [module.__name__, member_name]
         if member_name.startswith("__"):
             pass
         elif inspect.isclass(member_value):
-            classes.append(class_stubs(member_name, member_value, types_to_import))
+            classes.append(
+                class_stubs(member_name, member_value, element_path, types_to_import)
+            )
         elif inspect.isbuiltin(member_value):
-            functions.append(function_stub(member_name, member_value, types_to_import))
+            functions.append(
+                function_stub(member_name, member_value, element_path, types_to_import)
+            )
         else:
             logging.warning(f"Unsupported root construction {member_name}")
     return ast.Module(
@@ -57,36 +93,48 @@ def module_stubs(module) -> ast.Module:
     )
 
 
-def class_stubs(cls_name: str, cls_def, types_to_import: Set[str]) -> ast.ClassDef:
+def class_stubs(
+    cls_name: str, cls_def: Any, element_path: List[str], types_to_import: Set[str]
+) -> ast.ClassDef:
     attributes: List[ast.AST] = []
     methods: List[ast.AST] = []
     magic_methods: List[ast.AST] = []
     for (member_name, member_value) in inspect.getmembers(cls_def):
+        current_element_path = element_path + [member_name]
         if member_name == "__init__":
             try:
                 inspect.signature(cls_def)  # we check it actually exists
                 methods = [
-                    function_stub(member_name, cls_def, types_to_import)
+                    function_stub(
+                        member_name, cls_def, current_element_path, types_to_import
+                    )
                 ] + methods
             except ValueError as e:
                 if "no signature found" not in str(e):
                     raise ValueError(
                         f"Error while parsing signature of {cls_name}.__init__: {e}"
                     )
-        elif member_name in ATTRIBUTES_BLACKLIST or member_value == OBJECT_MEMBERS.get(
-            member_name
+        elif (
+            member_value == OBJECT_MEMBERS.get(member_name)
+            or BUILTINS.get(member_name, ()) is None
         ):
             pass
         elif inspect.isdatadescriptor(member_value):
             attributes.extend(
-                data_descriptor_stub(member_name, member_value, types_to_import)
+                data_descriptor_stub(
+                    member_name, member_value, current_element_path, types_to_import
+                )
             )
         elif inspect.isroutine(member_value):
             (magic_methods if member_name.startswith("__") else methods).append(
-                function_stub(member_name, member_value, types_to_import)
+                function_stub(
+                    member_name, member_value, current_element_path, types_to_import
+                )
             )
         else:
-            logging.warning(f"Unsupported member {member_name} of class {cls_name}")
+            logging.warning(
+                f"Unsupported member {member_name} of class {'.'.join(element_path)}"
+            )
 
     doc = inspect.getdoc(cls_def)
     return ast.ClassDef(
@@ -100,28 +148,29 @@ def class_stubs(cls_name: str, cls_def, types_to_import: Set[str]) -> ast.ClassD
             + magic_methods
         )
         or [AST_ELLIPSIS],
-        decorator_list=[
-            ast.Attribute(
-                value=ast.Name(id="typing", ctx=AST_LOAD), attr="final", ctx=AST_LOAD
-            )
-        ],
+        decorator_list=[_path_to_type("typing", "final")],
     )
 
 
 def data_descriptor_stub(
-    data_desc_name: str, data_desc_def, types_to_import: Set[str]
-) -> tuple:
+    data_desc_name: str,
+    data_desc_def: Any,
+    element_path: List[str],
+    types_to_import: Set[str],
+) -> Union[Tuple[ast.AnnAssign, ast.Expr], Tuple[ast.AnnAssign]]:
     annotation = None
     doc_comment = None
 
     doc = inspect.getdoc(data_desc_def)
     if doc is not None:
-        annotation = returns_stub(doc, types_to_import)
-        m = re.findall(r":return: *(.*) *\n", doc)
+        annotation = returns_stub(data_desc_name, doc, element_path, types_to_import)
+        m = re.findall(r"^ *:return: *(.*) *$", doc, re.MULTILINE)
         if len(m) == 1:
             doc_comment = m[0]
         elif len(m) > 1:
-            raise ValueError("Multiple return annotations found with :return:")
+            raise ValueError(
+                f"Multiple return annotations found with :return: in {'.'.join(element_path)} documentation"
+            )
 
     assign = ast.AnnAssign(
         target=ast.Name(id=data_desc_name, ctx=AST_STORE),
@@ -131,23 +180,33 @@ def data_descriptor_stub(
     return (assign, build_doc_comment(doc_comment)) if doc_comment else (assign,)
 
 
-def function_stub(fn_name: str, fn_def, types_to_import: Set[str]) -> ast.FunctionDef:
-    body = []
+def function_stub(
+    fn_name: str, fn_def: Any, element_path: List[str], types_to_import: Set[str]
+) -> ast.FunctionDef:
+    body: List[ast.AST] = []
     doc = inspect.getdoc(fn_def)
-    if doc is not None and not fn_name.startswith("__"):
+    if doc is not None:
         body.append(build_doc_comment(doc))
 
     return ast.FunctionDef(
         fn_name,
-        arguments_stub(fn_name, fn_def, doc or "", types_to_import),
+        arguments_stub(fn_name, fn_def, doc or "", element_path, types_to_import),
         body or [AST_ELLIPSIS],
         decorator_list=[],
-        returns=returns_stub(doc, types_to_import) if doc else None,
+        returns=returns_stub(fn_name, doc, element_path, types_to_import)
+        if doc
+        else None,
         lineno=0,
     )
 
 
-def arguments_stub(callable_name, callable_def, doc: str, types_to_import: Set[str]):
+def arguments_stub(
+    callable_name: str,
+    callable_def: Any,
+    doc: str,
+    element_path: List[str],
+    types_to_import: Set[str],
+) -> ast.arguments:
     real_parameters: Mapping[str, inspect.Parameter] = inspect.signature(
         callable_def
     ).parameters
@@ -159,16 +218,29 @@ def arguments_stub(callable_name, callable_def, doc: str, types_to_import: Set[s
 
     parsed_param_types = {}
     optional_params = set()
-    for match in re.findall(r"\n *:type *([a-z_]+): ([^\n]*) *\n", doc):
+
+    # Types for magic functions types
+    builtin = BUILTINS.get(callable_name)
+    if isinstance(builtin, tuple):
+        param_names = list(real_parameters.keys())
+        if param_names and param_names[0] == "self":
+            del param_names[0]
+        for name, t in zip(param_names, builtin[0]):
+            parsed_param_types[name] = t
+
+    # Types from comment
+    for match in re.findall(r"^ *:type *([a-z_]+): ([^\n]*) *$", doc, re.MULTILINE):
         if match[0] not in real_parameters:
             raise ValueError(
-                f"The parameter {match[0]} is defined in the documentation but not in the function signature"
+                f"The parameter {match[0]} of {'.'.join(element_path)} is defined in the documentation but not in the function signature"
             )
         type = match[1]
         if type.endswith(", optional"):
             optional_params.add(match[0])
             type = type[:-10]
-        parsed_param_types[match[0]] = convert_type_from_doc(type, types_to_import)
+        parsed_param_types[match[0]] = convert_type_from_doc(
+            type, element_path, types_to_import
+        )
 
     # we parse the parameters
     posonlyargs = []
@@ -179,13 +251,9 @@ def arguments_stub(callable_name, callable_def, doc: str, types_to_import: Set[s
     kwarg = None
     defaults = []
     for param in real_parameters.values():
-        if (
-            param.name != "self"
-            and param.name not in parsed_param_types
-            and (callable_name == "__init__" or not callable_name.startswith("__"))
-        ):
+        if param.name != "self" and param.name not in parsed_param_types:
             raise ValueError(
-                f"The parameter {param.name} of {callable_name} has no type definition in the function documentation"
+                f"The parameter {param.name} of {'.'.join(element_path)} has no type definition in the function documentation"
             )
         param_ast = ast.arg(
             arg=param.name, annotation=parsed_param_types.get(param.name)
@@ -196,11 +264,11 @@ def arguments_stub(callable_name, callable_def, doc: str, types_to_import: Set[s
             default_ast = ast.Constant(param.default)
             if param.name not in optional_params:
                 raise ValueError(
-                    f"Parameter {param.name} is optional according to the type but not flagged as such in the doc"
+                    f"Parameter {param.name} of {'.'.join(element_path)} is optional according to the type but not flagged as such in the doc"
                 )
         elif param.name in optional_params:
             raise ValueError(
-                f"Parameter {param.name} is optional according to the documentation but has no default value"
+                f"Parameter {param.name} of {'.'.join(element_path)} is optional according to the documentation but has no default value"
             )
 
         if param.kind == param.POSITIONAL_ONLY:
@@ -228,22 +296,35 @@ def arguments_stub(callable_name, callable_def, doc: str, types_to_import: Set[s
     )
 
 
-def returns_stub(doc: str, types_to_import: Set[str]):
-    m = re.findall(r"\n *:rtype: *([^\n]*) *\n", doc)
+def returns_stub(
+    callable_name: str, doc: str, element_path: List[str], types_to_import: Set[str]
+) -> Optional[ast.AST]:
+    m = re.findall(r"^ *:rtype: *([^\n]*) *$", doc, re.MULTILINE)
     if len(m) == 0:
-        return None
+        builtin = BUILTINS.get(callable_name)
+        if isinstance(builtin, tuple) and builtin[1] is not None:
+            return builtin[1]
+        raise ValueError(
+            f"The return type of {'.'.join(element_path)} has no type definition using :rtype: in the function documentation"
+        )
     elif len(m) == 1:
-        return convert_type_from_doc(m[0], types_to_import)
+        return convert_type_from_doc(m[0], element_path, types_to_import)
     else:
-        raise ValueError("Multiple return type annotations found with :rtype:")
+        raise ValueError(
+            f"Multiple return type annotations found with :rtype: for {'.'.join(element_path)}"
+        )
 
 
-def convert_type_from_doc(type_str: str, types_to_import: Set[str]):
+def convert_type_from_doc(
+    type_str: str, element_path: List[str], types_to_import: Set[str]
+) -> ast.AST:
     type_str = type_str.strip()
-    return parse_type_to_ast(type_str, types_to_import)
+    return parse_type_to_ast(type_str, element_path, types_to_import)
 
 
-def parse_type_to_ast(type_str: str, types_to_import: Set[str]):
+def parse_type_to_ast(
+    type_str: str, element_path: List[str], types_to_import: Set[str]
+) -> ast.AST:
     # let's tokenize
     tokens = []
     current_token = ""
@@ -272,32 +353,30 @@ def parse_type_to_ast(type_str: str, types_to_import: Set[str]):
             stack[-1].append(token)
 
     # then it's easy
-    def parse_sequence(sequence):
+    def parse_sequence(sequence: List[Any]) -> ast.AST:
         # we split based on "or"
-        or_groups = [[]]
+        or_groups: List[List[str]] = [[]]
         for e in sequence:
             if e == "or":
                 or_groups.append([])
             else:
                 or_groups[-1].append(e)
         if any(not g for g in or_groups):
-            raise ValueError(f'Not able to parse type "{type_str}"')
+            raise ValueError(
+                f"Not able to parse type '{type_str}' used by {'.'.join(element_path)}"
+            )
 
-        new_elements = []
+        new_elements: List[ast.AST] = []
         for group in or_groups:
             if len(group) == 1 and isinstance(group[0], str):
                 parts = group[0].split(".")
                 if any(not p for p in parts):
-                    raise ValueError(f'Not able to parse type "{type_str}"')
+                    raise ValueError(
+                        f"Not able to parse type '{type_str}' used by {'.'.join(element_path)}"
+                    )
                 if len(parts) > 1:
                     types_to_import.add(parts[0])
-                new_elements.append(
-                    reduce(
-                        lambda acc, n: ast.Attribute(value=acc, attr=n, ctx=AST_LOAD),
-                        parts[1:],
-                        ast.Name(id=parts[0], ctx=AST_LOAD),
-                    )
-                )
+                new_elements.append(_path_to_type(*parts))
             elif (
                 len(group) == 2
                 and isinstance(group[0], str)
@@ -305,7 +384,7 @@ def parse_type_to_ast(type_str: str, types_to_import: Set[str]):
             ):
                 if group[0] not in GENERICS:
                     raise ValueError(
-                        f'Constructor {group[0]} is not supported in type "{type_str}"'
+                        f"Constructor {group[0]} is not supported in type '{type_str}' used by {'.'.join(element_path)}"
                     )
                 new_elements.append(
                     ast.Subscript(
@@ -315,14 +394,12 @@ def parse_type_to_ast(type_str: str, types_to_import: Set[str]):
                     )
                 )
             else:
-                raise ValueError(f'Not able to parse type "{type_str}"')
+                raise ValueError(
+                    f"Not able to parse type '{type_str}' used by {'.'.join(element_path)}"
+                )
         return (
             ast.Subscript(
-                value=ast.Attribute(
-                    value=ast.Name(id="typing", ctx=AST_LOAD),
-                    attr="Union",
-                    ctx=AST_LOAD,
-                ),
+                value=_path_to_type("typing", "Union"),
                 slice=ast.Tuple(elts=new_elements, ctx=AST_LOAD),
                 ctx=AST_LOAD,
             )
@@ -333,7 +410,7 @@ def parse_type_to_ast(type_str: str, types_to_import: Set[str]):
     return parse_sequence(stack[0])
 
 
-def build_doc_comment(doc: str):
+def build_doc_comment(doc: str) -> ast.Expr:
     lines = [l.strip() for l in doc.split("\n")]
     clean_lines = []
     for l in lines:
@@ -371,6 +448,9 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     stub_content = ast.unparse(module_stubs(importlib.import_module(args.module_name)))
+    stub_content = stub_content.replace(
+        ", /", ""
+    )  # TODO: remove when targeting Python 3.8+
     if args.black:
         stub_content = format_with_black(stub_content)
     args.out.write(stub_content)
