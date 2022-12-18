@@ -38,7 +38,7 @@ pub fn add_to_module(module: &PyModule) -> PyResult<()> {
 /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
 /// :type base_iri: str or None, optional
 /// :return: an iterator of RDF triples or quads depending on the format.
-/// :rtype: iter(Triple) or iter(Quad)
+/// :rtype: iterator(Triple) or iterator(Quad)
 /// :raises ValueError: if the MIME type is not supported.
 /// :raises SyntaxError: if the provided data is invalid.
 ///
@@ -46,7 +46,7 @@ pub fn add_to_module(module: &PyModule) -> PyResult<()> {
 /// >>> list(parse(input, "text/turtle", base_iri="http://example.com/"))
 /// [<Triple subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>>>]
 #[pyfunction]
-#[pyo3(text_signature = "(input, /, mime_type, *, base_iri = None)")]
+#[pyo3(text_signature = "(input, mime_type, *, base_iri = None)")]
 pub fn parse(
     input: PyObject,
     mime_type: &str,
@@ -104,11 +104,12 @@ pub fn parse(
 /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
 ///
 /// :param input: the RDF triples and quads to serialize.
-/// :type input: iter(Triple) or iter(Quad)
+/// :type input: iterable(Triple) or iterable(Quad)
 /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``.
 /// :type output: io.RawIOBase or io.BufferedIOBase or str
 /// :param mime_type: the MIME type of the RDF serialization.
 /// :type mime_type: str
+/// :rtype: None
 /// :raises ValueError: if the MIME type is not supported.
 /// :raises TypeError: if a triple is given during a quad format serialization or reverse.
 ///
@@ -117,7 +118,7 @@ pub fn parse(
 /// >>> output.getvalue()
 /// b'<http://example.com> <http://example.com/p> "1" .\n'
 #[pyfunction]
-#[pyo3(text_signature = "(input, output, /, mime_type)")]
+#[pyo3(text_signature = "(input, output, mime_type)")]
 pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_>) -> PyResult<()> {
     let output = if let Ok(path) = output.extract::<&str>(py) {
         PyWritable::from_file(path, py)

@@ -11,7 +11,7 @@ EXAMPLE_TRIPLE = Triple(
 
 
 class TestParse(unittest.TestCase):
-    def test_parse_file(self):
+    def test_parse_file(self) -> None:
         with NamedTemporaryFile() as fp:
             fp.write(b'<foo> <p> "1" .')
             fp.flush()
@@ -20,11 +20,11 @@ class TestParse(unittest.TestCase):
                 [EXAMPLE_TRIPLE],
             )
 
-    def test_parse_not_existing_file(self):
+    def test_parse_not_existing_file(self) -> None:
         with self.assertRaises(IOError) as _:
             parse("/tmp/not-existing-oxigraph-file.ttl", "text/turtle")
 
-    def test_parse_str_io(self):
+    def test_parse_str_io(self) -> None:
         self.assertEqual(
             list(
                 parse(
@@ -36,7 +36,7 @@ class TestParse(unittest.TestCase):
             [EXAMPLE_TRIPLE],
         )
 
-    def test_parse_bytes_io(self):
+    def test_parse_bytes_io(self) -> None:
         self.assertEqual(
             list(
                 parse(
@@ -48,7 +48,7 @@ class TestParse(unittest.TestCase):
             [EXAMPLE_TRIPLE],
         )
 
-    def test_parse_io_error(self):
+    def test_parse_io_error(self) -> None:
         class BadIO(RawIOBase):
             pass
 
@@ -57,7 +57,7 @@ class TestParse(unittest.TestCase):
 
 
 class TestSerialize(unittest.TestCase):
-    def test_serialize_to_bytes_io(self):
+    def test_serialize_to_bytes_io(self) -> None:
         output = BytesIO()
         serialize([EXAMPLE_TRIPLE], output, "text/turtle")
         self.assertEqual(
@@ -65,7 +65,7 @@ class TestSerialize(unittest.TestCase):
             b'<http://example.com/foo> <http://example.com/p> "1" .\n',
         )
 
-    def test_serialize_to_file(self):
+    def test_serialize_to_file(self) -> None:
         with NamedTemporaryFile() as fp:
             serialize([EXAMPLE_TRIPLE], fp.name, "text/turtle")
             self.assertEqual(

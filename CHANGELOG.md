@@ -1,3 +1,22 @@
+## [0.3.9] - 2022-12-07
+
+## Added
+- Server: The `/store` endpoints now has a `no_transaction` HTTP option for `POST` and `PUT` request to get better performances at the cost of transactional guarantees.
+- Server: The `/store` endpoints now has a `lenient` HTTP option for `POST` and `PUT` request to ignore syntax errors (requires the  `no_transaction` option).
+- Server: allows path that are not valid UTF-8 in file path CLI arguments.
+- Rust: `From<spargebra::Query>` to `oxigraph::Query` (thanks to @hobofan).
+
+## Changed
+- SPARQL: `NOW()` function properly returns the current time and not 1970-01-01
+- SPARQL: fixes serialization of SPARQL queries (property path and STRSTARTS function).
+- SPARQL: slightly optimize aggregates by avoiding an unneeded projection.
+- SPARQL: the parser now cleanly fails if invalid `VALUES` clauses are provided.
+- SPARQL: In DELETE/INSERT UPDATEs the currently written values can't be read anymore ("Halloween problem").
+- `oxrdf`: makes Clippy run without warnings when `rdf-star` is disable.
+- Python: makes type annotations compatible with Python 3.7.
+- Python: makes sure the parameter default value is always included in the type annotation.
+
+
 ## [0.3.8] - 2022-10-22
 
 ### Changed

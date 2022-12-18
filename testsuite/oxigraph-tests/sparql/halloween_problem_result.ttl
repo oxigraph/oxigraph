@@ -2,4 +2,5 @@
 
 ex:s ex:salary 1300 .
 ex:s2 ex:salary 1350 .
+ex:s3 ex:salary 1380 .
 ex:boss ex:salary 1600 .
