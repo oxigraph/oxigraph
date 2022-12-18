@@ -54,18 +54,15 @@ jobs:
       - run: cargo publish
         working-directory: ./lib/oxrdf
         continue-on-error: true
-      - run: sleep 60
       - run: cargo publish
         working-directory: ./lib/sparesults
         continue-on-error: true
       - run: cargo publish
         working-directory: ./lib/spargebra
         continue-on-error: true
-      - run: sleep 60
       - run: cargo publish
         working-directory: ./lib
         continue-on-error: true
-      - run: sleep 60
       - run: cargo publish
         working-directory: ./server
 
