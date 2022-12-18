@@ -29,14 +29,14 @@ digest = "0.10"
 regex = "1"
 oxilangtag = "0.1"
 oxiri = "0.2"
-rio_api = "0.7"
-rio_turtle = "0.7"
-rio_xml = "0.7"
+rio_api = "0.8"
+rio_turtle = "0.8"
+rio_xml = "0.8"
 hex = "0.4"
 nom = "7"
 siphasher = "0.3"
 lazy_static = "1"
-sysinfo = "0.26"
+sysinfo = "0.27"
 oxrdf = { version = "0.1.1", path="oxrdf", features = ["rdf-star"] }
 spargebra = { version = "0.2.3", path="spargebra", features = ["rdf-star"] }
 sparesults = { version = "0.1.2", path="sparesults", features = ["rdf-star"] }
