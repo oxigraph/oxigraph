@@ -30,6 +30,7 @@
     :unbound_variable_in_subquery
     :values_too_many
     :values_too_few
+    :values_property_path_all
     ) .
 
 :small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
@@ -139,3 +140,9 @@
 :values_too_few rdf:type mf:NegativeSyntaxTest11 ;
     mf:name "Too few values in a VALUE clause compared to the number of variable" ;
     mf:action <values_too_few.rq> .
+
+:values_property_path_all rdf:type mf:QueryEvaluationTest ;
+    mf:name "ZeroOrX property paths should only return terms in the graph and not also terms defined in the query" ;
+    mf:action
+         [ qt:query  <values_property_path_all.rq> ] ;
+    mf:result  <values_property_path_all.srx> .

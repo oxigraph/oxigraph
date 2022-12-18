@@ -1,0 +1,4 @@
+SELECT * WHERE {
+   VALUES ?v { 1 }
+   ?v <http://example.com/p>? ?v
+}
