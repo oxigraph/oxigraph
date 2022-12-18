@@ -1310,15 +1310,6 @@ dependencies = [
 
 [[package]]
 name = "quick-xml"
-version = "0.23.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11bafc859c6815fbaffbbbf4229ecb767ac913fecb27f9ad4343662e9ef099ea"
-dependencies = [
- "memchr",
-]
-
-[[package]]
-name = "quick-xml"
 version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f50b1c63b38611e7d4d7f68b82d3ad0cc71a2ad2e7f61fc10f1328d917c93cd"
@@ -1446,15 +1437,15 @@ dependencies = [
 
 [[package]]
 name = "rio_api"
-version = "0.7.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f6196ea9fb6791ce3dcd1cfc0d7f1074972aec0572db73dfb7396fcd9c3bc76"
+checksum = "64bce58dd4aed6d706bd628c24076d9e88f6a8dd90a75fd0627b7440044b5975"
 
 [[package]]
 name = "rio_turtle"
-version = "0.7.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eefbe56cb005507d4517649f5d113b874e29b8559a7b7a263655aeb81570246c"
+checksum = "02aa66357f0ae6e1c5fb269a6823e588a51d191cc246c6b6c6bb9620cbe3e46e"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1463,13 +1454,13 @@ dependencies = [
 
 [[package]]
 name = "rio_xml"
-version = "0.7.3"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26defbc05a1e9d167f86d07adc70a717f108e46ef4c1ec6742d96c63c726ebb6"
+checksum = "c4751b8bed0b6e1ede898341476ef6829f4046065781bf43e8481bc00cb5e943"
 dependencies = [
  "oxilangtag",
  "oxiri",
- "quick-xml 0.23.1",
+ "quick-xml",
  "rio_api",
 ]
 
@@ -1673,7 +1664,7 @@ version = "0.1.2"
 dependencies = [
  "json-event-parser",
  "oxrdf",
- "quick-xml 0.26.0",
+ "quick-xml",
 ]
 
 [[package]]
@@ -1719,9 +1710,9 @@ dependencies = [
 
 [[package]]
 name = "sysinfo"
-version = "0.26.8"
+version = "0.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29ddf41e393a9133c81d5f0974195366bd57082deac6e0eb02ed39b8341c2bb6"
+checksum = "ccb297c0afb439440834b4bcf02c5c9da8ec2e808e70f36b0d8e815ff403bd24"
 dependencies = [
  "cfg-if",
  "core-foundation-sys",
