@@ -16,6 +16,19 @@ pub const DATA_TRIG: &str = "
 
 const NUMBER_OF_NAMED_NODES: u8 = 5;
 const NUMBER_OF_VARIABLES: u8 = 4;
+const LITERALS: [&str; 11] = [
+    "\"foo\"",
+    "\"foo\"^^<http://www.w3.org/2001/XMLSchema#string>",
+    "\"foo\"@en",
+    "true",
+    "false",
+    "0",
+    "0.0",
+    "0e0",
+    "1",
+    "1.0",
+    "1e0",
+];
 
 #[derive(Arbitrary)]
 pub struct Query {
@@ -1453,13 +1466,41 @@ enum BuiltInCall {
     // | ExistsFunc
     // | NotExistsFunc
     Bound(Var), //TODO: Other functions
+    Exists(ExistsFunc),
+    NotExists(ExistsFunc),
 }
 
 impl fmt::Display for BuiltInCall {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Bound(v) => write!(f, "BOUND({})", v),
+            Self::Exists(e) => write!(f, "{}", e),
+            Self::NotExists(e) => write!(f, "{}", e),
         }
+    }
+}
+
+#[derive(Debug, Arbitrary)]
+struct ExistsFunc {
+    // [125]  	ExistsFunc	  ::=  	'EXISTS' GroupGraphPattern
+    pattern: GroupGraphPattern,
+}
+
+impl fmt::Display for ExistsFunc {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "EXISTS {}", self.pattern)
+    }
+}
+
+#[derive(Debug, Arbitrary)]
+struct NotExistsFunc {
+    // [126]  	NotExistsFunc	  ::=  	'NOT' 'EXISTS' GroupGraphPattern
+    pattern: GroupGraphPattern,
+}
+
+impl fmt::Display for NotExistsFunc {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "NOT EXISTS {}", self.pattern)
     }
 }
 
@@ -1480,7 +1521,7 @@ impl fmt::Display for IriOrFunction {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Debug)]
 struct Literal {
     // [129]  	RDFLiteral	  ::=  	String ( LANGTAG | ( '^^' iri ) )?
     // [130]  	NumericLiteral	  ::=  	NumericLiteralUnsigned | NumericLiteralPositive | NumericLiteralNegative
@@ -1488,12 +1529,24 @@ struct Literal {
     // [132]  	NumericLiteralPositive	  ::=  	INTEGER_POSITIVE | DECIMAL_POSITIVE | DOUBLE_POSITIVE
     // [133]  	NumericLiteralNegative	  ::=  	INTEGER_NEGATIVE | DECIMAL_NEGATIVE | DOUBLE_NEGATIVE
     // [134]  	BooleanLiteral	  ::=  	'true' | 'false'
-    //TODO: Implement!
+    value: &'static str,
+}
+
+impl Arbitrary<'_> for Literal {
+    fn arbitrary(u: &mut Unstructured<'_>) -> Result<Self> {
+        Ok(Self {
+            value: u.choose(LITERALS.as_slice())?,
+        })
+    }
+
+    fn size_hint(depth: usize) -> (usize, Option<usize>) {
+        <u8 as Arbitrary>::size_hint(depth)
+    }
 }
 
 impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, " 123 ")
+        write!(f, "{}", self.value)
     }
 }
 
