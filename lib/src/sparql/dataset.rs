@@ -142,7 +142,7 @@ impl DatasetView {
                 self.store_encoded_quads_for_pattern(subject, predicate, object, None)
                     .filter(|quad| match quad {
                         Err(_) => true,
-                        Ok(quad) => quad.graph_name != EncodedTerm::DefaultGraph,
+                        Ok(quad) => !quad.graph_name.is_default_graph(),
                     }),
             )
         }

@@ -73,8 +73,6 @@ fn sparql11_query_w3c_evaluation_testsuite() -> Result<()> {
         vec![
             //BNODE() scope is currently wrong
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#bnode01",
-            //Property path with unbound graph name are not supported yet
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/property-path/manifest#pp35",
             //SERVICE name from a BGP
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/service/manifest#service5",
         ],

@@ -197,42 +197,40 @@ impl SimpleEvaluator {
                 object,
                 graph_name,
             } => {
-                let eval = self.clone();
                 let subject = subject.clone();
                 let path = path.clone();
                 let object = object.clone();
                 let graph_name = graph_name.clone();
+                let dataset = self.dataset.clone();
                 Rc::new(move |from| {
                     let input_subject = get_pattern_value(&subject, &from);
                     let input_object = get_pattern_value(&object, &from);
-                    let input_graph_name =
-                        if let Some(graph_name) = get_pattern_value(&graph_name, &from) {
-                            graph_name
-                        } else {
-                            let result: EncodedTuplesIterator =
-                            Box::new(once(Err(EvaluationError::msg(
-                                "Unknown graph name is not allowed when evaluating property path",
-                            ))));
-                            return result;
-                        };
-                    match (input_subject, input_object) {
-                        (Some(input_subject), Some(input_object)) => Box::new(
-                            eval.eval_path_from(&path, &input_subject, &input_graph_name)
-                                .filter_map(move |o| match o {
-                                    Ok(o) => {
-                                        if o == input_object {
-                                            Some(Ok(from.clone()))
-                                        } else {
-                                            None
+                    let input_graph_name = get_pattern_value(&graph_name, &from);
+                    let path_eval = PathEvaluator {
+                        dataset: dataset.clone(),
+                    };
+                    match (input_subject, input_object, input_graph_name) {
+                        (Some(input_subject), Some(input_object), Some(input_graph_name)) => {
+                            Box::new(
+                                path_eval
+                                    .eval_from_in_graph(&path, &input_subject, &input_graph_name)
+                                    .filter_map(move |o| match o {
+                                        Ok(o) => {
+                                            if o == input_object {
+                                                Some(Ok(from.clone()))
+                                            } else {
+                                                None
+                                            }
                                         }
-                                    }
-                                    Err(error) => Some(Err(error)),
-                                }),
-                        ),
-                        (Some(input_subject), None) => {
+                                        Err(error) => Some(Err(error)),
+                                    }),
+                            )
+                        }
+                        (Some(input_subject), None, Some(input_graph_name)) => {
                             let object = object.clone();
                             Box::new(
-                                eval.eval_path_from(&path, &input_subject, &input_graph_name)
+                                path_eval
+                                    .eval_from_in_graph(&path, &input_subject, &input_graph_name)
                                     .filter_map(move |o| match o {
                                         Ok(o) => {
                                             let mut new_tuple = from.clone();
@@ -243,10 +241,11 @@ impl SimpleEvaluator {
                                     }),
                             )
                         }
-                        (None, Some(input_object)) => {
+                        (None, Some(input_object), Some(input_graph_name)) => {
                             let subject = subject.clone();
                             Box::new(
-                                eval.eval_path_to(&path, &input_object, &input_graph_name)
+                                path_eval
+                                    .eval_to_in_graph(&path, &input_object, &input_graph_name)
                                     .filter_map(move |s| match s {
                                         Ok(s) => {
                                             let mut new_tuple = from.clone();
@@ -257,15 +256,88 @@ impl SimpleEvaluator {
                                     }),
                             )
                         }
-                        (None, None) => {
+                        (None, None, Some(input_graph_name)) => {
                             let subject = subject.clone();
                             let object = object.clone();
-                            Box::new(eval.eval_open_path(&path, &input_graph_name).filter_map(
-                                move |so| match so {
-                                    Ok((s, o)) => {
+                            Box::new(
+                                path_eval
+                                    .eval_open_in_graph(&path, &input_graph_name)
+                                    .filter_map(move |so| match so {
+                                        Ok((s, o)) => {
+                                            let mut new_tuple = from.clone();
+                                            put_pattern_value(&subject, s, &mut new_tuple)?;
+                                            put_pattern_value(&object, o, &mut new_tuple)?;
+                                            Some(Ok(new_tuple))
+                                        }
+                                        Err(error) => Some(Err(error)),
+                                    }),
+                            )
+                        }
+                        (Some(input_subject), Some(input_object), None) => {
+                            let graph_name = graph_name.clone();
+                            Box::new(
+                                path_eval
+                                    .eval_to_in_unknown_graph(&path, &input_subject)
+                                    .filter_map(move |r| match r {
+                                        Ok((o, g)) => {
+                                            if o == input_object {
+                                                let mut new_tuple = from.clone();
+                                                put_pattern_value(&graph_name, g, &mut new_tuple)?;
+                                                Some(Ok(new_tuple))
+                                            } else {
+                                                None
+                                            }
+                                        }
+                                        Err(error) => Some(Err(error)),
+                                    }),
+                            )
+                        }
+                        (Some(input_subject), None, None) => {
+                            let object = object.clone();
+                            let graph_name = graph_name.clone();
+                            Box::new(
+                                path_eval
+                                    .eval_from_in_unknown_graph(&path, &input_subject)
+                                    .filter_map(move |r| match r {
+                                        Ok((o, g)) => {
+                                            let mut new_tuple = from.clone();
+                                            put_pattern_value(&object, o, &mut new_tuple)?;
+                                            put_pattern_value(&graph_name, g, &mut new_tuple)?;
+                                            Some(Ok(new_tuple))
+                                        }
+                                        Err(error) => Some(Err(error)),
+                                    }),
+                            )
+                        }
+                        (None, Some(input_object), None) => {
+                            let subject = subject.clone();
+                            let graph_name = graph_name.clone();
+                            Box::new(
+                                path_eval
+                                    .eval_to_in_unknown_graph(&path, &input_object)
+                                    .filter_map(move |r| match r {
+                                        Ok((s, g)) => {
+                                            let mut new_tuple = from.clone();
+                                            put_pattern_value(&subject, s, &mut new_tuple)?;
+                                            put_pattern_value(&graph_name, g, &mut new_tuple)?;
+
+                                            Some(Ok(new_tuple))
+                                        }
+                                        Err(error) => Some(Err(error)),
+                                    }),
+                            )
+                        }
+                        (None, None, None) => {
+                            let subject = subject.clone();
+                            let object = object.clone();
+                            let graph_name = graph_name.clone();
+                            Box::new(path_eval.eval_open_in_unknown_graph(&path).filter_map(
+                                move |r| match r {
+                                    Ok((s, o, g)) => {
                                         let mut new_tuple = from.clone();
                                         put_pattern_value(&subject, s, &mut new_tuple)?;
                                         put_pattern_value(&object, o, &mut new_tuple)?;
+                                        put_pattern_value(&graph_name, g, &mut new_tuple)?;
                                         Some(Ok(new_tuple))
                                     }
                                     Err(error) => Some(Err(error)),
@@ -740,277 +812,6 @@ impl SimpleEvaluator {
                 }
             }
         }
-    }
-
-    fn eval_path_from(
-        &self,
-        path: &PlanPropertyPath,
-        start: &EncodedTerm,
-        graph_name: &EncodedTerm,
-    ) -> Box<dyn Iterator<Item = Result<EncodedTerm, EvaluationError>>> {
-        match path {
-            PlanPropertyPath::Path(p) => Box::new(
-                self.dataset
-                    .encoded_quads_for_pattern(Some(start), Some(p), None, Some(graph_name))
-                    .map(|t| Ok(t?.object)),
-            ),
-            PlanPropertyPath::Reverse(p) => self.eval_path_to(p, start, graph_name),
-            PlanPropertyPath::Sequence(a, b) => {
-                let eval = self.clone();
-                let b = b.clone();
-                let graph_name2 = graph_name.clone();
-                Box::new(
-                    self.eval_path_from(a, start, graph_name)
-                        .flat_map_ok(move |middle| eval.eval_path_from(&b, &middle, &graph_name2)),
-                )
-            }
-            PlanPropertyPath::Alternative(a, b) => Box::new(
-                self.eval_path_from(a, start, graph_name)
-                    .chain(self.eval_path_from(b, start, graph_name)),
-            ),
-            PlanPropertyPath::ZeroOrMore(p) => {
-                self.run_if_term_is_a_graph_node(start, graph_name, || {
-                    let eval = self.clone();
-                    let p = p.clone();
-                    let graph_name2 = graph_name.clone();
-                    Box::new(transitive_closure(Some(Ok(start.clone())), move |e| {
-                        eval.eval_path_from(&p, &e, &graph_name2)
-                    }))
-                })
-            }
-            PlanPropertyPath::OneOrMore(p) => {
-                let eval = self.clone();
-                let p = p.clone();
-                let graph_name2 = graph_name.clone();
-                Box::new(transitive_closure(
-                    self.eval_path_from(&p, start, graph_name),
-                    move |e| eval.eval_path_from(&p, &e, &graph_name2),
-                ))
-            }
-            PlanPropertyPath::ZeroOrOne(p) => {
-                self.run_if_term_is_a_graph_node(start, graph_name, || {
-                    Box::new(hash_deduplicate(
-                        once(Ok(start.clone())).chain(self.eval_path_from(p, start, graph_name)),
-                    ))
-                })
-            }
-            PlanPropertyPath::NegatedPropertySet(ps) => {
-                let ps = ps.clone();
-                Box::new(
-                    self.dataset
-                        .encoded_quads_for_pattern(Some(start), None, None, Some(graph_name))
-                        .filter_map(move |t| match t {
-                            Ok(t) => {
-                                if ps.contains(&t.predicate) {
-                                    None
-                                } else {
-                                    Some(Ok(t.object))
-                                }
-                            }
-                            Err(e) => Some(Err(e)),
-                        }),
-                )
-            }
-        }
-    }
-
-    fn eval_path_to(
-        &self,
-        path: &PlanPropertyPath,
-        end: &EncodedTerm,
-        graph_name: &EncodedTerm,
-    ) -> Box<dyn Iterator<Item = Result<EncodedTerm, EvaluationError>>> {
-        match path {
-            PlanPropertyPath::Path(p) => Box::new(
-                self.dataset
-                    .encoded_quads_for_pattern(None, Some(p), Some(end), Some(graph_name))
-                    .map(|t| Ok(t?.subject)),
-            ),
-            PlanPropertyPath::Reverse(p) => self.eval_path_from(p, end, graph_name),
-            PlanPropertyPath::Sequence(a, b) => {
-                let eval = self.clone();
-                let a = a.clone();
-                let graph_name2 = graph_name.clone();
-                Box::new(
-                    self.eval_path_to(b, end, graph_name)
-                        .flat_map_ok(move |middle| eval.eval_path_to(&a, &middle, &graph_name2)),
-                )
-            }
-            PlanPropertyPath::Alternative(a, b) => Box::new(
-                self.eval_path_to(a, end, graph_name)
-                    .chain(self.eval_path_to(b, end, graph_name)),
-            ),
-            PlanPropertyPath::ZeroOrMore(p) => {
-                self.run_if_term_is_a_graph_node(end, graph_name, || {
-                    let eval = self.clone();
-                    let p = p.clone();
-                    let graph_name2 = graph_name.clone();
-                    Box::new(transitive_closure(Some(Ok(end.clone())), move |e| {
-                        eval.eval_path_to(&p, &e, &graph_name2)
-                    }))
-                })
-            }
-            PlanPropertyPath::OneOrMore(p) => {
-                let eval = self.clone();
-                let p = p.clone();
-                let graph_name2 = graph_name.clone();
-                Box::new(transitive_closure(
-                    self.eval_path_to(&p, end, graph_name),
-                    move |e| eval.eval_path_to(&p, &e, &graph_name2),
-                ))
-            }
-            PlanPropertyPath::ZeroOrOne(p) => {
-                self.run_if_term_is_a_graph_node(end, graph_name, || {
-                    Box::new(hash_deduplicate(
-                        once(Ok(end.clone())).chain(self.eval_path_to(p, end, graph_name)),
-                    ))
-                })
-            }
-            PlanPropertyPath::NegatedPropertySet(ps) => {
-                let ps = ps.clone();
-                Box::new(
-                    self.dataset
-                        .encoded_quads_for_pattern(None, None, Some(end), Some(graph_name))
-                        .filter_map(move |t| match t {
-                            Ok(t) => {
-                                if ps.contains(&t.predicate) {
-                                    None
-                                } else {
-                                    Some(Ok(t.subject))
-                                }
-                            }
-                            Err(e) => Some(Err(e)),
-                        }),
-                )
-            }
-        }
-    }
-
-    fn eval_open_path(
-        &self,
-        path: &PlanPropertyPath,
-        graph_name: &EncodedTerm,
-    ) -> Box<dyn Iterator<Item = Result<(EncodedTerm, EncodedTerm), EvaluationError>>> {
-        match path {
-            PlanPropertyPath::Path(p) => Box::new(
-                self.dataset
-                    .encoded_quads_for_pattern(None, Some(p), None, Some(graph_name))
-                    .map(|t| t.map(|t| (t.subject, t.object))),
-            ),
-            PlanPropertyPath::Reverse(p) => Box::new(
-                self.eval_open_path(p, graph_name)
-                    .map(|t| t.map(|(s, o)| (o, s))),
-            ),
-            PlanPropertyPath::Sequence(a, b) => {
-                let eval = self.clone();
-                let b = b.clone();
-                let graph_name2 = graph_name.clone();
-                Box::new(
-                    self.eval_open_path(a, graph_name)
-                        .flat_map_ok(move |(start, middle)| {
-                            eval.eval_path_from(&b, &middle, &graph_name2)
-                                .map(move |end| Ok((start.clone(), end?)))
-                        }),
-                )
-            }
-            PlanPropertyPath::Alternative(a, b) => Box::new(
-                self.eval_open_path(a, graph_name)
-                    .chain(self.eval_open_path(b, graph_name)),
-            ),
-            PlanPropertyPath::ZeroOrMore(p) => {
-                let eval = self.clone();
-                let p = p.clone();
-                let graph_name2 = graph_name.clone();
-                Box::new(transitive_closure(
-                    self.get_subject_or_object_identity_pairs(graph_name), //TODO: avoid to inject everything
-                    move |(start, middle)| {
-                        eval.eval_path_from(&p, &middle, &graph_name2)
-                            .map(move |end| Ok((start.clone(), end?)))
-                    },
-                ))
-            }
-            PlanPropertyPath::OneOrMore(p) => {
-                let eval = self.clone();
-                let p = p.clone();
-                let graph_name2 = graph_name.clone();
-                Box::new(transitive_closure(
-                    self.eval_open_path(&p, graph_name),
-                    move |(start, middle)| {
-                        eval.eval_path_from(&p, &middle, &graph_name2)
-                            .map(move |end| Ok((start.clone(), end?)))
-                    },
-                ))
-            }
-            PlanPropertyPath::ZeroOrOne(p) => Box::new(hash_deduplicate(
-                self.get_subject_or_object_identity_pairs(graph_name)
-                    .chain(self.eval_open_path(p, graph_name)),
-            )),
-            PlanPropertyPath::NegatedPropertySet(ps) => {
-                let ps = ps.clone();
-                Box::new(
-                    self.dataset
-                        .encoded_quads_for_pattern(None, None, None, Some(graph_name))
-                        .filter_map(move |t| match t {
-                            Ok(t) => {
-                                if ps.contains(&t.predicate) {
-                                    None
-                                } else {
-                                    Some(Ok((t.subject, t.object)))
-                                }
-                            }
-                            Err(e) => Some(Err(e)),
-                        }),
-                )
-            }
-        }
-    }
-
-    fn get_subject_or_object_identity_pairs(
-        &self,
-        graph_name: &EncodedTerm,
-    ) -> impl Iterator<Item = Result<(EncodedTerm, EncodedTerm), EvaluationError>> {
-        self.dataset
-            .encoded_quads_for_pattern(None, None, None, Some(graph_name))
-            .flat_map_ok(|t| {
-                [
-                    Ok((t.subject.clone(), t.subject)),
-                    Ok((t.object.clone(), t.object)),
-                ]
-            })
-    }
-
-    fn run_if_term_is_a_graph_node<T: 'static>(
-        &self,
-        term: &EncodedTerm,
-        graph_name: &EncodedTerm,
-        f: impl FnOnce() -> Box<dyn Iterator<Item = Result<T, EvaluationError>>>,
-    ) -> Box<dyn Iterator<Item = Result<T, EvaluationError>>> {
-        match self.is_subject_or_object_in_dataset(term, graph_name) {
-            Ok(true) => f(),
-            Ok(false) => {
-                Box::new(empty()) // Not in the database
-            }
-            Err(error) => Box::new(once(Err(error))),
-        }
-    }
-
-    fn is_subject_or_object_in_dataset(
-        &self,
-        term: &EncodedTerm,
-        graph_name: &EncodedTerm,
-    ) -> Result<bool, EvaluationError> {
-        Ok(self
-            .dataset
-            .encoded_quads_for_pattern(Some(term), None, None, Some(graph_name))
-            .next()
-            .transpose()?
-            .is_some()
-            || self
-                .dataset
-                .encoded_quads_for_pattern(None, None, Some(term), Some(graph_name))
-                .next()
-                .transpose()?
-                .is_some())
     }
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
@@ -3144,6 +2945,583 @@ pub fn are_compatible_and_not_disjointed(a: &EncodedTuple, b: &EncodedTuple) -> 
     found_intersection
 }
 
+#[derive(Clone)]
+struct PathEvaluator {
+    dataset: Rc<DatasetView>,
+}
+
+impl PathEvaluator {
+    fn eval_from_in_graph(
+        &self,
+        path: &PlanPropertyPath,
+        start: &EncodedTerm,
+        graph_name: &EncodedTerm,
+    ) -> Box<dyn Iterator<Item = Result<EncodedTerm, EvaluationError>>> {
+        match path {
+            PlanPropertyPath::Path(p) => Box::new(
+                self.dataset
+                    .encoded_quads_for_pattern(Some(start), Some(p), None, Some(graph_name))
+                    .map(|t| Ok(t?.object)),
+            ),
+            PlanPropertyPath::Reverse(p) => self.eval_to_in_graph(p, start, graph_name),
+            PlanPropertyPath::Sequence(a, b) => {
+                let eval = self.clone();
+                let b = b.clone();
+                let graph_name2 = graph_name.clone();
+                Box::new(
+                    self.eval_from_in_graph(a, start, graph_name)
+                        .flat_map_ok(move |middle| {
+                            eval.eval_from_in_graph(&b, &middle, &graph_name2)
+                        }),
+                )
+            }
+            PlanPropertyPath::Alternative(a, b) => Box::new(
+                self.eval_from_in_graph(a, start, graph_name)
+                    .chain(self.eval_from_in_graph(b, start, graph_name)),
+            ),
+            PlanPropertyPath::ZeroOrMore(p) => {
+                self.run_if_term_is_a_graph_node(start, graph_name, || {
+                    let eval = self.clone();
+                    let p = p.clone();
+                    let graph_name2 = graph_name.clone();
+                    transitive_closure(Some(Ok(start.clone())), move |e| {
+                        eval.eval_from_in_graph(&p, &e, &graph_name2)
+                    })
+                })
+            }
+            PlanPropertyPath::OneOrMore(p) => {
+                let eval = self.clone();
+                let p = p.clone();
+                let graph_name2 = graph_name.clone();
+                Box::new(transitive_closure(
+                    self.eval_from_in_graph(&p, start, graph_name),
+                    move |e| eval.eval_from_in_graph(&p, &e, &graph_name2),
+                ))
+            }
+            PlanPropertyPath::ZeroOrOne(p) => {
+                self.run_if_term_is_a_graph_node(start, graph_name, || {
+                    hash_deduplicate(
+                        once(Ok(start.clone()))
+                            .chain(self.eval_from_in_graph(p, start, graph_name)),
+                    )
+                })
+            }
+            PlanPropertyPath::NegatedPropertySet(ps) => {
+                let ps = ps.clone();
+                Box::new(
+                    self.dataset
+                        .encoded_quads_for_pattern(Some(start), None, None, Some(graph_name))
+                        .filter_map(move |t| match t {
+                            Ok(t) => {
+                                if ps.contains(&t.predicate) {
+                                    None
+                                } else {
+                                    Some(Ok(t.object))
+                                }
+                            }
+                            Err(e) => Some(Err(e)),
+                        }),
+                )
+            }
+        }
+    }
+
+    fn eval_from_in_unknown_graph(
+        &self,
+        path: &PlanPropertyPath,
+        start: &EncodedTerm,
+    ) -> Box<dyn Iterator<Item = Result<(EncodedTerm, EncodedTerm), EvaluationError>>> {
+        match path {
+            PlanPropertyPath::Path(p) => Box::new(
+                self.dataset
+                    .encoded_quads_for_pattern(Some(start), Some(p), None, None)
+                    .map(|t| {
+                        let t = t?;
+                        Ok((t.object, t.graph_name))
+                    }),
+            ),
+            PlanPropertyPath::Reverse(p) => self.eval_to_in_unknown_graph(p, start),
+            PlanPropertyPath::Sequence(a, b) => {
+                let eval = self.clone();
+                let b = b.clone();
+                Box::new(self.eval_from_in_unknown_graph(a, start).flat_map_ok(
+                    move |(middle, graph_name)| {
+                        eval.eval_from_in_graph(&b, &middle, &graph_name)
+                            .map(move |end| Ok((end?, graph_name.clone())))
+                    },
+                ))
+            }
+            PlanPropertyPath::Alternative(a, b) => Box::new(
+                self.eval_from_in_unknown_graph(a, start)
+                    .chain(self.eval_from_in_unknown_graph(b, start)),
+            ),
+            PlanPropertyPath::ZeroOrMore(p) => {
+                let start2 = start.clone();
+                let eval = self.clone();
+                let p = p.clone();
+                self.run_if_term_is_a_dataset_node(start, move |graph_name| {
+                    let eval = eval.clone();
+                    let p = p.clone();
+                    let graph_name2 = graph_name.clone();
+                    transitive_closure(Some(Ok(start2.clone())), move |e| {
+                        eval.eval_from_in_graph(&p, &e, &graph_name2)
+                    })
+                    .map(move |e| Ok((e?, graph_name.clone())))
+                })
+            }
+            PlanPropertyPath::OneOrMore(p) => {
+                let eval = self.clone();
+                let p = p.clone();
+                Box::new(transitive_closure(
+                    self.eval_from_in_unknown_graph(&p, start),
+                    move |(e, graph_name)| {
+                        eval.eval_from_in_graph(&p, &e, &graph_name)
+                            .map(move |e| Ok((e?, graph_name.clone())))
+                    },
+                ))
+            }
+            PlanPropertyPath::ZeroOrOne(p) => {
+                let eval = self.clone();
+                let start2 = start.clone();
+                let p = p.clone();
+                self.run_if_term_is_a_dataset_node(start, move |graph_name| {
+                    hash_deduplicate(once(Ok(start2.clone())).chain(eval.eval_from_in_graph(
+                        &p,
+                        &start2,
+                        &graph_name,
+                    )))
+                    .map(move |e| Ok((e?, graph_name.clone())))
+                })
+            }
+            PlanPropertyPath::NegatedPropertySet(ps) => {
+                let ps = ps.clone();
+                Box::new(
+                    self.dataset
+                        .encoded_quads_for_pattern(Some(start), None, None, None)
+                        .filter_map(move |t| match t {
+                            Ok(t) => {
+                                if ps.contains(&t.predicate) {
+                                    None
+                                } else {
+                                    Some(Ok((t.object, t.graph_name)))
+                                }
+                            }
+                            Err(e) => Some(Err(e)),
+                        }),
+                )
+            }
+        }
+    }
+
+    fn eval_to_in_graph(
+        &self,
+        path: &PlanPropertyPath,
+        end: &EncodedTerm,
+        graph_name: &EncodedTerm,
+    ) -> Box<dyn Iterator<Item = Result<EncodedTerm, EvaluationError>>> {
+        match path {
+            PlanPropertyPath::Path(p) => Box::new(
+                self.dataset
+                    .encoded_quads_for_pattern(None, Some(p), Some(end), Some(graph_name))
+                    .map(|t| Ok(t?.subject)),
+            ),
+            PlanPropertyPath::Reverse(p) => self.eval_from_in_graph(p, end, graph_name),
+            PlanPropertyPath::Sequence(a, b) => {
+                let eval = self.clone();
+                let a = a.clone();
+                let graph_name2 = graph_name.clone();
+                Box::new(
+                    self.eval_to_in_graph(b, end, graph_name)
+                        .flat_map_ok(move |middle| {
+                            eval.eval_to_in_graph(&a, &middle, &graph_name2)
+                        }),
+                )
+            }
+            PlanPropertyPath::Alternative(a, b) => Box::new(
+                self.eval_to_in_graph(a, end, graph_name)
+                    .chain(self.eval_to_in_graph(b, end, graph_name)),
+            ),
+            PlanPropertyPath::ZeroOrMore(p) => {
+                self.run_if_term_is_a_graph_node(end, graph_name, || {
+                    let eval = self.clone();
+                    let p = p.clone();
+                    let graph_name2 = graph_name.clone();
+                    transitive_closure(Some(Ok(end.clone())), move |e| {
+                        eval.eval_to_in_graph(&p, &e, &graph_name2)
+                    })
+                })
+            }
+            PlanPropertyPath::OneOrMore(p) => {
+                let eval = self.clone();
+                let p = p.clone();
+                let graph_name2 = graph_name.clone();
+                Box::new(transitive_closure(
+                    self.eval_to_in_graph(&p, end, graph_name),
+                    move |e| eval.eval_to_in_graph(&p, &e, &graph_name2),
+                ))
+            }
+            PlanPropertyPath::ZeroOrOne(p) => {
+                self.run_if_term_is_a_graph_node(end, graph_name, || {
+                    hash_deduplicate(
+                        once(Ok(end.clone())).chain(self.eval_to_in_graph(p, end, graph_name)),
+                    )
+                })
+            }
+            PlanPropertyPath::NegatedPropertySet(ps) => {
+                let ps = ps.clone();
+                Box::new(
+                    self.dataset
+                        .encoded_quads_for_pattern(None, None, Some(end), Some(graph_name))
+                        .filter_map(move |t| match t {
+                            Ok(t) => {
+                                if ps.contains(&t.predicate) {
+                                    None
+                                } else {
+                                    Some(Ok(t.subject))
+                                }
+                            }
+                            Err(e) => Some(Err(e)),
+                        }),
+                )
+            }
+        }
+    }
+    fn eval_to_in_unknown_graph(
+        &self,
+        path: &PlanPropertyPath,
+        end: &EncodedTerm,
+    ) -> Box<dyn Iterator<Item = Result<(EncodedTerm, EncodedTerm), EvaluationError>>> {
+        match path {
+            PlanPropertyPath::Path(p) => Box::new(
+                self.dataset
+                    .encoded_quads_for_pattern(None, Some(p), Some(end), None)
+                    .map(|t| {
+                        let t = t?;
+                        Ok((t.subject, t.graph_name))
+                    }),
+            ),
+            PlanPropertyPath::Reverse(p) => self.eval_from_in_unknown_graph(p, end),
+            PlanPropertyPath::Sequence(a, b) => {
+                let eval = self.clone();
+                let a = a.clone();
+                Box::new(self.eval_to_in_unknown_graph(b, end).flat_map_ok(
+                    move |(middle, graph_name)| {
+                        eval.eval_from_in_graph(&a, &middle, &graph_name)
+                            .map(move |start| Ok((start?, graph_name.clone())))
+                    },
+                ))
+            }
+            PlanPropertyPath::Alternative(a, b) => Box::new(
+                self.eval_to_in_unknown_graph(a, end)
+                    .chain(self.eval_to_in_unknown_graph(b, end)),
+            ),
+            PlanPropertyPath::ZeroOrMore(p) => {
+                let end2 = end.clone();
+                let eval = self.clone();
+                let p = p.clone();
+                self.run_if_term_is_a_dataset_node(end, move |graph_name| {
+                    let eval = eval.clone();
+                    let p = p.clone();
+                    let graph_name2 = graph_name.clone();
+                    transitive_closure(Some(Ok(end2.clone())), move |e| {
+                        eval.eval_to_in_graph(&p, &e, &graph_name2)
+                    })
+                    .map(move |e| Ok((e?, graph_name.clone())))
+                })
+            }
+            PlanPropertyPath::OneOrMore(p) => {
+                let eval = self.clone();
+                let p = p.clone();
+                Box::new(transitive_closure(
+                    self.eval_to_in_unknown_graph(&p, end),
+                    move |(e, graph_name)| {
+                        eval.eval_to_in_graph(&p, &e, &graph_name)
+                            .map(move |e| Ok((e?, graph_name.clone())))
+                    },
+                ))
+            }
+            PlanPropertyPath::ZeroOrOne(p) => {
+                let eval = self.clone();
+                let end2 = end.clone();
+                let p = p.clone();
+                self.run_if_term_is_a_dataset_node(end, move |graph_name| {
+                    hash_deduplicate(once(Ok(end2.clone())).chain(eval.eval_to_in_graph(
+                        &p,
+                        &end2,
+                        &graph_name,
+                    )))
+                    .map(move |e| Ok((e?, graph_name.clone())))
+                })
+            }
+            PlanPropertyPath::NegatedPropertySet(ps) => {
+                let ps = ps.clone();
+                Box::new(
+                    self.dataset
+                        .encoded_quads_for_pattern(Some(end), None, None, None)
+                        .filter_map(move |t| match t {
+                            Ok(t) => {
+                                if ps.contains(&t.predicate) {
+                                    None
+                                } else {
+                                    Some(Ok((t.subject, t.graph_name)))
+                                }
+                            }
+                            Err(e) => Some(Err(e)),
+                        }),
+                )
+            }
+        }
+    }
+
+    fn eval_open_in_graph(
+        &self,
+        path: &PlanPropertyPath,
+        graph_name: &EncodedTerm,
+    ) -> Box<dyn Iterator<Item = Result<(EncodedTerm, EncodedTerm), EvaluationError>>> {
+        match path {
+            PlanPropertyPath::Path(p) => Box::new(
+                self.dataset
+                    .encoded_quads_for_pattern(None, Some(p), None, Some(graph_name))
+                    .map(|t| t.map(|t| (t.subject, t.object))),
+            ),
+            PlanPropertyPath::Reverse(p) => Box::new(
+                self.eval_open_in_graph(p, graph_name)
+                    .map(|t| t.map(|(s, o)| (o, s))),
+            ),
+            PlanPropertyPath::Sequence(a, b) => {
+                let eval = self.clone();
+                let b = b.clone();
+                let graph_name2 = graph_name.clone();
+                Box::new(self.eval_open_in_graph(a, graph_name).flat_map_ok(
+                    move |(start, middle)| {
+                        eval.eval_from_in_graph(&b, &middle, &graph_name2)
+                            .map(move |end| Ok((start.clone(), end?)))
+                    },
+                ))
+            }
+            PlanPropertyPath::Alternative(a, b) => Box::new(
+                self.eval_open_in_graph(a, graph_name)
+                    .chain(self.eval_open_in_graph(b, graph_name)),
+            ),
+            PlanPropertyPath::ZeroOrMore(p) => {
+                let eval = self.clone();
+                let p = p.clone();
+                let graph_name2 = graph_name.clone();
+                Box::new(transitive_closure(
+                    self.get_subject_or_object_identity_pairs_in_graph(graph_name),
+                    move |(start, middle)| {
+                        eval.eval_from_in_graph(&p, &middle, &graph_name2)
+                            .map(move |end| Ok((start.clone(), end?)))
+                    },
+                ))
+            }
+            PlanPropertyPath::OneOrMore(p) => {
+                let eval = self.clone();
+                let p = p.clone();
+                let graph_name2 = graph_name.clone();
+                Box::new(transitive_closure(
+                    self.eval_open_in_graph(&p, graph_name),
+                    move |(start, middle)| {
+                        eval.eval_from_in_graph(&p, &middle, &graph_name2)
+                            .map(move |end| Ok((start.clone(), end?)))
+                    },
+                ))
+            }
+            PlanPropertyPath::ZeroOrOne(p) => Box::new(hash_deduplicate(
+                self.get_subject_or_object_identity_pairs_in_graph(graph_name)
+                    .chain(self.eval_open_in_graph(p, graph_name)),
+            )),
+            PlanPropertyPath::NegatedPropertySet(ps) => {
+                let ps = ps.clone();
+                Box::new(
+                    self.dataset
+                        .encoded_quads_for_pattern(None, None, None, Some(graph_name))
+                        .filter_map(move |t| match t {
+                            Ok(t) => {
+                                if ps.contains(&t.predicate) {
+                                    None
+                                } else {
+                                    Some(Ok((t.subject, t.object)))
+                                }
+                            }
+                            Err(e) => Some(Err(e)),
+                        }),
+                )
+            }
+        }
+    }
+
+    fn eval_open_in_unknown_graph(
+        &self,
+        path: &PlanPropertyPath,
+    ) -> Box<dyn Iterator<Item = Result<(EncodedTerm, EncodedTerm, EncodedTerm), EvaluationError>>>
+    {
+        match path {
+            PlanPropertyPath::Path(p) => Box::new(
+                self.dataset
+                    .encoded_quads_for_pattern(None, Some(p), None, None)
+                    .map(|t| t.map(|t| (t.subject, t.object, t.graph_name))),
+            ),
+            PlanPropertyPath::Reverse(p) => Box::new(
+                self.eval_open_in_unknown_graph(p)
+                    .map(|t| t.map(|(s, o, g)| (o, s, g))),
+            ),
+            PlanPropertyPath::Sequence(a, b) => {
+                let eval = self.clone();
+                let b = b.clone();
+                Box::new(self.eval_open_in_unknown_graph(a).flat_map_ok(
+                    move |(start, middle, graph_name)| {
+                        eval.eval_from_in_graph(&b, &middle, &graph_name)
+                            .map(move |end| Ok((start.clone(), end?, graph_name.clone())))
+                    },
+                ))
+            }
+            PlanPropertyPath::Alternative(a, b) => Box::new(
+                self.eval_open_in_unknown_graph(a)
+                    .chain(self.eval_open_in_unknown_graph(b)),
+            ),
+            PlanPropertyPath::ZeroOrMore(p) => {
+                let eval = self.clone();
+                let p = p.clone();
+                Box::new(transitive_closure(
+                    self.get_subject_or_object_identity_pairs_in_dataset(),
+                    move |(start, middle, graph_name)| {
+                        eval.eval_from_in_graph(&p, &middle, &graph_name)
+                            .map(move |end| Ok((start.clone(), end?, graph_name.clone())))
+                    },
+                ))
+            }
+            PlanPropertyPath::OneOrMore(p) => {
+                let eval = self.clone();
+                let p = p.clone();
+                Box::new(transitive_closure(
+                    self.eval_open_in_unknown_graph(&p),
+                    move |(start, middle, graph_name)| {
+                        eval.eval_from_in_graph(&p, &middle, &graph_name)
+                            .map(move |end| Ok((start.clone(), end?, graph_name.clone())))
+                    },
+                ))
+            }
+            PlanPropertyPath::ZeroOrOne(p) => Box::new(hash_deduplicate(
+                self.get_subject_or_object_identity_pairs_in_dataset()
+                    .chain(self.eval_open_in_unknown_graph(p)),
+            )),
+            PlanPropertyPath::NegatedPropertySet(ps) => {
+                let ps = ps.clone();
+                Box::new(
+                    self.dataset
+                        .encoded_quads_for_pattern(None, None, None, None)
+                        .filter_map(move |t| match t {
+                            Ok(t) => {
+                                if ps.contains(&t.predicate) {
+                                    None
+                                } else {
+                                    Some(Ok((t.subject, t.object, t.graph_name)))
+                                }
+                            }
+                            Err(e) => Some(Err(e)),
+                        }),
+                )
+            }
+        }
+    }
+
+    fn get_subject_or_object_identity_pairs_in_graph(
+        &self,
+        graph_name: &EncodedTerm,
+    ) -> impl Iterator<Item = Result<(EncodedTerm, EncodedTerm), EvaluationError>> {
+        self.dataset
+            .encoded_quads_for_pattern(None, None, None, Some(graph_name))
+            .flat_map_ok(|t| {
+                [
+                    Ok((t.subject.clone(), t.subject)),
+                    Ok((t.object.clone(), t.object)),
+                ]
+            })
+    }
+
+    fn get_subject_or_object_identity_pairs_in_dataset(
+        &self,
+    ) -> impl Iterator<Item = Result<(EncodedTerm, EncodedTerm, EncodedTerm), EvaluationError>>
+    {
+        self.dataset
+            .encoded_quads_for_pattern(None, None, None, None)
+            .flat_map_ok(|t| {
+                [
+                    Ok((t.subject.clone(), t.subject, t.graph_name.clone())),
+                    Ok((t.object.clone(), t.object, t.graph_name)),
+                ]
+            })
+    }
+
+    fn run_if_term_is_a_graph_node<
+        T: 'static,
+        I: Iterator<Item = Result<T, EvaluationError>> + 'static,
+    >(
+        &self,
+        term: &EncodedTerm,
+        graph_name: &EncodedTerm,
+        f: impl FnOnce() -> I,
+    ) -> Box<dyn Iterator<Item = Result<T, EvaluationError>>> {
+        match self.is_subject_or_object_in_graph(term, graph_name) {
+            Ok(true) => Box::new(f()),
+            Ok(false) => {
+                Box::new(empty()) // Not in the database
+            }
+            Err(error) => Box::new(once(Err(error))),
+        }
+    }
+
+    fn is_subject_or_object_in_graph(
+        &self,
+        term: &EncodedTerm,
+        graph_name: &EncodedTerm,
+    ) -> Result<bool, EvaluationError> {
+        Ok(self
+            .dataset
+            .encoded_quads_for_pattern(Some(term), None, None, Some(graph_name))
+            .next()
+            .transpose()?
+            .is_some()
+            || self
+                .dataset
+                .encoded_quads_for_pattern(None, None, Some(term), Some(graph_name))
+                .next()
+                .transpose()?
+                .is_some())
+    }
+
+    fn run_if_term_is_a_dataset_node<
+        T: 'static,
+        I: Iterator<Item = Result<T, EvaluationError>> + 'static,
+    >(
+        &self,
+        term: &EncodedTerm,
+        f: impl FnMut(EncodedTerm) -> I + 'static,
+    ) -> Box<dyn Iterator<Item = Result<T, EvaluationError>>> {
+        match self
+            .find_graphs_where_the_node_is_in(term)
+            .collect::<Result<HashSet<_>, _>>()
+        {
+            Ok(graph_names) => Box::new(graph_names.into_iter().flat_map(f)),
+            Err(error) => Box::new(once(Err(error))),
+        }
+    }
+
+    fn find_graphs_where_the_node_is_in(
+        &self,
+        term: &EncodedTerm,
+    ) -> impl Iterator<Item = Result<EncodedTerm, EvaluationError>> {
+        self.dataset
+            .encoded_quads_for_pattern(Some(term), None, None, None)
+            .chain(
+                self.dataset
+                    .encoded_quads_for_pattern(None, None, Some(term), None),
+            )
+            .map(|q| Ok(q?.graph_name))
+    }
+}
+
 struct CartesianProductJoinIterator {
     left_iter: EncodedTuplesIterator,
     right: Vec<EncodedTuple>,
@@ -3511,7 +3889,7 @@ impl<T1, T2, I1: Iterator<Item = T1>, I2: Iterator<Item = T2>> Iterator
 
 fn transitive_closure<T: Clone + Eq + Hash, NI: Iterator<Item = Result<T, EvaluationError>>>(
     start: impl IntoIterator<Item = Result<T, EvaluationError>>,
-    next: impl Fn(T) -> NI,
+    mut next: impl FnMut(T) -> NI,
 ) -> impl Iterator<Item = Result<T, EvaluationError>> {
     //TODO: optimize
     let mut all = HashSet::<T>::default();
@@ -3533,7 +3911,7 @@ fn transitive_closure<T: Clone + Eq + Hash, NI: Iterator<Item = Result<T, Evalua
     while !current.is_empty() {
         current = current
             .into_iter()
-            .flat_map(&next)
+            .flat_map(&mut next)
             .filter_map(|e| match e {
                 Ok(e) => {
                     if all.contains(&e) {
