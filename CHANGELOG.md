@@ -1,3 +1,18 @@
+## [0.3.10] - 2022-12-21
+
+## Added
+- SPARQL: Property path with unbound graph are now evaluated.
+  For example, `SELECT * WHERE { GRAPH ?g { ?s ex:p+ ?o } }` now works.
+- SPARQL: The query optimizer is now fuzzed for better testing.
+
+## Changed
+- SPARQL: Evaluation of zero-length paths with both start and end unbounded now return only terms defined in the current graph but not terms only defined in the query.
+  For example, in `SELECT * WHERE { VALUES ?s { 1 } { ?s ex:p? ?o } }` the literal `1` won't be returned anymore if not in the queried graph.
+- Python: type stubs are now compatible with Python 3.7 and Mypy strict mode.
+- RDF/XML: allows entities declared using other entities.
+- Upgrades `quick-xml` to 0.26.
+
+
 ## [0.3.9] - 2022-12-07
 
 ## Added
