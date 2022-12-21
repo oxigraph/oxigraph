@@ -1,6 +1,6 @@
 [package]
 name = "oxrocksdb-sys"
-version = "0.3.7"
+version = "0.3.10"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "GPL-2.0 OR Apache-2.0"
 repository = "https://github.com/oxigraph/oxigraph/tree/main/oxrocksdb-sys"
@@ -16,5 +16,5 @@ links = "rocksdb"
 libc = "0.2"
 
 [build-dependencies]
-bindgen = "0.61"
+bindgen = "0.63"
 cc = { version = "1", features = ["parallel"] }
