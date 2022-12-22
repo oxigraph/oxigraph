@@ -119,7 +119,7 @@ impl fmt::Display for SyntaxError {
             SyntaxErrorKind::Turtle(e) => e.fmt(f),
             SyntaxErrorKind::RdfXml(e) => e.fmt(f),
             SyntaxErrorKind::InvalidBaseIri { iri, error } => {
-                write!(f, "Invalid base IRI '{}': {}", iri, error)
+                write!(f, "Invalid base IRI '{iri}': {error}")
             }
         }
     }
@@ -144,7 +144,7 @@ impl From<SyntaxError> for io::Error {
             SyntaxErrorKind::RdfXml(error) => error.into(),
             SyntaxErrorKind::InvalidBaseIri { iri, error } => Self::new(
                 io::ErrorKind::InvalidInput,
-                format!("Invalid IRI '{}': {}", iri, error),
+                format!("Invalid IRI '{iri}': {error}"),
             ),
         }
     }

@@ -440,11 +440,11 @@ impl fmt::Display for LiteralRef<'_> {
             LiteralRefContent::String(value) => print_quoted_str(value, f),
             LiteralRefContent::LanguageTaggedString { value, language } => {
                 print_quoted_str(value, f)?;
-                write!(f, "@{}", language)
+                write!(f, "@{language}")
             }
             LiteralRefContent::TypedLiteral { value, datatype } => {
                 print_quoted_str(value, f)?;
-                write!(f, "^^{}", datatype)
+                write!(f, "^^{datatype}")
             }
         }
     }

@@ -184,8 +184,7 @@ impl fmt::Display for BadSmallStringError {
         match self {
             Self::TooLong(v) => write!(
                 f,
-                "small strings could only contain at most 15 characters, found {}",
-                v
+                "small strings could only contain at most 15 characters, found {v}"
             ),
             Self::BadUtf8(e) => e.fmt(f),
         }

@@ -198,8 +198,7 @@ impl<R: BufRead> JsonQueryResultsReader<R> {
                     }
                     _ => {
                         return Err(SyntaxError::msg(format!(
-                            "Expecting head or result key, found {}",
-                            key
+                            "Expecting head or result key, found {key}"
                         ))
                         .into());
                     }
@@ -239,8 +238,7 @@ impl<R: BufRead> JsonSolutionsReader<R> {
                 JsonEvent::ObjectKey(key) => {
                     let k = *self.mapping.get(key).ok_or_else(|| {
                         SyntaxError::msg(format!(
-                            "The variable {} has not been defined in the header",
-                            key
+                            "The variable {key} has not been defined in the header"
                         ))
                     })?;
                     new_bindings[k] = Some(self.read_value(0)?)
@@ -253,8 +251,7 @@ impl<R: BufRead> JsonSolutionsReader<R> {
     fn read_value(&mut self, number_of_recursive_calls: usize) -> Result<Term, ParseError> {
         if number_of_recursive_calls == MAX_NUMBER_OF_NESTED_TRIPLES {
             return Err(SyntaxError::msg(format!(
-                "Too many nested triples ({}). The parser fails here to avoid a stack overflow.",
-                MAX_NUMBER_OF_NESTED_TRIPLES
+                "Too many nested triples ({MAX_NUMBER_OF_NESTED_TRIPLES}). The parser fails here to avoid a stack overflow."
             ))
             .into());
         }
@@ -297,8 +294,7 @@ impl<R: BufRead> JsonSolutionsReader<R> {
                     "object" => object = Some(self.read_value(number_of_recursive_calls + 1)?),
                     _ => {
                         return Err(SyntaxError::msg(format!(
-                            "Unexpected key in term serialization: '{}'",
-                            key
+                            "Unexpected key in term serialization: '{key}'"
                         ))
                         .into())
                     }
@@ -321,8 +317,7 @@ impl<R: BufRead> JsonSolutionsReader<R> {
                             "triple" => t = Some(Type::Triple),
                             _ => {
                                 return Err(SyntaxError::msg(format!(
-                                    "Unexpected term type: '{}'",
-                                    s
+                                    "Unexpected term type: '{s}'"
                                 ))
                                 .into())
                             }
@@ -338,9 +333,10 @@ impl<R: BufRead> JsonSolutionsReader<R> {
                         state = None;
                     }
                     Some(State::Datatype) => {
-                        datatype = Some(NamedNode::new(s).map_err(|e| {
-                            SyntaxError::msg(format!("Invalid datatype IRI: {}", e))
-                        })?);
+                        datatype =
+                            Some(NamedNode::new(s).map_err(|e| {
+                                SyntaxError::msg(format!("Invalid datatype IRI: {e}"))
+                            })?);
                         state = None;
                     }
                     _ => (), // impossible
@@ -364,12 +360,12 @@ impl<R: BufRead> JsonSolutionsReader<R> {
                             Some(Type::Uri) => Ok(NamedNode::new(value.ok_or_else(|| {
                                 SyntaxError::msg("uri serialization should have a 'value' key")
                             })?)
-                            .map_err(|e| SyntaxError::msg(format!("Invalid uri value: {}", e)))?
+                            .map_err(|e| SyntaxError::msg(format!("Invalid uri value: {e}")))?
                             .into()),
                             Some(Type::BNode) => Ok(BlankNode::new(value.ok_or_else(|| {
                                 SyntaxError::msg("bnode serialization should have a 'value' key")
                             })?)
-                            .map_err(|e| SyntaxError::msg(format!("Invalid bnode value: {}", e)))?
+                            .map_err(|e| SyntaxError::msg(format!("Invalid bnode value: {e}")))?
                             .into()),
                             Some(Type::Literal) => {
                                 let value = value.ok_or_else(|| {
@@ -382,13 +378,12 @@ impl<R: BufRead> JsonSolutionsReader<R> {
                                             if let Some(datatype) = datatype {
                                                 if datatype.as_ref() != rdf::LANG_STRING {
                                                     return Err(SyntaxError::msg(format!(
-                                                        "xml:lang value '{}' provided with the datatype {}",
-                                                        lang, datatype
+                                                        "xml:lang value '{lang}' provided with the datatype {datatype}"
                                                     )).into())
                                                 }
                                             }
                                             Literal::new_language_tagged_literal(value, &lang).map_err(|e| {
-                                                SyntaxError::msg(format!("Invalid xml:lang value '{}': {}", lang, e))
+                                                SyntaxError::msg(format!("Invalid xml:lang value '{lang}': {e}"))
                                             })?
                                         }
                                         None => if let Some(datatype) = datatype {
@@ -465,14 +460,12 @@ fn read_head<R: BufRead>(
                             JsonEvent::String(s) => {
                                 let new_var = Variable::new(s).map_err(|e| {
                                     SyntaxError::msg(format!(
-                                        "Invalid variable declaration '{}': {}",
-                                        s, e
+                                        "Invalid variable declaration '{s}': {e}"
                                     ))
                                 })?;
                                 if variables.contains(&new_var) {
                                     return Err(SyntaxError::msg(format!(
-                                        "The variable {} is declared twice",
-                                        new_var
+                                        "The variable {new_var} is declared twice"
                                     ))
                                     .into());
                                 }

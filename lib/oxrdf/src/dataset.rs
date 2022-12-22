@@ -901,7 +901,7 @@ impl<'a, T: Into<QuadRef<'a>>> Extend<T> for Dataset {
 impl fmt::Display for Dataset {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for t in self {
-            writeln!(f, "{}", t)?;
+            writeln!(f, "{t}")?;
         }
         Ok(())
     }
@@ -1236,7 +1236,7 @@ impl<'a, 'b> IntoIterator for &'b GraphView<'a> {
 impl<'a> fmt::Display for GraphView<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for t in self {
-            writeln!(f, "{}", t)?;
+            writeln!(f, "{t}")?;
         }
         Ok(())
     }
@@ -1438,7 +1438,7 @@ impl<'a> IntoIterator for &'a GraphViewMut<'a> {
 impl<'a> fmt::Display for GraphViewMut<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for t in self {
-            writeln!(f, "{}", t)?;
+            writeln!(f, "{t}")?;
         }
         Ok(())
     }

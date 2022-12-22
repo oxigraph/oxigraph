@@ -987,8 +987,7 @@ impl<S: StrLookup> Decoder for S {
 fn get_required_str<L: StrLookup>(lookup: &L, id: &StrHash) -> Result<String, StorageError> {
     Ok(lookup.get_str(id)?.ok_or_else(|| {
         CorruptionError::new(format!(
-            "Not able to find the string with id {:?} in the string store",
-            id
+            "Not able to find the string with id {id:?} in the string store"
         ))
     })?)
 }

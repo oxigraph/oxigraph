@@ -21,7 +21,7 @@ impl PropertyPathExpression {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
-            Self::NamedNode(p) => write!(f, "{}", p),
+            Self::NamedNode(p) => write!(f, "{p}"),
             Self::Reverse(p) => {
                 write!(f, "(reverse ")?;
                 p.fmt_sse(f)?;
@@ -59,7 +59,7 @@ impl PropertyPathExpression {
             Self::NegatedPropertySet(p) => {
                 write!(f, "(notoneof")?;
                 for p in p {
-                    write!(f, " {}", p)?;
+                    write!(f, " {p}")?;
                 }
                 write!(f, ")")
             }
@@ -71,19 +71,19 @@ impl fmt::Display for PropertyPathExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NamedNode(p) => p.fmt(f),
-            Self::Reverse(p) => write!(f, "^({})", p),
-            Self::Sequence(a, b) => write!(f, "({} / {})", a, b),
-            Self::Alternative(a, b) => write!(f, "({} | {})", a, b),
-            Self::ZeroOrMore(p) => write!(f, "({})*", p),
-            Self::OneOrMore(p) => write!(f, "({})+", p),
-            Self::ZeroOrOne(p) => write!(f, "({})?", p),
+            Self::Reverse(p) => write!(f, "^({p})"),
+            Self::Sequence(a, b) => write!(f, "({a} / {b})"),
+            Self::Alternative(a, b) => write!(f, "({a} | {b})"),
+            Self::ZeroOrMore(p) => write!(f, "({p})*"),
+            Self::OneOrMore(p) => write!(f, "({p})+"),
+            Self::ZeroOrOne(p) => write!(f, "({p})?"),
             Self::NegatedPropertySet(p) => {
                 write!(f, "!(")?;
                 for (i, c) in p.iter().enumerate() {
                     if i > 0 {
                         write!(f, " | ")?;
                     }
-                    write!(f, "{}", c)?;
+                    write!(f, "{c}")?;
                 }
                 write!(f, ")")
             }
@@ -149,9 +149,9 @@ impl Expression {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
-            Self::NamedNode(node) => write!(f, "{}", node),
-            Self::Literal(l) => write!(f, "{}", l),
-            Self::Variable(var) => write!(f, "{}", var),
+            Self::NamedNode(node) => write!(f, "{node}"),
+            Self::Literal(l) => write!(f, "{l}"),
+            Self::Variable(var) => write!(f, "{var}"),
             Self::Or(a, b) => fmt_sse_binary_expression(f, "||", a, b),
             Self::And(a, b) => fmt_sse_binary_expression(f, "&&", a, b),
             Self::Equal(a, b) => fmt_sse_binary_expression(f, "=", a, b),
@@ -191,7 +191,7 @@ impl Expression {
                 write!(f, ")")
             }
             Self::Bound(v) => {
-                write!(f, "(bound {})", v)
+                write!(f, "(bound {v})")
             }
             Self::If(a, b, c) => {
                 write!(f, "(if ")?;
@@ -220,52 +220,52 @@ impl fmt::Display for Expression {
             Self::NamedNode(node) => node.fmt(f),
             Self::Literal(l) => l.fmt(f),
             Self::Variable(var) => var.fmt(f),
-            Self::Or(a, b) => write!(f, "({} || {})", a, b),
-            Self::And(a, b) => write!(f, "({} && {})", a, b),
+            Self::Or(a, b) => write!(f, "({a} || {b})"),
+            Self::And(a, b) => write!(f, "({a} && {b})"),
             Self::Equal(a, b) => {
-                write!(f, "({} = {})", a, b)
+                write!(f, "({a} = {b})")
             }
             Self::SameTerm(a, b) => {
-                write!(f, "sameTerm({}, {})", a, b)
+                write!(f, "sameTerm({a}, {b})")
             }
             Self::Greater(a, b) => {
-                write!(f, "({} > {})", a, b)
+                write!(f, "({a} > {b})")
             }
-            Self::GreaterOrEqual(a, b) => write!(f, "({} >= {})", a, b),
+            Self::GreaterOrEqual(a, b) => write!(f, "({a} >= {b})"),
             Self::Less(a, b) => {
-                write!(f, "({} < {})", a, b)
+                write!(f, "({a} < {b})")
             }
-            Self::LessOrEqual(a, b) => write!(f, "({} <= {})", a, b),
+            Self::LessOrEqual(a, b) => write!(f, "({a} <= {b})"),
             Self::In(a, b) => {
-                write!(f, "({} IN ", a)?;
+                write!(f, "({a} IN ")?;
                 write_arg_list(b, f)?;
                 write!(f, ")")
             }
             Self::Add(a, b) => {
-                write!(f, "{} + {}", a, b)
+                write!(f, "{a} + {b}")
             }
             Self::Subtract(a, b) => {
-                write!(f, "{} - {}", a, b)
+                write!(f, "{a} - {b}")
             }
             Self::Multiply(a, b) => {
-                write!(f, "{} * {}", a, b)
+                write!(f, "{a} * {b}")
             }
             Self::Divide(a, b) => {
-                write!(f, "{} / {}", a, b)
+                write!(f, "{a} / {b}")
             }
-            Self::UnaryPlus(e) => write!(f, "+{}", e),
-            Self::UnaryMinus(e) => write!(f, "-{}", e),
+            Self::UnaryPlus(e) => write!(f, "+{e}"),
+            Self::UnaryMinus(e) => write!(f, "-{e}"),
             Self::Not(e) => match e.as_ref() {
-                Self::Exists(p) => write!(f, "NOT EXISTS {{ {} }}", p),
-                e => write!(f, "!{}", e),
+                Self::Exists(p) => write!(f, "NOT EXISTS {{ {p} }}"),
+                e => write!(f, "!{e}"),
             },
             Self::FunctionCall(function, parameters) => {
-                write!(f, "{}", function)?;
+                write!(f, "{function}")?;
                 write_arg_list(parameters, f)
             }
-            Self::Bound(v) => write!(f, "BOUND({})", v),
-            Self::Exists(p) => write!(f, "EXISTS {{ {} }}", p),
-            Self::If(a, b, c) => write!(f, "IF({}, {}, {})", a, b, c),
+            Self::Bound(v) => write!(f, "BOUND({v})"),
+            Self::Exists(p) => write!(f, "EXISTS {{ {p} }}"),
+            Self::If(a, b, c) => write!(f, "IF({a}, {b}, {c})"),
             Self::Coalesce(parameters) => {
                 write!(f, "COALESCE")?;
                 write_arg_list(parameters, f)
@@ -439,7 +439,7 @@ impl Function {
             Self::Object => write!(f, "object"),
             #[cfg(feature = "rdf-star")]
             Self::IsTriple => write!(f, "istriple"),
-            Self::Custom(iri) => write!(f, "{}", iri),
+            Self::Custom(iri) => write!(f, "{iri}"),
         }
     }
 }
@@ -655,7 +655,7 @@ impl GraphPattern {
                 variable,
                 expression,
             } => {
-                write!(f, "(extend (({} ", variable)?;
+                write!(f, "(extend (({variable} ")?;
                 expression.fmt_sse(f)?;
                 write!(f, ")) ")?;
                 inner.fmt_sse(f)?;
@@ -692,7 +692,7 @@ impl GraphPattern {
                     if i > 0 {
                         write!(f, " ")?;
                     }
-                    write!(f, "{}", v)?;
+                    write!(f, "{v}")?;
                 }
                 write!(f, ") (")?;
                 for (i, (v, a)) in aggregates.iter().enumerate() {
@@ -701,7 +701,7 @@ impl GraphPattern {
                     }
                     write!(f, "(")?;
                     a.fmt_sse(f)?;
-                    write!(f, " {})", v)?;
+                    write!(f, " {v})")?;
                 }
                 write!(f, ") ")?;
                 inner.fmt_sse(f)?;
@@ -713,14 +713,14 @@ impl GraphPattern {
             } => {
                 write!(f, "(table (vars")?;
                 for var in variables {
-                    write!(f, " {}", var)?;
+                    write!(f, " {var}")?;
                 }
                 write!(f, ")")?;
                 for row in bindings {
                     write!(f, " (row")?;
                     for (value, var) in row.iter().zip(variables) {
                         if let Some(value) = value {
-                            write!(f, " ({} {})", var, value)?;
+                            write!(f, " ({var} {value})")?;
                         }
                     }
                     write!(f, ")")?;
@@ -745,7 +745,7 @@ impl GraphPattern {
                     if i > 0 {
                         write!(f, " ")?;
                     }
-                    write!(f, "{}", v)?;
+                    write!(f, "{v}")?;
                 }
                 write!(f, ") ")?;
                 inner.fmt_sse(f)?;
@@ -767,9 +767,9 @@ impl GraphPattern {
                 length,
             } => {
                 if let Some(length) = length {
-                    write!(f, "(slice {} {} ", start, length)?;
+                    write!(f, "(slice {start} {length} ")?;
                 } else {
-                    write!(f, "(slice {} _ ", start)?;
+                    write!(f, "(slice {start} _ ")?;
                 }
                 inner.fmt_sse(f)?;
                 write!(f, ")")
@@ -783,7 +783,7 @@ impl fmt::Display for GraphPattern {
         match self {
             Self::Bgp { patterns } => {
                 for pattern in patterns {
-                    write!(f, "{} .", pattern)?
+                    write!(f, "{pattern} .")?
                 }
                 Ok(())
             }
@@ -791,7 +791,7 @@ impl fmt::Display for GraphPattern {
                 subject,
                 path,
                 object,
-            } => write!(f, "{} {} {} .", subject, path, object),
+            } => write!(f, "{subject} {path} {object} ."),
             Self::Join { left, right } => {
                 if matches!(
                     right.as_ref(),
@@ -801,9 +801,9 @@ impl fmt::Display for GraphPattern {
                         | Self::Filter { .. }
                 ) {
                     // The second block might be considered as a modification of the first one.
-                    write!(f, "{} {{ {} }}", left, right)
+                    write!(f, "{left} {{ {right} }}")
                 } else {
-                    write!(f, "{} {}", left, right)
+                    write!(f, "{left} {right}")
                 }
             }
             Self::LeftJoin {
@@ -812,33 +812,33 @@ impl fmt::Display for GraphPattern {
                 expression,
             } => {
                 if let Some(expr) = expression {
-                    write!(f, "{} OPTIONAL {{ {} FILTER({}) }}", left, right, expr)
+                    write!(f, "{left} OPTIONAL {{ {right} FILTER({expr}) }}")
                 } else {
-                    write!(f, "{} OPTIONAL {{ {} }}", left, right)
+                    write!(f, "{left} OPTIONAL {{ {right} }}")
                 }
             }
             Self::Filter { expr, inner } => {
-                write!(f, "{} FILTER({})", inner, expr)
+                write!(f, "{inner} FILTER({expr})")
             }
-            Self::Union { left, right } => write!(f, "{{ {} }} UNION {{ {} }}", left, right,),
+            Self::Union { left, right } => write!(f, "{{ {left} }} UNION {{ {right} }}",),
             Self::Graph { name, inner } => {
-                write!(f, "GRAPH {} {{ {} }}", name, inner)
+                write!(f, "GRAPH {name} {{ {inner} }}")
             }
             Self::Extend {
                 inner,
                 variable,
                 expression,
-            } => write!(f, "{} BIND({} AS {})", inner, expression, variable),
-            Self::Minus { left, right } => write!(f, "{} MINUS {{ {} }}", left, right),
+            } => write!(f, "{inner} BIND({expression} AS {variable})"),
+            Self::Minus { left, right } => write!(f, "{left} MINUS {{ {right} }}"),
             Self::Service {
                 name,
                 inner,
                 silent,
             } => {
                 if *silent {
-                    write!(f, "SERVICE SILENT {} {{ {} }}", name, inner)
+                    write!(f, "SERVICE SILENT {name} {{ {inner} }}")
                 } else {
-                    write!(f, "SERVICE {} {{ {} }}", name, inner)
+                    write!(f, "SERVICE {name} {{ {inner} }}")
                 }
             }
             Self::Values {
@@ -847,14 +847,14 @@ impl fmt::Display for GraphPattern {
             } => {
                 write!(f, "VALUES ( ")?;
                 for var in variables {
-                    write!(f, "{} ", var)?;
+                    write!(f, "{var} ")?;
                 }
                 write!(f, ") {{ ")?;
                 for row in bindings {
                     write!(f, "( ")?;
                     for val in row {
                         match val {
-                            Some(val) => write!(f, "{} ", val),
+                            Some(val) => write!(f, "{val} "),
                             None => write!(f, "UNDEF "),
                         }?;
                     }
@@ -869,16 +869,16 @@ impl fmt::Display for GraphPattern {
             } => {
                 write!(f, "{{SELECT")?;
                 for (a, v) in aggregates {
-                    write!(f, " ({} AS {})", v, a)?;
+                    write!(f, " ({v} AS {a})")?;
                 }
                 for b in variables {
-                    write!(f, " {}", b)?;
+                    write!(f, " {b}")?;
                 }
-                write!(f, " WHERE {{ {} }}", inner)?;
+                write!(f, " WHERE {{ {inner} }}")?;
                 if !variables.is_empty() {
                     write!(f, " GROUP BY")?;
                     for v in variables {
-                        write!(f, " {}", v)?;
+                        write!(f, " {v}")?;
                     }
                 }
                 write!(f, "}}")
@@ -1062,24 +1062,24 @@ impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
                         write!(f, " *")?;
                     } else {
                         for v in project {
-                            write!(f, " {}", v)?;
+                            write!(f, " {v}")?;
                         }
                     }
                     if let Some(dataset) = self.dataset {
-                        write!(f, " {}", dataset)?;
+                        write!(f, " {dataset}")?;
                     }
-                    write!(f, " WHERE {{ {} }}", p)?;
+                    write!(f, " WHERE {{ {p} }}")?;
                     if let Some(order) = order {
                         write!(f, " ORDER BY")?;
                         for c in order {
-                            write!(f, " {}", c)?;
+                            write!(f, " {c}")?;
                         }
                     }
                     if start > 0 {
-                        write!(f, " OFFSET {}", start)?;
+                        write!(f, " OFFSET {start}")?;
                     }
                     if let Some(length) = length {
-                        write!(f, " LIMIT {}", length)?;
+                        write!(f, " LIMIT {length}")?;
                     }
                     return Ok(());
                 }
@@ -1210,7 +1210,7 @@ impl AggregateExpression {
                 expr,
                 distinct,
             } => {
-                write!(f, "({}", name)?;
+                write!(f, "({name}")?;
                 if *distinct {
                     write!(f, " distinct")?;
                 }
@@ -1228,49 +1228,49 @@ impl fmt::Display for AggregateExpression {
             Self::Count { expr, distinct } => {
                 if *distinct {
                     if let Some(expr) = expr {
-                        write!(f, "COUNT(DISTINCT {})", expr)
+                        write!(f, "COUNT(DISTINCT {expr})")
                     } else {
                         write!(f, "COUNT(DISTINCT *)")
                     }
                 } else if let Some(expr) = expr {
-                    write!(f, "COUNT({})", expr)
+                    write!(f, "COUNT({expr})")
                 } else {
                     write!(f, "COUNT(*)")
                 }
             }
             Self::Sum { expr, distinct } => {
                 if *distinct {
-                    write!(f, "SUM(DISTINCT {})", expr)
+                    write!(f, "SUM(DISTINCT {expr})")
                 } else {
-                    write!(f, "SUM({})", expr)
+                    write!(f, "SUM({expr})")
                 }
             }
             Self::Min { expr, distinct } => {
                 if *distinct {
-                    write!(f, "MIN(DISTINCT {})", expr)
+                    write!(f, "MIN(DISTINCT {expr})")
                 } else {
-                    write!(f, "MIN({})", expr)
+                    write!(f, "MIN({expr})")
                 }
             }
             Self::Max { expr, distinct } => {
                 if *distinct {
-                    write!(f, "MAX(DISTINCT {})", expr)
+                    write!(f, "MAX(DISTINCT {expr})")
                 } else {
-                    write!(f, "MAX({})", expr)
+                    write!(f, "MAX({expr})")
                 }
             }
             Self::Avg { expr, distinct } => {
                 if *distinct {
-                    write!(f, "AVG(DISTINCT {})", expr)
+                    write!(f, "AVG(DISTINCT {expr})")
                 } else {
-                    write!(f, "AVG({})", expr)
+                    write!(f, "AVG({expr})")
                 }
             }
             Self::Sample { expr, distinct } => {
                 if *distinct {
-                    write!(f, "SAMPLE(DISTINCT {})", expr)
+                    write!(f, "SAMPLE(DISTINCT {expr})")
                 } else {
-                    write!(f, "SAMPLE({})", expr)
+                    write!(f, "SAMPLE({expr})")
                 }
             }
             Self::GroupConcat {
@@ -1287,7 +1287,7 @@ impl fmt::Display for AggregateExpression {
                             LiteralRef::new_simple_literal(separator)
                         )
                     } else {
-                        write!(f, "GROUP_CONCAT(DISTINCT {})", expr)
+                        write!(f, "GROUP_CONCAT(DISTINCT {expr})")
                     }
                 } else if let Some(separator) = separator {
                     write!(
@@ -1297,7 +1297,7 @@ impl fmt::Display for AggregateExpression {
                         LiteralRef::new_simple_literal(separator)
                     )
                 } else {
-                    write!(f, "GROUP_CONCAT({})", expr)
+                    write!(f, "GROUP_CONCAT({expr})")
                 }
             }
             Self::Custom {
@@ -1306,9 +1306,9 @@ impl fmt::Display for AggregateExpression {
                 distinct,
             } => {
                 if *distinct {
-                    write!(f, "{}(DISTINCT {})", name, expr)
+                    write!(f, "{name}(DISTINCT {expr})")
                 } else {
-                    write!(f, "{}({})", name, expr)
+                    write!(f, "{name}({expr})")
                 }
             }
         }
@@ -1345,8 +1345,8 @@ impl OrderExpression {
 impl fmt::Display for OrderExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Asc(e) => write!(f, "ASC({})", e),
-            Self::Desc(e) => write!(f, "DESC({})", e),
+            Self::Asc(e) => write!(f, "ASC({e})"),
+            Self::Desc(e) => write!(f, "DESC({e})"),
         }
     }
 }
@@ -1366,14 +1366,14 @@ impl QueryDataset {
             if i > 0 {
                 write!(f, " ")?;
             }
-            write!(f, "{}", graph_name)?;
+            write!(f, "{graph_name}")?;
         }
         if let Some(named) = &self.named {
             for (i, graph_name) in named.iter().enumerate() {
                 if !self.default.is_empty() || i > 0 {
                     write!(f, " ")?;
                 }
-                write!(f, "(named {})", graph_name)?;
+                write!(f, "(named {graph_name})")?;
             }
         }
         write!(f, ")")
@@ -1383,11 +1383,11 @@ impl QueryDataset {
 impl fmt::Display for QueryDataset {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for g in &self.default {
-            write!(f, " FROM {}", g)?;
+            write!(f, " FROM {g}")?;
         }
         if let Some(named) = &self.named {
             for g in named {
-                write!(f, " FROM NAMED {}", g)?;
+                write!(f, " FROM NAMED {g}")?;
             }
         }
         Ok(())
@@ -1409,7 +1409,7 @@ impl GraphTarget {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
-            Self::NamedNode(node) => write!(f, "{}", node),
+            Self::NamedNode(node) => write!(f, "{node}"),
             Self::DefaultGraph => write!(f, "default"),
             Self::NamedGraphs => write!(f, "named"),
             Self::AllGraphs => write!(f, "all"),
@@ -1420,7 +1420,7 @@ impl GraphTarget {
 impl fmt::Display for GraphTarget {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::NamedNode(node) => write!(f, "GRAPH {}", node),
+            Self::NamedNode(node) => write!(f, "GRAPH {node}"),
             Self::DefaultGraph => write!(f, "DEFAULT"),
             Self::NamedGraphs => write!(f, "NAMED"),
             Self::AllGraphs => write!(f, "ALL"),
@@ -1445,7 +1445,7 @@ impl From<GraphName> for GraphTarget {
 
 #[inline]
 fn fmt_sse_unary_expression(f: &mut impl fmt::Write, name: &str, e: &Expression) -> fmt::Result {
-    write!(f, "({} ", name)?;
+    write!(f, "({name} ")?;
     e.fmt_sse(f)?;
     write!(f, ")")
 }
@@ -1457,7 +1457,7 @@ fn fmt_sse_binary_expression(
     a: &Expression,
     b: &Expression,
 ) -> fmt::Result {
-    write!(f, "({} ", name)?;
+    write!(f, "({name} ")?;
     a.fmt_sse(f)?;
     write!(f, " ")?;
     b.fmt_sse(f)?;

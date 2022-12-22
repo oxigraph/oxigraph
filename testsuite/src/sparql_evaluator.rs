@@ -414,7 +414,7 @@ impl ServiceHandler for StaticServiceHandler {
             .ok_or_else(|| {
                 io::Error::new(
                     io::ErrorKind::InvalidInput,
-                    format!("Service {} not found", service_name),
+                    format!("Service {service_name} not found"),
                 )
             })?
             .query_opt(
@@ -579,12 +579,12 @@ impl fmt::Display for StaticQueryResults {
             } => {
                 write!(f, "Variables:")?;
                 for v in variables {
-                    write!(f, " {}", v)?;
+                    write!(f, " {v}")?;
                 }
                 for solution in solutions {
                     write!(f, "\n{{")?;
                     for (k, v) in solution {
-                        write!(f, "{} = {} ", k, v)?;
+                        write!(f, "{k} = {v} ")?;
                     }
                     write!(f, "}}")?;
                 }

@@ -754,8 +754,7 @@ impl<'a> PlanBuilder<'a> {
                         )?
                     } else {
                         return Err(EvaluationError::msg(format!(
-                            "Not supported custom function {}",
-                            expression
+                            "Not supported custom function {expression}"
                         )));
                     }
                 }
@@ -796,8 +795,7 @@ impl<'a> PlanBuilder<'a> {
             )?)))
         } else {
             Err(EvaluationError::msg(format!(
-                "The xsd:{} casting takes only one parameter",
-                name
+                "The xsd:{name} casting takes only one parameter"
             )))
         }
     }

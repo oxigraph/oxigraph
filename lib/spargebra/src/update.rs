@@ -41,7 +41,7 @@ impl Update {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         if let Some(base_iri) = &self.base_iri {
-            write!(f, "(base <{}> ", base_iri)?;
+            write!(f, "(base <{base_iri}> ")?;
         }
         write!(f, "(update")?;
         for op in &self.operations {
@@ -59,10 +59,10 @@ impl Update {
 impl fmt::Display for Update {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(base_iri) = &self.base_iri {
-            writeln!(f, "BASE <{}>", base_iri)?;
+            writeln!(f, "BASE <{base_iri}>")?;
         }
         for update in &self.operations {
-            writeln!(f, "{} ;", update)?;
+            writeln!(f, "{update} ;")?;
         }
         Ok(())
     }
@@ -191,7 +191,7 @@ impl GraphUpdateOperation {
                 if *silent {
                     write!(f, "silent ")?;
                 }
-                write!(f, "{} ", source)?;
+                write!(f, "{source} ")?;
                 destination.fmt_sse(f)?;
                 write!(f, ")")
             }
@@ -208,7 +208,7 @@ impl GraphUpdateOperation {
                 if *silent {
                     write!(f, "silent ")?;
                 }
-                write!(f, "{})", graph)
+                write!(f, "{graph})")
             }
             GraphUpdateOperation::Drop { silent, graph } => {
                 write!(f, "(drop ")?;
@@ -244,24 +244,24 @@ impl fmt::Display for GraphUpdateOperation {
                 if !delete.is_empty() {
                     writeln!(f, "DELETE {{")?;
                     for quad in delete {
-                        writeln!(f, "\t{} .", quad)?;
+                        writeln!(f, "\t{quad} .")?;
                     }
                     writeln!(f, "}}")?;
                 }
                 if !insert.is_empty() {
                     writeln!(f, "INSERT {{")?;
                     for quad in insert {
-                        writeln!(f, "\t{} .", quad)?;
+                        writeln!(f, "\t{quad} .")?;
                     }
                     writeln!(f, "}}")?;
                 }
                 if let Some(using) = using {
                     for g in &using.default {
-                        writeln!(f, "USING {}", g)?;
+                        writeln!(f, "USING {g}")?;
                     }
                     if let Some(named) = &using.named {
                         for g in named {
-                            writeln!(f, "USING NAMED {}", g)?;
+                            writeln!(f, "USING NAMED {g}")?;
                         }
                     }
                 }
@@ -283,9 +283,9 @@ impl fmt::Display for GraphUpdateOperation {
                 if *silent {
                     write!(f, "SILENT ")?;
                 }
-                write!(f, "{}", source)?;
+                write!(f, "{source}")?;
                 if destination != &GraphName::DefaultGraph {
-                    write!(f, " INTO GRAPH {}", destination)?;
+                    write!(f, " INTO GRAPH {destination}")?;
                 }
                 Ok(())
             }
@@ -294,21 +294,21 @@ impl fmt::Display for GraphUpdateOperation {
                 if *silent {
                     write!(f, "SILENT ")?;
                 }
-                write!(f, "{}", graph)
+                write!(f, "{graph}")
             }
             GraphUpdateOperation::Create { silent, graph } => {
                 write!(f, "CREATE ")?;
                 if *silent {
                     write!(f, "SILENT ")?;
                 }
-                write!(f, "GRAPH {}", graph)
+                write!(f, "GRAPH {graph}")
             }
             GraphUpdateOperation::Drop { silent, graph } => {
                 write!(f, "DROP ")?;
                 if *silent {
                     write!(f, "SILENT ")?;
                 }
-                write!(f, "{}", graph)
+                write!(f, "{graph}")
             }
         }
     }

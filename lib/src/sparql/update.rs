@@ -161,8 +161,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         )?;
         let format = GraphFormat::from_media_type(&content_type).ok_or_else(|| {
             EvaluationError::msg(format!(
-                "Unsupported Content-Type returned by {}: {}",
-                from, content_type
+                "Unsupported Content-Type returned by {from}: {content_type}"
             ))
         })?;
         let to_graph_name = match to {
@@ -187,8 +186,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             Ok(())
         } else {
             Err(EvaluationError::msg(format!(
-                "The graph {} already exists",
-                graph_name
+                "The graph {graph_name} already exists"
             )))
         }
     }
@@ -206,8 +204,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                     Ok(())
                 } else {
                     Err(EvaluationError::msg(format!(
-                        "The graph {} does not exists",
-                        graph
+                        "The graph {graph} does not exists"
                     )))
                 }
             }
@@ -227,8 +224,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                     Ok(())
                 } else {
                     Err(EvaluationError::msg(format!(
-                        "The graph {} does not exists",
-                        graph_name
+                        "The graph {graph_name} does not exists"
                     )))
                 }
             }

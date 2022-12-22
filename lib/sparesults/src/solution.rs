@@ -142,7 +142,7 @@ impl Index<usize> for QuerySolution {
     #[inline]
     fn index(&self, index: usize) -> &Term {
         self.get(index)
-            .unwrap_or_else(|| panic!("The column {} is not set in this solution", index))
+            .unwrap_or_else(|| panic!("The column {index} is not set in this solution"))
     }
 }
 
@@ -152,7 +152,7 @@ impl Index<&str> for QuerySolution {
     #[inline]
     fn index(&self, index: &str) -> &Term {
         self.get(index)
-            .unwrap_or_else(|| panic!("The variable ?{} is not set in this solution", index))
+            .unwrap_or_else(|| panic!("The variable ?{index} is not set in this solution"))
     }
 }
 
@@ -162,7 +162,7 @@ impl Index<VariableRef<'_>> for QuerySolution {
     #[inline]
     fn index(&self, index: VariableRef<'_>) -> &Term {
         self.get(index)
-            .unwrap_or_else(|| panic!("The variable {} is not set in this solution", index))
+            .unwrap_or_else(|| panic!("The variable {index} is not set in this solution"))
     }
 }
 impl Index<Variable> for QuerySolution {

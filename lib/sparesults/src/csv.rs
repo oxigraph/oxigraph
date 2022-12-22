@@ -210,14 +210,12 @@ impl<R: BufRead> TsvQueryResultsReader<R> {
         for v in buffer.split('\t') {
             let v = v.trim();
             let variable = Variable::from_str(v).map_err(|e| {
-                SyntaxError::msg(format!("Invalid variable declaration '{}': {}", v, e))
+                SyntaxError::msg(format!("Invalid variable declaration '{v}': {e}"))
             })?;
             if variables.contains(&variable) {
-                return Err(SyntaxError::msg(format!(
-                    "The variable {} is declared twice",
-                    variable
-                ))
-                .into());
+                return Err(
+                    SyntaxError::msg(format!("The variable {variable} is declared twice")).into(),
+                );
             }
             variables.push(variable);
         }

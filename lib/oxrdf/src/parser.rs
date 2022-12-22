@@ -410,23 +410,17 @@ impl fmt::Display for TermParseError {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
-            TermParseErrorKind::Iri { error, value } => write!(
-                f,
-                "Error while parsing the named node '{}': {}",
-                value, error
-            ),
-            TermParseErrorKind::BlankNode { error, value } => write!(
-                f,
-                "Error while parsing the blank node '{}': {}",
-                value, error
-            ),
-            TermParseErrorKind::LanguageTag { error, value } => write!(
-                f,
-                "Error while parsing the language tag '{}': {}",
-                value, error
-            ),
+            TermParseErrorKind::Iri { error, value } => {
+                write!(f, "Error while parsing the named node '{value}': {error}")
+            }
+            TermParseErrorKind::BlankNode { error, value } => {
+                write!(f, "Error while parsing the blank node '{value}': {error}")
+            }
+            TermParseErrorKind::LanguageTag { error, value } => {
+                write!(f, "Error while parsing the language tag '{value}': {error}")
+            }
             TermParseErrorKind::Variable { error, value } => {
-                write!(f, "Error while parsing the variable '{}': {}", value, error)
+                write!(f, "Error while parsing the variable '{value}': {error}")
             }
             TermParseErrorKind::Msg { msg } => f.write_str(msg),
         }

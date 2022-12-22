@@ -25,25 +25,25 @@ impl fmt::Display for Test {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.kind)?;
         for name in &self.name {
-            write!(f, " named \"{}\"", name)?;
+            write!(f, " named \"{name}\"")?;
         }
         for comment in &self.comment {
-            write!(f, " with comment \"{}\"", comment)?;
+            write!(f, " with comment \"{comment}\"")?;
         }
         if let Some(action) = &self.action {
-            write!(f, " on file \"{}\"", action)?;
+            write!(f, " on file \"{action}\"")?;
         }
         if let Some(query) = &self.query {
             write!(f, " on query {}", &query)?;
         }
         for data in &self.data {
-            write!(f, " with data {}", data)?;
+            write!(f, " with data {data}")?;
         }
         for (_, data) in &self.graph_data {
-            write!(f, " and graph data {}", data)?;
+            write!(f, " and graph data {data}")?;
         }
         for result in &self.result {
-            write!(f, " and expected result {}", result)?;
+            write!(f, " and expected result {result}")?;
         }
         Ok(())
     }

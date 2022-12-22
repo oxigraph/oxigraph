@@ -89,7 +89,7 @@ impl<W: Write> TripleWriter<W> {
         let triple = triple.into();
         match &mut self.formatter {
             TripleWriterKind::NTriples(writer) => {
-                writeln!(writer, "{} .", triple)?;
+                writeln!(writer, "{triple} .")?;
             }
             TripleWriterKind::RdfXml(formatter) => formatter.format(&rio::Triple {
                 subject: match triple.subject {
@@ -233,7 +233,7 @@ impl<W: Write> QuadWriter<W> {
         let quad = quad.into();
         match &mut self.formatter {
             QuadWriterKind::NQuads(writer) => {
-                writeln!(writer, "{} .", quad)?;
+                writeln!(writer, "{quad} .")?;
             }
             QuadWriterKind::TriG(writer) => {
                 if quad.graph_name == GraphNameRef::DefaultGraph {
@@ -244,7 +244,7 @@ impl<W: Write> QuadWriter<W> {
                         TripleRef::from(quad)
                     )?;
                 } else {
-                    writeln!(writer, "{} .", quad)?;
+                    writeln!(writer, "{quad} .")?;
                 }
             }
         }

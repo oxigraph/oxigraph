@@ -39,7 +39,7 @@ impl Client {
         }
         let content_type = response
             .header(&HeaderName::CONTENT_TYPE)
-            .ok_or_else(|| invalid_data_error(format!("No Content-Type returned by {}", url)))?
+            .ok_or_else(|| invalid_data_error(format!("No Content-Type returned by {url}")))?
             .to_str()
             .map_err(invalid_data_error)?
             .to_owned();
@@ -74,7 +74,7 @@ impl Client {
         }
         let content_type = response
             .header(&HeaderName::CONTENT_TYPE)
-            .ok_or_else(|| invalid_data_error(format!("No Content-Type returned by {}", url)))?
+            .ok_or_else(|| invalid_data_error(format!("No Content-Type returned by {url}")))?
             .to_str()
             .map_err(invalid_data_error)?
             .to_owned();

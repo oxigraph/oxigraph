@@ -193,7 +193,7 @@ impl GraphName {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
-            Self::NamedNode(node) => write!(f, "{}", node),
+            Self::NamedNode(node) => write!(f, "{node}"),
             Self::DefaultGraph => write!(f, "default"),
         }
     }
@@ -390,8 +390,8 @@ impl NamedNodePattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
-            Self::NamedNode(node) => write!(f, "{}", node),
-            Self::Variable(var) => write!(f, "{}", var),
+            Self::NamedNode(node) => write!(f, "{node}"),
+            Self::Variable(var) => write!(f, "{var}"),
         }
     }
 }
@@ -447,12 +447,12 @@ impl TermPattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
-            Self::NamedNode(term) => write!(f, "{}", term),
-            Self::BlankNode(term) => write!(f, "{}", term),
-            Self::Literal(term) => write!(f, "{}", term),
+            Self::NamedNode(term) => write!(f, "{term}"),
+            Self::BlankNode(term) => write!(f, "{term}"),
+            Self::Literal(term) => write!(f, "{term}"),
             #[cfg(feature = "rdf-star")]
             Self::Triple(triple) => triple.fmt_sse(f),
-            Self::Variable(var) => write!(f, "{}", var),
+            Self::Variable(var) => write!(f, "{var}"),
         }
     }
 }
@@ -465,7 +465,7 @@ impl fmt::Display for TermPattern {
             Self::BlankNode(term) => term.fmt(f),
             Self::Literal(term) => term.fmt(f),
             #[cfg(feature = "rdf-star")]
-            Self::Triple(triple) => write!(f, "<<{}>>", triple),
+            Self::Triple(triple) => write!(f, "<<{triple}>>"),
             Self::Variable(var) => var.fmt(f),
         }
     }
@@ -584,9 +584,9 @@ impl GroundTermPattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
-            Self::NamedNode(term) => write!(f, "{}", term),
-            Self::Literal(term) => write!(f, "{}", term),
-            Self::Variable(var) => write!(f, "{}", var),
+            Self::NamedNode(term) => write!(f, "{term}"),
+            Self::Literal(term) => write!(f, "{term}"),
+            Self::Variable(var) => write!(f, "{var}"),
             Self::Triple(triple) => triple.fmt_sse(f),
         }
     }
@@ -599,7 +599,7 @@ impl fmt::Display for GroundTermPattern {
             Self::NamedNode(term) => term.fmt(f),
             Self::Literal(term) => term.fmt(f),
             Self::Variable(var) => var.fmt(f),
-            Self::Triple(triple) => write!(f, "<<{}>>", triple),
+            Self::Triple(triple) => write!(f, "<<{triple}>>"),
         }
     }
 }
@@ -692,9 +692,9 @@ impl GraphNamePattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
-            Self::NamedNode(node) => write!(f, "{}", node),
+            Self::NamedNode(node) => write!(f, "{node}"),
             Self::DefaultGraph => write!(f, "default"),
-            Self::Variable(var) => write!(f, "{}", var),
+            Self::Variable(var) => write!(f, "{var}"),
         }
     }
 }
