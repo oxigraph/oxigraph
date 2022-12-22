@@ -81,7 +81,7 @@ impl Query {
                 base_iri,
             } => {
                 if let Some(base_iri) = base_iri {
-                    write!(f, "(base <{}> ", base_iri)?;
+                    write!(f, "(base <{base_iri}> ")?;
                 }
                 if let Some(dataset) = dataset {
                     write!(f, "(dataset ")?;
@@ -104,7 +104,7 @@ impl Query {
                 base_iri,
             } => {
                 if let Some(base_iri) = base_iri {
-                    write!(f, "(base <{}> ", base_iri)?;
+                    write!(f, "(base <{base_iri}> ")?;
                 }
                 write!(f, "(construct (")?;
                 for (i, t) in template.iter().enumerate() {
@@ -135,7 +135,7 @@ impl Query {
                 base_iri,
             } => {
                 if let Some(base_iri) = base_iri {
-                    write!(f, "(base <{}> ", base_iri)?;
+                    write!(f, "(base <{base_iri}> ")?;
                 }
                 write!(f, "(describe ")?;
                 if let Some(dataset) = dataset {
@@ -159,7 +159,7 @@ impl Query {
                 base_iri,
             } => {
                 if let Some(base_iri) = base_iri {
-                    write!(f, "(base <{}> ", base_iri)?;
+                    write!(f, "(base <{base_iri}> ")?;
                 }
                 write!(f, "(ask ")?;
                 if let Some(dataset) = dataset {
@@ -190,7 +190,7 @@ impl fmt::Display for Query {
                 base_iri,
             } => {
                 if let Some(base_iri) = base_iri {
-                    writeln!(f, "BASE <{}>", base_iri)?;
+                    writeln!(f, "BASE <{base_iri}>")?;
                 }
                 write!(
                     f,
@@ -208,11 +208,11 @@ impl fmt::Display for Query {
                 base_iri,
             } => {
                 if let Some(base_iri) = base_iri {
-                    writeln!(f, "BASE <{}>", base_iri)?;
+                    writeln!(f, "BASE <{base_iri}>")?;
                 }
                 write!(f, "CONSTRUCT {{ ")?;
                 for triple in template.iter() {
-                    write!(f, "{} . ", triple)?;
+                    write!(f, "{triple} . ")?;
                 }
                 write!(f, "}}")?;
                 if let Some(dataset) = dataset {
@@ -254,7 +254,7 @@ impl fmt::Display for Query {
                 base_iri,
             } => {
                 if let Some(base_iri) = base_iri {
-                    writeln!(f, "BASE <{}>", base_iri)?;
+                    writeln!(f, "BASE <{base_iri}>")?;
                 }
                 write!(f, "ASK")?;
                 if let Some(dataset) = dataset {

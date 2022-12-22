@@ -53,7 +53,7 @@ impl fmt::Display for QueryError {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.inner {
-            QueryErrorKind::Msg { msg } => write!(f, "{}", msg),
+            QueryErrorKind::Msg { msg } => write!(f, "{msg}"),
             QueryErrorKind::Other(error) => error.fmt(f),
         }
     }

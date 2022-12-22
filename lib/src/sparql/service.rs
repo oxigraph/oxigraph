@@ -120,8 +120,7 @@ impl ServiceHandler for SimpleServiceHandler {
         )?;
         let format = QueryResultsFormat::from_media_type(&content_type).ok_or_else(|| {
             EvaluationError::msg(format!(
-                "Unsupported Content-Type returned by {}: {}",
-                service_name, content_type
+                "Unsupported Content-Type returned by {service_name}: {content_type}"
             ))
         })?;
         Ok(QueryResults::read(BufReader::new(body), format)?)

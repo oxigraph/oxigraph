@@ -102,7 +102,7 @@ fn store_query_and_update(c: &mut Criterion) {
             match kind {
                 "query" => Operation::Query(Query::parse(operation, None).unwrap()),
                 "update" => Operation::Update(Update::parse(operation, None).unwrap()),
-                _ => panic!("Unexpected operation kind {}", kind),
+                _ => panic!("Unexpected operation kind {kind}"),
             }
         })
         .collect::<Vec<_>>();
@@ -169,10 +169,7 @@ fn read_data(file: &str) -> impl BufRead {
     if !Path::new(file).exists() {
         let mut client = oxhttp::Client::new();
         client.set_redirection_limit(5);
-        let url = format!(
-            "https://github.com/Tpt/bsbm-tools/releases/download/v0.2/{}",
-            file
-        );
+        let url = format!("https://github.com/Tpt/bsbm-tools/releases/download/v0.2/{file}");
         let request = Request::builder(Method::GET, url.parse().unwrap()).build();
         let response = client.request(request).unwrap();
         assert_eq!(

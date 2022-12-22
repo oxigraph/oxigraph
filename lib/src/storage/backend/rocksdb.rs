@@ -175,8 +175,8 @@ impl Db {
                     return Err(io::Error::new(
                         io::ErrorKind::Other,
                         format!(
-                            "Oxigraph needs at least 96 file descriptors, only {} allowed. Run e.g. `ulimit -n 512` to allow 512 opened files",
-                            available_fd
+                            "Oxigraph needs at least 96 file descriptors, only {available_fd} allowed. Run e.g. `ulimit -n 512` to allow 512 opened files"
+
                         ),
                     )
                     .into());
@@ -1123,7 +1123,7 @@ fn path_to_cstring(path: &Path) -> Result<CString, StorageError> {
     .map_err(|e| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("The DB path contains null bytes: {}", e),
+            format!("The DB path contains null bytes: {e}"),
         )
     })?)
 }

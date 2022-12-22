@@ -76,7 +76,7 @@ pub fn main() -> anyhow::Result<()> {
         Command::Load { file, lenient } => {
             ThreadPoolBuilder::new()
                 .num_threads(max(1, available_parallelism()?.get() / 2))
-                .thread_name(|i| format!("Oxigraph bulk loader thread {}", i))
+                .thread_name(|i| format!("Oxigraph bulk loader thread {i}"))
                 .build()?
                 .scope(|s| {
                     for file in file {
@@ -177,8 +177,7 @@ impl GraphOrDatasetFormat {
         if let Some(ext) = path.extension().and_then(|ext| ext.to_str()) {
             Self::from_extension(ext).map_err(|e| {
                 e.context(format!(
-                    "Not able to guess the file format from file name extension '{}'",
-                    ext
+                    "Not able to guess the file format from file name extension '{ext}'"
                 ))
             })
         } else {
@@ -416,7 +415,7 @@ fn handle_request(request: &mut Request, store: Store) -> Result<Response, HttpE
                         } else {
                             return Err((
                                 Status::NOT_FOUND,
-                                format!("The graph {} does not exists", target),
+                                format!("The graph {target} does not exists"),
                             ));
                         }
                     }
@@ -847,7 +846,7 @@ fn content_negotiation<F>(
         let (possible, parameters) = possible.split_once(';').unwrap_or((possible, ""));
         let (possible_base, possible_sub) = possible
             .split_once('/')
-            .ok_or_else(|| bad_request(format!("Invalid media type: '{}'", possible)))?;
+            .ok_or_else(|| bad_request(format!("Invalid media type: '{possible}'")))?;
         let possible_base = possible_base.trim();
         let possible_sub = possible_sub.trim();
 
@@ -856,7 +855,7 @@ fn content_negotiation<F>(
             let parameter = parameter.trim();
             if let Some(s) = parameter.strip_prefix("q=") {
                 score = f32::from_str(s.trim())
-                    .map_err(|_| bad_request(format!("Invalid Accept media type score: {}", s)))?
+                    .map_err(|_| bad_request(format!("Invalid Accept media type score: {s}")))?
             }
         }
         if score <= result_score {
@@ -868,7 +867,7 @@ fn content_negotiation<F>(
                 .map_or(*candidate, |(p, _)| p)
                 .split_once('/')
                 .ok_or_else(|| {
-                    internal_server_error(format!("Invalid media type: '{}'", possible))
+                    internal_server_error(format!("Invalid media type: '{possible}'"))
                 })?;
             if (possible_base == candidate_base || possible_base == "*")
                 && (possible_sub == candidate_sub || possible_sub == "*")
@@ -955,7 +954,7 @@ fn web_bulk_loader(store: &Store, request: &Request) -> BulkLoader {
     });
     if url_query_parameter(request, "lenient").is_some() {
         loader = loader.on_parse_error(move |e| {
-            eprintln!("Parsing error: {}", e);
+            eprintln!("Parsing error: {e}");
             Ok(())
         })
     }
@@ -976,12 +975,12 @@ fn bad_request(message: impl fmt::Display) -> HttpError {
 fn unsupported_media_type(content_type: &str) -> HttpError {
     (
         Status::UNSUPPORTED_MEDIA_TYPE,
-        format!("No supported content Content-Type given: {}", content_type),
+        format!("No supported content Content-Type given: {content_type}"),
     )
 }
 
 fn internal_server_error(message: impl fmt::Display) -> HttpError {
-    eprintln!("Internal server error: {}", message);
+    eprintln!("Internal server error: {message}");
     (Status::INTERNAL_SERVER_ERROR, message.to_string())
 }
 
@@ -1033,7 +1032,7 @@ impl<O, U: (Fn(O) -> io::Result<Option<O>>)> Read for ReadForWrite<O, U> {
                 self.state = match (self.add_more_data)(state) {
                     Ok(state) => state,
                     Err(e) => {
-                        eprintln!("Internal server error while streaming results: {}", e);
+                        eprintln!("Internal server error while streaming results: {e}");
                         self.buffer
                             .borrow_mut()
                             .write_all(e.to_string().as_bytes())?;
@@ -1721,7 +1720,7 @@ mod tests {
             let mut response = self.exec(request);
             let mut buf = String::new();
             response.body_mut().read_to_string(&mut buf)?;
-            assert_eq!(response.status(), expected_status, "Error message: {}", buf);
+            assert_eq!(response.status(), expected_status, "Error message: {buf}");
             Ok(())
         }
 
@@ -1729,7 +1728,7 @@ mod tests {
             let mut response = self.exec(request);
             let mut buf = String::new();
             response.body_mut().read_to_string(&mut buf)?;
-            assert_eq!(response.status(), Status::OK, "Error message: {}", buf);
+            assert_eq!(response.status(), Status::OK, "Error message: {buf}");
             assert_eq!(&buf, expected_body);
             Ok(())
         }

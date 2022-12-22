@@ -195,11 +195,10 @@ impl<R: BufRead> XmlQueryResultsReader<R> {
                                 .find(|attr| attr.key.local_name().as_ref() == b"name")
                                 .ok_or_else(|| SyntaxError::msg("No name attribute found for the <variable> tag"))?
                                 .decode_and_unescape_value(&reader)?;
-                            let variable = Variable::new(name).map_err(|e| SyntaxError::msg(format!("Invalid variable name: {}", e)))?;
+                            let variable = Variable::new(name).map_err(|e| SyntaxError::msg(format!("Invalid variable name: {e}")))?;
                             if variables.contains(&variable) {
                                 return Err(SyntaxError::msg(format!(
-                                    "The variable {} is declared twice",
-                                    variable
+                                    "The variable {variable} is declared twice"
                                 ))
                                     .into());
                             }
@@ -243,10 +242,10 @@ impl<R: BufRead> XmlQueryResultsReader<R> {
                             } else if value == "false" {
                                 Ok(Self::Boolean(false))
                             } else {
-                                Err(SyntaxError::msg(format!("Unexpected boolean value. Found '{}'", value)).into())
+                                Err(SyntaxError::msg(format!("Unexpected boolean value. Found '{value}'")).into())
                             };
                         }
-                        _ => Err(SyntaxError::msg(format!("Unexpected textual value found: '{}'", value)).into())
+                        _ => Err(SyntaxError::msg(format!("Unexpected textual value found: '{value}'")).into())
                     };
                 },
                 Event::End(event) => {
@@ -365,8 +364,7 @@ impl<R: BufRead> XmlSolutionsReader<R> {
                                     datatype =
                                         Some(NamedNode::new(iri.to_string()).map_err(|e| {
                                             SyntaxError::msg(format!(
-                                                "Invalid datatype IRI '{}': {}",
-                                                iri, e
+                                                "Invalid datatype IRI '{iri}': {e}"
                                             ))
                                         })?);
                                 }
@@ -406,10 +404,7 @@ impl<R: BufRead> XmlSolutionsReader<R> {
                             term = Some(
                                 NamedNode::new(data.to_string())
                                     .map_err(|e| {
-                                        SyntaxError::msg(format!(
-                                            "Invalid IRI value '{}': {}",
-                                            data, e
-                                        ))
+                                        SyntaxError::msg(format!("Invalid IRI value '{data}': {e}"))
                                     })?
                                     .into(),
                             )
@@ -419,8 +414,7 @@ impl<R: BufRead> XmlSolutionsReader<R> {
                                 BlankNode::new(data.to_string())
                                     .map_err(|e| {
                                         SyntaxError::msg(format!(
-                                            "Invalid blank node value '{}': {}",
-                                            data, e
+                                            "Invalid blank node value '{data}': {e}"
                                         ))
                                     })?
                                     .into(),
@@ -431,8 +425,7 @@ impl<R: BufRead> XmlSolutionsReader<R> {
                         }
                         _ => {
                             return Err(SyntaxError::msg(format!(
-                                "Unexpected textual value found: {}",
-                                data
+                                "Unexpected textual value found: {data}"
                             ))
                             .into());
                         }
@@ -447,7 +440,7 @@ impl<R: BufRead> XmlSolutionsReader<R> {
                                 new_bindings[*var] = term.take()
                             } else {
                                 return Err(
-                                    SyntaxError::msg(format!("The variable '{}' is used in a binding but not declared in the variables list",  var)).into()
+                                    SyntaxError::msg(format!("The variable '{var}' is used in a binding but not declared in the variables list")).into()
                                 );
                             }
                         } else {
@@ -554,14 +547,13 @@ fn build_literal(
             if let Some(datatype) = datatype {
                 if datatype.as_ref() != rdf::LANG_STRING {
                     return Err(SyntaxError::msg(format!(
-                        "xml:lang value '{}' provided with the datatype {}",
-                        lang, datatype
+                        "xml:lang value '{lang}' provided with the datatype {datatype}"
                     ))
                     .into());
                 }
             }
             Literal::new_language_tagged_literal(value, &lang).map_err(|e| {
-                SyntaxError::msg(format!("Invalid xml:lang value '{}': {}", lang, e)).into()
+                SyntaxError::msg(format!("Invalid xml:lang value '{lang}': {e}")).into()
             })
         }
         None => Ok(if let Some(datatype) = datatype {

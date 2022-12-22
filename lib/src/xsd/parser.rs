@@ -41,29 +41,27 @@ impl fmt::Display for XsdParseError {
                 write!(f, "Invalid XML Schema value: {}", kind.description())
             }
             XsdParseErrorKind::NomChar(c) => {
-                write!(f, "Unexpected character in XML Schema value: '{}'", c)
+                write!(f, "Unexpected character in XML Schema value: '{c}'")
             }
             XsdParseErrorKind::MissingData(Needed::Unknown) => {
                 write!(f, "Too small XML Schema value")
             }
             XsdParseErrorKind::MissingData(Needed::Size(size)) => {
-                write!(f, "Too small XML Schema value: missing {} chars", size)
+                write!(f, "Too small XML Schema value: missing {size} chars")
             }
             XsdParseErrorKind::TooMuchData { count } => {
-                write!(f, "Too long XML Schema value: {} extra chars", count)
+                write!(f, "Too long XML Schema value: {count} extra chars")
             }
             XsdParseErrorKind::Overflow => write!(f, "Computation overflow or underflow"),
             XsdParseErrorKind::ParseInt(error) => {
-                write!(f, "Error while parsing integer: {}", error)
+                write!(f, "Error while parsing integer: {error}")
             }
             XsdParseErrorKind::ParseDecimal(error) => {
-                write!(f, "Error while parsing decimal: {}", error)
+                write!(f, "Error while parsing decimal: {error}")
             }
-            XsdParseErrorKind::OutOfIntegerRange { value, min, max } => write!(
-                f,
-                "The integer {} is not between {} and {}",
-                value, min, max
-            ),
+            XsdParseErrorKind::OutOfIntegerRange { value, min, max } => {
+                write!(f, "The integer {value} is not between {min} and {max}")
+            }
             XsdParseErrorKind::DateTime(error) => error.fmt(f),
         }
     }

@@ -251,7 +251,7 @@ impl IdStr {
     #[inline]
     fn new(id: u128) -> Self {
         let mut str = [0; 32];
-        write!(&mut str[..], "{:x}", id).unwrap();
+        write!(&mut str[..], "{id:x}").unwrap();
         Self(str)
     }
 

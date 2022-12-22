@@ -217,7 +217,7 @@ impl fmt::Display for DateTime {
             self.second()
         )?;
         if let Some(timezone_offset) = self.timezone_offset() {
-            write!(f, "{}", timezone_offset)?;
+            write!(f, "{timezone_offset}")?;
         }
         Ok(())
     }
@@ -372,7 +372,7 @@ impl fmt::Display for Time {
             self.second()
         )?;
         if let Some(timezone_offset) = self.timezone_offset() {
-            write!(f, "{}", timezone_offset)?;
+            write!(f, "{timezone_offset}")?;
         }
         Ok(())
     }
@@ -522,7 +522,7 @@ impl fmt::Display for Date {
         }
         write!(f, "{:04}-{:02}-{:02}", year.abs(), self.month(), self.day())?;
         if let Some(timezone_offset) = self.timezone_offset() {
-            write!(f, "{}", timezone_offset)?;
+            write!(f, "{timezone_offset}")?;
         }
         Ok(())
     }
@@ -622,7 +622,7 @@ impl fmt::Display for GYearMonth {
         }
         write!(f, "{:04}-{:02}", year.abs(), self.month())?;
         if let Some(timezone_offset) = self.timezone_offset() {
-            write!(f, "{}", timezone_offset)?;
+            write!(f, "{timezone_offset}")?;
         }
         Ok(())
     }
@@ -721,7 +721,7 @@ impl fmt::Display for GYear {
         }
         write!(f, "{:04}", year.abs())?;
         if let Some(timezone_offset) = self.timezone_offset() {
-            write!(f, "{}", timezone_offset)?;
+            write!(f, "{timezone_offset}")?;
         }
         Ok(())
     }
@@ -817,7 +817,7 @@ impl fmt::Display for GMonthDay {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "--{:02}-{:02}", self.month(), self.day())?;
         if let Some(timezone_offset) = self.timezone_offset() {
-            write!(f, "{}", timezone_offset)?;
+            write!(f, "{timezone_offset}")?;
         }
         Ok(())
     }
@@ -920,7 +920,7 @@ impl fmt::Display for GMonth {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "--{:02}", self.month())?;
         if let Some(timezone_offset) = self.timezone_offset() {
-            write!(f, "{}", timezone_offset)?;
+            write!(f, "{timezone_offset}")?;
         }
         Ok(())
     }
@@ -1015,7 +1015,7 @@ impl fmt::Display for GDay {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "---{:02}", self.day())?;
         if let Some(timezone_offset) = self.timezone_offset() {
-            write!(f, "{}", timezone_offset)?;
+            write!(f, "{timezone_offset}")?;
         }
         Ok(())
     }
@@ -1514,7 +1514,7 @@ impl fmt::Display for DateTimeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
             DateTimeErrorKind::InvalidDayOfMonth { day, month } => {
-                write!(f, "{} is not a valid day of {}", day, month)
+                write!(f, "{day} is not a valid day of {month}")
             }
             DateTimeErrorKind::Overflow => write!(f, "Overflow during date time normalization"),
             DateTimeErrorKind::SystemTime(error) => error.fmt(f),

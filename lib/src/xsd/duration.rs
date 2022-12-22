@@ -134,12 +134,12 @@ impl fmt::Display for Duration {
 
             if y != 0 {
                 if m == 0 {
-                    write!(f, "{}Y", y)?;
+                    write!(f, "{y}Y")?;
                 } else {
-                    write!(f, "{}Y{}M", y, m)?;
+                    write!(f, "{y}Y{m}M")?;
                 }
             } else if m != 0 || ss == 0.into() {
-                write!(f, "{}M", m)?;
+                write!(f, "{m}M")?;
             }
         }
 
@@ -153,19 +153,19 @@ impl fmt::Display for Duration {
                 .unwrap(); //could not fail
 
             if d != 0 {
-                write!(f, "{}D", d)?;
+                write!(f, "{d}D")?;
             }
 
             if h != 0 || m != 0 || s != 0.into() {
                 write!(f, "T")?;
                 if h != 0 {
-                    write!(f, "{}H", h)?;
+                    write!(f, "{h}H")?;
                 }
                 if m != 0 {
-                    write!(f, "{}M", m)?;
+                    write!(f, "{m}M")?;
                 }
                 if s != 0.into() {
-                    write!(f, "{}S", s)?;
+                    write!(f, "{s}S")?;
                 }
             }
         }

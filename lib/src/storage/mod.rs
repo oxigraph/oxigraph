@@ -200,13 +200,13 @@ impl Storage {
 
         match version {
             _ if version < LATEST_STORAGE_VERSION => Err(CorruptionError::msg(format!(
-                "The RocksDB database is using the outdated encoding version {}. Automated migration is not supported, please dump the store dataset using a compatible Oxigraph version and load it again using the current version",
-                version
+                "The RocksDB database is using the outdated encoding version {version}. Automated migration is not supported, please dump the store dataset using a compatible Oxigraph version and load it again using the current version"
+
             )).into()),
             LATEST_STORAGE_VERSION => Ok(()),
             _ => Err(CorruptionError::msg(format!(
-                "The RocksDB database is using the too recent version {}. Upgrade to the latest Oxigraph version to load this database",
-                version
+                "The RocksDB database is using the too recent version {version}. Upgrade to the latest Oxigraph version to load this database"
+
             )).into())
         }
     }
@@ -216,7 +216,7 @@ impl Storage {
         Ok(
             if let Some(version) = self.db.get(&self.default_cf, b"oxversion")? {
                 u64::from_be_bytes(version.as_ref().try_into().map_err(|e| {
-                    CorruptionError::new(format!("Error while parsing the version key: {}", e))
+                    CorruptionError::new(format!("Error while parsing the version key: {e}"))
                 })?)
             } else {
                 self.update_version(LATEST_STORAGE_VERSION)?;

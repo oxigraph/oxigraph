@@ -324,8 +324,7 @@ impl PyStore {
                     .map_err(map_loader_error)
             } else {
                 Err(PyValueError::new_err(format!(
-                    "Not supported MIME type: {}",
-                    mime_type
+                    "Not supported MIME type: {mime_type}"
                 )))
             }
         })
@@ -411,8 +410,7 @@ impl PyStore {
                     .map_err(map_loader_error)
             } else {
                 Err(PyValueError::new_err(format!(
-                    "Not supported MIME type: {}",
-                    mime_type
+                    "Not supported MIME type: {mime_type}"
                 )))
             }
         })
@@ -488,8 +486,7 @@ impl PyStore {
                     .map_err(map_serializer_error)
             } else {
                 Err(PyValueError::new_err(format!(
-                    "Not supported MIME type: {}",
-                    mime_type
+                    "Not supported MIME type: {mime_type}"
                 )))
             }
         })

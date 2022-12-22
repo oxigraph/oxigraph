@@ -82,7 +82,7 @@ impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.inner {
             ParseErrorKind::InvalidBaseIri(e) => {
-                write!(f, "Invalid SPARQL base IRI provided: {}", e)
+                write!(f, "Invalid SPARQL base IRI provided: {e}")
             }
             ParseErrorKind::Parser(e) => e.fmt(f),
         }

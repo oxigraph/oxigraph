@@ -70,7 +70,7 @@ fn evaluate_positive_syntax_test(test: &Test) -> Result<()> {
         .ok_or_else(|| anyhow!("No action found for test {}", test))?;
     match load_dataset(action) {
         Ok(_) => Ok(()),
-        Err(e) => Err(anyhow!(format!("Parse error: {}", e))),
+        Err(e) => Err(anyhow!(format!("Parse error: {e}"))),
     }
 }
 

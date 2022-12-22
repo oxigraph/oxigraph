@@ -83,8 +83,7 @@ pub fn parse(
         .into_py(py))
     } else {
         Err(PyValueError::new_err(format!(
-            "Not supported MIME type: {}",
-            mime_type
+            "Not supported MIME type: {mime_type}"
         )))
     }
 }
@@ -150,8 +149,7 @@ pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_
         Ok(())
     } else {
         Err(PyValueError::new_err(format!(
-            "Not supported MIME type: {}",
-            mime_type
+            "Not supported MIME type: {mime_type}"
         )))
     }
 }
