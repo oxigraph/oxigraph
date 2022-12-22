@@ -274,8 +274,11 @@ impl<R: BufRead> JsonSolutionsReader<R> {
         let mut value = None;
         let mut lang = None;
         let mut datatype = None;
+        #[cfg(feature = "rdf-star")]
         let mut subject = None;
+        #[cfg(feature = "rdf-star")]
         let mut predicate = None;
+        #[cfg(feature = "rdf-star")]
         let mut object = None;
         if self.reader.read_event(&mut self.buffer)? != JsonEvent::StartObject {
             return Err(SyntaxError::msg("Term serializations should be an object").into());
@@ -287,10 +290,13 @@ impl<R: BufRead> JsonSolutionsReader<R> {
                     "value" => state = Some(State::Value),
                     "xml:lang" => state = Some(State::Lang),
                     "datatype" => state = Some(State::Datatype),
+                    #[cfg(feature = "rdf-star")]
                     "subject" => subject = Some(self.read_value(number_of_recursive_calls + 1)?),
+                    #[cfg(feature = "rdf-star")]
                     "predicate" => {
                         predicate = Some(self.read_value(number_of_recursive_calls + 1)?)
                     }
+                    #[cfg(feature = "rdf-star")]
                     "object" => object = Some(self.read_value(number_of_recursive_calls + 1)?),
                     _ => {
                         return Err(SyntaxError::msg(format!(
