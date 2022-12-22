@@ -11,6 +11,7 @@ description = """
 SPARQL query results formats parsers and serializers
 """
 edition = "2021"
+rust-version = "1.60"
 
 [features]
 default = []

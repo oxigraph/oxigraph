@@ -9,6 +9,7 @@ description = """
 Rust bindings for RocksDB for Oxigraph usage.
 """
 edition = "2021"
+rust-version = "1.60"
 build = "build.rs"
 links = "rocksdb"
 
