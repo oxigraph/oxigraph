@@ -116,3 +116,18 @@ jobs:
         working-directory: ./python
       - run: python -m mypy generate_stubs.py tests --strict
         working-directory: ./python
+
+  python_msv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - run: rustup update
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.7"
+      - run: pip install -r python/requirements.dev.txt
+      - run: pip install ./python
+      - run: python -m unittest
+        working-directory: ./python/tests
