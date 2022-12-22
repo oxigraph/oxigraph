@@ -37,6 +37,22 @@ jobs:
         working-directory: ./lib/spargebra
       - run: cargo clippy --all-targets --all-features
 
+  clippy_msv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - run: rustup override set 1.60.0 && rustup component add clippy
+      - run: cargo clippy --  -D warnings -D clippy::all
+        working-directory: ./lib/oxrdf
+      - run: cargo clippy -- -D warnings -D clippy::all
+        working-directory: ./lib/sparesults
+      - run: cargo clippy -- -D warnings -D clippy::all
+        working-directory: ./lib/spargebra
+      - run: cargo clippy -- -D warnings -D clippy::all
+        working-directory: ./server
+
   deny:
     runs-on: ubuntu-latest
     steps:

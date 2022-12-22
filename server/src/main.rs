@@ -303,7 +303,7 @@ fn handle_request(request: &mut Request, store: Store) -> Result<Response, HttpE
                     request,
                 )
             } else {
-                return Err(unsupported_media_type(&content_type));
+                Err(unsupported_media_type(&content_type))
             }
         }
         (path, "GET") if path.starts_with("/store") => {
