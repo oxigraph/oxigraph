@@ -1,6 +1,6 @@
 use crate::files::load_to_graph;
 use crate::vocab::*;
-use anyhow::{anyhow, Result};
+use anyhow::{bail, Result};
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
 use std::collections::VecDeque;
@@ -73,10 +73,10 @@ impl Iterator for TestManifest {
 
     fn next(&mut self) -> Option<Result<Test>> {
         loop {
-            if let Some(next) = self.next_test() {
+            if let Some(next) = self.next_test().transpose() {
                 return Some(next);
             }
-            if let Err(e) = self.load_next_manifest()? {
+            if let Err(e) = self.load_next_manifest().transpose()? {
                 return Some(Err(e));
             }
         }
@@ -84,40 +84,44 @@ impl Iterator for TestManifest {
 }
 
 impl TestManifest {
-    fn next_test(&mut self) -> Option<Result<Test>> {
-        let test_node = self.tests_to_do.pop_front()?;
-        let test_node = match test_node {
-            Term::NamedNode(n) => n,
-            _ => {
-                return Some(Err(anyhow!("Invalid test identifier. Got {test_node}")));
-            }
+    fn next_test(&mut self) -> Result<Option<Test>> {
+        let test_node = if let Some(test_node) = self.tests_to_do.pop_front() {
+            test_node
+        } else {
+            return Ok(None);
+        };
+        let test_node = if let Term::NamedNode(test_node) = test_node {
+            test_node
+        } else {
+            bail!("Invalid test identifier. Got {test_node}");
         };
 
-        let name = match self
+        let name = if let Some(TermRef::Literal(c)) = self
             .graph
             .object_for_subject_predicate(&test_node, mf::NAME)
         {
-            Some(TermRef::Literal(c)) => Some(c.value().to_string()),
-            _ => None,
+            Some(c.value().to_string())
+        } else {
+            None
         };
-        let kind = match self
+        let kind = if let Some(TermRef::NamedNode(c)) = self
             .graph
             .object_for_subject_predicate(&test_node, rdf::TYPE)
         {
-            Some(TermRef::NamedNode(c)) => c.into_owned(),
-            _ => {
-                return Some(Err(anyhow!(
-                    "The test {test_node} named {} has no rdf:type",
-                    name.as_deref().unwrap_or("")
-                )));
-            }
+            c.into_owned()
+        } else {
+            bail!(
+                "The test {test_node} named {} has no rdf:type",
+                name.as_deref().unwrap_or("")
+            );
         };
-        let comment = match self
+        let comment = if let Some(TermRef::Literal(c)) = self
             .graph
             .object_for_subject_predicate(&test_node, rdfs::COMMENT)
         {
-            Some(TermRef::Literal(c)) => Some(c.value().to_string()),
-            _ => None,
+            Some(c.value().to_string())
+        } else {
+            None
         };
         let (action, query, update, data, graph_data, service_data) = match self
             .graph
@@ -199,9 +203,9 @@ impl TestManifest {
                     .collect();
                 (None, query, update, data, graph_data, service_data)
             }
-            Some(_) => return Some(Err(anyhow!("invalid action"))),
+            Some(_) => bail!("invalid action"),
             None => {
-                return Some(Err(anyhow!("action not found for test {test_node}")));
+                bail!("action not found for test {test_node}");
             }
         };
         let (result, result_graph_data) = match self
@@ -243,10 +247,10 @@ impl TestManifest {
                     })
                     .collect(),
             ),
-            Some(_) => return Some(Err(anyhow!("invalid result"))),
+            Some(_) => bail!("invalid result"),
             None => (None, Vec::new()),
         };
-        Some(Ok(Test {
+        Ok(Some(Test {
             id: test_node,
             kind,
             name,
@@ -262,21 +266,21 @@ impl TestManifest {
         }))
     }
 
-    fn load_next_manifest(&mut self) -> Option<Result<()>> {
-        let url = self.manifests_to_do.pop_front()?;
+    fn load_next_manifest(&mut self) -> Result<Option<()>> {
+        let url = if let Some(url) = self.manifests_to_do.pop_front() {
+            url
+        } else {
+            return Ok(None);
+        };
         self.graph.clear();
-        if let Err(error) = load_to_graph(&url, &mut self.graph) {
-            return Some(Err(error));
-        }
+        load_to_graph(&url, &mut self.graph)?;
 
         let manifests = self
             .graph
             .subjects_for_predicate_object(rdf::TYPE, mf::MANIFEST)
             .collect::<Vec<_>>();
         if manifests.len() != 1 {
-            return Some(Err(anyhow!(
-                "The file {url} should contain a single manifest"
-            )));
+            bail!("The file {url} should contain a single manifest");
         }
         for manifest in manifests {
             match self
@@ -291,7 +295,7 @@ impl TestManifest {
                         }),
                     );
                 }
-                Some(_) => return Some(Err(anyhow!("invalid tests list"))),
+                Some(_) => bail!("invalid tests list"),
                 None => (),
             }
 
@@ -305,12 +309,12 @@ impl TestManifest {
                         .extend(RdfListIterator::iter(&self.graph, list.into()));
                 }
                 Some(term) => {
-                    return Some(Err(anyhow!("Invalid tests list. Got term {term}")));
+                    bail!("Invalid tests list. Got term {term}");
                 }
                 None => (),
             }
         }
-        Some(Ok(()))
+        Ok(Some(()))
     }
 }
 
