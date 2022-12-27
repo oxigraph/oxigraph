@@ -89,7 +89,7 @@ impl TestManifest {
         let test_node = match test_node {
             Term::NamedNode(n) => n,
             _ => {
-                return Some(Err(anyhow!("Invalid test identifier. Got {}", test_node)));
+                return Some(Err(anyhow!("Invalid test identifier. Got {test_node}")));
             }
         };
 
@@ -107,8 +107,7 @@ impl TestManifest {
             Some(TermRef::NamedNode(c)) => c.into_owned(),
             _ => {
                 return Some(Err(anyhow!(
-                    "The test {} named {} has no rdf:type",
-                    test_node,
+                    "The test {test_node} named {} has no rdf:type",
                     name.as_deref().unwrap_or("")
                 )));
             }
@@ -202,7 +201,7 @@ impl TestManifest {
             }
             Some(_) => return Some(Err(anyhow!("invalid action"))),
             None => {
-                return Some(Err(anyhow!("action not found for test {}", test_node)));
+                return Some(Err(anyhow!("action not found for test {test_node}")));
             }
         };
         let (result, result_graph_data) = match self
@@ -276,8 +275,7 @@ impl TestManifest {
             .collect::<Vec<_>>();
         if manifests.len() != 1 {
             return Some(Err(anyhow!(
-                "The file {} should contain a single manifest",
-                url
+                "The file {url} should contain a single manifest"
             )));
         }
         for manifest in manifests {
@@ -307,7 +305,7 @@ impl TestManifest {
                         .extend(RdfListIterator::iter(&self.graph, list.into()));
                 }
                 Some(term) => {
-                    return Some(Err(anyhow!("Invalid tests list. Got term {}", term)));
+                    return Some(Err(anyhow!("Invalid tests list. Got term {term}")));
                 }
                 None => (),
             }

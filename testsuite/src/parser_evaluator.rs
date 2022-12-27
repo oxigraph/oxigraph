@@ -2,7 +2,7 @@ use crate::evaluator::TestEvaluator;
 use crate::files::load_dataset;
 use crate::manifest::Test;
 use crate::report::dataset_diff;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 
 pub fn register_parser_tests(evaluator: &mut TestEvaluator) {
     evaluator.register(
@@ -67,20 +67,18 @@ fn evaluate_positive_syntax_test(test: &Test) -> Result<()> {
     let action = test
         .action
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {}", test))?;
-    match load_dataset(action) {
-        Ok(_) => Ok(()),
-        Err(e) => Err(anyhow!(format!("Parse error: {e}"))),
-    }
+        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
+    load_dataset(action).map_err(|e| anyhow!("Parse error: {e}"))?;
+    Ok(())
 }
 
 fn evaluate_negative_syntax_test(test: &Test) -> Result<()> {
     let action = test
         .action
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {}", test))?;
+        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
     match load_dataset(action) {
-        Ok(_) => Err(anyhow!("File parsed with an error even if it should not",)),
+        Ok(_) => bail!("File parsed with an error even if it should not"),
         Err(_) => Ok(()),
     }
 }
@@ -89,29 +87,23 @@ fn evaluate_eval_test(test: &Test) -> Result<()> {
     let action = test
         .action
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {}", test))?;
-    match load_dataset(action) {
-        Ok(mut actual_graph) => {
-            actual_graph.canonicalize();
-            if let Some(result) = &test.result {
-                match load_dataset(result) {
-                    Ok(mut expected_graph) => {
-                        expected_graph.canonicalize();
-                        if expected_graph == actual_graph {
-                            Ok(())
-                        } else {
-                            Err(anyhow!(
-                                "The two files are not isomorphic. Diff:\n{}",
-                                dataset_diff(&expected_graph, &actual_graph)
-                            ))
-                        }
-                    }
-                    Err(e) => Err(anyhow!("Parse error on file {}: {}", action, e)),
-                }
-            } else {
-                Err(anyhow!("No tests result found"))
-            }
+        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
+    let mut actual_graph =
+        load_dataset(action).map_err(|e| anyhow!("Parse error on file {action}: {e}"))?;
+    actual_graph.canonicalize();
+    if let Some(result) = &test.result {
+        let mut expected_graph =
+            load_dataset(result).map_err(|e| anyhow!("Parse error on file {action}: {e}"))?;
+        expected_graph.canonicalize();
+        if expected_graph == actual_graph {
+            Ok(())
+        } else {
+            bail!(
+                "The two files are not isomorphic. Diff:\n{}",
+                dataset_diff(&expected_graph, &actual_graph)
+            )
         }
-        Err(e) => Err(anyhow!("Parse error on file {}: {}", action, e)),
+    } else {
+        bail!("No tests result found")
     }
 }
