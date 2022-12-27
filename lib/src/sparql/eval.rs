@@ -3582,7 +3582,10 @@ impl Iterator for CartesianProductJoinIterator {
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         let (min, max) = self.left_iter.size_hint();
-        (min * self.right.len(), max.map(|v| v * self.right.len()))
+        (
+            min.saturating_mul(self.right.len()),
+            max.map(|v| v.saturating_mul(self.right.len())),
+        )
     }
 }
 
@@ -3616,7 +3619,10 @@ impl Iterator for HashJoinIterator {
     fn size_hint(&self) -> (usize, Option<usize>) {
         (
             0,
-            self.left_iter.size_hint().1.map(|v| v * self.right.len()),
+            self.left_iter
+                .size_hint()
+                .1
+                .map(|v| v.saturating_mul(self.right.len())),
         )
     }
 }
@@ -3662,7 +3668,10 @@ impl Iterator for HashLeftJoinIterator {
     fn size_hint(&self) -> (usize, Option<usize>) {
         (
             0,
-            self.left_iter.size_hint().1.map(|v| v * self.right.len()),
+            self.left_iter
+                .size_hint()
+                .1
+                .map(|v| v.saturating_mul(self.right.len())),
         )
     }
 }
@@ -3849,8 +3858,8 @@ impl Iterator for ConstructIterator {
     fn size_hint(&self) -> (usize, Option<usize>) {
         let (min, max) = self.iter.size_hint();
         (
-            min * self.template.len(),
-            max.map(|v| v * self.template.len()),
+            min.saturating_mul(self.template.len()),
+            max.map(|v| v.saturating_mul(self.template.len())),
         )
     }
 }
