@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail};
+use anyhow::bail;
 use clap::{Parser, Subcommand};
 use flate2::read::MultiGzDecoder;
 use oxhttp::model::{Body, HeaderName, HeaderValue, Request, Response, Status};
@@ -189,30 +189,31 @@ impl GraphOrDatasetFormat {
     }
 
     fn from_extension(name: &str) -> anyhow::Result<Self> {
-        match (GraphFormat::from_extension(name), DatasetFormat::from_extension(name)) {
-            (Some(g), Some(d)) => Err(anyhow!("The file extension '{}' can be resolved to both '{}' and '{}', not sure what to pick", name, g.file_extension(), d.file_extension())),
-            (Some(g), None) => Ok(GraphOrDatasetFormat::Graph(g)),
-            (None, Some(d)) => Ok(GraphOrDatasetFormat::Dataset(d)),
+        Ok( match (GraphFormat::from_extension(name), DatasetFormat::from_extension(name)) {
+            (Some(g), Some(d)) => bail!("The file extension '{name}' can be resolved to both '{}' and '{}', not sure what to pick", g.file_extension(), d.file_extension()),
+            (Some(g), None) => GraphOrDatasetFormat::Graph(g),
+            (None, Some(d)) => GraphOrDatasetFormat::Dataset(d),
             (None, None) =>
-            Err(anyhow!("The file extension '{}' is unknown", name))
-        }
+            bail!("The file extension '{name}' is unknown")
+        })
     }
 
     fn from_media_type(name: &str) -> anyhow::Result<Self> {
-        match (
-            GraphFormat::from_media_type(name),
-            DatasetFormat::from_media_type(name),
-        ) {
-            (Some(g), Some(d)) => Err(anyhow!(
-                "The media type '{}' can be resolved to both '{}' and '{}', not sure what to pick",
-                name,
+        Ok(
+            match (
+                GraphFormat::from_media_type(name),
+                DatasetFormat::from_media_type(name),
+            ) {
+                (Some(g), Some(d)) => bail!(
+                "The media type '{name}' can be resolved to both '{}' and '{}', not sure what to pick",
                 g.file_extension(),
                 d.file_extension()
-            )),
-            (Some(g), None) => Ok(GraphOrDatasetFormat::Graph(g)),
-            (None, Some(d)) => Ok(GraphOrDatasetFormat::Dataset(d)),
-            (None, None) => Err(anyhow!("The media type '{}' is unknown", name)),
-        }
+            ),
+                (Some(g), None) => GraphOrDatasetFormat::Graph(g),
+                (None, Some(d)) => GraphOrDatasetFormat::Dataset(d),
+                (None, None) => bail!("The media type '{name}' is unknown"),
+            },
+        )
     }
 }
 

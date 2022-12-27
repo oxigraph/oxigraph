@@ -3,7 +3,7 @@ use crate::files::*;
 use crate::manifest::*;
 use crate::report::dataset_diff;
 use crate::vocab::*;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
 use oxigraph::sparql::*;
@@ -73,32 +73,23 @@ fn evaluate_positive_syntax_test(test: &Test) -> Result<()> {
     let query_file = test
         .action
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {}", test))?;
-    match Query::parse(&read_file_to_string(query_file)?, Some(query_file)) {
-        Err(error) => Err(anyhow!("Not able to parse {} with error: {}", test, error)),
-        Ok(query) => match Query::parse(&query.to_string(), None) {
-            Ok(_) => Ok(()),
-            Err(error) => Err(anyhow!(
-                "Failure to deserialize \"{}\" of {} with error: {}",
-                query.to_string(),
-                test,
-                error
-            )),
-        },
-    }
+        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
+    let query = Query::parse(&read_file_to_string(query_file)?, Some(query_file))
+        .map_err(|e| anyhow!("Not able to parse {test} with error: {e}"))?;
+    Query::parse(&query.to_string(), None)
+        .map_err(|e| anyhow!("Failure to deserialize \"{query}\" of {test} with error: {e}"))?;
+    Ok(())
 }
 
 fn evaluate_negative_syntax_test(test: &Test) -> Result<()> {
     let query_file = test
         .action
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {}", test))?;
+        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
     match Query::parse(&read_file_to_string(query_file)?, Some(query_file)) {
-        Ok(result) => Err(anyhow!(
-            "Oxigraph parses even if it should not {}. The output tree is: {}",
-            test,
-            result
-        )),
+        Ok(result) => {
+            bail!("Oxigraph parses even if it should not {test}. The output tree is: {result}")
+        }
         Err(_) => Ok(()),
     }
 }
@@ -109,7 +100,7 @@ fn evaluate_positive_json_result_syntax_test(test: &Test) -> Result<()> {
 
 fn evaluate_negative_json_result_syntax_test(test: &Test) -> Result<()> {
     if result_syntax_check(test, QueryResultsFormat::Json).is_ok() {
-        Err(anyhow!("Oxigraph parses even if it should not {}.", test))
+        bail!("Oxigraph parses even if it should not {test}.")
     } else {
         Ok(())
     }
@@ -121,7 +112,7 @@ fn evaluate_positive_xml_result_syntax_test(test: &Test) -> Result<()> {
 
 fn evaluate_negative_xml_result_syntax_test(test: &Test) -> Result<()> {
     if result_syntax_check(test, QueryResultsFormat::Xml).is_ok() {
-        Err(anyhow!("Oxigraph parses even if it should not {}.", test))
+        bail!("Oxigraph parses even if it should not {test}.")
     } else {
         Ok(())
     }
@@ -129,7 +120,7 @@ fn evaluate_negative_xml_result_syntax_test(test: &Test) -> Result<()> {
 
 fn evaluate_negative_tsv_result_syntax_test(test: &Test) -> Result<()> {
     if result_syntax_check(test, QueryResultsFormat::Tsv).is_ok() {
-        Err(anyhow!("Oxigraph parses even if it should not {}.", test))
+        bail!("Oxigraph parses even if it should not {test}.")
     } else {
         Ok(())
     }
@@ -139,7 +130,7 @@ fn result_syntax_check(test: &Test, format: QueryResultsFormat) -> Result<()> {
     let results_file = test
         .action
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {}", test))?;
+        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
     match QueryResults::read(Cursor::new(read_file_to_string(results_file)?), format)? {
         QueryResults::Solutions(solutions) => {
             for s in solutions {
@@ -167,125 +158,83 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
     let query_file = test
         .query
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {}", test))?;
+        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
     let options = QueryOptions::default()
         .with_service_handler(StaticServiceHandler::new(&test.service_data)?);
-    match Query::parse(&read_file_to_string(query_file)?, Some(query_file)) {
-        Err(error) => Err(anyhow!(
-            "Failure to parse query of {} with error: {}",
-            test,
-            error
-        )),
-        Ok(query) => {
-            // We check parsing roundtrip
-            if let Err(error) = Query::parse(&query.to_string(), None) {
-                return Err(anyhow!(
-                    "Failure to deserialize \"{}\" of {} with error: {}",
-                    query.to_string(),
-                    test,
-                    error
-                ));
-            }
+    let query = Query::parse(&read_file_to_string(query_file)?, Some(query_file))
+        .map_err(|e| anyhow!("Failure to parse query of {test} with error: {e}"))?;
 
-            // FROM and FROM NAMED support. We make sure the data is in the store
-            if !query.dataset().is_default_dataset() {
-                for graph_name in query.dataset().default_graph_graphs().unwrap_or(&[]) {
-                    if let GraphName::NamedNode(graph_name) = graph_name {
-                        load_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
-                    } else {
-                        return Err(anyhow!("Invalid FROM in query {} for test {}", query, test));
-                    }
-                }
-                for graph_name in query.dataset().available_named_graphs().unwrap_or(&[]) {
-                    if let NamedOrBlankNode::NamedNode(graph_name) = graph_name {
-                        load_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
-                    } else {
-                        return Err(anyhow!(
-                            "Invalid FROM NAMED in query {} for test {}",
-                            query,
-                            test
-                        ));
-                    }
-                }
-            }
+    // We check parsing roundtrip
+    Query::parse(&query.to_string(), None)
+        .map_err(|e| anyhow!("Failure to deserialize \"{query}\" of {test} with error: {e}"))?;
 
-            for with_query_optimizer in [true, false] {
-                let mut options = options.clone();
-                if !with_query_optimizer {
-                    options = options.without_optimizations();
-                }
-                match store.query_opt(query.clone(), options) {
-                    Err(error) => {
-                        return Err(anyhow!(
-                            "Failure to execute query of {} with error: {}",
-                            test,
-                            error
-                        ))
-                    }
-                    Ok(actual_results) => {
-                        let expected_results = load_sparql_query_result(
-                            test.result.as_ref().unwrap(),
-                        )
-                        .map_err(|e| {
-                            anyhow!("Error constructing expected graph for {}: {}", test, e)
-                        })?;
-                        let with_order = if let StaticQueryResults::Solutions { ordered, .. } =
-                            &expected_results
-                        {
-                            *ordered
-                        } else {
-                            false
-                        };
-                        let actual_results =
-                            StaticQueryResults::from_query_results(actual_results, with_order)?;
-
-                        if !are_query_results_isomorphic(&expected_results, &actual_results) {
-                            return Err(anyhow!("Failure on {}.\nExpected file:\n{}\nOutput file:\n{}\nParsed query:\n{}\nData:\n{}\n",
-                                               test,
-                                               expected_results,
-                                               actual_results,
-                                               Query::parse(&read_file_to_string(query_file)?, Some(query_file)).unwrap(),
-                                               store
-                            ));
-                        }
-                    }
-                }
+    // FROM and FROM NAMED support. We make sure the data is in the store
+    if !query.dataset().is_default_dataset() {
+        for graph_name in query.dataset().default_graph_graphs().unwrap_or(&[]) {
+            if let GraphName::NamedNode(graph_name) = graph_name {
+                load_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
+            } else {
+                bail!("Invalid FROM in query {query} for test {test}");
             }
-            Ok(())
+        }
+        for graph_name in query.dataset().available_named_graphs().unwrap_or(&[]) {
+            if let NamedOrBlankNode::NamedNode(graph_name) = graph_name {
+                load_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
+            } else {
+                bail!("Invalid FROM NAMED in query {query} for test {test}");
+            }
         }
     }
+
+    let expected_results = load_sparql_query_result(test.result.as_ref().unwrap())
+        .map_err(|e| anyhow!("Error constructing expected graph for {test}: {e}"))?;
+    let with_order = if let StaticQueryResults::Solutions { ordered, .. } = &expected_results {
+        *ordered
+    } else {
+        false
+    };
+
+    for with_query_optimizer in [true, false] {
+        let mut options = options.clone();
+        if !with_query_optimizer {
+            options = options.without_optimizations();
+        }
+        let actual_results = store
+            .query_opt(query.clone(), options)
+            .map_err(|e| anyhow!("Failure to execute query of {test} with error: {e}"))?;
+        let actual_results = StaticQueryResults::from_query_results(actual_results, with_order)?;
+
+        if !are_query_results_isomorphic(&expected_results, &actual_results) {
+            bail!(
+                "Failure on {test}.\nExpected file:\n{expected_results}\nOutput file:\n{actual_results}\nParsed query:\n{}\nData:\n{store}\n",
+                Query::parse(&read_file_to_string(query_file)?, Some(query_file)).unwrap()
+            );
+        }
+    }
+    Ok(())
 }
 
 fn evaluate_positive_update_syntax_test(test: &Test) -> Result<()> {
     let update_file = test
         .action
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {}", test))?;
-    match Update::parse(&read_file_to_string(update_file)?, Some(update_file)) {
-        Err(error) => Err(anyhow!("Not able to parse {} with error: {}", test, error)),
-        Ok(update) => match Update::parse(&update.to_string(), None) {
-            Ok(_) => Ok(()),
-            Err(error) => Err(anyhow!(
-                "Failure to deserialize \"{}\" of {} with error: {}",
-                update.to_string(),
-                test,
-                error
-            )),
-        },
-    }
+        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
+    let update = Update::parse(&read_file_to_string(update_file)?, Some(update_file))
+        .map_err(|e| anyhow!("Not able to parse {test} with error: {e}"))?;
+    Update::parse(&update.to_string(), None)
+        .map_err(|e| anyhow!("Failure to deserialize \"{update}\" of {test} with error: {e}"))?;
+    Ok(())
 }
 
 fn evaluate_negative_update_syntax_test(test: &Test) -> Result<()> {
     let update_file = test
         .action
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {}", test))?;
+        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
     match Update::parse(&read_file_to_string(update_file)?, Some(update_file)) {
-        Ok(result) => Err(anyhow!(
-            "Oxigraph parses even if it should not {}. The output tree is: {}",
-            test,
-            result
-        )),
+        Ok(result) => {
+            bail!("Oxigraph parses even if it should not {test}. The output tree is: {result}")
+        }
         Err(_) => Ok(()),
     }
 }
@@ -310,50 +259,29 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
     let update_file = test
         .update
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {}", test))?;
-    match Update::parse(&read_file_to_string(update_file)?, Some(update_file)) {
-        Err(error) => Err(anyhow!(
-            "Failure to parse update of {} with error: {}",
-            test,
-            error
-        )),
-        Ok(update) => {
-            // We check parsing roundtrip
-            if let Err(error) = Update::parse(&update.to_string(), None) {
-                return Err(anyhow!(
-                    "Failure to deserialize \"{}\" of {} with error: {}",
-                    update.to_string(),
-                    test,
-                    error
-                ));
-            }
+        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
+    let update = Update::parse(&read_file_to_string(update_file)?, Some(update_file))
+        .map_err(|e| anyhow!("Failure to parse update of {test} with error: {e}"))?;
 
-            match store.update(update) {
-                Err(error) => Err(anyhow!(
-                    "Failure to execute update of {} with error: {}",
-                    test,
-                    error
-                )),
-                Ok(()) => {
-                    let mut store_dataset: Dataset = store.iter().collect::<Result<_, _>>()?;
-                    store_dataset.canonicalize();
-                    let mut result_store_dataset: Dataset =
-                        result_store.iter().collect::<Result<_, _>>()?;
-                    result_store_dataset.canonicalize();
-                    if store_dataset == result_store_dataset {
-                        Ok(())
-                    } else {
-                        Err(anyhow!(
-                            "Failure on {}.\nDiff:\n{}\nParsed update:\n{}\n",
-                            test,
-                            dataset_diff(&result_store_dataset, &store_dataset),
-                            Update::parse(&read_file_to_string(update_file)?, Some(update_file))
-                                .unwrap(),
-                        ))
-                    }
-                }
-            }
-        }
+    // We check parsing roundtrip
+    Update::parse(&update.to_string(), None)
+        .map_err(|e| anyhow!("Failure to deserialize \"{update}\" of {test} with error: {e}"))?;
+
+    store
+        .update(update)
+        .map_err(|e| anyhow!("Failure to execute update of {test} with error: {e}"))?;
+    let mut store_dataset: Dataset = store.iter().collect::<Result<_, _>>()?;
+    store_dataset.canonicalize();
+    let mut result_store_dataset: Dataset = result_store.iter().collect::<Result<_, _>>()?;
+    result_store_dataset.canonicalize();
+    if store_dataset == result_store_dataset {
+        Ok(())
+    } else {
+        bail!(
+            "Failure on {test}.\nDiff:\n{}\nParsed update:\n{}\n",
+            dataset_diff(&result_store_dataset, &store_dataset),
+            Update::parse(&read_file_to_string(update_file)?, Some(update_file)).unwrap(),
+        )
     }
 }
 
@@ -624,7 +552,7 @@ impl StaticQueryResults {
                         if let TermRef::Literal(l) = object {
                             Ok(Variable::new_unchecked(l.value()))
                         } else {
-                            Err(anyhow!("Invalid rs:resultVariable: {}", object))
+                            bail!("Invalid rs:resultVariable: {object}")
                         }
                     })
                     .collect::<Result<Vec<_>>>()?;
@@ -650,10 +578,10 @@ impl StaticQueryResults {
                                                 value.into_owned(),
                                             ))
                                         } else {
-                                            Err(anyhow!("Invalid rs:binding: {}", binding))
+                                            bail!("Invalid rs:binding: {binding}")
                                         }
                                     } else {
-                                        Err(anyhow!("Invalid rs:binding: {}", object))
+                                        bail!("Invalid rs:binding: {object}")
                                     }
                                 })
                                 .collect::<Result<Vec<_>>>()?;
@@ -664,13 +592,13 @@ impl StaticQueryResults {
                                     if let TermRef::Literal(l) = object {
                                         Ok(u64::from_str(l.value())?)
                                     } else {
-                                        Err(anyhow!("Invalid rs:index: {}", object))
+                                        bail!("Invalid rs:index: {object}")
                                     }
                                 })
                                 .transpose()?;
                             Ok((bindings, index))
                         } else {
-                            Err(anyhow!("Invalid rs:solution: {}", object))
+                            bail!("Invalid rs:solution: {object}")
                         }
                     })
                     .collect::<Result<Vec<_>>>()?;
