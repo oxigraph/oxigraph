@@ -80,7 +80,7 @@ jobs:
         with:
           platforms: linux/${{ matrix.architecture }}
         if: matrix.architecture != 'x86_64'
-      - run: sed 's/%arch%/${{ matrix.architecture }}/g' .github/workflows/manylinux_build.sh > .github/workflows/manylinux_build_script.sh
+      - run: sed 's/%arch%/${{ matrix.architecture }}/g' .github/workflows/manylinux_build.sh | sed 's/%for_each_version%/true/g' > .github/workflows/manylinux_build_script.sh
       - run: docker run -v "$(pwd)":/workdir --platform linux/${{ matrix.architecture }} quay.io/pypa/manylinux2014_${{ matrix.architecture }} /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
@@ -111,8 +111,8 @@ jobs:
       - run: rm -r target/wheels
       - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
         working-directory: ./python
-      - run: maturin publish --no-sdist -m python/Cargo.toml -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
-      - run: maturin publish --no-sdist --target aarch64-apple-darwin -m python/Cargo.toml -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
+      - run: maturin publish --no-sdist -m python/Cargo.toml --features abi3 -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
+      - run: maturin publish --no-sdist --target aarch64-apple-darwin -m python/Cargo.toml --features abi3 -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
       - uses: softprops/action-gh-release@v1
         with:
           files: target/wheels/*.whl
@@ -134,7 +134,7 @@ jobs:
       - run: rm -r target/wheels
       - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
         working-directory: ./python
-      - run: maturin publish --no-sdist -m python/Cargo.toml -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
+      - run: maturin publish --no-sdist -m python/Cargo.toml --features abi3 -u __token__ -p ${{ secrets.PYPI_PASSWORD }}
       - uses: softprops/action-gh-release@v1
         with:
           files: target/wheels/*.whl
