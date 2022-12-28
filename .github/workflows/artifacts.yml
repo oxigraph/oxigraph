@@ -62,7 +62,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - run: sed 's/%arch%/x86_64/g' .github/workflows/manylinux_build.sh > .github/workflows/manylinux_build_script.sh
+      - run: sed 's/%arch%/x86_64/g' .github/workflows/manylinux_build.sh | sed 's/%for_each_version%//g' > .github/workflows/manylinux_build_script.sh
       - run: docker run -v "$(pwd)":/workdir --platform linux/x86_64 quay.io/pypa/manylinux2014_x86_64 /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
       - uses: actions/upload-artifact@v3
         with:
@@ -89,7 +89,7 @@ jobs:
       - run: rm -r target/wheels
       - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
         working-directory: ./python
-      - run: maturin build --release -m python/Cargo.toml --universal2
+      - run: maturin build --release -m python/Cargo.toml --universal2 --features abi3
       - uses: actions/upload-artifact@v3
         with:
           name: pyoxigraph_wheel_universal2_mac
@@ -112,7 +112,7 @@ jobs:
       - run: rm -r target/wheels
       - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
         working-directory: ./python
-      - run: maturin build --release -m python/Cargo.toml
+      - run: maturin build --release -m python/Cargo.toml --features abi3
       - uses: actions/upload-artifact@v3
         with:
           name: pyoxigraph_wheel_x86_64_windows
