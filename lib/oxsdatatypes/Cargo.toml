@@ -1,0 +1,23 @@
+[package]
+name = "oxsdatatypes"
+version = "0.1.0"
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["XML Schema"]
+repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/oxsdatatypes"
+homepage = "https://oxigraph.org/"
+description = """
+An implementation of some XSD datatypes for SPARQL implementations
+"""
+edition = "2021"
+rust-version = "1.60"
+
+[dependencies]
+nom = "7"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+
+[package.metadata.docs.rs]
+all-features = true

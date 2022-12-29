@@ -1,14 +1,14 @@
+use crate::{Boolean, Double, Integer};
 use std::cmp::Ordering;
 use std::fmt;
-use std::hash::{Hash, Hasher};
 use std::num::ParseFloatError;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 use std::str::FromStr;
 
-/// [XML Schema `float` datatype](https://www.w3.org/TR/xmlschema11-2/#float) implementation.
+/// [XML Schema `float` datatype](https://www.w3.org/TR/xmlschema11-2/#float)
 ///
-/// The "==" implementation is identity, not equality
-#[derive(Debug, Clone, Copy, Default)]
+/// Uses internally a [`f32`].
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 #[repr(transparent)]
 pub struct Float {
     value: f32,
@@ -51,26 +51,20 @@ impl Float {
         self.value.round().into()
     }
 
-    /// Casts i64 into `Float`
     #[inline]
-    #[allow(clippy::cast_precision_loss)]
-    pub fn from_i64(value: i64) -> Self {
-        Self {
-            value: value as f32,
-        }
+    pub fn is_naan(self) -> bool {
+        self.value.is_nan()
     }
 
-    /// Casts `Float` into i64 without taking care of loss
     #[inline]
-    #[allow(clippy::cast_possible_truncation)]
-    pub fn to_i64(self) -> i64 {
-        self.value as i64
+    pub fn is_finite(self) -> bool {
+        self.value.is_finite()
     }
 
-    /// Creates a `bool` from a `Decimal` according to xsd:boolean cast constraints
+    /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
-    pub fn to_bool(self) -> bool {
-        self.value != 0. && !self.value.is_nan()
+    pub fn is_identical_with(&self, other: &Self) -> bool {
+        self.value.to_ne_bytes() == other.value.to_ne_bytes()
     }
 }
 
@@ -131,10 +125,32 @@ impl From<u16> for Float {
     }
 }
 
+impl From<Boolean> for Float {
+    #[inline]
+    fn from(value: Boolean) -> Self {
+        if bool::from(value) { 1. } else { 0. }.into()
+    }
+}
+
+impl From<Integer> for Float {
+    #[inline]
+    fn from(value: Integer) -> Self {
+        (i64::from(value) as f32).into()
+    }
+}
+
+impl From<Double> for Float {
+    #[inline]
+    fn from(value: Double) -> Self {
+        Self {
+            value: f64::from(value) as f32,
+        }
+    }
+}
+
 impl FromStr for Float {
     type Err = ParseFloatError;
 
-    /// Parses decimals lexical mapping
     #[inline]
     fn from_str(input: &str) -> Result<Self, ParseFloatError> {
         Ok(f32::from_str(input)?.into())
@@ -154,26 +170,10 @@ impl fmt::Display for Float {
     }
 }
 
-impl PartialEq for Float {
-    #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        self.value.to_ne_bytes() == other.value.to_ne_bytes()
-    }
-}
-
-impl Eq for Float {}
-
 impl PartialOrd for Float {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.value.partial_cmp(&other.value)
-    }
-}
-
-impl Hash for Float {
-    #[inline]
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        state.write(&self.value.to_ne_bytes())
     }
 }
 
@@ -228,14 +228,46 @@ mod tests {
 
     #[test]
     fn eq() {
-        assert_eq!(Float::from(0_f32), Float::from(0_f32));
-        assert_eq!(Float::from(f32::NAN), Float::from(f32::NAN));
-        assert_ne!(Float::from(-0.), Float::from(0.));
+        assert_eq!(Float::from(0.), Float::from(0.));
+        assert_ne!(Float::from(f32::NAN), Float::from(f32::NAN));
+        assert_eq!(Float::from(-0.), Float::from(0.));
+    }
+
+    #[test]
+    fn cmp() {
+        assert_eq!(
+            Float::from(0.).partial_cmp(&Float::from(0.)),
+            Some(Ordering::Equal)
+        );
+        assert_eq!(
+            Float::from(f32::INFINITY).partial_cmp(&Float::from(f32::MAX)),
+            Some(Ordering::Greater)
+        );
+        assert_eq!(
+            Float::from(f32::NEG_INFINITY).partial_cmp(&Float::from(f32::MIN)),
+            Some(Ordering::Less)
+        );
+        assert_eq!(Float::from(f32::NAN).partial_cmp(&Float::from(0.)), None);
+        assert_eq!(
+            Float::from(f32::NAN).partial_cmp(&Float::from(f32::NAN)),
+            None
+        );
+        assert_eq!(
+            Float::from(0.).partial_cmp(&Float::from(-0.)),
+            Some(Ordering::Equal)
+        );
+    }
+
+    #[test]
+    fn is_identical_with() {
+        assert!(Float::from(0.).is_identical_with(&Float::from(0.)));
+        assert!(Float::from(f32::NAN).is_identical_with(&Float::from(f32::NAN)));
+        assert!(!Float::from(-0.).is_identical_with(&Float::from(0.)));
     }
 
     #[test]
     fn from_str() -> Result<(), ParseFloatError> {
-        assert_eq!(Float::from(f32::NAN), Float::from_str("NaN")?);
+        assert!(Float::from(f32::NAN).is_identical_with(&Float::from_str("NaN")?));
         assert_eq!(Float::from(f32::INFINITY), Float::from_str("INF")?);
         assert_eq!(Float::from(f32::INFINITY), Float::from_str("+INF")?);
         assert_eq!(Float::from(f32::NEG_INFINITY), Float::from_str("-INF")?);

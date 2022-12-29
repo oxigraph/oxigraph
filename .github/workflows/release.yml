@@ -52,6 +52,9 @@ jobs:
         working-directory: ./oxrocksdb-sys
         continue-on-error: true
       - run: cargo publish
+        working-directory: ./lib/oxsdatatypes
+        continue-on-error: true
+      - run: cargo publish
         working-directory: ./lib/oxrdf
         continue-on-error: true
       - run: cargo publish

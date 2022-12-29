@@ -3,7 +3,7 @@
 use crate::model::*;
 use crate::storage::small_string::SmallString;
 use crate::store::{CorruptionError, StorageError};
-use crate::xsd::*;
+use oxsdatatypes::*;
 use siphasher::sip128::{Hasher128, SipHasher24};
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -80,10 +80,10 @@ pub enum EncodedTerm {
         value_id: StrHash,
         datatype_id: StrHash,
     },
-    BooleanLiteral(bool),
+    BooleanLiteral(Boolean),
     FloatLiteral(Float),
     DoubleLiteral(Double),
-    IntegerLiteral(i64),
+    IntegerLiteral(Integer),
     DecimalLiteral(Decimal),
     DateTimeLiteral(DateTime),
     TimeLiteral(Time),
@@ -183,10 +183,10 @@ impl PartialEq for EncodedTerm {
                 },
             ) => value_id_a == value_id_b && datatype_id_a == datatype_id_b,
             (Self::BooleanLiteral(a), Self::BooleanLiteral(b)) => a == b,
-            (Self::FloatLiteral(a), Self::FloatLiteral(b)) => a == b,
-            (Self::DoubleLiteral(a), Self::DoubleLiteral(b)) => a == b,
-            (Self::IntegerLiteral(a), Self::IntegerLiteral(b)) => a == b,
-            (Self::DecimalLiteral(a), Self::DecimalLiteral(b)) => a == b,
+            (Self::FloatLiteral(a), Self::FloatLiteral(b)) => a.is_identical_with(b),
+            (Self::DoubleLiteral(a), Self::DoubleLiteral(b)) => a.is_identical_with(b),
+            (Self::IntegerLiteral(a), Self::IntegerLiteral(b)) => a.is_identical_with(b),
+            (Self::DecimalLiteral(a), Self::DecimalLiteral(b)) => a.is_identical_with(b),
             (Self::DateTimeLiteral(a), Self::DateTimeLiteral(b)) => a.is_identical_with(b),
             (Self::TimeLiteral(a), Self::TimeLiteral(b)) => a.is_identical_with(b),
             (Self::DateLiteral(a), Self::DateLiteral(b)) => a.is_identical_with(b),
@@ -195,9 +195,13 @@ impl PartialEq for EncodedTerm {
             (Self::GMonthDayLiteral(a), Self::GMonthDayLiteral(b)) => a.is_identical_with(b),
             (Self::GMonthLiteral(a), Self::GMonthLiteral(b)) => a.is_identical_with(b),
             (Self::GDayLiteral(a), Self::GDayLiteral(b)) => a.is_identical_with(b),
-            (Self::DurationLiteral(a), Self::DurationLiteral(b)) => a == b,
-            (Self::YearMonthDurationLiteral(a), Self::YearMonthDurationLiteral(b)) => a == b,
-            (Self::DayTimeDurationLiteral(a), Self::DayTimeDurationLiteral(b)) => a == b,
+            (Self::DurationLiteral(a), Self::DurationLiteral(b)) => a.is_identical_with(b),
+            (Self::YearMonthDurationLiteral(a), Self::YearMonthDurationLiteral(b)) => {
+                a.is_identical_with(b)
+            }
+            (Self::DayTimeDurationLiteral(a), Self::DayTimeDurationLiteral(b)) => {
+                a.is_identical_with(b)
+            }
             (Self::Triple(a), Self::Triple(b)) => a == b,
             (_, _) => false,
         }
@@ -247,8 +251,8 @@ impl Hash for EncodedTerm {
                 datatype_id.hash(state);
             }
             Self::BooleanLiteral(value) => value.hash(state),
-            Self::FloatLiteral(value) => value.hash(state),
-            Self::DoubleLiteral(value) => value.hash(state),
+            Self::FloatLiteral(value) => value.to_be_bytes().hash(state),
+            Self::DoubleLiteral(value) => value.to_be_bytes().hash(state),
             Self::IntegerLiteral(value) => value.hash(state),
             Self::DecimalLiteral(value) => value.hash(state),
             Self::DateTimeLiteral(value) => value.hash(state),
@@ -329,13 +333,13 @@ impl EncodedTerm {
 
 impl From<bool> for EncodedTerm {
     fn from(value: bool) -> Self {
-        Self::BooleanLiteral(value)
+        Self::BooleanLiteral(value.into())
     }
 }
 
 impl From<i64> for EncodedTerm {
     fn from(value: i64) -> Self {
-        Self::IntegerLiteral(value)
+        Self::IntegerLiteral(value.into())
     }
 }
 
@@ -375,9 +379,21 @@ impl From<f64> for EncodedTerm {
     }
 }
 
+impl From<Boolean> for EncodedTerm {
+    fn from(value: Boolean) -> Self {
+        Self::BooleanLiteral(value)
+    }
+}
+
 impl From<Double> for EncodedTerm {
     fn from(value: Double) -> Self {
         Self::DoubleLiteral(value)
+    }
+}
+
+impl From<Integer> for EncodedTerm {
+    fn from(value: Integer) -> Self {
+        Self::IntegerLiteral(value)
     }
 }
 
@@ -402,6 +418,36 @@ impl From<Time> for EncodedTerm {
 impl From<Date> for EncodedTerm {
     fn from(value: Date) -> Self {
         Self::DateLiteral(value)
+    }
+}
+
+impl From<GMonthDay> for EncodedTerm {
+    fn from(value: GMonthDay) -> Self {
+        Self::GMonthDayLiteral(value)
+    }
+}
+
+impl From<GDay> for EncodedTerm {
+    fn from(value: GDay) -> Self {
+        Self::GDayLiteral(value)
+    }
+}
+
+impl From<GMonth> for EncodedTerm {
+    fn from(value: GMonth) -> Self {
+        Self::GMonthLiteral(value)
+    }
+}
+
+impl From<GYearMonth> for EncodedTerm {
+    fn from(value: GYearMonth) -> Self {
+        Self::GYearMonthLiteral(value)
+    }
+}
+
+impl From<GYear> for EncodedTerm {
+    fn from(value: GYear) -> Self {
+        Self::GYearLiteral(value)
     }
 }
 
@@ -749,11 +795,7 @@ pub fn insert_term<F: FnMut(&StrHash, &str) -> Result<(), StorageError>>(
 }
 
 pub fn parse_boolean_str(value: &str) -> Option<EncodedTerm> {
-    match value {
-        "true" | "1" => Some(EncodedTerm::BooleanLiteral(true)),
-        "false" | "0" => Some(EncodedTerm::BooleanLiteral(false)),
-        _ => None,
-    }
+    value.parse().map(EncodedTerm::BooleanLiteral).ok()
 }
 
 pub fn parse_float_str(value: &str) -> Option<EncodedTerm> {

@@ -2,10 +2,9 @@ use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, EncodedTriple, S
 use crate::storage::small_string::SmallString;
 use crate::storage::StorageError;
 use crate::store::CorruptionError;
-use crate::xsd::*;
+use oxsdatatypes::*;
 use std::io::{Cursor, Read};
 use std::mem::size_of;
-use std::rc::Rc;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub const LATEST_STORAGE_VERSION: u64 = 1;
@@ -314,100 +313,89 @@ impl<R: Read> TermReader for R {
                     value_id: StrHash::from_be_bytes(buffer),
                 })
             }
-            TYPE_BOOLEAN_LITERAL_TRUE => Ok(EncodedTerm::BooleanLiteral(true)),
-            TYPE_BOOLEAN_LITERAL_FALSE => Ok(EncodedTerm::BooleanLiteral(false)),
+            TYPE_BOOLEAN_LITERAL_TRUE => Ok(true.into()),
+            TYPE_BOOLEAN_LITERAL_FALSE => Ok(false.into()),
             TYPE_FLOAT_LITERAL => {
                 let mut buffer = [0; 4];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::FloatLiteral(Float::from_be_bytes(buffer)))
+                Ok(Float::from_be_bytes(buffer).into())
             }
             TYPE_DOUBLE_LITERAL => {
                 let mut buffer = [0; 8];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::DoubleLiteral(Double::from_be_bytes(buffer)))
+                Ok(Double::from_be_bytes(buffer).into())
             }
             TYPE_INTEGER_LITERAL => {
                 let mut buffer = [0; 8];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::IntegerLiteral(i64::from_be_bytes(buffer)))
+                Ok(Integer::from_be_bytes(buffer).into())
             }
             TYPE_DECIMAL_LITERAL => {
                 let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::DecimalLiteral(Decimal::from_be_bytes(buffer)))
+                Ok(Decimal::from_be_bytes(buffer).into())
             }
             TYPE_DATE_TIME_LITERAL => {
                 let mut buffer = [0; 18];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::DateTimeLiteral(DateTime::from_be_bytes(
-                    buffer,
-                )))
+                Ok(DateTime::from_be_bytes(buffer).into())
             }
             TYPE_TIME_LITERAL => {
                 let mut buffer = [0; 18];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::TimeLiteral(Time::from_be_bytes(buffer)))
+                Ok(Time::from_be_bytes(buffer).into())
             }
             TYPE_DATE_LITERAL => {
                 let mut buffer = [0; 18];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::DateLiteral(Date::from_be_bytes(buffer)))
+                Ok(Date::from_be_bytes(buffer).into())
             }
             TYPE_G_YEAR_MONTH_LITERAL => {
                 let mut buffer = [0; 18];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::GYearMonthLiteral(GYearMonth::from_be_bytes(
-                    buffer,
-                )))
+                Ok(GYearMonth::from_be_bytes(buffer).into())
             }
             TYPE_G_YEAR_LITERAL => {
                 let mut buffer = [0; 18];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::GYearLiteral(GYear::from_be_bytes(buffer)))
+                Ok(GYear::from_be_bytes(buffer).into())
             }
             TYPE_G_MONTH_DAY_LITERAL => {
                 let mut buffer = [0; 18];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::GMonthDayLiteral(GMonthDay::from_be_bytes(
-                    buffer,
-                )))
+                Ok(GMonthDay::from_be_bytes(buffer).into())
             }
             TYPE_G_DAY_LITERAL => {
                 let mut buffer = [0; 18];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::GDayLiteral(GDay::from_be_bytes(buffer)))
+                Ok(GDay::from_be_bytes(buffer).into())
             }
             TYPE_G_MONTH_LITERAL => {
                 let mut buffer = [0; 18];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::GMonthLiteral(GMonth::from_be_bytes(buffer)))
+                Ok(GMonth::from_be_bytes(buffer).into())
             }
             TYPE_DURATION_LITERAL => {
                 let mut buffer = [0; 24];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::DurationLiteral(Duration::from_be_bytes(
-                    buffer,
-                )))
+                Ok(Duration::from_be_bytes(buffer).into())
             }
             TYPE_YEAR_MONTH_DURATION_LITERAL => {
                 let mut buffer = [0; 8];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::YearMonthDurationLiteral(
-                    YearMonthDuration::from_be_bytes(buffer),
-                ))
+                Ok(YearMonthDuration::from_be_bytes(buffer).into())
             }
             TYPE_DAY_TIME_DURATION_LITERAL => {
                 let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::DayTimeDurationLiteral(
-                    DayTimeDuration::from_be_bytes(buffer),
-                ))
+                Ok(DayTimeDuration::from_be_bytes(buffer).into())
             }
-            TYPE_TRIPLE => Ok(EncodedTerm::Triple(Rc::new(EncodedTriple {
+            TYPE_TRIPLE => Ok(EncodedTriple {
                 subject: self.read_term()?,
                 predicate: self.read_term()?,
                 object: self.read_term()?,
-            }))),
+            }
+            .into()),
             _ => Err(CorruptionError::msg("the term buffer has an invalid type id").into()),
         }
     }
@@ -571,8 +559,11 @@ pub fn write_term(sink: &mut Vec<u8>, term: &EncodedTerm) {
             sink.extend_from_slice(&datatype_id.to_be_bytes());
             sink.extend_from_slice(&value_id.to_be_bytes());
         }
-        EncodedTerm::BooleanLiteral(true) => sink.push(TYPE_BOOLEAN_LITERAL_TRUE),
-        EncodedTerm::BooleanLiteral(false) => sink.push(TYPE_BOOLEAN_LITERAL_FALSE),
+        EncodedTerm::BooleanLiteral(value) => sink.push(if bool::from(*value) {
+            TYPE_BOOLEAN_LITERAL_TRUE
+        } else {
+            TYPE_BOOLEAN_LITERAL_FALSE
+        }),
         EncodedTerm::FloatLiteral(value) => {
             sink.push(TYPE_FLOAT_LITERAL);
             sink.extend_from_slice(&value.to_be_bytes())
